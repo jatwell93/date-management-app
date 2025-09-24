@@ -29,8 +29,8 @@
 ## Phase 3.3: Core Implementation (ONLY after tests are failing)
 ### Backend
 - [x] T017 [P] Create data model for `users` in `backend/src/models/user.model.ts`
-- [ ] T018 [P] Create data model for `products` in `backend/src/models/product.model.ts`
-- [ ] T019 [P] Create data model for `inventory_items` in `backend/src/models/inventory-item.model.ts`
+- [x] T018 [P] Create data model for `products` in `backend/src/models/product.model.ts`
+- [x] T019 [P] Create data model for `inventory_items` in `backend/src/models/inventory-item.model.ts`
 - [ ] T020 [P] Create data model for `store_areas` in `backend/src/models/store-area.model.ts`
 - [ ] T021 [P] Create data model for `audit_log` in `backend/src/models/audit-log.model.ts`
 - [ ] T022 Implement `AuthService` for user authentication logic in `backend/src/services/auth.service.ts`
