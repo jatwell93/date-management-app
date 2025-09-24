@@ -14,21 +14,21 @@
 
 ## Phase 3.2: Tests First (TDD) ⚠️ MUST COMPLETE BEFORE 3.3
 **CRITICAL: These tests MUST be written and MUST FAIL before ANY implementation**
-- [ ] T008 [P] Contract test `POST /auth/login` in `backend/src/tests/contract/auth.test.ts`
-- [ ] T009 [P] Contract test `GET /products?barcode=` in `backend/src/tests/contract/products.test.ts`
-- [ ] T010 [P] Contract test `POST /inventory-items` in `backend/src/tests/contract/inventory.test.ts`
-- [ ] T011 [P] Contract test `GET /reports/monthly-markdown` in `backend/src/tests/contract/reports.test.ts`
-- [ ] T011a [P] Contract test `GET /reports/usage` in `backend/src/tests/contract/reports.test.ts`
-- [ ] T012 [P] Contract test `GET /dashboard` in `backend/src/tests/contract/dashboard.test.ts`
-- [ ] T013 [P] Contract test `POST /products/upload-csv` in `backend/src/tests/contract/products.test.ts`
-- [ ] T013a [P] Contract test `POST /products` in `backend/src/tests/contract/products.test.ts`
-- [ ] T014 [P] Integration test for "Scan & Save" scenario from `quickstart.md` in `backend/src/tests/integration/scan.test.ts`
-- [ ] T015 [P] Integration test for "Manager Report" scenario from `quickstart.md` in `backend/src/tests/integration/reports.test.ts`
-- [ ] T016 [P] Integration test for "Manager Dashboard" scenario from `quickstart.md` in `backend/src/tests/integration/dashboard.test.ts`
+- [x] T008 [P] Contract test `POST /auth/login` in `backend/src/tests/contract/auth.test.ts`
+- [x] T009 [P] Contract test `GET /products?barcode=` in `backend/src/tests/contract/products.test.ts`
+- [x] T010 [P] Contract test `POST /inventory-items` in `backend/src/tests/contract/inventory.test.ts`
+- [x] T011 [P] Contract test `GET /reports/monthly-markdown` in `backend/src/tests/contract/reports.test.ts`
+- [x] T011a [P] Contract test `GET /reports/usage` in `backend/src/tests/contract/reports.test.ts`
+- [x] T012 [P] Contract test `GET /dashboard` in `backend/src/tests/contract/dashboard.test.ts`
+- [x] T013 [P] Contract test `POST /products/upload-csv` in `backend/src/tests/contract/products.test.ts`
+- [x] T013a [P] Contract test `POST /products` in `backend/src/tests/contract/products.test.ts`
+- [x] T014 [P] Integration test for "Scan & Save" scenario from `quickstart.md` in `backend/src/tests/integration/scan.test.ts`
+- [x] T015 [P] Integration test for "Manager Report" scenario from `quickstart.md` in `backend/src/tests/integration/reporting.test.ts`
+- [x] T016 [P] Integration test for "Manager Dashboard" scenario from `quickstart.md` in `backend/src/tests/integration/dashboard.test.ts`
 
 ## Phase 3.3: Core Implementation (ONLY after tests are failing)
 ### Backend
-- [ ] T017 [P] Create data model for `users` in `backend/src/models/user.model.ts`
+- [x] T017 [P] Create data model for `users` in `backend/src/models/user.model.ts`
 - [ ] T018 [P] Create data model for `products` in `backend/src/models/product.model.ts`
 - [ ] T019 [P] Create data model for `inventory_items` in `backend/src/models/inventory-item.model.ts`
 - [ ] T020 [P] Create data model for `store_areas` in `backend/src/models/store-area.model.ts`
