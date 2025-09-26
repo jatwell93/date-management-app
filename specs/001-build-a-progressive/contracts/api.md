@@ -22,11 +22,7 @@ Authenticates a user with their PIN.
 **Response (200 OK)**:
 ```json
 {
-  "token": "<jwt_token>",
-  "user": {
-    "id": 1,
-    "role": "Manager"
-  }
+  "token": "<jwt_token>"
 }
 ```
 
@@ -99,20 +95,22 @@ Creates a new product in the database. Used when a scanned barcode is not found.
 Generates the monthly markdown report.
 
 **Response (200 OK)**:
-- A PDF file containing the report.
-
+```json
+[
+  { "month": "YYYY-MM", "totalMarkdownValue": 123.45, "itemCount": 10 },
+  { "month": "YYYY-MM", "totalMarkdownValue": 67.89, "itemCount": 5 }
+]
+```
 ### `GET /reports/usage`
 
 Retrieves a report on the number of items entered by each team member.
 
 **Response (200 OK)**:
 ```json
-{
-  "usage_data": [
-    { "user_id": 2, "username": "Team Member A", "item_count": 150 },
-    { "user_id": 3, "username": "Team Member B", "item_count": 98 }
-  ]
-}
+[
+  { "user": "Manager", "scans": 150, "markdowns": 20 },
+  { "user": "Team Member", "scans": 100, "markdowns": 10 }
+]
 ```
 
 ### `GET /dashboard`
@@ -122,14 +120,11 @@ Retrieves data for the manager's dashboard.
 **Response (200 OK)**:
 ```json
 {
-  "markdown_next_month_value": 1234.56,
-  "top_5_markdown_items": [
-    { "name": "Product A", "count": 50 },
-    { "name": "Product B", "count": 45 }
-  ],
-  "areas_not_checked_30_days": [
-    { "name": "Aisle 3, Bay 1" },
-    { "name": "Aisle 7, Bay 4" }
+  "totalProducts": 1500,
+  "expiringSoon": 50,
+  "markdownItems": 75,
+  "recentActivity": [
+    { "id": 1, "description": "Product A scanned", "timestamp": "YYYY-MM-DDTHH:MM:SSZ" }
   ]
 }
 ```

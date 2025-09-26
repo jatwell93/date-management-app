@@ -24,6 +24,7 @@ As a retail team member, I want to scan product barcodes with my mobile device, 
 4.  **Given** it's the start of a month, **When** a manager generates the monthly markdown report, **Then** the system should show all items expiring 3 months out with their calculated markdown prices for physical implementation.
 5.  **Given** a team member is checking a store area, **When** they complete checking all items in that area, **Then** the system should update the "last checked" timestamp for that area.
 6.  **Given** the system is offline, **When** a team member scans barcodes and enters expiry dates, **Then** the data should be stored locally and sync when connectivity is restored
+7.  **Given** a store manager is logged in, **When** they navigate to the user management section, **Then** they should be able to create, edit, and delete user accounts, including assigning roles and setting PINs.
 
 ### Edge Cases
 -   What happens when a barcode is scanned that is not in the product database? Team member can manually add the item details, barcode, SKU, product name and cost and then add the expiry.
@@ -46,6 +47,9 @@ As a retail team member, I want to scan product barcodes with my mobile device, 
 -   **FR-011**: The system MUST automatically handle product price updates. When a new price CSV is uploaded to the SQL database, the prices in the application must update to match the new file.
 -   **FR-012**: The system MUST provide a simple calculator for manual markdown verification.
 -   **FR-013**: The application will have two roles: Manager and Team Member, authenticated by a 4-6 digit PIN. Managers have access to settings (store areas, team members) and the analytics dashboard. Team Members can only add items and view the monthly report.
+-   **FR-014**: The system MUST allow Managers to create new user accounts, specifying their role (Manager or Team Member) and an initial 4-6 digit PIN.
+-   **FR-015**: The system MUST allow Managers to edit existing user accounts, including changing their role and resetting their PIN.
+-   **FR-016**: The system MUST allow Managers to delete user accounts.
 
 ### Non-Functional Quality Attributes
 - **Data Volume**: The system should be designed to handle an inventory of 10,000 to 50,000 unique products.

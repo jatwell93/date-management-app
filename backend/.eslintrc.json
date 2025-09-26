@@ -1,4 +1,3 @@
-
 {
   "parser": "@typescript-eslint/parser",
   "extends": [
@@ -13,7 +12,14 @@
   },
   "rules": {
     "prettier/prettier": "error",
-    "no-console": "warn"
+    "no-console": "warn",
+    "@typescript-eslint/no-unused-vars": [
+      "warn",
+      {
+        "argsIgnorePattern": "^_",
+        "varsIgnorePattern": "^_"
+      }
+    ]
   },
   "env": {
     "node": true,

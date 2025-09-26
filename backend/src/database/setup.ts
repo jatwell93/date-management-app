@@ -1,14 +1,13 @@
+import sqlite3 from "sqlite3";
+import path from "path";
 
-import sqlite3 from 'sqlite3';
-import path from 'path';
-
-const dbPath = path.resolve(__dirname, '../database.sqlite');
+const dbPath = path.resolve(__dirname, "../database.sqlite");
 
 const db = new sqlite3.Database(dbPath, (err) => {
   if (err) {
-    console.error('Error opening database', err.message);
+    // console.error("Error opening database", err.message);
   } else {
-    console.log('Connected to the SQLite database.');
+    // console.log("Connected to the SQLite database.");
   }
 });
 
@@ -64,16 +63,16 @@ const createTablesQueries = `
 
 db.exec(createTablesQueries, (err) => {
   if (err) {
-    console.error('Error creating tables', err.message);
+    // console.error("Error creating tables", err.message);
   } else {
-    console.log('Tables created or already exist.');
+    // console.log("Tables created or already exist.");
   }
 });
 
 db.close((err) => {
   if (err) {
-    console.error('Error closing database', err.message);
+    // console.error("Error closing database", err.message);
   } else {
-    console.log('Database connection closed.');
+    // console.log("Database connection closed.");
   }
 });

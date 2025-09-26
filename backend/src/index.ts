@@ -1,61 +1,49 @@
-import express from 'express';
-import { getDb, initDatabase } from './database';
-import jwt from 'jsonwebtoken';
+import express from "express";
+import cors from "cors";
+import { initDatabase } from "./database";
+import authRoutes from "./routes/auth.routes";
+import productRoutes from "./routes/product.routes";
+import inventoryRoutes from "./routes/inventory.routes";
+import reportRoutes from "./routes/report.routes";
+import dashboardRoutes from "./routes/dashboard.routes";
+import userRoutes from "./routes/user.routes";
+import storeAreaRoutes from "./routes/store-area.routes";
+import { authenticateToken } from "./middleware/auth.middleware";
+import { errorHandler } from "./middleware/error.middleware";
 
 const app = express();
 const port = 3001;
-const JWT_SECRET = 'your_jwt_secret'; // In a real app, use an environment variable
 
 // Middleware
 app.use(express.json());
+app.use(cors()); // Enable CORS
 
 // Initialize database
-initDatabase().catch(console.error);
-
-// Routes
-app.get('/', (req, res) => {
-  res.send('Date Management API is running!');
+initDatabase().catch((_err) => {
+  // console.error("Database initialization failed", _err);
 });
 
-// Auth
-app.post('/auth/login', async (req, res) => {
-  const { pin } = req.body;
+// Public routes
+app.use("/auth", authRoutes);
 
-  // In a real app, you'd look up the user by PIN in the database
-  if (pin === '1234') {
-    const token = jwt.sign({ userId: 1, role: 'manager' }, JWT_SECRET, { expiresIn: '1h' });
-    res.status(200).json({ token });
-  } else {
-    res.status(401).json({ error: 'Invalid PIN' });
-  }
+// Protected routes
+app.use("/products", authenticateToken, productRoutes);
+app.use("/inventory-items", authenticateToken, inventoryRoutes);
+app.use("/store-areas", authenticateToken, storeAreaRoutes);
+app.use("/reports", authenticateToken, reportRoutes);
+app.use("/dashboard", authenticateToken, dashboardRoutes);
+app.use("/users", authenticateToken, userRoutes);
+
+app.get("/", (req, res) => {
+  res.send("Date Management API is running!");
 });
 
+// Error handling middleware
+app.use(errorHandler);
 
-// Products
-app.get('/products', async (req, res) => {
-  const { barcode } = req.query;
-
-  if (!barcode) {
-    return res.status(400).json({ error: 'Barcode is required' });
-  }
-
-  try {
-    const db = await getDb();
-    const product = await db.get('SELECT * FROM products WHERE barcode = ?', barcode);
-
-    if (!product) {
-      return res.status(404).json({ error: 'Product not found' });
-    }
-
-    res.json(product);
-  } catch (error) {
-    res.status(500).json({ error: 'Failed to fetch product' });
-  }
-});
-
-if (process.env.NODE_ENV !== 'test') {
+if (process.env.NODE_ENV !== "test") {
   app.listen(port, () => {
-    console.log(`Server is running on http://localhost:${port}`);
+    // console.log(`Server is running on http://localhost:${port}`);
   });
 }
 

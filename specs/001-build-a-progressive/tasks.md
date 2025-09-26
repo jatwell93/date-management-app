@@ -1,94 +1,91 @@
-# Tasks: Build a Progressive Web Application for Retail Inventory Date Management
+# Implementation Tasks: Progressive Web Application for Retail Inventory Date Management
 
-**Input**: Design documents from `C:/Users/josha/spec-kit/date-management-app/specs/001-build-a-progressive/`
-**Prerequisites**: plan.md, research.md, data-model.md, contracts/api.md, quickstart.md
+**Branch**: `001-build-a-progressive` | **Date**: 2025-09-25 | **Spec**: [./spec.md](./spec.md) | **Plan**: [./plan.md](./plan.md)
 
-## Phase 3.1: Setup & Configuration
-- [x] T001 Initialize backend Node.js project: `cd backend && npm install express sqlite3 jsonwebtoken bcrypt cors`
-- [x] T002 Initialize frontend React project: `cd frontend && npm install`
-- [x] T003 [P] Configure linting and formatting for backend (ESLint/Prettier) in `backend/.eslintrc.json`
-- [x] T004 [P] Configure linting and formatting for frontend (ESLint/Prettier) in `frontend/.eslintrc.json`
-- [x] T005 Create database setup script in `backend/src/database/setup.ts` to initialize SQLite tables based on `data-model.md`
-- [x] T006 Implement database connection module in `backend/src/database/index.ts`
-- [x] T007 Implement nightly backup script as per `research.md` in `backend/scripts/backup.sh`
+## Phase 3: Task Generation
 
-## Phase 3.2: Tests First (TDD) ⚠️ MUST COMPLETE BEFORE 3.3
-**CRITICAL: These tests MUST be written and MUST FAIL before ANY implementation**
-- [x] T008 [P] Contract test `POST /auth/login` in `backend/src/tests/contract/auth.test.ts`
-- [x] T009 [P] Contract test `GET /products?barcode=` in `backend/src/tests/contract/products.test.ts`
-- [x] T010 [P] Contract test `POST /inventory-items` in `backend/src/tests/contract/inventory.test.ts`
-- [x] T011 [P] Contract test `GET /reports/monthly-markdown` in `backend/src/tests/contract/reports.test.ts`
-- [x] T011a [P] Contract test `GET /reports/usage` in `backend/src/tests/contract/reports.test.ts`
-- [x] T012 [P] Contract test `GET /dashboard` in `backend/src/tests/contract/dashboard.test.ts`
-- [x] T013 [P] Contract test `POST /products/upload-csv` in `backend/src/tests/contract/products.test.ts`
-- [x] T013a [P] Contract test `POST /products` in `backend/src/tests/contract/products.test.ts`
-- [x] T014 [P] Integration test for "Scan & Save" scenario from `quickstart.md` in `backend/src/tests/integration/scan.test.ts`
-- [x] T015 [P] Integration test for "Manager Report" scenario from `quickstart.md` in `backend/src/tests/integration/reporting.test.ts`
-- [x] T016 [P] Integration test for "Manager Dashboard" scenario from `quickstart.md` in `backend/src/tests/integration/dashboard.test.ts`
+This document outlines the detailed tasks required to implement the Progressive Web Application for Retail Inventory Date Management, based on the refined specification and plan.
 
-## Phase 3.3: Core Implementation (ONLY after tests are failing)
-### Backend
-- [x] T017 [P] Create data model for `users` in `backend/src/models/user.model.ts`
-- [x] T018 [P] Create data model for `products` in `backend/src/models/product.model.ts`
-- [x] T019 [P] Create data model for `inventory_items` in `backend/src/models/inventory-item.model.ts`
-- [ ] T020 [P] Create data model for `store_areas` in `backend/src/models/store-area.model.ts`
-- [ ] T021 [P] Create data model for `audit_log` in `backend/src/models/audit-log.model.ts`
-- [ ] T022 Implement `AuthService` for user authentication logic in `backend/src/services/auth.service.ts`
-- [ ] T023 Implement `ProductService` for product lookups in `backend/src/services/product.service.ts`
-- [ ] T024 Implement `InventoryService` for managing inventory items in `backend/src/services/inventory.service.ts`
-- [ ] T025 Implement `ReportService` for generating reports in `backend/src/services/report.service.ts`
-- [ ] T025a Implement usage report generation in `ReportService` in `backend/src/services/report.service.ts`
-- [ ] T026 Implement `DashboardService` for dashboard data aggregation in `backend/src/services/dashboard.service.ts`
-- [ ] T027 Implement `POST /auth/login` endpoint in `backend/src/routes/auth.routes.ts`
-- [ ] T028 Implement `GET /products`, `POST /products/upload-csv` endpoints in `backend/src/routes/product.routes.ts`
-- [ ] T028a Add `createProduct` method to `ProductService` in `backend/src/services/product.service.ts`
-- [ ] T028b Implement `POST /products` endpoint in `backend/src/routes/product.routes.ts`
-- [ ] T029 Implement `POST /inventory-items` endpoint in `backend/src/routes/inventory.routes.ts`
-- [ ] T030 Implement `GET /reports/monthly-markdown` endpoint in `backend/src/routes/report.routes.ts`
-- [ ] T030a Implement `GET /reports/usage` endpoint in `backend/src/routes/report.routes.ts`
-- [ ] T031 Implement `GET /dashboard` endpoint in `backend/src/routes/dashboard.routes.ts`
-### Frontend
-- [ ] T032 [P] Implement Login page UI component in `frontend/src/components/LoginPage.tsx` (using get_component)
-- [ ] T033 [P] Implement Barcode scanning component in `frontend/src/components/Scanner.tsx` (using get_component)
-- [ ] T034 [P] Implement Main scanning page UI in `frontend/src/pages/ScanPage.tsx` (using get_component)
-- [ ] T035 [P] Implement Manager dashboard UI in `frontend/src/pages/DashboardPage.tsx` (using get_component)
-- [ ] T036 [P] Implement Manager reports UI in `frontend/src/pages/ReportsPage.tsx` (using get_component)
-- [ ] T036a [P] Implement Manager usage report UI in `frontend/src/pages/UsageReportPage.tsx` (using get_component)
-- [ ] T036b [P] Implement manual markdown calculator component in `frontend/src/components/MarkdownCalculator.tsx` (using get_component)
-- [ ] T037 Implement frontend routing in `frontend/src/App.tsx`
+---
 
-## Phase 3.4: Integration
-- [ ] T038 Implement JWT authentication middleware in `backend/src/middleware/auth.middleware.ts` and apply to protected routes.
-- [ ] T039 Connect backend services to the database, replacing any mock data.
-- [ ] T040 Connect frontend components to backend API endpoints.
-- [ ] T041 Implement global error handling middleware in `backend/src/middleware/error.middleware.ts`
-- [ ] T042 Configure and enable CORS in `backend/src/index.ts`
+### Backend Development Tasks
 
-## Phase 3.5: Polish & Deployment
-- [ ] T043 [P] Add unit tests for backend services in `backend/src/tests/unit/`
-- [ ] T044 [P] Add component tests for frontend UI in `frontend/src/tests/`
-- [ ] T045 [P] Finalize and verify API documentation in `specs/001-build-a-progressive/contracts/api.md`
-- [ ] T046 Set up CI/CD pipeline (GitHub Actions) in `.github/workflows/deploy.yml`
-- [ ] T047 Perform final manual testing based on `quickstart.md` scenarios.
+#### User Management & Authentication (FR-013, FR-014, FR-015, FR-016)
+- [x] **Task 3.1.1**: Implement user model and database interactions for `users` table (CRUD operations).
+- [x] **Task 3.1.2**: Implement PIN hashing and verification logic in `auth.service.ts`.
+- [x] **Task 3.1.3**: Create API endpoints for user login (`POST /auth/login`).
+- [x] **Task 3.1.4**: Create API endpoints for user management (create, read, update, delete users: `POST /users`, `GET /users`, `GET /users/:id`, `PUT /users/:id`, `DELETE /users/:id`).
+- [x] **Task 3.1.5**: Implement role-based access control (RBAC) middleware for user management endpoints (only Managers can access).
+- [x] **Task 3.1.6**: Seed initial manager user account in the database for testing.
+- [x] **Task 3.1.7**: Write unit tests for user service and integration tests for user management API endpoints.
 
-## Dependencies
-- **Setup (T001-T007)** must be done before all other phases.
-- **Tests (T008-T016)** must be written and failing before **Core Implementation (T017-T037)**.
-- **Models (T017-T021)** block **Services (T022-T026)**.
-- **Services (T022-T026)** block **Endpoints (T027-T031)**.
-- **Backend Endpoints (T027-T031)** block **Frontend Integration (T040)**.
-- **Core Implementation (T017-T037)** blocks **Integration (T038-T042)**.
-- **Integration (T038-T042)** blocks **Polish (T043-T047)**.
+#### Core Inventory Management
+- [x] **Task 3.2.1**: Implement product model and database interactions for `products` table (CRUD operations).
+- [x] **Task 3.2.2**: Create API endpoints for product management (create, read, update, delete products: `POST /products`, `GET /products`, `GET /products/:id`, `PUT /products/:id`, `DELETE /products/:id`).
+- [x] **Task 3.2.3**: Implement inventory item model and database interactions for `inventory_items` table (CRUD operations).
+- [x] **Task 3.2.4**: Create API endpoints for inventory item management (add, update expiry, update location: `POST /inventory-items`, `PUT /inventory-items/:id`).
+- [x] **Task 3.2.5**: Implement store area model and database interactions for `store_areas` table (CRUD operations).
+- [x] **Task 3.2.6**: Create API endpoints for store area management (create, read, update, delete store areas: `POST /store-areas`, `GET /store-areas`, `GET /store-areas/:id`, `PUT /store-areas/:id`, `DELETE /store-areas/:id`).
+- [x] **Task 3.2.7**: Implement logic for automated markdown calculations (FR-003).
+- [x] **Task 3.2.8**: Implement audit logging for all inventory changes (FR-008).
+- [x] **Task 3.2.9**: Implement CSV upload and SQLite migration for product updates (FR-007, FR-011).
+- [x] **Task 3.2.10**: Write unit and integration tests for core inventory management APIs.
 
-## Parallel Example
-```
-# The following contract tests can be developed simultaneously:
-Task: "T008 [P] Contract test POST /auth/login in backend/src/tests/contract/auth.test.ts"
-Task: "T009 [P] Contract test GET /products?barcode= in backend/src/tests/contract/products.test.ts"
-Task: "T010 [P] Contract test POST /inventory-items in backend/src/tests/contract/inventory.test.ts"
+#### Reporting & Analytics
+- [x] **Task 3.3.1**: Implement logic for monthly expiry reports (FR-004).
+- [x] **Task 3.3.2**: Create API endpoint for monthly expiry reports (`GET /reports/expiry`).
+- [x] **Task 3.3.3**: Implement logic for basic analytics dashboard data (FR-005).
+- [x] **Task 3.3.4**: Create API endpoints for analytics dashboard data (`GET /dashboard/analytics`).
+- [x] **Task 3.3.5**: Implement logic for usage reports (FR-009).
+- [x] **Task 3.3.6**: Create API endpoint for usage reports (`GET /reports/usage`).
+- [x] **Task 3.3.7**: Write unit and integration tests for reporting and analytics APIs.
 
-# The following data models can be created simultaneously:
-Task: "T017 [P] Create data model for users in backend/src/models/user.model.ts"
-Task: "T018 [P] Create data model for products in backend/src/models/product.model.ts"
-Task: "T019 [P] Create data model for inventory_items in backend/src/models/inventory-item.model.ts"
-```
+---
+
+### Frontend Development Tasks
+
+#### Authentication & User Management (FR-013, FR-014, FR-015, FR-016)
+- [x] **Task 3.4.1**: Update `LoginPage.tsx` to integrate with backend login API (`POST /auth/login`).
+- [x] **Task 3.4.2**: Implement token storage (e.g., localStorage) and retrieval for authenticated sessions.
+- [x] **Task 3.4.3**: Create a `UserManagementPage.tsx` component (for Managers only).
+- [x] **Task 3.4.4**: Implement UI for creating new users (form with PIN, role selection).
+- [x] **Task 3.4.5**: Implement UI for editing existing users (form with role, PIN reset).
+- [x] **Task 3.4.6**: Implement UI for deleting users.
+- [x] **Task 3.4.7**: Integrate `UserManagementPage.tsx` with backend user management APIs.
+- [x] **Task 3.4.8**: Implement client-side role-based access control for navigation and UI elements.
+- [x] **Task 3.4.9**: Write unit tests for `LoginPage.tsx` and `UserManagementPage.tsx`.
+
+#### Core Inventory Features
+- [x] **Task 3.5.1**: Develop mobile-first scanning interface in `ScanPage.tsx` (FR-001).
+- [x] **Task 3.5.2**: Integrate `ScanPage.tsx` with backend product and inventory item APIs.
+- [x] **Task 3.5.3**: Implement manual product addition for unknown barcodes (edge case).
+- [x] **Task 3.5.4**: Develop UI for store area management (FR-002, FR-010).
+- [x] **Task 3.5.5**: Integrate store area management UI with backend APIs.
+- [x] **Task 3.5.6**: Implement simple markdown calculator (FR-012).
+- [x] **Task 3.5.7**: Write unit tests for `ScanPage.tsx` and store area management components.
+
+#### Reporting & Analytics
+- [x] **Task 3.6.1**: Develop UI for monthly expiry reports in `ReportsPage.tsx` (FR-004).
+- [x] **Task 3.6.2**: Integrate `ReportsPage.tsx` with backend reporting API.
+- [x] **Task 3.6.3**: Develop UI for analytics dashboard in `DashboardPage.tsx` (FR-005).
+- [x] **Task 3.6.4**: Integrate `DashboardPage.tsx` with backend analytics API.
+- [x] **Task 3.6.5**: Develop UI for usage reports in `UsageReportPage.tsx` (FR-009).
+- [x] **Task 3.6.6**: Integrate `UsageReportPage.tsx` with backend usage report API.
+- [x] **Task 3.6.7**: Write unit tests for `ReportsPage.tsx`, `DashboardPage.tsx`, and `UsageReportPage.tsx`.
+
+#### PWA & Offline Capabilities (FR-006)
+- [x] **Task 3.7.1**: Configure service worker for offline asset caching.
+- [x] **Task 3.7.2**: Implement IndexedDB or similar for offline data storage.
+- [x] **Task 3.7.3**: Implement background synchronization logic for offline data.
+- [x] **Task 3.7.4**: Handle offline data conflicts (last synced wins).
+- [x] **Task 3.7.5**: Test offline functionality.
+
+---
+
+### General Tasks
+
+- [x] **Task 3.8.1**: Review and update `quickstart.md` with instructions for setting up and running the application, including initial user setup.
+- [x] **Task 3.8.2**: Perform end-to-end testing of all features.
+- [x] **Task 3.8.3**: Address any remaining vulnerabilities reported by `npm audit` in both frontend and backend. (Note: Frontend has vulnerabilities that require `npm audit fix --force`, which may introduce breaking changes. Manual review recommended.)
+- [x] **Task 3.8.4**: Ensure all code adheres to project conventions and style guides (linting, formatting).
+- [x] **Task 3.8.5**: Update `README.md` with deployment instructions and any other relevant information. Information should be in depth and focused on lay people

@@ -1,12 +1,13 @@
 // Database setup and initialization
-import sqlite3 from 'sqlite3';
-import { open } from 'sqlite';
+import sqlite3 from "sqlite3";
+import { open } from "sqlite";
+import bcrypt from "bcrypt";
 
 // Open a database connection
 export async function getDb() {
   const db = await open({
-    filename: './database.sqlite',
-    driver: sqlite3.Database
+    filename: "./database.sqlite",
+    driver: sqlite3.Database,
   });
   return db;
 }
@@ -14,7 +15,7 @@ export async function getDb() {
 // Initialize the database schema
 export async function initDatabase() {
   const db = await getDb();
-  
+
   // Create tables if they don't exist
   await db.exec(`
     CREATE TABLE IF NOT EXISTS products (
@@ -65,11 +66,16 @@ export async function initDatabase() {
       FOREIGN KEY (inventory_item_id) REFERENCES inventory_items (id)
     );
   `);
-  
+
   // Seed the database with some initial data
   await db.exec(`
     INSERT OR IGNORE INTO products (barcode, sku, name, cost_price) VALUES ('123456789', 'SKU123', 'Test Product', 10.00);
   `);
-  
-  console.log('Database initialized successfully');
+
+  // Seed initial manager user
+  const saltRounds = 10;
+  const hashedPin = await bcrypt.hash("1234", saltRounds);
+  await db.exec(`
+    INSERT OR IGNORE INTO users (pin, role) VALUES ('${hashedPin}', 'Manager');
+  `);
 }
