@@ -40,6 +40,20 @@ export class InventoryService {
     item: Omit<InventoryItem, "id" | "createdAt" | "updatedAt">,
   ): Promise<InventoryItem> {
     const db = await getDb();
+    
+    // First check if the location exists in store_areas table
+    const locationRecord = await db.get(
+      "SELECT id, sub_department FROM store_areas WHERE id = ?",
+      item.locationId
+    );
+    
+    if (!locationRecord) {
+      throw new Error("Location does not exist");
+    }
+    
+    // We could implement additional logic here to verify sub-department
+    // if needed, but for now just ensure the location exists
+    
     const result = await db.run(
       "INSERT INTO inventory_items (product_id, expiry_date, location_id, status) VALUES (?, ?, ?, ?)",
       item.productId,
@@ -92,7 +106,7 @@ export class InventoryService {
   async deleteInventoryItem(id: number): Promise<boolean> {
     const db = await getDb();
     const result = await db.run("DELETE FROM inventory_items WHERE id = ?", id);
-    return result.changes > 0;
+    return (result.changes ?? 0) > 0;
   }
 
   async updateInventoryItemStatus(
@@ -152,7 +166,7 @@ export class InventoryService {
       itemId,
     );
 
-    if (result.changes > 0) {
+    if ((result.changes ?? 0 )> 0) {
       return status;
     }
 

@@ -3,20 +3,80 @@ import { Card, CardContent, CardHeader, CardTitle } from "./ui/card";
 import { Input } from "./ui/input";
 import { Label } from "./ui/label";
 import { Button } from "./ui/button";
+import { Scanner } from "./Scanner"; // Import the Scanner component
 
 interface MarkdownCalculatorProps {
-  costPrice: number;
-  expiryDate: string; // YYYY-MM-DD format
+  token: string | null;
 }
 
-export function MarkdownCalculator({
-  costPrice,
-  expiryDate,
-}: MarkdownCalculatorProps) {
+interface ProductDetails {
+  id: number;
+  name: string;
+  sku: string;
+  barcode: string;
+  cost_price: number;
+}
+
+export function MarkdownCalculator({ token }: MarkdownCalculatorProps) {
+  const [costPrice, setCostPrice] = useState<number>(0);
+  const [expiryDate, setExpiryDate] = useState<string>(""); // YYYY-MM-DD format
   const [markdownStatus, setMarkdownStatus] = useState<string>("Normal");
   const [markdownValue, setMarkdownValue] = useState<number>(0);
+  const [scannedBarcode, setScannedBarcode] = useState<string | null>(null);
+  const [productDetails, setProductDetails] = useState<ProductDetails | null>(
+    null,
+  );
+  const [error, setError] = useState<string | null>(null);
+
+  const handleBarcodeScan = async (barcode: string) => {
+    setScannedBarcode(barcode);
+    setProductDetails(null);
+    setError(null);
+
+    if (!token) {
+      setError("Authentication token is missing.");
+      return;
+    }
+
+    try {
+      const response = await fetch(
+        `http://localhost:3001/products?barcode=${barcode}`,
+        {
+          headers: {
+            Authorization: `Bearer ${token}`,
+          },
+        },
+      );
+
+      if (response.status === 404) {
+        setError("Product not found for this barcode.");
+        return;
+      }
+
+      if (!response.ok) {
+        const errorData = await response.json();
+        throw new Error(errorData.message || "Failed to fetch product details");
+      }
+
+      const product = await response.json();
+      setProductDetails(product);
+      setCostPrice(product.cost_price);
+    } catch (err: unknown) {
+      if (err instanceof Error) {
+        setError(err.message);
+      } else {
+        setError("An unknown error occurred");
+      }
+    }
+  };
 
   const calculateMarkdown = () => {
+    if (!costPrice || !expiryDate) {
+      setMarkdownStatus("Invalid Input");
+      setMarkdownValue(0);
+      return;
+    }
+
     const today = new Date();
     const expiry = new Date(expiryDate);
     const diffTime = expiry.getTime() - today.getTime();
@@ -49,19 +109,48 @@ export function MarkdownCalculator({
         <CardTitle className="text-center">Markdown Calculator</CardTitle>
       </CardHeader>
       <CardContent>
-        <div className="grid gap-4">
+        <Scanner onScan={handleBarcodeScan} />
+        {error && (
+          <p className="text-red-500 text-sm text-center mt-4">
+            Error: {error}
+          </p>
+        )}
+        {productDetails && (
+          <div className="mt-4 p-4 border rounded-md bg-gray-50">
+            <p className="font-semibold">Scanned Product:</p>
+            <p>
+              <strong>Name:</strong> {productDetails.name}
+            </p>
+            <p>
+              <strong>SKU:</strong> {productDetails.sku}
+            </p>
+            <p>
+              <strong>Barcode:</strong> {productDetails.barcode}
+            </p>
+            <p>
+              <strong>Cost Price:</strong> ${productDetails.cost_price?.toFixed(2)}
+            </p>
+          </div>
+        )}
+        <div className="grid gap-4 mt-4">
           <div>
             <Label htmlFor="costPrice">Cost Price</Label>
             <Input
               id="costPrice"
               type="number"
-              value={costPrice.toFixed(2)}
-              readOnly
+              value={costPrice}
+              onChange={(e) => setCostPrice(parseFloat(e.target.value))}
+              disabled={!!productDetails} // Disable if product details are loaded from scan
             />
           </div>
           <div>
             <Label htmlFor="expiryDate">Expiry Date</Label>
-            <Input id="expiryDate" type="date" value={expiryDate} readOnly />
+            <Input
+              id="expiryDate"
+              type="date"
+              value={expiryDate}
+              onChange={(e) => setExpiryDate(e.target.value)}
+            />
           </div>
           <Button onClick={calculateMarkdown}>Calculate Markdown</Button>
           <div className="mt-4 p-4 border rounded-md bg-gray-50">

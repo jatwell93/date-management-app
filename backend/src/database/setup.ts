@@ -36,10 +36,12 @@ const createTablesQueries = `
 
   CREATE TABLE IF NOT EXISTS store_areas (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
-    name TEXT UNIQUE NOT NULL,
+    name TEXT NOT NULL,
+    sub_department TEXT,
     last_checked TEXT,
     created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
-    updated_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
+    updated_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    UNIQUE(name, sub_department)
   );
 
   CREATE TABLE IF NOT EXISTS users (
@@ -66,6 +68,33 @@ db.exec(createTablesQueries, (err) => {
     // console.error("Error creating tables", err.message);
   } else {
     // console.log("Tables created or already exist.");
+
+    // Attempt to add sub_department column if it doesn't exist for store_areas table
+    // We'll try to add it, and if it fails because it already exists, that's fine
+    try {
+      db.exec("ALTER TABLE store_areas ADD COLUMN sub_department TEXT;");
+    } catch (e) {
+      // Column might already exist, which is fine
+    }
+
+    // Insert a default user if no users exist
+    db.get("SELECT COUNT(*) as count FROM users", (err, row: { count: number }) => {
+      if (err) {
+        // console.error("Error checking for existing users", err.message);
+      } else if (row.count === 0) {
+        db.run(
+          "INSERT INTO users (pin, role) VALUES (?, ?)",
+          ["1234", "admin"],
+          (insertErr) => {
+            if (insertErr) {
+              // console.error("Error inserting default user", insertErr.message);
+            } else {
+              // console.log("Default user '1234' (admin) inserted.");
+            }
+          },
+        );
+      }
+    });
   }
 });
 

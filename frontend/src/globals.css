@@ -1,3 +1,215 @@
 @tailwind base;
 @tailwind components;
 @tailwind utilities;
+
+:root {
+  /* Default light theme colors */
+  --background: 0 0% 100%;
+  --foreground: 222.2 47.4% 11.2%;
+  --muted: 210 40% 96.1%;
+  --muted-foreground: 215.4 16.3% 46.9%;
+  --popover: 0 0% 100%;
+  --popover-foreground: 222.2 47.4% 11.2%;
+  --card: 0 0% 100%;
+  --card-foreground: 222.2 47.4% 11.2%;
+  --border: 214.3 31.8% 91.4%;
+  --input: 214.3 31.8% 91.4%;
+  --primary: 222.2 47.4% 11.2%;
+  --primary-foreground: 210 40% 98%;
+  --secondary: 210 40% 96.1%;
+  --secondary-foreground: 222.2 47.4% 11.2%;
+  --accent: 210 40% 96.1%;
+  --accent-foreground: 222.2 47.4% 11.2%;
+  --destructive: 0 100% 50%;
+  --destructive-foreground: 210 40% 98%;
+  --ring: 215 20.2% 65.1%;
+  --radius: 0.5rem;
+
+  /* Inventory App Specific Colors */
+  --inventory-primary-50: 240 100% 97.6%;
+  --inventory-primary-100: 200 100% 96.9%;
+  --inventory-primary-200: 192 98.5% 93.5%;
+  --inventory-primary-300: 194 96.2% 85.7%;
+  --inventory-primary-400: 197 93.5% 73.9%;
+  --inventory-primary-500: 201 96.2% 60.8%;
+  --inventory-primary-600: 203 91.5% 48.2%;
+  --inventory-primary-700: 205 86.5% 37.5%;
+  --inventory-primary-800: 205 79.4% 29.2%;
+  --inventory-primary-900: 204 74.1% 23.3%;
+  
+  --inventory-secondary-50: 171 100% 98.4%;
+  --inventory-secondary-100: 170 92.5% 95.5%;
+  --inventory-secondary-200: 167 89.1% 90.8%;
+  --inventory-secondary-300: 164 82.8% 82.5%;
+  --inventory-secondary-400: 162 69% 66.7%;
+  --inventory-secondary-500: 160 53.3% 53.9%;
+  --inventory-secondary-600: 161 57.5% 44.9%;
+  --inventory-secondary-700: 161 52.6% 37.3%;
+  --inventory-secondary-800: 161 47.3% 31.8%;
+  --inventory-secondary-900: 160 43.1% 27.3%;
+  
+  --inventory-success-50: 142 76.8% 97.1%;
+  --inventory-success-100: 142 71.8% 94.9%;
+  --inventory-success-200: 141 69.2% 89.4%;
+  --inventory-success-300: 141 70.6% 78.2%;
+  --inventory-success-400: 142 71.8% 62.7%;
+  --inventory-success-500: 142 76.2% 47.5%;
+  --inventory-success-600: 142 70.6% 38.4%;
+  --inventory-success-700: 142 76.2% 29.4%;
+  --inventory-success-800: 141 81.0% 24.3%;
+  --inventory-success-900: 141 77.8% 19.8%;
+  
+  --inventory-warning-50: 28 91.7% 97.1%;
+  --inventory-warning-100: 28 76.8% 94.5%;
+  --inventory-warning-200: 28 66.7% 88.8%;
+  --inventory-warning-300: 28 64.1% 78.2%;
+  --inventory-warning-400: 28 66.3% 64.7%;
+  --inventory-warning-500: 28 76% 52.5%;
+  --inventory-warning-600: 28 80.7% 42.9%;
+  --inventory-warning-700: 28 84.7% 33.7%;
+  --inventory-warning-800: 28 87.8% 27.1%;
+  --inventory-warning-900: 28 91.0% 21.4%;
+  
+  --inventory-error-50: 0 85.7% 97.6%;
+  --inventory-error-100: 0 92.3% 95.5%;
+  --inventory-error-200: 0 93.3% 91.4%;
+  --inventory-error-300: 0 92.8% 84.1%;
+  --inventory-error-400: 0 89.7% 69.8%;
+  --inventory-error-500: 0 87.2% 56.5%;
+  --inventory-error-600: 0 83.3% 44.1%;
+  --inventory-error-700: 0 82.1% 35.1%;
+  --inventory-error-800: 0 80.0% 27.5%;
+  --inventory-error-900: 0 75.0% 22.0%;
+  
+  --inventory-neutral-50: 0 0% 98.0%;
+  --inventory-neutral-100: 0 0% 94.9%;
+  --inventory-neutral-200: 0 0% 89.0%;
+  --inventory-neutral-300: 0 0% 82.0%;
+  --inventory-neutral-400: 0 0% 63.9%;
+  --inventory-neutral-500: 0 0% 45.1%;
+  --inventory-neutral-600: 0 0% 31.0%;
+  --inventory-neutral-700: 0 0% 26.7%;
+  --inventory-neutral-800: 0 0% 14.9%;
+  --inventory-neutral-900: 0 0% 8.6%;
+
+  /* Typography scale */
+  --font-size-xs: 0.75rem; /* 12px */
+  --font-size-sm: 0.875rem; /* 14px */
+  --font-size-base: 1rem; /* 16px */
+  --font-size-lg: 1.125rem; /* 18px */
+  --font-size-xl: 1.25rem; /* 20px */
+  --font-size-2xl: 1.5rem; /* 24px */
+  --font-size-3xl: 1.875rem; /* 30px */
+  --font-size-4xl: 2.25rem; /* 36px */
+  
+  /* Font weights */
+  --font-weight-normal: 400;
+  --font-weight-medium: 500;
+  --font-weight-semibold: 600;
+  --font-weight-bold: 700;
+}
+
+.dark {
+  --background: 224 71% 4%;
+  --foreground: 213 31% 91%;
+  --muted: 223 47% 11%;
+  --muted-foreground: 215.4 16.3% 56.9%;
+  --popover: 224 71% 4%;
+  --popover-foreground: 215 20.2% 65.1%;
+  --card: 224 71% 4%;
+  --card-foreground: 213 31% 91%;
+  --border: 216 34% 17%;
+  --input: 216 34% 17%;
+  --primary: 210 40% 98%;
+  --primary-foreground: 222.2 47.4% 1.2%;
+  --secondary: 222.2 47.4% 11.2%;
+  --secondary-foreground: 210 40% 98%;
+  --accent: 216 34% 17%;
+  --accent-foreground: 210 40% 98%;
+  --destructive: 0 63% 31%;
+  --destructive-foreground: 210 40% 98%;
+  --ring: 216 34% 17%;
+  --radius: 0.5rem;
+
+  /* Dark mode for inventory app specific colors */
+  --inventory-primary-50: 204 74.1% 22.3%;
+  --inventory-primary-100: 205 79.4% 28.2%;
+  --inventory-primary-200: 205 86.5% 36.5%;
+  --inventory-primary-300: 203 91.5% 47.2%;
+  --inventory-primary-400: 201 96.2% 59.8%;
+  --inventory-primary-500: 197 93.5% 72.9%;
+  --inventory-primary-600: 194 96.2% 84.7%;
+  --inventory-primary-700: 192 98.5% 92.5%;
+  --inventory-primary-800: 200 100% 95.9%;
+  --inventory-primary-900: 240 100% 97.1%;
+  
+  --inventory-secondary-50: 160 43.1% 26.3%;
+  --inventory-secondary-100: 161 47.3% 30.8%;
+  --inventory-secondary-200: 161 52.6% 36.3%;
+  --inventory-secondary-300: 161 57.5% 43.9%;
+  --inventory-secondary-400: 160 53.3% 52.9%;
+  --inventory-secondary-500: 162 69% 65.7%;
+  --inventory-secondary-600: 164 82.8% 79.8%;
+  --inventory-secondary-700: 167 89.1% 89.8%;
+  --inventory-secondary-900: 171 100% 98.0%;
+  
+  --inventory-success-50: 141 77.8% 20.8%;
+  --inventory-success-100: 141 81.0% 26.3%;
+  --inventory-success-200: 142 76.2% 33.4%;
+  --inventory-success-300: 142 70.6% 41.4%;
+  --inventory-success-400: 142 71.8% 58.7%;
+  --inventory-success-500: 142 76.2% 69.5%;
+  --inventory-success-600: 141 70.6% 85.1%;
+  --inventory-success-700: 141 69.2% 94.5%;
+  --inventory-success-800: 142 71.8% 97.1%;
+  --inventory-success-900: 142 76.8% 98.5%;
+  
+  --inventory-warning-50: 28 91.0% 22.4%;
+  --inventory-warning-100: 28 87.8% 29.1%;
+  --inventory-warning-200: 28 84.7% 37.7%;
+  --inventory-warning-300: 28 80.7% 45.9%;
+  --inventory-warning-400: 28 66.3% 62.7%;
+  --inventory-warning-500: 28 76% 67.5%;
+  --inventory-warning-600: 28 64.1% 79.2%;
+  --inventory-warning-700: 28 76.8% 90.8%;
+  --inventory-warning-800: 28 91.7% 95.9%;
+  --inventory-warning-900: 34 53.3% 97.6%;
+  
+  --inventory-error-50: 0 75.0% 23.0%;
+  --inventory-error-100: 0 80.0% 30.5%;
+  --inventory-error-200: 0 82.1% 38.1%;
+  --inventory-error-300: 0 83.3% 47.1%;
+  --inventory-error-400: 0 87.2% 61.5%;
+  --inventory-error-500: 0 89.7% 75.8%;
+  --inventory-error-600: 0 92.8% 87.1%;
+  --inventory-error-700: 0 93.3% 93.4%;
+  --inventory-error-800: 0 92.3% 96.5%;
+  --inventory-error-900: 0 85.7% 98.4%;
+  
+  --inventory-neutral-50: 0 0% 9.6%;
+  --inventory-neutral-100: 0 0% 16.9%;
+  --inventory-neutral-200: 0 0% 24.7%;
+  --inventory-neutral-300: 0 0% 32.0%;
+  --inventory-neutral-400: 0 0% 50.0%;
+  --inventory-neutral-500: 0 0% 63.9%;
+  --inventory-neutral-600: 0 0% 73.0%;
+  --inventory-neutral-700: 0 0% 82.0%;
+  --inventory-neutral-800: 0 0% 90.0%;
+  --inventory-neutral-900: 0 0% 94.9%;
+
+  /* Typography scale */
+  --font-size-xs: 0.75rem; /* 12px */
+  --font-size-sm: 0.875rem; /* 14px */
+  --font-size-base: 1rem; /* 16px */
+  --font-size-lg: 1.125rem; /* 18px */
+  --font-size-xl: 1.25rem; /* 20px */
+  --font-size-2xl: 1.5rem; /* 24px */
+  --font-size-3xl: 1.875rem; /* 30px */
+  --font-size-4xl: 2.25rem; /* 36px */
+  
+  /* Font weights */
+  --font-weight-normal: 400;
+  --font-weight-medium: 500;
+  --font-weight-semibold: 600;
+  --font-weight-bold: 700;
+}

@@ -4,8 +4,10 @@ import { MarkdownCalculator } from "../components/MarkdownCalculator";
 import "@testing-library/jest-dom";
 
 describe("MarkdownCalculator", () => {
+  const mockToken = "fake-token";
+
   it("renders the markdown calculator form", () => {
-    render(<MarkdownCalculator />);
+    render(<MarkdownCalculator token={mockToken} />);
     expect(screen.getByLabelText(/Original Price/i)).toBeInTheDocument();
     expect(
       screen.getByLabelText(/Markdown Percentage \(%\)/i),
@@ -16,7 +18,7 @@ describe("MarkdownCalculator", () => {
   });
 
   it("calculates markdown price correctly", () => {
-    render(<MarkdownCalculator />);
+    render(<MarkdownCalculator token={mockToken} />);
 
     fireEvent.change(screen.getByLabelText(/Original Price/i), {
       target: { value: "100" },
@@ -32,7 +34,7 @@ describe("MarkdownCalculator", () => {
   });
 
   it("displays no markdown price if inputs are invalid", () => {
-    render(<MarkdownCalculator />);
+    render(<MarkdownCalculator token={mockToken} />);
 
     fireEvent.change(screen.getByLabelText(/Original Price/i), {
       target: { value: "abc" },
@@ -48,7 +50,7 @@ describe("MarkdownCalculator", () => {
   });
 
   it("clears markdown price when inputs are changed after a calculation", () => {
-    render(<MarkdownCalculator />);
+    render(<MarkdownCalculator token={mockToken} />);
 
     fireEvent.change(screen.getByLabelText(/Original Price/i), {
       target: { value: "100" },

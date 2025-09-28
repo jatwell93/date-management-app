@@ -28,7 +28,8 @@ import {
 interface StoreArea {
   id: number;
   name: string;
-  last_checked: string | null;
+  subDepartment?: string; // New field for sub-departments
+  lastChecked?: string; // Changed from last_checked to lastChecked to match backend model
 }
 
 interface StoreAreaManagementPageProps {
@@ -40,8 +41,10 @@ export function StoreAreaManagementPage({
 }: StoreAreaManagementPageProps) {
   const [storeAreas, setStoreAreas] = useState<StoreArea[]>([]);
   const [newAreaName, setNewAreaName] = useState<string>("");
+  const [newSubDepartmentName, setNewSubDepartmentName] = useState<string>(""); // New state
   const [editingArea, setEditingArea] = useState<StoreArea | null>(null);
   const [editedAreaName, setEditedAreaName] = useState<string>("");
+  const [editedSubDepartmentName, setEditedSubDepartmentName] = useState<string>(""); // New state
   const [error, setError] = useState<string | null>(null);
   const [successMessage, setSuccessMessage] = useState<string | null>(null);
 
@@ -83,7 +86,10 @@ export function StoreAreaManagementPage({
           "Content-Type": "application/json",
           Authorization: `Bearer ${token}`,
         },
-        body: JSON.stringify({ name: newAreaName }),
+        body: JSON.stringify({
+          name: newAreaName,
+          subDepartment: newSubDepartmentName,
+        }),
       });
       if (!response.ok) {
         const errorData = await response.json();
@@ -91,6 +97,7 @@ export function StoreAreaManagementPage({
       }
       setSuccessMessage("Store area added successfully!");
       setNewAreaName("");
+      setNewSubDepartmentName(""); // Clear sub-department input
       fetchStoreAreas();
     } catch (err: unknown) {
       if (err instanceof Error) {
@@ -103,10 +110,12 @@ export function StoreAreaManagementPage({
   }, [
     token,
     newAreaName,
+    newSubDepartmentName,
     fetchStoreAreas,
     setError,
     setSuccessMessage,
     setNewAreaName,
+    setNewSubDepartmentName,
   ]);
 
   const handleEditArea = useCallback(async () => {
@@ -123,7 +132,10 @@ export function StoreAreaManagementPage({
             "Content-Type": "application/json",
             Authorization: `Bearer ${token}`,
           },
-          body: JSON.stringify({ name: editedAreaName }),
+          body: JSON.stringify({
+            name: editedAreaName,
+            subDepartment: editedSubDepartmentName,
+          }),
         },
       );
       if (!response.ok) {
@@ -133,6 +145,7 @@ export function StoreAreaManagementPage({
       setSuccessMessage("Store area updated successfully!");
       setEditingArea(null);
       setEditedAreaName("");
+      setEditedSubDepartmentName(""); // Clear sub-department input
       fetchStoreAreas();
     } catch (err: unknown) {
       if (err instanceof Error) {
@@ -146,11 +159,13 @@ export function StoreAreaManagementPage({
     token,
     editingArea,
     editedAreaName,
+    editedSubDepartmentName,
     fetchStoreAreas,
     setError,
     setSuccessMessage,
     setEditingArea,
     setEditedAreaName,
+    setEditedSubDepartmentName,
   ]);
 
   const handleDeleteArea = useCallback(
@@ -209,12 +224,19 @@ export function StoreAreaManagementPage({
 
           <div className="mb-6">
             <h3 className="text-lg font-semibold mb-2">Add New Store Area</h3>
-            <div className="flex space-x-2">
+            <div className="flex space-x-2 mb-2">
               <Input
                 type="text"
-                placeholder="New Area Name"
+                placeholder="Area Name"
                 value={newAreaName}
                 onChange={(e) => setNewAreaName(e.target.value)}
+                className="flex-grow"
+              />
+              <Input
+                type="text"
+                placeholder="Sub-Department (Optional)"
+                value={newSubDepartmentName}
+                onChange={(e) => setNewSubDepartmentName(e.target.value)}
                 className="flex-grow"
               />
               <Button onClick={handleAddArea}>Add Area</Button>
@@ -230,6 +252,7 @@ export function StoreAreaManagementPage({
                 <TableRow>
                   <TableHead>ID</TableHead>
                   <TableHead>Name</TableHead>
+                  <TableHead>Sub-Department</TableHead> {/* New TableHead */}
                   <TableHead>Last Checked</TableHead>
                   <TableHead className="text-right">Actions</TableHead>
                 </TableRow>
@@ -239,9 +262,13 @@ export function StoreAreaManagementPage({
                   <TableRow key={area.id}>
                     <TableCell>{area.id}</TableCell>
                     <TableCell>{area.name}</TableCell>
+
                     <TableCell>
-                      {area.last_checked
-                        ? new Date(area.last_checked).toLocaleString()
+                      {area.subDepartment || "N/A"}
+                    </TableCell>
+                    <TableCell>
+                      {area.lastChecked
+                        ? new Date(area.lastChecked).toLocaleString()
                         : "N/A"}
                     </TableCell>
                     <TableCell className="text-right">
@@ -254,6 +281,9 @@ export function StoreAreaManagementPage({
                             onClick={() => {
                               setEditingArea(area);
                               setEditedAreaName(area.name);
+                              setEditedSubDepartmentName(
+                                area.subDepartment || "",
+                              ); // Initialize sub-department
                             }}
                           >
                             Edit
@@ -280,7 +310,24 @@ export function StoreAreaManagementPage({
                                 className="col-span-3"
                               />
                             </div>
+                            <div className="grid grid-cols-4 items-center gap-4"> {/* New input for sub-department */}
+                              <Label
+                                htmlFor="editedSubDepartmentName"
+                                className="text-right"
+                              >
+                                Sub-Department
+                              </Label>
+                              <Input
+                                id="editedSubDepartmentName"
+                                value={editedSubDepartmentName}
+                                onChange={(e) =>
+                                  setEditedSubDepartmentName(e.target.value)
+                                }
+                                className="col-span-3"
+                              />
+                            </div>
                           </div>
+
                           <DialogFooter>
                             <Button onClick={handleEditArea}>
                               Save changes

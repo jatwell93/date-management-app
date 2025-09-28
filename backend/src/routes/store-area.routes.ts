@@ -11,9 +11,10 @@ router.get("/", authenticateToken, async (req: Request, res: Response) => {
   try {
     const areas = await storeAreaService.getAllStoreAreas();
     res.json(areas);
-  } catch (_error) {
-    // console.error("Get store areas error:", _error);
-    res.status(500).json({ message: "Internal server error" });
+  } catch (error: any) {
+    console.error("Get store areas error:", error);
+    const errorMessage = error.message || "Internal server error";
+    res.status(500).json({ message: errorMessage });
   }
 });
 
@@ -28,36 +29,38 @@ router.get("/:id", authenticateToken, async (req: Request, res: Response) => {
     }
 
     res.json(area);
-  } catch (_error) {
-    // console.error("Get store area error:", _error);
-    res.status(500).json({ message: "Internal server error" });
+  } catch (error: any) {
+    console.error("Get store area error:", error);
+    const errorMessage = error.message || "Internal server error";
+    res.status(500).json({ message: errorMessage });
   }
 });
 
-// GET /store-areas/name/:name - Get a specific store area by name
+// GET /store-areas/name/:name - Get store areas by name (can be multiple with different sub-departments)
 router.get(
   "/name/:name",
   authenticateToken,
   async (req: Request, res: Response) => {
     try {
       const name = req.params.name;
-      const area = await storeAreaService.getStoreAreaByName(name);
+      const areas = await storeAreaService.getStoreAreaByName(name);
 
-      if (!area) {
-        return res.status(404).json({ message: "Store area not found" });
+      if (!areas || areas.length === 0) {
+        return res.status(404).json({ message: "Store areas not found" });
       }
 
-      res.json(area);
-    } catch (_error) {
-      // console.error("Get store area by name error:", _error);
-      res.status(500).json({ message: "Internal server error" });
+      res.json(areas);
+    } catch (error: any) {
+      console.error("Get store areas by name error:", error);
+      const errorMessage = error.message || "Internal server error";
+      res.status(500).json({ message: errorMessage });
     }
   },
 );
 
 // POST /store-areas - Create a new store area
 router.post("/", authenticateToken, async (req: Request, res: Response) => {
-  const { name, lastChecked } = req.body;
+  const { name, subDepartment, lastChecked } = req.body;
   if (!name) {
     return res
       .status(400)
@@ -67,12 +70,14 @@ router.post("/", authenticateToken, async (req: Request, res: Response) => {
   try {
     const newArea = await storeAreaService.createStoreArea({
       name,
+      subDepartment,
       lastChecked,
     } as Omit<StoreArea, "id" | "createdAt" | "updatedAt">);
     res.status(201).json(newArea);
-  } catch (_error) {
-    // console.error("Create store area error:", _error);
-    res.status(500).json({ message: "Internal server error" });
+  } catch (error: any) {
+    console.error("Create store area error:", error);
+    const errorMessage = error.message || "Internal server error";
+    res.status(500).json({ message: errorMessage });
   }
 });
 
@@ -80,13 +85,14 @@ router.post("/", authenticateToken, async (req: Request, res: Response) => {
 router.put("/:id", authenticateToken, async (req: Request, res: Response) => {
   try {
     const id = parseInt(req.params.id);
-    const { name, lastChecked } = req.body;
+    const { name, subDepartment, lastChecked } = req.body;
 
     // Build update object
     const updateData: Partial<
       Omit<StoreArea, "id" | "createdAt" | "updatedAt">
     > = {};
     if (name !== undefined) updateData.name = name;
+    if (subDepartment !== undefined) updateData.subDepartment = subDepartment;
     if (lastChecked !== undefined) updateData.lastChecked = lastChecked;
 
     const updatedArea = await storeAreaService.updateStoreArea(id, updateData);
@@ -96,9 +102,10 @@ router.put("/:id", authenticateToken, async (req: Request, res: Response) => {
     }
 
     res.json(updatedArea);
-  } catch (_error) {
-    // console.error("Update store area error:", _error);
-    res.status(500).json({ message: "Internal server error" });
+  } catch (error: any) {
+    console.error("Update store area error:", error);
+    const errorMessage = error.message || "Internal server error";
+    res.status(500).json({ message: errorMessage });
   }
 });
 
@@ -116,9 +123,10 @@ router.delete(
       }
 
       res.json({ message: "Store area deleted successfully" });
-    } catch (_error) {
-      // console.error("Delete store area error:", _error);
-      res.status(500).json({ message: "Internal server error" });
+    } catch (error: any) {
+      console.error("Delete store area error:", error);
+      const errorMessage = error.message || "Internal server error";
+      res.status(500).json({ message: errorMessage });
     }
   },
 );

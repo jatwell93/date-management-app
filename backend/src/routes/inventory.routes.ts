@@ -71,7 +71,13 @@ router.get(
 // POST /inventory-items - Create a new inventory item
 router.post("/", authenticateToken, async (req: Request, res: Response) => {
   const { productId, expiryDate, locationId, status } = req.body;
-  if (!productId || !expiryDate || !locationId) {
+  
+  // Validate required fields
+  if (productId === undefined || productId === null || 
+      typeof productId !== 'number' || Number.isNaN(productId) || productId < 1 ||
+      !expiryDate || 
+      locationId === undefined || locationId === null || 
+      typeof locationId !== 'number' || Number.isNaN(locationId) || locationId < 1) {
     return res
       .status(400)
       .json({ message: "Missing required inventory item fields" });
@@ -85,7 +91,13 @@ router.post("/", authenticateToken, async (req: Request, res: Response) => {
       status,
     } as Omit<InventoryItem, "id" | "createdAt" | "updatedAt">);
     res.status(201).json(newInventoryItem);
-  } catch (_error) {
+  } catch (error: any) {
+    // Check if the error is about location not existing
+    if (error.message === "Location does not exist") {
+      return res
+        .status(400)
+        .json({ message: "Location does not exist" });
+    }
     // console.error("Create inventory item error:", _error);
     res.status(500).json({ message: "Internal server error" });
   }

@@ -3,7 +3,10 @@ import { render, screen, fireEvent, waitFor } from "@testing-library/react";
 import { UserManagementPage } from "../pages/UserManagementPage";
 
 // Mock the fetch API
-global.fetch = jest.fn(() =>
+(global.window as any).fetch = jest.fn() as any;
+
+// Default mock implementation for fetching users
+(global.fetch as jest.Mock).mockImplementation(() =>
   Promise.resolve({
     ok: true,
     json: () =>
@@ -12,7 +15,7 @@ global.fetch = jest.fn(() =>
         { id: 2, role: "Team Member" },
       ]),
   }),
-) as jest.Mock;
+);
 
 describe("UserManagementPage", () => {
   const mockToken = "mock-manager-token";
@@ -42,13 +45,13 @@ describe("UserManagementPage", () => {
   });
 
   test("creates a new user", async () => {
-    global.fetch.mockImplementationOnce(() =>
+    (global.fetch as jest.Mock).mockImplementationOnce(() =>
       Promise.resolve({
         ok: true,
         json: () => Promise.resolve({ message: "User created successfully!" }),
       }),
     ); // Mock for create user
-    global.fetch.mockImplementationOnce(() =>
+    (global.fetch as jest.Mock).mockImplementationOnce(() =>
       Promise.resolve({
         ok: true,
         json: () =>
@@ -86,13 +89,13 @@ describe("UserManagementPage", () => {
   });
 
   test("updates an existing user role", async () => {
-    global.fetch.mockImplementationOnce(() =>
+    (global.fetch as jest.Mock).mockImplementationOnce(() =>
       Promise.resolve({
         ok: true,
         json: () => Promise.resolve({ message: "User updated successfully!" }),
       }),
     ); // Mock for update user
-    global.fetch.mockImplementationOnce(() =>
+    (global.fetch as jest.Mock).mockImplementationOnce(() =>
       Promise.resolve({
         ok: true,
         json: () =>
@@ -130,13 +133,13 @@ describe("UserManagementPage", () => {
   });
 
   test("deletes a user", async () => {
-    global.fetch.mockImplementationOnce(() =>
+    (global.fetch as jest.Mock).mockImplementationOnce(() =>
       Promise.resolve({
         ok: true,
         json: () => Promise.resolve({ message: "User deleted successfully!" }),
       }),
     ); // Mock for delete user
-    global.fetch.mockImplementationOnce(() =>
+    (global.fetch as jest.Mock).mockImplementationOnce(() =>
       Promise.resolve({
         ok: true,
         json: () => Promise.resolve([{ id: 1, role: "Manager" }]),

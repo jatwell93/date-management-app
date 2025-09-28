@@ -64,7 +64,7 @@ export class ProductService {
       ...values,
     );
 
-    if (result.changes === 0) {
+    if ((result.changes ?? 0) === 0) {
       return null;
     }
 
@@ -76,6 +76,6 @@ export class ProductService {
   async deleteProduct(id: number): Promise<boolean> {
     const db = await getDb();
     const result = await db.run("DELETE FROM products WHERE id = ?", id);
-    return result.changes > 0;
+    return (result.changes ??0) > 0;
   }
 }

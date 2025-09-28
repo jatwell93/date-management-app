@@ -7,10 +7,7 @@
 
 import { clientsClaim } from "workbox-core";
 import { ExpirationPlugin } from "workbox-expiration";
-import {
-  precacheAndRoute,
-  createHandlerBoundToFetch,
-} from "workbox-precaching";
+import { precacheAndRoute, createHandlerBoundToURL } from "workbox-precaching";
 import { registerRoute } from "workbox-routing";
 import { StaleWhileRevalidate, CacheFirst } from "workbox-strategies";
 
@@ -48,7 +45,7 @@ registerRoute(
     // Return true to signal that we want to handle the request.
     return true;
   },
-  createHandlerBoundToFetch(self.__WB_MANIFEST[0].url),
+  createHandlerBoundToURL((self.__WB_MANIFEST[0] as any).url),
 );
 
 // An example runtime caching route for requests that aren't handled by the precache,

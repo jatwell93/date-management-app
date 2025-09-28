@@ -1,9 +1,11 @@
 import { synchronizeOfflineData } from "../lib/sync-manager";
 import { offlineStorage } from "../lib/offline-storage";
+import { waitFor } from "@testing-library/react";
 
 // Mock fetch API
-global.fetch = jest.fn((url) => {
-  if (url.includes("/inventory-items")) {
+global.fetch = jest.fn((url: RequestInfo | URL) => {
+  const urlString = url.toString();
+  if (urlString.includes("/inventory-items")) {
     return Promise.resolve({
       ok: true,
       json: () =>

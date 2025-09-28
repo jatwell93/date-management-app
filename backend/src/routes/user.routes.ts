@@ -65,10 +65,11 @@ router.post(
         return res.status(400).json({ message: "PIN and role are required" });
       }
 
-      const newUser: User = {
-        pin,
-        role,
-      };
+      // FIX: Use Omit to create a type that represents a user *before* it's saved to the DB.
+      const newUser: Omit<User, "id" | "created_at" | "updated_at"> = {
+        pin,
+        role,
+      };
 
       const createdUser = await createUser(newUser);
       res.status(201).json(createdUser);

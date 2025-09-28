@@ -1,13 +1,19 @@
 import React from "react";
-import { render, screen, fireEvent, waitFor } from "@testing-library/react";
+import {
+  render,
+  screen,
+  fireEvent,
+  waitFor as _waitFor,
+} from "@testing-library/react";
 import { ScanPage } from "../pages/ScanPage";
 import "@testing-library/jest-dom";
 import { offlineStorage } from "../lib/offline-storage";
 
 // Mock fetch API
-global.fetch = jest.fn((url) => {
-  if (url.includes("/products?barcode=")) {
-    if (url.includes("123")) {
+global.fetch = jest.fn((url: RequestInfo | URL) => {
+  const urlString = url.toString();
+  if (urlString.includes("/products?barcode=")) {
+    if (urlString.includes("123")) {
       return Promise.resolve({
         ok: true,
         json: () =>
@@ -19,14 +25,14 @@ global.fetch = jest.fn((url) => {
             cost_price: 10.0,
           }),
       } as Response);
-    } else if (url.includes("non_existent")) {
+    } else if (urlString.includes("non_existent")) {
       return Promise.resolve({
         ok: false,
         status: 404,
         json: () => Promise.resolve({ message: "Product not found" }),
       } as Response);
     }
-  } else if (url.includes("/products")) {
+  } else if (urlString.includes("/products")) {
     // Mock for adding new product
     return Promise.resolve({
       ok: true,
@@ -39,14 +45,14 @@ global.fetch = jest.fn((url) => {
           cost_price: 15.0,
         }),
     } as Response);
-  } else if (url.includes("/inventory-items")) {
+  } else if (urlString.includes("/inventory-items")) {
     // Mock for adding inventory item
     return Promise.resolve({
       ok: true,
       json: () =>
         Promise.resolve({ message: "Inventory item added successfully!" }),
     } as Response);
-  } else if (url.includes("/store-areas")) {
+  } else if (urlString.includes("/store-areas")) {
     // Mock for fetching store areas
     return Promise.resolve({
       ok: true,

@@ -1,0 +1,62 @@
+"use strict";
+Object.defineProperty(exports, "__esModule", { value: true });
+const product_service_1 = require("../services/product.service");
+const database_1 = require("../database");
+// Mock the database module
+jest.mock("../database", () => ({
+    getDb: jest.fn(),
+}));
+describe("ProductService", () => {
+    let productService;
+    let mockDb;
+    beforeEach(() => {
+        productService = new product_service_1.ProductService();
+        mockDb = {
+            get: jest.fn(),
+            run: jest.fn(),
+        };
+        database_1.getDb.mockResolvedValue(mockDb);
+    });
+    afterEach(() => {
+        jest.clearAllMocks();
+    });
+    it("should return a product by barcode", async () => {
+        const mockProduct = {
+            id: 1,
+            barcode: "123",
+            sku: "SKU1",
+            name: "Product 1",
+            cost_price: 10.0,
+            created_at: "now",
+            updated_at: "now",
+        };
+        mockDb.get.mockResolvedValue(mockProduct);
+        const product = await productService.getProductByBarcode("123");
+        expect(product).toEqual(mockProduct);
+        expect(database_1.getDb).toHaveBeenCalledTimes(1);
+        expect(mockDb.get).toHaveBeenCalledWith("SELECT * FROM products WHERE barcode = ?", "123");
+    });
+    it("should return null if product not found by barcode", async () => {
+        mockDb.get.mockResolvedValue(undefined);
+        const product = await productService.getProductByBarcode("non_existent");
+        expect(product).toBeNull();
+        expect(database_1.getDb).toHaveBeenCalledTimes(1);
+        expect(mockDb.get).toHaveBeenCalledWith("SELECT * FROM products WHERE barcode = ?", "non_existent");
+    });
+    it("should create a new product", async () => {
+        const newProductData = {
+            barcode: "456",
+            sku: "SKU2",
+            name: "Product 2",
+            cost_price: 20.0,
+        };
+        mockDb.run.mockResolvedValue({ lastID: 2 });
+        const createdProduct = await productService.createProduct(newProductData);
+        expect(createdProduct).toEqual(expect.objectContaining({
+            id: 2,
+            ...newProductData,
+        }));
+        expect(database_1.getDb).toHaveBeenCalledTimes(1);
+        expect(mockDb.run).toHaveBeenCalledWith("INSERT INTO products (barcode, sku, name, cost_price) VALUES (?, ?, ?, ?)", newProductData.barcode, newProductData.sku, newProductData.name, newProductData.cost_price);
+    });
+});

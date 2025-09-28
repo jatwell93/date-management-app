@@ -1,0 +1,17 @@
+"use strict";
+Object.defineProperty(exports, "__esModule", { value: true });
+exports.errorHandler = void 0;
+const errorHandler = (err, req, res, _next) => {
+    // Prevent multiple responses
+    if (res.headersSent) {
+        return _next(err);
+    }
+    // Use 500 as default status code if not already set
+    const statusCode = res.statusCode !== 200 ? res.statusCode : 500;
+    res.status(statusCode).json({
+        message: err.message,
+        // Only send stack trace in development environment
+        stack: process.env.NODE_ENV === "production" ? null : err.stack,
+    });
+};
+exports.errorHandler = errorHandler;

@@ -304,121 +304,131 @@ export function UserManagementPage({ token }: UserManagementPageProps) {
 
       <div className="mb-8">
         <h2 className="text-xl font-semibold mb-4">Edit Existing User</h2>
-        <FormField
-          control={form.control}
-          name="selectedUserForEdit"
-          render={({ field }) => (
-            <FormItem>
-              <FormLabel>Select User to Edit</FormLabel>
-              <Select
-                onValueChange={(value) => {
-                  field.onChange(value);
-                  setSelectedUserId(Number(value));
-                  const userToEdit = users.find((u) => u.id === Number(value));
-                  if (userToEdit) {
-                    form.setValue("role", userToEdit.role);
-                  }
-                }}
-                defaultValue={field.value}
-              >
-                <FormControl>
-                  <SelectTrigger>
-                    <SelectValue placeholder="Select a user" />
-                  </SelectTrigger>
-                </FormControl>
-                <SelectContent>
-                  {users.map((user) => (
-                    <SelectItem key={user.id} value={String(user.id)}>
-                      ID: {user.id}, Role: {user.role}
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
-              <FormMessage />
-            </FormItem>
-          )}
-        />
         <Form {...form}>
-          <form
-            onSubmit={form.handleSubmit(onEditSubmit)}
-            className="space-y-4 md:w-1/2 lg:w-1/3"
-          >
+          <div className="space-y-4 md:w-1/2 lg:w-1/3">
             <FormField
               control={form.control}
-              name="role"
+              name="selectedUserForEdit"
               render={({ field }) => (
                 <FormItem>
-                  <FormLabel>Role</FormLabel>
+                  <FormLabel>Select User to Edit</FormLabel>
                   <Select
-                    onValueChange={field.onChange}
+                    onValueChange={(value: string) => {
+                      field.onChange(value);
+                      setSelectedUserId(Number(value));
+                      const userToEdit = users.find(
+                        (u) => u.id === Number(value),
+                      );
+                      if (userToEdit) {
+                        form.setValue("role", userToEdit.role);
+                      }
+                    }}
                     defaultValue={field.value}
                   >
                     <FormControl>
                       <SelectTrigger>
-                        <SelectValue placeholder="Select a role" />
+                        <SelectValue placeholder="Select a user" />
                       </SelectTrigger>
                     </FormControl>
                     <SelectContent>
-                      <SelectItem value="Manager">Manager</SelectItem>
-                      <SelectItem value="Team Member">Team Member</SelectItem>
+                      {users.map((user) => (
+                        <SelectItem key={user.id} value={String(user.id)}>
+                          ID: {user.id}, Role: {user.role}
+                        </SelectItem>
+                      ))}
                     </SelectContent>
                   </Select>
                   <FormMessage />
                 </FormItem>
               )}
             />
-            {error && <p className="text-red-500 text-sm">{error}</p>}
-            {success && <p className="text-green-500 text-sm">{success}</p>}
-            <Button type="submit" className="w-full">
-              Update User
-            </Button>
-            <Button
-              type="button"
-              variant="outline"
-              className="w-full mt-2"
-              onClick={onResetPin}
-            >
-              Reset PIN
-            </Button>
-          </form>
+            <form onSubmit={form.handleSubmit(onEditSubmit)}>
+              <FormField
+                control={form.control}
+                name="role"
+                render={({ field }) => (
+                  <FormItem>
+                    <FormLabel>Role</FormLabel>
+                    <Select
+                      onValueChange={field.onChange}
+                      defaultValue={field.value}
+                    >
+                      <FormControl>
+                        <SelectTrigger>
+                          <SelectValue placeholder="Select a role" />
+                        </SelectTrigger>
+                      </FormControl>
+                      <SelectContent>
+                        <SelectItem value="Manager">Manager</SelectItem>
+                        <SelectItem value="Team Member">Team Member</SelectItem>
+                      </SelectContent>
+                    </Select>
+                    <FormMessage />
+                  </FormItem>
+                )}
+              />
+              {error && <p className="text-red-500 text-sm">{error}</p>}
+              {success && <p className="text-green-500 text-sm">{success}</p>}
+              <Button type="submit" className="w-full mt-4">
+                Update User
+              </Button>
+              <Button
+                type="button"
+                variant="outline"
+                className="w-full mt-2"
+                onClick={onResetPin}
+              >
+                Reset PIN
+              </Button>
+            </form>
+          </div>
         </Form>
       </div>
 
       <div>
         <h2 className="text-xl font-semibold mb-4">Delete User</h2>
-        <FormField
-          control={form.control}
-          name="selectedUserForDelete"
-          render={({ field }) => (
-            <FormItem>
-              <FormLabel>Select User to Delete</FormLabel>
-              <Select onValueChange={field.onChange} defaultValue={field.value}>
-                <FormControl>
-                  <SelectTrigger>
-                    <SelectValue placeholder="Select a user" />
-                  </SelectTrigger>
-                </FormControl>
-                <SelectContent>
-                  {users.map((user) => (
-                    <SelectItem key={user.id} value={String(user.id)}>
-                      ID: {user.id}, Role: {user.role}
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
-              <FormMessage />
-            </FormItem>
-          )}
-        />
-        {error && <p className="text-red-500 text-sm mt-2">{error}</p>}
-        {success && <p className="text-green-500 text-sm mt-2">{success}</p>}
-        <Button
-          variant="destructive"
-          className="w-full md:w-1/2 lg:w-1/3 mt-4"
-          onClick={onDeleteUser}
-        >
-          Delete User
-        </Button>
+        <Form {...form}>
+          <div className="space-y-4 md:w-1/2 lg:w-1/3">
+            <FormField
+              control={form.control}
+              name="selectedUserForDelete"
+              render={({ field }) => (
+                <FormItem>
+                  <FormLabel>Select User to Delete</FormLabel>
+                  <Select
+                    onValueChange={field.onChange}
+                    defaultValue={field.value}
+                  >
+                    <FormControl>
+                      <SelectTrigger>
+                        <SelectValue placeholder="Select a user" />
+                      </SelectTrigger>
+                    </FormControl>
+                    <SelectContent>
+                      {users.map((user) => (
+                        <SelectItem key={user.id} value={String(user.id)}>
+                          ID: {user.id}, Role: {user.role}
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                  <FormMessage />
+                </FormItem>
+              )}
+            />
+            {error && <p className="text-red-500 text-sm mt-2">{error}</p>}
+            {success && (
+              <p className="text-green-500 text-sm mt-2">{success}</p>
+            )}
+            <Button
+              variant="destructive"
+              className="w-full"
+              onClick={onDeleteUser}
+            >
+              Delete User
+            </Button>
+          </div>
+        </Form>
       </div>
     </div>
   );

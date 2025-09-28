@@ -1,3 +1,3 @@
-import React from "react";
-import { render, screen } from "@testing-library/react";
-import App from "./App";
+import _React from "react";
+import { render as _render, screen as _screen } from "@testing-library/react";
+import _App from "./App";

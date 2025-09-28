@@ -42,10 +42,12 @@ export async function initDatabase() {
 
     CREATE TABLE IF NOT EXISTS store_areas (
       id INTEGER PRIMARY KEY AUTOINCREMENT,
-      name TEXT UNIQUE NOT NULL,
+      name TEXT NOT NULL,
+      sub_department TEXT,
       last_checked TEXT,
       created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
-      updated_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
+      updated_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+      UNIQUE(name, sub_department)
     );
 
     CREATE TABLE IF NOT EXISTS users (
@@ -67,15 +69,47 @@ export async function initDatabase() {
     );
   `);
 
+  // Add sub_department column to store_areas if it doesn't exist
+  try {
+    const tableInfo = await db.all("PRAGMA table_info(store_areas)");
+    const hasSubDepartmentColumn = tableInfo.some(column => column.name === 'sub_department');
+    if (!hasSubDepartmentColumn) {
+      await db.exec("ALTER TABLE store_areas ADD COLUMN sub_department TEXT");
+    }
+  } catch (error) {
+    console.error("Error checking or updating store_areas table:", error);
+  }
+
   // Seed the database with some initial data
   await db.exec(`
     INSERT OR IGNORE INTO products (barcode, sku, name, cost_price) VALUES ('123456789', 'SKU123', 'Test Product', 10.00);
   `);
 
-  // Seed initial manager user
+  // First check if a user with PIN 1234 already exists
+  const existingUser = await db.get("SELECT * FROM users");
+  console.log("Existing user check:", existingUser);
+  
+  // Clear existing users for a fresh start if we see there are issues
+  if (existingUser) {
+    // Clear all users
+    await db.exec("DELETE FROM users");
+    console.log("Cleared existing users");
+  }
+  
+  // Now create a fresh user
+  // Seed initial manager user with proper hash
   const saltRounds = 10;
   const hashedPin = await bcrypt.hash("1234", saltRounds);
+  console.log("Hashed PIN for 1234:", hashedPin);
   await db.exec(`
     INSERT OR IGNORE INTO users (pin, role) VALUES ('${hashedPin}', 'Manager');
   `);
+  
+  // Check what we just inserted
+  const insertedUser = await db.get("SELECT * FROM users WHERE role = 'Manager'");
+  console.log("Inserted user:", insertedUser);
+  
+  // Also check all users
+  const allUsers = await db.all("SELECT * FROM users");
+  console.log("All users in DB:", allUsers);
 }

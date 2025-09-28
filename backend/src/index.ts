@@ -10,6 +10,9 @@ import userRoutes from "./routes/user.routes";
 import storeAreaRoutes from "./routes/store-area.routes";
 import { authenticateToken } from "./middleware/auth.middleware";
 import { errorHandler } from "./middleware/error.middleware";
+import { SchedulerService } from "./services/scheduler.service";
+import dotenv from "dotenv";
+dotenv.config();
 
 const app = express();
 const port = 3001;
@@ -23,6 +26,9 @@ initDatabase().catch((_err) => {
   // console.error("Database initialization failed", _err);
 });
 
+// Initialize scheduled tasks
+SchedulerService.initialize();
+
 // Public routes
 app.use("/auth", authRoutes);
 
@@ -35,7 +41,7 @@ app.use("/dashboard", authenticateToken, dashboardRoutes);
 app.use("/users", authenticateToken, userRoutes);
 
 app.get("/", (req, res) => {
-  res.send("Date Management API is running!");
+  res.json({ message: "Date Management API is running!" });
 });
 
 // Error handling middleware

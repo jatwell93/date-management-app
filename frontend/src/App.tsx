@@ -15,21 +15,28 @@ import { MarkdownCalculator } from "./components/MarkdownCalculator";
 import { UserManagementPage } from "./pages/UserManagementPage";
 import { StoreAreaManagementPage } from "./pages/StoreAreaManagementPage";
 import { synchronizeOfflineData } from "./lib/sync-manager";
-import "./globals.css"; // Import the global CSS for Tailwind
+import { jwtDecode } from "jwt-decode";
 
-// Helper function to decode JWT and get role (mock implementation)
+// Helper function to decode JWT and get role
 const decodeTokenAndGetRole = (
   token: string | null,
 ): "Manager" | "Team Member" | null => {
   if (!token) return null;
-  // In a real application, you would decode the JWT to get the role.
-  // For this mock, we'll assume a simple check.
-  if (token.includes("manager")) {
-    return "Manager";
-  } else if (token.includes("team-member")) {
-    return "Team Member";
+  try {
+    const decodedToken: any = jwtDecode(token);
+    const role = decodedToken.role;
+    console.log("Decoded token role:", role);
+    if (role === "Manager") {
+      return "Manager";
+    } else if (role === "Team Member") {
+      return "Team Member";
+    }
+    console.log("Unknown role in token, defaulting to Team Member");
+    return "Team Member"; // Default role if not specified
+  } catch (error) {
+    console.error("Error decoding token:", error);
+    return "Team Member"; // Default to Team Member on error
   }
-  return "Team Member"; // Default role if not specified
 };
 
 function App() {
@@ -83,62 +90,93 @@ function App() {
 
   return (
     <Router>
-      <div className="min-h-screen bg-gray-100">
+      <div className="min-h-screen bg-background text-foreground">
         {isLoggedIn && (
           <nav className="bg-primary text-primary-foreground p-4 shadow-md">
-            <ul className="flex space-x-4">
-              <li>
-                <Link to="/scan" className="hover:underline">
-                  Scan
+            <div className="container mx-auto flex items-center justify-between">
+              <div className="flex items-center space-x-8">
+                <Link
+                  to="/scan"
+                  className="font-semibold hover:opacity-90 transition-opacity"
+                >
+                  <h1 className="text-xl">Inventory Manager</h1>
                 </Link>
-              </li>
-              <li>
-                <Link to="/dashboard" className="hover:underline">
-                  Dashboard
-                </Link>
-              </li>
-              <li>
-                <Link to="/reports" className="hover:underline">
-                  Reports
-                </Link>
-              </li>
-              <li>
-                <Link to="/usage-report" className="hover:underline">
-                  Usage Report
-                </Link>
-              </li>
-              <li>
-                <Link to="/markdown-calculator" className="hover:underline">
-                  Markdown Calculator
-                </Link>
-              </li>
-              {userRole === "Manager" && (
-                <>
+                <ul className="hidden md:flex space-x-6">
                   <li>
-                    <Link to="/user-management" className="hover:underline">
-                      User Management
+                    <Link
+                      to="/scan"
+                      className="hover:opacity-90 transition-opacity"
+                    >
+                      Scan
                     </Link>
                   </li>
                   <li>
                     <Link
-                      to="/store-area-management"
-                      className="hover:underline"
+                      to="/dashboard"
+                      className="hover:opacity-90 transition-opacity"
                     >
-                      Store Areas
+                      Dashboard
                     </Link>
                   </li>
-                </>
-              )}
-              <li>
-                <button onClick={handleLogout} className="hover:underline">
+                  <li>
+                    <Link
+                      to="/reports"
+                      className="hover:opacity-90 transition-opacity"
+                    >
+                      Reports
+                    </Link>
+                  </li>
+                  <li>
+                    <Link
+                      to="/usage-report"
+                      className="hover:opacity-90 transition-opacity"
+                    >
+                      Usage Report
+                    </Link>
+                  </li>
+                  <li>
+                    <Link
+                      to="/markdown-calculator"
+                      className="hover:opacity-90 transition-opacity"
+                    >
+                      Markdown Calculator
+                    </Link>
+                  </li>
+                  {userRole === "Manager" && (
+                    <>
+                      <li>
+                        <Link
+                          to="/user-management"
+                          className="hover:opacity-90 transition-opacity"
+                        >
+                          User Management
+                        </Link>
+                      </li>
+                      <li>
+                        <Link
+                          to="/store-area-management"
+                          className="hover:opacity-90 transition-opacity"
+                        >
+                          Store Areas
+                        </Link>
+                      </li>
+                    </>
+                  )}
+                </ul>
+              </div>
+              <div>
+                <button
+                  onClick={handleLogout}
+                  className="px-4 py-2 bg-destructive text-destructive-foreground rounded-md hover:opacity-90 transition-opacity"
+                >
                   Logout
                 </button>
-              </li>
-            </ul>
+              </div>
+            </div>
           </nav>
         )}
 
-        <main className="p-4">
+        <main className="p-4 max-w-7xl mx-auto">
           <Routes>
             <Route
               path="/login"
@@ -193,7 +231,11 @@ function App() {
             <Route
               path="/markdown-calculator"
               element={
-                isLoggedIn ? <MarkdownCalculator /> : <Navigate to="/login" />
+                isLoggedIn ? (
+                  <MarkdownCalculator token={token} />
+                ) : (
+                  <Navigate to="/login" />
+                )
               }
             />
             {userRole === "Manager" && (

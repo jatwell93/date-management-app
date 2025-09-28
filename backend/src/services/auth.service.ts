@@ -17,18 +17,30 @@ export class AuthService {
 
   async login(pin: string): Promise<string | null> {
     const db = await getDb();
-    const user: User | undefined = await db.get(
-      "SELECT * FROM users WHERE pin = ?",
-      pin,
-    );
-
-    if (user) {
-      // In a real app, you would compare hashed PINs: await bcrypt.compare(pin, user.pin)
-      const token = jwt.sign({ userId: user.id, role: user.role }, JWT_SECRET, {
-        expiresIn: "1h",
-      });
-      return token;
+    
+    // Get all users and iterate through them to find a match
+    const users = await db.all("SELECT * FROM users");
+    console.log("All users in DB:", users);
+    
+    // Look for a user whose hashed pin matches the PIN that was provided
+    for (const user of users) {
+      console.log("Checking user:", user);
+      console.log("Comparing provided PIN:", pin);
+      console.log("Stored hashed PIN:", user.pin);
+      
+      const isValidPin = await bcrypt.compare(pin, user.pin);
+      console.log("PIN comparison result for user", user.id, ":", isValidPin);
+      
+      if (isValidPin) {
+        console.log("Valid user found:", user);
+        const token = jwt.sign({ userId: user.id, role: user.role }, JWT_SECRET, {
+          expiresIn: "1h",
+        });
+        return token;
+      }
     }
+    
+    console.log("No valid user found with PIN:", pin);
     return null;
   }
 }

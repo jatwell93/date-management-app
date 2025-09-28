@@ -191,6 +191,6 @@ export class InventoryItemModel {
   async delete(id: number): Promise<boolean> {
     const query = "DELETE FROM inventory_items WHERE id = ?";
     const result = await this.db.run(query, [id]);
-    return result.changes > 0;
+    return result.changes != null && result.changes > 0;
   }
 }

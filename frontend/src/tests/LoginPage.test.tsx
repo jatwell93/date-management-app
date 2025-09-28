@@ -3,12 +3,15 @@ import { render, screen, fireEvent, waitFor } from "@testing-library/react";
 import { LoginPage } from "../components/LoginPage";
 
 // Mock the fetch API
-global.fetch = jest.fn(() =>
+(global.window as any).fetch = jest.fn() as any;
+
+// Default mock implementation for successful login
+(global.fetch as jest.Mock).mockImplementation(() =>
   Promise.resolve({
     ok: true,
     json: () => Promise.resolve({ token: "mock-auth-token-manager" }),
   }),
-) as jest.Mock;
+);
 
 describe("LoginPage", () => {
   const mockOnLogin = jest.fn();
@@ -46,7 +49,7 @@ describe("LoginPage", () => {
   });
 
   test("displays error message on failed login", async () => {
-    global.fetch.mockImplementationOnce(() =>
+    (global.fetch as jest.Mock).mockImplementationOnce(() =>
       Promise.resolve({
         ok: false,
         json: () => Promise.resolve({ message: "Invalid credentials" }),

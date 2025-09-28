@@ -5,8 +5,8 @@ import {
   updateUser,
   deleteUser,
   getUserByPin,
-} from "../../src/services/user.service";
-import { getDb } from "../../src/database";
+} from "../services/user.service";
+import { getDb } from "../database";
 
 // Mock the database connection
 jest.mock("../../src/database", () => ({

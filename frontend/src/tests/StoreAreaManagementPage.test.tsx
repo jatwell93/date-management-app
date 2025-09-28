@@ -1,11 +1,17 @@
 import React from "react";
-import { render, screen, fireEvent, waitFor } from "@testing-library/react";
+import {
+  render,
+  screen,
+  fireEvent,
+  waitFor as _waitFor,
+} from "@testing-library/react";
 import { StoreAreaManagementPage } from "../pages/StoreAreaManagementPage";
 import "@testing-library/jest-dom";
 
 // Mock fetch API
-global.fetch = jest.fn((url, options) => {
-  if (url.includes("/store-areas")) {
+global.fetch = jest.fn((url: RequestInfo | URL, options) => {
+  const urlString = url.toString();
+  if (urlString.includes("/store-areas")) {
     if (options?.method === "POST") {
       return Promise.resolve({
         ok: true,

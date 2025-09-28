@@ -17,6 +17,7 @@ import {
   SelectValue,
 } from "../components/ui/select";
 import { offlineStorage } from "../lib/offline-storage";
+import { isWithinMarkdownPeriod, calculateMarkdownPrice } from "../lib/utils";
 
 interface ScanPageProps {
   token: string | null;
@@ -25,6 +26,7 @@ interface ScanPageProps {
 interface StoreArea {
   id: number;
   name: string;
+  subDepartment?: string;
 }
 
 interface ProductDetails {
@@ -35,6 +37,23 @@ interface ProductDetails {
   cost_price: number;
 }
 
+interface InventoryItem {
+  id: number;
+  product_id: number;
+  expiry_date: string;
+  location_id: number;
+  status: string;
+  created_at: string;
+  updated_at: string;
+}
+
+interface MarkdownCalculation {
+  expiryDate: string;
+  daysToExpiry: number;
+  markdownPercentage: number;
+  markdownPrice: number;
+}
+
 export function ScanPage({ token }: ScanPageProps) {
   const [scannedBarcode, setScannedBarcode] = useState<string | null>(null);
   const [productDetails, setProductDetails] = useState<ProductDetails | null>(
@@ -42,6 +61,7 @@ export function ScanPage({ token }: ScanPageProps) {
   );
   const [expiryDate, setExpiryDate] = useState<string>("");
   const [selectedLocationId, setSelectedLocationId] = useState<string>("");
+  const [selectedSubDepartment, setSelectedSubDepartment] = useState<string>("");
   const [storeAreas, setStoreAreas] = useState<StoreArea[]>([]);
   const [error, setError] = useState<string | null>(null);
   const [successMessage, setSuccessMessage] = useState<string | null>(null);
@@ -49,6 +69,8 @@ export function ScanPage({ token }: ScanPageProps) {
   const [newProductName, setNewProductName] = useState<string>("");
   const [newProductSKU, setNewProductSKU] = useState<string>("");
   const [newProductCostPrice, setNewProductCostPrice] = useState<string>("");
+  const [markdownPrice, setMarkdownPrice] = useState<number | null>(null);
+  const [markdownCalculations, setMarkdownCalculations] = useState<MarkdownCalculation[] | null>(null);
 
   useEffect(() => {
     const fetchStoreAreas = async () => {
@@ -75,12 +97,27 @@ export function ScanPage({ token }: ScanPageProps) {
     fetchStoreAreas();
   }, [token]);
 
+  useEffect(() => {
+    if (productDetails && expiryDate) {
+      const isMarkdown = isWithinMarkdownPeriod(expiryDate, 3);
+      if (isMarkdown) {
+        setMarkdownPrice(calculateMarkdownPrice(productDetails.cost_price, 20)); // Assuming 20% markdown
+      } else {
+        setMarkdownPrice(null);
+      }
+    } else {
+      setMarkdownPrice(null);
+    }
+  }, [productDetails, expiryDate]);
+
   const handleBarcodeScan = async (barcode: string) => {
     setScannedBarcode(barcode);
     setProductDetails(null);
     setError(null);
     setSuccessMessage(null);
     setShowNewProductForm(false);
+    setMarkdownPrice(null);
+    setMarkdownCalculations(null);
 
     if (!token) {
       setError("Authentication token is missing.");
@@ -109,6 +146,65 @@ export function ScanPage({ token }: ScanPageProps) {
 
       const product = await response.json();
       setProductDetails(product);
+
+      // Fetch inventory items for this product to check for markdown opportunities
+      try {
+        const inventoryResponse = await fetch(
+          `http://localhost:3001/inventory-items/product/${product.id}`,
+          {
+            headers: {
+              Authorization: `Bearer ${token}`,
+            },
+          },
+        );
+
+        if (inventoryResponse.ok) {
+          const inventoryItems: InventoryItem[] = await inventoryResponse.json();
+
+          // Calculate markdowns for each inventory item
+          const calculations: MarkdownCalculation[] = inventoryItems
+            .filter(item => {
+              // Only consider items that are within the markdown periods (next 3 months)
+              const expiryDate = new Date(item.expiry_date);
+              const today = new Date();
+              const daysToExpiry = Math.ceil(
+                (expiryDate.getTime() - today.getTime()) / (1000 * 60 * 60 * 24)
+              );
+              return daysToExpiry <= 90; // Within 3 months
+            })
+            .map(item => {
+              const expiryDate = new Date(item.expiry_date);
+              const today = new Date();
+              const daysToExpiry = Math.ceil(
+                (expiryDate.getTime() - today.getTime()) / (1000 * 60 * 60 * 24)
+              );
+
+              // Calculate markdown percentage based on days to expiry
+              let markdownPercentage = 0;
+              if (daysToExpiry <= 30) { // Within 1 month - 20% discount
+                markdownPercentage = -20;
+              } else if (daysToExpiry <= 60) { // Within 2 months - original price
+                markdownPercentage = 0;
+              } else if (daysToExpiry <= 90) { // Within 3 months - 20% markup
+                markdownPercentage = 20;
+              }
+
+              const markdownPrice = calculateMarkdownPrice(product.cost_price, markdownPercentage);
+
+              return {
+                expiryDate: item.expiry_date,
+                daysToExpiry,
+                markdownPercentage,
+                markdownPrice,
+              };
+            });
+
+          setMarkdownCalculations(calculations);
+        }
+      } catch (inventoryErr: unknown) {
+        console.error("Error fetching inventory items:", inventoryErr);
+        // Don't set an error here as it's not critical for the scan operation
+      }
     } catch (err: unknown) {
       if (err instanceof Error) {
         setError(err.message);
@@ -158,7 +254,6 @@ export function ScanPage({ token }: ScanPageProps) {
       setShowNewProductForm(false);
       setNewProductName("");
       setNewProductSKU("");
-      setNewProductCostPrice("");
     } catch (err: unknown) {
       if (err instanceof Error) {
         setError(err.message);
@@ -171,14 +266,26 @@ export function ScanPage({ token }: ScanPageProps) {
 
   const handleSubmit = async () => {
     if (!token || !productDetails || !expiryDate || !selectedLocationId) {
-      setError("Please fill all product and inventory details.");
+      setError("Please fill all product and inventory details including location.");
       return;
     }
 
+    // Further validate that the parsed locationId is a valid number
+    const parsedLocationId = parseInt(selectedLocationId);
+    if (isNaN(parsedLocationId)) {
+      setError("Please select a valid location.");
+      return;
+    }
+
+    // Get the selected store area to extract the subDepartment
+    const selectedArea = storeAreas.find(area => area.id === parsedLocationId);
+    const subDepartment = selectedArea?.subDepartment || null;
+
     const inventoryItem = {
-      product_id: productDetails.id,
-      expiry_date: expiryDate,
-      location_id: parseInt(selectedLocationId),
+      productId: productDetails.id,
+      expiryDate: expiryDate,
+      locationId: parsedLocationId,
+      subDepartment: subDepartment,
     };
 
     if (!navigator.onLine) {
@@ -191,7 +298,9 @@ export function ScanPage({ token }: ScanPageProps) {
         setProductDetails(null);
         setExpiryDate("");
         setSelectedLocationId("");
+        setSelectedSubDepartment("");
         setError(null);
+        setMarkdownPrice(null);
       } catch (err: unknown) {
         if (err instanceof Error) {
           setError(err.message);
@@ -224,7 +333,9 @@ export function ScanPage({ token }: ScanPageProps) {
       setProductDetails(null);
       setExpiryDate("");
       setSelectedLocationId("");
+      setSelectedSubDepartment("");
       setError(null);
+      setMarkdownPrice(null);
     } catch (err: unknown) {
       if (err instanceof Error) {
         setError(err.message);
@@ -236,20 +347,20 @@ export function ScanPage({ token }: ScanPageProps) {
   };
 
   return (
-    <div className="container mx-auto p-4">
-      <Card className="w-full max-w-md mx-auto">
-        <CardHeader>
-          <CardTitle className="text-center">Inventory Scan</CardTitle>
+    <div className="container mx-auto p-4 max-w-3xl">
+      <Card className="w-full mx-auto border border-border bg-card text-card-foreground shadow-lg">
+        <CardHeader className="bg-muted/50 border-b border-border">
+          <CardTitle className="text-2xl font-bold text-center">Inventory Scan</CardTitle>
         </CardHeader>
-        <CardContent>
-          <Scanner onScan={handleBarcodeScan} />
+        <CardContent className="p-6">
+          <Scanner onScan={handleBarcodeScan} markdownCalculations={markdownCalculations} />
           {error && (
-            <p className="text-red-500 text-sm text-center mt-4">
+            <p className="text-inventory-error-500 text-sm text-center mt-4">
               Error: {error}
             </p>
           )}
           {successMessage && (
-            <p className="text-green-500 text-sm text-center mt-4">
+            <p className="text-inventory-success-500 text-sm text-center mt-4">
               {successMessage}
             </p>
           )}
@@ -258,100 +369,118 @@ export function ScanPage({ token }: ScanPageProps) {
             !error &&
             !successMessage &&
             showNewProductForm && (
-              <div className="mt-4 p-4 border rounded-md bg-gray-50">
-                <p className="text-center font-semibold">
+              <div className="mt-6 p-4 border rounded-md bg-muted">
+                <p className="text-center font-semibold text-foreground">
                   Product not found for barcode: {scannedBarcode}
                 </p>
-                <p className="text-center text-sm mb-4">
+                <p className="text-center text-sm mb-4 text-muted-foreground">
                   Please add new product details:
                 </p>
                 <div className="space-y-4">
                   <div>
-                    <Label htmlFor="newProductName">Product Name</Label>
+                    <Label htmlFor="newProductName" className="text-foreground">Product Name</Label>
                     <Input
                       id="newProductName"
                       type="text"
                       value={newProductName}
                       onChange={(e) => setNewProductName(e.target.value)}
-                      className="mt-1"
+                      className="mt-1 border-input bg-background text-foreground"
                       placeholder="Enter product name"
                     />
                   </div>
                   <div>
-                    <Label htmlFor="newProductSKU">SKU</Label>
+                    <Label htmlFor="newProductSKU" className="text-foreground">SKU</Label>
                     <Input
                       id="newProductSKU"
                       type="text"
                       value={newProductSKU}
                       onChange={(e) => setNewProductSKU(e.target.value)}
-                      className="mt-1"
+                      className="mt-1 border-input bg-background text-foreground"
                       placeholder="Enter SKU"
                     />
                   </div>
                   <div>
-                    <Label htmlFor="newProductCostPrice">Cost Price</Label>
+                    <Label htmlFor="newProductCostPrice" className="text-foreground">Cost Price</Label>
                     <Input
                       id="newProductCostPrice"
                       type="number"
                       value={newProductCostPrice}
                       onChange={(e) => setNewProductCostPrice(e.target.value)}
-                      className="mt-1"
+                      className="mt-1 border-input bg-background text-foreground"
                       placeholder="Enter cost price"
                     />
                   </div>
-                  <Button onClick={handleAddNewProduct} className="w-full">
+                  <Button
+                    onClick={handleAddNewProduct}
+                    className="w-full bg-primary hover:bg-primary/90 text-primary-foreground"
+                  >
                     Add New Product
                   </Button>
                 </div>
               </div>
             )}
           {productDetails && (
-            <div className="mt-4 p-4 border rounded-md bg-gray-50">
-              <p className="font-semibold">Product Details:</p>
-              <p>
-                <strong>Name:</strong> {productDetails.name}
-              </p>
-              <p>
-                <strong>SKU:</strong> {productDetails.sku}
-              </p>
-              <p>
-                <strong>Barcode:</strong> {productDetails.barcode}
-              </p>
-              <p>
-                <strong>Cost Price:</strong> $
-                {productDetails.cost_price?.toFixed(2)}
-              </p>
-
-              <div className="mt-4 space-y-4">
+            <div className="mt-6 p-4 border rounded-md bg-muted">
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                 <div>
-                  <Label htmlFor="expiryDate">Expiry Date</Label>
+                  <p className="font-semibold text-foreground">Product Details:</p>
+                  <p className="text-foreground">
+                    <span className="font-medium">Name:</span> {productDetails.name}
+                  </p>
+                  <p className="text-foreground">
+                    <span className="font-medium">SKU:</span> {productDetails.sku}
+                  </p>
+                  <p className="text-foreground">
+                    <span className="font-medium">Barcode:</span> {productDetails.barcode}
+                  </p>
+                </div>
+                <div>
+                  <p className="text-foreground">
+                    <span className="font-medium">Cost Price:</span> $
+                    {productDetails.cost_price?.toFixed(2)}
+                  </p>
+
+                  {markdownPrice !== null && (
+                    <p className="text-inventory-warning-500 font-semibold mt-1">
+                      Markdown Price (20% off): ${markdownPrice.toFixed(2)}
+                    </p>
+                  )}
+                </div>
+              </div>
+
+              <div className="mt-6 space-y-6">
+                <div>
+                  <Label htmlFor="expiryDate" className="text-foreground">Expiry Date</Label>
                   <Input
                     id="expiryDate"
                     type="date"
                     value={expiryDate}
                     onChange={(e) => setExpiryDate(e.target.value)}
-                    className="mt-1"
+                    className="mt-1 border-input bg-background text-foreground w-full"
                   />
                 </div>
                 <div>
-                  <Label htmlFor="location">Location</Label>
+                  <Label htmlFor="location" className="text-foreground">Location</Label>
                   <Select
                     onValueChange={setSelectedLocationId}
                     value={selectedLocationId}
                   >
-                    <SelectTrigger className="w-full mt-1">
+                    <SelectTrigger className="w-full mt-1 border-input bg-background text-foreground">
                       <SelectValue placeholder="Select a location" />
                     </SelectTrigger>
-                    <SelectContent>
+                    <SelectContent className="border-input bg-background text-foreground">
                       {storeAreas.map((area) => (
                         <SelectItem key={area.id} value={area.id.toString()}>
-                          {area.name}
+                          {area.name}{area.subDepartment ? ` (${area.subDepartment})` : ''}
                         </SelectItem>
                       ))}
                     </SelectContent>
                   </Select>
                 </div>
-                <Button onClick={handleSubmit} className="w-full">
+                <Button
+                  onClick={handleSubmit}
+                  className="w-full bg-primary hover:bg-primary/90 text-primary-foreground"
+                >
                   Confirm & Save
                 </Button>
               </div>
