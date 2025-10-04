@@ -11,9 +11,10 @@ router.get("/", auth_middleware_1.authenticateToken, async (req, res) => {
         const areas = await storeAreaService.getAllStoreAreas();
         res.json(areas);
     }
-    catch (_error) {
-        // console.error("Get store areas error:", _error);
-        res.status(500).json({ message: "Internal server error" });
+    catch (error) {
+        console.error("Get store areas error:", error);
+        const errorMessage = error.message || "Internal server error";
+        res.status(500).json({ message: errorMessage });
     }
 });
 // GET /store-areas/:id - Get a specific store area by ID
@@ -26,24 +27,26 @@ router.get("/:id", auth_middleware_1.authenticateToken, async (req, res) => {
         }
         res.json(area);
     }
-    catch (_error) {
-        // console.error("Get store area error:", _error);
-        res.status(500).json({ message: "Internal server error" });
+    catch (error) {
+        console.error("Get store area error:", error);
+        const errorMessage = error.message || "Internal server error";
+        res.status(500).json({ message: errorMessage });
     }
 });
-// GET /store-areas/name/:name - Get a specific store area by name
+// GET /store-areas/name/:name - Get store areas by name (can be multiple with different sub-departments)
 router.get("/name/:name", auth_middleware_1.authenticateToken, async (req, res) => {
     try {
         const name = req.params.name;
-        const area = await storeAreaService.getStoreAreaByName(name);
-        if (!area) {
-            return res.status(404).json({ message: "Store area not found" });
+        const areas = await storeAreaService.getStoreAreaByName(name);
+        if (!areas || areas.length === 0) {
+            return res.status(404).json({ message: "Store areas not found" });
         }
-        res.json(area);
+        res.json(areas);
     }
-    catch (_error) {
-        // console.error("Get store area by name error:", _error);
-        res.status(500).json({ message: "Internal server error" });
+    catch (error) {
+        console.error("Get store areas by name error:", error);
+        const errorMessage = error.message || "Internal server error";
+        res.status(500).json({ message: errorMessage });
     }
 });
 // POST /store-areas - Create a new store area
@@ -62,9 +65,10 @@ router.post("/", auth_middleware_1.authenticateToken, async (req, res) => {
         });
         res.status(201).json(newArea);
     }
-    catch (_error) {
-        // console.error("Create store area error:", _error);
-        res.status(500).json({ message: "Internal server error" });
+    catch (error) {
+        console.error("Create store area error:", error);
+        const errorMessage = error.message || "Internal server error";
+        res.status(500).json({ message: errorMessage });
     }
 });
 // PUT /store-areas/:id - Update a store area
@@ -86,9 +90,10 @@ router.put("/:id", auth_middleware_1.authenticateToken, async (req, res) => {
         }
         res.json(updatedArea);
     }
-    catch (_error) {
-        // console.error("Update store area error:", _error);
-        res.status(500).json({ message: "Internal server error" });
+    catch (error) {
+        console.error("Update store area error:", error);
+        const errorMessage = error.message || "Internal server error";
+        res.status(500).json({ message: errorMessage });
     }
 });
 // DELETE /store-areas/:id - Delete a store area
@@ -101,9 +106,10 @@ router.delete("/:id", auth_middleware_1.authenticateToken, async (req, res) => {
         }
         res.json({ message: "Store area deleted successfully" });
     }
-    catch (_error) {
-        // console.error("Delete store area error:", _error);
-        res.status(500).json({ message: "Internal server error" });
+    catch (error) {
+        console.error("Delete store area error:", error);
+        const errorMessage = error.message || "Internal server error";
+        res.status(500).json({ message: errorMessage });
     }
 });
 exports.default = router;

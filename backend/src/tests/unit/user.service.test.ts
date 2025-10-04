@@ -5,8 +5,8 @@ import {
   updateUser,
   deleteUser,
   getUserByPin,
-} from "../services/user.service";
-import { getDb } from "../database";
+} from "../../services/user.service";
+import { getDb } from "../../database";
 
 // Mock the database connection
 jest.mock("../../src/database", () => ({
@@ -27,7 +27,7 @@ describe("User Service", () => {
 
   describe("createUser", () => {
     it("should create a user successfully", async () => {
-      const mockUser = { pin: "1234", role: "Manager" };
+      const mockUser = { pin: "1234", role: "Manager" as const };
       const mockResult = { lastID: 1 };
       mockDb.run.mockResolvedValue(mockResult);
 
@@ -48,7 +48,7 @@ describe("User Service", () => {
         {
           id: 1,
           pin: "1234",
-          role: "Manager",
+          role: "Manager" as const,
           created_at: "2023-01-01",
           updated_at: "2023-01-01",
         },
@@ -67,7 +67,7 @@ describe("User Service", () => {
       const mockUser = {
         id: 1,
         pin: "1234",
-        role: "Manager",
+        role: "Manager" as const,
         created_at: "2023-01-01",
         updated_at: "2023-01-01",
       };
@@ -100,7 +100,7 @@ describe("User Service", () => {
       const mockUser = {
         id: 1,
         pin: "1234",
-        role: "Manager",
+        role: "Manager" as const,
         created_at: "2023-01-01",
         updated_at: "2023-01-01",
       };

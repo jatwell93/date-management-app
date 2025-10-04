@@ -20,8 +20,13 @@ interface ReportsPageProps {
 
 interface MonthlyExpiryReportItem {
   month: string;
-  expiringItemsCount: number;
-  expiredItemsCount: number;
+  total_expiring: number;
+  expired_count: number;
+  markdown1_count: number;
+  markdown2_count: number;
+  markdown3_count: number;
+  total_markdown: number;
+  latest_expiry_date: string;
 }
 
 export function ReportsPage({ token }: ReportsPageProps) {
@@ -92,21 +97,39 @@ export function ReportsPage({ token }: ReportsPageProps) {
           <CardTitle className="text-center">Monthly Expiry Report</CardTitle>
         </CardHeader>
         <CardContent>
+          <div className="flex justify-center mb-4">
+            <a 
+              href="/detailed-expiry-report" 
+              className="px-4 py-2 bg-primary text-primary-foreground rounded-md hover:opacity-90 transition-opacity"
+            >
+              View Detailed Expiry Report (Next 90 Days)
+            </a>
+          </div>
           {reportData && reportData.length > 0 ? (
             <Table>
               <TableHeader>
                 <TableRow>
                   <TableHead>Month</TableHead>
-                  <TableHead>Expiring Items</TableHead>
+                  <TableHead>Total Expiring</TableHead>
                   <TableHead>Expired Items</TableHead>
+                  <TableHead>Markdown 1</TableHead>
+                  <TableHead>Markdown 2</TableHead>
+                  <TableHead>Markdown 3</TableHead>
+                  <TableHead>Total Markdown</TableHead>
+                  <TableHead>Latest Expiry</TableHead>
                 </TableRow>
               </TableHeader>
               <TableBody>
                 {reportData.map((row, index) => (
                   <TableRow key={index}>
                     <TableCell>{row.month}</TableCell>
-                    <TableCell>{row.expiringItemsCount}</TableCell>
-                    <TableCell>{row.expiredItemsCount}</TableCell>
+                    <TableCell>{row.total_expiring}</TableCell>
+                    <TableCell>{row.expired_count}</TableCell>
+                    <TableCell>{row.markdown1_count}</TableCell>
+                    <TableCell>{row.markdown2_count}</TableCell>
+                    <TableCell>{row.markdown3_count}</TableCell>
+                    <TableCell>{row.total_markdown}</TableCell>
+                    <TableCell>{row.latest_expiry_date}</TableCell>
                   </TableRow>
                 ))}
               </TableBody>

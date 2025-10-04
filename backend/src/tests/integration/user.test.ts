@@ -24,7 +24,7 @@ describe("User API Integration Tests", () => {
       const mockUser = {
         id: 1,
         pin: "1234",
-        role: "Manager",
+        role: "Manager" as const,
         created_at: "2023-01-01",
         updated_at: "2023-01-01",
       };

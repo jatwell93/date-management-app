@@ -18,14 +18,17 @@ interface UsageReportPageProps {
   token: string | null;
 }
 
-interface UsageData {
-  user: string;
-  scans: number;
-  markdowns: number;
+interface DailyUsageReportItem {
+  date: string; // YYYY-MM-DD
+  user_id: number;
+  user_role: string;
+  creations: number;
+  updates: number;
+  deletions: number;
 }
 
 export function UsageReportPage({ token }: UsageReportPageProps) {
-  const [usageData, setUsageData] = useState<UsageData[] | null>(null);
+  const [usageData, setUsageData] = useState<DailyUsageReportItem[] | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
@@ -38,7 +41,7 @@ export function UsageReportPage({ token }: UsageReportPageProps) {
       }
 
       try {
-        const response = await fetch("http://localhost:3001/reports/usage", {
+        const response = await fetch("http://localhost:3001/reports/daily-usage", {
           headers: {
             Authorization: `Bearer ${token}`,
           },
@@ -47,7 +50,7 @@ export function UsageReportPage({ token }: UsageReportPageProps) {
         if (!response.ok) {
           const errorData = await response.json();
           throw new Error(
-            errorData.message || "Failed to load usage report data",
+            errorData.message || "Failed to load daily usage report data",
           );
         }
 
@@ -87,24 +90,30 @@ export function UsageReportPage({ token }: UsageReportPageProps) {
     <div className="container mx-auto p-4">
       <Card>
         <CardHeader>
-          <CardTitle className="text-center">User Usage Report</CardTitle>
+          <CardTitle className="text-center">Daily User Activity Report (Last 90 Days)</CardTitle>
         </CardHeader>
         <CardContent>
           {usageData && usageData.length > 0 ? (
             <Table>
               <TableHeader>
                 <TableRow>
-                  <TableHead>User</TableHead>
-                  <TableHead>Scans</TableHead>
-                  <TableHead>Markdowns</TableHead>
+                  <TableHead>Date</TableHead>
+                  <TableHead>User ID</TableHead>
+                  <TableHead>Role</TableHead>
+                  <TableHead>Creations</TableHead>
+                  <TableHead>Updates</TableHead>
+                  <TableHead>Deletions</TableHead>
                 </TableRow>
               </TableHeader>
               <TableBody>
                 {usageData.map((row, index) => (
                   <TableRow key={index}>
-                    <TableCell>{row.user}</TableCell>
-                    <TableCell>{row.scans}</TableCell>
-                    <TableCell>{row.markdowns}</TableCell>
+                    <TableCell>{new Date(row.date).toLocaleDateString()}</TableCell>
+                    <TableCell>{row.user_id}</TableCell>
+                    <TableCell>{row.user_role}</TableCell>
+                    <TableCell>{row.creations}</TableCell>
+                    <TableCell>{row.updates}</TableCell>
+                    <TableCell>{row.deletions}</TableCell>
                   </TableRow>
                 ))}
               </TableBody>

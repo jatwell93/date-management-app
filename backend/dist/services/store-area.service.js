@@ -31,7 +31,20 @@ class StoreAreaService {
     }
     async getStoreAreaByName(name) {
         const db = await (0, database_1.getDb)();
-        const result = await db.get("SELECT * FROM store_areas WHERE name = ?", name);
+        const results = await db.all("SELECT * FROM store_areas WHERE name = ?", name);
+        return results.map((result) => ({
+            id: result.id,
+            name: result.name,
+            subDepartment: result.sub_department,
+            lastChecked: result.last_checked,
+            createdAt: result.created_at,
+            updatedAt: result.updated_at,
+        }));
+    }
+    async getStoreAreaByNameAndSubDepartment(name, subDepartment) {
+        const db = await (0, database_1.getDb)();
+        // Properly handle NULL comparisons in SQLite
+        const result = await db.get("SELECT * FROM store_areas WHERE name = ? AND ((sub_department IS NULL AND ? IS NULL) OR (sub_department = ?))", name, subDepartment, subDepartment);
         if (!result)
             return null;
         return {
@@ -44,6 +57,11 @@ class StoreAreaService {
         };
     }
     async createStoreArea(area) {
+        // Check if a store area with the same name and subDepartment already exists
+        const existingArea = await this.getStoreAreaByNameAndSubDepartment(area.name, area.subDepartment || null);
+        if (existingArea) {
+            throw new Error("A store area with this name and sub-department combination already exists");
+        }
         const db = await (0, database_1.getDb)();
         const result = await db.run("INSERT INTO store_areas (name, sub_department, last_checked) VALUES (?, ?, ?)", area.name, area.subDepartment || null, area.lastChecked || null);
         const newArea = {

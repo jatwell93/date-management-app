@@ -1,10 +1,10 @@
-import { AuthService } from "../services/auth.service";
-import { getDb } from "../database";
+import { AuthService } from "../../services/auth.service";
+import { getDb } from "../../database";
 import jwt from "jsonwebtoken";
 import bcrypt from "bcrypt";
 
 // Mock the database module
-jest.mock("../database", () => ({
+jest.mock("../../database", () => ({
   getDb: jest.fn(),
 }));
 

@@ -1,9 +1,9 @@
 "use strict";
 Object.defineProperty(exports, "__esModule", { value: true });
-const report_service_1 = require("../services/report.service");
-const database_1 = require("../database");
+const report_service_1 = require("../../services/report.service");
+const database_1 = require("../../database");
 // Mock the database module
-jest.mock("../database", () => ({
+jest.mock("../../database", () => ({
     getDb: jest.fn(),
 }));
 describe("ReportService", () => {

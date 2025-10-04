@@ -1,9 +1,9 @@
 "use strict";
 Object.defineProperty(exports, "__esModule", { value: true });
-const inventory_service_1 = require("../services/inventory.service");
-const database_1 = require("../database");
+const inventory_service_1 = require("../../services/inventory.service");
+const database_1 = require("../../database");
 // Mock the database module
-jest.mock("../database", () => ({
+jest.mock("../../database", () => ({
     getDb: jest.fn(),
 }));
 describe("InventoryService", () => {
@@ -21,9 +21,9 @@ describe("InventoryService", () => {
     });
     it("should create a new inventory item", async () => {
         const newItemData = {
-            product_id: 1,
-            expiry_date: "2025-12-31",
-            location_id: 1,
+            productId: 1,
+            expiryDate: "2025-12-31",
+            locationId: 1,
             status: "Normal",
         };
         mockDb.run.mockResolvedValue({ lastID: 1 });
@@ -33,7 +33,7 @@ describe("InventoryService", () => {
             ...newItemData,
         }));
         expect(database_1.getDb).toHaveBeenCalledTimes(1);
-        expect(mockDb.run).toHaveBeenCalledWith("INSERT INTO inventory_items (product_id, expiry_date, location_id, status) VALUES (?, ?, ?, ?)", newItemData.product_id, newItemData.expiry_date, newItemData.location_id, newItemData.status);
+        expect(mockDb.run).toHaveBeenCalledWith("INSERT INTO inventory_items (product_id, expiry_date, location_id, status) VALUES (?, ?, ?, ?)", newItemData.productId, newItemData.expiryDate, newItemData.locationId, newItemData.status);
     });
     it("should update an inventory item status", async () => {
         mockDb.run.mockResolvedValue({ changes: 1 });

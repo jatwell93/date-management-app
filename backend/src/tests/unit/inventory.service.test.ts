@@ -1,8 +1,8 @@
-import { InventoryService } from "../services/inventory.service";
-import { getDb } from "../database";
+import { InventoryService } from "../../services/inventory.service";
+import { getDb } from "../../database";
 
 // Mock the database module
-jest.mock("../database", () => ({
+jest.mock("../../database", () => ({
   getDb: jest.fn(),
 }));
 
@@ -27,10 +27,10 @@ describe("InventoryService", () => {
 
   it("should create a new inventory item", async () => {
     const newItemData = {
-      product_id: 1,
-      expiry_date: "2025-12-31",
-      location_id: 1,
-      status: "Normal",
+      productId: 1,
+      expiryDate: "2025-12-31",
+      locationId: 1,
+      status: "Normal" as "Normal" | "Markdown 1" | "Markdown 2" | "Markdown 3" | "Expired",
     };
     mockDb.run.mockResolvedValue({ lastID: 1 });
 
@@ -45,9 +45,9 @@ describe("InventoryService", () => {
     expect(getDb).toHaveBeenCalledTimes(1);
     expect(mockDb.run).toHaveBeenCalledWith(
       "INSERT INTO inventory_items (product_id, expiry_date, location_id, status) VALUES (?, ?, ?, ?)",
-      newItemData.product_id,
-      newItemData.expiry_date,
-      newItemData.location_id,
+      newItemData.productId,
+      newItemData.expiryDate,
+      newItemData.locationId,
       newItemData.status,
     );
   });

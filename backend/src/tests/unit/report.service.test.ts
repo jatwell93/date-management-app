@@ -1,8 +1,8 @@
-import { ReportService } from "../services/report.service";
-import { getDb } from "../database";
+import { ReportService } from "../../services/report.service";
+import { getDb } from "../../database";
 
 // Mock the database module
-jest.mock("../database", () => ({
+jest.mock("../../database", () => ({
   getDb: jest.fn(),
 }));
 

@@ -22,6 +22,10 @@ const authenticateToken = (req, res, next) => {
         // Now that we've checked, we can safely access the properties
         req.userId = user.userId;
         req.userRole = user.role;
+        req.user = {
+            id: user.userId,
+            role: user.role
+        };
         next();
     });
 };

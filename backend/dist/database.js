@@ -46,10 +46,12 @@ async function initDatabase() {
 
     CREATE TABLE IF NOT EXISTS store_areas (
       id INTEGER PRIMARY KEY AUTOINCREMENT,
-      name TEXT UNIQUE NOT NULL,
+      name TEXT NOT NULL,
+      sub_department TEXT,
       last_checked TEXT,
       created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
-      updated_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
+      updated_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+      UNIQUE(name, sub_department)
     );
 
     CREATE TABLE IF NOT EXISTS users (

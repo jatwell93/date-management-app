@@ -18,6 +18,7 @@ import {
 } from "../components/ui/select";
 import { offlineStorage } from "../lib/offline-storage";
 import { isWithinMarkdownPeriod, calculateMarkdownPrice } from "../lib/utils";
+import { apiService } from "../lib/api.service";
 
 interface ScanPageProps {
   token: string | null;
@@ -38,6 +39,16 @@ interface ProductDetails {
 }
 
 interface InventoryItem {
+  id: number;
+  product_id: number;
+  expiry_date: string;
+  location_id: number;
+  status: string;
+  created_at: string;
+  updated_at: string;
+}
+
+interface RecentInventoryItem {
   id: number;
   product_id: number;
   expiry_date: string;
@@ -71,20 +82,13 @@ export function ScanPage({ token }: ScanPageProps) {
   const [newProductCostPrice, setNewProductCostPrice] = useState<string>("");
   const [markdownPrice, setMarkdownPrice] = useState<number | null>(null);
   const [markdownCalculations, setMarkdownCalculations] = useState<MarkdownCalculation[] | null>(null);
+  const [recentEntries, setRecentEntries] = useState<RecentInventoryItem[] | null>(null);
 
   useEffect(() => {
     const fetchStoreAreas = async () => {
       if (!token) return;
       try {
-        const response = await fetch("http://localhost:3001/store-areas", {
-          headers: {
-            Authorization: `Bearer ${token}`,
-          },
-        });
-        if (!response.ok) {
-          throw new Error("Failed to fetch store areas");
-        }
-        const data = await response.json();
+        const data = await apiService.get<StoreArea[]>('/store-areas', token);
         setStoreAreas(data);
       } catch (err: unknown) {
         if (err instanceof Error) {
@@ -110,9 +114,10 @@ export function ScanPage({ token }: ScanPageProps) {
     }
   }, [productDetails, expiryDate]);
 
-  const handleBarcodeScan = async (barcode: string) => {
-    setScannedBarcode(barcode);
+  const handleBarcodeScan = async (input: string) => {
+    setScannedBarcode(input);
     setProductDetails(null);
+    setRecentEntries(null); // Reset recent entries when scanning a new item
     setError(null);
     setSuccessMessage(null);
     setShowNewProductForm(false);
@@ -125,89 +130,102 @@ export function ScanPage({ token }: ScanPageProps) {
     }
 
     try {
-      const response = await fetch(
-        `http://localhost:3001/products?barcode=${barcode}`,
-        {
-          headers: {
-            Authorization: `Bearer ${token}`,
-          },
-        },
-      );
+      let product: ProductDetails | null = null;
+      
+      // Check if input is likely a SKU (8 or fewer characters) or barcode (more than 8 characters)
+      const isSkuSearch = input.length <= 8;
+      
+      if (isSkuSearch) {
+        // Search by SKU first
+        product = await apiService.get<ProductDetails>(`/products/by-sku/${input}`, token);
+      } else {
+        // Search by barcode
+        product = await apiService.get<ProductDetails>(`/products/by-barcode/${input}`, token);
+      }
 
-      if (response.status === 404) {
+      // If not found by the primary method, try the alternative
+      if (!product) {
+        if (isSkuSearch) {
+          // Try searching by barcode if SKU search failed
+          product = await apiService.get<ProductDetails>(`/products/by-barcode/${input}`, token);
+        } else {
+          // Try searching by SKU if barcode search failed
+          product = await apiService.get<ProductDetails>(`/products/by-sku/${input}`, token);
+        }
+      }
+
+      if (!product) {
         setShowNewProductForm(true);
         return;
       }
 
-      if (!response.ok) {
-        const errorData = await response.json();
-        throw new Error(errorData.message || "Failed to fetch product details");
-      }
-
-      const product = await response.json();
       setProductDetails(product);
 
       // Fetch inventory items for this product to check for markdown opportunities
       try {
-        const inventoryResponse = await fetch(
-          `http://localhost:3001/inventory-items/product/${product.id}`,
-          {
-            headers: {
-              Authorization: `Bearer ${token}`,
-            },
-          },
-        );
+        // We can only fetch inventory by barcode, so we use the product's barcode
+        const inventoryItems: InventoryItem[] = await apiService.get<InventoryItem[]>(`/inventory-items/by-barcode/${product.barcode}`, token);
 
-        if (inventoryResponse.ok) {
-          const inventoryItems: InventoryItem[] = await inventoryResponse.json();
+        // Calculate markdowns for each inventory item
+        const calculations: MarkdownCalculation[] = inventoryItems
+          .filter(item => {
+            // Only consider items that are within the markdown periods (next 3 months)
+            const expiryDate = new Date(item.expiry_date);
+            const today = new Date();
+            const daysToExpiry = Math.ceil(
+              (expiryDate.getTime() - today.getTime()) / (1000 * 60 * 60 * 24)
+            );
+            return daysToExpiry <= 90; // Within 3 months
+          })
+          .map(item => {
+            const expiryDate = new Date(item.expiry_date);
+            const today = new Date();
+            const daysToExpiry = Math.ceil(
+              (expiryDate.getTime() - today.getTime()) / (1000 * 60 * 60 * 24)
+            );
 
-          // Calculate markdowns for each inventory item
-          const calculations: MarkdownCalculation[] = inventoryItems
-            .filter(item => {
-              // Only consider items that are within the markdown periods (next 3 months)
-              const expiryDate = new Date(item.expiry_date);
-              const today = new Date();
-              const daysToExpiry = Math.ceil(
-                (expiryDate.getTime() - today.getTime()) / (1000 * 60 * 60 * 24)
-              );
-              return daysToExpiry <= 90; // Within 3 months
-            })
-            .map(item => {
-              const expiryDate = new Date(item.expiry_date);
-              const today = new Date();
-              const daysToExpiry = Math.ceil(
-                (expiryDate.getTime() - today.getTime()) / (1000 * 60 * 60 * 24)
-              );
+            // Calculate markdown percentage based on days to expiry
+            let markdownPercentage = 0;
+            if (daysToExpiry <= 30) { // Within 1 month - 20% discount
+              markdownPercentage = -20;
+            } else if (daysToExpiry <= 60) { // Within 2 months - original price
+              markdownPercentage = 0;
+            } else if (daysToExpiry <= 90) { // Within 3 months - 20% markup
+              markdownPercentage = 20;
+            }
 
-              // Calculate markdown percentage based on days to expiry
-              let markdownPercentage = 0;
-              if (daysToExpiry <= 30) { // Within 1 month - 20% discount
-                markdownPercentage = -20;
-              } else if (daysToExpiry <= 60) { // Within 2 months - original price
-                markdownPercentage = 0;
-              } else if (daysToExpiry <= 90) { // Within 3 months - 20% markup
-                markdownPercentage = 20;
-              }
+            const markdownPrice = calculateMarkdownPrice(product!.cost_price, markdownPercentage);
 
-              const markdownPrice = calculateMarkdownPrice(product.cost_price, markdownPercentage);
+            return {
+              expiryDate: item.expiry_date,
+              daysToExpiry,
+              markdownPercentage,
+              markdownPrice,
+            };
+          });
 
-              return {
-                expiryDate: item.expiry_date,
-                daysToExpiry,
-                markdownPercentage,
-                markdownPrice,
-              };
-            });
-
-          setMarkdownCalculations(calculations);
-        }
+        setMarkdownCalculations(calculations);
       } catch (inventoryErr: unknown) {
         console.error("Error fetching inventory items:", inventoryErr);
         // Don't set an error here as it's not critical for the scan operation
       }
+
+      // Fetch recent inventory entries for this product
+      try {
+        const recent: RecentInventoryItem[] = await apiService.get<RecentInventoryItem[]>(`/inventory-items/recent/product/${product.id}`, token);
+        console.log("Fetched recent entries:", recent); // Debug log
+        setRecentEntries(recent);
+      } catch (recentErr: unknown) {
+        console.error("Error fetching recent inventory entries:", recentErr);
+        // Don't set an error here as it's not critical for the scan operation
+      }
     } catch (err: unknown) {
       if (err instanceof Error) {
-        setError(err.message);
+        if (err.message.includes("404")) {
+          setShowNewProductForm(true);
+        } else {
+          setError(err.message);
+        }
       } else {
         setError("An unknown error occurred");
       }
@@ -227,26 +245,12 @@ export function ScanPage({ token }: ScanPageProps) {
     }
 
     try {
-      const response = await fetch("http://localhost:3001/products", {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-          Authorization: `Bearer ${token}`,
-        },
-        body: JSON.stringify({
-          barcode: scannedBarcode,
-          name: newProductName,
-          sku: newProductSKU,
-          cost_price: parseFloat(newProductCostPrice),
-        }),
-      });
-
-      if (!response.ok) {
-        const errorData = await response.json();
-        throw new Error(errorData.message || "Failed to add new product");
-      }
-
-      const newProduct = await response.json();
+      const newProduct = await apiService.post<ProductDetails>('/products', {
+        barcode: scannedBarcode,
+        name: newProductName,
+        sku: newProductSKU,
+        cost_price: parseFloat(newProductCostPrice),
+      }, token);
       setProductDetails(newProduct);
       setSuccessMessage(
         "New product added successfully! Now add inventory details.",
@@ -313,19 +317,11 @@ export function ScanPage({ token }: ScanPageProps) {
     }
 
     try {
-      const response = await fetch("http://localhost:3001/inventory-items", {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-          Authorization: `Bearer ${token}`,
-        },
-        body: JSON.stringify(inventoryItem),
-      });
-
-      if (!response.ok) {
-        const errorData = await response.json();
-        throw new Error(errorData.message || "Failed to add inventory item");
-      }
+      const response = await apiService.post('/inventory-items', {
+        productId: productDetails.id,
+        expiryDate: expiryDate,
+        locationId: parsedLocationId,
+      }, token);
 
       setSuccessMessage("Inventory item added successfully!");
       // Reset form
@@ -343,6 +339,34 @@ export function ScanPage({ token }: ScanPageProps) {
         setError("An unknown error occurred");
       }
       setSuccessMessage(null);
+    }
+  };
+
+  const handleDeleteRecentEntry = async (entryId: number) => {
+    if (!token) {
+      setError("Authentication token is missing.");
+      return;
+    }
+
+    if (!window.confirm("Are you sure you want to delete this entry? This action cannot be undone.")) {
+      return; // If user cancels, do nothing
+    }
+
+    try {
+      await apiService.delete(`/inventory-items/${entryId}`, token);
+      
+      // Update the recent entries list by removing the deleted entry
+      setRecentEntries(prevEntries => 
+        prevEntries ? prevEntries.filter(entry => entry.id !== entryId) : null
+      );
+      
+      setSuccessMessage("Inventory entry deleted successfully!");
+    } catch (err: unknown) {
+      if (err instanceof Error) {
+        setError(err.message);
+      } else {
+        setError("An unknown error occurred while deleting the entry");
+      }
     }
   };
 
@@ -483,6 +507,35 @@ export function ScanPage({ token }: ScanPageProps) {
                 >
                   Confirm & Save
                 </Button>
+              </div>
+            </div>
+          )}
+          {productDetails && recentEntries && recentEntries.length > 0 && (
+            <div className="mt-8 p-4 border rounded-md bg-muted">
+              <h3 className="font-semibold text-lg text-foreground mb-4">Recent Entries</h3>
+              <div className="space-y-3">
+                {recentEntries.map((entry) => (
+                  <div 
+                    key={entry.id} 
+                    className="flex items-center justify-between p-3 bg-background border rounded-md"
+                  >
+                    <div>
+                      <p className="text-foreground">
+                        <span className="font-medium">Expiry Date:</span> {new Date(entry.expiry_date).toLocaleDateString('en-AU', { timeZone: 'Australia/Sydney' })}
+                      </p>
+                      <p className="text-muted-foreground text-sm">
+                        Added: {new Date(entry.created_at).toLocaleString('en-AU', { timeZone: 'Australia/Sydney' })}
+                      </p>
+                    </div>
+                    <Button
+                      onClick={() => handleDeleteRecentEntry(entry.id)}
+                      variant="destructive"
+                      size="sm"
+                    >
+                      Delete
+                    </Button>
+                  </div>
+                ))}
               </div>
             </div>
           )}

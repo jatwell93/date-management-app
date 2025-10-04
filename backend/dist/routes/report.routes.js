@@ -16,6 +16,17 @@ router.get("/expiry", auth_middleware_1.authenticateToken, async (req, res) => {
         res.status(500).json({ message: "Internal server error" });
     }
 });
+// GET /reports/expiry-details - Get detailed expiry report for next 90 days
+router.get("/expiry-details", auth_middleware_1.authenticateToken, async (req, res) => {
+    try {
+        const report = await reportService.getDetailedExpiryReport();
+        res.json(report);
+    }
+    catch (_error) {
+        // console.error("Get detailed expiry report error:", _error);
+        res.status(500).json({ message: "Internal server error" });
+    }
+});
 // GET /reports/monthly-markdown - Get monthly markdown report
 router.get("/monthly-markdown", auth_middleware_1.authenticateToken, async (req, res) => {
     try {
@@ -35,6 +46,17 @@ router.get("/usage", auth_middleware_1.authenticateToken, async (req, res) => {
     }
     catch (_error) {
         // console.error("Get usage report error:", _error);
+        res.status(500).json({ message: "Internal server error" });
+    }
+});
+// GET /reports/daily-usage - Get daily usage report for past 90 days
+router.get("/daily-usage", auth_middleware_1.authenticateToken, async (req, res) => {
+    try {
+        const report = await reportService.getDailyUsageReport();
+        res.json(report);
+    }
+    catch (_error) {
+        // console.error("Get daily usage report error:", _error);
         res.status(500).json({ message: "Internal server error" });
     }
 });

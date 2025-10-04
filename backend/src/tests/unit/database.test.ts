@@ -1,4 +1,4 @@
-import { initDatabase, getDb } from "../database";
+import { initDatabase, getDb } from "../../database";
 
 describe("Database Initialization", () => {
   it("should initialize database successfully", async () => {

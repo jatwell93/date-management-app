@@ -224,18 +224,18 @@ export function UserManagementPage({ token }: UserManagementPageProps) {
   }, [token, form, fetchUsers, setError, setSuccess]);
 
   return (
-    <div className="container mx-auto p-4">
-      <h1 className="text-2xl font-bold mb-4">
+    <div className="container mx-auto p-4 flex flex-col items-center">
+      <h1 className="text-2xl font-bold mb-4 text-center">
         User Management (Managers Only)
       </h1>
 
-      <div className="mb-8">
-        <h2 className="text-xl font-semibold mb-4">Current Users</h2>
-        {error && <p className="text-red-500 text-sm mb-2">{error}</p>}
+      <div className="mb-8 w-full max-w-md">
+        <h2 className="text-xl font-semibold mb-4 text-center">Current Users</h2>
+        {error && <p className="text-red-500 text-sm mb-2 text-center">{error}</p>}
         {users.length === 0 ? (
-          <p>No users found.</p>
+          <p className="text-center">No users found.</p>
         ) : (
-          <ul>
+          <ul className="text-center">
             {users.map((user) => (
               <li key={user.id} className="mb-1">
                 ID: {user.id}, Role: {user.role}
@@ -245,12 +245,12 @@ export function UserManagementPage({ token }: UserManagementPageProps) {
         )}
       </div>
 
-      <div className="mb-8">
-        <h2 className="text-xl font-semibold mb-4">Create New User</h2>
+      <div className="mb-8 w-full max-w-md">
+        <h2 className="text-xl font-semibold mb-4 text-center">Create New User</h2>
         <Form {...form}>
           <form
             onSubmit={form.handleSubmit(onCreateSubmit)}
-            className="space-y-4 md:w-1/2 lg:w-1/3"
+            className="space-y-4 w-full"
           >
             <FormField
               control={form.control}
@@ -293,8 +293,8 @@ export function UserManagementPage({ token }: UserManagementPageProps) {
                 </FormItem>
               )}
             />
-            {error && <p className="text-red-500 text-sm">{error}</p>}
-            {success && <p className="text-green-500 text-sm">{success}</p>}
+            {error && <p className="text-red-500 text-sm text-center">{error}</p>}
+            {success && <p className="text-green-500 text-sm text-center">{success}</p>}
             <Button type="submit" className="w-full">
               Create User
             </Button>
@@ -302,16 +302,16 @@ export function UserManagementPage({ token }: UserManagementPageProps) {
         </Form>
       </div>
 
-      <div className="mb-8">
-        <h2 className="text-xl font-semibold mb-4">Edit Existing User</h2>
+      <div className="mb-8 w-full max-w-md">
+        <h2 className="text-xl font-semibold mb-4 text-center">Edit Existing User</h2>
         <Form {...form}>
-          <div className="space-y-4 md:w-1/2 lg:w-1/3">
+          <div className="space-y-4 w-full">
             <FormField
               control={form.control}
               name="selectedUserForEdit"
               render={({ field }) => (
                 <FormItem>
-                  <FormLabel>Select User to Edit</FormLabel>
+                  <FormLabel className="text-center">Select User to Edit</FormLabel>
                   <Select
                     onValueChange={(value: string) => {
                       field.onChange(value);
@@ -367,8 +367,8 @@ export function UserManagementPage({ token }: UserManagementPageProps) {
                   </FormItem>
                 )}
               />
-              {error && <p className="text-red-500 text-sm">{error}</p>}
-              {success && <p className="text-green-500 text-sm">{success}</p>}
+              {error && <p className="text-red-500 text-sm text-center">{error}</p>}
+              {success && <p className="text-green-500 text-sm text-center">{success}</p>}
               <Button type="submit" className="w-full mt-4">
                 Update User
               </Button>
@@ -385,16 +385,16 @@ export function UserManagementPage({ token }: UserManagementPageProps) {
         </Form>
       </div>
 
-      <div>
-        <h2 className="text-xl font-semibold mb-4">Delete User</h2>
+      <div className="w-full max-w-md">
+        <h2 className="text-xl font-semibold mb-4 text-center">Delete User</h2>
         <Form {...form}>
-          <div className="space-y-4 md:w-1/2 lg:w-1/3">
+          <div className="space-y-4 w-full">
             <FormField
               control={form.control}
               name="selectedUserForDelete"
               render={({ field }) => (
                 <FormItem>
-                  <FormLabel>Select User to Delete</FormLabel>
+                  <FormLabel className="text-center">Select User to Delete</FormLabel>
                   <Select
                     onValueChange={field.onChange}
                     defaultValue={field.value}
@@ -416,9 +416,9 @@ export function UserManagementPage({ token }: UserManagementPageProps) {
                 </FormItem>
               )}
             />
-            {error && <p className="text-red-500 text-sm mt-2">{error}</p>}
+            {error && <p className="text-red-500 text-sm mt-2 text-center">{error}</p>}
             {success && (
-              <p className="text-green-500 text-sm mt-2">{success}</p>
+              <p className="text-green-500 text-sm mt-2 text-center">{success}</p>
             )}
             <Button
               variant="destructive"

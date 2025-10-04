@@ -15,12 +15,12 @@ interface ScannerProps {
 }
 
 export function Scanner({ onScan, markdownCalculations }: ScannerProps) {
-  const [barcode, setBarcode] = useState("");
+  const [input, setInput] = useState("");
 
   const handleScan = () => {
-    if (barcode.trim()) {
-      onScan(barcode.trim());
-      setBarcode("");
+    if (input.trim()) {
+      onScan(input.trim());
+      setInput("");
     }
   };
 
@@ -34,12 +34,12 @@ export function Scanner({ onScan, markdownCalculations }: ScannerProps) {
 
   return (
     <div className="flex flex-col items-center space-y-4 p-4">
-      <h2 className="text-xl font-semibold text-foreground">Scan Barcode</h2>
+      <h2 className="text-xl font-semibold text-foreground">Scan/Enter Product ID</h2>
       <Input
         type="text"
-        placeholder="Enter barcode manually"
-        value={barcode}
-        onChange={(e) => setBarcode(e.target.value)}
+        placeholder="Enter barcode or SKU"
+        value={input}
+        onChange={(e) => setInput(e.target.value)}
         onKeyPress={(e) => {
           if (e.key === "Enter") {
             handleScan();
@@ -51,7 +51,7 @@ export function Scanner({ onScan, markdownCalculations }: ScannerProps) {
         onClick={handleScan} 
         className="w-full max-w-sm bg-primary hover:bg-primary/90 text-primary-foreground"
       >
-        Scan
+        Search
       </Button>
       
       {/* Display markdown calculations if available */}

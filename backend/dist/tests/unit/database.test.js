@@ -1,6 +1,6 @@
 "use strict";
 Object.defineProperty(exports, "__esModule", { value: true });
-const database_1 = require("../database");
+const database_1 = require("../../database");
 describe("Database Initialization", () => {
     it("should initialize database successfully", async () => {
         // This test just ensures the database can be initialized without errors

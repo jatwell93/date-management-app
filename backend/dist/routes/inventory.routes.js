@@ -2,6 +2,7 @@
 Object.defineProperty(exports, "__esModule", { value: true });
 const express_1 = require("express");
 const inventory_service_1 = require("../services/inventory.service");
+const product_service_1 = require("../services/product.service");
 const auth_middleware_1 = require("../middleware/auth.middleware");
 const router = (0, express_1.Router)();
 const inventoryService = new inventory_service_1.InventoryService();
@@ -43,6 +44,38 @@ router.get("/product/:productId", auth_middleware_1.authenticateToken, async (re
         res.status(500).json({ message: "Internal server error" });
     }
 });
+// GET /inventory-items/by-barcode/:barcode - Get inventory items for a specific product by barcode
+router.get("/by-barcode/:barcode", auth_middleware_1.authenticateToken, async (req, res) => {
+    try {
+        const barcode = req.params.barcode;
+        // First, get the product by barcode to get its ID
+        const productService = new product_service_1.ProductService();
+        const product = await productService.getProductByBarcode(barcode);
+        if (!product) {
+            return res.status(404).json({ message: "Product not found" });
+        }
+        // Then get inventory items for that product
+        const items = await inventoryService.getInventoryItemsByProductId(product.id);
+        res.json(items);
+    }
+    catch (_error) {
+        // console.error("Get inventory items by barcode error:", _error);
+        res.status(500).json({ message: "Internal server error" });
+    }
+});
+// GET /inventory-items/recent/product/:productId - Get the most recent inventory items for a specific product
+router.get("/recent/product/:productId", auth_middleware_1.authenticateToken, async (req, res) => {
+    try {
+        const productId = parseInt(req.params.productId);
+        const limit = parseInt(req.query.limit) || 5; // Default to 5 items if not specified
+        const items = await inventoryService.getRecentInventoryItemsByProductId(productId, limit);
+        res.json(items);
+    }
+    catch (_error) {
+        // console.error("Get recent inventory items by product error:", _error);
+        res.status(500).json({ message: "Internal server error" });
+    }
+});
 // GET /inventory-items/location/:locationId - Get inventory items for a specific location
 router.get("/location/:locationId", auth_middleware_1.authenticateToken, async (req, res) => {
     try {
@@ -69,12 +102,13 @@ router.post("/", auth_middleware_1.authenticateToken, async (req, res) => {
             .json({ message: "Missing required inventory item fields" });
     }
     try {
+        const userId = req.userId; // Get user ID from auth middleware
         const newInventoryItem = await inventoryService.createInventoryItem({
             productId,
             expiryDate,
             locationId,
             status,
-        });
+        }, userId);
         res.status(201).json(newInventoryItem);
     }
     catch (error) {
@@ -93,6 +127,7 @@ router.put("/:id", auth_middleware_1.authenticateToken, async (req, res) => {
     try {
         const id = parseInt(req.params.id);
         const { productId, expiryDate, locationId, status } = req.body;
+        const userId = req.userId; // Get user ID from auth middleware
         // Build update object
         const updateData = {};
         if (productId !== undefined)
@@ -103,7 +138,7 @@ router.put("/:id", auth_middleware_1.authenticateToken, async (req, res) => {
             updateData.locationId = locationId;
         if (status !== undefined)
             updateData.status = status;
-        const updatedItem = await inventoryService.updateInventoryItem(id, updateData);
+        const updatedItem = await inventoryService.updateInventoryItem(id, updateData, userId);
         if (!updatedItem) {
             return res.status(404).json({ message: "Inventory item not found" });
         }
@@ -118,7 +153,8 @@ router.put("/:id", auth_middleware_1.authenticateToken, async (req, res) => {
 router.delete("/:id", auth_middleware_1.authenticateToken, async (req, res) => {
     try {
         const id = parseInt(req.params.id);
-        const deleted = await inventoryService.deleteInventoryItem(id);
+        const userId = req.userId; // Get user ID from auth middleware
+        const deleted = await inventoryService.deleteInventoryItem(id, userId);
         if (!deleted) {
             return res.status(404).json({ message: "Inventory item not found" });
         }
