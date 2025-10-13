@@ -25,3 +25,10 @@ yarn-error.log*
 .Trashes
 ehthumbs.db
 Thumbs.db
+
+# Development and specification directories
+.gemini/
+.github/
+.specify/
+.vscode/
+specs/
