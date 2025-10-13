@@ -20,6 +20,21 @@ router.get(
   },
 );
 
+// GET /reports/expiry-overall - Get overall expiry report with all time counts
+router.get(
+  "/expiry-overall",
+  authenticateToken,
+  async (req: Request, res: Response) => {
+    try {
+      const report = await reportService.getOverallExpiryReport();
+      res.json(report);
+    } catch (_error) {
+      // console.error("Get overall expiry report error:", _error);
+      res.status(500).json({ message: "Internal server error" });
+    }
+  },
+);
+
 // GET /reports/expiry-details - Get detailed expiry report for next 90 days
 router.get(
   "/expiry-details",
@@ -45,6 +60,21 @@ router.get(
       res.json(report);
     } catch (_error) {
       // console.error("Get monthly markdown report error:", _error);
+      res.status(500).json({ message: "Internal server error" });
+    }
+  },
+);
+
+// POST /reports/update-statuses - Manually update all inventory markdown statuses
+router.post(
+  "/update-statuses",
+  authenticateToken,
+  async (req: Request, res: Response) => {
+    try {
+      await reportService.updateAllMarkdownStatuses();
+      res.json({ message: "All inventory markdown statuses updated successfully." });
+    } catch (_error) {
+      // console.error("Update markdown statuses error:", _error);
       res.status(500).json({ message: "Internal server error" });
     }
   },

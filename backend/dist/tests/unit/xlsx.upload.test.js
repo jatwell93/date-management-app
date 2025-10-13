@@ -40,15 +40,27 @@ const product_service_1 = require("../../services/product.service");
 const fs_1 = __importDefault(require("fs"));
 const path_1 = __importDefault(require("path"));
 const XLSX = __importStar(require("xlsx"));
+const database_1 = require("../../database");
 // Mock the database functions to avoid actual database operations during tests
 jest.mock("../../database", () => ({
     getDb: jest.fn(),
+    releaseDb: jest.fn(),
 }));
 describe("XLSX Upload Functionality Tests", () => {
     let productService;
     let testXLSXPath;
-    beforeAll(() => {
+    const mockStatement = {
+        run: jest.fn(),
+        all: jest.fn(),
+        get: jest.fn(),
+    };
+    const mockDb = {
+        prepare: jest.fn(() => mockStatement),
+    };
+    beforeEach(() => {
         productService = new product_service_1.ProductService();
+        database_1.getDb.mockReturnValue(mockDb);
+        jest.spyOn(productService, 'getAllProducts').mockResolvedValue([]);
         // Create a temporary XLSX file for testing
         const jsonData = [
             ["SKU", "Name", "Cost", "Barcode"],
@@ -62,13 +74,16 @@ describe("XLSX Upload Functionality Tests", () => {
         testXLSXPath = path_1.default.join(__dirname, "test.xlsx");
         XLSX.writeFile(workbook, testXLSXPath);
     });
-    afterAll(() => {
+    afterEach(() => {
         // Clean up the test file
         if (fs_1.default.existsSync(testXLSXPath)) {
             fs_1.default.unlinkSync(testXLSXPath);
         }
+        jest.clearAllMocks();
     });
     it("should process XLSX with basic format correctly", async () => {
+        mockStatement.get.mockReturnValue(undefined);
+        mockStatement.run.mockReturnValue({ lastInsertRowid: 1 });
         const result = await productService.processCSVUpload(testXLSXPath);
         expect(result.errors.length).toBe(0);
         expect(result.imported).toBe(3); // All 3 rows should be imported
@@ -87,6 +102,8 @@ describe("XLSX Upload Functionality Tests", () => {
         const testAltXLSXPath = path_1.default.join(__dirname, "test_alt_headers.xlsx");
         XLSX.writeFile(workbook, testAltXLSXPath);
         try {
+            mockStatement.get.mockReturnValue(undefined);
+            mockStatement.run.mockReturnValue({ lastInsertRowid: 1 });
             const result = await productService.processCSVUpload(testAltXLSXPath);
             expect(result.errors.length).toBe(0);
             expect(result.imported).toBe(2); // Both rows should be imported
@@ -112,7 +129,7 @@ describe("XLSX Upload Functionality Tests", () => {
         try {
             const result = await productService.processCSVUpload(testMissingFieldsPath);
             expect(result.errors.length).toBeGreaterThan(0);
-            expect(result.errors[0]).toContain("Missing required field - Barcode");
+            expect(result.errors[0]).toContain("Row 1: Missing required field - Barcode");
             expect(result.imported).toBe(0);
             expect(result.updated).toBe(0);
         }
@@ -199,8 +216,20 @@ describe("XLSX Upload Functionality Tests", () => {
 describe("XLSX Processing Validation", () => {
     let productService;
     let testXLSXPath;
-    beforeAll(() => {
+    const mockStatement = {
+        run: jest.fn(),
+        all: jest.fn(),
+        get: jest.fn(),
+    };
+    const mockDb = {
+        prepare: jest.fn(() => mockStatement),
+    };
+    beforeEach(() => {
         productService = new product_service_1.ProductService();
+        database_1.getDb.mockReturnValue(mockDb);
+        jest.spyOn(productService, 'getAllProducts').mockResolvedValue([
+            { id: 1, sku: 'TEST001', name: 'Old Name', costPrice: 10.00, barcode: '1234567890123', createdAt: 'now', updatedAt: 'now' }
+        ]);
         // Create a temporary XLSX file for testing
         const jsonData = [
             ["SKU", "Name", "Cost", "Barcode"],
@@ -213,18 +242,21 @@ describe("XLSX Processing Validation", () => {
         testXLSXPath = path_1.default.join(__dirname, "test_validation.xlsx");
         XLSX.writeFile(workbook, testXLSXPath);
     });
-    afterAll(() => {
+    afterEach(() => {
         // Clean up the test file
         if (fs_1.default.existsSync(testXLSXPath)) {
             fs_1.default.unlinkSync(testXLSXPath);
         }
+        jest.clearAllMocks();
     });
     it("should update existing products in XLSX processing", async () => {
-        // We can't properly test this without a real database connection
-        // but we can at least ensure the processing function doesn't crash
+        mockStatement.get.mockReturnValueOnce({ id: 1, sku: 'TEST001', name: 'Old Name', costPrice: 10.00, barcode: '1234567890123' });
+        mockStatement.get.mockReturnValueOnce(undefined);
+        mockStatement.run.mockReturnValueOnce({ changes: 1 });
+        mockStatement.run.mockReturnValueOnce({ lastInsertRowid: 2 });
         const result = await productService.processCSVUpload(testXLSXPath);
         expect(result.errors.length).toBe(0);
-        expect(result.imported).toBe(2);
-        expect(result.updated).toBe(0);
+        expect(result.imported).toBe(1);
+        expect(result.updated).toBe(1);
     });
 });

@@ -3,6 +3,8 @@ Object.defineProperty(exports, "__esModule", { value: true });
 const express_1 = require("express");
 const store_area_service_1 = require("../services/store-area.service");
 const auth_middleware_1 = require("../middleware/auth.middleware");
+const validation_middleware_1 = require("../middleware/validation.middleware");
+const data_integrity_middleware_1 = require("../middleware/data-integrity.middleware");
 const router = (0, express_1.Router)();
 const storeAreaService = new store_area_service_1.StoreAreaService();
 // GET /store-areas - Get all store areas
@@ -50,7 +52,7 @@ router.get("/name/:name", auth_middleware_1.authenticateToken, async (req, res) 
     }
 });
 // POST /store-areas - Create a new store area
-router.post("/", auth_middleware_1.authenticateToken, async (req, res) => {
+router.post("/", auth_middleware_1.authenticateToken, validation_middleware_1.validateStoreAreaInput, validation_middleware_1.validateDataIntegrity, data_integrity_middleware_1.validateBusinessRules, async (req, res) => {
     const { name, subDepartment, lastChecked } = req.body;
     if (!name) {
         return res
@@ -72,7 +74,7 @@ router.post("/", auth_middleware_1.authenticateToken, async (req, res) => {
     }
 });
 // PUT /store-areas/:id - Update a store area
-router.put("/:id", auth_middleware_1.authenticateToken, async (req, res) => {
+router.put("/:id", auth_middleware_1.authenticateToken, validation_middleware_1.validateStoreAreaInput, validation_middleware_1.validateDataIntegrity, data_integrity_middleware_1.validateBusinessRules, async (req, res) => {
     try {
         const id = parseInt(req.params.id);
         const { name, subDepartment, lastChecked } = req.body;

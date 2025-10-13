@@ -62,8 +62,8 @@ describe("extractCostValueEnhanced function", () => {
   });
 
   it("should handle values with parentheses (often used for negative values)", () => {
-    expect(extractCostValueEnhanced("(12.34)")).toBe(12.34); // Extracting the positive value
-    expect(extractCostValueEnhanced("$(12.34)")).toBe(12.34);
+    expect(extractCostValueEnhanced("(12.34)")).toBe(-12.34);
+    expect(extractCostValueEnhanced("$(12.34)")).toBe(-12.34);
   });
 
   it("should handle values with spaces and formatting", () => {

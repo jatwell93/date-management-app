@@ -2,6 +2,8 @@ import { Router, Request, Response } from "express";
 import { StoreAreaService } from "../services/store-area.service";
 import { StoreArea } from "../models/store-area.model";
 import { authenticateToken } from "../middleware/auth.middleware";
+import { validateStoreAreaInput, validateDataIntegrity } from "../middleware/validation.middleware";
+import { validateBusinessRules } from "../middleware/data-integrity.middleware";
 
 const router = Router();
 const storeAreaService = new StoreAreaService();
@@ -59,7 +61,7 @@ router.get(
 );
 
 // POST /store-areas - Create a new store area
-router.post("/", authenticateToken, async (req: Request, res: Response) => {
+router.post("/", authenticateToken, validateStoreAreaInput, validateDataIntegrity, validateBusinessRules, async (req: Request, res: Response) => {
   const { name, subDepartment, lastChecked } = req.body;
   if (!name) {
     return res
@@ -82,7 +84,7 @@ router.post("/", authenticateToken, async (req: Request, res: Response) => {
 });
 
 // PUT /store-areas/:id - Update a store area
-router.put("/:id", authenticateToken, async (req: Request, res: Response) => {
+router.put("/:id", authenticateToken, validateStoreAreaInput, validateDataIntegrity, validateBusinessRules, async (req: Request, res: Response) => {
   try {
     const id = parseInt(req.params.id);
     const { name, subDepartment, lastChecked } = req.body;

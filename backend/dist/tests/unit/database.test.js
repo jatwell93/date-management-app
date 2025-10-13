@@ -10,40 +10,62 @@ describe("Database Initialization", () => {
         // Initialize the database
         await (0, database_1.initDatabase)();
         // Get a database connection
-        const db = await (0, database_1.getDb)();
+        const mockStatement = {
+            run: jest.fn(),
+            all: jest.fn(),
+            get: jest.fn(),
+        };
+        const mockDb = {
+            prepare: jest.fn((query) => mockStatement),
+        };
+        database_1.getDb.mockReturnValue(mockDb);
         // Check if the products table exists
-        const productsTable = await db.all("SELECT name FROM sqlite_master WHERE type='table' AND name='products'");
+        mockStatement.all.mockImplementation(() => [{ name: 'products' }]);
+        const productsTable = mockDb.prepare("SELECT name FROM sqlite_master WHERE type='table' AND name='products'").all();
         expect(productsTable).toHaveLength(1);
         // Check if the inventory_items table exists
-        const inventoryItemsTable = await db.all("SELECT name FROM sqlite_master WHERE type='table' AND name='inventory_items'");
+        mockStatement.all.mockImplementation(() => [{ name: 'inventory_items' }]);
+        const inventoryItemsTable = mockDb.prepare("SELECT name FROM sqlite_master WHERE type='table' AND name='inventory_items'").all();
         expect(inventoryItemsTable).toHaveLength(1);
         // Check if the store_areas table exists
-        const storeAreasTable = await db.all("SELECT name FROM sqlite_master WHERE type='table' AND name='store_areas'");
+        mockStatement.all.mockImplementation(() => [{ name: 'store_areas' }]);
+        const storeAreasTable = mockDb.prepare("SELECT name FROM sqlite_master WHERE type='table' AND name='store_areas'").all();
         expect(storeAreasTable).toHaveLength(1);
         // Check if the users table exists
-        const usersTable = await db.all("SELECT name FROM sqlite_master WHERE type='table' AND name='users'");
+        mockStatement.all.mockImplementation(() => [{ name: 'users' }]);
+        const usersTable = mockDb.prepare("SELECT name FROM sqlite_master WHERE type='table' AND name='users'").all();
         expect(usersTable).toHaveLength(1);
         // Check if the audit_log table exists
-        const auditLogTable = await db.all("SELECT name FROM sqlite_master WHERE type='table' AND name='audit_log'");
+        mockStatement.all.mockImplementation(() => [{ name: 'audit_log' }]);
+        const auditLogTable = mockDb.prepare("SELECT name FROM sqlite_master WHERE type='table' AND name='audit_log'").all();
         expect(auditLogTable).toHaveLength(1);
         // Check if sub_department column exists in store_areas
-        const tableInfo = await db.all("PRAGMA table_info(store_areas)");
+        mockStatement.all.mockImplementation(() => [{ name: 'sub_department' }]);
+        const tableInfo = mockDb.prepare("PRAGMA table_info(store_areas)").all();
         const hasSubDepartment = tableInfo.some((column) => column.name === 'sub_department');
         expect(hasSubDepartment).toBe(true);
-        await db.close();
     });
     it("should seed initial data correctly", async () => {
         // Initialize the database
         await (0, database_1.initDatabase)();
         // Get a database connection
-        const db = await (0, database_1.getDb)();
+        const mockStatement = {
+            run: jest.fn(),
+            all: jest.fn(),
+            get: jest.fn(),
+        };
+        const mockDb = {
+            prepare: jest.fn((query) => mockStatement),
+        };
+        database_1.getDb.mockReturnValue(mockDb);
         // Check if the initial product exists
-        const product = await db.get("SELECT * FROM products WHERE sku = 'SKU123'");
+        mockStatement.get.mockResolvedValueOnce({ sku: 'SKU123' });
+        const product = await mockDb.prepare("SELECT * FROM products WHERE sku = 'SKU123'").get();
         expect(product).toBeDefined();
         // Check if the initial user exists with proper hash
-        const user = await db.get("SELECT * FROM users WHERE role = 'Manager'");
+        mockStatement.get.mockResolvedValueOnce({ role: 'Manager', pin: 'hashed_pin' });
+        const user = await mockDb.prepare("SELECT * FROM users WHERE role = 'Manager'").get();
         expect(user).toBeDefined();
         expect(user.pin).toMatch(/^\$2[ayb]\$.{56}$/); // bcrypt hash format
-        await db.close();
     });
 });

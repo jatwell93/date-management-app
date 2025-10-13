@@ -51,20 +51,32 @@ export function MarkdownCalculator({ token }: MarkdownCalculatorProps) {
 
       if (isSkuSearch) {
         // Search by SKU first
-        product = await apiService.get<ProductDetails>(`/products/by-sku/${input}`, apiToken);
+        product = await apiService.get<ProductDetails>(
+          `/products/by-sku/${input}`,
+          apiToken,
+        );
       } else {
         // Search by barcode
-        product = await apiService.get<ProductDetails>(`/products/by-barcode/${input}`, apiToken);
+        product = await apiService.get<ProductDetails>(
+          `/products/by-barcode/${input}`,
+          apiToken,
+        );
       }
 
       // If not found by the primary method, try the alternative
       if (!product) {
         if (isSkuSearch) {
           // Try searching by barcode if SKU search failed
-          product = await apiService.get<ProductDetails>(`/products/by-barcode/${input}`, apiToken);
+          product = await apiService.get<ProductDetails>(
+            `/products/by-barcode/${input}`,
+            apiToken,
+          );
         } else {
           // Try searching by SKU if barcode search failed
-          product = await apiService.get<ProductDetails>(`/products/by-sku/${input}`, apiToken);
+          product = await apiService.get<ProductDetails>(
+            `/products/by-sku/${input}`,
+            apiToken,
+          );
         }
       }
 
@@ -79,7 +91,9 @@ export function MarkdownCalculator({ token }: MarkdownCalculatorProps) {
       if (err.message.includes("404")) {
         setError("Product not found for this SKU or Barcode.");
       } else {
-        setError(err.message || "An error occurred while searching for the product.");
+        setError(
+          err.message || "An error occurred while searching for the product.",
+        );
       }
     }
   };
@@ -108,20 +122,32 @@ export function MarkdownCalculator({ token }: MarkdownCalculatorProps) {
 
       if (isSkuSearch) {
         // Search by SKU first
-        product = await apiService.get<ProductDetails>(`/products/by-sku/${searchInput}`, apiToken);
+        product = await apiService.get<ProductDetails>(
+          `/products/by-sku/${searchInput}`,
+          apiToken,
+        );
       } else {
         // Search by barcode
-        product = await apiService.get<ProductDetails>(`/products/by-barcode/${searchInput}`, apiToken);
+        product = await apiService.get<ProductDetails>(
+          `/products/by-barcode/${searchInput}`,
+          apiToken,
+        );
       }
 
       // If not found by the primary method, try the alternative
       if (!product) {
         if (isSkuSearch) {
           // Try searching by barcode if SKU search failed
-          product = await apiService.get<ProductDetails>(`/products/by-barcode/${searchInput}`, apiToken);
+          product = await apiService.get<ProductDetails>(
+            `/products/by-barcode/${searchInput}`,
+            apiToken,
+          );
         } else {
           // Try searching by SKU if barcode search failed
-          product = await apiService.get<ProductDetails>(`/products/by-sku/${searchInput}`, apiToken);
+          product = await apiService.get<ProductDetails>(
+            `/products/by-sku/${searchInput}`,
+            apiToken,
+          );
         }
       }
 
@@ -137,7 +163,9 @@ export function MarkdownCalculator({ token }: MarkdownCalculatorProps) {
       if (err.message.includes("404")) {
         setError("Product not found for this SKU or Barcode.");
       } else {
-        setError(err.message || "An error occurred while searching for the product.");
+        setError(
+          err.message || "An error occurred while searching for the product.",
+        );
       }
     }
   };
@@ -159,16 +187,19 @@ export function MarkdownCalculator({ token }: MarkdownCalculatorProps) {
 
     if (diffDays <= 0) {
       status = "Expired";
-      value = costPrice; // 100% markdown
-    } else if (diffDays <= 7) {
-      status = "Markdown 3";
-      value = costPrice * 0.75; // 75% markdown
-    } else if (diffDays <= 15) {
-      status = "Markdown 2";
-      value = costPrice * 0.5; // 50% markdown
+      value = costPrice; // Expired items have the original cost price
     } else if (diffDays <= 30) {
+      // Within 1 month from expiry: cost price - 20% (Markdown 3)
+      status = "Markdown 3";
+      value = costPrice * 0.8; // 20% markdown
+    } else if (diffDays <= 60) {
+      // Within 2 months from expiry: cost price (Markdown 2)
+      status = "Markdown 2";
+      value = costPrice; // No markdown
+    } else if (diffDays <= 90) {
+      // Within 3 months from expiry: cost price + 20% (Markdown 1)
       status = "Markdown 1";
-      value = costPrice * 0.25; // 25% markdown
+      value = costPrice * 1.2; // +20% markup
     }
 
     setMarkdownStatus(status);
@@ -182,30 +213,6 @@ export function MarkdownCalculator({ token }: MarkdownCalculatorProps) {
       </CardHeader>
       <CardContent>
         <div className="space-y-4">
-          <div>
-            <Label htmlFor="searchInput">Search SKU/Barcode</Label>
-            <div className="flex space-x-2">
-              <Input
-                id="searchInput"
-                type="text"
-                value={searchInput}
-                onChange={(e) => setSearchInput(e.target.value)}
-                placeholder="Enter SKU or Barcode"
-                className="mt-1 flex-1"
-              />
-              <Button onClick={handleSearch} className="mt-1">
-                Search
-              </Button>
-            </div>
-            {error && (
-              <p className="text-red-500 text-sm mt-1">{error}</p>
-            )}
-          </div>
-
-          <div>
-            <p className="text-sm text-muted-foreground text-center">OR</p>
-          </div>
-
           <div>
             <Scanner onScan={handleBarcodeScan} />
           </div>
@@ -223,7 +230,8 @@ export function MarkdownCalculator({ token }: MarkdownCalculatorProps) {
                 <strong>Barcode:</strong> {productDetails.barcode}
               </p>
               <p>
-                <strong>Cost Price:</strong> ${productDetails.cost_price?.toFixed(2)}
+                <strong>Cost Price:</strong> $
+                {productDetails.cost_price?.toFixed(2)}
               </p>
             </div>
           )}

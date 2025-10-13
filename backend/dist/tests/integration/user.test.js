@@ -4,10 +4,10 @@ var __importDefault = (this && this.__importDefault) || function (mod) {
 };
 Object.defineProperty(exports, "__esModule", { value: true });
 const supertest_1 = __importDefault(require("supertest"));
-const index_1 = __importDefault(require("../../src/index"));
-const database_1 = require("../../src/database");
+const index_1 = __importDefault(require("../../index"));
+const database_1 = require("../../database");
 // Mock the database connection
-jest.mock("../../src/database", () => ({
+jest.mock("../../database", () => ({
     getDb: jest.fn(),
 }));
 describe("User API Integration Tests", () => {
@@ -24,7 +24,7 @@ describe("User API Integration Tests", () => {
         it("should login successfully with valid PIN", async () => {
             const mockUser = {
                 id: 1,
-                pin: "1234",
+                pin: "5624",
                 role: "Manager",
                 created_at: "2023-01-01",
                 updated_at: "2023-01-01",
@@ -32,7 +32,7 @@ describe("User API Integration Tests", () => {
             mockDb.get.mockResolvedValue(mockUser);
             const response = await (0, supertest_1.default)(index_1.default)
                 .post("/auth/login")
-                .send({ pin: "1234" })
+                .send({ pin: "5624" })
                 .expect(200);
             expect(response.body).toHaveProperty("token");
         });
@@ -51,7 +51,7 @@ describe("User API Integration Tests", () => {
         it("should return all users when accessed by manager", async () => {
             const mockUser = {
                 id: 1,
-                pin: "1234",
+                pin: "5624",
                 role: "Manager",
                 created_at: "2023-01-01",
                 updated_at: "2023-01-01",
@@ -60,7 +60,7 @@ describe("User API Integration Tests", () => {
             mockDb.all.mockResolvedValue([
                 {
                     id: 1,
-                    pin: "1234",
+                    pin: "5624",
                     role: "Manager",
                     created_at: "2023-01-01",
                     updated_at: "2023-01-01",
@@ -76,7 +76,7 @@ describe("User API Integration Tests", () => {
             // Mock authentication with a manager token
             const authResponse = await (0, supertest_1.default)(index_1.default)
                 .post("/auth/login")
-                .send({ pin: "1234" });
+                .send({ pin: "5624" });
             const token = authResponse.body.token;
             const response = await (0, supertest_1.default)(index_1.default)
                 .get("/users")
@@ -90,7 +90,7 @@ describe("User API Integration Tests", () => {
         it("should create a new user when accessed by manager", async () => {
             const mockUser = {
                 id: 1,
-                pin: "1234",
+                pin: "5624",
                 role: "Manager",
                 created_at: "2023-01-01",
                 updated_at: "2023-01-01",
@@ -99,7 +99,7 @@ describe("User API Integration Tests", () => {
             mockDb.run.mockResolvedValue({ lastID: 2 });
             const authResponse = await (0, supertest_1.default)(index_1.default)
                 .post("/auth/login")
-                .send({ pin: "1234" });
+                .send({ pin: "5624" });
             const token = authResponse.body.token;
             const response = await (0, supertest_1.default)(index_1.default)
                 .post("/users")
@@ -114,7 +114,7 @@ describe("User API Integration Tests", () => {
         it("should update a user when accessed by manager", async () => {
             const mockUser = {
                 id: 1,
-                pin: "1234",
+                pin: "5624",
                 role: "Manager",
                 created_at: "2023-01-01",
                 updated_at: "2023-01-01",
@@ -131,7 +131,7 @@ describe("User API Integration Tests", () => {
             });
             const authResponse = await (0, supertest_1.default)(index_1.default)
                 .post("/auth/login")
-                .send({ pin: "1234" });
+                .send({ pin: "5624" });
             const token = authResponse.body.token;
             const response = await (0, supertest_1.default)(index_1.default)
                 .put("/users/2")
@@ -145,7 +145,7 @@ describe("User API Integration Tests", () => {
         it("should delete a user when accessed by manager", async () => {
             const mockUser = {
                 id: 1,
-                pin: "1234",
+                pin: "5624",
                 role: "Manager",
                 created_at: "2023-01-01",
                 updated_at: "2023-01-01",
@@ -154,7 +154,7 @@ describe("User API Integration Tests", () => {
             mockDb.run.mockResolvedValue({ changes: 1 });
             const authResponse = await (0, supertest_1.default)(index_1.default)
                 .post("/auth/login")
-                .send({ pin: "1234" });
+                .send({ pin: "5624" });
             const token = authResponse.body.token;
             await (0, supertest_1.default)(index_1.default)
                 .delete("/users/2")

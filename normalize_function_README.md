@@ -20,7 +20,7 @@ Extracts a numeric value from a formatted cost string, supporting:
 ## Usage Examples
 
 ```typescript
-import { extractCostValueEnhanced } from './temp_normalize_function';
+import { extractCostValueEnhanced } from './backend/src/utils/normalize.function';
 
 // Various currency formats
 console.log(extractCostValueEnhanced("$12.34"));      // 12.34

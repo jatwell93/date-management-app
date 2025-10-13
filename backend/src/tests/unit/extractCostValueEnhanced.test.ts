@@ -62,8 +62,8 @@ describe("extractCostValueEnhanced function", () => {
   });
 
   it("should handle values with parentheses (often used for negative values)", () => {
-    expect(extractCostValueEnhanced("(12.34)")).toBe(12.34); // Extracting the positive value
-    expect(extractCostValueEnhanced("$(12.34)")).toBe(12.34);
+    expect(extractCostValueEnhanced("(12.34)")).toBe(-12.34);
+    expect(extractCostValueEnhanced("$(12.34)")).toBe(-12.34);
   });
 
   it("should handle values with spaces and formatting", () => {
@@ -85,16 +85,8 @@ describe("extractCostValueEnhanced function", () => {
   });
 
   it("should handle negative values", () => {
-    // The function extracts the numeric value but doesn't preserve the sign
-    expect(extractCostValueEnhanced("(12.34)")).toBe(12.34); // Parentheses case is already tested
-    // Testing the actual function behavior for negative numbers
-    const result1 = extractCostValueEnhanced("-12.34");
-    expect(result1).not.toBeNaN();
-    expect(result1).toBe(12.34); // Function currently returns the absolute value
-    
-    const result2 = extractCostValueEnhanced("$-12.34");
-    expect(result2).not.toBeNaN();
-    expect(result2).toBe(12.34); // Function currently returns the absolute value
+    expect(extractCostValueEnhanced("-12.34")).toBe(-12.34);
+    expect(extractCostValueEnhanced("$-12.34")).toBe(-12.34);
   });
 
   it("should handle complex currency representations", () => {

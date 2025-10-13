@@ -1,6 +1,14 @@
-import React, { useState, useCallback } from 'react';
-import { useNavigate } from 'react-router-dom';
-import * as XLSX from 'xlsx';
+import React, { useState, useCallback } from "react";
+import { useNavigate } from "react-router-dom";
+import * as XLSX from "xlsx";
+import {
+  Table,
+  TableBody,
+  TableCell,
+  TableHead,
+  TableHeader,
+  TableRow,
+} from "../components/ui/table";
 
 interface UploadResponse {
   success: boolean;
@@ -11,14 +19,16 @@ interface UploadResponse {
   errors?: string[];
 }
 
-export const CSVUploadPage: React.FC<{ token: string | null }> = ({ token }) => {
+export const CSVUploadPage: React.FC<{ token: string | null }> = ({
+  token,
+}) => {
   const [selectedFile, setSelectedFile] = useState<File | null>(null);
   const [isUploading, setIsUploading] = useState(false);
   const [uploadResult, setUploadResult] = useState<UploadResponse | null>(null);
   const [fileName, setFileName] = useState<string | null>(null);
   const [filePreview, setFilePreview] = useState<string[][]>([]);
   const [uploadProgress, setUploadProgress] = useState<number>(0);
-  const [progressMessage, setProgressMessage] = useState<string>('');
+  const [progressMessage, setProgressMessage] = useState<string>("");
   const navigate = useNavigate();
 
   const handleFileChange = (event: React.ChangeEvent<HTMLInputElement>) => {
@@ -34,15 +44,15 @@ export const CSVUploadPage: React.FC<{ token: string | null }> = ({ token }) => 
   };
 
   const previewFile = (file: File) => {
-    const fileExtension = file.name.split('.').pop()?.toLowerCase();
+    const fileExtension = file.name.split(".").pop()?.toLowerCase();
 
-    if (fileExtension === 'xlsx' || fileExtension === 'xls') {
+    if (fileExtension === "xlsx" || fileExtension === "xls") {
       // Handle XLSX and XLS files
       const reader = new FileReader();
 
       reader.onload = (e) => {
         const data = new Uint8Array(e.target?.result as ArrayBuffer);
-        const workbook = XLSX.read(data, { type: 'array' });
+        const workbook = XLSX.read(data, { type: "array" });
         const firstSheetName = workbook.SheetNames[0];
         const worksheet = workbook.Sheets[firstSheetName];
 
@@ -61,8 +71,10 @@ export const CSVUploadPage: React.FC<{ token: string | null }> = ({ token }) => 
 
       reader.onload = (e) => {
         const text = e.target?.result as string;
-        const lines = text.split('\n').slice(0, 6); // Take first 6 lines (header + 5 data rows)
-        const previewData = lines.map(line => line.split(',').map(cell => cell.trim()));
+        const lines = text.split("\n").slice(0, 6); // Take first 6 lines (header + 5 data rows)
+        const previewData = lines.map((line) =>
+          line.split(",").map((cell) => cell.trim()),
+        );
         setFilePreview(previewData);
       };
 
@@ -76,75 +88,81 @@ export const CSVUploadPage: React.FC<{ token: string | null }> = ({ token }) => 
     if (!selectedFile) {
       setUploadResult({
         success: false,
-        message: 'Please select a CSV, XLSX, or XLS file to upload'
+        message: "Please select a CSV, XLSX, or XLS file to upload",
       });
       return;
     }
 
     // Validate file type
-    if (selectedFile.type !== 'text/csv' &&
-      selectedFile.type !== 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' &&
-      selectedFile.type !== 'application/vnd.ms-excel' &&
-      !selectedFile.name.endsWith('.csv') &&
-      !selectedFile.name.endsWith('.xlsx') &&
-      !selectedFile.name.endsWith('.xls')) {
+    if (
+      selectedFile.type !== "text/csv" &&
+      selectedFile.type !==
+        "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet" &&
+      selectedFile.type !== "application/vnd.ms-excel" &&
+      !selectedFile.name.endsWith(".csv") &&
+      !selectedFile.name.endsWith(".xlsx") &&
+      !selectedFile.name.endsWith(".xls")
+    ) {
       setUploadResult({
         success: false,
-        message: 'Please select a valid CSV, XLSX, or XLS file'
+        message: "Please select a valid CSV, XLSX, or XLS file",
       });
       return;
     }
 
     setIsUploading(true);
     setUploadProgress(0);
-    setProgressMessage('Starting upload...');
+    setProgressMessage("Starting upload...");
     setUploadResult(null);
 
     const formData = new FormData();
-    formData.append('file', selectedFile);
+    formData.append("file", selectedFile);
 
     try {
       // Simulate progress updates
       const progressInterval = setInterval(() => {
-        setUploadProgress(prev => {
+        setUploadProgress((prev) => {
           if (prev >= 90) {
             clearInterval(progressInterval);
             return prev;
           }
           return prev + 10;
         });
-        setProgressMessage('Uploading...');
+        setProgressMessage("Uploading...");
       }, 200);
 
-      const response = await fetch(`${process.env.REACT_APP_API_URL}/products/upload-csv`, {
-        method: 'POST',
-        headers: {
-          'Authorization': `Bearer ${token}`,
+      const response = await fetch(
+        `${process.env.REACT_APP_API_URL}/products/upload-csv`,
+        {
+          method: "POST",
+          headers: {
+            Authorization: `Bearer ${token}`,
+          },
+          body: formData,
         },
-        body: formData,
-      });
+      );
 
       clearInterval(progressInterval);
       setUploadProgress(100);
-      setProgressMessage('Processing...');
+      setProgressMessage("Processing...");
 
       const result: UploadResponse = await response.json();
 
       if (response.ok) {
         setUploadResult(result);
         setUploadProgress(0);
-        setProgressMessage('');
+        setProgressMessage("");
       } else {
         setUploadResult({
           success: false,
-          message: result.message || 'An error occurred during upload',
-          errors: result.errors
+          message: result.message || "An error occurred during upload",
+          errors: result.errors,
         });
       }
     } catch (error) {
       setUploadResult({
         success: false,
-        message: 'Network error: Unable to connect to the server'
+        message: "Network error: Unable to connect to the server",
       });
     } finally {
       setIsUploading(false);
@@ -157,7 +175,7 @@ export const CSVUploadPage: React.FC<{ token: string | null }> = ({ token }) => 
     setFilePreview([]);
     setUploadResult(null);
     setUploadProgress(0);
-    setProgressMessage('');
+    setProgressMessage("");
   };
 
   return (
@@ -166,16 +184,34 @@ export const CSVUploadPage: React.FC<{ token: string | null }> = ({ token }) => 
 
       <div className="bg-white p-6 rounded-lg shadow-md">
         <p className="mb-4 text-gray-700">
-          Upload a CSV, XLSX, or XLS file containing product information (SKU, Name, Cost, Barcode) to update your product database.
+          Upload a CSV, XLSX, or XLS file containing product information (SKU,
+          Name, Cost, Barcode) to update your product database.
         </p>
 
         {/* Column name and format guidelines */}
-        <div className="mb-6 p-4 bg-blue-50 rounded-md">
-          <h3 className="text-lg font-medium text-blue-800 mb-2">Format Guidelines</h3>
-          <ul className="list-disc pl-5 space-y-1 text-sm text-blue-700">
-            <li>Required columns: <code className="bg-blue-100 px-1 rounded">SKU</code>, <code className="bg-blue-100 px-1 rounded">Name</code>, <code className="bg-blue-100 px-1 rounded">Cost</code>, <code className="bg-blue-100 px-1 rounded">Barcode</code></li>
-            <li>Column names are case-insensitive and can include common variations (e.g., "Product Name", "Item Name", "Item Cost", "Unit Cost")</li>
-            <li>Cost format: Use decimal numbers like <code className="bg-blue-100 px-1 rounded">1.99</code> or <code className="bg-blue-100 px-1 rounded">19.99</code> (no currency symbols)</li>
+        <div className="mb-6 p-4 bg-inventory-primary-50 rounded-md">
+          <h3 className="text-lg font-medium text-inventory-primary-800 mb-2">
+            Format Guidelines
+          </h3>
+          <ul className="list-disc pl-5 space-y-1 text-sm text-inventory-primary-700">
+            <li>
+              Required columns:{" "}
+              <code className="bg-inventory-primary-100 px-1 rounded">SKU</code>,{" "}
+              <code className="bg-inventory-primary-100 px-1 rounded">Name</code>,{" "}
+              <code className="bg-inventory-primary-100 px-1 rounded">Cost</code>,{" "}
+              <code className="bg-inventory-primary-100 px-1 rounded">Barcode</code>
+            </li>
+            <li>
+              Column names are case-insensitive and can include common
+              variations (e.g., "Product Name", "Item Name", "Item Cost", "Unit
+              Cost")
+            </li>
+            <li>
+              Cost format: Use decimal numbers like{" "}
+              <code className="bg-blue-100 px-1 rounded">1.99</code> or{" "}
+              <code className="bg-blue-100 px-1 rounded">19.99</code> (no
+              currency symbols)
+            </li>
           </ul>
         </div>
 
@@ -193,8 +229,8 @@ export const CSVUploadPage: React.FC<{ token: string | null }> = ({ token }) => 
                   file:mr-4 file:py-2 file:px-4
                   file:rounded-md file:border-0
                   file:text-sm file:font-semibold
-                  file:bg-blue-50 file:text-blue-700
-                  hover:file:bg-blue-100"
+                  file:bg-inventory-primary-50 file:text-inventory-primary-700
+                  hover:file:bg-inventory-primary-100"
               />
               {fileName && (
                 <span className="ml-4 text-sm text-gray-600 truncate max-w-xs">
@@ -203,35 +239,54 @@ export const CSVUploadPage: React.FC<{ token: string | null }> = ({ token }) => 
               )}
             </div>
             <p className="mt-2 text-sm text-gray-500">
-              The CSV/XLSX/XLS file should contain columns: SKU, Name, Cost, and Barcode (in that order)
+              The CSV/XLSX/XLS file should contain columns: SKU, Name, Cost, and
+              Barcode (in that order)
             </p>
           </div>
 
           {filePreview.length > 0 && (
             <div className="mb-6">
-              <h3 className="text-lg font-medium mb-2">File Preview (First 5 rows):</h3>
+              <h3 className="text-lg font-medium mb-2">
+                File Preview (First 5 rows):
+              </h3>
               <div className="overflow-x-auto border rounded-md">
-                <table className="min-w-full divide-y divide-gray-200">
-                  <thead className="bg-gray-50">
-                    <tr>
-                      <th className="px-4 py-2 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">SKU</th>
-                      <th className="px-4 py-2 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Name</th>
-                      <th className="px-4 py-2 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Cost</th>
-                      <th className="px-4 py-2 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Barcode</th>
-                    </tr>
-                  </thead>
-                  <tbody className="bg-white divide-y divide-gray-200">
+                <Table>
+                  <TableHeader>
+                    <TableRow>
+                      <TableHead className="text-left text-xs font-medium text-muted-foreground uppercase tracking-wider">
+                        SKU
+                      </TableHead>
+                      <TableHead className="text-left text-xs font-medium text-muted-foreground uppercase tracking-wider">
+                        Name
+                      </TableHead>
+                      <TableHead className="text-left text-xs font-medium text-muted-foreground uppercase tracking-wider">
+                        Cost
+                      </TableHead>
+                      <TableHead className="text-left text-xs font-medium text-muted-foreground uppercase tracking-wider">
+                        Barcode
+                      </TableHead>
+                    </TableRow>
+                  </TableHeader>
+                  <TableBody>
                     {filePreview.map((row, rowIndex) => (
-                      <tr key={rowIndex} className={rowIndex === 0 ? 'bg-gray-100 font-semibold' : ''}>
+                      <TableRow
+                        key={rowIndex}
+                        className={
+                          rowIndex === 0 ? "bg-muted font-semibold" : ""
+                        }
+                      >
                         {row.map((cell, cellIndex) => (
-                          <td key={cellIndex} className="px-4 py-2 whitespace-nowrap text-sm text-gray-500">
+                          <TableCell
+                            key={cellIndex}
+                            className="whitespace-nowrap text-sm text-foreground"
+                          >
                             {cell}
-                          </td>
+                          </TableCell>
                         ))}
-                      </tr>
+                      </TableRow>
                     ))}
-                  </tbody>
-                </table>
+                  </TableBody>
+                </Table>
               </div>
             </div>
           )}
@@ -239,12 +294,16 @@ export const CSVUploadPage: React.FC<{ token: string | null }> = ({ token }) => 
           {isUploading && (
             <div className="mb-4">
               <div className="flex items-center justify-between mb-1">
-                <span className="text-sm font-medium text-gray-700">{progressMessage}</span>
-                <span className="text-sm font-medium text-gray-700">{uploadProgress}%</span>
+                <span className="text-sm font-medium text-gray-700">
+                  {progressMessage}
+                </span>
+                <span className="text-sm font-medium text-gray-700">
+                  {uploadProgress}%
+                </span>
               </div>
               <div className="w-full bg-gray-200 rounded-full h-2.5">
                 <div
-                  className="bg-blue-600 h-2.5 rounded-full transition-all duration-300 ease-in-out"
+                  className="bg-inventory-primary-600 h-2.5 rounded-full transition-all duration-300 ease-in-out"
                   style={{ width: `${uploadProgress}%` }}
                 ></div>
               </div>
@@ -255,12 +314,13 @@ export const CSVUploadPage: React.FC<{ token: string | null }> = ({ token }) => 
             <button
               type="submit"
               disabled={isUploading || !selectedFile}
-              className={`px-4 py-2 rounded-md text-white font-medium ${isUploading || !selectedFile
-                  ? 'bg-gray-400 cursor-not-allowed'
-                  : 'bg-blue-600 hover:bg-blue-700'
-                }`}
+              className={`px-4 py-2 rounded-md text-white font-medium ${
+                isUploading || !selectedFile
+                  ? "bg-gray-400 cursor-not-allowed"
+                  : "bg-inventory-primary-600 hover:bg-inventory-primary-700"
+              }`}
             >
-              {isUploading ? 'Uploading...' : 'Upload CSV/XLSX/XLS'}
+              {isUploading ? "Uploading..." : "Upload CSV/XLSX/XLS"}
             </button>
 
             <button
@@ -274,9 +334,11 @@ export const CSVUploadPage: React.FC<{ token: string | null }> = ({ token }) => 
         </form>
 
         {uploadResult && (
-          <div className={`mt-6 p-4 rounded-md ${uploadResult.success ? 'bg-green-50 text-green-800' : 'bg-red-50 text-red-800'}`}>
+          <div
+            className={`mt-6 p-4 rounded-md ${uploadResult.success ? "bg-inventory-success-50 text-inventory-success-800" : "bg-inventory-error-50 text-inventory-error-800"}`}
+          >
             <h3 className="font-bold mb-2">
-              {uploadResult.success ? 'Upload Successful!' : 'Upload Failed'}
+              {uploadResult.success ? "Upload Successful!" : "Upload Failed"}
             </h3>
 
             <p>{uploadResult.message}</p>
@@ -295,28 +357,44 @@ export const CSVUploadPage: React.FC<{ token: string | null }> = ({ token }) => 
                 <ul className="list-disc pl-5 mt-1 space-y-1">
                   {uploadResult.errors.map((error, index) => (
                     <li key={index} className="text-sm">
-                      {error.includes('column') && error.toLowerCase().includes('name') ? (
-                        <span>{error} - <a
-                          href="#"
-                          className="text-blue-600 hover:underline"
-                          onClick={(e) => {
-                            e.preventDefault();
-                            document.querySelector('h3.text-lg.font-medium.text-blue-800')?.scrollIntoView({ behavior: 'smooth' });
-                          }}
-                        >
-                          See format guidelines
-                        </a></span>
-                      ) : error.includes('cost') && error.toLowerCase().includes('format') ? (
-                        <span>{error} - <a
-                          href="#"
-                          className="text-blue-600 hover:underline"
-                          onClick={(e) => {
-                            e.preventDefault();
-                            document.querySelector('h3.text-lg.font-medium.text-blue-800')?.scrollIntoView({ behavior: 'smooth' });
-                          }}
-                        >
-                          See cost format guidelines
-                        </a></span>
+                      {error.includes("column") &&
+                      error.toLowerCase().includes("name") ? (
+                        <span>
+                          {error} -{" "}
+                          <a
+                            href="#"
+                            className="text-inventory-primary-600 hover:underline"
+                            onClick={(e) => {
+                              e.preventDefault();
+                              document
+                                .querySelector(
+                                  "h3.text-lg.font-medium.text-inventory-primary-800",
+                                )
+                                ?.scrollIntoView({ behavior: "smooth" });
+                            }}
+                          >
+                            See format guidelines
+                          </a>
+                        </span>
+                      ) : error.includes("cost") &&
+                        error.toLowerCase().includes("format") ? (
+                        <span>
+                          {error} -{" "}
+                          <a
+                            href="#"
+                            className="text-inventory-primary-600 hover:underline"
+                            onClick={(e) => {
+                              e.preventDefault();
+                              document
+                                .querySelector(
+                                  "h3.text-lg.font-medium.text-inventory-primary-800",
+                                )
+                                ?.scrollIntoView({ behavior: "smooth" });
+                            }}
+                          >
+                            See cost format guidelines
+                          </a>
+                        </span>
                       ) : (
                         <span>{error}</span>
                       )}

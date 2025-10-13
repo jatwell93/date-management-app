@@ -36,7 +36,7 @@
   --inventory-primary-700: 205 86.5% 37.5%;
   --inventory-primary-800: 205 79.4% 29.2%;
   --inventory-primary-900: 204 74.1% 23.3%;
-  
+
   --inventory-secondary-50: 171 100% 98.4%;
   --inventory-secondary-100: 170 92.5% 95.5%;
   --inventory-secondary-200: 167 89.1% 90.8%;
@@ -47,7 +47,7 @@
   --inventory-secondary-700: 161 52.6% 37.3%;
   --inventory-secondary-800: 161 47.3% 31.8%;
   --inventory-secondary-900: 160 43.1% 27.3%;
-  
+
   --inventory-success-50: 142 76.8% 97.1%;
   --inventory-success-100: 142 71.8% 94.9%;
   --inventory-success-200: 141 69.2% 89.4%;
@@ -56,9 +56,9 @@
   --inventory-success-500: 142 76.2% 47.5%;
   --inventory-success-600: 142 70.6% 38.4%;
   --inventory-success-700: 142 76.2% 29.4%;
-  --inventory-success-800: 141 81.0% 24.3%;
+  --inventory-success-800: 141 81% 24.3%;
   --inventory-success-900: 141 77.8% 19.8%;
-  
+
   --inventory-warning-50: 28 91.7% 97.1%;
   --inventory-warning-100: 28 76.8% 94.5%;
   --inventory-warning-200: 28 66.7% 88.8%;
@@ -68,8 +68,8 @@
   --inventory-warning-600: 28 80.7% 42.9%;
   --inventory-warning-700: 28 84.7% 33.7%;
   --inventory-warning-800: 28 87.8% 27.1%;
-  --inventory-warning-900: 28 91.0% 21.4%;
-  
+  --inventory-warning-900: 28 91% 21.4%;
+
   --inventory-error-50: 0 85.7% 97.6%;
   --inventory-error-100: 0 92.3% 95.5%;
   --inventory-error-200: 0 93.3% 91.4%;
@@ -78,16 +78,16 @@
   --inventory-error-500: 0 87.2% 56.5%;
   --inventory-error-600: 0 83.3% 44.1%;
   --inventory-error-700: 0 82.1% 35.1%;
-  --inventory-error-800: 0 80.0% 27.5%;
-  --inventory-error-900: 0 75.0% 22.0%;
-  
-  --inventory-neutral-50: 0 0% 98.0%;
+  --inventory-error-800: 0 80% 27.5%;
+  --inventory-error-900: 0 75% 22%;
+
+  --inventory-neutral-50: 0 0% 98%;
   --inventory-neutral-100: 0 0% 94.9%;
-  --inventory-neutral-200: 0 0% 89.0%;
-  --inventory-neutral-300: 0 0% 82.0%;
+  --inventory-neutral-200: 0 0% 89%;
+  --inventory-neutral-300: 0 0% 82%;
   --inventory-neutral-400: 0 0% 63.9%;
   --inventory-neutral-500: 0 0% 45.1%;
-  --inventory-neutral-600: 0 0% 31.0%;
+  --inventory-neutral-600: 0 0% 31%;
   --inventory-neutral-700: 0 0% 26.7%;
   --inventory-neutral-800: 0 0% 14.9%;
   --inventory-neutral-900: 0 0% 8.6%;
@@ -101,7 +101,7 @@
   --font-size-2xl: 1.5rem; /* 24px */
   --font-size-3xl: 1.875rem; /* 30px */
   --font-size-4xl: 2.25rem; /* 36px */
-  
+
   /* Font weights */
   --font-weight-normal: 400;
   --font-weight-medium: 500;
@@ -142,7 +142,7 @@
   --inventory-primary-700: 192 98.5% 92.5%;
   --inventory-primary-800: 200 100% 95.9%;
   --inventory-primary-900: 240 100% 97.1%;
-  
+
   --inventory-secondary-50: 160 43.1% 26.3%;
   --inventory-secondary-100: 161 47.3% 30.8%;
   --inventory-secondary-200: 161 52.6% 36.3%;
@@ -151,10 +151,10 @@
   --inventory-secondary-500: 162 69% 65.7%;
   --inventory-secondary-600: 164 82.8% 79.8%;
   --inventory-secondary-700: 167 89.1% 89.8%;
-  --inventory-secondary-900: 171 100% 98.0%;
-  
+  --inventory-secondary-900: 171 100% 98%;
+
   --inventory-success-50: 141 77.8% 20.8%;
-  --inventory-success-100: 141 81.0% 26.3%;
+  --inventory-success-100: 141 81% 26.3%;
   --inventory-success-200: 142 76.2% 33.4%;
   --inventory-success-300: 142 70.6% 41.4%;
   --inventory-success-400: 142 71.8% 58.7%;
@@ -163,8 +163,8 @@
   --inventory-success-700: 141 69.2% 94.5%;
   --inventory-success-800: 142 71.8% 97.1%;
   --inventory-success-900: 142 76.8% 98.5%;
-  
-  --inventory-warning-50: 28 91.0% 22.4%;
+
+  --inventory-warning-50: 28 91% 22.4%;
   --inventory-warning-100: 28 87.8% 29.1%;
   --inventory-warning-200: 28 84.7% 37.7%;
   --inventory-warning-300: 28 80.7% 45.9%;
@@ -174,9 +174,9 @@
   --inventory-warning-700: 28 76.8% 90.8%;
   --inventory-warning-800: 28 91.7% 95.9%;
   --inventory-warning-900: 34 53.3% 97.6%;
-  
-  --inventory-error-50: 0 75.0% 23.0%;
-  --inventory-error-100: 0 80.0% 30.5%;
+
+  --inventory-error-50: 0 75% 23%;
+  --inventory-error-100: 0 80% 30.5%;
   --inventory-error-200: 0 82.1% 38.1%;
   --inventory-error-300: 0 83.3% 47.1%;
   --inventory-error-400: 0 87.2% 61.5%;
@@ -185,16 +185,16 @@
   --inventory-error-700: 0 93.3% 93.4%;
   --inventory-error-800: 0 92.3% 96.5%;
   --inventory-error-900: 0 85.7% 98.4%;
-  
+
   --inventory-neutral-50: 0 0% 9.6%;
   --inventory-neutral-100: 0 0% 16.9%;
   --inventory-neutral-200: 0 0% 24.7%;
-  --inventory-neutral-300: 0 0% 32.0%;
-  --inventory-neutral-400: 0 0% 50.0%;
+  --inventory-neutral-300: 0 0% 32%;
+  --inventory-neutral-400: 0 0% 50%;
   --inventory-neutral-500: 0 0% 63.9%;
-  --inventory-neutral-600: 0 0% 73.0%;
-  --inventory-neutral-700: 0 0% 82.0%;
-  --inventory-neutral-800: 0 0% 90.0%;
+  --inventory-neutral-600: 0 0% 73%;
+  --inventory-neutral-700: 0 0% 82%;
+  --inventory-neutral-800: 0 0% 90%;
   --inventory-neutral-900: 0 0% 94.9%;
 
   /* Typography scale */
@@ -206,7 +206,7 @@
   --font-size-2xl: 1.5rem; /* 24px */
   --font-size-3xl: 1.875rem; /* 30px */
   --font-size-4xl: 2.25rem; /* 36px */
-  
+
   /* Font weights */
   --font-weight-normal: 400;
   --font-weight-medium: 500;

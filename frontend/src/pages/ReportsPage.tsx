@@ -13,6 +13,7 @@ import {
   TableHeader,
   TableRow,
 } from "../components/ui/table";
+import { apiService } from "../lib/api.service";
 
 interface ReportsPageProps {
   token: string | null;
@@ -33,7 +34,11 @@ export function ReportsPage({ token }: ReportsPageProps) {
   const [reportData, setReportData] = useState<
     MonthlyExpiryReportItem[] | null
   >(null);
+  const [overallReportData, setOverallReportData] = useState<
+    MonthlyExpiryReportItem | null
+  >(null);
   const [loading, setLoading] = useState(true);
+  const [overallLoading, setOverallLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
@@ -45,20 +50,10 @@ export function ReportsPage({ token }: ReportsPageProps) {
       }
 
       try {
-        const response = await fetch("http://localhost:3001/reports/expiry", {
-          headers: {
-            Authorization: `Bearer ${token}`,
-          },
-        });
-
-        if (!response.ok) {
-          const errorData = await response.json();
-          throw new Error(
-            errorData.message || "Failed to load monthly expiry report",
-          );
-        }
-
-        const data = await response.json();
+        const data = await apiService.get<MonthlyExpiryReportItem[]>(
+          "/reports/expiry",
+          token,
+        );
         setReportData(data);
       } catch (err: unknown) {
         if (err instanceof Error) {
@@ -71,7 +66,32 @@ export function ReportsPage({ token }: ReportsPageProps) {
       }
     };
 
+    const fetchOverallReportData = async () => {
+      if (!token) {
+        setError("Authentication token is missing.");
+        setOverallLoading(false);
+        return;
+      }
+
+      try {
+        const data = await apiService.get<MonthlyExpiryReportItem>(
+          "/reports/expiry-overall",
+          token,
+        );
+        setOverallReportData(data);
+      } catch (err: unknown) {
+        if (err instanceof Error) {
+          setError(err.message);
+        } else {
+          setError("An unknown error occurred");
+        }
+      } finally {
+        setOverallLoading(false);
+      }
+    };
+
     fetchReportData();
+    fetchOverallReportData();
   }, [token]);
 
   if (loading) {
@@ -92,20 +112,60 @@ export function ReportsPage({ token }: ReportsPageProps) {
 
   return (
     <div className="container mx-auto p-4">
+      <Card className="mb-6">
+        <CardHeader>
+          <CardTitle className="text-center">Overall Expiry Report</CardTitle>
+        </CardHeader>
+        <CardContent>
+          {overallLoading ? (
+            <div className="text-center">Loading overall report...</div>
+          ) : overallReportData ? (
+            <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mb-6">
+              <div className="bg-blue-50 p-4 rounded-lg text-center">
+                <p className="text-2xl font-bold">{overallReportData.total_expiring}</p>
+                <p className="text-sm text-gray-600">Total Items</p>
+              </div>
+              <div className="bg-red-50 p-4 rounded-lg text-center">
+                <p className="text-2xl font-bold text-red-600">{overallReportData.expired_count}</p>
+                <p className="text-sm text-gray-600">Expired Items</p>
+              </div>
+              <div className="bg-yellow-50 p-4 rounded-lg text-center">
+                <p className="text-2xl font-bold text-yellow-600">{overallReportData.total_markdown}</p>
+                <p className="text-sm text-gray-600">Markdown Items</p>
+              </div>
+              <div className="bg-green-50 p-4 rounded-lg text-center">
+                <p className="text-2xl font-bold text-green-600">{overallReportData.total_expiring - overallReportData.expired_count - overallReportData.total_markdown}</p>
+                <p className="text-sm text-gray-600">Active Items</p>
+              </div>
+            </div>
+          ) : (
+            <p className="text-center">No overall report data available.</p>
+          )}
+        </CardContent>
+      </Card>
+
       <Card>
         <CardHeader>
           <CardTitle className="text-center">Monthly Expiry Report</CardTitle>
         </CardHeader>
         <CardContent>
           <div className="flex justify-center mb-4">
-            <a 
-              href="/detailed-expiry-report" 
-              className="px-4 py-2 bg-primary text-primary-foreground rounded-md hover:opacity-90 transition-opacity"
+            <a
+              href="/detailed-expiry-report"
+              className="px-4 py-2 bg-primary text-primary-foreground rounded-md hover:opacity-90 transition-opacity mr-2"
             >
               View Detailed Expiry Report (Next 90 Days)
             </a>
+            <a
+              href="/expired-items"
+              className="px-4 py-2 bg-destructive text-destructive-foreground rounded-md hover:opacity-90 transition-opacity"
+            >
+              View Expired Items
+            </a>
           </div>
-          {reportData && reportData.length > 0 ? (
+          {loading ? (
+            <div className="text-center">Loading monthly report...</div>
+          ) : reportData && reportData.length > 0 ? (
             <Table>
               <TableHeader>
                 <TableRow>

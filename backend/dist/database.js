@@ -4,110 +4,163 @@ var __importDefault = (this && this.__importDefault) || function (mod) {
 };
 Object.defineProperty(exports, "__esModule", { value: true });
 exports.getDb = getDb;
+exports.releaseDb = releaseDb;
+exports.getDbWithMonitoring = getDbWithMonitoring;
 exports.initDatabase = initDatabase;
-// Database setup and initialization
-const sqlite3_1 = __importDefault(require("sqlite3"));
-const sqlite_1 = require("sqlite");
+// Database setup and initialization with connection pooling
+const better_sqlite3_1 = __importDefault(require("better-sqlite3"));
 const bcrypt_1 = __importDefault(require("bcrypt"));
-// Open a database connection
-async function getDb() {
-    const db = await (0, sqlite_1.open)({
-        filename: "./database.sqlite",
-        driver: sqlite3_1.default.Database,
+const environment_1 = require("./config/environment");
+const logger_1 = require("./utils/logger");
+// Import the migration service
+const migrate_1 = require("./migrations/migrate");
+// Import the monitoring service
+const database_monitoring_service_1 = require("./services/database.monitoring.service");
+// Define a simple connection pool
+class DatabasePool {
+    constructor() {
+        this.connections = [];
+        this.maxConnections = 10; // Maximum connections in the pool
+        this.currentConnections = 0;
+        this.dbPath = environment_1.envConfig.DATABASE_PATH || "./database.sqlite";
+    }
+    // Get a database connection from the pool
+    acquire() {
+        // If we have a connection in the pool, return it
+        if (this.connections.length > 0) {
+            const connection = this.connections.pop();
+            if (connection && connection.open) {
+                logger_1.Logger.debug("Reusing database connection from pool");
+                return connection;
+            }
+        }
+        // If we haven't reached the max connections limit, create a new one
+        if (this.currentConnections < this.maxConnections) {
+            const connection = new better_sqlite3_1.default(this.dbPath);
+            this.currentConnections++;
+            logger_1.Logger.info(`Created new database connection. Total connections: ${this.currentConnections}`);
+            return connection;
+        }
+        // If we've reached max connections, create an additional connection (but log it)
+        logger_1.Logger.warn("Database pool at maximum capacity, creating additional connection");
+        const connection = new better_sqlite3_1.default(this.dbPath);
+        this.currentConnections++;
+        return connection;
+    }
+    // Release a connection back to the pool
+    release(connection) {
+        if (connection && connection.open && this.connections.length < this.maxConnections) {
+            this.connections.push(connection);
+            logger_1.Logger.debug("Connection returned to pool");
+        }
+        else {
+            // If pool is full or connection is closed, close the connection
+            if (connection && connection.open) {
+                connection.close();
+                this.currentConnections--;
+                logger_1.Logger.info(`Database connection closed. Total connections: ${this.currentConnections}`);
+            }
+        }
+    }
+    // Close all connections in the pool
+    closeAll() {
+        for (const connection of this.connections) {
+            if (connection.open) {
+                connection.close();
+                this.currentConnections--;
+            }
+        }
+        this.connections = [];
+        logger_1.Logger.info("All database connections closed");
+    }
+}
+const pool = new DatabasePool();
+function getDb() {
+    try {
+        const db = pool.acquire();
+        return db;
+    }
+    catch (error) {
+        logger_1.Logger.error("Failed to acquire database connection", {
+            error: error instanceof Error ? error.message : 'Unknown error'
+        });
+        throw error;
+    }
+}
+// Function to release a connection back to the pool
+function releaseDb(db) {
+    try {
+        pool.release(db);
+    }
+    catch (error) {
+        logger_1.Logger.error("Failed to release database connection", {
+            error: error instanceof Error ? error.message : 'Unknown error'
+        });
+    }
+}
+// Initialize the database using migrations
+// Enhanced database functions with monitoring
+function getDbWithMonitoring() {
+    const db = getDb();
+    // Add query execution time monitoring
+    // Note: TypeScript might not recognize the 'on' method on Database type
+    // because better-sqlite3 types can vary based on installation
+    db.on('profile', (query, time) => {
+        // Convert nanoseconds to milliseconds
+        const duration = time / 1000000;
+        database_monitoring_service_1.DatabaseMonitoringService.getInstance().recordQuery(duration);
+        if (duration > 100) { // 100ms threshold for slow queries
+            logger_1.Logger.warn(`Slow query detected (${duration}ms): ${query}`);
+        }
     });
     return db;
 }
-// Initialize the database schema
 async function initDatabase() {
-    const db = await getDb();
-    // Create tables if they don't exist
-    await db.exec(`
-    CREATE TABLE IF NOT EXISTS products (
-      id INTEGER PRIMARY KEY AUTOINCREMENT,
-      barcode TEXT UNIQUE NOT NULL,
-      sku TEXT UNIQUE NOT NULL,
-      name TEXT NOT NULL,
-      cost_price REAL NOT NULL,
-      created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
-      updated_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
-    );
-
-    CREATE TABLE IF NOT EXISTS inventory_items (
-      id INTEGER PRIMARY KEY AUTOINCREMENT,
-      product_id INTEGER NOT NULL,
-      expiry_date TEXT NOT NULL,
-      location_id INTEGER NOT NULL,
-      status TEXT NOT NULL DEFAULT 'Normal',
-      created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
-      updated_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
-      FOREIGN KEY (product_id) REFERENCES products (id),
-      FOREIGN KEY (location_id) REFERENCES store_areas (id)
-    );
-
-    CREATE TABLE IF NOT EXISTS store_areas (
-      id INTEGER PRIMARY KEY AUTOINCREMENT,
-      name TEXT NOT NULL,
-      sub_department TEXT,
-      last_checked TEXT,
-      created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
-      updated_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
-      UNIQUE(name, sub_department)
-    );
-
-    CREATE TABLE IF NOT EXISTS users (
-      id INTEGER PRIMARY KEY AUTOINCREMENT,
-      pin TEXT NOT NULL,
-      role TEXT NOT NULL,
-      created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
-      updated_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
-    );
-
-    CREATE TABLE IF NOT EXISTS audit_log (
-      id INTEGER PRIMARY KEY AUTOINCREMENT,
-      user_id INTEGER NOT NULL,
-      inventory_item_id INTEGER NOT NULL,
-      change_description TEXT NOT NULL,
-      created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
-      FOREIGN KEY (user_id) REFERENCES users (id),
-      FOREIGN KEY (inventory_item_id) REFERENCES inventory_items (id)
-    );
-  `);
-    // Add sub_department column to store_areas if it doesn't exist
     try {
-        const tableInfo = await db.all("PRAGMA table_info(store_areas)");
-        const hasSubDepartmentColumn = tableInfo.some(column => column.name === 'sub_department');
-        if (!hasSubDepartmentColumn) {
-            await db.exec("ALTER TABLE store_areas ADD COLUMN sub_department TEXT");
+        // Run all pending migrations
+        await (0, migrate_1.runMigrations)();
+        // Get a database connection to add the default user
+        const db = getDb();
+        try {
+            // Check if a user with any PIN already exists
+            const existingUser = db.prepare("SELECT * FROM users LIMIT 1").get();
+            // Clear existing users for a fresh start if we see there are issues
+            if (existingUser) {
+                // Clear all users
+                db.exec("DELETE FROM users");
+                logger_1.Logger.info("Cleared existing users during initialization");
+            }
+            // Create the default user with the configured default PIN and Manager role
+            // First, hash the PIN
+            const saltRounds = 10;
+            const hashedPin = await new Promise((resolve, reject) => {
+                bcrypt_1.default.hash(environment_1.envConfig.DEFAULT_PIN, saltRounds, (err, hash) => {
+                    if (err) {
+                        reject(err);
+                    }
+                    else {
+                        resolve(hash);
+                    }
+                });
+            });
+            // Insert the default user
+            const insertUserStmt = db.prepare("INSERT OR IGNORE INTO users (pin, role) VALUES (?, 'Manager')");
+            insertUserStmt.run(hashedPin);
+            logger_1.Logger.info("Default user created/verified successfully", {
+                hasExistingUsers: !!existingUser,
+                defaultPinUsed: environment_1.envConfig.DEFAULT_PIN
+            });
+        }
+        finally {
+            // Always return the connection to the pool after initialization
+            releaseDb(db);
         }
     }
     catch (error) {
-        console.error("Error checking or updating store_areas table:", error);
+        logger_1.Logger.error("Database initialization failed", {
+            error: error instanceof Error ? error.message : 'Unknown error',
+            stack: error instanceof Error ? error.stack : undefined
+        });
+        throw error;
     }
-    // Seed the database with some initial data
-    await db.exec(`
-    INSERT OR IGNORE INTO products (barcode, sku, name, cost_price) VALUES ('123456789', 'SKU123', 'Test Product', 10.00);
-  `);
-    // First check if a user with PIN 1234 already exists
-    const existingUser = await db.get("SELECT * FROM users");
-    console.log("Existing user check:", existingUser);
-    // Clear existing users for a fresh start if we see there are issues
-    if (existingUser) {
-        // Clear all users
-        await db.exec("DELETE FROM users");
-        console.log("Cleared existing users");
-    }
-    // Now create a fresh user
-    // Seed initial manager user with proper hash
-    const saltRounds = 10;
-    const hashedPin = await bcrypt_1.default.hash("1234", saltRounds);
-    console.log("Hashed PIN for 1234:", hashedPin);
-    await db.exec(`
-    INSERT OR IGNORE INTO users (pin, role) VALUES ('${hashedPin}', 'Manager');
-  `);
-    // Check what we just inserted
-    const insertedUser = await db.get("SELECT * FROM users WHERE role = 'Manager'");
-    console.log("Inserted user:", insertedUser);
-    // Also check all users
-    const allUsers = await db.all("SELECT * FROM users");
-    console.log("All users in DB:", allUsers);
 }

@@ -11,7 +11,7 @@ describe("POST /auth/login", () => {
         // and the endpoint is implemented. This is the correct TDD workflow.
         const response = await (0, supertest_1.default)(index_1.default)
             .post("/auth/login")
-            .send({ pin: "1234" });
+            .send({ pin: "5624" });
         expect(response.status).toBe(200);
         expect(response.body).toHaveProperty("token");
     });

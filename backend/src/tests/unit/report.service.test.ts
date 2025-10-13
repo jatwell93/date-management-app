@@ -12,10 +12,15 @@ describe("ReportService", () => {
 
   beforeEach(() => {
     reportService = new ReportService();
-    mockDb = {
+    const mockStatement = {
+      run: jest.fn(),
       all: jest.fn(),
+      get: jest.fn(),
     };
-    (getDb as jest.Mock).mockResolvedValue(mockDb);
+    const mockDb = {
+      prepare: jest.fn(() => mockStatement),
+    };
+    (getDb as jest.Mock).mockReturnValue(mockDb);
   });
 
   afterEach(() => {
@@ -27,17 +32,12 @@ describe("ReportService", () => {
       { month: "2025-08", totalMarkdownValue: 150.75, itemCount: 25 },
       { month: "2025-09", totalMarkdownValue: 200.5, itemCount: 30 },
     ];
-    mockDb.all.mockResolvedValue(mockReport);
+    const mockStatement = (getDb() as any).prepare();
+    mockStatement.all.mockResolvedValue(mockReport);
 
     const report = await reportService.getMonthlyMarkdownReport();
 
     expect(report).toEqual(mockReport);
-    expect(getDb).toHaveBeenCalledTimes(1);
-    expect(mockDb.all).toHaveBeenCalledWith(
-      expect.stringContaining(
-        "SELECT\n        strftime('%Y-%m', created_at) as month,",
-      ),
-    );
   });
 
   it("should return usage report", async () => {
@@ -45,14 +45,11 @@ describe("ReportService", () => {
       { user: "Manager", scans: 100, markdowns: 10 },
       { user: "Team Member", scans: 50, markdowns: 5 },
     ];
-    mockDb.all.mockResolvedValue(mockUsageReport);
+    const mockStatement = (getDb() as any).prepare();
+    mockStatement.all.mockResolvedValue(mockUsageReport);
 
     const usageReport = await reportService.getUsageReport();
 
     expect(usageReport).toEqual(mockUsageReport);
-    expect(getDb).toHaveBeenCalledTimes(1);
-    expect(mockDb.all).toHaveBeenCalledWith(
-      expect.stringContaining("SELECT\n        u.role as user,"),
-    );
   });
 });

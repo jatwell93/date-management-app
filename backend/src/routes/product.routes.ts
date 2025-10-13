@@ -2,6 +2,8 @@ import { Router, Request, Response } from "express";
 import { ProductService } from "../services/product.service";
 import { Product } from "../models/product.model";
 import { authenticateToken } from "../middleware/auth.middleware";
+import { validateProductInput, validateDataIntegrity } from "../middleware/validation.middleware";
+import { validateBusinessRules } from "../middleware/data-integrity.middleware";
 import multer, { FileFilterCallback } from "multer";
 
 const router = Router();
@@ -96,7 +98,7 @@ router.get(
 );
 
 // POST /products - Create a new product
-router.post("/", authenticateToken, async (req: Request, res: Response) => {
+router.post("/", authenticateToken, validateProductInput, validateDataIntegrity, validateBusinessRules, async (req: Request, res: Response) => {
   const { barcode, sku, name, costPrice } = req.body;
   if (!barcode || !sku || !name || costPrice === undefined) {
     return res.status(400).json({ message: "Missing required product fields" });
@@ -117,7 +119,7 @@ router.post("/", authenticateToken, async (req: Request, res: Response) => {
 });
 
 // PUT /products/:id - Update a product
-router.put("/:id", authenticateToken, async (req: Request, res: Response) => {
+router.put("/:id", authenticateToken, validateProductInput, validateDataIntegrity, validateBusinessRules, async (req: Request, res: Response) => {
   try {
     const id = parseInt(req.params.id);
     const { barcode, sku, name, costPrice } = req.body;

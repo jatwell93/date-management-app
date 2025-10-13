@@ -1,9 +1,11 @@
 import cron from 'node-cron';
 import { InventoryService } from './inventory.service';
 import { getDb } from '../database';
+import { DatabaseBackupService } from './database.backup.service';
 
 export class SchedulerService {
   private static inventoryService = new InventoryService();
+  private static databaseBackupService = new DatabaseBackupService();
 
   // Initialize scheduled tasks
   static initialize() {
@@ -12,6 +14,13 @@ export class SchedulerService {
     cron.schedule('0 2 * * *', () => {
       console.log('Running scheduled markdown updates...');
       this.updateAllInventoryMarkdownStatuses();
+    });
+
+    // Schedule database backups to run daily at 1:00 AM
+    // This is a good time when system load is typically low
+    cron.schedule('0 1 * * *', () => {
+      console.log('Running scheduled database backup...');
+      this.createDatabaseBackup();
     });
 
     // Additional: You could also run it more frequently (e.g. every hour during business hours)
@@ -25,8 +34,8 @@ export class SchedulerService {
   static async updateAllInventoryMarkdownStatuses() {
     try {
       // Get all inventory items from the database
-      const db = await getDb();
-      const inventoryItems = await db.all('SELECT id, expiry_date FROM inventory_items');
+      const db = getDb();
+      const inventoryItems = db.prepare('SELECT id, expiry_date FROM inventory_items').all() as Array<{ id: number; expiry_date: string }>;
       
       console.log(`Processing ${inventoryItems.length} inventory items for markdown updates...`);
 
@@ -42,6 +51,16 @@ export class SchedulerService {
       console.log('Completed scheduled markdown updates.');
     } catch (error) {
       console.error('Error in scheduled markdown update process:', error);
+    }
+  }
+
+  // Create a database backup
+  static async createDatabaseBackup() {
+    try {
+      const backupPath = await this.databaseBackupService.createBackup();
+      console.log(`Database backup completed: ${backupPath}`);
+    } catch (error) {
+      console.error('Error in scheduled database backup process:', error);
     }
   }
 }

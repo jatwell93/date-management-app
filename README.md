@@ -84,47 +84,87 @@ This is a full-stack application built with React (frontend) and Node.js/Express
 
 ## API Endpoints
 
-### Authentication
-- `POST /auth/login` - User login
+  If you're seeing unexpected classifications:
+  - In the detailed expiry report (which recalculates statuses
+   dynamically based on expiry dates), check that the expiry 
+  dates are accurate.
+  - In the overview reports page (which uses stored statuses),
+   the counts might be outdated—use the new endpoint to 
+  refresh them.
 
-### User Management (Manager Only)
-- `POST /users` - Create a new user
-- `GET /users` - Get all users
-- `GET /users/:id` - Get a specific user by ID
-- `PUT /users/:id` - Update a user
-- `PUT /users/:id/reset-pin` - Reset a user's PIN
-- `DELETE /users/:id` - Delete a user
 
-### Product Management
-- `POST /products` - Create a new product
-- `GET /products` - Get all products
-- `GET /products/:id` - Get a specific product by ID
-- `GET /products/by-barcode/:barcode` - Get a product by barcode
-- `PUT /products/:id` - Update a product
-- `DELETE /products/:id` - Delete a product
+  To trigger the update, you can make a POST request to 
+  http://localhost:3000/reports/update-statuses with your 
+  auth token (adjust port if needed). Alternatively, 
+  restarting the backend will cause the daily scheduler to 
+  run and update statuses.
 
-### Inventory Item Management
-- `POST /inventory-items` - Create a new inventory item
-- `GET /inventory-items` - Get all inventory items
-- `GET /inventory-items/:id` - Get a specific inventory item by ID
-- `GET /inventory-items/product/:productId` - Get inventory items by product ID
-- `GET /inventory-items/location/:locationId` - Get inventory items by location ID
-- `PUT /inventory-items/:id` - Update an inventory item
-- `DELETE /inventory-items/:id` - Delete an inventory item
+The backend provides the following API endpoints:
 
-### Store Area Management
-- `POST /store-areas` - Create a new store area
-- `GET /store-areas` - Get all store areas
-- `GET /store-areas/:id` - Get a specific store area by ID
-- `GET /store-areas/name/:name` - Get a store area by name
-- `PUT /store-areas/:id` - Update a store area
-- `DELETE /store-areas/:id` - Delete a store area
+Public Routes
+- POST /auth/login - User authentication
 
-### Reporting & Dashboard
-- `GET /reports/expiry` - Get monthly expiry report
-- `GET /reports/monthly-markdown` - Get monthly markdown report
-- `GET /reports/usage` - Get usage report
-- `GET /dashboard/analytics` - Get dashboard analytics data
+Protected Routes (require authentication token)
+
+Products
+- GET /products - Get all products
+- GET /products/:id - Get a specific product by ID
+- GET /products/by-barcode/:barcode - Get a specific product
+   by barcode
+- GET /products/by-sku/:sku - Get a specific product by SKU
+- POST /products - Create a new product
+- PUT /products/:id - Update a product
+- DELETE /products/:id - Delete a product
+- POST /products/upload-csv - Upload and process a
+   CSV/XLSX/XLS file of products
+
+Inventory Items
+- GET /inventory-items - Get all inventory items
+- GET /inventory-items/:id - Get a specific inventory item
+   by ID
+- GET /inventory-items/product/:productId - Get inventory
+   items for a specific product
+- GET /inventory-items/by-barcode/:barcode - Get inventory
+   items for a specific product by barcode
+- GET /inventory-items/recent/product/:productId - Get the
+   most recent inventory items for a specific product
+- GET /inventory-items/location/:locationId - Get inventory
+   items for a specific location
+- POST /inventory-items - Create a new inventory item
+- PUT /inventory-items/:id - Update an inventory item
+- DELETE /inventory-items/:id - Delete an inventory item
+
+Store Areas
+- GET /store-areas - Get all store areas
+- GET /store-areas/:id - Get a specific store area by ID
+- GET /store-areas/name/:name - Get store areas by name
+- POST /store-areas - Create a new store area
+- PUT /store-areas/:id - Update a store area
+- DELETE /store-areas/:id - Delete a store area
+
+Reports
+- GET /reports/expiry - Get monthly expiry report
+- GET /reports/expiry-details - Get detailed expiry report
+   for next 90 days
+- GET /reports/monthly-markdown - Get monthly markdown report
+- GET /reports/usage - Get usage report
+- GET /reports/daily-usage - Get daily usage report for past
+   90 days
+- GET /reports/analytics - Get dashboard analytics data
+
+
+Dashboard
+- GET /dashboard - Get dashboard data
+
+Users (Manager role only)
+- GET /users - Get all users
+- GET /users/:id - Get a specific user by ID
+- POST /users - Create a new user
+- PUT /users/:id - Update a user
+- DELETE /users/:id - Delete a user
+
+Root
+- GET / - Server health check
 
 ## Database Schema
 
@@ -189,6 +229,8 @@ npm run build
 cd frontend
 npm run build
 ```
+
+5624 is the default pin
 
 ## Deployment
 

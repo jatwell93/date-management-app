@@ -6,25 +6,42 @@ export function cn(...inputs: ClassValue[]) {
 }
 
 export function isWithinMarkdownPeriod(
-  expiryDateString: string,
-  months: number,
+  expiryDate: string | null,
+  days: number,
 ): boolean {
-  const expiryDate = new Date(expiryDateString);
-  const currentDate = new Date();
-  const threeMonthsFromNow = new Date();
-  threeMonthsFromNow.setMonth(currentDate.getMonth() + months);
-
-  // Check if expiryDate is in the future and within the next 'months' months
-  return expiryDate > currentDate && expiryDate <= threeMonthsFromNow;
+  if (!expiryDate) return false;
+  const now = new Date();
+  const expiry = new Date(expiryDate);
+  const daysToExpiry = Math.ceil(
+    (expiry.getTime() - now.getTime()) / (1000 * 60 * 60 * 24),
+  );
+  return daysToExpiry <= days;
 }
 
 export function calculateMarkdownPrice(
-  originalPrice: number,
-  markdownPercentage: number,
+  costPrice: number,
+  daysToExpiry: number,
 ): number {
-  if (markdownPercentage < 0 || markdownPercentage > 100) {
-    throw new Error("Markdown percentage must be between 0 and 100.");
+  // Apply markdown rules based on days to expiry (from feature requirements)
+  if (daysToExpiry <= 30) {
+    return costPrice * 0.8; // 20% markdown
+  } else if (daysToExpiry <= 60) {
+    return costPrice; // No markdown
+  } else if (daysToExpiry <= 90) {
+    return costPrice * 1.2; // 20% markup
+  } else {
+    return costPrice; // No markdown if outside the window
   }
-  const discount = originalPrice * (markdownPercentage / 100);
-  return originalPrice - discount;
+}
+
+export function calculateMarkdownPercentage(daysToExpiry: number): number {
+  if (daysToExpiry <= 30) {
+    return -20;
+  } else if (daysToExpiry <= 60) {
+    return 0;
+  } else if (daysToExpiry <= 90) {
+    return 20;
+  } else {
+    return 0;
+  }
 }

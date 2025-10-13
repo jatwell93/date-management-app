@@ -19,8 +19,10 @@ const buttonVariants = cva(
         ghost:
           "hover:bg-accent hover:text-accent-foreground dark:hover:bg-accent/50",
         link: "text-primary underline-offset-4 hover:underline",
-        success: "bg-inventory-success-500 text-white hover:bg-inventory-success-600",
-        warning: "bg-inventory-warning-500 text-white hover:bg-inventory-warning-600",
+        success:
+          "bg-inventory-success-500 text-white hover:bg-inventory-success-600",
+        warning:
+          "bg-inventory-warning-500 text-white hover:bg-inventory-warning-600",
         error: "bg-inventory-error-500 text-white hover:bg-inventory-error-600",
       },
       size: {

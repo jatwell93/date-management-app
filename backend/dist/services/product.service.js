@@ -129,80 +129,105 @@ function normalizeNumericString(input) {
 }
 // Enhanced helper function to extract numeric value from cost string with flexible formatting
 function extractCostValueEnhanced(costStr) {
-    // Remove common currency symbols and formatting
     let cleanedStr = costStr.trim();
-    // Check if the value is in parentheses (indicates negative)
     let isNegative = false;
-    if (cleanedStr.startsWith('(') && cleanedStr.endsWith(')')) {
+    // 1. Handle negative values in parentheses first, e.g., "(12.34)" or "$(12.34)"
+    if (cleanedStr.includes('(') && cleanedStr.includes(')')) {
+        const openParenIndex = cleanedStr.lastIndexOf('('); // Use last occurrence to handle cases like "$(12.34)"
+        const closeParenIndex = cleanedStr.indexOf(')', openParenIndex);
+        if (closeParenIndex > openParenIndex) {
+            isNegative = true;
+            // Extract the content inside the parentheses
+            const insideParen = cleanedStr.substring(openParenIndex + 1, closeParenIndex);
+            // Remove the parentheses and what's around them
+            cleanedStr = cleanedStr.substring(0, openParenIndex) + insideParen + cleanedStr.substring(closeParenIndex + 1);
+        }
+    }
+    // 2. Remove common currency symbols and codes (this includes currency codes like USD, EUR)
+    // More comprehensive pattern to match currency symbols and codes at start or end
+    cleanedStr = cleanedStr.replace(/([A-Z]{3,4}[\s]*)|([\s]*[A-Z]{3,4})|[\s$€£¥₹₽₪₨₩₦₡₫Є₴₵₸₺₼₾₯]/gi, '');
+    // 3. Normalize spaces (remove all spaces)
+    cleanedStr = cleanedStr.trim().replace(/\s+/g, '');
+    // 4. Handle explicit negative sign if not already handled by parentheses
+    if (cleanedStr.startsWith('-')) {
         isNegative = true;
-        cleanedStr = cleanedStr.substring(1, cleanedStr.length - 1);
+        cleanedStr = cleanedStr.substring(1);
     }
-    // Remove common currency symbols at the beginning or end
-    cleanedStr = cleanedStr.replace(/^[\$€£¥₹₽₪₨]/, ''); // Remove common currency symbols from start
-    cleanedStr = cleanedStr.replace(/[\$€£¥₹₽₪₨]$/, ''); // Remove common currency symbols from end
-    // Remove any other non-numeric characters except decimal point and comma (for thousands)
-    // Keep only digits, decimal point, and comma
-    cleanedStr = cleanedStr.replace(/[^\d.,]/g, '');
-    // Handle different decimal/thousands separator conventions
-    const commaCount = (cleanedStr.match(/,/g) || []).length;
+    // 5. Count and analyze separators to determine decimal vs. thousands
     const dotCount = (cleanedStr.match(/\./g) || []).length;
-    // Determine the most likely decimal separator based on format
-    // European format: 1.234,56 (dots for thousands, comma for decimal)
-    // US format: 1,234.56 (comma for thousands, dot for decimal)
-    // We'll assume that the rightmost occurrence of either comma or dot as decimal separator
-    if (commaCount > 0 && dotCount > 0) {
-        // If both exist, check which one is at the end (likely decimal separator)
-        const endsWithDigitPattern = /\d{1,2}$/;
-        if (cleanedStr.includes(',') && endsWithDigitPattern.test(cleanedStr)) {
-            // Check if string ends with comma followed by 1-2 digits (European format)
-            const europeanPattern = /,\d{1,2}$/;
-            if (europeanPattern.test(cleanedStr)) {
-                // European format: swap meaning - commas are thousands, last dot is decimal
-                cleanedStr = cleanedStr.replace(/\./g, ''); // Remove dots (thousands separators)
-                cleanedStr = cleanedStr.replace(/,/, '.'); // Replace last comma with dot (decimal)
-            }
-            else {
-                // US format: commas are thousands, last dot is decimal
-                cleanedStr = cleanedStr.replace(/,/g, ''); // Remove commas (thousands separators)
-            }
-        }
-        else if (cleanedStr.includes('.') && endsWithDigitPattern.test(cleanedStr)) {
-            // Check if string ends with dot followed by 1-2 digits (US format)
-            const usPattern = /\.\\d{1,2}$/;
-            if (usPattern.test(cleanedStr)) {
-                // US format: commas are thousands, last dot is decimal
-                cleanedStr = cleanedStr.replace(/,/g, ''); // Remove commas (thousands separators)
-            }
-            else {
-                // For other patterns, default to US format
-                cleanedStr = cleanedStr.replace(/,/g, ''); // Remove commas (thousands separators)
-            }
+    const commaCount = (cleanedStr.match(/,/g) || []).length;
+    let normalizedStr = cleanedStr;
+    if (dotCount === 0 && commaCount === 0) {
+        // No separators - just digits
+        normalizedStr = cleanedStr;
+    }
+    else if (dotCount === 1 && commaCount === 0) {
+        // Single dot - US format (decimal)
+        normalizedStr = cleanedStr;
+    }
+    else if (dotCount === 0 && commaCount === 1) {
+        // Single comma - might be European decimal or thousands separator
+        const commaIndex = cleanedStr.lastIndexOf(',');
+        const afterComma = cleanedStr.substring(commaIndex + 1);
+        // If after comma is 1-3 digits, it's likely a decimal separator
+        if (/^\d{1,3}$/.test(afterComma)) {
+            // European format: use comma as decimal point
+            normalizedStr = cleanedStr.replace(',', '.');
         }
         else {
-            // Default to US format: commas as thousands separators
-            cleanedStr = cleanedStr.replace(/,/g, ''); // Remove commas (thousands separators)
+            // Thousands separator
+            normalizedStr = cleanedStr.replace(/,/g, '');
         }
     }
-    else if (commaCount > 1) {
-        // Multiple commas - assume thousands separators (US format)
-        cleanedStr = cleanedStr.replace(/,/g, ''); // Remove all commas
+    else if (commaCount === 0 && dotCount === 1) {
+        // Single dot - US format (decimal)
+        normalizedStr = cleanedStr;
     }
-    else if (commaCount === 1) {
-        // Single comma - check if followed by 1-2 digits (likely decimal separator)
-        if (cleanedStr.match(/,\d{1,2}$/)) {
-            cleanedStr = cleanedStr.replace(/,/, '.'); // Replace comma with dot (decimal)
+    else if (dotCount === 0 && commaCount === 1) {
+        // Single comma - European format (decimal)
+        normalizedStr = cleanedStr.replace(',', '.');
+    }
+    else {
+        // Multiple separators - rightmost one is decimal separator
+        const lastDotIndex = cleanedStr.lastIndexOf('.');
+        const lastCommaIndex = cleanedStr.lastIndexOf(',');
+        // The rightmost separator is the decimal point
+        if (lastDotIndex > lastCommaIndex) {
+            // Last separator is dot: US format (dot is decimal, commas are thousands)
+            const integerPart = cleanedStr.substring(0, lastDotIndex).replace(/,/g, '');
+            const decimalPart = cleanedStr.substring(lastDotIndex + 1);
+            normalizedStr = integerPart + '.' + decimalPart;
+        }
+        else if (lastCommaIndex > lastDotIndex) {
+            // Last separator is comma: European format (comma is decimal, dots are thousands)
+            const integerPart = cleanedStr.substring(0, lastCommaIndex).replace(/\./g, '');
+            const decimalPart = cleanedStr.substring(lastCommaIndex + 1);
+            normalizedStr = integerPart + '.' + decimalPart;
         }
         else {
-            // Otherwise treat as thousands separator
-            cleanedStr = cleanedStr.replace(/,/, ''); // Remove comma (thousands separator)
+            // Both have same last index (shouldn't happen in practice with our approach)
+            // Default to keeping original
+            normalizedStr = cleanedStr;
         }
     }
-    else if (dotCount > 1) {
-        // Multiple dots - assume thousands separators
-        cleanedStr = cleanedStr.replace(/\.(?=.*\.)/g, ''); // Remove all but last dot
+    // Handle special case for "1,000" or "1.000" where there's no decimal part
+    if (normalizedStr.match(/^[0-9]+[,.][0-9]{3}$/)) {
+        // This is likely a thousands separator, not a decimal separator
+        normalizedStr = normalizedStr.replace(/[,.]/, '');
     }
-    // Now parse as float
-    const value = parseFloat(cleanedStr);
+    // 6. Final cleanup to ensure only digits and a single dot remain
+    normalizedStr = normalizedStr.replace(/[^\d.]/g, '');
+    // Ensure there's only one decimal point (in case multiple were introduced)
+    const parts = normalizedStr.split('.');
+    if (parts.length > 2) {
+        // If there are multiple decimal points, join all but the last part with no separator, 
+        // then add the last part as decimal
+        const integerPart = parts.slice(0, -1).join('');
+        const decimalPart = parts[parts.length - 1];
+        normalizedStr = integerPart + '.' + decimalPart;
+    }
+    // Parse the value
+    const value = parseFloat(normalizedStr);
     if (isNaN(value)) {
         return null;
     }
@@ -214,61 +239,113 @@ function formatErrorMessage(rowNumber, field, value, expected) {
     return `Row ${rowNumber}: Invalid ${field} value "${value}". Expected ${expected}.`;
 }
 class ProductService {
-    async getAllProducts() {
-        const db = await (0, database_1.getDb)();
-        return db.all("SELECT * FROM products");
+    // Expose parser for tests that reference it via ProductService["extractCostValueEnhanced"]
+    static extractCostValueEnhanced(costStr) {
+        return extractCostValueEnhanced(costStr);
+    }
+    async getAllProducts(limit, offset) {
+        const db = (0, database_1.getDb)();
+        try {
+            let query = "SELECT * FROM products";
+            if (limit !== undefined) {
+                query += " LIMIT ?";
+                if (offset !== undefined) {
+                    query += " OFFSET ?";
+                    return db.prepare(query).all(limit, offset);
+                }
+                else {
+                    return db.prepare(query).all(limit);
+                }
+            }
+            else {
+                return db.prepare(query).all();
+            }
+        }
+        finally {
+            (0, database_1.releaseDb)(db);
+        }
     }
     async getProductById(id) {
-        const db = await (0, database_1.getDb)();
-        const product = await db.get("SELECT * FROM products WHERE id = ?", id);
-        return product || null;
+        const db = (0, database_1.getDb)();
+        try {
+            const product = db.prepare("SELECT * FROM products WHERE id = ?").get(id);
+            return product || null;
+        }
+        finally {
+            (0, database_1.releaseDb)(db);
+        }
     }
     async getProductByBarcode(barcode) {
-        const db = await (0, database_1.getDb)();
-        const product = await db.get("SELECT * FROM products WHERE barcode = ?", barcode);
-        return product || null;
+        const db = (0, database_1.getDb)();
+        try {
+            const product = db.prepare("SELECT * FROM products WHERE barcode = ?").get(barcode);
+            return product || null;
+        }
+        finally {
+            (0, database_1.releaseDb)(db);
+        }
     }
     async getProductBySku(sku) {
-        const db = await (0, database_1.getDb)();
-        const product = await db.get("SELECT * FROM products WHERE sku = ?", sku);
-        return product || null;
+        const db = (0, database_1.getDb)();
+        try {
+            const product = db.prepare("SELECT * FROM products WHERE sku = ?").get(sku);
+            return product || null;
+        }
+        finally {
+            (0, database_1.releaseDb)(db);
+        }
     }
     async createProduct(product) {
-        const db = await (0, database_1.getDb)();
-        const result = await db.run("INSERT INTO products (barcode, sku, name, cost_price) VALUES (?, ?, ?, ?)", product.barcode, product.sku, product.name, product.costPrice);
-        const newProduct = {
-            id: result.lastID,
-            ...product,
-            createdAt: new Date().toISOString(), // SQLite handles this with DEFAULT CURRENT_TIMESTAMP
-            updatedAt: new Date().toISOString(), // SQLite handles this with DEFAULT CURRENT_TIMESTAMP
-        };
-        return newProduct;
+        const db = (0, database_1.getDb)();
+        try {
+            const result = db.prepare("INSERT INTO products (barcode, sku, name, cost_price) VALUES (?, ?, ?, ?)").run(product.barcode, product.sku, product.name, product.costPrice);
+            const newProduct = {
+                id: result.lastInsertRowid,
+                ...product,
+                createdAt: new Date().toISOString(), // SQLite handles this with DEFAULT CURRENT_TIMESTAMP
+                updatedAt: new Date().toISOString(), // SQLite handles this with DEFAULT CURRENT_TIMESTAMP
+            };
+            return newProduct;
+        }
+        finally {
+            (0, database_1.releaseDb)(db);
+        }
     }
     async updateProduct(id, product) {
-        const db = await (0, database_1.getDb)();
-        const fields = Object.keys(product);
-        if (fields.length === 0) {
-            return null;
+        const db = (0, database_1.getDb)();
+        try {
+            const fields = Object.keys(product);
+            if (fields.length === 0) {
+                return null;
+            }
+            // Map TypeScript field names to database column names
+            const fieldToColumnMap = {
+                costPrice: 'cost_price',
+                // Add other mappings if needed in the future
+            };
+            const setClause = fields.map((field) => `${fieldToColumnMap[field] || field} = ?`).join(", ");
+            const values = [...Object.values(product), id];
+            const result = db.prepare(`UPDATE products SET ${setClause}, updated_at = CURRENT_TIMESTAMP WHERE id = ?`).run(...values);
+            if ((result.changes ?? 0) === 0) {
+                return null;
+            }
+            // Return the updated product
+            const updatedProduct = await this.getProductById(id);
+            return updatedProduct;
         }
-        // Map TypeScript field names to database column names
-        const fieldToColumnMap = {
-            costPrice: 'cost_price',
-            // Add other mappings if needed in the future
-        };
-        const setClause = fields.map((field) => `${fieldToColumnMap[field] || field} = ?`).join(", ");
-        const values = [...Object.values(product), id];
-        const result = await db.run(`UPDATE products SET ${setClause}, updated_at = CURRENT_TIMESTAMP WHERE id = ?`, ...values);
-        if ((result.changes ?? 0) === 0) {
-            return null;
+        finally {
+            (0, database_1.releaseDb)(db);
         }
-        // Return the updated product
-        const updatedProduct = await this.getProductById(id);
-        return updatedProduct;
     }
     async deleteProduct(id) {
-        const db = await (0, database_1.getDb)();
-        const result = await db.run("DELETE FROM products WHERE id = ?", id);
-        return (result.changes ?? 0) > 0;
+        const db = (0, database_1.getDb)();
+        try {
+            const result = db.prepare("DELETE FROM products WHERE id = ?").run(id);
+            return (result.changes ?? 0) > 0;
+        }
+        finally {
+            (0, database_1.releaseDb)(db);
+        }
     }
     async processCSVUpload(filePath, originalFilename) {
         const fileType = detectFileType(filePath, originalFilename);
@@ -752,16 +829,21 @@ class ProductService {
         return null;
     }
     async getProductBySkuOrBarcode(sku, barcode) {
-        const db = await (0, database_1.getDb)();
-        // Check for products by SKU and barcode independently
-        const bySku = await db.get("SELECT * FROM products WHERE sku = ?", sku);
-        const byBarcode = await db.get("SELECT * FROM products WHERE barcode = ?", barcode);
-        // If both match different products, this is an error case
-        if (bySku && byBarcode && bySku.id !== byBarcode.id) {
-            throw new Error(`Duplicate identifiers detected: SKU ${sku} exists in product ${bySku.id} and barcode ${barcode} exists in product ${byBarcode.id}. This will cause data integrity issues.`);
+        const db = (0, database_1.getDb)();
+        try {
+            // Check for products by SKU and barcode independently
+            const bySku = db.prepare("SELECT * FROM products WHERE sku = ?").get(sku);
+            const byBarcode = db.prepare("SELECT * FROM products WHERE barcode = ?").get(barcode);
+            // If both match different products, this is an error case
+            if (bySku && byBarcode && bySku.id !== byBarcode.id) {
+                throw new Error(`Duplicate identifiers detected: SKU ${sku} exists in product ${bySku.id} and barcode ${barcode} exists in product ${byBarcode.id}. This will cause data integrity issues.`);
+            }
+            // Return the product found by either SKU or barcode (or null if neither)
+            return bySku || byBarcode || null;
         }
-        // Return the product found by either SKU or barcode (or null if neither)
-        return bySku || byBarcode || null;
+        finally {
+            (0, database_1.releaseDb)(db);
+        }
     }
 }
 exports.ProductService = ProductService;

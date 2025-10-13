@@ -8,7 +8,7 @@ describe('"Manager Dashboard" Integration Scenario', () => {
     // Step 1: Log in as a manager (simulate by getting a token)
     const loginResponse = await request(app)
       .post("/auth/login")
-      .send({ pin: "1234" }); // Assuming a manager's PIN
+      .send({ pin: "5624" }); // Default manager PIN
 
     expect(loginResponse.status).toBe(200);
     const token = loginResponse.body.token;

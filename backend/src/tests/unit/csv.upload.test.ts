@@ -1,42 +1,48 @@
 import { ProductService } from "../../services/product.service";
+import { getDb } from "../../database";
 import fs from "fs";
 import path from "path";
 
 // Mock the database functions to avoid actual database operations during tests
 jest.mock("../../database", () => ({
   getDb: jest.fn(),
+  releaseDb: jest.fn(),
 }));
 
 describe("CSV Upload Functionality Tests", () => {
   let productService: ProductService;
-  let testCSVPath: string;
 
-  beforeAll(() => {
+  beforeEach(() => {
     productService = new ProductService();
-    
-    // Create a temporary CSV file for testing
+    const mockStatement = {
+      run: jest.fn(),
+      all: jest.fn(),
+      get: jest.fn(),
+    };
+    const mockDb = {
+      prepare: jest.fn(() => mockStatement),
+    };
+    (getDb as jest.Mock).mockReturnValue(mockDb);
+  });
+
+it("should process CSV with basic format correctly", async () => {
     const csvContent = `SKU,Name,Cost,Barcode
 TEST001,Product 1,$12.99,1234567890123
 TEST002,Product 2,€15.50,1234567890124
 TEST003,Product 3,1,000.99,1234567890125`;
-    
-    testCSVPath = path.join(__dirname, "test.csv");
+    const testCSVPath = path.join(__dirname, "test.csv");
     fs.writeFileSync(testCSVPath, csvContent);
-  });
 
-  afterAll(() => {
-    // Clean up the test file
-    if (fs.existsSync(testCSVPath)) {
-      fs.unlinkSync(testCSVPath);
-    }
-  });
-
-  it("should process CSV with basic format correctly", async () => {
-    const result = await productService.processCSVUpload(testCSVPath);
+    const result = await productService.processCSVUploadInternal(testCSVPath);
     
     expect(result.errors.length).toBe(0);
     expect(result.imported).toBe(3); // All 3 rows should be imported
     expect(result.updated).toBe(0);  // No updates since it's first import
+    
+    // Clean up the test file
+    if (fs.existsSync(testCSVPath)) {
+      fs.unlinkSync(testCSVPath);
+    }
   });
 });
 
@@ -193,25 +199,18 @@ describe("Flexible Data Validation for Different Number Formats", () => {
 // Test cases for error handling scenarios
 describe("CSV Upload Error Handling", () => {
   let productService: ProductService;
-  let testCSVPath: string;
 
-  beforeAll(() => {
+  beforeEach(() => {
     productService = new ProductService();
-  });
-
-  afterAll(() => {
-    if (fs.existsSync(testCSVPath)) {
-      fs.unlinkSync(testCSVPath);
-    }
   });
 
   it("should return errors for missing required fields", async () => {
     // Create a CSV with missing required fields
     const csvContent = `SKU,Name,Cost\nTEST001,Product 1,12.99`;
-    testCSVPath = path.join(__dirname, "test_missing_fields.csv");
+    const testCSVPath = path.join(__dirname, "test_missing_fields.csv");
     fs.writeFileSync(testCSVPath, csvContent);
     
-    const result = await productService.processCSVUpload(testCSVPath);
+    const result = await productService.processCSVUploadInternal(testCSVPath);
     
     expect(result.errors.length).toBeGreaterThan(0);
     expect(result.errors[0]).toContain("Missing required field - Barcode");
@@ -222,10 +221,10 @@ describe("CSV Upload Error Handling", () => {
   it("should return errors for invalid cost values", async () => {
     // Create a CSV with invalid cost values
     const csvContent = `SKU,Name,Cost,Barcode\nTEST001,Product 1,invalid_cost,1234567890123`;
-    testCSVPath = path.join(__dirname, "test_invalid_cost.csv");
+    const testCSVPath = path.join(__dirname, "test_invalid_cost.csv");
     fs.writeFileSync(testCSVPath, csvContent);
     
-    const result = await productService.processCSVUpload(testCSVPath);
+    const result = await productService.processCSVUploadInternal(testCSVPath);
     
     expect(result.errors.length).toBeGreaterThan(0);
     expect(result.errors[0]).toContain("Invalid cost value");
@@ -237,10 +236,10 @@ describe("CSV Upload Error Handling", () => {
     // Create a CSV with values exceeding length limits
     const longName = "Product with a very long name that exceeds the maximum allowed length for testing purposes";
     const csvContent = `SKU,Name,Cost,Barcode\nTEST001,${longName},12.99,1234567890123`;
-    testCSVPath = path.join(__dirname, "test_length_error.csv");
+    const testCSVPath = path.join(__dirname, "test_length_error.csv");
     fs.writeFileSync(testCSVPath, csvContent);
     
-    const result = await productService.processCSVUpload(testCSVPath);
+    const result = await productService.processCSVUploadInternal(testCSVPath);
     
     expect(result.errors.length).toBeGreaterThan(0);
     expect(result.errors[0]).toContain("Name too long");
@@ -251,10 +250,10 @@ describe("CSV Upload Error Handling", () => {
   it("should return errors when required headers are missing", async () => {
     // Create a CSV without required headers
     const csvContent = `WrongHeader1,WrongHeader2,WrongHeader3,WrongHeader4\nTEST001,Product 1,12.99,1234567890123`;
-    testCSVPath = path.join(__dirname, "test_missing_headers.csv");
+    const testCSVPath = path.join(__dirname, "test_missing_headers.csv");
     fs.writeFileSync(testCSVPath, csvContent);
     
-    const result = await productService.processCSVUpload(testCSVPath);
+    const result = await productService.processCSVUploadInternal(testCSVPath);
     
     expect(result.errors.length).toBeGreaterThan(0);
     expect(result.errors[0]).toContain("Missing required column header for SKU");
@@ -266,16 +265,9 @@ describe("CSV Upload Error Handling", () => {
 // Update the existing CSV processing test to include more comprehensive checks
 describe("Comprehensive CSV Processing Tests", () => {
   let productService: ProductService;
-  let testCSVPath: string;
 
-  beforeAll(() => {
+  beforeEach(() => {
     productService = new ProductService();
-  });
-
-  afterAll(() => {
-    if (fs.existsSync(testCSVPath)) {
-      fs.unlinkSync(testCSVPath);
-    }
   });
 
   it("should process CSV with various currency formats", async () => {
@@ -286,10 +278,10 @@ TEST003,Product 3,GBP 20.75,1234567890125
 TEST004,Product 4,¥1000,1234567890126
 TEST005,Product 5,AUD$ 35.99,1234567890127`;
     
-    testCSVPath = path.join(__dirname, "test_currency_formats.csv");
+    const testCSVPath = path.join(__dirname, "test_currency_formats.csv");
     fs.writeFileSync(testCSVPath, csvContent);
 
-    const result = await productService.processCSVUpload(testCSVPath);
+    const result = await productService.processCSVUploadInternal(testCSVPath);
     
     expect(result.errors.length).toBe(0);
     expect(result.imported).toBe(5);
@@ -302,10 +294,10 @@ TEST001,Product 1,12.99,1234567890123
 TEST002,Product 2,15.50,1234567890124
 TEST003,Product 3,20.75,1234567890125`;
     
-    testCSVPath = path.join(__dirname, "test_alt_headers.csv");
+    const testCSVPath = path.join(__dirname, "test_alt_headers.csv");
     fs.writeFileSync(testCSVPath, csvContent);
 
-    const result = await productService.processCSVUpload(testCSVPath);
+    const result = await productService.processCSVUploadInternal(testCSVPath);
     
     expect(result.errors.length).toBe(0);
     expect(result.imported).toBe(3);

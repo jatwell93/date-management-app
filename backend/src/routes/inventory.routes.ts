@@ -3,6 +3,8 @@ import { InventoryService } from "../services/inventory.service";
 import { ProductService } from "../services/product.service";
 import { InventoryItem } from "../models/inventory-item.model";
 import { authenticateToken, AuthRequest } from "../middleware/auth.middleware";
+import { validateInventoryItemInput } from "../middleware/validation.middleware";
+import { validateReferentialIntegrity, validateDataConsistency, validateBusinessRules } from "../middleware/data-integrity.middleware";
 
 const router = Router();
 const inventoryService = new InventoryService();
@@ -12,8 +14,8 @@ router.get("/", authenticateToken, async (req: AuthRequest, res: Response) => {
   try {
     const items = await inventoryService.getAllInventoryItems();
     res.json(items);
-  } catch (_error) {
-    // console.error("Get inventory items error:", _error);
+  } catch (error) {
+    console.error("Get inventory items error:", error);
     res.status(500).json({ message: "Internal server error" });
   }
 });
@@ -29,8 +31,8 @@ router.get("/:id", authenticateToken, async (req: AuthRequest, res: Response) =>
     }
 
     res.json(item);
-  } catch (_error) {
-    // console.error("Get inventory item error:", _error);
+  } catch (error) {
+    console.error("Get inventory item error:", error);
     res.status(500).json({ message: "Internal server error" });
   }
 });
@@ -45,8 +47,8 @@ router.get(
       const items =
         await inventoryService.getInventoryItemsByProductId(productId);
       res.json(items);
-    } catch (_error) {
-      // console.error("Get inventory items by product error:", _error);
+    } catch (error) {
+      console.error("Get inventory items by product error:", error);
       res.status(500).json({ message: "Internal server error" });
     }
   },
@@ -71,8 +73,8 @@ router.get(
       // Then get inventory items for that product
       const items = await inventoryService.getInventoryItemsByProductId(product.id);
       res.json(items);
-    } catch (_error) {
-      // console.error("Get inventory items by barcode error:", _error);
+    } catch (error) {
+      console.error("Get inventory items by barcode error:", error);
       res.status(500).json({ message: "Internal server error" });
     }
   },
@@ -89,8 +91,8 @@ router.get(
       
       const items = await inventoryService.getRecentInventoryItemsByProductId(productId, limit);
       res.json(items);
-    } catch (_error) {
-      // console.error("Get recent inventory items by product error:", _error);
+    } catch (error) {
+      console.error("Get recent inventory items by product error:", error);
       res.status(500).json({ message: "Internal server error" });
     }
   },
@@ -106,15 +108,15 @@ router.get(
       const items =
         await inventoryService.getInventoryItemsByLocationId(locationId);
       res.json(items);
-    } catch (_error) {
-      // console.error("Get inventory items by location error:", _error);
+    } catch (error) {
+      console.error("Get inventory items by location error:", error);
       res.status(500).json({ message: "Internal server error" });
     }
   },
 );
 
 // POST /inventory-items - Create a new inventory item
-router.post("/", authenticateToken, async (req: AuthRequest, res: Response) => {
+router.post("/", authenticateToken, validateInventoryItemInput, validateReferentialIntegrity, validateDataConsistency, validateBusinessRules, async (req: AuthRequest, res: Response) => {
   const { productId, expiryDate, locationId, status } = req.body;
 
   // Validate required fields
@@ -130,6 +132,9 @@ router.post("/", authenticateToken, async (req: AuthRequest, res: Response) => {
 
   try {
     const userId = req.userId; // Get user ID from auth middleware
+    if (!userId) {
+      return res.status(401).json({ message: "Access denied: No user ID found" });
+    }
     const newInventoryItem = await inventoryService.createInventoryItem({
       productId,
       expiryDate,
@@ -144,17 +149,20 @@ router.post("/", authenticateToken, async (req: AuthRequest, res: Response) => {
         .status(400)
         .json({ message: "Location does not exist" });
     }
-    // console.error("Create inventory item error:", _error);
+    console.error("Create inventory item error:", error);
     res.status(500).json({ message: "Internal server error" });
   }
 });
 
 // PUT /inventory-items/:id - Update an inventory item
-router.put("/:id", authenticateToken, async (req: AuthRequest, res: Response) => {
+router.put("/:id", authenticateToken, validateInventoryItemInput, validateReferentialIntegrity, validateBusinessRules, async (req: AuthRequest, res: Response) => {
   try {
     const id = parseInt(req.params.id);
     const { productId, expiryDate, locationId, status } = req.body;
     const userId = req.userId; // Get user ID from auth middleware
+    if (!userId) {
+      return res.status(401).json({ message: "Access denied: No user ID found" });
+    }
 
     // Build update object
     const updateData: Partial<
@@ -176,8 +184,8 @@ router.put("/:id", authenticateToken, async (req: AuthRequest, res: Response) =>
     }
 
     res.json(updatedItem);
-  } catch (_error) {
-    // console.error("Update inventory item error:", _error);
+  } catch (error) {
+    console.error("Update inventory item error:", error);
     res.status(500).json({ message: "Internal server error" });
   }
 });
@@ -190,6 +198,9 @@ router.delete(
     try {
       const id = parseInt(req.params.id);
       const userId = req.userId; // Get user ID from auth middleware
+      if (!userId) {
+        return res.status(401).json({ message: "Access denied: No user ID found" });
+      }
       const deleted = await inventoryService.deleteInventoryItem(id, userId);
 
       if (!deleted) {
@@ -197,8 +208,8 @@ router.delete(
       }
 
       res.json({ message: "Inventory item deleted successfully" });
-    } catch (_error) {
-      // console.error("Delete inventory item error:", _error);
+    } catch (error) {
+      console.error("Delete inventory item error:", error);
       res.status(500).json({ message: "Internal server error" });
     }
   },

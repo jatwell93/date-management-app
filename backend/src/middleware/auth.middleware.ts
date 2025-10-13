@@ -1,5 +1,6 @@
 import { Request, Response, NextFunction } from "express";
-import jwt from "jsonwebtoken";
+import jwt, { Secret } from "jsonwebtoken";
+import { AnalyticsService, AnalyticsEventType } from "../services/analytics.service";
 
 export interface AuthRequest extends Request {
   userId?: number;
@@ -10,6 +11,11 @@ export interface AuthRequest extends Request {
   };
 }
 
+export interface TokenPayload extends jwt.JwtPayload {
+  userId: number;
+  role: string;
+}
+
 export const authenticateToken = (
   req: AuthRequest,
   res: Response,
@@ -18,38 +24,125 @@ export const authenticateToken = (
   const authHeader = req.headers["authorization"];
   const token = authHeader && authHeader.split(" ")[1];
 
-  if (token == null) return res.status(401).json({ message: "Access denied: No token provided" }); // No token
-
-  // The 'user' object from the callback can be of type `jwt.JwtPayload`
-  // which can include standard claims, or it can be a string.
-  // We'll define a type for our specific payload structure.
-  interface CustomPayload extends jwt.JwtPayload {
-    userId: number;
-    role: string;
+  if (token == null) {
+    // Track unauthorized access attempt
+    const analyticsService = AnalyticsService.getInstance();
+    analyticsService.trackEvent({
+      eventType: AnalyticsEventType.USER_LOGOUT,
+      eventCategory: 'Auth',
+      eventAction: 'unauthorized_access_attempt',
+      ipAddress: req.ip,
+      userAgent: req.get('User-Agent') || undefined,
+      metadata: { path: req.path, method: req.method }
+    });
+    
+    return res.status(401).json({ message: "Access denied: No token provided" }); // No token
   }
 
-  jwt.verify(
-    token,
-    "your_jwt_secret", // It's better to use an environment variable here, e.g., process.env.JWT_SECRET
-    (err, user) => { // Let TypeScript infer the type of `user`
-      if (err) {
-        return res.status(403).json({ message: "Access denied: Invalid token" }); // Token is invalid (e.g., expired, wrong signature)
+  // Check for valid token with current secret, and if that fails, check with old secret for rotation
+  let decodedToken: TokenPayload | string;
+  let verificationError = null;
+  
+  // First try with the current JWT secret
+  try {
+    decodedToken = jwt.verify(token, process.env.JWT_SECRET || "your_jwt_secret") as TokenPayload;
+  } catch (err) {
+    // If current secret fails, try with old secret (for rotation period)
+    if (process.env.JWT_SECRET_OLD) {
+      try {
+        decodedToken = jwt.verify(token, process.env.JWT_SECRET_OLD) as TokenPayload;
+      } catch (rotationErr) {
+        // Both secrets failed, return unauthorized
+        // Track invalid token attempt
+        const analyticsService = AnalyticsService.getInstance();
+        analyticsService.trackEvent({
+          eventType: AnalyticsEventType.USER_LOGOUT,
+          eventCategory: 'Auth',
+          eventAction: 'invalid_token_attempt',
+          ipAddress: req.ip,
+          userAgent: req.get('User-Agent') || undefined,
+          metadata: { path: req.path, method: req.method }
+        });
+        
+        return res.status(403).json({ message: "Access denied: Invalid token" });
       }
+    } else {
+      // Only current secret was available and it failed
+      // Track invalid token attempt
+      const analyticsService = AnalyticsService.getInstance();
+      analyticsService.trackEvent({
+        eventType: AnalyticsEventType.USER_LOGOUT,
+        eventCategory: 'Auth',
+        eventAction: 'invalid_token_attempt',
+        ipAddress: req.ip,
+        userAgent: req.get('User-Agent') || undefined,
+        metadata: { path: req.path, method: req.method }
+      });
       
-      // FIX: Add a check to ensure the user payload exists and is an object
-      if (!user || typeof user === 'string') {
-        return res.status(403).json({ message: "Access denied: Invalid token payload" }); // Token is valid, but payload is missing or in wrong format
-      }
+      return res.status(403).json({ message: "Access denied: Invalid token" });
+    }
+  }
 
-      // Now that we've checked, we can safely access the properties
-      req.userId = user.userId;
-      req.userRole = user.role;
-      req.user = {
-        id: user.userId,
-        role: user.role
-      };
-      next();
-    },
+  // FIX: Add a check to ensure the decoded token payload exists and is an object
+  if (!decodedToken || typeof decodedToken === 'string') {
+    // Track invalid token payload
+    const analyticsService = AnalyticsService.getInstance();
+    analyticsService.trackEvent({
+      eventType: AnalyticsEventType.USER_LOGOUT,
+      eventCategory: 'Auth',
+      eventAction: 'invalid_token_payload',
+      ipAddress: req.ip,
+      userAgent: req.get('User-Agent') || undefined,
+      metadata: { path: req.path, method: req.method }
+    });
+    
+    return res.status(403).json({ message: "Access denied: Invalid token payload" }); // Token is valid, but payload is missing or in wrong format
+  }
+
+  // Check for token expiration (manually if not automatically handled by jwt.verify)
+  if (decodedToken.exp && decodedToken.exp * 1000 < Date.now()) {
+    // Track expired token attempt
+    const analyticsService = AnalyticsService.getInstance();
+    analyticsService.trackEvent({
+      eventType: AnalyticsEventType.USER_LOGOUT,
+      eventCategory: 'Auth',
+      eventAction: 'expired_token_attempt',
+      ipAddress: req.ip,
+      userAgent: req.get('User-Agent') || undefined,
+      metadata: { path: req.path, method: req.method }
+    });
+    
+    return res.status(403).json({ message: "Access denied: Token has expired" });
+  }
+
+  // Now that we've verified, we can safely access the properties
+  req.userId = decodedToken.userId;
+  req.userRole = decodedToken.role;
+  req.user = {
+    id: decodedToken.userId,
+    role: decodedToken.role
+  };
+  
+  // Track successful authenticated request
+  const analyticsService = AnalyticsService.getInstance();
+  analyticsService.trackEvent({
+    userId: decodedToken.userId,
+    eventType: AnalyticsEventType.VIEW_DASHBOARD, // General action for accessing protected routes
+    eventCategory: 'Auth',
+    eventAction: 'protected_route_access',
+    ipAddress: req.ip,
+    userAgent: req.get('User-Agent') || undefined,
+    metadata: { path: req.path, method: req.method, role: decodedToken.role }
+  });
+  
+  next();
+};
+
+// Function to generate a JWT token with configurable expiration
+export const generateToken = (userId: number, role: string, expiresIn: string = '24h'): string => {
+  return jwt.sign(
+    { userId, role },
+    process.env.JWT_SECRET as Secret || "your_jwt_secret"
   );
 };
 
@@ -59,6 +152,18 @@ export const requireManager = (
   next: NextFunction,
 ) => {
   if (req.userRole !== "Manager") {
+    // Track unauthorized manager access attempt
+    const analyticsService = AnalyticsService.getInstance();
+    analyticsService.trackEvent({
+      userId: req.userId,
+      eventType: AnalyticsEventType.USER_LOGOUT,
+      eventCategory: 'Auth',
+      eventAction: 'manager_access_denied',
+      ipAddress: req.ip,
+      userAgent: req.get('User-Agent') || undefined,
+      metadata: { path: req.path, method: req.method, role: req.userRole }
+    });
+    
     return res
       .status(403)
       .json({ message: "Access denied: Manager role required" });

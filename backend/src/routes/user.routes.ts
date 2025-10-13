@@ -11,6 +11,8 @@ import {
   authenticateToken,
   requireManager,
 } from "../middleware/auth.middleware";
+import { validateUserInput, validateDataIntegrity } from "../middleware/validation.middleware";
+import { validateBusinessRules } from "../middleware/data-integrity.middleware";
 
 const router = Router();
 
@@ -57,6 +59,9 @@ router.post(
   "/",
   authenticateToken,
   requireManager,
+  validateUserInput,
+  validateDataIntegrity,
+  validateBusinessRules,
   async (req: Request, res: Response) => {
     try {
       const { pin, role } = req.body;
@@ -85,6 +90,9 @@ router.put(
   "/:id",
   authenticateToken,
   requireManager,
+  validateUserInput,
+  validateDataIntegrity,
+  validateBusinessRules,
   async (req: Request, res: Response) => {
     try {
       const id = parseInt(req.params.id);

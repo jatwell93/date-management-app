@@ -1,4 +1,5 @@
 import { offlineStorage } from "./offline-storage";
+import { apiService } from "./api.service";
 
 const PENDING_INVENTORY_ITEMS_PREFIX = "pending-inventory-item-";
 
@@ -29,21 +30,7 @@ export async function synchronizeOfflineData(token: string | null) {
     if (item) {
       try {
         // console.log(`Synchronizing item: ${key}`, item);
-        const response = await fetch("http://localhost:3001/inventory-items", {
-          method: "POST",
-          headers: {
-            "Content-Type": "application/json",
-            Authorization: `Bearer ${token}`,
-          },
-          body: JSON.stringify(item),
-        });
-
-        if (!response.ok) {
-          const errorData = await response.json();
-          throw new Error(
-            errorData.message || "Failed to synchronize inventory item",
-          );
-        }
+        await apiService.post("/inventory-items", item, token);
 
         // console.log(`Successfully synchronized item: ${key}`);
         await offlineStorage.removeItem(key);

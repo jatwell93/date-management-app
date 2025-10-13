@@ -24,6 +24,7 @@ import {
   DialogTrigger,
   DialogFooter,
 } from "../components/ui/dialog";
+import { apiService } from "../lib/api.service";
 
 interface StoreArea {
   id: number;
@@ -44,22 +45,15 @@ export function StoreAreaManagementPage({
   const [newSubDepartmentName, setNewSubDepartmentName] = useState<string>(""); // New state
   const [editingArea, setEditingArea] = useState<StoreArea | null>(null);
   const [editedAreaName, setEditedAreaName] = useState<string>("");
-  const [editedSubDepartmentName, setEditedSubDepartmentName] = useState<string>(""); // New state
+  const [editedSubDepartmentName, setEditedSubDepartmentName] =
+    useState<string>(""); // New state
   const [error, setError] = useState<string | null>(null);
   const [successMessage, setSuccessMessage] = useState<string | null>(null);
 
   const fetchStoreAreas = useCallback(async () => {
     if (!token) return;
     try {
-      const response = await fetch("http://localhost:3001/store-areas", {
-        headers: {
-          Authorization: `Bearer ${token}`,
-        },
-      });
-      if (!response.ok) {
-        throw new Error("Failed to fetch store areas");
-      }
-      const data = await response.json();
+      const data = await apiService.get<StoreArea[]>("/store-areas", token);
       setStoreAreas(data);
     } catch (err: unknown) {
       if (err instanceof Error) {
@@ -80,21 +74,14 @@ export function StoreAreaManagementPage({
       return;
     }
     try {
-      const response = await fetch("http://localhost:3001/store-areas", {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-          Authorization: `Bearer ${token}`,
-        },
-        body: JSON.stringify({
+      await apiService.post(
+        "/store-areas",
+        {
           name: newAreaName,
           subDepartment: newSubDepartmentName,
-        }),
-      });
-      if (!response.ok) {
-        const errorData = await response.json();
-        throw new Error(errorData.message || "Failed to add store area");
-      }
+        },
+        token,
+      );
       setSuccessMessage("Store area added successfully!");
       setNewAreaName("");
       setNewSubDepartmentName(""); // Clear sub-department input
@@ -124,24 +111,14 @@ export function StoreAreaManagementPage({
       return;
     }
     try {
-      const response = await fetch(
-        `http://localhost:3001/store-areas/${editingArea.id}`,
+      await apiService.put(
+        `/store-areas/${editingArea.id}`,
         {
-          method: "PUT",
-          headers: {
-            "Content-Type": "application/json",
-            Authorization: `Bearer ${token}`,
-          },
-          body: JSON.stringify({
-            name: editedAreaName,
-            subDepartment: editedSubDepartmentName,
-          }),
+          name: editedAreaName,
+          subDepartment: editedSubDepartmentName,
         },
+        token,
       );
-      if (!response.ok) {
-        const errorData = await response.json();
-        throw new Error(errorData.message || "Failed to update store area");
-      }
       setSuccessMessage("Store area updated successfully!");
       setEditingArea(null);
       setEditedAreaName("");
@@ -177,19 +154,7 @@ export function StoreAreaManagementPage({
         return;
       }
       try {
-        const response = await fetch(
-          `http://localhost:3001/store-areas/${id}`,
-          {
-            method: "DELETE",
-            headers: {
-              Authorization: `Bearer ${token}`,
-            },
-          },
-        );
-        if (!response.ok) {
-          const errorData = await response.json();
-          throw new Error(errorData.message || "Failed to delete store area");
-        }
+        await apiService.delete(`/store-areas/${id}`, token);
         setSuccessMessage("Store area deleted successfully!");
         fetchStoreAreas();
       } catch (err: unknown) {
@@ -212,12 +177,12 @@ export function StoreAreaManagementPage({
         </CardHeader>
         <CardContent>
           {error && (
-            <p className="text-red-500 text-sm text-center mt-4">
+            <p className="text-inventory-error-500 text-sm text-center mt-4">
               Error: {error}
             </p>
           )}
           {successMessage && (
-            <p className="text-green-500 text-sm text-center mt-4">
+            <p className="text-inventory-success-500 text-sm text-center mt-4">
               {successMessage}
             </p>
           )}
@@ -263,9 +228,7 @@ export function StoreAreaManagementPage({
                     <TableCell>{area.id}</TableCell>
                     <TableCell>{area.name}</TableCell>
 
-                    <TableCell>
-                      {area.subDepartment || "N/A"}
-                    </TableCell>
+                    <TableCell>{area.subDepartment || "N/A"}</TableCell>
                     <TableCell>
                       {area.lastChecked
                         ? new Date(area.lastChecked).toLocaleString()
@@ -310,7 +273,9 @@ export function StoreAreaManagementPage({
                                 className="col-span-3"
                               />
                             </div>
-                            <div className="grid grid-cols-4 items-center gap-4"> {/* New input for sub-department */}
+                            <div className="grid grid-cols-4 items-center gap-4">
+                              {" "}
+                              {/* New input for sub-department */}
                               <Label
                                 htmlFor="editedSubDepartmentName"
                                 className="text-right"

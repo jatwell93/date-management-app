@@ -1,4 +1,5 @@
 import { getDb } from "../database";
+import { SchedulerService } from "./scheduler.service";
 
 interface MonthlyExpiryReport {
   month: string;
@@ -48,7 +49,7 @@ export class ReportService {
     const db = await getDb();
 
     // Get expiry reports grouped by month, showing products expiring soon and their status
-    const report = await db.all(
+    const stmt = db.prepare(
       `SELECT
         strftime('%Y-%m', expiry_date) as month,
         COUNT(*) as total_expiring,
@@ -64,14 +65,34 @@ export class ReportService {
       ORDER BY month DESC
       LIMIT 12`,
     );
-    return report;
+    return stmt.all() as MonthlyExpiryReport[];
+  }
+
+  async getOverallExpiryReport(): Promise<MonthlyExpiryReport> {
+    const db = await getDb();
+
+    // Get overall expiry report showing total counts across all months
+    const stmt = db.prepare(
+      `SELECT
+        'Overall' as month,
+        COUNT(*) as total_expiring,
+        SUM(CASE WHEN status = 'Expired' THEN 1 ELSE 0 END) as expired_count,
+        SUM(CASE WHEN status = 'Markdown 1' THEN 1 ELSE 0 END) as markdown1_count,
+        SUM(CASE WHEN status = 'Markdown 2' THEN 1 ELSE 0 END) as markdown2_count,
+        SUM(CASE WHEN status = 'Markdown 3' THEN 1 ELSE 0 END) as markdown3_count,
+        SUM(CASE WHEN status LIKE 'Markdown%' THEN 1 ELSE 0 END) as total_markdown,
+        MAX(expiry_date) as latest_expiry_date
+      FROM inventory_items
+      WHERE expiry_date IS NOT NULL AND expiry_date != ''`
+    );
+    return stmt.get() as MonthlyExpiryReport;
   }
 
   async getDetailedExpiryReport(): Promise<any[]> {
     const db = await getDb();
     
-    // Get detailed expiry information for the next 90 days
-    const report = await db.all(
+    // Get detailed expiry information for the next 90 days, including cost price
+    const stmt = db.prepare(
       `SELECT 
         ii.id as inventoryId,
         ii.expiry_date as expiryDate,
@@ -79,6 +100,7 @@ export class ReportService {
         p.id as productId,
         p.name as productName,
         p.sku as sku,
+        p.cost_price as costPrice,
         sa.id as locationId,
         sa.name as locationName,
         sa.sub_department as subDepartment
@@ -89,13 +111,13 @@ export class ReportService {
         AND ii.expiry_date <= date('now', '+90 days')
       ORDER BY ii.expiry_date ASC`
     );
-    return report;
+    return stmt.all();
   }
 
   async getMonthlyMarkdownReport(): Promise<MonthlyMarkdownReport[]> {
     const db = await getDb();
     // This query aggregates markdown values and counts by month.
-    const report = await db.all(
+    const stmt = db.prepare(
       `SELECT
         strftime('%Y-%m', created_at) as month,
         SUM(CASE WHEN status LIKE 'Markdown%' THEN 10.00 ELSE 0 END) as totalMarkdownValue,
@@ -105,13 +127,13 @@ export class ReportService {
       GROUP BY month
       ORDER BY month DESC`,
     );
-    return report;
+    return stmt.all() as MonthlyMarkdownReport[];
   }
 
   async getUsageReport(): Promise<UsageReport[]> {
     const db = await getDb();
     // Aggregate user activity from audit logs
-    const report = await db.all(
+    const stmt = db.prepare(
       `SELECT
         COALESCE(u.role, 'Unknown') as role,
         COUNT(al.id) as total_activities,
@@ -123,13 +145,13 @@ export class ReportService {
       GROUP BY COALESCE(u.role, 'Unknown')
       ORDER BY COALESCE(u.role, 'Unknown')`,
     );
-    return report;
+    return stmt.all() as UsageReport[];
   }
 
   async getDailyUsageReport(): Promise<DailyUsageReportItem[]> {
     const db = await getDb();
     // Get daily usage report for the past 90 days
-    const report = await db.all(
+    const stmt = db.prepare(
       `SELECT
         date(al.created_at) as date,
         COALESCE(u.id, al.user_id) as user_id,
@@ -143,35 +165,35 @@ export class ReportService {
       GROUP BY date(al.created_at), COALESCE(u.id, al.user_id)
       ORDER BY date(al.created_at) DESC`,
     );
-    return report;
+    return stmt.all() as DailyUsageReportItem[];
   }
 
   async getDashboardAnalytics(): Promise<DashboardAnalytics> {
     const db = await getDb();
 
     // Get overall inventory statistics
-    const totalProducts = await db.get(
+    const totalProducts = db.prepare(
       "SELECT COUNT(*) as count FROM products",
-    );
-    const totalInventoryItems = await db.get(
+    ).get() as { count: number };
+    const totalInventoryItems = db.prepare(
       "SELECT COUNT(*) as count FROM inventory_items",
-    );
-    const activeItems = await db.get(
+    ).get() as { count: number };
+    const activeItems = db.prepare(
       "SELECT COUNT(*) as count FROM inventory_items WHERE status != 'Expired'",
-    );
-    const expiredItems = await db.get(
+    ).get() as { count: number };
+    const expiredItems = db.prepare(
       "SELECT COUNT(*) as count FROM inventory_items WHERE status = 'Expired'",
-    );
-    const markdownItems = await db.get(
+    ).get() as { count: number };
+    const markdownItems = db.prepare(
       "SELECT COUNT(*) as count FROM inventory_items WHERE status LIKE 'Markdown%'",
-    );
+    ).get() as { count: number };
 
     // Get upcoming expiry items that will expire within next 30 days
-    const upcomingExpiry = await db.get(
+    const upcomingExpiry = db.prepare(
       `SELECT COUNT(*) as count FROM inventory_items
        WHERE expiry_date >= date('now') AND expiry_date <= date('now', '+30 days')
        AND status != 'Expired'`,
-    );
+    ).get() as { count: number };
 
     return {
       totalProducts: totalProducts.count,
@@ -181,5 +203,9 @@ export class ReportService {
       markdownItems: markdownItems.count,
       upcomingExpiry: upcomingExpiry.count,
     };
+  }
+
+  async updateAllMarkdownStatuses(): Promise<void> {
+    return SchedulerService.updateAllInventoryMarkdownStatuses();
   }
 }

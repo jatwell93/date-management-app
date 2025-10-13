@@ -6,6 +6,7 @@ import bcrypt from "bcrypt";
 // Mock the database module
 jest.mock("../../database", () => ({
   getDb: jest.fn(),
+  releaseDb: jest.fn(),
 }));
 
 // Mock the jsonwebtoken module
@@ -23,6 +24,7 @@ describe("AuthService", () => {
   let authService: AuthService;
   interface MockDatabase {
     get: jest.Mock;
+    prepare: jest.Mock;
     run?: jest.Mock;
     all?: jest.Mock;
   }
@@ -30,13 +32,22 @@ describe("AuthService", () => {
 
   beforeEach(() => {
     authService = new AuthService();
+    const mockStatement = {
+      all: jest.fn(),
+    };
     mockDb = {
+      prepare: jest.fn(() => mockStatement),
       get: jest.fn(),
     };
-    (getDb as jest.Mock).mockResolvedValue(mockDb);
+    (getDb as jest.Mock).mockReturnValue(mockDb);
     (jwt.sign as jest.Mock).mockReturnValue("mock_jwt_token");
     (bcrypt.hash as jest.Mock).mockResolvedValue("hashed_pin");
     (bcrypt.compare as jest.Mock).mockResolvedValue(true);
+
+    // Mock the return value for the user query
+    mockStatement.all.mockReturnValue([
+      { id: 1, pin: "hashed_pin", role: "Manager" },
+    ]);
   });
 
   afterEach(() => {
@@ -44,16 +55,11 @@ describe("AuthService", () => {
   });
 
   it("should return a JWT token on successful login", async () => {
-    mockDb.get.mockResolvedValue({ id: 1, pin: "hashed_pin", role: "Manager" });
-
-    const token = await authService.login("1234");
+    const token = await authService.login("5624");
 
     expect(token).toBe("mock_jwt_token");
     expect(getDb).toHaveBeenCalledTimes(1);
-    expect(mockDb.get).toHaveBeenCalledWith(
-      "SELECT * FROM users WHERE pin = ?",
-      "1234",
-    );
+    expect(mockDb.prepare).toHaveBeenCalledWith("SELECT * FROM users");
     expect(jwt.sign).toHaveBeenCalledWith(
       { userId: 1, role: "Manager" },
       expect.any(String),
@@ -62,16 +68,16 @@ describe("AuthService", () => {
   });
 
   it("should return null for invalid PIN", async () => {
-    mockDb.get.mockResolvedValue(undefined);
+    const mockStatement = {
+      all: jest.fn().mockReturnValue([]),
+    };
+    (mockDb.prepare as jest.Mock).mockReturnValue(mockStatement);
 
     const token = await authService.login("wrong_pin");
 
     expect(token).toBeNull();
     expect(getDb).toHaveBeenCalledTimes(1);
-    expect(mockDb.get).toHaveBeenCalledWith(
-      "SELECT * FROM users WHERE pin = ?",
-      "wrong_pin",
-    );
+    expect(mockDb.prepare).toHaveBeenCalledWith("SELECT * FROM users");
     expect(jwt.sign).not.toHaveBeenCalled();
   });
 });

@@ -19,7 +19,8 @@ clientsClaim();
 // Their URLs are injected into the manifest variable below.
 // This variable must be present somewhere in your service worker file,
 // even if you decide not to use precaching.
-precacheAndRoute(self.__WB_MANIFEST);
+const WB_MANIFEST = self.__WB_MANIFEST;
+precacheAndRoute(WB_MANIFEST);
 
 // Set up App Shell-style routing, so that all navigation requests
 // are fulfilled with your index.html file.
@@ -45,7 +46,7 @@ registerRoute(
     // Return true to signal that we want to handle the request.
     return true;
   },
-  createHandlerBoundToURL((self.__WB_MANIFEST[0] as any).url),
+  createHandlerBoundToURL((WB_MANIFEST[0] as any).url),
 );
 
 // An example runtime caching route for requests that aren't handled by the precache,
@@ -80,6 +81,30 @@ registerRoute(
         maxEntries: 60,
         maxAgeSeconds: 30 * 24 * 60 * 60,
       }), // 30 Days
+    ],
+  }),
+);
+
+// Cache API requests for offline use
+registerRoute(
+  // Match API requests
+  ({ url }) =>
+    url.pathname.startsWith("/api/") ||
+    url.pathname.includes("/auth/") ||
+    url.pathname.includes("/products/") ||
+    url.pathname.includes("/inventory-items/") ||
+    url.pathname.includes("/store-areas/") ||
+    url.pathname.includes("/reports/") ||
+    url.pathname.includes("/dashboard/") ||
+    url.pathname.includes("/users/"),
+  // Use network first strategy, falling back to cache if offline
+  new StaleWhileRevalidate({
+    cacheName: "api-cache",
+    plugins: [
+      new ExpirationPlugin({
+        maxEntries: 100,
+        maxAgeSeconds: 24 * 60 * 60, // 24 hours
+      }),
     ],
   }),
 );

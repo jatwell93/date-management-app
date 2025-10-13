@@ -5,6 +5,7 @@ import {
   CardHeader,
   CardTitle,
 } from "../components/ui/card";
+import { apiService } from "../lib/api.service";
 
 interface DashboardPageProps {
   token: string | null;
@@ -37,18 +38,7 @@ export function DashboardPage({ token }: DashboardPageProps) {
       }
 
       try {
-        const response = await fetch("http://localhost:3001/dashboard", {
-          headers: {
-            Authorization: `Bearer ${token}`,
-          },
-        });
-
-        if (!response.ok) {
-          const errorData = await response.json();
-          throw new Error(errorData.message || "Failed to load dashboard data");
-        }
-
-        const data = await response.json();
+        const data = await apiService.get<DashboardData>("/dashboard", token);
         setDashboardData(data);
       } catch (err: unknown) {
         if (err instanceof Error) {

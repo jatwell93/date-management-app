@@ -6,6 +6,8 @@ Object.defineProperty(exports, "__esModule", { value: true });
 const express_1 = require("express");
 const product_service_1 = require("../services/product.service");
 const auth_middleware_1 = require("../middleware/auth.middleware");
+const validation_middleware_1 = require("../middleware/validation.middleware");
+const data_integrity_middleware_1 = require("../middleware/data-integrity.middleware");
 const multer_1 = __importDefault(require("multer"));
 const router = (0, express_1.Router)();
 const productService = new product_service_1.ProductService();
@@ -84,7 +86,7 @@ router.get("/by-sku/:sku", auth_middleware_1.authenticateToken, async (req, res)
     }
 });
 // POST /products - Create a new product
-router.post("/", auth_middleware_1.authenticateToken, async (req, res) => {
+router.post("/", auth_middleware_1.authenticateToken, validation_middleware_1.validateProductInput, validation_middleware_1.validateDataIntegrity, data_integrity_middleware_1.validateBusinessRules, async (req, res) => {
     const { barcode, sku, name, costPrice } = req.body;
     if (!barcode || !sku || !name || costPrice === undefined) {
         return res.status(400).json({ message: "Missing required product fields" });
@@ -104,7 +106,7 @@ router.post("/", auth_middleware_1.authenticateToken, async (req, res) => {
     }
 });
 // PUT /products/:id - Update a product
-router.put("/:id", auth_middleware_1.authenticateToken, async (req, res) => {
+router.put("/:id", auth_middleware_1.authenticateToken, validation_middleware_1.validateProductInput, validation_middleware_1.validateDataIntegrity, data_integrity_middleware_1.validateBusinessRules, async (req, res) => {
     try {
         const id = parseInt(req.params.id);
         const { barcode, sku, name, costPrice } = req.body;

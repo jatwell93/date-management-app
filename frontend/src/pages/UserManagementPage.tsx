@@ -17,6 +17,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from "../components/ui/select";
+import { apiService } from "../lib/api.service";
 
 interface User {
   id: number;
@@ -44,15 +45,7 @@ export function UserManagementPage({ token }: UserManagementPageProps) {
   const fetchUsers = useCallback(async () => {
     if (!token) return;
     try {
-      const response = await fetch("http://localhost:3001/users", {
-        headers: {
-          Authorization: `Bearer ${token}`,
-        },
-      });
-      if (!response.ok) {
-        throw new Error("Failed to fetch users");
-      }
-      const data: User[] = await response.json();
+      const data: User[] = await apiService.get<User[]>("/users", token);
       setUsers(data);
     } catch (err: unknown) {
       if (err instanceof Error) {
@@ -76,19 +69,7 @@ export function UserManagementPage({ token }: UserManagementPageProps) {
         return;
       }
       try {
-        const response = await fetch("http://localhost:3001/users", {
-          method: "POST",
-          headers: {
-            "Content-Type": "application/json",
-            Authorization: `Bearer ${token}`,
-          },
-          body: JSON.stringify(data),
-        });
-
-        if (!response.ok) {
-          const errorData = await response.json();
-          throw new Error(errorData.message || "Failed to create user");
-        }
+        await apiService.post("/users", data, token);
 
         setSuccess("User created successfully!");
         form.reset();
@@ -113,22 +94,11 @@ export function UserManagementPage({ token }: UserManagementPageProps) {
         return;
       }
       try {
-        const response = await fetch(
-          `http://localhost:3001/users/${selectedUserId}`,
-          {
-            method: "PUT",
-            headers: {
-              "Content-Type": "application/json",
-              Authorization: `Bearer ${token}`,
-            },
-            body: JSON.stringify({ role: data.role }),
-          },
+        await apiService.put(
+          `/users/${selectedUserId}`,
+          { role: data.role },
+          token,
         );
-
-        if (!response.ok) {
-          const errorData = await response.json();
-          throw new Error(errorData.message || "Failed to update user");
-        }
 
         setSuccess("User updated successfully!");
         fetchUsers(); // Refresh user list after update
@@ -156,20 +126,7 @@ export function UserManagementPage({ token }: UserManagementPageProps) {
       return;
     }
     try {
-      const response = await fetch(
-        `http://localhost:3001/users/${selectedUserId}/reset-pin`,
-        {
-          method: "PUT",
-          headers: {
-            Authorization: `Bearer ${token}`,
-          },
-        },
-      );
-
-      if (!response.ok) {
-        const errorData = await response.json();
-        throw new Error(errorData.message || "Failed to reset PIN");
-      }
+      await apiService.put(`/users/${selectedUserId}/reset-pin`, {}, token);
 
       setSuccess("User PIN reset successfully!");
       fetchUsers(); // Refresh user list after PIN reset
@@ -194,20 +151,7 @@ export function UserManagementPage({ token }: UserManagementPageProps) {
       return;
     }
     try {
-      const response = await fetch(
-        `http://localhost:3001/users/${userToDeleteId}`,
-        {
-          method: "DELETE",
-          headers: {
-            Authorization: `Bearer ${token}`,
-          },
-        },
-      );
-
-      if (!response.ok) {
-        const errorData = await response.json();
-        throw new Error(errorData.message || "Failed to delete user");
-      }
+      await apiService.delete(`/users/${userToDeleteId}`, token);
 
       setSuccess("User deleted successfully!");
       form.reset({
@@ -230,8 +174,12 @@ export function UserManagementPage({ token }: UserManagementPageProps) {
       </h1>
 
       <div className="mb-8 w-full max-w-md">
-        <h2 className="text-xl font-semibold mb-4 text-center">Current Users</h2>
-        {error && <p className="text-red-500 text-sm mb-2 text-center">{error}</p>}
+        <h2 className="text-xl font-semibold mb-4 text-center">
+          Current Users
+        </h2>
+        {error && (
+          <p className="text-inventory-error-500 text-sm mb-2 text-center">{error}</p>
+        )}
         {users.length === 0 ? (
           <p className="text-center">No users found.</p>
         ) : (
@@ -246,7 +194,9 @@ export function UserManagementPage({ token }: UserManagementPageProps) {
       </div>
 
       <div className="mb-8 w-full max-w-md">
-        <h2 className="text-xl font-semibold mb-4 text-center">Create New User</h2>
+        <h2 className="text-xl font-semibold mb-4 text-center">
+          Create New User
+        </h2>
         <Form {...form}>
           <form
             onSubmit={form.handleSubmit(onCreateSubmit)}
@@ -293,8 +243,12 @@ export function UserManagementPage({ token }: UserManagementPageProps) {
                 </FormItem>
               )}
             />
-            {error && <p className="text-red-500 text-sm text-center">{error}</p>}
-            {success && <p className="text-green-500 text-sm text-center">{success}</p>}
+            {error && (
+              <p className="text-inventory-error-500 text-sm text-center">{error}</p>
+            )}
+            {success && (
+              <p className="text-inventory-success-500 text-sm text-center">{success}</p>
+            )}
             <Button type="submit" className="w-full">
               Create User
             </Button>
@@ -303,7 +257,9 @@ export function UserManagementPage({ token }: UserManagementPageProps) {
       </div>
 
       <div className="mb-8 w-full max-w-md">
-        <h2 className="text-xl font-semibold mb-4 text-center">Edit Existing User</h2>
+        <h2 className="text-xl font-semibold mb-4 text-center">
+          Edit Existing User
+        </h2>
         <Form {...form}>
           <div className="space-y-4 w-full">
             <FormField
@@ -311,7 +267,9 @@ export function UserManagementPage({ token }: UserManagementPageProps) {
               name="selectedUserForEdit"
               render={({ field }) => (
                 <FormItem>
-                  <FormLabel className="text-center">Select User to Edit</FormLabel>
+                  <FormLabel className="text-center">
+                    Select User to Edit
+                  </FormLabel>
                   <Select
                     onValueChange={(value: string) => {
                       field.onChange(value);
@@ -367,8 +325,12 @@ export function UserManagementPage({ token }: UserManagementPageProps) {
                   </FormItem>
                 )}
               />
-              {error && <p className="text-red-500 text-sm text-center">{error}</p>}
-              {success && <p className="text-green-500 text-sm text-center">{success}</p>}
+              {error && (
+                <p className="text-inventory-error-500 text-sm text-center">{error}</p>
+              )}
+              {success && (
+                <p className="text-inventory-success-500 text-sm text-center">{success}</p>
+              )}
               <Button type="submit" className="w-full mt-4">
                 Update User
               </Button>
@@ -394,7 +356,9 @@ export function UserManagementPage({ token }: UserManagementPageProps) {
               name="selectedUserForDelete"
               render={({ field }) => (
                 <FormItem>
-                  <FormLabel className="text-center">Select User to Delete</FormLabel>
+                  <FormLabel className="text-center">
+                    Select User to Delete
+                  </FormLabel>
                   <Select
                     onValueChange={field.onChange}
                     defaultValue={field.value}
@@ -416,9 +380,13 @@ export function UserManagementPage({ token }: UserManagementPageProps) {
                 </FormItem>
               )}
             />
-            {error && <p className="text-red-500 text-sm mt-2 text-center">{error}</p>}
+            {error && (
+              <p className="text-inventory-error-500 text-sm mt-2 text-center">{error}</p>
+            )}
             {success && (
-              <p className="text-green-500 text-sm mt-2 text-center">{success}</p>
+              <p className="text-inventory-success-500 text-sm mt-2 text-center">
+                {success}
+              </p>
             )}
             <Button
               variant="destructive"

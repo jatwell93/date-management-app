@@ -1,0 +1,343 @@
+import React, { useState, useEffect } from "react";
+import { useNavigate } from "react-router-dom";
+import { ExpiredItem } from "../types/inventory";
+import { getExpiredItems, processExpiredItem } from "../services/expiredItemService";
+import ExpiredLossReport from "../components/ExpiredLossReport";
+import { Button } from "../components/ui/button";
+import { 
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+  AlertDialogTrigger,
+} from "../components/ui/alert-dialog";
+import Toast from "../components/ui/toast";
+import {
+  Table,
+  TableBody,
+  TableCell,
+  TableHead,
+  TableHeader,
+  TableRow,
+} from "../components/ui/table";
+
+interface ExpiredItemsPageProps {
+  token: string | null;
+}
+
+const ExpiredItemsPage: React.FC<ExpiredItemsPageProps> = ({ token }) => {
+  const [expiredItems, setExpiredItems] = useState<ExpiredItem[]>([]);
+  const [loading, setLoading] = useState<boolean>(true);
+  const [error, setError] = useState<string | null>(null);
+  const [selectedItem, setSelectedItem] = useState<ExpiredItem | null>(null);
+  const [action, setAction] = useState<'sold_through' | 'expired' | null>(null);
+  const [unitsDiscarded, setUnitsDiscarded] = useState<number>(1);
+  const [isModalOpen, setIsModalOpen] = useState<boolean>(false);
+  const [processError, setProcessError] = useState<string | null>(null);
+  const [isConfirmDialogOpen, setIsConfirmDialogOpen] = useState(false);
+  const [toast, setToast] = useState<{ message: string; type: 'success' | 'error' | 'info' | 'warning' } | null>(null);
+  const [isToastVisible, setIsToastVisible] = useState(false);
+
+  const navigate = useNavigate();
+
+  useEffect(() => {
+    if (!token) {
+      // If no token is available, redirect to login
+      navigate('/login');
+      return;
+    }
+
+    const fetchExpiredItems = async () => {
+      try {
+        setLoading(true);
+        const data = await getExpiredItems(token);
+        setExpiredItems(data);
+      } catch (err) {
+        setError('Failed to fetch expired items');
+        console.error('Error fetching expired items:', err);
+      } finally {
+        setLoading(false);
+      }
+    };
+
+    fetchExpiredItems();
+  }, [token, navigate]);
+
+  const handleAction = (item: ExpiredItem, action: 'sold_through' | 'expired') => {
+    setSelectedItem(item);
+    setAction(action);
+    
+    // If action is 'expired', we need to enter units discarded
+    if (action === 'expired') {
+      setUnitsDiscarded(1); // Default to 1
+    } else {
+      setUnitsDiscarded(0);
+    }
+    
+    setIsModalOpen(true);
+  };
+
+  const showSuccessToast = (message: string) => {
+    setToast({ message, type: 'success' });
+    setIsToastVisible(true);
+    setTimeout(() => setIsToastVisible(false), 3000);
+  };
+
+  const showErrorToast = (message: string) => {
+    setToast({ message, type: 'error' });
+    setIsToastVisible(true);
+    setTimeout(() => setIsToastVisible(false), 3000);
+  };
+
+  const handleProcessItem = async () => {
+    if (!selectedItem || !action) return;
+
+    try {
+      setProcessError(null);
+      
+      let processUnitsDiscarded = action === 'expired' ? unitsDiscarded : 0;
+      
+      if (action === 'expired' && (!unitsDiscarded || unitsDiscarded <= 0)) {
+        setProcessError('Units discarded must be a positive number when marking as expired');
+        return;
+      }
+
+      // Show confirmation dialog before processing
+      setIsConfirmDialogOpen(true);
+    } catch (err) {
+      setProcessError('Failed to process expired item');
+      console.error('Error processing expired item:', err);
+    }
+  };
+
+  const confirmProcessItem = async () => {
+    if (!selectedItem || !action) return;
+
+    try {
+      setProcessError(null);
+      
+      let processUnitsDiscarded = action === 'expired' ? unitsDiscarded : 0;
+      
+      await processExpiredItem({
+        inventoryItemId: selectedItem.id,
+        action,
+        unitsDiscarded: processUnitsDiscarded
+      }, token);
+
+      // Refresh the expired items list after successful processing
+      const data = await getExpiredItems(token);
+      setExpiredItems(data);
+      
+      // Show success message
+      showSuccessToast(`Item marked as ${action} successfully!`);
+      
+      // Close both modals and reset state
+      setIsModalOpen(false);
+      setIsConfirmDialogOpen(false);
+      setSelectedItem(null);
+      setAction(null);
+    } catch (err) {
+      const errorMessage = 'Failed to process expired item';
+      setProcessError(errorMessage);
+      showErrorToast(errorMessage);
+      console.error('Error processing expired item:', err);
+    } finally {
+      setIsConfirmDialogOpen(false);
+    }
+  };
+
+  if (loading) {
+    return <div className="text-center py-10">Loading expired items...</div>;
+  }
+
+  if (error) {
+    return <div className="text-center py-10 text-red-500">{error}</div>;
+  }
+
+  return (
+    <div className="container mx-auto px-4 py-8">
+      <h1 className="text-3xl font-bold mb-6">Expired Items</h1>
+      
+      <Table>
+        <TableHeader>
+          <TableRow>
+            <TableHead className="text-left text-xs font-medium text-muted-foreground uppercase tracking-wider">SKU</TableHead>
+            <TableHead className="text-left text-xs font-medium text-muted-foreground uppercase tracking-wider">Product Name</TableHead>
+            <TableHead className="text-left text-xs font-medium text-muted-foreground uppercase tracking-wider">Location</TableHead>
+            <TableHead className="text-left text-xs font-medium text-muted-foreground uppercase tracking-wider">Expiry Date</TableHead>
+            <TableHead className="text-left text-xs font-medium text-muted-foreground uppercase tracking-wider">Cost Price</TableHead>
+            <TableHead className="text-left text-xs font-medium text-muted-foreground uppercase tracking-wider">Quantity Available</TableHead>
+            <TableHead className="text-left text-xs font-medium text-muted-foreground uppercase tracking-wider">Status</TableHead>
+            <TableHead className="text-left text-xs font-medium text-muted-foreground uppercase tracking-wider">Actions</TableHead>
+          </TableRow>
+        </TableHeader>
+        <TableBody>
+          {expiredItems.map((item) => (
+            <TableRow key={item.id} className="hover:bg-muted/50">
+              <TableCell className="whitespace-nowrap text-sm text-foreground">{item.sku}</TableCell>
+              <TableCell className="whitespace-nowrap text-sm font-medium text-foreground">{item.productName}</TableCell>
+              <TableCell className="whitespace-nowrap text-sm text-foreground">{item.locationName}</TableCell>
+              <TableCell className="whitespace-nowrap text-sm text-foreground">{item.expiryDate}</TableCell>
+              <TableCell className="whitespace-nowrap text-sm text-foreground">${item.costPrice.toFixed(2)}</TableCell>
+              <TableCell className="whitespace-nowrap text-sm text-foreground">{item.quantityAvailable}</TableCell>
+              <TableCell className="whitespace-nowrap text-sm text-foreground">{item.status}</TableCell>
+              <TableCell className="whitespace-nowrap text-sm">
+                <div className="flex space-x-2">
+                  <Button
+                    onClick={() => handleAction(item, 'sold_through')}
+                    variant="outline"
+                    size="sm"
+                  >
+                    Mark as Sold Through
+                  </Button>
+                  <Button
+                    onClick={() => handleAction(item, 'expired')}
+                    variant="outline"
+                    size="sm"
+                    className="text-destructive border-destructive hover:bg-destructive/10"
+                  >
+                    Mark as Expired
+                  </Button>
+                </div>
+              </TableCell>
+            </TableRow>
+          ))}
+        </TableBody>
+      </Table>
+
+      {expiredItems.length === 0 && (
+        <div className="text-center py-10 text-muted-foreground">
+          No expired items found.
+        </div>
+      )}
+
+      {/* Process Expired Item Dialog */}
+      {isModalOpen && selectedItem && action && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center">
+          <div className="fixed inset-0 bg-black/50 backdrop-blur-sm" onClick={() => {
+            setIsModalOpen(false);
+            setSelectedItem(null);
+            setAction(null);
+          }} />
+          <div className="relative z-10 bg-background rounded-lg shadow-lg w-11/12 max-w-md p-6">
+            <div className="flex justify-between items-center mb-4">
+              <h3 className="text-lg font-semibold text-foreground">
+                Process Expired Item
+              </h3>
+              <button
+                onClick={() => {
+                  setIsModalOpen(false);
+                  setSelectedItem(null);
+                  setAction(null);
+                }}
+                className="text-muted-foreground hover:text-foreground"
+              >
+                <span className="text-2xl">&times;</span>
+              </button>
+            </div>
+
+            <div className="mb-4 space-y-2">
+              <p className="text-sm">
+                <span className="font-semibold text-foreground">Product:</span> {selectedItem.productName}
+              </p>
+              <p className="text-sm">
+                <span className="font-semibold text-foreground">SKU:</span> {selectedItem.sku}
+              </p>
+              <p className="text-sm">
+                <span className="font-semibold text-foreground">Location:</span> {selectedItem.locationName}
+              </p>
+              <p className="text-sm">
+                <span className="font-semibold text-foreground">Expiry Date:</span> {selectedItem.expiryDate}
+              </p>
+            </div>
+
+            {action === 'expired' && (
+              <div className="mb-4">
+                <label className="block text-sm font-medium text-foreground mb-1">
+                  Units to Discard
+                </label>
+                <input
+                  type="number"
+                  min="1"
+                  max={selectedItem.quantityAvailable}
+                  value={unitsDiscarded}
+                  onChange={(e) => setUnitsDiscarded(parseInt(e.target.value) || 1)}
+                  className="w-full px-3 py-2 border border-input rounded-md focus:outline-none focus:ring-2 focus:ring-ring focus:border-transparent"
+                />
+                <p className="mt-1 text-xs text-muted-foreground">
+                  Maximum available: {selectedItem.quantityAvailable}
+                </p>
+              </div>
+            )}
+
+            {processError && (
+              <div className="mb-4 p-3 bg-destructive/10 text-destructive rounded-md">
+                {processError}
+              </div>
+            )}
+
+            <div className="mt-6 flex justify-end space-x-2">
+              <Button
+                variant="outline"
+                onClick={() => {
+                  setIsModalOpen(false);
+                  setSelectedItem(null);
+                  setAction(null);
+                }}
+              >
+                Cancel
+              </Button>
+              <Button
+                onClick={handleProcessItem}
+                className={action === 'expired' ? 'bg-destructive hover:bg-destructive/90' : ''}
+              >
+                Confirm {action === 'expired' ? 'Expired' : 'Sold Through'}
+              </Button>
+            </div>
+            
+            <AlertDialog open={isConfirmDialogOpen} onOpenChange={setIsConfirmDialogOpen}>
+              <AlertDialogContent>
+                <AlertDialogHeader>
+                  <AlertDialogTitle>Confirm Action</AlertDialogTitle>
+                  <AlertDialogDescription>
+                    Are you sure you want to mark this item as {action}? This action cannot be undone.
+                  </AlertDialogDescription>
+                </AlertDialogHeader>
+                <AlertDialogFooter>
+                  <AlertDialogCancel onClick={() => {
+                    setIsConfirmDialogOpen(false);
+                    setIsModalOpen(true); // Reopen the main modal if user cancels
+                  }}>Cancel</AlertDialogCancel>
+                  <AlertDialogAction onClick={confirmProcessItem}>
+                    Continue
+                  </AlertDialogAction>
+                </AlertDialogFooter>
+              </AlertDialogContent>
+            </AlertDialog>
+          </div>
+        </div>
+      )}
+
+      {/* Expired Losses Report Section */}
+      <div className="mt-12">
+        <ExpiredLossReport token={token} />
+      </div>
+      
+      {/* Toast Notification */}
+      {toast && (
+        <Toast 
+          message={toast.message} 
+          type={toast.type} 
+          isVisible={isToastVisible} 
+          onClose={() => setIsToastVisible(false)} 
+        />
+      )}
+    </div>
+  );
+};
+
+export default ExpiredItemsPage;

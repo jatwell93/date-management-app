@@ -13,6 +13,7 @@ import {
   TableHeader,
   TableRow,
 } from "../components/ui/table";
+import { apiService } from "../lib/api.service";
 
 interface UsageReportPageProps {
   token: string | null;
@@ -28,7 +29,9 @@ interface DailyUsageReportItem {
 }
 
 export function UsageReportPage({ token }: UsageReportPageProps) {
-  const [usageData, setUsageData] = useState<DailyUsageReportItem[] | null>(null);
+  const [usageData, setUsageData] = useState<DailyUsageReportItem[] | null>(
+    null,
+  );
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
@@ -41,20 +44,10 @@ export function UsageReportPage({ token }: UsageReportPageProps) {
       }
 
       try {
-        const response = await fetch("http://localhost:3001/reports/daily-usage", {
-          headers: {
-            Authorization: `Bearer ${token}`,
-          },
-        });
-
-        if (!response.ok) {
-          const errorData = await response.json();
-          throw new Error(
-            errorData.message || "Failed to load daily usage report data",
-          );
-        }
-
-        const data = await response.json();
+        const data = await apiService.get<DailyUsageReportItem[]>(
+          "/reports/daily-usage",
+          token,
+        );
         setUsageData(data);
       } catch (err: unknown) {
         if (err instanceof Error) {
@@ -90,7 +83,9 @@ export function UsageReportPage({ token }: UsageReportPageProps) {
     <div className="container mx-auto p-4">
       <Card>
         <CardHeader>
-          <CardTitle className="text-center">Daily User Activity Report (Last 90 Days)</CardTitle>
+          <CardTitle className="text-center">
+            Daily User Activity Report (Last 90 Days)
+          </CardTitle>
         </CardHeader>
         <CardContent>
           {usageData && usageData.length > 0 ? (
@@ -108,7 +103,9 @@ export function UsageReportPage({ token }: UsageReportPageProps) {
               <TableBody>
                 {usageData.map((row, index) => (
                   <TableRow key={index}>
-                    <TableCell>{new Date(row.date).toLocaleDateString()}</TableCell>
+                    <TableCell>
+                      {new Date(row.date).toLocaleDateString()}
+                    </TableCell>
                     <TableCell>{row.user_id}</TableCell>
                     <TableCell>{row.user_role}</TableCell>
                     <TableCell>{row.creations}</TableCell>

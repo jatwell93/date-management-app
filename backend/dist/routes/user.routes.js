@@ -3,6 +3,8 @@ Object.defineProperty(exports, "__esModule", { value: true });
 const express_1 = require("express");
 const user_service_1 = require("../services/user.service");
 const auth_middleware_1 = require("../middleware/auth.middleware");
+const validation_middleware_1 = require("../middleware/validation.middleware");
+const data_integrity_middleware_1 = require("../middleware/data-integrity.middleware");
 const router = (0, express_1.Router)();
 // GET /users - Get all users (Manager only)
 router.get("/", auth_middleware_1.authenticateToken, auth_middleware_1.requireManager, async (req, res) => {
@@ -31,7 +33,7 @@ router.get("/:id", auth_middleware_1.authenticateToken, auth_middleware_1.requir
     }
 });
 // POST /users - Create a new user (Manager only)
-router.post("/", auth_middleware_1.authenticateToken, auth_middleware_1.requireManager, async (req, res) => {
+router.post("/", auth_middleware_1.authenticateToken, auth_middleware_1.requireManager, validation_middleware_1.validateUserInput, validation_middleware_1.validateDataIntegrity, data_integrity_middleware_1.validateBusinessRules, async (req, res) => {
     try {
         const { pin, role } = req.body;
         if (!pin || !role) {
@@ -51,7 +53,7 @@ router.post("/", auth_middleware_1.authenticateToken, auth_middleware_1.requireM
     }
 });
 // PUT /users/:id - Update a user (Manager only)
-router.put("/:id", auth_middleware_1.authenticateToken, auth_middleware_1.requireManager, async (req, res) => {
+router.put("/:id", auth_middleware_1.authenticateToken, auth_middleware_1.requireManager, validation_middleware_1.validateUserInput, validation_middleware_1.validateDataIntegrity, data_integrity_middleware_1.validateBusinessRules, async (req, res) => {
     try {
         const id = parseInt(req.params.id);
         const { pin, role } = req.body;

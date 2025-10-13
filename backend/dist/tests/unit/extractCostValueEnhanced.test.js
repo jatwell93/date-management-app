@@ -57,8 +57,8 @@ describe("extractCostValueEnhanced function", () => {
         expect((0, product_service_1.extractCostValueEnhanced)("€ 1.234,56")).toBe(1234.56);
     });
     it("should handle values with parentheses (often used for negative values)", () => {
-        expect((0, product_service_1.extractCostValueEnhanced)("(12.34)")).toBe(12.34); // Extracting the positive value
-        expect((0, product_service_1.extractCostValueEnhanced)("$(12.34)")).toBe(12.34);
+        expect((0, product_service_1.extractCostValueEnhanced)("(12.34)")).toBe(-12.34);
+        expect((0, product_service_1.extractCostValueEnhanced)("$(12.34)")).toBe(-12.34);
     });
     it("should handle values with spaces and formatting", () => {
         expect((0, product_service_1.extractCostValueEnhanced)("  $ 12.34  ")).toBe(12.34);
@@ -76,15 +76,8 @@ describe("extractCostValueEnhanced function", () => {
         expect((0, product_service_1.extractCostValueEnhanced)("12.34.56.78")).toBe(123456.78); // Multiple thousands separators
     });
     it("should handle negative values", () => {
-        // The function extracts the numeric value but doesn't preserve the sign
-        expect((0, product_service_1.extractCostValueEnhanced)("(12.34)")).toBe(12.34); // Parentheses case is already tested
-        // Testing the actual function behavior for negative numbers
-        const result1 = (0, product_service_1.extractCostValueEnhanced)("-12.34");
-        expect(result1).not.toBeNaN();
-        expect(result1).toBe(12.34); // Function currently returns the absolute value
-        const result2 = (0, product_service_1.extractCostValueEnhanced)("$-12.34");
-        expect(result2).not.toBeNaN();
-        expect(result2).toBe(12.34); // Function currently returns the absolute value
+        expect((0, product_service_1.extractCostValueEnhanced)("-12.34")).toBe(-12.34);
+        expect((0, product_service_1.extractCostValueEnhanced)("$-12.34")).toBe(-12.34);
     });
     it("should handle complex currency representations", () => {
         expect((0, product_service_1.extractCostValueEnhanced)("AUD$ 1,234.56")).toBe(1234.56);

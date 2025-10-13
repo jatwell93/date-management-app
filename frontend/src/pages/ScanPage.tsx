@@ -19,6 +19,17 @@ import {
 import { offlineStorage } from "../lib/offline-storage";
 import { isWithinMarkdownPeriod, calculateMarkdownPrice } from "../lib/utils";
 import { apiService } from "../lib/api.service";
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+  AlertDialogTrigger,
+} from "../components/ui/alert-dialog";
 
 interface ScanPageProps {
   token: string | null;
@@ -58,13 +69,6 @@ interface RecentInventoryItem {
   updated_at: string;
 }
 
-interface MarkdownCalculation {
-  expiryDate: string;
-  daysToExpiry: number;
-  markdownPercentage: number;
-  markdownPrice: number;
-}
-
 export function ScanPage({ token }: ScanPageProps) {
   const [scannedBarcode, setScannedBarcode] = useState<string | null>(null);
   const [productDetails, setProductDetails] = useState<ProductDetails | null>(
@@ -81,8 +85,9 @@ export function ScanPage({ token }: ScanPageProps) {
   const [newProductSKU, setNewProductSKU] = useState<string>("");
   const [newProductCostPrice, setNewProductCostPrice] = useState<string>("");
   const [markdownPrice, setMarkdownPrice] = useState<number | null>(null);
-  const [markdownCalculations, setMarkdownCalculations] = useState<MarkdownCalculation[] | null>(null);
   const [recentEntries, setRecentEntries] = useState<RecentInventoryItem[] | null>(null);
+  const [isAlertDialogOpen, setAlertDialogOpen] = useState(false);
+  const [itemToDelete, setItemToDelete] = useState<number | null>(null);
 
   useEffect(() => {
     const fetchStoreAreas = async () => {
@@ -103,9 +108,15 @@ export function ScanPage({ token }: ScanPageProps) {
 
   useEffect(() => {
     if (productDetails && expiryDate) {
-      const isMarkdown = isWithinMarkdownPeriod(expiryDate, 3);
+      const expiry = new Date(expiryDate);
+      const today = new Date();
+      const daysToExpiry = Math.ceil(
+        (expiry.getTime() - today.getTime()) / (1000 * 60 * 60 * 24)
+      );
+
+      const isMarkdown = isWithinMarkdownPeriod(expiryDate, 90); // Check if within 90 days
       if (isMarkdown) {
-        setMarkdownPrice(calculateMarkdownPrice(productDetails.cost_price, 20)); // Assuming 20% markdown
+        setMarkdownPrice(calculateMarkdownPrice(productDetails.cost_price, daysToExpiry));
       } else {
         setMarkdownPrice(null);
       }
@@ -122,7 +133,6 @@ export function ScanPage({ token }: ScanPageProps) {
     setSuccessMessage(null);
     setShowNewProductForm(false);
     setMarkdownPrice(null);
-    setMarkdownCalculations(null);
 
     if (!token) {
       setError("Authentication token is missing.");
@@ -131,25 +141,19 @@ export function ScanPage({ token }: ScanPageProps) {
 
     try {
       let product: ProductDetails | null = null;
-      
-      // Check if input is likely a SKU (8 or fewer characters) or barcode (more than 8 characters)
+
       const isSkuSearch = input.length <= 8;
-      
+
       if (isSkuSearch) {
-        // Search by SKU first
         product = await apiService.get<ProductDetails>(`/products/by-sku/${input}`, token);
       } else {
-        // Search by barcode
         product = await apiService.get<ProductDetails>(`/products/by-barcode/${input}`, token);
       }
 
-      // If not found by the primary method, try the alternative
       if (!product) {
         if (isSkuSearch) {
-          // Try searching by barcode if SKU search failed
           product = await apiService.get<ProductDetails>(`/products/by-barcode/${input}`, token);
         } else {
-          // Try searching by SKU if barcode search failed
           product = await apiService.get<ProductDetails>(`/products/by-sku/${input}`, token);
         }
       }
@@ -161,63 +165,18 @@ export function ScanPage({ token }: ScanPageProps) {
 
       setProductDetails(product);
 
-      // Fetch inventory items for this product to check for markdown opportunities
       try {
-        // We can only fetch inventory by barcode, so we use the product's barcode
         const inventoryItems: InventoryItem[] = await apiService.get<InventoryItem[]>(`/inventory-items/by-barcode/${product.barcode}`, token);
-
-        // Calculate markdowns for each inventory item
-        const calculations: MarkdownCalculation[] = inventoryItems
-          .filter(item => {
-            // Only consider items that are within the markdown periods (next 3 months)
-            const expiryDate = new Date(item.expiry_date);
-            const today = new Date();
-            const daysToExpiry = Math.ceil(
-              (expiryDate.getTime() - today.getTime()) / (1000 * 60 * 60 * 24)
-            );
-            return daysToExpiry <= 90; // Within 3 months
-          })
-          .map(item => {
-            const expiryDate = new Date(item.expiry_date);
-            const today = new Date();
-            const daysToExpiry = Math.ceil(
-              (expiryDate.getTime() - today.getTime()) / (1000 * 60 * 60 * 24)
-            );
-
-            // Calculate markdown percentage based on days to expiry
-            let markdownPercentage = 0;
-            if (daysToExpiry <= 30) { // Within 1 month - 20% discount
-              markdownPercentage = -20;
-            } else if (daysToExpiry <= 60) { // Within 2 months - original price
-              markdownPercentage = 0;
-            } else if (daysToExpiry <= 90) { // Within 3 months - 20% markup
-              markdownPercentage = 20;
-            }
-
-            const markdownPrice = calculateMarkdownPrice(product!.cost_price, markdownPercentage);
-
-            return {
-              expiryDate: item.expiry_date,
-              daysToExpiry,
-              markdownPercentage,
-              markdownPrice,
-            };
-          });
-
-        setMarkdownCalculations(calculations);
       } catch (inventoryErr: unknown) {
         console.error("Error fetching inventory items:", inventoryErr);
-        // Don't set an error here as it's not critical for the scan operation
       }
 
-      // Fetch recent inventory entries for this product
       try {
         const recent: RecentInventoryItem[] = await apiService.get<RecentInventoryItem[]>(`/inventory-items/recent/product/${product.id}`, token);
         console.log("Fetched recent entries:", recent); // Debug log
         setRecentEntries(recent);
       } catch (recentErr: unknown) {
         console.error("Error fetching recent inventory entries:", recentErr);
-        // Don't set an error here as it's not critical for the scan operation
       }
     } catch (err: unknown) {
       if (err instanceof Error) {
@@ -274,14 +233,12 @@ export function ScanPage({ token }: ScanPageProps) {
       return;
     }
 
-    // Further validate that the parsed locationId is a valid number
     const parsedLocationId = parseInt(selectedLocationId);
     if (isNaN(parsedLocationId)) {
       setError("Please select a valid location.");
       return;
     }
 
-    // Get the selected store area to extract the subDepartment
     const selectedArea = storeAreas.find(area => area.id === parsedLocationId);
     const subDepartment = selectedArea?.subDepartment || null;
 
@@ -297,7 +254,6 @@ export function ScanPage({ token }: ScanPageProps) {
         const key = `pending-inventory-item-${Date.now()}`;
         await offlineStorage.setItem(key, inventoryItem);
         setSuccessMessage("Offline: Inventory item saved for synchronization.");
-        // Reset form
         setScannedBarcode(null);
         setProductDetails(null);
         setExpiryDate("");
@@ -317,14 +273,13 @@ export function ScanPage({ token }: ScanPageProps) {
     }
 
     try {
-      const response = await apiService.post('/inventory-items', {
+      await apiService.post('/inventory-items', {
         productId: productDetails.id,
         expiryDate: expiryDate,
         locationId: parsedLocationId,
       }, token);
 
       setSuccessMessage("Inventory item added successfully!");
-      // Reset form
       setScannedBarcode(null);
       setProductDetails(null);
       setExpiryDate("");
@@ -342,31 +297,36 @@ export function ScanPage({ token }: ScanPageProps) {
     }
   };
 
-  const handleDeleteRecentEntry = async (entryId: number) => {
-    if (!token) {
-      setError("Authentication token is missing.");
+  const handleDeleteRecentEntry = (entryId: number) => {
+    setItemToDelete(entryId);
+    setAlertDialogOpen(true);
+  };
+
+  const confirmDelete = async () => {
+    if (!token || itemToDelete === null) {
+      setError("Authentication token is missing or item to delete is not specified.");
+      setAlertDialogOpen(false);
       return;
     }
 
-    if (!window.confirm("Are you sure you want to delete this entry? This action cannot be undone.")) {
-      return; // If user cancels, do nothing
-    }
-
     try {
-      await apiService.delete(`/inventory-items/${entryId}`, token);
-      
-      // Update the recent entries list by removing the deleted entry
-      setRecentEntries(prevEntries => 
-        prevEntries ? prevEntries.filter(entry => entry.id !== entryId) : null
+      await apiService.delete(`/inventory-items/${itemToDelete}`, token);
+
+      setRecentEntries(prevEntries =>
+        prevEntries ? prevEntries.filter(entry => entry.id !== itemToDelete) : null
       );
-      
+
       setSuccessMessage("Inventory entry deleted successfully!");
+      setTimeout(() => setSuccessMessage(null), 3000);
     } catch (err: unknown) {
       if (err instanceof Error) {
         setError(err.message);
       } else {
         setError("An unknown error occurred while deleting the entry");
       }
+    } finally {
+      setAlertDialogOpen(false);
+      setItemToDelete(null);
     }
   };
 
@@ -377,16 +337,16 @@ export function ScanPage({ token }: ScanPageProps) {
           <CardTitle className="text-2xl font-bold text-center">Inventory Scan</CardTitle>
         </CardHeader>
         <CardContent className="p-6">
-          <Scanner onScan={handleBarcodeScan} markdownCalculations={markdownCalculations} />
+          <Scanner onScan={handleBarcodeScan} />
           {error && (
-            <p className="text-inventory-error-500 text-sm text-center mt-4">
-              Error: {error}
-            </p>
+            <div className="bg-inventory-error-50 border border-inventory-error-400 text-inventory-error-800 px-4 py-3 rounded relative text-center mt-4" role="alert">
+              <span className="block sm:inline">Error: {error}</span>
+            </div>
           )}
           {successMessage && (
-            <p className="text-inventory-success-500 text-sm text-center mt-4">
-              {successMessage}
-            </p>
+            <div className="bg-inventory-success-50 border border-inventory-success-400 text-inventory-success-800 px-4 py-3 rounded relative text-center mt-4" role="alert">
+              <span className="block sm:inline">{successMessage}</span>
+            </div>
           )}
           {scannedBarcode &&
             !productDetails &&
@@ -465,7 +425,7 @@ export function ScanPage({ token }: ScanPageProps) {
                   </p>
 
                   {markdownPrice !== null && (
-                    <p className="text-inventory-warning-500 font-semibold mt-1">
+                    <p className="text-yellow-500 font-semibold mt-1">
                       Markdown Price (20% off): ${markdownPrice.toFixed(2)}
                     </p>
                   )}
@@ -515,8 +475,8 @@ export function ScanPage({ token }: ScanPageProps) {
               <h3 className="font-semibold text-lg text-foreground mb-4">Recent Entries</h3>
               <div className="space-y-3">
                 {recentEntries.map((entry) => (
-                  <div 
-                    key={entry.id} 
+                  <div
+                    key={entry.id}
                     className="flex items-center justify-between p-3 bg-background border rounded-md"
                   >
                     <div>
@@ -527,13 +487,26 @@ export function ScanPage({ token }: ScanPageProps) {
                         Added: {new Date(entry.created_at).toLocaleString('en-AU', { timeZone: 'Australia/Sydney' })}
                       </p>
                     </div>
-                    <Button
-                      onClick={() => handleDeleteRecentEntry(entry.id)}
-                      variant="destructive"
-                      size="sm"
-                    >
-                      Delete
-                    </Button>
+                    <AlertDialog open={isAlertDialogOpen && itemToDelete === entry.id} onOpenChange={setAlertDialogOpen}>
+                      <AlertDialogTrigger asChild>
+                        <Button variant="destructive" size="sm" onClick={() => handleDeleteRecentEntry(entry.id)}>Delete</Button>
+                      </AlertDialogTrigger>
+                      <AlertDialogContent>
+                        <AlertDialogHeader>
+                          <AlertDialogTitle>Are you absolutely sure?</AlertDialogTitle>
+                          <AlertDialogDescription>
+                            This action cannot be undone. This will permanently delete the
+                            inventory entry.
+                          </AlertDialogDescription>
+                        </AlertDialogHeader>
+                        <AlertDialogFooter>
+                          <AlertDialogCancel>Cancel</AlertDialogCancel>
+                          <AlertDialogAction onClick={confirmDelete}>
+                            Continue
+                          </AlertDialogAction>
+                        </AlertDialogFooter>
+                      </AlertDialogContent>
+                    </AlertDialog>
                   </div>
                 ))}
               </div>

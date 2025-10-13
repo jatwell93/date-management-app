@@ -7,17 +7,21 @@ import {
   getUserByPin,
 } from "../../services/user.service";
 import { getDb } from "../../database";
+import { AuthService } from "../../services/auth.service";
 
 // Mock the database connection
-jest.mock("../../src/database", () => ({
+jest.mock("../../database", () => ({
   getDb: jest.fn(),
 }));
 
 describe("User Service", () => {
-  const mockDb = {
+  const mockStatement = {
     run: jest.fn(),
     all: jest.fn(),
     get: jest.fn(),
+  };
+  const mockDb = {
+    prepare: jest.fn(() => mockStatement),
   };
 
   beforeEach(() => {
@@ -27,18 +31,21 @@ describe("User Service", () => {
 
   describe("createUser", () => {
     it("should create a user successfully", async () => {
-      const mockUser = { pin: "1234", role: "Manager" as const };
-      const mockResult = { lastID: 1 };
-      mockDb.run.mockResolvedValue(mockResult);
+      const mockUser = { pin: "123456", role: "Manager" as const };
+      const mockResult = { lastInsertRowid: 1 };
+      mockStatement.run.mockReturnValue(mockResult);
+      const validatePinSpy = jest.spyOn(AuthService.prototype, 'validatePin').mockReturnValue({ isValid: true });
+      const hashPinSpy = jest.spyOn(AuthService.prototype, 'hashPin').mockResolvedValue("hashed_pin");
 
       const result = await createUser(mockUser);
 
-      expect(mockDb.run).toHaveBeenCalledWith(
-        "INSERT INTO users (pin, role) VALUES (?, ?)",
-        mockUser.pin,
-        mockUser.role,
+      expect(validatePinSpy).toHaveBeenCalledWith(mockUser.pin);
+      expect(hashPinSpy).toHaveBeenCalledWith(mockUser.pin);
+      expect(mockDb.prepare).toHaveBeenCalledWith(
+        "INSERT INTO users (pin, role) VALUES (?, ?)"
       );
-      expect(result).toEqual({ id: 1, ...mockUser });
+      expect(mockStatement.run).toHaveBeenCalledWith("hashed_pin", mockUser.role);
+      expect(result).toEqual({ id: 1, ...mockUser, pin: "hashed_pin" });
     });
   });
 
@@ -47,17 +54,18 @@ describe("User Service", () => {
       const mockUsers = [
         {
           id: 1,
-          pin: "1234",
+          pin: "hashed_pin",
           role: "Manager" as const,
           created_at: "2023-01-01",
           updated_at: "2023-01-01",
         },
       ];
-      mockDb.all.mockResolvedValue(mockUsers);
+      mockStatement.all.mockReturnValue(mockUsers);
 
       const result = await getUsers();
 
-      expect(mockDb.all).toHaveBeenCalledWith("SELECT * FROM users");
+      expect(mockDb.prepare).toHaveBeenCalledWith("SELECT * FROM users");
+      expect(mockStatement.all).toHaveBeenCalledWith();
       expect(result).toEqual(mockUsers);
     });
   });
@@ -66,84 +74,83 @@ describe("User Service", () => {
     it("should get a user by ID successfully", async () => {
       const mockUser = {
         id: 1,
-        pin: "1234",
+        pin: "hashed_pin",
         role: "Manager" as const,
         created_at: "2023-01-01",
         updated_at: "2023-01-01",
       };
-      mockDb.get.mockResolvedValue(mockUser);
+      mockStatement.get.mockReturnValue(mockUser);
 
       const result = await getUserById(1);
 
-      expect(mockDb.get).toHaveBeenCalledWith(
-        "SELECT * FROM users WHERE id = ?",
-        1,
+      expect(mockDb.prepare).toHaveBeenCalledWith(
+        "SELECT * FROM users WHERE id = ?"
       );
+      expect(mockStatement.get).toHaveBeenCalledWith(1);
       expect(result).toEqual(mockUser);
     });
 
     it("should return undefined when user is not found", async () => {
-      mockDb.get.mockResolvedValue(undefined);
+      mockStatement.get.mockReturnValue(undefined);
 
       const result = await getUserById(999);
 
-      expect(mockDb.get).toHaveBeenCalledWith(
-        "SELECT * FROM users WHERE id = ?",
-        999,
+      expect(mockDb.prepare).toHaveBeenCalledWith(
+        "SELECT * FROM users WHERE id = ?"
       );
+      expect(mockStatement.get).toHaveBeenCalledWith(999);
       expect(result).toBeUndefined();
     });
   });
 
   describe("getUserByPin", () => {
     it("should get a user by PIN successfully", async () => {
-      const mockUser = {
-        id: 1,
-        pin: "1234",
-        role: "Manager" as const,
-        created_at: "2023-01-01",
-        updated_at: "2023-01-01",
-      };
-      mockDb.get.mockResolvedValue(mockUser);
+      const mockUsers = [
+        {
+          id: 1,
+          pin: "hashed_pin",
+          role: "Manager" as const,
+          created_at: "2023-01-01",
+          updated_at: "2023-01-01",
+        },
+      ];
+      mockStatement.all.mockReturnValue(mockUsers);
+      const verifyPinSpy = jest.spyOn(AuthService.prototype, 'verifyPin').mockResolvedValue(true);
 
-      const result = await getUserByPin("1234");
+      const result = await getUserByPin("123456");
 
-      expect(mockDb.get).toHaveBeenCalledWith(
-        "SELECT * FROM users WHERE pin = ?",
-        "1234",
-      );
-      expect(result).toEqual(mockUser);
+      expect(mockDb.prepare).toHaveBeenCalledWith("SELECT * FROM users");
+      expect(mockStatement.all).toHaveBeenCalledWith();
+      expect(verifyPinSpy).toHaveBeenCalledWith("123456", "hashed_pin");
+      expect(result).toEqual(mockUsers[0]);
     });
 
     it("should return undefined when user is not found", async () => {
-      mockDb.get.mockResolvedValue(undefined);
+      mockStatement.all.mockReturnValue([]);
 
       const result = await getUserByPin("9999");
 
-      expect(mockDb.get).toHaveBeenCalledWith(
-        "SELECT * FROM users WHERE pin = ?",
-        "9999",
-      );
+      expect(mockDb.prepare).toHaveBeenCalledWith("SELECT * FROM users");
+      expect(mockStatement.all).toHaveBeenCalledWith();
       expect(result).toBeUndefined();
     });
   });
 
   describe("updateUser", () => {
     it("should update a user successfully", async () => {
-      mockDb.run.mockResolvedValue({ changes: 1 });
+      mockStatement.run.mockReturnValue({ changes: 1 });
 
       const result = await updateUser(1, { role: "Team Member" });
 
-      expect(mockDb.run).toHaveBeenCalledWith(
-        "UPDATE users SET role = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ?",
-        "Team Member",
-        1,
+      expect(mockDb.prepare).toHaveBeenCalledWith(
+        "UPDATE users SET role = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ?"
       );
+      expect(mockStatement.run).toHaveBeenCalledWith("Team Member", 1);
       expect(result).toBe(true);
     });
 
     it("should return false when user is not found", async () => {
-      mockDb.run.mockResolvedValue({ changes: 0 });
+      mockStatement.run.mockReturnValue({ changes: 0 });
 
       const result = await updateUser(999, { role: "Team Member" });
 
@@ -153,19 +160,19 @@ describe("User Service", () => {
 
   describe("deleteUser", () => {
     it("should delete a user successfully", async () => {
-      mockDb.run.mockResolvedValue({ changes: 1 });
+      mockStatement.run.mockReturnValue({ changes: 1 });
 
       const result = await deleteUser(1);
 
-      expect(mockDb.run).toHaveBeenCalledWith(
-        "DELETE FROM users WHERE id = ?",
-        1,
+      expect(mockDb.prepare).toHaveBeenCalledWith(
+        "DELETE FROM users WHERE id = ?"
       );
+      expect(mockStatement.run).toHaveBeenCalledWith(1);
       expect(result).toBe(true);
     });
 
     it("should return false when user is not found", async () => {
-      mockDb.run.mockResolvedValue({ changes: 0 });
+      mockStatement.run.mockReturnValue({ changes: 0 });
 
       const result = await deleteUser(999);
 

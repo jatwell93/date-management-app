@@ -10,6 +10,7 @@ import {
   FormLabel,
   FormMessage,
 } from "../components/ui/form";
+import { apiService } from "../lib/api.service";
 
 interface LoginPageProps {
   onLogin: (token: string) => void;
@@ -30,21 +31,10 @@ export function LoginPage({ onLogin }: LoginPageProps) {
     setError(null);
 
     try {
-      const response = await fetch("http://localhost:3001/auth/login", {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-        },
-        body: JSON.stringify({ pin: data.pin }),
+      const result = await apiService.post<{ token: string }>("/auth/login", {
+        pin: data.pin,
       });
-
-      if (!response.ok) {
-        const errorData = await response.json();
-        throw new Error(errorData.message || "Login failed");
-      }
-
-      const { token } = await response.json();
-      onLogin(token);
+      onLogin(result.token);
     } catch (err: unknown) {
       if (err instanceof Error) {
         setError(err.message);
@@ -78,7 +68,7 @@ export function LoginPage({ onLogin }: LoginPageProps) {
               )}
             />
             {error && (
-              <p className="text-red-500 text-sm text-center">{error}</p>
+              <p className="text-inventory-error-500 text-sm text-center">{error}</p>
             )}
             <Button type="submit" className="w-full">
               Login
