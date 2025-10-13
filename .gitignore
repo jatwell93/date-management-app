@@ -32,3 +32,4 @@ Thumbs.db
 .specify/
 .vscode/
 specs/
+node_modules/
