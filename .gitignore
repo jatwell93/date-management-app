@@ -11,6 +11,12 @@ dist/
 build/
 out/
 
+# Cache directories
+.cache/
+node_modules/.cache/
+frontend/node_modules/.cache/
+backend/node_modules/.cache/
+
 # Logs
 *.log
 npm-debug.log*
@@ -32,4 +38,4 @@ Thumbs.db
 .specify/
 .vscode/
 specs/
-node_modules/
+
