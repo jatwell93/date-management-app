@@ -45,10 +45,16 @@ export function DetailedExpiryReportPage({
   >(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
-  const [editingItem, setEditingItem] = useState<EditableInventoryItem | null>(null);
+  const [editingItem, setEditingItem] = useState<EditableInventoryItem | null>(
+    null,
+  );
   const [saving, setSaving] = useState(false);
-  const [deleteConfirmation, setDeleteConfirmation] = useState<number | null>(null); // inventoryId to confirm deletion
-  const [storeAreas, setStoreAreas] = useState<{ id: number; name: string }[]>([]);
+  const [deleteConfirmation, setDeleteConfirmation] = useState<number | null>(
+    null,
+  ); // inventoryId to confirm deletion
+  const [storeAreas, setStoreAreas] = useState<{ id: number; name: string }[]>(
+    [],
+  );
 
   // Define columns for the data table
   const columns: ColumnDef<DetailedExpiryReportItem>[] = [
@@ -59,18 +65,21 @@ export function DetailedExpiryReportPage({
       ),
       cell: ({ row }) => {
         // Check if this row is being edited
-        const isEditing = editingItem && editingItem.inventoryId === row.original.inventoryId;
-        
+        const isEditing =
+          editingItem && editingItem.inventoryId === row.original.inventoryId;
+
         if (isEditing) {
           return (
             <div className="min-w-[140px]">
               <Input
                 type="date"
                 value={editingItem.expiryDate}
-                onChange={(e) => setEditingItem({
-                  ...editingItem,
-                  expiryDate: e.target.value
-                })}
+                onChange={(e) =>
+                  setEditingItem({
+                    ...editingItem,
+                    expiryDate: e.target.value,
+                  })
+                }
                 className="w-full"
                 disabled={saving}
               />
@@ -81,11 +90,13 @@ export function DetailedExpiryReportPage({
           const expiryDate = new Date(row.original.expiryDate);
           const today = new Date();
           const daysToExpiry = Math.ceil(
-            (expiryDate.getTime() - today.getTime()) / (1000 * 60 * 60 * 24)
+            (expiryDate.getTime() - today.getTime()) / (1000 * 60 * 60 * 24),
           );
 
           return (
-            <div className={`min-w-[140px] ${daysToExpiry <= 0 ? "text-red-600 font-bold" : ""}`}>
+            <div
+              className={`min-w-[140px] ${daysToExpiry <= 0 ? "text-red-600 font-bold" : ""}`}
+            >
               {new Date(row.original.expiryDate).toLocaleDateString()}
               <div className="text-xs text-gray-500">
                 {daysToExpiry > 0 ? `${daysToExpiry} days left` : "Expired"}
@@ -101,7 +112,10 @@ export function DetailedExpiryReportPage({
         <DataTableColumnHeader column={column} title="Product Name" />
       ),
       cell: ({ row }) => (
-        <div className="font-medium min-w-[160px] max-w-[200px] truncate" title={row.original.productName}>
+        <div
+          className="font-medium min-w-[160px] max-w-[200px] truncate"
+          title={row.original.productName}
+        >
           {row.original.productName}
         </div>
       ),
@@ -112,7 +126,10 @@ export function DetailedExpiryReportPage({
         <DataTableColumnHeader column={column} title="SKU" />
       ),
       cell: ({ row }) => (
-        <div className="min-w-[100px] max-w-[140px] truncate" title={row.original.sku}>
+        <div
+          className="min-w-[100px] max-w-[140px] truncate"
+          title={row.original.sku}
+        >
           {row.original.sku}
         </div>
       ),
@@ -123,7 +140,9 @@ export function DetailedExpiryReportPage({
         <DataTableColumnHeader column={column} title="Cost Price" />
       ),
       cell: ({ row }) => (
-        <div className="min-w-[100px]">${row.original.costPrice.toFixed(2)}</div>
+        <div className="min-w-[100px]">
+          ${row.original.costPrice.toFixed(2)}
+        </div>
       ),
     },
     {
@@ -133,14 +152,16 @@ export function DetailedExpiryReportPage({
       ),
       cell: ({ row }) => {
         // Check if this row is being edited
-        const isEditing = editingItem && editingItem.inventoryId === row.original.inventoryId;
-        
+        const isEditing =
+          editingItem && editingItem.inventoryId === row.original.inventoryId;
+
         if (isEditing) {
           // Calculate days to expiry based on the editing date
           const editingExpiryDate = new Date(editingItem.expiryDate);
           const today = new Date();
           const editingDaysToExpiry = Math.ceil(
-            (editingExpiryDate.getTime() - today.getTime()) / (1000 * 60 * 60 * 24)
+            (editingExpiryDate.getTime() - today.getTime()) /
+              (1000 * 60 * 60 * 24),
           );
 
           return <div className="min-w-[100px]">{editingDaysToExpiry}</div>;
@@ -149,7 +170,7 @@ export function DetailedExpiryReportPage({
           const expiryDate = new Date(row.original.expiryDate);
           const today = new Date();
           const daysToExpiry = Math.ceil(
-            (expiryDate.getTime() - today.getTime()) / (1000 * 60 * 60 * 24)
+            (expiryDate.getTime() - today.getTime()) / (1000 * 60 * 60 * 24),
           );
 
           return <div className="min-w-[100px]">{daysToExpiry}</div>;
@@ -163,14 +184,16 @@ export function DetailedExpiryReportPage({
       ),
       cell: ({ row }) => {
         // Check if this row is being edited
-        const isEditing = editingItem && editingItem.inventoryId === row.original.inventoryId;
-        
+        const isEditing =
+          editingItem && editingItem.inventoryId === row.original.inventoryId;
+
         if (isEditing) {
           // Calculate days to expiry based on the editing date
           const editingExpiryDate = new Date(editingItem.expiryDate);
           const today = new Date();
           const editingDaysToExpiry = Math.ceil(
-            (editingExpiryDate.getTime() - today.getTime()) / (1000 * 60 * 60 * 24)
+            (editingExpiryDate.getTime() - today.getTime()) /
+              (1000 * 60 * 60 * 24),
           );
 
           // Determine markdown status based on editing days to expiry
@@ -185,13 +208,20 @@ export function DetailedExpiryReportPage({
             editingMarkdownStatus = "Markdown 1 (<90 & >60 days)";
           }
 
-          return <div className="min-w-[140px] max-w-[160px] truncate" title={editingMarkdownStatus}>{editingMarkdownStatus}</div>;
+          return (
+            <div
+              className="min-w-[140px] max-w-[160px] truncate"
+              title={editingMarkdownStatus}
+            >
+              {editingMarkdownStatus}
+            </div>
+          );
         } else {
           // Calculate days to expiry
           const expiryDate = new Date(row.original.expiryDate);
           const today = new Date();
           const daysToExpiry = Math.ceil(
-            (expiryDate.getTime() - today.getTime()) / (1000 * 60 * 60 * 24)
+            (expiryDate.getTime() - today.getTime()) / (1000 * 60 * 60 * 24),
           );
 
           // Determine markdown status based on days to expiry
@@ -206,7 +236,14 @@ export function DetailedExpiryReportPage({
             markdownStatus = "Markdown 1 (<90 & >60 days)";
           }
 
-          return <div className="min-w-[140px] max-w-[160px] truncate" title={markdownStatus}>{markdownStatus}</div>;
+          return (
+            <div
+              className="min-w-[140px] max-w-[160px] truncate"
+              title={markdownStatus}
+            >
+              {markdownStatus}
+            </div>
+          );
         }
       },
     },
@@ -217,32 +254,46 @@ export function DetailedExpiryReportPage({
       ),
       cell: ({ row }) => {
         // Check if this row is being edited
-        const isEditing = editingItem && editingItem.inventoryId === row.original.inventoryId;
-        
+        const isEditing =
+          editingItem && editingItem.inventoryId === row.original.inventoryId;
+
         if (isEditing) {
           // Calculate days to expiry based on the editing date
           const editingExpiryDate = new Date(editingItem.expiryDate);
           const today = new Date();
           const editingDaysToExpiry = Math.ceil(
-            (editingExpiryDate.getTime() - today.getTime()) / (1000 * 60 * 60 * 24)
+            (editingExpiryDate.getTime() - today.getTime()) /
+              (1000 * 60 * 60 * 24),
           );
 
           // Calculate markdown price based on editing days to expiry
-          const editingMarkdownPrice = calculateMarkdownPrice(row.original.costPrice, editingDaysToExpiry);
+          const editingMarkdownPrice = calculateMarkdownPrice(
+            row.original.costPrice,
+            editingDaysToExpiry,
+          );
 
-          return <div className="min-w-[100px]">${editingMarkdownPrice.toFixed(2)}</div>;
+          return (
+            <div className="min-w-[100px]">
+              ${editingMarkdownPrice.toFixed(2)}
+            </div>
+          );
         } else {
           // Calculate days to expiry
           const expiryDate = new Date(row.original.expiryDate);
           const today = new Date();
           const daysToExpiry = Math.ceil(
-            (expiryDate.getTime() - today.getTime()) / (1000 * 60 * 60 * 24)
+            (expiryDate.getTime() - today.getTime()) / (1000 * 60 * 60 * 24),
           );
 
           // Calculate markdown price based on days to expiry
-          const markdownPrice = calculateMarkdownPrice(row.original.costPrice, daysToExpiry);
+          const markdownPrice = calculateMarkdownPrice(
+            row.original.costPrice,
+            daysToExpiry,
+          );
 
-          return <div className="min-w-[100px]">${markdownPrice.toFixed(2)}</div>;
+          return (
+            <div className="min-w-[100px]">${markdownPrice.toFixed(2)}</div>
+          );
         }
       },
     },
@@ -253,21 +304,24 @@ export function DetailedExpiryReportPage({
       ),
       cell: ({ row }) => {
         // Check if this row is being edited
-        const isEditing = editingItem && editingItem.inventoryId === row.original.inventoryId;
-        
+        const isEditing =
+          editingItem && editingItem.inventoryId === row.original.inventoryId;
+
         if (isEditing) {
           return (
             <div className="min-w-[120px]">
               <select
                 value={editingItem.locationId}
-                onChange={(e) => setEditingItem({
-                  ...editingItem,
-                  locationId: parseInt(e.target.value)
-                })}
+                onChange={(e) =>
+                  setEditingItem({
+                    ...editingItem,
+                    locationId: parseInt(e.target.value),
+                  })
+                }
                 disabled={saving}
                 className="border rounded p-1 w-full"
               >
-                {storeAreas.map(area => (
+                {storeAreas.map((area) => (
                   <option key={area.id} value={area.id}>
                     {area.name}
                   </option>
@@ -276,7 +330,14 @@ export function DetailedExpiryReportPage({
             </div>
           );
         } else {
-          return <div className="min-w-[120px] max-w-[160px] truncate" title={row.original.locationName}>{row.original.locationName}</div>;
+          return (
+            <div
+              className="min-w-[120px] max-w-[160px] truncate"
+              title={row.original.locationName}
+            >
+              {row.original.locationName}
+            </div>
+          );
         }
       },
     },
@@ -286,7 +347,10 @@ export function DetailedExpiryReportPage({
         <DataTableColumnHeader column={column} title="Sub-Department" />
       ),
       cell: ({ row }) => (
-        <div className="min-w-[120px] max-w-[140px] truncate" title={row.original.subDepartment || "N/A"}>
+        <div
+          className="min-w-[120px] max-w-[140px] truncate"
+          title={row.original.subDepartment || "N/A"}
+        >
           {row.original.subDepartment || "N/A"}
         </div>
       ),
@@ -318,8 +382,9 @@ export function DetailedExpiryReportPage({
         }
 
         // Check if this row is being edited
-        const isEditing = editingItem && editingItem.inventoryId === row.original.inventoryId;
-        
+        const isEditing =
+          editingItem && editingItem.inventoryId === row.original.inventoryId;
+
         if (isEditing) {
           return (
             <div className="flex gap-2 justify-start min-w-[140px]">
@@ -404,7 +469,7 @@ export function DetailedExpiryReportPage({
       try {
         const data = await apiService.get<{ id: number; name: string }[]>(
           "/store-areas",
-          token
+          token,
         );
         setStoreAreas(data);
       } catch (err: unknown) {
@@ -458,15 +523,19 @@ export function DetailedExpiryReportPage({
 
     setSaving(true);
     try {
-      await apiService.put(`/inventory-items/${editingItem.inventoryId}`, {
-        expiryDate: editingItem.expiryDate,
-        locationId: editingItem.locationId,
-      }, token);
+      await apiService.put(
+        `/inventory-items/${editingItem.inventoryId}`,
+        {
+          expiryDate: editingItem.expiryDate,
+          locationId: editingItem.locationId,
+        },
+        token,
+      );
 
       // Refresh the report data
       const updatedData = await apiService.get<DetailedExpiryReportItem[]>(
         "/reports/expiry-details",
-        token
+        token,
       );
       setReportData(updatedData);
       setEditingItem(null);
@@ -497,7 +566,7 @@ export function DetailedExpiryReportPage({
       // Refresh the report data
       const updatedData = await apiService.get<DetailedExpiryReportItem[]>(
         "/reports/expiry-details",
-        token
+        token,
       );
       setReportData(updatedData);
       setDeleteConfirmation(null);
@@ -520,32 +589,39 @@ export function DetailedExpiryReportPage({
 
   return (
     <div className="container mx-auto p-4 overflow-x-auto">
-      <Card className="overflow-hidden">
-        <CardHeader>
-          <CardTitle className="text-center">
-            Detailed Expiry Report (Next 90 Days)
-          </CardTitle>
-        </CardHeader>
-        <CardContent>
-          {reportData && reportData.length > 0 ? (
-            <DataTable
-              columns={columns}
-              data={reportData}
-              filtering={true}
-              pagination={true}
-              sorting={true}
-            />
-          ) : (
-            <p className="text-center">
-              No expiry items found in the next 90 days.
-            </p>
-          )}
-          {/* Mobile notification */}
-          <div className="mt-6 p-3 bg-yellow-50 border border-yellow-200 rounded-lg text-center text-sm text-yellow-700 md:hidden">
-            <p><strong>Note:</strong> This report is best viewed on a desktop device. For better mobile experience, use the Scan Page or Markdown Calculator.</p>
-          </div>
-        </CardContent>
-      </Card>
+      <div className="overflow-x-auto">
+        {/* Original Table Section */}
+        <Card className="overflow-visible">
+          <CardHeader>
+            <CardTitle className="text-center">
+              Detailed Expiry Report (Next 90 Days)
+            </CardTitle>
+          </CardHeader>
+          <CardContent>
+            {reportData && reportData.length > 0 ? (
+              <DataTable
+                columns={columns}
+                data={reportData}
+                filtering={true}
+                pagination={true}
+                sorting={true}
+              />
+            ) : (
+              <p className="text-center">
+                No expiry items found in the next 90 days.
+              </p>
+            )}
+            {/* Mobile notification */}
+            <div className="mt-6 p-3 bg-yellow-50 border border-yellow-200 rounded-lg text-center text-sm text-yellow-700 md:hidden">
+              <p>
+                <strong>Note:</strong> This report is best viewed on a desktop
+                device. For better mobile experience, use the Scan Page or
+                Markdown Calculator.
+              </p>
+            </div>
+          </CardContent>
+        </Card>
+      </div>
     </div>
   );
 }

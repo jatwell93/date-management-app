@@ -178,7 +178,9 @@ export function UserManagementPage({ token }: UserManagementPageProps) {
           Current Users
         </h2>
         {error && (
-          <p className="text-inventory-error-500 text-sm mb-2 text-center">{error}</p>
+          <p className="text-inventory-error-500 text-sm mb-2 text-center">
+            {error}
+          </p>
         )}
         {users.length === 0 ? (
           <p className="text-center">No users found.</p>
@@ -244,10 +246,14 @@ export function UserManagementPage({ token }: UserManagementPageProps) {
               )}
             />
             {error && (
-              <p className="text-inventory-error-500 text-sm text-center">{error}</p>
+              <p className="text-inventory-error-500 text-sm text-center">
+                {error}
+              </p>
             )}
             {success && (
-              <p className="text-inventory-success-500 text-sm text-center">{success}</p>
+              <p className="text-inventory-success-500 text-sm text-center">
+                {success}
+              </p>
             )}
             <Button type="submit" className="w-full">
               Create User
@@ -326,10 +332,14 @@ export function UserManagementPage({ token }: UserManagementPageProps) {
                 )}
               />
               {error && (
-                <p className="text-inventory-error-500 text-sm text-center">{error}</p>
+                <p className="text-inventory-error-500 text-sm text-center">
+                  {error}
+                </p>
               )}
               {success && (
-                <p className="text-inventory-success-500 text-sm text-center">{success}</p>
+                <p className="text-inventory-success-500 text-sm text-center">
+                  {success}
+                </p>
               )}
               <Button type="submit" className="w-full mt-4">
                 Update User
@@ -381,7 +391,9 @@ export function UserManagementPage({ token }: UserManagementPageProps) {
               )}
             />
             {error && (
-              <p className="text-inventory-error-500 text-sm mt-2 text-center">{error}</p>
+              <p className="text-inventory-error-500 text-sm mt-2 text-center">
+                {error}
+              </p>
             )}
             {success && (
               <p className="text-inventory-success-500 text-sm mt-2 text-center">

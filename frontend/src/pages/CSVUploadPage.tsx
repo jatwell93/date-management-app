@@ -196,10 +196,19 @@ export const CSVUploadPage: React.FC<{ token: string | null }> = ({
           <ul className="list-disc pl-5 space-y-1 text-sm text-inventory-primary-700">
             <li>
               Required columns:{" "}
-              <code className="bg-inventory-primary-100 px-1 rounded">SKU</code>,{" "}
-              <code className="bg-inventory-primary-100 px-1 rounded">Name</code>,{" "}
-              <code className="bg-inventory-primary-100 px-1 rounded">Cost</code>,{" "}
-              <code className="bg-inventory-primary-100 px-1 rounded">Barcode</code>
+              <code className="bg-inventory-primary-100 px-1 rounded">SKU</code>
+              ,{" "}
+              <code className="bg-inventory-primary-100 px-1 rounded">
+                Name
+              </code>
+              ,{" "}
+              <code className="bg-inventory-primary-100 px-1 rounded">
+                Cost
+              </code>
+              ,{" "}
+              <code className="bg-inventory-primary-100 px-1 rounded">
+                Barcode
+              </code>
             </li>
             <li>
               Column names are case-insensitive and can include common

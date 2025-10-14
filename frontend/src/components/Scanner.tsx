@@ -56,7 +56,9 @@ export function Scanner({ onScan }: ScannerProps) {
       ) : (
         <div className="mb-4">
           <div className="flex justify-between items-center mb-2">
-            <h3 className="text-lg font-semibold text-foreground">Camera Scanner</h3>
+            <h3 className="text-lg font-semibold text-foreground">
+              Camera Scanner
+            </h3>
             <button
               type="button"
               onClick={() => setUseCamera(false)}
@@ -72,8 +74,6 @@ export function Scanner({ onScan }: ScannerProps) {
           />
         </div>
       )}
-
-
     </div>
   );
 }

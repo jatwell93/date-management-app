@@ -27,11 +27,11 @@ class ApiService {
     if (response.status === 401) {
       // Remove auth token from localStorage
       localStorage.removeItem("authToken");
-      
+
       // Redirect to login page by reloading the window
       // This will trigger the useEffect in App component to update isLoggedIn state
       window.location.href = "/login";
-      
+
       throw new Error("Authentication failed. You have been logged out.");
     }
 

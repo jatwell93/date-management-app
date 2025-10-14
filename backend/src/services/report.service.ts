@@ -35,6 +35,30 @@ interface DailyUsageReportItem {
   deletions: number;
 }
 
+interface LossBySkuReportItem {
+  sku: string;
+  productName: string;
+  totalLoss: number;
+  count: number;
+}
+
+interface LossByDepartmentReportItem {
+  department: string;
+  totalLoss: number;
+  count: number;
+}
+
+interface ItemsByUserReportItem {
+  userId: number;
+  userName: string;
+  itemCount: number;
+}
+
+interface ItemsByDateReportItem {
+  date: string; // YYYY-MM-DD
+  itemCount: number;
+}
+
 interface DashboardAnalytics {
   totalProducts: number;
   totalInventoryItems: number;
@@ -207,5 +231,90 @@ export class ReportService {
 
   async updateAllMarkdownStatuses(): Promise<void> {
     return SchedulerService.updateAllInventoryMarkdownStatuses();
+  }
+
+  async getLossBySkuReport(): Promise<LossBySkuReportItem[]> {
+    const db = await getDb();
+    
+    // Get total loss by SKU (for expired items)
+    const stmt = db.prepare(`
+      SELECT 
+        p.sku as sku,
+        p.name as productName,
+        SUM(p.cost_price) as totalLoss,
+        COUNT(*) as count
+      FROM inventory_items ii
+      JOIN products p ON ii.product_id = p.id
+      WHERE ii.status = 'Expired'
+      GROUP BY p.sku, p.name
+      ORDER BY totalLoss DESC
+      LIMIT 10
+    `);
+    return stmt.all() as LossBySkuReportItem[];
+  }
+
+  async getLossByDepartmentReport(): Promise<LossByDepartmentReportItem[]> {
+    const db = await getDb();
+    
+    // Get total loss by department (for expired items)
+    const stmt = db.prepare(`
+      SELECT 
+        sa.sub_department as department,
+        SUM(p.cost_price) as totalLoss,
+        COUNT(*) as count
+      FROM inventory_items ii
+      JOIN products p ON ii.product_id = p.id
+      JOIN store_areas sa ON ii.location_id = sa.id
+      WHERE ii.status = 'Expired' AND sa.sub_department IS NOT NULL
+      GROUP BY sa.sub_department
+      ORDER BY totalLoss DESC
+    `);
+    return stmt.all() as LossByDepartmentReportItem[];
+  }
+
+  async getItemsByUserReport(timeFrame?: string): Promise<ItemsByUserReportItem[]> {
+    const db = await getDb();
+    
+    let whereClause = "WHERE al.change_description LIKE '%created%'";
+    const params: any[] = [];
+
+    if (timeFrame && timeFrame !== 'all-time') {
+      whereClause += ` AND al.created_at >= date('now', '-' || ? || ' days')`;
+      params.push(timeFrame);
+    }
+
+    // Get items added by user (from audit logs)
+    const query = `
+      SELECT 
+        al.user_id as userId,
+        COALESCE(u.pin, 'Unknown') as userName,
+        COUNT(*) as itemCount
+      FROM audit_log al
+      LEFT JOIN users u ON al.user_id = u.id
+      ${whereClause}
+      GROUP BY al.user_id, u.pin
+      ORDER BY itemCount DESC
+      LIMIT 10
+    `;
+
+    const stmt = db.prepare(query);
+    return stmt.all(...params) as ItemsByUserReportItem[];
+  }
+
+  async getItemsByDateReport(): Promise<ItemsByDateReportItem[]> {
+    const db = await getDb();
+    
+    // Get items added by date (from audit logs)
+    const stmt = db.prepare(`
+      SELECT 
+        date(al.created_at) as date,
+        COUNT(*) as itemCount
+      FROM audit_log al
+      WHERE al.change_description LIKE '%created%'
+      GROUP BY date(al.created_at)
+      ORDER BY date DESC
+      LIMIT 30
+    `);
+    return stmt.all() as ItemsByDateReportItem[];
   }
 }

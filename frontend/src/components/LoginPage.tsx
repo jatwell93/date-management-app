@@ -68,7 +68,9 @@ export function LoginPage({ onLogin }: LoginPageProps) {
               )}
             />
             {error && (
-              <p className="text-inventory-error-500 text-sm text-center">{error}</p>
+              <p className="text-inventory-error-500 text-sm text-center">
+                {error}
+              </p>
             )}
             <Button type="submit" className="w-full">
               Login
