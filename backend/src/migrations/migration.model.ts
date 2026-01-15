@@ -1,4 +1,4 @@
-import Database from 'better-sqlite3';
+import { Database as DB } from 'better-sqlite3';
 import { envConfig } from '../config/environment';
 import { Logger } from '../utils/logger';
 
@@ -24,7 +24,7 @@ export class MigrationModel {
   /**
    * Create the migrations table if it doesn't exist
    */
-  public ensureMigrationsTable(db: Database): void {
+  public ensureMigrationsTable(db: DB): void {
     db.exec(`
       CREATE TABLE IF NOT EXISTS migrations (
         id INTEGER PRIMARY KEY,
@@ -38,7 +38,7 @@ export class MigrationModel {
   /**
    * Check if a migration with the given name has already been executed
    */
-  public hasMigrationExecuted(db: Database, migrationName: string): boolean {
+  public hasMigrationExecuted(db: DB, migrationName: string): boolean {
     const result = db.prepare('SELECT id FROM migrations WHERE name = ?').get(migrationName);
     return !!result;
   }
@@ -46,14 +46,14 @@ export class MigrationModel {
   /**
    * Get all executed migrations
    */
-  public getExecutedMigrations(db: Database): MigrationRecord[] {
+  public getExecutedMigrations(db: DB): MigrationRecord[] {
     return db.prepare('SELECT id, name, executed_at FROM migrations ORDER BY id').all() as MigrationRecord[];
   }
 
   /**
    * Mark a migration as executed
    */
-  public markMigrationExecuted(db: Database, id: number, name: string): void {
+  public markMigrationExecuted(db: DB, id: number, name: string): void {
     db.prepare('INSERT INTO migrations (id, name) VALUES (?, ?)').run(id, name);
     Logger.info(`Migration marked as executed: ${name} (ID: ${id})`);
   }
@@ -61,7 +61,7 @@ export class MigrationModel {
   /**
    * Remove a migration record (useful for rollback operations)
    */
-  public removeMigrationRecord(db: Database, migrationName: string): void {
+  public removeMigrationRecord(db: DB, migrationName: string): void {
     db.prepare('DELETE FROM migrations WHERE name = ?').run(migrationName);
     Logger.info(`Migration record removed: ${migrationName}`);
   }
