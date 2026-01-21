@@ -1,6 +1,9 @@
 import { Request, Response, NextFunction } from 'express';
 import validator from 'validator';
 
+// Constants for validation
+const TRANSACTION_TYPES = ['in', 'out', 'adjustment'] as const;
+
 // Validation middleware for product creation
 export const validateProductInput = (req: Request, res: Response, next: NextFunction) => {
   const { barcode, sku, name, cost_price } = req.body;
@@ -157,31 +160,34 @@ export const validateTransactionInput = (req: Request, res: Response, next: Next
     return res.status(400).json({ error: 'user_id must be a positive integer' });
   }
   
-  // Validate type (required, must be one of: 'in', 'out', 'adjustment')
+  // Validate type (required, must be one of the defined transaction types)
   if (!type) {
     return res.status(400).json({ error: 'type is required' });
   }
-  if (!['in', 'out', 'adjustment'].includes(type)) {
-    return res.status(400).json({ error: 'type must be one of: in, out, adjustment' });
+  if (!TRANSACTION_TYPES.includes(type)) {
+    return res.status(400).json({ error: `type must be one of: ${TRANSACTION_TYPES.join(', ')}` });
   }
   
-  // Validate quantity_change (required, must be a number)
+  // Validate quantity_change (required, must be a valid non-zero number)
   if (quantity_change === undefined || quantity_change === null) {
     return res.status(400).json({ error: 'quantity_change is required' });
   }
   if (typeof quantity_change !== 'number' || isNaN(quantity_change)) {
     return res.status(400).json({ error: 'quantity_change must be a valid number' });
   }
+  if (quantity_change === 0) {
+    return res.status(400).json({ error: 'quantity_change cannot be zero' });
+  }
   
-  // Validate notes (optional, but if provided, should not contain HTML tags and max 500 characters)
+  // Validate notes (optional, but if provided, sanitize it)
   if (notes !== undefined && notes !== null) {
     if (typeof notes !== 'string') {
       return res.status(400).json({ error: 'notes must be a string' });
     }
-    if (validator.contains(notes, '<') || validator.contains(notes, '>')) {
-      return res.status(400).json({ error: 'notes cannot contain HTML tags' });
-    }
-    if (notes.length > 500) {
+    // Escape HTML to prevent XSS attacks
+    req.body.notes = validator.escape(notes);
+    
+    if (req.body.notes.length > 500) {
       return res.status(400).json({ error: 'notes must not exceed 500 characters' });
     }
   }

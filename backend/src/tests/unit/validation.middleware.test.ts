@@ -420,7 +420,24 @@ describe('Validation Middleware', () => {
       expect(mockNext).not.toHaveBeenCalled();
     });
 
-    it('should return 400 for notes with HTML tags', () => {
+    it('should return 400 for quantity_change equal to zero', () => {
+      mockReq = {
+        body: {
+          inventory_item_id: 1,
+          user_id: 1,
+          type: 'in',
+          quantity_change: 0,
+        },
+      };
+
+      validateTransactionInput(mockReq as Request, mockRes as Response, mockNext);
+
+      expect(mockRes.status).toHaveBeenCalledWith(400);
+      expect(mockRes.json).toHaveBeenCalledWith({ error: 'quantity_change cannot be zero' });
+      expect(mockNext).not.toHaveBeenCalled();
+    });
+
+    it('should escape HTML in notes and call next()', () => {
       mockReq = {
         body: {
           inventory_item_id: 1,
@@ -433,9 +450,9 @@ describe('Validation Middleware', () => {
 
       validateTransactionInput(mockReq as Request, mockRes as Response, mockNext);
 
-      expect(mockRes.status).toHaveBeenCalledWith(400);
-      expect(mockRes.json).toHaveBeenCalledWith({ error: 'notes cannot contain HTML tags' });
-      expect(mockNext).not.toHaveBeenCalled();
+      expect(mockNext).toHaveBeenCalled();
+      expect(mockReq.body.notes).not.toContain('<script>');
+      expect(mockReq.body.notes).toContain('&lt;');
     });
 
     it('should return 400 for notes exceeding 500 characters', () => {
