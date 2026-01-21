@@ -7,6 +7,31 @@ import { releaseDb } from '../database';
  * This ensures data consistency and referential integrity beyond basic input validation
  */
 
+/**
+ * Helper function to validate that user_id and inventory_item_id exist in the database
+ * @param db - Database instance
+ * @param user_id - User ID to validate
+ * @param inventory_item_id - Inventory item ID to validate
+ * @returns Error message if validation fails, null otherwise
+ */
+function validateUserAndInventoryItemExistence(db: any, user_id: number | undefined, inventory_item_id: number | undefined): string | null {
+  if (user_id) {
+    const userExists = db.prepare('SELECT id FROM users WHERE id = ?').get(user_id);
+    if (!userExists) {
+      return 'Referenced user does not exist';
+    }
+  }
+  
+  if (inventory_item_id) {
+    const itemExists = db.prepare('SELECT id FROM inventory_items WHERE id = ?').get(inventory_item_id);
+    if (!itemExists) {
+      return 'Referenced inventory item does not exist';
+    }
+  }
+  
+  return null;
+}
+
 // Middleware to validate that referenced entities exist before creating records
 export const validateReferentialIntegrity = async (req: Request, res: Response, next: NextFunction) => {
   const db = getDb();
@@ -34,38 +59,18 @@ export const validateReferentialIntegrity = async (req: Request, res: Response, 
     // For audit logs, validate that user_id and inventory_item_id exist
     if (req.path.includes('/audit-log') && req.method === 'POST') {
       const { user_id, inventory_item_id } = req.body;
-      
-      if (user_id) {
-        const userExists = db.prepare('SELECT id FROM users WHERE id = ?').get(user_id);
-        if (!userExists) {
-          return res.status(400).json({ error: 'Referenced user does not exist' });
-        }
-      }
-      
-      if (inventory_item_id) {
-        const itemExists = db.prepare('SELECT id FROM inventory_items WHERE id = ?').get(inventory_item_id);
-        if (!itemExists) {
-          return res.status(400).json({ error: 'Referenced inventory item does not exist' });
-        }
+      const error = validateUserAndInventoryItemExistence(db, user_id, inventory_item_id);
+      if (error) {
+        return res.status(400).json({ error });
       }
     }
     
     // For transactions, validate that user_id and inventory_item_id exist
     if (req.path.includes('/transaction') && req.method === 'POST') {
       const { user_id, inventory_item_id } = req.body;
-      
-      if (user_id) {
-        const userExists = db.prepare('SELECT id FROM users WHERE id = ?').get(user_id);
-        if (!userExists) {
-          return res.status(400).json({ error: 'Referenced user does not exist' });
-        }
-      }
-      
-      if (inventory_item_id) {
-        const itemExists = db.prepare('SELECT id FROM inventory_items WHERE id = ?').get(inventory_item_id);
-        if (!itemExists) {
-          return res.status(400).json({ error: 'Referenced inventory item does not exist' });
-        }
+      const error = validateUserAndInventoryItemExistence(db, user_id, inventory_item_id);
+      if (error) {
+        return res.status(400).json({ error });
       }
     }
     

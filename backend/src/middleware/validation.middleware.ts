@@ -142,12 +142,12 @@ export const validateTransactionInput = (req: Request, res: Response, next: Next
   const { inventory_item_id, user_id, type, quantity_change, notes } = req.body;
   
   // Validate inventory_item_id (positive integer)
-  if (inventory_item_id !== undefined && (!validator.isInt(String(inventory_item_id), { min: 1 }) || parseInt(inventory_item_id) <= 0)) {
+  if (inventory_item_id !== undefined && !validator.isInt(String(inventory_item_id), { min: 1 })) {
     return res.status(400).json({ error: 'Inventory item ID must be a positive integer' });
   }
   
   // Validate user_id (positive integer)
-  if (user_id !== undefined && (!validator.isInt(String(user_id), { min: 1 }) || parseInt(user_id) <= 0)) {
+  if (user_id !== undefined && !validator.isInt(String(user_id), { min: 1 })) {
     return res.status(400).json({ error: 'User ID must be a positive integer' });
   }
   
