@@ -11,6 +11,10 @@ dist/
 build/
 out/
 
+# SQLite temporary files
+*.sqlite-shm
+*.sqlite-wal
+
 # Cache directories
 .cache/
 node_modules/.cache/
@@ -38,4 +42,5 @@ Thumbs.db
 .specify/
 .vscode/
 specs/
+.quint/
 
