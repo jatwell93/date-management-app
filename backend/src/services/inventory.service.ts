@@ -292,7 +292,7 @@ export class InventoryService {
       /**
        * Log an item transaction
        */
-      async logTransaction(transaction: Omit<ItemTransaction, "id" | "transactionDate">): Promise<number> {
+      async logTransaction(transaction: Omit<ItemTransaction, "id" | "transaction_date">): Promise<number> {
         const { inventory_item_id, user_id, type, quantity_change, notes } = transaction;
     
         const result = db.prepare(

@@ -16,6 +16,17 @@ router.get("/expiry", auth_middleware_1.authenticateToken, async (req, res) => {
         res.status(500).json({ message: "Internal server error" });
     }
 });
+// GET /reports/expiry-overall - Get overall expiry report with all time counts
+router.get("/expiry-overall", auth_middleware_1.authenticateToken, async (req, res) => {
+    try {
+        const report = await reportService.getOverallExpiryReport();
+        res.json(report);
+    }
+    catch (_error) {
+        // console.error("Get overall expiry report error:", _error);
+        res.status(500).json({ message: "Internal server error" });
+    }
+});
 // GET /reports/expiry-details - Get detailed expiry report for next 90 days
 router.get("/expiry-details", auth_middleware_1.authenticateToken, async (req, res) => {
     try {
@@ -35,6 +46,17 @@ router.get("/monthly-markdown", auth_middleware_1.authenticateToken, async (req,
     }
     catch (_error) {
         // console.error("Get monthly markdown report error:", _error);
+        res.status(500).json({ message: "Internal server error" });
+    }
+});
+// POST /reports/update-statuses - Manually update all inventory markdown statuses
+router.post("/update-statuses", auth_middleware_1.authenticateToken, async (req, res) => {
+    try {
+        await reportService.updateAllMarkdownStatuses();
+        res.json({ message: "All inventory markdown statuses updated successfully." });
+    }
+    catch (_error) {
+        // console.error("Update markdown statuses error:", _error);
         res.status(500).json({ message: "Internal server error" });
     }
 });
