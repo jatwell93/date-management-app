@@ -8,8 +8,8 @@ import { Logger } from '../utils/logger';
 export interface Migration {
   id: number;
   name: string;
-  up: (db: Database) => void;
-  down?: (db: Database) => void;
+  up: (db: Database.Database) => void;
+  down?: (db: Database.Database) => void;
 }
 
 export class MigrationService {
@@ -24,7 +24,7 @@ export class MigrationService {
    */
   public async runMigrations(): Promise<void> {
     const dbPath = envConfig.DATABASE_PATH || './database.sqlite';
-    const db = new Database(dbPath);
+    const db: Database.Database = new Database(dbPath);
 
     try {
       // Ensure the migrations table exists
@@ -81,7 +81,7 @@ export class MigrationService {
       {
         id: 1,
         name: '001-initial-schema',
-        up: (db: Database) => {
+        up: (db: DB) => {
           // Create tables if they don't exist
           db.exec(`
             CREATE TABLE IF NOT EXISTS products (
@@ -135,7 +135,7 @@ export class MigrationService {
             );
           `);
         },
-        down: (db: Database) => {
+        down: (db: DB) => {
           // Drop tables in reverse order to respect foreign key constraints
           db.exec(`
             DROP TABLE IF EXISTS audit_log;
@@ -150,7 +150,7 @@ export class MigrationService {
       {
         id: 2,
         name: '002-add-sub-department-column',
-        up: (db: Database) => {
+        up: (db: DB) => {
           // Check if the column already exists to avoid errors
           const tableInfo = db.prepare("PRAGMA table_info(store_areas)").all();
           const hasSubDepartmentColumn = tableInfo.some((column: any) => column.name === 'sub_department');
@@ -160,7 +160,7 @@ export class MigrationService {
             Logger.info("Added sub_department column to store_areas table");
           }
         },
-        down: (db: Database) => {
+        down: (db: DB) => {
           // Note: SQLite doesn't support dropping columns directly
           // We'd need to recreate the table which is complex
           // For now, we'll just log that this migration can't be reverted
@@ -171,7 +171,7 @@ export class MigrationService {
       {
         id: 3,
         name: '003-add-performance-indexes',
-        up: (db: Database) => {
+        up: (db: DB) => {
           db.exec(`
             CREATE INDEX IF NOT EXISTS idx_inventory_expiry ON inventory_items(expiry_date);
             CREATE INDEX IF NOT EXISTS idx_inventory_location ON inventory_items(location_id);
@@ -179,7 +179,7 @@ export class MigrationService {
             CREATE INDEX IF NOT EXISTS idx_products_barcode ON products(barcode);
           `);
         },
-        down: (db: Database) => {
+        down: (db: DB) => {
           db.exec(`
             DROP INDEX IF EXISTS idx_inventory_expiry;
             DROP INDEX IF EXISTS idx_inventory_location;
@@ -192,7 +192,7 @@ export class MigrationService {
       {
         id: 5,
         name: '005-add-additional-performance-indexes',
-        up: (db: Database) => {
+        up: (db: DB) => {
           db.exec(`
             -- Indexes for inventory_items that will help with expiry date queries (used for markdown calculations)
             CREATE INDEX IF NOT EXISTS idx_inventory_product_expiry ON inventory_items(product_id, expiry_date);
@@ -207,7 +207,7 @@ export class MigrationService {
             CREATE INDEX IF NOT EXISTS idx_products_name ON products(name);
           `);
         },
-        down: (db: Database) => {
+        down: (db: DB) => {
           db.exec(`
             DROP INDEX IF EXISTS idx_inventory_product_expiry;
             DROP INDEX IF EXISTS idx_inventory_status;
@@ -222,7 +222,7 @@ export class MigrationService {
       {
         id: 4,
         name: '004-add-default-data',
-        up: (db: Database) => {
+        up: (db: DB) => {
           // Insert default store area if none exist
           const storeAreaCount = db.prepare("SELECT COUNT(*) as count FROM store_areas").get() as { count: number };
           if (storeAreaCount.count === 0) {
@@ -235,7 +235,7 @@ export class MigrationService {
             db.exec("INSERT INTO products (barcode, sku, name, cost_price) VALUES ('123456789', 'DEFAULT001', 'Default Product', 0.0)");
           }
         },
-        down: (db: Database) => {
+        down: (db: DB) => {
           // We don't want to remove default data in down migrations
           Logger.info("Default data migration rollback skipped");
         }
@@ -244,7 +244,7 @@ export class MigrationService {
       {
         id: 6,
         name: '006-update-markdown-statuses',
-        up: (db: Database) => {
+        up: (db: DB) => {
           // Create an instance of the inventory service to use the updated calculation functions
           const { InventoryService } = require('../services/inventory.service');
           const inventoryService = new InventoryService();
@@ -299,7 +299,7 @@ export class MigrationService {
           
           Logger.info(`Updated markdown statuses for ${updatedCount} inventory items.`);
         },
-        down: (db: Database) => {
+        down: (db: DB) => {
           Logger.info("Rollback for update markdown statuses migration is not implemented.");
         }
       },
@@ -307,7 +307,7 @@ export class MigrationService {
       {
         id: 7,
         name: '007-add-expired-item-transactions-table',
-        up: (db: Database) => {
+        up: (db: DB) => {
           // Create the expired_item_transactions table
           db.exec(`
             CREATE TABLE IF NOT EXISTS expired_item_transactions (
@@ -331,7 +331,7 @@ export class MigrationService {
             CREATE INDEX IF NOT EXISTS idx_expired_item_transactions_transaction_date ON expired_item_transactions (transaction_date);
           `);
         },
-        down: (db: Database) => {
+        down: (db: DB) => {
           // Drop the expired_item_transactions table
           db.exec(`
             DROP TABLE IF EXISTS expired_item_transactions;
@@ -346,7 +346,7 @@ export class MigrationService {
    */
   public async getMigrationStatus(): Promise<{ pending: Migration[], executed: MigrationRecord[] }> {
     const dbPath = envConfig.DATABASE_PATH || './database.sqlite';
-    const db = new Database(dbPath);
+    const db: Database.Database = new Database(dbPath);
 
     try {
       this.migrationModel.ensureMigrationsTable(db);
@@ -370,7 +370,7 @@ export class MigrationService {
    */
   public async rollbackLastMigration(): Promise<void> {
     const dbPath = envConfig.DATABASE_PATH || './database.sqlite';
-    const db = new Database(dbPath);
+    const db: Database.Database = new Database(dbPath);
 
     try {
       this.migrationModel.ensureMigrationsTable(db);

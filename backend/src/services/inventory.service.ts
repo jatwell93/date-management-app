@@ -4,6 +4,7 @@ import { Product } from "../models/product.model";
 import { StoreArea } from "../models/store-area.model";
 import { User } from "../models/user.model";
 import { AuditLog } from "../models/audit-log.model";
+import { ItemTransaction } from "../models/item-transaction.model";
 import { ProductService } from "./product.service";
 import { StoreAreaService } from "./store-area.service";
 import { Logger } from "../utils/logger";
@@ -283,8 +284,22 @@ export class InventoryService {
     inventoryItemId: number,
     changeDescription: string,
   ) {
-    db.prepare(
-      "INSERT INTO audit_log (user_id, inventory_item_id, change_description) VALUES (?, ?, ?)",
-    ).run(userId, inventoryItemId, changeDescription);
-  }
-}
+        db.prepare(
+          "INSERT INTO audit_log (user_id, inventory_item_id, change_description) VALUES (?, ?, ?)",
+        ).run(userId, inventoryItemId, changeDescription);
+      }
+    
+      /**
+       * Log an item transaction
+       */
+      async logTransaction(transaction: Omit<ItemTransaction, "id" | "transactionDate">): Promise<number> {
+        const { inventory_item_id, user_id, type, quantity_change, notes } = transaction;
+    
+        const result = db.prepare(
+          "INSERT INTO item_transactions (inventory_item_id, user_id, type, quantity_change, notes) VALUES (?, ?, ?, ?, ?)"
+        ).run(inventory_item_id, user_id, type, quantity_change, notes);
+    
+        return result.lastInsertRowid as number;
+      }
+    }
+    
