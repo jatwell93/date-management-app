@@ -1,6 +1,5 @@
 
 import { db } from '../database';
-import { INTEGER, TEXT, REAL } from '../utils/sql-data-types';
 
 export interface ItemTransaction {
   id?: number;
