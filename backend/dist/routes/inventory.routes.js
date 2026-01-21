@@ -6,6 +6,7 @@ const product_service_1 = require("../services/product.service");
 const auth_middleware_1 = require("../middleware/auth.middleware");
 const validation_middleware_1 = require("../middleware/validation.middleware");
 const data_integrity_middleware_1 = require("../middleware/data-integrity.middleware");
+const inventory_controller_1 = require("../controllers/inventory.controller");
 const router = (0, express_1.Router)();
 const inventoryService = new inventory_service_1.InventoryService();
 // GET /inventory-items - Get all inventory items
@@ -176,4 +177,6 @@ router.delete("/:id", auth_middleware_1.authenticateToken, async (req, res) => {
         res.status(500).json({ message: "Internal server error" });
     }
 });
+// POST /inventory-items/transaction - Log a new transaction
+router.post("/transaction", auth_middleware_1.authenticateToken, validation_middleware_1.validateTransactionInput, inventory_controller_1.logTransaction);
 exports.default = router;

@@ -3,7 +3,7 @@ import { InventoryService } from "../services/inventory.service";
 import { ProductService } from "../services/product.service";
 import { InventoryItem } from "../models/inventory-item.model";
 import { authenticateToken, AuthRequest } from "../middleware/auth.middleware";
-import { validateInventoryItemInput } from "../middleware/validation.middleware";
+import { validateInventoryItemInput, validateTransactionInput } from "../middleware/validation.middleware";
 import { validateReferentialIntegrity, validateDataConsistency, validateBusinessRules } from "../middleware/data-integrity.middleware";
 import { logTransaction } from "../controllers/inventory.controller";
 
@@ -217,6 +217,6 @@ router.delete(
 );
 
 // POST /inventory-items/transaction - Log a new transaction
-router.post("/transaction", authenticateToken, logTransaction);
+router.post("/transaction", authenticateToken, validateTransactionInput, logTransaction);
 
 export default router;

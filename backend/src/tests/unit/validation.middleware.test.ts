@@ -1,5 +1,5 @@
 import { Request, Response, NextFunction } from 'express';
-import { validateProductInput, validateInventoryItemInput, validateUserInput, validateStoreAreaInput } from '../../middleware/validation.middleware';
+import { validateProductInput, validateInventoryItemInput, validateUserInput, validateStoreAreaInput, validateTransactionInput } from '../../middleware/validation.middleware';
 
 describe('Validation Middleware', () => {
   let mockReq: Partial<Request>;
@@ -250,6 +250,227 @@ describe('Validation Middleware', () => {
 
       expect(mockRes.status).toHaveBeenCalledWith(400);
       expect(mockRes.json).toHaveBeenCalledWith({ error: 'Invalid store area name format' });
+      expect(mockNext).not.toHaveBeenCalled();
+    });
+  });
+
+  describe('validateTransactionInput', () => {
+    it('should call next() for valid transaction data', () => {
+      mockReq = {
+        body: {
+          inventory_item_id: 1,
+          user_id: 1,
+          type: 'in',
+          quantity_change: 10,
+        },
+      };
+
+      validateTransactionInput(mockReq as Request, mockRes as Response, mockNext);
+
+      expect(mockNext).toHaveBeenCalled();
+      expect(mockRes.status).not.toHaveBeenCalled();
+    });
+
+    it('should call next() for valid transaction data with notes', () => {
+      mockReq = {
+        body: {
+          inventory_item_id: 1,
+          user_id: 1,
+          type: 'out',
+          quantity_change: 5,
+          notes: 'Test transaction notes',
+        },
+      };
+
+      validateTransactionInput(mockReq as Request, mockRes as Response, mockNext);
+
+      expect(mockNext).toHaveBeenCalled();
+      expect(mockRes.status).not.toHaveBeenCalled();
+    });
+
+    it('should return 400 for missing inventory_item_id', () => {
+      mockReq = {
+        body: {
+          user_id: 1,
+          type: 'in',
+          quantity_change: 10,
+        },
+      };
+
+      validateTransactionInput(mockReq as Request, mockRes as Response, mockNext);
+
+      expect(mockRes.status).toHaveBeenCalledWith(400);
+      expect(mockRes.json).toHaveBeenCalledWith({ error: 'inventory_item_id is required' });
+      expect(mockNext).not.toHaveBeenCalled();
+    });
+
+    it('should return 400 for invalid inventory_item_id', () => {
+      mockReq = {
+        body: {
+          inventory_item_id: 0, // Must be positive
+          user_id: 1,
+          type: 'in',
+          quantity_change: 10,
+        },
+      };
+
+      validateTransactionInput(mockReq as Request, mockRes as Response, mockNext);
+
+      expect(mockRes.status).toHaveBeenCalledWith(400);
+      expect(mockRes.json).toHaveBeenCalledWith({ error: 'inventory_item_id must be a positive integer' });
+      expect(mockNext).not.toHaveBeenCalled();
+    });
+
+    it('should return 400 for missing user_id', () => {
+      mockReq = {
+        body: {
+          inventory_item_id: 1,
+          type: 'in',
+          quantity_change: 10,
+        },
+      };
+
+      validateTransactionInput(mockReq as Request, mockRes as Response, mockNext);
+
+      expect(mockRes.status).toHaveBeenCalledWith(400);
+      expect(mockRes.json).toHaveBeenCalledWith({ error: 'user_id is required' });
+      expect(mockNext).not.toHaveBeenCalled();
+    });
+
+    it('should return 400 for invalid user_id', () => {
+      mockReq = {
+        body: {
+          inventory_item_id: 1,
+          user_id: -1, // Must be positive
+          type: 'in',
+          quantity_change: 10,
+        },
+      };
+
+      validateTransactionInput(mockReq as Request, mockRes as Response, mockNext);
+
+      expect(mockRes.status).toHaveBeenCalledWith(400);
+      expect(mockRes.json).toHaveBeenCalledWith({ error: 'user_id must be a positive integer' });
+      expect(mockNext).not.toHaveBeenCalled();
+    });
+
+    it('should return 400 for missing type', () => {
+      mockReq = {
+        body: {
+          inventory_item_id: 1,
+          user_id: 1,
+          quantity_change: 10,
+        },
+      };
+
+      validateTransactionInput(mockReq as Request, mockRes as Response, mockNext);
+
+      expect(mockRes.status).toHaveBeenCalledWith(400);
+      expect(mockRes.json).toHaveBeenCalledWith({ error: 'type is required' });
+      expect(mockNext).not.toHaveBeenCalled();
+    });
+
+    it('should return 400 for invalid type', () => {
+      mockReq = {
+        body: {
+          inventory_item_id: 1,
+          user_id: 1,
+          type: 'invalid', // Must be 'in', 'out', or 'adjustment'
+          quantity_change: 10,
+        },
+      };
+
+      validateTransactionInput(mockReq as Request, mockRes as Response, mockNext);
+
+      expect(mockRes.status).toHaveBeenCalledWith(400);
+      expect(mockRes.json).toHaveBeenCalledWith({ error: 'type must be one of: in, out, adjustment' });
+      expect(mockNext).not.toHaveBeenCalled();
+    });
+
+    it('should return 400 for missing quantity_change', () => {
+      mockReq = {
+        body: {
+          inventory_item_id: 1,
+          user_id: 1,
+          type: 'in',
+        },
+      };
+
+      validateTransactionInput(mockReq as Request, mockRes as Response, mockNext);
+
+      expect(mockRes.status).toHaveBeenCalledWith(400);
+      expect(mockRes.json).toHaveBeenCalledWith({ error: 'quantity_change is required' });
+      expect(mockNext).not.toHaveBeenCalled();
+    });
+
+    it('should return 400 for invalid quantity_change (not a number)', () => {
+      mockReq = {
+        body: {
+          inventory_item_id: 1,
+          user_id: 1,
+          type: 'in',
+          quantity_change: 'not a number',
+        },
+      };
+
+      validateTransactionInput(mockReq as Request, mockRes as Response, mockNext);
+
+      expect(mockRes.status).toHaveBeenCalledWith(400);
+      expect(mockRes.json).toHaveBeenCalledWith({ error: 'quantity_change must be a valid number' });
+      expect(mockNext).not.toHaveBeenCalled();
+    });
+
+    it('should return 400 for notes with HTML tags', () => {
+      mockReq = {
+        body: {
+          inventory_item_id: 1,
+          user_id: 1,
+          type: 'in',
+          quantity_change: 10,
+          notes: 'Test <script>alert("xss")</script>',
+        },
+      };
+
+      validateTransactionInput(mockReq as Request, mockRes as Response, mockNext);
+
+      expect(mockRes.status).toHaveBeenCalledWith(400);
+      expect(mockRes.json).toHaveBeenCalledWith({ error: 'notes cannot contain HTML tags' });
+      expect(mockNext).not.toHaveBeenCalled();
+    });
+
+    it('should return 400 for notes exceeding 500 characters', () => {
+      mockReq = {
+        body: {
+          inventory_item_id: 1,
+          user_id: 1,
+          type: 'in',
+          quantity_change: 10,
+          notes: 'a'.repeat(501), // 501 characters
+        },
+      };
+
+      validateTransactionInput(mockReq as Request, mockRes as Response, mockNext);
+
+      expect(mockRes.status).toHaveBeenCalledWith(400);
+      expect(mockRes.json).toHaveBeenCalledWith({ error: 'notes must not exceed 500 characters' });
+      expect(mockNext).not.toHaveBeenCalled();
+    });
+
+    it('should return 400 for invalid notes type', () => {
+      mockReq = {
+        body: {
+          inventory_item_id: 1,
+          user_id: 1,
+          type: 'in',
+          quantity_change: 10,
+          notes: 123, // Should be string
+        },
+      };
+
+      validateTransactionInput(mockReq as Request, mockRes as Response, mockNext);
+
+      expect(mockRes.status).toHaveBeenCalledWith(400);
+      expect(mockRes.json).toHaveBeenCalledWith({ error: 'notes must be a string' });
       expect(mockNext).not.toHaveBeenCalled();
     });
   });
