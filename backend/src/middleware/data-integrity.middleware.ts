@@ -50,6 +50,25 @@ export const validateReferentialIntegrity = async (req: Request, res: Response, 
       }
     }
     
+    // For transactions, validate that user_id and inventory_item_id exist
+    if (req.path.includes('/transaction') && req.method === 'POST') {
+      const { user_id, inventory_item_id } = req.body;
+      
+      if (user_id) {
+        const userExists = db.prepare('SELECT id FROM users WHERE id = ?').get(user_id);
+        if (!userExists) {
+          return res.status(400).json({ error: 'Referenced user does not exist' });
+        }
+      }
+      
+      if (inventory_item_id) {
+        const itemExists = db.prepare('SELECT id FROM inventory_items WHERE id = ?').get(inventory_item_id);
+        if (!itemExists) {
+          return res.status(400).json({ error: 'Referenced inventory item does not exist' });
+        }
+      }
+    }
+    
     next();
   } catch (error) {
     res.status(500).json({ error: 'Database validation failed' });
@@ -119,6 +138,17 @@ export const validateBusinessRules = (req: Request, res: Response, next: NextFun
     if (cost_price !== undefined && parseFloat(cost_price) < 0) {
       return res.status(400).json({ 
         error: 'Product cost price cannot be negative' 
+      });
+    }
+  }
+  
+  // Transaction quantity change should be reasonable (not exceeding 10000 in absolute value)
+  if (req.path.includes('/transaction') && req.method === 'POST') {
+    const { quantity_change } = req.body;
+    
+    if (quantity_change !== undefined && Math.abs(parseFloat(quantity_change)) > 10000) {
+      return res.status(400).json({ 
+        error: 'Transaction quantity change exceeds reasonable limits. Please verify the value.' 
       });
     }
   }

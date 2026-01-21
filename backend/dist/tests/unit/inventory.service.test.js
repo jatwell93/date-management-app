@@ -29,8 +29,8 @@ describe("InventoryService", () => {
             status: "Normal",
         };
         mockDb.prepare.mockReturnValue(mockStatement);
-        mockStatement.run.mockReturnValue({ lastID: 1 });
-        const createdItem = await inventoryService.createInventoryItem(newItemData);
+        mockStatement.run.mockReturnValue({ lastInsertRowid: 1 });
+        const createdItem = await inventoryService.createInventoryItem(newItemData, 1);
         expect(createdItem).toEqual(expect.objectContaining({
             id: 1,
             ...newItemData,
@@ -42,19 +42,22 @@ describe("InventoryService", () => {
     it("should update an inventory item status", async () => {
         mockDb.prepare.mockReturnValue(mockStatement);
         mockStatement.run.mockReturnValue({ changes: 1 });
-        const success = await inventoryService.updateInventoryItemStatus(1, "Markdown 1");
-        expect(success).toBe(true);
-        expect(database_1.getDb).toHaveBeenCalledTimes(1);
-        expect(mockDb.prepare).toHaveBeenCalledWith("UPDATE inventory_items SET status = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ?");
+        mockStatement.get.mockReturnValue({ id: 1, status: 'Markdown 1' });
+        const updatedItem = await inventoryService.updateInventoryItem(1, { status: "Markdown 1" }, 1);
+        expect(updatedItem).not.toBeNull();
+        expect(updatedItem?.status).toBe("Markdown 1");
+        expect(database_1.getDb).toHaveBeenCalledTimes(2);
+        expect(mockDb.prepare).toHaveBeenCalledWith(`UPDATE inventory_items SET status = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ?`);
         expect(mockStatement.run).toHaveBeenCalledWith("Markdown 1", 1);
     });
-    it("should return false if no item was updated", async () => {
+    it("should return null if no item was updated", async () => {
         mockDb.prepare.mockReturnValue(mockStatement);
         mockStatement.run.mockReturnValue({ changes: 0 });
-        const success = await inventoryService.updateInventoryItemStatus(999, "Expired");
-        expect(success).toBe(false);
-        expect(database_1.getDb).toHaveBeenCalledTimes(1);
-        expect(mockDb.prepare).toHaveBeenCalledWith("UPDATE inventory_items SET status = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ?");
+        mockStatement.get.mockReturnValue(null);
+        const updatedItem = await inventoryService.updateInventoryItem(999, { status: "Expired" }, 1);
+        expect(updatedItem).toBeNull();
+        expect(database_1.getDb).toHaveBeenCalledTimes(2);
+        expect(mockDb.prepare).toHaveBeenCalledWith(`UPDATE inventory_items SET status = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ?`);
         expect(mockStatement.run).toHaveBeenCalledWith("Expired", 999);
     });
     describe("calculateMarkdownStatusSync", () => {

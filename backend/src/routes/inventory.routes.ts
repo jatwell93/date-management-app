@@ -5,6 +5,7 @@ import { InventoryItem } from "../models/inventory-item.model";
 import { authenticateToken, AuthRequest } from "../middleware/auth.middleware";
 import { validateInventoryItemInput } from "../middleware/validation.middleware";
 import { validateReferentialIntegrity, validateDataConsistency, validateBusinessRules } from "../middleware/data-integrity.middleware";
+import { validateTransactionInput } from "../middleware/validation.middleware";
 import { logTransaction } from "../controllers/inventory.controller";
 
 const router = Router();
@@ -217,6 +218,6 @@ router.delete(
 );
 
 // POST /inventory-items/transaction - Log a new transaction
-router.post("/transaction", authenticateToken, logTransaction);
+router.post("/transaction", authenticateToken, validateTransactionInput, validateReferentialIntegrity, validateBusinessRules, logTransaction);
 
 export default router;

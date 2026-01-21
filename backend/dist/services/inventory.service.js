@@ -82,7 +82,18 @@ class InventoryService {
         // Build the update query dynamically
         const fields = Object.keys(updates);
         const values = Object.values(updates);
-        const setClause = fields.map((field) => `${field} = ?`).join(", ");
+        const setClause = fields.map((field) => {
+            let col = field;
+            if (field === 'productId')
+                col = 'product_id';
+            else if (field === 'expiryDate')
+                col = 'expiry_date';
+            else if (field === 'locationId')
+                col = 'location_id';
+            else
+                col = field;
+            return `${col} = ?`;
+        }).join(", ");
         if (fields.length === 0) {
             return existingItem; // No updates to perform
         }
@@ -90,7 +101,7 @@ class InventoryService {
         if (updates.expiryDate) {
             updates.status = await this.calculateMarkdownStatus(updates.expiryDate);
         }
-        const stmt = db.prepare(`UPDATE inventory_items SET ${setClause}, updatedAt = CURRENT_TIMESTAMP WHERE id = ?`);
+        const stmt = db.prepare(`UPDATE inventory_items SET ${setClause}, updated_at = CURRENT_TIMESTAMP WHERE id = ?`);
         stmt.run(...values, id);
         // Create audit log entry
         const changeDescription = `Inventory item updated: ${JSON.stringify(updates)}`;
@@ -101,15 +112,16 @@ class InventoryService {
      * Delete an inventory item
      */
     async deleteInventoryItem(id, userId) {
-        const result = db.prepare("DELETE FROM inventory_items WHERE id = ?").run(id);
-        if (result.changes > 0) {
-            // Create audit log entry
-            const changeDescription = `Inventory item with ID ${id} deleted.`;
-            // We can't link to a deleted item, so we pass a placeholder ID
-            this.createAuditLog(userId, -1, changeDescription);
-            return true;
+        // Get the item before deleting to use in audit log
+        const item = await this.getInventoryItemById(id);
+        if (!item) {
+            return false; // Item doesn't exist
         }
-        return false;
+        // Create audit log entry before deleting the item
+        const changeDescription = `Inventory item with ID ${id} deleted.`;
+        this.createAuditLog(userId, id, changeDescription);
+        const result = db.prepare("DELETE FROM inventory_items WHERE id = ?").run(id);
+        return result.changes > 0;
     }
     /**
      * Synchronous version of calculateMarkdownStatus for use in batch operations
@@ -214,6 +226,14 @@ class InventoryService {
      */
     createAuditLog(userId, inventoryItemId, changeDescription) {
         db.prepare("INSERT INTO audit_log (user_id, inventory_item_id, change_description) VALUES (?, ?, ?)").run(userId, inventoryItemId, changeDescription);
+    }
+    /**
+     * Log an item transaction
+     */
+    async logTransaction(transaction) {
+        const { inventory_item_id, user_id, type, quantity_change, notes } = transaction;
+        const result = db.prepare("INSERT INTO item_transactions (inventory_item_id, user_id, type, quantity_change, notes) VALUES (?, ?, ?, ?, ?)").run(inventory_item_id, user_id, type, quantity_change, notes);
+        return result.lastInsertRowid;
     }
 }
 exports.InventoryService = InventoryService;

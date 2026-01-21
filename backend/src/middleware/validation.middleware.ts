@@ -136,3 +136,35 @@ export const validateDataIntegrity = (req: Request, res: Response, next: NextFun
   
   next();
 };
+
+// Validation middleware for transaction input
+export const validateTransactionInput = (req: Request, res: Response, next: NextFunction) => {
+  const { inventory_item_id, user_id, type, quantity_change, notes } = req.body;
+  
+  // Validate inventory_item_id (positive integer)
+  if (inventory_item_id !== undefined && (!validator.isInt(String(inventory_item_id), { min: 1 }) || parseInt(inventory_item_id) <= 0)) {
+    return res.status(400).json({ error: 'Inventory item ID must be a positive integer' });
+  }
+  
+  // Validate user_id (positive integer)
+  if (user_id !== undefined && (!validator.isInt(String(user_id), { min: 1 }) || parseInt(user_id) <= 0)) {
+    return res.status(400).json({ error: 'User ID must be a positive integer' });
+  }
+  
+  // Validate type (must be 'in', 'out', or 'adjustment')
+  if (type && !['in', 'out', 'adjustment'].includes(type)) {
+    return res.status(400).json({ error: 'Transaction type must be one of: in, out, adjustment' });
+  }
+  
+  // Validate quantity_change (numeric value)
+  if (quantity_change !== undefined && !validator.isNumeric(String(quantity_change))) {
+    return res.status(400).json({ error: 'Quantity change must be a numeric value' });
+  }
+  
+  // Validate notes if provided (no HTML tags, max 500 characters)
+  if (notes && (validator.contains(notes, '<') || validator.contains(notes, '>') || notes.length > 500)) {
+    return res.status(400).json({ error: 'Invalid notes format' });
+  }
+  
+  next();
+};
