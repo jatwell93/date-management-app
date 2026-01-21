@@ -20,6 +20,7 @@ const user_routes_1 = __importDefault(require("./routes/user.routes"));
 const store_area_routes_1 = __importDefault(require("./routes/store-area.routes"));
 const health_routes_1 = __importDefault(require("./routes/health.routes"));
 const database_backup_routes_1 = __importDefault(require("./routes/database.backup.routes"));
+const expired_item_routes_1 = __importDefault(require("./routes/expired-item.routes"));
 const auth_middleware_1 = require("./middleware/auth.middleware");
 const error_middleware_1 = require("./middleware/error.middleware");
 const scheduler_service_1 = require("./services/scheduler.service");
@@ -154,6 +155,7 @@ app.use("/reports", auth_middleware_1.authenticateToken, report_routes_1.default
 app.use("/dashboard", auth_middleware_1.authenticateToken, dashboard_routes_1.default);
 app.use("/users", auth_middleware_1.authenticateToken, user_routes_1.default);
 app.use("/database", auth_middleware_1.authenticateToken, database_backup_routes_1.default);
+app.use("/expired-items", auth_middleware_1.authenticateToken, expired_item_routes_1.default);
 app.get("/", (req, res) => {
     res.json({
         message: "Date Management API is running!",

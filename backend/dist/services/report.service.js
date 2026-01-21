@@ -2,6 +2,7 @@
 Object.defineProperty(exports, "__esModule", { value: true });
 exports.ReportService = void 0;
 const database_1 = require("../database");
+const scheduler_service_1 = require("./scheduler.service");
 class ReportService {
     async getMonthlyExpiryReport() {
         const db = await (0, database_1.getDb)();
@@ -21,6 +22,22 @@ class ReportService {
       ORDER BY month DESC
       LIMIT 12`);
         return stmt.all();
+    }
+    async getOverallExpiryReport() {
+        const db = await (0, database_1.getDb)();
+        // Get overall expiry report showing total counts across all months
+        const stmt = db.prepare(`SELECT
+        'Overall' as month,
+        COUNT(*) as total_expiring,
+        SUM(CASE WHEN status = 'Expired' THEN 1 ELSE 0 END) as expired_count,
+        SUM(CASE WHEN status = 'Markdown 1' THEN 1 ELSE 0 END) as markdown1_count,
+        SUM(CASE WHEN status = 'Markdown 2' THEN 1 ELSE 0 END) as markdown2_count,
+        SUM(CASE WHEN status = 'Markdown 3' THEN 1 ELSE 0 END) as markdown3_count,
+        SUM(CASE WHEN status LIKE 'Markdown%' THEN 1 ELSE 0 END) as total_markdown,
+        MAX(expiry_date) as latest_expiry_date
+      FROM inventory_items
+      WHERE expiry_date IS NOT NULL AND expiry_date != ''`);
+        return stmt.get();
     }
     async getDetailedExpiryReport() {
         const db = await (0, database_1.getDb)();
@@ -109,6 +126,9 @@ class ReportService {
             markdownItems: markdownItems.count,
             upcomingExpiry: upcomingExpiry.count,
         };
+    }
+    async updateAllMarkdownStatuses() {
+        return scheduler_service_1.SchedulerService.updateAllInventoryMarkdownStatuses();
     }
 }
 exports.ReportService = ReportService;
