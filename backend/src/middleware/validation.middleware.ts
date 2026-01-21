@@ -184,12 +184,14 @@ export const validateTransactionInput = (req: Request, res: Response, next: Next
     if (typeof notes !== 'string') {
       return res.status(400).json({ error: 'notes must be a string' });
     }
-    // Escape HTML to prevent XSS attacks
-    req.body.notes = validator.escape(notes);
     
-    if (req.body.notes.length > 500) {
+    // Check length before escaping to avoid false rejections
+    if (notes.length > 500) {
       return res.status(400).json({ error: 'notes must not exceed 500 characters' });
     }
+    
+    // Escape HTML to prevent XSS attacks
+    req.body.notes = validator.escape(notes);
   }
   
   next();
