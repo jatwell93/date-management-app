@@ -4,12 +4,13 @@ import { envConfig } from '../config/environment';
 import { Logger } from '../utils/logger';
 
 // Define the Database type for better-sqlite3
+type DB = Database.Database;
 
 export interface Migration {
   id: number;
   name: string;
-  up: (db: Database.Database) => void;
-  down?: (db: Database.Database) => void;
+  up: (db: DB) => void;
+  down?: (db: DB) => void;
 }
 
 export class MigrationService {
@@ -24,7 +25,7 @@ export class MigrationService {
    */
   public async runMigrations(): Promise<void> {
     const dbPath = envConfig.DATABASE_PATH || './database.sqlite';
-    const db: Database.Database = new Database(dbPath);
+    const db: DB = new Database(dbPath);
 
     try {
       // Ensure the migrations table exists
@@ -346,7 +347,7 @@ export class MigrationService {
    */
   public async getMigrationStatus(): Promise<{ pending: Migration[], executed: MigrationRecord[] }> {
     const dbPath = envConfig.DATABASE_PATH || './database.sqlite';
-    const db: Database.Database = new Database(dbPath);
+    const db: DB = new Database(dbPath);
 
     try {
       this.migrationModel.ensureMigrationsTable(db);
@@ -370,7 +371,7 @@ export class MigrationService {
    */
   public async rollbackLastMigration(): Promise<void> {
     const dbPath = envConfig.DATABASE_PATH || './database.sqlite';
-    const db: Database.Database = new Database(dbPath);
+    const db: DB = new Database(dbPath);
 
     try {
       this.migrationModel.ensureMigrationsTable(db);
