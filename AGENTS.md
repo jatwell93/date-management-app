@@ -498,11 +498,13 @@ root/
 **In:** Approved Proposal **Out:** Code changes (NOT APPLIED YET)
 
 **Actions:**
-
-1.  **Read Tasks:** Review `openspec/changes/<change-id>/tasks.md`.
-2. **Codemap:** Use codemap commands for context of project structure: `codemap .               # Project structure`
-`codemap --deps          # How files connect`
-3.  **Branch:** `git checkout -b feature/<change-id>`
+1. **Codemap:** Use codemap commands for context of project structure:
+```bash
+codemap .               # Project structure
+codemap --deps          # How files connect
+```
+2.  **Read Tasks:** Review `openspec/changes/<change-id>/tasks.md`.
+3.  **Branch (REQUIRED):** `git checkout -b feature/<change-id>`
 4.  **Loop through Tasks:**
     -   Mark task "In Progress" in `tasks.md` (mentally or via status if applicable).
     -   **RED Phase:** Write failing tests.
@@ -593,6 +595,16 @@ ubs --only=ts,js,tsx src/ # Language filter
 **Actions:**
 
 1. Verify all tests pass (one final time). 
+2. Commit Changes: Use conventional commit format:
+```bash
+git add .
+git commit -m "feat(<area>): brief description
+
+- Task 1 completed
+- Task 2 completed
+
+Refs: <change-id>"
+```
 2. Push feature branch: `git push origin feature/<change-id>` 
 3. User creates a pull request via GitHub 
 4. After PR approval and merge, confirm success
