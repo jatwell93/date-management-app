@@ -37,7 +37,7 @@ STORAGE_PROVIDER = "local"
 # Build Configuration
 [build]
 command = "npm run build"
-watch_paths = ["src/**/*.ts"]
+watch_dir = "src"
 
 # Secrets (set via CLI: wrangler secret put <KEY>)
 # - DATABASE_URL (PlanetScale connection string)

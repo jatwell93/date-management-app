@@ -1,4 +1,5 @@
-import { getDb } from "../database";
+import { PrismaClient } from "@prisma/client";
+import { getDefaultDatabaseClient } from "../database/database-factory";
 import { InventoryItem } from "../models/inventory-item.model";
 import { Product } from "../models/product.model";
 import { StoreArea } from "../models/store-area.model";
@@ -10,27 +11,35 @@ import { StoreAreaService } from "./store-area.service";
 import { Logger } from "../utils/logger";
 import { getUserById } from "./user.service";
 
-const db = getDb();
-
 export class InventoryService {
+  private prisma: PrismaClient;
   private productService = new ProductService();
   private storeAreaService = new StoreAreaService();
+
+  /**
+   * Constructor with optional dependency injection
+   * @param prismaClient - Optional PrismaClient for testing/custom configurations
+   */
+  constructor(prismaClient?: PrismaClient) {
+    this.prisma = prismaClient ?? getDefaultDatabaseClient();
+  }
 
   /**
    * Get all inventory items
    */
   async getAllInventoryItems(): Promise<InventoryItem[]> {
-    return db.prepare("SELECT * FROM inventory_items").all() as InventoryItem[];
+    const items = await this.prisma.inventoryItem.findMany();
+    return items.map(this.mapPrismaToModel);
   }
 
   /**
    * Get an inventory item by its ID
    */
   async getInventoryItemById(id: number): Promise<InventoryItem | null> {
-    const item = db
-      .prepare("SELECT * FROM inventory_items WHERE id = ?")
-      .get(id) as InventoryItem | undefined;
-    return item || null;
+    const item = await this.prisma.inventoryItem.findUnique({
+      where: { id }
+    });
+    return item ? this.mapPrismaToModel(item) : null;
   }
 
   /**
@@ -39,9 +48,10 @@ export class InventoryService {
   async getInventoryItemsByProductId(
     productId: number,
   ): Promise<InventoryItem[]> {
-    return db
-      .prepare("SELECT * FROM inventory_items WHERE product_id = ?")
-      .all(productId) as InventoryItem[];
+    const items = await this.prisma.inventoryItem.findMany({
+      where: { productId }
+    });
+    return items.map(this.mapPrismaToModel);
   }
 
   /**
@@ -51,11 +61,12 @@ export class InventoryService {
     productId: number,
     limit: number,
   ): Promise<InventoryItem[]> {
-    return db
-      .prepare(
-        "SELECT * FROM inventory_items WHERE product_id = ? ORDER BY created_at DESC LIMIT ?"
-      )
-      .all(productId, limit) as InventoryItem[];
+    const items = await this.prisma.inventoryItem.findMany({
+      where: { productId },
+      orderBy: { createdAt: 'desc' },
+      take: limit
+    });
+    return items.map(this.mapPrismaToModel);
   }
 
   /**
@@ -64,9 +75,10 @@ export class InventoryService {
   async getInventoryItemsByLocationId(
     locationId: number,
   ): Promise<InventoryItem[]> {
-    return db
-      .prepare("SELECT * FROM inventory_items WHERE location_id = ?")
-      .all(locationId) as InventoryItem[];
+    const items = await this.prisma.inventoryItem.findMany({
+      where: { locationId }
+    });
+    return items.map(this.mapPrismaToModel);
   }
 
   /**
@@ -82,25 +94,20 @@ export class InventoryService {
     const calculatedStatus: "Normal" | "Markdown 1" | "Markdown 2" | "Markdown 3" | "Expired" = 
       item.status || await this.calculateMarkdownStatus(item.expiryDate);
 
-    const result = db
-      .prepare(
-        "INSERT INTO inventory_items (product_id, expiry_date, location_id, status) VALUES (?, ?, ?, ?)",
-      )
-      .run(productId, expiryDate, locationId, calculatedStatus);
-
-    const newItemId = result.lastInsertRowid as number;
+    const newItem = await this.prisma.inventoryItem.create({
+      data: {
+        productId,
+        expiryDate: new Date(expiryDate), // Convert string to Date for Prisma
+        locationId,
+        status: calculatedStatus
+      }
+    });
 
     // Create audit log entry
     const changeDescription = `Inventory item created with expiry date ${expiryDate} and status ${calculatedStatus}.`;
-    this.createAuditLog(userId, newItemId, changeDescription);
+    await this.createAuditLog(userId, newItem.id, changeDescription);
 
-    return {
-      id: newItemId,
-      ...item,
-      status: calculatedStatus,
-      createdAt: new Date().toISOString(),
-      updatedAt: new Date().toISOString(),
-    };
+    return this.mapPrismaToModel(newItem);
   }
 
   /**
@@ -116,39 +123,31 @@ export class InventoryService {
       return null;
     }
 
-    // Build the update query dynamically
-    const fields = Object.keys(updates);
-    const values = Object.values(updates);
-    const setClause = fields.map((field) => {
-      let col = field;
-      if (field === 'productId') col = 'product_id';
-      else if (field === 'expiryDate') col = 'expiry_date';
-      else if (field === 'locationId') col = 'location_id';
-      else col = field;
-      return `${col} = ?`;
-    }).join(", ");
-
-    if (fields.length === 0) {
+    if (Object.keys(updates).length === 0) {
       return existingItem; // No updates to perform
     }
 
     // If expiry date is updated, recalculate markdown status
+    let statusUpdate = updates.status;
     if (updates.expiryDate) {
-      updates.status = await this.calculateMarkdownStatus(updates.expiryDate);
+      statusUpdate = await this.calculateMarkdownStatus(updates.expiryDate);
     }
 
-    const stmt = db.prepare(
-      `UPDATE inventory_items SET ${setClause}, updated_at = CURRENT_TIMESTAMP WHERE id = ?`,
-    );
-    stmt.run(...values, id);
+    const updatedItem = await this.prisma.inventoryItem.update({
+      where: { id },
+      data: {
+        ...(updates.productId !== undefined && { productId: updates.productId }),
+        ...(updates.expiryDate !== undefined && { expiryDate: new Date(updates.expiryDate) }), // Convert string to Date
+        ...(updates.locationId !== undefined && { locationId: updates.locationId }),
+        ...(statusUpdate !== undefined && { status: statusUpdate })
+      }
+    });
 
     // Create audit log entry
-    const changeDescription = `Inventory item updated: ${JSON.stringify(
-      updates,
-    )}`;
-    this.createAuditLog(userId, id, changeDescription);
+    const changeDescription = `Inventory item updated: ${JSON.stringify(updates)}`;
+    await this.createAuditLog(userId, id, changeDescription);
 
-    return this.getInventoryItemById(id);
+    return this.mapPrismaToModel(updatedItem);
   }
 
   /**
@@ -163,11 +162,13 @@ export class InventoryService {
     
     // Create audit log entry before deleting the item
     const changeDescription = `Inventory item with ID ${id} deleted.`;
-    this.createAuditLog(userId, id, changeDescription);
+    await this.createAuditLog(userId, id, changeDescription);
 
-    const result = db.prepare("DELETE FROM inventory_items WHERE id = ?").run(id);
+    await this.prisma.inventoryItem.delete({
+      where: { id }
+    });
 
-    return result.changes > 0;
+    return true;
   }
 
   /**
@@ -237,10 +238,10 @@ export class InventoryService {
     }
 
     // Update the inventory item's status in the database
-    db.prepare("UPDATE inventory_items SET status = ? WHERE id = ?").run(
-      status,
-      itemId,
-    );
+    await this.prisma.inventoryItem.update({
+      where: { id: itemId },
+      data: { status }
+    });
   }
 
   /**
@@ -279,27 +280,60 @@ export class InventoryService {
   /**
    * Create an audit log entry
    */
-  private createAuditLog(
+  private async createAuditLog(
     userId: number,
     inventoryItemId: number,
     changeDescription: string,
-  ) {
-        db.prepare(
-          "INSERT INTO audit_log (user_id, inventory_item_id, change_description) VALUES (?, ?, ?)",
-        ).run(userId, inventoryItemId, changeDescription);
+  ): Promise<void> {
+    await this.prisma.auditLog.create({
+      data: {
+        userId,
+        inventoryItemId,
+        changeDescription
       }
-    
-      /**
-       * Log an item transaction
-       */
-      async logTransaction(transaction: Omit<ItemTransaction, "id" | "transactionDate">): Promise<number> {
-        const { inventory_item_id, user_id, type, quantity_change, notes } = transaction;
-    
-        const result = db.prepare(
-          "INSERT INTO item_transactions (inventory_item_id, user_id, type, quantity_change, notes) VALUES (?, ?, ?, ?, ?)"
-        ).run(inventory_item_id, user_id, type, quantity_change, notes);
-    
-        return result.lastInsertRowid as number;
+    });
+  }
+
+  /**
+   * Log an item transaction
+   */
+  async logTransaction(transaction: Omit<ItemTransaction, "id" | "transactionDate">): Promise<number> {
+    const { inventory_item_id, user_id, type, quantity_change, notes } = transaction;
+
+    const result = await this.prisma.itemTransaction.create({
+      data: {
+        inventoryItemId: inventory_item_id,
+        userId: user_id,
+        type,
+        quantityChange: quantity_change,
+        notes
       }
-    }
+    });
+
+    return result.id;
+  }
+
+  /**
+   * Map Prisma model to legacy InventoryItem interface
+   */
+  private mapPrismaToModel(item: {
+    id: number;
+    productId: number;
+    expiryDate: Date;
+    locationId: number;
+    status: string;
+    createdAt: Date;
+    updatedAt: Date;
+  }): InventoryItem {
+    return {
+      id: item.id,
+      productId: item.productId,
+      expiryDate: item.expiryDate.toISOString().split('T')[0], // Convert Date to YYYY-MM-DD string
+      locationId: item.locationId,
+      status: item.status as "Normal" | "Markdown 1" | "Markdown 2" | "Markdown 3" | "Expired",
+      createdAt: item.createdAt.toISOString(),
+      updatedAt: item.updatedAt.toISOString()
+    };
+  }
+}
     
