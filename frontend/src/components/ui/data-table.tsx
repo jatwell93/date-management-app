@@ -69,7 +69,7 @@ export function DataTable<TData, TValue>({
   });
 
   return (
-    <div className="w-full space-y-4">
+    <div className="w-full space-y-4 overflow-x-auto">
       {filtering && (
         <div className="flex items-center py-4">
           <Input
@@ -80,8 +80,8 @@ export function DataTable<TData, TValue>({
           />
         </div>
       )}
-      <div className="rounded-md border overflow-auto max-w-full">
-        <table className="w-full min-w-max">
+      <div className="rounded-md border:none">
+        <table className="w-full">
           <thead>
             {table.getHeaderGroups().map((headerGroup) => (
               <tr key={headerGroup.id}>
@@ -146,7 +146,7 @@ export function DataTable<TData, TValue>({
         </table>
       </div>
       {pagination && (
-        <div className="flex items-center justify-between space-x-2 py-4">
+        <div className="flex items-center justify-between space-x-2 py-4 overflow-x-auto">
           <div className="flex-1 text-sm text-slate-500 dark:text-slate-400">
             Showing{" "}
             {table.getState().pagination.pageIndex *
@@ -160,7 +160,7 @@ export function DataTable<TData, TValue>({
             )}{" "}
             of {table.getFilteredRowModel().rows.length} entries
           </div>
-          <div className="flex items-center space-x-2">
+          <div className="flex items-center space-x-2 overflow-x-auto">
             <Button
               variant="outline"
               size="sm"

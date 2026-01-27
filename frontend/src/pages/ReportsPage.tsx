@@ -34,9 +34,8 @@ export function ReportsPage({ token }: ReportsPageProps) {
   const [reportData, setReportData] = useState<
     MonthlyExpiryReportItem[] | null
   >(null);
-  const [overallReportData, setOverallReportData] = useState<
-    MonthlyExpiryReportItem | null
-  >(null);
+  const [overallReportData, setOverallReportData] =
+    useState<MonthlyExpiryReportItem | null>(null);
   const [loading, setLoading] = useState(true);
   const [overallLoading, setOverallLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -122,19 +121,29 @@ export function ReportsPage({ token }: ReportsPageProps) {
           ) : overallReportData ? (
             <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mb-6">
               <div className="bg-blue-50 p-4 rounded-lg text-center">
-                <p className="text-2xl font-bold">{overallReportData.total_expiring}</p>
+                <p className="text-2xl font-bold">
+                  {overallReportData.total_expiring}
+                </p>
                 <p className="text-sm text-gray-600">Total Items</p>
               </div>
               <div className="bg-red-50 p-4 rounded-lg text-center">
-                <p className="text-2xl font-bold text-red-600">{overallReportData.expired_count}</p>
+                <p className="text-2xl font-bold text-red-600">
+                  {overallReportData.expired_count}
+                </p>
                 <p className="text-sm text-gray-600">Expired Items</p>
               </div>
               <div className="bg-yellow-50 p-4 rounded-lg text-center">
-                <p className="text-2xl font-bold text-yellow-600">{overallReportData.total_markdown}</p>
+                <p className="text-2xl font-bold text-yellow-600">
+                  {overallReportData.total_markdown}
+                </p>
                 <p className="text-sm text-gray-600">Markdown Items</p>
               </div>
               <div className="bg-green-50 p-4 rounded-lg text-center">
-                <p className="text-2xl font-bold text-green-600">{overallReportData.total_expiring - overallReportData.expired_count - overallReportData.total_markdown}</p>
+                <p className="text-2xl font-bold text-green-600">
+                  {overallReportData.total_expiring -
+                    overallReportData.expired_count -
+                    overallReportData.total_markdown}
+                </p>
                 <p className="text-sm text-gray-600">Active Items</p>
               </div>
             </div>

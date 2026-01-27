@@ -102,6 +102,51 @@ router.get("/daily-usage", authenticateToken, async (req: Request, res: Response
   }
 });
 
+// GET /reports/loss-by-sku - Get loss report by SKU
+router.get("/loss-by-sku", authenticateToken, async (req: Request, res: Response) => {
+  try {
+    const report = await reportService.getLossBySkuReport();
+    res.json(report);
+  } catch (_error) {
+    // console.error("Get loss by SKU report error:", _error);
+    res.status(500).json({ message: "Internal server error" });
+  }
+});
+
+// GET /reports/loss-by-department - Get loss report by department
+router.get("/loss-by-department", authenticateToken, async (req: Request, res: Response) => {
+  try {
+    const report = await reportService.getLossByDepartmentReport();
+    res.json(report);
+  } catch (_error) {
+    // console.error("Get loss by department report error:", _error);
+    res.status(500).json({ message: "Internal server error" });
+  }
+});
+
+// GET /reports/items-by-user - Get items added by user
+router.get("/items-by-user", authenticateToken, async (req: Request, res: Response) => {
+  try {
+    const timeFrame = req.query.timeFrame as string | undefined;
+    const report = await reportService.getItemsByUserReport(timeFrame);
+    res.json(report);
+  } catch (_error) {
+    // console.error("Get items by user report error:", _error);
+    res.status(500).json({ message: "Internal server error" });
+  }
+});
+
+// GET /reports/items-by-date - Get items added by date
+router.get("/items-by-date", authenticateToken, async (req: Request, res: Response) => {
+  try {
+    const report = await reportService.getItemsByDateReport();
+    res.json(report);
+  } catch (_error) {
+    // console.error("Get items by date report error:", _error);
+    res.status(500).json({ message: "Internal server error" });
+  }
+});
+
 // GET /dashboard/analytics - Get dashboard analytics data (FR-005)
 router.get(
   "/analytics",

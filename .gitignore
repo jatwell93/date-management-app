@@ -44,3 +44,5 @@ Thumbs.db
 specs/
 .quint/
 
+.env
+.env.local

@@ -1,0 +1,142 @@
+// Prisma Schema for Date Management App
+// Supports SQLite (development) and MySQL/PlanetScale (production)
+// 
+// For production deployment with PlanetScale:
+// 1. Copy schema.planetscale.prisma to schema.prisma
+// 2. Or use prisma generate --schema=./prisma/schema.planetscale.prisma
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+// Development: SQLite
+// For production, use schema.planetscale.prisma
+datasource db {
+  provider = "sqlite"
+  url      = env("DATABASE_URL")
+}
+
+// ============================================================================
+// Core Models
+// ============================================================================
+
+model Product {
+  id        Int      @id @default(autoincrement())
+  barcode   String   @unique
+  sku       String   @unique
+  name      String
+  costPrice Float    @map("cost_price")
+  notes     String   @default("")
+  createdAt DateTime @default(now()) @map("created_at")
+  updatedAt DateTime @updatedAt @map("updated_at")
+
+  // Relations
+  inventoryItems InventoryItem[]
+
+  @@index([sku])
+  @@index([barcode])
+  @@map("products")
+}
+
+model InventoryItem {
+  id         Int      @id @default(autoincrement())
+  productId  Int      @map("product_id")
+  expiryDate DateTime @map("expiry_date")
+  locationId Int      @map("location_id")
+  status     String   @default("Normal")
+  createdAt  DateTime @default(now()) @map("created_at")
+  updatedAt  DateTime @updatedAt @map("updated_at")
+
+  // Relations
+  product      Product     @relation(fields: [productId], references: [id])
+  storeArea    StoreArea   @relation(fields: [locationId], references: [id])
+  auditLogs    AuditLog[]
+  transactions ExpiredItemTransaction[]
+
+  @@index([productId])
+  @@index([locationId])
+  @@index([expiryDate])
+  @@index([status])
+  @@map("inventory_items")
+}
+
+model StoreArea {
+  id            Int       @id @default(autoincrement())
+  name          String
+  subDepartment String?   @map("sub_department")
+  lastChecked   DateTime? @map("last_checked")
+  createdAt     DateTime  @default(now()) @map("created_at")
+  updatedAt     DateTime  @updatedAt @map("updated_at")
+
+  // Relations
+  inventoryItems InventoryItem[]
+
+  // Unique constraint on name + sub_department combination
+  @@unique([name, subDepartment])
+  @@index([name])
+  @@map("store_areas")
+}
+
+model User {
+  id        Int      @id @default(autoincrement())
+  pin       String
+  role      String
+  createdAt DateTime @default(now()) @map("created_at")
+  updatedAt DateTime @updatedAt @map("updated_at")
+
+  // Relations
+  auditLogs    AuditLog[]
+  transactions ExpiredItemTransaction[]
+
+  @@map("users")
+}
+
+model AuditLog {
+  id                Int      @id @default(autoincrement())
+  userId            Int      @map("user_id")
+  inventoryItemId   Int      @map("inventory_item_id")
+  changeDescription String   @map("change_description")
+  createdAt         DateTime @default(now()) @map("created_at")
+
+  // Relations
+  user          User          @relation(fields: [userId], references: [id])
+  inventoryItem InventoryItem @relation(fields: [inventoryItemId], references: [id])
+
+  @@index([userId])
+  @@index([inventoryItemId])
+  @@map("audit_log")
+}
+
+model ExpiredItemTransaction {
+  id              Int      @id @default(autoincrement())
+  inventoryItemId Int      @map("inventory_item_id")
+  userId          Int      @map("user_id")
+  action          String   // 'sold_through' or 'expired'
+  unitsDiscarded  Int?     @map("units_discarded")
+  financialLoss   Float?   @map("financial_loss")
+  transactionDate DateTime @default(now()) @map("transaction_date")
+  createdAt       DateTime @default(now()) @map("created_at")
+  updatedAt       DateTime @updatedAt @map("updated_at")
+
+  // Relations
+  inventoryItem InventoryItem @relation(fields: [inventoryItemId], references: [id])
+  user          User          @relation(fields: [userId], references: [id])
+
+  @@index([inventoryItemId])
+  @@index([userId])
+  @@index([action])
+  @@index([transactionDate])
+  @@map("expired_item_transactions")
+}
+
+// ============================================================================
+// Migration Tracking (for compatibility with existing migration system)
+// ============================================================================
+
+model Migration {
+  id        Int      @id @default(autoincrement())
+  name      String   @unique
+  appliedAt DateTime @default(now()) @map("applied_at")
+
+  @@map("migrations")
+}

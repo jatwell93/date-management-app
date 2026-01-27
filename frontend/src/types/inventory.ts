@@ -25,7 +25,7 @@ export interface ExpiredItemTransaction {
   id: number;
   inventoryItemId: number;
   userId: number;
-  action: 'sold_through' | 'expired';
+  action: "sold_through" | "expired";
   unitsDiscarded: number | null;
   financialLoss: number | null;
   transactionDate: string;
@@ -33,6 +33,6 @@ export interface ExpiredItemTransaction {
 
 export interface ProcessExpiredItemRequest {
   inventoryItemId: number;
-  action: 'sold_through' | 'expired';
+  action: "sold_through" | "expired";
   unitsDiscarded?: number;
 }

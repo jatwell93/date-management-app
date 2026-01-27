@@ -76,7 +76,8 @@ export function ScanPage({ token }: ScanPageProps) {
   );
   const [expiryDate, setExpiryDate] = useState<string>("");
   const [selectedLocationId, setSelectedLocationId] = useState<string>("");
-  const [selectedSubDepartment, setSelectedSubDepartment] = useState<string>("");
+  const [selectedSubDepartment, setSelectedSubDepartment] =
+    useState<string>("");
   const [storeAreas, setStoreAreas] = useState<StoreArea[]>([]);
   const [error, setError] = useState<string | null>(null);
   const [successMessage, setSuccessMessage] = useState<string | null>(null);
@@ -85,7 +86,9 @@ export function ScanPage({ token }: ScanPageProps) {
   const [newProductSKU, setNewProductSKU] = useState<string>("");
   const [newProductCostPrice, setNewProductCostPrice] = useState<string>("");
   const [markdownPrice, setMarkdownPrice] = useState<number | null>(null);
-  const [recentEntries, setRecentEntries] = useState<RecentInventoryItem[] | null>(null);
+  const [recentEntries, setRecentEntries] = useState<
+    RecentInventoryItem[] | null
+  >(null);
   const [isAlertDialogOpen, setAlertDialogOpen] = useState(false);
   const [itemToDelete, setItemToDelete] = useState<number | null>(null);
 
@@ -93,7 +96,7 @@ export function ScanPage({ token }: ScanPageProps) {
     const fetchStoreAreas = async () => {
       if (!token) return;
       try {
-        const data = await apiService.get<StoreArea[]>('/store-areas', token);
+        const data = await apiService.get<StoreArea[]>("/store-areas", token);
         setStoreAreas(data);
       } catch (err: unknown) {
         if (err instanceof Error) {
@@ -111,12 +114,14 @@ export function ScanPage({ token }: ScanPageProps) {
       const expiry = new Date(expiryDate);
       const today = new Date();
       const daysToExpiry = Math.ceil(
-        (expiry.getTime() - today.getTime()) / (1000 * 60 * 60 * 24)
+        (expiry.getTime() - today.getTime()) / (1000 * 60 * 60 * 24),
       );
 
       const isMarkdown = isWithinMarkdownPeriod(expiryDate, 90); // Check if within 90 days
       if (isMarkdown) {
-        setMarkdownPrice(calculateMarkdownPrice(productDetails.cost_price, daysToExpiry));
+        setMarkdownPrice(
+          calculateMarkdownPrice(productDetails.cost_price, daysToExpiry),
+        );
       } else {
         setMarkdownPrice(null);
       }
@@ -145,16 +150,28 @@ export function ScanPage({ token }: ScanPageProps) {
       const isSkuSearch = input.length <= 8;
 
       if (isSkuSearch) {
-        product = await apiService.get<ProductDetails>(`/products/by-sku/${input}`, token);
+        product = await apiService.get<ProductDetails>(
+          `/products/by-sku/${input}`,
+          token,
+        );
       } else {
-        product = await apiService.get<ProductDetails>(`/products/by-barcode/${input}`, token);
+        product = await apiService.get<ProductDetails>(
+          `/products/by-barcode/${input}`,
+          token,
+        );
       }
 
       if (!product) {
         if (isSkuSearch) {
-          product = await apiService.get<ProductDetails>(`/products/by-barcode/${input}`, token);
+          product = await apiService.get<ProductDetails>(
+            `/products/by-barcode/${input}`,
+            token,
+          );
         } else {
-          product = await apiService.get<ProductDetails>(`/products/by-sku/${input}`, token);
+          product = await apiService.get<ProductDetails>(
+            `/products/by-sku/${input}`,
+            token,
+          );
         }
       }
 
@@ -166,13 +183,17 @@ export function ScanPage({ token }: ScanPageProps) {
       setProductDetails(product);
 
       try {
-        const inventoryItems: InventoryItem[] = await apiService.get<InventoryItem[]>(`/inventory-items/by-barcode/${product.barcode}`, token);
+        const inventoryItems: InventoryItem[] = await apiService.get<
+          InventoryItem[]
+        >(`/inventory-items/by-barcode/${product.barcode}`, token);
       } catch (inventoryErr: unknown) {
         console.error("Error fetching inventory items:", inventoryErr);
       }
 
       try {
-        const recent: RecentInventoryItem[] = await apiService.get<RecentInventoryItem[]>(`/inventory-items/recent/product/${product.id}`, token);
+        const recent: RecentInventoryItem[] = await apiService.get<
+          RecentInventoryItem[]
+        >(`/inventory-items/recent/product/${product.id}`, token);
         console.log("Fetched recent entries:", recent); // Debug log
         setRecentEntries(recent);
       } catch (recentErr: unknown) {
@@ -204,12 +225,16 @@ export function ScanPage({ token }: ScanPageProps) {
     }
 
     try {
-      const newProduct = await apiService.post<ProductDetails>('/products', {
-        barcode: scannedBarcode,
-        name: newProductName,
-        sku: newProductSKU,
-        cost_price: parseFloat(newProductCostPrice),
-      }, token);
+      const newProduct = await apiService.post<ProductDetails>(
+        "/products",
+        {
+          barcode: scannedBarcode,
+          name: newProductName,
+          sku: newProductSKU,
+          cost_price: parseFloat(newProductCostPrice),
+        },
+        token,
+      );
       setProductDetails(newProduct);
       setSuccessMessage(
         "New product added successfully! Now add inventory details.",
@@ -229,7 +254,9 @@ export function ScanPage({ token }: ScanPageProps) {
 
   const handleSubmit = async () => {
     if (!token || !productDetails || !expiryDate || !selectedLocationId) {
-      setError("Please fill all product and inventory details including location.");
+      setError(
+        "Please fill all product and inventory details including location.",
+      );
       return;
     }
 
@@ -239,7 +266,9 @@ export function ScanPage({ token }: ScanPageProps) {
       return;
     }
 
-    const selectedArea = storeAreas.find(area => area.id === parsedLocationId);
+    const selectedArea = storeAreas.find(
+      (area) => area.id === parsedLocationId,
+    );
     const subDepartment = selectedArea?.subDepartment || null;
 
     const inventoryItem = {
@@ -273,11 +302,15 @@ export function ScanPage({ token }: ScanPageProps) {
     }
 
     try {
-      await apiService.post('/inventory-items', {
-        productId: productDetails.id,
-        expiryDate: expiryDate,
-        locationId: parsedLocationId,
-      }, token);
+      await apiService.post(
+        "/inventory-items",
+        {
+          productId: productDetails.id,
+          expiryDate: expiryDate,
+          locationId: parsedLocationId,
+        },
+        token,
+      );
 
       setSuccessMessage("Inventory item added successfully!");
       setScannedBarcode(null);
@@ -304,7 +337,9 @@ export function ScanPage({ token }: ScanPageProps) {
 
   const confirmDelete = async () => {
     if (!token || itemToDelete === null) {
-      setError("Authentication token is missing or item to delete is not specified.");
+      setError(
+        "Authentication token is missing or item to delete is not specified.",
+      );
       setAlertDialogOpen(false);
       return;
     }
@@ -312,8 +347,10 @@ export function ScanPage({ token }: ScanPageProps) {
     try {
       await apiService.delete(`/inventory-items/${itemToDelete}`, token);
 
-      setRecentEntries(prevEntries =>
-        prevEntries ? prevEntries.filter(entry => entry.id !== itemToDelete) : null
+      setRecentEntries((prevEntries) =>
+        prevEntries
+          ? prevEntries.filter((entry) => entry.id !== itemToDelete)
+          : null,
       );
 
       setSuccessMessage("Inventory entry deleted successfully!");
@@ -334,17 +371,25 @@ export function ScanPage({ token }: ScanPageProps) {
     <div className="container mx-auto p-4 max-w-3xl">
       <Card className="w-full mx-auto border border-border bg-card text-card-foreground shadow-lg">
         <CardHeader className="bg-muted/50 border-b border-border">
-          <CardTitle className="text-2xl font-bold text-center">Inventory Scan</CardTitle>
+          <CardTitle className="text-2xl font-bold text-center">
+            Inventory Scan
+          </CardTitle>
         </CardHeader>
         <CardContent className="p-6">
           <Scanner onScan={handleBarcodeScan} />
           {error && (
-            <div className="bg-inventory-error-50 border border-inventory-error-400 text-inventory-error-800 px-4 py-3 rounded relative text-center mt-4" role="alert">
+            <div
+              className="bg-inventory-error-50 border border-inventory-error-400 text-inventory-error-800 px-4 py-3 rounded relative text-center mt-4"
+              role="alert"
+            >
               <span className="block sm:inline">Error: {error}</span>
             </div>
           )}
           {successMessage && (
-            <div className="bg-inventory-success-50 border border-inventory-success-400 text-inventory-success-800 px-4 py-3 rounded relative text-center mt-4" role="alert">
+            <div
+              className="bg-inventory-success-50 border border-inventory-success-400 text-inventory-success-800 px-4 py-3 rounded relative text-center mt-4"
+              role="alert"
+            >
               <span className="block sm:inline">{successMessage}</span>
             </div>
           )}
@@ -362,7 +407,9 @@ export function ScanPage({ token }: ScanPageProps) {
                 </p>
                 <div className="space-y-4">
                   <div>
-                    <Label htmlFor="newProductName" className="text-foreground">Product Name</Label>
+                    <Label htmlFor="newProductName" className="text-foreground">
+                      Product Name
+                    </Label>
                     <Input
                       id="newProductName"
                       type="text"
@@ -373,7 +420,9 @@ export function ScanPage({ token }: ScanPageProps) {
                     />
                   </div>
                   <div>
-                    <Label htmlFor="newProductSKU" className="text-foreground">SKU</Label>
+                    <Label htmlFor="newProductSKU" className="text-foreground">
+                      SKU
+                    </Label>
                     <Input
                       id="newProductSKU"
                       type="text"
@@ -384,7 +433,12 @@ export function ScanPage({ token }: ScanPageProps) {
                     />
                   </div>
                   <div>
-                    <Label htmlFor="newProductCostPrice" className="text-foreground">Cost Price</Label>
+                    <Label
+                      htmlFor="newProductCostPrice"
+                      className="text-foreground"
+                    >
+                      Cost Price
+                    </Label>
                     <Input
                       id="newProductCostPrice"
                       type="number"
@@ -407,15 +461,20 @@ export function ScanPage({ token }: ScanPageProps) {
             <div className="mt-6 p-4 border rounded-md bg-muted">
               <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                 <div>
-                  <p className="font-semibold text-foreground">Product Details:</p>
-                  <p className="text-foreground">
-                    <span className="font-medium">Name:</span> {productDetails.name}
+                  <p className="font-semibold text-foreground">
+                    Product Details:
                   </p>
                   <p className="text-foreground">
-                    <span className="font-medium">SKU:</span> {productDetails.sku}
+                    <span className="font-medium">Name:</span>{" "}
+                    {productDetails.name}
                   </p>
                   <p className="text-foreground">
-                    <span className="font-medium">Barcode:</span> {productDetails.barcode}
+                    <span className="font-medium">SKU:</span>{" "}
+                    {productDetails.sku}
+                  </p>
+                  <p className="text-foreground">
+                    <span className="font-medium">Barcode:</span>{" "}
+                    {productDetails.barcode}
                   </p>
                 </div>
                 <div>
@@ -434,7 +493,9 @@ export function ScanPage({ token }: ScanPageProps) {
 
               <div className="mt-6 space-y-6">
                 <div>
-                  <Label htmlFor="expiryDate" className="text-foreground">Expiry Date</Label>
+                  <Label htmlFor="expiryDate" className="text-foreground">
+                    Expiry Date
+                  </Label>
                   <Input
                     id="expiryDate"
                     type="date"
@@ -444,7 +505,9 @@ export function ScanPage({ token }: ScanPageProps) {
                   />
                 </div>
                 <div>
-                  <Label htmlFor="location" className="text-foreground">Location</Label>
+                  <Label htmlFor="location" className="text-foreground">
+                    Location
+                  </Label>
                   <Select
                     onValueChange={setSelectedLocationId}
                     value={selectedLocationId}
@@ -455,7 +518,8 @@ export function ScanPage({ token }: ScanPageProps) {
                     <SelectContent className="border-input bg-background text-foreground">
                       {storeAreas.map((area) => (
                         <SelectItem key={area.id} value={area.id.toString()}>
-                          {area.name}{area.subDepartment ? ` (${area.subDepartment})` : ''}
+                          {area.name}
+                          {area.subDepartment ? ` (${area.subDepartment})` : ""}
                         </SelectItem>
                       ))}
                     </SelectContent>
@@ -472,7 +536,9 @@ export function ScanPage({ token }: ScanPageProps) {
           )}
           {productDetails && recentEntries && recentEntries.length > 0 && (
             <div className="mt-8 p-4 border rounded-md bg-muted">
-              <h3 className="font-semibold text-lg text-foreground mb-4">Recent Entries</h3>
+              <h3 className="font-semibold text-lg text-foreground mb-4">
+                Recent Entries
+              </h3>
               <div className="space-y-3">
                 {recentEntries.map((entry) => (
                   <div
@@ -481,22 +547,40 @@ export function ScanPage({ token }: ScanPageProps) {
                   >
                     <div>
                       <p className="text-foreground">
-                        <span className="font-medium">Expiry Date:</span> {new Date(entry.expiry_date).toLocaleDateString('en-AU', { timeZone: 'Australia/Sydney' })}
+                        <span className="font-medium">Expiry Date:</span>{" "}
+                        {new Date(entry.expiry_date).toLocaleDateString(
+                          "en-AU",
+                          { timeZone: "Australia/Sydney" },
+                        )}
                       </p>
                       <p className="text-muted-foreground text-sm">
-                        Added: {new Date(entry.created_at).toLocaleString('en-AU', { timeZone: 'Australia/Sydney' })}
+                        Added:{" "}
+                        {new Date(entry.created_at).toLocaleString("en-AU", {
+                          timeZone: "Australia/Sydney",
+                        })}
                       </p>
                     </div>
-                    <AlertDialog open={isAlertDialogOpen && itemToDelete === entry.id} onOpenChange={setAlertDialogOpen}>
+                    <AlertDialog
+                      open={isAlertDialogOpen && itemToDelete === entry.id}
+                      onOpenChange={setAlertDialogOpen}
+                    >
                       <AlertDialogTrigger asChild>
-                        <Button variant="destructive" size="sm" onClick={() => handleDeleteRecentEntry(entry.id)}>Delete</Button>
+                        <Button
+                          variant="destructive"
+                          size="sm"
+                          onClick={() => handleDeleteRecentEntry(entry.id)}
+                        >
+                          Delete
+                        </Button>
                       </AlertDialogTrigger>
                       <AlertDialogContent>
                         <AlertDialogHeader>
-                          <AlertDialogTitle>Are you absolutely sure?</AlertDialogTitle>
+                          <AlertDialogTitle>
+                            Are you absolutely sure?
+                          </AlertDialogTitle>
                           <AlertDialogDescription>
-                            This action cannot be undone. This will permanently delete the
-                            inventory entry.
+                            This action cannot be undone. This will permanently
+                            delete the inventory entry.
                           </AlertDialogDescription>
                         </AlertDialogHeader>
                         <AlertDialogFooter>
