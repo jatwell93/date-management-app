@@ -304,6 +304,37 @@ export class CSVParserService extends EventEmitter {
   }
 
   /**
+   * Extract a field value from a record using the header map
+   */
+  private extractField(
+    record: Record<string, string>,
+    headerMap: Map<string, string>,
+    fieldName: string
+  ): string | undefined {
+    const header = headerMap.get(fieldName);
+    return header ? record[header] : undefined;
+  }
+
+  /**
+   * Validate that a required field is present and non-empty
+   */
+  private validateRequiredField(
+    value: string | undefined,
+    fieldName: string,
+    rowNumber: number
+  ): RowError | null {
+    if (!value || value.trim() === '') {
+      return {
+        rowNumber,
+        field: fieldName,
+        value: value || '',
+        message: `${fieldName.charAt(0).toUpperCase() + fieldName.slice(1)} is required and cannot be empty`
+      };
+    }
+    return null;
+  }
+
+  /**
    * Parse and validate a single row
    */
   private parseRow(
@@ -315,51 +346,24 @@ export class CSVParserService extends EventEmitter {
     const errors: RowError[] = [];
     
     // Extract values using header map
-    const skuHeader = headerMap.get('sku');
-    const nameHeader = headerMap.get('name');
-    const barcodeHeader = headerMap.get('barcode');
-    const costHeader = headerMap.get('cost');
-
-    const rawSku = skuHeader ? record[skuHeader] : undefined;
-    const rawName = nameHeader ? record[nameHeader] : undefined;
-    const rawBarcode = barcodeHeader ? record[barcodeHeader] : undefined;
-    const rawCost = costHeader ? record[costHeader] : undefined;
+    const rawSku = this.extractField(record, headerMap, 'sku');
+    const rawName = this.extractField(record, headerMap, 'name');
+    const rawBarcode = this.extractField(record, headerMap, 'barcode');
+    const rawCost = this.extractField(record, headerMap, 'cost');
 
     // Validate required fields
-    if (!rawSku || rawSku.trim() === '') {
-      errors.push({
-        rowNumber,
-        field: 'sku',
-        value: rawSku || '',
-        message: 'SKU is required and cannot be empty'
-      });
-    }
+    const requiredFields = [
+      { value: rawSku, name: 'sku' },
+      { value: rawName, name: 'name' },
+      { value: rawBarcode, name: 'barcode' },
+      { value: rawCost, name: 'cost' }
+    ];
 
-    if (!rawName || rawName.trim() === '') {
-      errors.push({
-        rowNumber,
-        field: 'name',
-        value: rawName || '',
-        message: 'Name is required and cannot be empty'
-      });
-    }
-
-    if (!rawBarcode || rawBarcode.trim() === '') {
-      errors.push({
-        rowNumber,
-        field: 'barcode',
-        value: rawBarcode || '',
-        message: 'Barcode is required and cannot be empty'
-      });
-    }
-
-    if (!rawCost || rawCost.trim() === '') {
-      errors.push({
-        rowNumber,
-        field: 'cost',
-        value: rawCost || '',
-        message: 'Cost is required and cannot be empty'
-      });
+    for (const field of requiredFields) {
+      const error = this.validateRequiredField(field.value, field.name, rowNumber);
+      if (error) {
+        errors.push(error);
+      }
     }
 
     // Early return if required fields missing
@@ -392,18 +396,11 @@ export class CSVParserService extends EventEmitter {
         value: sku,
         message: `Duplicate SKU found in file (first occurrence will be used)`
       });
-      // Note: We still return null but this is a warning, not a hard error
       return { row: null, errors };
     }
 
     return {
-      row: {
-        sku,
-        name,
-        barcode,
-        costPrice,
-        rowNumber
-      },
+      row: { sku, name, barcode, costPrice, rowNumber },
       errors
     };
   }
@@ -427,74 +424,95 @@ export class CSVParserService extends EventEmitter {
   }
 
   /**
+   * Check if a cost string has invalid letter/digit mixing
+   */
+  private hasInvalidLetterMixing(value: string): boolean {
+    const hasCurrencyCodePrefix = /^[A-Z]{3,4}\s+[\d]/i.test(value);
+    const hasLettersMixedWithDigits = /[a-zA-Z]/.test(value.replace(/^[A-Z]{3,4}\s+/i, ''));
+    return hasLettersMixedWithDigits && !hasCurrencyCodePrefix;
+  }
+
+  /**
+   * Extract value from accounting-style parentheses notation: "(12.34)" -> "12.34", isNegative=true
+   */
+  private extractFromParentheses(value: string): { cleaned: string; isNegative: boolean } {
+    if (value.includes('(') && value.includes(')')) {
+      const match = value.match(/\(([^)]+)\)/);
+      if (match) {
+        return { cleaned: match[1], isNegative: true };
+      }
+    }
+    return { cleaned: value, isNegative: false };
+  }
+
+  /**
+   * Strip currency codes and symbols from a value
+   */
+  private stripCurrencySymbols(value: string): string {
+    let cleaned = value;
+    cleaned = cleaned.replace(/^[A-Z]{3,4}\s+/i, ''); // Currency codes like "USD ", "EUR "
+    cleaned = cleaned.replace(/[\s$€£¥₹₽₪₨₩₦₡₫Є₴₵₸₺₼₾₯]/g, '');
+    return cleaned;
+  }
+
+  /**
+   * Normalize decimal separators (handle US vs European formats)
+   */
+  private normalizeDecimalSeparator(value: string): string {
+    const lastDot = value.lastIndexOf('.');
+    const lastComma = value.lastIndexOf(',');
+
+    if (lastDot > lastComma) {
+      // US format: dots are decimal, commas are thousands
+      return value.replace(/,/g, '');
+    } else if (lastComma > lastDot) {
+      // European format: commas are decimal, dots are thousands
+      return value.replace(/\./g, '').replace(',', '.');
+    } else if (lastComma !== -1 && lastDot === -1) {
+      // Only comma - check if it's decimal separator (1-2 digits after)
+      if (value.match(/,\d{1,2}$/)) {
+        return value.replace(',', '.');
+      }
+      return value.replace(/,/g, '');
+    }
+    // No separators or both absent
+    return value;
+  }
+
+  /**
    * Parse a cost string into a number, handling various formats
    */
   private parseCostValue(costStr: string): number | null {
     let cleaned = costStr.trim();
-    let isNegative = false;
 
-    // Early rejection: if the string has letters mixed in without a proper currency format,
-    // reject it. Valid patterns are:
-    // - Currency code prefix with REQUIRED space: "USD 12.99", "EUR 20,50"
-    // - Symbol prefix: "$12.99", "€20,50"
-    // - Pure numbers: "12.99", "1,234.56"
-    // Invalid: "abc123", "12abc", "invalid"
-    const hasCurrencyCodePrefix = /^[A-Z]{3,4}\s+[\d]/i.test(cleaned);
-    const hasLettersMixedWithDigits = /[a-zA-Z]/.test(cleaned.replace(/^[A-Z]{3,4}\s+/i, ''));
-    
-    if (hasLettersMixedWithDigits && !hasCurrencyCodePrefix) {
+    // Early rejection for invalid letter/digit mixing
+    if (this.hasInvalidLetterMixing(cleaned)) {
       return null;
     }
 
-    // Handle negative values in parentheses e.g., "(12.34)"
-    if (cleaned.includes('(') && cleaned.includes(')')) {
-      const match = cleaned.match(/\(([^)]+)\)/);
-      if (match) {
-        isNegative = true;
-        cleaned = match[1];
-      }
-    }
+    // Handle accounting-style parentheses: "(12.34)" = -12.34
+    const parenthesesResult = this.extractFromParentheses(cleaned);
+    cleaned = parenthesesResult.cleaned;
+    let isNegative = parenthesesResult.isNegative;
 
-    // Remove currency symbols and codes (require space between code and digits to avoid matching "abc123")
-    cleaned = cleaned.replace(/^[A-Z]{3,4}\s+/i, ''); // Currency codes like "USD ", "EUR " with required space
-    cleaned = cleaned.replace(/[\s$€£¥₹₽₪₨₩₦₡₫Є₴₵₸₺₼₾₯]/g, '');
+    // Strip currency codes and symbols
+    cleaned = this.stripCurrencySymbols(cleaned);
 
-    // Handle negative sign
+    // Handle leading negative sign
     if (cleaned.startsWith('-')) {
       isNegative = true;
       cleaned = cleaned.substring(1);
     }
 
-    // Check if remaining string looks like a valid number (digits, dots, commas only)
-    // Reject strings that have letters mixed in
+    // Reject if letters remain after stripping currency
     if (/[a-zA-Z]/.test(cleaned)) {
       return null;
     }
 
-    // Determine decimal separator
-    const lastDot = cleaned.lastIndexOf('.');
-    const lastComma = cleaned.lastIndexOf(',');
+    // Normalize decimal separators (US vs European)
+    cleaned = this.normalizeDecimalSeparator(cleaned);
 
-    if (lastDot > lastComma) {
-      // US format: dots are decimal, commas are thousands
-      cleaned = cleaned.replace(/,/g, '');
-    } else if (lastComma > lastDot) {
-      // European format: commas are decimal, dots are thousands
-      cleaned = cleaned.replace(/\./g, '').replace(',', '.');
-    } else if (lastComma === -1 && lastDot === -1) {
-      // No separators, just digits
-    } else if (lastComma !== -1 && lastDot === -1) {
-      // Only comma - check if it's decimal separator
-      if (cleaned.match(/,\d{1,2}$/)) {
-        cleaned = cleaned.replace(',', '.');
-      } else {
-        cleaned = cleaned.replace(/,/g, '');
-      }
-    }
-
-    // After processing, check if the cleaned string is a valid number pattern
-    // Must be: optional sign, digits, optional decimal part, optional more digits
-    // Reject anything that has extraneous characters like letters mixed in
+    // Final validation: should only contain digits, dots, commas, spaces
     if (!/^-?[\d,.\s]*$/.test(cleaned)) {
       return null;
     }
@@ -503,12 +521,7 @@ export class CSVParserService extends EventEmitter {
     cleaned = cleaned.replace(/[^\d.]/g, '');
 
     const value = parseFloat(cleaned);
-    
-    if (isNaN(value)) {
-      return null;
-    }
-
-    return isNegative ? -value : value;
+    return isNaN(value) ? null : (isNegative ? -value : value);
   }
 
   /**
