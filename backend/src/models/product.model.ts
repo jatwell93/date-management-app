@@ -141,6 +141,6 @@ export class ProductModel {
   async delete(id: number): Promise<boolean> {
     const query = "DELETE FROM products WHERE id = ?";
     const result = await this.db.run(query, [id]);
-    return result.changes != null && result.changes > 0;
+    return result.changes !== null && result.changes !== undefined && result.changes > 0;
   }
 }

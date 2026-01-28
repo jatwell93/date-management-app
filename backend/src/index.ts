@@ -3,7 +3,7 @@ import cors from "cors";
 import helmet from "helmet";
 import { createServer, Server as HttpsServer } from "https";
 import { Server as HttpServer } from "http";  // Import http server type
-import { readFileSync } from "fs";
+import { promises as fs } from "fs";
 import { join } from "path";
 import { RateLimiterMemory } from "rate-limiter-flexible";
 import { initDatabase } from "./database";
@@ -200,37 +200,46 @@ type AppServer = HttpServer | HttpsServer;
 
 let server: AppServer;
 
-if (process.env.NODE_ENV !== "test") {
-  // Check if we should enable HTTPS
-  if (envConfig.NODE_ENV === 'production' && envConfig.USE_HTTPS) {
-    try {
-      // Read SSL certificate and key
-      if (!envConfig.SSL_PRIVATE_KEY_PATH || !envConfig.SSL_CERT_PATH) {
-        throw new Error('SSL_PRIVATE_KEY_PATH and SSL_CERT_PATH must be provided when USE_HTTPS is true');
+const startServer = async (): Promise<void> => {
+  if (process.env.NODE_ENV !== "test") {
+    // Check if we should enable HTTPS
+    if (envConfig.NODE_ENV === 'production' && envConfig.USE_HTTPS) {
+      try {
+        // Read SSL certificate and key
+        if (!envConfig.SSL_PRIVATE_KEY_PATH || !envConfig.SSL_CERT_PATH) {
+          throw new Error('SSL_PRIVATE_KEY_PATH and SSL_CERT_PATH must be provided when USE_HTTPS is true');
+        }
+
+        const [key, cert] = await Promise.all([
+          fs.readFile(envConfig.SSL_PRIVATE_KEY_PATH),
+          fs.readFile(envConfig.SSL_CERT_PATH)
+        ]);
+
+        const httpsOptions = {
+          key,
+          cert
+        };
+
+        server = createServer(httpsOptions, app);
+        server.listen(port, () => {
+          console.log(`HTTPS Server is running on https://localhost:${port}`);
+        });
+      } catch (error) {
+        console.error('Failed to start HTTPS server:', error);
+        console.log('Falling back to HTTP server');
+        server = app.listen(port, () => {
+          console.log(`HTTP Server is running on http://localhost:${port}`);
+        });
       }
-      
-      const httpsOptions = {
-        key: readFileSync(envConfig.SSL_PRIVATE_KEY_PATH),
-        cert: readFileSync(envConfig.SSL_CERT_PATH)
-      };
-      
-      server = createServer(httpsOptions, app);
-      server.listen(port, () => {
-        console.log(`HTTPS Server is running on https://localhost:${port}`);
-      });
-    } catch (error) {
-      console.error('Failed to start HTTPS server:', error);
-      console.log('Falling back to HTTP server');
+    } else {
+      // Use regular HTTP server for development or if HTTPS is disabled
       server = app.listen(port, () => {
-        console.log(`HTTP Server is running on http://localhost:${port}`);
+        console.log(`Server is running on http://localhost:${port}`);
       });
     }
-  } else {
-    // Use regular HTTP server for development or if HTTPS is disabled
-    server = app.listen(port, () => {
-      console.log(`Server is running on http://localhost:${port}`);
-    });
   }
-}
+};
+
+void startServer();
 
 export default app;

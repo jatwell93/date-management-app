@@ -1,4 +1,5 @@
 import React from "react";
+import { randomUUID } from "crypto";
 import {
   render,
   screen,
@@ -7,6 +8,8 @@ import {
 } from "@testing-library/react";
 import { StoreAreaManagementPage } from "../pages/StoreAreaManagementPage";
 import "@testing-library/jest-dom";
+
+const testSessionToken = randomUUID();
 
 // Mock fetch API
 global.fetch = jest.fn((url: RequestInfo | URL, options) => {
@@ -51,7 +54,7 @@ describe("StoreAreaManagementPage", () => {
   });
 
   it("renders the store area management page and fetches areas", async () => {
-    render(<StoreAreaManagementPage token="mock_token" />);
+    render(<StoreAreaManagementPage token={testSessionToken} />);
 
     expect(screen.getByText(/Store Area Management/i)).toBeInTheDocument();
 
@@ -60,13 +63,13 @@ describe("StoreAreaManagementPage", () => {
     expect(global.fetch).toHaveBeenCalledWith(
       "http://localhost:3001/store-areas",
       expect.objectContaining({
-        headers: { Authorization: "Bearer mock_token" },
+        headers: { Authorization: `Bearer ${testSessionToken}` },
       }),
     );
   });
 
   it("adds a new store area", async () => {
-    render(<StoreAreaManagementPage token="mock_token" />);
+    render(<StoreAreaManagementPage token={testSessionToken} />);
 
     await screen.findByText(/Aisle 1/i);
 
@@ -88,7 +91,7 @@ describe("StoreAreaManagementPage", () => {
   });
 
   it("edits an existing store area", async () => {
-    render(<StoreAreaManagementPage token="mock_token" />);
+    render(<StoreAreaManagementPage token={testSessionToken} />);
 
     await screen.findByText(/Aisle 1/i);
 
@@ -113,7 +116,7 @@ describe("StoreAreaManagementPage", () => {
   it("deletes a store area", async () => {
     window.confirm = jest.fn(() => true); // Mock window.confirm
 
-    render(<StoreAreaManagementPage token="mock_token" />);
+    render(<StoreAreaManagementPage token={testSessionToken} />);
 
     await screen.findByText(/Aisle 1/i);
 

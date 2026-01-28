@@ -24,7 +24,7 @@ export const authenticateToken = (
   const authHeader = req.headers["authorization"];
   const token = authHeader && authHeader.split(" ")[1];
 
-  if (token == null) {
+  if (token === undefined || token === null) {
     // Track unauthorized access attempt
     const analyticsService = AnalyticsService.getInstance();
     analyticsService.trackEvent({

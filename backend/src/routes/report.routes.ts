@@ -1,6 +1,8 @@
 import { Router, Request, Response } from "express";
+import validator from "validator";
 import { ReportService } from "../services/report.service";
 import { authenticateToken } from "../middleware/auth.middleware";
+import { escapeHtml } from "../utils/normalize.function";
 
 const router = Router();
 const reportService = new ReportService();
@@ -12,7 +14,7 @@ router.get(
   async (req: Request, res: Response) => {
     try {
       const report = await reportService.getMonthlyExpiryReport();
-      res.json(report);
+      res.json(escapeHtml(report));
     } catch (_error) {
       // console.error("Get monthly expiry report error:", _error);
       res.status(500).json({ message: "Internal server error" });
@@ -27,7 +29,7 @@ router.get(
   async (req: Request, res: Response) => {
     try {
       const report = await reportService.getOverallExpiryReport();
-      res.json(report);
+      res.json(escapeHtml(report));
     } catch (_error) {
       // console.error("Get overall expiry report error:", _error);
       res.status(500).json({ message: "Internal server error" });
@@ -42,7 +44,7 @@ router.get(
   async (req: Request, res: Response) => {
     try {
       const report = await reportService.getDetailedExpiryReport();
-      res.json(report);
+      res.json(escapeHtml(report));
     } catch (_error) {
       // console.error("Get detailed expiry report error:", _error);
       res.status(500).json({ message: "Internal server error" });
@@ -57,7 +59,7 @@ router.get(
   async (req: Request, res: Response) => {
     try {
       const report = await reportService.getMonthlyMarkdownReport();
-      res.json(report);
+      res.json(escapeHtml(report));
     } catch (_error) {
       // console.error("Get monthly markdown report error:", _error);
       res.status(500).json({ message: "Internal server error" });
@@ -72,7 +74,7 @@ router.post(
   async (req: Request, res: Response) => {
     try {
       await reportService.updateAllMarkdownStatuses();
-      res.json({ message: "All inventory markdown statuses updated successfully." });
+      res.json(escapeHtml({ message: "All inventory markdown statuses updated successfully." }));
     } catch (_error) {
       // console.error("Update markdown statuses error:", _error);
       res.status(500).json({ message: "Internal server error" });
@@ -84,7 +86,7 @@ router.post(
 router.get("/usage", authenticateToken, async (req: Request, res: Response) => {
   try {
     const report = await reportService.getUsageReport();
-    res.json(report);
+    res.json(escapeHtml(report));
   } catch (_error) {
     // console.error("Get usage report error:", _error);
     res.status(500).json({ message: "Internal server error" });
@@ -95,7 +97,7 @@ router.get("/usage", authenticateToken, async (req: Request, res: Response) => {
 router.get("/daily-usage", authenticateToken, async (req: Request, res: Response) => {
   try {
     const report = await reportService.getDailyUsageReport();
-    res.json(report);
+    res.json(escapeHtml(report));
   } catch (_error) {
     // console.error("Get daily usage report error:", _error);
     res.status(500).json({ message: "Internal server error" });
@@ -106,7 +108,7 @@ router.get("/daily-usage", authenticateToken, async (req: Request, res: Response
 router.get("/loss-by-sku", authenticateToken, async (req: Request, res: Response) => {
   try {
     const report = await reportService.getLossBySkuReport();
-    res.json(report);
+    res.json(escapeHtml(report));
   } catch (_error) {
     // console.error("Get loss by SKU report error:", _error);
     res.status(500).json({ message: "Internal server error" });
@@ -117,7 +119,7 @@ router.get("/loss-by-sku", authenticateToken, async (req: Request, res: Response
 router.get("/loss-by-department", authenticateToken, async (req: Request, res: Response) => {
   try {
     const report = await reportService.getLossByDepartmentReport();
-    res.json(report);
+    res.json(escapeHtml(report));
   } catch (_error) {
     // console.error("Get loss by department report error:", _error);
     res.status(500).json({ message: "Internal server error" });
@@ -128,8 +130,11 @@ router.get("/loss-by-department", authenticateToken, async (req: Request, res: R
 router.get("/items-by-user", authenticateToken, async (req: Request, res: Response) => {
   try {
     const timeFrame = req.query.timeFrame as string | undefined;
+    if (timeFrame && !validator.isInt(timeFrame, { min: 1, max: 3650 })) {
+      return res.status(400).json({ message: "Invalid timeFrame value" });
+    }
     const report = await reportService.getItemsByUserReport(timeFrame);
-    res.json(report);
+    res.json(escapeHtml(report));
   } catch (_error) {
     // console.error("Get items by user report error:", _error);
     res.status(500).json({ message: "Internal server error" });
@@ -140,7 +145,7 @@ router.get("/items-by-user", authenticateToken, async (req: Request, res: Respon
 router.get("/items-by-date", authenticateToken, async (req: Request, res: Response) => {
   try {
     const report = await reportService.getItemsByDateReport();
-    res.json(report);
+    res.json(escapeHtml(report));
   } catch (_error) {
     // console.error("Get items by date report error:", _error);
     res.status(500).json({ message: "Internal server error" });
@@ -154,7 +159,7 @@ router.get(
   async (req: Request, res: Response) => {
     try {
       const analytics = await reportService.getDashboardAnalytics();
-      res.json(analytics);
+      res.json(escapeHtml(analytics));
     } catch (_error) {
       // console.error("Get dashboard analytics error:", _error);
       res.status(500).json({ message: "Internal server error" });

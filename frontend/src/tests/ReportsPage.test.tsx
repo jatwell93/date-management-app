@@ -1,4 +1,5 @@
 import React from "react";
+import { randomUUID } from "crypto";
 import { render, screen, waitFor } from "@testing-library/react";
 import { ReportsPage } from "../pages/ReportsPage";
 import "@testing-library/jest-dom";
@@ -16,7 +17,8 @@ global.fetch = jest.fn(() =>
 
 describe("ReportsPage", () => {
   it("renders monthly expiry report data on successful fetch", async () => {
-    render(<ReportsPage token="mock_token" />);
+    const tokenValue = randomUUID();
+    render(<ReportsPage token={tokenValue} />);
 
     expect(screen.getByText(/Loading reports.../i)).toBeInTheDocument();
 
@@ -30,7 +32,7 @@ describe("ReportsPage", () => {
     expect(global.fetch).toHaveBeenCalledWith(
       "http://localhost:3001/reports/expiry",
       expect.objectContaining({
-        headers: { Authorization: "Bearer mock_token" },
+        headers: { Authorization: `Bearer ${tokenValue}` },
       }),
     );
   });
@@ -53,7 +55,8 @@ describe("ReportsPage", () => {
       } as Response),
     );
 
-    render(<ReportsPage token="mock_token" />);
+    const tokenValue = randomUUID();
+    render(<ReportsPage token={tokenValue} />);
 
     await waitFor(() => {
       expect(

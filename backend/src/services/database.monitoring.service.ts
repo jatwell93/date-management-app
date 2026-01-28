@@ -425,9 +425,9 @@ export class DatabaseMonitoringService extends EventEmitter {
       }
 
       // Actually get the database file size
-      const fs = await import('fs');
+      const fs = await import('fs/promises');
       const dbPath = process.env.DATABASE_PATH || './database.sqlite';
-      const stats = fs.statSync(dbPath);
+      const stats = await fs.stat(dbPath);
       const dbFileSize = stats.size;
       
       // Distribute the database file size proportionally based on row count
@@ -454,8 +454,7 @@ export class DatabaseMonitoringService extends EventEmitter {
    */
   private async getDiskSpaceMetrics(): Promise<DatabaseMetrics['diskSpace']> {
     // Use the 'fs' and 'os' modules to get disk space information
-    const fs = await import('fs');
-    const os = await import('os');
+    const fs = await import('fs/promises');
 
     // Note: Node.js doesn't have a direct way to get disk space
     // This is a simplified implementation that won't work on all platforms
@@ -466,7 +465,7 @@ export class DatabaseMonitoringService extends EventEmitter {
       
       // Get disk space info using statfs (Unix-like systems) or alternative methods
       // This is a simplified approach - a real implementation would require platform-specific code
-      const stats = fs.statSync(dbPath);
+      const stats = await fs.stat(dbPath);
       const dbFileSize = stats.size;
       
       // For now, return placeholder values

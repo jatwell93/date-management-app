@@ -4,6 +4,7 @@ import { StoreArea } from "../models/store-area.model";
 import { authenticateToken } from "../middleware/auth.middleware";
 import { validateStoreAreaInput, validateDataIntegrity } from "../middleware/validation.middleware";
 import { validateBusinessRules } from "../middleware/data-integrity.middleware";
+import { escapeHtml } from "../utils/normalize.function";
 
 const router = Router();
 const storeAreaService = new StoreAreaService();
@@ -12,7 +13,7 @@ const storeAreaService = new StoreAreaService();
 router.get("/", authenticateToken, async (req: Request, res: Response) => {
   try {
     const areas = await storeAreaService.getAllStoreAreas();
-    res.json(areas);
+    res.json(escapeHtml(areas));
   } catch (error: any) {
     console.error("Get store areas error:", error);
     const errorMessage = error.message || "Internal server error";
@@ -23,14 +24,17 @@ router.get("/", authenticateToken, async (req: Request, res: Response) => {
 // GET /store-areas/:id - Get a specific store area by ID
 router.get("/:id", authenticateToken, async (req: Request, res: Response) => {
   try {
-    const id = parseInt(req.params.id);
+    const id = Number.parseInt(req.params.id, 10);
+    if (Number.isNaN(id)) {
+      return res.status(400).json({ message: "Invalid store area id" });
+    }
     const area = await storeAreaService.getStoreAreaById(id);
 
     if (!area) {
       return res.status(404).json({ message: "Store area not found" });
     }
 
-    res.json(area);
+    res.json(escapeHtml(area));
   } catch (error: any) {
     console.error("Get store area error:", error);
     const errorMessage = error.message || "Internal server error";
@@ -51,7 +55,7 @@ router.get(
         return res.status(404).json({ message: "Store areas not found" });
       }
 
-      res.json(areas);
+      res.json(escapeHtml(areas));
     } catch (error: any) {
       console.error("Get store areas by name error:", error);
       const errorMessage = error.message || "Internal server error";
@@ -75,7 +79,7 @@ router.post("/", authenticateToken, validateStoreAreaInput, validateDataIntegrit
       subDepartment,
       lastChecked,
     } as Omit<StoreArea, "id" | "createdAt" | "updatedAt">);
-    res.status(201).json(newArea);
+    res.status(201).json(escapeHtml(newArea));
   } catch (error: any) {
     console.error("Create store area error:", error);
     const errorMessage = error.message || "Internal server error";
@@ -86,7 +90,10 @@ router.post("/", authenticateToken, validateStoreAreaInput, validateDataIntegrit
 // PUT /store-areas/:id - Update a store area
 router.put("/:id", authenticateToken, validateStoreAreaInput, validateDataIntegrity, validateBusinessRules, async (req: Request, res: Response) => {
   try {
-    const id = parseInt(req.params.id);
+    const id = Number.parseInt(req.params.id, 10);
+    if (Number.isNaN(id)) {
+      return res.status(400).json({ message: "Invalid store area id" });
+    }
     const { name, subDepartment, lastChecked } = req.body;
 
     // Build update object
@@ -103,7 +110,7 @@ router.put("/:id", authenticateToken, validateStoreAreaInput, validateDataIntegr
       return res.status(404).json({ message: "Store area not found" });
     }
 
-    res.json(updatedArea);
+    res.json(escapeHtml(updatedArea));
   } catch (error: any) {
     console.error("Update store area error:", error);
     const errorMessage = error.message || "Internal server error";
@@ -117,14 +124,17 @@ router.delete(
   authenticateToken,
   async (req: Request, res: Response) => {
     try {
-      const id = parseInt(req.params.id);
+      const id = Number.parseInt(req.params.id, 10);
+      if (Number.isNaN(id)) {
+        return res.status(400).json({ message: "Invalid store area id" });
+      }
       const deleted = await storeAreaService.deleteStoreArea(id);
 
       if (!deleted) {
         return res.status(404).json({ message: "Store area not found" });
       }
 
-      res.json({ message: "Store area deleted successfully" });
+      res.json(escapeHtml({ message: "Store area deleted successfully" }));
     } catch (error: any) {
       console.error("Delete store area error:", error);
       const errorMessage = error.message || "Internal server error";

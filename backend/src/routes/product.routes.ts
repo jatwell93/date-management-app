@@ -5,6 +5,7 @@ import { authenticateToken } from "../middleware/auth.middleware";
 import { validateProductInput, validateDataIntegrity } from "../middleware/validation.middleware";
 import { validateBusinessRules } from "../middleware/data-integrity.middleware";
 import multer, { FileFilterCallback } from "multer";
+import { escapeHtml } from "../utils/normalize.function";
 
 const router = Router();
 const productService = new ProductService();
@@ -31,7 +32,7 @@ const upload = multer({
 router.get("/", authenticateToken, async (req: Request, res: Response) => {
   try {
     const products = await productService.getAllProducts();
-    res.json(products);
+    res.json(escapeHtml(products));
   } catch (_error) {
     // console.error("Get products error:", _error);
     res.status(500).json({ message: "Internal server error" });
@@ -41,14 +42,17 @@ router.get("/", authenticateToken, async (req: Request, res: Response) => {
 // GET /products/:id - Get a specific product by ID
 router.get("/:id", authenticateToken, async (req: Request, res: Response) => {
   try {
-    const id = parseInt(req.params.id);
+    const id = Number.parseInt(req.params.id, 10);
+    if (Number.isNaN(id)) {
+      return res.status(400).json({ message: "Invalid product id" });
+    }
     const product = await productService.getProductById(id);
 
     if (!product) {
       return res.status(404).json({ message: "Product not found" });
     }
 
-    res.json(product);
+    res.json(escapeHtml(product));
   } catch (_error) {
     // console.error("Get product error:", _error);
     res.status(500).json({ message: "Internal server error" });
@@ -68,7 +72,7 @@ router.get(
         return res.status(404).json({ message: "Product not found" });
       }
 
-      res.json(product);
+      res.json(escapeHtml(product));
     } catch (_error) {
       // console.error("Get product by barcode error:", _error);
       res.status(500).json({ message: "Internal server error" });
@@ -89,7 +93,7 @@ router.get(
         return res.status(404).json({ message: "Product not found" });
       }
 
-      res.json(product);
+      res.json(escapeHtml(product));
     } catch (_error) {
       // console.error("Get product by SKU error:", _error);
       res.status(500).json({ message: "Internal server error" });
@@ -111,7 +115,7 @@ router.post("/", authenticateToken, validateProductInput, validateDataIntegrity,
       name,
       costPrice,
     } as Omit<Product, "id" | "createdAt" | "updatedAt">);
-    res.status(201).json(newProduct);
+    res.status(201).json(escapeHtml(newProduct));
   } catch (_error) {
     // console.error("Create product error:", _error);
     res.status(500).json({ message: "Internal server error" });
@@ -121,7 +125,10 @@ router.post("/", authenticateToken, validateProductInput, validateDataIntegrity,
 // PUT /products/:id - Update a product
 router.put("/:id", authenticateToken, validateProductInput, validateDataIntegrity, validateBusinessRules, async (req: Request, res: Response) => {
   try {
-    const id = parseInt(req.params.id);
+    const id = Number.parseInt(req.params.id, 10);
+    if (Number.isNaN(id)) {
+      return res.status(400).json({ message: "Invalid product id" });
+    }
     const { barcode, sku, name, costPrice } = req.body;
 
     // Build update object
@@ -138,7 +145,7 @@ router.put("/:id", authenticateToken, validateProductInput, validateDataIntegrit
       return res.status(404).json({ message: "Product not found" });
     }
 
-    res.json(updatedProduct);
+    res.json(escapeHtml(updatedProduct));
   } catch (_error) {
     // console.error("Update product error:", _error);
     res.status(500).json({ message: "Internal server error" });
@@ -151,14 +158,17 @@ router.delete(
   authenticateToken,
   async (req: Request, res: Response) => {
     try {
-      const id = parseInt(req.params.id);
+      const id = Number.parseInt(req.params.id, 10);
+      if (Number.isNaN(id)) {
+        return res.status(400).json({ message: "Invalid product id" });
+      }
       const deleted = await productService.deleteProduct(id);
 
       if (!deleted) {
         return res.status(404).json({ message: "Product not found" });
       }
 
-      res.json({ message: "Product deleted successfully" });
+      res.json(escapeHtml({ message: "Product deleted successfully" }));
     } catch (_error) {
       // console.error("Delete product error:", _error);
       res.status(500).json({ message: "Internal server error" });
@@ -197,7 +207,7 @@ router.post(
         responseObj.errors = result.errors;
       }
       
-      res.json(responseObj);
+      res.json(escapeHtml(responseObj));
     } catch (error: any) {
       console.error("CSV upload error:", error);
       res.status(500).json({ 

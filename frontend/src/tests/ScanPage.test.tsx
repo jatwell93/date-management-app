@@ -1,4 +1,5 @@
 import React from "react";
+import { randomUUID } from "crypto";
 import {
   render,
   screen,
@@ -8,6 +9,8 @@ import {
 import { ScanPage } from "../pages/ScanPage";
 import "@testing-library/jest-dom";
 import { offlineStorage } from "../lib/offline-storage";
+
+const testSessionToken = randomUUID();
 
 // Mock fetch API
 global.fetch = jest.fn((url: RequestInfo | URL) => {
@@ -85,7 +88,7 @@ describe("ScanPage", () => {
   });
 
   it("renders the scan page and fetches product details on scan", async () => {
-    render(<ScanPage token="mock_token" />);
+    render(<ScanPage token={testSessionToken} />);
 
     expect(screen.getByText(/Inventory Scan/i)).toBeInTheDocument();
 
@@ -99,7 +102,7 @@ describe("ScanPage", () => {
     expect(global.fetch).toHaveBeenCalledWith(
       "http://localhost:3001/products?barcode=123",
       expect.objectContaining({
-        headers: { Authorization: "Bearer mock_token" },
+        headers: { Authorization: `Bearer ${testSessionToken}` },
       }),
     );
   });
@@ -118,7 +121,7 @@ describe("ScanPage", () => {
   });
 
   it("displays new product form when product is not found", async () => {
-    render(<ScanPage token="mock_token" />);
+    render(<ScanPage token={testSessionToken} />);
 
     fireEvent.change(screen.getByPlaceholderText(/Enter barcode manually/i), {
       target: { value: "non_existent" },
@@ -134,7 +137,7 @@ describe("ScanPage", () => {
   });
 
   it("adds a new product and then shows inventory details form", async () => {
-    render(<ScanPage token="mock_token" />);
+    render(<ScanPage token={testSessionToken} />);
 
     fireEvent.change(screen.getByPlaceholderText(/Enter barcode manually/i), {
       target: { value: "non_existent" },
@@ -177,7 +180,7 @@ describe("ScanPage", () => {
   });
 
   it("submits inventory item successfully when online", async () => {
-    render(<ScanPage token="mock_token" />);
+    render(<ScanPage token={testSessionToken} />);
 
     fireEvent.change(screen.getByPlaceholderText(/Enter barcode manually/i), {
       target: { value: "123" },
@@ -215,7 +218,7 @@ describe("ScanPage", () => {
       writable: true,
       value: false,
     });
-    render(<ScanPage token="mock_token" />);
+    render(<ScanPage token={testSessionToken} />);
 
     fireEvent.change(screen.getByPlaceholderText(/Enter barcode manually/i), {
       target: { value: "123" },

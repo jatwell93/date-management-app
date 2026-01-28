@@ -7,7 +7,7 @@ import fs from "fs";
 import * as path from "path";
 
 // Helper function to detect file type by content
-function detectFileType(filePath: string, originalFilename?: string): 'csv' | 'xls' | 'xlsx' {
+async function detectFileType(filePath: string, originalFilename?: string): Promise<'csv' | 'xls' | 'xlsx'> {
   // First check by original filename if provided
   if (originalFilename) {
     const ext = path.extname(originalFilename).toLowerCase();
@@ -23,7 +23,12 @@ function detectFileType(filePath: string, originalFilename?: string): 'csv' | 'x
   // If no extension in path (e.g., multer temp files without extension), 
   // try to detect by file header
   try {
-    const header = fs.readFileSync(filePath, { encoding: 'binary', flag: 'r' });
+    const fileHandle = await fs.promises.open(filePath, 'r');
+    const buffer = Buffer.alloc(4);
+    await fileHandle.read(buffer, 0, buffer.length, 0);
+    await fileHandle.close();
+
+    const header = buffer.toString('binary');
     if (header.startsWith('PK')) { // ZIP file header (XLSX files are ZIP archives)
       return 'xlsx';
     }
@@ -287,21 +292,36 @@ export class ProductService {
     try {
       const updatedProduct = await this.prisma.product.update({
         where: { id },
-        data: {
-          ...(product.barcode !== undefined && { barcode: product.barcode }),
-          ...(product.sku !== undefined && { sku: product.sku }),
-          ...(product.name !== undefined && { name: product.name }),
-          ...(product.costPrice !== undefined && { costPrice: product.costPrice })
-        }
+        data: this.buildProductUpdateData(product)
       });
       return this.mapPrismaToModel(updatedProduct);
     } catch (error: any) {
-      // Prisma throws P2025 when record not found
-      if (error.code === 'P2025') {
-        return null;
-      }
-      throw error;
+      return this.handlePrismaNotFound(error);
     }
+  }
+
+  /**
+   * Build update data object from partial product, filtering undefined values
+   */
+  private buildProductUpdateData(
+    product: Partial<Omit<Product, "id" | "createdAt" | "updatedAt">>
+  ): { barcode?: string; sku?: string; name?: string; costPrice?: number } {
+    const data: { barcode?: string; sku?: string; name?: string; costPrice?: number } = {};
+    if (product.barcode !== undefined) data.barcode = product.barcode;
+    if (product.sku !== undefined) data.sku = product.sku;
+    if (product.name !== undefined) data.name = product.name;
+    if (product.costPrice !== undefined) data.costPrice = product.costPrice;
+    return data;
+  }
+
+  /**
+   * Handle Prisma P2025 (record not found) error, rethrow others
+   */
+  private handlePrismaNotFound(error: any): null {
+    if (error.code === 'P2025') {
+      return null;
+    }
+    throw error;
   }
 
   async deleteProduct(id: number): Promise<boolean> {
@@ -344,7 +364,7 @@ export class ProductService {
   }
 
   async processCSVUpload(filePath: string, originalFilename?: string): Promise<{ imported: number; updated: number; errors: string[] }> {
-    const fileType = detectFileType(filePath, originalFilename);
+    const fileType = await detectFileType(filePath, originalFilename);
     
     if (fileType === 'xlsx' || fileType === 'xls') {
       return this.processXLSXUpload(filePath);
