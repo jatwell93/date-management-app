@@ -14,7 +14,8 @@ global.fetch = jest.fn(() =>
 
 describe("UsageReportPage", () => {
   it("renders usage report data on successful fetch", async () => {
-    render(<UsageReportPage token="mock_token" />);
+    const tokenValue = "test-session-value";
+    render(<UsageReportPage token={tokenValue} />);
 
     expect(screen.getByText(/Loading usage report.../i)).toBeInTheDocument();
 
@@ -26,7 +27,7 @@ describe("UsageReportPage", () => {
     expect(global.fetch).toHaveBeenCalledWith(
       "http://localhost:3001/reports/usage",
       expect.objectContaining({
-        headers: { Authorization: "Bearer mock_token" },
+        headers: { Authorization: `Bearer ${tokenValue}` },
       }),
     );
   });
@@ -49,7 +50,8 @@ describe("UsageReportPage", () => {
       } as Response),
     );
 
-    render(<UsageReportPage token="mock_token" />);
+    const tokenValue = "test-session-value";
+    render(<UsageReportPage token={tokenValue} />);
 
     await waitFor(() => {
       expect(

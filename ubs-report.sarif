@@ -1,0 +1,42 @@
+{
+  "version": "2.1.0",
+  "runs": [
+    {
+      "tool": {
+        "driver": {
+          "name": "UBS (js)",
+          "informationUri": "https://github.com/Dicklesworthstone/ultimate_bug_scanner"
+        }
+      },
+      "results": [
+        {
+          "ruleId": "summary.critical",
+          "level": "error",
+          "message": {
+            "text": "52 critical findings"
+          }
+        },
+        {
+          "ruleId": "summary.warning",
+          "level": "warning",
+          "message": {
+            "text": "417 warnings"
+          }
+        },
+        {
+          "ruleId": "summary.info",
+          "level": "note",
+          "message": {
+            "text": "2958 info items"
+          }
+        }
+      ],
+      "versionControlProvenance": [
+        {
+          "repositoryUri": "https://github.com/jatwell93/date-management-app",
+          "revisionId": "58937a9ea456a188c3aab01d1381034802bfe53c"
+        }
+      ]
+    }
+  ]
+}

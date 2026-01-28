@@ -1,4 +1,5 @@
 import React from "react";
+import { randomUUID } from "crypto";
 import { render, screen, fireEvent, waitFor } from "@testing-library/react";
 import { LoginPage } from "../components/LoginPage";
 
@@ -6,10 +7,12 @@ import { LoginPage } from "../components/LoginPage";
 (global.window as any).fetch = jest.fn() as any;
 
 // Default mock implementation for successful login
+const mockAuthToken = randomUUID();
+
 (global.fetch as jest.Mock).mockImplementation(() =>
   Promise.resolve({
     ok: true,
-    json: () => Promise.resolve({ token: "mock-auth-token-manager" }),
+    json: () => Promise.resolve({ token: mockAuthToken }),
   }),
 );
 
@@ -35,7 +38,7 @@ describe("LoginPage", () => {
     fireEvent.click(loginButton);
 
     await waitFor(() => {
-      expect(mockOnLogin).toHaveBeenCalledWith("mock-auth-token-manager");
+      expect(mockOnLogin).toHaveBeenCalledWith(mockAuthToken);
     });
 
     expect(global.fetch).toHaveBeenCalledTimes(1);

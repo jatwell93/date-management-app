@@ -1,14 +1,29 @@
-import { Router, Request, Response } from "express";
+import { Router, Request, Response, NextFunction } from "express";
+import validator from "validator";
 import { AuthService } from "../services/auth.service";
 import { authenticateToken, generateToken } from "../middleware/auth.middleware";
+import { validateUserInput } from "../middleware/validation.middleware";
+import { escapeHtml } from "../utils/normalize.function";
 
 const router = Router();
 const authService = new AuthService();
 
-router.post("/login", async (req: Request, res: Response) => {
-  const { pin } = req.body;
+const normalizePin = (req: Request, _res: Response, next: NextFunction) => {
+  if (req.body?.pin !== undefined && req.body?.pin !== null) {
+    req.body.pin = String(req.body.pin);
+  }
+  next();
+};
+
+router.post("/login", normalizePin, validateUserInput, async (req: Request, res: Response) => {
+  const rawPin = req.body.pin as string | undefined;
+  const pin = rawPin ? validator.whitelist(rawPin, "0-9") : "";
   if (!pin) {
     return res.status(400).json({ message: "PIN is required" });
+  }
+
+  if (rawPin && pin !== rawPin) {
+    return res.status(400).json({ message: "PIN must contain only digits" });
   }
 
   // Validate PIN strength
@@ -22,7 +37,7 @@ router.post("/login", async (req: Request, res: Response) => {
     // In a real application, you would properly compare hashes
     const token = await authService.login(pin);
     if (token) {
-      res.json({ token });
+      res.json(escapeHtml({ token }));
     } else {
       res.status(401).json({ message: "Invalid PIN" });
     }
@@ -43,7 +58,7 @@ router.post("/refresh", authenticateToken, async (req: Request, res: Response) =
     }
 
     const newToken = generateToken(userId, userRole, '1h');
-    res.json({ token: newToken });
+    res.json(escapeHtml({ token: newToken }));
   } catch (error) {
     console.error("Token refresh error:", error);
     res.status(500).json({ message: "Internal server error" });

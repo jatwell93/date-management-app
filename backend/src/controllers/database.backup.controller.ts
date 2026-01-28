@@ -64,7 +64,7 @@ export const restoreBackup = async (req: Request, res: Response): Promise<void> 
 
 export const listBackups = async (req: Request, res: Response): Promise<void> => {
   try {
-    const backups = backupService.listBackups();
+    const backups = await backupService.listBackups();
     
     res.status(200).json({
       backups: backups,

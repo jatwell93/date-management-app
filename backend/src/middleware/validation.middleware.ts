@@ -1,4 +1,5 @@
 import { Request, Response, NextFunction } from 'express';
+import path from 'path';
 import validator from 'validator';
 
 // Validation middleware for product creation
@@ -134,5 +135,54 @@ export const validateDataIntegrity = (req: Request, res: Response, next: NextFun
     }
   }
   
+  next();
+};
+
+// Validation middleware for database backup restore
+export const validateBackupRestoreInput = (req: Request, res: Response, next: NextFunction) => {
+  const { backupPath } = req.body;
+
+  if (!backupPath || typeof backupPath !== 'string') {
+    return res.status(400).json({ error: 'Backup path is required' });
+  }
+
+  const normalizedPath = path.normalize(backupPath);
+  if (normalizedPath.includes('..')) {
+    return res.status(400).json({ error: 'Invalid backup path' });
+  }
+
+  const baseDir = path.resolve('backups');
+  const resolvedPath = path.resolve(backupPath);
+  if (!resolvedPath.startsWith(baseDir + path.sep)) {
+    return res.status(400).json({ error: 'Backup path must be within backups directory' });
+  }
+
+  next();
+};
+
+// Validation middleware for inventory transactions
+export const validateInventoryTransactionInput = (req: Request, res: Response, next: NextFunction) => {
+  const { inventory_item_id, user_id, type, quantity_change, notes } = req.body;
+
+  if (!validator.isInt(String(inventory_item_id), { min: 1 })) {
+    return res.status(400).json({ error: 'Inventory item id must be a positive integer' });
+  }
+
+  if (!validator.isInt(String(user_id), { min: 1 })) {
+    return res.status(400).json({ error: 'User id must be a positive integer' });
+  }
+
+  if (!['in', 'out', 'adjustment'].includes(type)) {
+    return res.status(400).json({ error: "Type must be one of: in, out, adjustment" });
+  }
+
+  if (quantity_change === undefined || quantity_change === null || !Number.isFinite(Number(quantity_change))) {
+    return res.status(400).json({ error: 'Quantity change must be a number' });
+  }
+
+  if (notes !== undefined && notes !== null && typeof notes !== 'string') {
+    return res.status(400).json({ error: 'Notes must be a string' });
+  }
+
   next();
 };

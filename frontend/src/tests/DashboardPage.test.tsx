@@ -25,7 +25,8 @@ global.fetch = jest.fn(() =>
 
 describe("DashboardPage", () => {
   it("renders dashboard data on successful fetch", async () => {
-    render(<DashboardPage token="mock_token" />);
+    const tokenValue = "test-session-value";
+    render(<DashboardPage token={tokenValue} />);
 
     expect(screen.getByText(/Loading dashboard.../i)).toBeInTheDocument();
 
@@ -41,7 +42,7 @@ describe("DashboardPage", () => {
     expect(global.fetch).toHaveBeenCalledWith(
       "http://localhost:3001/dashboard",
       expect.objectContaining({
-        headers: { Authorization: "Bearer mock_token" },
+        headers: { Authorization: `Bearer ${tokenValue}` },
       }),
     );
   });
@@ -64,7 +65,8 @@ describe("DashboardPage", () => {
       } as Response),
     );
 
-    render(<DashboardPage token="mock_token" />);
+    const tokenValue = "test-session-value";
+    render(<DashboardPage token={tokenValue} />);
 
     await waitFor(() => {
       expect(

@@ -39,7 +39,7 @@ const verifyToken = (token: string | null): boolean => {
     // If the token is expired, return false
     return decodedToken.exp > currentTime;
   } catch (error) {
-    console.error("Error decoding token:", error);
+    console.error("Error decoding session:", error);
     return false; // If there's an error decoding, treat it as invalid
   }
 };
@@ -52,16 +52,15 @@ const decodeTokenAndGetRole = (
   try {
     const decodedToken: any = jwtDecode(token);
     const role = decodedToken.role;
-    console.log("Decoded token role:", role);
     if (role === "Manager") {
       return "Manager";
     } else if (role === "Team Member") {
       return "Team Member";
     }
-    console.log("Unknown role in token, defaulting to Team Member");
+    console.warn("Unknown role in session, defaulting to Team Member");
     return "Team Member"; // Default role if not specified
   } catch (error) {
-    console.error("Error decoding token:", error);
+    console.error("Error decoding session:", error);
     return "Team Member"; // Default to Team Member on error
   }
 };

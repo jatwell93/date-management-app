@@ -1,11 +1,13 @@
 import { Router, Request, Response } from "express";
+import validator from "validator";
 import { InventoryService } from "../services/inventory.service";
 import { ProductService } from "../services/product.service";
 import { InventoryItem } from "../models/inventory-item.model";
 import { authenticateToken, AuthRequest } from "../middleware/auth.middleware";
-import { validateInventoryItemInput } from "../middleware/validation.middleware";
+import { validateInventoryItemInput, validateInventoryTransactionInput } from "../middleware/validation.middleware";
 import { validateReferentialIntegrity, validateDataConsistency, validateBusinessRules } from "../middleware/data-integrity.middleware";
 import { logTransaction } from "../controllers/inventory.controller";
+import { escapeHtml } from "../utils/normalize.function";
 
 const router = Router();
 const inventoryService = new InventoryService();
@@ -14,7 +16,7 @@ const inventoryService = new InventoryService();
 router.get("/", authenticateToken, async (req: AuthRequest, res: Response) => {
   try {
     const items = await inventoryService.getAllInventoryItems();
-    res.json(items);
+    res.json(escapeHtml(items));
   } catch (error) {
     console.error("Get inventory items error:", error);
     res.status(500).json({ message: "Internal server error" });
@@ -24,14 +26,17 @@ router.get("/", authenticateToken, async (req: AuthRequest, res: Response) => {
 // GET /inventory-items/:id - Get a specific inventory item by ID
 router.get("/:id", authenticateToken, async (req: AuthRequest, res: Response) => {
   try {
-    const id = parseInt(req.params.id);
+    const id = Number.parseInt(req.params.id, 10);
+    if (Number.isNaN(id)) {
+      return res.status(400).json({ message: "Invalid inventory item id" });
+    }
     const item = await inventoryService.getInventoryItemById(id);
 
     if (!item) {
       return res.status(404).json({ message: "Inventory item not found" });
     }
 
-    res.json(item);
+    res.json(escapeHtml(item));
   } catch (error) {
     console.error("Get inventory item error:", error);
     res.status(500).json({ message: "Internal server error" });
@@ -44,10 +49,13 @@ router.get(
   authenticateToken,
   async (req: AuthRequest, res: Response) => {
     try {
-      const productId = parseInt(req.params.productId);
+      const productId = Number.parseInt(req.params.productId, 10);
+      if (Number.isNaN(productId)) {
+        return res.status(400).json({ message: "Invalid product id" });
+      }
       const items =
         await inventoryService.getInventoryItemsByProductId(productId);
-      res.json(items);
+      res.json(escapeHtml(items));
     } catch (error) {
       console.error("Get inventory items by product error:", error);
       res.status(500).json({ message: "Internal server error" });
@@ -62,6 +70,14 @@ router.get(
   async (req: AuthRequest, res: Response) => {
     try {
       const barcode = req.params.barcode;
+      const sanitizedBarcode = barcode.replace(/-/g, "");
+      if (
+        !validator.isAlphanumeric(sanitizedBarcode) ||
+        sanitizedBarcode.length < 8 ||
+        sanitizedBarcode.length > 14
+      ) {
+        return res.status(400).json({ message: "Invalid barcode format" });
+      }
 
       // First, get the product by barcode to get its ID
       const productService = new ProductService();
@@ -73,7 +89,7 @@ router.get(
 
       // Then get inventory items for that product
       const items = await inventoryService.getInventoryItemsByProductId(product.id);
-      res.json(items);
+      res.json(escapeHtml(items));
     } catch (error) {
       console.error("Get inventory items by barcode error:", error);
       res.status(500).json({ message: "Internal server error" });
@@ -87,11 +103,15 @@ router.get(
   authenticateToken,
   async (req: AuthRequest, res: Response) => {
     try {
-      const productId = parseInt(req.params.productId);
-      const limit = parseInt(req.query.limit as string) || 5; // Default to 5 items if not specified
+      const productId = Number.parseInt(req.params.productId, 10);
+      if (Number.isNaN(productId)) {
+        return res.status(400).json({ message: "Invalid product id" });
+      }
+      const limitParam = Number.parseInt(String(req.query.limit ?? ""), 10);
+      const limit = Number.isNaN(limitParam) || limitParam <= 0 ? 5 : limitParam;
       
       const items = await inventoryService.getRecentInventoryItemsByProductId(productId, limit);
-      res.json(items);
+      res.json(escapeHtml(items));
     } catch (error) {
       console.error("Get recent inventory items by product error:", error);
       res.status(500).json({ message: "Internal server error" });
@@ -105,10 +125,13 @@ router.get(
   authenticateToken,
   async (req: AuthRequest, res: Response) => {
     try {
-      const locationId = parseInt(req.params.locationId);
+      const locationId = Number.parseInt(req.params.locationId, 10);
+      if (Number.isNaN(locationId)) {
+        return res.status(400).json({ message: "Invalid location id" });
+      }
       const items =
         await inventoryService.getInventoryItemsByLocationId(locationId);
-      res.json(items);
+      res.json(escapeHtml(items));
     } catch (error) {
       console.error("Get inventory items by location error:", error);
       res.status(500).json({ message: "Internal server error" });
@@ -142,7 +165,7 @@ router.post("/", authenticateToken, validateInventoryItemInput, validateReferent
       locationId,
       status,
     } as Omit<InventoryItem, "id" | "createdAt" | "updatedAt">, userId);
-    res.status(201).json(newInventoryItem);
+    res.status(201).json(escapeHtml(newInventoryItem));
   } catch (error: any) {
     // Check if the error is about location not existing
     if (error.message === "Location does not exist") {
@@ -158,7 +181,10 @@ router.post("/", authenticateToken, validateInventoryItemInput, validateReferent
 // PUT /inventory-items/:id - Update an inventory item
 router.put("/:id", authenticateToken, validateInventoryItemInput, validateReferentialIntegrity, validateBusinessRules, async (req: AuthRequest, res: Response) => {
   try {
-    const id = parseInt(req.params.id);
+    const id = Number.parseInt(req.params.id, 10);
+    if (Number.isNaN(id)) {
+      return res.status(400).json({ message: "Invalid inventory item id" });
+    }
     const { productId, expiryDate, locationId, status } = req.body;
     const userId = req.userId; // Get user ID from auth middleware
     if (!userId) {
@@ -184,7 +210,7 @@ router.put("/:id", authenticateToken, validateInventoryItemInput, validateRefere
       return res.status(404).json({ message: "Inventory item not found" });
     }
 
-    res.json(updatedItem);
+    res.json(escapeHtml(updatedItem));
   } catch (error) {
     console.error("Update inventory item error:", error);
     res.status(500).json({ message: "Internal server error" });
@@ -197,7 +223,10 @@ router.delete(
   authenticateToken,
   async (req: AuthRequest, res: Response) => {
     try {
-      const id = parseInt(req.params.id);
+      const id = Number.parseInt(req.params.id, 10);
+      if (Number.isNaN(id)) {
+        return res.status(400).json({ message: "Invalid inventory item id" });
+      }
       const userId = req.userId; // Get user ID from auth middleware
       if (!userId) {
         return res.status(401).json({ message: "Access denied: No user ID found" });
@@ -217,6 +246,6 @@ router.delete(
 );
 
 // POST /inventory-items/transaction - Log a new transaction
-router.post("/transaction", authenticateToken, logTransaction);
+router.post("/transaction", authenticateToken, validateInventoryTransactionInput, logTransaction);
 
 export default router;

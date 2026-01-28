@@ -90,3 +90,52 @@ export function extractCostValueEnhanced(costStr: string): number | null {
   
   return value;
 }
+
+export function escapeHtmlString(input: string): string {
+  return input.replace(/[&<>"'`=\/]/g, (char) => {
+    switch (char) {
+      case "&":
+        return "&amp;";
+      case "<":
+        return "&lt;";
+      case ">":
+        return "&gt;";
+      case '"':
+        return "&quot;";
+      case "'":
+        return "&#39;";
+      case "`":
+        return "&#96;";
+      case "=":
+        return "&#61;";
+      case "/":
+        return "&#47;";
+      default:
+        return char;
+    }
+  });
+}
+
+export function escapeHtml<T>(value: T): T {
+  if (typeof value === "string") {
+    return escapeHtmlString(value) as unknown as T;
+  }
+
+  if (value instanceof Date) {
+    return value;
+  }
+
+  if (Array.isArray(value)) {
+    return value.map((item) => escapeHtml(item)) as unknown as T;
+  }
+
+  if (value && typeof value === "object") {
+    const sanitized: Record<string, unknown> = {};
+    for (const [key, val] of Object.entries(value as Record<string, unknown>)) {
+      sanitized[key] = escapeHtml(val);
+    }
+    return sanitized as T;
+  }
+
+  return value;
+}

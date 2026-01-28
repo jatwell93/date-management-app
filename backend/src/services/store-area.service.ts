@@ -1,158 +1,130 @@
-import { getDb, releaseDb } from "../database";
+import { PrismaClient } from "@prisma/client";
+import { getDefaultDatabaseClient } from "../database/database-factory";
 import { StoreArea } from "../models/store-area.model";
 
 export class StoreAreaService {
-  getAllStoreAreas(): StoreArea[] {
-    const db = getDb();
-    try {
-      const results = db.prepare("SELECT * FROM store_areas ORDER BY name").all();
-      return results.map((result: any) => ({
-        id: result.id,
-        name: result.name,
-        subDepartment: result.sub_department,
-        lastChecked: result.last_checked,
-        createdAt: result.created_at,
-        updatedAt: result.updated_at,
-      }));
-    } finally {
-      releaseDb(db);
-    }
+  private prisma: PrismaClient;
+
+  /**
+   * Constructor with optional dependency injection
+   * @param prismaClient - Optional PrismaClient for testing/custom configurations
+   */
+  constructor(prismaClient?: PrismaClient) {
+    this.prisma = prismaClient ?? getDefaultDatabaseClient();
   }
 
-  getStoreAreaById(id: number): StoreArea | null {
-    const db = getDb();
-    try {
-      const result: any = db.prepare(
-        "SELECT * FROM store_areas WHERE id = ?"
-      ).get(id);
-      if (!result) return null;
-      
-      return {
-        id: result.id,
-        name: result.name,
-        subDepartment: result.sub_department,
-        lastChecked: result.last_checked,
-        createdAt: result.created_at,
-        updatedAt: result.updated_at,
-      };
-    } finally {
-      releaseDb(db);
-    }
+  async getAllStoreAreas(): Promise<StoreArea[]> {
+    const results = await this.prisma.storeArea.findMany({
+      orderBy: { name: 'asc' }
+    });
+    return results.map(this.mapPrismaToModel);
   }
 
-  getStoreAreaByName(name: string): StoreArea[] {
-    const db = getDb();
-    try {
-      const results: any[] = db.prepare(
-        "SELECT * FROM store_areas WHERE name = ?"
-      ).all(name);
-      
-      return results.map((result) => ({
-        id: result.id,
-        name: result.name,
-        subDepartment: result.sub_department,
-        lastChecked: result.last_checked,
-        createdAt: result.created_at,
-        updatedAt: result.updated_at,
-      }));
-    } finally {
-      releaseDb(db);
-    }
+  async getStoreAreaById(id: number): Promise<StoreArea | null> {
+    const result = await this.prisma.storeArea.findUnique({
+      where: { id }
+    });
+    return result ? this.mapPrismaToModel(result) : null;
+  }
+
+  async getStoreAreaByName(name: string): Promise<StoreArea[]> {
+    const results = await this.prisma.storeArea.findMany({
+      where: { name }
+    });
+    return results.map(this.mapPrismaToModel);
   }
   
-  getStoreAreaByNameAndSubDepartment(name: string, subDepartment: string | null): StoreArea | null {
-    const db = getDb();
-    try {
-      // Properly handle NULL comparisons in SQLite
-      const result: any = db.prepare(
-        "SELECT * FROM store_areas WHERE name = ? AND ((sub_department IS NULL AND ? IS NULL) OR (sub_department = ?))"
-      ).get(name, subDepartment, subDepartment);
-      if (!result) return null;
-      
-      return {
-        id: result.id,
-        name: result.name,
-        subDepartment: result.sub_department,
-        lastChecked: result.last_checked,
-        createdAt: result.created_at,
-        updatedAt: result.updated_at,
-      };
-    } finally {
-      releaseDb(db);
-    }
+  async getStoreAreaByNameAndSubDepartment(name: string, subDepartment: string | null): Promise<StoreArea | null> {
+    const result = await this.prisma.storeArea.findFirst({
+      where: {
+        name,
+        subDepartment: subDepartment ?? null
+      }
+    });
+    return result ? this.mapPrismaToModel(result) : null;
   }
 
-  createStoreArea(
+  async createStoreArea(
     area: Omit<StoreArea, "id" | "createdAt" | "updatedAt">,
-  ): StoreArea {
+  ): Promise<StoreArea> {
     // Check if a store area with the same name and subDepartment already exists
-    const existingArea = this.getStoreAreaByNameAndSubDepartment(area.name, area.subDepartment || null);
+    const existingArea = await this.getStoreAreaByNameAndSubDepartment(area.name, area.subDepartment || null);
     if (existingArea) {
       throw new Error("A store area with this name and sub-department combination already exists");
     }
 
-    const db = getDb();
-    try {
-      const result = db.prepare(
-        "INSERT INTO store_areas (name, sub_department, last_checked) VALUES (?, ?, ?)"
-      ).run(area.name, area.subDepartment || null, area.lastChecked || null);
-      const newArea: StoreArea = {
-        id: result.lastInsertRowid as number,
-        ...area,
-        createdAt: new Date().toISOString(), // SQLite handles this with DEFAULT CURRENT_TIMESTAMP
-        updatedAt: new Date().toISOString(), // SQLite handles this with DEFAULT CURRENT_TIMESTAMP
-      };
-      return newArea;
-    } finally {
-      releaseDb(db);
-    }
+    const newArea = await this.prisma.storeArea.create({
+      data: {
+        name: area.name,
+        subDepartment: area.subDepartment || null,
+        lastChecked: area.lastChecked ? new Date(area.lastChecked) : null
+      }
+    });
+
+    return this.mapPrismaToModel(newArea);
   }
 
-  updateStoreArea(
+  async updateStoreArea(
     id: number,
     area: Partial<Omit<StoreArea, "id" | "createdAt" | "updatedAt">>,
-  ): StoreArea | null {
-    const db = getDb();
+  ): Promise<StoreArea | null> {
+    if (Object.keys(area).length === 0) {
+      return null;
+    }
+
     try {
-      const fields = Object.keys(area);
-
-      if (fields.length === 0) {
-        return null;
-      }
-
-      const setClause = fields.map((field) => {
-        if (field === "subDepartment") return "sub_department = ?";
-        return `${field} = ?`;
-      }).join(", ");
-
-      const values = Object.entries(area).map(([key, value]) => {
-        if (key === "subDepartment") return value || null;
-        return value;
+      const updatedArea = await this.prisma.storeArea.update({
+        where: { id },
+        data: {
+          ...(area.name !== undefined && { name: area.name }),
+          ...(area.subDepartment !== undefined && { subDepartment: area.subDepartment || null }),
+          ...(area.lastChecked !== undefined && { lastChecked: area.lastChecked ? new Date(area.lastChecked) : null })
+        }
       });
 
-      const result = db.prepare(
-        `UPDATE store_areas SET ${setClause}, updated_at = CURRENT_TIMESTAMP WHERE id = ?`
-      ).run(...values, id);
-
-      if (result.changes === 0) {
+      return this.mapPrismaToModel(updatedArea);
+    } catch (error: any) {
+      // Prisma throws P2025 when record not found
+      if (error.code === 'P2025') {
         return null;
       }
-
-      // Return the updated area
-      const updatedArea = this.getStoreAreaById(id);
-      return updatedArea;
-    } finally {
-      releaseDb(db);
+      throw error;
     }
   }
 
-  deleteStoreArea(id: number): boolean {
-    const db = getDb();
+  async deleteStoreArea(id: number): Promise<boolean> {
     try {
-      const result = db.prepare("DELETE FROM store_areas WHERE id = ?").run(id);
-      return (result.changes ?? 0) > 0;
-    } finally {
-      releaseDb(db);
+      await this.prisma.storeArea.delete({
+        where: { id }
+      });
+      return true;
+    } catch (error: any) {
+      // Prisma throws P2025 when record not found
+      if (error.code === 'P2025') {
+        return false;
+      }
+      throw error;
     }
+  }
+
+  /**
+   * Map Prisma model to legacy StoreArea interface
+   */
+  private mapPrismaToModel(area: {
+    id: number;
+    name: string;
+    subDepartment: string | null;
+    lastChecked: Date | null;
+    createdAt: Date;
+    updatedAt: Date;
+  }): StoreArea {
+    return {
+      id: area.id,
+      name: area.name,
+      subDepartment: area.subDepartment ?? undefined,
+      lastChecked: area.lastChecked?.toISOString() ?? undefined,
+      createdAt: area.createdAt.toISOString(),
+      updatedAt: area.updatedAt.toISOString()
+    };
   }
 }

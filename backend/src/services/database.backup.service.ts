@@ -1,9 +1,8 @@
 import { getDb, releaseDb } from '../database';
 import { Database } from 'sqlite';
-import { copyFile, existsSync, mkdirSync, readdirSync, statSync, unlinkSync } from 'fs';
+import { promises as fs } from 'fs';
 import { join } from 'path';
 import { Logger } from '../utils/logger';
-import { promisify } from 'util';
 
 interface BackupConfig {
   backupDirectory: string;
@@ -19,15 +18,18 @@ export class DatabaseBackupService {
   };
 
   private config: BackupConfig;
+  private ensureBackupDirectoryPromise: Promise<void>;
 
   constructor(config?: Partial<BackupConfig>) {
     this.config = { ...DatabaseBackupService.DEFAULT_CONFIG, ...config };
-    this.ensureBackupDirectory();
+    this.ensureBackupDirectoryPromise = this.ensureBackupDirectory();
   }
 
-  private ensureBackupDirectory(): void {
-    if (!existsSync(this.config.backupDirectory)) {
-      mkdirSync(this.config.backupDirectory, { recursive: true });
+  private async ensureBackupDirectory(): Promise<void> {
+    try {
+      await fs.access(this.config.backupDirectory);
+    } catch {
+      await fs.mkdir(this.config.backupDirectory, { recursive: true });
       Logger.info(`Created backup directory: ${this.config.backupDirectory}`);
     }
   }
@@ -41,6 +43,7 @@ export class DatabaseBackupService {
     // The backup is a file-level copy
     
     try {
+      await this.ensureBackupDirectoryPromise;
       // Generate backup filename with timestamp
       const timestamp = new Date().toISOString().replace(/[:.]/g, '-');
       const backupFileName = `backup-${timestamp}.sqlite`;
@@ -50,7 +53,7 @@ export class DatabaseBackupService {
       const originalDbPath = process.env.DATABASE_PATH || './database.sqlite';
 
       // Copy the database file to the backup location
-      await promisify(copyFile)(originalDbPath, backupPath);
+      await fs.copyFile(originalDbPath, backupPath);
 
       Logger.info(`Database backup created: ${backupPath}`);
       
@@ -73,8 +76,11 @@ export class DatabaseBackupService {
    */
   async restoreFromBackup(backupPath: string): Promise<boolean> {
     try {
+      await this.ensureBackupDirectoryPromise;
       // Validate backup file exists
-      if (!existsSync(backupPath)) {
+      try {
+        await fs.access(backupPath);
+      } catch {
         Logger.error(`Backup file does not exist: ${backupPath}`);
         return false;
       }
@@ -83,7 +89,7 @@ export class DatabaseBackupService {
       const originalDbPath = process.env.DATABASE_PATH || './database.sqlite';
 
       // Copy the backup file back to the original location
-      await promisify(copyFile)(backupPath, originalDbPath);
+      await fs.copyFile(backupPath, originalDbPath);
 
       Logger.info(`Database restored from backup: ${backupPath}`);
       
@@ -101,24 +107,27 @@ export class DatabaseBackupService {
    * Lists all available backup files
    * @returns Array of backup file paths sorted by creation date (newest first)
    */
-  listBackups(): string[] {
+  async listBackups(): Promise<string[]> {
     try {
-      if (!existsSync(this.config.backupDirectory)) {
-        return [];
-      }
+      await this.ensureBackupDirectoryPromise;
 
-      const files = readdirSync(this.config.backupDirectory);
+      const files = await fs.readdir(this.config.backupDirectory);
       const backupFiles = files
         .filter(file => file.endsWith('.sqlite') && file.startsWith('backup-'))
-        .map(file => join(this.config.backupDirectory, file))
-        .sort((a, b) => {
-          const statA = statSync(a);
-          const statB = statSync(b);
-          return statB.mtime.getTime() - statA.mtime.getTime(); // Sort by modification time, newest first
-        });
+        .map(file => join(this.config.backupDirectory, file));
 
-      Logger.info(`Found ${backupFiles.length} backup files`);
-      return backupFiles;
+      const backupStats = await Promise.all(
+        backupFiles.map(async (filePath) => ({
+          filePath,
+          stats: await fs.stat(filePath)
+        }))
+      );
+
+      backupStats.sort((a, b) => b.stats.mtime.getTime() - a.stats.mtime.getTime());
+      const sortedBackupFiles = backupStats.map((entry) => entry.filePath);
+
+      Logger.info(`Found ${sortedBackupFiles.length} backup files`);
+      return sortedBackupFiles;
     } catch (error) {
       Logger.error('Failed to list backup files', { 
         error: error instanceof Error ? error.message : 'Unknown error' 
@@ -132,30 +141,34 @@ export class DatabaseBackupService {
    */
   async cleanupOldBackups(): Promise<void> {
     try {
-      const allBackups = this.listBackups();
+      const allBackups = await this.listBackups();
 
       // Remove backups older than retention days
       const cutoffDate = new Date();
       cutoffDate.setDate(cutoffDate.getDate() - this.config.retentionDays);
 
-      const oldBackups = allBackups.filter(backupPath => {
-        const stats = statSync(backupPath);
-        return stats.mtime < cutoffDate;
-      });
+      const oldBackups = await Promise.all(
+        allBackups.map(async (backupPath) => {
+          const stats = await fs.stat(backupPath);
+          return stats.mtime < cutoffDate ? backupPath : null;
+        })
+      );
 
-      for (const oldBackup of oldBackups) {
-        unlinkSync(oldBackup);
+      const filteredOldBackups = oldBackups.filter((backupPath): backupPath is string => Boolean(backupPath));
+
+      for (const oldBackup of filteredOldBackups) {
+        await fs.unlink(oldBackup);
         Logger.info(`Deleted old backup: ${oldBackup}`);
       }
 
       // If we still have more than the max retained backups, remove the oldest ones
-      if (allBackups.length - oldBackups.length > this.config.maxRetainedBackups) {
+      if (allBackups.length - filteredOldBackups.length > this.config.maxRetainedBackups) {
         const toDelete = allBackups
           .slice(this.config.maxRetainedBackups) // Get backups beyond the max retention
-          .filter(backup => !oldBackups.includes(backup)); // Exclude ones we already deleted
+          .filter(backup => !filteredOldBackups.includes(backup)); // Exclude ones we already deleted
 
         for (const backupToDelete of toDelete) {
-          unlinkSync(backupToDelete);
+          await fs.unlink(backupToDelete);
           Logger.info(`Deleted backup beyond retention limit: ${backupToDelete}`);
         }
       }

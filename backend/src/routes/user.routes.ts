@@ -13,6 +13,7 @@ import {
 } from "../middleware/auth.middleware";
 import { validateUserInput, validateDataIntegrity } from "../middleware/validation.middleware";
 import { validateBusinessRules } from "../middleware/data-integrity.middleware";
+import { escapeHtml } from "../utils/normalize.function";
 
 const router = Router();
 
@@ -24,7 +25,7 @@ router.get(
   async (req: Request, res: Response) => {
     try {
       const users = await getUsers();
-      res.json(users);
+      res.json(escapeHtml(users));
     } catch (_error) {
       // console.error("Error getting users:", _error);
       res.status(500).json({ message: "Internal server error" });
@@ -39,14 +40,17 @@ router.get(
   requireManager,
   async (req: Request, res: Response) => {
     try {
-      const id = parseInt(req.params.id);
+      const id = Number.parseInt(req.params.id, 10);
+      if (Number.isNaN(id)) {
+        return res.status(400).json({ message: "Invalid user id" });
+      }
       const user = await getUserById(id);
 
       if (!user) {
         return res.status(404).json({ message: "User not found" });
       }
 
-      res.json(user);
+      res.json(escapeHtml(user));
     } catch (_error) {
       // console.error("Error getting user:", _error);
       res.status(500).json({ message: "Internal server error" });
@@ -77,7 +81,7 @@ router.post(
       };
 
       const createdUser = await createUser(newUser);
-      res.status(201).json(createdUser);
+      res.status(201).json(escapeHtml(createdUser));
     } catch (_error) {
       // console.error("Error creating user:", _error);
       res.status(500).json({ message: "Internal server error" });
@@ -95,7 +99,10 @@ router.put(
   validateBusinessRules,
   async (req: Request, res: Response) => {
     try {
-      const id = parseInt(req.params.id);
+      const id = Number.parseInt(req.params.id, 10);
+      if (Number.isNaN(id)) {
+        return res.status(400).json({ message: "Invalid user id" });
+      }
       const { pin, role } = req.body;
 
       const user: Partial<User> = {};
@@ -109,7 +116,7 @@ router.put(
       }
 
       const updatedUser = await getUserById(id);
-      res.json(updatedUser);
+      res.json(escapeHtml(updatedUser));
     } catch (_error) {
       // console.error("Error updating user:", _error);
       res.status(500).json({ message: "Internal server error" });
@@ -124,14 +131,17 @@ router.delete(
   requireManager,
   async (req: Request, res: Response) => {
     try {
-      const id = parseInt(req.params.id);
+      const id = Number.parseInt(req.params.id, 10);
+      if (Number.isNaN(id)) {
+        return res.status(400).json({ message: "Invalid user id" });
+      }
       const deleted = await deleteUser(id);
 
       if (!deleted) {
         return res.status(404).json({ message: "User not found" });
       }
 
-      res.json({ message: "User deleted successfully" });
+      res.json(escapeHtml({ message: "User deleted successfully" }));
     } catch (_error) {
       // console.error("Error deleting user:", _error);
       res.status(500).json({ message: "Internal server error" });

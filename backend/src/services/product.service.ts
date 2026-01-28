@@ -1,4 +1,5 @@
-import { getDb, releaseDb } from "../database";
+import { PrismaClient } from "@prisma/client";
+import { getDefaultDatabaseClient } from "../database/database-factory";
 import { Product } from "../models/product.model";
 import { parse } from "csv-parse";
 import * as XLSX from "xlsx";
@@ -6,7 +7,7 @@ import fs from "fs";
 import * as path from "path";
 
 // Helper function to detect file type by content
-function detectFileType(filePath: string, originalFilename?: string): 'csv' | 'xls' | 'xlsx' {
+async function detectFileType(filePath: string, originalFilename?: string): Promise<'csv' | 'xls' | 'xlsx'> {
   // First check by original filename if provided
   if (originalFilename) {
     const ext = path.extname(originalFilename).toLowerCase();
@@ -22,7 +23,12 @@ function detectFileType(filePath: string, originalFilename?: string): 'csv' | 'x
   // If no extension in path (e.g., multer temp files without extension), 
   // try to detect by file header
   try {
-    const header = fs.readFileSync(filePath, { encoding: 'binary', flag: 'r' });
+    const fileHandle = await fs.promises.open(filePath, 'r');
+    const buffer = Buffer.alloc(4);
+    await fileHandle.read(buffer, 0, buffer.length, 0);
+    await fileHandle.close();
+
+    const header = buffer.toString('binary');
     if (header.startsWith('PK')) { // ZIP file header (XLSX files are ZIP archives)
       return 'xlsx';
     }
@@ -218,135 +224,147 @@ function formatErrorMessage(rowNumber: number, field: string, value: string, exp
 }
 
 export class ProductService {
+  private prisma: PrismaClient;
+
+  /**
+   * Constructor with optional dependency injection
+   * @param prismaClient - Optional PrismaClient for testing/custom configurations
+   */
+  constructor(prismaClient?: PrismaClient) {
+    this.prisma = prismaClient ?? getDefaultDatabaseClient();
+  }
+
   // Expose parser for tests that reference it via ProductService["extractCostValueEnhanced"]
   static extractCostValueEnhanced(costStr: string): number | null {
     return extractCostValueEnhanced(costStr);
   }
   async getAllProducts(limit?: number, offset?: number): Promise<Product[]> {
-    const db = getDb();
-    try {
-      let query = "SELECT * FROM products";
-      if (limit !== undefined) {
-        query += " LIMIT ?";
-        if (offset !== undefined) {
-          query += " OFFSET ?";
-          return db.prepare(query).all(limit, offset) as Product[];
-        } else {
-          return db.prepare(query).all(limit) as Product[];
-        }
-      } else {
-        return db.prepare(query).all() as Product[];
-      }
-    } finally {
-      releaseDb(db);
-    }
+    const products = await this.prisma.product.findMany({
+      ...(limit !== undefined && { take: limit }),
+      ...(offset !== undefined && { skip: offset })
+    });
+    return products.map(this.mapPrismaToModel);
   }
 
   async getProductById(id: number): Promise<Product | null> {
-    const db = getDb();
-    try {
-      const product = db.prepare(
-        "SELECT * FROM products WHERE id = ?"
-      ).get(id) as Product | undefined;
-      return product || null;
-    } finally {
-      releaseDb(db);
-    }
+    const product = await this.prisma.product.findUnique({
+      where: { id }
+    });
+    return product ? this.mapPrismaToModel(product) : null;
   }
 
   async getProductByBarcode(barcode: string): Promise<Product | null> {
-    const db = getDb();
-    try {
-      const product = db.prepare(
-        "SELECT * FROM products WHERE barcode = ?"
-      ).get(barcode) as Product | undefined;
-      return product || null;
-    } finally {
-      releaseDb(db);
-    }
+    const product = await this.prisma.product.findUnique({
+      where: { barcode }
+    });
+    return product ? this.mapPrismaToModel(product) : null;
   }
 
   async getProductBySku(sku: string): Promise<Product | null> {
-    const db = getDb();
-    try {
-      const product = db.prepare(
-        "SELECT * FROM products WHERE sku = ?"
-      ).get(sku) as Product | undefined;
-      return product || null;
-    } finally {
-      releaseDb(db);
-    }
+    const product = await this.prisma.product.findUnique({
+      where: { sku }
+    });
+    return product ? this.mapPrismaToModel(product) : null;
   }
 
   async createProduct(
     product: Omit<Product, "id" | "createdAt" | "updatedAt">,
   ): Promise<Product> {
-    const db = getDb();
-    try {
-      const result = db.prepare(
-        "INSERT INTO products (barcode, sku, name, cost_price) VALUES (?, ?, ?, ?)"
-      ).run(product.barcode, product.sku, product.name, product.costPrice);
-      const newProduct: Product = {
-        id: result.lastInsertRowid as number,
-        ...product,
-        createdAt: new Date().toISOString(), // SQLite handles this with DEFAULT CURRENT_TIMESTAMP
-        updatedAt: new Date().toISOString(), // SQLite handles this with DEFAULT CURRENT_TIMESTAMP
-      };
-      return newProduct;
-    } finally {
-      releaseDb(db);
-    }
+    const newProduct = await this.prisma.product.create({
+      data: {
+        barcode: product.barcode,
+        sku: product.sku,
+        name: product.name,
+        costPrice: product.costPrice
+      }
+    });
+    return this.mapPrismaToModel(newProduct);
   }
 
   async updateProduct(
     id: number,
     product: Partial<Omit<Product, "id" | "createdAt" | "updatedAt">>,
   ): Promise<Product | null> {
-    const db = getDb();
-    try {
-      const fields = Object.keys(product);
-
-      if (fields.length === 0) {
-        return null;
-      }
-
-      // Map TypeScript field names to database column names
-      const fieldToColumnMap: { [key: string]: string } = {
-        costPrice: 'cost_price',
-        // Add other mappings if needed in the future
-      };
-
-      const setClause = fields.map((field) => `${fieldToColumnMap[field] || field} = ?`).join(", ");
-      const values = [...Object.values(product), id];
-
-      const result = db.prepare(
-        `UPDATE products SET ${setClause}, updated_at = CURRENT_TIMESTAMP WHERE id = ?`
-      ).run(...values);
-
-      if ((result.changes ?? 0) === 0) {
-        return null;
-      }
-
-      // Return the updated product
-      const updatedProduct = await this.getProductById(id);
-      return updatedProduct;
-    } finally {
-      releaseDb(db);
+    if (Object.keys(product).length === 0) {
+      return null;
     }
+
+    try {
+      const updatedProduct = await this.prisma.product.update({
+        where: { id },
+        data: this.buildProductUpdateData(product)
+      });
+      return this.mapPrismaToModel(updatedProduct);
+    } catch (error: any) {
+      return this.handlePrismaNotFound(error);
+    }
+  }
+
+  /**
+   * Build update data object from partial product, filtering undefined values
+   */
+  private buildProductUpdateData(
+    product: Partial<Omit<Product, "id" | "createdAt" | "updatedAt">>
+  ): { barcode?: string; sku?: string; name?: string; costPrice?: number } {
+    const data: { barcode?: string; sku?: string; name?: string; costPrice?: number } = {};
+    if (product.barcode !== undefined) data.barcode = product.barcode;
+    if (product.sku !== undefined) data.sku = product.sku;
+    if (product.name !== undefined) data.name = product.name;
+    if (product.costPrice !== undefined) data.costPrice = product.costPrice;
+    return data;
+  }
+
+  /**
+   * Handle Prisma P2025 (record not found) error, rethrow others
+   */
+  private handlePrismaNotFound(error: any): null {
+    if (error.code === 'P2025') {
+      return null;
+    }
+    throw error;
   }
 
   async deleteProduct(id: number): Promise<boolean> {
-    const db = getDb();
     try {
-      const result = db.prepare("DELETE FROM products WHERE id = ?").run(id);
-      return (result.changes ?? 0) > 0;
-    } finally {
-      releaseDb(db);
+      await this.prisma.product.delete({
+        where: { id }
+      });
+      return true;
+    } catch (error: any) {
+      // Prisma throws P2025 when record not found
+      if (error.code === 'P2025') {
+        return false;
+      }
+      throw error;
     }
   }
 
+  /**
+   * Map Prisma model to legacy Product interface
+   */
+  private mapPrismaToModel(product: {
+    id: number;
+    barcode: string;
+    sku: string;
+    name: string;
+    costPrice: number;
+    notes: string;
+    createdAt: Date;
+    updatedAt: Date;
+  }): Product {
+    return {
+      id: product.id,
+      barcode: product.barcode,
+      sku: product.sku,
+      name: product.name,
+      costPrice: product.costPrice,
+      createdAt: product.createdAt.toISOString(),
+      updatedAt: product.updatedAt.toISOString()
+    };
+  }
+
   async processCSVUpload(filePath: string, originalFilename?: string): Promise<{ imported: number; updated: number; errors: string[] }> {
-    const fileType = detectFileType(filePath, originalFilename);
+    const fileType = await detectFileType(filePath, originalFilename);
     
     if (fileType === 'xlsx' || fileType === 'xls') {
       return this.processXLSXUpload(filePath);
@@ -885,27 +903,22 @@ export class ProductService {
   }
 
   private async getProductBySkuOrBarcode(sku: string, barcode: string): Promise<Product | null> {
-    const db = getDb();
-    
-    try {
-      // Check for products by SKU and barcode independently
-      const bySku = db.prepare(
-        "SELECT * FROM products WHERE sku = ?"
-      ).get(sku) as Product | undefined;
+    // Check for products by SKU and barcode independently
+    const bySku = await this.prisma.product.findUnique({
+      where: { sku }
+    });
 
-      const byBarcode = db.prepare(
-        "SELECT * FROM products WHERE barcode = ?"
-      ).get(barcode) as Product | undefined;
-      
-      // If both match different products, this is an error case
-      if (bySku && byBarcode && bySku.id !== byBarcode.id) {
-        throw new Error(`Duplicate identifiers detected: SKU ${sku} exists in product ${bySku.id} and barcode ${barcode} exists in product ${byBarcode.id}. This will cause data integrity issues.`);
-      }
-      
-      // Return the product found by either SKU or barcode (or null if neither)
-      return bySku || byBarcode || null;
-    } finally {
-      releaseDb(db);
+    const byBarcode = await this.prisma.product.findUnique({
+      where: { barcode }
+    });
+    
+    // If both match different products, this is an error case
+    if (bySku && byBarcode && bySku.id !== byBarcode.id) {
+      throw new Error(`Duplicate identifiers detected: SKU ${sku} exists in product ${bySku.id} and barcode ${barcode} exists in product ${byBarcode.id}. This will cause data integrity issues.`);
     }
+    
+    // Return the product found by either SKU or barcode (or null if neither)
+    const product = bySku || byBarcode;
+    return product ? this.mapPrismaToModel(product) : null;
   }
 }
