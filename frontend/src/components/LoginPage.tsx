@@ -1,7 +1,7 @@
-import React, { useState } from "react";
-import { useForm } from "react-hook-form";
-import { Button } from "../components/ui/button";
-import { Input } from "../components/ui/input";
+import React, { useState } from 'react';
+import { useForm } from 'react-hook-form';
+import { Button } from '../components/ui/button';
+import { Input } from '../components/ui/input';
 import {
   Form,
   FormControl,
@@ -9,8 +9,8 @@ import {
   FormItem,
   FormLabel,
   FormMessage,
-} from "../components/ui/form";
-import { apiService } from "../lib/api.service";
+} from '../components/ui/form';
+import { apiService } from '../lib/api.service';
 
 interface LoginPageProps {
   onLogin: (token: string) => void;
@@ -21,7 +21,7 @@ export function LoginPage({ onLogin }: LoginPageProps) {
     pin: string;
   }>({
     defaultValues: {
-      pin: "", // Set the initial value to an empty string
+      pin: '', // Set the initial value to an empty string
     },
   });
 
@@ -31,7 +31,7 @@ export function LoginPage({ onLogin }: LoginPageProps) {
     setError(null);
 
     try {
-      const result = await apiService.post<{ token: string }>("/auth/login", {
+      const result = await apiService.post<{ token: string }>('/auth/login', {
         pin: data.pin,
       });
       onLogin(result.token);
@@ -39,7 +39,7 @@ export function LoginPage({ onLogin }: LoginPageProps) {
       if (err instanceof Error) {
         setError(err.message);
       } else {
-        setError("An unknown error occurred");
+        setError('An unknown error occurred');
       }
     }
   };
@@ -57,21 +57,13 @@ export function LoginPage({ onLogin }: LoginPageProps) {
                 <FormItem>
                   <FormLabel>PIN</FormLabel>
                   <FormControl>
-                    <Input
-                      type="password"
-                      placeholder="Enter your PIN"
-                      {...field}
-                    />
+                    <Input type="password" placeholder="Enter your PIN" {...field} />
                   </FormControl>
                   <FormMessage />
                 </FormItem>
               )}
             />
-            {error && (
-              <p className="text-inventory-error-500 text-sm text-center">
-                {error}
-              </p>
-            )}
+            {error && <p className="text-inventory-error-500 text-sm text-center">{error}</p>}
             <Button type="submit" className="w-full">
               Login
             </Button>

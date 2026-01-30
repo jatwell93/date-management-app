@@ -1,12 +1,12 @@
-import localforage from "localforage";
+import localforage from 'localforage';
 
 // Configure localforage
 localforage.config({
   driver: localforage.INDEXEDDB, // Force IndexedDB; fallback to WebSQL or localStorage
-  name: "retailInventoryApp",
+  name: 'retailInventoryApp',
   version: 1.0,
-  storeName: "keyvaluepairs", // Should be alphanumeric, not contain '_'
-  description: "Offline storage for retail inventory application",
+  storeName: 'keyvaluepairs', // Should be alphanumeric, not contain '_'
+  description: 'Offline storage for retail inventory application',
 });
 
 export const offlineStorage = {

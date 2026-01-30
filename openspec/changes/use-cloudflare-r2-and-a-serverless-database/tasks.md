@@ -2,30 +2,30 @@
 
 ## 0. User Account Setup (Manual - User Actions)
 
-- [ ] 0.1 **Sign up for Cloudflare account** at https://dash.cloudflare.com/sign-up
-- [ ] 0.2 **Verify email** and complete Cloudflare account setup
-- [ ] 0.3 **Add payment method** to Cloudflare (required for R2 and Workers, free tier available)
-- [ ] 0.4 **Sign up for PlanetScale account** at https://planetscale.com/
-- [ ] 0.5 **Verify email** and complete PlanetScale account setup
-- [ ] 0.6 **Note your Cloudflare Account ID** (found in dashboard sidebar under "Account ID")
-- [ ] 0.7 **Create R2 bucket** via Cloudflare dashboard: R2 → Create Bucket → name: `csv-uploads-prod`
-- [ ] 0.8 **Generate R2 API token**: R2 → Manage R2 API Tokens → Create API Token → Permissions: Object Read & Write
-- [ ] 0.9 **Save R2 credentials** (Access Key ID, Secret Access Key, Account ID) securely
-- [ ] 0.10 **Create PlanetScale database**: Databases → New Database → name: `date-management-prod` → region: (choose closest)
-- [ ] 0.11 **Create PlanetScale password**: Database Settings → Passwords → New Password → name: `production`
-- [ ] 0.12 **Save PlanetScale connection string** securely (format: `mysql://user:pass@host/db?sslaccept=strict`)
+- [x] 0.1 **Sign up for Cloudflare account** at https://dash.cloudflare.com/sign-up
+- [x] 0.2 **Verify email** and complete Cloudflare account setup
+- [x] 0.3 **Add payment method** to Cloudflare (required for R2 and Workers, free tier available)
+- [x] 0.4 **Sign up for Neon account** at https://neon.tech/
+- [x] 0.5 **Verify email** and complete Neon account setup
+- [x] 0.6 **Note your Cloudflare Account ID** (found in dashboard sidebar under "Account ID")
+- [x] 0.7 **Create R2 bucket** via Cloudflare dashboard: R2 → Create Bucket → name: `csv-uploads-prod`
+- [x] 0.8 **Generate R2 API token**: R2 → Manage R2 API Tokens → Create API Token → Permissions: Object Read & Write
+- [x] 0.9 **Save R2 credentials** (Access Key ID, Secret Access Key, Account ID) securely
+- [ ] 0.10 **Create Neon database**: Databases → New Project → name: `date-management-prod` → region: (choose closest)
+- [ ] 0.11 **Copy Neon connection string**: Connection Details → Connection String → copy value
+- [ ] 0.12 **Save Neon connection string** securely (format: `postgresql://user:pass@host/db?sslmode=require`)
 - [ ] 0.13 **Choose production domain** for Workers (e.g., `api.yourdomain.com` or use workers.dev subdomain)
 - [ ] 0.14 **Provide credentials to developer** via secure method (never commit to git)
 
 ## 1. Project Setup & Dependencies
 
-- [x] 1.1 Install Prisma ORM (`npm install @prisma/client @prisma/adapter-planetscale`)
+- [x] 1.1 Install Prisma ORM (`npm install @prisma/client`)
 - [x] 1.2 Install AWS SDK for R2 (`npm install @aws-sdk/client-s3 @aws-sdk/s3-request-presigner`)
 - [ ] 1.3 Install Wrangler CLI globally (`npm install -g wrangler`)
 - [x] 1.4 Install CSV parsing library (`npm install csv-parse`)
 - [x] 1.5 Install Workers types (`npm install -D @cloudflare/workers-types`)
 - [x] 1.6 Create `workers/` directory for production deployment code
-- [x] 1.7 Update `.env.example` with Cloudflare and PlanetScale variables
+- [x] 1.7 Update `.env.example` with Cloudflare and Neon variables
 - [x] 1.8 Create `wrangler.toml` configuration file
 
 ## 2. Storage Abstraction Layer
@@ -47,10 +47,10 @@
 - [x] 3.3 Configure Prisma for SQLite in development (provider = "sqlite")
 - [x] 3.4 Generate initial Prisma client (`npx prisma generate`)
 - [x] 3.5 Create `backend/src/database/database-factory.ts` with environment-based client creation
-- [x] 3.6 Configure connection pooling for PlanetScale (production only)
+- [ ] 3.6 Configure connection pooling for Neon PostgreSQL (production only)
 - [x] 3.7 Update existing migration files to use Prisma format
 - [x] 3.8 Write unit tests for database factory
-- [x] 3.9 Write integration tests for Prisma client (both SQLite and MySQL)
+- [ ] 3.9 Write integration tests for Prisma client (both SQLite and PostgreSQL)
 - [x] 3.10 Document database abstraction in `docs/database-patterns.md`
 
 ## 4. Refactor Services to Use Abstractions
@@ -90,8 +90,8 @@
 
 ## 6. Cloudflare R2 Setup
 
-- [ ] 6.1 **USER: Verify R2 bucket created** (done in task 0.7)
-- [ ] 6.2 **USER: Verify R2 API token generated** (done in task 0.8)
+- [x] 6.1 **USER: Verify R2 bucket created** (done in task 0.7)
+- [x] 6.2 **USER: Verify R2 API token generated** (done in task 0.8)
 - [ ] 6.3 Configure R2 bucket CORS policy for presigned URL uploads
 - [ ] 6.4 Test R2 connection from local machine using AWS SDK
 - [ ] 6.5 Implement presigned URL generation in R2StorageProvider
@@ -100,19 +100,19 @@
 - [ ] 6.8 Set up R2 bucket encryption at rest
 - [ ] 6.9 Document R2 setup in `docs/cloudflare-setup.md`
 
-## 7. PlanetScale Database Setup
+## 7. Neon Database Setup
 
-- [ ] 7.1 **USER: Verify PlanetScale account created** (done in task 0.4-0.5)
+- [ ] 7.1 **USER: Verify Neon account created** (done in task 0.4-0.5)
 - [ ] 7.2 **USER: Verify database created** (done in task 0.10)
-- [ ] 7.3 **USER: Verify connection password created** (done in task 0.11)
-- [ ] 7.4 Configure Prisma schema for MySQL (provider = "mysql")
+- [ ] 7.3 **USER: Verify connection string copied** (done in task 0.11)
+- [ ] 7.4 Configure Prisma schema for PostgreSQL (provider = "postgresql")
 - [ ] 7.5 Generate initial migration SQL from Prisma schema
-- [ ] 7.6 Apply migration to PlanetScale main branch
-- [ ] 7.7 **USER: Create PlanetScale service token** for CI/CD (Database Settings → Service Tokens)
+- [ ] 7.6 Apply migration to Neon main branch
+- [ ] 7.7 **USER: Create Neon API key** for CI/CD (Project Settings → API Keys)
 - [ ] 7.8 Set up connection string in `.env` (development branch for testing)
-- [ ] 7.9 Enable PlanetScale Query Insights
-- [ ] 7.10 Configure alerts for slow queries (>200ms)
-- [ ] 7.11 Document PlanetScale schema branching workflow in `docs/database-migrations.md`
+- [ ] 7.9 Enable Neon monitoring dashboard
+- [ ] 7.10 Configure alerts for high query latency (>200ms)
+- [ ] 7.11 Document Neon database branching workflow in `docs/database-migrations.md`
 
 ## 8. Cloudflare Workers Implementation
 
@@ -148,7 +148,7 @@
 - [ ] 10.1 Create environment detection utility (`backend/src/config/environment.ts`)
 - [ ] 10.2 Add `NODE_ENV` checks (development vs production)
 - [ ] 10.3 Configure separate `.env.development` and `.env.production` files
-- [ ] 10.4 **USER: Provide production credentials** (R2 keys, PlanetScale connection string from task 0.9 & 0.12)
+- [ ] 10.4 **USER: Provide production credentials** (R2 keys, Neon connection string from task 0.9 & 0.12)
 - [ ] 10.5 Set up Workers Secrets via Wrangler CLI (`wrangler secret put DATABASE_URL`)
 - [ ] 10.6 Add R2 credentials to Workers Secrets (R2_ACCOUNT_ID, R2_ACCESS_KEY_ID, R2_SECRET_ACCESS_KEY)
 - [ ] 10.7 Document required environment variables in `docs/environment-setup.md`
@@ -158,7 +158,7 @@
 ## 11. Testing & Quality Assurance
 
 - [ ] 11.1 Write integration tests for storage abstraction (local and R2)
-- [ ] 11.2 Write integration tests for database abstraction (SQLite and PlanetScale)
+- [ ] 11.2 Write integration tests for database abstraction (SQLite and Neon PostgreSQL)
 - [ ] 11.3 Create test fixtures for CSV files (valid, invalid, large)
 - [ ] 11.4 Write end-to-end tests for CSV upload flow
 - [ ] 11.5 Add load tests for 1000 concurrent uploads
@@ -172,11 +172,11 @@
 
 - [ ] 12.1 Enable Cloudflare Analytics for Workers
 - [ ] 12.2 Configure custom metrics (CSV processing time, upload size)
-- [ ] 12.3 Set up PlanetScale Query Insights alerts
+- [ ] 12.3 Set up Neon monitoring dashboard alerts
 - [ ] 12.4 Create dashboard for key metrics (response times, error rates, upload counts)
 - [ ] 12.5 Configure alerts for error rate >1%
 - [ ] 12.6 Configure alerts for 95th percentile response time >500ms
-- [ ] 12.7 Set up PlanetScale row read alerts at 80% of monthly limit
+- [ ] 12.7 Set up Neon usage alerts at 80% of plan limits
 - [ ] 12.8 Add structured logging to Workers (JSON format)
 - [ ] 12.9 Document monitoring setup in `docs/monitoring.md`
 
@@ -185,7 +185,7 @@
 - [ ] 13.1 Implement CSV injection sanitization in parser
 - [ ] 13.2 Add input validation for all API endpoints
 - [ ] 13.3 Configure rate limiting on upload endpoints
-- [ ] 13.4 Enable TLS-only connections to PlanetScale
+- [ ] 13.4 Enable TLS-only connections to Neon (verify sslmode=require in connection string)
 - [ ] 13.5 Verify no secrets in codebase (use git-secrets or similar)
 - [ ] 13.6 Configure CORS to whitelist production domain only
 - [ ] 13.7 Add request size limits (10MB max)
@@ -196,13 +196,13 @@
 ## 14. Database Migrations
 
 - [ ] 14.1 Keep existing SQLite migrations in `backend/migrations/` for development
-- [ ] 14.2 Create PlanetScale branch for schema changes (`pscale branch create`)
-- [ ] 14.3 Apply Prisma migrations to PlanetScale branch
+- [ ] 14.2 Create Neon branch for schema changes (`neon branches create`)
+- [ ] 14.3 Apply Prisma migrations to Neon branch
 - [ ] 14.4 Test migrations on branch before deploying to main
-- [ ] 14.5 Create deploy request in PlanetScale (`pscale deploy-request create`)
+- [ ] 14.5 Merge branch to main (`neon branches merge`)
 - [ ] 14.6 Document migration workflow in `docs/database-migrations.md`
 - [ ] 14.7 Add migration scripts to `package.json` (dev and prod)
-- [ ] 14.8 Verify migrations work in both SQLite and MySQL
+- [ ] 14.8 Verify migrations work in both SQLite and PostgreSQL
 
 ## 15. Production Deployment
 
@@ -213,7 +213,7 @@
 - [ ] 15.5 Verify health check endpoint accessible (`https://api.domain.com/health`)
 - [ ] 15.6 Test CSV upload flow end-to-end in production
 - [ ] 15.7 Monitor initial production traffic (first 24 hours)
-- [ ] 15.8 Verify costs match projections (Cloudflare + PlanetScale)
+- [ ] 15.8 Verify costs match projections (Cloudflare + Neon)
 - [ ] 15.9 Update frontend to use production API endpoint
 - [ ] 15.10 Create rollback plan and document in `docs/rollback-procedure.md`
 
@@ -223,7 +223,7 @@
 - [ ] 16.2 Document storage abstraction patterns
 - [ ] 16.3 Document database abstraction patterns
 - [ ] 16.4 Create `docs/cloudflare-setup.md` for infrastructure setup
-- [ ] 16.5 Create `docs/planetscale-workflow.md` for schema branching
+- [ ] 16.5 Create `docs/neon-workflow.md` for database branching
 - [ ] 16.6 Update main README with production setup instructions
 - [ ] 16.7 Document CSV upload API endpoints
 - [ ] 16.8 Create troubleshooting guide for common issues
@@ -238,7 +238,7 @@
 - [ ] 17.4 Test Workers cold start times (<10ms target)
 - [ ] 17.5 Optimize Workers bundle size (<1MB limit)
 - [ ] 17.6 Add compression to API responses (gzip)
-- [ ] 17.7 Implement connection pooling for PlanetScale
+- [ ] 17.7 Implement connection pooling for Neon PostgreSQL
 - [ ] 17.8 Run load tests and verify 95th percentile <200ms
 - [ ] 17.9 Profile CSV parsing for 10,000-line files (<25s target)
 - [ ] 17.10 Document performance benchmarks in `docs/performance.md`
@@ -246,10 +246,10 @@
 ## 18. Rollback & Disaster Recovery
 
 - [ ] 18.1 Document rollback procedure to VPS deployment
-- [ ] 18.2 Create script to export PlanetScale data to SQLite
+- [ ] 18.2 Create script to export Neon data to SQLite
 - [ ] 18.3 Document R2 to local filesystem migration
 - [ ] 18.4 Test rollback procedure in staging environment
-- [ ] 18.5 Create backup strategy for PlanetScale (daily snapshots)
+- [ ] 18.5 Create backup strategy for Neon (automatic backups included)
 - [ ] 18.6 Document data retention policies
 - [ ] 18.7 Create incident response plan
 - [ ] 18.8 Set up status page for service availability

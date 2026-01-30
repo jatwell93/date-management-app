@@ -1,5 +1,5 @@
-declare module "better-sqlite3" {
-  import { EventEmitter } from "events";
+declare module 'better-sqlite3' {
+  import { EventEmitter } from 'events';
 
   export interface Statement {
     run: (...params: any[]) => any;
@@ -16,6 +16,3 @@ declare module "better-sqlite3" {
     close(): void;
   }
 }
-
-
-

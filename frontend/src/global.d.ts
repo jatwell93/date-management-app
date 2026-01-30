@@ -1,5 +1,5 @@
-import "jest-fetch-mock";
+import 'jest-fetch-mock';
 
 declare global {
-  const fetch: typeof import("jest-fetch-mock");
+  const fetch: typeof import('jest-fetch-mock');
 }

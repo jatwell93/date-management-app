@@ -1,6 +1,6 @@
-import React, { useEffect, useState } from "react";
+import React, { useEffect, useState } from 'react';
 
-type ToastType = "success" | "error" | "info" | "warning";
+type ToastType = 'success' | 'error' | 'info' | 'warning';
 
 interface ToastProps {
   message: string;
@@ -26,15 +26,15 @@ const Toast: React.FC<ToastProps> = ({ message, type, isVisible, onClose }) => {
 
   const getToastStyle = () => {
     switch (type) {
-      case "success":
-        return "bg-inventory-success-500";
-      case "error":
-        return "bg-inventory-error-500";
-      case "warning":
-        return "bg-inventory-warning-500";
-      case "info":
+      case 'success':
+        return 'bg-inventory-success-500';
+      case 'error':
+        return 'bg-inventory-error-500';
+      case 'warning':
+        return 'bg-inventory-warning-500';
+      case 'info':
       default:
-        return "bg-inventory-primary-500";
+        return 'bg-inventory-primary-500';
     }
   };
 
@@ -44,7 +44,7 @@ const Toast: React.FC<ToastProps> = ({ message, type, isVisible, onClose }) => {
     <div className="fixed bottom-4 right-4 z-50">
       <div
         className={`transform transition-transform duration-300 ease-in-out ${
-          show ? "translate-y-0 opacity-100" : "translate-y-full opacity-0"
+          show ? 'translate-y-0 opacity-100' : 'translate-y-full opacity-0'
         }`}
       >
         <div

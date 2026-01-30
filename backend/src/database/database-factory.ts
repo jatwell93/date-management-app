@@ -4,7 +4,7 @@
  * Creates the appropriate Prisma client based on the environment.
  * - Development: SQLite with local file
  * - Production: MySQL with PlanetScale (serverless)
- * 
+ *
  * This factory provides environment-based database client creation
  * with proper connection pooling for production.
  */
@@ -82,18 +82,20 @@ function getLogOptions(config: DatabaseFactoryConfig): Array<'query' | 'info' | 
  */
 export function createDatabaseClient(config: DatabaseFactoryConfig = {}): PrismaClient {
   const environment = config.environment ?? detectEnvironment();
-  const _databaseUrl = getDatabaseUrl(environment, config.connectionUrl);
+  getDatabaseUrl(environment, config.connectionUrl);
   const logOptions = getLogOptions(config);
 
   // Create Prisma client with appropriate settings
   const client = new PrismaClient({
     log: logOptions,
     // Data source override if URL is provided
-    datasources: config.connectionUrl ? {
-      db: {
-        url: config.connectionUrl,
-      },
-    } : undefined,
+    datasources: config.connectionUrl
+      ? {
+          db: {
+            url: config.connectionUrl,
+          },
+        }
+      : undefined,
   });
 
   // For production with PlanetScale, we rely on Prisma's built-in
@@ -166,7 +168,7 @@ export type TransactionClient = Omit<
  */
 export async function withTransaction<T>(
   client: PrismaClient,
-  fn: (tx: TransactionClient) => Promise<T>
+  fn: (tx: TransactionClient) => Promise<T>,
 ): Promise<T> {
   return client.$transaction(fn);
 }
@@ -180,7 +182,7 @@ export async function withTransactionOptions<T>(
   options?: {
     maxWait?: number; // Maximum time to wait to acquire a transaction (ms)
     timeout?: number; // Maximum time the transaction can run (ms)
-  }
+  },
 ): Promise<T> {
   return client.$transaction(fn, options);
 }

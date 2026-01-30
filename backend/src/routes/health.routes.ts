@@ -1,6 +1,6 @@
 import { Router } from 'express';
 import { getDb, releaseDb } from '../database';
-import { DatabaseMonitoringService, DatabaseAlertType } from '../services/database.monitoring.service';
+import { DatabaseMonitoringService } from '../services/database.monitoring.service';
 
 const router = Router();
 
@@ -11,15 +11,15 @@ router.get('/health', (req, res) => {
     // Check database connectivity
     db = getDb();
     const result: any = db.prepare('SELECT 1 as alive').get();
-    
+
     if (result && result.alive === 1) {
       res.status(200).json({
         status: 'healthy',
         timestamp: new Date().toISOString(),
         services: {
           database: 'healthy',
-          api: 'healthy'
-        }
+          api: 'healthy',
+        },
       });
     } else {
       res.status(503).json({
@@ -27,9 +27,9 @@ router.get('/health', (req, res) => {
         timestamp: new Date().toISOString(),
         services: {
           database: 'unhealthy',
-          api: 'healthy'
+          api: 'healthy',
         },
-        error: 'Database connectivity test failed'
+        error: 'Database connectivity test failed',
       });
     }
   } catch (error) {
@@ -38,9 +38,9 @@ router.get('/health', (req, res) => {
       timestamp: new Date().toISOString(),
       services: {
         database: 'unhealthy',
-        api: 'healthy'
+        api: 'healthy',
       },
-      error: 'Database connectivity error: ' + (error as Error).message
+      error: 'Database connectivity error: ' + (error as Error).message,
     });
   } finally {
     if (db) {
@@ -53,7 +53,7 @@ router.get('/health', (req, res) => {
 router.get('/live', (req, res) => {
   res.status(200).json({
     status: 'alive',
-    timestamp: new Date().toISOString()
+    timestamp: new Date().toISOString(),
   });
 });
 
@@ -64,23 +64,23 @@ router.get('/ready', (req, res) => {
     // Check if database is available
     db = getDb();
     const result: any = db.prepare('SELECT 1 as ready').get();
-    
+
     if (result && result.ready === 1) {
       res.status(200).json({
         status: 'ready',
-        timestamp: new Date().toISOString()
+        timestamp: new Date().toISOString(),
       });
     } else {
       res.status(503).json({
         status: 'not ready',
-        timestamp: new Date().toISOString()
+        timestamp: new Date().toISOString(),
       });
     }
-  } catch (error) {
+  } catch (_error) {
     res.status(503).json({
       status: 'not ready',
       timestamp: new Date().toISOString(),
-      error: 'Database not available'
+      error: 'Database not available',
     });
   } finally {
     if (db) {
@@ -94,14 +94,14 @@ router.get('/metrics', (req, res) => {
   const uptime = process.uptime();
   const memoryUsage = process.memoryUsage();
   const cpuUsage = process.cpuUsage ? process.cpuUsage() : null;
-  
+
   res.status(200).json({
     uptime: uptime,
     memory: {
       rss: memoryUsage.rss,
       heapTotal: memoryUsage.heapTotal,
       heapUsed: memoryUsage.heapUsed,
-      external: memoryUsage.external
+      external: memoryUsage.external,
     },
     cpu: cpuUsage,
     timestamp: new Date().toISOString(),
@@ -109,8 +109,8 @@ router.get('/metrics', (req, res) => {
       pid: process.pid,
       version: process.version,
       platform: process.platform,
-      arch: process.arch
-    }
+      arch: process.arch,
+    },
   });
 });
 
@@ -118,17 +118,17 @@ router.get('/metrics', (req, res) => {
 router.get('/database-metrics', (req, res) => {
   try {
     const dbMetrics = DatabaseMonitoringService.getInstance().getMetrics();
-    
+
     res.status(200).json({
       status: 'success',
       timestamp: new Date().toISOString(),
-      metrics: dbMetrics
+      metrics: dbMetrics,
     });
   } catch (error) {
     res.status(500).json({
       status: 'error',
       timestamp: new Date().toISOString(),
-      error: 'Failed to retrieve database metrics: ' + (error as Error).message
+      error: 'Failed to retrieve database metrics: ' + (error as Error).message,
     });
   }
 });
@@ -140,7 +140,7 @@ router.get('/database-health', (req, res) => {
     // Check database connectivity
     db = getDb();
     const result: any = db.prepare('SELECT 1 as alive').get();
-    
+
     if (result && result.alive === 1) {
       res.status(200).json({
         status: 'healthy',
@@ -148,8 +148,8 @@ router.get('/database-health', (req, res) => {
         database: {
           connected: true,
           version: db.pragma ? db.pragma('user_version', { simple: true }) : 'N/A',
-          integrity_check: db.pragma ? db.pragma('integrity_check', { simple: true }) : 'N/A'
-        }
+          integrity_check: db.pragma ? db.pragma('integrity_check', { simple: true }) : 'N/A',
+        },
       });
     } else {
       res.status(503).json({
@@ -157,8 +157,8 @@ router.get('/database-health', (req, res) => {
         timestamp: new Date().toISOString(),
         database: {
           connected: false,
-          error: 'Database connectivity test failed'
-        }
+          error: 'Database connectivity test failed',
+        },
       });
     }
   } catch (error) {
@@ -167,8 +167,8 @@ router.get('/database-health', (req, res) => {
       timestamp: new Date().toISOString(),
       database: {
         connected: false,
-        error: 'Database connectivity error: ' + (error as Error).message
-      }
+        error: 'Database connectivity error: ' + (error as Error).message,
+      },
     });
   } finally {
     if (db) {
@@ -184,7 +184,7 @@ router.get('/recent-alerts', (req, res) => {
   res.status(200).json({
     status: 'success',
     timestamp: new Date().toISOString(),
-    alerts: []  // This would come from a persisted alert store in a real implementation
+    alerts: [], // This would come from a persisted alert store in a real implementation
   });
 });
 

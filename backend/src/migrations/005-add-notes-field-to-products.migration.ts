@@ -1,4 +1,4 @@
-import Database, { type Database as DatabaseType } from 'better-sqlite3';
+import { type Database as DatabaseType } from 'better-sqlite3';
 import { Migration } from './migration.service';
 
 /**
@@ -18,15 +18,17 @@ export const addNotesToProductsMigration: Migration = {
       pk: number;
     }>;
     const hasNotesColumn = tableInfo.some((column) => column.name === 'notes');
-    
+
     if (!hasNotesColumn) {
       db.exec("ALTER TABLE products ADD COLUMN notes TEXT DEFAULT ''");
-      console.log("Added notes column to products table");
+      console.log('Added notes column to products table');
     }
   },
-  down: (db: DatabaseType) => {
+  down: (_db: DatabaseType) => {
     // Note: SQLite doesn't support dropping columns directly
     // In a real scenario, you would need to recreate the table
-    console.log("Skipping rollback for adding notes column (SQLite doesn't support dropping columns)");
-  }
+    console.log(
+      "Skipping rollback for adding notes column (SQLite doesn't support dropping columns)",
+    );
+  },
 };

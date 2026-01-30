@@ -1,7 +1,7 @@
-import React from "react";
-import { render, screen, waitFor } from "@testing-library/react";
-import { DashboardPage } from "../pages/DashboardPage";
-import "@testing-library/jest-dom";
+import React from 'react';
+import { render, screen, waitFor } from '@testing-library/react';
+import { DashboardPage } from '../pages/DashboardPage';
+import '@testing-library/jest-dom';
 
 // Mock fetch API
 global.fetch = jest.fn(() =>
@@ -15,17 +15,17 @@ global.fetch = jest.fn(() =>
         recentActivity: [
           {
             id: 1,
-            description: "Activity 1",
-            timestamp: "2025-09-24T10:00:00Z",
+            description: 'Activity 1',
+            timestamp: '2025-09-24T10:00:00Z',
           },
         ],
       }),
   } as Response),
 );
 
-describe("DashboardPage", () => {
-  it("renders dashboard data on successful fetch", async () => {
-    const tokenValue = "test-session-value";
+describe('DashboardPage', () => {
+  it('renders dashboard data on successful fetch', async () => {
+    const tokenValue = 'test-session-value';
     render(<DashboardPage token={tokenValue} />);
 
     expect(screen.getByText(/Loading dashboard.../i)).toBeInTheDocument();
@@ -40,38 +40,34 @@ describe("DashboardPage", () => {
     expect(screen.getByText(/Activity 1/i)).toBeInTheDocument();
 
     expect(global.fetch).toHaveBeenCalledWith(
-      "http://localhost:3001/dashboard",
+      'http://localhost:3001/dashboard',
       expect.objectContaining({
         headers: { Authorization: `Bearer ${tokenValue}` },
       }),
     );
   });
 
-  it("displays an error message if token is missing", async () => {
+  it('displays an error message if token is missing', async () => {
     render(<DashboardPage token={null} />);
 
     await waitFor(() => {
-      expect(
-        screen.getByText(/Error: Authentication token is missing./i),
-      ).toBeInTheDocument();
+      expect(screen.getByText(/Error: Authentication token is missing./i)).toBeInTheDocument();
     });
   });
 
-  it("displays an error message on failed data fetch", async () => {
+  it('displays an error message on failed data fetch', async () => {
     (global.fetch as jest.Mock).mockImplementationOnce(() =>
       Promise.resolve({
         ok: false,
-        json: () => Promise.resolve({ message: "Failed to load data" }),
+        json: () => Promise.resolve({ message: 'Failed to load data' }),
       } as Response),
     );
 
-    const tokenValue = "test-session-value";
+    const tokenValue = 'test-session-value';
     render(<DashboardPage token={tokenValue} />);
 
     await waitFor(() => {
-      expect(
-        screen.getByText(/Error: Failed to load data/i),
-      ).toBeInTheDocument();
+      expect(screen.getByText(/Error: Failed to load data/i)).toBeInTheDocument();
     });
   });
 });

@@ -1,5 +1,5 @@
-import React, { useEffect, useRef, useState } from "react";
-import Quagga from "quagga";
+import React, { useEffect, useRef, useState } from 'react';
+import Quagga from 'quagga';
 
 interface CameraScannerProps {
   onDetected: (code: string) => void;
@@ -7,11 +7,7 @@ interface CameraScannerProps {
   onScannerReset?: () => void;
 }
 
-export function CameraScanner({
-  onDetected,
-  onScannerReady,
-  onScannerReset,
-}: CameraScannerProps) {
+export function CameraScanner({ onDetected, onScannerReady, onScannerReset }: CameraScannerProps) {
   const videoRef = useRef<HTMLDivElement>(null);
   const [error, setError] = useState<string | null>(null);
 
@@ -22,35 +18,33 @@ export function CameraScanner({
       Quagga.init(
         {
           inputStream: {
-            name: "Live",
-            type: "LiveStream",
+            name: 'Live',
+            type: 'LiveStream',
             target: videoRef.current,
             constraints: {
-              facingMode: "environment", // Prefer rear camera if available
+              facingMode: 'environment', // Prefer rear camera if available
               width: 640,
               height: 480,
             },
           },
           decoder: {
             readers: [
-              "code_128_reader",
-              "ean_reader",
-              "ean_8_reader",
-              "code_39_reader",
-              "code_39_vin_reader",
-              "codabar_reader",
-              "upc_reader",
-              "upc_e_reader",
-              "i2of5_reader",
+              'code_128_reader',
+              'ean_reader',
+              'ean_8_reader',
+              'code_39_reader',
+              'code_39_vin_reader',
+              'codabar_reader',
+              'upc_reader',
+              'upc_e_reader',
+              'i2of5_reader',
             ],
           },
         },
         (err: any) => {
           if (err) {
-            console.error("Error initializing Quagga:", err);
-            setError(
-              "Error accessing camera. Please ensure you have granted camera permissions.",
-            );
+            console.error('Error initializing Quagga:', err);
+            setError('Error accessing camera. Please ensure you have granted camera permissions.');
             return;
           }
 
@@ -117,10 +111,7 @@ export function CameraScanner({
 
   return (
     <div className="camera-scanner">
-      <div
-        ref={videoRef}
-        className="w-full h-64 bg-black flex items-center justify-center rounded"
-      >
+      <div ref={videoRef} className="w-full h-64 bg-black flex items-center justify-center rounded">
         <div className="text-white text-center">
           <p>Camera feed will appear here</p>
           <p className="text-sm mt-2">Point your camera at a barcode</p>

@@ -101,9 +101,7 @@ describe('LocalStorageProvider', () => {
       const data = Buffer.alloc(2 * 1024 * 1024); // 2MB (exceeds 1MB limit)
       const contentType = 'text/plain';
 
-      await expect(provider.upload(key, data, contentType)).rejects.toThrow(
-        FileSizeLimitError
-      );
+      await expect(provider.upload(key, data, contentType)).rejects.toThrow(FileSizeLimitError);
     });
 
     it('should sanitize key to prevent directory traversal', async () => {
@@ -140,9 +138,7 @@ describe('LocalStorageProvider', () => {
     });
 
     it('should throw FileNotFoundError for non-existent file', async () => {
-      await expect(provider.download('non-existent.txt')).rejects.toThrow(
-        FileNotFoundError
-      );
+      await expect(provider.download('non-existent.txt')).rejects.toThrow(FileNotFoundError);
     });
 
     it('should preserve binary data integrity', async () => {
@@ -186,9 +182,7 @@ describe('LocalStorageProvider', () => {
     });
 
     it('should throw FileNotFoundError for non-existent file', async () => {
-      await expect(provider.delete('non-existent.txt')).rejects.toThrow(
-        FileNotFoundError
-      );
+      await expect(provider.delete('non-existent.txt')).rejects.toThrow(FileNotFoundError);
     });
   });
 
@@ -247,23 +241,21 @@ describe('LocalStorageProvider', () => {
     });
 
     it('should throw FileNotFoundError for non-existent file', async () => {
-      await expect(provider.getMetadata('non-existent.txt')).rejects.toThrow(
-        FileNotFoundError
-      );
+      await expect(provider.getMetadata('non-existent.txt')).rejects.toThrow(FileNotFoundError);
     });
   });
 
   describe('getPresignedUploadUrl', () => {
     it('should throw StorageProviderError (not supported)', async () => {
-      await expect(
-        provider.getPresignedUploadUrl('test.txt', 3600)
-      ).rejects.toThrow(StorageProviderError);
+      await expect(provider.getPresignedUploadUrl('test.txt', 3600)).rejects.toThrow(
+        StorageProviderError,
+      );
     });
 
     it('should include helpful error message', async () => {
-      await expect(
-        provider.getPresignedUploadUrl('test.txt', 3600)
-      ).rejects.toThrow('Presigned URLs are not supported in local storage mode');
+      await expect(provider.getPresignedUploadUrl('test.txt', 3600)).rejects.toThrow(
+        'Presigned URLs are not supported in local storage mode',
+      );
     });
   });
 });

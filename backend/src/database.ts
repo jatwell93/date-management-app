@@ -10,7 +10,7 @@ export function getDb(): Database.Database {
   return db;
 }
 
-export function releaseDb(db: Database.Database): void {
+export function releaseDb(_db: Database.Database): void {
   // better-sqlite3 doesn't have connection pooling, so this is a no-op
 }
 

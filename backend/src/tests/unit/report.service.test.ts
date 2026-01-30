@@ -1,14 +1,13 @@
-import { ReportService } from "../../services/report.service";
-import { getDb } from "../../database";
+import { ReportService } from '../../services/report.service';
+import { getDb } from '../../database';
 
 // Mock the database module
-jest.mock("../../database", () => ({
+jest.mock('../../database', () => ({
   getDb: jest.fn(),
 }));
 
-describe("ReportService", () => {
+describe('ReportService', () => {
   let reportService: ReportService;
-  let mockDb: { all: jest.Mock };
 
   beforeEach(() => {
     reportService = new ReportService();
@@ -27,10 +26,10 @@ describe("ReportService", () => {
     jest.clearAllMocks();
   });
 
-  it("should return monthly markdown report", async () => {
+  it('should return monthly markdown report', async () => {
     const mockReport = [
-      { month: "2025-08", totalMarkdownValue: 150.75, itemCount: 25 },
-      { month: "2025-09", totalMarkdownValue: 200.5, itemCount: 30 },
+      { month: '2025-08', totalMarkdownValue: 150.75, itemCount: 25 },
+      { month: '2025-09', totalMarkdownValue: 200.5, itemCount: 30 },
     ];
     const mockStatement = (getDb() as any).prepare();
     mockStatement.all.mockResolvedValue(mockReport);
@@ -40,10 +39,10 @@ describe("ReportService", () => {
     expect(report).toEqual(mockReport);
   });
 
-  it("should return usage report", async () => {
+  it('should return usage report', async () => {
     const mockUsageReport = [
-      { user: "Manager", scans: 100, markdowns: 10 },
-      { user: "Team Member", scans: 50, markdowns: 5 },
+      { user: 'Manager', scans: 100, markdowns: 10 },
+      { user: 'Team Member', scans: 50, markdowns: 5 },
     ];
     const mockStatement = (getDb() as any).prepare();
     mockStatement.all.mockResolvedValue(mockUsageReport);

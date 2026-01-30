@@ -1,12 +1,12 @@
-import { useState } from "react";
-import { CameraScanner } from "./CameraScanner";
+import { useState } from 'react';
+import { CameraScanner } from './CameraScanner';
 
 interface ScannerProps {
   onScan: (scannedInput: string) => void;
 }
 
 export function Scanner({ onScan }: ScannerProps) {
-  const [input, setInput] = useState("");
+  const [input, setInput] = useState('');
   const [useCamera, setUseCamera] = useState(false);
 
   const handleInputChange = (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -17,7 +17,7 @@ export function Scanner({ onScan }: ScannerProps) {
     e.preventDefault();
     if (input.trim()) {
       onScan(input.trim());
-      setInput("");
+      setInput('');
     }
   };
 
@@ -56,9 +56,7 @@ export function Scanner({ onScan }: ScannerProps) {
       ) : (
         <div className="mb-4">
           <div className="flex justify-between items-center mb-2">
-            <h3 className="text-lg font-semibold text-foreground">
-              Camera Scanner
-            </h3>
+            <h3 className="text-lg font-semibold text-foreground">Camera Scanner</h3>
             <button
               type="button"
               onClick={() => setUseCamera(false)}
@@ -69,8 +67,8 @@ export function Scanner({ onScan }: ScannerProps) {
           </div>
           <CameraScanner
             onDetected={handleScan}
-            onScannerReady={() => console.log("Scanner ready")}
-            onScannerReset={() => console.log("Scanner reset")}
+            onScannerReady={() => console.log('Scanner ready')}
+            onScannerReset={() => console.log('Scanner reset')}
           />
         </div>
       )}

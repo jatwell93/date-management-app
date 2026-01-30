@@ -32,7 +32,7 @@ export class MigrationService {
 
       // Get all executed migrations
       const executedMigrations = this.migrationModel.getExecutedMigrations(db);
-      const executedMigrationNames = new Set(executedMigrations.map(m => m.name));
+      const executedMigrationNames = new Set(executedMigrations.map((m) => m.name));
 
       // Define our migration pipeline
       const migrations: Migration[] = await this.getMigrations();
@@ -41,15 +41,15 @@ export class MigrationService {
       for (const migration of migrations) {
         if (!executedMigrationNames.has(migration.name)) {
           Logger.info(`Running migration: ${migration.name} (ID: ${migration.id})`);
-          
+
           try {
             // Run the migration in a transaction to ensure atomicity
             const transaction = (db as any).transaction(() => {
               migration.up(db);
             });
-            
+
             transaction();
-            
+
             // Mark the migration as executed
             this.migrationModel.markMigrationExecuted(db, migration.id, migration.name);
             Logger.info(`Migration ${migration.name} completed successfully`);
@@ -58,7 +58,9 @@ export class MigrationService {
             throw error;
           }
         } else {
-          Logger.debug(`Migration ${migration.name} (ID: ${migration.id}) already executed, skipping`);
+          Logger.debug(
+            `Migration ${migration.name} (ID: ${migration.id}) already executed, skipping`,
+          );
         }
       }
 
@@ -144,7 +146,7 @@ export class MigrationService {
             DROP TABLE IF EXISTS users;
             DROP TABLE IF EXISTS products;
           `);
-        }
+        },
       },
       // Add sub_department column to store_areas
       {
@@ -152,20 +154,22 @@ export class MigrationService {
         name: '002-add-sub-department-column',
         up: (db: DB) => {
           // Check if the column already exists to avoid errors
-          const tableInfo = db.prepare("PRAGMA table_info(store_areas)").all();
-          const hasSubDepartmentColumn = tableInfo.some((column: any) => column.name === 'sub_department');
-          
+          const tableInfo = db.prepare('PRAGMA table_info(store_areas)').all();
+          const hasSubDepartmentColumn = tableInfo.some(
+            (column: any) => column.name === 'sub_department',
+          );
+
           if (!hasSubDepartmentColumn) {
-            db.exec("ALTER TABLE store_areas ADD COLUMN sub_department TEXT");
-            Logger.info("Added sub_department column to store_areas table");
+            db.exec('ALTER TABLE store_areas ADD COLUMN sub_department TEXT');
+            Logger.info('Added sub_department column to store_areas table');
           }
         },
-        down: (db: DB) => {
+        down: (_db: DB) => {
           // Note: SQLite doesn't support dropping columns directly
           // We'd need to recreate the table which is complex
           // For now, we'll just log that this migration can't be reverted
           Logger.warn("Cannot revert 'Add sub_department to store_areas' migration in SQLite");
-        }
+        },
       },
       // Add indexes for performance
       {
@@ -186,7 +190,7 @@ export class MigrationService {
             DROP INDEX IF EXISTS idx_products_sku;
             DROP INDEX IF EXISTS idx_products_barcode;
           `);
-        }
+        },
       },
       // Add additional performance indexes for scale
       {
@@ -216,7 +220,7 @@ export class MigrationService {
             DROP INDEX IF EXISTS idx_audit_timestamp;
             DROP INDEX IF EXISTS idx_products_name;
           `);
-        }
+        },
       },
       // Add default data migration
       {
@@ -224,21 +228,29 @@ export class MigrationService {
         name: '004-add-default-data',
         up: (db: DB) => {
           // Insert default store area if none exist
-          const storeAreaCount = db.prepare("SELECT COUNT(*) as count FROM store_areas").get() as { count: number };
+          const storeAreaCount = db.prepare('SELECT COUNT(*) as count FROM store_areas').get() as {
+            count: number;
+          };
           if (storeAreaCount.count === 0) {
-            db.exec("INSERT INTO store_areas (name, sub_department) VALUES ('Default Area', 'General')");
+            db.exec(
+              "INSERT INTO store_areas (name, sub_department) VALUES ('Default Area', 'General')",
+            );
           }
-          
+
           // Insert default product if none exist
-          const productCount = db.prepare("SELECT COUNT(*) as count FROM products").get() as { count: number };
+          const productCount = db.prepare('SELECT COUNT(*) as count FROM products').get() as {
+            count: number;
+          };
           if (productCount.count === 0) {
-            db.exec("INSERT INTO products (barcode, sku, name, cost_price) VALUES ('123456789', 'DEFAULT001', 'Default Product', 0.0)");
+            db.exec(
+              "INSERT INTO products (barcode, sku, name, cost_price) VALUES ('123456789', 'DEFAULT001', 'Default Product', 0.0)",
+            );
           }
         },
-        down: (db: DB) => {
+        down: (_db: DB) => {
           // We don't want to remove default data in down migrations
-          Logger.info("Default data migration rollback skipped");
-        }
+          Logger.info('Default data migration rollback skipped');
+        },
       },
       // Update markdown statuses to follow correct calculation rules
       {
@@ -246,18 +258,15 @@ export class MigrationService {
         name: '006-update-markdown-statuses',
         up: (db: DB) => {
           // Create an instance of the inventory service to use the updated calculation functions
-          const { InventoryService } = require('../services/inventory.service');
-          const inventoryService = new InventoryService();
-          
+          require('../services/inventory.service');
+
           // Get all inventory items
           const stmt = db.prepare('SELECT id, expiry_date FROM inventory_items');
-          const items = stmt.all() as Array<{id: number, expiry_date: string}>;
-          
+          const items = stmt.all() as Array<{ id: number; expiry_date: string }>;
+
           // Update each item's status based on the new calculation rules
-          const updateStmt = db.prepare(
-            'UPDATE inventory_items SET status = ? WHERE id = ?'
-          );
-          
+          const updateStmt = db.prepare('UPDATE inventory_items SET status = ? WHERE id = ?');
+
           let updatedCount = 0;
           for (const item of items) {
             try {
@@ -268,10 +277,10 @@ export class MigrationService {
               const today = new Date();
               today.setHours(0, 0, 0, 0);
               expiry.setHours(0, 0, 0, 0);
-              
+
               const timeDiff = expiry.getTime() - today.getTime();
               const daysDiff = Math.ceil(timeDiff / (1000 * 60 * 60 * 24));
-              
+
               let newStatus: string;
               if (daysDiff < 0) {
                 newStatus = 'Expired';
@@ -288,7 +297,7 @@ export class MigrationService {
                 // More than 3 months from expiry: Normal (no markdown)
                 newStatus = 'Normal';
               }
-              
+
               // Update the status in the database
               updateStmt.run(newStatus, item.id);
               updatedCount++;
@@ -296,12 +305,12 @@ export class MigrationService {
               Logger.error(`Error updating item ${item.id}:`, error);
             }
           }
-          
+
           Logger.info(`Updated markdown statuses for ${updatedCount} inventory items.`);
         },
-        down: (db: DB) => {
-          Logger.info("Rollback for update markdown statuses migration is not implemented.");
-        }
+        down: (_db: DB) => {
+          Logger.info('Rollback for update markdown statuses migration is not implemented.');
+        },
       },
       // Add expired_item_transactions table
       {
@@ -336,15 +345,18 @@ export class MigrationService {
           db.exec(`
             DROP TABLE IF EXISTS expired_item_transactions;
           `);
-        }
-      }
+        },
+      },
     ];
   }
 
   /**
    * Get the status of all migrations
    */
-  public async getMigrationStatus(): Promise<{ pending: Migration[], executed: MigrationRecord[] }> {
+  public async getMigrationStatus(): Promise<{
+    pending: Migration[];
+    executed: MigrationRecord[];
+  }> {
     const dbPath = envConfig.DATABASE_PATH || './database.sqlite';
     const db: Database.Database = new Database(dbPath);
 
@@ -352,13 +364,13 @@ export class MigrationService {
       this.migrationModel.ensureMigrationsTable(db);
       const executedMigrations = this.migrationModel.getExecutedMigrations(db);
       const allMigrations = await this.getMigrations();
-      
-      const executedNames = new Set(executedMigrations.map(m => m.name));
-      const pendingMigrations = allMigrations.filter(m => !executedNames.has(m.name));
-      
+
+      const executedNames = new Set(executedMigrations.map((m) => m.name));
+      const pendingMigrations = allMigrations.filter((m) => !executedNames.has(m.name));
+
       return {
         pending: pendingMigrations,
-        executed: executedMigrations
+        executed: executedMigrations,
       };
     } finally {
       db.close();
@@ -375,7 +387,7 @@ export class MigrationService {
     try {
       this.migrationModel.ensureMigrationsTable(db);
       const executedMigrations = this.migrationModel.getExecutedMigrations(db);
-      
+
       if (executedMigrations.length === 0) {
         Logger.info('No migrations to rollback');
         return;
@@ -383,10 +395,10 @@ export class MigrationService {
 
       // Get the last executed migration
       const lastMigration = executedMigrations[executedMigrations.length - 1];
-      
+
       // Find the corresponding migration definition
       const allMigrations = await this.getMigrations();
-      const migrationToRollback = allMigrations.find(m => m.name === lastMigration.name);
+      const migrationToRollback = allMigrations.find((m) => m.name === lastMigration.name);
 
       if (!migrationToRollback || !migrationToRollback.down) {
         Logger.error(`Migration ${lastMigration.name} does not have a rollback function`);
@@ -404,7 +416,7 @@ export class MigrationService {
 
       // Remove the migration record
       this.migrationModel.removeMigrationRecord(db, lastMigration.name);
-      
+
       Logger.info(`Migration ${lastMigration.name} rolled back successfully`);
     } catch (error) {
       Logger.error('Migration rollback failed:', error);

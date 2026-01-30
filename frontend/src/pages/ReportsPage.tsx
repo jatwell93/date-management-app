@@ -1,10 +1,5 @@
-import React, { useEffect, useState } from "react";
-import {
-  Card,
-  CardContent,
-  CardHeader,
-  CardTitle,
-} from "../components/ui/card";
+import React, { useEffect, useState } from 'react';
+import { Card, CardContent, CardHeader, CardTitle } from '../components/ui/card';
 import {
   Table,
   TableBody,
@@ -12,8 +7,8 @@ import {
   TableHead,
   TableHeader,
   TableRow,
-} from "../components/ui/table";
-import { apiService } from "../lib/api.service";
+} from '../components/ui/table';
+import { apiService } from '../lib/api.service';
 
 interface ReportsPageProps {
   token: string | null;
@@ -31,11 +26,8 @@ interface MonthlyExpiryReportItem {
 }
 
 export function ReportsPage({ token }: ReportsPageProps) {
-  const [reportData, setReportData] = useState<
-    MonthlyExpiryReportItem[] | null
-  >(null);
-  const [overallReportData, setOverallReportData] =
-    useState<MonthlyExpiryReportItem | null>(null);
+  const [reportData, setReportData] = useState<MonthlyExpiryReportItem[] | null>(null);
+  const [overallReportData, setOverallReportData] = useState<MonthlyExpiryReportItem | null>(null);
   const [loading, setLoading] = useState(true);
   const [overallLoading, setOverallLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -43,22 +35,19 @@ export function ReportsPage({ token }: ReportsPageProps) {
   useEffect(() => {
     const fetchReportData = async () => {
       if (!token) {
-        setError("Authentication token is missing.");
+        setError('Authentication token is missing.');
         setLoading(false);
         return;
       }
 
       try {
-        const data = await apiService.get<MonthlyExpiryReportItem[]>(
-          "/reports/expiry",
-          token,
-        );
+        const data = await apiService.get<MonthlyExpiryReportItem[]>('/reports/expiry', token);
         setReportData(data);
       } catch (err: unknown) {
         if (err instanceof Error) {
           setError(err.message);
         } else {
-          setError("An unknown error occurred");
+          setError('An unknown error occurred');
         }
       } finally {
         setLoading(false);
@@ -67,14 +56,14 @@ export function ReportsPage({ token }: ReportsPageProps) {
 
     const fetchOverallReportData = async () => {
       if (!token) {
-        setError("Authentication token is missing.");
+        setError('Authentication token is missing.');
         setOverallLoading(false);
         return;
       }
 
       try {
         const data = await apiService.get<MonthlyExpiryReportItem>(
-          "/reports/expiry-overall",
+          '/reports/expiry-overall',
           token,
         );
         setOverallReportData(data);
@@ -82,7 +71,7 @@ export function ReportsPage({ token }: ReportsPageProps) {
         if (err instanceof Error) {
           setError(err.message);
         } else {
-          setError("An unknown error occurred");
+          setError('An unknown error occurred');
         }
       } finally {
         setOverallLoading(false);
@@ -94,19 +83,11 @@ export function ReportsPage({ token }: ReportsPageProps) {
   }, [token]);
 
   if (loading) {
-    return (
-      <div className="container mx-auto p-4 text-center">
-        Loading reports...
-      </div>
-    );
+    return <div className="container mx-auto p-4 text-center">Loading reports...</div>;
   }
 
   if (error) {
-    return (
-      <div className="container mx-auto p-4 text-center text-red-500">
-        Error: {error}
-      </div>
-    );
+    return <div className="container mx-auto p-4 text-center text-red-500">Error: {error}</div>;
   }
 
   return (
@@ -121,15 +102,11 @@ export function ReportsPage({ token }: ReportsPageProps) {
           ) : overallReportData ? (
             <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mb-6">
               <div className="bg-blue-50 p-4 rounded-lg text-center">
-                <p className="text-2xl font-bold">
-                  {overallReportData.total_expiring}
-                </p>
+                <p className="text-2xl font-bold">{overallReportData.total_expiring}</p>
                 <p className="text-sm text-gray-600">Total Items</p>
               </div>
               <div className="bg-red-50 p-4 rounded-lg text-center">
-                <p className="text-2xl font-bold text-red-600">
-                  {overallReportData.expired_count}
-                </p>
+                <p className="text-2xl font-bold text-red-600">{overallReportData.expired_count}</p>
                 <p className="text-sm text-gray-600">Expired Items</p>
               </div>
               <div className="bg-yellow-50 p-4 rounded-lg text-center">

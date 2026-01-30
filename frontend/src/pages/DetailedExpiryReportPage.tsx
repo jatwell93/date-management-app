@@ -1,18 +1,12 @@
-import React, { useEffect, useState } from "react";
-import {
-  Card,
-  CardContent,
-  CardHeader,
-  CardTitle,
-} from "../components/ui/card";
-import { Button } from "../components/ui/button";
-import { Input } from "../components/ui/input";
-import { apiService } from "../lib/api.service";
-import { calculateMarkdownPrice } from "../lib/utils";
-import { DataTable } from "../components/ui/data-table";
-import { DataTableColumnHeader } from "../components/ui/data-table-column-header";
-import { cn } from "../lib/utils";
-import { ColumnDef } from "@tanstack/react-table";
+import React, { useEffect, useState } from 'react';
+import { Card, CardContent, CardHeader, CardTitle } from '../components/ui/card';
+import { Button } from '../components/ui/button';
+import { Input } from '../components/ui/input';
+import { apiService } from '../lib/api.service';
+import { calculateMarkdownPrice } from '../lib/utils';
+import { DataTable } from '../components/ui/data-table';
+import { DataTableColumnHeader } from '../components/ui/data-table-column-header';
+import { ColumnDef } from '@tanstack/react-table';
 
 interface DetailedExpiryReportPageProps {
   token: string | null;
@@ -37,36 +31,23 @@ interface EditableInventoryItem {
   locationId: number;
 }
 
-export function DetailedExpiryReportPage({
-  token,
-}: DetailedExpiryReportPageProps) {
-  const [reportData, setReportData] = useState<
-    DetailedExpiryReportItem[] | null
-  >(null);
+export function DetailedExpiryReportPage({ token }: DetailedExpiryReportPageProps) {
+  const [reportData, setReportData] = useState<DetailedExpiryReportItem[] | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
-  const [editingItem, setEditingItem] = useState<EditableInventoryItem | null>(
-    null,
-  );
+  const [editingItem, setEditingItem] = useState<EditableInventoryItem | null>(null);
   const [saving, setSaving] = useState(false);
-  const [deleteConfirmation, setDeleteConfirmation] = useState<number | null>(
-    null,
-  ); // inventoryId to confirm deletion
-  const [storeAreas, setStoreAreas] = useState<{ id: number; name: string }[]>(
-    [],
-  );
+  const [deleteConfirmation, setDeleteConfirmation] = useState<number | null>(null); // inventoryId to confirm deletion
+  const [storeAreas, setStoreAreas] = useState<{ id: number; name: string }[]>([]);
 
   // Define columns for the data table
   const columns: ColumnDef<DetailedExpiryReportItem>[] = [
     {
-      accessorKey: "expiryDate",
-      header: ({ column }) => (
-        <DataTableColumnHeader column={column} title="Expiry Date" />
-      ),
+      accessorKey: 'expiryDate',
+      header: ({ column }) => <DataTableColumnHeader column={column} title="Expiry Date" />,
       cell: ({ row }) => {
         // Check if this row is being edited
-        const isEditing =
-          editingItem && editingItem.inventoryId === row.original.inventoryId;
+        const isEditing = editingItem && editingItem.inventoryId === row.original.inventoryId;
 
         if (isEditing) {
           return (
@@ -94,12 +75,10 @@ export function DetailedExpiryReportPage({
           );
 
           return (
-            <div
-              className={`min-w-[140px] ${daysToExpiry <= 0 ? "text-red-600 font-bold" : ""}`}
-            >
+            <div className={`min-w-[140px] ${daysToExpiry <= 0 ? 'text-red-600 font-bold' : ''}`}>
               {new Date(row.original.expiryDate).toLocaleDateString()}
               <div className="text-xs text-gray-500">
-                {daysToExpiry > 0 ? `${daysToExpiry} days left` : "Expired"}
+                {daysToExpiry > 0 ? `${daysToExpiry} days left` : 'Expired'}
               </div>
             </div>
           );
@@ -107,10 +86,8 @@ export function DetailedExpiryReportPage({
       },
     },
     {
-      accessorKey: "productName",
-      header: ({ column }) => (
-        <DataTableColumnHeader column={column} title="Product Name" />
-      ),
+      accessorKey: 'productName',
+      header: ({ column }) => <DataTableColumnHeader column={column} title="Product Name" />,
       cell: ({ row }) => (
         <div
           className="font-medium min-w-[160px] max-w-[200px] truncate"
@@ -121,47 +98,32 @@ export function DetailedExpiryReportPage({
       ),
     },
     {
-      accessorKey: "sku",
-      header: ({ column }) => (
-        <DataTableColumnHeader column={column} title="SKU" />
-      ),
+      accessorKey: 'sku',
+      header: ({ column }) => <DataTableColumnHeader column={column} title="SKU" />,
       cell: ({ row }) => (
-        <div
-          className="min-w-[100px] max-w-[140px] truncate"
-          title={row.original.sku}
-        >
+        <div className="min-w-[100px] max-w-[140px] truncate" title={row.original.sku}>
           {row.original.sku}
         </div>
       ),
     },
     {
-      accessorKey: "costPrice",
-      header: ({ column }) => (
-        <DataTableColumnHeader column={column} title="Cost Price" />
-      ),
-      cell: ({ row }) => (
-        <div className="min-w-[100px]">
-          ${row.original.costPrice.toFixed(2)}
-        </div>
-      ),
+      accessorKey: 'costPrice',
+      header: ({ column }) => <DataTableColumnHeader column={column} title="Cost Price" />,
+      cell: ({ row }) => <div className="min-w-[100px]">${row.original.costPrice.toFixed(2)}</div>,
     },
     {
-      accessorKey: "daysToExpiry",
-      header: ({ column }) => (
-        <DataTableColumnHeader column={column} title="Days to Expiry" />
-      ),
+      accessorKey: 'daysToExpiry',
+      header: ({ column }) => <DataTableColumnHeader column={column} title="Days to Expiry" />,
       cell: ({ row }) => {
         // Check if this row is being edited
-        const isEditing =
-          editingItem && editingItem.inventoryId === row.original.inventoryId;
+        const isEditing = editingItem && editingItem.inventoryId === row.original.inventoryId;
 
         if (isEditing) {
           // Calculate days to expiry based on the editing date
           const editingExpiryDate = new Date(editingItem.expiryDate);
           const today = new Date();
           const editingDaysToExpiry = Math.ceil(
-            (editingExpiryDate.getTime() - today.getTime()) /
-              (1000 * 60 * 60 * 24),
+            (editingExpiryDate.getTime() - today.getTime()) / (1000 * 60 * 60 * 24),
           );
 
           return <div className="min-w-[100px]">{editingDaysToExpiry}</div>;
@@ -178,41 +140,34 @@ export function DetailedExpiryReportPage({
       },
     },
     {
-      accessorKey: "status",
-      header: ({ column }) => (
-        <DataTableColumnHeader column={column} title="Markdown Status" />
-      ),
+      accessorKey: 'status',
+      header: ({ column }) => <DataTableColumnHeader column={column} title="Markdown Status" />,
       cell: ({ row }) => {
         // Check if this row is being edited
-        const isEditing =
-          editingItem && editingItem.inventoryId === row.original.inventoryId;
+        const isEditing = editingItem && editingItem.inventoryId === row.original.inventoryId;
 
         if (isEditing) {
           // Calculate days to expiry based on the editing date
           const editingExpiryDate = new Date(editingItem.expiryDate);
           const today = new Date();
           const editingDaysToExpiry = Math.ceil(
-            (editingExpiryDate.getTime() - today.getTime()) /
-              (1000 * 60 * 60 * 24),
+            (editingExpiryDate.getTime() - today.getTime()) / (1000 * 60 * 60 * 24),
           );
 
           // Determine markdown status based on editing days to expiry
-          let editingMarkdownStatus = "Normal (>90 days)";
+          let editingMarkdownStatus = 'Normal (>90 days)';
           if (editingDaysToExpiry <= 0) {
-            editingMarkdownStatus = "Expired (<=0 days)";
+            editingMarkdownStatus = 'Expired (<=0 days)';
           } else if (editingDaysToExpiry <= 30) {
-            editingMarkdownStatus = "Markdown 3 (<30 days)";
+            editingMarkdownStatus = 'Markdown 3 (<30 days)';
           } else if (editingDaysToExpiry <= 60) {
-            editingMarkdownStatus = "Markdown 2 (<60 & >30 days)";
+            editingMarkdownStatus = 'Markdown 2 (<60 & >30 days)';
           } else if (editingDaysToExpiry <= 90) {
-            editingMarkdownStatus = "Markdown 1 (<90 & >60 days)";
+            editingMarkdownStatus = 'Markdown 1 (<90 & >60 days)';
           }
 
           return (
-            <div
-              className="min-w-[140px] max-w-[160px] truncate"
-              title={editingMarkdownStatus}
-            >
+            <div className="min-w-[140px] max-w-[160px] truncate" title={editingMarkdownStatus}>
               {editingMarkdownStatus}
             </div>
           );
@@ -225,22 +180,19 @@ export function DetailedExpiryReportPage({
           );
 
           // Determine markdown status based on days to expiry
-          let markdownStatus = "Normal (>90 days)";
+          let markdownStatus = 'Normal (>90 days)';
           if (daysToExpiry <= 0) {
-            markdownStatus = "Expired (<=0 days)";
+            markdownStatus = 'Expired (<=0 days)';
           } else if (daysToExpiry <= 30) {
-            markdownStatus = "Markdown 3 (<30 days)";
+            markdownStatus = 'Markdown 3 (<30 days)';
           } else if (daysToExpiry <= 60) {
-            markdownStatus = "Markdown 2 (<60 & >30 days)";
+            markdownStatus = 'Markdown 2 (<60 & >30 days)';
           } else if (daysToExpiry <= 90) {
-            markdownStatus = "Markdown 1 (<90 & >60 days)";
+            markdownStatus = 'Markdown 1 (<90 & >60 days)';
           }
 
           return (
-            <div
-              className="min-w-[140px] max-w-[160px] truncate"
-              title={markdownStatus}
-            >
+            <div className="min-w-[140px] max-w-[160px] truncate" title={markdownStatus}>
               {markdownStatus}
             </div>
           );
@@ -248,22 +200,18 @@ export function DetailedExpiryReportPage({
       },
     },
     {
-      accessorKey: "markdownPrice",
-      header: ({ column }) => (
-        <DataTableColumnHeader column={column} title="Markdown Price" />
-      ),
+      accessorKey: 'markdownPrice',
+      header: ({ column }) => <DataTableColumnHeader column={column} title="Markdown Price" />,
       cell: ({ row }) => {
         // Check if this row is being edited
-        const isEditing =
-          editingItem && editingItem.inventoryId === row.original.inventoryId;
+        const isEditing = editingItem && editingItem.inventoryId === row.original.inventoryId;
 
         if (isEditing) {
           // Calculate days to expiry based on the editing date
           const editingExpiryDate = new Date(editingItem.expiryDate);
           const today = new Date();
           const editingDaysToExpiry = Math.ceil(
-            (editingExpiryDate.getTime() - today.getTime()) /
-              (1000 * 60 * 60 * 24),
+            (editingExpiryDate.getTime() - today.getTime()) / (1000 * 60 * 60 * 24),
           );
 
           // Calculate markdown price based on editing days to expiry
@@ -272,11 +220,7 @@ export function DetailedExpiryReportPage({
             editingDaysToExpiry,
           );
 
-          return (
-            <div className="min-w-[100px]">
-              ${editingMarkdownPrice.toFixed(2)}
-            </div>
-          );
+          return <div className="min-w-[100px]">${editingMarkdownPrice.toFixed(2)}</div>;
         } else {
           // Calculate days to expiry
           const expiryDate = new Date(row.original.expiryDate);
@@ -286,26 +230,18 @@ export function DetailedExpiryReportPage({
           );
 
           // Calculate markdown price based on days to expiry
-          const markdownPrice = calculateMarkdownPrice(
-            row.original.costPrice,
-            daysToExpiry,
-          );
+          const markdownPrice = calculateMarkdownPrice(row.original.costPrice, daysToExpiry);
 
-          return (
-            <div className="min-w-[100px]">${markdownPrice.toFixed(2)}</div>
-          );
+          return <div className="min-w-[100px]">${markdownPrice.toFixed(2)}</div>;
         }
       },
     },
     {
-      accessorKey: "locationName",
-      header: ({ column }) => (
-        <DataTableColumnHeader column={column} title="Location" />
-      ),
+      accessorKey: 'locationName',
+      header: ({ column }) => <DataTableColumnHeader column={column} title="Location" />,
       cell: ({ row }) => {
         // Check if this row is being edited
-        const isEditing =
-          editingItem && editingItem.inventoryId === row.original.inventoryId;
+        const isEditing = editingItem && editingItem.inventoryId === row.original.inventoryId;
 
         if (isEditing) {
           return (
@@ -331,10 +267,7 @@ export function DetailedExpiryReportPage({
           );
         } else {
           return (
-            <div
-              className="min-w-[120px] max-w-[160px] truncate"
-              title={row.original.locationName}
-            >
+            <div className="min-w-[120px] max-w-[160px] truncate" title={row.original.locationName}>
               {row.original.locationName}
             </div>
           );
@@ -342,21 +275,19 @@ export function DetailedExpiryReportPage({
       },
     },
     {
-      accessorKey: "subDepartment",
-      header: ({ column }) => (
-        <DataTableColumnHeader column={column} title="Sub-Department" />
-      ),
+      accessorKey: 'subDepartment',
+      header: ({ column }) => <DataTableColumnHeader column={column} title="Sub-Department" />,
       cell: ({ row }) => (
         <div
           className="min-w-[120px] max-w-[140px] truncate"
-          title={row.original.subDepartment || "N/A"}
+          title={row.original.subDepartment || 'N/A'}
         >
-          {row.original.subDepartment || "N/A"}
+          {row.original.subDepartment || 'N/A'}
         </div>
       ),
     },
     {
-      id: "actions",
+      id: 'actions',
       header: () => <div className="min-w-[140px]">Actions</div>,
       cell: ({ row }) => {
         // Check if this row is pending deletion
@@ -382,8 +313,7 @@ export function DetailedExpiryReportPage({
         }
 
         // Check if this row is being edited
-        const isEditing =
-          editingItem && editingItem.inventoryId === row.original.inventoryId;
+        const isEditing = editingItem && editingItem.inventoryId === row.original.inventoryId;
 
         if (isEditing) {
           return (
@@ -395,7 +325,7 @@ export function DetailedExpiryReportPage({
                 variant="default"
                 className="min-w-[50px] bg-inventory-success-600 hover:bg-inventory-success-700 text-white font-medium disabled:bg-inventory-neutral-400"
               >
-                {saving ? "..." : "Save"}
+                {saving ? '...' : 'Save'}
               </Button>
               <Button
                 onClick={handleCancelEdit}
@@ -437,14 +367,14 @@ export function DetailedExpiryReportPage({
   useEffect(() => {
     const fetchReportData = async () => {
       if (!token) {
-        setError("Authentication token is missing.");
+        setError('Authentication token is missing.');
         setLoading(false);
         return;
       }
 
       try {
         const data = await apiService.get<DetailedExpiryReportItem[]>(
-          "/reports/expiry-details",
+          '/reports/expiry-details',
           token,
         );
         setReportData(data);
@@ -452,7 +382,7 @@ export function DetailedExpiryReportPage({
         if (err instanceof Error) {
           setError(err.message);
         } else {
-          setError("An unknown error occurred");
+          setError('An unknown error occurred');
         }
       } finally {
         setLoading(false);
@@ -467,16 +397,13 @@ export function DetailedExpiryReportPage({
 
     const fetchStoreAreas = async () => {
       try {
-        const data = await apiService.get<{ id: number; name: string }[]>(
-          "/store-areas",
-          token,
-        );
+        const data = await apiService.get<{ id: number; name: string }[]>('/store-areas', token);
         setStoreAreas(data);
       } catch (err: unknown) {
         if (err instanceof Error) {
           setError(err.message);
         } else {
-          setError("An unknown error occurred when fetching store areas");
+          setError('An unknown error occurred when fetching store areas');
         }
       }
     };
@@ -486,9 +413,7 @@ export function DetailedExpiryReportPage({
 
   if (loading) {
     return (
-      <div className="container mx-auto p-4 text-center">
-        Loading detailed expiry report...
-      </div>
+      <div className="container mx-auto p-4 text-center">Loading detailed expiry report...</div>
     );
   }
 
@@ -517,7 +442,7 @@ export function DetailedExpiryReportPage({
     if (!editingItem) return; // Only require editingItem, not token for internal calls
 
     if (!token) {
-      setError("Authentication token is missing.");
+      setError('Authentication token is missing.');
       return;
     }
 
@@ -534,7 +459,7 @@ export function DetailedExpiryReportPage({
 
       // Refresh the report data
       const updatedData = await apiService.get<DetailedExpiryReportItem[]>(
-        "/reports/expiry-details",
+        '/reports/expiry-details',
         token,
       );
       setReportData(updatedData);
@@ -543,7 +468,7 @@ export function DetailedExpiryReportPage({
       if (err instanceof Error) {
         setError(err.message);
       } else {
-        setError("An unknown error occurred while updating the item");
+        setError('An unknown error occurred while updating the item');
       }
     } finally {
       setSaving(false);
@@ -556,7 +481,7 @@ export function DetailedExpiryReportPage({
 
   const handleDelete = async (inventoryId: number) => {
     if (!token) {
-      setError("Authentication token is missing.");
+      setError('Authentication token is missing.');
       return;
     }
 
@@ -565,7 +490,7 @@ export function DetailedExpiryReportPage({
 
       // Refresh the report data
       const updatedData = await apiService.get<DetailedExpiryReportItem[]>(
-        "/reports/expiry-details",
+        '/reports/expiry-details',
         token,
       );
       setReportData(updatedData);
@@ -574,7 +499,7 @@ export function DetailedExpiryReportPage({
       if (err instanceof Error) {
         setError(err.message);
       } else {
-        setError("An unknown error occurred while deleting the item");
+        setError('An unknown error occurred while deleting the item');
       }
     }
   };
@@ -593,9 +518,7 @@ export function DetailedExpiryReportPage({
         {/* Original Table Section */}
         <Card className="overflow-visible">
           <CardHeader>
-            <CardTitle className="text-center">
-              Detailed Expiry Report (Next 90 Days)
-            </CardTitle>
+            <CardTitle className="text-center">Detailed Expiry Report (Next 90 Days)</CardTitle>
           </CardHeader>
           <CardContent>
             {reportData && reportData.length > 0 ? (
@@ -607,16 +530,13 @@ export function DetailedExpiryReportPage({
                 sorting={true}
               />
             ) : (
-              <p className="text-center">
-                No expiry items found in the next 90 days.
-              </p>
+              <p className="text-center">No expiry items found in the next 90 days.</p>
             )}
             {/* Mobile notification */}
             <div className="mt-6 p-3 bg-yellow-50 border border-yellow-200 rounded-lg text-center text-sm text-yellow-700 md:hidden">
               <p>
-                <strong>Note:</strong> This report is best viewed on a desktop
-                device. For better mobile experience, use the Scan Page or
-                Markdown Calculator.
+                <strong>Note:</strong> This report is best viewed on a desktop device. For better
+                mobile experience, use the Scan Page or Markdown Calculator.
               </p>
             </div>
           </CardContent>

@@ -5,11 +5,11 @@
 // for the list of available Workbox modules, or add any other code you'd like.
 // You can also remove this file if you'd prefer not to use a service worker, and the Workbox build step will be skipped.
 
-import { clientsClaim } from "workbox-core";
-import { ExpirationPlugin } from "workbox-expiration";
-import { precacheAndRoute, createHandlerBoundToURL } from "workbox-precaching";
-import { registerRoute } from "workbox-routing";
-import { StaleWhileRevalidate, CacheFirst } from "workbox-strategies";
+import { clientsClaim } from 'workbox-core';
+import { ExpirationPlugin } from 'workbox-expiration';
+import { precacheAndRoute, createHandlerBoundToURL } from 'workbox-precaching';
+import { registerRoute } from 'workbox-routing';
+import { StaleWhileRevalidate, CacheFirst } from 'workbox-strategies';
 
 declare const self: ServiceWorkerGlobalScope;
 
@@ -28,13 +28,13 @@ registerRoute(
   // Return false to exempt requests from being fulfilled by index.html.
   ({ request, url }) => {
     // If this isn't a navigation, skip.
-    if (request.mode !== "navigate") {
+    if (request.mode !== 'navigate') {
       return false;
     }
 
     // If this is a URL that starts with /_,' then it's probably a non-navigation request
     // that we don't want to handle.
-    if (url.pathname.startsWith("/_/")) {
+    if (url.pathname.startsWith('/_/')) {
       return false;
     }
 
@@ -53,11 +53,10 @@ registerRoute(
 // using a Stale-While-Revalidate strategy. Set a custom expiration time.
 registerRoute(
   // Add in any other file extensions or routing criteria as needed.
-  ({ url }) =>
-    url.origin === self.location.origin && url.pathname.endsWith(".png"),
+  ({ url }) => url.origin === self.location.origin && url.pathname.endsWith('.png'),
   // Customize this strategy as needed, e.g., by changing the cache name.
   new StaleWhileRevalidate({
-    cacheName: "images",
+    cacheName: 'images',
     plugins: [
       // Ensure that once this runtime cache reaches a maximum size the least-recently used images are removed.
       new ExpirationPlugin({ maxEntries: 50 }),
@@ -68,14 +67,14 @@ registerRoute(
 // Cache CSS, JS, and JSON files with a CacheFirst strategy
 registerRoute(
   ({ request }) =>
-    request.destination === "style" ||
-    request.destination === "script" ||
-    request.destination === "worker" ||
-    request.destination === "font" ||
-    request.destination === "image" ||
-    request.url.endsWith(".json"),
+    request.destination === 'style' ||
+    request.destination === 'script' ||
+    request.destination === 'worker' ||
+    request.destination === 'font' ||
+    request.destination === 'image' ||
+    request.url.endsWith('.json'),
   new CacheFirst({
-    cacheName: "static-assets",
+    cacheName: 'static-assets',
     plugins: [
       new ExpirationPlugin({
         maxEntries: 60,
@@ -89,17 +88,17 @@ registerRoute(
 registerRoute(
   // Match API requests
   ({ url }) =>
-    url.pathname.startsWith("/api/") ||
-    url.pathname.includes("/auth/") ||
-    url.pathname.includes("/products/") ||
-    url.pathname.includes("/inventory-items/") ||
-    url.pathname.includes("/store-areas/") ||
-    url.pathname.includes("/reports/") ||
-    url.pathname.includes("/dashboard/") ||
-    url.pathname.includes("/users/"),
+    url.pathname.startsWith('/api/') ||
+    url.pathname.includes('/auth/') ||
+    url.pathname.includes('/products/') ||
+    url.pathname.includes('/inventory-items/') ||
+    url.pathname.includes('/store-areas/') ||
+    url.pathname.includes('/reports/') ||
+    url.pathname.includes('/dashboard/') ||
+    url.pathname.includes('/users/'),
   // Use network first strategy, falling back to cache if offline
   new StaleWhileRevalidate({
-    cacheName: "api-cache",
+    cacheName: 'api-cache',
     plugins: [
       new ExpirationPlugin({
         maxEntries: 100,
@@ -110,8 +109,8 @@ registerRoute(
 );
 
 // This allows the web app to trigger a skipWaiting revision for service worker updates
-self.addEventListener("message", (event) => {
-  if (event.data && event.data.type === "SKIP_WAITING") {
+self.addEventListener('message', (event) => {
+  if (event.data && event.data.type === 'SKIP_WAITING') {
     self.skipWaiting();
   }
 });

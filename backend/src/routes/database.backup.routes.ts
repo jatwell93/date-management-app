@@ -1,5 +1,9 @@
 import { Router } from 'express';
-import { createBackup, restoreBackup, listBackups } from '../controllers/database.backup.controller';
+import {
+  createBackup,
+  restoreBackup,
+  listBackups,
+} from '../controllers/database.backup.controller';
 import { authenticateToken } from '../middleware/auth.middleware';
 import { validateBackupRestoreInput } from '../middleware/validation.middleware';
 

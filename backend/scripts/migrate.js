@@ -14,7 +14,7 @@ async function runCommand(command) {
         await migrationService.runMigrations();
         Logger.info('Migrations completed successfully');
         break;
-        
+
       case 'status':
         Logger.info('Checking migration status...');
         const status = await migrationService.getMigrationStatus();
@@ -22,28 +22,28 @@ async function runCommand(command) {
         console.log('=================');
         console.log(`Executed migrations: ${status.executed.length}`);
         console.log(`Pending migrations: ${status.pending.length}`);
-        
+
         if (status.executed.length > 0) {
           console.log('\nExecuted migrations:');
-          status.executed.forEach(m => {
+          status.executed.forEach((m) => {
             console.log(`  - ${m.id}: ${m.name} (${m.executed_at})`);
           });
         }
-        
+
         if (status.pending.length > 0) {
           console.log('\nPending migrations:');
-          status.pending.forEach(m => {
+          status.pending.forEach((m) => {
             console.log(`  - ${m.id}: ${m.name}`);
           });
         }
         break;
-        
+
       case 'rollback':
         Logger.info('Rolling back last migration...');
         await migrationService.rollbackLastMigration();
         Logger.info('Rollback completed successfully');
         break;
-        
+
       default:
         console.log('Usage: npm run migrate [up|status|rollback]');
         console.log('  up/migrate: Run pending migrations');

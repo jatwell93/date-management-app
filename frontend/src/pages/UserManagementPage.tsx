@@ -1,7 +1,7 @@
-import React, { useState, useEffect, useCallback } from "react";
-import { useForm } from "react-hook-form";
-import { Button } from "../components/ui/button";
-import { Input } from "../components/ui/input";
+import React, { useState, useEffect, useCallback } from 'react';
+import { useForm } from 'react-hook-form';
+import { Button } from '../components/ui/button';
+import { Input } from '../components/ui/input';
 import {
   Form,
   FormControl,
@@ -9,20 +9,20 @@ import {
   FormItem,
   FormLabel,
   FormMessage,
-} from "../components/ui/form";
+} from '../components/ui/form';
 import {
   Select,
   SelectContent,
   SelectItem,
   SelectTrigger,
   SelectValue,
-} from "../components/ui/select";
-import { apiService } from "../lib/api.service";
+} from '../components/ui/select';
+import { apiService } from '../lib/api.service';
 
 interface User {
   id: number;
   pin: string; // In a real app, this would not be exposed
-  role: "Manager" | "Team Member";
+  role: 'Manager' | 'Team Member';
 }
 
 interface UserManagementPageProps {
@@ -32,7 +32,7 @@ interface UserManagementPageProps {
 export function UserManagementPage({ token }: UserManagementPageProps) {
   const form = useForm<{
     pin: string;
-    role: "Manager" | "Team Member";
+    role: 'Manager' | 'Team Member';
     selectedUserForEdit: string;
     selectedUserForDelete: string;
   }>();
@@ -45,13 +45,13 @@ export function UserManagementPage({ token }: UserManagementPageProps) {
   const fetchUsers = useCallback(async () => {
     if (!token) return;
     try {
-      const data: User[] = await apiService.get<User[]>("/users", token);
+      const data: User[] = await apiService.get<User[]>('/users', token);
       setUsers(data);
     } catch (err: unknown) {
       if (err instanceof Error) {
         setError(err.message);
       } else {
-        setError("An unknown error occurred");
+        setError('An unknown error occurred');
       }
     }
   }, [token, setUsers, setError]);
@@ -61,24 +61,24 @@ export function UserManagementPage({ token }: UserManagementPageProps) {
   }, [fetchUsers]); // Re-fetch users if token changes
 
   const onCreateSubmit = useCallback(
-    async (data: { pin: string; role: "Manager" | "Team Member" }) => {
+    async (data: { pin: string; role: 'Manager' | 'Team Member' }) => {
       setError(null);
       setSuccess(null);
       if (!token) {
-        setError("Not authenticated.");
+        setError('Not authenticated.');
         return;
       }
       try {
-        await apiService.post("/users", data, token);
+        await apiService.post('/users', data, token);
 
-        setSuccess("User created successfully!");
+        setSuccess('User created successfully!');
         form.reset();
         fetchUsers(); // Refresh user list after creation
       } catch (err: unknown) {
         if (err instanceof Error) {
           setError(err.message);
         } else {
-          setError("An unknown error occurred");
+          setError('An unknown error occurred');
         }
       }
     },
@@ -86,27 +86,23 @@ export function UserManagementPage({ token }: UserManagementPageProps) {
   );
 
   const onEditSubmit = useCallback(
-    async (data: { role: "Manager" | "Team Member" }) => {
+    async (data: { role: 'Manager' | 'Team Member' }) => {
       setError(null);
       setSuccess(null);
       if (!token || selectedUserId === null) {
-        setError("Not authenticated or no user selected.");
+        setError('Not authenticated or no user selected.');
         return;
       }
       try {
-        await apiService.put(
-          `/users/${selectedUserId}`,
-          { role: data.role },
-          token,
-        );
+        await apiService.put(`/users/${selectedUserId}`, { role: data.role }, token);
 
-        setSuccess("User updated successfully!");
+        setSuccess('User updated successfully!');
         fetchUsers(); // Refresh user list after update
       } catch (err: unknown) {
         if (err instanceof Error) {
           setError(err.message);
         } else {
-          setError("An unknown error occurred");
+          setError('An unknown error occurred');
         }
       }
     },
@@ -117,24 +113,22 @@ export function UserManagementPage({ token }: UserManagementPageProps) {
     setError(null);
     setSuccess(null);
     if (!token || selectedUserId === null) {
-      setError("Not authenticated or no user selected.");
+      setError('Not authenticated or no user selected.');
       return;
     }
-    if (
-      !window.confirm("Are you sure you want to reset the PIN for this user?")
-    ) {
+    if (!window.confirm('Are you sure you want to reset the PIN for this user?')) {
       return;
     }
     try {
       await apiService.put(`/users/${selectedUserId}/reset-pin`, {}, token);
 
-      setSuccess("User PIN reset successfully!");
+      setSuccess('User PIN reset successfully!');
       fetchUsers(); // Refresh user list after PIN reset
     } catch (err: unknown) {
       if (err instanceof Error) {
         setError(err.message);
       } else {
-        setError("An unknown error occurred");
+        setError('An unknown error occurred');
       }
     }
   }, [token, selectedUserId, fetchUsers, setError, setSuccess]);
@@ -142,46 +136,38 @@ export function UserManagementPage({ token }: UserManagementPageProps) {
   const onDeleteUser = useCallback(async () => {
     setError(null);
     setSuccess(null);
-    const userToDeleteId = form.getValues("selectedUserForDelete");
+    const userToDeleteId = form.getValues('selectedUserForDelete');
     if (!token || !userToDeleteId) {
-      setError("Not authenticated or no user selected for deletion.");
+      setError('Not authenticated or no user selected for deletion.');
       return;
     }
-    if (!window.confirm("Are you sure you want to delete this user?")) {
+    if (!window.confirm('Are you sure you want to delete this user?')) {
       return;
     }
     try {
       await apiService.delete(`/users/${userToDeleteId}`, token);
 
-      setSuccess("User deleted successfully!");
+      setSuccess('User deleted successfully!');
       form.reset({
-        selectedUserForDelete: "",
+        selectedUserForDelete: '',
       });
       fetchUsers(); // Refresh user list after deletion
     } catch (err: unknown) {
       if (err instanceof Error) {
         setError(err.message);
       } else {
-        setError("An unknown error occurred");
+        setError('An unknown error occurred');
       }
     }
   }, [token, form, fetchUsers, setError, setSuccess]);
 
   return (
     <div className="container mx-auto p-4 flex flex-col items-center">
-      <h1 className="text-2xl font-bold mb-4 text-center">
-        User Management (Managers Only)
-      </h1>
+      <h1 className="text-2xl font-bold mb-4 text-center">User Management (Managers Only)</h1>
 
       <div className="mb-8 w-full max-w-md">
-        <h2 className="text-xl font-semibold mb-4 text-center">
-          Current Users
-        </h2>
-        {error && (
-          <p className="text-inventory-error-500 text-sm mb-2 text-center">
-            {error}
-          </p>
-        )}
+        <h2 className="text-xl font-semibold mb-4 text-center">Current Users</h2>
+        {error && <p className="text-inventory-error-500 text-sm mb-2 text-center">{error}</p>}
         {users.length === 0 ? (
           <p className="text-center">No users found.</p>
         ) : (
@@ -196,14 +182,9 @@ export function UserManagementPage({ token }: UserManagementPageProps) {
       </div>
 
       <div className="mb-8 w-full max-w-md">
-        <h2 className="text-xl font-semibold mb-4 text-center">
-          Create New User
-        </h2>
+        <h2 className="text-xl font-semibold mb-4 text-center">Create New User</h2>
         <Form {...form}>
-          <form
-            onSubmit={form.handleSubmit(onCreateSubmit)}
-            className="space-y-4 w-full"
-          >
+          <form onSubmit={form.handleSubmit(onCreateSubmit)} className="space-y-4 w-full">
             <FormField
               control={form.control}
               name="pin"
@@ -211,11 +192,7 @@ export function UserManagementPage({ token }: UserManagementPageProps) {
                 <FormItem>
                   <FormLabel>PIN</FormLabel>
                   <FormControl>
-                    <Input
-                      type="password"
-                      placeholder="Enter user PIN"
-                      {...field}
-                    />
+                    <Input type="password" placeholder="Enter user PIN" {...field} />
                   </FormControl>
                   <FormMessage />
                 </FormItem>
@@ -227,10 +204,7 @@ export function UserManagementPage({ token }: UserManagementPageProps) {
               render={({ field }) => (
                 <FormItem>
                   <FormLabel>Role</FormLabel>
-                  <Select
-                    onValueChange={field.onChange}
-                    defaultValue={field.value}
-                  >
+                  <Select onValueChange={field.onChange} defaultValue={field.value}>
                     <FormControl>
                       <SelectTrigger>
                         <SelectValue placeholder="Select a role" />
@@ -245,16 +219,8 @@ export function UserManagementPage({ token }: UserManagementPageProps) {
                 </FormItem>
               )}
             />
-            {error && (
-              <p className="text-inventory-error-500 text-sm text-center">
-                {error}
-              </p>
-            )}
-            {success && (
-              <p className="text-inventory-success-500 text-sm text-center">
-                {success}
-              </p>
-            )}
+            {error && <p className="text-inventory-error-500 text-sm text-center">{error}</p>}
+            {success && <p className="text-inventory-success-500 text-sm text-center">{success}</p>}
             <Button type="submit" className="w-full">
               Create User
             </Button>
@@ -263,9 +229,7 @@ export function UserManagementPage({ token }: UserManagementPageProps) {
       </div>
 
       <div className="mb-8 w-full max-w-md">
-        <h2 className="text-xl font-semibold mb-4 text-center">
-          Edit Existing User
-        </h2>
+        <h2 className="text-xl font-semibold mb-4 text-center">Edit Existing User</h2>
         <Form {...form}>
           <div className="space-y-4 w-full">
             <FormField
@@ -273,18 +237,14 @@ export function UserManagementPage({ token }: UserManagementPageProps) {
               name="selectedUserForEdit"
               render={({ field }) => (
                 <FormItem>
-                  <FormLabel className="text-center">
-                    Select User to Edit
-                  </FormLabel>
+                  <FormLabel className="text-center">Select User to Edit</FormLabel>
                   <Select
                     onValueChange={(value: string) => {
                       field.onChange(value);
                       setSelectedUserId(Number(value));
-                      const userToEdit = users.find(
-                        (u) => u.id === Number(value),
-                      );
+                      const userToEdit = users.find((u) => u.id === Number(value));
                       if (userToEdit) {
-                        form.setValue("role", userToEdit.role);
+                        form.setValue('role', userToEdit.role);
                       }
                     }}
                     defaultValue={field.value}
@@ -313,10 +273,7 @@ export function UserManagementPage({ token }: UserManagementPageProps) {
                 render={({ field }) => (
                   <FormItem>
                     <FormLabel>Role</FormLabel>
-                    <Select
-                      onValueChange={field.onChange}
-                      defaultValue={field.value}
-                    >
+                    <Select onValueChange={field.onChange} defaultValue={field.value}>
                       <FormControl>
                         <SelectTrigger>
                           <SelectValue placeholder="Select a role" />
@@ -331,25 +288,14 @@ export function UserManagementPage({ token }: UserManagementPageProps) {
                   </FormItem>
                 )}
               />
-              {error && (
-                <p className="text-inventory-error-500 text-sm text-center">
-                  {error}
-                </p>
-              )}
+              {error && <p className="text-inventory-error-500 text-sm text-center">{error}</p>}
               {success && (
-                <p className="text-inventory-success-500 text-sm text-center">
-                  {success}
-                </p>
+                <p className="text-inventory-success-500 text-sm text-center">{success}</p>
               )}
               <Button type="submit" className="w-full mt-4">
                 Update User
               </Button>
-              <Button
-                type="button"
-                variant="outline"
-                className="w-full mt-2"
-                onClick={onResetPin}
-              >
+              <Button type="button" variant="outline" className="w-full mt-2" onClick={onResetPin}>
                 Reset PIN
               </Button>
             </form>
@@ -366,13 +312,8 @@ export function UserManagementPage({ token }: UserManagementPageProps) {
               name="selectedUserForDelete"
               render={({ field }) => (
                 <FormItem>
-                  <FormLabel className="text-center">
-                    Select User to Delete
-                  </FormLabel>
-                  <Select
-                    onValueChange={field.onChange}
-                    defaultValue={field.value}
-                  >
+                  <FormLabel className="text-center">Select User to Delete</FormLabel>
+                  <Select onValueChange={field.onChange} defaultValue={field.value}>
                     <FormControl>
                       <SelectTrigger>
                         <SelectValue placeholder="Select a user" />
@@ -390,21 +331,11 @@ export function UserManagementPage({ token }: UserManagementPageProps) {
                 </FormItem>
               )}
             />
-            {error && (
-              <p className="text-inventory-error-500 text-sm mt-2 text-center">
-                {error}
-              </p>
-            )}
+            {error && <p className="text-inventory-error-500 text-sm mt-2 text-center">{error}</p>}
             {success && (
-              <p className="text-inventory-success-500 text-sm mt-2 text-center">
-                {success}
-              </p>
+              <p className="text-inventory-success-500 text-sm mt-2 text-center">{success}</p>
             )}
-            <Button
-              variant="destructive"
-              className="w-full"
-              onClick={onDeleteUser}
-            >
+            <Button variant="destructive" className="w-full" onClick={onDeleteUser}>
               Delete User
             </Button>
           </div>

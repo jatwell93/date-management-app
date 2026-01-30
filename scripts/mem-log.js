@@ -1,17 +1,17 @@
 #!/usr/bin/env node
 /**
  * mem-log.js - Quick memory logging for agent workflows
- * 
+ *
  * Usage:
  *   node scripts/mem-log.js <kind> <title> <message>
- * 
+ *
  * Kinds:
  *   FIX      - Bug fixes and their solutions
  *   PATTERN  - Architectural decisions (JWT, CSS-modules, etc.)
  *   DECISION - Why we chose X over Y
  *   FEATURE  - New feature implementations
  *   ERROR    - Common errors and how to resolve them
- * 
+ *
  * Examples:
  *   node scripts/mem-log.js FIX "Auth Token Bug" "Fixed JWT expiry check by adding timezone normalization"
  *   node scripts/mem-log.js PATTERN "Database Access" "All DB queries go through repository layer, never direct in controllers"
@@ -40,20 +40,20 @@ function logMemory(kind, title, message) {
   }
 
   const fullMessage = `[${normalizedKind}] ${message}`;
-  
+
   // Check if Gemini API key is available in environment
   const hasGemini = !!process.env.GEMINI_API_KEY;
   const embeddingFlags = hasGemini ? ' --embedding --embedding-model gemini' : '';
-  
+
   try {
     // Use echo with pipe
     const cmd = `echo "${fullMessage.replace(/"/g, '\\"')}" | memvid put "${MEMORY_FILE}" --title "${title}" --kind "${normalizedKind.toLowerCase()}"${embeddingFlags}`;
-    
-    execSync(cmd, { 
+
+    execSync(cmd, {
       stdio: 'inherit',
-      shell: true
+      shell: true,
     });
-    
+
     console.log(`\n✅ Memory logged: [${normalizedKind}] ${title}`);
   } catch (error) {
     console.error('❌ Failed to log memory:', error.message);
@@ -62,7 +62,7 @@ function logMemory(kind, title, message) {
 }
 
 // Parse CLI arguments
-const [,, kind, title, ...messageParts] = process.argv;
+const [, , kind, title, ...messageParts] = process.argv;
 const message = messageParts.join(' ');
 
 if (kind) {
@@ -71,7 +71,7 @@ if (kind) {
   console.log('Memory Logger - Store project knowledge for AI agents\n');
   console.log('Usage: node scripts/mem-log.js <kind> <title> <message>\n');
   console.log('Kinds:');
-  VALID_KINDS.forEach(k => console.log(`  ${k}`));
+  VALID_KINDS.forEach((k) => console.log(`  ${k}`));
   console.log('\nExample:');
   console.log('  node scripts/mem-log.js FIX "Auth Bug" "Added null check for user session"');
 }

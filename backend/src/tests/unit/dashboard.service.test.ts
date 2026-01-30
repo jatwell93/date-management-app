@@ -1,9 +1,9 @@
-import { DashboardService } from "../../services/dashboard.service";
-import { getDb } from "../../database";
+import { DashboardService } from '../../services/dashboard.service';
+import { getDb } from '../../database';
 
-jest.mock("../../database");
+jest.mock('../../database');
 
-describe("DashboardService", () => {
+describe('DashboardService', () => {
   let dashboardService: DashboardService;
 
   beforeEach(() => {
@@ -14,7 +14,7 @@ describe("DashboardService", () => {
     jest.clearAllMocks();
   });
 
-  it("should return dashboard data", async () => {
+  it('should return dashboard data', async () => {
     const mockDashboardData = {
       totalProducts: 100,
       expiringSoon: 10,
@@ -23,7 +23,8 @@ describe("DashboardService", () => {
     };
 
     const mockStatement = {
-      get: jest.fn()
+      get: jest
+        .fn()
         .mockReturnValueOnce({ count: 100 })
         .mockReturnValueOnce({ count: 10 })
         .mockReturnValueOnce({ count: 5 }),

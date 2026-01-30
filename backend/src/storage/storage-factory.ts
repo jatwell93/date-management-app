@@ -70,7 +70,7 @@ export function createStorageProvider(config: StorageFactoryConfig = {}): Storag
     if (!accountId || !accessKeyId || !secretAccessKey || !bucketName) {
       throw new Error(
         'R2 storage configuration is incomplete. Required environment variables: ' +
-          'R2_ACCOUNT_ID, R2_ACCESS_KEY_ID, R2_SECRET_ACCESS_KEY, R2_BUCKET_NAME'
+          'R2_ACCOUNT_ID, R2_ACCESS_KEY_ID, R2_SECRET_ACCESS_KEY, R2_BUCKET_NAME',
       );
     }
 

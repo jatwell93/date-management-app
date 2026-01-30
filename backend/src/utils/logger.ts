@@ -1,4 +1,4 @@
-import { envConfig } from "../config/environment";
+import { envConfig } from '../config/environment';
 
 interface LogEntry {
   timestamp: string;
@@ -16,7 +16,9 @@ export class Logger {
 
   private static shouldLog(level: 'info' | 'warn' | 'error' | 'debug'): boolean {
     const logLevels = ['error', 'warn', 'info', 'debug'];
-    const currentLogLevelIndex = logLevels.indexOf(envConfig.NODE_ENV === 'production' ? 'warn' : 'debug');
+    const currentLogLevelIndex = logLevels.indexOf(
+      envConfig.NODE_ENV === 'production' ? 'warn' : 'debug',
+    );
     const messageLevelIndex = logLevels.indexOf(level);
 
     return messageLevelIndex >= currentLogLevelIndex;
@@ -38,14 +40,24 @@ export class Logger {
 
   static error(message: string, meta?: any): void {
     if (this.shouldLog('error')) {
-      const entry: LogEntry = { timestamp: new Date().toISOString(), level: 'error', message, meta };
+      const entry: LogEntry = {
+        timestamp: new Date().toISOString(),
+        level: 'error',
+        message,
+        meta,
+      };
       console.error(this.formatLog(entry));
     }
   }
 
   static debug(message: string, meta?: any): void {
     if (this.shouldLog('debug')) {
-      const entry: LogEntry = { timestamp: new Date().toISOString(), level: 'debug', message, meta };
+      const entry: LogEntry = {
+        timestamp: new Date().toISOString(),
+        level: 'debug',
+        message,
+        meta,
+      };
       console.log(this.formatLog(entry));
     }
   }

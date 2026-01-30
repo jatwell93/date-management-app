@@ -1,13 +1,8 @@
-import React, { useState, useEffect, useCallback } from "react";
-import {
-  Card,
-  CardContent,
-  CardHeader,
-  CardTitle,
-} from "../components/ui/card";
-import { Input } from "../components/ui/input";
-import { Button } from "../components/ui/button";
-import { Label } from "../components/ui/label";
+import React, { useState, useEffect, useCallback } from 'react';
+import { Card, CardContent, CardHeader, CardTitle } from '../components/ui/card';
+import { Input } from '../components/ui/input';
+import { Button } from '../components/ui/button';
+import { Label } from '../components/ui/label';
 import {
   Table,
   TableBody,
@@ -15,7 +10,7 @@ import {
   TableHead,
   TableHeader,
   TableRow,
-} from "../components/ui/table";
+} from '../components/ui/table';
 import {
   Dialog,
   DialogContent,
@@ -23,8 +18,8 @@ import {
   DialogTitle,
   DialogTrigger,
   DialogFooter,
-} from "../components/ui/dialog";
-import { apiService } from "../lib/api.service";
+} from '../components/ui/dialog';
+import { apiService } from '../lib/api.service';
 
 interface StoreArea {
   id: number;
@@ -37,29 +32,26 @@ interface StoreAreaManagementPageProps {
   token: string | null;
 }
 
-export function StoreAreaManagementPage({
-  token,
-}: StoreAreaManagementPageProps) {
+export function StoreAreaManagementPage({ token }: StoreAreaManagementPageProps) {
   const [storeAreas, setStoreAreas] = useState<StoreArea[]>([]);
-  const [newAreaName, setNewAreaName] = useState<string>("");
-  const [newSubDepartmentName, setNewSubDepartmentName] = useState<string>(""); // New state
+  const [newAreaName, setNewAreaName] = useState<string>('');
+  const [newSubDepartmentName, setNewSubDepartmentName] = useState<string>(''); // New state
   const [editingArea, setEditingArea] = useState<StoreArea | null>(null);
-  const [editedAreaName, setEditedAreaName] = useState<string>("");
-  const [editedSubDepartmentName, setEditedSubDepartmentName] =
-    useState<string>(""); // New state
+  const [editedAreaName, setEditedAreaName] = useState<string>('');
+  const [editedSubDepartmentName, setEditedSubDepartmentName] = useState<string>(''); // New state
   const [error, setError] = useState<string | null>(null);
   const [successMessage, setSuccessMessage] = useState<string | null>(null);
 
   const fetchStoreAreas = useCallback(async () => {
     if (!token) return;
     try {
-      const data = await apiService.get<StoreArea[]>("/store-areas", token);
+      const data = await apiService.get<StoreArea[]>('/store-areas', token);
       setStoreAreas(data);
     } catch (err: unknown) {
       if (err instanceof Error) {
         setError(err.message);
       } else {
-        setError("An unknown error occurred");
+        setError('An unknown error occurred');
       }
     }
   }, [token, setStoreAreas, setError]);
@@ -70,27 +62,27 @@ export function StoreAreaManagementPage({
 
   const handleAddArea = useCallback(async () => {
     if (!token || !newAreaName.trim()) {
-      setError("Store area name cannot be empty.");
+      setError('Store area name cannot be empty.');
       return;
     }
     try {
       await apiService.post(
-        "/store-areas",
+        '/store-areas',
         {
           name: newAreaName,
           subDepartment: newSubDepartmentName,
         },
         token,
       );
-      setSuccessMessage("Store area added successfully!");
-      setNewAreaName("");
-      setNewSubDepartmentName(""); // Clear sub-department input
+      setSuccessMessage('Store area added successfully!');
+      setNewAreaName('');
+      setNewSubDepartmentName(''); // Clear sub-department input
       fetchStoreAreas();
     } catch (err: unknown) {
       if (err instanceof Error) {
         setError(err.message);
       } else {
-        setError("An unknown error occurred");
+        setError('An unknown error occurred');
       }
       setSuccessMessage(null);
     }
@@ -107,7 +99,7 @@ export function StoreAreaManagementPage({
 
   const handleEditArea = useCallback(async () => {
     if (!token || !editingArea || !editedAreaName.trim()) {
-      setError("Store area name cannot be empty.");
+      setError('Store area name cannot be empty.');
       return;
     }
     try {
@@ -119,16 +111,16 @@ export function StoreAreaManagementPage({
         },
         token,
       );
-      setSuccessMessage("Store area updated successfully!");
+      setSuccessMessage('Store area updated successfully!');
       setEditingArea(null);
-      setEditedAreaName("");
-      setEditedSubDepartmentName(""); // Clear sub-department input
+      setEditedAreaName('');
+      setEditedSubDepartmentName(''); // Clear sub-department input
       fetchStoreAreas();
     } catch (err: unknown) {
       if (err instanceof Error) {
         setError(err.message);
       } else {
-        setError("An unknown error occurred");
+        setError('An unknown error occurred');
       }
       setSuccessMessage(null);
     }
@@ -147,21 +139,18 @@ export function StoreAreaManagementPage({
 
   const handleDeleteArea = useCallback(
     async (id: number) => {
-      if (
-        !token ||
-        !window.confirm("Are you sure you want to delete this store area?")
-      ) {
+      if (!token || !window.confirm('Are you sure you want to delete this store area?')) {
         return;
       }
       try {
         await apiService.delete(`/store-areas/${id}`, token);
-        setSuccessMessage("Store area deleted successfully!");
+        setSuccessMessage('Store area deleted successfully!');
         fetchStoreAreas();
       } catch (err: unknown) {
         if (err instanceof Error) {
           setError(err.message);
         } else {
-          setError("An unknown error occurred");
+          setError('An unknown error occurred');
         }
         setSuccessMessage(null);
       }
@@ -177,14 +166,10 @@ export function StoreAreaManagementPage({
         </CardHeader>
         <CardContent>
           {error && (
-            <p className="text-inventory-error-500 text-sm text-center mt-4">
-              Error: {error}
-            </p>
+            <p className="text-inventory-error-500 text-sm text-center mt-4">Error: {error}</p>
           )}
           {successMessage && (
-            <p className="text-inventory-success-500 text-sm text-center mt-4">
-              {successMessage}
-            </p>
+            <p className="text-inventory-success-500 text-sm text-center mt-4">{successMessage}</p>
           )}
 
           <div className="mb-6">
@@ -228,11 +213,9 @@ export function StoreAreaManagementPage({
                     <TableCell>{area.id}</TableCell>
                     <TableCell>{area.name}</TableCell>
 
-                    <TableCell>{area.subDepartment || "N/A"}</TableCell>
+                    <TableCell>{area.subDepartment || 'N/A'}</TableCell>
                     <TableCell>
-                      {area.lastChecked
-                        ? new Date(area.lastChecked).toLocaleString()
-                        : "N/A"}
+                      {area.lastChecked ? new Date(area.lastChecked).toLocaleString() : 'N/A'}
                     </TableCell>
                     <TableCell className="text-right">
                       <Dialog>
@@ -244,9 +227,7 @@ export function StoreAreaManagementPage({
                             onClick={() => {
                               setEditingArea(area);
                               setEditedAreaName(area.name);
-                              setEditedSubDepartmentName(
-                                area.subDepartment || "",
-                              ); // Initialize sub-department
+                              setEditedSubDepartmentName(area.subDepartment || ''); // Initialize sub-department
                             }}
                           >
                             Edit
@@ -258,45 +239,33 @@ export function StoreAreaManagementPage({
                           </DialogHeader>
                           <div className="grid gap-4 py-4">
                             <div className="grid grid-cols-4 items-center gap-4">
-                              <Label
-                                htmlFor="editedAreaName"
-                                className="text-right"
-                              >
+                              <Label htmlFor="editedAreaName" className="text-right">
                                 Name
                               </Label>
                               <Input
                                 id="editedAreaName"
                                 value={editedAreaName}
-                                onChange={(e) =>
-                                  setEditedAreaName(e.target.value)
-                                }
+                                onChange={(e) => setEditedAreaName(e.target.value)}
                                 className="col-span-3"
                               />
                             </div>
                             <div className="grid grid-cols-4 items-center gap-4">
-                              {" "}
+                              {' '}
                               {/* New input for sub-department */}
-                              <Label
-                                htmlFor="editedSubDepartmentName"
-                                className="text-right"
-                              >
+                              <Label htmlFor="editedSubDepartmentName" className="text-right">
                                 Sub-Department
                               </Label>
                               <Input
                                 id="editedSubDepartmentName"
                                 value={editedSubDepartmentName}
-                                onChange={(e) =>
-                                  setEditedSubDepartmentName(e.target.value)
-                                }
+                                onChange={(e) => setEditedSubDepartmentName(e.target.value)}
                                 className="col-span-3"
                               />
                             </div>
                           </div>
 
                           <DialogFooter>
-                            <Button onClick={handleEditArea}>
-                              Save changes
-                            </Button>
+                            <Button onClick={handleEditArea}>Save changes</Button>
                           </DialogFooter>
                         </DialogContent>
                       </Dialog>

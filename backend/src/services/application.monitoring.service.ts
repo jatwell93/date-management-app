@@ -9,7 +9,7 @@ export enum ApplicationAlertType {
   HIGH_LATENCY = 'HIGH_LATENCY',
   LOW_UPTIME = 'LOW_UPTIME',
   RESOURCE_EXHAUSTION = 'RESOURCE_EXHAUSTION',
-  ANOMALOUS_USER_BEHAVIOR = 'ANOMALOUS_USER_BEHAVIOR'
+  ANOMALOUS_USER_BEHAVIOR = 'ANOMALOUS_USER_BEHAVIOR',
 }
 
 // Interface for application alert events
@@ -72,7 +72,7 @@ export class ApplicationMonitoringService extends EventEmitter {
   private config: ApplicationMonitoringConfig;
   private isMonitoring: boolean = false;
   private monitoringInterval?: NodeJS.Timeout;
-  
+
   // Metrics store
   private metrics: ApplicationMetrics = {
     performance: {
@@ -80,25 +80,25 @@ export class ApplicationMonitoringService extends EventEmitter {
       slowRequests: 0,
       avgResponseTime: 0,
       lastResponseTime: 0,
-      requestPerMinute: 0
+      requestPerMinute: 0,
     },
     userJourneys: {
       scanBarcode: { count: 0, avgTime: 0, errorRate: 0 },
       addInventoryItem: { count: 0, avgTime: 0, errorRate: 0 },
       generateReport: { count: 0, avgTime: 0, errorRate: 0 },
-      login: { count: 0, avgTime: 0, errorRate: 0 }
+      login: { count: 0, avgTime: 0, errorRate: 0 },
     },
     errors: {
       totalErrors: 0,
       errorRate: 0,
-      lastErrorCode: null
+      lastErrorCode: null,
     },
     health: {
       uptime: 0,
       healthyEndpoints: [],
-      unhealthyEndpoints: []
+      unhealthyEndpoints: [],
     },
-    timestamp: new Date()
+    timestamp: new Date(),
   };
 
   // Store request start times for performance tracking
@@ -112,7 +112,7 @@ export class ApplicationMonitoringService extends EventEmitter {
       alertThresholds: {
         errorRate: 5, // 5%
         responseTimeThreshold: 1000, // 1 second
-        requestPerMinuteThreshold: 1000 // 1000 requests per minute
+        requestPerMinuteThreshold: 1000, // 1000 requests per minute
       },
       checkInterval: 60000, // 1 minute
       enableLogging: true,
@@ -123,8 +123,8 @@ export class ApplicationMonitoringService extends EventEmitter {
         '/api/store-areas',
         '/api/auth/login',
         '/api/reports/usage',
-        '/api/reports/expiry'
-      ]
+        '/api/reports/expiry',
+      ],
     };
   }
 
@@ -145,8 +145,8 @@ export class ApplicationMonitoringService extends EventEmitter {
         ...config,
         alertThresholds: {
           ...this.config.alertThresholds,
-          ...(config.alertThresholds || {})
-        }
+          ...(config.alertThresholds || {}),
+        },
       };
     }
 
@@ -175,7 +175,7 @@ export class ApplicationMonitoringService extends EventEmitter {
         await this.collectMetrics();
       } catch (error) {
         Logger.error('Error during application monitoring', {
-          error: error instanceof Error ? error.message : 'Unknown error'
+          error: error instanceof Error ? error.message : 'Unknown error',
         });
       }
     }, this.config.checkInterval);
@@ -206,7 +206,7 @@ export class ApplicationMonitoringService extends EventEmitter {
     return (req: Request, res: Response, next: NextFunction) => {
       const startTime = Date.now();
       const requestId = `${req.method}-${req.url}-${Date.now()}-${Math.random()}`;
-      
+
       // Store the start time for this request
       this.requestStartTimes.set(requestId, startTime);
 
@@ -214,15 +214,10 @@ export class ApplicationMonitoringService extends EventEmitter {
       res.on('finish', () => {
         const endTime = Date.now();
         const duration = endTime - startTime;
-        
+
         // Record the request metrics
-        this.recordRequest(
-          req.method + req.url,
-          duration,
-          res.statusCode,
-          req.url
-        );
-        
+        this.recordRequest(req.method + req.url, duration, res.statusCode, req.url);
+
         // Clean up the start time
         this.requestStartTimes.delete(requestId);
       });
@@ -249,29 +244,32 @@ export class ApplicationMonitoringService extends EventEmitter {
 
     if (duration > this.config.slowEndpointThreshold) {
       this.metrics.performance.slowRequests++;
-      
+
       if (this.config.enableAlerting) {
         this.emitAlert({
           type: ApplicationAlertType.SLOW_ENDPOINT,
           message: `Slow endpoint detected: ${endpoint} took ${duration}ms > ${this.config.slowEndpointThreshold}ms threshold`,
           severity: 'medium',
           timestamp: new Date(),
-          metadata: { 
-            endpoint, 
-            responseTime: duration, 
+          metadata: {
+            endpoint,
+            responseTime: duration,
             threshold: this.config.slowEndpointThreshold,
-            url
-          }
+            url,
+          },
         });
       }
     }
 
     // Recalculate average response time
-    const totalTime = (this.metrics.performance.avgResponseTime * (this.metrics.performance.totalRequests - 1)) + duration;
+    const totalTime =
+      this.metrics.performance.avgResponseTime * (this.metrics.performance.totalRequests - 1) +
+      duration;
     this.metrics.performance.avgResponseTime = totalTime / this.metrics.performance.totalRequests;
 
     // Update error rate
-    this.metrics.errors.errorRate = (this.metrics.errors.totalErrors / this.metrics.performance.totalRequests) * 100;
+    this.metrics.errors.errorRate =
+      (this.metrics.errors.totalErrors / this.metrics.performance.totalRequests) * 100;
   }
 
   /**
@@ -280,10 +278,13 @@ export class ApplicationMonitoringService extends EventEmitter {
   private trackUserJourney(endpoint: string, duration: number, statusCode: number): void {
     // Determine which user journey this endpoint represents
     let journeyType: keyof ApplicationMetrics['userJourneys'] | null = null;
-    
+
     if (endpoint.includes('/api/inventory-items') && endpoint.includes('POST')) {
       journeyType = 'addInventoryItem';
-    } else if (endpoint.includes('/api/reports/usage') || endpoint.includes('/api/reports/expiry')) {
+    } else if (
+      endpoint.includes('/api/reports/usage') ||
+      endpoint.includes('/api/reports/expiry')
+    ) {
       journeyType = 'generateReport';
     } else if (endpoint.includes('/api/auth/login')) {
       journeyType = 'login';
@@ -295,15 +296,15 @@ export class ApplicationMonitoringService extends EventEmitter {
     if (journeyType) {
       const journey = this.metrics.userJourneys[journeyType];
       const oldAvg = journey.avgTime;
-      
+
       journey.count++;
-      
+
       // Calculate new average time
-      journey.avgTime = ((oldAvg * (journey.count - 1)) + duration) / journey.count;
-      
+      journey.avgTime = (oldAvg * (journey.count - 1) + duration) / journey.count;
+
       // Calculate error rate
       if (statusCode >= 400) {
-        journey.errorRate = ((journey.errorRate * (journey.count - 1)) + 100) / journey.count;
+        journey.errorRate = (journey.errorRate * (journey.count - 1) + 100) / journey.count;
       } else {
         journey.errorRate = (journey.errorRate * (journey.count - 1)) / journey.count;
       }
@@ -323,9 +324,9 @@ export class ApplicationMonitoringService extends EventEmitter {
   private emitAlert(alert: ApplicationAlertEvent): void {
     if (this.config.enableAlerting) {
       this.emit('alert', alert);
-      Logger.warn(`Application alert: ${alert.message}`, { 
-        type: alert.type, 
-        severity: alert.severity 
+      Logger.warn(`Application alert: ${alert.message}`, {
+        type: alert.type,
+        severity: alert.severity,
       });
     }
   }
@@ -343,13 +344,15 @@ export class ApplicationMonitoringService extends EventEmitter {
         timestamp: new Date(),
         metadata: {
           errorRate: this.metrics.errors.errorRate,
-          threshold: this.config.alertThresholds.errorRate
-        }
+          threshold: this.config.alertThresholds.errorRate,
+        },
       });
     }
 
     // Check average response time
-    if (this.metrics.performance.avgResponseTime > this.config.alertThresholds.responseTimeThreshold) {
+    if (
+      this.metrics.performance.avgResponseTime > this.config.alertThresholds.responseTimeThreshold
+    ) {
       this.emitAlert({
         type: ApplicationAlertType.HIGH_LATENCY,
         message: `Average response time is ${this.metrics.performance.avgResponseTime}ms > ${this.config.alertThresholds.responseTimeThreshold}ms threshold`,
@@ -357,8 +360,8 @@ export class ApplicationMonitoringService extends EventEmitter {
         timestamp: new Date(),
         metadata: {
           avgResponseTime: this.metrics.performance.avgResponseTime,
-          threshold: this.config.alertThresholds.responseTimeThreshold
-        }
+          threshold: this.config.alertThresholds.responseTimeThreshold,
+        },
       });
     }
   }
@@ -368,7 +371,7 @@ export class ApplicationMonitoringService extends EventEmitter {
    */
   public async collectMetrics(): Promise<ApplicationMetrics> {
     const startTime = Date.now();
-    
+
     try {
       // Update timestamp
       this.metrics.timestamp = new Date();
@@ -388,7 +391,7 @@ export class ApplicationMonitoringService extends EventEmitter {
       const duration = Date.now() - startTime;
       Logger.error('Failed to collect application metrics', {
         duration,
-        error: error instanceof Error ? error.message : 'Unknown error'
+        error: error instanceof Error ? error.message : 'Unknown error',
       });
 
       throw error;

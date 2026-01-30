@@ -3,7 +3,7 @@
  * Represents a unique product in the inventory system
  */
 
-import { Database } from "sqlite";
+import { Database } from 'sqlite';
 
 export interface Product {
   id: number;
@@ -44,9 +44,7 @@ export class ProductModel {
   /**
    * Creates a new product
    */
-  async create(
-    productData: Omit<Product, "id" | "createdAt" | "updatedAt">,
-  ): Promise<Product> {
+  async create(productData: Omit<Product, 'id' | 'createdAt' | 'updatedAt'>): Promise<Product> {
     const { barcode, sku, name, costPrice } = productData;
     const query = `
       INSERT INTO products (barcode, sku, name, cost_price)
@@ -70,7 +68,7 @@ export class ProductModel {
    * Finds a product by its barcode
    */
   async findByBarcode(barcode: string): Promise<Product | null> {
-    const query = "SELECT * FROM products WHERE barcode = ?";
+    const query = 'SELECT * FROM products WHERE barcode = ?';
     const result = await this.db.get(query, [barcode]);
 
     if (!result) return null;
@@ -90,7 +88,7 @@ export class ProductModel {
    * Finds a product by its ID
    */
   async findById(id: number): Promise<Product | null> {
-    const query = "SELECT * FROM products WHERE id = ?";
+    const query = 'SELECT * FROM products WHERE id = ?';
     const result = await this.db.get(query, [id]);
 
     if (!result) return null;
@@ -111,12 +109,12 @@ export class ProductModel {
    */
   async update(
     id: number,
-    updateData: Partial<Omit<Product, "id" | "createdAt" | "updatedAt">>,
+    updateData: Partial<Omit<Product, 'id' | 'createdAt' | 'updatedAt'>>,
   ): Promise<Product | null> {
     const fields = Object.keys(updateData);
     if (fields.length === 0) return null;
 
-    const setClause = fields.map((field) => `${field} = ?`).join(", ");
+    const setClause = fields.map((field) => `${field} = ?`).join(', ');
     const values = [...Object.values(updateData), id];
 
     const query = `UPDATE products SET ${setClause}, updated_at = CURRENT_TIMESTAMP WHERE id = ? RETURNING *`;
@@ -139,7 +137,7 @@ export class ProductModel {
    * Deletes a product
    */
   async delete(id: number): Promise<boolean> {
-    const query = "DELETE FROM products WHERE id = ?";
+    const query = 'DELETE FROM products WHERE id = ?';
     const result = await this.db.run(query, [id]);
     return result.changes !== null && result.changes !== undefined && result.changes > 0;
   }

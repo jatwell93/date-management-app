@@ -74,7 +74,7 @@ export class LocalStorageProvider implements StorageProvider {
     } catch (error) {
       throw new StorageProviderError(
         `Failed to upload file: ${key}`,
-        error instanceof Error ? error : undefined
+        error instanceof Error ? error : undefined,
       );
     }
   }
@@ -91,7 +91,7 @@ export class LocalStorageProvider implements StorageProvider {
       }
       throw new StorageProviderError(
         `Failed to download file: ${key}`,
-        error instanceof Error ? error : undefined
+        error instanceof Error ? error : undefined,
       );
     }
   }
@@ -119,7 +119,7 @@ export class LocalStorageProvider implements StorageProvider {
       }
       throw new StorageProviderError(
         `Failed to delete file: ${key}`,
-        error instanceof Error ? error : undefined
+        error instanceof Error ? error : undefined,
       );
     }
   }
@@ -164,7 +164,7 @@ export class LocalStorageProvider implements StorageProvider {
         }
         throw new StorageProviderError(
           `Failed to get metadata for file: ${key}`,
-          error instanceof Error ? error : undefined
+          error instanceof Error ? error : undefined,
         );
       }
     }
@@ -175,8 +175,6 @@ export class LocalStorageProvider implements StorageProvider {
    * This method throws an error if called.
    */
   async getPresignedUploadUrl(_key: string, _expiresIn: number): Promise<string> {
-    throw new StorageProviderError(
-      'Presigned URLs are not supported in local storage mode'
-    );
+    throw new StorageProviderError('Presigned URLs are not supported in local storage mode');
   }
 }

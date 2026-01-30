@@ -47,7 +47,9 @@ export class MigrationModel {
    * Get all executed migrations
    */
   public getExecutedMigrations(db: DB): MigrationRecord[] {
-    return db.prepare('SELECT id, name, executed_at FROM migrations ORDER BY id').all() as MigrationRecord[];
+    return db
+      .prepare('SELECT id, name, executed_at FROM migrations ORDER BY id')
+      .all() as MigrationRecord[];
   }
 
   /**

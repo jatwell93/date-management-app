@@ -1,6 +1,6 @@
 /**
  * Storage Provider Interface
- * 
+ *
  * Unified interface for file storage operations supporting both
  * local filesystem (development) and Cloudflare R2 (production).
  */
@@ -86,7 +86,10 @@ export class FileSizeLimitError extends Error {
 }
 
 export class StorageProviderError extends Error {
-  constructor(message: string, public readonly originalError?: Error) {
+  constructor(
+    message: string,
+    public readonly originalError?: Error,
+  ) {
     super(message);
     this.name = 'StorageProviderError';
   }

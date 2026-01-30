@@ -1,4 +1,4 @@
-declare module "quagga" {
+declare module 'quagga' {
   interface QuaggaStatic {
     init(config: any, callback: (err: any) => void): void;
     start(): void;

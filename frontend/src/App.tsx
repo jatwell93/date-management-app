@@ -1,73 +1,64 @@
-import React, { useState, useEffect, Suspense } from "react";
-import {
-  BrowserRouter as Router,
-  Routes,
-  Route,
-  Link,
-  Navigate,
-} from "react-router-dom";
-import { LoginPage } from "./components/LoginPage";
-import { ScanPage } from "./pages/ScanPage";
-import { DashboardPage } from "./pages/DashboardPage";
-import { ReportsPage } from "./pages/ReportsPage";
-import { UsageReportPage } from "./pages/UsageReportPage";
-import { MarkdownCalculator } from "./components/MarkdownCalculator";
-import { UserManagementPage } from "./pages/UserManagementPage";
-import { StoreAreaManagementPage } from "./pages/StoreAreaManagementPage";
-import { CSVUploadPage } from "./pages/CSVUploadPage";
-import { DetailedExpiryReportPage } from "./pages/DetailedExpiryReportPage";
-import ExpiredItemsPage from "./pages/ExpiredItemsPage";
+import React, { useState, useEffect } from 'react';
+import { BrowserRouter as Router, Routes, Route, Link, Navigate } from 'react-router-dom';
+import { LoginPage } from './components/LoginPage';
+import { ScanPage } from './pages/ScanPage';
+import { DashboardPage } from './pages/DashboardPage';
+import { ReportsPage } from './pages/ReportsPage';
+import { UsageReportPage } from './pages/UsageReportPage';
+import { MarkdownCalculator } from './components/MarkdownCalculator';
+import { UserManagementPage } from './pages/UserManagementPage';
+import { StoreAreaManagementPage } from './pages/StoreAreaManagementPage';
+import { CSVUploadPage } from './pages/CSVUploadPage';
+import { DetailedExpiryReportPage } from './pages/DetailedExpiryReportPage';
+import ExpiredItemsPage from './pages/ExpiredItemsPage';
 import {
   DropdownMenu,
   DropdownMenuContent,
   DropdownMenuItem,
   DropdownMenuTrigger,
-} from "./components/ui/dropdown-menu";
-import ErrorBoundary from "./components/ErrorBoundary";
-import LoadingSpinner from "./components/LoadingSpinner";
-import { synchronizeOfflineData } from "./lib/sync-manager";
-import { jwtDecode } from "jwt-decode";
-import { ToastProvider } from "./components/ui/toast-provider";
-import "./globals.css";
+} from './components/ui/dropdown-menu';
+import ErrorBoundary from './components/ErrorBoundary';
+import { synchronizeOfflineData } from './lib/sync-manager';
+import { jwtDecode, JwtPayload } from 'jwt-decode';
+import { ToastProvider } from './components/ui/toast-provider';
+import './globals.css';
 
 // Helper function to verify if a token is still valid by checking its expiration
 const verifyToken = (token: string | null): boolean => {
   if (!token) return false;
   try {
-    const decodedToken: any = jwtDecode(token);
+    const decodedToken = jwtDecode<JwtPayload>(token);
     const currentTime = Date.now() / 1000; // Convert to Unix timestamp
     // If the token is expired, return false
     return decodedToken.exp > currentTime;
   } catch (error) {
-    console.error("Error decoding session:", error);
+    console.error('Error decoding session:', error);
     return false; // If there's an error decoding, treat it as invalid
   }
 };
 
 // Helper function to decode JWT and get role
-const decodeTokenAndGetRole = (
-  token: string | null,
-): "Manager" | "Team Member" | null => {
+const decodeTokenAndGetRole = (token: string | null): 'Manager' | 'Team Member' | null => {
   if (!token) return null;
   try {
-    const decodedToken: any = jwtDecode(token);
+    const decodedToken = jwtDecode<JwtPayload & { role?: string }>(token);
     const role = decodedToken.role;
-    if (role === "Manager") {
-      return "Manager";
-    } else if (role === "Team Member") {
-      return "Team Member";
+    if (role === 'Manager') {
+      return 'Manager';
+    } else if (role === 'Team Member') {
+      return 'Team Member';
     }
-    console.warn("Unknown role in session, defaulting to Team Member");
-    return "Team Member"; // Default role if not specified
+    console.warn('Unknown role in session, defaulting to Team Member');
+    return 'Team Member'; // Default role if not specified
   } catch (error) {
-    console.error("Error decoding session:", error);
-    return "Team Member"; // Default to Team Member on error
+    console.error('Error decoding session:', error);
+    return 'Team Member'; // Default to Team Member on error
   }
 };
 
 function App() {
   const [isLoggedIn, setIsLoggedIn] = useState(() => {
-    const token = localStorage.getItem("authToken");
+    const token = localStorage.getItem('authToken');
     if (token) {
       // Verify that the token is still valid by checking if it's expired
       return verifyToken(token);
@@ -75,24 +66,22 @@ function App() {
     return false;
   });
   const [token, setToken] = useState<string | null>(() => {
-    return localStorage.getItem("authToken");
+    return localStorage.getItem('authToken');
   });
-  const [userRole, setUserRole] = useState<"Manager" | "Team Member" | null>(
-    () => {
-      return decodeTokenAndGetRole(localStorage.getItem("authToken"));
-    },
-  );
+  const [userRole, setUserRole] = useState<'Manager' | 'Team Member' | null>(() => {
+    return decodeTokenAndGetRole(localStorage.getItem('authToken'));
+  });
   const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
 
   const handleLogin = (newToken: string) => {
-    localStorage.setItem("authToken", newToken);
+    localStorage.setItem('authToken', newToken);
     setIsLoggedIn(true);
     setToken(newToken);
     setUserRole(decodeTokenAndGetRole(newToken));
   };
 
   const handleLogout = () => {
-    localStorage.removeItem("authToken");
+    localStorage.removeItem('authToken');
     setIsLoggedIn(false);
     setToken(null);
     setUserRole(null);
@@ -116,9 +105,9 @@ function App() {
       synchronizeOfflineData(token);
     }
 
-    window.addEventListener("online", handleOnline);
+    window.addEventListener('online', handleOnline);
     return () => {
-      window.removeEventListener("online", handleOnline);
+      window.removeEventListener('online', handleOnline);
     };
   }, [token]);
 
@@ -132,10 +121,7 @@ function App() {
                 {/* Top-level container for the navigation elements */}
                 <div className="flex items-center justify-between">
                   <div className="flex items-center space-x-4">
-                    <Link
-                      to="/scan"
-                      className="font-semibold hover:opacity-90 transition-opacity"
-                    >
+                    <Link to="/scan" className="font-semibold hover:opacity-90 transition-opacity">
                       <h1 className="text-xl">Inventory Manager</h1>
                     </Link>
 
@@ -143,10 +129,7 @@ function App() {
                     <button
                       className="md:hidden text-primary-foreground focus:outline-none p-2 hover:bg-primary-foreground/10 rounded-md transition-colors"
                       onClick={() => {
-                        console.log(
-                          "Hamburger clicked, current state:",
-                          isMobileMenuOpen,
-                        );
+                        console.log('Hamburger clicked, current state:', isMobileMenuOpen);
                         setIsMobileMenuOpen(!isMobileMenuOpen);
                       }}
                       aria-label="Toggle mobile menu"
@@ -189,18 +172,12 @@ function App() {
                     {/* Desktop Navigation - moved inside the right-aligned div */}
                     <ul className="hidden md:flex space-x-6">
                       <li>
-                        <Link
-                          to="/scan"
-                          className="hover:opacity-90 transition-opacity"
-                        >
+                        <Link to="/scan" className="hover:opacity-90 transition-opacity">
                           Scan
                         </Link>
                       </li>
                       <li>
-                        <Link
-                          to="/dashboard"
-                          className="hover:opacity-90 transition-opacity"
-                        >
+                        <Link to="/dashboard" className="hover:opacity-90 transition-opacity">
                           Dashboard
                         </Link>
                       </li>
@@ -253,7 +230,7 @@ function App() {
                           Markdown Calculator
                         </Link>
                       </li>
-                      {userRole === "Manager" && (
+                      {userRole === 'Manager' && (
                         <>
                           <li>
                             <Link
@@ -272,10 +249,7 @@ function App() {
                             </Link>
                           </li>
                           <li>
-                            <Link
-                              to="/csv-upload"
-                              className="hover:opacity-90 transition-opacity"
-                            >
+                            <Link to="/csv-upload" className="hover:opacity-90 transition-opacity">
                               CSV Upload
                             </Link>
                           </li>
@@ -362,7 +336,7 @@ function App() {
                           Markdown Calculator
                         </Link>
                       </li>
-                      {userRole === "Manager" && (
+                      {userRole === 'Manager' && (
                         <>
                           <li>
                             <Link
@@ -417,42 +391,20 @@ function App() {
                 <Route
                   path="/login"
                   element={
-                    isLoggedIn ? (
-                      <Navigate to="/scan" />
-                    ) : (
-                      <LoginPage onLogin={handleLogin} />
-                    )
+                    isLoggedIn ? <Navigate to="/scan" /> : <LoginPage onLogin={handleLogin} />
                   }
                 />
                 <Route
                   path="/scan"
-                  element={
-                    isLoggedIn ? (
-                      <ScanPage token={token} />
-                    ) : (
-                      <Navigate to="/login" />
-                    )
-                  }
+                  element={isLoggedIn ? <ScanPage token={token} /> : <Navigate to="/login" />}
                 />
                 <Route
                   path="/dashboard"
-                  element={
-                    isLoggedIn ? (
-                      <DashboardPage token={token} />
-                    ) : (
-                      <Navigate to="/login" />
-                    )
-                  }
+                  element={isLoggedIn ? <DashboardPage token={token} /> : <Navigate to="/login" />}
                 />
                 <Route
                   path="/reports"
-                  element={
-                    isLoggedIn ? (
-                      <ReportsPage token={token} />
-                    ) : (
-                      <Navigate to="/login" />
-                    )
-                  }
+                  element={isLoggedIn ? <ReportsPage token={token} /> : <Navigate to="/login" />}
                 />
                 <Route
                   path="/detailed-expiry-report"
@@ -467,43 +419,27 @@ function App() {
                 <Route
                   path="/expired-items"
                   element={
-                    isLoggedIn ? (
-                      <ExpiredItemsPage token={token} />
-                    ) : (
-                      <Navigate to="/login" />
-                    )
+                    isLoggedIn ? <ExpiredItemsPage token={token} /> : <Navigate to="/login" />
                   }
                 />
                 <Route
                   path="/usage-report"
                   element={
-                    isLoggedIn ? (
-                      <UsageReportPage token={token} />
-                    ) : (
-                      <Navigate to="/login" />
-                    )
+                    isLoggedIn ? <UsageReportPage token={token} /> : <Navigate to="/login" />
                   }
                 />
                 <Route
                   path="/markdown-calculator"
                   element={
-                    isLoggedIn ? (
-                      <MarkdownCalculator token={token} />
-                    ) : (
-                      <Navigate to="/login" />
-                    )
+                    isLoggedIn ? <MarkdownCalculator token={token} /> : <Navigate to="/login" />
                   }
                 />
-                {userRole === "Manager" && (
+                {userRole === 'Manager' && (
                   <>
                     <Route
                       path="/user-management"
                       element={
-                        isLoggedIn ? (
-                          <UserManagementPage token={token} />
-                        ) : (
-                          <Navigate to="/login" />
-                        )
+                        isLoggedIn ? <UserManagementPage token={token} /> : <Navigate to="/login" />
                       }
                     />
                     <Route
@@ -519,11 +455,7 @@ function App() {
                     <Route
                       path="/csv-upload"
                       element={
-                        isLoggedIn ? (
-                          <CSVUploadPage token={token} />
-                        ) : (
-                          <Navigate to="/login" />
-                        )
+                        isLoggedIn ? <CSVUploadPage token={token} /> : <Navigate to="/login" />
                       }
                     />
                   </>

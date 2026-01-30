@@ -1,6 +1,6 @@
-import { PrismaClient } from "@prisma/client";
-import { getDefaultDatabaseClient } from "../database/database-factory";
-import { StoreArea } from "../models/store-area.model";
+import { PrismaClient } from '@prisma/client';
+import { getDefaultDatabaseClient } from '../database/database-factory';
+import { StoreArea } from '../models/store-area.model';
 
 export class StoreAreaService {
   private prisma: PrismaClient;
@@ -15,50 +15,56 @@ export class StoreAreaService {
 
   async getAllStoreAreas(): Promise<StoreArea[]> {
     const results = await this.prisma.storeArea.findMany({
-      orderBy: { name: 'asc' }
+      orderBy: { name: 'asc' },
     });
     return results.map(this.mapPrismaToModel);
   }
 
   async getStoreAreaById(id: number): Promise<StoreArea | null> {
     const result = await this.prisma.storeArea.findUnique({
-      where: { id }
+      where: { id },
     });
     return result ? this.mapPrismaToModel(result) : null;
   }
 
   async getStoreAreaByName(name: string): Promise<StoreArea[]> {
     const results = await this.prisma.storeArea.findMany({
-      where: { name }
+      where: { name },
     });
     return results.map(this.mapPrismaToModel);
   }
-  
-  async getStoreAreaByNameAndSubDepartment(name: string, subDepartment: string | null): Promise<StoreArea | null> {
+
+  async getStoreAreaByNameAndSubDepartment(
+    name: string,
+    subDepartment: string | null,
+  ): Promise<StoreArea | null> {
     const result = await this.prisma.storeArea.findFirst({
       where: {
         name,
-        subDepartment: subDepartment ?? null
-      }
+        subDepartment: subDepartment ?? null,
+      },
     });
     return result ? this.mapPrismaToModel(result) : null;
   }
 
   async createStoreArea(
-    area: Omit<StoreArea, "id" | "createdAt" | "updatedAt">,
+    area: Omit<StoreArea, 'id' | 'createdAt' | 'updatedAt'>,
   ): Promise<StoreArea> {
     // Check if a store area with the same name and subDepartment already exists
-    const existingArea = await this.getStoreAreaByNameAndSubDepartment(area.name, area.subDepartment || null);
+    const existingArea = await this.getStoreAreaByNameAndSubDepartment(
+      area.name,
+      area.subDepartment || null,
+    );
     if (existingArea) {
-      throw new Error("A store area with this name and sub-department combination already exists");
+      throw new Error('A store area with this name and sub-department combination already exists');
     }
 
     const newArea = await this.prisma.storeArea.create({
       data: {
         name: area.name,
         subDepartment: area.subDepartment || null,
-        lastChecked: area.lastChecked ? new Date(area.lastChecked) : null
-      }
+        lastChecked: area.lastChecked ? new Date(area.lastChecked) : null,
+      },
     });
 
     return this.mapPrismaToModel(newArea);
@@ -66,7 +72,7 @@ export class StoreAreaService {
 
   async updateStoreArea(
     id: number,
-    area: Partial<Omit<StoreArea, "id" | "createdAt" | "updatedAt">>,
+    area: Partial<Omit<StoreArea, 'id' | 'createdAt' | 'updatedAt'>>,
   ): Promise<StoreArea | null> {
     if (Object.keys(area).length === 0) {
       return null;
@@ -78,8 +84,10 @@ export class StoreAreaService {
         data: {
           ...(area.name !== undefined && { name: area.name }),
           ...(area.subDepartment !== undefined && { subDepartment: area.subDepartment || null }),
-          ...(area.lastChecked !== undefined && { lastChecked: area.lastChecked ? new Date(area.lastChecked) : null })
-        }
+          ...(area.lastChecked !== undefined && {
+            lastChecked: area.lastChecked ? new Date(area.lastChecked) : null,
+          }),
+        },
       });
 
       return this.mapPrismaToModel(updatedArea);
@@ -95,7 +103,7 @@ export class StoreAreaService {
   async deleteStoreArea(id: number): Promise<boolean> {
     try {
       await this.prisma.storeArea.delete({
-        where: { id }
+        where: { id },
       });
       return true;
     } catch (error: any) {
@@ -124,7 +132,7 @@ export class StoreAreaService {
       subDepartment: area.subDepartment ?? undefined,
       lastChecked: area.lastChecked?.toISOString() ?? undefined,
       createdAt: area.createdAt.toISOString(),
-      updatedAt: area.updatedAt.toISOString()
+      updatedAt: area.updatedAt.toISOString(),
     };
   }
 }

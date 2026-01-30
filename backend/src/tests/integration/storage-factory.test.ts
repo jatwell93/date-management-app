@@ -87,9 +87,7 @@ describe('StorageFactory', () => {
         process.env.NODE_ENV = 'production';
         // Missing R2 credentials
 
-        expect(() => createStorageProvider()).toThrow(
-          'R2 storage configuration is incomplete'
-        );
+        expect(() => createStorageProvider()).toThrow('R2 storage configuration is incomplete');
       });
 
       it('should throw error when only some R2 credentials are present', () => {
@@ -97,9 +95,7 @@ describe('StorageFactory', () => {
         process.env.R2_ACCOUNT_ID = 'test-account';
         // Missing other credentials
 
-        expect(() => createStorageProvider()).toThrow(
-          'R2 storage configuration is incomplete'
-        );
+        expect(() => createStorageProvider()).toThrow('R2 storage configuration is incomplete');
       });
 
       it('should use config parameters over environment variables', () => {

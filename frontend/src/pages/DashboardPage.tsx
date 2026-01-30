@@ -1,11 +1,6 @@
-import React, { useEffect, useState } from "react";
-import {
-  Card,
-  CardContent,
-  CardHeader,
-  CardTitle,
-} from "../components/ui/card";
-import { apiService } from "../lib/api.service";
+import React, { useEffect, useState } from 'react';
+import { Card, CardContent, CardHeader, CardTitle } from '../components/ui/card';
+import { apiService } from '../lib/api.service';
 
 interface DashboardPageProps {
   token: string | null;
@@ -23,28 +18,26 @@ interface DashboardData {
 }
 
 export function DashboardPage({ token }: DashboardPageProps) {
-  const [dashboardData, setDashboardData] = useState<DashboardData | null>(
-    null,
-  );
+  const [dashboardData, setDashboardData] = useState<DashboardData | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
     const fetchDashboardData = async () => {
       if (!token) {
-        setError("Authentication token is missing.");
+        setError('Authentication token is missing.');
         setLoading(false);
         return;
       }
 
       try {
-        const data = await apiService.get<DashboardData>("/dashboard", token);
+        const data = await apiService.get<DashboardData>('/dashboard', token);
         setDashboardData(data);
       } catch (err: unknown) {
         if (err instanceof Error) {
           setError(err.message);
         } else {
-          setError("An unknown error occurred");
+          setError('An unknown error occurred');
         }
       } finally {
         setLoading(false);
@@ -55,19 +48,11 @@ export function DashboardPage({ token }: DashboardPageProps) {
   }, [token]);
 
   if (loading) {
-    return (
-      <div className="container mx-auto p-4 text-center">
-        Loading dashboard...
-      </div>
-    );
+    return <div className="container mx-auto p-4 text-center">Loading dashboard...</div>;
   }
 
   if (error) {
-    return (
-      <div className="container mx-auto p-4 text-center text-red-500">
-        Error: {error}
-      </div>
-    );
+    return <div className="container mx-auto p-4 text-center text-red-500">Error: {error}</div>;
   }
 
   return (
@@ -86,9 +71,7 @@ export function DashboardPage({ token }: DashboardPageProps) {
           <CardTitle>Expiring Soon</CardTitle>
         </CardHeader>
         <CardContent>
-          <p className="text-3xl font-bold text-orange-500">
-            {dashboardData?.expiringSoon}
-          </p>
+          <p className="text-3xl font-bold text-orange-500">{dashboardData?.expiringSoon}</p>
         </CardContent>
       </Card>
 
@@ -97,9 +80,7 @@ export function DashboardPage({ token }: DashboardPageProps) {
           <CardTitle>Markdown Items</CardTitle>
         </CardHeader>
         <CardContent>
-          <p className="text-3xl font-bold text-red-500">
-            {dashboardData?.markdownItems}
-          </p>
+          <p className="text-3xl font-bold text-red-500">{dashboardData?.markdownItems}</p>
         </CardContent>
       </Card>
 
@@ -110,10 +91,7 @@ export function DashboardPage({ token }: DashboardPageProps) {
         <CardContent>
           <ul>
             {dashboardData?.recentActivity.map((activity) => (
-              <li
-                key={activity.id}
-                className="mb-2 pb-2 border-b last:border-b-0"
-              >
+              <li key={activity.id} className="mb-2 pb-2 border-b last:border-b-0">
                 <p className="text-sm">{activity.description}</p>
                 <p className="text-xs text-gray-500">{activity.timestamp}</p>
               </li>

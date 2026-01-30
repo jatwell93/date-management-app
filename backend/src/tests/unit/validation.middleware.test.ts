@@ -1,5 +1,10 @@
 import { Request, Response, NextFunction } from 'express';
-import { validateProductInput, validateInventoryItemInput, validateUserInput, validateStoreAreaInput } from '../../middleware/validation.middleware';
+import {
+  validateProductInput,
+  validateInventoryItemInput,
+  validateUserInput,
+  validateStoreAreaInput,
+} from '../../middleware/validation.middleware';
 
 describe('Validation Middleware', () => {
   let mockReq: Partial<Request>;
@@ -128,7 +133,9 @@ describe('Validation Middleware', () => {
       validateInventoryItemInput(mockReq as Request, mockRes as Response, mockNext);
 
       expect(mockRes.status).toHaveBeenCalledWith(400);
-      expect(mockRes.json).toHaveBeenCalledWith({ error: 'Invalid expiry date format. Use YYYY-MM-DD.' });
+      expect(mockRes.json).toHaveBeenCalledWith({
+        error: 'Invalid expiry date format. Use YYYY-MM-DD.',
+      });
       expect(mockNext).not.toHaveBeenCalled();
     });
 
@@ -220,7 +227,9 @@ describe('Validation Middleware', () => {
       validateUserInput(mockReq as Request, mockRes as Response, mockNext);
 
       expect(mockRes.status).toHaveBeenCalledWith(400);
-      expect(mockRes.json).toHaveBeenCalledWith({ error: 'Role must be either "Manager" or "Team Member"' });
+      expect(mockRes.json).toHaveBeenCalledWith({
+        error: 'Role must be either "Manager" or "Team Member"',
+      });
       expect(mockNext).not.toHaveBeenCalled();
     });
   });

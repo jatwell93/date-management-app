@@ -8,14 +8,18 @@ import { releaseDb } from '../database';
  */
 
 // Middleware to validate that referenced entities exist before creating records
-export const validateReferentialIntegrity = async (req: Request, res: Response, next: NextFunction) => {
+export const validateReferentialIntegrity = async (
+  req: Request,
+  res: Response,
+  next: NextFunction,
+) => {
   const db = getDb();
 
   try {
     // For inventory items, validate that productId and locationId exist
     if (req.path.includes('/inventory-items') && req.method === 'POST') {
       const { productId, locationId } = req.body;
-      
+
       if (productId) {
         const productExists = db.prepare('SELECT id FROM products WHERE id = ?').get(productId);
         if (!productExists) {
@@ -24,34 +28,38 @@ export const validateReferentialIntegrity = async (req: Request, res: Response, 
       }
 
       if (locationId) {
-        const locationExists = db.prepare('SELECT id FROM store_areas WHERE id = ?').get(locationId);
+        const locationExists = db
+          .prepare('SELECT id FROM store_areas WHERE id = ?')
+          .get(locationId);
         if (!locationExists) {
           return res.status(400).json({ error: 'Referenced store location does not exist' });
         }
       }
     }
-    
+
     // For audit logs, validate that user_id and inventory_item_id exist
     if (req.path.includes('/audit-log') && req.method === 'POST') {
       const { user_id, inventory_item_id } = req.body;
-      
+
       if (user_id) {
         const userExists = db.prepare('SELECT id FROM users WHERE id = ?').get(user_id);
         if (!userExists) {
           return res.status(400).json({ error: 'Referenced user does not exist' });
         }
       }
-      
+
       if (inventory_item_id) {
-        const itemExists = db.prepare('SELECT id FROM inventory_items WHERE id = ?').get(inventory_item_id);
+        const itemExists = db
+          .prepare('SELECT id FROM inventory_items WHERE id = ?')
+          .get(inventory_item_id);
         if (!itemExists) {
           return res.status(400).json({ error: 'Referenced inventory item does not exist' });
         }
       }
     }
-    
+
     next();
-  } catch (error) {
+  } catch (_error) {
     res.status(500).json({ error: 'Database validation failed' });
   } finally {
     releaseDb(db);
@@ -68,24 +76,29 @@ export const validateDataConsistency = (req: Request, res: Response, next: NextF
     if (productId && expiryDate && locationId) {
       const db = getDb();
       try {
-        const existingItem = db.prepare(`
+        const existingItem = db
+          .prepare(
+            `
           SELECT id FROM inventory_items 
           WHERE product_id = ? AND expiry_date = ? AND location_id = ?
-        `).get(productId, expiryDate, locationId);
+        `,
+          )
+          .get(productId, expiryDate, locationId);
 
         if (existingItem) {
-          return res.status(409).json({ 
-            error: 'An inventory item with the same product, expiry date, and location already exists' 
+          return res.status(409).json({
+            error:
+              'An inventory item with the same product, expiry date, and location already exists',
           });
         }
-      } catch (error) {
+      } catch (_error) {
         res.status(500).json({ error: 'Data consistency check failed' });
       } finally {
         releaseDb(db);
       }
     }
   }
-  
+
   next();
 };
 
@@ -94,34 +107,34 @@ export const validateBusinessRules = (req: Request, res: Response, next: NextFun
   // Expiry date should not be more than 5 years in the future
   if (req.path.includes('/inventory-items') && (req.method === 'POST' || req.method === 'PUT')) {
     const { expiryDate } = req.body;
-    
+
     if (expiryDate) {
       // Create date objects for expiry date and max future date at the start of the day in local timezone
       const expiry = new Date(expiryDate);
       expiry.setHours(0, 0, 0, 0); // Start of expiry day in local time
-      
+
       const maxFutureDate = new Date();
       maxFutureDate.setHours(0, 0, 0, 0); // Start of max future date in local time
       maxFutureDate.setFullYear(maxFutureDate.getFullYear() + 5);
-      
+
       if (expiry > maxFutureDate) {
-        return res.status(400).json({ 
-          error: 'Expiry date cannot be more than 5 years in the future' 
+        return res.status(400).json({
+          error: 'Expiry date cannot be more than 5 years in the future',
         });
       }
     }
   }
-  
+
   // Product cost should not be negative
   if (req.path.includes('/products') && (req.method === 'POST' || req.method === 'PUT')) {
     const { cost_price } = req.body;
-    
+
     if (cost_price !== undefined && parseFloat(cost_price) < 0) {
-      return res.status(400).json({ 
-        error: 'Product cost price cannot be negative' 
+      return res.status(400).json({
+        error: 'Product cost price cannot be negative',
       });
     }
   }
-  
+
   next();
 };

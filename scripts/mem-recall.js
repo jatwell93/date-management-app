@@ -1,15 +1,15 @@
 #!/usr/bin/env node
 /**
  * mem-recall.js - Retrieve relevant project memories for AI context
- * 
+ *
  * Usage:
  *   node scripts/mem-recall.js <query>
- * 
+ *
  * Examples:
  *   node scripts/mem-recall.js "how does authentication work"
  *   node scripts/mem-recall.js "expired items"
  *   node scripts/mem-recall.js "database patterns"
- * 
+ *
  * Output is formatted for easy consumption by AI agents.
  */
 
@@ -28,24 +28,28 @@ function retrieveContext(query) {
   // Check if Gemini API key is available in environment
   const hasGemini = !!process.env.GEMINI_API_KEY;
   const semanticFlags = hasGemini ? ' --mode sem --embedding-model gemini' : '';
-  
+
   try {
     const cmd = `memvid find "${MEMORY_FILE}" --query "${query.replace(/"/g, '\\"')}" --json${semanticFlags}`;
-    
-    const output = execSync(cmd, { 
+
+    const output = execSync(cmd, {
       encoding: 'utf8',
       shell: true,
-      stdio: ['pipe', 'pipe', 'pipe']
+      stdio: ['pipe', 'pipe', 'pipe'],
     });
 
     const results = JSON.parse(output);
-    
+
     if (!results.hits || results.hits.length === 0) {
       // Fall back to lexical search if semantic returns nothing
       if (hasGemini) {
         console.log('No semantic matches. Trying lexical search...\n');
         const lexCmd = `memvid find "${MEMORY_FILE}" --query "${query.replace(/"/g, '\\"')}" --json --mode lex`;
-        const lexOutput = execSync(lexCmd, { encoding: 'utf8', shell: true, stdio: ['pipe', 'pipe', 'pipe'] });
+        const lexOutput = execSync(lexCmd, {
+          encoding: 'utf8',
+          shell: true,
+          stdio: ['pipe', 'pipe', 'pipe'],
+        });
         const lexResults = JSON.parse(lexOutput);
         if (lexResults.hits && lexResults.hits.length > 0) {
           displayResults(query, lexResults, 'lexical');
@@ -58,7 +62,6 @@ function retrieveContext(query) {
     }
 
     displayResults(query, results, hasGemini ? 'semantic' : 'lexical');
-
   } catch (error) {
     // Try non-JSON output as fallback
     try {
@@ -74,20 +77,24 @@ function retrieveContext(query) {
 function displayResults(query, results, mode) {
   console.log('### RELEVANT PROJECT MEMORY ###\n');
   console.log(`Query: "${query}" (${mode} search)`);
-  console.log(`Found: ${results.hits.length} result(s) in ${results.metadata?.elapsed_ms || 0}ms\n`);
+  console.log(
+    `Found: ${results.hits.length} result(s) in ${results.metadata?.elapsed_ms || 0}ms\n`,
+  );
   console.log('---\n');
 
   results.hits.forEach((hit, i) => {
     const title = hit.title || 'Untitled';
     // Extract kind from tags or text
     const tags = hit.metadata?.tags || [];
-    const kindTag = ['fix', 'pattern', 'decision', 'feature', 'error', 'architecture'].find(k => tags.includes(k));
+    const kindTag = ['fix', 'pattern', 'decision', 'feature', 'error', 'architecture'].find((k) =>
+      tags.includes(k),
+    );
     const kind = kindTag || 'general';
-    
+
     // Extract the actual content (first line before metadata)
     const fullText = hit.text || '';
     const contentLine = fullText.split('\n')[0] || '';
-    
+
     console.log(`${i + 1}. [${kind.toUpperCase()}] ${title}`);
     console.log(`   ${contentLine.trim()}`);
     if (hit.metadata?.tags) {

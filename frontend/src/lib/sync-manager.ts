@@ -1,7 +1,7 @@
-import { offlineStorage } from "./offline-storage";
-import { apiService } from "./api.service";
+import { offlineStorage } from './offline-storage';
+import { apiService } from './api.service';
 
-const PENDING_INVENTORY_ITEMS_PREFIX = "pending-inventory-item-";
+const PENDING_INVENTORY_ITEMS_PREFIX = 'pending-inventory-item-';
 
 export async function synchronizeOfflineData(token: string | null) {
   if (!token) {
@@ -30,7 +30,7 @@ export async function synchronizeOfflineData(token: string | null) {
     if (item) {
       try {
         // console.log(`Synchronizing item: ${key}`, item);
-        await apiService.post("/inventory-items", item, token);
+        await apiService.post('/inventory-items', item, token);
 
         // console.log(`Successfully synchronized item: ${key}`);
         await offlineStorage.removeItem(key);

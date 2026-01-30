@@ -3,7 +3,7 @@
  * Records changes made to inventory items for auditing purposes
  */
 
-import { Database } from "sqlite";
+import { Database } from 'sqlite';
 
 export interface AuditLog {
   id: number;
@@ -53,11 +53,7 @@ export class AuditLogModel {
       RETURNING *
     `;
 
-    const result = await this.db.get(query, [
-      userId,
-      inventoryItemId,
-      changeDescription,
-    ]);
+    const result = await this.db.get(query, [userId, inventoryItemId, changeDescription]);
     return {
       id: result.id,
       user_id: result.user_id,

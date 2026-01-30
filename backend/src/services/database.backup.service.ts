@@ -1,5 +1,3 @@
-import { getDb, releaseDb } from '../database';
-import { Database } from 'sqlite';
 import { promises as fs } from 'fs';
 import { join } from 'path';
 import { Logger } from '../utils/logger';
@@ -14,7 +12,7 @@ export class DatabaseBackupService {
   private static readonly DEFAULT_CONFIG: BackupConfig = {
     backupDirectory: './backups',
     retentionDays: 30,
-    maxRetainedBackups: 10
+    maxRetainedBackups: 10,
   };
 
   private config: BackupConfig;
@@ -41,7 +39,7 @@ export class DatabaseBackupService {
   async createBackup(): Promise<string> {
     // Since we're just copying the database file, we don't need to get a connection
     // The backup is a file-level copy
-    
+
     try {
       await this.ensureBackupDirectoryPromise;
       // Generate backup filename with timestamp
@@ -56,14 +54,14 @@ export class DatabaseBackupService {
       await fs.copyFile(originalDbPath, backupPath);
 
       Logger.info(`Database backup created: ${backupPath}`);
-      
+
       // Clean up old backups after creating a new one
       await this.cleanupOldBackups();
-      
+
       return backupPath;
     } catch (error) {
-      Logger.error('Failed to create database backup', { 
-        error: error instanceof Error ? error.message : 'Unknown error' 
+      Logger.error('Failed to create database backup', {
+        error: error instanceof Error ? error.message : 'Unknown error',
       });
       throw error;
     }
@@ -92,12 +90,12 @@ export class DatabaseBackupService {
       await fs.copyFile(backupPath, originalDbPath);
 
       Logger.info(`Database restored from backup: ${backupPath}`);
-      
+
       return true;
     } catch (error) {
-      Logger.error('Failed to restore database from backup', { 
+      Logger.error('Failed to restore database from backup', {
         error: error instanceof Error ? error.message : 'Unknown error',
-        backupPath
+        backupPath,
       });
       throw error;
     }
@@ -113,14 +111,14 @@ export class DatabaseBackupService {
 
       const files = await fs.readdir(this.config.backupDirectory);
       const backupFiles = files
-        .filter(file => file.endsWith('.sqlite') && file.startsWith('backup-'))
-        .map(file => join(this.config.backupDirectory, file));
+        .filter((file) => file.endsWith('.sqlite') && file.startsWith('backup-'))
+        .map((file) => join(this.config.backupDirectory, file));
 
       const backupStats = await Promise.all(
         backupFiles.map(async (filePath) => ({
           filePath,
-          stats: await fs.stat(filePath)
-        }))
+          stats: await fs.stat(filePath),
+        })),
       );
 
       backupStats.sort((a, b) => b.stats.mtime.getTime() - a.stats.mtime.getTime());
@@ -129,8 +127,8 @@ export class DatabaseBackupService {
       Logger.info(`Found ${sortedBackupFiles.length} backup files`);
       return sortedBackupFiles;
     } catch (error) {
-      Logger.error('Failed to list backup files', { 
-        error: error instanceof Error ? error.message : 'Unknown error' 
+      Logger.error('Failed to list backup files', {
+        error: error instanceof Error ? error.message : 'Unknown error',
       });
       return [];
     }
@@ -151,10 +149,12 @@ export class DatabaseBackupService {
         allBackups.map(async (backupPath) => {
           const stats = await fs.stat(backupPath);
           return stats.mtime < cutoffDate ? backupPath : null;
-        })
+        }),
       );
 
-      const filteredOldBackups = oldBackups.filter((backupPath): backupPath is string => Boolean(backupPath));
+      const filteredOldBackups = oldBackups.filter((backupPath): backupPath is string =>
+        Boolean(backupPath),
+      );
 
       for (const oldBackup of filteredOldBackups) {
         await fs.unlink(oldBackup);
@@ -165,7 +165,7 @@ export class DatabaseBackupService {
       if (allBackups.length - filteredOldBackups.length > this.config.maxRetainedBackups) {
         const toDelete = allBackups
           .slice(this.config.maxRetainedBackups) // Get backups beyond the max retention
-          .filter(backup => !filteredOldBackups.includes(backup)); // Exclude ones we already deleted
+          .filter((backup) => !filteredOldBackups.includes(backup)); // Exclude ones we already deleted
 
         for (const backupToDelete of toDelete) {
           await fs.unlink(backupToDelete);
@@ -173,8 +173,8 @@ export class DatabaseBackupService {
         }
       }
     } catch (error) {
-      Logger.error('Failed to clean up old backups', { 
-        error: error instanceof Error ? error.message : 'Unknown error' 
+      Logger.error('Failed to clean up old backups', {
+        error: error instanceof Error ? error.message : 'Unknown error',
       });
       throw error;
     }

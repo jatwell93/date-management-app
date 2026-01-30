@@ -1,9 +1,9 @@
-import { Router, Request, Response, NextFunction } from "express";
-import validator from "validator";
-import { AuthService } from "../services/auth.service";
-import { authenticateToken, generateToken } from "../middleware/auth.middleware";
-import { validateUserInput } from "../middleware/validation.middleware";
-import { escapeHtml } from "../utils/normalize.function";
+import { Router, Request, Response, NextFunction } from 'express';
+import validator from 'validator';
+import { AuthService } from '../services/auth.service';
+import { authenticateToken, generateToken } from '../middleware/auth.middleware';
+import { validateUserInput } from '../middleware/validation.middleware';
+import { escapeHtml } from '../utils/normalize.function';
 
 const router = Router();
 const authService = new AuthService();
@@ -15,15 +15,15 @@ const normalizePin = (req: Request, _res: Response, next: NextFunction) => {
   next();
 };
 
-router.post("/login", normalizePin, validateUserInput, async (req: Request, res: Response) => {
+router.post('/login', normalizePin, validateUserInput, async (req: Request, res: Response) => {
   const rawPin = req.body.pin as string | undefined;
-  const pin = rawPin ? validator.whitelist(rawPin, "0-9") : "";
+  const pin = rawPin ? validator.whitelist(rawPin, '0-9') : '';
   if (!pin) {
-    return res.status(400).json({ message: "PIN is required" });
+    return res.status(400).json({ message: 'PIN is required' });
   }
 
   if (rawPin && pin !== rawPin) {
-    return res.status(400).json({ message: "PIN must contain only digits" });
+    return res.status(400).json({ message: 'PIN must contain only digits' });
   }
 
   // Validate PIN strength
@@ -39,29 +39,29 @@ router.post("/login", normalizePin, validateUserInput, async (req: Request, res:
     if (token) {
       res.json(escapeHtml({ token }));
     } else {
-      res.status(401).json({ message: "Invalid PIN" });
+      res.status(401).json({ message: 'Invalid PIN' });
     }
   } catch (_error) {
     // console.error("Login error:", _error);
-    res.status(500).json({ message: "Internal server error" });
+    res.status(500).json({ message: 'Internal server error' });
   }
 });
 
 // Token refresh endpoint
-router.post("/refresh", authenticateToken, async (req: Request, res: Response) => {
+router.post('/refresh', authenticateToken, async (req: Request, res: Response) => {
   try {
     // Regenerate token with updated expiration
-    const { userId, userRole } = (req as any); // Using 'any' to access custom properties added by auth middleware
-    
+    const { userId, userRole } = req as any; // Using 'any' to access custom properties added by auth middleware
+
     if (!userId || !userRole) {
-      return res.status(401).json({ message: "User not authenticated" });
+      return res.status(401).json({ message: 'User not authenticated' });
     }
 
     const newToken = generateToken(userId, userRole, '1h');
     res.json(escapeHtml({ token: newToken }));
   } catch (error) {
-    console.error("Token refresh error:", error);
-    res.status(500).json({ message: "Internal server error" });
+    console.error('Token refresh error:', error);
+    res.status(500).json({ message: 'Internal server error' });
   }
 });
 

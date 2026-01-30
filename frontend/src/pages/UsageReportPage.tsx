@@ -1,10 +1,5 @@
-import React, { useEffect, useState } from "react";
-import {
-  Card,
-  CardContent,
-  CardHeader,
-  CardTitle,
-} from "../components/ui/card";
+import React, { useEffect, useState } from 'react';
+import { Card, CardContent, CardHeader, CardTitle } from '../components/ui/card';
 import {
   Table,
   TableBody,
@@ -12,15 +7,15 @@ import {
   TableHead,
   TableHeader,
   TableRow,
-} from "../components/ui/table";
-import { apiService } from "../lib/api.service";
+} from '../components/ui/table';
+import { apiService } from '../lib/api.service';
 import {
   Select,
   SelectContent,
   SelectItem,
   SelectTrigger,
   SelectValue,
-} from "../components/ui/select";
+} from '../components/ui/select';
 
 // Import Chart.js components
 import {
@@ -33,8 +28,8 @@ import {
   Legend,
   PointElement,
   LineElement,
-} from "chart.js";
-import { Bar, Line } from "react-chartjs-2";
+} from 'chart.js';
+import { Bar, Line } from 'react-chartjs-2';
 
 // Register Chart.js components
 ChartJS.register(
@@ -73,39 +68,30 @@ interface ItemsByDateReportItem {
 }
 
 export function UsageReportPage({ token }: UsageReportPageProps) {
-  const [usageData, setUsageData] = useState<DailyUsageReportItem[] | null>(
-    null,
-  );
+  const [usageData, setUsageData] = useState<DailyUsageReportItem[] | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
-  const [itemsByUser, setItemsByUser] = useState<
-    ItemsByUserReportItem[] | null
-  >(null);
-  const [itemsByDate, setItemsByDate] = useState<
-    ItemsByDateReportItem[] | null
-  >(null);
+  const [itemsByUser, setItemsByUser] = useState<ItemsByUserReportItem[] | null>(null);
+  const [itemsByDate, setItemsByDate] = useState<ItemsByDateReportItem[] | null>(null);
   const [chartsLoading, setChartsLoading] = useState(true);
-  const [timeFrame, setTimeFrame] = useState("all-time");
+  const [timeFrame, setTimeFrame] = useState('all-time');
 
   useEffect(() => {
     const fetchUsageData = async () => {
       if (!token) {
-        setError("Authentication token is missing.");
+        setError('Authentication token is missing.');
         setLoading(false);
         return;
       }
 
       try {
-        const data = await apiService.get<DailyUsageReportItem[]>(
-          "/reports/daily-usage",
-          token,
-        );
+        const data = await apiService.get<DailyUsageReportItem[]>('/reports/daily-usage', token);
         setUsageData(data);
       } catch (err: unknown) {
         if (err instanceof Error) {
           setError(err.message);
         } else {
-          setError("An unknown error occurred");
+          setError('An unknown error occurred');
         }
       } finally {
         setLoading(false);
@@ -119,7 +105,7 @@ export function UsageReportPage({ token }: UsageReportPageProps) {
   useEffect(() => {
     const fetchChartData = async () => {
       if (!token) {
-        setError("Authentication token is missing.");
+        setError('Authentication token is missing.');
         setChartsLoading(false);
         return;
       }
@@ -131,10 +117,7 @@ export function UsageReportPage({ token }: UsageReportPageProps) {
             `/reports/items-by-user?timeFrame=${timeFrame}`,
             token,
           ),
-          apiService.get<ItemsByDateReportItem[]>(
-            "/reports/items-by-date",
-            token,
-          ),
+          apiService.get<ItemsByDateReportItem[]>('/reports/items-by-date', token),
         ]);
 
         setItemsByUser(itemsByUser);
@@ -143,7 +126,7 @@ export function UsageReportPage({ token }: UsageReportPageProps) {
         if (err instanceof Error) {
           setError(err.message);
         } else {
-          setError("An unknown error occurred when fetching chart data");
+          setError('An unknown error occurred when fetching chart data');
         }
       } finally {
         setChartsLoading(false);
@@ -154,19 +137,11 @@ export function UsageReportPage({ token }: UsageReportPageProps) {
   }, [token, timeFrame]);
 
   if (loading) {
-    return (
-      <div className="container mx-auto p-4 text-center">
-        Loading usage report...
-      </div>
-    );
+    return <div className="container mx-auto p-4 text-center">Loading usage report...</div>;
   }
 
   if (error) {
-    return (
-      <div className="container mx-auto p-4 text-center text-red-500">
-        Error: {error}
-      </div>
-    );
+    return <div className="container mx-auto p-4 text-center text-red-500">Error: {error}</div>;
   }
 
   // Prepare chart data for Items by User
@@ -174,10 +149,10 @@ export function UsageReportPage({ token }: UsageReportPageProps) {
     labels: itemsByUser?.map((item) => `User ${item.userId}`) || [],
     datasets: [
       {
-        label: "Items Added",
+        label: 'Items Added',
         data: itemsByUser?.map((item) => item.itemCount) || [],
-        backgroundColor: "rgba(74, 222, 128, 0.5)", // Green
-        borderColor: "rgba(74, 222, 128, 1)",
+        backgroundColor: 'rgba(74, 222, 128, 0.5)', // Green
+        borderColor: 'rgba(74, 222, 128, 1)',
         borderWidth: 1,
       },
     ],
@@ -185,16 +160,14 @@ export function UsageReportPage({ token }: UsageReportPageProps) {
 
   // Prepare chart data for Items by Date
   const itemsByDateChartData = {
-    labels:
-      itemsByDate?.map((item) => new Date(item.date).toLocaleDateString()) ||
-      [],
+    labels: itemsByDate?.map((item) => new Date(item.date).toLocaleDateString()) || [],
     datasets: [
       {
-        label: "Items Added",
+        label: 'Items Added',
         data: itemsByDate?.map((item) => item.itemCount) || [],
         fill: false,
-        borderColor: "rgb(53, 162, 235)",
-        backgroundColor: "rgba(53, 162, 235, 0.5)",
+        borderColor: 'rgb(53, 162, 235)',
+        backgroundColor: 'rgba(53, 162, 235, 0.5)',
         tension: 0.1,
       },
     ],
@@ -265,15 +238,13 @@ export function UsageReportPage({ token }: UsageReportPageProps) {
                     ...barChartOptions.plugins,
                     title: {
                       display: true,
-                      text: "Top Users by Items Added",
+                      text: 'Top Users by Items Added',
                     },
                   },
                 }}
               />
             ) : (
-              <div className="text-center py-4 text-gray-500">
-                No user data available
-              </div>
+              <div className="text-center py-4 text-gray-500">No user data available</div>
             )}
           </CardContent>
         </Card>
@@ -294,15 +265,13 @@ export function UsageReportPage({ token }: UsageReportPageProps) {
                     ...lineChartOptions.plugins,
                     title: {
                       display: true,
-                      text: "Items Added Over Time",
+                      text: 'Items Added Over Time',
                     },
                   },
                 }}
               />
             ) : (
-              <div className="text-center py-4 text-gray-500">
-                No date data available
-              </div>
+              <div className="text-center py-4 text-gray-500">No date data available</div>
             )}
           </CardContent>
         </Card>
@@ -311,9 +280,7 @@ export function UsageReportPage({ token }: UsageReportPageProps) {
       {/* Original Table Section */}
       <Card>
         <CardHeader>
-          <CardTitle className="text-center">
-            Daily User Activity Report (Last 90 Days)
-          </CardTitle>
+          <CardTitle className="text-center">Daily User Activity Report (Last 90 Days)</CardTitle>
         </CardHeader>
         <CardContent>
           {usageData && usageData.length > 0 ? (
@@ -331,9 +298,7 @@ export function UsageReportPage({ token }: UsageReportPageProps) {
               <TableBody>
                 {usageData.map((row, index) => (
                   <TableRow key={index}>
-                    <TableCell>
-                      {new Date(row.date).toLocaleDateString()}
-                    </TableCell>
+                    <TableCell>{new Date(row.date).toLocaleDateString()}</TableCell>
                     <TableCell>{row.user_id}</TableCell>
                     <TableCell>{row.user_role}</TableCell>
                     <TableCell>{row.creations}</TableCell>

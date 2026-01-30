@@ -1,10 +1,10 @@
 /**
  * Streaming CSV Parser Service
- * 
+ *
  * A dedicated service for processing CSV files using streaming to maintain
  * constant memory usage regardless of file size. Supports batch database
  * inserts, progress reporting, and comprehensive error handling.
- * 
+ *
  * Key Features:
  * - Line-by-line streaming (constant memory)
  * - Batch accumulation (100 rows per batch)
@@ -15,11 +15,11 @@
  * - Duplicate SKU detection
  */
 
-import { PrismaClient } from "@prisma/client";
-import { EventEmitter } from "events";
-import { parse, Parser } from "csv-parse";
-import * as fs from "fs";
-import { getDefaultDatabaseClient } from "../database/database-factory";
+import { PrismaClient } from '@prisma/client';
+import { EventEmitter } from 'events';
+import { parse } from 'csv-parse';
+import * as fs from 'fs';
+import { getDefaultDatabaseClient } from '../database/database-factory';
 
 // ============================================================================
 // Types & Interfaces
@@ -80,10 +80,52 @@ export interface ProgressEvent {
 
 // Column name alternatives for flexible header matching
 const COLUMN_ALTERNATIVES = {
-  sku: ['SKU', 'Item Code', 'Reorder Number', 'Product Code', 'Item Number', 'sku', 'item_code', 'product_code'],
-  name: ['Name', 'Item Description', 'Product Name', 'Description', 'Item Name', 'name', 'description', 'product_name'],
-  barcode: ['Barcode', 'Alias', 'EAN', 'UPC', 'GTIN', 'Product Barcode', 'Barcode Number', 'barcode', 'ean', 'upc'],
-  cost: ['Cost', 'Cost Price', 'Unit Cost', 'Cost ex', 'Price', 'Unit Price', 'Cost inc', 'Selling Price', 'Retail Price', 'cost', 'cost_price', 'price']
+  sku: [
+    'SKU',
+    'Item Code',
+    'Reorder Number',
+    'Product Code',
+    'Item Number',
+    'sku',
+    'item_code',
+    'product_code',
+  ],
+  name: [
+    'Name',
+    'Item Description',
+    'Product Name',
+    'Description',
+    'Item Name',
+    'name',
+    'description',
+    'product_name',
+  ],
+  barcode: [
+    'Barcode',
+    'Alias',
+    'EAN',
+    'UPC',
+    'GTIN',
+    'Product Barcode',
+    'Barcode Number',
+    'barcode',
+    'ean',
+    'upc',
+  ],
+  cost: [
+    'Cost',
+    'Cost Price',
+    'Unit Cost',
+    'Cost ex',
+    'Price',
+    'Unit Price',
+    'Cost inc',
+    'Selling Price',
+    'Retail Price',
+    'cost',
+    'cost_price',
+    'price',
+  ],
 };
 
 // Characters that could indicate CSV injection attempts
@@ -109,7 +151,7 @@ export class CSVParserService extends EventEmitter {
       batchSize: options.batchSize ?? 100,
       progressInterval: options.progressInterval ?? 1000,
       skipInvalidRows: options.skipInvalidRows ?? true,
-      maxFileSize: options.maxFileSize ?? 10 * 1024 * 1024 // 10MB
+      maxFileSize: options.maxFileSize ?? 10 * 1024 * 1024, // 10MB
     };
   }
 
@@ -120,7 +162,7 @@ export class CSVParserService extends EventEmitter {
    */
   async processFile(filePath: string): Promise<CSVParseResult> {
     const startTime = Date.now();
-    
+
     // Validate file exists and check size
     await this.validateFile(filePath);
 
@@ -130,12 +172,12 @@ export class CSVParserService extends EventEmitter {
       skipped: 0,
       total: 0,
       errors: [],
-      durationMs: 0
+      durationMs: 0,
     };
 
     // Track seen SKUs for duplicate detection within this file
     const seenSkus = new Set<string>();
-    
+
     // Batch accumulator
     let batch: ParsedRow[] = [];
     let headerMap: Map<string, string> | null = null;
@@ -146,11 +188,11 @@ export class CSVParserService extends EventEmitter {
       skip_records_with_error: true,
       relax_column_count: true,
       trim: true,
-      cast: false // Keep all values as strings
+      cast: false, // Keep all values as strings
     });
 
     const fileStream = fs.createReadStream(filePath);
-    
+
     // Pipe file to parser
     fileStream.pipe(parser);
 
@@ -162,11 +204,11 @@ export class CSVParserService extends EventEmitter {
         // Initialize header mapping on first record
         if (!headerMap) {
           headerMap = this.buildHeaderMap(Object.keys(record));
-          
+
           // Validate required headers exist
           const headerValidation = this.validateHeaders(headerMap);
           if (!headerValidation.isValid) {
-            headerValidation.errors.forEach(err => result.errors.push(err));
+            headerValidation.errors.forEach((err) => result.errors.push(err));
             if (!this.options.skipInvalidRows) {
               fileStream.destroy();
               result.durationMs = Date.now() - startTime;
@@ -177,7 +219,7 @@ export class CSVParserService extends EventEmitter {
 
         // Parse and validate row
         const parseResult = this.parseRow(record, result.total, headerMap, seenSkus);
-        
+
         if (parseResult.errors.length > 0) {
           result.errors.push(...parseResult.errors);
           result.skipped++;
@@ -198,7 +240,7 @@ export class CSVParserService extends EventEmitter {
               rowNumber: result.total,
               field: 'batch',
               value: '',
-              message: `Batch insert failed: ${(error as Error).message}`
+              message: `Batch insert failed: ${(error as Error).message}`,
             });
           }
         }
@@ -220,26 +262,25 @@ export class CSVParserService extends EventEmitter {
             rowNumber: result.total,
             field: 'batch',
             value: '',
-            message: `Final batch insert failed: ${(error as Error).message}`
+            message: `Final batch insert failed: ${(error as Error).message}`,
           });
         }
       }
-
     } catch (error) {
       result.errors.push({
         rowNumber: result.total,
         field: 'parser',
         value: '',
-        message: `CSV parsing error: ${(error as Error).message}`
+        message: `CSV parsing error: ${(error as Error).message}`,
       });
     }
 
     result.durationMs = Date.now() - startTime;
-    
+
     // Emit final progress
     this.emitProgress(result);
     this.emit('complete', result);
-    
+
     return result;
   }
 
@@ -249,9 +290,11 @@ export class CSVParserService extends EventEmitter {
   private async validateFile(filePath: string): Promise<void> {
     try {
       const stats = await fs.promises.stat(filePath);
-      
+
       if (stats.size > this.options.maxFileSize) {
-        throw new Error(`File size ${stats.size} exceeds maximum allowed ${this.options.maxFileSize} bytes`);
+        throw new Error(
+          `File size ${stats.size} exceeds maximum allowed ${this.options.maxFileSize} bytes`,
+        );
       }
     } catch (error) {
       if ((error as NodeJS.ErrnoException).code === 'ENOENT') {
@@ -266,40 +309,41 @@ export class CSVParserService extends EventEmitter {
    */
   private buildHeaderMap(headers: string[]): Map<string, string> {
     const map = new Map<string, string>();
-    
+
     for (const [field, alternatives] of Object.entries(COLUMN_ALTERNATIVES)) {
       for (const alt of alternatives) {
-        const found = headers.find(h => 
-          h.toLowerCase().trim() === alt.toLowerCase()
-        );
+        const found = headers.find((h) => h.toLowerCase().trim() === alt.toLowerCase());
         if (found) {
           map.set(field, found);
           break;
         }
       }
     }
-    
+
     return map;
   }
 
   /**
    * Validate that all required headers are present
    */
-  private validateHeaders(headerMap: Map<string, string>): { isValid: boolean; errors: RowError[] } {
+  private validateHeaders(headerMap: Map<string, string>): {
+    isValid: boolean;
+    errors: RowError[];
+  } {
     const errors: RowError[] = [];
     const requiredFields = ['sku', 'name', 'barcode', 'cost'];
-    
+
     for (const field of requiredFields) {
       if (!headerMap.has(field)) {
         errors.push({
           rowNumber: 0,
           field: 'header',
           value: field,
-          message: `Missing required column: ${field}. Expected one of: ${COLUMN_ALTERNATIVES[field as keyof typeof COLUMN_ALTERNATIVES].join(', ')}`
+          message: `Missing required column: ${field}. Expected one of: ${COLUMN_ALTERNATIVES[field as keyof typeof COLUMN_ALTERNATIVES].join(', ')}`,
         });
       }
     }
-    
+
     return { isValid: errors.length === 0, errors };
   }
 
@@ -309,7 +353,7 @@ export class CSVParserService extends EventEmitter {
   private extractField(
     record: Record<string, string>,
     headerMap: Map<string, string>,
-    fieldName: string
+    fieldName: string,
   ): string | undefined {
     const header = headerMap.get(fieldName);
     return header ? record[header] : undefined;
@@ -321,14 +365,14 @@ export class CSVParserService extends EventEmitter {
   private validateRequiredField(
     value: string | undefined,
     fieldName: string,
-    rowNumber: number
+    rowNumber: number,
   ): RowError | null {
     if (!value || value.trim() === '') {
       return {
         rowNumber,
         field: fieldName,
         value: value || '',
-        message: `${fieldName.charAt(0).toUpperCase() + fieldName.slice(1)} is required and cannot be empty`
+        message: `${fieldName.charAt(0).toUpperCase() + fieldName.slice(1)} is required and cannot be empty`,
       };
     }
     return null;
@@ -341,10 +385,10 @@ export class CSVParserService extends EventEmitter {
     record: Record<string, string>,
     rowNumber: number,
     headerMap: Map<string, string>,
-    seenSkus: Set<string>
+    seenSkus: Set<string>,
   ): { row: ParsedRow | null; errors: RowError[] } {
     const errors: RowError[] = [];
-    
+
     // Extract values using header map
     const rawSku = this.extractField(record, headerMap, 'sku');
     const rawName = this.extractField(record, headerMap, 'name');
@@ -356,7 +400,7 @@ export class CSVParserService extends EventEmitter {
       { value: rawSku, name: 'sku' },
       { value: rawName, name: 'name' },
       { value: rawBarcode, name: 'barcode' },
-      { value: rawCost, name: 'cost' }
+      { value: rawCost, name: 'cost' },
     ];
 
     for (const field of requiredFields) {
@@ -383,7 +427,7 @@ export class CSVParserService extends EventEmitter {
         rowNumber,
         field: 'cost',
         value: rawCost!,
-        message: 'Invalid cost format. Expected numeric value (e.g., "12.99", "$12.99")'
+        message: 'Invalid cost format. Expected numeric value (e.g., "12.99", "$12.99")',
       });
       return { row: null, errors };
     }
@@ -394,14 +438,14 @@ export class CSVParserService extends EventEmitter {
         rowNumber,
         field: 'sku',
         value: sku,
-        message: `Duplicate SKU found in file (first occurrence will be used)`
+        message: `Duplicate SKU found in file (first occurrence will be used)`,
       });
       return { row: null, errors };
     }
 
     return {
       row: { sku, name, barcode, costPrice, rowNumber },
-      errors
+      errors,
     };
   }
 
@@ -410,7 +454,7 @@ export class CSVParserService extends EventEmitter {
    */
   private sanitizeValue(value: string): string {
     let sanitized = value;
-    
+
     // Remove or escape dangerous prefixes
     for (const prefix of CSV_INJECTION_PREFIXES) {
       if (sanitized.startsWith(prefix)) {
@@ -419,7 +463,7 @@ export class CSVParserService extends EventEmitter {
         break;
       }
     }
-    
+
     return sanitized;
   }
 
@@ -521,7 +565,7 @@ export class CSVParserService extends EventEmitter {
     cleaned = cleaned.replace(/[^\d.]/g, '');
 
     const value = parseFloat(cleaned);
-    return isNaN(value) ? null : (isNegative ? -value : value);
+    return isNaN(value) ? null : isNegative ? -value : value;
   }
 
   /**
@@ -536,11 +580,8 @@ export class CSVParserService extends EventEmitter {
         // Check if product exists by SKU or barcode
         const existing = await tx.product.findFirst({
           where: {
-            OR: [
-              { sku: row.sku },
-              { barcode: row.barcode }
-            ]
-          }
+            OR: [{ sku: row.sku }, { barcode: row.barcode }],
+          },
         });
 
         if (existing) {
@@ -551,8 +592,8 @@ export class CSVParserService extends EventEmitter {
               name: row.name,
               costPrice: row.costPrice,
               // Update barcode if it changed
-              barcode: row.barcode
-            }
+              barcode: row.barcode,
+            },
           });
           updated++;
         } else {
@@ -562,8 +603,8 @@ export class CSVParserService extends EventEmitter {
               sku: row.sku,
               name: row.name,
               barcode: row.barcode,
-              costPrice: row.costPrice
-            }
+              costPrice: row.costPrice,
+            },
           });
           imported++;
         }
@@ -580,7 +621,7 @@ export class CSVParserService extends EventEmitter {
     const event: ProgressEvent = {
       processed: result.total,
       imported: result.imported + result.updated,
-      errors: result.errors.length
+      errors: result.errors.length,
     };
     this.emit('progress', event);
   }

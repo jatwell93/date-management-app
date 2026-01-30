@@ -15,14 +15,20 @@ function extractCostValueEnhanced(costStr: string): number | null {
       // Extract the content inside the parentheses
       const insideParen = cleanedStr.substring(openParenIndex + 1, closeParenIndex);
       // Remove the parentheses and what's around them
-      cleanedStr = cleanedStr.substring(0, openParenIndex) + insideParen + cleanedStr.substring(closeParenIndex + 1);
+      cleanedStr =
+        cleanedStr.substring(0, openParenIndex) +
+        insideParen +
+        cleanedStr.substring(closeParenIndex + 1);
     }
   }
 
   // 2. Remove common currency symbols and codes (this includes currency codes like USD, EUR)
   // More comprehensive pattern to match currency symbols and codes at start or end
-  cleanedStr = cleanedStr.replace(/([A-Z]{3,4}[\s]*)|([\s]*[A-Z]{3,4})|[\s$€£¥₹₽₪₨₩₦₡₫Є₴₵₸₺₼₾₯]/gi, '');
-  
+  cleanedStr = cleanedStr.replace(
+    /([A-Z]{3,4}[\s]*)|([\s]*[A-Z]{3,4})|[\s$€£¥₹₽₪₨₩₦₡₫Є₴₵₸₺₼₾₯]/gi,
+    '',
+  );
+
   // 3. Normalize spaces (remove all spaces)
   cleanedStr = cleanedStr.trim().replace(/\s+/g, '');
 
@@ -35,9 +41,9 @@ function extractCostValueEnhanced(costStr: string): number | null {
   // 5. Count and analyze separators to determine decimal vs. thousands
   const dotCount = (cleanedStr.match(/\./g) || []).length;
   const commaCount = (cleanedStr.match(/,/g) || []).length;
-  
+
   let normalizedStr = cleanedStr;
-  
+
   if (dotCount === 0 && commaCount === 0) {
     // No separators - just digits
     normalizedStr = cleanedStr;
@@ -48,7 +54,7 @@ function extractCostValueEnhanced(costStr: string): number | null {
     // Single comma - might be European decimal or thousands separator
     const commaIndex = cleanedStr.lastIndexOf(',');
     const afterComma = cleanedStr.substring(commaIndex + 1);
-    
+
     // If after comma is 1-3 digits, it's likely a decimal separator
     if (/^\d{1,3}$/.test(afterComma)) {
       // European format: use comma as decimal point
@@ -67,7 +73,7 @@ function extractCostValueEnhanced(costStr: string): number | null {
     // Multiple separators - rightmost one is decimal separator
     const lastDotIndex = cleanedStr.lastIndexOf('.');
     const lastCommaIndex = cleanedStr.lastIndexOf(',');
-    
+
     // The rightmost separator is the decimal point
     if (lastDotIndex > lastCommaIndex) {
       // Last separator is dot: US format (dot is decimal, commas are thousands)
@@ -94,11 +100,11 @@ function extractCostValueEnhanced(costStr: string): number | null {
 
   // 6. Final cleanup to ensure only digits and a single dot remain
   normalizedStr = normalizedStr.replace(/[^\d.]/g, '');
-  
+
   // Ensure there's only one decimal point (in case multiple were introduced)
   const parts = normalizedStr.split('.');
   if (parts.length > 2) {
-    // If there are multiple decimal points, join all but the last part with no separator, 
+    // If there are multiple decimal points, join all but the last part with no separator,
     // then add the last part as decimal
     const integerPart = parts.slice(0, -1).join('');
     const decimalPart = parts[parts.length - 1];
@@ -107,7 +113,7 @@ function extractCostValueEnhanced(costStr: string): number | null {
 
   // Parse the value
   const value = parseFloat(normalizedStr);
-  
+
   if (isNaN(value)) {
     return null;
   }
@@ -118,46 +124,46 @@ function extractCostValueEnhanced(costStr: string): number | null {
 
 // Test cases with expected results
 const testCases = [
-  { input: "12.34", expected: 12.34 },
-  { input: "100", expected: 100 },
-  { input: "0.99", expected: 0.99 },
-  { input: "1000.00", expected: 1000.00 },
-  { input: "$12.34", expected: 12.34 },
-  { input: "€12.34", expected: 12.34 },
-  { input: "£12.34", expected: 12.34 },
-  { input: "¥1234", expected: 1234 },
-  { input: "¢12.34", expected: 12.34 },
-  { input: "₹12.34", expected: 12.34 },
-  { input: "₽12.34", expected: 12.34 },
-  { input: "₪12.34", expected: 12.34 },
-  { input: "₨12.34", expected: 12.34 },
-  { input: "₩1234", expected: 1234 },
-  { input: "₦12.34", expected: 12.34 },
-  { input: "₡12.34", expected: 12.34 },
-  { input: "(12.34)", expected: -12.34 },
-  { input: "$(12.34)", expected: -12.34 },
-  { input: "1,234.56", expected: 1234.56 },
-  { input: "1.234,56", expected: 1234.56 },
-  { input: "EUR 1 234,56", expected: 1234.56 },
-  { input: "12.34.56", expected: 1234.56 },  // Problem: should be 1234.56 (rightmost dot is decimal)
-  { input: "¥1,234", expected: 1234 },
-  { input: "1,000", expected: 1000 },
-  { input: "1.000", expected: 1000 },
-  { input: "-12.34", expected: -12.34 },
-  { input: " 12.34 ", expected: 12.34 },
-  { input: "12,34", expected: 12.34 },
-  { input: "1234,56", expected: 1234.56 },
-  { input: "12.34.567", expected: 1234.567 },
-  { input: "12,34,56", expected: 1234.56 },
-  { input: "$ 1,234.56", expected: 1234.56 },
-  { input: "USD 1,234.56", expected: 1234.56 },
-  { input: "1 234.56", expected: 1234.56 },  // space as thousands separator
-  { input: "1 234,56", expected: 1234.56 },  // space and comma
-  { input: "CAD $1,234.56", expected: 1234.56 },
-  { input: "(CAD $1,234.56)", expected: -1234.56 },
+  { input: '12.34', expected: 12.34 },
+  { input: '100', expected: 100 },
+  { input: '0.99', expected: 0.99 },
+  { input: '1000.00', expected: 1000.0 },
+  { input: '$12.34', expected: 12.34 },
+  { input: '€12.34', expected: 12.34 },
+  { input: '£12.34', expected: 12.34 },
+  { input: '¥1234', expected: 1234 },
+  { input: '¢12.34', expected: 12.34 },
+  { input: '₹12.34', expected: 12.34 },
+  { input: '₽12.34', expected: 12.34 },
+  { input: '₪12.34', expected: 12.34 },
+  { input: '₨12.34', expected: 12.34 },
+  { input: '₩1234', expected: 1234 },
+  { input: '₦12.34', expected: 12.34 },
+  { input: '₡12.34', expected: 12.34 },
+  { input: '(12.34)', expected: -12.34 },
+  { input: '$(12.34)', expected: -12.34 },
+  { input: '1,234.56', expected: 1234.56 },
+  { input: '1.234,56', expected: 1234.56 },
+  { input: 'EUR 1 234,56', expected: 1234.56 },
+  { input: '12.34.56', expected: 1234.56 }, // Problem: should be 1234.56 (rightmost dot is decimal)
+  { input: '¥1,234', expected: 1234 },
+  { input: '1,000', expected: 1000 },
+  { input: '1.000', expected: 1000 },
+  { input: '-12.34', expected: -12.34 },
+  { input: ' 12.34 ', expected: 12.34 },
+  { input: '12,34', expected: 12.34 },
+  { input: '1234,56', expected: 1234.56 },
+  { input: '12.34.567', expected: 1234.567 },
+  { input: '12,34,56', expected: 1234.56 },
+  { input: '$ 1,234.56', expected: 1234.56 },
+  { input: 'USD 1,234.56', expected: 1234.56 },
+  { input: '1 234.56', expected: 1234.56 }, // space as thousands separator
+  { input: '1 234,56', expected: 1234.56 }, // space and comma
+  { input: 'CAD $1,234.56', expected: 1234.56 },
+  { input: '(CAD $1,234.56)', expected: -1234.56 },
 ];
 
-console.log("Testing extractCostValueEnhanced function:\n");
+console.log('Testing extractCostValueEnhanced function:\n');
 
 let passedTests = 0;
 let totalTests = testCases.length;
@@ -165,11 +171,11 @@ let totalTests = testCases.length;
 for (const testCase of testCases) {
   const result = extractCostValueEnhanced(testCase.input);
   const passed = result === testCase.expected;
-  
+
   console.log(
-    `Input: "${testCase.input}" | Expected: ${testCase.expected} | Got: ${result} | ${passed ? 'PASS' : 'FAIL'}`
+    `Input: "${testCase.input}" | Expected: ${testCase.expected} | Got: ${result} | ${passed ? 'PASS' : 'FAIL'}`,
   );
-  
+
   if (passed) {
     passedTests++;
   }
@@ -178,9 +184,9 @@ for (const testCase of testCases) {
 console.log(`\nResults: ${passedTests}/${totalTests} tests passed`);
 
 if (passedTests !== totalTests) {
-  console.log("\nSome tests failed. Please review the implementation.");
+  console.log('\nSome tests failed. Please review the implementation.');
   process.exit(1);
 } else {
-  console.log("\nAll tests passed!");
+  console.log('\nAll tests passed!');
   process.exit(0);
 }

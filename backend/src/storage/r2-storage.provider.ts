@@ -70,7 +70,7 @@ export class R2StorageProvider implements StorageProvider {
     } catch (error) {
       throw new StorageProviderError(
         `Failed to upload file to R2: ${key}`,
-        error instanceof Error ? error : undefined
+        error instanceof Error ? error : undefined,
       );
     }
   }
@@ -105,7 +105,7 @@ export class R2StorageProvider implements StorageProvider {
       }
       throw new StorageProviderError(
         `Failed to download file from R2: ${key}`,
-        error instanceof Error ? error : undefined
+        error instanceof Error ? error : undefined,
       );
     }
   }
@@ -130,7 +130,7 @@ export class R2StorageProvider implements StorageProvider {
       }
       throw new StorageProviderError(
         `Failed to delete file from R2: ${key}`,
-        error instanceof Error ? error : undefined
+        error instanceof Error ? error : undefined,
       );
     }
   }
@@ -152,7 +152,7 @@ export class R2StorageProvider implements StorageProvider {
       // Any other error is unexpected
       throw new StorageProviderError(
         `Failed to check if file exists in R2: ${key}`,
-        error instanceof Error ? error : undefined
+        error instanceof Error ? error : undefined,
       );
     }
   }
@@ -179,7 +179,7 @@ export class R2StorageProvider implements StorageProvider {
       }
       throw new StorageProviderError(
         `Failed to get metadata from R2: ${key}`,
-        error instanceof Error ? error : undefined
+        error instanceof Error ? error : undefined,
       );
     }
   }
@@ -196,7 +196,7 @@ export class R2StorageProvider implements StorageProvider {
     } catch (error) {
       throw new StorageProviderError(
         `Failed to generate presigned URL for: ${key}`,
-        error instanceof Error ? error : undefined
+        error instanceof Error ? error : undefined,
       );
     }
   }
@@ -216,7 +216,7 @@ export class R2StorageProvider implements StorageProvider {
     } catch (error) {
       throw new StorageProviderError(
         `Failed to generate presigned download URL for: ${key}`,
-        error instanceof Error ? error : undefined
+        error instanceof Error ? error : undefined,
       );
     }
   }

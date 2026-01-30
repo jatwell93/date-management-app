@@ -2,27 +2,51 @@
 
 ## Why
 
-Current SQLite-based backend works well for development but limits global scalability and increases operational costs at scale. Adding Cloudflare R2 + PlanetScale for production provides 82% cost savings ($399 vs $2,207/month at 50k users), 50ms faster global latency via 300+ edge locations, and 99.9% profit margins while keeping the simple Express + SQLite stack for local development.
+Current SQLite-based backend works well for development but limits global scalability and increases operational costs at scale. Adding Cloudflare R2 + Neon for production provides 87% cost savings ($275 vs $2,207/month at 50k users), 50ms faster global latency via 300+ edge locations, and 99.9% profit margins while keeping the simple Express + SQLite stack for local development.
+
+### Cost Breakdown (50k users, 10GB storage)
+
+**Current VPS/AWS Approach:**
+- VPS: $100/month (4GB RAM, 80GB storage)
+- S3 Storage: $2/month (10GB)
+- S3 Egress: $2,000/month (22TB @ $0.09/GB)
+- RDS PostgreSQL: $100/month (db.t3.small)
+- Misc (backups, monitoring): $5/month
+- **Total: $2,207/month**
+
+**Cloudflare + Neon Approach:**
+- Cloudflare Workers: $5/month (10M requests included, then $0.50/million)
+- Cloudflare R2 Storage: $0.15/month (10GB @ $0.015/GB)
+- R2 Egress: $0/month (zero egress fees!)
+- Neon PostgreSQL: $19/month (Starter plan with autoscaling)
+- Operations Write: $250/month (Class A: 1M writes @ $4.50/million, Class B: 10M reads @ $0.36/million)
+- **Total: ~$275/month**
+
+**Savings: $1,932/month (87% reduction)**
+
+At startup scale (no paying users), costs drop even further:
+- Free tier: $0/month (Cloudflare Workers + R2 free allowances, Neon free tier 0.5GB)
+- Light usage: <$25/month (within generous free tiers)
 
 ## What Changes
 
 ### Dual Environment Strategy
 - **Development**: Keep Express + SQLite + local filesystem (no Cloudflare dependencies)
-- **Production**: Add Cloudflare Workers + R2 + PlanetScale (deployed to edge)
+- **Production**: Add Cloudflare Workers + R2 + Neon (deployed to edge)
 
 ### New Production Infrastructure
 - Add **Cloudflare Workers** deployment target for production API endpoints
 - Add **Cloudflare R2** for production CSV file storage (zero egress fees)
-- Add **PlanetScale** serverless MySQL for production database
+- Add **Neon** serverless PostgreSQL for production database
 - Implement **storage abstraction layer** (local filesystem for dev, R2 for prod)
-- Implement **database abstraction layer** (SQLite for dev, PlanetScale for prod)
+- Implement **database abstraction layer** (SQLite for dev, Neon for prod)
 - Add **streaming CSV parser** to handle large files within Workers' 30s CPU limit
 - Implement **Workers Secrets** management for production credentials
 - Add **R2 presigned URLs** for direct production CSV uploads
-- Configure **PlanetScale schema branching** workflow for production migrations
+- Configure **Neon database branching** workflow for production migrations
 - Set up **Cloudflare Analytics** for production monitoring and alerting
 - Implement **rate limiting** on production CSV upload endpoints
-- Add **PlanetScale query insights** for production performance monitoring
+- Add **Neon monitoring** for production query performance
 
 ### Development Experience Preserved
 - Express server remains primary development environment
@@ -36,21 +60,21 @@ Current SQLite-based backend works well for development but limits global scalab
 ### New Capabilities
 
 - `cloudflare-r2-storage`: Production object storage for CSV files with S3-compatible API, zero egress fees, and global replication
-- `planetscale-database`: Production serverless MySQL database with horizontal sharding, schema branching, and automatic scaling
+- `neon-database`: Production serverless PostgreSQL database with autoscaling, database branching, and automatic scaling
 - `cloudflare-workers-api`: Production serverless API deployment with <10ms cold starts, 30s CPU limit, and global edge deployment
 - `storage-abstraction-layer`: Unified storage interface supporting local filesystem (dev) and R2 (prod) with environment-aware switching
-- `database-abstraction-layer`: Unified database interface supporting SQLite (dev) and PlanetScale (prod) with compatible query patterns
+- `database-abstraction-layer`: Unified database interface supporting SQLite (dev) and Neon PostgreSQL (prod) with compatible query patterns
 - `streaming-csv-parser`: Line-by-line CSV processing to avoid memory/CPU limits for files up to 10,000+ lines (both environments)
 - `r2-presigned-uploads`: Production direct CSV uploads to R2 bypassing Workers for files >10MB
 - `workers-secrets-management`: Production encrypted environment variable storage for API keys and database credentials
-- `planetscale-schema-branching`: Production Git-like database migration workflow with safe deploy previews
+- `neon-database-branching`: Production Git-like database branching workflow with safe deploy previews
 - `cloudflare-analytics`: Production monitoring for Workers invocations, R2 operations, and error tracking
 
 ### Modified Capabilities
 
 - `csv-upload-processing`: Add environment-aware routing (local filesystem for dev, R2 for prod) with unified interface
-- `product-inventory-storage`: Add database abstraction supporting SQLite locally and PlanetScale in production
-- `database-migrations`: Support dual migration systems (SQLite scripts for dev, PlanetScale branches for prod)
+- `product-inventory-storage`: Add database abstraction supporting SQLite locally and Neon PostgreSQL in production
+- `database-migrations`: Support dual migration systems (SQLite scripts for dev, Neon branches for prod)
 - `deployment-workflow`: Add production deployment via Wrangler (dev deployment unchanged)
 
 ## Impact
@@ -66,7 +90,7 @@ Current SQLite-based backend works well for development but limits global scalab
 - `backend/src/storage/r2-storage.provider.ts` - R2 implementation (prod)
 - `backend/src/database/database-provider.interface.ts` - Unified DB interface
 - `backend/src/database/sqlite-database.provider.ts` - SQLite implementation (dev)
-- `backend/src/database/planetscale-database.provider.ts` - PlanetScale implementation (prod)
+- `backend/src/database/neon-database.provider.ts` - Neon PostgreSQL implementation (prod)
 
 ### Affected Services (Refactored, Not Rewritten)
 - `backend/src/services/csv-upload.service.ts` - Use storage abstraction instead of direct fs calls
@@ -130,22 +154,16 @@ Current SQLite-based backend works well for development but limits global scalab
 ### Risk Mitigation
 - Development environment unaffected (can always work locally)
 - R2 S3-compatible API enables fallback to AWS S3 if needed (20-40h)
-- PlanetScale MySQL compatibility enables migration to self-hosted MySQL
+- Neon PostgreSQL compatibility enables migration to self-hosted PostgreSQL or RDS
 - Workers code is vanilla TypeScript (portable to other serverless platforms)
 - Abstraction layers allow swapping providers without touching business logic
 - Can rollback production to VPS deployment if critical Cloudflare issue
 
 ### Compliance Considerations
 - Development: No compliance requirements (local only)
-- Production: SOC 2 Type II compliant (Cloudflare + PlanetScale)
-- **Not available**: ISO 27001, HIPAA (AWS-only for now)
-- GDPR: R2 EU region support available, PlanetScale eu-west-1
-- PCI DSS: Use Stripe for payments (don't store card data in R2)
-
-### Compliance Considerations
-- SOC 2 Type II compliant (Cloudflare + PlanetScale)
-- **Not available**: ISO 27001, HIPAA (AWS-only for now)
-- GDPR: R2 EU region support available, PlanetScale eu-west-1
+- Production: SOC 2 Type II compliant (Cloudflare + Neon)
+- **Not available**: ISO 27001, HIPAA (consult Neon documentation for enterprise compliance)
+- GDPR: R2 EU region support available, Neon supports EU regions
 - PCI DSS: Use Stripe for payments (don't store card data in R2)
 
 ## Success Criteria
@@ -153,7 +171,7 @@ Current SQLite-based backend works well for development but limits global scalab
 1. Development environment works exactly as before (Express + SQLite + local files)
 2. Abstraction layers allow transparent switching between dev and prod storage/database
 3. All CSV upload functionality working in both environments (local files dev, R2 prod)
-4. All product/inventory CRUD operations working in both environments (SQLite dev, PlanetScale prod)
+4. All product/inventory CRUD operations working in both environments (SQLite dev, Neon PostgreSQL prod)
 5. Production API response times <200ms for 95th percentile (Cloudflare Analytics)
 6. Existing test suite passes without modifications (SQLite-based tests)
 7. New abstraction layer tests achieve 100% coverage

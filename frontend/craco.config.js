@@ -1,10 +1,9 @@
-﻿const path = require("path");
-const BundleAnalyzerPlugin = require("webpack-bundle-analyzer").BundleAnalyzerPlugin;
+﻿const BundleAnalyzerPlugin = require('webpack-bundle-analyzer').BundleAnalyzerPlugin;
 
 module.exports = {
   style: {
     postcss: {
-      plugins: [require("tailwindcss"), require("autoprefixer")],
+      plugins: [require('tailwindcss'), require('autoprefixer')],
     },
   },
   webpack: {

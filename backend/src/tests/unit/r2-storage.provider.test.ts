@@ -42,9 +42,12 @@ describe('R2StorageProvider', () => {
     jest.clearAllMocks();
 
     // Setup S3Client mock
-    MockS3Client.mockImplementation(() => ({
-      send: mockSend,
-    }) as unknown as S3Client);
+    MockS3Client.mockImplementation(
+      () =>
+        ({
+          send: mockSend,
+        }) as unknown as S3Client,
+    );
 
     provider = new R2StorageProvider(config);
   });
@@ -82,9 +85,7 @@ describe('R2StorageProvider', () => {
       const data = Buffer.alloc(2 * 1024 * 1024); // 2MB
       const contentType = 'text/plain';
 
-      await expect(provider.upload(key, data, contentType)).rejects.toThrow(
-        FileSizeLimitError
-      );
+      await expect(provider.upload(key, data, contentType)).rejects.toThrow(FileSizeLimitError);
       expect(mockSend).not.toHaveBeenCalled();
     });
 
@@ -95,9 +96,7 @@ describe('R2StorageProvider', () => {
 
       mockSend.mockRejectedValueOnce(new Error('R2 connection failed'));
 
-      await expect(provider.upload(key, data, contentType)).rejects.toThrow(
-        StorageProviderError
-      );
+      await expect(provider.upload(key, data, contentType)).rejects.toThrow(StorageProviderError);
     });
   });
 
@@ -273,7 +272,7 @@ describe('R2StorageProvider', () => {
       expect(mockGetSignedUrl).toHaveBeenCalledWith(
         expect.any(Object), // S3Client instance
         expect.any(PutObjectCommand),
-        { expiresIn }
+        { expiresIn },
       );
     });
 
@@ -283,9 +282,9 @@ describe('R2StorageProvider', () => {
 
       mockGetSignedUrl.mockRejectedValueOnce(new Error('Signing failed'));
 
-      await expect(
-        provider.getPresignedUploadUrl(key, expiresIn)
-      ).rejects.toThrow(StorageProviderError);
+      await expect(provider.getPresignedUploadUrl(key, expiresIn)).rejects.toThrow(
+        StorageProviderError,
+      );
     });
   });
 
@@ -303,7 +302,7 @@ describe('R2StorageProvider', () => {
       expect(mockGetSignedUrl).toHaveBeenCalledWith(
         expect.any(Object),
         expect.any(GetObjectCommand),
-        { expiresIn }
+        { expiresIn },
       );
     });
   });

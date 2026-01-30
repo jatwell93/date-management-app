@@ -27,9 +27,9 @@ The application currently runs as a Node.js/Express server with SQLite database 
 
 **Goals:**
 - Implement provider pattern for storage and database access with environment-based switching
-- Deploy production infrastructure on Cloudflare Workers + R2 + PlanetScale
+- Deploy production infrastructure on Cloudflare Workers + R2 + Neon PostgreSQL
 - Maintain 100% backward compatibility with existing development workflow
-- Achieve 82% cost reduction compared to traditional VPS/cloud deployment at scale
+- Achieve 87% cost reduction compared to traditional VPS/cloud deployment at scale
 - Enable zero-downtime deployments with automatic global replication
 - Reduce operational burden from 5-7 hours/month to 3-4 hours/month
 - Support streaming CSV processing for files up to 10MB (10,000+ lines)
@@ -40,7 +40,7 @@ The application currently runs as a Node.js/Express server with SQLite database 
 - Rewriting existing business logic (only add abstraction layer)
 - Supporting multiple production deployment targets simultaneously (Cloudflare only initially)
 - Implementing advanced features like real-time collaboration or WebSockets (future work)
-- Migrating existing SQLite data to PlanetScale (fresh start for production)
+- Migrating existing SQLite data to Neon (fresh start for production)
 - Supporting offline-first or edge computing for end users (server-side only)
 
 ## Decisions
@@ -186,21 +186,22 @@ export async function processCSVStream(
 }
 ```
 
-### Decision 4: PlanetScale with Prisma ORM
+### Decision 4: Neon PostgreSQL with Prisma ORM
 
 **Choice**: Use Prisma as ORM layer with connection string switching
 
 **Alternatives Considered**:
 1. **Knex.js query builder**: More flexible but lose type safety
-2. **Raw SQL with mysql2**: Maximum control but no type safety, harder migrations
+2. **Raw SQL with pg**: Maximum control but no type safety, harder migrations
 3. **TypeORM**: Similar to Prisma but less serverless-optimized
 
 **Rationale**:
 - Prisma provides excellent TypeScript type generation from schema
 - Connection pooling built-in (important for serverless)
-- Schema migrations work with both SQLite and MySQL
-- `@prisma/adapter-planetscale` handles serverless connection optimization
+- Schema migrations work with both SQLite and PostgreSQL
+- Neon's serverless driver optimized for edge/serverless environments
 - Unified API means minimal code changes between environments
+- PostgreSQL is Prisma's best-supported database (better than MySQL)
 
 **Implementation**:
 ```typescript
@@ -214,13 +215,12 @@ export function createDatabaseClient(): PrismaClient {
     return new PrismaClient({
       datasources: {
         db: {
-          url: process.env.DATABASE_URL // PlanetScale connection string
+          url: process.env.DATABASE_URL // Neon connection string
         }
       },
       log: ['error'],
-      // PlanetScale-specific optimizations
-      engineType: 'binary',
-      adapter: 'planetscale'
+      // Neon-specific optimizations for serverless
+      engineType: 'binary'
     });
   }
   
@@ -298,22 +298,22 @@ export async function initiateUpload(req: Request, res: Response) {
 **Choice**: Maintain separate migration paths with Prisma schema as source of truth
 
 **Alternatives Considered**:
-1. **Single migration path**: Doesn't work (SQLite and MySQL have different syntax)
-2. **Generate MySQL from SQLite schema**: Lossy conversion, missing MySQL-specific optimizations
+1. **Single migration path**: Doesn't work (SQLite and PostgreSQL have different syntax)
+2. **Generate PostgreSQL from SQLite schema**: Lossy conversion, missing PostgreSQL-specific optimizations
 3. **Dual schema files**: Redundant, error-prone to keep in sync
 
 **Rationale**:
-- Prisma schema language is database-agnostic (supports both SQLite and MySQL)
+- Prisma schema language is database-agnostic (supports both SQLite and PostgreSQL)
 - `prisma migrate dev` generates SQLite migrations for development
-- `prisma migrate deploy` works with PlanetScale branches for production
+- `prisma migrate deploy` works with Neon branches for production
 - Schema stays in sync automatically through single source of truth
-- PlanetScale schema branching provides safe preview environment for testing
+- Neon database branching provides safe preview environment for testing (Git-like workflow)
 
 **Implementation**:
 ```prisma
 // backend/prisma/schema.prisma
 datasource db {
-  provider = "sqlite" // Changed to "mysql" in production
+  provider = "sqlite" // Changed to "postgresql" in production
   url      = env("DATABASE_URL")
 }
 
@@ -341,15 +341,14 @@ Development workflow:
 # Development: SQLite migrations
 npx prisma migrate dev --name add_notes_field
 
-# Production: Create PlanetScale branch
-pscale branch create main add_notes_field
-pscale connect main add_notes_field --port 3309
+# Production: Create Neon branch
+neon branches create --name add_notes_field
 
 # Apply migrations to branch
-DATABASE_URL="mysql://..." npx prisma migrate deploy
+DATABASE_URL="postgresql://..." npx prisma migrate deploy
 
-# Create deploy request
-pscale deploy-request create main add_notes_field
+# Test on branch, then merge to main
+neon branches merge add_notes_field
 ```
 
 ## Risks / Trade-offs
@@ -365,17 +364,17 @@ pscale deploy-request create main add_notes_field
 
 **Trade-off Accepted**: Single-cloud dependency is acceptable given Cloudflare's 99.99% uptime SLA and significant cost savings
 
-### Risk 2: PlanetScale Query Limit Exhaustion
-**Risk**: Exceeding 1B row reads/month on Scaler plan requires expensive upgrade ($39 → $179/month)
+### Risk 2: Neon Usage Limits on Free/Starter Tier
+**Risk**: Exceeding Neon free tier limits (0.5GB storage, 3GB data transfer) or paid tier compute hours
 
 **Mitigation**:
 - Implement query optimization from day 1 (indexes on expiry_date, store_area)
-- Add read query caching with Cloudflare Workers KV (10-50x reduction in DB queries)
-- Monitor row reads via PlanetScale Insights dashboard weekly
-- Set up alerts at 80% of monthly limit (800M rows)
+- Monitor database size via Neon dashboard weekly
+- Set up usage alerts at 80% of storage/compute limits
 - Batch operations where possible (bulk inserts, single query for multiple items)
+- Neon's autoscaling means only pay for actual compute usage (no idle costs)
 
-**Trade-off Accepted**: Query limits force good database design practices; monitoring prevents surprise costs
+**Trade-off Accepted**: Usage-based pricing ensures cost efficiency; monitoring prevents surprise costs
 
 ### Risk 3: Workers CPU Time Limit for Large CSVs
 **Risk**: CSV files >10MB may timeout during processing (30s limit on paid Workers plan)
@@ -389,14 +388,16 @@ pscale deploy-request create main add_notes_field
 **Trade-off Accepted**: 10MB limit covers 99% of use cases (10,000 lines); power users can split files
 
 ### Risk 4: Development/Production Environment Drift
-**Risk**: SQLite and MySQL have subtle differences that could cause production-only bugs
+**Risk**: SQLite and PostgreSQL have subtle differences that could cause production-only bugs
 
 **Mitigation**:
 - Use Prisma ORM to abstract database-specific syntax
-- Run integration tests against both SQLite and PlanetScale in CI pipeline
+- Run integration tests against both SQLite and Neon PostgreSQL in CI pipeline
 - Document known differences in `docs/database-compatibility.md`
-- Require production testing in staging environment (PlanetScale dev branch) before deploy
-- Use PlanetScale's schema diff tool to catch incompatibilities
+- Require production testing in staging environment (Neon dev branch) before deploy
+- Use Neon's branching to test migrations in isolation before merging
+
+**Trade-off Accepted**: Prisma abstracts most differences; PostgreSQL and SQLite are more similar than MySQL
 
 **Trade-off Accepted**: Rare edge cases may appear, but abstraction layer minimizes risk
 
@@ -430,7 +431,7 @@ pscale deploy-request create main add_notes_field
 **Mitigation**:
 - Abstraction layers allow swapping providers without touching business logic
 - R2 uses S3-compatible API (migrate to AWS S3 in ~20 hours)
-- PlanetScale uses standard MySQL (migrate to RDS/self-hosted in ~20 hours)
+- Neon uses standard PostgreSQL (migrate to RDS/self-hosted in ~20 hours)
 - Workers code is vanilla TypeScript (adapt to Vercel/Netlify in ~40 hours)
 - Document migration paths in `docs/disaster-recovery.md`
 
@@ -467,11 +468,11 @@ pscale deploy-request create main add_notes_field
 ### Phase 2: Cloudflare Infrastructure Setup (Week 2-3, ~20 hours)
 
 **Tasks**:
-1. Provision Cloudflare resources
+1. Provision Cloudflare and Neon resources
    - Create R2 bucket via Cloudflare dashboard
    - Generate R2 API tokens with appropriate scopes
-   - Set up PlanetScale database (Scaler plan, $39/month)
-   - Create PlanetScale service token for CI/CD
+   - Set up Neon database (Starter plan, $19/month or free tier initially)
+   - Create Neon API key for programmatic access
 
 2. Configure Workers project
    - Install Wrangler CLI (`npm install -g wrangler`)
@@ -487,7 +488,7 @@ pscale deploy-request create main add_notes_field
 
 **Validation**:
 - R2 bucket accessible via S3 SDK
-- PlanetScale connection works from local machine
+- Neon PostgreSQL connection works from local machine
 - Workers deploy successfully with `wrangler publish`
 - Health check endpoint returns 200 OK
 
@@ -554,14 +555,14 @@ pscale deploy-request create main add_notes_field
 
 2. Set up production monitoring
    - Configure Cloudflare Analytics for Workers
-   - Enable PlanetScale Query Insights
+   - Enable Neon monitoring dashboard
    - Set up alerts for error rate >1%
    - Add custom metrics for CSV processing time
 
 3. Load testing
    - Simulate 1000 concurrent CSV uploads
    - Verify Workers auto-scaling handles load
-   - Check PlanetScale query performance under load
+   - Check Neon query performance under load
    - Measure 95th percentile response times
 
 **Validation**:
@@ -602,7 +603,7 @@ pscale deploy-request create main add_notes_field
 If critical issues arise post-deployment:
 
 1. **Immediate**: Revert DNS to old VPS server (5 minutes downtime)
-2. **Data**: Export PlanetScale data and import to SQLite if needed (4-8 hours)
+2. **Data**: Export Neon data and import to SQLite if needed (4-8 hours)
 3. **Code**: Git revert abstraction layer commits (2 hours to test)
 4. **Lessons**: Document issues in post-mortem, create mitigation plan
 
@@ -617,8 +618,8 @@ If critical issues arise post-deployment:
 1. **Workers Bundle Size**: Will Express adapter + existing routes fit within 1MB Workers script limit?
    - **Resolution**: Measure bundle size after Phase 3, consider code splitting if >800KB
 
-2. **PlanetScale Connection Limits**: How many concurrent connections can Scaler plan handle?
-   - **Resolution**: Contact PlanetScale support for clarification, load test in Phase 5
+2. **Neon Connection Pooling**: How should we configure connection pooling for serverless environment?
+   - **Resolution**: Use Neon's serverless driver with built-in connection pooling, load test in Phase 5
 
 3. **CORS Configuration**: Should we allow uploads from any origin or restrict to production domain?
    - **Resolution**: Start with production domain only, add CORS allowlist if needed

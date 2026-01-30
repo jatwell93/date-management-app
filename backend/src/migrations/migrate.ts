@@ -4,7 +4,7 @@ import { Logger } from '../utils/logger';
 // Run migrations using the MigrationService
 export async function runMigrations(): Promise<void> {
   const migrationService = new MigrationService();
-  
+
   try {
     await migrationService.runMigrations();
   } catch (error) {

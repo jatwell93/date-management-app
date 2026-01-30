@@ -1,4 +1,3 @@
-
 import { Request, Response } from 'express';
 import { InventoryService } from '../services/inventory.service';
 import { Logger } from '../utils/logger';
@@ -17,12 +16,12 @@ export const logTransaction = async (req: Request, res: Response): Promise<void>
   } catch (error) {
     Logger.error('Error logging transaction', {
       error: error instanceof Error ? error.message : 'Unknown error',
-      stack: error instanceof Error ? error.stack : undefined
+      stack: error instanceof Error ? error.stack : undefined,
     });
 
     res.status(500).json({
       error: 'Failed to log transaction',
-      message: error instanceof Error ? error.message : 'Unknown error occurred'
+      message: error instanceof Error ? error.message : 'Unknown error occurred',
     });
   }
 };

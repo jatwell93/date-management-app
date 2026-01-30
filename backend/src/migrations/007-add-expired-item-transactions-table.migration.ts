@@ -1,4 +1,4 @@
-import Database, { type Database as DatabaseType } from 'better-sqlite3';
+import { type Database as DatabaseType } from 'better-sqlite3';
 import { Migration } from './migration.service';
 
 /**
@@ -37,5 +37,5 @@ export const expiredItemTransactionsMigration: Migration = {
     db.exec(`
       DROP TABLE IF EXISTS expired_item_transactions;
     `);
-  }
+  },
 };

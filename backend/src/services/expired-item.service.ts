@@ -1,13 +1,5 @@
-import { getDb, releaseDb } from "../database";
-import { InventoryItem } from "../models/inventory-item.model";
-import { Product } from "../models/product.model";
-import { StoreArea } from "../models/store-area.model";
-import { User } from "../models/user.model";
-import { AuditLog } from "../models/audit-log.model";
-import { InventoryService } from "./inventory.service";
-import { ProductService } from "./product.service";
-import { StoreAreaService } from "./store-area.service";
-import { Logger } from "../utils/logger";
+import { getDb, releaseDb } from '../database';
+import { InventoryItem } from '../models/inventory-item.model';
 
 export interface ExpiredItem {
   id: number;
@@ -31,10 +23,6 @@ export interface ExpiredItemTransaction {
 }
 
 export class ExpiredItemService {
-  private inventoryService = new InventoryService();
-  private productService = new ProductService();
-  private storeAreaService = new StoreAreaService();
-
   /**
    * Get all expired items
    */
@@ -60,7 +48,7 @@ export class ExpiredItemService {
         GROUP BY ii.product_id, ii.location_id, p.cost_price
         ORDER BY ii.expiry_date ASC
       `;
-      
+
       const items = db.prepare(query).all() as ExpiredItem[];
       return items;
     } finally {
@@ -75,7 +63,7 @@ export class ExpiredItemService {
     inventoryItemId: number,
     userId: number,
     action: 'sold_through' | 'expired',
-    unitsDiscarded?: number
+    unitsDiscarded?: number,
   ): Promise<ExpiredItemTransaction> {
     const db = getDb();
     try {
@@ -88,8 +76,10 @@ export class ExpiredItemService {
           JOIN products p ON ii.product_id = p.id
           WHERE ii.id = ?
         `);
-        const inventoryItem = itemStmt.get(inventoryItemId) as (InventoryItem & { costPrice: number }) | undefined;
-        
+        const inventoryItem = itemStmt.get(inventoryItemId) as
+          | (InventoryItem & { costPrice: number })
+          | undefined;
+
         if (!inventoryItem) {
           throw new Error(`Inventory item with ID ${inventoryItemId} not found`);
         }
@@ -99,7 +89,7 @@ export class ExpiredItemService {
           if (unitsDiscarded === undefined || unitsDiscarded <= 0) {
             throw new Error('Units discarded must be a positive number when marking as expired');
           }
-          
+
           // Check if there's sufficient quantity available (we're only checking if at least 1 exists)
           // Since we're processing individual items, we expect there to be 1 instance
         }
@@ -116,20 +106,21 @@ export class ExpiredItemService {
           (inventory_item_id, user_id, action, units_discarded, financial_loss) 
           VALUES (?, ?, ?, ?, ?)
         `);
-        
+
         const result = insertTransactionStmt.run(
           inventoryItemId,
           userId,
           action,
           action === 'expired' ? unitsDiscarded : null,
-          financialLoss
+          financialLoss,
         );
 
         // Create audit log entry
-        const changeDescription = action === 'sold_through' 
-          ? `Expired item marked as sold through`
-          : `Expired item marked as discarded, units: ${unitsDiscarded}, financial loss: ${financialLoss}`;
-        
+        const changeDescription =
+          action === 'sold_through'
+            ? `Expired item marked as sold through`
+            : `Expired item marked as discarded, units: ${unitsDiscarded}, financial loss: ${financialLoss}`;
+
         const auditStmt = db.prepare(`
           INSERT INTO audit_log (user_id, inventory_item_id, change_description) 
           VALUES (?, ?, ?)
@@ -138,7 +129,9 @@ export class ExpiredItemService {
 
         // Update the inventory item's status to 'Processed' to remove it from the expired list
         // but keep it for reporting purposes.
-        const updateStmt = db.prepare("UPDATE inventory_items SET status = 'Processed' WHERE id = ?");
+        const updateStmt = db.prepare(
+          "UPDATE inventory_items SET status = 'Processed' WHERE id = ?",
+        );
         updateStmt.run(inventoryItemId);
 
         // Return the created transaction record
@@ -149,7 +142,7 @@ export class ExpiredItemService {
           action,
           unitsDiscarded: action === 'expired' ? unitsDiscarded || null : null,
           financialLoss,
-          transactionDate: new Date().toISOString()
+          transactionDate: new Date().toISOString(),
         };
       });
 
@@ -162,7 +155,9 @@ export class ExpiredItemService {
   /**
    * Get financial losses by SKU
    */
-  async getFinancialLossesBySKU(): Promise<Array<{sku: string, productName: string, totalLoss: number}>> {
+  async getFinancialLossesBySKU(): Promise<
+    Array<{ sku: string; productName: string; totalLoss: number }>
+  > {
     const db = getDb();
     try {
       const query = `
@@ -177,8 +172,12 @@ export class ExpiredItemService {
         GROUP BY p.id
         ORDER BY totalLoss DESC
       `;
-      
-      return db.prepare(query).all() as Array<{sku: string, productName: string, totalLoss: number}>;
+
+      return db.prepare(query).all() as Array<{
+        sku: string;
+        productName: string;
+        totalLoss: number;
+      }>;
     } finally {
       releaseDb(db);
     }
@@ -187,7 +186,9 @@ export class ExpiredItemService {
   /**
    * Get financial losses by store area
    */
-  async getFinancialLossesByStoreArea(): Promise<Array<{locationName: string, totalLoss: number}>> {
+  async getFinancialLossesByStoreArea(): Promise<
+    Array<{ locationName: string; totalLoss: number }>
+  > {
     const db = getDb();
     try {
       const query = `
@@ -201,8 +202,8 @@ export class ExpiredItemService {
         GROUP BY sa.id
         ORDER BY totalLoss DESC
       `;
-      
-      return db.prepare(query).all() as Array<{locationName: string, totalLoss: number}>;
+
+      return db.prepare(query).all() as Array<{ locationName: string; totalLoss: number }>;
     } finally {
       releaseDb(db);
     }
@@ -226,7 +227,7 @@ export class ExpiredItemService {
         FROM expired_item_transactions eit
         ORDER BY eit.transaction_date DESC
       `;
-      
+
       return db.prepare(query).all() as ExpiredItemTransaction[];
     } finally {
       releaseDb(db);

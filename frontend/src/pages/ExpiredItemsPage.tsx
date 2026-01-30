@@ -1,13 +1,10 @@
-import React, { useState, useEffect } from "react";
-import { useNavigate } from "react-router-dom";
-import { ExpiredItem } from "../types/inventory";
-import { apiService } from "../lib/api.service";
-import {
-  getExpiredItems,
-  processExpiredItem,
-} from "../services/expiredItemService";
-import ExpiredLossReport from "../components/ExpiredLossReport";
-import { Button } from "../components/ui/button";
+import React, { useState, useEffect } from 'react';
+import { useNavigate } from 'react-router-dom';
+import { ExpiredItem } from '../types/inventory';
+import { apiService } from '../lib/api.service';
+import { getExpiredItems, processExpiredItem } from '../services/expiredItemService';
+import ExpiredLossReport from '../components/ExpiredLossReport';
+import { Button } from '../components/ui/button';
 import {
   AlertDialog,
   AlertDialogAction,
@@ -17,15 +14,9 @@ import {
   AlertDialogFooter,
   AlertDialogHeader,
   AlertDialogTitle,
-  AlertDialogTrigger,
-} from "../components/ui/alert-dialog";
-import Toast from "../components/ui/toast";
-import {
-  Card,
-  CardContent,
-  CardHeader,
-  CardTitle,
-} from "../components/ui/card";
+} from '../components/ui/alert-dialog';
+import Toast from '../components/ui/toast';
+import { Card, CardContent, CardHeader, CardTitle } from '../components/ui/card';
 import {
   Table,
   TableBody,
@@ -33,7 +24,7 @@ import {
   TableHead,
   TableHeader,
   TableRow,
-} from "../components/ui/table";
+} from '../components/ui/table';
 
 // Import Chart.js components
 import {
@@ -44,18 +35,11 @@ import {
   Title,
   Tooltip,
   Legend,
-} from "chart.js";
-import { Bar } from "react-chartjs-2";
+} from 'chart.js';
+import { Bar } from 'react-chartjs-2';
 
 // Register Chart.js components
-ChartJS.register(
-  CategoryScale,
-  LinearScale,
-  BarElement,
-  Title,
-  Tooltip,
-  Legend,
-);
+ChartJS.register(CategoryScale, LinearScale, BarElement, Title, Tooltip, Legend);
 
 interface ExpiredItemsPageProps {
   token: string | null;
@@ -79,19 +63,17 @@ const ExpiredItemsPage: React.FC<ExpiredItemsPageProps> = ({ token }) => {
   const [loading, setLoading] = useState<boolean>(true);
   const [error, setError] = useState<string | null>(null);
   const [selectedItem, setSelectedItem] = useState<ExpiredItem | null>(null);
-  const [action, setAction] = useState<"sold_through" | "expired" | null>(null);
+  const [action, setAction] = useState<'sold_through' | 'expired' | null>(null);
   const [unitsDiscarded, setUnitsDiscarded] = useState<number>(1);
   const [isModalOpen, setIsModalOpen] = useState<boolean>(false);
   const [processError, setProcessError] = useState<string | null>(null);
   const [isConfirmDialogOpen, setIsConfirmDialogOpen] = useState(false);
   const [toast, setToast] = useState<{
     message: string;
-    type: "success" | "error" | "info" | "warning";
+    type: 'success' | 'error' | 'info' | 'warning';
   } | null>(null);
   const [isToastVisible, setIsToastVisible] = useState(false);
-  const [lossBySkuData, setLossBySkuData] = useState<
-    LossBySkuReportItem[] | null
-  >(null);
+  const [lossBySkuData, setLossBySkuData] = useState<LossBySkuReportItem[] | null>(null);
   const [lossByDepartmentData, setLossByDepartmentData] = useState<
     LossByDepartmentReportItem[] | null
   >(null);
@@ -102,7 +84,7 @@ const ExpiredItemsPage: React.FC<ExpiredItemsPageProps> = ({ token }) => {
   useEffect(() => {
     if (!token) {
       // If no token is available, redirect to login
-      navigate("/login");
+      navigate('/login');
       return;
     }
 
@@ -112,8 +94,8 @@ const ExpiredItemsPage: React.FC<ExpiredItemsPageProps> = ({ token }) => {
         const data = await getExpiredItems(token);
         setExpiredItems(data);
       } catch (err) {
-        setError("Failed to fetch expired items");
-        console.error("Error fetching expired items:", err);
+        setError('Failed to fetch expired items');
+        console.error('Error fetching expired items:', err);
       } finally {
         setLoading(false);
       }
@@ -122,15 +104,12 @@ const ExpiredItemsPage: React.FC<ExpiredItemsPageProps> = ({ token }) => {
     fetchExpiredItems();
   }, [token, navigate]);
 
-  const handleAction = (
-    item: ExpiredItem,
-    action: "sold_through" | "expired",
-  ) => {
+  const handleAction = (item: ExpiredItem, action: 'sold_through' | 'expired') => {
     setSelectedItem(item);
     setAction(action);
 
     // If action is 'expired', we need to enter units discarded
-    if (action === "expired") {
+    if (action === 'expired') {
       setUnitsDiscarded(1); // Default to 1
     } else {
       setUnitsDiscarded(0);
@@ -140,13 +119,13 @@ const ExpiredItemsPage: React.FC<ExpiredItemsPageProps> = ({ token }) => {
   };
 
   const showSuccessToast = (message: string) => {
-    setToast({ message, type: "success" });
+    setToast({ message, type: 'success' });
     setIsToastVisible(true);
     setTimeout(() => setIsToastVisible(false), 3000);
   };
 
   const showErrorToast = (message: string) => {
-    setToast({ message, type: "error" });
+    setToast({ message, type: 'error' });
     setIsToastVisible(true);
     setTimeout(() => setIsToastVisible(false), 3000);
   };
@@ -157,20 +136,16 @@ const ExpiredItemsPage: React.FC<ExpiredItemsPageProps> = ({ token }) => {
     try {
       setProcessError(null);
 
-      let processUnitsDiscarded = action === "expired" ? unitsDiscarded : 0;
-
-      if (action === "expired" && (!unitsDiscarded || unitsDiscarded <= 0)) {
-        setProcessError(
-          "Units discarded must be a positive number when marking as expired",
-        );
+      if (action === 'expired' && (!unitsDiscarded || unitsDiscarded <= 0)) {
+        setProcessError('Units discarded must be a positive number when marking as expired');
         return;
       }
 
       // Show confirmation dialog before processing
       setIsConfirmDialogOpen(true);
     } catch (err) {
-      setProcessError("Failed to process expired item");
-      console.error("Error processing expired item:", err);
+      setProcessError('Failed to process expired item');
+      console.error('Error processing expired item:', err);
     }
   };
 
@@ -180,7 +155,7 @@ const ExpiredItemsPage: React.FC<ExpiredItemsPageProps> = ({ token }) => {
     try {
       setProcessError(null);
 
-      let processUnitsDiscarded = action === "expired" ? unitsDiscarded : 0;
+      let processUnitsDiscarded = action === 'expired' ? unitsDiscarded : 0;
 
       await processExpiredItem(
         {
@@ -204,10 +179,10 @@ const ExpiredItemsPage: React.FC<ExpiredItemsPageProps> = ({ token }) => {
       setSelectedItem(null);
       setAction(null);
     } catch (err) {
-      const errorMessage = "Failed to process expired item";
+      const errorMessage = 'Failed to process expired item';
       setProcessError(errorMessage);
       showErrorToast(errorMessage);
-      console.error("Error processing expired item:", err);
+      console.error('Error processing expired item:', err);
     } finally {
       setIsConfirmDialogOpen(false);
     }
@@ -217,7 +192,7 @@ const ExpiredItemsPage: React.FC<ExpiredItemsPageProps> = ({ token }) => {
   useEffect(() => {
     const fetchChartData = async () => {
       if (!token) {
-        setError("Authentication token is missing.");
+        setError('Authentication token is missing.');
         setChartsLoading(false);
         return;
       }
@@ -225,11 +200,8 @@ const ExpiredItemsPage: React.FC<ExpiredItemsPageProps> = ({ token }) => {
       try {
         // Fetch both chart datasets concurrently
         const [lossBySku, lossByDepartment] = await Promise.all([
-          apiService.get<LossBySkuReportItem[]>("/reports/loss-by-sku", token),
-          apiService.get<LossByDepartmentReportItem[]>(
-            "/reports/loss-by-department",
-            token,
-          ),
+          apiService.get<LossBySkuReportItem[]>('/reports/loss-by-sku', token),
+          apiService.get<LossByDepartmentReportItem[]>('/reports/loss-by-department', token),
         ]);
 
         setLossBySkuData(lossBySku);
@@ -238,7 +210,7 @@ const ExpiredItemsPage: React.FC<ExpiredItemsPageProps> = ({ token }) => {
         if (err instanceof Error) {
           setError(err.message);
         } else {
-          setError("An unknown error occurred when fetching chart data");
+          setError('An unknown error occurred when fetching chart data');
         }
       } finally {
         setChartsLoading(false);
@@ -253,10 +225,10 @@ const ExpiredItemsPage: React.FC<ExpiredItemsPageProps> = ({ token }) => {
     labels: lossBySkuData?.map((item) => item.sku) || [],
     datasets: [
       {
-        label: "Total Loss ($)",
+        label: 'Total Loss ($)',
         data: lossBySkuData?.map((item) => item.totalLoss) || [],
-        backgroundColor: "rgba(239, 68, 68, 0.5)", // Red for losses
-        borderColor: "rgba(239, 68, 68, 1)",
+        backgroundColor: 'rgba(239, 68, 68, 0.5)', // Red for losses
+        borderColor: 'rgba(239, 68, 68, 1)',
         borderWidth: 1,
       },
     ],
@@ -267,10 +239,10 @@ const ExpiredItemsPage: React.FC<ExpiredItemsPageProps> = ({ token }) => {
     labels: lossByDepartmentData?.map((item) => item.department) || [],
     datasets: [
       {
-        label: "Total Loss ($)",
+        label: 'Total Loss ($)',
         data: lossByDepartmentData?.map((item) => item.totalLoss) || [],
-        backgroundColor: "rgba(59, 130, 246, 0.5)", // Blue
-        borderColor: "rgba(59, 130, 246, 1)",
+        backgroundColor: 'rgba(59, 130, 246, 0.5)', // Blue
+        borderColor: 'rgba(59, 130, 246, 1)',
         borderWidth: 1,
       },
     ],
@@ -294,7 +266,7 @@ const ExpiredItemsPage: React.FC<ExpiredItemsPageProps> = ({ token }) => {
           // format tick values as dollar amounts
           callback: (value: any) => {
             // Chart.js may pass objects for tick objects; coerce to number when possible
-            const num = typeof value === "number" ? value : Number(value);
+            const num = typeof value === 'number' ? value : Number(value);
             if (Number.isFinite(num)) {
               return `$${num}`;
             }
@@ -373,14 +345,14 @@ const ExpiredItemsPage: React.FC<ExpiredItemsPageProps> = ({ token }) => {
               <TableCell className="whitespace-nowrap text-sm">
                 <div className="flex space-x-2">
                   <Button
-                    onClick={() => handleAction(item, "sold_through")}
+                    onClick={() => handleAction(item, 'sold_through')}
                     variant="outline"
                     size="sm"
                   >
                     Mark as Sold Through
                   </Button>
                   <Button
-                    onClick={() => handleAction(item, "expired")}
+                    onClick={() => handleAction(item, 'expired')}
                     variant="outline"
                     size="sm"
                     className="text-destructive border-destructive hover:bg-destructive/10"
@@ -395,9 +367,7 @@ const ExpiredItemsPage: React.FC<ExpiredItemsPageProps> = ({ token }) => {
       </Table>
 
       {expiredItems.length === 0 && (
-        <div className="text-center py-10 text-muted-foreground">
-          No expired items found.
-        </div>
+        <div className="text-center py-10 text-muted-foreground">No expired items found.</div>
       )}
 
       {/* Chart Section */}
@@ -418,24 +388,20 @@ const ExpiredItemsPage: React.FC<ExpiredItemsPageProps> = ({ token }) => {
                     ...chartOptions.plugins,
                     title: {
                       display: true,
-                      text: "Top SKUs by Total Loss Value",
+                      text: 'Top SKUs by Total Loss Value',
                     },
                   },
                 }}
               />
             ) : (
-              <div className="text-center py-4 text-gray-500">
-                No loss data available
-              </div>
+              <div className="text-center py-4 text-gray-500">No loss data available</div>
             )}
           </CardContent>
         </Card>
 
         <Card>
           <CardHeader>
-            <CardTitle className="text-center">
-              Worst Loss by Department
-            </CardTitle>
+            <CardTitle className="text-center">Worst Loss by Department</CardTitle>
           </CardHeader>
           <CardContent>
             {chartsLoading ? (
@@ -449,7 +415,7 @@ const ExpiredItemsPage: React.FC<ExpiredItemsPageProps> = ({ token }) => {
                     ...chartOptions.plugins,
                     title: {
                       display: true,
-                      text: "Losses by Department",
+                      text: 'Losses by Department',
                     },
                   },
                 }}
@@ -476,9 +442,7 @@ const ExpiredItemsPage: React.FC<ExpiredItemsPageProps> = ({ token }) => {
           />
           <div className="relative z-10 bg-background rounded-lg shadow-lg w-11/12 max-w-md p-6">
             <div className="flex justify-between items-center mb-4">
-              <h3 className="text-lg font-semibold text-foreground">
-                Process Expired Item
-              </h3>
+              <h3 className="text-lg font-semibold text-foreground">Process Expired Item</h3>
               <button
                 onClick={() => {
                   setIsModalOpen(false);
@@ -493,26 +457,23 @@ const ExpiredItemsPage: React.FC<ExpiredItemsPageProps> = ({ token }) => {
 
             <div className="mb-4 space-y-2">
               <p className="text-sm">
-                <span className="font-semibold text-foreground">Product:</span>{" "}
+                <span className="font-semibold text-foreground">Product:</span>{' '}
                 {selectedItem.productName}
               </p>
               <p className="text-sm">
-                <span className="font-semibold text-foreground">SKU:</span>{" "}
-                {selectedItem.sku}
+                <span className="font-semibold text-foreground">SKU:</span> {selectedItem.sku}
               </p>
               <p className="text-sm">
-                <span className="font-semibold text-foreground">Location:</span>{" "}
+                <span className="font-semibold text-foreground">Location:</span>{' '}
                 {selectedItem.locationName}
               </p>
               <p className="text-sm">
-                <span className="font-semibold text-foreground">
-                  Expiry Date:
-                </span>{" "}
+                <span className="font-semibold text-foreground">Expiry Date:</span>{' '}
                 {selectedItem.expiryDate}
               </p>
             </div>
 
-            {action === "expired" && (
+            {action === 'expired' && (
               <div className="mb-4">
                 <label className="block text-sm font-medium text-foreground mb-1">
                   Units to Discard
@@ -522,9 +483,7 @@ const ExpiredItemsPage: React.FC<ExpiredItemsPageProps> = ({ token }) => {
                   min="1"
                   max={selectedItem.quantityAvailable}
                   value={unitsDiscarded}
-                  onChange={(e) =>
-                    setUnitsDiscarded(parseInt(e.target.value) || 1)
-                  }
+                  onChange={(e) => setUnitsDiscarded(parseInt(e.target.value) || 1)}
                   className="w-full px-3 py-2 border border-input rounded-md focus:outline-none focus:ring-2 focus:ring-ring focus:border-transparent"
                 />
                 <p className="mt-1 text-xs text-muted-foreground">
@@ -552,26 +511,19 @@ const ExpiredItemsPage: React.FC<ExpiredItemsPageProps> = ({ token }) => {
               </Button>
               <Button
                 onClick={handleProcessItem}
-                className={
-                  action === "expired"
-                    ? "bg-destructive hover:bg-destructive/90"
-                    : ""
-                }
+                className={action === 'expired' ? 'bg-destructive hover:bg-destructive/90' : ''}
               >
-                Confirm {action === "expired" ? "Expired" : "Sold Through"}
+                Confirm {action === 'expired' ? 'Expired' : 'Sold Through'}
               </Button>
             </div>
 
-            <AlertDialog
-              open={isConfirmDialogOpen}
-              onOpenChange={setIsConfirmDialogOpen}
-            >
+            <AlertDialog open={isConfirmDialogOpen} onOpenChange={setIsConfirmDialogOpen}>
               <AlertDialogContent>
                 <AlertDialogHeader>
                   <AlertDialogTitle>Confirm Action</AlertDialogTitle>
                   <AlertDialogDescription>
-                    Are you sure you want to mark this item as {action}? This
-                    action cannot be undone.
+                    Are you sure you want to mark this item as {action}? This action cannot be
+                    undone.
                   </AlertDialogDescription>
                 </AlertDialogHeader>
                 <AlertDialogFooter>
@@ -583,9 +535,7 @@ const ExpiredItemsPage: React.FC<ExpiredItemsPageProps> = ({ token }) => {
                   >
                     Cancel
                   </AlertDialogCancel>
-                  <AlertDialogAction onClick={confirmProcessItem}>
-                    Continue
-                  </AlertDialogAction>
+                  <AlertDialogAction onClick={confirmProcessItem}>Continue</AlertDialogAction>
                 </AlertDialogFooter>
               </AlertDialogContent>
             </AlertDialog>

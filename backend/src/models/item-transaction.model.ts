@@ -1,6 +1,4 @@
-
 import { db } from '../database';
-import { INTEGER, TEXT, REAL } from '../utils/sql-data-types';
 
 export interface ItemTransaction {
   id?: number;
@@ -41,7 +39,7 @@ export const itemTransactionsTable = {
 export const createItemTransaction = (transaction: ItemTransaction) => {
   const { inventory_item_id, user_id, type, quantity_change, notes } = transaction;
   const stmt = db.prepare(
-    'INSERT INTO item_transactions (inventory_item_id, user_id, type, quantity_change, notes) VALUES (?, ?, ?, ?, ?)'
+    'INSERT INTO item_transactions (inventory_item_id, user_id, type, quantity_change, notes) VALUES (?, ?, ?, ?, ?)',
   );
   const info = stmt.run(inventory_item_id, user_id, type, quantity_change, notes);
   return info.lastInsertRowid;

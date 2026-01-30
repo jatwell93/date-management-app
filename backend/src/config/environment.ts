@@ -22,11 +22,11 @@ function validateEnvironment(): EnvironmentConfig {
   const requiredEnvVars = [
     'NODE_ENV',
     'PORT',
-    'JWT_SECRET'
+    'JWT_SECRET',
     // DATABASE_PATH and FRONTEND_URL are optional, will default if not provided
   ];
 
-  const missingEnvVars = requiredEnvVars.filter(envVar => !process.env[envVar]);
+  const missingEnvVars = requiredEnvVars.filter((envVar) => !process.env[envVar]);
 
   if (missingEnvVars.length > 0) {
     console.error(`Missing required environment variables: ${missingEnvVars.join(', ')}`);
@@ -36,7 +36,9 @@ function validateEnvironment(): EnvironmentConfig {
   // Validate PORT is a number
   const port = parseInt(process.env.PORT as string, 10);
   if (isNaN(port) || port <= 0) {
-    console.error(`Invalid PORT environment variable: ${process.env.PORT}. Must be a positive number.`);
+    console.error(
+      `Invalid PORT environment variable: ${process.env.PORT}. Must be a positive number.`,
+    );
     exit(1);
   }
 
@@ -57,9 +59,9 @@ function validateEnvironment(): EnvironmentConfig {
     NODE_ENV: process.env.NODE_ENV as string,
     PORT: port,
     JWT_SECRET: process.env.JWT_SECRET as string,
-    DATABASE_PATH: process.env.DATABASE_PATH || "./database.sqlite", // Default to local database file
+    DATABASE_PATH: process.env.DATABASE_PATH || './database.sqlite', // Default to local database file
     FRONTEND_URL: process.env.FRONTEND_URL || 'http://localhost:3000', // Default to local frontend during development
-    DEFAULT_PIN: process.env.DEFAULT_PIN || "5624", // Default PIN for dev environment
+    DEFAULT_PIN: process.env.DEFAULT_PIN || '5624', // Default PIN for dev environment
     USE_HTTPS: process.env.USE_HTTPS === 'true',
     SSL_PRIVATE_KEY_PATH: process.env.SSL_PRIVATE_KEY_PATH,
     SSL_CERT_PATH: process.env.SSL_CERT_PATH,

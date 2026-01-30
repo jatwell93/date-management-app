@@ -1,18 +1,17 @@
 // offline-sync.ts - Handles offline data synchronization for the PWA
-import { v4 as uuidv4 } from "uuid";
+import { v4 as uuidv4 } from 'uuid';
 
 // Define types for offline operations
 type OfflineOperation = {
   id: string;
-  action: "create" | "update" | "delete";
-  entityType: "product" | "inventory-item" | "store-area" | "user";
+  action: 'create' | 'update' | 'delete';
+  entityType: 'product' | 'inventory-item' | 'store-area' | 'user';
   data: any;
   timestamp: number;
 };
 
 // Queue to store offline operations
-const OFFLINE_QUEUE_KEY = "offline-queue";
-const PENDING_OPERATIONS_KEY = "pending-operations";
+const OFFLINE_QUEUE_KEY = 'offline-queue';
 
 class OfflineSyncService {
   private isOnline = navigator.onLine;
@@ -24,8 +23,8 @@ class OfflineSyncService {
     this.isOnline = navigator.onLine;
 
     // Set up event listeners for online/offline status
-    window.addEventListener("online", this.handleOnline.bind(this));
-    window.addEventListener("offline", this.handleOffline.bind(this));
+    window.addEventListener('online', this.handleOnline.bind(this));
+    window.addEventListener('offline', this.handleOffline.bind(this));
 
     // Initialize periodic sync
     this.scheduleSync();
@@ -33,14 +32,14 @@ class OfflineSyncService {
 
   // Handle going online
   private handleOnline() {
-    console.log("Device is now online, starting sync...");
+    console.log('Device is now online, starting sync...');
     this.isOnline = true;
     this.performSync();
   }
 
   // Handle going offline
   private handleOffline() {
-    console.log("Device is now offline");
+    console.log('Device is now offline');
     this.isOnline = false;
   }
 
@@ -56,8 +55,8 @@ class OfflineSyncService {
 
   // Add an operation to the offline queue
   addOperation(
-    action: "create" | "update" | "delete",
-    entityType: "product" | "inventory-item" | "store-area" | "user",
+    action: 'create' | 'update' | 'delete',
+    entityType: 'product' | 'inventory-item' | 'store-area' | 'user',
     data: any,
   ): Promise<void> {
     return new Promise((resolve) => {
@@ -105,18 +104,18 @@ class OfflineSyncService {
   // Perform synchronization
   async performSync() {
     if (this.syncInProgress) {
-      console.log("Sync already in progress, skipping...");
+      console.log('Sync already in progress, skipping...');
       return;
     }
 
     this.syncInProgress = true;
-    console.log("Starting synchronization...");
+    console.log('Starting synchronization...');
 
     try {
       // Get operations from the queue
       const queue = this.getOfflineQueue();
       if (queue.length === 0) {
-        console.log("No operations to sync");
+        console.log('No operations to sync');
         return;
       }
 
@@ -138,10 +137,10 @@ class OfflineSyncService {
         }
       }
     } catch (error) {
-      console.error("Error during sync:", error);
+      console.error('Error during sync:', error);
     } finally {
       this.syncInProgress = false;
-      console.log("Synchronization completed");
+      console.log('Synchronization completed');
     }
   }
 
@@ -150,18 +149,18 @@ class OfflineSyncService {
     const { action, entityType, data } = operation;
 
     // Construct the appropriate endpoint URL based on entity type
-    let endpoint = "";
+    let endpoint = '';
     switch (entityType) {
-      case "product":
+      case 'product':
         endpoint = `${process.env.REACT_APP_API_BASE_URL}/products`;
         break;
-      case "inventory-item":
+      case 'inventory-item':
         endpoint = `${process.env.REACT_APP_API_BASE_URL}/inventory-items`;
         break;
-      case "store-area":
+      case 'store-area':
         endpoint = `${process.env.REACT_APP_API_BASE_URL}/store-areas`;
         break;
-      case "user":
+      case 'user':
         endpoint = `${process.env.REACT_APP_API_BASE_URL}/users`;
         break;
       default:
@@ -171,23 +170,23 @@ class OfflineSyncService {
     // Execute the appropriate HTTP request based on action
     let response;
     switch (action) {
-      case "create":
+      case 'create':
         response = await fetch(endpoint, {
-          method: "POST",
+          method: 'POST',
           headers: this.getHeaders(),
           body: JSON.stringify(data),
         });
         break;
-      case "update":
+      case 'update':
         response = await fetch(`${endpoint}/${data.id}`, {
-          method: "PUT",
+          method: 'PUT',
           headers: this.getHeaders(),
           body: JSON.stringify(data),
         });
         break;
-      case "delete":
+      case 'delete':
         response = await fetch(`${endpoint}/${data.id}`, {
-          method: "DELETE",
+          method: 'DELETE',
           headers: this.getHeaders(),
         });
         break;
@@ -207,7 +206,7 @@ class OfflineSyncService {
 
   // Get authentication headers
   private getAuthHeaders() {
-    const token = localStorage.getItem("token");
+    const token = localStorage.getItem('token');
     if (token) {
       return {
         Authorization: `Bearer ${token}`,
@@ -217,10 +216,10 @@ class OfflineSyncService {
   }
 
   // Get properly typed headers for fetch requests
-  private getHeaders(): { "Content-Type": string; Authorization?: string } {
-    const token = localStorage.getItem("token");
-    const headers: { "Content-Type": string; Authorization?: string } = {
-      "Content-Type": "application/json",
+  private getHeaders(): { 'Content-Type': string; Authorization?: string } {
+    const token = localStorage.getItem('token');
+    const headers: { 'Content-Type': string; Authorization?: string } = {
+      'Content-Type': 'application/json',
     };
 
     if (token) {
