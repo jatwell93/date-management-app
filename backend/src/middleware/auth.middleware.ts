@@ -143,7 +143,7 @@ export const authenticateToken = (req: AuthRequest, res: Response, next: NextFun
 export const generateToken = (userId: number, role: string, expiresIn: string | number = '24h'): string => {
   const secret = process.env.JWT_SECRET || 'your_jwt_secret';
   return jwt.sign({ userId, role }, secret, {
-    expiresIn,
+    expiresIn: expiresIn as any,
   });
 };
 

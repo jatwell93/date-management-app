@@ -1,6 +1,8 @@
-import { Database as DB } from 'better-sqlite3';
+import Database from 'better-sqlite3';
 import { envConfig } from '../config/environment';
 import { Logger } from '../utils/logger';
+
+type DB = InstanceType<typeof Database>;
 
 /**
  * Model for tracking migration status in the database
