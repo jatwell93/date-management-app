@@ -14,7 +14,7 @@
 - [x] 0.10 **Create Neon database**: Databases → New Project → name: `date-management-prod` → region: (choose closest)
 - [x] 0.11 **Copy Neon connection string**: Connection Details → Connection String → copy value
 - [x] 0.12 **Save Neon connection string** securely (format: `postgresql://user:pass@host/db?sslmode=require`)
-- [ ] 0.13 **Choose production domain** for Workers (e.g., `api.yourdomain.com` or use workers.dev subdomain)
+- [x] 0.13 **Choose production domain** for Workers (e.g., `api.yourdomain.com` or use workers.dev subdomain)
 - [x] 0.14 **Provide credentials to developer** via secure method (never commit to git)
 - [x] 0.15 **Install Neon MCP** set up VSCode MCP for Neon
 
@@ -22,7 +22,7 @@
 
 - [x] 1.1 Install Prisma ORM (`npm install @prisma/client`)
 - [x] 1.2 Install AWS SDK for R2 (`npm install @aws-sdk/client-s3 @aws-sdk/s3-request-presigner`)
-- [ ] 1.3 Install Wrangler CLI globally (`npm install -g wrangler`)
+- [x] 1.3 Install Wrangler CLI globally (`npm install -g wrangler`)
 - [x] 1.4 Install CSV parsing library (`npm install csv-parse`)
 - [x] 1.5 Install Workers types (`npm install -D @cloudflare/workers-types`)
 - [x] 1.6 Create `workers/` directory for production deployment code
@@ -177,10 +177,7 @@
   - **Test**: Barcode scanner (quagga) on real iOS/Android devices, offline sync, PWA install flow
   - **Benefit**: Critical for PWA validation - Chrome DevTools mobile emulation doesn't catch device-specific issues
   - **Docs**: https://www.browserstack.com/docs/automate/selenium/getting-started/nodejs
-- [ ] 11.10 **[OPTIONAL - GitHub Student Pack]** Install CodeScene for code quality monitoring
-  - **Setup**: GitHub App installation at github.com/apps/codescene, configure PR checks
-  - **Benefit**: AI-powered hotspot detection, technical debt tracking
-  - **Skip if**: Team is small or code quality tools already in place
+- [x] 11.10 **[OPTIONAL - GitHub Student Pack]** Install CodeScene for code quality monitoring, configure PR checks
 - [ ] 11.11 Verify UBS scan passes (`ubs backend/src/`)
 - [ ] 11.12 Run linter and fix all errors (`npm run lint`)
 

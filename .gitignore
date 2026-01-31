@@ -52,3 +52,6 @@ bug-scan-report.json
 bug-scan-report.txt
 .env
 .env.local
+
+#cloudflare workers
+workers/.wrangler/
