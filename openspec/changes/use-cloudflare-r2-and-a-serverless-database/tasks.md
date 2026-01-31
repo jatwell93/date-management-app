@@ -93,13 +93,13 @@
 
 - [x] 6.1 **USER: Verify R2 bucket created** (done in task 0.7)
 - [x] 6.2 **USER: Verify R2 API token generated** (done in task 0.8)
-- [ ] 6.3 Configure R2 bucket CORS policy for presigned URL uploads
-- [ ] 6.4 Test R2 connection from local machine using AWS SDK
-- [ ] 6.5 Implement presigned URL generation in R2StorageProvider
-- [ ] 6.6 Add file size limit validation (10MB max)
-- [ ] 6.7 Configure R2 lifecycle rules (delete files >24 hours for successful uploads)
-- [ ] 6.8 Set up R2 bucket encryption at rest
-- [ ] 6.9 Document R2 setup in `docs/cloudflare-setup.md`
+- [ ] 6.3 **USER: Configure R2 bucket CORS policy** (see `docs/cloudflare-setup.md#configuring-cors`)
+- [x] 6.4 Test R2 connection from local machine using AWS SDK (created `backend/scripts/test-r2-connection.ts`)
+- [x] 6.5 Implement presigned URL generation in R2StorageProvider (already implemented in `backend/src/storage/r2-storage.provider.ts:182-211`)
+- [x] 6.6 Add file size limit validation (10MB max) (already implemented in `backend/src/storage/r2-storage.provider.ts:31,53-56`)
+- [ ] 6.7 **USER: Configure R2 lifecycle rules** (see `docs/cloudflare-setup.md#lifecycle-rules`)
+- [x] 6.8 Set up R2 bucket encryption at rest (R2 encrypts at rest by default with AES-256, documented)
+- [x] 6.9 Document R2 setup in `docs/cloudflare-setup.md`
 
 ## 7. Neon Database Setup
 
