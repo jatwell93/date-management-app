@@ -38,11 +38,12 @@ Thumbs.db
 
 # Development and specification directories
 .gemini/
-.github/
 .specify/
 .vscode/
 specs/
 .quint/
+prompts/
+skills/
 
 # Coverage
 coverage/
