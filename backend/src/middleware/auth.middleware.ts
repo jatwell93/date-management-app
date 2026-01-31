@@ -135,7 +135,8 @@ export const authenticateToken = (req: AuthRequest, res: Response, next: NextFun
 
 // Function to generate a JWT token with configurable expiration
 export const generateToken = (userId: number, role: string, expiresIn: string = '24h'): string => {
-  return jwt.sign({ userId, role }, (process.env.JWT_SECRET as Secret) || 'your_jwt_secret', {
+  const secret = process.env.JWT_SECRET || 'your_jwt_secret';
+  return jwt.sign({ userId, role }, secret as Secret, {
     expiresIn,
   });
 };

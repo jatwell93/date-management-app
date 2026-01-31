@@ -1,16 +1,16 @@
 import Database from 'better-sqlite3';
 import { envConfig } from './config/environment';
 
-let db: Database.Database;
+let db: Database;
 
-export function getDb(): Database.Database {
+export function getDb(): Database {
   if (!db) {
     db = new Database(envConfig.DATABASE_PATH || './database.sqlite');
   }
   return db;
 }
 
-export function releaseDb(_db: Database.Database): void {
+export function releaseDb(_db: Database): void {
   // better-sqlite3 doesn't have connection pooling, so this is a no-op
 }
 

@@ -20,4 +20,8 @@ module.exports = {
   ],
   coverageReporters: ['text', 'text-summary', 'lcov', 'html'],
   coverageDirectory: 'coverage',
+  
+  // Performance optimization
+  maxWorkers: '50%',
+  testTimeout: 30000,
 };

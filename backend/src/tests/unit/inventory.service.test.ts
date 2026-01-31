@@ -1,6 +1,8 @@
 import { InventoryService } from '../../services/inventory.service';
 import { getDb } from '../../database';
 
+jest.mock('../../database');
+
 describe('InventoryService', () => {
   let inventoryService: InventoryService;
   let mockDb: any;

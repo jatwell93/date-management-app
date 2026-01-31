@@ -1,5 +1,7 @@
 import { initDatabase, getDb } from '../../database';
 
+jest.mock('../../database');
+
 describe('Database Initialization', () => {
   it('should initialize database successfully', async () => {
     // This test just ensures the database can be initialized without errors
