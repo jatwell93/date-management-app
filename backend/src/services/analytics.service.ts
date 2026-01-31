@@ -1,5 +1,5 @@
 import { Logger } from '../utils/logger';
-import { getDb } from '../database';
+import { getDb, releaseDb } from '../database';
 
 // Define analytics event types
 export enum AnalyticsEventType {
