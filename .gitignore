@@ -48,6 +48,7 @@ skills/
 # Coverage
 coverage/
 backend/coverage/
-
+bug-scan-report.json
+bug-scan-report.txt
 .env
 .env.local
