@@ -17,6 +17,12 @@ export interface TokenPayload extends jwt.JwtPayload {
 }
 
 export const authenticateToken = (req: AuthRequest, res: Response, next: NextFunction) => {
+  // Test environment bypass
+  if (process.env.NODE_ENV === 'test' && process.env.TEST_AUTH_BYPASS === 'true') {
+    req.user = { id: 1, role: 'Manager' }; // Mock user
+    return next();
+  }
+
   const authHeader = req.headers['authorization'];
   const token = authHeader && authHeader.split(' ')[1];
 
@@ -134,9 +140,9 @@ export const authenticateToken = (req: AuthRequest, res: Response, next: NextFun
 };
 
 // Function to generate a JWT token with configurable expiration
-export const generateToken = (userId: number, role: string, expiresIn: string = '24h'): string => {
+export const generateToken = (userId: number, role: string, expiresIn: string | number = '24h'): string => {
   const secret = process.env.JWT_SECRET || 'your_jwt_secret';
-  return jwt.sign({ userId, role }, secret as Secret, {
+  return jwt.sign({ userId, role }, secret, {
     expiresIn,
   });
 };

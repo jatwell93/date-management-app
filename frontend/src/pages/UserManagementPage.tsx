@@ -35,7 +35,14 @@ export function UserManagementPage({ token }: UserManagementPageProps) {
     role: 'Manager' | 'Team Member';
     selectedUserForEdit: string;
     selectedUserForDelete: string;
-  }>();
+  }>({
+    defaultValues: {
+      pin: '',
+      role: 'Team Member',
+      selectedUserForEdit: '',
+      selectedUserForDelete: '',
+    },
+  });
 
   const [error, setError] = useState<string | null>(null);
   const [success, setSuccess] = useState<string | null>(null);
@@ -69,7 +76,7 @@ export function UserManagementPage({ token }: UserManagementPageProps) {
         return;
       }
       try {
-        await apiService.post('/users', data, token);
+        await apiService.post('/users', { pin: data.pin, role: data.role }, token);
 
         setSuccess('User created successfully!');
         form.reset();

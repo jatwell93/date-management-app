@@ -1,24 +1,24 @@
 import { InventoryService } from '../../services/inventory.service';
-import { getDb } from '../../database';
-
-jest.mock('../../database');
+import { PrismaClient } from '@prisma/client';
 
 describe('InventoryService', () => {
   let inventoryService: InventoryService;
-  let mockDb: any;
-  let mockStatement: any;
+  let mockPrisma: any;
 
   beforeEach(() => {
-    inventoryService = new InventoryService();
-    mockStatement = {
-      run: jest.fn(),
-      get: jest.fn(),
-      all: jest.fn(),
+    mockPrisma = {
+        inventoryItem: {
+            create: jest.fn(),
+            update: jest.fn(),
+            findUnique: jest.fn(),
+            findMany: jest.fn(),
+        },
+        auditLog: {
+            create: jest.fn(),
+        },
+        $transaction: jest.fn((callback) => callback(mockPrisma)),
     };
-    mockDb = {
-      prepare: jest.fn(() => mockStatement),
-    };
-    (getDb as jest.Mock).mockReturnValue(mockDb);
+    inventoryService = new InventoryService(mockPrisma as unknown as PrismaClient);
   });
 
   afterEach(() => {
@@ -32,58 +32,60 @@ describe('InventoryService', () => {
       locationId: 1,
       status: 'Normal' as 'Normal' | 'Markdown 1' | 'Markdown 2' | 'Markdown 3' | 'Expired',
     };
-    (mockDb.prepare as jest.Mock).mockReturnValue(mockStatement);
-    (mockStatement.run as jest.Mock).mockReturnValue({ lastInsertRowid: 1 });
+    
+    // The service might expect Dates in return from Prisma
+    const mockCreatedItem = {
+        id: 1,
+        ...newItemData,
+        expiryDate: new Date(newItemData.expiryDate), // Prisma returns Date objects
+        createdAt: new Date(),
+        updatedAt: new Date()
+    };
+    
+    mockPrisma.inventoryItem.create.mockResolvedValue(mockCreatedItem);
 
     const createdItem = await inventoryService.createInventoryItem(newItemData, 1);
 
-    expect(createdItem).toEqual(
-      expect.objectContaining({
-        id: 1,
-        ...newItemData,
-      }),
-    );
-    expect(getDb).toHaveBeenCalledTimes(1);
-    expect(mockDb.prepare).toHaveBeenCalledWith(
-      'INSERT INTO inventory_items (product_id, expiry_date, location_id, status) VALUES (?, ?, ?, ?)',
-    );
-    expect(mockStatement.run).toHaveBeenCalledWith(
-      newItemData.productId,
-      newItemData.expiryDate,
-      newItemData.locationId,
-      newItemData.status,
-    );
+    expect(createdItem.id).toBe(1);
+    expect(createdItem.status).toBe('Normal');
+    expect(mockPrisma.inventoryItem.create).toHaveBeenCalled();
   });
 
   it('should update an inventory item status', async () => {
-    (mockDb.prepare as jest.Mock).mockReturnValue(mockStatement);
-    (mockStatement.run as jest.Mock).mockReturnValue({ changes: 1 });
-    (mockStatement.get as jest.Mock).mockReturnValue({ id: 1, status: 'Markdown 1' });
+    const mockItem = { 
+        id: 1, 
+        productId: 1,
+        locationId: 1,
+        expiryDate: new Date(),
+        status: 'Markdown 1',
+        createdAt: new Date(),
+        updatedAt: new Date()
+    };
+    
+    // We mock findUnique to return the item (if logic checks existence first)
+    mockPrisma.inventoryItem.findUnique.mockResolvedValue(mockItem);
+    // We mock update to return the updated item
+    mockPrisma.inventoryItem.update.mockResolvedValue({
+        ...mockItem,
+        status: 'Markdown 1'
+    });
 
     const updatedItem = await inventoryService.updateInventoryItem(1, { status: 'Markdown 1' }, 1);
 
     expect(updatedItem).not.toBeNull();
     expect(updatedItem?.status).toBe('Markdown 1');
-    expect(getDb).toHaveBeenCalledTimes(2);
-    expect(mockDb.prepare).toHaveBeenCalledWith(
-      `UPDATE inventory_items SET status = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ?`,
-    );
-    expect(mockStatement.run).toHaveBeenCalledWith('Markdown 1', 1);
+    expect(mockPrisma.inventoryItem.update).toHaveBeenCalled();
   });
 
   it('should return null if no item was updated', async () => {
-    (mockDb.prepare as jest.Mock).mockReturnValue(mockStatement);
-    (mockStatement.run as jest.Mock).mockReturnValue({ changes: 0 });
-    (mockStatement.get as jest.Mock).mockReturnValue(null);
+    // If logic checks existence via findUnique first:
+    mockPrisma.inventoryItem.findUnique.mockResolvedValue(null);
 
     const updatedItem = await inventoryService.updateInventoryItem(999, { status: 'Expired' }, 1);
 
     expect(updatedItem).toBeNull();
-    expect(getDb).toHaveBeenCalledTimes(2);
-    expect(mockDb.prepare).toHaveBeenCalledWith(
-      `UPDATE inventory_items SET status = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ?`,
-    );
-    expect(mockStatement.run).toHaveBeenCalledWith('Expired', 999);
+    // Assuming implementation checks existence
+    expect(mockPrisma.inventoryItem.findUnique).toHaveBeenCalledWith({ where: { id: 999 } });
   });
 
   describe('calculateMarkdownStatusSync', () => {

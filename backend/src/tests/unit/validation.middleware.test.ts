@@ -107,10 +107,14 @@ describe('Validation Middleware', () => {
 
   describe('validateInventoryItemInput', () => {
     it('should call next() for valid inventory item data', () => {
+      const futureDate = new Date();
+      futureDate.setFullYear(futureDate.getFullYear() + 1);
+      const futureDateStr = futureDate.toISOString().split('T')[0];
+
       mockReq = {
         body: {
           product_id: 1,
-          expiry_date: '2025-12-31',
+          expiry_date: futureDateStr,
           location_id: 1,
         },
       };
@@ -140,10 +144,14 @@ describe('Validation Middleware', () => {
     });
 
     it('should return 400 for invalid product_id', () => {
+      const futureDate = new Date();
+      futureDate.setFullYear(futureDate.getFullYear() + 1);
+      const futureDateStr = futureDate.toISOString().split('T')[0];
+
       mockReq = {
         body: {
           product_id: 0, // Invalid (must be positive)
-          expiry_date: '2025-12-31',
+          expiry_date: futureDateStr,
           location_id: 1,
         },
       };

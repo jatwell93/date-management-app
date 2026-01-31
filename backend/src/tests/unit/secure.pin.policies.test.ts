@@ -9,7 +9,8 @@ describe('Secure PIN Policies', () => {
 
   describe('PIN validation', () => {
     it('should accept valid PINs (4-6 digits)', () => {
-      const validPins = ['1234', '12345', '123456', '987654'];
+      // Use PINs that are NOT sequential or repeating
+      const validPins = ['1593', '95123', '852069', '741258'];
 
       validPins.forEach((pin) => {
         const result = authService.validatePin(pin);

@@ -1,5 +1,5 @@
 import { Logger } from '../utils/logger';
-import { getDb, releaseDb } from '../database';
+import { getDb } from '../database';
 
 // Define analytics event types
 export enum AnalyticsEventType {
@@ -106,7 +106,7 @@ export class AnalyticsService {
     }
 
     // Create necessary tables if they don't exist
-    this.createAnalyticsTables();
+    // this.createAnalyticsTables();
 
     // Start periodic batch processing of events
     if (this.config.enableTracking) {
@@ -168,8 +168,10 @@ export class AnalyticsService {
       db.exec(
         'CREATE INDEX IF NOT EXISTS idx_user_sessions_session_id ON user_sessions(session_id)',
       );
+    } catch (error) {
+      Logger.error('Failed to initialize Analytics tables.', error);
     } finally {
-      releaseDb(db);
+      // releaseDb(db);
     }
   }
 

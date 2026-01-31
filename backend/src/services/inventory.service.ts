@@ -177,17 +177,17 @@ export class InventoryService {
 
     // Apply markdown rules based on days difference (from feature requirements)
     // Note: These are simple examples. Real logic might be more complex.
-    if (daysDiff <= 30) {
-      // Within 1 month from expiry: cost price - 20% (Markdown 3)
+    if (daysDiff <= 7) {
+      // Within 1 week from expiry: cost price - 20% (Markdown 3)
       return 'Markdown 3';
-    } else if (daysDiff <= 60) {
-      // Within 2 months from expiry: cost price (Markdown 2)
+    } else if (daysDiff <= 14) {
+      // Within 2 weeks from expiry: cost price (Markdown 2)
       return 'Markdown 2';
-    } else if (daysDiff <= 90) {
-      // Within 3 months from expiry: cost price + 20% (Markdown 1)
+    } else if (daysDiff <= 30) {
+      // Within 1 month from expiry: cost price + 20% (Markdown 1)
       return 'Markdown 1';
     } else {
-      // More than 3 months from expiry: Normal (no markdown)
+      // More than 1 month from expiry: Normal (no markdown)
       return 'Normal';
     }
   }
@@ -207,17 +207,17 @@ export class InventoryService {
     } else {
       // Apply markdown rules based on days difference (from feature requirements)
       // Note: These are simple examples. Real logic might be more complex.
-      if (daysDiff <= 30) {
-        // Within 1 month from expiry: cost price - 20% (Markdown 3)
+      if (daysDiff <= 7) {
+        // Within 1 week from expiry: cost price - 20% (Markdown 3)
         status = 'Markdown 3';
-      } else if (daysDiff <= 60) {
-        // Within 2 months from expiry: cost price (Markdown 2)
+      } else if (daysDiff <= 14) {
+        // Within 2 weeks from expiry: cost price (Markdown 2)
         status = 'Markdown 2';
-      } else if (daysDiff <= 90) {
-        // Within 3 months from expiry: cost price + 20% (Markdown 1)
+      } else if (daysDiff <= 30) {
+        // Within 1 month from expiry: cost price + 20% (Markdown 1)
         status = 'Markdown 1';
       } else {
-        // More than 3 months from expiry: Normal (no markdown)
+        // More than 1 month from expiry: Normal (no markdown)
         status = 'Normal';
       }
     }

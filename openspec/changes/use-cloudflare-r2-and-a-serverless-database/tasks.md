@@ -11,11 +11,11 @@
 - [x] 0.7 **Create R2 bucket** via Cloudflare dashboard: R2 → Create Bucket → name: `csv-uploads-prod`
 - [x] 0.8 **Generate R2 API token**: R2 → Manage R2 API Tokens → Create API Token → Permissions: Object Read & Write
 - [x] 0.9 **Save R2 credentials** (Access Key ID, Secret Access Key, Account ID) securely
-- [ ] 0.10 **Create Neon database**: Databases → New Project → name: `date-management-prod` → region: (choose closest)
-- [ ] 0.11 **Copy Neon connection string**: Connection Details → Connection String → copy value
-- [ ] 0.12 **Save Neon connection string** securely (format: `postgresql://user:pass@host/db?sslmode=require`)
+- [x] 0.10 **Create Neon database**: Databases → New Project → name: `date-management-prod` → region: (choose closest)
+- [x] 0.11 **Copy Neon connection string**: Connection Details → Connection String → copy value
+- [x] 0.12 **Save Neon connection string** securely (format: `postgresql://user:pass@host/db?sslmode=require`)
 - [ ] 0.13 **Choose production domain** for Workers (e.g., `api.yourdomain.com` or use workers.dev subdomain)
-- [ ] 0.14 **Provide credentials to developer** via secure method (never commit to git)
+- [x] 0.14 **Provide credentials to developer** via secure method (never commit to git)
 
 ## 1. Project Setup & Dependencies
 
