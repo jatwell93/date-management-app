@@ -93,7 +93,7 @@
 
 - [x] 6.1 **USER: Verify R2 bucket created** (done in task 0.7)
 - [x] 6.2 **USER: Verify R2 API token generated** (done in task 0.8)
-- [ ] 6.3 **USER: Configure R2 bucket CORS policy** (see `docs/cloudflare-setup.md#configuring-cors`)
+- [x] 6.3 **USER: Configure R2 bucket CORS policy** (see `docs/cloudflare-setup.md#configuring-cors`)
 - [x] 6.4 Test R2 connection from local machine using AWS SDK (created `backend/scripts/test-r2-connection.ts`)
 - [x] 6.5 Implement presigned URL generation in R2StorageProvider (already implemented in `backend/src/storage/r2-storage.provider.ts:182-211`)
 - [x] 6.6 Add file size limit validation (10MB max) (already implemented in `backend/src/storage/r2-storage.provider.ts:31,53-56`)
@@ -103,9 +103,9 @@
 
 ## 7. Neon Database Setup
 
-- [ ] 7.1 **USER: Verify Neon account created** (done in task 0.4-0.5)
-- [ ] 7.2 **USER: Verify database created** (done in task 0.10)
-- [ ] 7.3 **USER: Verify connection string copied** (done in task 0.11)
+- [x] 7.1 **USER: Verify Neon account created** (done in task 0.4-0.5)
+- [x] 7.2 **USER: Verify database created** (done in task 0.10)
+- [x] 7.3 **USER: Verify connection string copied** (done in task 0.11)
 - [ ] 7.4 Configure Prisma schema for PostgreSQL (provider = "postgresql")
 - [ ] 7.5 Generate initial migration SQL from Prisma schema
 - [ ] 7.6 Apply migration to Neon main branch
