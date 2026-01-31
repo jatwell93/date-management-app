@@ -1,0 +1,50 @@
+name = "date-management-api"
+main = "src/index.ts"
+compatibility_date = "2024-01-01"
+
+# Workers Routes Configuration
+# Option 1: Custom Domain (Requires an active Cloudflare zone)
+# [[routes]]
+# pattern = "date-management-app.workers.dev"
+# custom_domain = true
+
+# Option 2: Free workers.dev subdomain (Automatically assigned on publish)
+# workers_dev = true
+
+# Environment Variables (Non-Secret)
+[env.production]
+name = "date-management-api-prod"
+
+[env.production.vars]
+NODE_ENV = "production"
+STORAGE_PROVIDER = "r2"
+MAX_FILE_SIZE = "10485760"
+CSV_BATCH_SIZE = "100"
+RATE_LIMIT_WINDOW = "60000"
+RATE_LIMIT_MAX_REQUESTS = "10"
+RATE_LIMIT_MAX_AUTHENTICATED = "100"
+
+# R2 Bucket Bindings
+[[r2_buckets]]
+binding = "CSV_UPLOADS"
+bucket_name = "csv-uploads-prod"
+preview_bucket_name = "csv-uploads-preview"
+
+# Development/Preview Environment
+[env.development]
+name = "date-management-api-dev"
+
+[env.development.vars]
+NODE_ENV = "development"
+STORAGE_PROVIDER = "local"
+
+# Build Configuration
+[build]
+command = "npm run build"
+watch_dir = "src"
+
+# Secrets (set via CLI: wrangler secret put <KEY>)
+# - DATABASE_URL (PlanetScale connection string)
+# - R2_ACCESS_KEY_ID
+# - R2_SECRET_ACCESS_KEY
+# - JWT_SECRET

@@ -21,6 +21,9 @@
 const { execSync } = require('child_process');
 const path = require('path');
 
+// Load environment variables from .env file
+require('dotenv').config({ path: path.join(__dirname, '..', '.env') });
+
 const MEMORY_FILE = path.join(__dirname, '..', 'project-memory.mv2');
 
 const VALID_KINDS = ['FIX', 'PATTERN', 'DECISION', 'FEATURE', 'ERROR', 'ARCHITECTURE', 'WORKFLOW'];
