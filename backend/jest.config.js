@@ -7,4 +7,17 @@ module.exports = {
   moduleNameMapper: {
     '^@/(.*)': '<rootDir>/src/$1',
   },
+  // Coverage configuration
+  coverageProvider: 'v8',
+  collectCoverageFrom: [
+    'src/**/*.ts',
+    '!src/**/*.d.ts',
+    '!src/tests/**',
+    '!src/__mocks__/**',
+    '!src/migrations/**',
+    '!src/index.ts',
+    '!src/config/**',
+  ],
+  coverageReporters: ['text', 'text-summary', 'lcov', 'html'],
+  coverageDirectory: 'coverage',
 };

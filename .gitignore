@@ -44,5 +44,9 @@ Thumbs.db
 specs/
 .quint/
 
+# Coverage
+coverage/
+backend/coverage/
+
 .env
 .env.local
