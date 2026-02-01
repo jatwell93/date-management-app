@@ -21,7 +21,7 @@ The application uses a dual-database strategy:
 | Environment | Database | Schema File | Connection |
 |-------------|----------|-------------|------------|
 | Development | SQLite | `schema.prisma` | File-based |
-| Production | Neon PostgreSQL | `schema.neon.prisma` | Connection URL |
+| Production | Neon PostgreSQL | `production/schema.prisma` | Connection URL |
 
 Both schemas define identical models - only the datasource provider differs.
 
@@ -86,10 +86,10 @@ DATABASE_URL=postgresql://user:password@host/database?sslmode=require
 cd backend
 
 # Quick sync (no migration history)
-DATABASE_URL="your-neon-url" npx prisma db push --schema=./prisma/schema.neon.prisma
+DATABASE_URL="your-neon-url" npx prisma db push --schema=./prisma/production/schema.prisma
 
 # Or with migration tracking
-DATABASE_URL="your-neon-url" npx prisma migrate deploy --schema=./prisma/schema.neon.prisma
+DATABASE_URL="your-neon-url" npx prisma migrate deploy --schema=./prisma/production/schema.prisma
 ```
 
 ### Viewing Production Data
@@ -142,7 +142,7 @@ neonctl branches create --name dev/feature-xyz --project-id your-project-id
 ```bash
 # Get branch connection string from Neon dashboard
 # Apply migrations to branch first
-DATABASE_URL="branch-connection-string" npx prisma db push --schema=./prisma/schema.neon.prisma
+DATABASE_URL="branch-connection-string" npx prisma db push --schema=./prisma/production/schema.prisma
 
 # Test your application against the branch
 DATABASE_URL="branch-connection-string" npm run dev
@@ -154,7 +154,7 @@ After testing, apply the same migration to production:
 
 ```bash
 # Apply to production main branch
-DATABASE_URL="production-connection-string" npx prisma db push --schema=./prisma/schema.neon.prisma
+   DATABASE_URL="production-connection-string" npx prisma db push --schema=./prisma/production/schema.prisma
 ```
 
 ### Deleting a Branch
@@ -176,7 +176,7 @@ neonctl branches delete dev/feature-xyz --project-id your-project-id
 
 1. **Update Prisma Schema**
    ```prisma
-   // schema.prisma AND schema.neon.prisma
+   // schema.prisma AND production/schema.prisma
    model Product {
      // ... existing fields
      newField String? @map("new_field")  // Add new field
@@ -194,13 +194,13 @@ neonctl branches delete dev/feature-xyz --project-id your-project-id
 
 4. **Test on Branch**
    ```bash
-   DATABASE_URL="branch-url" npx prisma db push --schema=./prisma/schema.neon.prisma
+   DATABASE_URL="branch-url" npx prisma db push --schema=./prisma/production/schema.prisma
    DATABASE_URL="branch-url" npm test
    ```
 
 5. **Apply to Production**
    ```bash
-   DATABASE_URL="production-url" npx prisma db push --schema=./prisma/schema.neon.prisma
+   DATABASE_URL="production-url" npx prisma db push --schema=./prisma/production/schema.prisma
    ```
 
 6. **Clean Up**
@@ -269,7 +269,7 @@ prisma/migrations/neon/
 
 ### Schema Changes
 
-1. ✅ Always update both `schema.prisma` AND `schema.neon.prisma`
+1. ✅ Always update both `schema.prisma` AND `production/schema.prisma`
 2. ✅ Test migrations locally before production
 3. ✅ Use Neon branches for risky migrations
 4. ✅ Keep migration SQL files for audit trail
@@ -330,7 +330,7 @@ Branches:
 If production schema differs from Prisma schema:
 ```bash
 # Generate diff to see what's different
-npx prisma migrate diff --from-url "$DATABASE_URL" --to-schema-datamodel ./prisma/schema.neon.prisma --script
+npx prisma migrate diff --from-url "$DATABASE_URL" --to-schema-datamodel ./prisma/production/schema.prisma --script
 ```
 
 ---

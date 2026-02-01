@@ -1,11 +1,11 @@
 // Prisma Schema for Date Management App - Neon PostgreSQL Production
 // 
 // Use this schema for production deployment with Neon:
-// npx prisma generate --schema=./prisma/schema.neon.prisma
-// npx prisma db push --schema=./prisma/schema.neon.prisma
+// npx prisma generate --schema=./prisma/production/schema.prisma
+// npx prisma db push --schema=./prisma/production/schema.prisma
 //
 // Or for migrations:
-// npx prisma migrate dev --schema=./prisma/schema.neon.prisma
+// npx prisma migrate dev --schema=./prisma/production/schema.prisma
 
 generator client {
   provider = "prisma-client-js"

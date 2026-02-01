@@ -10,9 +10,10 @@ generator client {
 }
 
 // Development: SQLite
-// For production, use schema.planetscale.prisma
+// For production, use production/schema.prisma
 datasource db {
   provider = "sqlite"
+  url      = env("DATABASE_URL")
 }
 
 // ============================================================================
