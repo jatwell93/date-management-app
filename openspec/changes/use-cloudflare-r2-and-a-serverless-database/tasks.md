@@ -106,14 +106,14 @@
 - [x] 7.1 **USER: Verify Neon account created** (done in task 0.4-0.5)
 - [x] 7.2 **USER: Verify database created** (done in task 0.10)
 - [x] 7.3 **USER: Verify connection string copied** (done in task 0.11)
-- [ ] 7.4 Configure Prisma schema for PostgreSQL (provider = "postgresql")
-- [ ] 7.5 Generate initial migration SQL from Prisma schema
-- [ ] 7.6 Apply migration to Neon main branch
-- [ ] 7.7 **USER: Create Neon API key** for CI/CD (Project Settings → API Keys)
-- [ ] 7.8 Set up connection string in `.env` (development branch for testing)
-- [ ] 7.9 Enable Neon monitoring dashboard
-- [ ] 7.10 Configure alerts for high query latency (>200ms)
-- [ ] 7.11 Document Neon database branching workflow in `docs/database-migrations.md`
+- [x] 7.4 Configure Prisma schema for PostgreSQL (created `backend/prisma/schema.neon.prisma`)
+- [x] 7.5 Generate initial migration SQL from Prisma schema (saved to `prisma/migrations/neon/0001_initial.sql`)
+- [x] 7.6 Apply migration to Neon main branch (verified: all 8 tables created)
+- [x] 7.7 **USER: Create Neon API key** for CI/CD (Project Settings → API Keys)
+- [x] 7.8 Set up connection string in `.env` (NEON_CONNECTION_STRING configured)
+- [x] 7.9 **USER: Enable Neon monitoring dashboard** (Neon Dashboard → Monitoring)
+- [ ] 7.10 **USER: Manually review slow queries** in Neon Dashboard (Monitoring → Query Performance tab)
+- [x] 7.11 Document Neon database branching workflow in `docs/database-migrations.md`
 
 ## 8. Cloudflare Workers Implementation
 
@@ -191,6 +191,7 @@
   - **Backend**: `npm install @sentry/node`, init in `backend/src/index.ts` and `workers/src/index.ts`
   - **Frontend**: `npm install @sentry/react`, init in `frontend/src/index.tsx`, configure source maps
   - **Workers Config**: Add `SENTRY_DSN` to Workers Secrets, configure release tracking with git SHA
+  - **Alerting**: Configure Sentry Performance alerts for database queries (>200ms) and API responses (>500ms)
   - **Benefit**: CRITICAL for Workers where logs are ephemeral - catch errors before users report them
   - **Free Tier**: 50K errors, 100K transactions, 500 session replays for 1 year
   - **Docs**: https://docs.sentry.io/platforms/javascript/guides/express/
