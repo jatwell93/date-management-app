@@ -111,8 +111,8 @@
 - [x] 7.6 Apply migration to Neon main branch (verified: all 8 tables created)
 - [x] 7.7 **USER: Create Neon API key** for CI/CD (Project Settings → API Keys)
 - [x] 7.8 Set up connection string in `.env` (NEON_CONNECTION_STRING configured)
-- [ ] 7.9 **USER: Enable Neon monitoring dashboard** (Neon Dashboard → Monitoring)
-- [ ] 7.10 **USER: Configure alerts for high query latency** (>200ms threshold in Neon Dashboard)
+- [x] 7.9 **USER: Enable Neon monitoring dashboard** (Neon Dashboard → Monitoring)
+- [ ] 7.10 **USER: Manually review slow queries** in Neon Dashboard (Monitoring → Query Performance tab)
 - [x] 7.11 Document Neon database branching workflow in `docs/database-migrations.md`
 
 ## 8. Cloudflare Workers Implementation
@@ -191,6 +191,7 @@
   - **Backend**: `npm install @sentry/node`, init in `backend/src/index.ts` and `workers/src/index.ts`
   - **Frontend**: `npm install @sentry/react`, init in `frontend/src/index.tsx`, configure source maps
   - **Workers Config**: Add `SENTRY_DSN` to Workers Secrets, configure release tracking with git SHA
+  - **Alerting**: Configure Sentry Performance alerts for database queries (>200ms) and API responses (>500ms)
   - **Benefit**: CRITICAL for Workers where logs are ephemeral - catch errors before users report them
   - **Free Tier**: 50K errors, 100K transactions, 500 session replays for 1 year
   - **Docs**: https://docs.sentry.io/platforms/javascript/guides/express/
