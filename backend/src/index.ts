@@ -6,7 +6,7 @@ import { Server as HttpServer } from 'http'; // Import http server type
 import { promises as fs } from 'fs';
 import { join } from 'path';
 import { RateLimiterMemory } from 'rate-limiter-flexible';
-import { initDatabase } from './database';
+// import { initDatabase } from './database';
 import authRoutes from './routes/auth.routes';
 import productRoutes from './routes/product.routes';
 import inventoryRoutes from './routes/inventory.routes';
@@ -85,7 +85,7 @@ app.use(cors(corsOptions)); // Enable CORS with options
 
 // Initialize database
 (async () => {
-  await initDatabase();
+  // await initDatabase();
 })();
 
 // Initialize database monitoring

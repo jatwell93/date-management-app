@@ -1,5 +1,7 @@
-import { type Database as DatabaseType } from 'better-sqlite3';
+import Database from 'better-sqlite3';
 import { Migration } from './migration.service';
+
+type DatabaseType = InstanceType<typeof Database>;
 
 /**
  * Initial schema migration

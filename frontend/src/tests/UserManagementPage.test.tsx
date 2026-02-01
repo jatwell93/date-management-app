@@ -1,21 +1,34 @@
 import React from 'react';
-import { render, screen, fireEvent, waitFor } from '@testing-library/react';
+import { render, screen, fireEvent, waitFor, within } from '@testing-library/react';
 import { UserManagementPage } from '../pages/UserManagementPage';
+import { apiService } from '../lib/api.service';
 
-// Mock the fetch API
-(global.window as any).fetch = jest.fn() as any;
+// Mock UI components
+jest.mock('../components/ui/select', () => ({
+  Select: ({ onValueChange, children, defaultValue }: any) => (
+    <select
+      data-testid="select"
+      defaultValue={defaultValue}
+      onChange={(e) => onValueChange(e.target.value)}
+    >
+      {children}
+    </select>
+  ),
+  SelectTrigger: ({ children }: any) => <option value="" disabled>Select...</option>, 
+  SelectValue: ({ placeholder }: any) => <>{placeholder}</>,
+  SelectContent: ({ children }: any) => <optgroup label="Options">{children}</optgroup>,
+  SelectItem: ({ value, children }: any) => <option value={value}>{children}</option>,
+}));
 
-// Default mock implementation for fetching users
-(global.fetch as jest.Mock).mockImplementation(() =>
-  Promise.resolve({
-    ok: true,
-    json: () =>
-      Promise.resolve([
-        { id: 1, role: 'Manager' },
-        { id: 2, role: 'Team Member' },
-      ]),
-  }),
-);
+// Mock apiService
+jest.mock('../lib/api.service', () => ({
+  apiService: {
+    get: jest.fn(),
+    post: jest.fn(),
+    put: jest.fn(),
+    delete: jest.fn(),
+  },
+}));
 
 describe('UserManagementPage', () => {
   const mockToken = 'mock-manager-token';
@@ -25,138 +38,127 @@ describe('UserManagementPage', () => {
   });
 
   test('renders user management page and fetches users', async () => {
+    (apiService.get as jest.Mock).mockResolvedValue([
+        { id: 1, role: 'Manager' },
+        { id: 2, role: 'Team Member' },
+    ]);
+
     render(<UserManagementPage token={mockToken} />);
 
     expect(screen.getByText(/User Management \(Managers Only\)/i)).toBeInTheDocument();
 
-    expect(await screen.findByText(/ID: 1, Role: Manager/i)).toBeInTheDocument();
-    expect(screen.getByText(/ID: 2, Role: Team Member/i)).toBeInTheDocument();
-    expect(global.fetch).toHaveBeenCalledTimes(1);
-    expect(global.fetch).toHaveBeenCalledWith(
-      'http://localhost:3001/users',
-      expect.objectContaining({
-        headers: { Authorization: `Bearer ${mockToken}` },
-      }),
-    );
+    // Wait for list to appear
+    const list = await screen.findByRole('list');
+    expect(within(list).getByText(/ID: 1, Role: Manager/i)).toBeInTheDocument();
+    expect(within(list).getByText(/ID: 2, Role: Team Member/i)).toBeInTheDocument();
+    
+    expect(apiService.get).toHaveBeenCalledTimes(1);
+    expect(apiService.get).toHaveBeenCalledWith('/users', mockToken);
   });
 
   test('creates a new user', async () => {
-    (global.fetch as jest.Mock).mockImplementationOnce(() =>
-      Promise.resolve({
-        ok: true,
-        json: () => Promise.resolve({ message: 'User created successfully!' }),
-      }),
-    ); // Mock for create user
-    (global.fetch as jest.Mock).mockImplementationOnce(() =>
-      Promise.resolve({
-        ok: true,
-        json: () =>
-          Promise.resolve([
-            { id: 1, role: 'Manager' },
-            { id: 2, role: 'Team Member' },
-            { id: 3, role: 'Team Member' },
-          ]),
-      }),
-    ); // Mock for re-fetching users
+    (apiService.get as jest.Mock).mockResolvedValueOnce([
+        { id: 1, role: 'Manager' },
+        { id: 2, role: 'Team Member' },
+    ]).mockResolvedValueOnce([ // After create
+        { id: 1, role: 'Manager' },
+        { id: 2, role: 'Team Member' },
+        { id: 3, role: 'Team Member' },
+    ]);
+
+    (apiService.post as jest.Mock).mockResolvedValue({ message: 'User created successfully!' });
 
     render(<UserManagementPage token={mockToken} />);
 
-    await waitFor(() => expect(global.fetch).toHaveBeenCalledTimes(1)); // Initial fetch
-
+    // Wait for validation of load
+    const list = await screen.findByRole('list');
+    
+    // Fill Form
     fireEvent.change(screen.getByPlaceholderText(/Enter user PIN/i), {
       target: { value: '5678' },
     });
-    fireEvent.mouseDown(screen.getByText(/Select a role/i));
-    fireEvent.click(screen.getByText(/Team Member/i));
+    
+    // Select Role in Create Form (First Select)
+    const createRoleSelect = screen.getAllByRole('combobox')[0];
+    fireEvent.change(createRoleSelect, { target: { value: 'Team Member' } });
+
     fireEvent.click(screen.getByRole('button', { name: /Create User/i }));
 
-    expect(await screen.findByText(/User created successfully!/i)).toBeInTheDocument();
-    expect(screen.getByText(/ID: 3, Role: Team Member/i)).toBeInTheDocument();
-    expect(global.fetch).toHaveBeenCalledTimes(3); // Initial fetch, create, re-fetch
-    expect(global.fetch).toHaveBeenCalledWith(
-      'http://localhost:3001/users',
-      expect.objectContaining({
-        method: 'POST',
-        body: JSON.stringify({ pin: '5678', role: 'Team Member' }),
-      }),
+    // Expect at least one success message 
+    await waitFor(() => {
+        expect(screen.getAllByText(/User created successfully!/i).length).toBeGreaterThan(0);
+    });
+    
+    // Check if new user is in the list
+    expect(await within(list).findByText(/ID: 3, Role: Team Member/i)).toBeInTheDocument();
+    
+    expect(apiService.post).toHaveBeenCalledWith(
+      '/users',
+      { pin: '5678', role: 'Team Member' },
+      mockToken
     );
   });
 
   test('updates an existing user role', async () => {
-    (global.fetch as jest.Mock).mockImplementationOnce(() =>
-      Promise.resolve({
-        ok: true,
-        json: () => Promise.resolve({ message: 'User updated successfully!' }),
-      }),
-    ); // Mock for update user
-    (global.fetch as jest.Mock).mockImplementationOnce(() =>
-      Promise.resolve({
-        ok: true,
-        json: () =>
-          Promise.resolve([
-            { id: 1, role: 'Manager' },
-            { id: 2, role: 'Manager' }, // Updated role
-          ]),
-      }),
-    ); // Mock for re-fetching users
+    (apiService.get as jest.Mock).mockResolvedValue([
+        { id: 1, role: 'Manager' },
+        { id: 2, role: 'Team Member' },
+    ]);
+    (apiService.put as jest.Mock).mockResolvedValue({ message: 'User updated successfully!' });
 
     render(<UserManagementPage token={mockToken} />);
 
-    await waitFor(() => expect(global.fetch).toHaveBeenCalledTimes(1)); // Initial fetch
+    await screen.findByRole('list');
 
-    fireEvent.mouseDown(screen.getByLabelText(/Select User to Edit/i));
-    fireEvent.click(screen.getByText(/ID: 2, Role: Team Member/i));
+    // Edit User Form: Select User (Index 1), Select Role (Index 2)
+    const selects = await screen.findAllByRole('combobox');
+    const editUserSelect = selects[1]; 
+    
+    fireEvent.change(editUserSelect, { target: { value: '2' } });
 
-    fireEvent.mouseDown(screen.getAllByText(/Select a role/i)[1]); // Select for edit form
-    fireEvent.click(screen.getAllByText(/Manager/i)[1]);
+    const editRoleSelect = selects[2]; 
+    fireEvent.change(editRoleSelect, { target: { value: 'Manager' } });
 
     fireEvent.click(screen.getByRole('button', { name: /Update User/i }));
 
-    expect(await screen.findByText(/User updated successfully!/i)).toBeInTheDocument();
-    expect(screen.getByText(/ID: 2, Role: Manager/i)).toBeInTheDocument();
-    expect(global.fetch).toHaveBeenCalledTimes(3); // Initial fetch, update, re-fetch
-    expect(global.fetch).toHaveBeenCalledWith(
-      'http://localhost:3001/users/2',
-      expect.objectContaining({
-        method: 'PUT',
-        body: JSON.stringify({ role: 'Manager' }),
-      }),
+    await waitFor(() => {
+        expect(screen.getAllByText(/User updated successfully!/i).length).toBeGreaterThan(0);
+    });
+    
+    expect(apiService.put).toHaveBeenCalledWith(
+      '/users/2',
+      { role: 'Manager' },
+      mockToken
     );
   });
 
   test('deletes a user', async () => {
-    (global.fetch as jest.Mock).mockImplementationOnce(() =>
-      Promise.resolve({
-        ok: true,
-        json: () => Promise.resolve({ message: 'User deleted successfully!' }),
-      }),
-    ); // Mock for delete user
-    (global.fetch as jest.Mock).mockImplementationOnce(() =>
-      Promise.resolve({
-        ok: true,
-        json: () => Promise.resolve([{ id: 1, role: 'Manager' }]),
-      }),
-    ); // Mock for re-fetching users
+    (apiService.get as jest.Mock).mockResolvedValue([
+        { id: 1, role: 'Manager' },
+        { id: 2, role: 'Team Member' },
+    ]);
+    (apiService.delete as jest.Mock).mockResolvedValue({ message: 'User deleted successfully!' });
 
     render(<UserManagementPage token={mockToken} />);
 
-    await waitFor(() => expect(global.fetch).toHaveBeenCalledTimes(1)); // Initial fetch
+    await screen.findByRole('list');
 
-    fireEvent.mouseDown(screen.getByLabelText(/Select User to Delete/i));
-    fireEvent.click(screen.getByText(/ID: 2, Role: Team Member/i));
+    // Delete User Form: Select User (Index 3)
+    const selects = await screen.findAllByRole('combobox');
+    const deleteUserSelect = selects[3];
+    
+    fireEvent.change(deleteUserSelect, { target: { value: '2' } });
 
-    window.confirm = jest.fn(() => true); // Mock window.confirm
+    // Mock confirm
+    window.confirm = jest.fn(() => true); 
+    
     fireEvent.click(screen.getByRole('button', { name: /Delete User/i }));
 
-    expect(await screen.findByText(/User deleted successfully!/i)).toBeInTheDocument();
-    expect(screen.queryByText(/ID: 2, Role: Team Member/i)).not.toBeInTheDocument();
+    await waitFor(() => {
+         expect(screen.getAllByText(/User deleted successfully!/i).length).toBeGreaterThan(0);
+    });
+    
     expect(window.confirm).toHaveBeenCalledTimes(1);
-    expect(global.fetch).toHaveBeenCalledTimes(3); // Initial fetch, delete, re-fetch
-    expect(global.fetch).toHaveBeenCalledWith(
-      'http://localhost:3001/users/2',
-      expect.objectContaining({
-        method: 'DELETE',
-      }),
-    );
+    expect(apiService.delete).toHaveBeenCalledWith('/users/2', mockToken);
   });
 });

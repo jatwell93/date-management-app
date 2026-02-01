@@ -18,6 +18,7 @@ import {
   DialogTitle,
   DialogTrigger,
   DialogFooter,
+  DialogDescription,
 } from '../components/ui/dialog';
 import { apiService } from '../lib/api.service';
 
@@ -202,7 +203,7 @@ export function StoreAreaManagementPage({ token }: StoreAreaManagementPageProps)
                 <TableRow>
                   <TableHead>ID</TableHead>
                   <TableHead>Name</TableHead>
-                  <TableHead>Sub-Department</TableHead> {/* New TableHead */}
+                  <TableHead>Sub-Department</TableHead>
                   <TableHead>Last Checked</TableHead>
                   <TableHead className="text-right">Actions</TableHead>
                 </TableRow>
@@ -236,6 +237,9 @@ export function StoreAreaManagementPage({ token }: StoreAreaManagementPageProps)
                         <DialogContent>
                           <DialogHeader>
                             <DialogTitle>Edit Store Area</DialogTitle>
+                            <DialogDescription>
+                              Make changes to the store area name and sub-department.
+                            </DialogDescription>
                           </DialogHeader>
                           <div className="grid gap-4 py-4">
                             <div className="grid grid-cols-4 items-center gap-4">

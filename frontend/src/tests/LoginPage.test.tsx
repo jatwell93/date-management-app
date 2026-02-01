@@ -2,25 +2,24 @@ import React from 'react';
 import { randomUUID } from 'crypto';
 import { render, screen, fireEvent, waitFor } from '@testing-library/react';
 import { LoginPage } from '../components/LoginPage';
+import { apiService } from '../lib/api.service';
 
-// Mock the fetch API
-(global.window as any).fetch = jest.fn() as any;
+// Mock apiService
+jest.mock('../lib/api.service', () => ({
+  apiService: {
+    post: jest.fn(),
+  },
+}));
 
 // Default mock implementation for successful login
 const mockAuthToken = randomUUID();
-
-(global.fetch as jest.Mock).mockImplementation(() =>
-  Promise.resolve({
-    ok: true,
-    json: () => Promise.resolve({ token: mockAuthToken }),
-  }),
-);
 
 describe('LoginPage', () => {
   const mockOnLogin = jest.fn();
 
   beforeEach(() => {
     jest.clearAllMocks();
+    (apiService.post as jest.Mock).mockResolvedValue({ token: mockAuthToken });
   });
 
   test('renders login form', () => {
@@ -41,23 +40,12 @@ describe('LoginPage', () => {
       expect(mockOnLogin).toHaveBeenCalledWith(mockAuthToken);
     });
 
-    expect(global.fetch).toHaveBeenCalledTimes(1);
-    expect(global.fetch).toHaveBeenCalledWith(
-      'http://localhost:3001/auth/login',
-      expect.objectContaining({
-        method: 'POST',
-        body: JSON.stringify({ pin: '12345' }),
-      }),
-    );
+    expect(apiService.post).toHaveBeenCalledTimes(1);
+    expect(apiService.post).toHaveBeenCalledWith('/auth/login', { pin: '12345' });
   });
 
   test('displays error message on failed login', async () => {
-    (global.fetch as jest.Mock).mockImplementationOnce(() =>
-      Promise.resolve({
-        ok: false,
-        json: () => Promise.resolve({ message: 'Invalid credentials' }),
-      }),
-    );
+    (apiService.post as jest.Mock).mockRejectedValueOnce(new Error('Invalid credentials'));
 
     render(<LoginPage onLogin={mockOnLogin} />);
     const pinInput = screen.getByLabelText(/PIN/i);

@@ -6,45 +6,45 @@ import '@testing-library/jest-dom';
 describe('Scanner', () => {
   it('renders the scanner input and button', () => {
     render(<Scanner onScan={jest.fn()} />);
-    expect(screen.getByPlaceholderText(/Enter barcode manually/i)).toBeInTheDocument();
-    expect(screen.getByRole('button', { name: /Scan/i })).toBeInTheDocument();
+    expect(screen.getByPlaceholderText(/Scan barcode or enter manually/i)).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: /Submit/i })).toBeInTheDocument();
   });
 
   it('calls onScan with the entered barcode when button is clicked', () => {
     const mockOnScan = jest.fn();
     render(<Scanner onScan={mockOnScan} />);
 
-    fireEvent.change(screen.getByPlaceholderText(/Enter barcode manually/i), {
+    fireEvent.change(screen.getByPlaceholderText(/Scan barcode or enter manually/i), {
       target: { value: '12345' },
     });
-    fireEvent.click(screen.getByRole('button', { name: /Scan/i }));
+    fireEvent.click(screen.getByRole('button', { name: /Submit/i }));
 
     expect(mockOnScan).toHaveBeenCalledWith('12345');
-    expect(screen.getByPlaceholderText(/Enter barcode manually/i)).toHaveValue(''); // Input should be cleared
+    expect(screen.getByPlaceholderText(/Scan barcode or enter manually/i)).toHaveValue(''); // Input should be cleared
   });
 
-  it('calls onScan with the entered barcode when Enter key is pressed', () => {
+  it('calls onScan with the entered barcode when form is submitted', () => {
     const mockOnScan = jest.fn();
     render(<Scanner onScan={mockOnScan} />);
 
-    fireEvent.change(screen.getByPlaceholderText(/Enter barcode manually/i), {
+    const input = screen.getByPlaceholderText(/Scan barcode or enter manually/i);
+    fireEvent.change(input, {
       target: { value: '67890' },
     });
-    fireEvent.keyPress(screen.getByPlaceholderText(/Enter barcode manually/i), {
-      key: 'Enter',
-      code: 13,
-      charCode: 13,
-    });
+    
+    // Submit the form
+    const form = input.closest('form');
+    fireEvent.submit(form!);
 
     expect(mockOnScan).toHaveBeenCalledWith('67890');
-    expect(screen.getByPlaceholderText(/Enter barcode manually/i)).toHaveValue(''); // Input should be cleared
+    expect(screen.getByPlaceholderText(/Scan barcode or enter manually/i)).toHaveValue(''); // Input should be cleared
   });
 
   it('does not call onScan if barcode is empty', () => {
     const mockOnScan = jest.fn();
     render(<Scanner onScan={mockOnScan} />);
 
-    fireEvent.click(screen.getByRole('button', { name: /Scan/i }));
+    fireEvent.click(screen.getByRole('button', { name: /Submit/i }));
     expect(mockOnScan).not.toHaveBeenCalled();
   });
 });

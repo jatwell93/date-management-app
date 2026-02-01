@@ -516,20 +516,34 @@ codemap --deps          # How files connect
 #### TDD Phases
 
 ```typescript 
-// PHASE 1: RED - Failing test // src/__tests__/users.test.ts describe('User', () => {  describe('validations', () => { it('validates email format', () => { const result = usersService.validateEmail('invalid'); expect(result.isValid).toBe(false); }); }); });   // PHASE 2: GREEN - Implementation // src/services/usersService.ts export  const usersService = {  validateEmail(email: string): ValidationResult { // ... implementation return { isValid: true, errors: [] }; } }; // Verify: npm test (should now pass)
+// PHASE 1: RED - Failing test
+// src/__tests__/users.test.ts
+describe('User', () => {
+  describe('validations', () => {
+    it('validates email format', () => {
+      const result = usersService.validateEmail('invalid');
+      expect(result.isValid).toBe(false);
+    });
+  });
+});
+
+// PHASE 2: GREEN - Implementation
+// src/services/usersService.ts
+export const usersService = {
+  validateEmail(email: string): ValidationResult {
+    // ... implementation
+    return {
+      isValid: true,
+      errors: []
+    };
+  }
+};
+
+// Verify: npm test (should now pass)
+
 ```
 
-#### UBS (Ultimate Bug Scanner)
-
-Flags likely bugs early. Use before every commit.
-
-```bash
-ubs <changed-files> # Specific files (1s) [RECOMMENDED] 
-ubs $(git diff --name-only) # Staged files 
-ubs --only=ts,js,tsx src/ # Language filter
-```
-
-**Exit:** Tests pass (`npm test`), linter clean, UBS passed (`exit 0`), `tasks.md` fully checked `[x]`.
+**Exit:** Tests pass (`npm run test:frontend:diff` or `npm run test:backend:diff`), linter clean, `tasks.md` fully checked `[x]`.
 
 ----------
 
@@ -550,8 +564,13 @@ ubs --only=ts,js,tsx src/ # Language filter
 ### Diff [git diff output]   
 ### Checks 
 - ✅ Tests: 145 passing 
+- ✅ =============================== Coverage summary ===============================
+Statements   : 57.71% ( 2054/3559 )
+Branches     : 69.61% ( 252/362 )
+Functions    : 58.25% ( 60/103 )
+Lines        : 57.71% ( 2054/3559 )
+================================================================================
 - ✅ Linter: clean 
-- ✅ UBS: passed (no critical/important issues)
 ```
 
 ----------
@@ -561,9 +580,17 @@ ubs --only=ts,js,tsx src/ # Language filter
 **In:** DIFF presented **Out:** Test results **Exit:** Tests pass OR user waiver
 
 **Execute:**
+#### UBS (Ultimate Bug Scanner)
 
-1.  Run full test suite: `npm test`
-2.  Report results.
+Flags likely bugs early. Use before every commit.
+
+```bash
+ubs <changed-files> # Specific files (1s) [RECOMMENDED] 
+ubs $(git diff --name-only) # Staged files 
+ubs --only=ts,js,tsx src/ # Language filter
+```
+**PASS**: No critical results found. 
+**FAIL**: Critical warnings: [list out findings and plan of action]
 
 ----------
 
@@ -583,7 +610,7 @@ ubs --only=ts,js,tsx src/ # Language filter
 - ✅ Linter: clean 
 - ✅ UBS: passed 
 - ✅ OpenSpec: `tasks.md` complete   
-**Please review. Reply with:** - "approved" / "looks good" → Merge to develop - "change X" → Back to BUILD - "revert" → Discard all
+**Please review. Reply with:** - "approved" / "looks good" → push to git - "change X" → Back to BUILD - "revert" → Discard all
 ```
 
 ----------
@@ -605,9 +632,10 @@ git commit -m "feat(<area>): brief description
 
 Refs: <change-id>"
 ```
-2. Push feature branch: `git push origin feature/<change-id>` 
+2. Push feature branch: `git push feature/<change-id>` 
 3. User creates a pull request via GitHub 
-4. After PR approval and merge, confirm success
+4. User raises any findings from CodeSense check
+5. After PR approval and merge, confirm success
 
 ----------
 
@@ -749,7 +777,7 @@ Before marking task complete, run all (must pass):
 
 ```
 # Run all tests  
-npm test                                  # Expected: exit code 0  
+npm run test:coverage                     # Expected: high level of quality coverage  
   
 # Run linter with auto-fix  
 npm run lint                              # Expected: exit code 0 or only minor 

@@ -11,17 +11,18 @@
 - [x] 0.7 **Create R2 bucket** via Cloudflare dashboard: R2 → Create Bucket → name: `csv-uploads-prod`
 - [x] 0.8 **Generate R2 API token**: R2 → Manage R2 API Tokens → Create API Token → Permissions: Object Read & Write
 - [x] 0.9 **Save R2 credentials** (Access Key ID, Secret Access Key, Account ID) securely
-- [ ] 0.10 **Create Neon database**: Databases → New Project → name: `date-management-prod` → region: (choose closest)
-- [ ] 0.11 **Copy Neon connection string**: Connection Details → Connection String → copy value
-- [ ] 0.12 **Save Neon connection string** securely (format: `postgresql://user:pass@host/db?sslmode=require`)
-- [ ] 0.13 **Choose production domain** for Workers (e.g., `api.yourdomain.com` or use workers.dev subdomain)
-- [ ] 0.14 **Provide credentials to developer** via secure method (never commit to git)
+- [x] 0.10 **Create Neon database**: Databases → New Project → name: `date-management-prod` → region: (choose closest)
+- [x] 0.11 **Copy Neon connection string**: Connection Details → Connection String → copy value
+- [x] 0.12 **Save Neon connection string** securely (format: `postgresql://user:pass@host/db?sslmode=require`)
+- [x] 0.13 **Choose production domain** for Workers (e.g., `api.yourdomain.com` or use workers.dev subdomain)
+- [x] 0.14 **Provide credentials to developer** via secure method (never commit to git)
+- [x] 0.15 **Install Neon MCP** set up VSCode MCP for Neon
 
 ## 1. Project Setup & Dependencies
 
 - [x] 1.1 Install Prisma ORM (`npm install @prisma/client`)
 - [x] 1.2 Install AWS SDK for R2 (`npm install @aws-sdk/client-s3 @aws-sdk/s3-request-presigner`)
-- [ ] 1.3 Install Wrangler CLI globally (`npm install -g wrangler`)
+- [x] 1.3 Install Wrangler CLI globally (`npm install -g wrangler`)
 - [x] 1.4 Install CSV parsing library (`npm install csv-parse`)
 - [x] 1.5 Install Workers types (`npm install -D @cloudflare/workers-types`)
 - [x] 1.6 Create `workers/` directory for production deployment code
@@ -92,19 +93,19 @@
 
 - [x] 6.1 **USER: Verify R2 bucket created** (done in task 0.7)
 - [x] 6.2 **USER: Verify R2 API token generated** (done in task 0.8)
-- [ ] 6.3 Configure R2 bucket CORS policy for presigned URL uploads
-- [ ] 6.4 Test R2 connection from local machine using AWS SDK
-- [ ] 6.5 Implement presigned URL generation in R2StorageProvider
-- [ ] 6.6 Add file size limit validation (10MB max)
-- [ ] 6.7 Configure R2 lifecycle rules (delete files >24 hours for successful uploads)
-- [ ] 6.8 Set up R2 bucket encryption at rest
-- [ ] 6.9 Document R2 setup in `docs/cloudflare-setup.md`
+- [x] 6.3 **USER: Configure R2 bucket CORS policy** (see `docs/cloudflare-setup.md#configuring-cors`)
+- [x] 6.4 Test R2 connection from local machine using AWS SDK (created `backend/scripts/test-r2-connection.ts`)
+- [x] 6.5 Implement presigned URL generation in R2StorageProvider (already implemented in `backend/src/storage/r2-storage.provider.ts:182-211`)
+- [x] 6.6 Add file size limit validation (10MB max) (already implemented in `backend/src/storage/r2-storage.provider.ts:31,53-56`)
+- [ ] 6.7 **USER: Configure R2 lifecycle rules** (see `docs/cloudflare-setup.md#lifecycle-rules`)
+- [x] 6.8 Set up R2 bucket encryption at rest (R2 encrypts at rest by default with AES-256, documented)
+- [x] 6.9 Document R2 setup in `docs/cloudflare-setup.md`
 
 ## 7. Neon Database Setup
 
-- [ ] 7.1 **USER: Verify Neon account created** (done in task 0.4-0.5)
-- [ ] 7.2 **USER: Verify database created** (done in task 0.10)
-- [ ] 7.3 **USER: Verify connection string copied** (done in task 0.11)
+- [x] 7.1 **USER: Verify Neon account created** (done in task 0.4-0.5)
+- [x] 7.2 **USER: Verify database created** (done in task 0.10)
+- [x] 7.3 **USER: Verify connection string copied** (done in task 0.11)
 - [ ] 7.4 Configure Prisma schema for PostgreSQL (provider = "postgresql")
 - [ ] 7.5 Generate initial migration SQL from Prisma schema
 - [ ] 7.6 Apply migration to Neon main branch
@@ -149,11 +150,16 @@
 - [ ] 10.2 Add `NODE_ENV` checks (development vs production)
 - [ ] 10.3 Configure separate `.env.development` and `.env.production` files
 - [ ] 10.4 **USER: Provide production credentials** (R2 keys, Neon connection string from task 0.9 & 0.12)
-- [ ] 10.5 Set up Workers Secrets via Wrangler CLI (`wrangler secret put DATABASE_URL`)
-- [ ] 10.6 Add R2 credentials to Workers Secrets (R2_ACCOUNT_ID, R2_ACCESS_KEY_ID, R2_SECRET_ACCESS_KEY)
-- [ ] 10.7 Document required environment variables in `docs/environment-setup.md`
-- [ ] 10.8 Create `.env.example` with all required variables (no secrets)
-- [ ] 10.9 Verify development works without any production credentials
+- [ ] 10.5 **[OPTIONAL - GitHub Student Pack]** Set up 1Password or Doppler for secrets management
+  - **1Password**: Install CLI (`npm install -g @1password/op-js`), create vault for project secrets, use `op run` for CI/CD
+  - **Doppler**: Sign up at doppler.com, install CLI, create project, sync secrets with `doppler run`
+  - **Benefit**: Eliminates .env files, secure team credential sharing, audit trail
+  - **Skip if**: Using basic .env files is sufficient for your workflow
+- [ ] 10.6 Set up Workers Secrets via Wrangler CLI (`wrangler secret put DATABASE_URL`)
+- [ ] 10.7 Add R2 credentials to Workers Secrets (R2_ACCOUNT_ID, R2_ACCESS_KEY_ID, R2_SECRET_ACCESS_KEY)
+- [ ] 10.8 Document required environment variables in `docs/environment-setup.md`
+- [ ] 10.9 Create `.env.example` with all required variables (no secrets)
+- [ ] 10.10 Verify development works without any production credentials
 
 ## 11. Testing & Quality Assurance
 
@@ -165,20 +171,35 @@
 - [ ] 11.6 Verify test coverage >90% for abstraction layers
 - [ ] 11.7 Run all tests in both development and production modes
 - [ ] 11.8 Test Workers deployment to preview environment
-- [ ] 11.9 Verify UBS scan passes (`ubs backend/src/`)
-- [ ] 11.10 Run linter and fix all errors (`npm run lint`)
+- [ ] 11.9 **[RECOMMENDED - GitHub Student Pack]** Set up BrowserStack for mobile PWA testing
+  - **Setup**: Sign up at browserstack.com/github-students, get Free Automate Mobile Plan (1 year)
+  - **Integration**: `npm install -D browserstack-local`, add to Jest config for E2E tests
+  - **Test**: Barcode scanner (quagga) on real iOS/Android devices, offline sync, PWA install flow
+  - **Benefit**: Critical for PWA validation - Chrome DevTools mobile emulation doesn't catch device-specific issues
+  - **Docs**: https://www.browserstack.com/docs/automate/selenium/getting-started/nodejs
+- [x] 11.10 **[OPTIONAL - GitHub Student Pack]** Install CodeScene for code quality monitoring, configure PR checks
+- [ ] 11.11 Verify UBS scan passes (`ubs backend/src/`)
+- [ ] 11.12 Run linter and fix all errors (`npm run lint`)
 
 ## 12. Monitoring & Observability
 
 - [ ] 12.1 Enable Cloudflare Analytics for Workers
 - [ ] 12.2 Configure custom metrics (CSV processing time, upload size)
 - [ ] 12.3 Set up Neon monitoring dashboard alerts
-- [ ] 12.4 Create dashboard for key metrics (response times, error rates, upload counts)
-- [ ] 12.5 Configure alerts for error rate >1%
-- [ ] 12.6 Configure alerts for 95th percentile response time >500ms
-- [ ] 12.7 Set up Neon usage alerts at 80% of plan limits
-- [ ] 12.8 Add structured logging to Workers (JSON format)
-- [ ] 12.9 Document monitoring setup in `docs/monitoring.md`
+- [ ] 12.4 **[ESSENTIAL - GitHub Student Pack]** Set up Sentry error monitoring
+  - **Setup**: Sign up at sentry.io/for/students, create project, get DSN
+  - **Backend**: `npm install @sentry/node`, init in `backend/src/index.ts` and `workers/src/index.ts`
+  - **Frontend**: `npm install @sentry/react`, init in `frontend/src/index.tsx`, configure source maps
+  - **Workers Config**: Add `SENTRY_DSN` to Workers Secrets, configure release tracking with git SHA
+  - **Benefit**: CRITICAL for Workers where logs are ephemeral - catch errors before users report them
+  - **Free Tier**: 50K errors, 100K transactions, 500 session replays for 1 year
+  - **Docs**: https://docs.sentry.io/platforms/javascript/guides/express/
+- [ ] 12.5 Create dashboard for key metrics (response times, error rates, upload counts)
+- [ ] 12.6 Configure alerts for error rate >1%
+- [ ] 12.7 Configure alerts for 95th percentile response time >500ms
+- [ ] 12.8 Set up Neon usage alerts at 80% of plan limits
+- [ ] 12.9 Add structured logging to Workers (JSON format)
+- [ ] 12.10 Document monitoring setup in `docs/monitoring.md`
 
 ## 13. Security Hardening
 
@@ -278,3 +299,4 @@
 - [ ] 20.8 Perform user acceptance testing with sample CSVs
 - [ ] 20.9 Get approval from stakeholders for production release
 - [ ] 20.10 Archive OpenSpec change with `openspec archive use-cloudflare-r2-and-a-serverless-database`
+

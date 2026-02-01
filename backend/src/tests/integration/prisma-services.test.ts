@@ -26,7 +26,7 @@ describe('Prisma-based Services Integration', () => {
     process.env.NODE_ENV = 'test';
     prisma = createDatabaseClient({
       environment: 'test',
-      connectionUrl: 'file:./test-services.db',
+      connectionUrl: process.env.DATABASE_URL || 'file:./test.db',
     });
 
     // Ensure tables exist (in real scenario, migrations would handle this)

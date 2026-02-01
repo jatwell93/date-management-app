@@ -128,7 +128,25 @@ export function extractCostValueEnhanced(costStr: string): number | null {
 
   let normalizedStr = cleanedStr;
 
-  if (dotCount === 0 && commaCount === 0) {
+  if (dotCount > 1 && commaCount === 0) {
+    // Multiple dots, no commas (e.g. 1.000.000) -> dots are thousands separators
+    // Heuristic: Check last segment length to see if it might be a decimal
+    const lastDotIndex = cleanedStr.lastIndexOf('.');
+    const afterLastDot = cleanedStr.substring(lastDotIndex + 1);
+
+    if (afterLastDot.length === 2) {
+      // Heuristic: 12.34.56 -> 1234.56 (last dot is decimal)
+      // Replace all dots BEFORE the last one
+      const part1 = cleanedStr.substring(0, lastDotIndex).replace(/\./g, '');
+      normalizedStr = part1 + '.' + afterLastDot;
+    } else {
+      // Assume all dots are thousands separators
+      normalizedStr = cleanedStr.replace(/\./g, '');
+    }
+  } else if (commaCount > 1 && dotCount === 0) {
+    // Multiple commas, no dots (e.g. 1,000,000) -> commas are thousands separators
+    normalizedStr = cleanedStr.replace(/,/g, '');
+  } else if (dotCount === 0 && commaCount === 0) {
     // No separators - just digits
     normalizedStr = cleanedStr;
   } else if (dotCount === 1 && commaCount === 0) {

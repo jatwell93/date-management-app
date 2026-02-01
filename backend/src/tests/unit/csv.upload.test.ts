@@ -1,47 +1,55 @@
 import { ProductService } from '../../services/product.service';
-import { getDb } from '../../database';
+import { PrismaClient } from '@prisma/client';
 import fs from 'fs';
 import path from 'path';
 
-// Mock the database functions to avoid actual database operations during tests
-jest.mock('../../database', () => ({
-  getDb: jest.fn(),
-  releaseDb: jest.fn(),
-}));
-
 describe('CSV Upload Functionality Tests', () => {
   let productService: ProductService;
+  let mockPrisma: any;
 
   beforeEach(() => {
-    productService = new ProductService();
-    const mockStatement = {
-      run: jest.fn(),
-      all: jest.fn(),
-      get: jest.fn(),
+    mockPrisma = {
+        product: {
+            findUnique: jest.fn(),
+            create: jest.fn(),
+            update: jest.fn(),
+        },
+        $transaction: jest.fn((callback) => callback(mockPrisma)),
     };
-    const mockDb = {
-      prepare: jest.fn(() => mockStatement),
-    };
-    (getDb as jest.Mock).mockReturnValue(mockDb);
+    productService = new ProductService(mockPrisma as unknown as PrismaClient);
   });
 
   it('should process CSV with basic format correctly', async () => {
+    mockPrisma.product.findUnique.mockResolvedValue(null); // No existing products
+    // Simplify mock to return a valid object always
+    mockPrisma.product.create.mockImplementation((args: any) => Promise.resolve({
+        id: 1,
+        name: 'Test Product',
+        sku: 'TEST001',
+        costPrice: 10.00,
+        barcode: '123456789',
+        ...args.data,
+        createdAt: new Date(),
+        updatedAt: new Date()
+    }));
+
     const csvContent = `SKU,Name,Cost,Barcode
 TEST001,Product 1,$12.99,1234567890123
 TEST002,Product 2,€15.50,1234567890124
-TEST003,Product 3,1,000.99,1234567890125`;
+TEST003,Product 3,"1,000.99",1234567890125`;
     const testCSVPath = path.join(__dirname, 'test.csv');
     fs.writeFileSync(testCSVPath, csvContent);
 
-    const result = await productService.processCSVUploadInternal(testCSVPath);
-
-    expect(result.errors.length).toBe(0);
-    expect(result.imported).toBe(3); // All 3 rows should be imported
-    expect(result.updated).toBe(0); // No updates since it's first import
-
-    // Clean up the test file
-    if (fs.existsSync(testCSVPath)) {
-      fs.unlinkSync(testCSVPath);
+    try {
+        const result = await productService.processCSVUploadInternal(testCSVPath);
+        
+        expect(result.errors.length).toBe(0);
+        expect(result.imported).toBe(3); // All 3 rows should be imported
+        expect(result.updated).toBe(0); // No updates since it's first import
+    } finally {
+        if (fs.existsSync(testCSVPath)) {
+            fs.unlinkSync(testCSVPath);
+        }
     }
   });
 });
@@ -49,9 +57,11 @@ TEST003,Product 3,1,000.99,1234567890125`;
 // Test cases for alternative header name recognition
 describe('CSV Header Name Recognition', () => {
   let productService: ProductService;
+  let mockPrisma: any;
 
   beforeEach(() => {
-    productService = new ProductService();
+    mockPrisma = { product: {} };
+    productService = new ProductService(mockPrisma);
   });
 
   it('should recognize alternative SKU column names', () => {
@@ -191,6 +201,7 @@ describe('Flexible Data Validation for Different Number Formats', () => {
   it('should handle numbers with thousands separators only', () => {
     expect(ProductService['extractCostValueEnhanced']('1,000')).toBe(1000);
     expect(ProductService['extractCostValueEnhanced']('1.000')).toBe(1000);
+    // These work now because we fixed the logic
     expect(ProductService['extractCostValueEnhanced']('1,000,000')).toBe(1000000);
     expect(ProductService['extractCostValueEnhanced']('1.000.000')).toBe(1000000);
   });
@@ -215,79 +226,119 @@ describe('Flexible Data Validation for Different Number Formats', () => {
 // Test cases for error handling scenarios
 describe('CSV Upload Error Handling', () => {
   let productService: ProductService;
+  let mockPrisma: any;
 
   beforeEach(() => {
-    productService = new ProductService();
+    mockPrisma = {
+        product: {
+            findUnique: jest.fn(),
+            create: jest.fn(),
+        },
+        $transaction: jest.fn((callback) => callback(mockPrisma)),
+    };
+    productService = new ProductService(mockPrisma as unknown as PrismaClient);
   });
 
   it('should return errors for missing required fields', async () => {
+    // Missing Barcode
+    mockPrisma.product.findUnique.mockResolvedValue(null);
+    
     // Create a CSV with missing required fields
     const csvContent = `SKU,Name,Cost\nTEST001,Product 1,12.99`;
     const testCSVPath = path.join(__dirname, 'test_missing_fields.csv');
     fs.writeFileSync(testCSVPath, csvContent);
 
-    const result = await productService.processCSVUploadInternal(testCSVPath);
+    try {
+        const result = await productService.processCSVUploadInternal(testCSVPath);
 
-    expect(result.errors.length).toBeGreaterThan(0);
-    expect(result.errors[0]).toContain('Missing required field - Barcode');
-    expect(result.imported).toBe(0);
-    expect(result.updated).toBe(0);
+        expect(result.errors.length).toBeGreaterThan(0);
+        expect(result.errors[0]).toContain('Missing required field - Barcode');
+        expect(result.imported).toBe(0);
+        expect(result.updated).toBe(0);
+    } finally {
+        if (fs.existsSync(testCSVPath)) fs.unlinkSync(testCSVPath);
+    }
   });
 
   it('should return errors for invalid cost values', async () => {
-    // Create a CSV with invalid cost values
+    mockPrisma.product.findUnique.mockResolvedValue(null);
+    
     const csvContent = `SKU,Name,Cost,Barcode\nTEST001,Product 1,invalid_cost,1234567890123`;
     const testCSVPath = path.join(__dirname, 'test_invalid_cost.csv');
     fs.writeFileSync(testCSVPath, csvContent);
 
-    const result = await productService.processCSVUploadInternal(testCSVPath);
+    try {
+        const result = await productService.processCSVUploadInternal(testCSVPath);
 
-    expect(result.errors.length).toBeGreaterThan(0);
-    expect(result.errors[0]).toContain('Invalid cost value');
-    expect(result.imported).toBe(0);
-    expect(result.updated).toBe(0);
+        expect(result.errors.length).toBeGreaterThan(0);
+        expect(result.errors[0]).toContain('Invalid cost value');
+        expect(result.imported).toBe(0);
+        expect(result.updated).toBe(0);
+    } finally {
+        if (fs.existsSync(testCSVPath)) fs.unlinkSync(testCSVPath);
+    }
   });
 
   it('should return errors for values that exceed length limits', async () => {
-    // Create a CSV with values exceeding length limits
+    mockPrisma.product.findUnique.mockResolvedValue(null);
+    
     const longName =
       'Product with a very long name that exceeds the maximum allowed length for testing purposes';
     const csvContent = `SKU,Name,Cost,Barcode\nTEST001,${longName},12.99,1234567890123`;
     const testCSVPath = path.join(__dirname, 'test_length_error.csv');
     fs.writeFileSync(testCSVPath, csvContent);
 
-    const result = await productService.processCSVUploadInternal(testCSVPath);
+    try {
+        const result = await productService.processCSVUploadInternal(testCSVPath);
 
-    expect(result.errors.length).toBeGreaterThan(0);
-    expect(result.errors[0]).toContain('Name too long');
-    expect(result.imported).toBe(0);
-    expect(result.updated).toBe(0);
+        expect(result.errors.length).toBeGreaterThan(0);
+        expect(result.errors[0]).toContain('Name too long');
+        expect(result.imported).toBe(0);
+        expect(result.updated).toBe(0);
+    } finally {
+        if (fs.existsSync(testCSVPath)) fs.unlinkSync(testCSVPath);
+    }
   });
 
   it('should return errors when required headers are missing', async () => {
-    // Create a CSV without required headers
+    // This fails at header validation stage, so DB logic is not reached, but mock needed for constructor
     const csvContent = `WrongHeader1,WrongHeader2,WrongHeader3,WrongHeader4\nTEST001,Product 1,12.99,1234567890123`;
     const testCSVPath = path.join(__dirname, 'test_missing_headers.csv');
     fs.writeFileSync(testCSVPath, csvContent);
 
-    const result = await productService.processCSVUploadInternal(testCSVPath);
+    try {
+        const result = await productService.processCSVUploadInternal(testCSVPath);
 
-    expect(result.errors.length).toBeGreaterThan(0);
-    expect(result.errors[0]).toContain('Missing required column header for SKU');
-    expect(result.imported).toBe(0);
-    expect(result.updated).toBe(0);
+        expect(result.errors.length).toBeGreaterThan(0);
+        expect(result.errors[0]).toContain('Missing required column header for SKU');
+        expect(result.imported).toBe(0);
+        expect(result.updated).toBe(0);
+    } finally {
+        if (fs.existsSync(testCSVPath)) fs.unlinkSync(testCSVPath);
+    }
   });
 });
 
-// Update the existing CSV processing test to include more comprehensive checks
 describe('Comprehensive CSV Processing Tests', () => {
   let productService: ProductService;
+  let mockPrisma: any;
 
   beforeEach(() => {
-    productService = new ProductService();
+    mockPrisma = {
+        product: {
+            findUnique: jest.fn(),
+            create: jest.fn(),
+            update: jest.fn(),
+        },
+        $transaction: jest.fn((callback) => callback(mockPrisma)),
+    };
+    productService = new ProductService(mockPrisma as unknown as PrismaClient);
   });
 
   it('should process CSV with various currency formats', async () => {
+    mockPrisma.product.findUnique.mockResolvedValue(null);
+    mockPrisma.product.create.mockImplementation((args: any) => Promise.resolve({ id: 1, ...args.data }));
+    
     const csvContent = `SKU,Name,Cost,Barcode
 TEST001,Product 1,$12.99,1234567890123
 TEST002,Product 2,€15.50,1234567890124
@@ -298,14 +349,20 @@ TEST005,Product 5,AUD$ 35.99,1234567890127`;
     const testCSVPath = path.join(__dirname, 'test_currency_formats.csv');
     fs.writeFileSync(testCSVPath, csvContent);
 
-    const result = await productService.processCSVUploadInternal(testCSVPath);
-
-    expect(result.errors.length).toBe(0);
-    expect(result.imported).toBe(5);
-    expect(result.updated).toBe(0);
+    try {
+        const result = await productService.processCSVUploadInternal(testCSVPath);
+        expect(result.errors.length).toBe(0);
+        expect(result.imported).toBe(5);
+        expect(result.updated).toBe(0);
+    } finally {
+        if (fs.existsSync(testCSVPath)) fs.unlinkSync(testCSVPath);
+    }
   });
 
   it('should process CSV with alternative header names', async () => {
+    mockPrisma.product.findUnique.mockResolvedValue(null);
+    mockPrisma.product.create.mockImplementation((args: any) => Promise.resolve({ id: 1, ...args.data }));
+
     const csvContent = `Item Code,Product Name,Unit Price,GTIN
 TEST001,Product 1,12.99,1234567890123
 TEST002,Product 2,15.50,1234567890124
@@ -314,10 +371,14 @@ TEST003,Product 3,20.75,1234567890125`;
     const testCSVPath = path.join(__dirname, 'test_alt_headers.csv');
     fs.writeFileSync(testCSVPath, csvContent);
 
-    const result = await productService.processCSVUploadInternal(testCSVPath);
+    try {
+        const result = await productService.processCSVUploadInternal(testCSVPath);
 
-    expect(result.errors.length).toBe(0);
-    expect(result.imported).toBe(3);
-    expect(result.updated).toBe(0);
+        expect(result.errors.length).toBe(0);
+        expect(result.imported).toBe(3);
+        expect(result.updated).toBe(0);
+    } finally {
+        if (fs.existsSync(testCSVPath)) fs.unlinkSync(testCSVPath);
+    }
   });
 });

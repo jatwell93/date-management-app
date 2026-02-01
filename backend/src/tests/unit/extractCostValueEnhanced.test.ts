@@ -138,8 +138,8 @@ describe('Flexible data validation for different number formats', () => {
     // For "1.000.000", it depends on the function logic
     const result2 = extractCostValueEnhanced('1.000.000');
     expect(result2).not.toBeNaN();
-    // The function likely treats this as 1000 (with multiple dots being treated as thousands separators)
-    expect(result2).toBe(1000);
+    // The function treats this as 1000000 (with multiple dots being treated as thousands separators)
+    expect(result2).toBe(1000000);
   });
 
   it('should handle decimal numbers without thousands separators', () => {

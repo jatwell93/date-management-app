@@ -1,4 +1,4 @@
-import { getDb, releaseDb } from '../database';
+import { getDb } from '../database';
 import { Logger } from '../utils/logger';
 import { EventEmitter } from 'events';
 
@@ -404,6 +404,14 @@ export class DatabaseMonitoringService extends EventEmitter {
   private async getHealthMetrics(): Promise<DatabaseMetrics['health']> {
     const db = getDb();
 
+    if (!db) {
+       return {
+        uptime: process.uptime(),
+        tableSizes: {},
+        rowCount: {},
+      };
+    }
+
     try {
       // Get table names
       const tablesResult = db
@@ -454,7 +462,7 @@ export class DatabaseMonitoringService extends EventEmitter {
         rowCount,
       };
     } finally {
-      releaseDb(db);
+      // releaseDb(db);
     }
   }
 

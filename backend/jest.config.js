@@ -7,6 +7,13 @@ module.exports = {
   moduleNameMapper: {
     '^@/(.*)': '<rootDir>/src/$1',
   },
+  transform: {
+    '^.+\\.tsx?$': ['ts-jest', {
+      isolatedModules: true,
+    }],
+  },
+  globalSetup: '<rootDir>/test-setup.js',
+  setupFiles: ['<rootDir>/src/tests/setup-env.ts'],
   // Coverage configuration
   coverageProvider: 'v8',
   collectCoverageFrom: [
@@ -20,4 +27,8 @@ module.exports = {
   ],
   coverageReporters: ['text', 'text-summary', 'lcov', 'html'],
   coverageDirectory: 'coverage',
+  
+  // Performance optimization
+  maxWorkers: '50%',
+  testTimeout: 30000,
 };

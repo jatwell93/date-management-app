@@ -3,9 +3,13 @@ main = "src/index.ts"
 compatibility_date = "2024-01-01"
 
 # Workers Routes Configuration
-routes = [
-  { pattern = "api.yourdomain.com/*", zone_name = "yourdomain.com" }
-]
+# Option 1: Custom Domain (Requires an active Cloudflare zone)
+# [[routes]]
+# pattern = "date-management-app.workers.dev"
+# custom_domain = true
+
+# Option 2: Free workers.dev subdomain (Automatically assigned on publish)
+# workers_dev = true
 
 # Environment Variables (Non-Secret)
 [env.production]

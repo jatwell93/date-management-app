@@ -1,50 +1,50 @@
 import React from 'react';
 import { render, screen, waitFor } from '@testing-library/react';
 import { DashboardPage } from '../pages/DashboardPage';
+import { apiService } from '../lib/api.service';
 import '@testing-library/jest-dom';
 
-// Mock fetch API
-global.fetch = jest.fn(() =>
-  Promise.resolve({
-    ok: true,
-    json: () =>
-      Promise.resolve({
-        totalProducts: 100,
-        expiringSoon: 10,
-        markdownItems: 5,
-        recentActivity: [
-          {
-            id: 1,
-            description: 'Activity 1',
-            timestamp: '2025-09-24T10:00:00Z',
-          },
-        ],
-      }),
-  } as Response),
-);
+// Mock apiService
+jest.mock('../lib/api.service', () => ({
+  apiService: {
+    get: jest.fn(),
+  },
+}));
 
 describe('DashboardPage', () => {
+  beforeEach(() => {
+    jest.clearAllMocks();
+  });
+
   it('renders dashboard data on successful fetch', async () => {
+    (apiService.get as jest.Mock).mockResolvedValue({
+      totalProducts: 100,
+      expiringSoon: 10,
+      markdownItems: 5,
+      recentActivity: [
+        {
+          id: 1,
+          description: 'Activity 1',
+          timestamp: '2025-09-24T10:00:00Z',
+        },
+      ],
+    });
+
     const tokenValue = 'test-session-value';
     render(<DashboardPage token={tokenValue} />);
 
     expect(screen.getByText(/Loading dashboard.../i)).toBeInTheDocument();
 
     expect(await screen.findByText(/Total Products/i)).toBeInTheDocument();
-    expect(screen.getByText(/100/i)).toBeInTheDocument();
+    expect(screen.getByText('100')).toBeInTheDocument();
     expect(screen.getByText(/Expiring Soon/i)).toBeInTheDocument();
-    expect(screen.getByText(/10/i)).toBeInTheDocument();
+    expect(screen.getByText('10')).toBeInTheDocument();
     expect(screen.getByText(/Markdown Items/i)).toBeInTheDocument();
-    expect(screen.getByText(/5/i)).toBeInTheDocument();
+    expect(screen.getByText('5')).toBeInTheDocument();
     expect(screen.getByText(/Recent Activity/i)).toBeInTheDocument();
     expect(screen.getByText(/Activity 1/i)).toBeInTheDocument();
 
-    expect(global.fetch).toHaveBeenCalledWith(
-      'http://localhost:3001/dashboard',
-      expect.objectContaining({
-        headers: { Authorization: `Bearer ${tokenValue}` },
-      }),
-    );
+    expect(apiService.get).toHaveBeenCalledWith('/dashboard', tokenValue);
   });
 
   it('displays an error message if token is missing', async () => {
@@ -56,12 +56,7 @@ describe('DashboardPage', () => {
   });
 
   it('displays an error message on failed data fetch', async () => {
-    (global.fetch as jest.Mock).mockImplementationOnce(() =>
-      Promise.resolve({
-        ok: false,
-        json: () => Promise.resolve({ message: 'Failed to load data' }),
-      } as Response),
-    );
+    (apiService.get as jest.Mock).mockRejectedValueOnce(new Error('Failed to load data'));
 
     const tokenValue = 'test-session-value';
     render(<DashboardPage token={tokenValue} />);

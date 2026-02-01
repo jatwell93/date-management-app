@@ -15,4 +15,11 @@ module.exports = {
       return webpackConfig;
     },
   },
+  jest: {
+    configure: {
+      transformIgnorePatterns: [
+        'node_modules/(?!uuid)/'
+      ],
+    },
+  },
 };
