@@ -112,7 +112,7 @@
 - [x] 7.7 **USER: Create Neon API key** for CI/CD (Project Settings → API Keys)
 - [x] 7.8 Set up connection string in `.env` (NEON_CONNECTION_STRING configured)
 - [x] 7.9 **USER: Enable Neon monitoring dashboard** (Neon Dashboard → Monitoring)
-- [ ] 7.10 **USER: Manually review slow queries** in Neon Dashboard (Monitoring → Query Performance tab)
+- [x] 7.10 **USER: Manually review slow queries** in Neon Dashboard (Monitoring → Query Performance tab)
 - [x] 7.11 Document Neon database branching workflow in `docs/database-migrations.md`
 
 ## 8. Cloudflare Workers Implementation
