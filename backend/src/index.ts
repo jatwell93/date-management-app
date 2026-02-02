@@ -1,6 +1,9 @@
+require('../instrument');
+
 import express from 'express';
 import cors from 'cors';
 import helmet from 'helmet';
+import * as Sentry from "@sentry/node";
 import { createServer, Server as HttpsServer } from 'https';
 import { Server as HttpServer } from 'http'; // Import http server type
 import { promises as fs } from 'fs';
@@ -195,6 +198,9 @@ app.get('*', (req, res) => {
     res.status(404).send('File not found');
   }
 });
+
+// Sentry error handler must be added before any other error-handling middleware
+Sentry.setupExpressErrorHandler(app);
 
 // Error handling middleware
 app.use(errorHandler);
