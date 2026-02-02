@@ -117,19 +117,19 @@
 
 ## 8. Cloudflare Workers Implementation
 
-- [ ] 8.1 Create `workers/src/index.ts` entry point
-- [ ] 8.2 Implement Express-compatible adapter for Workers
-- [ ] 8.3 Import existing Express routes from `backend/src/routes/`
-- [ ] 8.4 Configure CORS headers for production frontend domain
-- [ ] 8.5 Add error handling middleware for Workers environment
-- [ ] 8.6 Implement request validation middleware
-- [ ] 8.7 Add rate limiting (10 requests/minute per IP, 100 for authenticated)
-- [ ] 8.8 Implement health check endpoint (`/health`)
-- [ ] 8.9 Configure Workers Secrets for R2 and PlanetScale credentials
-- [ ] 8.10 Add request/response logging (exclude sensitive data)
-- [ ] 8.11 Configure Wrangler routes in `wrangler.toml`
+- [x] 8.1 Create `workers/src/index.ts` entry point
+- [x] 8.2 Implement Express-compatible adapter for Workers
+- [ ] 8.3 Import existing Express routes from `backend/src/routes/` (structure ready, needs actual route imports)
+- [x] 8.4 Configure CORS headers for production frontend domain
+- [x] 8.5 Add error handling middleware for Workers environment
+- [x] 8.6 Implement request validation middleware (via Express adapter middleware chain)
+- [x] 8.7 Add rate limiting (10 requests/minute per IP, 100 for authenticated)
+- [x] 8.8 Implement health check endpoint (`/health`)
+- [x] 8.9 Configure Workers Secrets for R2 and Neon credentials (documented in wrangler.toml)
+- [x] 8.10 Add request/response logging (exclude sensitive data)
+- [x] 8.11 Configure Wrangler routes in `wrangler.toml`
 - [ ] 8.12 Write Workers-specific tests using Miniflare
-- [ ] 8.13 Test Workers locally with `wrangler dev`
+- [x] 8.13 **USER: Test Workers locally with `wrangler dev`** (verified: server runs, health endpoint responds correctly)
 
 ## 9. Upload Flow Enhancement
 

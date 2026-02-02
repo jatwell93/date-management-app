@@ -13,4 +13,5 @@ module.exports = [
   '**/*.sqlite',
   '**/*.sqlite-*',
   '**/prisma/*.db',
+  '**/workers/**', // Workers has its own separate config
 ];

@@ -2,14 +2,23 @@ name = "date-management-api"
 main = "src/index.ts"
 compatibility_date = "2024-01-01"
 
+# Node.js compatibility for Prisma and Node APIs
+compatibility_flags = ["nodejs_compat"]
+
 # Workers Routes Configuration
 # Option 1: Custom Domain (Requires an active Cloudflare zone)
 # [[routes]]
-# pattern = "date-management-app.workers.dev"
-# custom_domain = true
+# pattern = "api.yourdomain.com/*"
+# zone_name = "yourdomain.com"
 
 # Option 2: Free workers.dev subdomain (Automatically assigned on publish)
-# workers_dev = true
+workers_dev = true
+
+# Route patterns (when using custom domain)
+# [[routes]]
+# pattern = "api.yourdomain.com/api/*"
+# [[routes]]
+# pattern = "api.yourdomain.com/health"
 
 # Environment Variables (Non-Secret)
 [env.production]
@@ -24,11 +33,15 @@ RATE_LIMIT_WINDOW = "60000"
 RATE_LIMIT_MAX_REQUESTS = "10"
 RATE_LIMIT_MAX_AUTHENTICATED = "100"
 
-# R2 Bucket Bindings
-[[r2_buckets]]
+# R2 Bucket Bindings (Production)
+[[env.production.r2_buckets]]
 binding = "CSV_UPLOADS"
 bucket_name = "csv-uploads-prod"
-preview_bucket_name = "csv-uploads-preview"
+
+# R2 Bucket Bindings (Development/Preview)
+[[env.development.r2_buckets]]
+binding = "CSV_UPLOADS"
+bucket_name = "csv-uploads-dev"
 
 # Development/Preview Environment
 [env.development]
@@ -41,10 +54,16 @@ STORAGE_PROVIDER = "local"
 # Build Configuration
 [build]
 command = "npm run build"
-watch_dir = "src"
+watch_dirs = ["src"]
 
-# Secrets (set via CLI: wrangler secret put <KEY>)
-# - DATABASE_URL (PlanetScale connection string)
-# - R2_ACCESS_KEY_ID
-# - R2_SECRET_ACCESS_KEY
-# - JWT_SECRET
+# Secrets (set via CLI: wrangler secret put <KEY> --env production)
+# Production secrets required:
+# - NEON_CONNECTION_STRING (Neon PostgreSQL connection string)
+# - JWT_SECRET (JWT authentication secret)
+# - R2_ACCOUNT_ID (Cloudflare R2 account ID)
+# - R2_ACCESS_KEY_ID (R2 API access key)
+# - R2_SECRET_ACCESS_KEY (R2 API secret key)
+# - R2_BUCKET_NAME (R2 bucket name, e.g., csv-uploads-prod)
+# - SENTRY_DSN (optional, Sentry error monitoring)
+#
+# Example: wrangler secret put NEON_CONNECTION_STRING --env production
