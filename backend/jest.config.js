@@ -8,9 +8,12 @@ module.exports = {
     '^@/(.*)': '<rootDir>/src/$1',
   },
   transform: {
-    '^.+\\.tsx?$': ['ts-jest', {
-      isolatedModules: true,
-    }],
+    '^.+\\.tsx?$': [
+      'ts-jest',
+      {
+        isolatedModules: true,
+      },
+    ],
   },
   globalSetup: '<rootDir>/test-setup.js',
   setupFiles: ['<rootDir>/src/tests/setup-env.ts'],
@@ -27,7 +30,7 @@ module.exports = {
   ],
   coverageReporters: ['text', 'text-summary', 'lcov', 'html'],
   coverageDirectory: 'coverage',
-  
+
   // Performance optimization
   maxWorkers: '50%',
   testTimeout: 30000,

@@ -7,16 +7,16 @@ describe('InventoryService', () => {
 
   beforeEach(() => {
     mockPrisma = {
-        inventoryItem: {
-            create: jest.fn(),
-            update: jest.fn(),
-            findUnique: jest.fn(),
-            findMany: jest.fn(),
-        },
-        auditLog: {
-            create: jest.fn(),
-        },
-        $transaction: jest.fn((callback) => callback(mockPrisma)),
+      inventoryItem: {
+        create: jest.fn(),
+        update: jest.fn(),
+        findUnique: jest.fn(),
+        findMany: jest.fn(),
+      },
+      auditLog: {
+        create: jest.fn(),
+      },
+      $transaction: jest.fn((callback) => callback(mockPrisma)),
     };
     inventoryService = new InventoryService(mockPrisma as unknown as PrismaClient);
   });
@@ -32,16 +32,16 @@ describe('InventoryService', () => {
       locationId: 1,
       status: 'Normal' as 'Normal' | 'Markdown 1' | 'Markdown 2' | 'Markdown 3' | 'Expired',
     };
-    
+
     // The service might expect Dates in return from Prisma
     const mockCreatedItem = {
-        id: 1,
-        ...newItemData,
-        expiryDate: new Date(newItemData.expiryDate), // Prisma returns Date objects
-        createdAt: new Date(),
-        updatedAt: new Date()
+      id: 1,
+      ...newItemData,
+      expiryDate: new Date(newItemData.expiryDate), // Prisma returns Date objects
+      createdAt: new Date(),
+      updatedAt: new Date(),
     };
-    
+
     mockPrisma.inventoryItem.create.mockResolvedValue(mockCreatedItem);
 
     const createdItem = await inventoryService.createInventoryItem(newItemData, 1);
@@ -52,22 +52,22 @@ describe('InventoryService', () => {
   });
 
   it('should update an inventory item status', async () => {
-    const mockItem = { 
-        id: 1, 
-        productId: 1,
-        locationId: 1,
-        expiryDate: new Date(),
-        status: 'Markdown 1',
-        createdAt: new Date(),
-        updatedAt: new Date()
+    const mockItem = {
+      id: 1,
+      productId: 1,
+      locationId: 1,
+      expiryDate: new Date(),
+      status: 'Markdown 1',
+      createdAt: new Date(),
+      updatedAt: new Date(),
     };
-    
+
     // We mock findUnique to return the item (if logic checks existence first)
     mockPrisma.inventoryItem.findUnique.mockResolvedValue(mockItem);
     // We mock update to return the updated item
     mockPrisma.inventoryItem.update.mockResolvedValue({
-        ...mockItem,
-        status: 'Markdown 1'
+      ...mockItem,
+      status: 'Markdown 1',
     });
 
     const updatedItem = await inventoryService.updateInventoryItem(1, { status: 'Markdown 1' }, 1);

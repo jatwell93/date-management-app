@@ -22,7 +22,18 @@ const { execSync } = require('child_process');
 const path = require('path');
 
 // Load environment variables from .env file
-require('dotenv').config({ path: path.join(__dirname, '..', '.env') });
+const envPath = path.join(__dirname, '..', '.env');
+require('dotenv').config({ path: envPath, override: true });
+
+// Ensure all common Gemini/Google environment variables are set and exported
+const apiKey = process.env.GEMINI_API_KEY || process.env.GOOGLE_API_KEY || process.env.MEMVID_TOKEN;
+if (apiKey) {
+  process.env.GEMINI_API_KEY = apiKey;
+  process.env.GOOGLE_API_KEY = apiKey;
+  // console.log(`[DEBUG] Key found in .env (length: ${apiKey.length})`);
+} else {
+  console.warn('[WARN] No Gemini API key found in .env or environment');
+}
 
 const MEMORY_FILE = path.join(__dirname, '..', 'project-memory.mv2');
 
@@ -48,13 +59,21 @@ function logMemory(kind, title, message) {
   const hasGemini = !!process.env.GEMINI_API_KEY;
   const embeddingFlags = hasGemini ? ' --embedding --embedding-model gemini' : '';
 
+  // Cross-platform environment variable prefix for the shell command
+  const envPrefix = hasGemini
+    ? process.platform === 'win32'
+      ? `set GEMINI_API_KEY=${process.env.GEMINI_API_KEY} && set GOOGLE_API_KEY=${process.env.GEMINI_API_KEY} && set gemini_api_key=${process.env.GEMINI_API_KEY} && `
+      : `GEMINI_API_KEY=${process.env.GEMINI_API_KEY} GOOGLE_API_KEY=${process.env.GEMINI_API_KEY} gemini_api_key=${process.env.GEMINI_API_KEY} `
+    : '';
+
   try {
     // Use echo with pipe
-    const cmd = `echo "${fullMessage.replace(/"/g, '\\"')}" | memvid put "${MEMORY_FILE}" --title "${title}" --kind "${normalizedKind.toLowerCase()}"${embeddingFlags}`;
+    const cmd = `${envPrefix}echo "${fullMessage.replace(/"/g, '\\"')}" | memvid put "${MEMORY_FILE}" --title "${title}" --kind "${normalizedKind.toLowerCase()}"${embeddingFlags}`;
 
     execSync(cmd, {
       stdio: 'inherit',
       shell: true,
+      env: process.env,
     });
 
     console.log(`\n✅ Memory logged: [${normalizedKind}] ${title}`);

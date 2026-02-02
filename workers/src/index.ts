@@ -50,7 +50,9 @@ class WorkersRouter {
     
     this.routes.push({
       path: regex,
-      handler: adaptExpressHandler(handler),
+      handler: async (req: ExpressRequest, res: ExpressResponse) => {
+        await adaptExpressHandler(handler)(req, res);
+      },
       middleware,
     });
   }
@@ -106,7 +108,7 @@ function createRouter(env: Env): WorkersRouter {
   // adapted to work in Workers environment (no file system access)
 
   // Health check (no auth required)
-  router.addRoute('/health', async (req, res) => {
+  router.addRoute('/health', async (req: ExpressRequest, res: ExpressResponse) => {
     res.status(200).json({
       status: 'healthy',
       timestamp: new Date().toISOString(),

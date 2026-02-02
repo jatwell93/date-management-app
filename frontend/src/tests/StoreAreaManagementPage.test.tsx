@@ -40,14 +40,19 @@ describe('StoreAreaManagementPage', () => {
 
   it('adds a new store area', async () => {
     // Initial fetch returns empty or existing
-    (apiService.get as jest.Mock).mockResolvedValueOnce([
-        { id: 1, name: 'Aisle 1', last_checked: null } 
-    ]).mockResolvedValueOnce([ // After add
+    (apiService.get as jest.Mock)
+      .mockResolvedValueOnce([{ id: 1, name: 'Aisle 1', last_checked: null }])
+      .mockResolvedValueOnce([
+        // After add
         { id: 1, name: 'Aisle 1', last_checked: null },
-        { id: 3, name: 'New Area', last_checked: null }
-    ]);
+        { id: 3, name: 'New Area', last_checked: null },
+      ]);
 
-    (apiService.post as jest.Mock).mockResolvedValue({ id: 3, name: 'New Area', last_checked: null });
+    (apiService.post as jest.Mock).mockResolvedValue({
+      id: 3,
+      name: 'New Area',
+      last_checked: null,
+    });
 
     render(<StoreAreaManagementPage token={testSessionToken} />);
 
@@ -60,49 +65,57 @@ describe('StoreAreaManagementPage', () => {
     fireEvent.click(screen.getByRole('button', { name: /Add Area/i }));
 
     // Verify POST call
-    await _waitFor(() => expect(apiService.post).toHaveBeenCalledWith(
-      '/store-areas',
-      { name: 'New Area', subDepartment: '' },
-      testSessionToken
-    ));
+    await _waitFor(() =>
+      expect(apiService.post).toHaveBeenCalledWith(
+        '/store-areas',
+        { name: 'New Area', subDepartment: '' },
+        testSessionToken,
+      ),
+    );
 
     // Verify success message and subsequent operations (Mock update)
-     expect(await screen.findByText(/Store area added successfully!/i)).toBeInTheDocument();
+    expect(await screen.findByText(/Store area added successfully!/i)).toBeInTheDocument();
   });
 
   it('edits an existing store area', async () => {
-     (apiService.get as jest.Mock).mockResolvedValue([
-      { id: 1, name: 'Aisle 1', last_checked: null }
+    (apiService.get as jest.Mock).mockResolvedValue([
+      { id: 1, name: 'Aisle 1', last_checked: null },
     ]);
-    (apiService.put as jest.Mock).mockResolvedValue({ message: 'Store area updated successfully!' });
+    (apiService.put as jest.Mock).mockResolvedValue({
+      message: 'Store area updated successfully!',
+    });
 
     render(<StoreAreaManagementPage token={testSessionToken} />);
 
     await screen.findByText(/Aisle 1/i);
 
     // Open Edit Dialog
-    fireEvent.click(screen.getAllByRole('button', { name: /Edit/i })[0]); 
-    
+    fireEvent.click(screen.getAllByRole('button', { name: /Edit/i })[0]);
+
     // In Dialog
     const editInput = screen.getByLabelText(/Name/i); // Matches Label htmlFor="editedAreaName"
     fireEvent.change(editInput, { target: { value: 'Updated Aisle 1' } });
 
     fireEvent.click(screen.getByRole('button', { name: /Save changes/i }));
 
-    await _waitFor(() => expect(apiService.put).toHaveBeenCalledWith(
-      '/store-areas/1',
-      { name: 'Updated Aisle 1', subDepartment: '' },
-      testSessionToken
-    ));
-    
+    await _waitFor(() =>
+      expect(apiService.put).toHaveBeenCalledWith(
+        '/store-areas/1',
+        { name: 'Updated Aisle 1', subDepartment: '' },
+        testSessionToken,
+      ),
+    );
+
     expect(await screen.findByText(/Store area updated successfully!/i)).toBeInTheDocument();
   });
 
   it('deletes a store area', async () => {
     (apiService.get as jest.Mock).mockResolvedValue([
-      { id: 1, name: 'Aisle 1', last_checked: null }
+      { id: 1, name: 'Aisle 1', last_checked: null },
     ]);
-    (apiService.delete as jest.Mock).mockResolvedValue({ message: 'Store area deleted successfully!' });
+    (apiService.delete as jest.Mock).mockResolvedValue({
+      message: 'Store area deleted successfully!',
+    });
 
     render(<StoreAreaManagementPage token={testSessionToken} />);
 
@@ -111,10 +124,12 @@ describe('StoreAreaManagementPage', () => {
     // Mock confirm
     window.confirm = jest.fn(() => true);
 
-    fireEvent.click(screen.getAllByRole('button', { name: /Delete/i })[0]); 
+    fireEvent.click(screen.getAllByRole('button', { name: /Delete/i })[0]);
 
-    await _waitFor(() => expect(apiService.delete).toHaveBeenCalledWith('/store-areas/1', testSessionToken));
-    
+    await _waitFor(() =>
+      expect(apiService.delete).toHaveBeenCalledWith('/store-areas/1', testSessionToken),
+    );
+
     expect(await screen.findByText(/Store area deleted successfully!/i)).toBeInTheDocument();
   });
 });

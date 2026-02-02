@@ -20,12 +20,12 @@ describe('MarkdownCalculator', () => {
     fireEvent.change(screen.getByLabelText(/Cost Price/i), {
       target: { value: '100' },
     });
-    
+
     // Set expiry date to 15 days from now (Markdown 3 - 20% off)
     const futureDate = new Date();
     futureDate.setDate(futureDate.getDate() + 15);
     const dateString = futureDate.toISOString().split('T')[0];
-    
+
     fireEvent.change(screen.getByLabelText(/Expiry Date/i), {
       target: { value: dateString },
     });
@@ -49,12 +49,12 @@ describe('MarkdownCalculator', () => {
     fireEvent.change(screen.getByLabelText(/Cost Price/i), {
       target: { value: '50' },
     });
-    
+
     // Set expiry date to yesterday
     const pastDate = new Date();
     pastDate.setDate(pastDate.getDate() - 1);
     const dateString = pastDate.toISOString().split('T')[0];
-    
+
     fireEvent.change(screen.getByLabelText(/Expiry Date/i), {
       target: { value: dateString },
     });

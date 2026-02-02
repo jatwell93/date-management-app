@@ -9,12 +9,12 @@ describe('CSV Upload Functionality Tests', () => {
 
   beforeEach(() => {
     mockPrisma = {
-        product: {
-            findUnique: jest.fn(),
-            create: jest.fn(),
-            update: jest.fn(),
-        },
-        $transaction: jest.fn((callback) => callback(mockPrisma)),
+      product: {
+        findUnique: jest.fn(),
+        create: jest.fn(),
+        update: jest.fn(),
+      },
+      $transaction: jest.fn((callback) => callback(mockPrisma)),
     };
     productService = new ProductService(mockPrisma as unknown as PrismaClient);
   });
@@ -22,16 +22,18 @@ describe('CSV Upload Functionality Tests', () => {
   it('should process CSV with basic format correctly', async () => {
     mockPrisma.product.findUnique.mockResolvedValue(null); // No existing products
     // Simplify mock to return a valid object always
-    mockPrisma.product.create.mockImplementation((args: any) => Promise.resolve({
+    mockPrisma.product.create.mockImplementation((args: any) =>
+      Promise.resolve({
         id: 1,
         name: 'Test Product',
         sku: 'TEST001',
-        costPrice: 10.00,
+        costPrice: 10.0,
         barcode: '123456789',
         ...args.data,
         createdAt: new Date(),
-        updatedAt: new Date()
-    }));
+        updatedAt: new Date(),
+      }),
+    );
 
     const csvContent = `SKU,Name,Cost,Barcode
 TEST001,Product 1,$12.99,1234567890123
@@ -41,15 +43,15 @@ TEST003,Product 3,"1,000.99",1234567890125`;
     fs.writeFileSync(testCSVPath, csvContent);
 
     try {
-        const result = await productService.processCSVUploadInternal(testCSVPath);
-        
-        expect(result.errors.length).toBe(0);
-        expect(result.imported).toBe(3); // All 3 rows should be imported
-        expect(result.updated).toBe(0); // No updates since it's first import
+      const result = await productService.processCSVUploadInternal(testCSVPath);
+
+      expect(result.errors.length).toBe(0);
+      expect(result.imported).toBe(3); // All 3 rows should be imported
+      expect(result.updated).toBe(0); // No updates since it's first import
     } finally {
-        if (fs.existsSync(testCSVPath)) {
-            fs.unlinkSync(testCSVPath);
-        }
+      if (fs.existsSync(testCSVPath)) {
+        fs.unlinkSync(testCSVPath);
+      }
     }
   });
 });
@@ -230,11 +232,11 @@ describe('CSV Upload Error Handling', () => {
 
   beforeEach(() => {
     mockPrisma = {
-        product: {
-            findUnique: jest.fn(),
-            create: jest.fn(),
-        },
-        $transaction: jest.fn((callback) => callback(mockPrisma)),
+      product: {
+        findUnique: jest.fn(),
+        create: jest.fn(),
+      },
+      $transaction: jest.fn((callback) => callback(mockPrisma)),
     };
     productService = new ProductService(mockPrisma as unknown as PrismaClient);
   });
@@ -242,46 +244,46 @@ describe('CSV Upload Error Handling', () => {
   it('should return errors for missing required fields', async () => {
     // Missing Barcode
     mockPrisma.product.findUnique.mockResolvedValue(null);
-    
+
     // Create a CSV with missing required fields
     const csvContent = `SKU,Name,Cost\nTEST001,Product 1,12.99`;
     const testCSVPath = path.join(__dirname, 'test_missing_fields.csv');
     fs.writeFileSync(testCSVPath, csvContent);
 
     try {
-        const result = await productService.processCSVUploadInternal(testCSVPath);
+      const result = await productService.processCSVUploadInternal(testCSVPath);
 
-        expect(result.errors.length).toBeGreaterThan(0);
-        expect(result.errors[0]).toContain('Missing required field - Barcode');
-        expect(result.imported).toBe(0);
-        expect(result.updated).toBe(0);
+      expect(result.errors.length).toBeGreaterThan(0);
+      expect(result.errors[0]).toContain('Missing required field - Barcode');
+      expect(result.imported).toBe(0);
+      expect(result.updated).toBe(0);
     } finally {
-        if (fs.existsSync(testCSVPath)) fs.unlinkSync(testCSVPath);
+      if (fs.existsSync(testCSVPath)) fs.unlinkSync(testCSVPath);
     }
   });
 
   it('should return errors for invalid cost values', async () => {
     mockPrisma.product.findUnique.mockResolvedValue(null);
-    
+
     const csvContent = `SKU,Name,Cost,Barcode\nTEST001,Product 1,invalid_cost,1234567890123`;
     const testCSVPath = path.join(__dirname, 'test_invalid_cost.csv');
     fs.writeFileSync(testCSVPath, csvContent);
 
     try {
-        const result = await productService.processCSVUploadInternal(testCSVPath);
+      const result = await productService.processCSVUploadInternal(testCSVPath);
 
-        expect(result.errors.length).toBeGreaterThan(0);
-        expect(result.errors[0]).toContain('Invalid cost value');
-        expect(result.imported).toBe(0);
-        expect(result.updated).toBe(0);
+      expect(result.errors.length).toBeGreaterThan(0);
+      expect(result.errors[0]).toContain('Invalid cost value');
+      expect(result.imported).toBe(0);
+      expect(result.updated).toBe(0);
     } finally {
-        if (fs.existsSync(testCSVPath)) fs.unlinkSync(testCSVPath);
+      if (fs.existsSync(testCSVPath)) fs.unlinkSync(testCSVPath);
     }
   });
 
   it('should return errors for values that exceed length limits', async () => {
     mockPrisma.product.findUnique.mockResolvedValue(null);
-    
+
     const longName =
       'Product with a very long name that exceeds the maximum allowed length for testing purposes';
     const csvContent = `SKU,Name,Cost,Barcode\nTEST001,${longName},12.99,1234567890123`;
@@ -289,14 +291,14 @@ describe('CSV Upload Error Handling', () => {
     fs.writeFileSync(testCSVPath, csvContent);
 
     try {
-        const result = await productService.processCSVUploadInternal(testCSVPath);
+      const result = await productService.processCSVUploadInternal(testCSVPath);
 
-        expect(result.errors.length).toBeGreaterThan(0);
-        expect(result.errors[0]).toContain('Name too long');
-        expect(result.imported).toBe(0);
-        expect(result.updated).toBe(0);
+      expect(result.errors.length).toBeGreaterThan(0);
+      expect(result.errors[0]).toContain('Name too long');
+      expect(result.imported).toBe(0);
+      expect(result.updated).toBe(0);
     } finally {
-        if (fs.existsSync(testCSVPath)) fs.unlinkSync(testCSVPath);
+      if (fs.existsSync(testCSVPath)) fs.unlinkSync(testCSVPath);
     }
   });
 
@@ -307,14 +309,14 @@ describe('CSV Upload Error Handling', () => {
     fs.writeFileSync(testCSVPath, csvContent);
 
     try {
-        const result = await productService.processCSVUploadInternal(testCSVPath);
+      const result = await productService.processCSVUploadInternal(testCSVPath);
 
-        expect(result.errors.length).toBeGreaterThan(0);
-        expect(result.errors[0]).toContain('Missing required column header for SKU');
-        expect(result.imported).toBe(0);
-        expect(result.updated).toBe(0);
+      expect(result.errors.length).toBeGreaterThan(0);
+      expect(result.errors[0]).toContain('Missing required column header for SKU');
+      expect(result.imported).toBe(0);
+      expect(result.updated).toBe(0);
     } finally {
-        if (fs.existsSync(testCSVPath)) fs.unlinkSync(testCSVPath);
+      if (fs.existsSync(testCSVPath)) fs.unlinkSync(testCSVPath);
     }
   });
 });
@@ -325,20 +327,22 @@ describe('Comprehensive CSV Processing Tests', () => {
 
   beforeEach(() => {
     mockPrisma = {
-        product: {
-            findUnique: jest.fn(),
-            create: jest.fn(),
-            update: jest.fn(),
-        },
-        $transaction: jest.fn((callback) => callback(mockPrisma)),
+      product: {
+        findUnique: jest.fn(),
+        create: jest.fn(),
+        update: jest.fn(),
+      },
+      $transaction: jest.fn((callback) => callback(mockPrisma)),
     };
     productService = new ProductService(mockPrisma as unknown as PrismaClient);
   });
 
   it('should process CSV with various currency formats', async () => {
     mockPrisma.product.findUnique.mockResolvedValue(null);
-    mockPrisma.product.create.mockImplementation((args: any) => Promise.resolve({ id: 1, ...args.data }));
-    
+    mockPrisma.product.create.mockImplementation((args: any) =>
+      Promise.resolve({ id: 1, ...args.data }),
+    );
+
     const csvContent = `SKU,Name,Cost,Barcode
 TEST001,Product 1,$12.99,1234567890123
 TEST002,Product 2,€15.50,1234567890124
@@ -350,18 +354,20 @@ TEST005,Product 5,AUD$ 35.99,1234567890127`;
     fs.writeFileSync(testCSVPath, csvContent);
 
     try {
-        const result = await productService.processCSVUploadInternal(testCSVPath);
-        expect(result.errors.length).toBe(0);
-        expect(result.imported).toBe(5);
-        expect(result.updated).toBe(0);
+      const result = await productService.processCSVUploadInternal(testCSVPath);
+      expect(result.errors.length).toBe(0);
+      expect(result.imported).toBe(5);
+      expect(result.updated).toBe(0);
     } finally {
-        if (fs.existsSync(testCSVPath)) fs.unlinkSync(testCSVPath);
+      if (fs.existsSync(testCSVPath)) fs.unlinkSync(testCSVPath);
     }
   });
 
   it('should process CSV with alternative header names', async () => {
     mockPrisma.product.findUnique.mockResolvedValue(null);
-    mockPrisma.product.create.mockImplementation((args: any) => Promise.resolve({ id: 1, ...args.data }));
+    mockPrisma.product.create.mockImplementation((args: any) =>
+      Promise.resolve({ id: 1, ...args.data }),
+    );
 
     const csvContent = `Item Code,Product Name,Unit Price,GTIN
 TEST001,Product 1,12.99,1234567890123
@@ -372,13 +378,13 @@ TEST003,Product 3,20.75,1234567890125`;
     fs.writeFileSync(testCSVPath, csvContent);
 
     try {
-        const result = await productService.processCSVUploadInternal(testCSVPath);
+      const result = await productService.processCSVUploadInternal(testCSVPath);
 
-        expect(result.errors.length).toBe(0);
-        expect(result.imported).toBe(3);
-        expect(result.updated).toBe(0);
+      expect(result.errors.length).toBe(0);
+      expect(result.imported).toBe(3);
+      expect(result.updated).toBe(0);
     } finally {
-        if (fs.existsSync(testCSVPath)) fs.unlinkSync(testCSVPath);
+      if (fs.existsSync(testCSVPath)) fs.unlinkSync(testCSVPath);
     }
   });
 });

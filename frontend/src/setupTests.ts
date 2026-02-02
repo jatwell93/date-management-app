@@ -49,13 +49,13 @@ if (typeof window !== 'undefined') {
     public twist: number = 0;
     public pointerType: string = '';
     public isPrimary: boolean = false;
-    
+
     constructor(type: string, params: PointerEventInit = {}) {
       super(type, params);
       Object.assign(this, params);
     }
   } as any;
-  
+
   window.HTMLElement.prototype.scrollIntoView = jest.fn();
   window.HTMLElement.prototype.hasPointerCapture = jest.fn();
   window.HTMLElement.prototype.releasePointerCapture = jest.fn();

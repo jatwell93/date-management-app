@@ -14,7 +14,11 @@ jest.mock('../components/ui/select', () => ({
       {children}
     </select>
   ),
-  SelectTrigger: ({ children }: any) => <option value="" disabled>Select...</option>, 
+  SelectTrigger: ({ children }: any) => (
+    <option value="" disabled>
+      Select...
+    </option>
+  ),
   SelectValue: ({ placeholder }: any) => <>{placeholder}</>,
   SelectContent: ({ children }: any) => <optgroup label="Options">{children}</optgroup>,
   SelectItem: ({ value, children }: any) => <option value={value}>{children}</option>,
@@ -39,8 +43,8 @@ describe('UserManagementPage', () => {
 
   test('renders user management page and fetches users', async () => {
     (apiService.get as jest.Mock).mockResolvedValue([
-        { id: 1, role: 'Manager' },
-        { id: 2, role: 'Team Member' },
+      { id: 1, role: 'Manager' },
+      { id: 2, role: 'Team Member' },
     ]);
 
     render(<UserManagementPage token={mockToken} />);
@@ -51,20 +55,23 @@ describe('UserManagementPage', () => {
     const list = await screen.findByRole('list');
     expect(within(list).getByText(/ID: 1, Role: Manager/i)).toBeInTheDocument();
     expect(within(list).getByText(/ID: 2, Role: Team Member/i)).toBeInTheDocument();
-    
+
     expect(apiService.get).toHaveBeenCalledTimes(1);
     expect(apiService.get).toHaveBeenCalledWith('/users', mockToken);
   });
 
   test('creates a new user', async () => {
-    (apiService.get as jest.Mock).mockResolvedValueOnce([
+    (apiService.get as jest.Mock)
+      .mockResolvedValueOnce([
         { id: 1, role: 'Manager' },
         { id: 2, role: 'Team Member' },
-    ]).mockResolvedValueOnce([ // After create
+      ])
+      .mockResolvedValueOnce([
+        // After create
         { id: 1, role: 'Manager' },
         { id: 2, role: 'Team Member' },
         { id: 3, role: 'Team Member' },
-    ]);
+      ]);
 
     (apiService.post as jest.Mock).mockResolvedValue({ message: 'User created successfully!' });
 
@@ -72,37 +79,37 @@ describe('UserManagementPage', () => {
 
     // Wait for validation of load
     const list = await screen.findByRole('list');
-    
+
     // Fill Form
     fireEvent.change(screen.getByPlaceholderText(/Enter user PIN/i), {
       target: { value: '5678' },
     });
-    
+
     // Select Role in Create Form (First Select)
     const createRoleSelect = screen.getAllByRole('combobox')[0];
     fireEvent.change(createRoleSelect, { target: { value: 'Team Member' } });
 
     fireEvent.click(screen.getByRole('button', { name: /Create User/i }));
 
-    // Expect at least one success message 
+    // Expect at least one success message
     await waitFor(() => {
-        expect(screen.getAllByText(/User created successfully!/i).length).toBeGreaterThan(0);
+      expect(screen.getAllByText(/User created successfully!/i).length).toBeGreaterThan(0);
     });
-    
+
     // Check if new user is in the list
     expect(await within(list).findByText(/ID: 3, Role: Team Member/i)).toBeInTheDocument();
-    
+
     expect(apiService.post).toHaveBeenCalledWith(
       '/users',
       { pin: '5678', role: 'Team Member' },
-      mockToken
+      mockToken,
     );
   });
 
   test('updates an existing user role', async () => {
     (apiService.get as jest.Mock).mockResolvedValue([
-        { id: 1, role: 'Manager' },
-        { id: 2, role: 'Team Member' },
+      { id: 1, role: 'Manager' },
+      { id: 2, role: 'Team Member' },
     ]);
     (apiService.put as jest.Mock).mockResolvedValue({ message: 'User updated successfully!' });
 
@@ -112,30 +119,26 @@ describe('UserManagementPage', () => {
 
     // Edit User Form: Select User (Index 1), Select Role (Index 2)
     const selects = await screen.findAllByRole('combobox');
-    const editUserSelect = selects[1]; 
-    
+    const editUserSelect = selects[1];
+
     fireEvent.change(editUserSelect, { target: { value: '2' } });
 
-    const editRoleSelect = selects[2]; 
+    const editRoleSelect = selects[2];
     fireEvent.change(editRoleSelect, { target: { value: 'Manager' } });
 
     fireEvent.click(screen.getByRole('button', { name: /Update User/i }));
 
     await waitFor(() => {
-        expect(screen.getAllByText(/User updated successfully!/i).length).toBeGreaterThan(0);
+      expect(screen.getAllByText(/User updated successfully!/i).length).toBeGreaterThan(0);
     });
-    
-    expect(apiService.put).toHaveBeenCalledWith(
-      '/users/2',
-      { role: 'Manager' },
-      mockToken
-    );
+
+    expect(apiService.put).toHaveBeenCalledWith('/users/2', { role: 'Manager' }, mockToken);
   });
 
   test('deletes a user', async () => {
     (apiService.get as jest.Mock).mockResolvedValue([
-        { id: 1, role: 'Manager' },
-        { id: 2, role: 'Team Member' },
+      { id: 1, role: 'Manager' },
+      { id: 2, role: 'Team Member' },
     ]);
     (apiService.delete as jest.Mock).mockResolvedValue({ message: 'User deleted successfully!' });
 
@@ -146,18 +149,18 @@ describe('UserManagementPage', () => {
     // Delete User Form: Select User (Index 3)
     const selects = await screen.findAllByRole('combobox');
     const deleteUserSelect = selects[3];
-    
+
     fireEvent.change(deleteUserSelect, { target: { value: '2' } });
 
     // Mock confirm
-    window.confirm = jest.fn(() => true); 
-    
+    window.confirm = jest.fn(() => true);
+
     fireEvent.click(screen.getByRole('button', { name: /Delete User/i }));
 
     await waitFor(() => {
-         expect(screen.getAllByText(/User deleted successfully!/i).length).toBeGreaterThan(0);
+      expect(screen.getAllByText(/User deleted successfully!/i).length).toBeGreaterThan(0);
     });
-    
+
     expect(window.confirm).toHaveBeenCalledTimes(1);
     expect(apiService.delete).toHaveBeenCalledWith('/users/2', mockToken);
   });

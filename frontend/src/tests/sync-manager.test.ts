@@ -27,7 +27,9 @@ describe('synchronizeOfflineData', () => {
     // Default to online
     Object.defineProperty(navigator, 'onLine', { writable: true, value: true });
     // Default mock for apiService.post
-    (apiService.post as jest.Mock).mockResolvedValue({ message: 'Inventory item added successfully!' });
+    (apiService.post as jest.Mock).mockResolvedValue({
+      message: 'Inventory item added successfully!',
+    });
   });
 
   it('should not synchronize if token is missing', async () => {
@@ -67,7 +69,7 @@ describe('synchronizeOfflineData', () => {
 
     expect(offlineStorage.keys).toHaveBeenCalledTimes(1);
     expect(offlineStorage.getItem).toHaveBeenCalledTimes(2);
-    
+
     await waitFor(() => {
       expect(apiService.post).toHaveBeenCalledTimes(2);
     });

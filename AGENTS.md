@@ -495,7 +495,7 @@ root/
 
 ### BUILD State (Implementation)
 
-**In:** Approved Proposal **Out:** Code changes (NOT APPLIED YET)
+**In:** Approved Proposal **Out:** Code changes
 
 **Actions:**
 1. **Codemap:** Use codemap commands for context of project structure:
@@ -549,7 +549,7 @@ export const usersService = {
 
 ### DIFF State
 
-**In:** BUILD complete **Out:** Proposed changes with rationale
+**In:** BUILD complete **Out:** Diff, Test Coverage % for Diff, No Typescript errors
 
 **Present:**
 
@@ -561,8 +561,14 @@ export const usersService = {
 -  `src/services/usersService.ts`: +5 
 -  `src/__tests__/users.test.ts`: +20 
 -  `openspec/changes/add-user-validation/tasks.md`: Updated   
+
 ### Diff [git diff output]   
 ### Checks 
+
+```bash
+npm run test:backend:diff
+```
+
 - ✅ Tests: 145 passing 
 - ✅ =============================== Coverage summary ===============================
 Statements   : 57.71% ( 2054/3559 )
@@ -570,14 +576,13 @@ Branches     : 69.61% ( 252/362 )
 Functions    : 58.25% ( 60/103 )
 Lines        : 57.71% ( 2054/3559 )
 ================================================================================
-- ✅ Linter: clean 
-```
+
 
 ----------
 
 ### QA State
 
-**In:** DIFF presented **Out:** Test results **Exit:** Tests pass OR user waiver
+**In:** DIFF presented **Out:** Test results, UBS reults, Linter **Exit:** Tests pass OR user waiver
 
 **Execute:**
 #### UBS (Ultimate Bug Scanner)
@@ -592,6 +597,7 @@ ubs --only=ts,js,tsx src/ # Language filter
 **PASS**: No critical results found. 
 **FAIL**: Critical warnings: [list out findings and plan of action]
 
+- ✅ Linter: clean 
 ----------
 
 ### APPROVAL State (HUMAN GATE)

@@ -40,14 +40,14 @@ describe('OfflineSyncService', () => {
   beforeEach(() => {
     localStorage.clear();
     jest.clearAllMocks();
-    
+
     // Reset fetch mock for each test
     global.fetch = jest.fn();
 
     offlineSyncService.clearQueue();
     // Reset online status
     mockNavigatorOnline.mockReturnValue(true);
-    
+
     // Force reset internal state of singleton
     // @ts-ignore
     offlineSyncService.isOnline = true;
@@ -105,7 +105,7 @@ describe('OfflineSyncService', () => {
       });
 
       await offlineSyncService.addOperation('create', 'product', { name: 'Sync Me' });
-      
+
       await offlineSyncService.performSync();
 
       expect(global.fetch).toHaveBeenCalledTimes(1);
@@ -138,10 +138,10 @@ describe('OfflineSyncService', () => {
     it('should retry failed operations on next sync', async () => {
       // First attempt fails
       (global.fetch as jest.Mock).mockRejectedValueOnce(new Error('Network Error'));
-      
+
       await offlineSyncService.addOperation('create', 'product', { id: 1 });
       await offlineSyncService.performSync();
-      
+
       expect(offlineSyncService.getPendingOperationCount()).toBe(1);
 
       // Second attempt succeeds
@@ -151,7 +151,7 @@ describe('OfflineSyncService', () => {
       });
 
       await offlineSyncService.performSync();
-      
+
       expect(offlineSyncService.getPendingOperationCount()).toBe(0);
       expect(global.fetch).toHaveBeenCalledTimes(2);
     });
@@ -160,76 +160,79 @@ describe('OfflineSyncService', () => {
   describe('Online/Offline Handling', () => {
     it('should report correct offline status', () => {
       expect(offlineSyncService.isCurrentlyOffline()).toBe(false);
-      
+
       // Manually trigger handleOffline to update state
       // @ts-ignore
       offlineSyncService.handleOffline();
-      
+
       expect(offlineSyncService.isCurrentlyOffline()).toBe(true);
     });
 
     it('should trigger sync when coming online', () => {
       const syncSpy = jest.spyOn(offlineSyncService, 'performSync');
-      
+
       // Go offline
       // @ts-ignore
       offlineSyncService.handleOffline();
-      
+
       // Go online (should trigger sync)
       // @ts-ignore
       offlineSyncService.handleOnline();
 
       expect(syncSpy).toHaveBeenCalled();
-      
+
       // CRITICAL: Restore the spy so subsequent tests don't fail
       syncSpy.mockRestore();
     });
   });
 
   describe('API Endpoint & Method Mapping', () => {
-     beforeEach(() => {
-         (global.fetch as jest.Mock).mockResolvedValue({
-             ok: true,
-             json: async () => ({ success: true }),
-         });
-         // Force reset internal state again just to be safe
-         // @ts-ignore
-         offlineSyncService.syncInProgress = false;
-         // @ts-ignore
-         offlineSyncService.isOnline = true;
-     });
+    beforeEach(() => {
+      (global.fetch as jest.Mock).mockResolvedValue({
+        ok: true,
+        json: async () => ({ success: true }),
+      });
+      // Force reset internal state again just to be safe
+      // @ts-ignore
+      offlineSyncService.syncInProgress = false;
+      // @ts-ignore
+      offlineSyncService.isOnline = true;
+    });
 
-     it('should send POST request for create', async () => {
-         await offlineSyncService.addOperation('create', 'product', { name: 'Test' });
-         
-         await offlineSyncService.performSync();
-         
-         expect(global.fetch).toHaveBeenCalledWith(
-             expect.stringContaining('/products'),
-             expect.objectContaining({ method: 'POST' })
-         );
-     });
+    it('should send POST request for create', async () => {
+      await offlineSyncService.addOperation('create', 'product', { name: 'Test' });
 
-     it('should send PUT request for update', async () => {
-        await offlineSyncService.addOperation('update', 'inventory-item', { id: 123, status: 'sold' });
-        
-        await offlineSyncService.performSync();
-        
-        expect(global.fetch).toHaveBeenCalledWith(
-            expect.stringContaining('/inventory-items/123'),
-            expect.objectContaining({ method: 'PUT' })
-        );
+      await offlineSyncService.performSync();
+
+      expect(global.fetch).toHaveBeenCalledWith(
+        expect.stringContaining('/products'),
+        expect.objectContaining({ method: 'POST' }),
+      );
+    });
+
+    it('should send PUT request for update', async () => {
+      await offlineSyncService.addOperation('update', 'inventory-item', {
+        id: 123,
+        status: 'sold',
+      });
+
+      await offlineSyncService.performSync();
+
+      expect(global.fetch).toHaveBeenCalledWith(
+        expect.stringContaining('/inventory-items/123'),
+        expect.objectContaining({ method: 'PUT' }),
+      );
     });
 
     it('should send DELETE request for delete', async () => {
-        await offlineSyncService.addOperation('delete', 'store-area', { id: 456 });
-        
-        await offlineSyncService.performSync();
-        
-        expect(global.fetch).toHaveBeenCalledWith(
-            expect.stringContaining('/store-areas/456'),
-            expect.objectContaining({ method: 'DELETE' })
-        );
+      await offlineSyncService.addOperation('delete', 'store-area', { id: 456 });
+
+      await offlineSyncService.performSync();
+
+      expect(global.fetch).toHaveBeenCalledWith(
+        expect.stringContaining('/store-areas/456'),
+        expect.objectContaining({ method: 'DELETE' }),
+      );
     });
   });
 });

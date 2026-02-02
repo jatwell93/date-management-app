@@ -31,7 +31,7 @@ describe('Scanner', () => {
     fireEvent.change(input, {
       target: { value: '67890' },
     });
-    
+
     // Submit the form
     const form = input.closest('form');
     fireEvent.submit(form!);

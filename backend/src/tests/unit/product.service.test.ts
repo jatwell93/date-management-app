@@ -33,7 +33,7 @@ describe('ProductService', () => {
       createdAt: new Date(),
       updatedAt: new Date(),
     };
-    
+
     mockPrisma.product.findUnique.mockResolvedValue(mockProduct);
 
     const product = await productService.getProductByBarcode('123');
@@ -42,7 +42,7 @@ describe('ProductService', () => {
     expect(product).toBeDefined();
     expect(product?.barcode).toBe(mockProduct.barcode);
     expect(mockPrisma.product.findUnique).toHaveBeenCalledWith({
-      where: { barcode: '123' }
+      where: { barcode: '123' },
     });
   });
 
@@ -60,7 +60,7 @@ describe('ProductService', () => {
       name: 'Product 2',
       costPrice: 20,
     };
-    
+
     // Mock return from create
     const mockCreatedProduct = {
       id: 2,
@@ -68,7 +68,7 @@ describe('ProductService', () => {
       createdAt: new Date(),
       updatedAt: new Date(),
     };
-    
+
     mockPrisma.product.create.mockResolvedValue(mockCreatedProduct);
 
     const createdProduct = await productService.createProduct(newProductData);
@@ -80,8 +80,8 @@ describe('ProductService', () => {
         barcode: newProductData.barcode,
         sku: newProductData.sku,
         name: newProductData.name,
-        costPrice: newProductData.costPrice
-      }
+        costPrice: newProductData.costPrice,
+      },
     });
   });
 });

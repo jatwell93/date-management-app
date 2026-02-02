@@ -17,7 +17,18 @@ const { execSync } = require('child_process');
 const path = require('path');
 
 // Load environment variables from .env file
-require('dotenv').config({ path: path.join(__dirname, '..', '.env') });
+const envPath = path.join(__dirname, '..', '.env');
+require('dotenv').config({ path: envPath, override: true });
+
+// Ensure all common Gemini/Google environment variables are set and exported
+const apiKey = process.env.GEMINI_API_KEY || process.env.GOOGLE_API_KEY || process.env.MEMVID_TOKEN;
+if (apiKey) {
+  process.env.GEMINI_API_KEY = apiKey;
+  process.env.GOOGLE_API_KEY = apiKey;
+  // console.log(`[DEBUG] Key found in .env (length: ${apiKey.length})`);
+} else {
+  console.warn('[WARN] No Gemini API key found in .env or environment');
+}
 
 const MEMORY_FILE = path.join(__dirname, '..', 'project-memory.mv2');
 
@@ -32,13 +43,21 @@ function retrieveContext(query) {
   const hasGemini = !!process.env.GEMINI_API_KEY;
   const semanticFlags = hasGemini ? ' --mode sem --embedding-model gemini' : '';
 
+  // Cross-platform environment variable prefix for the shell command
+  const envPrefix = hasGemini
+    ? process.platform === 'win32'
+      ? `set GEMINI_API_KEY=${process.env.GEMINI_API_KEY} && set GOOGLE_API_KEY=${process.env.GEMINI_API_KEY} && set gemini_api_key=${process.env.GEMINI_API_KEY} && `
+      : `GEMINI_API_KEY=${process.env.GEMINI_API_KEY} GOOGLE_API_KEY=${process.env.GEMINI_API_KEY} gemini_api_key=${process.env.GEMINI_API_KEY} `
+    : '';
+
   try {
-    const cmd = `memvid find "${MEMORY_FILE}" --query "${query.replace(/"/g, '\\"')}" --json${semanticFlags}`;
+    const cmd = `${envPrefix}memvid find "${MEMORY_FILE}" --query "${query.replace(/"/g, '\\"')}" --json${semanticFlags}`;
 
     const output = execSync(cmd, {
       encoding: 'utf8',
       shell: true,
       stdio: ['pipe', 'pipe', 'pipe'],
+      env: process.env,
     });
 
     const results = JSON.parse(output);
@@ -47,11 +66,12 @@ function retrieveContext(query) {
       // Fall back to lexical search if semantic returns nothing
       if (hasGemini) {
         console.log('No semantic matches. Trying lexical search...\n');
-        const lexCmd = `memvid find "${MEMORY_FILE}" --query "${query.replace(/"/g, '\\"')}" --json --mode lex`;
+        const lexCmd = `${envPrefix}memvid find "${MEMORY_FILE}" --query "${query.replace(/"/g, '\\"')}" --json --mode lex`;
         const lexOutput = execSync(lexCmd, {
           encoding: 'utf8',
           shell: true,
           stdio: ['pipe', 'pipe', 'pipe'],
+          env: process.env,
         });
         const lexResults = JSON.parse(lexOutput);
         if (lexResults.hits && lexResults.hits.length > 0) {
@@ -69,7 +89,7 @@ function retrieveContext(query) {
     // Try non-JSON output as fallback
     try {
       const fallbackCmd = `memvid find "${MEMORY_FILE}" --query "${query.replace(/"/g, '\\"')}"`;
-      execSync(fallbackCmd, { stdio: 'inherit', shell: true });
+      execSync(fallbackCmd, { stdio: 'inherit', shell: true, env: process.env });
     } catch (fallbackError) {
       console.error('❌ Retrieval failed:', error.message);
       process.exit(1);

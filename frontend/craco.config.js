@@ -17,9 +17,7 @@ module.exports = {
   },
   jest: {
     configure: {
-      transformIgnorePatterns: [
-        'node_modules/(?!uuid)/'
-      ],
+      transformIgnorePatterns: ['node_modules/(?!uuid)/'],
     },
   },
 };

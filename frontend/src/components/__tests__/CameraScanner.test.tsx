@@ -24,7 +24,7 @@ describe('CameraScanner', () => {
 
   it('initializes Quagga on mount', () => {
     render(<CameraScanner onDetected={mockOnDetected} />);
-    
+
     expect(Quagga.init).toHaveBeenCalledTimes(1);
     // Check config if needed
     expect(Quagga.init).toHaveBeenCalledWith(
@@ -33,7 +33,7 @@ describe('CameraScanner', () => {
           type: 'LiveStream',
         }),
       }),
-      expect.any(Function)
+      expect.any(Function),
     );
   });
 
@@ -44,7 +44,7 @@ describe('CameraScanner', () => {
     });
 
     render(<CameraScanner onDetected={mockOnDetected} onScannerReady={mockOnScannerReady} />);
-    
+
     expect(Quagga.start).toHaveBeenCalled();
     expect(mockOnScannerReady).toHaveBeenCalled();
   });
@@ -56,7 +56,7 @@ describe('CameraScanner', () => {
     });
 
     render(<CameraScanner onDetected={mockOnDetected} />);
-    
+
     expect(Quagga.start).not.toHaveBeenCalled();
     // Expect error message
     expect(screen.getByText(/Camera Error/i)).toBeInTheDocument();
@@ -108,11 +108,11 @@ describe('CameraScanner', () => {
     expect(Quagga.stop).toHaveBeenCalled();
     jest.useRealTimers();
   });
-  
+
   it('stops scanner on unmount', () => {
-      const { unmount } = render(<CameraScanner onDetected={mockOnDetected} />);
-      unmount();
-      expect(Quagga.stop).toHaveBeenCalled();
+    const { unmount } = render(<CameraScanner onDetected={mockOnDetected} />);
+    unmount();
+    expect(Quagga.stop).toHaveBeenCalled();
   });
 
   it('resets scanner when retry button is clicked', () => {
@@ -124,28 +124,28 @@ describe('CameraScanner', () => {
     });
 
     render(<CameraScanner onDetected={mockOnDetected} />);
-    
+
     // Verify error and retry button
     const retryButton = screen.getByText(/Try Again/i);
     expect(retryButton).toBeInTheDocument();
-    
+
     // Clear mocks to track calls during reset
     jest.clearAllMocks();
-    
+
     // 2. Click retry
     userEvent.click(retryButton);
-    
+
     // Verity stop called immediately
     expect(Quagga.stop).toHaveBeenCalled();
-    
+
     // 3. Fast forward for timeout
     act(() => {
-        jest.advanceTimersByTime(300);
+      jest.advanceTimersByTime(300);
     });
-    
+
     // 4. Verify start called
     expect(Quagga.start).toHaveBeenCalled();
-    
+
     jest.useRealTimers();
   });
 });

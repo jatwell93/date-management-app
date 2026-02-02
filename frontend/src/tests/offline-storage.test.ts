@@ -1,5 +1,5 @@
 /**
- * This test mocks localforage because IndexedDB (the browser storage API 
+ * This test mocks localforage because IndexedDB (the browser storage API
  * that localforage uses) is not available in Jest's jsdom environment.
  * This is a legitimate mock - we're testing our wrapper around localforage,
  * not localforage itself.
@@ -38,7 +38,7 @@ describe('offlineStorage', () => {
   beforeEach(() => {
     mockStore = {};
     jest.clearAllMocks();
-    
+
     // Set up fresh mock implementations for each test
     (localforage.setItem as jest.Mock).mockImplementation((key: string, value: any) => {
       mockStore[key] = value;

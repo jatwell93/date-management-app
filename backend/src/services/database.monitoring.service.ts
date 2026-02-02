@@ -405,7 +405,7 @@ export class DatabaseMonitoringService extends EventEmitter {
     const db = getDb();
 
     if (!db) {
-       return {
+      return {
         uptime: process.uptime(),
         tableSizes: {},
         rowCount: {},

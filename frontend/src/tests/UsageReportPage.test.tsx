@@ -24,18 +24,21 @@ describe('UsageReportPage', () => {
     (apiService.get as jest.Mock).mockImplementation((url: string) => {
       if (url === '/reports/daily-usage') {
         return Promise.resolve([
-          { date: '2025-01-30', user_id: 1, user_role: 'Manager', creations: 5, updates: 3, deletions: 1 },
+          {
+            date: '2025-01-30',
+            user_id: 1,
+            user_role: 'Manager',
+            creations: 5,
+            updates: 3,
+            deletions: 1,
+          },
         ]);
       }
       if (url === '/reports/items-by-user') {
-        return Promise.resolve([
-          { userId: 1, userName: 'Manager 1', itemCount: 150 },
-        ]);
+        return Promise.resolve([{ userId: 1, userName: 'Manager 1', itemCount: 150 }]);
       }
       if (url === '/reports/items-by-date') {
-        return Promise.resolve([
-          { date: '2025-01-30', itemCount: 20 },
-        ]);
+        return Promise.resolve([{ date: '2025-01-30', itemCount: 20 }]);
       }
       return Promise.resolve([]);
     });
