@@ -144,7 +144,7 @@
 - [x] 8.9 Configure Workers Secrets for R2 and Neon credentials (documented in wrangler.toml)
 - [x] 8.10 Add request/response logging (exclude sensitive data)
 - [x] 8.11 Configure Wrangler routes in `wrangler.toml`
-- [ ] 8.12 Write Workers-specific tests using Miniflare
+- [x] 8.12 Write Workers-specific tests using Miniflare
 - [x] 8.13 **USER: Test Workers locally with `wrangler dev`** (verified: edge-native build compiles, server runs, health endpoint 200 OK, no Node.js module errors)
 
 ## 9. Upload Flow Enhancement
