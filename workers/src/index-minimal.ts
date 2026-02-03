@@ -461,3 +461,8 @@ async function handleGetDashboard(request: Request, db: Database, env: Env): Pro
 
   return jsonResponse({ stats }, 200, env);
 }
+
+export {
+  handleLogin,
+  handleRegister,
+};
