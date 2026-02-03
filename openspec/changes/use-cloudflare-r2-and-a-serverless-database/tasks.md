@@ -48,7 +48,7 @@
 - [x] 3.3 Configure Prisma for SQLite in development (provider = "sqlite")
 - [x] 3.4 Generate initial Prisma client (`npx prisma generate`)
 - [x] 3.5 Create `backend/src/database/database-factory.ts` with environment-based client creation
-- [ ] 3.6 Configure connection pooling for Neon PostgreSQL (production only)
+- [ ] 3.6 Configure Hyperdrive for Neon connection pooling (production only) - See Phase 7.12-7.15
 - [x] 3.7 Update existing migration files to use Prisma format
 - [x] 3.8 Write unit tests for database factory
 - [ ] 3.9 Write integration tests for Prisma client (both SQLite and PostgreSQL)
@@ -115,11 +115,34 @@
 - [x] 7.10 **USER: Manually review slow queries** in Neon Dashboard (Monitoring → Query Performance tab)
 - [x] 7.11 Document Neon database branching workflow in `docs/database-migrations.md`
 
+### 7b. Cloudflare Hyperdrive Setup (Edge Connection Pooling)
+
+> **Why Hyperdrive?** Provides lowest possible latency for Neon by performing connection pooling at Cloudflare's edge. Eliminates cold start penalty on database connections. Required for production Workers deployment.
+
+- [ ] 7.12 **USER: Enable Workers Paid plan** ($5/month, includes Hyperdrive)
+- [ ] 7.13 Create Hyperdrive configuration via Wrangler:
+  ```bash
+  npx wrangler hyperdrive create date-management-db \
+    --connection-string="postgres://user:pass@ep-xxx.us-east-1.aws.neon.tech/neondb?sslmode=require"
+  ```
+- [ ] 7.14 Add Hyperdrive binding to `wrangler.toml`:
+  ```toml
+  [[hyperdrive]]
+  binding = "HYPERDRIVE"
+  id = "<hyperdrive-config-id-from-7.13>"
+  ```
+- [ ] 7.15 Update database factory to use Hyperdrive connection string in Workers (see design.md Decision 4b)
+- [ ] 7.16 Test Hyperdrive connection with `wrangler dev` (verify queries execute successfully)
+- [ ] 7.17 Document Hyperdrive setup in `docs/cloudflare-setup.md`
+
 ## 8. Cloudflare Workers Implementation
 
 - [x] 8.1 Create `workers/src/index.ts` entry point
 - [x] 8.2 Implement Express-compatible adapter for Workers
-- [ ] 8.3 Import existing Express routes from `backend/src/routes/` (structure ready, needs actual route imports)
+- [ ] 8.3 Import existing Express routes from `backend/src/routes/`
+  - **Blocker identified**: Backend routes import native Node.js dependencies (SQLite bindings, node-pre-gyp, fs, crypto) that cannot run in Workers
+  - **Solution**: Create Workers-specific service implementations using Hyperdrive for database access
+  - **Alternative**: Create thin API layer in Workers that delegates to shared business logic
 - [x] 8.4 Configure CORS headers for production frontend domain
 - [x] 8.5 Add error handling middleware for Workers environment
 - [x] 8.6 Implement request validation middleware (via Express adapter middleware chain)

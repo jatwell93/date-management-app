@@ -186,45 +186,98 @@ export async function processCSVStream(
 }
 ```
 
-### Decision 4: Neon PostgreSQL with Prisma ORM
+### Decision 4: Neon PostgreSQL with Hyperdrive Connection Pooling
 
-**Choice**: Use Prisma as ORM layer with connection string switching
+**Choice**: Use Neon PostgreSQL with Cloudflare Hyperdrive for edge connection pooling, Prisma as ORM
 
 **Alternatives Considered**:
-1. **Knex.js query builder**: More flexible but lose type safety
-2. **Raw SQL with pg**: Maximum control but no type safety, harder migrations
-3. **TypeORM**: Similar to Prisma but less serverless-optimized
+1. **Cloudflare D1**: Native to Workers but lacks transactions (ACID broken), single-threaded (queuing under load), 500MB limit on free tier
+2. **Neon with serverless driver (@neondatabase/serverless)**: Works but adds ~50-100ms latency per connection
+3. **PlanetScale**: Similar to Neon but no Hyperdrive integration, MySQL-based (Prisma PostgreSQL support is better)
+4. **Direct Neon connection without pooling**: Cold start latency for each connection, connection exhaustion risk
 
 **Rationale**:
-- Prisma provides excellent TypeScript type generation from schema
-- Connection pooling built-in (important for serverless)
-- Schema migrations work with both SQLite and PostgreSQL
-- Neon's serverless driver optimized for edge/serverless environments
-- Unified API means minimal code changes between environments
-- PostgreSQL is Prisma's best-supported database (better than MySQL)
+- **Hyperdrive provides lowest possible latency** per Cloudflare docs: performs connection pooling across Cloudflare's edge network
+- **Full transaction support** (D1 does NOT support transactions - critical for CSV batch imports)
+- **Multi-threaded PostgreSQL** handles concurrent users (D1 is single-threaded, queues requests)
+- **Prisma full support** including migrations (D1 has limited Prisma support, no local migrations)
+- **PostgreSQL features** (JSONB, full-text search, extensions) vs SQLite dialect limitations
+- **Existing Neon migrations** already in `backend/prisma/migrations/neon/` - lower migration effort
+
+**Key Limitation of D1 (Why We Avoided It)**:
+> "Cloudflare D1 currently does not support transactions. Implicit & explicit transactions will be ignored and run as individual queries, which breaks the guarantees of the ACID properties of transactions." — [Prisma D1 docs](https://www.prisma.io/docs/orm/overview/databases/cloudflare-d1)
+
+This is critical for our CSV import feature which does batch upserts - a partial failure without transactions could leave the database in an inconsistent state.
+
+**Hyperdrive Benefits**:
+- Connection pooling at Cloudflare edge (no cold start penalty)
+- Native database driver support (pg, Prisma)
+- Global distribution matches Workers deployment
+- Included in Workers paid plan ($5/month)
+
+**Implementation**:
+```typescript
+// workers/src/index.ts - Hyperdrive configuration
+export default {
+  async fetch(request: Request, env: Env): Promise<Response> {
+    // Hyperdrive provides connection string via binding
+    const connectionString = env.HYPERDRIVE.connectionString;
+    
+    // Use standard pg or Prisma with Hyperdrive-provided connection
+    const client = new Client({ connectionString });
+    await client.connect();
+    
+    // ... handle request
+  }
+};
+
+// wrangler.toml - Hyperdrive binding
+[[hyperdrive]]
+binding = "HYPERDRIVE"
+id = "<hyperdrive-config-id>"
+```
+
+```bash
+# Create Hyperdrive configuration
+npx wrangler hyperdrive create date-management-db \
+  --connection-string="postgres://user:pass@ep-xxx.us-east-1.aws.neon.tech/neondb"
+```
+
+### Decision 4b: Database Factory with Hyperdrive Support
 
 **Implementation**:
 ```typescript
 // backend/src/database/database-factory.ts
 import { PrismaClient } from '@prisma/client';
 
-export function createDatabaseClient(): PrismaClient {
-  const env = process.env.NODE_ENV || 'development';
+export function createDatabaseClient(env?: Env): PrismaClient {
+  const nodeEnv = process.env.NODE_ENV || 'development';
   
-  if (env === 'production') {
+  if (nodeEnv === 'production' && env?.HYPERDRIVE) {
+    // Production: Use Hyperdrive connection string (edge-pooled)
     return new PrismaClient({
       datasources: {
         db: {
-          url: process.env.DATABASE_URL // Neon connection string
+          url: env.HYPERDRIVE.connectionString
         }
       },
       log: ['error'],
-      // Neon-specific optimizations for serverless
-      engineType: 'binary'
     });
   }
   
-  // SQLite for development
+  if (nodeEnv === 'production') {
+    // Production fallback: Direct Neon connection
+    return new PrismaClient({
+      datasources: {
+        db: {
+          url: process.env.NEON_CONNECTION_STRING
+        }
+      },
+      log: ['error'],
+    });
+  }
+  
+  // Development: SQLite
   return new PrismaClient({
     datasources: {
       db: {
@@ -619,7 +672,7 @@ If critical issues arise post-deployment:
    - **Resolution**: Measure bundle size after Phase 3, consider code splitting if >800KB
 
 2. **Neon Connection Pooling**: How should we configure connection pooling for serverless environment?
-   - **Resolution**: Use Neon's serverless driver with built-in connection pooling, load test in Phase 5
+   - **Resolution**: ✅ RESOLVED - Use Cloudflare Hyperdrive for edge connection pooling. Hyperdrive eliminates cold start penalty and provides lowest latency. See Decision 4 and Tasks 7.12-7.17.
 
 3. **CORS Configuration**: Should we allow uploads from any origin or restrict to production domain?
    - **Resolution**: Start with production domain only, add CORS allowlist if needed
@@ -654,3 +707,59 @@ If critical issues arise post-deployment:
 - New developer onboarding: <30 minutes to local dev environment
 - Test suite execution time: <5 minutes
 - Local development: Zero cloud dependencies required
+## Appendix A: Cloudflare D1 Evaluation
+
+### Overview
+Cloudflare D1 was evaluated as an alternative to Neon PostgreSQL. D1 is a SQLite-based serverless database native to Cloudflare Workers, which would provide tighter integration and potentially lower latency.
+
+### Evaluation Findings
+
+**Advantages of D1:**
+- Native Cloudflare integration (no external network calls)
+- SQLite compatibility with existing local development
+- Generous free tier (5M reads/day, 100K writes/day, 5GB total storage)
+- Simpler migration from existing SQLite database
+- Automatic replication and zero-downtime deploys
+
+**Critical Limitations of D1:**
+
+1. **No Transaction Support (DEAL BREAKER)**
+   > "Cloudflare D1 currently does not support transactions. Implicit & explicit transactions will be ignored and run as individual queries, which breaks the guarantees of the ACID properties of transactions." 
+   — [Prisma D1 Docs](https://www.prisma.io/docs/orm/overview/databases/cloudflare-d1)
+   
+   This breaks our CSV import feature which performs batch upserts. Without transactions, a partial failure during import would leave the database in an inconsistent state.
+
+2. **Single-Threaded Architecture**
+   > "Each individual D1 database is inherently single-threaded, and processes queries one at a time."
+   — [D1 Limits Docs](https://developers.cloudflare.com/d1/platform/limits/)
+   
+   Under high concurrency, requests queue and can return "overloaded" errors. Our application serves multiple concurrent users uploading CSVs.
+
+3. **Limited Prisma Support**
+   - No transaction API support
+   - No local migration support (must use Wrangler)
+   - Interactive transactions ignored, run as individual queries
+
+4. **Storage Limits**
+   - Free tier: 500MB per database (not 5GB as initially stated)
+   - Paid tier: 10GB max per database (no horizontal scaling)
+
+### Decision Rationale
+
+We chose **Neon PostgreSQL + Hyperdrive** over D1 because:
+
+| Requirement | D1 | Neon + Hyperdrive |
+|-------------|-----|-------------------|
+| Transaction support | ❌ Not supported | ✅ Full ACID |
+| Concurrent users | ❌ Single-threaded, queues | ✅ Multi-threaded |
+| Prisma support | ⚠️ Limited | ✅ Full support |
+| Edge latency | ✅ Native (~1-2ms) | ✅ Hyperdrive pooling (~5-10ms) |
+| Existing migrations | ✅ SQLite compatible | ✅ Already have Neon migrations |
+| Free tier storage | 500MB | 500MB |
+
+**The lack of transaction support in D1 is a fundamental limitation that cannot be worked around for our use case.** CSV batch imports require atomicity - either all rows are inserted, or none are.
+
+### References
+- [Prisma D1 Limitations](https://www.prisma.io/docs/orm/overview/databases/cloudflare-d1)
+- [D1 Database Limits](https://developers.cloudflare.com/d1/platform/limits/)
+- [Neon + Hyperdrive Integration](https://neon.tech/docs/guides/cloudflare-hyperdrive)

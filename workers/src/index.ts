@@ -19,6 +19,19 @@ import { createRateLimiter } from './middleware/rate-limit.middleware';
 import { createRequestLogger, createErrorHandler, WorkersLogger } from './middleware/error-handler.middleware';
 import { handleHealthCheck } from './health';
 
+// Import backend Express routes
+// Note: Product routes use multer for file uploads - skipped for Workers (no filesystem)
+import authRoutes from '../../backend/src/routes/auth.routes';
+import dashboardRoutes from '../../backend/src/routes/dashboard.routes';
+import expiredItemRoutes from '../../backend/src/routes/expired-item.routes';
+import healthRoutes from '../../backend/src/routes/health.routes';
+import inventoryRoutes from '../../backend/src/routes/inventory.routes';
+import reportRoutes from '../../backend/src/routes/report.routes';
+import storeAreaRoutes from '../../backend/src/routes/store-area.routes';
+import userRoutes from '../../backend/src/routes/user.routes';
+// Skipped: product.routes.ts (uses multer - filesystem dependency)
+// Skipped: database.backup.routes.ts (uses filesystem for backups)
+
 /**
  * Route definition
  */
@@ -92,6 +105,48 @@ class WorkersRouter {
 }
 
 /**
+ * Register Express Router with Workers router
+ * Converts Express router's stack to Workers-compatible routes
+ */
+function registerExpressRouter(
+  workersRouter: WorkersRouter,
+  expressRouter: any,
+  basePath: string,
+  env: Env
+) {
+  // Express router stores routes in router.stack
+  const stack = expressRouter.stack || [];
+  
+  for (const layer of stack) {
+    if (layer.route) {
+      // Direct route handler
+      const methods = Object.keys(layer.route.methods);
+      const path = basePath + layer.route.path;
+      
+      // Register for each HTTP method
+      for (const method of methods) {
+        const handlers = layer.route.stack.map((l: any) => l.handle);
+        
+        // Wrap all handlers with adapter
+        workersRouter.addRoute(path, async (req: ExpressRequest, res: ExpressResponse) => {
+          req.method = method.toUpperCase();
+          
+          // Execute handlers in sequence
+          for (const handler of handlers) {
+            await adaptExpressHandler(handler)(req, res);
+            if (res.isSent()) break;
+          }
+        });
+      }
+    } else if (layer.name === 'router') {
+      // Nested router
+      const nestedPath = basePath + (layer.regexp.source.match(/^\/\^\\\/([^\\]+)/) || ['', ''])[1];
+      registerExpressRouter(workersRouter, layer.handle, nestedPath, env);
+    }
+  }
+}
+
+/**
  * Initialize Workers router with all Express routes
  */
 function createRouter(env: Env): WorkersRouter {
@@ -102,30 +157,21 @@ function createRouter(env: Env): WorkersRouter {
   router.use(createRequestLogger(env));
   router.use(createRateLimiter(env));
 
-  // Import and register Express routes
-  // Note: Actual route registration would import from backend/src/routes/
-  // For now, we'll define the structure. The actual imports need to be
-  // adapted to work in Workers environment (no file system access)
+  // Register imported Express routes
+  // Each route is prefixed with /api to match backend URL structure
+  registerExpressRouter(router, authRoutes, '/api/auth', env);
+  registerExpressRouter(router, dashboardRoutes, '/api/dashboard', env);
+  registerExpressRouter(router, expiredItemRoutes, '/api/expired-items', env);
+  registerExpressRouter(router, healthRoutes, '/api/health', env);
+  registerExpressRouter(router, inventoryRoutes, '/api/inventory-items', env);
+  registerExpressRouter(router, reportRoutes, '/api/reports', env);
+  registerExpressRouter(router, storeAreaRoutes, '/api/store-areas', env);
+  registerExpressRouter(router, userRoutes, '/api/users', env);
 
-  // Health check (no auth required)
-  router.addRoute('/health', async (req: ExpressRequest, res: ExpressResponse) => {
-    res.status(200).json({
-      status: 'healthy',
-      timestamp: new Date().toISOString(),
-      environment: env.NODE_ENV,
-    });
-  });
-
-  // TODO: Import and register all backend routes
-  // router.addRoute('/api/auth/*', authRoutes);
-  // router.addRoute('/api/products/*', productRoutes);
-  // router.addRoute('/api/inventory-items/*', inventoryRoutes);
-  // router.addRoute('/api/store-areas/*', storeAreaRoutes);
-  // router.addRoute('/api/reports/*', reportRoutes);
-  // router.addRoute('/api/dashboard/*', dashboardRoutes);
-  // router.addRoute('/api/users/*', userRoutes);
-  // router.addRoute('/api/database/*', databaseBackupRoutes);
-  // router.addRoute('/api/expired-items/*', expiredItemRoutes);
+  // Note: Skipped routes that require filesystem access:
+  // - product.routes.ts (uses multer for CSV uploads)
+  // - database.backup.routes.ts (filesystem backups)
+  // These would need Workers-specific implementations using R2
 
   return router;
 }

@@ -60,7 +60,8 @@ At startup scale (no paying users), costs drop even further:
 ### New Capabilities
 
 - `cloudflare-r2-storage`: Production object storage for CSV files with S3-compatible API, zero egress fees, and global replication
-- `neon-database`: Production serverless PostgreSQL database with autoscaling, database branching, and automatic scaling
+- `neon-database`: Production serverless PostgreSQL database with autoscaling, database branching, and automatic scaling. Full ACID transaction support (critical for CSV batch imports)
+- `cloudflare-hyperdrive`: Edge connection pooling for Neon PostgreSQL providing lowest possible latency and eliminating cold start penalty on database connections
 - `cloudflare-workers-api`: Production serverless API deployment with <10ms cold starts, 30s CPU limit, and global edge deployment
 - `storage-abstraction-layer`: Unified storage interface supporting local filesystem (dev) and R2 (prod) with environment-aware switching
 - `database-abstraction-layer`: Unified database interface supporting SQLite (dev) and Neon PostgreSQL (prod) with compatible query patterns
@@ -102,21 +103,25 @@ At startup scale (no paying users), costs drop even further:
 ### Database Layer (Dual Support)
 - `backend/src/database.ts` - Add environment detection and provider factory
 - `backend/src/migrations/*` - Keep existing SQLite migrations for dev
-- `backend/database/planetscale/*` - New directory for production PlanetScale migrations
+- `backend/prisma/migrations/neon/*` - Directory for production Neon PostgreSQL migrations (already created)
 - Repository/model files - Use abstraction layer (no direct DB calls)
 
 ### Security Changes
 - Add Workers Secrets for production: `DATABASE_URL`, `R2_ACCESS_KEY`, `R2_SECRET_KEY`
 - Development uses `.env` file (existing pattern)
-- Implement TLS-only database connections for PlanetScale (production)
+- Implement TLS-only database connections via Hyperdrive to Neon (production)
 - Add CSV injection sanitization (unified across both environments)
 - Configure CORS for R2 presigned upload URLs (production only)
 
 ### External Dependencies
-- **Add (Production)**: `@cloudflare/workers-types`, `@planetscale/database`, Wrangler CLI
+- **Add (Production)**: `@cloudflare/workers-types`, `pg` (postgres driver), Wrangler CLI
 - **Add (Both)**: Abstraction layer types, environment detection utilities
 - **Keep (Development)**: `better-sqlite3`, `express`, existing dev dependencies
-- **Cost**: Cloudflare Workers (free tier: 100k requests/day), R2 ($0.015/GB), PlanetScale (Scaler: $39/month for production only)
+- **Cost**: 
+  - Cloudflare Workers Paid: $5/month (includes Hyperdrive)
+  - Cloudflare R2: $0.015/GB/month storage, zero egress
+  - Neon Free: 0.5GB storage, 100 CU-hours compute (sufficient for MVP)
+  - Neon Scale: $0.35/GB-month storage + $0.106/CU-hour compute (if Free exceeded)
 
 ### Frontend Changes (Minimal)
 - Update API base URL configuration (environment variable selects dev vs prod endpoint)
@@ -139,16 +144,17 @@ At startup scale (no paying users), costs drop even further:
 
 ### Production Deployment (New)
 - **Build**: `npm run build:workers` - Compile Workers bundle
-- **Deploy**: `wrangler publish` - Deploy to Cloudflare edge
-- **Migrations**: `pscale deploy-request` - PlanetScale schema branch deploy
+- **Deploy**: `wrangler deploy` - Deploy to Cloudflare edge (global)
+- **Migrations**: `npx prisma migrate deploy` - Apply Neon migrations
+- **Hyperdrive**: Configured via `wrangler hyperdrive create` (connection pooling at edge)
 - Zero-downtime deploys, no server management
 
 ### Operational Impact
 - Development: No changes (same local workflow)
 - Production: 3-4 hours/month maintenance (down from 5-7h with VPS)
 - No SSH access needed for production, no server patching
-- PlanetScale query insights for production DB performance
-- Cloudflare Analytics for production API monitoring
+- Neon dashboard for production DB performance insights
+- Cloudflare Analytics for production API monitoring + Hyperdrive metrics
 - Local logs/debugging unchanged
 
 ### Risk Mitigation
