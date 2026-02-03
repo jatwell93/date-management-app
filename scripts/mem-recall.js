@@ -42,12 +42,12 @@ function retrieveContext(query) {
   // Check if Gemini API key is available in environment
   const hasGemini = !!process.env.GEMINI_API_KEY;
   const semanticFlags = hasGemini ? ' --mode sem --embedding-model gemini' : '';
-  
+
   // Cross-platform environment variable prefix for the shell command
-  const envPrefix = hasGemini 
-    ? (process.platform === 'win32' 
-        ? `set GEMINI_API_KEY=${process.env.GEMINI_API_KEY} && set GOOGLE_API_KEY=${process.env.GEMINI_API_KEY} && set gemini_api_key=${process.env.GEMINI_API_KEY} && ` 
-        : `GEMINI_API_KEY=${process.env.GEMINI_API_KEY} GOOGLE_API_KEY=${process.env.GEMINI_API_KEY} gemini_api_key=${process.env.GEMINI_API_KEY} `)
+  const envPrefix = hasGemini
+    ? process.platform === 'win32'
+      ? `set GEMINI_API_KEY=${process.env.GEMINI_API_KEY} && set GOOGLE_API_KEY=${process.env.GEMINI_API_KEY} && set gemini_api_key=${process.env.GEMINI_API_KEY} && `
+      : `GEMINI_API_KEY=${process.env.GEMINI_API_KEY} GOOGLE_API_KEY=${process.env.GEMINI_API_KEY} gemini_api_key=${process.env.GEMINI_API_KEY} `
     : '';
 
   try {
@@ -57,7 +57,7 @@ function retrieveContext(query) {
       encoding: 'utf8',
       shell: true,
       stdio: ['pipe', 'pipe', 'pipe'],
-      env: process.env
+      env: process.env,
     });
 
     const results = JSON.parse(output);
@@ -71,7 +71,7 @@ function retrieveContext(query) {
           encoding: 'utf8',
           shell: true,
           stdio: ['pipe', 'pipe', 'pipe'],
-          env: process.env
+          env: process.env,
         });
         const lexResults = JSON.parse(lexOutput);
         if (lexResults.hits && lexResults.hits.length > 0) {

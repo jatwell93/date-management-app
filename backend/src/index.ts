@@ -3,7 +3,7 @@ require('../instrument');
 import express from 'express';
 import cors from 'cors';
 import helmet from 'helmet';
-import * as Sentry from "@sentry/node";
+import * as Sentry from '@sentry/node';
 import { createServer, Server as HttpsServer } from 'https';
 import { Server as HttpServer } from 'http'; // Import http server type
 import { promises as fs } from 'fs';

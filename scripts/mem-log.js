@@ -60,10 +60,10 @@ function logMemory(kind, title, message) {
   const embeddingFlags = hasGemini ? ' --embedding --embedding-model gemini' : '';
 
   // Cross-platform environment variable prefix for the shell command
-  const envPrefix = hasGemini 
-    ? (process.platform === 'win32' 
-        ? `set GEMINI_API_KEY=${process.env.GEMINI_API_KEY} && set GOOGLE_API_KEY=${process.env.GEMINI_API_KEY} && set gemini_api_key=${process.env.GEMINI_API_KEY} && ` 
-        : `GEMINI_API_KEY=${process.env.GEMINI_API_KEY} GOOGLE_API_KEY=${process.env.GEMINI_API_KEY} gemini_api_key=${process.env.GEMINI_API_KEY} `)
+  const envPrefix = hasGemini
+    ? process.platform === 'win32'
+      ? `set GEMINI_API_KEY=${process.env.GEMINI_API_KEY} && set GOOGLE_API_KEY=${process.env.GEMINI_API_KEY} && set gemini_api_key=${process.env.GEMINI_API_KEY} && `
+      : `GEMINI_API_KEY=${process.env.GEMINI_API_KEY} GOOGLE_API_KEY=${process.env.GEMINI_API_KEY} gemini_api_key=${process.env.GEMINI_API_KEY} `
     : '';
 
   try {
@@ -73,7 +73,7 @@ function logMemory(kind, title, message) {
     execSync(cmd, {
       stdio: 'inherit',
       shell: true,
-      env: process.env
+      env: process.env,
     });
 
     console.log(`\n✅ Memory logged: [${normalizedKind}] ${title}`);
