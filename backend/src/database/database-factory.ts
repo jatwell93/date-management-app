@@ -3,7 +3,7 @@
  *
  * Creates the appropriate Prisma client based on the environment.
  * - Development: SQLite with local file
- * - Production: MySQL with PlanetScale (serverless)
+ * - Production: PostgreSQL with Neon (via Hyperdrive for Workers, direct for Express)
  *
  * This factory provides environment-based database client creation
  * with proper connection pooling for production.
@@ -17,6 +17,8 @@ export interface DatabaseFactoryConfig {
   environment?: DatabaseEnvironment;
   // Connection options
   connectionUrl?: string;
+  // Hyperdrive connection (Workers only)
+  hyperdriveConnectionString?: string;
   // Logging options
   enableLogging?: boolean;
   logQueries?: boolean;
@@ -42,13 +44,27 @@ function detectEnvironment(): DatabaseEnvironment {
 /**
  * Get the database URL based on environment
  */
-function getDatabaseUrl(environment: DatabaseEnvironment, configUrl?: string): string {
-  // Use explicit config URL if provided
-  if (configUrl) {
-    return configUrl;
+function getDatabaseUrl(environment: DatabaseEnvironment, config: DatabaseFactoryConfig): string {
+  // Hyperdrive connection string (Workers with Cloudflare Hyperdrive)
+  if (config.hyperdriveConnectionString) {
+    return config.hyperdriveConnectionString;
   }
 
-  // Use environment variable
+  // Use explicit config URL if provided
+  if (config.connectionUrl) {
+    return config.connectionUrl;
+  }
+
+  // Use Neon connection string for production
+  if (environment === 'production') {
+    const neonUrl = process.env.NEON_CONNECTION_STRING || process.env.DATABASE_URL;
+    if (neonUrl) {
+      return neonUrl;
+    }
+    throw new Error('Production environment requires NEON_CONNECTION_STRING or DATABASE_URL');
+  }
+
+  // Use environment variable for other cases
   const envUrl = process.env.DATABASE_URL;
   if (envUrl) {
     return envUrl;
@@ -82,27 +98,25 @@ function getLogOptions(config: DatabaseFactoryConfig): Array<'query' | 'info' | 
  */
 export function createDatabaseClient(config: DatabaseFactoryConfig = {}): PrismaClient {
   const environment = config.environment ?? detectEnvironment();
-  getDatabaseUrl(environment, config.connectionUrl);
+  const databaseUrl = getDatabaseUrl(environment, config);
   const logOptions = getLogOptions(config);
 
   // Create Prisma client with appropriate settings
   const client = new PrismaClient({
     log: logOptions,
-    // Data source override if URL is provided
-    datasources: config.connectionUrl
-      ? {
-          db: {
-            url: config.connectionUrl,
-          },
-        }
-      : undefined,
+    // Data source override with connection URL
+    datasources: {
+      db: {
+        url: databaseUrl,
+      },
+    },
   });
 
-  // For production with PlanetScale, we rely on Prisma's built-in
-  // connection management which works well with serverless
-  if (environment === 'production') {
-    // Log connection for debugging (no sensitive data)
-    console.log('[Database] Connecting to PlanetScale (production mode)');
+  // Log connection type for debugging (no sensitive data)
+  if (config.hyperdriveConnectionString) {
+    console.log('[Database] Connecting via Cloudflare Hyperdrive (edge pooling)');
+  } else if (environment === 'production') {
+    console.log('[Database] Connecting to Neon PostgreSQL (production mode)');
   } else {
     console.log(`[Database] Using SQLite (${environment} mode)`);
   }
@@ -113,9 +127,9 @@ export function createDatabaseClient(config: DatabaseFactoryConfig = {}): Prisma
 /**
  * Get the database provider type for the current environment
  */
-export function getDatabaseProvider(config: DatabaseFactoryConfig = {}): 'sqlite' | 'mysql' {
+export function getDatabaseProvider(config: DatabaseFactoryConfig = {}): 'sqlite' | 'postgresql' {
   const environment = config.environment ?? detectEnvironment();
-  return environment === 'production' ? 'mysql' : 'sqlite';
+  return environment === 'production' ? 'postgresql' : 'sqlite';
 }
 
 // ============================================================================

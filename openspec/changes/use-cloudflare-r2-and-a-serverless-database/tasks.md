@@ -119,21 +119,12 @@
 
 > **Why Hyperdrive?** Provides lowest possible latency for Neon by performing connection pooling at Cloudflare's edge. Eliminates cold start penalty on database connections. Required for production Workers deployment.
 
-- [ ] 7.12 **USER: Enable Workers Paid plan** ($5/month, includes Hyperdrive)
-- [ ] 7.13 Create Hyperdrive configuration via Wrangler:
-  ```bash
-  npx wrangler hyperdrive create date-management-db \
-    --connection-string="postgres://user:pass@ep-xxx.us-east-1.aws.neon.tech/neondb?sslmode=require"
-  ```
-- [ ] 7.14 Add Hyperdrive binding to `wrangler.toml`:
-  ```toml
-  [[hyperdrive]]
-  binding = "HYPERDRIVE"
-  id = "<hyperdrive-config-id-from-7.13>"
-  ```
-- [ ] 7.15 Update database factory to use Hyperdrive connection string in Workers (see design.md Decision 4b)
-- [ ] 7.16 Test Hyperdrive connection with `wrangler dev` (verify queries execute successfully)
-- [ ] 7.17 Document Hyperdrive setup in `docs/cloudflare-setup.md`
+- [x] 7.12 **USER: Verify Hyperdrive is available** (Free tier includes 100,000 queries/day - sufficient for MVP)
+- [x] 7.13 Create Hyperdrive configuration via Wrangler (USER completed, ID: 4fac081391784eb7bb2db2269c1fa870)
+- [x] 7.14 Add Hyperdrive binding to `wrangler.toml` (added to both dev and prod environments)
+- [x] 7.15 Update database factory to use Hyperdrive connection string in Workers (see design.md Decision 4b)
+- [] 7.16 Test Hyperdrive connection with `wrangler dev` (configuration verified, actual testing blocked by Task 8.3 - backend route dependencies)
+- [x] 7.17 Document Hyperdrive setup in `docs/cloudflare-setup.md` (comprehensive setup guide with troubleshooting)
 
 ## 8. Cloudflare Workers Implementation
 

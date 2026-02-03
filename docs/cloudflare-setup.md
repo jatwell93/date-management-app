@@ -479,8 +479,190 @@ Compare to AWS S3:
 
 ---
 
+## Hyperdrive Setup (Database Connection Pooling)
+
+Hyperdrive provides edge connection pooling for Neon PostgreSQL, dramatically reducing latency for database queries from Workers.
+
+### Why Hyperdrive?
+
+- **Lowest latency**: Connection pooling at Cloudflare's edge (not origin)
+- **No cold starts**: Persistent connections eliminate connection setup time
+- **Free tier**: 100,000 queries/day included (sufficient for MVP)
+- **Paid tier**: $5/month Workers Paid plan includes unlimited queries
+
+### Prerequisites
+
+- Neon PostgreSQL database created and migrated
+- Neon connection string (from Neon Dashboard → Connection Details)
+- Wrangler CLI installed (`npm install -g wrangler`)
+
+### Step 1: Create Hyperdrive Configuration
+
+Run from your project root:
+
+```bash
+npx wrangler hyperdrive create date-management-db \
+  --connection-string="postgresql://user:pass@ep-xxx.us-east-1.aws.neon.tech/neondb?sslmode=require&channel_binding=require"
+```
+
+**Important**: Use your actual Neon connection string from `.env` or Neon Dashboard.
+
+The command will output:
+
+```
+✅ Created new Hyperdrive config
+ {
+   "id": "a1b2c3d4e5f6789012345678abcdef90",
+   "name": "date-management-db",
+   "origin": {
+     "host": "ep-xxx.us-east-1.aws.neon.tech",
+     "port": 5432,
+     "database": "neondb"
+   }
+ }
+```
+
+**Save the `id` value** - you'll need it for `wrangler.toml`.
+
+### Step 2: Add Hyperdrive ID to Environment
+
+Add to your `.env` file (local development reference):
+
+```bash
+HYPERDRIVE_CONFIG_ID=a1b2c3d4e5f6789012345678abcdef90  # Replace with your actual ID
+```
+
+⚠️ **Note**: While Hyperdrive IDs are not secrets (they don't contain credentials), use your actual ID from the previous step.
+
+⚠️ **Note**: The Hyperdrive binding is configured in `wrangler.toml`, not as a secret.
+
+### Step 3: Configure Wrangler Bindings
+
+The Hyperdrive binding should be configured in `workers/wrangler.toml`:
+
+```toml
+# Production Environment
+[[env.production.hyperdrive]]
+binding = "HYPERDRIVE"
+id = "a1b2c3d4e5f6789012345678abcdef90"  # Your Hyperdrive config ID from Step 1
+
+# Development Environment
+[[env.development.hyperdrive]]
+binding = "HYPERDRIVE"
+id = "a1b2c3d4e5f6789012345678abcdef90"  # Same ID for both environments
+```
+
+**Note**: It's safe to commit the Hyperdrive ID to git - it's a resource identifier, not a credential. The actual database credentials are stored securely by Cloudflare.
+
+### Step 4: Use Hyperdrive in Workers Code
+
+Hyperdrive is automatically available via the `env.HYPERDRIVE` binding:
+
+```typescript
+import { createDatabaseClient } from '../../backend/src/database/database-factory';
+
+export function createWorkersDatabase(env: Env) {
+  return createDatabaseClient({
+    environment: 'production',
+    hyperdriveConnectionString: env.HYPERDRIVE.connectionString,
+    enableLogging: env.NODE_ENV === 'development',
+  });
+}
+```
+
+The database factory handles the Hyperdrive connection automatically.
+
+### Step 5: Test Hyperdrive Connection
+
+Test locally with Wrangler dev server:
+
+```bash
+cd workers
+npx wrangler dev
+```
+
+Then test a database query:
+
+```bash
+curl http://localhost:8787/api/health
+```
+
+Check the console output for:
+
+```
+[Database] Connecting via Cloudflare Hyperdrive (edge pooling)
+```
+
+### Troubleshooting Hyperdrive
+
+#### Error: "Hyperdrive configuration not found"
+
+**Solution**: Verify the configuration ID is correct in `wrangler.toml`. List all Hyperdrive configs:
+
+```bash
+npx wrangler hyperdrive list
+```
+
+#### Error: "Connection to origin failed"
+
+**Solution**: Check Neon connection string is correct and database is accessible:
+
+1. Verify connection string in Neon Dashboard
+2. Ensure database is not paused (Neon Free tier auto-pauses after 7 days inactivity)
+3. Check Neon compute endpoint is running
+
+#### Workers not using Hyperdrive
+
+**Solution**: Ensure you're using the `env.HYPERDRIVE.connectionString` in your database factory:
+
+```typescript
+// ✅ Correct
+hyperdriveConnectionString: env.HYPERDRIVE.connectionString
+
+// ❌ Wrong
+connectionUrl: process.env.NEON_CONNECTION_STRING
+```
+
+#### High latency despite Hyperdrive
+
+**Solution**: 
+
+1. Check Hyperdrive region matches Neon region (ap-southeast-2 in your case)
+2. Verify you're not using direct Neon connections in parallel
+3. Monitor Hyperdrive metrics in Cloudflare Dashboard → Workers → Hyperdrive
+
+### Hyperdrive Metrics
+
+Monitor Hyperdrive performance in Cloudflare Dashboard:
+
+1. Go to **Workers & Pages** → **Hyperdrive**
+2. Select your configuration (`date-management-db`)
+3. View metrics:
+   - Query count
+   - Average latency
+   - Cache hit rate
+   - Connection pool usage
+
+### Cost Comparison
+
+| Tier | Queries/Day | Cost |
+|------|-------------|------|
+| **Free** | 100,000 | $0 |
+| **Paid** | Unlimited | $5/month (Workers Paid plan) |
+
+**Note**: The Workers Paid plan ($5/month) includes Hyperdrive plus:
+- Unmetered requests (vs 100k/day free)
+- Longer CPU time limits
+- Additional features
+
+For most applications, the free tier is sufficient for development and early production.
+
+---
+
 ## Related Documentation
 
 - [Storage Patterns](../backend/docs/storage-patterns.md) - Storage abstraction layer
 - [Deployment Guide](../backend/docs/deployment.md) - Production deployment
 - [Environment Variables](../backend/.env.example) - Configuration reference
+- [Neon Database Branching](./database-migrations.md) - Database workflow
+- [Hyperdrive Documentation](https://developers.cloudflare.com/hyperdrive/) - Official Cloudflare docs

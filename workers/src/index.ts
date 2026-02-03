@@ -3,6 +3,11 @@
  * 
  * Production deployment entry point that wraps existing Express routes
  * for Cloudflare Workers environment.
+ * 
+ * Database Connection:
+ * - Uses Cloudflare Hyperdrive for edge connection pooling to Neon PostgreSQL
+ * - Hyperdrive provides lowest latency by pooling connections at Cloudflare's edge
+ * - Connection string available via env.HYPERDRIVE.connectionString
  */
 
 import { Env } from './types/env';
@@ -18,6 +23,19 @@ import { createProductionCors } from './middleware/cors.middleware';
 import { createRateLimiter } from './middleware/rate-limit.middleware';
 import { createRequestLogger, createErrorHandler, WorkersLogger } from './middleware/error-handler.middleware';
 import { handleHealthCheck } from './health';
+import { createDatabaseClient } from '../../backend/src/database/database-factory';
+
+/**
+ * Initialize Prisma client with Hyperdrive connection
+ * This provides edge-pooled connections to Neon PostgreSQL
+ */
+export function createWorkersDatabase(env: Env) {
+  return createDatabaseClient({
+    environment: 'production',
+    hyperdriveConnectionString: env.HYPERDRIVE.connectionString,
+    enableLogging: env.NODE_ENV === 'development',
+  });
+}
 
 // Import backend Express routes
 // Note: Product routes use multer for file uploads - skipped for Workers (no filesystem)

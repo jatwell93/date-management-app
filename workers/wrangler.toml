@@ -38,10 +38,20 @@ RATE_LIMIT_MAX_AUTHENTICATED = "100"
 binding = "CSV_UPLOADS"
 bucket_name = "csv-uploads-prod"
 
+# Hyperdrive Configuration (Production)
+[[env.production.hyperdrive]]
+binding = "HYPERDRIVE"
+id = "4fac081391784eb7bb2db2269c1fa870"
+
 # R2 Bucket Bindings (Development/Preview)
 [[env.development.r2_buckets]]
 binding = "CSV_UPLOADS"
 bucket_name = "csv-uploads-dev"
+
+# Hyperdrive Configuration (Development)
+[[env.development.hyperdrive]]
+binding = "HYPERDRIVE"
+id = "4fac081391784eb7bb2db2269c1fa870"
 
 # Development/Preview Environment
 [env.development]
