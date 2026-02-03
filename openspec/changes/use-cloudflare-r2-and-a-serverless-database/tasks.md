@@ -149,16 +149,16 @@
 
 ## 9. Upload Flow Enhancement
 
-- [ ] 9.1 Create upload initiation endpoint (`POST /api/upload/initiate`)
-- [ ] 9.2 Implement file size check (>2MB → presigned URL, <2MB → direct upload)
-- [ ] 9.3 Generate presigned R2 URLs for large files (1 hour expiry)
-- [ ] 9.4 Add direct upload endpoint (`POST /api/upload/direct`) for small files
-- [ ] 9.5 Implement upload completion callback (`POST /api/upload/complete`)
-- [ ] 9.6 Update frontend to handle presigned URL upload flow
-- [ ] 9.7 Add client-side file size validation (reject >10MB)
-- [ ] 9.8 Implement upload progress tracking with WebSocket or polling
-- [ ] 9.9 Add retry logic for failed uploads (exponential backoff)
-- [ ] 9.10 Write end-to-end tests for upload flow (both direct and presigned)
+- [x] 9.1 Create upload initiation endpoint (`POST /api/upload/initiate`)
+- [x] 9.2 Implement file size check (>2MB → presigned URL, <2MB → direct upload)
+- [x] 9.3 Generate presigned R2 URLs for large files (1 hour expiry)
+- [x] 9.4 Add direct upload endpoint (`POST /api/upload/direct`) for small files
+- [x] 9.5 Implement upload completion callback (`POST /api/upload/complete`)
+- [x] 9.6 Update frontend to handle presigned URL upload flow
+- [x] 9.7 Add client-side file size validation (reject >10MB)
+- [x] 9.8 Implement upload progress tracking (XHR/Polling)
+- [x] 9.9 Add retry logic for failed uploads (exponential backoff)
+- [x] 9.10 Write end-to-end tests for upload flow (both direct and presigned)
 
 ## 10. Environment Configuration
 

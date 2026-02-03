@@ -1,9 +1,9 @@
 import { ProductService } from '../../services/product.service';
-import { Product } from '../../models/product.model';
 import { PrismaClient } from '@prisma/client';
 
 describe('ProductService', () => {
   let productService: ProductService;
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
   let mockPrisma: any;
 
   beforeEach(() => {

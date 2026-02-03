@@ -103,56 +103,163 @@ export const CSVUploadPage: React.FC<{ token: string | null }> = ({ token }) => 
       return;
     }
 
-    setIsUploading(true);
-    setUploadProgress(0);
-    setProgressMessage('Starting upload...');
-    setUploadResult(null);
-
-    const formData = new FormData();
-    formData.append('file', selectedFile);
-
-    try {
-      // Simulate progress updates
-      const progressInterval = setInterval(() => {
-        setUploadProgress((prev) => {
-          if (prev >= 90) {
-            clearInterval(progressInterval);
-            return prev;
-          }
-          return prev + 10;
-        });
-        setProgressMessage('Uploading...');
-      }, 200);
-
-      const response = await fetch(`${process.env.REACT_APP_API_URL}/products/upload-csv`, {
-        method: 'POST',
-        headers: {
-          Authorization: `Bearer ${token}`,
-        },
-        body: formData,
-      });
-
-      clearInterval(progressInterval);
-      setUploadProgress(100);
-      setProgressMessage('Processing...');
-
-      const result: UploadResponse = await response.json();
-
-      if (response.ok) {
-        setUploadResult(result);
-        setUploadProgress(0);
-        setProgressMessage('');
-      } else {
-        setUploadResult({
-          success: false,
-          message: result.message || 'An error occurred during upload',
-          errors: result.errors,
-        });
-      }
-    } catch (_error) {
+    // Validate file size (10MB limit)
+    const MAX_SIZE = 10 * 1024 * 1024;
+    if (selectedFile.size > MAX_SIZE) {
       setUploadResult({
         success: false,
-        message: 'Network error: Unable to connect to the server',
+        message: 'File size exceeds 10MB limit',
+      });
+      return;
+    }
+
+    setIsUploading(true);
+    setUploadProgress(0);
+    setProgressMessage('Preparing file...');
+    setUploadResult(null);
+
+    try {
+      let fileToUpload = selectedFile;
+      let fileNameToUpload = selectedFile.name;
+
+      // Convert XLSX/XLS to CSV if needed
+      const fileExtension = selectedFile.name.split('.').pop()?.toLowerCase();
+      if (
+        (fileExtension === 'xlsx' || fileExtension === 'xls') &&
+        selectedFile.type !== 'text/csv'
+      ) {
+        setProgressMessage('Converting spreadsheet to CSV...');
+        const buffer = await selectedFile.arrayBuffer();
+        const workbook = XLSX.read(buffer, { type: 'array' });
+        const firstSheetName = workbook.SheetNames[0];
+        const worksheet = workbook.Sheets[firstSheetName];
+        const csvContent = XLSX.utils.sheet_to_csv(worksheet);
+        fileToUpload = new File([csvContent], selectedFile.name.replace(/\.[^/.]+$/, '.csv'), {
+          type: 'text/csv',
+        });
+        fileNameToUpload = fileToUpload.name;
+      }
+
+      // 1. Initiate Upload
+      setProgressMessage('Initiating upload...');
+      const apiUrl = process.env.REACT_APP_API_URL || '';
+
+      const initiateRes = await fetch(`${apiUrl}/upload/initiate`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${token}`,
+        },
+        body: JSON.stringify({
+          filename: fileNameToUpload,
+          fileSize: fileToUpload.size,
+          contentType: fileToUpload.type,
+        }),
+      });
+
+      if (!initiateRes.ok) {
+        throw new Error('Failed to initiate upload');
+      }
+
+      const { strategy, uploadUrl, method, key } = await initiateRes.json();
+
+      // 2. Perform Upload
+      setProgressMessage(
+        strategy === 'presigned' ? 'Uploading to Storage (R2)...' : 'Uploading...',
+      );
+
+      // Simulate progress for user feedback
+      const progressInterval = setInterval(() => {
+        setUploadProgress((prev) => {
+          if (prev >= 90) return prev;
+          return prev + 5;
+        });
+      }, 500);
+
+      const uploadWithRetry = async (url: string, options: RequestInit, retries = 3) => {
+        for (let i = 0; i < retries; i++) {
+          try {
+            const res = await fetch(url, options);
+            if (res.ok) return res;
+            console.warn(`Upload attempt ${i + 1} failed with status: ${res.status}`);
+          } catch (err) {
+            console.warn(`Upload attempt ${i + 1} failed:`, err);
+          }
+          if (i < retries - 1) {
+            const delay = 1000 * Math.pow(2, i); // Exponential backoff
+            await new Promise((r) => setTimeout(r, delay));
+          }
+        }
+        throw new Error('Upload failed after multiple attempts');
+      };
+
+      try {
+        if (strategy === 'direct') {
+          const formData = new FormData();
+          formData.append('file', fileToUpload);
+
+          const directUrl = uploadUrl.startsWith('http') ? uploadUrl : `${apiUrl}/upload/direct`;
+
+          await uploadWithRetry(directUrl, {
+            method: 'POST',
+            headers: {
+              Authorization: `Bearer ${token}`,
+            },
+            body: formData,
+          });
+        } else {
+          // Presigned PUT
+          await uploadWithRetry(uploadUrl, {
+            method: method,
+            headers: {
+              'Content-Type': fileToUpload.type,
+            },
+            body: fileToUpload,
+          });
+        }
+      } finally {
+        clearInterval(progressInterval);
+      }
+
+      setUploadProgress(100);
+
+      // 3. Complete (Trigger Processing)
+      // For direct upload, the server might trigger processing automatically, but our API design
+      // in UploadController for 'direct' finishes with json response.
+      // AND 'direct' endpoint calls handleDirectUpload which calls completeUpload.
+      // So detailed processing happens. But for consistency, 'presigned' NEEDS explicit complete call.
+      // 'direct' does NOT need it if the controller handles it.
+
+      // Strategy check:
+      // If presigned, we MUST call complete.
+      // If direct, the request is already done.
+
+      if (strategy === 'presigned') {
+        setProgressMessage('Processing file...');
+        const completeRes = await fetch(`${apiUrl}/upload/complete`, {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            Authorization: `Bearer ${token}`,
+          },
+          body: JSON.stringify({ key }),
+        });
+
+        if (!completeRes.ok) throw new Error('Processing failed');
+      }
+
+      // Success
+      setUploadResult({
+        success: true,
+        message: 'File uploaded and processed successfully',
+      });
+      setUploadProgress(0);
+      setProgressMessage('');
+    } catch (error) {
+      console.error(error);
+      setUploadResult({
+        success: false,
+        message: error instanceof Error ? error.message : 'An error occurred during upload',
       });
     } finally {
       setIsUploading(false);

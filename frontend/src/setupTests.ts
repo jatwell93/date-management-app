@@ -38,23 +38,35 @@ jest.mock('localforage', () => {
 
 // Mock Pointer Events for Radix UI
 if (typeof window !== 'undefined') {
-  window.PointerEvent = class PointerEvent extends Event {
-    public pointerId: number = 0;
-    public width: number = 0;
-    public height: number = 0;
-    public pressure: number = 0;
-    public tangentialPressure: number = 0;
-    public tiltX: number = 0;
-    public tiltY: number = 0;
-    public twist: number = 0;
-    public pointerType: string = '';
-    public isPrimary: boolean = false;
+  // Fix for "TypeError: Cannot set property bubbles of [object Event] which has only a getter"
+  class MockPointerEvent extends Event {
+    pointerId: number;
+    width: number;
+    height: number;
+    pressure: number;
+    tangentialPressure: number;
+    tiltX: number;
+    tiltY: number;
+    twist: number;
+    pointerType: string;
+    isPrimary: boolean;
 
     constructor(type: string, params: PointerEventInit = {}) {
       super(type, params);
-      Object.assign(this, params);
+      this.pointerId = params.pointerId || 0;
+      this.width = params.width || 0;
+      this.height = params.height || 0;
+      this.pressure = params.pressure || 0;
+      this.tangentialPressure = params.tangentialPressure || 0;
+      this.tiltX = params.tiltX || 0;
+      this.tiltY = params.tiltY || 0;
+      this.twist = params.twist || 0;
+      this.pointerType = params.pointerType || '';
+      this.isPrimary = params.isPrimary || false;
     }
-  } as any;
+  }
+
+  (window as any).PointerEvent = MockPointerEvent;
 
   window.HTMLElement.prototype.scrollIntoView = jest.fn();
   window.HTMLElement.prototype.hasPointerCapture = jest.fn();

@@ -49,10 +49,8 @@ describe('OfflineSyncService', () => {
     mockNavigatorOnline.mockReturnValue(true);
 
     // Force reset internal state of singleton
-    // @ts-ignore
-    offlineSyncService.isOnline = true;
-    // @ts-ignore
-    offlineSyncService.syncInProgress = false;
+    (offlineSyncService as any).isOnline = true;
+    (offlineSyncService as any).syncInProgress = false;
   });
 
   describe('Queue Management', () => {
@@ -162,8 +160,7 @@ describe('OfflineSyncService', () => {
       expect(offlineSyncService.isCurrentlyOffline()).toBe(false);
 
       // Manually trigger handleOffline to update state
-      // @ts-ignore
-      offlineSyncService.handleOffline();
+      (offlineSyncService as any).handleOffline();
 
       expect(offlineSyncService.isCurrentlyOffline()).toBe(true);
     });
@@ -172,12 +169,10 @@ describe('OfflineSyncService', () => {
       const syncSpy = jest.spyOn(offlineSyncService, 'performSync');
 
       // Go offline
-      // @ts-ignore
-      offlineSyncService.handleOffline();
+      (offlineSyncService as any).handleOffline();
 
       // Go online (should trigger sync)
-      // @ts-ignore
-      offlineSyncService.handleOnline();
+      (offlineSyncService as any).handleOnline();
 
       expect(syncSpy).toHaveBeenCalled();
 
@@ -193,10 +188,8 @@ describe('OfflineSyncService', () => {
         json: async () => ({ success: true }),
       });
       // Force reset internal state again just to be safe
-      // @ts-ignore
-      offlineSyncService.syncInProgress = false;
-      // @ts-ignore
-      offlineSyncService.isOnline = true;
+      (offlineSyncService as any).syncInProgress = false;
+      (offlineSyncService as any).isOnline = true;
     });
 
     it('should send POST request for create', async () => {

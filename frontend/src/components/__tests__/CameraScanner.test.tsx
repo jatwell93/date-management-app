@@ -64,7 +64,7 @@ describe('CameraScanner', () => {
 
   it('calls onDetected when code is scanned', () => {
     // Capture the onDetected callback
-    let onDetectedCallback: Function | null = null;
+    let onDetectedCallback: ((data: any) => void) | null = null;
     (Quagga.onDetected as jest.Mock).mockImplementation((cb) => {
       onDetectedCallback = cb;
     });
@@ -84,7 +84,7 @@ describe('CameraScanner', () => {
 
   it('stops scanner after detection (after delay)', () => {
     jest.useFakeTimers();
-    let onDetectedCallback: Function | null = null;
+    let onDetectedCallback: ((data: any) => void) | null = null;
     (Quagga.onDetected as jest.Mock).mockImplementation((cb) => {
       onDetectedCallback = cb;
     });

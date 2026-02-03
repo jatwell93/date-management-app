@@ -20,6 +20,7 @@ import storeAreaRoutes from './routes/store-area.routes';
 import healthRoutes from './routes/health.routes';
 import databaseBackupRoutes from './routes/database.backup.routes';
 import expiredItemRoutes from './routes/expired-item.routes';
+import uploadRoutes from './routes/upload.routes';
 import { authenticateToken } from './middleware/auth.middleware';
 import { errorHandler } from './middleware/error.middleware';
 import { SchedulerService } from './services/scheduler.service';
@@ -175,6 +176,7 @@ app.use('/dashboard', authenticateToken, dashboardRoutes);
 app.use('/users', authenticateToken, userRoutes);
 app.use('/database', authenticateToken, databaseBackupRoutes);
 app.use('/expired-items', authenticateToken, expiredItemRoutes);
+app.use('/api/upload', authenticateToken, uploadRoutes);
 
 app.get('/', (req, res) => {
   res.json({

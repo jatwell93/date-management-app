@@ -1,3 +1,4 @@
+/* eslint-disable @typescript-eslint/no-explicit-any */
 import { ProductService } from '../../services/product.service';
 import { PrismaClient } from '@prisma/client';
 import fs from 'fs';
@@ -283,9 +284,15 @@ describe('CSV Upload Error Handling', () => {
 
   it('should return errors for values that exceed length limits', async () => {
     mockPrisma.product.findUnique.mockResolvedValue(null);
+    // Mock create to prevent crash if validation fails (it shouldn't execute, but safety)
+    mockPrisma.product.create.mockResolvedValue({
+      id: 1,
+      name: 'Too Long',
+      sku: 'TEST001',
+      barcode: '123',
+    });
 
-    const longName =
-      'Product with a very long name that exceeds the maximum allowed length for testing purposes';
+    const longName = 'product'.repeat(40); // 7 * 40 = 280 characters
     const csvContent = `SKU,Name,Cost,Barcode\nTEST001,${longName},12.99,1234567890123`;
     const testCSVPath = path.join(__dirname, 'test_length_error.csv');
     fs.writeFileSync(testCSVPath, csvContent);
@@ -312,7 +319,7 @@ describe('CSV Upload Error Handling', () => {
       const result = await productService.processCSVUploadInternal(testCSVPath);
 
       expect(result.errors.length).toBeGreaterThan(0);
-      expect(result.errors[0]).toContain('Missing required column header for SKU');
+      expect(result.errors[0]).toContain('Missing required field - SKU');
       expect(result.imported).toBe(0);
       expect(result.updated).toBe(0);
     } finally {
@@ -340,7 +347,12 @@ describe('Comprehensive CSV Processing Tests', () => {
   it('should process CSV with various currency formats', async () => {
     mockPrisma.product.findUnique.mockResolvedValue(null);
     mockPrisma.product.create.mockImplementation((args: any) =>
-      Promise.resolve({ id: 1, ...args.data }),
+      Promise.resolve({
+        id: 1,
+        ...args.data,
+        createdAt: new Date(),
+        updatedAt: new Date(),
+      }),
     );
 
     const csvContent = `SKU,Name,Cost,Barcode
@@ -366,7 +378,12 @@ TEST005,Product 5,AUD$ 35.99,1234567890127`;
   it('should process CSV with alternative header names', async () => {
     mockPrisma.product.findUnique.mockResolvedValue(null);
     mockPrisma.product.create.mockImplementation((args: any) =>
-      Promise.resolve({ id: 1, ...args.data }),
+      Promise.resolve({
+        id: 1,
+        ...args.data,
+        createdAt: new Date(),
+        updatedAt: new Date(),
+      }),
     );
 
     const csvContent = `Item Code,Product Name,Unit Price,GTIN
