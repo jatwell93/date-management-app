@@ -1,6 +1,7 @@
 name = "date-management-api"
-main = "src/index.ts"
-compatibility_date = "2024-01-01"
+main = "dist/index.js"
+compatibility_date = "2024-09-23"
+no_bundle = true
 
 # Node.js compatibility for Prisma and Node APIs
 compatibility_flags = ["nodejs_compat"]
@@ -64,7 +65,9 @@ STORAGE_PROVIDER = "local"
 # Build Configuration
 [build]
 command = "npm run build"
-watch_dirs = ["src"]
+
+# Note: watch_dirs and upload sections are no longer needed
+# wrangler handles file watching automatically
 
 # Secrets (set via CLI: wrangler secret put <KEY> --env production)
 # Production secrets required:

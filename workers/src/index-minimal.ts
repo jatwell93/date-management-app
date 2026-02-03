@@ -1,0 +1,463 @@
+/**
+ * Cloudflare Workers Entry Point (Minimal)
+ * 
+ * This is a minimal implementation that doesn't import backend Express routes
+ * to avoid pulling in SQLite dependencies. It provides essential API endpoints
+ * using Workers-native code.
+ * 
+ * For full API compatibility, backend Express routes would need refactoring
+ * to separate business logic from Node.js-specific code.
+ */
+
+import { Env } from './types/env';
+import { handleHealthCheck } from './health';
+import { createWorkersDatabase } from './database';
+
+/**
+ * CORS headers for production
+ */
+function getCorsHeaders(env: Env): HeadersInit {
+  const allowedOrigins = env.CORS_ORIGINS?.split(',') || ['https://yourdomain.com'];
+  
+  return {
+    'Access-Control-Allow-Origin': allowedOrigins[0],
+    'Access-Control-Allow-Methods': 'GET, POST, PUT, PATCH, DELETE, OPTIONS',
+    'Access-Control-Allow-Headers': 'Content-Type, Authorization',
+    'Access-Control-Max-Age': '86400',
+  };
+}
+
+/**
+ * Handle CORS preflight requests
+ */
+function handleOptions(env: Env): Response {
+  return new Response(null, {
+    status: 204,
+    headers: getCorsHeaders(env),
+  });
+}
+
+/**
+ * JSON response helper
+ */
+function jsonResponse(data: unknown, status = 200, env?: Env): Response {
+  const headers: HeadersInit = {
+    'Content-Type': 'application/json',
+    ...(env ? getCorsHeaders(env) : {}),
+  };
+  
+  return new Response(JSON.stringify(data), { status, headers });
+}
+
+/**
+ * Error response helper
+ */
+function errorResponse(message: string, status = 500, env?: Env): Response {
+  return jsonResponse({ error: message }, status, env);
+}
+
+/**
+ * Main Workers fetch handler
+ */
+export default {
+  async fetch(request: Request, env: Env, ctx: ExecutionContext): Promise<Response> {
+    const url = new URL(request.url);
+    const { pathname } = url;
+    const method = request.method;
+
+    // Handle CORS preflight
+    if (method === 'OPTIONS') {
+      return handleOptions(env);
+    }
+
+    try {
+      // Health check endpoint (no auth required)
+      if (pathname === '/health' || pathname === '/api/health') {
+        return handleHealthCheck(request, env);
+      }
+
+      // API routes
+      if (pathname.startsWith('/api/')) {
+        // Initialize database connection
+        const db = createWorkersDatabase(env);
+
+        // Route handling
+        switch (true) {
+          // Auth endpoints
+          case pathname === '/api/auth/login' && method === 'POST':
+            return await handleLogin(request, db, env);
+
+          case pathname === '/api/auth/register' && method === 'POST':
+            return await handleRegister(request, db, env);
+
+          // User endpoints (require auth)
+          case pathname === '/api/users/me' && method === 'GET':
+            return await handleGetCurrentUser(request, db, env);
+
+          // Products endpoints
+          case pathname === '/api/products' && method === 'GET':
+            return await handleGetProducts(request, db, env);
+
+          case pathname.match(/^\/api\/products\/\d+$/) && method === 'GET':
+            return await handleGetProduct(request, db, env, pathname);
+
+          // Inventory endpoints
+          case pathname === '/api/inventory-items' && method === 'GET':
+            return await handleGetInventory(request, db, env);
+
+          // Store areas endpoints
+          case pathname === '/api/store-areas' && method === 'GET':
+            return await handleGetStoreAreas(request, db, env);
+
+          // Dashboard endpoints
+          case pathname === '/api/dashboard' && method === 'GET':
+            return await handleGetDashboard(request, db, env);
+
+          default:
+            return errorResponse('Not Found', 404, env);
+        }
+      }
+
+      return errorResponse('Not Found', 404, env);
+    } catch (error) {
+      console.error('Unhandled error:', error);
+      const message = env.NODE_ENV === 'development' 
+        ? (error instanceof Error ? error.message : 'Unknown error')
+        : 'Internal Server Error';
+      return errorResponse(message, 500, env);
+    }
+  },
+};
+
+// =============================================================================
+// API Handlers (Using Neon serverless driver)
+// These use the typed Database interface from database.ts
+// =============================================================================
+
+import { Database } from './database';
+import { SignJWT, jwtVerify } from 'jose';
+
+/**
+ * Hash password using Web Crypto (edge-compatible)
+ * Uses PBKDF2 which is available in Workers
+ */
+async function hashPassword(password: string): Promise<string> {
+  const encoder = new TextEncoder();
+  const salt = crypto.getRandomValues(new Uint8Array(16));
+  
+  const keyMaterial = await crypto.subtle.importKey(
+    'raw',
+    encoder.encode(password),
+    'PBKDF2',
+    false,
+    ['deriveBits']
+  );
+  
+  const hash = await crypto.subtle.deriveBits(
+    {
+      name: 'PBKDF2',
+      salt: salt,
+      iterations: 100000,
+      hash: 'SHA-256',
+    },
+    keyMaterial,
+    256
+  );
+  
+  // Combine salt and hash for storage
+  const combined = new Uint8Array(salt.length + new Uint8Array(hash).length);
+  combined.set(salt);
+  combined.set(new Uint8Array(hash), salt.length);
+  
+  // Return as base64
+  return btoa(String.fromCharCode(...combined));
+}
+
+/**
+ * Verify password against stored hash
+ */
+async function verifyPassword(password: string, storedHash: string): Promise<boolean> {
+  try {
+    const encoder = new TextEncoder();
+    
+    // Decode stored hash
+    const combined = new Uint8Array(
+      atob(storedHash).split('').map(c => c.charCodeAt(0))
+    );
+    
+    // Extract salt (first 16 bytes)
+    const salt = combined.slice(0, 16);
+    const storedHashBytes = combined.slice(16);
+    
+    const keyMaterial = await crypto.subtle.importKey(
+      'raw',
+      encoder.encode(password),
+      'PBKDF2',
+      false,
+      ['deriveBits']
+    );
+    
+    const hash = await crypto.subtle.deriveBits(
+      {
+        name: 'PBKDF2',
+        salt: salt,
+        iterations: 100000,
+        hash: 'SHA-256',
+      },
+      keyMaterial,
+      256
+    );
+    
+    // Compare hashes
+    const hashBytes = new Uint8Array(hash);
+    if (hashBytes.length !== storedHashBytes.length) return false;
+    
+    return hashBytes.every((byte, i) => byte === storedHashBytes[i]);
+  } catch {
+    return false;
+  }
+}
+
+/**
+ * Verify bcrypt-style hash (for backward compatibility with existing users)
+ * Note: Full bcrypt verification isn't available in Workers, 
+ * so we use a simple prefix check and assume valid for testing
+ */
+async function verifyBcryptPassword(password: string, storedHash: string): Promise<boolean> {
+  // Check if it's a bcrypt hash (starts with $2a$, $2b$, etc.)
+  if (storedHash.startsWith('$2')) {
+    // For bcrypt hashes, we can't verify in Workers without native bindings
+    // In production, you'd either:
+    // 1. Migrate all users to PBKDF2 hashes
+    // 2. Use a Worker that calls an external service
+    // 3. Use Cloudflare's Password hashing API when available
+    console.warn('Bcrypt hash detected - cannot verify in Workers. Migration needed.');
+    return false;
+  }
+  
+  // Try PBKDF2 verification
+  return verifyPassword(password, storedHash);
+}
+
+/**
+ * Create JWT token using jose
+ */
+async function createToken(userId: number, env: Env): Promise<string> {
+  const secret = new TextEncoder().encode(env.JWT_SECRET || 'development-secret');
+  
+  return await new SignJWT({ userId })
+    .setProtectedHeader({ alg: 'HS256' })
+    .setExpirationTime('24h')
+    .setIssuedAt()
+    .sign(secret);
+}
+
+/**
+ * Extract and verify JWT token from Authorization header
+ */
+async function authenticateRequest(request: Request, env: Env): Promise<{ userId: number } | null> {
+  const authHeader = request.headers.get('Authorization');
+  if (!authHeader?.startsWith('Bearer ')) {
+    return null;
+  }
+
+  const token = authHeader.slice(7);
+  try {
+    const secret = new TextEncoder().encode(env.JWT_SECRET || 'development-secret');
+    const { payload } = await jwtVerify(token, secret);
+    return { userId: payload.userId as number };
+  } catch {
+    return null;
+  }
+}
+
+/**
+ * POST /api/auth/login
+ */
+async function handleLogin(request: Request, db: Database, env: Env): Promise<Response> {
+  const body = await request.json() as { email: string; password: string };
+  
+  if (!body.email || !body.password) {
+    return errorResponse('Email and password are required', 400, env);
+  }
+
+  const user = await db.findUserByEmail(body.email);
+
+  if (!user) {
+    return errorResponse('Invalid credentials', 401, env);
+  }
+
+  const validPassword = await verifyBcryptPassword(body.password, user.passwordHash);
+  if (!validPassword) {
+    return errorResponse('Invalid credentials', 401, env);
+  }
+
+  const token = await createToken(user.id, env);
+
+  return jsonResponse({
+    token,
+    user: {
+      id: user.id,
+      email: user.email,
+      name: user.name,
+      role: user.role,
+    },
+  }, 200, env);
+}
+
+/**
+ * POST /api/auth/register
+ */
+async function handleRegister(request: Request, db: Database, env: Env): Promise<Response> {
+  const body = await request.json() as { email: string; password: string; name: string };
+  
+  if (!body.email || !body.password || !body.name) {
+    return errorResponse('Email, password, and name are required', 400, env);
+  }
+
+  const existingUser = await db.findUserByEmail(body.email);
+
+  if (existingUser) {
+    return errorResponse('Email already registered', 409, env);
+  }
+
+  const passwordHash = await hashPassword(body.password);
+
+  const user = await db.createUser({
+    email: body.email,
+    passwordHash,
+    name: body.name,
+    role: 'user',
+  });
+
+  const token = await createToken(user.id, env);
+
+  return jsonResponse({
+    token,
+    user: {
+      id: user.id,
+      email: user.email,
+      name: user.name,
+      role: user.role,
+    },
+  }, 201, env);
+}
+
+/**
+ * GET /api/users/me
+ */
+async function handleGetCurrentUser(request: Request, db: Database, env: Env): Promise<Response> {
+  const auth = await authenticateRequest(request, env);
+  if (!auth) {
+    return errorResponse('Unauthorized', 401, env);
+  }
+
+  const user = await db.findUserById(auth.userId);
+
+  if (!user) {
+    return errorResponse('User not found', 404, env);
+  }
+
+  return jsonResponse({
+    id: user.id,
+    email: user.email,
+    name: user.name,
+    role: user.role,
+    createdAt: user.createdAt,
+  }, 200, env);
+}
+
+/**
+ * GET /api/products
+ */
+async function handleGetProducts(request: Request, db: Database, env: Env): Promise<Response> {
+  const auth = await authenticateRequest(request, env);
+  if (!auth) {
+    return errorResponse('Unauthorized', 401, env);
+  }
+
+  const url = new URL(request.url);
+  const search = url.searchParams.get('search') || undefined;
+  const limit = parseInt(url.searchParams.get('limit') || '100', 10);
+  const offset = parseInt(url.searchParams.get('offset') || '0', 10);
+
+  const [products, total] = await Promise.all([
+    db.findProducts({ search, limit, offset }),
+    db.countProducts(search),
+  ]);
+
+  return jsonResponse({ products, total, limit, offset }, 200, env);
+}
+
+/**
+ * GET /api/products/:id
+ */
+async function handleGetProduct(request: Request, db: Database, env: Env, pathname: string): Promise<Response> {
+  const auth = await authenticateRequest(request, env);
+  if (!auth) {
+    return errorResponse('Unauthorized', 401, env);
+  }
+
+  const match = pathname.match(/\/api\/products\/(\d+)/);
+  if (!match) {
+    return errorResponse('Invalid product ID', 400, env);
+  }
+
+  const id = parseInt(match[1], 10);
+  const product = await db.findProductById(id);
+
+  if (!product) {
+    return errorResponse('Product not found', 404, env);
+  }
+
+  return jsonResponse(product, 200, env);
+}
+
+/**
+ * GET /api/inventory-items
+ */
+async function handleGetInventory(request: Request, db: Database, env: Env): Promise<Response> {
+  const auth = await authenticateRequest(request, env);
+  if (!auth) {
+    return errorResponse('Unauthorized', 401, env);
+  }
+
+  const url = new URL(request.url);
+  const limit = parseInt(url.searchParams.get('limit') || '100', 10);
+  const offset = parseInt(url.searchParams.get('offset') || '0', 10);
+
+  const [items, total] = await Promise.all([
+    db.findInventoryItems({ limit, offset }),
+    db.countInventoryItems(),
+  ]);
+
+  return jsonResponse({ items, total, limit, offset }, 200, env);
+}
+
+/**
+ * GET /api/store-areas
+ */
+async function handleGetStoreAreas(request: Request, db: Database, env: Env): Promise<Response> {
+  const auth = await authenticateRequest(request, env);
+  if (!auth) {
+    return errorResponse('Unauthorized', 401, env);
+  }
+
+  const areas = await db.findStoreAreas();
+
+  return jsonResponse(areas, 200, env);
+}
+
+/**
+ * GET /api/dashboard
+ */
+async function handleGetDashboard(request: Request, db: Database, env: Env): Promise<Response> {
+  const auth = await authenticateRequest(request, env);
+  if (!auth) {
+    return errorResponse('Unauthorized', 401, env);
+  }
+
+  const stats = await db.getDashboardStats();
+
+  return jsonResponse({ stats }, 200, env);
+}
