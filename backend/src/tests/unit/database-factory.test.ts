@@ -73,12 +73,12 @@ describe('DatabaseFactory', () => {
       expect(provider).toBe('sqlite');
     });
 
-    it('should return mysql for production environment', () => {
+    it('should return postgresql for production environment', () => {
       process.env.NODE_ENV = 'production';
 
       const provider = getDatabaseProvider();
 
-      expect(provider).toBe('mysql');
+      expect(provider).toBe('postgresql');
     });
 
     it('should respect explicit environment config', () => {
@@ -86,7 +86,7 @@ describe('DatabaseFactory', () => {
 
       const provider = getDatabaseProvider({ environment: 'production' });
 
-      expect(provider).toBe('mysql');
+      expect(provider).toBe('postgresql');
     });
 
     it('should default to sqlite when NODE_ENV is undefined', () => {
@@ -158,7 +158,7 @@ describe('DatabaseFactory', () => {
 
       const provider = getDatabaseProvider();
 
-      expect(provider).toBe('mysql');
+      expect(provider).toBe('postgresql');
     });
 
     it('should be case-insensitive for NODE_ENV', () => {
@@ -166,7 +166,7 @@ describe('DatabaseFactory', () => {
 
       const provider = getDatabaseProvider();
 
-      expect(provider).toBe('mysql');
+      expect(provider).toBe('postgresql');
     });
   });
 });

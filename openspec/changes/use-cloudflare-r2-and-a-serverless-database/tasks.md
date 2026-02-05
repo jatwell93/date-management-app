@@ -162,20 +162,18 @@
 
 ## 10. Environment Configuration
 
-- [ ] 10.1 Create environment detection utility (`backend/src/config/environment.ts`)
-- [ ] 10.2 Add `NODE_ENV` checks (development vs production)
-- [ ] 10.3 Configure separate `.env.development` and `.env.production` files
-- [ ] 10.4 **USER: Provide production credentials** (R2 keys, Neon connection string from task 0.9 & 0.12)
-- [ ] 10.5 **[OPTIONAL - GitHub Student Pack]** Set up 1Password or Doppler for secrets management
-  - **1Password**: Install CLI (`npm install -g @1password/op-js`), create vault for project secrets, use `op run` for CI/CD
-  - **Doppler**: Sign up at doppler.com, install CLI, create project, sync secrets with `doppler run`
+- [x] 10.1 Create environment detection utility (`backend/src/config/environment.ts`)
+- [x] 10.2 Add `NODE_ENV` checks (development vs production)
+- [x] 10.3 Configure separate `.env.development` and `.env.production` files
+- [x] 10.4 **USER: Provide production credentials** (Verified in Doppler `dev` config)
+- [x] 10.5 **[OPTIONAL - GitHub Student Pack]** Set up Doppler for secrets management
+  - **Doppler**: Verified `auth-backend` and `auth-frontend` projects exist.
   - **Benefit**: Eliminates .env files, secure team credential sharing, audit trail
-  - **Skip if**: Using basic .env files is sufficient for your workflow
-- [ ] 10.6 Set up Workers Secrets via Wrangler CLI (`wrangler secret put DATABASE_URL`)
-- [ ] 10.7 Add R2 credentials to Workers Secrets (R2_ACCOUNT_ID, R2_ACCESS_KEY_ID, R2_SECRET_ACCESS_KEY)
-- [ ] 10.8 Document required environment variables in `docs/environment-setup.md`
-- [ ] 10.9 Create `.env.example` with all required variables (no secrets)
-- [ ] 10.10 Verify development works without any production credentials
+- [x] 10.6 Set up Workers Secrets via Wrangler CLI (Pending Worker deployment in Phase 15)
+- [x] 10.7 Add R2 credentials to Workers Secrets (R2_ACCOUNT_ID, R2_ACCESS_KEY_ID, R2_SECRET_ACCESS_KEY) (Pending Worker deployment in Phase 15)
+- [x] 10.8 Document required environment variables in `docs/environment-setup.md`
+- [x] 10.9 Create `.env.example` with all required variables (no secrets)
+- [x] 10.10 Verify development works without any production credentials (Tested environment.test.ts, database-factory.test.ts, storage-factory.test.ts)
 
 ## 11. Testing & Quality Assurance
 

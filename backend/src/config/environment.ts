@@ -1,71 +1,166 @@
-import dotenv from 'dotenv';
-import { exit } from 'process';
+// Environment configuration
+// - Node.js: loads .env files using dotenv
+// - Workers: expects runtime injection via setWorkerConfig
 
-// Load environment-specific configuration
-dotenv.config({ path: `.env.${process.env.NODE_ENV}` });
-dotenv.config(); // Load default .env file
+type RawEnv = Record<string, string | undefined>;
 
-interface EnvironmentConfig {
+const isNodeRuntime =
+  typeof process !== 'undefined' &&
+  typeof process.versions !== 'undefined' &&
+  typeof process.versions.node === 'string';
+
+const loadDotenv = () => {
+  if (!isNodeRuntime) {
+    return;
+  }
+
+  // eslint-disable-next-line @typescript-eslint/no-var-requires
+  const dotenv = require('dotenv') as typeof import('dotenv');
+  const nodeEnv = (process.env.NODE_ENV || 'development').toLowerCase();
+
+  dotenv.config({ path: `.env.${nodeEnv}` });
+  dotenv.config(); // Load default .env file
+};
+
+loadDotenv();
+
+export interface EnvironmentConfig {
   NODE_ENV: string;
   PORT: number;
   JWT_SECRET: string;
   DATABASE_PATH: string;
+  DATABASE_URL?: string;
+  DATABASE_PROVIDER?: string;
   FRONTEND_URL: string;
+  CORS_ORIGIN: string;
   USE_HTTPS: boolean;
   DEFAULT_PIN: string;
   SSL_PRIVATE_KEY_PATH?: string;
   SSL_CERT_PATH?: string;
+  STORAGE_PROVIDER?: string;
+  R2_ACCOUNT_ID?: string;
+  R2_ACCESS_KEY_ID?: string;
+  R2_SECRET_ACCESS_KEY?: string;
+  R2_BUCKET_NAME?: string;
+  NEON_CONNECTION_STRING?: string;
+  MAX_UPLOAD_SIZE_BYTES: number;
+  DIRECT_UPLOAD_THRESHOLD_BYTES: number;
   // Add other required environment variables as needed
 }
 
-function validateEnvironment(): EnvironmentConfig {
-  const requiredEnvVars = [
-    'NODE_ENV',
-    'PORT',
-    'JWT_SECRET',
-    // DATABASE_PATH and FRONTEND_URL are optional, will default if not provided
-  ];
+function fail(message: string): never {
+  if (isNodeRuntime) {
+    console.error(message);
+    process.exit(1);
+  }
+  throw new Error(message);
+}
 
-  const missingEnvVars = requiredEnvVars.filter((envVar) => !process.env[envVar]);
-
-  if (missingEnvVars.length > 0) {
-    console.error(`Missing required environment variables: ${missingEnvVars.join(', ')}`);
-    exit(1);
+function parseNumber(
+  value: string | undefined,
+  defaultValue?: number,
+  fieldName?: string,
+): number {
+  if (value === undefined || value === '') {
+    if (defaultValue !== undefined) {
+      return defaultValue;
+    }
+    return fail(`Missing required environment variable${fieldName ? `: ${fieldName}` : ''}`);
   }
 
-  // Validate PORT is a number
-  const port = parseInt(process.env.PORT as string, 10);
-  if (isNaN(port) || port <= 0) {
-    console.error(
-      `Invalid PORT environment variable: ${process.env.PORT}. Must be a positive number.`,
+  const parsed = Number(value);
+  if (Number.isNaN(parsed) || parsed <= 0) {
+    return fail(
+      `Invalid ${fieldName ?? 'number'} environment variable: ${value}. Must be a positive number.`,
     );
-    exit(1);
   }
 
-  // Validate JWT_SECRET is not empty
-  if (!process.env.JWT_SECRET || process.env.JWT_SECRET.trim() === '') {
-    console.error('JWT_SECRET environment variable is empty');
-    exit(1);
-  }
+  return parsed;
+}
 
-  // Validate NODE_ENV is one of the expected values
+function normalizeNodeEnv(rawEnv: string | undefined): string {
+  const normalized = (rawEnv || 'development').toLowerCase();
   const validEnvironments = ['development', 'staging', 'production', 'test'];
-  if (!validEnvironments.includes(process.env.NODE_ENV as string)) {
-    console.error(`NODE_ENV must be one of: ${validEnvironments.join(', ')}`);
-    exit(1);
+
+  if (!validEnvironments.includes(normalized)) {
+    return fail(`NODE_ENV must be one of: ${validEnvironments.join(', ')}`);
   }
+
+  return normalized;
+}
+
+function resolveJwtSecret(nodeEnv: string, rawSecret: string | undefined): string {
+  if (rawSecret && rawSecret.trim() !== '') {
+    return rawSecret;
+  }
+
+  if (nodeEnv === 'production') {
+    return fail('JWT_SECRET environment variable is empty');
+  }
+
+  return nodeEnv === 'test' ? 'test-secret' : 'dev-secret';
+}
+
+function resolveFrontendUrl(env: RawEnv): string {
+  return env.FRONTEND_URL || env.CORS_ORIGIN || 'http://localhost:3000';
+}
+
+function resolveCorsOrigin(env: RawEnv): string {
+  return env.CORS_ORIGIN || env.FRONTEND_URL || 'http://localhost:3000';
+}
+
+function validateEnvironment(env: RawEnv, allowMissingRequired: boolean): EnvironmentConfig {
+  const nodeEnv = normalizeNodeEnv(env.NODE_ENV);
+  const isProduction = nodeEnv === 'production';
+  const portDefault = isProduction && !allowMissingRequired ? undefined : 3001;
+
+  const port = parseNumber(env.PORT, portDefault, 'PORT');
+  const jwtSecret = resolveJwtSecret(nodeEnv, env.JWT_SECRET);
+  if (!allowMissingRequired && isProduction && (!env.JWT_SECRET || env.JWT_SECRET.trim() === '')) {
+    fail('JWT_SECRET environment variable is empty');
+  }
+
+  const maxUploadSize = Number(env.MAX_UPLOAD_SIZE_BYTES || env.MAX_FILE_SIZE || 10 * 1024 * 1024);
+  const directThreshold = Number(
+    env.DIRECT_UPLOAD_THRESHOLD_BYTES || env.DIRECT_UPLOAD_THRESHOLD || 2 * 1024 * 1024,
+  );
 
   return {
-    NODE_ENV: process.env.NODE_ENV as string,
+    NODE_ENV: nodeEnv,
     PORT: port,
-    JWT_SECRET: process.env.JWT_SECRET as string,
-    DATABASE_PATH: process.env.DATABASE_PATH || './database.sqlite', // Default to local database file
-    FRONTEND_URL: process.env.FRONTEND_URL || 'http://localhost:3000', // Default to local frontend during development
-    DEFAULT_PIN: process.env.DEFAULT_PIN || '5624', // Default PIN for dev environment
-    USE_HTTPS: process.env.USE_HTTPS === 'true',
-    SSL_PRIVATE_KEY_PATH: process.env.SSL_PRIVATE_KEY_PATH,
-    SSL_CERT_PATH: process.env.SSL_CERT_PATH,
+    JWT_SECRET: jwtSecret,
+    DATABASE_PATH: env.DATABASE_PATH || './database.sqlite',
+    DATABASE_URL: env.DATABASE_URL || env.NEON_CONNECTION_STRING,
+    DATABASE_PROVIDER: env.DATABASE_PROVIDER,
+    FRONTEND_URL: resolveFrontendUrl(env),
+    CORS_ORIGIN: resolveCorsOrigin(env),
+    DEFAULT_PIN: env.DEFAULT_PIN || '5624',
+    USE_HTTPS: env.USE_HTTPS === 'true',
+    SSL_PRIVATE_KEY_PATH: env.SSL_PRIVATE_KEY_PATH,
+    SSL_CERT_PATH: env.SSL_CERT_PATH,
+    STORAGE_PROVIDER: env.STORAGE_PROVIDER,
+    R2_ACCOUNT_ID: env.R2_ACCOUNT_ID,
+    R2_ACCESS_KEY_ID: env.R2_ACCESS_KEY_ID,
+    R2_SECRET_ACCESS_KEY: env.R2_SECRET_ACCESS_KEY,
+    R2_BUCKET_NAME: env.R2_BUCKET_NAME,
+    NEON_CONNECTION_STRING: env.NEON_CONNECTION_STRING,
+    MAX_UPLOAD_SIZE_BYTES: Number.isNaN(maxUploadSize) ? 10 * 1024 * 1024 : maxUploadSize,
+    DIRECT_UPLOAD_THRESHOLD_BYTES: Number.isNaN(directThreshold) ? 2 * 1024 * 1024 : directThreshold,
   };
 }
 
-export const envConfig = validateEnvironment();
+let workerEnvOverrides: RawEnv | undefined;
+
+export function setWorkerConfig(env: RawEnv): void {
+  workerEnvOverrides = env;
+  envConfig = validateEnvironment(workerEnvOverrides, false);
+}
+
+function getRuntimeEnv(): RawEnv {
+  if (isNodeRuntime) {
+    return process.env as RawEnv;
+  }
+  return workerEnvOverrides || {};
+}
+
+export let envConfig = validateEnvironment(getRuntimeEnv(), !isNodeRuntime);

@@ -651,10 +651,7 @@ Refs: <change-id>"
 
 **Actions:**
 
-1.  Archive the OpenSpec change:
-    
-    `openspec archive <change-id> --yes`
-    _(This moves the change to `openspec/archive/` and updates any specs)_
+1.  Confirm OpenSpec up to do `list`:
 2. Store Memory: Use `node scripts/mem-log.js` to log what was accomplished:
 
     ```bash
