@@ -9,6 +9,8 @@ import {
   getDatabaseProvider,
   getDefaultDatabaseClient,
   resetDefaultDatabaseClient,
+  withTransaction,
+  withTransactionOptions,
 } from '../../database/database-factory';
 import { PrismaClient } from '@prisma/client';
 
@@ -53,6 +55,32 @@ describe('DatabaseFactory', () => {
       });
 
       expect(client).toBeInstanceOf(PrismaClient);
+    });
+
+    it('should use hyperdrive connection string when provided', () => {
+      const logSpy = jest.spyOn(console, 'log').mockImplementation(() => undefined);
+
+      const client = createDatabaseClient({
+        hyperdriveConnectionString: 'postgresql://hyperdrive.test/db',
+      });
+
+      expect(client).toBeInstanceOf(PrismaClient);
+      expect(logSpy).toHaveBeenCalledWith(
+        '[Database] Connecting via Cloudflare Hyperdrive (edge pooling)',
+      );
+
+      logSpy.mockRestore();
+    });
+
+    it('should throw when production has no database URL', () => {
+      delete process.env.NEON_CONNECTION_STRING;
+      delete process.env.DATABASE_URL;
+
+      expect(() =>
+        createDatabaseClient({
+          environment: 'production',
+        }),
+      ).toThrow('Production environment requires NEON_CONNECTION_STRING or DATABASE_URL');
     });
   });
 
@@ -167,6 +195,33 @@ describe('DatabaseFactory', () => {
       const provider = getDatabaseProvider();
 
       expect(provider).toBe('postgresql');
+    });
+  });
+
+  describe('transaction helpers', () => {
+    it('should delegate to client.$transaction', async () => {
+      const txResult = { ok: true };
+      const client = {
+        $transaction: jest.fn(async (fn: (tx: unknown) => Promise<unknown>) => fn({})),
+      } as unknown as PrismaClient;
+
+      const result = await withTransaction(client, async () => txResult);
+
+      expect(result).toBe(txResult);
+      expect(client.$transaction).toHaveBeenCalledTimes(1);
+    });
+
+    it('should pass options to client.$transaction', async () => {
+      const client = {
+        $transaction: jest.fn(async (_fn: (tx: unknown) => Promise<unknown>) => 'ok'),
+      } as unknown as PrismaClient;
+
+      await withTransactionOptions(client, async () => 'ok', { maxWait: 1000, timeout: 5000 });
+
+      expect(client.$transaction).toHaveBeenCalledWith(expect.any(Function), {
+        maxWait: 1000,
+        timeout: 5000,
+      });
     });
   });
 });

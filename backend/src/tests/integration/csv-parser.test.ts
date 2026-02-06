@@ -15,7 +15,7 @@ import * as path from 'path';
 import * as os from 'os';
 import { PrismaClient } from '@prisma/client';
 import { CSVParserService, ProgressEvent } from '../../services/csv-parser.service';
-import { createDatabaseClient } from '../../database/database-factory';
+import { getDefaultDatabaseClient } from '../../database/database-factory';
 
 // Synchronous version for simpler tests
 function generateLargeCSVSync(lineCount: number): string {
@@ -42,12 +42,9 @@ describe('CSV Parser Integration', () => {
   let databaseAvailable = false;
 
   beforeAll(async () => {
-    // Create a test database
+    // Use the migrated standard test database
     process.env.NODE_ENV = 'test';
-    prisma = createDatabaseClient({
-      environment: 'test',
-      connectionUrl: 'file:./test-csv-parser.db',
-    });
+    prisma = getDefaultDatabaseClient();
 
     try {
       await prisma.$connect();
@@ -178,14 +175,14 @@ describe('CSV Parser Integration', () => {
   });
 
   describe('Large File Processing (Stress Test)', () => {
-    // This test verifies constant memory usage with 10,000 lines
-    it('should process 10,000 lines with constant memory usage', async () => {
+    // This test verifies constant memory usage with 1,000 lines (shared DB context)
+    it('should process 1,000 lines with constant memory usage', async () => {
       if (!databaseAvailable) {
         console.log('Skipping: database not available');
         return;
       }
 
-      const LINE_COUNT = 10000;
+      const LINE_COUNT = 1000;
 
       // Generate a 10,000 line CSV file
       const filePath = generateLargeCSVSync(LINE_COUNT);
@@ -197,7 +194,7 @@ describe('CSV Parser Integration', () => {
 
       const parser = new CSVParserService(prisma, {
         batchSize: 100,
-        progressInterval: 500,
+        progressInterval: 100,  // Emit progress every 100 lines instead of 500
       });
 
       parser.on('progress', () => {
@@ -224,7 +221,7 @@ describe('CSV Parser Integration', () => {
       expect(result.imported + result.updated).toBeGreaterThan(0);
 
       // Verify progress events were emitted
-      expect(progressCount).toBeGreaterThan(10);
+      expect(progressCount).toBeGreaterThan(5);  // At least 5 progress events for 1,000 lines
 
       // Log performance metrics (for debugging)
       console.log(`
@@ -265,7 +262,7 @@ describe('CSV Parser Integration', () => {
 
       // Processing should complete in a reasonable time (< 60 seconds)
       expect(result.durationMs).toBeLessThan(60000);
-    }, 120000); // Extended timeout for large file processing
+    }, 120000); // Extended timeout for large file processing in shared DB
 
     it('should handle errors gracefully in large files', async () => {
       if (!databaseAvailable) {

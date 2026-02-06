@@ -177,15 +177,15 @@
 
 ## 11. Testing & Quality Assurance
 
-- [ ] 11.1 Write integration tests for storage abstraction (local and R2)
-- [ ] 11.2 Write integration tests for database abstraction (SQLite and Neon PostgreSQL)
-- [ ] 11.3 Create test fixtures for CSV files (valid, invalid, large)
-- [ ] 11.4 Write end-to-end tests for CSV upload flow
-- [ ] 11.5 Add load tests for 1000 concurrent uploads
-- [ ] 11.6 Verify test coverage >90% for abstraction layers
+- [x] 11.1 Write integration tests for storage abstraction (local and R2)
+- [x] 11.2 Write integration tests for database abstraction (SQLite and Neon PostgreSQL)
+- [x] 11.3 Create test fixtures for CSV files (valid, invalid, large)
+- [x] 11.4 Write end-to-end tests for CSV upload flow
+- [x] 11.5 Add load tests for 1000 concurrent uploads (opt-in: RUN_UPLOAD_LOAD_TESTS=true)
+- [x] 11.6 Verify test coverage >90% for abstraction layers (95.18% statements)
 - [ ] 11.7 Run all tests in both development and production modes
 - [ ] 11.8 Test Workers deployment to preview environment
-- [ ] 11.9 **[RECOMMENDED - GitHub Student Pack]** Set up BrowserStack for mobile PWA testing
+- [x] 11.9 **[RECOMMENDED - GitHub Student Pack]** Set up BrowserStack for mobile PWA testing
   - **Setup**: Sign up at browserstack.com/github-students, get Free Automate Mobile Plan (1 year)
   - **Integration**: `npm install -D browserstack-local`, add to Jest config for E2E tests
   - **Test**: Barcode scanner (quagga) on real iOS/Android devices, offline sync, PWA install flow
@@ -194,6 +194,8 @@
 - [x] 11.10 **[OPTIONAL - GitHub Student Pack]** Install CodeScene for code quality monitoring, configure PR checks
 - [ ] 11.11 Verify UBS scan passes (`ubs backend/src/`)
 - [ ] 11.12 Run linter and fix all errors (`npm run lint`)
+- [ ] 11.13 All tests for frontend and backend pass. 
+- [ ] 11.14 Use tech-debt-remediation-plan agent to create a detailed plan on tech debt at the half-way point of the project
 
 ## 12. Monitoring & Observability
 

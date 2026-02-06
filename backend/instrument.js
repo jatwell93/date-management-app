@@ -1,8 +1,10 @@
 const Sentry = require('@sentry/node');
 const { nodeProfilingIntegration } = require('@sentry/profiling-node');
 
-// Ensure to call this before requiring any other modules!
-Sentry.init({
+// Skip Sentry initialization in test environment to avoid instrumentation warnings
+if (process.env.NODE_ENV !== 'test') {
+  // Ensure to call this before requiring any other modules!
+  Sentry.init({
   dsn: 'https://c062ac296f7c9bbe618c5f1fe824ea59@o4510816588922880.ingest.us.sentry.io/4510816590692352',
 
   // Adds request headers and IP for users
@@ -22,4 +24,5 @@ Sentry.init({
     // Add our Profiling integration
     nodeProfilingIntegration(),
   ],
-});
+  });
+}

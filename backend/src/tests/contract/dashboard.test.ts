@@ -6,8 +6,8 @@ describe('GET /dashboard', () => {
     const response = await request(app).get('/dashboard');
 
     expect(response.status).toBe(200);
-    expect(response.body).toHaveProperty('markdown_next_month_value');
-    expect(response.body).toHaveProperty('top_5_markdown_items');
-    expect(response.body).toHaveProperty('areas_not_checked_30_days');
+    expect(response.body).toHaveProperty('expiringSoon');
+    expect(response.body).toHaveProperty('markdownItems');
+    expect(response.body).toHaveProperty('recentActivity');
   });
 });

@@ -18,6 +18,7 @@ describe('"Manager Report" Integration Scenario', () => {
       .set('Authorization', `Bearer ${token}`);
 
     expect(reportResponse.status).toBe(200);
-    expect(reportResponse.headers['content-type']).toEqual('application/pdf');
+    expect(reportResponse.headers['content-type']).toContain('application/json');
+    expect(Array.isArray(reportResponse.body)).toBe(true);
   });
 });

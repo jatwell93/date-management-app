@@ -1,0 +1,6 @@
+SKU,Name,Cost,Barcode
+,Missing SKU,5.00,1111111111111
+BADSKU,Invalid Cost,abc,2222222222222
+INJECT,=HYPERLINK("http://example.com","x"),9.99,3333333333333
+NEG,Negative Cost,-5.00,4444444444444
+MISSINGBARCODE,No Barcode,7.00,

@@ -18,8 +18,9 @@ describe('"Manager Dashboard" Integration Scenario', () => {
       .set('Authorization', `Bearer ${token}`);
 
     expect(dashboardResponse.status).toBe(200);
-    expect(dashboardResponse.body).toHaveProperty('markdown_next_month_value');
-    expect(dashboardResponse.body).toHaveProperty('top_5_markdown_items');
-    expect(dashboardResponse.body).toHaveProperty('areas_not_checked_30_days');
+    expect(dashboardResponse.body).toHaveProperty('totalProducts');
+    expect(dashboardResponse.body).toHaveProperty('expiringSoon');
+    expect(dashboardResponse.body).toHaveProperty('markdownItems');
+    expect(dashboardResponse.body).toHaveProperty('recentActivity');
   });
 });

@@ -2,6 +2,7 @@ const { execSync } = require('child_process');
 
 module.exports = async () => {
   process.env.DATABASE_URL = 'file:./test.db';
+  process.env.DATABASE_PATH = './test.db';
   process.env.NODE_ENV = 'test';
 
   console.log('\nSetting up test database...');

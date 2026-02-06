@@ -305,5 +305,16 @@ describe('R2StorageProvider', () => {
         { expiresIn },
       );
     });
+
+    it('should throw StorageProviderError on presigned download error', async () => {
+      const key = 'error-presigned-download.txt';
+      const expiresIn = 60;
+
+      mockGetSignedUrl.mockRejectedValueOnce(new Error('Presign failed'));
+
+      await expect(provider.getPresignedDownloadUrl(key, expiresIn)).rejects.toThrow(
+        StorageProviderError,
+      );
+    });
   });
 });

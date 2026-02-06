@@ -98,9 +98,10 @@ export class UploadService {
       try {
         await fs.unlink(tempPath);
       } catch (err) {
-        // Ignore parsing errors? No, we want to bubble them up.
-        // But we MUST cleanup.
-        console.error('Failed to cleanup temp file', tempPath, err);
+        const code = (err as NodeJS.ErrnoException).code;
+        if (code !== 'ENOENT' && code !== 'EPERM') {
+          console.error('Failed to cleanup temp file', tempPath, err);
+        }
       }
     }
   }

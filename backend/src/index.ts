@@ -92,76 +92,80 @@ app.use(cors(corsOptions)); // Enable CORS with options
   // await initDatabase();
 })();
 
-// Initialize database monitoring
-const dbMonitoringService = DatabaseMonitoringService.getInstance();
-dbMonitoringService.initialize({
-  slowQueryThreshold: 100, // 100ms
-  alertThresholds: {
-    connectionPoolUtilization: 90, // 90%
-    tableSizeThreshold: 100, // 100MB
-    rowCountThreshold: 100000, // 100k rows
-    diskSpaceUtilization: 85, // 85%
-  },
-  checkInterval: 30000, // 30 seconds
-  enableLogging: true,
-  enableAlerting: true,
-});
+const isTestEnv = envConfig.NODE_ENV === 'test';
 
-// Listen for database alerts
-dbMonitoringService.on('alert', (alert) => {
-  console.log(`Database Alert [${alert.severity.toUpperCase()}]: ${alert.message}`, {
-    type: alert.type,
-    timestamp: alert.timestamp,
-    metadata: alert.metadata,
+if (!isTestEnv) {
+  // Initialize database monitoring
+  const dbMonitoringService = DatabaseMonitoringService.getInstance();
+  dbMonitoringService.initialize({
+    slowQueryThreshold: 100, // 100ms
+    alertThresholds: {
+      connectionPoolUtilization: 90, // 90%
+      tableSizeThreshold: 100, // 100MB
+      rowCountThreshold: 100000, // 100k rows
+      diskSpaceUtilization: 85, // 85%
+    },
+    checkInterval: 30000, // 30 seconds
+    enableLogging: true,
+    enableAlerting: true,
   });
-});
 
-// Initialize application monitoring
-const appMonitoringService = ApplicationMonitoringService.getInstance();
-appMonitoringService.initialize({
-  slowEndpointThreshold: 500, // 500ms
-  alertThresholds: {
-    errorRate: 5, // 5%
-    responseTimeThreshold: 1000, // 1 second
-    requestPerMinuteThreshold: 1000, // 1000 requests per minute
-  },
-  checkInterval: 60000, // 1 minute
-  enableLogging: true,
-  enableAlerting: true,
-  monitoredEndpoints: [
-    '/api/inventory-items',
-    '/api/products',
-    '/api/store-areas',
-    '/api/auth/login',
-    '/api/reports/usage',
-    '/api/reports/expiry',
-  ],
-});
-
-// Listen for application alerts
-appMonitoringService.on('alert', (alert) => {
-  console.log(`Application Alert [${alert.severity.toUpperCase()}]: ${alert.message}`, {
-    type: alert.type,
-    timestamp: alert.timestamp,
-    metadata: alert.metadata,
+  // Listen for database alerts
+  dbMonitoringService.on('alert', (alert) => {
+    console.log(`Database Alert [${alert.severity.toUpperCase()}]: ${alert.message}`, {
+      type: alert.type,
+      timestamp: alert.timestamp,
+      metadata: alert.metadata,
+    });
   });
-});
 
-// Apply application monitoring middleware
-app.use(appMonitoringService.requestTrackingMiddleware());
+  // Initialize application monitoring
+  const appMonitoringService = ApplicationMonitoringService.getInstance();
+  appMonitoringService.initialize({
+    slowEndpointThreshold: 500, // 500ms
+    alertThresholds: {
+      errorRate: 5, // 5%
+      responseTimeThreshold: 1000, // 1 second
+      requestPerMinuteThreshold: 1000, // 1000 requests per minute
+    },
+    checkInterval: 60000, // 1 minute
+    enableLogging: true,
+    enableAlerting: true,
+    monitoredEndpoints: [
+      '/api/inventory-items',
+      '/api/products',
+      '/api/store-areas',
+      '/api/auth/login',
+      '/api/reports/usage',
+      '/api/reports/expiry',
+    ],
+  });
 
-// Initialize analytics service
-const analyticsService = AnalyticsService.getInstance();
-analyticsService.initialize({
-  enableTracking: true,
-  enableSessionTracking: true,
-  retentionPeriod: 90, // 90 days
-  batchSize: 100,
-  enablePWAAnalytics: true,
-});
+  // Listen for application alerts
+  appMonitoringService.on('alert', (alert) => {
+    console.log(`Application Alert [${alert.severity.toUpperCase()}]: ${alert.message}`, {
+      type: alert.type,
+      timestamp: alert.timestamp,
+      metadata: alert.metadata,
+    });
+  });
 
-// Initialize scheduled tasks
-SchedulerService.initialize();
+  // Apply application monitoring middleware
+  app.use(appMonitoringService.requestTrackingMiddleware());
+
+  // Initialize analytics service
+  const analyticsService = AnalyticsService.getInstance();
+  analyticsService.initialize({
+    enableTracking: true,
+    enableSessionTracking: true,
+    retentionPeriod: 90, // 90 days
+    batchSize: 100,
+    enablePWAAnalytics: true,
+  });
+
+  // Initialize scheduled tasks
+  SchedulerService.initialize();
+}
 
 // Public routes
 app.use('/auth', authRoutes);
@@ -202,7 +206,10 @@ app.get('*', (req, res) => {
 });
 
 // Sentry error handler must be added before any other error-handling middleware
-Sentry.setupExpressErrorHandler(app);
+// Skip in test environment to avoid instrumentation warnings
+if (!isTestEnv) {
+  Sentry.setupExpressErrorHandler(app);
+}
 
 // Error handling middleware
 app.use(errorHandler);

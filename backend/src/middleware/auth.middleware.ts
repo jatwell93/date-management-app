@@ -20,6 +20,8 @@ export const authenticateToken = (req: AuthRequest, res: Response, next: NextFun
   // Test environment bypass
   if (process.env.NODE_ENV === 'test' && process.env.TEST_AUTH_BYPASS === 'true') {
     req.user = { id: 1, role: 'Manager' }; // Mock user
+    req.userId = 1;
+    req.userRole = 'Manager';
     return next();
   }
 

@@ -47,6 +47,8 @@ specs/
 .quint/
 prompts/
 skills/
+instructions/
+agents/
 
 # Coverage
 coverage/

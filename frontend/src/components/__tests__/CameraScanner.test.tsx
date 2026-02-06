@@ -13,6 +13,17 @@ jest.mock('quagga', () => ({
   offDetected: jest.fn(),
 }));
 
+
+// Mock `navigator.mediaDevices`
+Object.defineProperty(global.navigator, 'mediaDevices', {
+  value: {
+    getUserMedia: jest.fn().mockResolvedValue({
+      getTracks: () => [{ stop: jest.fn() }],
+    }),
+  },
+  writable: true,
+});
+
 describe('CameraScanner', () => {
   const mockOnDetected = jest.fn();
   const mockOnScannerReady = jest.fn();

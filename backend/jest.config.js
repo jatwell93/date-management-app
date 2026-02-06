@@ -17,6 +17,7 @@ module.exports = {
   },
   globalSetup: '<rootDir>/test-setup.js',
   setupFiles: ['<rootDir>/src/tests/setup-env.ts'],
+  setupFilesAfterEnv: ['<rootDir>/src/tests/setup-after-env.ts'],
   // Coverage configuration
   coverageProvider: 'v8',
   collectCoverageFrom: [
@@ -32,6 +33,6 @@ module.exports = {
   coverageDirectory: 'coverage',
 
   // Performance optimization
-  maxWorkers: '50%',
+  maxWorkers: 1,
   testTimeout: 30000,
 };
