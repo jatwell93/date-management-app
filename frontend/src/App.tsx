@@ -11,6 +11,7 @@ import { StoreAreaManagementPage } from './pages/StoreAreaManagementPage';
 import { CSVUploadPage } from './pages/CSVUploadPage';
 import { DetailedExpiryReportPage } from './pages/DetailedExpiryReportPage';
 import ExpiredItemsPage from './pages/ExpiredItemsPage';
+import { StorageQuotaWarning } from './components/StorageQuotaWarning';
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -56,6 +57,17 @@ const decodeTokenAndGetRole = (token: string | null): 'Manager' | 'Team Member' 
   }
 };
 
+const decodeTokenAndGetUserId = (token: string | null): number | null => {
+  if (!token) return null;
+  try {
+    const decodedToken = jwtDecode<JwtPayload & { userId?: number }>(token);
+    return typeof decodedToken.userId === 'number' ? decodedToken.userId : null;
+  } catch (error) {
+    console.error('Error decoding user ID:', error);
+    return null;
+  }
+};
+
 function App() {
   const [isLoggedIn, setIsLoggedIn] = useState(() => {
     const token = localStorage.getItem('authToken');
@@ -71,6 +83,9 @@ function App() {
   const [userRole, setUserRole] = useState<'Manager' | 'Team Member' | null>(() => {
     return decodeTokenAndGetRole(localStorage.getItem('authToken'));
   });
+  const [userId, setUserId] = useState<number | null>(() => {
+    return decodeTokenAndGetUserId(localStorage.getItem('authToken'));
+  });
   const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
 
   const handleLogin = (newToken: string) => {
@@ -78,6 +93,7 @@ function App() {
     setIsLoggedIn(true);
     setToken(newToken);
     setUserRole(decodeTokenAndGetRole(newToken));
+    setUserId(decodeTokenAndGetUserId(newToken));
   };
 
   const handleLogout = () => {
@@ -85,11 +101,13 @@ function App() {
     setIsLoggedIn(false);
     setToken(null);
     setUserRole(null);
+    setUserId(null);
   };
 
   useEffect(() => {
     // Re-evaluate role if token changes (e.g., on initial load or if token is manually set)
     setUserRole(decodeTokenAndGetRole(token));
+    setUserId(decodeTokenAndGetUserId(token));
   }, [token]);
 
   useEffect(() => {
@@ -115,6 +133,9 @@ function App() {
     <ToastProvider>
       <Router>
         <div className="min-h-screen bg-background text-foreground">
+          {isLoggedIn && userId && (
+            <StorageQuotaWarning userId={userId} subscriptionTier="free" />
+          )}
           {isLoggedIn && (
             <nav className="bg-primary text-primary-foreground p-4 shadow-md">
               <div className="container mx-auto">

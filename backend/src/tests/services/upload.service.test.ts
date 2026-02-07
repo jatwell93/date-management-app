@@ -29,7 +29,6 @@ jest.mock('fs/promises', () => ({
   unlink: jest.fn(),
 }));
 import * as fs from 'fs/promises';
-import { UploadService } from '../../services/upload.service';
 
 describe('UploadService', () => {
   let uploadService: UploadService;
@@ -79,7 +78,7 @@ describe('UploadService', () => {
         errors: [],
       });
 
-      await uploadService.completeUpload(key);
+      await uploadService.completeUpload(key, 1);
 
       expect(mockStorageProvider.exists).toHaveBeenCalledWith(key);
       expect(mockStorageProvider.download).toHaveBeenCalledWith(key);
@@ -95,7 +94,7 @@ describe('UploadService', () => {
       const key = 'uploads/missing.csv';
       mockStorageProvider.exists.mockResolvedValue(false);
 
-      await expect(uploadService.completeUpload(key)).rejects.toThrow(
+      await expect(uploadService.completeUpload(key, 1)).rejects.toThrow(
         'File upload verification failed',
       );
     });
@@ -114,7 +113,7 @@ describe('UploadService', () => {
       mockStorageProvider.exists.mockResolvedValue(true);
       mockStorageProvider.download.mockResolvedValue(buffer);
 
-      const resultKey = await uploadService.handleDirectUpload(buffer, filename, 'text/csv');
+      const resultKey = await uploadService.handleDirectUpload(buffer, filename, 'text/csv', 1);
 
       expect(mockStorageProvider.upload).toHaveBeenCalledWith(key, buffer, 'text/csv');
       // Verify completeUpload logic was executed (we can spy on completeUpload if we want, or just verify effects)

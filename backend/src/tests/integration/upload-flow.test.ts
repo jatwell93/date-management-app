@@ -20,7 +20,11 @@ jest.mock('../../config/environment', () => ({
 }));
 
 jest.mock('../../middleware/auth.middleware', () => ({
-  authenticateToken: (_req: any, _res: any, next: any) => next(),
+  authenticateToken: (req: any, _res: any, next: any) => {
+    req.userId = 1;
+    req.user = { id: 1, role: 'Manager' };
+    next();
+  },
 }));
 
 class InMemoryStorageProvider implements StorageProvider {
@@ -58,6 +62,10 @@ class InMemoryStorageProvider implements StorageProvider {
 const createTestApp = (storage: StorageProvider, csvParser: { processFile: jest.Mock }) => {
   const app = express();
   app.use(express.json());
+  app.use((req: any, _res, next) => {
+    req.userId = 1;
+    next();
+  });
 
   const upload = multer({ storage: multer.memoryStorage() });
   const uploadService = new UploadService(storage, csvParser as any);

@@ -44,6 +44,18 @@ bucket_name = "csv-uploads-prod"
 binding = "HYPERDRIVE"
 id = "4fac081391784eb7bb2db2269c1fa870"
 
+# Analytics Engine Configuration (Production)
+# IMPORTANT: Uncomment this section AFTER enabling Analytics Engine in Cloudflare Dashboard
+# Steps:
+# 1. Go to: https://dash.cloudflare.com/accounts/{ACCOUNT_ID}/workers/analytics-engine
+# 2. Click "Enable Analytics Engine"
+# 3. Uncomment the section below
+# 4. Run: wrangler deploy --env production
+#
+[[env.production.analytics_engine_datasets]]
+binding = "ANALYTICS"
+dataset = "analytics_events"
+
 # R2 Bucket Bindings (Development/Preview)
 [[env.development.r2_buckets]]
 binding = "CSV_UPLOADS"
@@ -65,6 +77,18 @@ STORAGE_PROVIDER = "local"
 # Build Configuration
 [build]
 command = "npm run build"
+
+# Analytics Engine Configuration
+# Note: Analytics Engine must be enabled on your Cloudflare account before
+# metrics can be written. If not enabled, metrics collection is gracefully skipped.
+# 
+# To enable:
+# 1. Go to https://dash.cloudflare.com/accounts/{ACCOUNT_ID}/workers/analytics-engine
+# 2. Click "Enable Analytics Engine"
+# 3. Redeploy this worker with `wrangler deploy --env production`
+#
+# After enabling, metrics will be automatically written for all API requests.
+# Data available in: Cloudflare Dashboard → Workers → Analytics
 
 # Note: watch_dirs and upload sections are no longer needed
 # wrangler handles file watching automatically

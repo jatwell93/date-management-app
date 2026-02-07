@@ -211,18 +211,18 @@
 
 - [ ] 12.1 Enable Cloudflare Analytics for Workers
 - [ ] 12.2 Configure custom metrics (CSV processing time, upload size)
-- [ ] 12.3 Set up Neon monitoring dashboard alerts
+- [x] 12.3 Set up Neon monitoring dashboard alerts 
 - [x] 12.4 **[ESSENTIAL - GitHub Student Pack]** Set up Sentry error monitoring
   - [x] **Setup**: Sign up at sentry.io/for/students, create project, get DSN
   - [x] **Backend**: `npm install @sentry/node`, init in `backend/src/index.ts` and `workers/src/index.ts`
   - [x] **Frontend**: `npm install @sentry/react`, init in `frontend/src/index.tsx`, configure source maps
-  - [ ] **Workers Config**: Add `SENTRY_DSN` to Workers Secrets, configure release tracking with git SHA
+  - [x] **Workers Config**: Add `SENTRY_DSN` to Workers Secrets, configure release tracking with git SHA
   - [ ] **Alerting**: Configure Sentry Performance alerts for database queries (>200ms) 
   - **Docs**: https://docs.sentry.io/platforms/javascript/guides/express/
 - [ ] 12.5 Create dashboard for key metrics (response times, error rates, upload counts)
 - [ ] 12.6 Configure alerts for error rate >1%
 - [ ] 12.7 Configure alerts for 95th percentile response time >500ms
-- [ ] 12.8 Set up Neon usage alerts at 80% of plan limits
+- [x] 12.8 Set up Neon usage alerts at 80% of plan limits **Note** this is not possible without a 3rd Party. We will set up PgHero as a free option in Phase 17
 - [ ] 12.9 Add structured logging to Workers (JSON format)
 ### Refer to tech-debt.md for steps 12.10 - 12. 14
 - [ ] 12.10 Document monitoring setup in `docs/monitoring.md`
@@ -324,6 +324,7 @@
 - [ ] 17.8 Run load tests and verify 95th percentile <200ms
 - [ ] 17.9 Profile CSV parsing for 10,000-line files (<25s target)
 - [ ] 17.10 Document performance benchmarks in `docs/performance.md`
+- [ ] 17.11 Add PgHero for Neon query performance, slow queries, index suggestions
 
 ## 18. Rollback & Disaster Recovery
 

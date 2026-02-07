@@ -57,6 +57,13 @@ export interface Env {
   
   // KV namespace for rate limiting (optional, can use Durable Objects instead)
   RATE_LIMITER?: KVNamespace;
+
+  // ============================================================================
+  // Analytics Engine Bindings
+  // ============================================================================
+  
+  // Analytics Engine dataset for metrics collection (production only)
+  ANALYTICS?: AnalyticsEngineDataset;
 }
 
 /**

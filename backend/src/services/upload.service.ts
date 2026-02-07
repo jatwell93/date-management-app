@@ -1,9 +1,10 @@
 import * as fs from 'fs/promises';
 import * as path from 'path';
 import * as os from 'os';
-import { StorageProvider } from '../storage/storage-provider.interface';
+import { StorageProvider, FileMetadata } from '../storage/storage-provider.interface';
 import { CSVParserService } from './csv-parser.service';
 import { envConfig } from '../config/environment';
+import { StorageQuotaService } from './storage-quota.service';
 
 export interface InitiateUploadResponse {
   strategy: 'direct' | 'presigned';
@@ -16,6 +17,7 @@ export class UploadService {
   constructor(
     private storage: StorageProvider,
     private csvParser: CSVParserService,
+    private storageQuotaService: StorageQuotaService = new StorageQuotaService(),
   ) {}
 
   /**
@@ -75,11 +77,20 @@ export class UploadService {
   /**
    * Finalize upload and trigger parsing
    */
-  async completeUpload(key: string): Promise<void> {
+  async completeUpload(key: string, userId: number): Promise<void> {
     // 1. Verify file exists in storage
     const exists = await this.storage.exists(key);
     if (!exists) {
       throw new Error('File upload verification failed: File not found in storage');
+    }
+
+    let metadata: FileMetadata | undefined;
+    if (this.storage.getMetadata) {
+      try {
+        metadata = await this.storage.getMetadata(key);
+      } catch (error) {
+        console.warn('Failed to read upload metadata:', error);
+      }
     }
 
     // 2. Download to temp file
@@ -90,6 +101,15 @@ export class UploadService {
 
     try {
       await fs.writeFile(tempPath, buffer);
+
+      // Track upload for quota purposes
+      await this.storageQuotaService.recordUpload(
+        userId,
+        key,
+        path.basename(key),
+        metadata?.size ?? buffer.length,
+        metadata?.contentType,
+      );
 
       // 3. Process file
       await this.csvParser.processFile(tempPath);
@@ -109,7 +129,12 @@ export class UploadService {
   /**
    * Handle direct file upload (from controller)
    */
-  async handleDirectUpload(buffer: Buffer, filename: string, contentType: string): Promise<string> {
+  async handleDirectUpload(
+    buffer: Buffer,
+    filename: string,
+    contentType: string,
+    userId: number,
+  ): Promise<string> {
     const timestamp = Date.now();
     const key = `uploads/${timestamp}-${path.basename(filename)}`;
 
@@ -119,7 +144,7 @@ export class UploadService {
     await this.storage.upload(key, buffer, contentType);
 
     // 2. Trigger processing
-    await this.completeUpload(key);
+    await this.completeUpload(key, userId);
 
     return key;
   }

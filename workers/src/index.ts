@@ -22,6 +22,11 @@ import {
 import { createProductionCors } from './middleware/cors.middleware';
 import { createRateLimiter } from './middleware/rate-limit.middleware';
 import { createRequestLogger, createErrorHandler, WorkersLogger } from './middleware/error-handler.middleware';
+import {
+  createMetricsInitializer,
+  getRequestMetrics,
+  formatMetricsForAnalytics,
+} from './middleware/metrics.middleware';
 import { handleHealthCheck } from './health';
 import { createDatabaseClient } from '../../backend/src/database/database-factory';
 
@@ -187,6 +192,7 @@ function createRouter(env: Env): WorkersRouter {
   const router = new WorkersRouter();
 
   // Global middleware
+  router.use(createMetricsInitializer()); // Initialize metrics tracking first
   router.use(createProductionCors(env));
   router.use(createRequestLogger(env));
   router.use(createRateLimiter(env));
@@ -211,11 +217,29 @@ function createRouter(env: Env): WorkersRouter {
 }
 
 /**
+ * Write metrics to Cloudflare Analytics Engine
+ * Production-only: tracks request/response metrics for monitoring
+ */
+function writeMetrics(env: Env, metrics: any): void {
+  // Only write metrics in production when Analytics is available
+  if (env.NODE_ENV === 'production' && env.ANALYTICS) {
+    try {
+      const analyticsData = formatMetricsForAnalytics(metrics);
+      env.ANALYTICS.writeDataPoint(analyticsData);
+    } catch (error) {
+      // Silently fail if Analytics writing fails - don't block requests
+      console.error('Failed to write metrics to Analytics Engine:', error);
+    }
+  }
+}
+
+/**
  * Main Workers fetch handler
  */
 export default {
   async fetch(request: Request, env: Env, ctx: ExecutionContext): Promise<Response> {
     const url = new URL(request.url);
+    const startTime = Date.now();
     
     // Fast-path health check (bypass full routing)
     if (url.pathname === '/health') {
@@ -242,13 +266,33 @@ export default {
         });
       }
 
-      return res.toResponse();
+      const response = res.toResponse();
+      
+      // Extract metrics from request context (includes CSV instrumentation if applicable)
+      const metrics = getRequestMetrics(req, res, response.status);
+      writeMetrics(env, metrics);
+
+      return response;
     } catch (error) {
       // Global error handler
+      const responseTime = Date.now() - startTime;
+      
       logger.error('Unhandled error in fetch handler', {
         error: error instanceof Error ? error.message : 'Unknown error',
         stack: error instanceof Error ? error.stack : undefined,
       });
+
+      // Create error metrics for error responses
+      const errorMetrics = {
+        timestamp: startTime,
+        endpoint: url.pathname,
+        method: request.method,
+        status: 500,
+        responseTime,
+        errorMessage: error instanceof Error ? error.message : 'Unknown error',
+      };
+      
+      writeMetrics(env, errorMetrics);
 
       return new Response(
         JSON.stringify({

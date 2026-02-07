@@ -16,6 +16,7 @@ const mockUploadService = {
 jest.mock('../../middleware/auth.middleware', () => ({
   authenticateToken: (req: any, res: any, next: any) => {
     req.user = { id: 1, email: 'test@example.com' };
+    req.userId = 1;
     next();
   },
 }));
@@ -90,7 +91,7 @@ describe('UploadRoutes', () => {
 
       expect(res.status).toBe(200);
       expect(res.body).toEqual({ message: 'Upload completed and processing started' });
-      expect(mockUploadService.completeUpload).toHaveBeenCalledWith('uploads/file.csv');
+      expect(mockUploadService.completeUpload).toHaveBeenCalledWith('uploads/file.csv', 1);
     });
 
     it('should return 400 if key is missing', async () => {
@@ -118,6 +119,7 @@ describe('UploadRoutes', () => {
         expect.any(Buffer),
         'direct.csv',
         'text/csv',
+        1,
       );
     });
 

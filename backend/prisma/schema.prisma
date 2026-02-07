@@ -89,6 +89,7 @@ model User {
   auditLogs                AuditLog[]
   itemTransactions         ItemTransaction[]
   expiredItemTransactions  ExpiredItemTransaction[]
+  uploads                  Upload[]
 
   @@map("users")
 }
@@ -150,6 +151,30 @@ model ExpiredItemTransaction {
   @@index([action])
   @@index([transactionDate])
   @@map("expired_item_transactions")
+}
+
+// ============================================================================
+// File Upload Tracking (for storage quota calculation)
+// ============================================================================
+
+model Upload {
+  id              Int      @id @default(autoincrement())
+  userId          Int      @map("user_id")
+  fileKey         String   @unique @map("file_key")
+  fileName        String   @map("file_name")
+  fileSizeBytes   Int      @map("file_size_bytes")
+  contentType     String?  @map("content_type")
+  status          String   @default("completed")
+  createdAt       DateTime @default(now()) @map("created_at")
+  updatedAt       DateTime @updatedAt @map("updated_at")
+
+  // Relations
+  user            User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId, createdAt])
+  @@index([status])
+  @@index([createdAt])
+  @@map("uploads")
 }
 
 // ============================================================================
