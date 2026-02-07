@@ -10,6 +10,9 @@
     "test": "jest",
     "test:coverage": "jest --coverage",
     "test:diff": "jest --coverage --changedSince=origin/main",
+    "test:dev": "jest --config jest.config.js",
+    "test:prod": "jest --config jest.config.neon.js",
+    "test:both": "npm run test:dev && npm run test:prod",
     "migrate": "ts-node src/migrations/migrate.ts",
     "migrate:status": "ts-node -e \"(async () => { const { MigrationService } = await import('./src/migrations/migration.service.ts'); const service = new MigrationService(); const status = await service.getMigrationStatus(); console.log('Migration Status:\\n================='); console.log(`Executed migrations: ${status.executed.length}`); console.log(`Pending migrations: ${status.pending.length}`); if (status.executed.length > 0) { console.log('\\nExecuted migrations:'); status.executed.forEach(m => { console.log(`  - ${m.id}: ${m.name} (${m.executed_at})`); }); } if (status.pending.length > 0) { console.log('\\nPending migrations:'); status.pending.forEach(m => { console.log(`  - ${m.id}: ${m.name}`); }); } })();\"",
     "migrate:rollback": "ts-node -e \"(async () => { const { MigrationService } = await import('./src/migrations/migration.service.ts'); const service = new MigrationService(); await service.rollbackLastMigration(); })();\""
