@@ -203,7 +203,7 @@
 - [x] 11.10 **[OPTIONAL - GitHub Student Pack]** Install CodeScene for code quality monitoring, configure PR checks
 - [ ] 11.11 Verify UBS scan passes (`ubs backend/src/`) with no CRTICAL findings. Check all WARNINGS and consider if actioning will improve the code base
 - [ ] 11.12 Run linter and fix all errors (`npm run lint`)
-- [ ] 11.13 All tests for frontend and backend pass. 
+- [ ] 11.13 All tests for frontend/backend dev/prod pass. 
 - [ ] 11.14 Use tech-debt-remediation-plan agent to create a detailed plan on tech debt at the half-way point of the project
 - [ ] 11.15 Update README.md to reflect current state; how to run locally, setting up dev and production with R2 and Neon 
 

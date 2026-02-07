@@ -28,7 +28,7 @@ describe('Workers Preview Deployment', () => {
       try {
         const response = await fetch(`${PREVIEW_URL}/health`);
         if (response.ok) {
-          const data = await response.json();
+          const data = await response.json() as { status: string };
           expect(data).toHaveProperty('status');
           expect(data.status).toBe('ok');
         }
