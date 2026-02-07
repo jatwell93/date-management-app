@@ -2,8 +2,7 @@
 # AGENTS.md
 **Node.js/Express/TypeScript Development Guide**
 
-**Version:** 1.2  
-**Compatibility:** Claude, Cursor, Copilot, Cline, Aider, all AGENTS.md-compatible tools  
+**Version:** 1.2.2  
 **Status:** Canonical guide for AI-assisted Node/Express/TypeScript development  
 **Last Updated:** January 2026
 

@@ -39,39 +39,42 @@ function retrieveContext(query) {
     process.exit(1);
   }
 
-  // Check if Gemini API key is available in environment
-  const hasGemini = !!process.env.GEMINI_API_KEY;
-  const semanticFlags = hasGemini ? ' --mode sem --embedding-model gemini' : '';
+  // Check if API key is available in environment (for potential future use)
+  const hasApiKey = !!process.env.GEMINI_API_KEY || !!process.env.OPENAI_API_KEY;
+  const semanticFlags = '';
 
-  // Cross-platform environment variable prefix for the shell command
-  const envPrefix = hasGemini
+  // Cross-platform environment variable prefix
+  const envPrefix = hasApiKey
     ? process.platform === 'win32'
-      ? `set GEMINI_API_KEY=${process.env.GEMINI_API_KEY} && set GOOGLE_API_KEY=${process.env.GEMINI_API_KEY} && set gemini_api_key=${process.env.GEMINI_API_KEY} && `
-      : `GEMINI_API_KEY=${process.env.GEMINI_API_KEY} GOOGLE_API_KEY=${process.env.GEMINI_API_KEY} gemini_api_key=${process.env.GEMINI_API_KEY} `
+      ? `set GEMINI_API_KEY=${process.env.GEMINI_API_KEY} && set GOOGLE_API_KEY=${process.env.GEMINI_API_KEY} && `
+      : `GEMINI_API_KEY=${process.env.GEMINI_API_KEY} GOOGLE_API_KEY=${process.env.GEMINI_API_KEY} `
     : '';
 
   try {
     const cmd = `${envPrefix}memvid find "${MEMORY_FILE}" --query "${query.replace(/"/g, '\\"')}" --json${semanticFlags}`;
 
+    // Create clean env (keep API keys for remote providers)
+    const cleanEnv = { ...process.env };
+
     const output = execSync(cmd, {
       encoding: 'utf8',
       shell: true,
       stdio: ['pipe', 'pipe', 'pipe'],
-      env: process.env,
+      env: cleanEnv,
     });
 
     const results = JSON.parse(output);
 
     if (!results.hits || results.hits.length === 0) {
       // Fall back to lexical search if semantic returns nothing
-      if (hasGemini) {
+      if (hasApiKey) {
         console.log('No semantic matches. Trying lexical search...\n');
         const lexCmd = `${envPrefix}memvid find "${MEMORY_FILE}" --query "${query.replace(/"/g, '\\"')}" --json --mode lex`;
         const lexOutput = execSync(lexCmd, {
           encoding: 'utf8',
           shell: true,
           stdio: ['pipe', 'pipe', 'pipe'],
-          env: process.env,
+          env: cleanEnv,
         });
         const lexResults = JSON.parse(lexOutput);
         if (lexResults.hits && lexResults.hits.length > 0) {
@@ -84,12 +87,12 @@ function retrieveContext(query) {
       return;
     }
 
-    displayResults(query, results, hasGemini ? 'semantic' : 'lexical');
+    displayResults(query, results, 'lexical');
   } catch (error) {
     // Try non-JSON output as fallback
     try {
       const fallbackCmd = `memvid find "${MEMORY_FILE}" --query "${query.replace(/"/g, '\\"')}"`;
-      execSync(fallbackCmd, { stdio: 'inherit', shell: true, env: process.env });
+      execSync(fallbackCmd, { stdio: 'inherit', shell: true, env: cleanEnv });
     } catch (fallbackError) {
       console.error('❌ Retrieval failed:', error.message);
       process.exit(1);

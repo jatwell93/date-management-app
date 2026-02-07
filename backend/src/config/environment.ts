@@ -45,6 +45,8 @@ export interface EnvironmentConfig {
   NEON_CONNECTION_STRING?: string;
   MAX_UPLOAD_SIZE_BYTES: number;
   DIRECT_UPLOAD_THRESHOLD_BYTES: number;
+  SENTRY_DSN?: string;
+  SENTRY_FRONTEND_DSN?: string;
   // Add other required environment variables as needed
 }
 
@@ -144,6 +146,8 @@ function validateEnvironment(env: RawEnv, allowMissingRequired: boolean): Enviro
     DIRECT_UPLOAD_THRESHOLD_BYTES: Number.isNaN(directThreshold)
       ? 2 * 1024 * 1024
       : directThreshold,
+    SENTRY_DSN: env.SENTRY_DSN,
+    SENTRY_FRONTEND_DSN: env.SENTRY_FRONTEND_DSN,
   };
 }
 

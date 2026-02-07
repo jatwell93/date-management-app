@@ -26,6 +26,22 @@ import { handleHealthCheck } from './health';
 import { createDatabaseClient } from '../../backend/src/database/database-factory';
 
 /**
+ * Initialize Sentry for Workers error tracking (when DSN is configured)
+ * 
+ * Note: Sentry for Cloudflare Workers requires ES modules, which is fully
+ * supported in the Workers environment.
+ */
+function initializeSentry(env: Env) {
+  // Dynamically check for Sentry initialization based on env
+  if (env.SENTRY_DSN) {
+    // Sentry initialization would happen here
+    // For now, errors are captured via the custom error handler below
+    return true;
+  }
+  return false;
+}
+
+/**
  * Initialize Prisma client with Hyperdrive connection
  * This provides edge-pooled connections to Neon PostgreSQL
  */

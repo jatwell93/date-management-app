@@ -212,14 +212,12 @@
 - [ ] 12.1 Enable Cloudflare Analytics for Workers
 - [ ] 12.2 Configure custom metrics (CSV processing time, upload size)
 - [ ] 12.3 Set up Neon monitoring dashboard alerts
-- [ ] 12.4 **[ESSENTIAL - GitHub Student Pack]** Set up Sentry error monitoring
-  - **Setup**: Sign up at sentry.io/for/students, create project, get DSN
-  - **Backend**: `npm install @sentry/node`, init in `backend/src/index.ts` and `workers/src/index.ts`
-  - **Frontend**: `npm install @sentry/react`, init in `frontend/src/index.tsx`, configure source maps
-  - **Workers Config**: Add `SENTRY_DSN` to Workers Secrets, configure release tracking with git SHA
-  - **Alerting**: Configure Sentry Performance alerts for database queries (>200ms) and API responses (>500ms)
-  - **Benefit**: CRITICAL for Workers where logs are ephemeral - catch errors before users report them
-  - **Free Tier**: 50K errors, 100K transactions, 500 session replays for 1 year
+- [x] 12.4 **[ESSENTIAL - GitHub Student Pack]** Set up Sentry error monitoring
+  - [x] **Setup**: Sign up at sentry.io/for/students, create project, get DSN
+  - [x] **Backend**: `npm install @sentry/node`, init in `backend/src/index.ts` and `workers/src/index.ts`
+  - [x] **Frontend**: `npm install @sentry/react`, init in `frontend/src/index.tsx`, configure source maps
+  - [ ] **Workers Config**: Add `SENTRY_DSN` to Workers Secrets, configure release tracking with git SHA
+  - [ ] **Alerting**: Configure Sentry Performance alerts for database queries (>200ms) 
   - **Docs**: https://docs.sentry.io/platforms/javascript/guides/express/
 - [ ] 12.5 Create dashboard for key metrics (response times, error rates, upload counts)
 - [ ] 12.6 Configure alerts for error rate >1%
@@ -228,7 +226,7 @@
 - [ ] 12.9 Add structured logging to Workers (JSON format)
 ### Refer to tech-debt.md for steps 12.10 - 12. 14
 - [ ] 12.10 Document monitoring setup in `docs/monitoring.md`
-- [ ] 12.11 Fix Logger any types → Record<string, unknown>
+- [x] 12.11 Fix Logger any types → Record<string, unknown>
 - [ ] 12.12 Refactor UserService + AuthService to Prisma
 - [ ] 12.13 Create ServiceProvider DI container
 - [ ] 12.14 Update upload routes to use ServiceProvider

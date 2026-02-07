@@ -4,7 +4,7 @@ interface LogEntry {
   timestamp: string;
   level: 'info' | 'warn' | 'error' | 'debug';
   message: string;
-  meta?: any;
+  meta?: Record<string, unknown>;
 }
 
 export class Logger {
@@ -16,6 +16,10 @@ export class Logger {
 
   private static shouldLog(level: 'info' | 'warn' | 'error' | 'debug'): boolean {
     const logLevels = ['error', 'warn', 'info', 'debug'];
+    // Always log in test mode for testability
+    if (envConfig.NODE_ENV === 'test') {
+      return true;
+    }
     const currentLogLevelIndex = logLevels.indexOf(
       envConfig.NODE_ENV === 'production' ? 'warn' : 'debug',
     );
@@ -24,21 +28,21 @@ export class Logger {
     return messageLevelIndex >= currentLogLevelIndex;
   }
 
-  static info(message: string, meta?: any): void {
+  static info(message: string, meta?: Record<string, unknown>): void {
     if (this.shouldLog('info')) {
       const entry: LogEntry = { timestamp: new Date().toISOString(), level: 'info', message, meta };
       console.log(this.formatLog(entry));
     }
   }
 
-  static warn(message: string, meta?: any): void {
+  static warn(message: string, meta?: Record<string, unknown>): void {
     if (this.shouldLog('warn')) {
       const entry: LogEntry = { timestamp: new Date().toISOString(), level: 'warn', message, meta };
       console.warn(this.formatLog(entry));
     }
   }
 
-  static error(message: string, meta?: any): void {
+  static error(message: string, meta?: Record<string, unknown>): void {
     if (this.shouldLog('error')) {
       const entry: LogEntry = {
         timestamp: new Date().toISOString(),
@@ -50,7 +54,7 @@ export class Logger {
     }
   }
 
-  static debug(message: string, meta?: any): void {
+  static debug(message: string, meta?: Record<string, unknown>): void {
     if (this.shouldLog('debug')) {
       const entry: LogEntry = {
         timestamp: new Date().toISOString(),
