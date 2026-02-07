@@ -17,8 +17,8 @@ describe('GET /products', () => {
         barcode,
         name: 'Contract Test Product',
         sku: 'CONTRACT-SKU-1',
-        costPrice: 5.00
-      }
+        costPrice: 5.0,
+      },
     });
 
     // Use the specific by-barcode endpoint as per route definition

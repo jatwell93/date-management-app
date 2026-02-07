@@ -13,7 +13,6 @@ jest.mock('quagga', () => ({
   offDetected: jest.fn(),
 }));
 
-
 // Mock `navigator.mediaDevices`
 Object.defineProperty(global.navigator, 'mediaDevices', {
   value: {

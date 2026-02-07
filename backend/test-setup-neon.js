@@ -33,4 +33,3 @@ module.exports = async () => {
     process.env.SKIP_NEON_TESTS = 'true';
   }
 };
-

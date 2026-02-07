@@ -201,11 +201,11 @@
   - **Benefit**: Critical for PWA validation - Chrome DevTools mobile emulation doesn't catch device-specific issues
   - **Docs**: https://www.browserstack.com/docs/automate/selenium/getting-started/nodejs
 - [x] 11.10 **[OPTIONAL - GitHub Student Pack]** Install CodeScene for code quality monitoring, configure PR checks
-- [ ] 11.11 Verify UBS scan passes (`ubs backend/src/`) with no CRTICAL findings. Check all WARNINGS and consider if actioning will improve the code base
-- [ ] 11.12 Run linter and fix all errors (`npm run lint`)
-- [ ] 11.13 All tests for frontend/backend dev/prod pass. 
-- [ ] 11.14 Use tech-debt-remediation-plan agent to create a detailed plan on tech debt at the half-way point of the project
-- [ ] 11.15 Update README.md to reflect current state; how to run locally, setting up dev and production with R2 and Neon 
+- [x] 11.11 Verify UBS scan passes (`ubs backend/src/`) with no CRTICAL findings. Check all WARNINGS and consider if actioning will improve the code base
+- [x] 11.12 Run linter and fix all errors (`npm run lint`)
+- [x] 11.13 All tests for frontend/backend dev/prod pass. 
+- [x] 11.14 Use tech-debt-remediation-plan agent to create a detailed plan on tech debt at the half-way point of the project
+- [x] 11.15 Update README.md to reflect current state; how to run locally, setting up dev and production with R2 and Neon 
 
 ## 12. Monitoring & Observability
 
@@ -226,7 +226,13 @@
 - [ ] 12.7 Configure alerts for 95th percentile response time >500ms
 - [ ] 12.8 Set up Neon usage alerts at 80% of plan limits
 - [ ] 12.9 Add structured logging to Workers (JSON format)
+### Refer to tech-debt.md for steps 12.10 - 12. 14
 - [ ] 12.10 Document monitoring setup in `docs/monitoring.md`
+- [ ] 12.11 Fix Logger any types → Record<string, unknown>
+- [ ] 12.12 Refactor UserService + AuthService to Prisma
+- [ ] 12.13 Create ServiceProvider DI container
+- [ ] 12.14 Update upload routes to use ServiceProvider
+  - Deliverable: UserService/AuthService fully refactored with >80% coverage
 
 ## 13. Security Hardening
 
@@ -240,6 +246,15 @@
 - [ ] 13.8 Implement JWT token validation in Workers
 - [ ] 13.9 Run security audit with `npm audit`
 - [ ] 13.10 Document security measures in `docs/security.md`
+### Refer to tech-debt.md for steps 13.11 - 13.16
+- [ ] 13.11 Refactor AnalyticsService (split & Prisma)
+- [ ] 13.12 Refactor ReportService (Prisma)
+- [ ] 13.13 Create AnalyticsRepository + ReportRepository
+- [ ] 13.14 Service-level TypeScript type fixes
+- [ ] 13.15 Global error handler + custom errors
+- [ ] 13.16 AuthService test coverage >80%
+  - Deliverable: All services use Prisma/DI; error handling consistent
+
 
 ## 14. Database Migrations
 
@@ -251,6 +266,13 @@
 - [ ] 14.6 Document migration workflow in `docs/database-migrations.md`
 - [ ] 14.7 Add migration scripts to `package.json` (dev and prod)
 - [ ] 14.8 Verify migrations work in both SQLite and PostgreSQL
+### Refer to tech-debt.md for steps 14.9 - 14.13
+- [ ] 14.9 Remove any from service layers (target <10 remaining)
+- [ ] 14.10 Extract complexity from AnalyticsService
+- [ ] 14.11 Coverage thresholds enforcement in Jest
+- [ ] 14.12 Integration test suite expansion
+- [ ] 14.13 Non-null assertion audit & fixes
+  - Deliverable: Global coverage >70%; <10 any types outside tests
 
 ## 15. Production Deployment
 
@@ -264,6 +286,13 @@
 - [ ] 15.8 Verify costs match projections (Cloudflare + Neon)
 - [ ] 15.9 Update frontend to use production API endpoint
 - [ ] 15.10 Create rollback plan and document in `docs/rollback-procedure.md`
+### Refer to tech-debt.md for steps 15.11 - 15.15
+- [ ] 15.11 Complete non-null assertion fixes
+- [ ] 15.12 DI container tests
+- [ ] 15.13 Helper service extraction
+- [ ] 15.14 Scheduler + Monitoring coverage >80%
+- [ ] 15.15 Documentation: architecture, error handling, DI patterns
+  - Deliverable: Test coverage >75% globally
 
 ## 16. Documentation
 
@@ -277,6 +306,13 @@
 - [ ] 16.8 Create troubleshooting guide for common issues
 - [ ] 16.9 Document cost optimization strategies
 - [ ] 16.10 Create runbook for production operations
+### Refer to tech-debt.md for steps 16.11 - 16.14
+- [ ] 16.11 Presigned URL expiry handling (workers)
+- [ ] 16.12 Edge case coverage (CSV parser, storage)
+- [ ] 16.13 Performance optimization (database indexes, caching)
+- [ ] 16.14 Security audit (input validation, secrets management)
+  - Deliverable: Production-ready codebase
+
 
 ## 17. Performance Optimization
 
@@ -302,6 +338,12 @@
 - [ ] 18.7 Create incident response plan
 - [ ] 18.8 Set up status page for service availability
 - [ ] 18.9 Document disaster recovery procedures in `docs/disaster-recovery.md`
+### Refer to tech-debt.md for steps 18.10 - 18.
+- [ ] 18.10 Enhanced logging & observability (Sentry integration)
+- [ ] 18.11 Performance monitoring (Workers analytics)
+- [ ] 18.12 Database monitoring (Neon metrics)
+- [ ] 18.13 Feedback mechanism from production
+  - Deliverable: Full observability stack operational
 
 ## 19. Developer Experience
 

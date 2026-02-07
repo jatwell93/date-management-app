@@ -609,13 +609,20 @@ ubs --only=ts,js,tsx src/ # Language filter
 ```markdown
 ## Ready for Approval   
 ### Summary 
-- Completed all tasks in `add-user-validation` 
-- Added email validation to User service 
-- 20 new tests, all passing   ### Checks 
-- ✅ Tests pass: 145/145 
+3. Code Review Checklist
+
+Before committing, verify:
+
+- ✅ Tests written first (TDD)
+- ✅ >80% coverage for new code
+- ✅ No any types (except justified in comments)
+- ✅ Services have <50 lines per method
+- ✅ Custom errors used for business logic errors
+- ✅ DI used for dependencies
+- ✅ No hardcoded config (use environment)
 - ✅ Linter: clean 
-- ✅ UBS: passed 
-- ✅ OpenSpec: `tasks.md` complete   
+- ✅ UBS: passed without 'Critical'
+- ✅ OpenSpec: completed task marked in `tasks.md`   
 **Please review. Reply with:** - "approved" / "looks good" → push to git - "change X" → Back to BUILD - "revert" → Discard all
 ```
 

@@ -126,9 +126,7 @@ describe('CSV Upload Flow', () => {
     const key = initiateRes.body.key as string;
     await storage.upload(key, Buffer.from('SKU,Name,Cost,Barcode\nSKU2,Test,2.00,456\n'));
 
-    const completeRes = await request(app)
-      .post('/api/upload/complete')
-      .send({ key });
+    const completeRes = await request(app).post('/api/upload/complete').send({ key });
 
     expect(completeRes.status).toBe(200);
     expect(csvParser.processFile).toHaveBeenCalledTimes(1);

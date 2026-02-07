@@ -43,7 +43,7 @@ describe('XLSX Upload Functionality Tests', () => {
         ...args.data,
       };
     };
-    
+
     // Default implementations
     (mockPrisma.product.findUnique as jest.Mock).mockResolvedValue(null);
     (mockPrisma.product.findMany as jest.Mock).mockResolvedValue([]);
@@ -53,7 +53,7 @@ describe('XLSX Upload Functionality Tests', () => {
     (mockPrisma.product.upsert as jest.Mock).mockImplementation((args: any) =>
       Promise.resolve(buildMockProduct({ data: args.create })),
     );
-    
+
     // Create a temporary XLSX file for testing
     const jsonData = [
       ['SKU', 'Name', 'Cost', 'Barcode'],
@@ -76,13 +76,13 @@ describe('XLSX Upload Functionality Tests', () => {
     }
     const otherFiles = [
       'test_alt_headers.xlsx',
-      'test_missing_fields.xlsx', 
+      'test_missing_fields.xlsx',
       'test_invalid_cost.xlsx',
       'test_missing_headers.xlsx',
       'test_unexpected_columns.xlsx',
-      'test_validation.xlsx'
+      'test_validation.xlsx',
     ];
-    otherFiles.forEach(file => {
+    otherFiles.forEach((file) => {
       const p = path.join(__dirname, file);
       if (fs.existsSync(p)) fs.unlinkSync(p);
     });
@@ -224,8 +224,8 @@ describe('XLSX Upload Functionality Tests', () => {
           lowStockThreshold: 5,
           image: null,
           isDeleted: false,
-          deletedAt: null
-        }
+          deletedAt: null,
+        },
       ]);
 
       (mockPrisma.product.update as jest.Mock).mockResolvedValue({
@@ -241,7 +241,7 @@ describe('XLSX Upload Functionality Tests', () => {
         lowStockThreshold: 5,
         image: null,
         isDeleted: false,
-        deletedAt: null
+        deletedAt: null,
       });
 
       const jsonData = [
@@ -259,9 +259,9 @@ describe('XLSX Upload Functionality Tests', () => {
     });
 
     afterEach(() => {
-        if (fs.existsSync(testXLSXPath)) {
-            fs.unlinkSync(testXLSXPath);
-        }
+      if (fs.existsSync(testXLSXPath)) {
+        fs.unlinkSync(testXLSXPath);
+      }
     });
 
     it('should update existing products in XLSX processing', async () => {

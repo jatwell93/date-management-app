@@ -2,7 +2,11 @@
  * Unit Tests for Storage Factory
  */
 
-import { createStorageProvider, getStorageProviderType, resetDefaultStorageProvider } from '../../storage/storage-factory';
+import {
+  createStorageProvider,
+  getStorageProviderType,
+  resetDefaultStorageProvider,
+} from '../../storage/storage-factory';
 import { LocalStorageProvider } from '../../storage/local-storage.provider';
 import { R2StorageProvider } from '../../storage/r2-storage.provider';
 

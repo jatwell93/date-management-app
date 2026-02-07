@@ -57,6 +57,7 @@ bug-scan-report.json
 bug-scan-report.txt
 .env
 .env.local
+tech-debt.md
 
 #cloudflare workers
 workers/.wrangler/

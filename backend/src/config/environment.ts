@@ -56,11 +56,7 @@ function fail(message: string): never {
   throw new Error(message);
 }
 
-function parseNumber(
-  value: string | undefined,
-  defaultValue?: number,
-  fieldName?: string,
-): number {
+function parseNumber(value: string | undefined, defaultValue?: number, fieldName?: string): number {
   if (value === undefined || value === '') {
     if (defaultValue !== undefined) {
       return defaultValue;
@@ -145,7 +141,9 @@ function validateEnvironment(env: RawEnv, allowMissingRequired: boolean): Enviro
     R2_BUCKET_NAME: env.R2_BUCKET_NAME,
     NEON_CONNECTION_STRING: env.NEON_CONNECTION_STRING,
     MAX_UPLOAD_SIZE_BYTES: Number.isNaN(maxUploadSize) ? 10 * 1024 * 1024 : maxUploadSize,
-    DIRECT_UPLOAD_THRESHOLD_BYTES: Number.isNaN(directThreshold) ? 2 * 1024 * 1024 : directThreshold,
+    DIRECT_UPLOAD_THRESHOLD_BYTES: Number.isNaN(directThreshold)
+      ? 2 * 1024 * 1024
+      : directThreshold,
   };
 }
 

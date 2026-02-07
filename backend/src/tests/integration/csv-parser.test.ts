@@ -194,7 +194,7 @@ describe('CSV Parser Integration', () => {
 
       const parser = new CSVParserService(prisma, {
         batchSize: 100,
-        progressInterval: 100,  // Emit progress every 100 lines instead of 500
+        progressInterval: 100, // Emit progress every 100 lines instead of 500
       });
 
       parser.on('progress', () => {
@@ -221,7 +221,7 @@ describe('CSV Parser Integration', () => {
       expect(result.imported + result.updated).toBeGreaterThan(0);
 
       // Verify progress events were emitted
-      expect(progressCount).toBeGreaterThan(5);  // At least 5 progress events for 1,000 lines
+      expect(progressCount).toBeGreaterThan(5); // At least 5 progress events for 1,000 lines
 
       // Log performance metrics (for debugging)
       console.log(`
