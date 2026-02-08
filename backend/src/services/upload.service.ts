@@ -5,6 +5,7 @@ import { StorageProvider, FileMetadata } from '../storage/storage-provider.inter
 import { CSVParserService } from './csv-parser.service';
 import { envConfig } from '../config/environment';
 import { StorageQuotaService } from './storage-quota.service';
+import { Logger } from '../utils/logger';
 
 export interface InitiateUploadResponse {
   strategy: 'direct' | 'presigned';
@@ -78,6 +79,7 @@ export class UploadService {
    * Finalize upload and trigger parsing
    */
   async completeUpload(key: string, userId: number): Promise<void> {
+    const startTime = Date.now();
     // 1. Verify file exists in storage
     const exists = await this.storage.exists(key);
     if (!exists) {
@@ -112,7 +114,27 @@ export class UploadService {
       );
 
       // 3. Process file
-      await this.csvParser.processFile(tempPath);
+      await this.csvParser.processFile(tempPath, { uploadKey: key, userId });
+
+      Logger.info('Upload processing metrics', {
+        uploadKey: key,
+        userId,
+        fileSize: metadata?.size ?? buffer.length,
+        contentType: metadata?.contentType,
+        processingDurationMs: Date.now() - startTime,
+        status: 'success',
+      });
+    } catch (error) {
+      Logger.warn('Upload processing metrics', {
+        uploadKey: key,
+        userId,
+        fileSize: metadata?.size ?? buffer.length,
+        contentType: metadata?.contentType,
+        processingDurationMs: Date.now() - startTime,
+        status: 'failure',
+        error: error instanceof Error ? error.message : 'Unknown error',
+      });
+      throw error;
     } finally {
       // 4. Cleanup temp file
       try {
@@ -135,6 +157,7 @@ export class UploadService {
     contentType: string,
     userId: number,
   ): Promise<string> {
+    const startTime = Date.now();
     const timestamp = Date.now();
     const key = `uploads/${timestamp}-${path.basename(filename)}`;
 
@@ -144,7 +167,28 @@ export class UploadService {
     await this.storage.upload(key, buffer, contentType);
 
     // 2. Trigger processing
-    await this.completeUpload(key, userId);
+    try {
+      await this.completeUpload(key, userId);
+      Logger.info('Direct upload metrics', {
+        uploadKey: key,
+        userId,
+        fileSize: buffer.length,
+        contentType,
+        uploadDurationMs: Date.now() - startTime,
+        status: 'success',
+      });
+    } catch (error) {
+      Logger.warn('Direct upload metrics', {
+        uploadKey: key,
+        userId,
+        fileSize: buffer.length,
+        contentType,
+        uploadDurationMs: Date.now() - startTime,
+        status: 'failure',
+        error: error instanceof Error ? error.message : 'Unknown error',
+      });
+      throw error;
+    }
 
     return key;
   }

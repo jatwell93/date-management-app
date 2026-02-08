@@ -18,12 +18,15 @@ export interface RequestMetrics {
   endpoint: string;
   method: string;
   status: number;
+  statusClass?: string;
+  routeGroup?: string;
   responseTime: number;
   csvProcessingTime?: number;
   uploadSize?: number;
   rowCount?: number;
   batchCount?: number;
   errorMessage?: string;
+  correlationId?: string;
 }
 
 /**
@@ -44,6 +47,13 @@ declare global {
  */
 export function createMetricsInitializer() {
   return async (req: ExpressRequest, res: ExpressResponse): Promise<void> => {
+    const correlationId =
+      req.get('x-request-id') ||
+      req.get('cf-ray') ||
+      (typeof crypto !== 'undefined' && 'randomUUID' in crypto
+        ? crypto.randomUUID()
+        : `${Date.now()}-${Math.random().toString(16).slice(2)}`);
+
     // Initialize metrics context on request
     const request = req as any;
     request.metricsContext = {
@@ -52,8 +62,11 @@ export function createMetricsInitializer() {
         timestamp: Date.now(),
         endpoint: req.path,
         method: req.method,
+        correlationId,
       },
     };
+
+    request.correlationId = correlationId;
   };
 }
 
@@ -134,16 +147,23 @@ export function getRequestMetrics(
 
   const responseTime = Date.now() - metricsContext.startTime;
 
+  const statusClass = `${Math.floor(status / 100)}xx`;
+  const endpoint = metricsContext.metrics.endpoint || '/';
+  const routeGroup = endpoint.split('/').slice(0, 3).join('/') || '/';
+
   return {
     timestamp: metricsContext.metrics.timestamp || Date.now(),
-    endpoint: metricsContext.metrics.endpoint || '/',
+    endpoint,
     method: metricsContext.metrics.method || 'GET',
     status,
+    statusClass,
+    routeGroup,
     responseTime,
     csvProcessingTime: metricsContext.metrics.csvProcessingTime,
     uploadSize: metricsContext.metrics.uploadSize,
     rowCount: metricsContext.metrics.rowCount,
     batchCount: metricsContext.metrics.batchCount,
+    correlationId: metricsContext.metrics.correlationId,
   };
 }
 
@@ -158,9 +178,9 @@ export function getRequestMetrics(
 export function formatMetricsForAnalytics(metrics: RequestMetrics) {
   return {
     indexes: [
-      metrics.endpoint,
+      metrics.routeGroup || metrics.endpoint,
       metrics.method,
-      `status_${metrics.status}`,
+      metrics.statusClass || `status_${metrics.status}`,
     ],
     blobs: [],
     doubles: [

@@ -12,6 +12,7 @@ import { CSVUploadPage } from './pages/CSVUploadPage';
 import { DetailedExpiryReportPage } from './pages/DetailedExpiryReportPage';
 import ExpiredItemsPage from './pages/ExpiredItemsPage';
 import { StorageQuotaWarning } from './components/StorageQuotaWarning';
+import SentryTest from './SentryTest';
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -31,7 +32,7 @@ const verifyToken = (token: string | null): boolean => {
     const decodedToken = jwtDecode<JwtPayload>(token);
     const currentTime = Date.now() / 1000; // Convert to Unix timestamp
     // If the token is expired, return false
-    return decodedToken.exp > currentTime;
+    return decodedToken.exp ? decodedToken.exp > currentTime : false;
   } catch (error) {
     console.error('Error decoding session:', error);
     return false; // If there's an error decoding, treat it as invalid
@@ -198,6 +199,11 @@ function App() {
                         </Link>
                       </li>
                       <li>
+                        <Link to="/sentry-test" className="hover:opacity-90 transition-opacity">
+                          Sentry Test
+                        </Link>
+                      </li>
+                      <li>
                         <Link to="/dashboard" className="hover:opacity-90 transition-opacity">
                           Dashboard
                         </Link>
@@ -301,6 +307,15 @@ function App() {
                           onClick={() => setIsMobileMenuOpen(false)}
                         >
                           Scan
+                        </Link>
+                      </li>
+                      <li>
+                        <Link
+                          to="/sentry-test"
+                          className="block hover:opacity-90 transition-opacity"
+                          onClick={() => setIsMobileMenuOpen(false)}
+                        >
+                          Sentry Test
                         </Link>
                       </li>
                       <li>
@@ -418,6 +433,10 @@ function App() {
                 <Route
                   path="/scan"
                   element={isLoggedIn ? <ScanPage token={token} /> : <Navigate to="/login" />}
+                />
+                <Route
+                  path="/sentry-test"
+                  element={isLoggedIn ? <SentryTest /> : <Navigate to="/login" />}
                 />
                 <Route
                   path="/dashboard"

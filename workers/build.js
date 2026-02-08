@@ -53,6 +53,7 @@ async function build() {
         'buffer', 'node:buffer',
         'timers', 'node:timers',
         'string_decoder', 'node:string_decoder',
+        'async_hooks', 'node:async_hooks',
         
         // Test dependencies
         'mock-fs',

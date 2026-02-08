@@ -12,38 +12,47 @@
 import { Env } from './types/env';
 import { handleHealthCheck } from './health';
 import { createWorkersDatabase } from './database';
+import * as Sentry from '@sentry/cloudflare';
 
 /**
  * CORS headers for production
  */
-function getCorsHeaders(env: Env): HeadersInit {
-  const allowedOrigins = env.CORS_ORIGINS?.split(',') || ['https://yourdomain.com'];
+function getCorsHeaders(env: Env, requestOrigin?: string): HeadersInit {
+  // For development/testing: Allow all origins
+  // In production with real domain, use FRONTEND_URL env var
+  const allowAll = env.NODE_ENV !== 'production' || !env.FRONTEND_URL;
+  
+  const allowedOrigin = allowAll 
+    ? (requestOrigin || '*')
+    : env.FRONTEND_URL || 'http://localhost:3000';
   
   return {
-    'Access-Control-Allow-Origin': allowedOrigins[0],
+    'Access-Control-Allow-Origin': allowedOrigin,
     'Access-Control-Allow-Methods': 'GET, POST, PUT, PATCH, DELETE, OPTIONS',
     'Access-Control-Allow-Headers': 'Content-Type, Authorization',
     'Access-Control-Max-Age': '86400',
+    ...(allowAll ? {} : { 'Access-Control-Allow-Credentials': 'true' }),
   };
 }
 
 /**
  * Handle CORS preflight requests
  */
-function handleOptions(env: Env): Response {
+function handleOptions(request: Request, env: Env): Response {
+  const origin = request.headers.get('Origin') || '';
   return new Response(null, {
     status: 204,
-    headers: getCorsHeaders(env),
+    headers: getCorsHeaders(env, origin),
   });
 }
 
 /**
  * JSON response helper
  */
-function jsonResponse(data: unknown, status = 200, env?: Env): Response {
+function jsonResponse(data: unknown, status = 200, env?: Env, requestOrigin?: string): Response {
   const headers: HeadersInit = {
     'Content-Type': 'application/json',
-    ...(env ? getCorsHeaders(env) : {}),
+    ...(env ? getCorsHeaders(env, requestOrigin) : {}),
   };
   
   return new Response(JSON.stringify(data), { status, headers });
@@ -52,25 +61,38 @@ function jsonResponse(data: unknown, status = 200, env?: Env): Response {
 /**
  * Error response helper
  */
-function errorResponse(message: string, status = 500, env?: Env): Response {
-  return jsonResponse({ error: message }, status, env);
+function errorResponse(message: string, status = 500, env?: Env, requestOrigin?: string): Response {
+  return jsonResponse({ error: message }, status, env, requestOrigin);
 }
 
 /**
  * Main Workers fetch handler
  */
-export default {
+export default Sentry.withSentry(
+  (env: any) => ({
+    dsn: env.WORKERS_SENTRY_DSN || env.SENTRY_DSN,
+    tracesSampleRate: 1.0, // Adjust to 0.1 later to save on free tier quota
+  }),
+  {
   async fetch(request: Request, env: Env, ctx: ExecutionContext): Promise<Response> {
     const url = new URL(request.url);
     const { pathname } = url;
     const method = request.method;
 
+    const requestOrigin = request.headers.get('Origin') || '';
+
     // Handle CORS preflight
     if (method === 'OPTIONS') {
-      return handleOptions(env);
+      return handleOptions(request, env);
     }
 
     try {
+      // Test route for Sentry testing
+      if (pathname === '/api/test-error') {
+        // This will trigger an error that should be captured by Sentry
+        throw new Error('Test error from Cloudflare Workers - this should be captured by Sentry');
+      }
+
       // Health check endpoint (no auth required)
       if (pathname === '/health' || pathname === '/api/health') {
         return handleHealthCheck(request, env);
@@ -124,10 +146,10 @@ export default {
       const message = env.NODE_ENV === 'development' 
         ? (error instanceof Error ? error.message : 'Unknown error')
         : 'Internal Server Error';
-      return errorResponse(message, 500, env);
+      return errorResponse(message, 500, env, requestOrigin);
     }
   },
-};
+});
 
 // =============================================================================
 // API Handlers (Using Neon serverless driver)

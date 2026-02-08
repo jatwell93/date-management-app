@@ -169,7 +169,9 @@ export class AnalyticsService {
         'CREATE INDEX IF NOT EXISTS idx_user_sessions_session_id ON user_sessions(session_id)',
       );
     } catch (error) {
-      Logger.error('Failed to initialize Analytics tables.', error);
+      Logger.error('Failed to initialize Analytics tables.', {
+        error: error instanceof Error ? error.message : 'Unknown error',
+      });
     } finally {
       // releaseDb(db);
     }

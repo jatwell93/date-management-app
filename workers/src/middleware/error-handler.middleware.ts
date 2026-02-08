@@ -27,7 +27,7 @@ export class WorkersLogger {
     this.env = env;
   }
 
-  log(level: LogLevel, message: string, meta?: Record<string, any>) {
+  log(level: LogLevel, message: string, meta?: Record<string, unknown>) {
     const timestamp = new Date().toISOString();
     const logEntry = {
       timestamp,
@@ -47,19 +47,19 @@ export class WorkersLogger {
     }
   }
 
-  debug(message: string, meta?: Record<string, any>) {
+  debug(message: string, meta?: Record<string, unknown>) {
     this.log(LogLevel.DEBUG, message, meta);
   }
 
-  info(message: string, meta?: Record<string, any>) {
+  info(message: string, meta?: Record<string, unknown>) {
     this.log(LogLevel.INFO, message, meta);
   }
 
-  warn(message: string, meta?: Record<string, any>) {
+  warn(message: string, meta?: Record<string, unknown>) {
     this.log(LogLevel.WARN, message, meta);
   }
 
-  error(message: string, meta?: Record<string, any>) {
+  error(message: string, meta?: Record<string, unknown>) {
     this.log(LogLevel.ERROR, message, meta);
   }
 }
@@ -78,6 +78,7 @@ export function createErrorHandler(env: Env) {
       method: req.method,
       path: req.path,
       ip: req.ip,
+      correlationId: req.correlationId,
     });
 
     // Send error response (don't leak stack traces in production)
@@ -137,7 +138,10 @@ export function createRequestLogger(env: Env) {
       path: req.path,
       ip: req.ip,
       userAgent: req.get('User-Agent'),
+      correlationId: req.correlationId,
       query: sanitizeForLogging(req.query),
+      headers: sanitizeForLogging(req.headers),
+      body: sanitizeForLogging(req.body),
     });
 
     // Wrap response to log completion
@@ -149,6 +153,7 @@ export function createRequestLogger(env: Env) {
         path: req.path,
         duration,
         statusCode: res['statusCode'] || 200,
+        correlationId: req.correlationId,
       });
       return originalJson(data);
     };

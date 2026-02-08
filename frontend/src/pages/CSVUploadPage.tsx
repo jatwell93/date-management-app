@@ -1,4 +1,5 @@
 import React, { useState } from 'react';
+import * as Sentry from '@sentry/react';
 import * as XLSX from 'xlsx';
 import {
   Table,
@@ -26,6 +27,36 @@ export const CSVUploadPage: React.FC<{ token: string | null }> = ({ token }) => 
   const [filePreview, setFilePreview] = useState<string[][]>([]);
   const [uploadProgress, setUploadProgress] = useState<number>(0);
   const [progressMessage, setProgressMessage] = useState<string>('');
+
+  const logUploadMetric = (event: string, data: Record<string, unknown>) => {
+    if (process.env.NODE_ENV === 'test') {
+      return;
+    }
+
+    console.info('client_upload_metrics', {
+      event,
+      ...data,
+    });
+
+    Sentry.captureMessage('client_upload_metrics', {
+      level: 'info',
+      extra: {
+        event,
+        ...data,
+      },
+    });
+  };
+
+  const categorizeUploadError = (error: unknown): string => {
+    if (error instanceof Error) {
+      const message = error.message.toLowerCase();
+      if (message.includes('initiate')) return 'initiate_failed';
+      if (message.includes('processing')) return 'processing_failed';
+      if (message.includes('upload')) return 'upload_failed';
+      return 'unknown_error';
+    }
+    return 'unknown_error';
+  };
 
   const handleFileChange = (event: React.ChangeEvent<HTMLInputElement>) => {
     if (event.target.files && event.target.files[0]) {
@@ -118,6 +149,8 @@ export const CSVUploadPage: React.FC<{ token: string | null }> = ({ token }) => 
     setProgressMessage('Preparing file...');
     setUploadResult(null);
 
+    const uploadStartTime = Date.now();
+
     try {
       let fileToUpload = selectedFile;
       let fileNameToUpload = selectedFile.name;
@@ -182,8 +215,21 @@ export const CSVUploadPage: React.FC<{ token: string | null }> = ({ token }) => 
             const res = await fetch(url, options);
             if (res.ok) return res;
             console.warn(`Upload attempt ${i + 1} failed with status: ${res.status}`);
+            if (i < retries - 1) {
+              logUploadMetric('upload_retry', {
+                attempt: i + 1,
+                status: res.status,
+                errorCategory: 'http_error',
+              });
+            }
           } catch (err) {
             console.warn(`Upload attempt ${i + 1} failed:`, err);
+            if (i < retries - 1) {
+              logUploadMetric('upload_retry', {
+                attempt: i + 1,
+                errorCategory: 'network_error',
+              });
+            }
           }
           if (i < retries - 1) {
             const delay = 1000 * Math.pow(2, i); // Exponential backoff
@@ -253,6 +299,13 @@ export const CSVUploadPage: React.FC<{ token: string | null }> = ({ token }) => 
         success: true,
         message: 'File uploaded and processed successfully',
       });
+      logUploadMetric('upload_complete', {
+        fileSize: fileToUpload.size,
+        durationMs: Date.now() - uploadStartTime,
+        result: 'success',
+        method: strategy,
+        fileType: fileToUpload.type,
+      });
       setUploadProgress(0);
       setProgressMessage('');
     } catch (error) {
@@ -260,6 +313,13 @@ export const CSVUploadPage: React.FC<{ token: string | null }> = ({ token }) => 
       setUploadResult({
         success: false,
         message: error instanceof Error ? error.message : 'An error occurred during upload',
+      });
+      logUploadMetric('upload_complete', {
+        fileSize: selectedFile?.size || 0,
+        durationMs: Date.now() - uploadStartTime,
+        result: 'failure',
+        method: 'unknown',
+        errorCategory: categorizeUploadError(error),
       });
     } finally {
       setIsUploading(false);

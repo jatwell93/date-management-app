@@ -20,6 +20,7 @@ import { EventEmitter } from 'events';
 import { parse } from 'csv-parse';
 import * as fs from 'fs';
 import { getDefaultDatabaseClient } from '../database/database-factory';
+import { Logger } from '../utils/logger';
 
 // ============================================================================
 // Types & Interfaces
@@ -65,6 +66,11 @@ export interface CSVParseResult {
   errors: RowError[];
   /** Processing time in milliseconds */
   durationMs: number;
+}
+
+export interface CSVMetricsContext {
+  uploadKey?: string;
+  userId?: number;
 }
 
 export interface ProgressEvent {
@@ -160,7 +166,7 @@ export class CSVParserService extends EventEmitter {
    * @param filePath - Path to the CSV file
    * @returns Parse result with import statistics
    */
-  async processFile(filePath: string): Promise<CSVParseResult> {
+  async processFile(filePath: string, context: CSVMetricsContext = {}): Promise<CSVParseResult> {
     const startTime = Date.now();
 
     // Validate file exists and check size
@@ -280,6 +286,17 @@ export class CSVParserService extends EventEmitter {
     // Emit final progress
     this.emitProgress(result);
     this.emit('complete', result);
+
+    Logger.info('CSV processing metrics', {
+      uploadKey: context.uploadKey,
+      userId: context.userId,
+      totalRows: result.total,
+      imported: result.imported,
+      updated: result.updated,
+      skipped: result.skipped,
+      errorCount: result.errors.length,
+      durationMs: result.durationMs,
+    });
 
     return result;
   }

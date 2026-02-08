@@ -71,6 +71,8 @@ import userRoutes from '../../backend/src/routes/user.routes';
 // Skipped: product.routes.ts (uses multer - filesystem dependency)
 // Skipped: database.backup.routes.ts (uses filesystem for backups)
 
+import * as Sentry from "@sentry/cloudflare";
+
 /**
  * Route definition
  */
@@ -236,76 +238,88 @@ function writeMetrics(env: Env, metrics: any): void {
 /**
  * Main Workers fetch handler
  */
-export default {
-  async fetch(request: Request, env: Env, ctx: ExecutionContext): Promise<Response> {
-    const url = new URL(request.url);
-    const startTime = Date.now();
-    
-    // Fast-path health check (bypass full routing)
-    if (url.pathname === '/health') {
-      return handleHealthCheck(request, env);
-    }
-
-    const logger = new WorkersLogger(env);
-    const errorHandler = createErrorHandler(env);
-
-    try {
-      // Create Express-compatible request
-      const req = await createExpressRequest(request, {}, env);
-      const res = new ExpressResponse();
-
-      // Route request
-      const router = createRouter(env);
-      const handled = await router.route(req, res);
-
-      if (!handled) {
-        // 404 Not Found
-        res.status(404).json({
-          error: 'Not Found',
-          message: `Route ${req.path} not found`,
-        });
+export default Sentry.withSentry(
+  (env: any) => ({
+    dsn: env.WORKERS_SENTRY_DSN || env.SENTRY_DSN,
+    tracesSampleRate: 1.0, // Adjust to 0.1 later to save on free tier quota
+  }),
+  {
+    async fetch(request: Request, env: any, ctx: ExecutionContext): Promise<Response> {
+      const url = new URL(request.url);
+      const startTime = Date.now();
+      
+      // Fast-path health check (bypass full routing)
+      if (url.pathname === '/health') {
+        return handleHealthCheck(request, env);
       }
 
-      const response = res.toResponse();
-      
-      // Extract metrics from request context (includes CSV instrumentation if applicable)
-      const metrics = getRequestMetrics(req, res, response.status);
-      writeMetrics(env, metrics);
+      // Test route for Sentry testing
+      if (url.pathname === '/api/test-error') {
+        // This will trigger a Sentry error in Workers
+        throw new Error('Test error from Cloudflare Workers - this should be captured by Sentry');
+      }
 
-      return response;
-    } catch (error) {
-      // Global error handler
-      const responseTime = Date.now() - startTime;
-      
-      logger.error('Unhandled error in fetch handler', {
-        error: error instanceof Error ? error.message : 'Unknown error',
-        stack: error instanceof Error ? error.stack : undefined,
-      });
+      const logger = new WorkersLogger(env);
+      const errorHandler = createErrorHandler(env);
 
-      // Create error metrics for error responses
-      const errorMetrics = {
-        timestamp: startTime,
-        endpoint: url.pathname,
-        method: request.method,
-        status: 500,
-        responseTime,
-        errorMessage: error instanceof Error ? error.message : 'Unknown error',
-      };
-      
-      writeMetrics(env, errorMetrics);
+      try {
+        // Create Express-compatible request
+        const req = await createExpressRequest(request, {}, env);
+        const res = new ExpressResponse();
 
-      return new Response(
-        JSON.stringify({
-          error: 'Internal Server Error',
-          message: env.NODE_ENV === 'development' 
-            ? (error instanceof Error ? error.message : 'Unknown error')
-            : 'An unexpected error occurred',
-        }),
-        {
-          status: 500,
-          headers: { 'Content-Type': 'application/json' },
+        // Route request
+        const router = createRouter(env);
+        const handled = await router.route(req, res);
+
+        if (!handled) {
+          // 404 Not Found
+          res.status(404).json({
+            error: 'Not Found',
+            message: `Route ${req.path} not found`,
+          });
         }
-      );
+
+        const response = res.toResponse();
+        
+        // Extract metrics from request context (includes CSV instrumentation if applicable)
+        const metrics = getRequestMetrics(req, res, response.status);
+        writeMetrics(env, metrics);
+
+        return response;
+      } catch (error) {
+        // Global error handler
+        const responseTime = Date.now() - startTime;
+        
+        logger.error('Unhandled error in fetch handler', {
+          error: error instanceof Error ? error.message : 'Unknown error',
+          stack: error instanceof Error ? error.stack : undefined,
+        });
+
+        // Create error metrics for error responses
+        const errorMetrics = {
+          timestamp: startTime,
+          endpoint: url.pathname,
+          method: request.method,
+          status: 500,
+          responseTime,
+          errorMessage: error instanceof Error ? error.message : 'Unknown error',
+        };
+        
+        writeMetrics(env, errorMetrics);
+
+        return new Response(
+          JSON.stringify({
+            error: 'Internal Server Error',
+            message: env.NODE_ENV === 'development' 
+              ? (error instanceof Error ? error.message : 'Unknown error')
+              : 'An unexpected error occurred',
+          }),
+          {
+            status: 500,
+            headers: { 'Content-Type': 'application/json' },
+          }
+        );
+      }
     }
-  },
-};
+  }
+);

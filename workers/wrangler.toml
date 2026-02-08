@@ -86,7 +86,20 @@ command = "npm run build"
 # 1. Go to https://dash.cloudflare.com/accounts/{ACCOUNT_ID}/workers/analytics-engine
 # 2. Click "Enable Analytics Engine"
 # 3. Redeploy this worker with `wrangler deploy --env production`
-#
+[observability]
+enabled = false
+head_sampling_rate = 1
+
+[observability.logs]
+enabled = true
+head_sampling_rate = 1
+persist = true
+invocation_logs = true
+
+[observability.traces]
+enabled = true
+persist = true
+head_sampling_rate = 1
 # After enabling, metrics will be automatically written for all API requests.
 # Data available in: Cloudflare Dashboard → Workers → Analytics
 

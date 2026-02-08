@@ -225,7 +225,7 @@
 - [x] 12.8 Set up Neon usage alerts at 80% of plan limits **Note** this is not possible without a 3rd Party. We will set up PgHero as a free option in Phase 17
 - [ ] 12.9 Add structured logging to Workers (JSON format)
 ### Refer to tech-debt.md for steps 12.10 - 12. 14
-- [ ] 12.10 Document monitoring setup in `docs/monitoring.md`
+- [x] 12.10 Document monitoring setup in `docs/monitoring.md`
 - [x] 12.11 Fix Logger any types → Record<string, unknown>
 - [ ] 12.12 Refactor UserService + AuthService to Prisma
 - [ ] 12.13 Create ServiceProvider DI container

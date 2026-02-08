@@ -17,6 +17,7 @@ export interface Env {
   RATE_LIMIT_WINDOW: string; // milliseconds
   RATE_LIMIT_MAX_REQUESTS: string;
   RATE_LIMIT_MAX_AUTHENTICATED: string;
+  FRONTEND_URL?: string; // Frontend URL for CORS configuration
 
   // ============================================================================
   // Secrets (Set via wrangler secret put)
@@ -34,8 +35,9 @@ export interface Env {
   R2_SECRET_ACCESS_KEY: string;
   R2_BUCKET_NAME: string;
   
-  // Optional: Sentry DSN for error monitoring
-  SENTRY_DSN?: string;
+  // Optional: Sentry DSN for error monitoring (renamed from SENTRY_DSN for clarity)
+  WORKERS_SENTRY_DSN?: string;
+  SENTRY_DSN?: string; // Deprecated: use WORKERS_SENTRY_DSN
 
   // ============================================================================
   // R2 Bucket Bindings

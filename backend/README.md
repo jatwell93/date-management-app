@@ -18,6 +18,8 @@ npm install
 # 2. Copy environment template
 cp .env.example .env
 
+npm run seed  # Creates default users
+
 # 3. Start development server (SQLite)
 npm run dev
 

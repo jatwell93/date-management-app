@@ -19,6 +19,7 @@ export interface ExpressRequest {
   url: string;
   path: string;
   ip: string;
+  correlationId?: string;
   get(header: string): string | undefined;
   user?: any; // Set by authenticateToken middleware
 }

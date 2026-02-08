@@ -41,7 +41,7 @@ function retrieveContext(query) {
 
   // Check if API key is available in environment (for potential future use)
   const hasApiKey = !!process.env.GEMINI_API_KEY || !!process.env.OPENAI_API_KEY;
-  const semanticFlags = '';
+  const semanticFlags = ' --mode lex';
 
   // Cross-platform environment variable prefix
   const envPrefix = hasApiKey

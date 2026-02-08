@@ -1,263 +1,306 @@
-# Monitoring and Alerting Thresholds for Date Management Application
+# Monitoring & Alerting Runbook
+
+**Version:** 1.0  
+**Last Updated:** February 2026  
+**Stack:** Sentry (Free tier) + Cloudflare Workers Logs + Analytics Engine
+
+---
 
 ## Overview
-This document defines the monitoring parameters, thresholds, and alerting criteria for the Date Management Application to ensure optimal performance, availability, and early issue detection.
 
-## Monitoring Categories
+This project uses a **Free-tier optimized observability stack**:
+- **Sentry**: Error tracking, performance monitoring, alerting (5,000 events/month)
+- **Cloudflare Workers**: Structured logging with correlation IDs (3-day retention)
+- **Analytics Engine**: Basic request/error counts (Free tier—limited querying)
 
-### 1. Application Performance Metrics
+---
 
-#### Response Time Thresholds
-- **Normal**: < 100ms for 95th percentile
-- **Warning**: 100-500ms for 95th percentile
-- **Critical**: > 500ms for 95th percentile
+## 1. Alert Configuration
 
-#### Throughput Thresholds
-- **Normal**: 1-100 requests/minute
-- **Warning**: 100-500 requests/minute
-- **Critical**: > 500 requests/minute (potential DDoS)
+### 1.1 Sentry Performance Alerts
 
-#### Error Rate Thresholds
-- **Normal**: < 1% of requests resulting in error
-- **Warning**: 1-5% of requests resulting in error
-- **Critical**: > 5% of requests resulting in error
+**Database Query Duration (>200ms)**
+- **Platform:** Sentry → Alerts → Performance Alerts
+- **Trigger:** Database query duration exceeds 200ms
+- **Notification:** Email to account owner
+- **Response:** 
+  1. Check Sentry transaction trace
+  2. Identify slow query in backend logs
+  3. Review [database-patterns.md](database-patterns.md#query-optimization)
+  4. Add database index if N+1 query detected
 
-### 2. Database Performance Metrics
+**P95 Latency Monitoring**
+- **Platform:** Sentry → Performance → Trends
+- **Baseline:** <500ms for CSV upload endpoints
+- **Check frequency:** Weekly review
+- **Response:** Profile slow endpoints, check Hyperdrive connection pooling
 
-#### Connection Pool Metrics
-- **Normal**: < 70% connection pool utilization
-- **Warning**: 70-90% connection pool utilization
-- **Critical**: > 90% connection pool utilization
+### 1.2 Sentry Error Alerts
 
-#### Slow Query Detection
-- **Warning**: Queries taking > 100ms
-- **Critical**: More than 10 slow queries per minute
+**Automatic Error Tracking**
+- **Platform:** Sentry → Issues
+- **Coverage:** Backend, Frontend, Workers
+- **Trigger:** Any uncaught exception or logged error
+- **Notification:** Email (immediate), Slack integration (optional)
+- **Response:** 
+  1. Check error stack trace and breadcrumbs
+  2. Reproduce in dev environment
+  3. Review correlation ID in Workers logs for full request context
+  4. Fix and deploy
 
-#### Database Size Thresholds
-- **Normal**: < 50MB database size
-- **Warning**: 50-100MB database size
-- **Critical**: > 100MB database size
+---
 
-#### Row Count Thresholds
-- **Normal**: < 50,000 rows per table
-- **Warning**: 50,000-100,000 rows per table
-- **Critical**: > 100,000 rows per table
+## 2. Metrics & Dashboards
 
-#### Disk Space Utilization
-- **Normal**: < 70% disk space utilization
-- **Warning**: 70-85% disk space utilization
-- **Critical**: > 85% disk space utilization
+### 2.1 Sentry Dashboards
 
-### 3. System Resource Metrics
+**Performance Dashboard** (Default)
+- Transaction throughput (requests/min)
+- Apdex score (user satisfaction)
+- P95/P99 latency by endpoint
+- Database query duration
 
-#### CPU Utilization
-- **Normal**: < 70% average CPU utilization
-- **Warning**: 70-85% average CPU utilization
-- **Critical**: > 85% average CPU utilization
+**Access:** [sentry.io](https://sentry.io) → Projects → date-management-app → Performance
 
-#### Memory Utilization
-- **Normal**: < 70% memory utilization
-- **Warning**: 70-85% memory utilization
-- **Critical**: > 85% memory utilization
+**Business Metrics** (Custom)
+- CSV upload success rate
+- Upload retry frequency
+- Error categorization (initiate_failed, processing_failed, upload_failed)
 
-#### Disk Space
-- **Normal**: > 30% available disk space
-- **Warning**: 15-30% available disk space
-- **Critical**: < 15% available disk space
+**Access:** Sentry → Discover → Create custom query
 
-#### File Descriptors
-- **Normal**: < 70% of available file descriptors used
-- **Warning**: 70-85% of available file descriptors used
-- **Critical**: > 85% of available file descriptors used
+### 2.2 Cloudflare Workers Logs
 
-## Alerting Configuration
+**Real-Time Monitoring**
+```bash
+# Tail production logs
+cd workers
+npx wrangler tail --env production
 
-### Alert Severity Levels
+# Filter for errors only
+npx wrangler tail --env production --status error
 
-#### Critical Alerts
-- Application completely unavailable
-- Database unavailable or locked
-- Disk space critically low (< 10% available)
-- High error rates (> 5%)
-- Security incidents
-
-#### High Alerts
-- Response times > 500ms
-- Connection pool utilization > 90%
-- Slow query rate > 10 queries/min
-- CPU or memory utilization > 85%
-- Database size > 100MB
-
-#### Medium Alerts
-- Response times 100-500ms
-- Connection pool utilization 70-90%
-- Disk space utilization 70-85%
-- CPU or memory utilization 70-85%
-- Database size 50-100MB
-
-#### Low Alerts
-- Response times 50-100ms
-- Application health check warnings
-- Minor performance degradation
-
-### Alert Channels and Response Times
-
-#### Critical Alerts
-- **Channels**: SMS, Phone call, Email
-- **Response Time**: Within 15 minutes
-- **Escalation**: Every 15 minutes until acknowledged
-
-#### High Alerts
-- **Channels**: Email, SMS
-- **Response Time**: Within 1 hour
-- **Escalation**: After 1 hour if not acknowledged
-
-#### Medium Alerts
-- **Channels**: Email, Slack/Teams
-- **Response Time**: Within 4 hours
-- **Escalation**: After 8 hours if not acknowledged
-
-#### Low Alerts
-- **Channels**: Email, Dashboard notification
-- **Response Time**: Within 24 hours
-- **Escalation**: No automatic escalation
-
-## Monitoring Endpoints
-
-### Health Check Endpoints
-- `GET /health`: Overall application health
-- `GET /health/database-health`: Database-specific health
-- `GET /health/database-metrics`: Database metrics
-- `GET /health/metrics`: System metrics
-- `GET /health/recent-alerts`: Recent alert information
-
-### Expected Response Times
-- Health check endpoints should respond within 100ms
-- Database-specific endpoints within 200ms
-- Metrics endpoints within 500ms
-
-## Alert Configuration Examples
-
-### Database Monitoring Alerts
-```javascript
-// Database connection pool alert
-if (metrics.connectionPool.utilization > 90) {
-  alert({
-    type: 'CONNECTION_POOL_EXHAUSTED',
-    severity: 'high',
-    message: `Connection pool utilization is ${metrics.connectionPool.utilization}% > 90% threshold`,
-    metadata: {
-      utilization: metrics.connectionPool.utilization,
-      threshold: 90
-    }
-  });
-}
-
-// Slow query alert
-if (metrics.performance.slowQueries > 10) {
-  alert({
-    type: 'SLOW_QUERY',
-    severity: 'critical',
-    message: `Detected ${metrics.performance.slowQueries} slow queries in the last minute`,
-    metadata: {
-      slowQueryCount: metrics.performance.slowQueries,
-      timeWindow: 'minute'
-    }
-  });
-}
-
-// Table size alert
-for (const [tableName, size] of Object.entries(metrics.health.tableSizes)) {
-  const sizeInMB = size / (1024 * 1024); // Convert to MB
-  if (sizeInMB > 100) {  // 100MB threshold
-    alert({
-      type: 'TABLE_SIZE_THRESHOLD',
-      severity: 'medium',
-      message: `Table ${tableName} size is ${sizeInMB.toFixed(2)}MB > 100MB threshold`,
-      metadata: {
-        tableName,
-        size: sizeInMB,
-        threshold: 100
-      }
-    });
-  }
-}
+# Sample output:
+# {
+#   "timestamp": "2026-02-07T10:30:45.123Z",
+#   "level": "info",
+#   "message": "Request completed",
+#   "environment": "production",
+#   "correlationId": "550e8400-e29b-41d4-a716-446655440000",
+#   "statusClass": "2xx",
+#   "routeGroup": "/api/v1/uploads",
+#   "responseTime": 145
+# }
 ```
 
-### System Resource Alerts
-```javascript
-// Disk space alert
-if (metrics.diskSpace.utilization > 85) {  // 85% threshold
-  alert({
-    type: 'DISK_SPACE_LOW',
-    severity: 'high',
-    message: `Disk space utilization is ${metrics.diskSpace.utilization}% > 85% threshold`,
-    metadata: {
-      utilization: metrics.diskSpace.utilization,
-      threshold: 85
-    }
-  });
-}
+**Dashboard Access**
+1. Go to: **Cloudflare Dashboard** → **Workers & Pages** → **date-management-api-prod**
+2. Click **Observability** → **Logs**
+3. Filter by:
+   - Status code (4xx, 5xx)
+   - Time range (last 3 days—Free tier limit)
+   - Correlation ID (trace full request flow)
+
+### 2.3 Analytics Engine (Basic Metrics)
+
+**Available on Free Tier:**
+- Total request count
+- Error count (status 500+)
+- Basic latency histogram
+
+**Query via Investigate Tab:**
+1. Go to: **Workers Logs** → **Investigate**
+2. Example query:
+   ```sql
+   SELECT 
+     blob1 AS routeGroup,
+     blob2 AS statusClass,
+     double1 AS responseTime,
+     COUNT(*) as requests
+   FROM analytics_events
+   WHERE timestamp > NOW() - INTERVAL '1 hour'
+   GROUP BY routeGroup, statusClass
+   ```
+
+**⚠️ Free Tier Limitations:**
+- No real-time dashboards (use Workers Logs instead)
+- No saved queries (Enterprise feature)
+- No alerting (use Sentry instead)
+
+---
+
+## 3. Key Metrics Reference
+
+### 3.1 Infrastructure Metrics
+
+| Metric | Source | Target/Threshold | Alert |
+|--------|--------|------------------|-------|
+| Request Latency (p95) | Sentry Performance | <500ms | Weekly review |
+| Error Rate | Sentry Issues | <1% | Email on any error |
+| Database Query Duration | Sentry Performance | <200ms | Email alert configured |
+| Worker CPU Time | Cloudflare Dashboard | <10ms | Manual check monthly |
+| Hyperdrive Connections | Backend logs | <50 concurrent | Manual check |
+
+### 3.2 Business Metrics
+
+| Metric | Source | Target | Monitoring |
+|--------|--------|--------|------------|
+| CSV Upload Success Rate | Frontend logs + Sentry | >95% | Weekly Sentry Discover query |
+| Upload Retry Rate | Frontend metrics | <10% | Check Sentry breadcrumbs |
+| CSV Processing Time | Backend logs | <2s per 1000 rows | Check correlation ID in logs |
+| Storage Quota Violations | Backend logs (quota warnings) | 0/day | Search logs for "quota exceeded" |
+
+---
+
+## 4. Incident Response Playbook
+
+### 4.1 High Error Rate
+
+**Symptom:** Multiple error emails from Sentry within 5 minutes
+
+**Diagnosis:**
+1. Check Sentry Issues for common error pattern
+2. Review [deployment history](deployment.md#rollback-procedure) (recent deploy?)
+3. Check Cloudflare Workers status: [cloudflarestatus.com](https://www.cloudflarestatus.com)
+4. Tail Workers logs for correlation IDs: `npx wrangler tail --env production`
+
+**Mitigation:**
+- If deployment-related: Rollback via `git revert` + `npm run deploy:prod`
+- If Cloudflare incident: Wait for resolution (check status page)
+- If database-related: Check Neon console for connection issues
+
+### 4.2 Slow Database Queries
+
+**Symptom:** Sentry alert "DB query >200ms"
+
+**Diagnosis:**
+1. Open Sentry transaction trace
+2. Identify slow query (e.g., `SELECT * FROM uploads WHERE userId = ?`)
+3. Check Prisma query in backend code
+4. Review database indexes: `npx prisma studio` → Inspect table
+
+**Mitigation:**
+- Add database index if missing (see [database-patterns.md](database-patterns.md#indexing-strategy))
+- Review for N+1 queries (multiple queries in loop—should be batch query)
+- Consider Prisma `include` optimization (reduce joins)
+
+### 4.3 Upload Failures
+
+**Symptom:** User reports CSV upload failure + Frontend shows retry exhausted
+
+**Diagnosis:**
+1. Get upload key from user
+2. Search backend logs: `grep <uploadKey> backend/logs/app.log`
+3. Find correlation ID in logs
+4. Search Workers logs: `npx wrangler tail --env production --search <correlationId>`
+5. Check Sentry breadcrumbs for error category (initiate_failed, processing_failed, upload_failed)
+
+**Mitigation:**
+- `initiate_failed`: Check R2 bucket permissions, verify presigned URL generation
+- `processing_failed`: Check CSV format, review parser logs for row errors
+- `upload_failed`: Check R2 connectivity, verify bucket exists
+
+---
+
+## 5. Log Correlation Guide
+
+Our logs use **correlation IDs** to trace requests across distributed systems:
+
+```
+User clicks "Upload CSV"
+  ↓
+Frontend: Logs upload attempt with uploadKey=abc123
+  ↓
+Workers: Generates correlationId=550e8400-... (attached to request)
+  ↓
+Backend: Logs CSV processing with uploadKey=abc123 + correlationId=550e8400-...
+  ↓
+Sentry: Captures transaction with correlationId tag
 ```
 
-## Performance Optimization Indicators
+**How to trace an issue:**
+1. User reports problem with timestamp
+2. Search Sentry for timestamp → Find transaction with correlationId
+3. Search Workers logs: `npx wrangler tail --env production --search 550e8400`
+4. Search backend logs: `grep 550e8400 backend/logs/app.log`
+5. Reconstruct full request flow from logs
 
-### When to Implement Optimizations
-- Average response times consistently > 200ms over 1 hour
-- More than 50 slow queries per hour
-- Database connection pool utilization > 80% consistently
-- Database size > 75MB and growing rapidly
-- CPU or memory consistently > 80% utilization
+---
 
-### Optimization Triggers
-- Table row count > 75,000
-- Database size > 75MB
-- More than 1,000 API requests per hour
-- Slow query rate > 5 per hour
+## 6. Maintenance Tasks
 
-## Monitoring Dashboard Configuration
+### Daily
+- ✅ Check Sentry inbox for new errors (auto-emailed)
 
-### Essential Dashboard Metrics
-1. **Application Health**: Overall health status of all services
-2. **Response Times**: 95th percentile response times
-3. **Error Rates**: Percentage of requests resulting in errors
-4. **Database Health**: Connection pool, size, and performance metrics
-5. **System Resources**: CPU, memory, and disk utilization
-6. **Active Alerts**: Current unresolved alerts by severity
+### Weekly
+- ✅ Review Sentry Performance dashboard (p95 latency trends)
+- ✅ Check CSV upload success rate in Sentry Discover
+- ✅ Review Workers Logs for quota warnings: `npx wrangler tail --search "quota"`
 
-### Recommended Retention
-- **Real-time metrics**: 1 hour
-- **Hourly averages**: 7 days
-- **Daily averages**: 30 days
-- **Weekly averages**: 1 year
+### Monthly
+- ✅ Review Cloudflare Workers analytics (request volume trends)
+- ✅ Check Sentry event usage (stay under 5,000/month limit)
+- ✅ Validate alert email delivery (test with `throw new Error()` in dev)
 
-## Alert Acknowledgment and Resolution Process
+---
 
-### Alert Acknowledgment
-1. Responder must acknowledge alert within defined response time
-2. Create incident ticket if applicable
-3. Document initial assessment and planned actions
+## 7. Free Tier Cost Monitoring
 
-### Resolution Process
-1. Fix the underlying issue
-2. Verify the fix resolves the alert conditions
-3. Update monitoring thresholds if needed
-4. Document the incident and resolution
-5. Close the alert and incident ticket
+**Sentry (5,000 events/month)**
+- Current usage: Check Sentry → Settings → Usage & Billing
+- If nearing limit: Filter noisy errors (e.g., ignore 404s)
 
-## Escalation Matrix
+**Cloudflare Workers (100,000 requests/day)**
+- Current usage: Cloudflare Dashboard → Workers → date-management-api-prod → Metrics
+- If nearing limit: Implement rate limiting (already configured in wrangler.toml)
 
-| Alert Type | Level 1 | Level 2 | Level 3 |
-|------------|---------|---------|---------|
-| Application Unavailable | On-call engineer | Technical lead | Infrastructure team |
-| Database Issues | Backend team | Database admin | Infrastructure team |
-| Performance Degradation | Backend team | Technical lead | Performance team |
-| Security Incidents | Security team | Technical lead | Management |
-| Infrastructure Issues | Infrastructure team | Cloud admin | Vendor support |
+**Neon Database (3GB storage, 191.9 compute hours/month)**
+- Current usage: [Neon Console](https://console.neon.tech) → Project → Usage
+- If nearing limit: Review data retention policy, consider archiving old uploads
 
-## Contact Information
-- **On-Call Rotation**: [Contact Information]
-- **Technical Lead**: [Contact Information]
-- **Database Administrator**: [Contact Information]
-- **Infrastructure Team**: [Contact Information]
-- **Vendor Support**: [Contact Information if applicable]
+---
+
+## 8. Scaling Beyond Free Tier
+
+When you outgrow free tiers, upgrade:
+
+1. **Sentry ($26/month)**: 50,000 events, performance monitoring, custom dashboards
+2. **Cloudflare Workers ($5/month + $0.50/million requests)**: Advanced analytics, custom alerts
+3. **Neon ($19/month)**: Autoscaling, point-in-time restore, unlimited branches
+
+**Upgrade thresholds:**
+- Sentry: >4,000 events/month sustained
+- Cloudflare: >80,000 requests/day sustained
+- Neon: >2.5GB data or >150 compute hours/month
+
+---
+
+## 9. Troubleshooting
+
+### "Sentry alert not received"
+- Check spam folder
+- Verify email in Sentry → Settings → Account → Email
+- Test alert manually: throw error in dev environment
+
+### "Workers logs not showing up"
+- Verify `observability.logs.enabled = true` in wrangler.toml
+- Check 3-day retention window (Free tier)
+- Redeploy: `npx wrangler deploy --env production`
+
+### "Analytics Engine dataset empty"
+- Confirm binding enabled: `wrangler tail` should show "ANALYTICS dataset connected"
+- Check code emits metrics: `env.ANALYTICS.writeDataPoint()`
+- Wait 5-10 minutes for data ingestion
+
+---
+
+## 10. Related Documentation
+
+- [database-patterns.md](database-patterns.md) - Query optimization
+- [deployment.md](deployment.md) - Deployment and rollback procedures
+- [storage-patterns.md](storage-patterns.md) - R2 troubleshooting
+- [observability.md](observability.md) - Metrics collection patterns
+
+---
+
+**Need help?** Check Sentry trace → Find correlation ID → Search Workers logs → Review backend logs → Open GitHub issue with full context.
