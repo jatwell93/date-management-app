@@ -2,17 +2,13 @@ import express from 'express';
 import multer from 'multer';
 import { authenticateToken } from '../middleware/auth.middleware';
 import { UploadController } from '../controllers/upload.controller';
-import { UploadService } from '../services/upload.service';
-import { CSVParserService } from '../services/csv-parser.service';
-import { getDefaultStorageProvider } from '../storage/storage-factory';
+import { ServiceProvider } from '../services/service-provider';
 
 const router = express.Router();
 
-// Initialize dependencies
-// Note: In a real DI system these would be injected
-const csvParserService = new CSVParserService(); // Uses default Prisma client
-const uploadService = new UploadService(getDefaultStorageProvider(), csvParserService);
-const uploadController = new UploadController(uploadService);
+// Initialize dependencies via ServiceProvider
+const serviceProvider = new ServiceProvider();
+const uploadController = new UploadController(serviceProvider.getUploadService());
 
 // Configure Multer for direct uploads (MemoryStorage for small files)
 const upload = multer({

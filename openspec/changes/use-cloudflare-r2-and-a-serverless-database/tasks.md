@@ -217,11 +217,11 @@
   - [x] **Backend**: `npm install @sentry/node`, init in `backend/src/index.ts` and `workers/src/index.ts`
   - [x] **Frontend**: `npm install @sentry/react`, init in `frontend/src/index.tsx`, configure source maps
   - [x] **Workers Config**: Add `SENTRY_DSN` to Workers Secrets, configure release tracking with git SHA
-  - [ ] **Alerting**: Configure Sentry Performance alerts for database queries (>200ms) 
+  - [x] **Alerting**: Configure Sentry Performance alerts for database queries (>200ms) 
   - **Docs**: https://docs.sentry.io/platforms/javascript/guides/express/
-- [ ] 12.5 Create dashboard for key metrics (response times, error rates, upload counts)
-- [ ] 12.6 Configure alerts for error rate >1%
-- [ ] 12.7 Configure alerts for 95th percentile response time >500ms
+- [x] 12.5 Create dashboard for key metrics (response times, error rates, upload counts)
+- [x] 12.6 Configure alerts for error rate >1%
+- [x] 12.7 Configure alerts for 95th percentile response time >500ms
 - [x] 12.8 Set up Neon usage alerts at 80% of plan limits **Note** this is not possible without a 3rd Party. We will set up PgHero as a free option in Phase 17
 - [ ] 12.9 Add structured logging to Workers (JSON format)
 ### Refer to tech-debt.md for steps 12.10 - 12. 14

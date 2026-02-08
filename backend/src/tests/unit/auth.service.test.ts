@@ -1,13 +1,7 @@
-import { AuthService } from '../../services/auth.service';
-import { getDb } from '../../database';
+import { PrismaClient } from '@prisma/client';
 import jwt from 'jsonwebtoken';
 import bcrypt from 'bcrypt';
-
-// Mock the database module
-jest.mock('../../database', () => ({
-  getDb: jest.fn(),
-  releaseDb: jest.fn(),
-}));
+import { AuthService } from '../../services/auth.service';
 
 // Mock the jsonwebtoken module
 jest.mock('jsonwebtoken', () => ({
@@ -22,58 +16,49 @@ jest.mock('bcrypt', () => ({
 
 describe('AuthService', () => {
   let authService: AuthService;
-  interface MockDatabase {
-    get: jest.Mock;
-    prepare: jest.Mock;
-    run?: jest.Mock;
-    all?: jest.Mock;
-  }
-  let mockDb: MockDatabase;
+  let prisma: PrismaClient;
 
   beforeEach(() => {
-    authService = new AuthService();
-    const mockStatement = {
-      all: jest.fn(),
-    };
-    mockDb = {
-      prepare: jest.fn(() => mockStatement),
-      get: jest.fn(),
-    };
-    (getDb as jest.Mock).mockReturnValue(mockDb);
-    (jwt.sign as jest.Mock).mockReturnValue('mock_jwt_token');
-    (bcrypt.hash as jest.Mock).mockResolvedValue('hashed_pin');
-    (bcrypt.compare as jest.Mock).mockResolvedValue(true);
+    prisma = {
+      user: {
+        findMany: jest.fn(),
+      },
+    } as unknown as PrismaClient;
 
-    // Mock the return value for the user query
-    mockStatement.all.mockReturnValue([{ id: 1, pin: 'hashed_pin', role: 'Manager' }]);
+    authService = new AuthService(prisma);
+    (jwt.sign as jest.Mock).mockReturnValue('mock_jwt_token');
+    (bcrypt.compare as jest.Mock).mockResolvedValue(true);
   });
 
   afterEach(() => {
     jest.clearAllMocks();
   });
 
-  it('should return a JWT token on successful login', async () => {
+  it('returns a JWT token on successful login', async () => {
+    (prisma.user.findMany as jest.Mock).mockResolvedValue([
+      { id: 1, pin: 'hashed_pin', role: 'Manager' },
+    ]);
+
     const token = await authService.login('5624');
 
     expect(token).toBe('mock_jwt_token');
-    expect(getDb).toHaveBeenCalledTimes(1);
-    expect(mockDb.prepare).toHaveBeenCalledWith('SELECT * FROM users');
+    expect(prisma.user.findMany).toHaveBeenCalledWith({
+      select: { id: true, pin: true, role: true },
+    });
     expect(jwt.sign).toHaveBeenCalledWith({ userId: 1, role: 'Manager' }, expect.any(String), {
       expiresIn: '1h',
     });
   });
 
-  it('should return null for invalid PIN', async () => {
-    const mockStatement = {
-      all: jest.fn().mockReturnValue([]),
-    };
-    (mockDb.prepare as jest.Mock).mockReturnValue(mockStatement);
+  it('returns null for invalid PIN', async () => {
+    (prisma.user.findMany as jest.Mock).mockResolvedValue([
+      { id: 1, pin: 'hashed_pin', role: 'Manager' },
+    ]);
+    (bcrypt.compare as jest.Mock).mockResolvedValue(false);
 
     const token = await authService.login('wrong_pin');
 
     expect(token).toBeNull();
-    expect(getDb).toHaveBeenCalledTimes(1);
-    expect(mockDb.prepare).toHaveBeenCalledWith('SELECT * FROM users');
     expect(jwt.sign).not.toHaveBeenCalled();
   });
 });

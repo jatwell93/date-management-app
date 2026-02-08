@@ -289,10 +289,13 @@ export default Sentry.withSentry(
       } catch (error) {
         // Global error handler
         const responseTime = Date.now() - startTime;
+        const requestId = request.headers.get('x-request-id') || request.headers.get('cf-ray');
         
         logger.error('Unhandled error in fetch handler', {
           error: error instanceof Error ? error.message : 'Unknown error',
           stack: error instanceof Error ? error.stack : undefined,
+          requestId,
+          durationMs: responseTime,
         });
 
         // Create error metrics for error responses
@@ -303,6 +306,7 @@ export default Sentry.withSentry(
           status: 500,
           responseTime,
           errorMessage: error instanceof Error ? error.message : 'Unknown error',
+          correlationId: requestId || undefined,
         };
         
         writeMetrics(env, errorMetrics);

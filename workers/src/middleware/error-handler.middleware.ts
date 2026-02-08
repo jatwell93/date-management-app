@@ -71,6 +71,9 @@ export function createErrorHandler(env: Env) {
   const logger = new WorkersLogger(env);
 
   return (error: Error, req: ExpressRequest, res: ExpressResponse) => {
+    const metricsContext = (req as any).metricsContext;
+    const durationMs = metricsContext?.startTime ? Date.now() - metricsContext.startTime : undefined;
+
     // Log error
     logger.error('Request error', {
       error: error.message,
@@ -79,6 +82,8 @@ export function createErrorHandler(env: Env) {
       path: req.path,
       ip: req.ip,
       correlationId: req.correlationId,
+      userId: req.user?.id ?? req.userId,
+      durationMs,
     });
 
     // Send error response (don't leak stack traces in production)
@@ -139,6 +144,7 @@ export function createRequestLogger(env: Env) {
       ip: req.ip,
       userAgent: req.get('User-Agent'),
       correlationId: req.correlationId,
+      userId: req.user?.id ?? req.userId,
       query: sanitizeForLogging(req.query),
       headers: sanitizeForLogging(req.headers),
       body: sanitizeForLogging(req.body),
@@ -154,6 +160,7 @@ export function createRequestLogger(env: Env) {
         duration,
         statusCode: res['statusCode'] || 200,
         correlationId: req.correlationId,
+        userId: req.user?.id ?? req.userId,
       });
       return originalJson(data);
     };

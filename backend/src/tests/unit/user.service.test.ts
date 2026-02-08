@@ -1,176 +1,211 @@
-import {
-  createUser,
-  getUsers,
-  getUserById,
-  updateUser,
-  deleteUser,
-  getUserByPin,
-} from '../../services/user.service';
-import { getDb } from '../../database';
+import { PrismaClient } from '@prisma/client';
 import { AuthService } from '../../services/auth.service';
+import { UserService } from '../../services/user.service';
 
-// Mock the database connection
-jest.mock('../../database', () => ({
-  getDb: jest.fn(),
-}));
+describe('UserService', () => {
+  let prisma: PrismaClient;
+  let authService: AuthService;
+  let service: UserService;
 
-describe('User Service', () => {
-  const mockStatement = {
-    run: jest.fn(),
-    all: jest.fn(),
-    get: jest.fn(),
-  };
-  const mockDb = {
-    prepare: jest.fn(() => mockStatement),
-  };
+  const createdAt = new Date('2023-01-01T00:00:00.000Z');
+  const updatedAt = new Date('2023-01-02T00:00:00.000Z');
 
   beforeEach(() => {
-    (getDb as jest.Mock).mockResolvedValue(mockDb);
+    prisma = {
+      user: {
+        create: jest.fn(),
+        findMany: jest.fn(),
+        findUnique: jest.fn(),
+        update: jest.fn(),
+        delete: jest.fn(),
+      },
+    } as unknown as PrismaClient;
+
+    authService = {
+      validatePin: jest.fn(),
+      hashPin: jest.fn(),
+      verifyPin: jest.fn(),
+    } as unknown as AuthService;
+
+    service = new UserService(prisma, authService);
     jest.clearAllMocks();
   });
 
   describe('createUser', () => {
-    it('should create a user successfully', async () => {
-      const mockUser = { pin: '123456', role: 'Manager' as const };
-      const mockResult = { lastInsertRowid: 1 };
-      mockStatement.run.mockReturnValue(mockResult);
-      const validatePinSpy = jest
-        .spyOn(AuthService.prototype, 'validatePin')
-        .mockReturnValue({ isValid: true });
-      const hashPinSpy = jest
-        .spyOn(AuthService.prototype, 'hashPin')
-        .mockResolvedValue('hashed_pin');
+    it('creates a user with a hashed PIN', async () => {
+      (authService.validatePin as jest.Mock).mockReturnValue({ isValid: true });
+      (authService.hashPin as jest.Mock).mockResolvedValue('hashed_pin');
+      (prisma.user.create as jest.Mock).mockResolvedValue({
+        id: 1,
+        pin: 'hashed_pin',
+        role: 'Manager',
+        createdAt,
+        updatedAt,
+      });
 
-      const result = await createUser(mockUser);
+      const result = await service.createUser({ pin: '123456', role: 'Manager' });
 
-      expect(validatePinSpy).toHaveBeenCalledWith(mockUser.pin);
-      expect(hashPinSpy).toHaveBeenCalledWith(mockUser.pin);
-      expect(mockDb.prepare).toHaveBeenCalledWith('INSERT INTO users (pin, role) VALUES (?, ?)');
-      expect(mockStatement.run).toHaveBeenCalledWith('hashed_pin', mockUser.role);
-      expect(result).toEqual({ id: 1, ...mockUser, pin: 'hashed_pin' });
+      expect(authService.validatePin).toHaveBeenCalledWith('123456');
+      expect(authService.hashPin).toHaveBeenCalledWith('123456');
+      expect(prisma.user.create).toHaveBeenCalledWith({
+        data: {
+          pin: 'hashed_pin',
+          role: 'Manager',
+        },
+      });
+      expect(result).toEqual({
+        id: 1,
+        pin: 'hashed_pin',
+        role: 'Manager',
+        created_at: createdAt.toISOString(),
+        updated_at: updatedAt.toISOString(),
+      });
     });
   });
 
   describe('getUsers', () => {
-    it('should get all users successfully', async () => {
-      const mockUsers = [
+    it('returns all users', async () => {
+      (prisma.user.findMany as jest.Mock).mockResolvedValue([
+        { id: 1, pin: 'hashed_pin', role: 'Manager', createdAt, updatedAt },
+      ]);
+
+      const result = await service.getUsers();
+
+      expect(prisma.user.findMany).toHaveBeenCalledWith();
+      expect(result).toEqual([
         {
           id: 1,
           pin: 'hashed_pin',
-          role: 'Manager' as const,
-          created_at: '2023-01-01',
-          updated_at: '2023-01-01',
+          role: 'Manager',
+          created_at: createdAt.toISOString(),
+          updated_at: updatedAt.toISOString(),
         },
-      ];
-      mockStatement.all.mockReturnValue(mockUsers);
-
-      const result = await getUsers();
-
-      expect(mockDb.prepare).toHaveBeenCalledWith('SELECT * FROM users');
-      expect(mockStatement.all).toHaveBeenCalledWith();
-      expect(result).toEqual(mockUsers);
+      ]);
     });
   });
 
   describe('getUserById', () => {
-    it('should get a user by ID successfully', async () => {
-      const mockUser = {
+    it('returns a user when found', async () => {
+      (prisma.user.findUnique as jest.Mock).mockResolvedValue({
         id: 1,
         pin: 'hashed_pin',
-        role: 'Manager' as const,
-        created_at: '2023-01-01',
-        updated_at: '2023-01-01',
-      };
-      mockStatement.get.mockReturnValue(mockUser);
+        role: 'Manager',
+        createdAt,
+        updatedAt,
+      });
 
-      const result = await getUserById(1);
+      const result = await service.getUserById(1);
 
-      expect(mockDb.prepare).toHaveBeenCalledWith('SELECT * FROM users WHERE id = ?');
-      expect(mockStatement.get).toHaveBeenCalledWith(1);
-      expect(result).toEqual(mockUser);
+      expect(prisma.user.findUnique).toHaveBeenCalledWith({ where: { id: 1 } });
+      expect(result?.id).toBe(1);
     });
 
-    it('should return undefined when user is not found', async () => {
-      mockStatement.get.mockReturnValue(undefined);
+    it('returns undefined when user is not found', async () => {
+      (prisma.user.findUnique as jest.Mock).mockResolvedValue(null);
 
-      const result = await getUserById(999);
+      const result = await service.getUserById(999);
 
-      expect(mockDb.prepare).toHaveBeenCalledWith('SELECT * FROM users WHERE id = ?');
-      expect(mockStatement.get).toHaveBeenCalledWith(999);
       expect(result).toBeUndefined();
     });
   });
 
   describe('getUserByPin', () => {
-    it('should get a user by PIN successfully', async () => {
-      const mockUsers = [
-        {
-          id: 1,
-          pin: 'hashed_pin',
-          role: 'Manager' as const,
-          created_at: '2023-01-01',
-          updated_at: '2023-01-01',
-        },
-      ];
-      mockStatement.all.mockReturnValue(mockUsers);
-      const verifyPinSpy = jest.spyOn(AuthService.prototype, 'verifyPin').mockResolvedValue(true);
+    it('returns user when PIN matches', async () => {
+      (prisma.user.findMany as jest.Mock).mockResolvedValue([
+        { id: 1, pin: 'hashed_pin', role: 'Manager', createdAt, updatedAt },
+      ]);
+      (authService.verifyPin as jest.Mock).mockResolvedValue(true);
 
-      const result = await getUserByPin('123456');
+      const result = await service.getUserByPin('123456');
 
-      expect(mockDb.prepare).toHaveBeenCalledWith('SELECT * FROM users');
-      expect(mockStatement.all).toHaveBeenCalledWith();
-      expect(verifyPinSpy).toHaveBeenCalledWith('123456', 'hashed_pin');
-      expect(result).toEqual(mockUsers[0]);
+      expect(authService.verifyPin).toHaveBeenCalledWith('123456', 'hashed_pin');
+      expect(result?.id).toBe(1);
     });
 
-    it('should return undefined when user is not found', async () => {
-      mockStatement.all.mockReturnValue([]);
+    it('returns undefined when no PIN matches', async () => {
+      (prisma.user.findMany as jest.Mock).mockResolvedValue([
+        { id: 1, pin: 'hashed_pin', role: 'Manager', createdAt, updatedAt },
+      ]);
+      (authService.verifyPin as jest.Mock).mockResolvedValue(false);
 
-      const result = await getUserByPin('9999');
+      const result = await service.getUserByPin('9999');
 
-      expect(mockDb.prepare).toHaveBeenCalledWith('SELECT * FROM users');
-      expect(mockStatement.all).toHaveBeenCalledWith();
       expect(result).toBeUndefined();
     });
   });
 
   describe('updateUser', () => {
-    it('should update a user successfully', async () => {
-      mockStatement.run.mockReturnValue({ changes: 1 });
+    it('updates a user and returns true', async () => {
+      (prisma.user.update as jest.Mock).mockResolvedValue({
+        id: 1,
+        pin: 'hashed_pin',
+        role: 'Team Member',
+        createdAt,
+        updatedAt,
+      });
 
-      const result = await updateUser(1, { role: 'Team Member' });
+      const result = await service.updateUser(1, { role: 'Team Member' });
 
-      expect(mockDb.prepare).toHaveBeenCalledWith(
-        'UPDATE users SET role = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ?',
-      );
-      expect(mockStatement.run).toHaveBeenCalledWith('Team Member', 1);
+      expect(prisma.user.update).toHaveBeenCalledWith({
+        where: { id: 1 },
+        data: { role: 'Team Member' },
+      });
       expect(result).toBe(true);
     });
 
-    it('should return false when user is not found', async () => {
-      mockStatement.run.mockReturnValue({ changes: 0 });
+    it('hashes PIN updates', async () => {
+      (authService.validatePin as jest.Mock).mockReturnValue({ isValid: true });
+      (authService.hashPin as jest.Mock).mockResolvedValue('hashed_pin');
+      (prisma.user.update as jest.Mock).mockResolvedValue({
+        id: 1,
+        pin: 'hashed_pin',
+        role: 'Manager',
+        createdAt,
+        updatedAt,
+      });
 
-      const result = await updateUser(999, { role: 'Team Member' });
+      const result = await service.updateUser(1, { pin: '123456' });
+
+      expect(authService.validatePin).toHaveBeenCalledWith('123456');
+      expect(authService.hashPin).toHaveBeenCalledWith('123456');
+      expect(prisma.user.update).toHaveBeenCalledWith({
+        where: { id: 1 },
+        data: { pin: 'hashed_pin' },
+      });
+      expect(result).toBe(true);
+    });
+
+    it('returns false when user is not found', async () => {
+      const notFoundError = { code: 'P2025' };
+      (prisma.user.update as jest.Mock).mockRejectedValue(notFoundError);
+
+      const result = await service.updateUser(999, { role: 'Team Member' });
 
       expect(result).toBe(false);
     });
   });
 
   describe('deleteUser', () => {
-    it('should delete a user successfully', async () => {
-      mockStatement.run.mockReturnValue({ changes: 1 });
+    it('deletes a user and returns true', async () => {
+      (prisma.user.delete as jest.Mock).mockResolvedValue({
+        id: 1,
+        pin: 'hashed_pin',
+        role: 'Manager',
+        createdAt,
+        updatedAt,
+      });
 
-      const result = await deleteUser(1);
+      const result = await service.deleteUser(1);
 
-      expect(mockDb.prepare).toHaveBeenCalledWith('DELETE FROM users WHERE id = ?');
-      expect(mockStatement.run).toHaveBeenCalledWith(1);
+      expect(prisma.user.delete).toHaveBeenCalledWith({ where: { id: 1 } });
       expect(result).toBe(true);
     });
 
-    it('should return false when user is not found', async () => {
-      mockStatement.run.mockReturnValue({ changes: 0 });
+    it('returns false when user is not found', async () => {
+      const notFoundError = { code: 'P2025' };
+      (prisma.user.delete as jest.Mock).mockRejectedValue(notFoundError);
 
-      const result = await deleteUser(999);
+      const result = await service.deleteUser(999);
 
       expect(result).toBe(false);
     });

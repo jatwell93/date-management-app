@@ -1,10 +1,16 @@
 import jwt from 'jsonwebtoken';
 import bcrypt from 'bcrypt';
-import { User } from '../models/user.model';
-import { getDb, releaseDb } from '../database';
+import { PrismaClient } from '@prisma/client';
+import { getDefaultDatabaseClient } from '../database/database-factory';
 import { Logger } from '../utils/logger';
 
 export class AuthService {
+  private prisma: PrismaClient;
+
+  constructor(prismaClient?: PrismaClient) {
+    this.prisma = prismaClient ?? getDefaultDatabaseClient();
+  }
+
   // Validate PIN strength: 4-6 digits, not too predictable
   validatePin(pin: string): { isValid: boolean; message?: string } {
     // Check if PIN is only digits and within length limits
@@ -107,17 +113,17 @@ export class AuthService {
   }
 
   async login(pin: string): Promise<string | null> {
-    const db = getDb();
-
     try {
       // Get all users and iterate through them to find a match
-      const users = db.prepare('SELECT * FROM users').all();
+      const users = await this.prisma.user.findMany({
+        select: { id: true, pin: true, role: true },
+      });
       Logger.debug('Auth service: Attempting to authenticate user', {
         userCount: users.length,
       });
 
       // Look for a user whose hashed pin matches the PIN that was provided
-      for (const user of users as User[]) {
+      for (const user of users) {
         Logger.debug('Auth service: Checking user for authentication', { userId: user.id });
 
         const isValidPin = await bcrypt.compare(pin, user.pin);
@@ -146,8 +152,6 @@ export class AuthService {
         stack: error instanceof Error ? error.stack : undefined,
       });
       return null;
-    } finally {
-      releaseDb(db);
     }
   }
 }

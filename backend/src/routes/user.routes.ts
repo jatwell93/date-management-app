@@ -1,11 +1,5 @@
 import { Router, Request, Response } from 'express';
-import {
-  createUser,
-  getUsers,
-  getUserById,
-  updateUser,
-  deleteUser,
-} from '../services/user.service';
+import { UserService } from '../services/user.service';
 import { User } from '../models/user.model';
 import { authenticateToken, requireManager } from '../middleware/auth.middleware';
 import { validateUserInput, validateDataIntegrity } from '../middleware/validation.middleware';
@@ -13,11 +7,12 @@ import { validateBusinessRules } from '../middleware/data-integrity.middleware';
 import { escapeHtml } from '../utils/normalize.function';
 
 const router = Router();
+const userService = new UserService();
 
 // GET /users - Get all users (Manager only)
 router.get('/', authenticateToken, requireManager, async (req: Request, res: Response) => {
   try {
-    const users = await getUsers();
+    const users = await userService.getUsers();
     res.json(escapeHtml(users));
   } catch (_error) {
     // console.error("Error getting users:", _error);
@@ -32,7 +27,7 @@ router.get('/:id', authenticateToken, requireManager, async (req: Request, res: 
     if (Number.isNaN(id)) {
       return res.status(400).json({ message: 'Invalid user id' });
     }
-    const user = await getUserById(id);
+    const user = await userService.getUserById(id);
 
     if (!user) {
       return res.status(404).json({ message: 'User not found' });
@@ -67,7 +62,7 @@ router.post(
         role,
       };
 
-      const createdUser = await createUser(newUser);
+      const createdUser = await userService.createUser(newUser);
       res.status(201).json(escapeHtml(createdUser));
     } catch (_error) {
       // console.error("Error creating user:", _error);
@@ -96,13 +91,13 @@ router.put(
       if (pin !== undefined) user.pin = pin;
       if (role !== undefined) user.role = role;
 
-      const updated = await updateUser(id, user);
+      const updated = await userService.updateUser(id, user);
 
       if (!updated) {
         return res.status(404).json({ message: 'User not found' });
       }
 
-      const updatedUser = await getUserById(id);
+      const updatedUser = await userService.getUserById(id);
       res.json(escapeHtml(updatedUser));
     } catch (_error) {
       // console.error("Error updating user:", _error);
@@ -118,7 +113,7 @@ router.delete('/:id', authenticateToken, requireManager, async (req: Request, re
     if (Number.isNaN(id)) {
       return res.status(400).json({ message: 'Invalid user id' });
     }
-    const deleted = await deleteUser(id);
+    const deleted = await userService.deleteUser(id);
 
     if (!deleted) {
       return res.status(404).json({ message: 'User not found' });

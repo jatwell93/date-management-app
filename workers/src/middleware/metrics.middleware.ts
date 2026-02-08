@@ -46,7 +46,7 @@ declare global {
  * Should be called at the beginning of the middleware chain
  */
 export function createMetricsInitializer() {
-  return async (req: ExpressRequest, res: ExpressResponse): Promise<void> => {
+  return async (req: ExpressRequest, res: ExpressResponse, next: () => void): Promise<void> => {
     const correlationId =
       req.get('x-request-id') ||
       req.get('cf-ray') ||
@@ -67,6 +67,8 @@ export function createMetricsInitializer() {
     };
 
     request.correlationId = correlationId;
+    res.setHeader('X-Request-ID', correlationId);
+    next();
   };
 }
 

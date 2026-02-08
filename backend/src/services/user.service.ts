@@ -1,88 +1,116 @@
-import { getDb } from '../database';
+import { PrismaClient } from '@prisma/client';
+import { getDefaultDatabaseClient } from '../database/database-factory';
+import { User } from '../models/user.model';
 import { AuthService } from './auth.service';
 
-export interface User {
-  id?: number;
-  pin: string;
-  role: 'Manager' | 'Team Member';
-  created_at?: string;
-  updated_at?: string;
-}
+export class UserService {
+  private prisma: PrismaClient;
+  private authService: AuthService;
 
-const authService = new AuthService();
-
-export async function createUser(user: User): Promise<User> {
-  // Validate PIN strength before creating user
-  const pinValidation = authService.validatePin(user.pin);
-  if (!pinValidation.isValid) {
-    throw new Error(pinValidation.message || 'Invalid PIN format');
+  constructor(prismaClient?: PrismaClient, authService?: AuthService) {
+    this.prisma = prismaClient ?? getDefaultDatabaseClient();
+    this.authService = authService ?? new AuthService(this.prisma);
   }
 
-  // Hash the PIN before storing
-  const hashedPin = await authService.hashPin(user.pin);
-
-  const db = await getDb();
-  const stmt = db.prepare('INSERT INTO users (pin, role) VALUES (?, ?)');
-  const result = stmt.run(hashedPin, user.role);
-  return { id: result.lastInsertRowid as number, ...user, pin: hashedPin }; // Return hashed pin in the object
-}
-
-export async function getUsers(): Promise<User[]> {
-  const db = await getDb();
-  const stmt = db.prepare('SELECT * FROM users');
-  return stmt.all() as User[];
-}
-
-export async function getUserById(id: number): Promise<User | undefined> {
-  const db = await getDb();
-  const stmt = db.prepare('SELECT * FROM users WHERE id = ?');
-  return stmt.get(id) as User | undefined;
-}
-
-export async function getUserByPin(pin: string): Promise<User | undefined> {
-  const db = await getDb();
-  // Get all users and compare PINs using bcrypt (since PINs are hashed)
-  const stmt = db.prepare('SELECT * FROM users');
-  const users = stmt.all() as User[];
-
-  for (const user of users) {
-    const isValid = await authService.verifyPin(pin, user.pin);
-    if (isValid) {
-      return user;
-    }
-  }
-
-  return undefined;
-}
-
-export async function updateUser(id: number, user: Partial<User>): Promise<boolean> {
-  const db = await getDb();
-
-  // If PIN is being updated, validate and hash it
-  if (user.pin) {
-    const pinValidation = authService.validatePin(user.pin);
+  async createUser(user: Omit<User, 'id' | 'created_at' | 'updated_at'>): Promise<User> {
+    const pinValidation = this.authService.validatePin(user.pin);
     if (!pinValidation.isValid) {
       throw new Error(pinValidation.message || 'Invalid PIN format');
     }
 
-    // Hash the new PIN before updating
-    user.pin = await authService.hashPin(user.pin);
+    const hashedPin = await this.authService.hashPin(user.pin);
+
+    const created = await this.prisma.user.create({
+      data: {
+        pin: hashedPin,
+        role: user.role,
+      },
+    });
+
+    return this.mapPrismaToModel(created);
   }
 
-  const fields = Object.keys(user)
-    .map((key) => `${key} = ?`)
-    .join(', ');
-  const values = Object.values(user);
-  const stmt = db.prepare(
-    `UPDATE users SET ${fields}, updated_at = CURRENT_TIMESTAMP WHERE id = ?`,
-  );
-  const result = stmt.run(...values, id);
-  return result.changes === 1;
-}
+  async getUsers(): Promise<User[]> {
+    const users = await this.prisma.user.findMany();
+    return users.map((user) => this.mapPrismaToModel(user));
+  }
 
-export async function deleteUser(id: number): Promise<boolean> {
-  const db = await getDb();
-  const stmt = db.prepare('DELETE FROM users WHERE id = ?');
-  const result = stmt.run(id);
-  return result.changes === 1;
+  async getUserById(id: number): Promise<User | undefined> {
+    const user = await this.prisma.user.findUnique({ where: { id } });
+    return user ? this.mapPrismaToModel(user) : undefined;
+  }
+
+  async getUserByPin(pin: string): Promise<User | undefined> {
+    const users = await this.prisma.user.findMany();
+
+    for (const user of users) {
+      const isValid = await this.authService.verifyPin(pin, user.pin);
+      if (isValid) {
+        return this.mapPrismaToModel(user);
+      }
+    }
+
+    return undefined;
+  }
+
+  async updateUser(
+    id: number,
+    user: Partial<Omit<User, 'id' | 'created_at' | 'updated_at'>>,
+  ): Promise<boolean> {
+    const data: { pin?: string; role?: User['role'] } = {};
+
+    if (user.pin) {
+      const pinValidation = this.authService.validatePin(user.pin);
+      if (!pinValidation.isValid) {
+        throw new Error(pinValidation.message || 'Invalid PIN format');
+      }
+
+      data.pin = await this.authService.hashPin(user.pin);
+    }
+
+    if (user.role !== undefined) {
+      data.role = user.role;
+    }
+
+    try {
+      await this.prisma.user.update({
+        where: { id },
+        data,
+      });
+      return true;
+    } catch (error: any) {
+      if (error?.code === 'P2025') {
+        return false;
+      }
+      throw error;
+    }
+  }
+
+  async deleteUser(id: number): Promise<boolean> {
+    try {
+      await this.prisma.user.delete({ where: { id } });
+      return true;
+    } catch (error: any) {
+      if (error?.code === 'P2025') {
+        return false;
+      }
+      throw error;
+    }
+  }
+
+  private mapPrismaToModel(user: {
+    id: number;
+    pin: string;
+    role: string;
+    createdAt: Date;
+    updatedAt: Date;
+  }): User {
+    return {
+      id: user.id,
+      pin: user.pin,
+      role: user.role as User['role'],
+      created_at: user.createdAt.toISOString(),
+      updated_at: user.updatedAt.toISOString(),
+    };
+  }
 }
