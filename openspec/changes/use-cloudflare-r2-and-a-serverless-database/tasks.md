@@ -223,13 +223,13 @@
 - [x] 12.6 Configure alerts for error rate >1%
 - [x] 12.7 Configure alerts for 95th percentile response time >500ms
 - [x] 12.8 Set up Neon usage alerts at 80% of plan limits **Note** this is not possible without a 3rd Party. We will set up PgHero as a free option in Phase 17
-- [ ] 12.9 Add structured logging to Workers (JSON format)
+- [x] 12.9 Add structured logging to Workers (JSON format)
 ### Refer to tech-debt.md for steps 12.10 - 12. 14
 - [x] 12.10 Document monitoring setup in `docs/monitoring.md`
 - [x] 12.11 Fix Logger any types → Record<string, unknown>
-- [ ] 12.12 Refactor UserService + AuthService to Prisma
-- [ ] 12.13 Create ServiceProvider DI container
-- [ ] 12.14 Update upload routes to use ServiceProvider
+- [x] 12.12 Refactor UserService + AuthService to Prisma
+- [x] 12.13 Create ServiceProvider DI container
+- [x] 12.14 Update upload routes to use ServiceProvider
   - Deliverable: UserService/AuthService fully refactored with >80% coverage
 
 ## 13. Security Hardening
@@ -265,7 +265,7 @@
 - [ ] 14.7 Add migration scripts to `package.json` (dev and prod)
 - [ ] 14.8 Verify migrations work in both SQLite and PostgreSQL
 ### Refer to tech-debt.md for steps 14.9 - 14.13
-- [ ] 14.9 Remove any from service layers (target <10 remaining)
+- [ ] 14.9 Remove `any` from service layers (target <10 remaining)
 - [ ] 14.10 Extract complexity from AnalyticsService
 - [ ] 14.11 Coverage thresholds enforcement in Jest
 - [ ] 14.12 Integration test suite expansion
