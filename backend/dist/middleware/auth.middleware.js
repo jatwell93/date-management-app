@@ -7,9 +7,16 @@ exports.requireManager = exports.generateToken = exports.authenticateToken = voi
 const jsonwebtoken_1 = __importDefault(require("jsonwebtoken"));
 const analytics_service_1 = require("../services/analytics.service");
 const authenticateToken = (req, res, next) => {
-    const authHeader = req.headers["authorization"];
-    const token = authHeader && authHeader.split(" ")[1];
-    if (token == null) {
+    // Test environment bypass
+    if (process.env.NODE_ENV === 'test' && process.env.TEST_AUTH_BYPASS === 'true') {
+        req.user = { id: 1, role: 'Manager' }; // Mock user
+        req.userId = 1;
+        req.userRole = 'Manager';
+        return next();
+    }
+    const authHeader = req.headers['authorization'];
+    const token = authHeader && authHeader.split(' ')[1];
+    if (token === undefined || token === null) {
         // Track unauthorized access attempt
         const analyticsService = analytics_service_1.AnalyticsService.getInstance();
         analyticsService.trackEvent({
@@ -18,24 +25,23 @@ const authenticateToken = (req, res, next) => {
             eventAction: 'unauthorized_access_attempt',
             ipAddress: req.ip,
             userAgent: req.get('User-Agent') || undefined,
-            metadata: { path: req.path, method: req.method }
+            metadata: { path: req.path, method: req.method },
         });
-        return res.status(401).json({ message: "Access denied: No token provided" }); // No token
+        return res.status(401).json({ message: 'Access denied: No token provided' }); // No token
     }
     // Check for valid token with current secret, and if that fails, check with old secret for rotation
     let decodedToken;
-    let verificationError = null;
     // First try with the current JWT secret
     try {
-        decodedToken = jsonwebtoken_1.default.verify(token, process.env.JWT_SECRET || "your_jwt_secret");
+        decodedToken = jsonwebtoken_1.default.verify(token, process.env.JWT_SECRET || 'your_jwt_secret');
     }
-    catch (err) {
+    catch (_err) {
         // If current secret fails, try with old secret (for rotation period)
         if (process.env.JWT_SECRET_OLD) {
             try {
                 decodedToken = jsonwebtoken_1.default.verify(token, process.env.JWT_SECRET_OLD);
             }
-            catch (rotationErr) {
+            catch (_rotationErr) {
                 // Both secrets failed, return unauthorized
                 // Track invalid token attempt
                 const analyticsService = analytics_service_1.AnalyticsService.getInstance();
@@ -45,9 +51,9 @@ const authenticateToken = (req, res, next) => {
                     eventAction: 'invalid_token_attempt',
                     ipAddress: req.ip,
                     userAgent: req.get('User-Agent') || undefined,
-                    metadata: { path: req.path, method: req.method }
+                    metadata: { path: req.path, method: req.method },
                 });
-                return res.status(403).json({ message: "Access denied: Invalid token" });
+                return res.status(403).json({ message: 'Access denied: Invalid token' });
             }
         }
         else {
@@ -60,9 +66,9 @@ const authenticateToken = (req, res, next) => {
                 eventAction: 'invalid_token_attempt',
                 ipAddress: req.ip,
                 userAgent: req.get('User-Agent') || undefined,
-                metadata: { path: req.path, method: req.method }
+                metadata: { path: req.path, method: req.method },
             });
-            return res.status(403).json({ message: "Access denied: Invalid token" });
+            return res.status(403).json({ message: 'Access denied: Invalid token' });
         }
     }
     // FIX: Add a check to ensure the decoded token payload exists and is an object
@@ -75,9 +81,9 @@ const authenticateToken = (req, res, next) => {
             eventAction: 'invalid_token_payload',
             ipAddress: req.ip,
             userAgent: req.get('User-Agent') || undefined,
-            metadata: { path: req.path, method: req.method }
+            metadata: { path: req.path, method: req.method },
         });
-        return res.status(403).json({ message: "Access denied: Invalid token payload" }); // Token is valid, but payload is missing or in wrong format
+        return res.status(403).json({ message: 'Access denied: Invalid token payload' }); // Token is valid, but payload is missing or in wrong format
     }
     // Check for token expiration (manually if not automatically handled by jwt.verify)
     if (decodedToken.exp && decodedToken.exp * 1000 < Date.now()) {
@@ -89,16 +95,16 @@ const authenticateToken = (req, res, next) => {
             eventAction: 'expired_token_attempt',
             ipAddress: req.ip,
             userAgent: req.get('User-Agent') || undefined,
-            metadata: { path: req.path, method: req.method }
+            metadata: { path: req.path, method: req.method },
         });
-        return res.status(403).json({ message: "Access denied: Token has expired" });
+        return res.status(403).json({ message: 'Access denied: Token has expired' });
     }
     // Now that we've verified, we can safely access the properties
     req.userId = decodedToken.userId;
     req.userRole = decodedToken.role;
     req.user = {
         id: decodedToken.userId,
-        role: decodedToken.role
+        role: decodedToken.role,
     };
     // Track successful authenticated request
     const analyticsService = analytics_service_1.AnalyticsService.getInstance();
@@ -109,18 +115,21 @@ const authenticateToken = (req, res, next) => {
         eventAction: 'protected_route_access',
         ipAddress: req.ip,
         userAgent: req.get('User-Agent') || undefined,
-        metadata: { path: req.path, method: req.method, role: decodedToken.role }
+        metadata: { path: req.path, method: req.method, role: decodedToken.role },
     });
     next();
 };
 exports.authenticateToken = authenticateToken;
 // Function to generate a JWT token with configurable expiration
 const generateToken = (userId, role, expiresIn = '24h') => {
-    return jsonwebtoken_1.default.sign({ userId, role }, process.env.JWT_SECRET || "your_jwt_secret");
+    const secret = process.env.JWT_SECRET || 'your_jwt_secret';
+    return jsonwebtoken_1.default.sign({ userId, role }, secret, {
+        expiresIn: expiresIn,
+    });
 };
 exports.generateToken = generateToken;
 const requireManager = (req, res, next) => {
-    if (req.userRole !== "Manager") {
+    if (req.userRole !== 'Manager') {
         // Track unauthorized manager access attempt
         const analyticsService = analytics_service_1.AnalyticsService.getInstance();
         analyticsService.trackEvent({
@@ -130,11 +139,9 @@ const requireManager = (req, res, next) => {
             eventAction: 'manager_access_denied',
             ipAddress: req.ip,
             userAgent: req.get('User-Agent') || undefined,
-            metadata: { path: req.path, method: req.method, role: req.userRole }
+            metadata: { path: req.path, method: req.method, role: req.userRole },
         });
-        return res
-            .status(403)
-            .json({ message: "Access denied: Manager role required" });
+        return res.status(403).json({ message: 'Access denied: Manager role required' });
     }
     next();
 };

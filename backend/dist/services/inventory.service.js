@@ -1,53 +1,59 @@
 "use strict";
 Object.defineProperty(exports, "__esModule", { value: true });
 exports.InventoryService = void 0;
-const database_1 = require("../database");
-const product_service_1 = require("./product.service");
-const store_area_service_1 = require("./store-area.service");
-const db = (0, database_1.getDb)();
+const database_factory_1 = require("../database/database-factory");
 class InventoryService {
-    constructor() {
-        this.productService = new product_service_1.ProductService();
-        this.storeAreaService = new store_area_service_1.StoreAreaService();
+    /**
+     * Constructor with optional dependency injection
+     * @param prismaClient - Optional PrismaClient for testing/custom configurations
+     */
+    constructor(prismaClient) {
+        this.prisma = prismaClient ?? (0, database_factory_1.getDefaultDatabaseClient)();
     }
     /**
      * Get all inventory items
      */
     async getAllInventoryItems() {
-        return db.prepare("SELECT * FROM inventory_items").all();
+        const items = await this.prisma.inventoryItem.findMany();
+        return items.map(this.mapPrismaToModel);
     }
     /**
      * Get an inventory item by its ID
      */
     async getInventoryItemById(id) {
-        const item = db
-            .prepare("SELECT * FROM inventory_items WHERE id = ?")
-            .get(id);
-        return item || null;
+        const item = await this.prisma.inventoryItem.findUnique({
+            where: { id },
+        });
+        return item ? this.mapPrismaToModel(item) : null;
     }
     /**
      * Get all inventory items for a specific product
      */
     async getInventoryItemsByProductId(productId) {
-        return db
-            .prepare("SELECT * FROM inventory_items WHERE product_id = ?")
-            .all(productId);
+        const items = await this.prisma.inventoryItem.findMany({
+            where: { productId },
+        });
+        return items.map(this.mapPrismaToModel);
     }
     /**
      * Get recent inventory items for a specific product
      */
     async getRecentInventoryItemsByProductId(productId, limit) {
-        return db
-            .prepare("SELECT * FROM inventory_items WHERE product_id = ? ORDER BY created_at DESC LIMIT ?")
-            .all(productId, limit);
+        const items = await this.prisma.inventoryItem.findMany({
+            where: { productId },
+            orderBy: { createdAt: 'desc' },
+            take: limit,
+        });
+        return items.map(this.mapPrismaToModel);
     }
     /**
      * Get all inventory items for a specific location
      */
     async getInventoryItemsByLocationId(locationId) {
-        return db
-            .prepare("SELECT * FROM inventory_items WHERE location_id = ?")
-            .all(locationId);
+        const items = await this.prisma.inventoryItem.findMany({
+            where: { locationId },
+        });
+        return items.map(this.mapPrismaToModel);
     }
     /**
      * Create a new inventory item
@@ -55,21 +61,19 @@ class InventoryService {
     async createInventoryItem(item, userId) {
         const { productId, expiryDate, locationId } = item;
         // Calculate markdown status
-        const calculatedStatus = item.status || await this.calculateMarkdownStatus(item.expiryDate);
-        const result = db
-            .prepare("INSERT INTO inventory_items (product_id, expiry_date, location_id, status) VALUES (?, ?, ?, ?)")
-            .run(productId, expiryDate, locationId, calculatedStatus);
-        const newItemId = result.lastInsertRowid;
+        const calculatedStatus = item.status || (await this.calculateMarkdownStatus(item.expiryDate));
+        const newItem = await this.prisma.inventoryItem.create({
+            data: {
+                productId,
+                expiryDate: new Date(expiryDate), // Convert string to Date for Prisma
+                locationId,
+                status: calculatedStatus,
+            },
+        });
         // Create audit log entry
         const changeDescription = `Inventory item created with expiry date ${expiryDate} and status ${calculatedStatus}.`;
-        this.createAuditLog(userId, newItemId, changeDescription);
-        return {
-            id: newItemId,
-            ...item,
-            status: calculatedStatus,
-            createdAt: new Date().toISOString(),
-            updatedAt: new Date().toISOString(),
-        };
+        await this.createAuditLog(userId, newItem.id, changeDescription);
+        return this.mapPrismaToModel(newItem);
     }
     /**
      * Update an existing inventory item
@@ -79,68 +83,75 @@ class InventoryService {
         if (!existingItem) {
             return null;
         }
-        // Build the update query dynamically
-        const fields = Object.keys(updates);
-        const values = Object.values(updates);
-        const setClause = fields.map((field) => `${field} = ?`).join(", ");
-        if (fields.length === 0) {
+        if (Object.keys(updates).length === 0) {
             return existingItem; // No updates to perform
         }
         // If expiry date is updated, recalculate markdown status
+        let statusUpdate = updates.status;
         if (updates.expiryDate) {
-            updates.status = await this.calculateMarkdownStatus(updates.expiryDate);
+            statusUpdate = await this.calculateMarkdownStatus(updates.expiryDate);
         }
-        const stmt = db.prepare(`UPDATE inventory_items SET ${setClause}, updatedAt = CURRENT_TIMESTAMP WHERE id = ?`);
-        stmt.run(...values, id);
+        const updatedItem = await this.prisma.inventoryItem.update({
+            where: { id },
+            data: {
+                ...(updates.productId !== undefined && { productId: updates.productId }),
+                ...(updates.expiryDate !== undefined && { expiryDate: new Date(updates.expiryDate) }), // Convert string to Date
+                ...(updates.locationId !== undefined && { locationId: updates.locationId }),
+                ...(statusUpdate !== undefined && { status: statusUpdate }),
+            },
+        });
         // Create audit log entry
         const changeDescription = `Inventory item updated: ${JSON.stringify(updates)}`;
-        this.createAuditLog(userId, id, changeDescription);
-        return this.getInventoryItemById(id);
+        await this.createAuditLog(userId, id, changeDescription);
+        return this.mapPrismaToModel(updatedItem);
     }
     /**
      * Delete an inventory item
      */
     async deleteInventoryItem(id, userId) {
-        const result = db.prepare("DELETE FROM inventory_items WHERE id = ?").run(id);
-        if (result.changes > 0) {
-            // Create audit log entry
-            const changeDescription = `Inventory item with ID ${id} deleted.`;
-            // We can't link to a deleted item, so we pass a placeholder ID
-            this.createAuditLog(userId, -1, changeDescription);
-            return true;
+        // Get the item before deleting to use in audit log
+        const item = await this.getInventoryItemById(id);
+        if (!item) {
+            return false; // Item doesn't exist
         }
-        return false;
+        // Create audit log entry before deleting the item
+        const changeDescription = `Inventory item with ID ${id} deleted.`;
+        await this.createAuditLog(userId, id, changeDescription);
+        await this.prisma.inventoryItem.delete({
+            where: { id },
+        });
+        return true;
     }
     /**
      * Synchronous version of calculateMarkdownStatus for use in batch operations
      */
     calculateMarkdownStatusSync(expiryDate) {
         if (!expiryDate) {
-            return "Normal";
+            return 'Normal';
         }
         const now = new Date();
         const expiry = new Date(expiryDate);
         const daysDiff = Math.ceil((expiry.getTime() - now.getTime()) / (1000 * 60 * 60 * 24));
         if (daysDiff <= 0) {
-            return "Expired";
+            return 'Expired';
         }
         // Apply markdown rules based on days difference (from feature requirements)
         // Note: These are simple examples. Real logic might be more complex.
-        if (daysDiff <= 30) {
-            // Within 1 month from expiry: cost price - 20% (Markdown 3)
-            return "Markdown 3";
+        if (daysDiff <= 7) {
+            // Within 1 week from expiry: cost price - 20% (Markdown 3)
+            return 'Markdown 3';
         }
-        else if (daysDiff <= 60) {
-            // Within 2 months from expiry: cost price (Markdown 2)
-            return "Markdown 2";
+        else if (daysDiff <= 14) {
+            // Within 2 weeks from expiry: cost price (Markdown 2)
+            return 'Markdown 2';
         }
-        else if (daysDiff <= 90) {
-            // Within 3 months from expiry: cost price + 20% (Markdown 1)
-            return "Markdown 1";
+        else if (daysDiff <= 30) {
+            // Within 1 month from expiry: cost price + 20% (Markdown 1)
+            return 'Markdown 1';
         }
         else {
-            // More than 3 months from expiry: Normal (no markdown)
-            return "Normal";
+            // More than 1 month from expiry: Normal (no markdown)
+            return 'Normal';
         }
     }
     /**
@@ -150,70 +161,109 @@ class InventoryService {
         const now = new Date();
         const expiry = new Date(expiryDate);
         const daysDiff = Math.ceil((expiry.getTime() - now.getTime()) / (1000 * 60 * 60 * 24));
-        let status = "Normal";
+        let status = 'Normal';
         if (daysDiff <= 0) {
-            status = "Expired";
+            status = 'Expired';
         }
         else {
             // Apply markdown rules based on days difference (from feature requirements)
             // Note: These are simple examples. Real logic might be more complex.
-            if (daysDiff <= 30) {
-                // Within 1 month from expiry: cost price - 20% (Markdown 3)
-                status = "Markdown 3";
+            if (daysDiff <= 7) {
+                // Within 1 week from expiry: cost price - 20% (Markdown 3)
+                status = 'Markdown 3';
             }
-            else if (daysDiff <= 60) {
-                // Within 2 months from expiry: cost price (Markdown 2)
-                status = "Markdown 2";
+            else if (daysDiff <= 14) {
+                // Within 2 weeks from expiry: cost price (Markdown 2)
+                status = 'Markdown 2';
             }
-            else if (daysDiff <= 90) {
-                // Within 3 months from expiry: cost price + 20% (Markdown 1)
-                status = "Markdown 1";
+            else if (daysDiff <= 30) {
+                // Within 1 month from expiry: cost price + 20% (Markdown 1)
+                status = 'Markdown 1';
             }
             else {
-                // More than 3 months from expiry: Normal (no markdown)
-                status = "Normal";
+                // More than 1 month from expiry: Normal (no markdown)
+                status = 'Normal';
             }
         }
         // Update the inventory item's status in the database
-        db.prepare("UPDATE inventory_items SET status = ? WHERE id = ?").run(status, itemId);
+        await this.prisma.inventoryItem.update({
+            where: { id: itemId },
+            data: { status },
+        });
     }
     /**
      * Calculate markdown status based on expiry date without updating the database
      */
     async calculateMarkdownStatus(expiryDate) {
         if (!expiryDate) {
-            return "Normal";
+            return 'Normal';
         }
         const now = new Date();
         const expiry = new Date(expiryDate);
         const daysDiff = Math.ceil((expiry.getTime() - now.getTime()) / (1000 * 60 * 60 * 24));
         if (daysDiff <= 0) {
-            return "Expired";
+            return 'Expired';
         }
         // Apply markdown rules based on days difference (from feature requirements)
         // Note: These are simple examples. Real logic might be more complex.
         if (daysDiff <= 30) {
             // Within 1 month from expiry: cost price - 20% (Markdown 3)
-            return "Markdown 3";
+            return 'Markdown 3';
         }
         else if (daysDiff <= 60) {
             // Within 2 months from expiry: cost price (Markdown 2)
-            return "Markdown 2";
+            return 'Markdown 2';
         }
         else if (daysDiff <= 90) {
             // Within 3 months from expiry: cost price + 20% (Markdown 1)
-            return "Markdown 1";
+            return 'Markdown 1';
         }
         else {
             // More than 3 months from expiry: Normal (no markdown)
-            return "Normal";
+            return 'Normal';
         }
     }
     /**
      * Create an audit log entry
      */
-    createAuditLog(userId, inventoryItemId, changeDescription) {
-        db.prepare("INSERT INTO audit_log (user_id, inventory_item_id, change_description) VALUES (?, ?, ?)").run(userId, inventoryItemId, changeDescription);
+    async createAuditLog(userId, inventoryItemId, changeDescription) {
+        await this.prisma.auditLog.create({
+            data: {
+                userId,
+                inventoryItemId,
+                changeDescription,
+            },
+        });
+    }
+    /**
+     * Log an item transaction
+     */
+    async logTransaction(transaction) {
+        const { inventory_item_id, user_id, type, quantity_change, notes } = transaction;
+        const result = await this.prisma.itemTransaction.create({
+            data: {
+                inventoryItemId: inventory_item_id,
+                userId: user_id,
+                type,
+                quantityChange: quantity_change,
+                notes,
+            },
+        });
+        return result.id;
+    }
+    /**
+     * Map Prisma model to legacy InventoryItem interface
+     */
+    mapPrismaToModel(item) {
+        return {
+            id: item.id,
+            productId: item.productId,
+            expiryDate: item.expiryDate.toISOString().split('T')[0], // Convert Date to YYYY-MM-DD string
+            locationId: item.locationId,
+            status: item.status,
+            createdAt: item.createdAt.toISOString(),
+            updatedAt: item.updatedAt.toISOString(),
+        };
     }
 }
 exports.InventoryService = InventoryService;

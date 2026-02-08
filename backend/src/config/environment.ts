@@ -47,6 +47,11 @@ export interface EnvironmentConfig {
   DIRECT_UPLOAD_THRESHOLD_BYTES: number;
   SENTRY_DSN?: string;
   SENTRY_FRONTEND_DSN?: string;
+  // Error Handling Configuration
+  ERROR_HIDE_STACK_TRACE_IN_PRODUCTION: boolean;
+  ERROR_LOG_LEVEL: string;
+  // CORS Configuration
+  CORS_ORIGINS?: string;
   // Add other required environment variables as needed
 }
 
@@ -148,6 +153,11 @@ function validateEnvironment(env: RawEnv, allowMissingRequired: boolean): Enviro
       : directThreshold,
     SENTRY_DSN: env.SENTRY_DSN,
     SENTRY_FRONTEND_DSN: env.SENTRY_FRONTEND_DSN,
+    // Error Handling Configuration
+    ERROR_HIDE_STACK_TRACE_IN_PRODUCTION: nodeEnv === 'production',
+    ERROR_LOG_LEVEL: env.ERROR_LOG_LEVEL || 'error',
+    // CORS Configuration
+    CORS_ORIGINS: env.CORS_ORIGINS,
   };
 }
 

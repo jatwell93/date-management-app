@@ -2,8 +2,8 @@
 Object.defineProperty(exports, "__esModule", { value: true });
 const dashboard_service_1 = require("../../services/dashboard.service");
 const database_1 = require("../../database");
-jest.mock("../../database");
-describe("DashboardService", () => {
+jest.mock('../../database');
+describe('DashboardService', () => {
     let dashboardService;
     beforeEach(() => {
         dashboardService = new dashboard_service_1.DashboardService();
@@ -11,7 +11,7 @@ describe("DashboardService", () => {
     afterEach(() => {
         jest.clearAllMocks();
     });
-    it("should return dashboard data", async () => {
+    it('should return dashboard data', async () => {
         const mockDashboardData = {
             totalProducts: 100,
             expiringSoon: 10,
@@ -19,7 +19,8 @@ describe("DashboardService", () => {
             recentActivity: [],
         };
         const mockStatement = {
-            get: jest.fn()
+            get: jest
+                .fn()
                 .mockReturnValueOnce({ count: 100 })
                 .mockReturnValueOnce({ count: 10 })
                 .mockReturnValueOnce({ count: 5 }),

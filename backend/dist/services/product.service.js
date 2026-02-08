@@ -39,13 +39,13 @@ Object.defineProperty(exports, "__esModule", { value: true });
 exports.ProductService = void 0;
 exports.extractCostValue = extractCostValue;
 exports.extractCostValueEnhanced = extractCostValueEnhanced;
-const database_1 = require("../database");
+const database_factory_1 = require("../database/database-factory");
 const csv_parse_1 = require("csv-parse");
 const XLSX = __importStar(require("xlsx"));
 const fs_1 = __importDefault(require("fs"));
 const path = __importStar(require("path"));
 // Helper function to detect file type by content
-function detectFileType(filePath, originalFilename) {
+async function detectFileType(filePath, originalFilename) {
     // First check by original filename if provided
     if (originalFilename) {
         const ext = path.extname(originalFilename).toLowerCase();
@@ -60,11 +60,16 @@ function detectFileType(filePath, originalFilename) {
         return 'xlsx';
     if (pathExt === '.xls')
         return 'xls';
-    // If no extension in path (e.g., multer temp files without extension), 
+    // If no extension in path (e.g., multer temp files without extension),
     // try to detect by file header
     try {
-        const header = fs_1.default.readFileSync(filePath, { encoding: 'binary', flag: 'r' });
-        if (header.startsWith('PK')) { // ZIP file header (XLSX files are ZIP archives)
+        const fileHandle = await fs_1.default.promises.open(filePath, 'r');
+        const buffer = Buffer.alloc(4);
+        await fileHandle.read(buffer, 0, buffer.length, 0);
+        await fileHandle.close();
+        const header = buffer.toString('binary');
+        if (header.startsWith('PK')) {
+            // ZIP file header (XLSX files are ZIP archives)
             return 'xlsx';
         }
         // For XLS, we could also check for BIFF header, but it's more complex
@@ -110,23 +115,6 @@ function extractCostValue(costStr) {
     }
     return value;
 }
-// Helper function to normalize numeric strings by handling various currency symbols, spaces, and formatting
-function normalizeNumericString(input) {
-    // Remove common currency symbols at the beginning or end, including additional ones
-    let cleaned = input.trim();
-    // More comprehensive currency symbol removal
-    cleaned = cleaned.replace(/^[¥€£¢₹₽₪₨₩₦₡₫Є₴₵₸₺₼₾₯]/, '');
-    cleaned = cleaned.replace(/[¥€£¢₹₽₪₨₩₦₡₫Є₴₵₸₺₼₾₯]$/, '');
-    // Remove additional formatting like parentheses (often used for negative values) temporarily
-    // and other common characters that might indicate currency or formatting
-    if (cleaned.startsWith('(') && cleaned.endsWith(')')) {
-        cleaned = cleaned.substring(1, cleaned.length - 1);
-    }
-    // Remove common thousands separators and spaces
-    // Keep only digits, decimal points, and commas temporarily for format analysis
-    cleaned = cleaned.replace(/[ ]/g, ''); // Remove any spaces first
-    return cleaned;
-}
 // Enhanced helper function to extract numeric value from cost string with flexible formatting
 function extractCostValueEnhanced(costStr) {
     let cleanedStr = costStr.trim();
@@ -140,7 +128,10 @@ function extractCostValueEnhanced(costStr) {
             // Extract the content inside the parentheses
             const insideParen = cleanedStr.substring(openParenIndex + 1, closeParenIndex);
             // Remove the parentheses and what's around them
-            cleanedStr = cleanedStr.substring(0, openParenIndex) + insideParen + cleanedStr.substring(closeParenIndex + 1);
+            cleanedStr =
+                cleanedStr.substring(0, openParenIndex) +
+                    insideParen +
+                    cleanedStr.substring(closeParenIndex + 1);
         }
     }
     // 2. Remove common currency symbols and codes (this includes currency codes like USD, EUR)
@@ -157,7 +148,27 @@ function extractCostValueEnhanced(costStr) {
     const dotCount = (cleanedStr.match(/\./g) || []).length;
     const commaCount = (cleanedStr.match(/,/g) || []).length;
     let normalizedStr = cleanedStr;
-    if (dotCount === 0 && commaCount === 0) {
+    if (dotCount > 1 && commaCount === 0) {
+        // Multiple dots, no commas (e.g. 1.000.000) -> dots are thousands separators
+        // Heuristic: Check last segment length to see if it might be a decimal
+        const lastDotIndex = cleanedStr.lastIndexOf('.');
+        const afterLastDot = cleanedStr.substring(lastDotIndex + 1);
+        if (afterLastDot.length === 2) {
+            // Heuristic: 12.34.56 -> 1234.56 (last dot is decimal)
+            // Replace all dots BEFORE the last one
+            const part1 = cleanedStr.substring(0, lastDotIndex).replace(/\./g, '');
+            normalizedStr = part1 + '.' + afterLastDot;
+        }
+        else {
+            // Assume all dots are thousands separators
+            normalizedStr = cleanedStr.replace(/\./g, '');
+        }
+    }
+    else if (commaCount > 1 && dotCount === 0) {
+        // Multiple commas, no dots (e.g. 1,000,000) -> commas are thousands separators
+        normalizedStr = cleanedStr.replace(/,/g, '');
+    }
+    else if (dotCount === 0 && commaCount === 0) {
         // No separators - just digits
         normalizedStr = cleanedStr;
     }
@@ -220,7 +231,7 @@ function extractCostValueEnhanced(costStr) {
     // Ensure there's only one decimal point (in case multiple were introduced)
     const parts = normalizedStr.split('.');
     if (parts.length > 2) {
-        // If there are multiple decimal points, join all but the last part with no separator, 
+        // If there are multiple decimal points, join all but the last part with no separator,
         // then add the last part as decimal
         const integerPart = parts.slice(0, -1).join('');
         const decimalPart = parts[parts.length - 1];
@@ -234,121 +245,124 @@ function extractCostValueEnhanced(costStr) {
     // Apply negative sign if originally detected
     return isNegative ? -value : value;
 }
-// Helper function to validate and format error messages
-function formatErrorMessage(rowNumber, field, value, expected) {
-    return `Row ${rowNumber}: Invalid ${field} value "${value}". Expected ${expected}.`;
-}
 class ProductService {
+    /**
+     * Constructor with optional dependency injection
+     * @param prismaClient - Optional PrismaClient for testing/custom configurations
+     */
+    constructor(prismaClient) {
+        this.prisma = prismaClient ?? (0, database_factory_1.getDefaultDatabaseClient)();
+    }
     // Expose parser for tests that reference it via ProductService["extractCostValueEnhanced"]
     static extractCostValueEnhanced(costStr) {
         return extractCostValueEnhanced(costStr);
     }
     async getAllProducts(limit, offset) {
-        const db = (0, database_1.getDb)();
-        try {
-            let query = "SELECT * FROM products";
-            if (limit !== undefined) {
-                query += " LIMIT ?";
-                if (offset !== undefined) {
-                    query += " OFFSET ?";
-                    return db.prepare(query).all(limit, offset);
-                }
-                else {
-                    return db.prepare(query).all(limit);
-                }
-            }
-            else {
-                return db.prepare(query).all();
-            }
-        }
-        finally {
-            (0, database_1.releaseDb)(db);
-        }
+        const products = await this.prisma.product.findMany({
+            ...(limit !== undefined && { take: limit }),
+            ...(offset !== undefined && { skip: offset }),
+        });
+        return products.map(this.mapPrismaToModel);
     }
     async getProductById(id) {
-        const db = (0, database_1.getDb)();
-        try {
-            const product = db.prepare("SELECT * FROM products WHERE id = ?").get(id);
-            return product || null;
-        }
-        finally {
-            (0, database_1.releaseDb)(db);
-        }
+        const product = await this.prisma.product.findUnique({
+            where: { id },
+        });
+        return product ? this.mapPrismaToModel(product) : null;
     }
     async getProductByBarcode(barcode) {
-        const db = (0, database_1.getDb)();
-        try {
-            const product = db.prepare("SELECT * FROM products WHERE barcode = ?").get(barcode);
-            return product || null;
-        }
-        finally {
-            (0, database_1.releaseDb)(db);
-        }
+        const product = await this.prisma.product.findUnique({
+            where: { barcode },
+        });
+        return product ? this.mapPrismaToModel(product) : null;
     }
     async getProductBySku(sku) {
-        const db = (0, database_1.getDb)();
-        try {
-            const product = db.prepare("SELECT * FROM products WHERE sku = ?").get(sku);
-            return product || null;
-        }
-        finally {
-            (0, database_1.releaseDb)(db);
-        }
+        const product = await this.prisma.product.findUnique({
+            where: { sku },
+        });
+        return product ? this.mapPrismaToModel(product) : null;
     }
     async createProduct(product) {
-        const db = (0, database_1.getDb)();
-        try {
-            const result = db.prepare("INSERT INTO products (barcode, sku, name, cost_price) VALUES (?, ?, ?, ?)").run(product.barcode, product.sku, product.name, product.costPrice);
-            const newProduct = {
-                id: result.lastInsertRowid,
-                ...product,
-                createdAt: new Date().toISOString(), // SQLite handles this with DEFAULT CURRENT_TIMESTAMP
-                updatedAt: new Date().toISOString(), // SQLite handles this with DEFAULT CURRENT_TIMESTAMP
-            };
-            return newProduct;
-        }
-        finally {
-            (0, database_1.releaseDb)(db);
-        }
+        const newProduct = await this.prisma.product.create({
+            data: {
+                barcode: product.barcode,
+                sku: product.sku,
+                name: product.name,
+                costPrice: product.costPrice,
+            },
+        });
+        return this.mapPrismaToModel(newProduct);
     }
     async updateProduct(id, product) {
-        const db = (0, database_1.getDb)();
+        if (Object.keys(product).length === 0) {
+            return null;
+        }
         try {
-            const fields = Object.keys(product);
-            if (fields.length === 0) {
-                return null;
-            }
-            // Map TypeScript field names to database column names
-            const fieldToColumnMap = {
-                costPrice: 'cost_price',
-                // Add other mappings if needed in the future
-            };
-            const setClause = fields.map((field) => `${fieldToColumnMap[field] || field} = ?`).join(", ");
-            const values = [...Object.values(product), id];
-            const result = db.prepare(`UPDATE products SET ${setClause}, updated_at = CURRENT_TIMESTAMP WHERE id = ?`).run(...values);
-            if ((result.changes ?? 0) === 0) {
-                return null;
-            }
-            // Return the updated product
-            const updatedProduct = await this.getProductById(id);
-            return updatedProduct;
+            const updatedProduct = await this.prisma.product.update({
+                where: { id },
+                data: this.buildProductUpdateData(product),
+            });
+            return this.mapPrismaToModel(updatedProduct);
         }
-        finally {
-            (0, database_1.releaseDb)(db);
+        catch (error) {
+            return this.handlePrismaNotFound(error);
         }
+    }
+    /**
+     * Build update data object from partial product, filtering undefined values
+     */
+    buildProductUpdateData(product) {
+        const data = {};
+        if (product.barcode !== undefined)
+            data.barcode = product.barcode;
+        if (product.sku !== undefined)
+            data.sku = product.sku;
+        if (product.name !== undefined)
+            data.name = product.name;
+        if (product.costPrice !== undefined)
+            data.costPrice = product.costPrice;
+        return data;
+    }
+    /**
+     * Handle Prisma P2025 (record not found) error, rethrow others
+     */
+    handlePrismaNotFound(error) {
+        if (error.code === 'P2025') {
+            return null;
+        }
+        throw error;
     }
     async deleteProduct(id) {
-        const db = (0, database_1.getDb)();
         try {
-            const result = db.prepare("DELETE FROM products WHERE id = ?").run(id);
-            return (result.changes ?? 0) > 0;
+            await this.prisma.product.delete({
+                where: { id },
+            });
+            return true;
         }
-        finally {
-            (0, database_1.releaseDb)(db);
+        catch (error) {
+            // Prisma throws P2025 when record not found
+            if (error.code === 'P2025') {
+                return false;
+            }
+            throw error;
         }
     }
+    /**
+     * Map Prisma model to legacy Product interface
+     */
+    mapPrismaToModel(product) {
+        return {
+            id: product.id,
+            barcode: product.barcode,
+            sku: product.sku,
+            name: product.name,
+            costPrice: product.costPrice,
+            createdAt: product.createdAt.toISOString(),
+            updatedAt: product.updatedAt.toISOString(),
+        };
+    }
     async processCSVUpload(filePath, originalFilename) {
-        const fileType = detectFileType(filePath, originalFilename);
+        const fileType = await detectFileType(filePath, originalFilename);
         if (fileType === 'xlsx' || fileType === 'xls') {
             return this.processXLSXUpload(filePath);
         }
@@ -369,13 +383,13 @@ class ProductService {
         return new Promise((resolve, reject) => {
             let recordCount = 0;
             const processingPromises = [];
-            const parser = fs_1.default.createReadStream(filePath)
+            fs_1.default.createReadStream(filePath)
                 .pipe((0, csv_parse_1.parse)({
                 columns: true, // Use auto-generated columns from header row
                 skip_empty_lines: true,
                 // Add additional CSV validation options
                 skip_records_with_error: true, // Skip records that cause errors
-                cast: (value, context) => {
+                cast: (value, _context) => {
                     // Don't cast any values to avoid automatic type conversion
                     // This ensures barcodes in scientific notation stay as strings
                     return value;
@@ -392,10 +406,40 @@ class ProductService {
                 const rowProcessingPromise = (async () => {
                     try {
                         // Find the correct column for each field based on alternatives
-                        const skuHeader = this.findColumnByAlternatives(row, ['SKU', 'Item Code', 'Reorder Number', 'Product Code', 'Item Number']);
-                        const nameHeader = this.findColumnByAlternatives(row, ['Name', 'Item Description', 'Product Name', 'Description', 'Item Name']);
-                        const costHeader = this.findColumnByAlternatives(row, ['Cost', 'Cost Price', 'Unit Cost', 'Cost ex', 'Price', 'Unit Price', 'Cost inc', 'Selling Price', 'Retail Price']);
-                        const barcodeHeader = this.findColumnByAlternatives(row, ['Barcode', 'Alias', 'EAN', 'UPC', 'GTIN', 'Product Barcode', 'Barcode Number']);
+                        const skuHeader = this.findColumnByAlternatives(row, [
+                            'SKU',
+                            'Item Code',
+                            'Reorder Number',
+                            'Product Code',
+                            'Item Number',
+                        ]);
+                        const nameHeader = this.findColumnByAlternatives(row, [
+                            'Name',
+                            'Item Description',
+                            'Product Name',
+                            'Description',
+                            'Item Name',
+                        ]);
+                        const costHeader = this.findColumnByAlternatives(row, [
+                            'Cost',
+                            'Cost Price',
+                            'Unit Cost',
+                            'Cost ex',
+                            'Price',
+                            'Unit Price',
+                            'Cost inc',
+                            'Selling Price',
+                            'Retail Price',
+                        ]);
+                        const barcodeHeader = this.findColumnByAlternatives(row, [
+                            'Barcode',
+                            'Alias',
+                            'EAN',
+                            'UPC',
+                            'GTIN',
+                            'Product Barcode',
+                            'Barcode Number',
+                        ]);
                         // Validate required fields - check if headers exist before accessing
                         const sku = skuHeader ? row[skuHeader]?.toString()?.trim() : null;
                         const name = nameHeader ? row[nameHeader]?.toString()?.trim() : null;
@@ -457,14 +501,29 @@ class ProductService {
                         }
                         // Check for unexpected columns (not in our required or alternative columns list)
                         const allowedHeaders = [
-                            skuHeader, nameHeader, costHeader, barcodeHeader,
+                            skuHeader,
+                            nameHeader,
+                            costHeader,
+                            barcodeHeader,
                             ...['SKU', 'Item Code', 'Reorder Number', 'Product Code', 'Item Number'],
                             ...['Name', 'Item Description', 'Product Name', 'Description', 'Item Name'],
-                            ...['Cost', 'Cost Price', 'Unit Cost', 'Cost ex', 'Price', 'Unit Price', 'Cost inc', 'Selling Price', 'Retail Price'],
-                            ...['Barcode', 'Alias', 'EAN', 'UPC', 'GTIN', 'Product Barcode', 'Barcode Number']
-                        ].map(header => header?.toLowerCase()).filter(Boolean);
+                            ...[
+                                'Cost',
+                                'Cost Price',
+                                'Unit Cost',
+                                'Cost ex',
+                                'Price',
+                                'Unit Price',
+                                'Cost inc',
+                                'Selling Price',
+                                'Retail Price',
+                            ],
+                            ...['Barcode', 'Alias', 'EAN', 'UPC', 'GTIN', 'Product Barcode', 'Barcode Number'],
+                        ]
+                            .map((header) => header?.toLowerCase())
+                            .filter(Boolean);
                         const allowedColumns = new Set(allowedHeaders);
-                        const unexpectedColumns = Object.keys(row).filter(col => !allowedColumns.has(col.toLowerCase()));
+                        const unexpectedColumns = Object.keys(row).filter((col) => !allowedColumns.has(col.toLowerCase()));
                         if (unexpectedColumns.length > 0) {
                             errors.push(`Row ${recordCount}: Unexpected columns found - ${unexpectedColumns.join(', ')}`);
                             return; // Skip processing this row if there are unexpected columns
@@ -485,7 +544,7 @@ class ProductService {
                                     barcode,
                                     sku, // Update SKU as well in case it changed
                                     name,
-                                    costPrice: cost
+                                    costPrice: cost,
                                 });
                                 updated++;
                             }
@@ -500,7 +559,7 @@ class ProductService {
                                     barcode,
                                     sku,
                                     name,
-                                    costPrice: cost
+                                    costPrice: cost,
                                 });
                                 imported++;
                             }
@@ -560,7 +619,17 @@ class ProductService {
             // Find the required column indices based on alternatives
             const skuColIndex = this.findColumnIndexByAlternatives(headers, ['SKU', 'Item Code', 'Reorder Number', 'Product Code', 'Item Number']);
             const nameColIndex = this.findColumnIndexByAlternatives(headers, ['Name', 'Item Description', 'Product Name', 'Description', 'Item Name']);
-            const costColIndex = this.findColumnIndexByAlternatives(headers, ['Cost', 'Cost Price', 'Unit Cost', 'Cost ex', 'Price', 'Unit Price', 'Cost inc', 'Selling Price', 'Retail Price']);
+            const costColIndex = this.findColumnIndexByAlternatives(headers, [
+                'Cost',
+                'Cost Price',
+                'Unit Cost',
+                'Cost ex',
+                'Price',
+                'Unit Price',
+                'Cost inc',
+                'Selling Price',
+                'Retail Price',
+            ]);
             const barcodeColIndex = this.findColumnIndexByAlternatives(headers, ['Barcode', 'Alias', 'EAN', 'UPC', 'GTIN', 'Product Barcode', 'Barcode Number']);
             // Validate required columns exist
             if (skuColIndex === null) {
@@ -583,11 +652,23 @@ class ProductService {
                 barcodeColIndex !== null ? headers[barcodeColIndex] : null,
                 ...['SKU', 'Item Code', 'Reorder Number', 'Product Code', 'Item Number'],
                 ...['Name', 'Item Description', 'Product Name', 'Description', 'Item Name'],
-                ...['Cost', 'Cost Price', 'Unit Cost', 'Cost ex', 'Price', 'Unit Price', 'Cost inc', 'Selling Price', 'Retail Price'],
-                ...['Barcode', 'Alias', 'EAN', 'UPC', 'GTIN', 'Product Barcode', 'Barcode Number']
-            ].filter((header) => header !== null && header !== undefined).map(header => header.toLowerCase());
+                ...[
+                    'Cost',
+                    'Cost Price',
+                    'Unit Cost',
+                    'Cost ex',
+                    'Price',
+                    'Unit Price',
+                    'Cost inc',
+                    'Selling Price',
+                    'Retail Price',
+                ],
+                ...['Barcode', 'Alias', 'EAN', 'UPC', 'GTIN', 'Product Barcode', 'Barcode Number'],
+            ]
+                .filter((header) => header !== null && header !== undefined)
+                .map((header) => header.toLowerCase());
             const allowedColumns = new Set(allowedHeaders);
-            const unexpectedColumns = headers.filter((header, index) => {
+            const unexpectedColumns = headers.filter((header, _index) => {
                 if (!header)
                     return false;
                 return !allowedColumns.has(header.toString().toLowerCase());
@@ -615,13 +696,19 @@ class ProductService {
                 try {
                     // Get values from the appropriate columns
                     const sku = skuColIndex !== null && skuColIndex < row.length && row[skuColIndex] !== undefined
-                        ? row[skuColIndex]?.toString()?.trim() : null;
+                        ? row[skuColIndex]?.toString()?.trim()
+                        : null;
                     const name = nameColIndex !== null && nameColIndex < row.length && row[nameColIndex] !== undefined
-                        ? row[nameColIndex]?.toString()?.trim() : null;
+                        ? row[nameColIndex]?.toString()?.trim()
+                        : null;
                     const costStr = costColIndex !== null && costColIndex < row.length && row[costColIndex] !== undefined
-                        ? row[costColIndex]?.toString()?.trim() : null;
-                    const barcode = barcodeColIndex !== null && barcodeColIndex < row.length && row[barcodeColIndex] !== undefined
-                        ? row[barcodeColIndex]?.toString()?.trim() : null;
+                        ? row[costColIndex]?.toString()?.trim()
+                        : null;
+                    const barcode = barcodeColIndex !== null &&
+                        barcodeColIndex < row.length &&
+                        row[barcodeColIndex] !== undefined
+                        ? row[barcodeColIndex]?.toString()?.trim()
+                        : null;
                     // Check if all required fields are present
                     if (!sku) {
                         errors.push(`Row ${recordCount}: Missing required field - SKU. Please ensure the column exists and contains a value.`);
@@ -680,7 +767,7 @@ class ProductService {
                                 barcode,
                                 sku, // Update SKU as well in case it changed
                                 name,
-                                costPrice: cost
+                                costPrice: cost,
                             });
                             if (updatedProduct) {
                                 updated++;
@@ -766,14 +853,14 @@ class ProductService {
         let isValid = true;
         return new Promise((resolve) => {
             // Create a parser that only reads the first few rows to check structure
-            const parser = fs_1.default.createReadStream(filePath)
+            fs_1.default.createReadStream(filePath)
                 .pipe((0, csv_parse_1.parse)({
                 columns: true,
                 skip_empty_lines: true,
                 from_line: 1, // Start from the first line (header)
                 to_line: 5, // Only check the first 5 lines (header + 4 data rows)
                 // Disable casting to avoid type conversion errors during validation
-                cast: (value, context) => {
+                cast: (value, _context) => {
                     // Don't cast any values to avoid automatic type conversion
                     // This ensures barcodes in scientific notation stay as strings
                     return value;
@@ -788,10 +875,40 @@ class ProductService {
                 // Check headers on the first row (idx is the row index, starting from 0)
                 if (typeof idx === 'number' && idx === 0) {
                     // Find the required columns using alternative names
-                    const skuHeader = this.findColumnByAlternatives(row, ['SKU', 'Item Code', 'Reorder Number', 'Product Code', 'Item Number']);
-                    const nameHeader = this.findColumnByAlternatives(row, ['Name', 'Item Description', 'Product Name', 'Description', 'Item Name']);
-                    const costHeader = this.findColumnByAlternatives(row, ['Cost', 'Cost Price', 'Unit Cost', 'Cost ex', 'Price', 'Unit Price', 'Cost inc', 'Selling Price', 'Retail Price']);
-                    const barcodeHeader = this.findColumnByAlternatives(row, ['Barcode', 'Alias', 'EAN', 'UPC', 'GTIN', 'Product Barcode', 'Barcode Number']);
+                    const skuHeader = this.findColumnByAlternatives(row, [
+                        'SKU',
+                        'Item Code',
+                        'Reorder Number',
+                        'Product Code',
+                        'Item Number',
+                    ]);
+                    const nameHeader = this.findColumnByAlternatives(row, [
+                        'Name',
+                        'Item Description',
+                        'Product Name',
+                        'Description',
+                        'Item Name',
+                    ]);
+                    const costHeader = this.findColumnByAlternatives(row, [
+                        'Cost',
+                        'Cost Price',
+                        'Unit Cost',
+                        'Cost ex',
+                        'Price',
+                        'Unit Price',
+                        'Cost inc',
+                        'Selling Price',
+                        'Retail Price',
+                    ]);
+                    const barcodeHeader = this.findColumnByAlternatives(row, [
+                        'Barcode',
+                        'Alias',
+                        'EAN',
+                        'UPC',
+                        'GTIN',
+                        'Product Barcode',
+                        'Barcode Number',
+                    ]);
                     // Check if all required columns are present
                     if (!skuHeader) {
                         errors.push(`Missing required column header for SKU. Acceptable alternatives: SKU, Item Code, Reorder Number, Product Code, Item Number. Column headers are case-insensitive and leading/trailing spaces are ignored.`);
@@ -821,7 +938,7 @@ class ProductService {
         const headers = Object.keys(row);
         for (const alt of alternatives) {
             // Case insensitive search
-            const foundHeader = headers.find(header => header.toLowerCase() === alt.toLowerCase());
+            const foundHeader = headers.find((header) => header.toLowerCase() === alt.toLowerCase());
             if (foundHeader) {
                 return foundHeader;
             }
@@ -829,21 +946,20 @@ class ProductService {
         return null;
     }
     async getProductBySkuOrBarcode(sku, barcode) {
-        const db = (0, database_1.getDb)();
-        try {
-            // Check for products by SKU and barcode independently
-            const bySku = db.prepare("SELECT * FROM products WHERE sku = ?").get(sku);
-            const byBarcode = db.prepare("SELECT * FROM products WHERE barcode = ?").get(barcode);
-            // If both match different products, this is an error case
-            if (bySku && byBarcode && bySku.id !== byBarcode.id) {
-                throw new Error(`Duplicate identifiers detected: SKU ${sku} exists in product ${bySku.id} and barcode ${barcode} exists in product ${byBarcode.id}. This will cause data integrity issues.`);
-            }
-            // Return the product found by either SKU or barcode (or null if neither)
-            return bySku || byBarcode || null;
+        // Check for products by SKU and barcode independently
+        const bySku = await this.prisma.product.findUnique({
+            where: { sku },
+        });
+        const byBarcode = await this.prisma.product.findUnique({
+            where: { barcode },
+        });
+        // If both match different products, this is an error case
+        if (bySku && byBarcode && bySku.id !== byBarcode.id) {
+            throw new Error(`Duplicate identifiers detected: SKU ${sku} exists in product ${bySku.id} and barcode ${barcode} exists in product ${byBarcode.id}. This will cause data integrity issues.`);
         }
-        finally {
-            (0, database_1.releaseDb)(db);
-        }
+        // Return the product found by either SKU or barcode (or null if neither)
+        const product = bySku || byBarcode;
+        return product ? this.mapPrismaToModel(product) : null;
     }
 }
 exports.ProductService = ProductService;

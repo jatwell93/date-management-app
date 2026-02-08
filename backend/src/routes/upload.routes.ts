@@ -3,6 +3,9 @@ import multer from 'multer';
 import { authenticateToken } from '../middleware/auth.middleware';
 import { UploadController } from '../controllers/upload.controller';
 import { ServiceProvider } from '../services/service-provider';
+import { validateRequest } from '../middleware/validateRequest';
+import { uploadInitiateSchema, uploadCompleteSchema } from '../schemas';
+import { uploadLimiter } from '../middleware/rateLimiter';
 
 const router = express.Router();
 
@@ -22,13 +25,19 @@ const upload = multer({
  * POST /api/upload/initiate
  * Initiate upload process - returns strategy (direct vs presigned)
  */
-router.post('/initiate', authenticateToken, (req, res) => uploadController.initiate(req, res));
+router.post(
+  '/initiate',
+  authenticateToken,
+  uploadLimiter,
+  validateRequest(uploadInitiateSchema),
+  (req, res) => uploadController.initiate(req, res),
+);
 
 /**
  * POST /api/upload/direct
  * Handle direct file upload logic
  */
-router.post('/direct', authenticateToken, upload.single('file'), (req, res) =>
+router.post('/direct', authenticateToken, uploadLimiter, upload.single('file'), (req, res) =>
   uploadController.direct(req, res),
 );
 
@@ -36,6 +45,12 @@ router.post('/direct', authenticateToken, upload.single('file'), (req, res) =>
  * POST /api/upload/complete
  * Complete upload process (after presigned upload) and trigger parsing
  */
-router.post('/complete', authenticateToken, (req, res) => uploadController.complete(req, res));
+router.post(
+  '/complete',
+  authenticateToken,
+  uploadLimiter,
+  validateRequest(uploadCompleteSchema),
+  (req, res) => uploadController.complete(req, res),
+);
 
 export default router;

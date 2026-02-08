@@ -2,9 +2,12 @@ import { Router, Request, Response } from 'express';
 import { UserService } from '../services/user.service';
 import { User } from '../models/user.model';
 import { authenticateToken, requireManager } from '../middleware/auth.middleware';
-import { validateUserInput, validateDataIntegrity } from '../middleware/validation.middleware';
+import { validateDataIntegrity } from '../middleware/validation.middleware';
+import { validateRequest } from '../middleware/validateRequest';
+import { userSchema } from '../schemas';
 import { validateBusinessRules } from '../middleware/data-integrity.middleware';
 import { escapeHtml } from '../utils/normalize.function';
+import { standardLimiter } from '../middleware/rateLimiter';
 
 const router = Router();
 const userService = new UserService();
@@ -45,7 +48,8 @@ router.post(
   '/',
   authenticateToken,
   requireManager,
-  validateUserInput,
+  standardLimiter,
+  validateRequest(userSchema),
   validateDataIntegrity,
   validateBusinessRules,
   async (req: Request, res: Response) => {
@@ -76,7 +80,8 @@ router.put(
   '/:id',
   authenticateToken,
   requireManager,
-  validateUserInput,
+  standardLimiter,
+  validateRequest(userSchema),
   validateDataIntegrity,
   validateBusinessRules,
   async (req: Request, res: Response) => {
@@ -107,7 +112,7 @@ router.put(
 );
 
 // DELETE /users/:id - Delete a user (Manager only)
-router.delete('/:id', authenticateToken, requireManager, async (req: Request, res: Response) => {
+router.delete('/:id', authenticateToken, requireManager, standardLimiter, async (req: Request, res: Response) => {
   try {
     const id = Number.parseInt(req.params.id, 10);
     if (Number.isNaN(id)) {

@@ -51,7 +51,7 @@ class ProductModel {
      * Finds a product by its barcode
      */
     async findByBarcode(barcode) {
-        const query = "SELECT * FROM products WHERE barcode = ?";
+        const query = 'SELECT * FROM products WHERE barcode = ?';
         const result = await this.db.get(query, [barcode]);
         if (!result)
             return null;
@@ -69,7 +69,7 @@ class ProductModel {
      * Finds a product by its ID
      */
     async findById(id) {
-        const query = "SELECT * FROM products WHERE id = ?";
+        const query = 'SELECT * FROM products WHERE id = ?';
         const result = await this.db.get(query, [id]);
         if (!result)
             return null;
@@ -90,7 +90,7 @@ class ProductModel {
         const fields = Object.keys(updateData);
         if (fields.length === 0)
             return null;
-        const setClause = fields.map((field) => `${field} = ?`).join(", ");
+        const setClause = fields.map((field) => `${field} = ?`).join(', ');
         const values = [...Object.values(updateData), id];
         const query = `UPDATE products SET ${setClause}, updated_at = CURRENT_TIMESTAMP WHERE id = ? RETURNING *`;
         const result = await this.db.get(query, values);
@@ -110,9 +110,9 @@ class ProductModel {
      * Deletes a product
      */
     async delete(id) {
-        const query = "DELETE FROM products WHERE id = ?";
+        const query = 'DELETE FROM products WHERE id = ?';
         const result = await this.db.run(query, [id]);
-        return result.changes != null && result.changes > 0;
+        return result.changes !== null && result.changes !== undefined && result.changes > 0;
     }
 }
 exports.ProductModel = ProductModel;

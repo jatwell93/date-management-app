@@ -2,9 +2,12 @@ import { Router, Request, Response } from 'express';
 import { StoreAreaService } from '../services/store-area.service';
 import { StoreArea } from '../models/store-area.model';
 import { authenticateToken } from '../middleware/auth.middleware';
-import { validateStoreAreaInput, validateDataIntegrity } from '../middleware/validation.middleware';
+import { validateDataIntegrity } from '../middleware/validation.middleware';
+import { validateRequest } from '../middleware/validateRequest';
+import { storeAreaSchema } from '../schemas';
 import { validateBusinessRules } from '../middleware/data-integrity.middleware';
 import { escapeHtml } from '../utils/normalize.function';
+import { standardLimiter } from '../middleware/rateLimiter';
 
 const router = Router();
 const storeAreaService = new StoreAreaService();
@@ -64,7 +67,8 @@ router.get('/name/:name', authenticateToken, async (req: Request, res: Response)
 router.post(
   '/',
   authenticateToken,
-  validateStoreAreaInput,
+  standardLimiter,
+  validateRequest(storeAreaSchema),
   validateDataIntegrity,
   validateBusinessRules,
   async (req: Request, res: Response) => {
@@ -92,7 +96,8 @@ router.post(
 router.put(
   '/:id',
   authenticateToken,
-  validateStoreAreaInput,
+  standardLimiter,
+  validateRequest(storeAreaSchema),
   validateDataIntegrity,
   validateBusinessRules,
   async (req: Request, res: Response) => {
@@ -125,7 +130,7 @@ router.put(
 );
 
 // DELETE /store-areas/:id - Delete a store area
-router.delete('/:id', authenticateToken, async (req: Request, res: Response) => {
+router.delete('/:id', authenticateToken, standardLimiter, async (req: Request, res: Response) => {
   try {
     const id = Number.parseInt(req.params.id, 10);
     if (Number.isNaN(id)) {

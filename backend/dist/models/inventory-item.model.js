@@ -38,12 +38,7 @@ class InventoryItemModel {
       VALUES (?, ?, ?, ?)
       RETURNING *
     `;
-        const result = await this.db.get(query, [
-            productId,
-            expiryDate,
-            locationId,
-            status,
-        ]);
+        const result = await this.db.get(query, [productId, expiryDate, locationId, status]);
         return {
             id: result.id,
             productId: result.product_id,
@@ -58,7 +53,7 @@ class InventoryItemModel {
      * Finds an inventory item by its ID
      */
     async findById(id) {
-        const query = "SELECT * FROM inventory_items WHERE id = ?";
+        const query = 'SELECT * FROM inventory_items WHERE id = ?';
         const result = await this.db.get(query, [id]);
         if (!result)
             return null;
@@ -76,7 +71,7 @@ class InventoryItemModel {
      * Finds inventory items by product ID
      */
     async findByProductId(productId) {
-        const query = "SELECT * FROM inventory_items WHERE product_id = ? ORDER BY expiry_date";
+        const query = 'SELECT * FROM inventory_items WHERE product_id = ? ORDER BY expiry_date';
         const results = await this.db.all(query, [productId]);
         return results.map((result) => ({
             id: result.id,
@@ -92,7 +87,7 @@ class InventoryItemModel {
      * Finds inventory items by location ID
      */
     async findByLocationId(locationId) {
-        const query = "SELECT * FROM inventory_items WHERE location_id = ? ORDER BY expiry_date";
+        const query = 'SELECT * FROM inventory_items WHERE location_id = ? ORDER BY expiry_date';
         const results = await this.db.all(query, [locationId]);
         return results.map((result) => ({
             id: result.id,
@@ -111,7 +106,7 @@ class InventoryItemModel {
         const fields = Object.keys(updateData);
         if (fields.length === 0)
             return null;
-        const setClause = fields.map((field) => `${field} = ?`).join(", ");
+        const setClause = fields.map((field) => `${field} = ?`).join(', ');
         const values = [...Object.values(updateData), id];
         const query = `UPDATE inventory_items SET ${setClause}, updated_at = CURRENT_TIMESTAMP WHERE id = ? RETURNING *`;
         const result = await this.db.get(query, values);
@@ -131,9 +126,9 @@ class InventoryItemModel {
      * Deletes an inventory item
      */
     async delete(id) {
-        const query = "DELETE FROM inventory_items WHERE id = ?";
+        const query = 'DELETE FROM inventory_items WHERE id = ?';
         const result = await this.db.run(query, [id]);
-        return result.changes != null && result.changes > 0;
+        return result.changes !== null && result.changes !== undefined && result.changes > 0;
     }
 }
 exports.InventoryItemModel = InventoryItemModel;

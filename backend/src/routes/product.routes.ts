@@ -2,10 +2,13 @@ import { Router, Request, Response } from 'express';
 import { ProductService } from '../services/product.service';
 import { Product } from '../models/product.model';
 import { authenticateToken } from '../middleware/auth.middleware';
-import { validateProductInput, validateDataIntegrity } from '../middleware/validation.middleware';
+import { validateDataIntegrity } from '../middleware/validation.middleware';
+import { validateRequest } from '../middleware/validateRequest';
+import { productSchema } from '../schemas';
 import { validateBusinessRules } from '../middleware/data-integrity.middleware';
 import multer, { FileFilterCallback } from 'multer';
 import { escapeHtml } from '../utils/normalize.function';
+import { standardLimiter } from '../middleware/rateLimiter';
 
 const router = Router();
 const productService = new ProductService();
@@ -99,7 +102,8 @@ router.get('/by-sku/:sku', authenticateToken, async (req: Request, res: Response
 router.post(
   '/',
   authenticateToken,
-  validateProductInput,
+  standardLimiter,
+  validateRequest(productSchema),
   validateDataIntegrity,
   validateBusinessRules,
   async (req: Request, res: Response) => {
@@ -127,7 +131,8 @@ router.post(
 router.put(
   '/:id',
   authenticateToken,
-  validateProductInput,
+  standardLimiter,
+  validateRequest(productSchema),
   validateDataIntegrity,
   validateBusinessRules,
   async (req: Request, res: Response) => {
@@ -160,7 +165,7 @@ router.put(
 );
 
 // DELETE /products/:id - Delete a product
-router.delete('/:id', authenticateToken, async (req: Request, res: Response) => {
+router.delete('/:id', authenticateToken, standardLimiter, async (req: Request, res: Response) => {
   try {
     const id = Number.parseInt(req.params.id, 10);
     if (Number.isNaN(id)) {
@@ -183,6 +188,7 @@ router.delete('/:id', authenticateToken, async (req: Request, res: Response) => 
 router.post(
   '/upload-csv',
   authenticateToken,
+  standardLimiter,
   upload.single('file'),
   async (req: Request, res: Response) => {
     try {

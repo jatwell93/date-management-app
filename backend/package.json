@@ -16,7 +16,10 @@
     "migrate": "ts-node src/migrations/migrate.ts",
     "migrate:status": "ts-node -e \"(async () => { const { MigrationService } = await import('./src/migrations/migration.service.ts'); const service = new MigrationService(); const status = await service.getMigrationStatus(); console.log('Migration Status:\\n================='); console.log(`Executed migrations: ${status.executed.length}`); console.log(`Pending migrations: ${status.pending.length}`); if (status.executed.length > 0) { console.log('\\nExecuted migrations:'); status.executed.forEach(m => { console.log(`  - ${m.id}: ${m.name} (${m.executed_at})`); }); } if (status.pending.length > 0) { console.log('\\nPending migrations:'); status.pending.forEach(m => { console.log(`  - ${m.id}: ${m.name}`); }); } })();\"",
     "migrate:rollback": "ts-node -e \"(async () => { const { MigrationService } = await import('./src/migrations/migration.service.ts'); const service = new MigrationService(); await service.rollbackLastMigration(); })();\"",
-    "seed": "node scripts/seed-users.js"
+    "seed": "node scripts/seed-users.js",
+    "secrets-scan": "git secrets --scan || echo 'git-secrets not installed. Install from: https://github.com/awslabs/git-secrets'",
+    "lint": "eslint . --ext .ts",
+    "lint:fix": "eslint . --ext .ts --fix"
   },
   "keywords": [],
   "author": "",
@@ -35,6 +38,7 @@
     "csv-parse": "^6.1.0",
     "dotenv": "^17.2.2",
     "express": "^4.19.2",
+    "express-rate-limit": "^8.2.1",
     "helmet": "^8.1.0",
     "jsonwebtoken": "^9.0.2",
     "multer": "^2.0.2",
@@ -43,7 +47,8 @@
     "sqlite": "^5.1.1",
     "sqlite3": "^5.1.7",
     "validator": "^13.15.15",
-    "xlsx": "^0.18.5"
+    "xlsx": "^0.18.5",
+    "zod": "^4.3.6"
   },
   "devDependencies": {
     "@cloudflare/workers-types": "^4.20260124.0",

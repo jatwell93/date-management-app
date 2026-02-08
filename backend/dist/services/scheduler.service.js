@@ -34,7 +34,9 @@ class SchedulerService {
         try {
             // Get all inventory items from the database
             const db = (0, database_1.getDb)();
-            const inventoryItems = db.prepare('SELECT id, expiry_date FROM inventory_items').all();
+            const inventoryItems = db
+                .prepare('SELECT id, expiry_date FROM inventory_items')
+                .all();
             console.log(`Processing ${inventoryItems.length} inventory items for markdown updates...`);
             // Process each inventory item
             for (const item of inventoryItems) {

@@ -23,7 +23,8 @@ class StoreAreaModel {
                 const indexes = await this.db.all("SELECT * FROM pragma_index_list('store_areas')");
                 let hasUniqueNameConstraint = false;
                 for (const index of indexes) {
-                    if (index.unique === 1) { // If it's a unique index
+                    if (index.unique === 1) {
+                        // If it's a unique index
                         const indexInfo = await this.db.all(`SELECT * FROM pragma_index_info('${index.name}')`);
                         if (indexInfo.some((col) => col.name === 'name')) {
                             hasUniqueNameConstraint = true;
@@ -33,9 +34,9 @@ class StoreAreaModel {
                 }
                 if (hasUniqueNameConstraint) {
                     // Get all data from the existing table
-                    const allData = await this.db.all("SELECT * FROM store_areas");
+                    const allData = await this.db.all('SELECT * FROM store_areas');
                     // Drop the table and recreate it without the unique constraint on name
-                    await this.db.run("DROP TABLE store_areas");
+                    await this.db.run('DROP TABLE store_areas');
                     const createTableQuery = `
             CREATE TABLE store_areas (
               id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -50,12 +51,12 @@ class StoreAreaModel {
                     await this.db.run(createTableQuery);
                     // Insert the data back
                     for (const row of allData) {
-                        await this.db.run("INSERT INTO store_areas (id, name, sub_department, last_checked, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?)", row.id, row.name, row.sub_department, row.last_checked, row.created_at, row.updated_at);
+                        await this.db.run('INSERT INTO store_areas (id, name, sub_department, last_checked, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?)', row.id, row.name, row.sub_department, row.last_checked, row.created_at, row.updated_at);
                     }
                 }
             }
             catch (error) {
-                console.error("Error during table migration:", error);
+                console.error('Error during table migration:', error);
                 // Re-throw the error so it's more visible
                 throw error;
             }
@@ -100,7 +101,7 @@ class StoreAreaModel {
      * Finds a store area by its ID
      */
     async findById(id) {
-        const query = "SELECT * FROM store_areas WHERE id = ?";
+        const query = 'SELECT * FROM store_areas WHERE id = ?';
         const result = await this.db.get(query, [id]);
         if (!result)
             return null;
@@ -117,7 +118,7 @@ class StoreAreaModel {
      * Finds store areas by their name (can return multiple if different subdepartments)
      */
     async findByName(name) {
-        const query = "SELECT * FROM store_areas WHERE name = ?";
+        const query = 'SELECT * FROM store_areas WHERE name = ?';
         const results = await this.db.all(query, [name]);
         if (!results || results.length === 0)
             return [];
@@ -134,7 +135,7 @@ class StoreAreaModel {
      * Finds a store area by its name and subdepartment (ensures uniqueness)
      */
     async findByNameAndSubDepartment(name, subDepartment) {
-        const query = "SELECT * FROM store_areas WHERE name = ? AND ((sub_department IS NULL AND ? IS NULL) OR (sub_department = ?))";
+        const query = 'SELECT * FROM store_areas WHERE name = ? AND ((sub_department IS NULL AND ? IS NULL) OR (sub_department = ?))';
         const result = await this.db.get(query, [name, subDepartment, subDepartment]);
         if (!result)
             return null;
@@ -151,7 +152,7 @@ class StoreAreaModel {
      * Gets all store areas
      */
     async findAll() {
-        const query = "SELECT * FROM store_areas ORDER BY name";
+        const query = 'SELECT * FROM store_areas ORDER BY name';
         const results = await this.db.all(query);
         return results.map((result) => ({
             id: result.id,
@@ -169,13 +170,15 @@ class StoreAreaModel {
         const fields = Object.keys(updateData);
         if (fields.length === 0)
             return null;
-        const setClause = fields.map((field) => {
-            if (field === "subDepartment")
-                return "sub_department = ?";
+        const setClause = fields
+            .map((field) => {
+            if (field === 'subDepartment')
+                return 'sub_department = ?';
             return `${field} = ?`;
-        }).join(", ");
+        })
+            .join(', ');
         const values = Object.entries(updateData).map(([key, value]) => {
-            if (key === "subDepartment")
+            if (key === 'subDepartment')
                 return value || null;
             return value;
         });
@@ -196,9 +199,9 @@ class StoreAreaModel {
      * Deletes a store area
      */
     async delete(id) {
-        const query = "DELETE FROM store_areas WHERE id = ?";
+        const query = 'DELETE FROM store_areas WHERE id = ?';
         const result = await this.db.run(query, [id]);
-        return result.changes != null && result.changes > 0;
+        return result.changes !== null && result.changes !== undefined && result.changes > 0;
     }
 }
 exports.StoreAreaModel = StoreAreaModel;

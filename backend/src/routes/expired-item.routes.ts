@@ -1,6 +1,9 @@
 import { Router, Response } from 'express';
 import { ExpiredItemService } from '../services/expired-item.service';
 import { authenticateToken, AuthRequest } from '../middleware/auth.middleware';
+import { validateRequest } from '../middleware/validateRequest';
+import { expiredItemProcessSchema } from '../schemas';
+import { standardLimiter } from '../middleware/rateLimiter';
 
 const router = Router();
 const expiredItemService = new ExpiredItemService();
@@ -17,7 +20,12 @@ router.get('/', authenticateToken, async (req: AuthRequest, res: Response) => {
 });
 
 // POST /expired-items/process - Process an expired item (mark as sold through or expired)
-router.post('/process', authenticateToken, async (req: AuthRequest, res: Response) => {
+router.post(
+  '/process',
+  authenticateToken,
+  standardLimiter,
+  validateRequest(expiredItemProcessSchema),
+  async (req: AuthRequest, res: Response) => {
   const { inventoryItemId, action, unitsDiscarded } = req.body;
 
   // Validate required fields
@@ -74,7 +82,8 @@ router.post('/process', authenticateToken, async (req: AuthRequest, res: Respons
 
     res.status(500).json({ message: 'Internal server error' });
   }
-});
+  },
+);
 
 // GET /reports/expired-losses - Get financial loss reports by SKU and store area
 router.get(

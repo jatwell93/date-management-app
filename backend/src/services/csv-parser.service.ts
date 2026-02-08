@@ -468,15 +468,16 @@ export class CSVParserService extends EventEmitter {
 
   /**
    * Sanitize a string value to prevent CSV injection
+   * Uses backslash escape for dangerous prefixes
    */
   private sanitizeValue(value: string): string {
     let sanitized = value;
 
-    // Remove or escape dangerous prefixes
+    // Escape dangerous prefixes with backslash
     for (const prefix of CSV_INJECTION_PREFIXES) {
       if (sanitized.startsWith(prefix)) {
-        // Prefix with single quote to neutralize formula
-        sanitized = "'" + sanitized;
+        // Prefix with backslash to escape the dangerous character
+        sanitized = '\\' + sanitized;
         break;
       }
     }

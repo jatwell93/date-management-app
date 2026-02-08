@@ -1,14 +1,12 @@
 require('../instrument');
 
 import express from 'express';
-import cors from 'cors';
 import helmet from 'helmet';
 import * as Sentry from '@sentry/node';
 import { createServer, Server as HttpsServer } from 'https';
 import { Server as HttpServer } from 'http'; // Import http server type
 import { promises as fs } from 'fs';
 import { join } from 'path';
-import { RateLimiterMemory } from 'rate-limiter-flexible';
 // import { initDatabase } from './database';
 import authRoutes from './routes/auth.routes';
 import productRoutes from './routes/product.routes';
@@ -24,6 +22,8 @@ import uploadRoutes from './routes/upload.routes';
 import storageQuotaRoutes from './routes/storage-quota.routes';
 import { authenticateToken } from './middleware/auth.middleware';
 import { errorHandler } from './middleware/error.middleware';
+import { corsMiddleware } from './middleware/cors';
+import { globalLimiter } from './middleware/rateLimiter';
 import { SchedulerService } from './services/scheduler.service';
 import { DatabaseMonitoringService } from './services/database.monitoring.service';
 import { ApplicationMonitoringService } from './services/application.monitoring.service';
@@ -32,12 +32,6 @@ import { envConfig } from './config/environment';
 
 const app = express();
 const port = envConfig.PORT;
-
-// Rate limiter configuration - limit each IP to 1000 requests per minute
-const rateLimiter = new RateLimiterMemory({
-  points: 1000, // Number of requests allowed per IP
-  duration: 60, // Per 60 seconds
-});
 
 // Security headers using Helmet
 app.use(
@@ -60,33 +54,14 @@ app.use(
   }),
 );
 
-// Configure CORS based on environment
-const corsOptions = {
-  origin:
-    envConfig.NODE_ENV === 'production'
-      ? envConfig.FRONTEND_URL // Use validated frontend URL in production
-      : '*', // Allow all origins in development
-  credentials: true,
-  optionsSuccessStatus: 200,
-};
-
-// Apply rate limiting middleware to all requests
-app.use((req, res, next) => {
-  const ipKey: string = req.ip ?? req.headers['x-forwarded-for']?.toString() ?? 'unknown';
-  rateLimiter
-    .consume(ipKey)
-    .then(() => {
-      next(); // If rate limit is not exceeded, continue
-    })
-    .catch(() => {
-      // If rate limit is exceeded, return 429 (Too Many Requests)
-      res.status(429).send({ error: 'Too Many Requests' });
-    });
-});
+// Apply global rate limiter (DDoS protection - 1000 requests per minute per IP)
+app.use(globalLimiter);
 
 // Middleware
 app.use(express.json());
-app.use(cors(corsOptions)); // Enable CORS with options
+
+// Apply CORS middleware with environment-based origin whitelist
+app.use(corsMiddleware);
 
 // Initialize database
 (async () => {

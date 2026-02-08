@@ -35,11 +35,7 @@ class AuditLogModel {
       VALUES (?, ?, ?)
       RETURNING *
     `;
-        const result = await this.db.get(query, [
-            userId,
-            inventoryItemId,
-            changeDescription,
-        ]);
+        const result = await this.db.get(query, [userId, inventoryItemId, changeDescription]);
         return {
             id: result.id,
             user_id: result.user_id,

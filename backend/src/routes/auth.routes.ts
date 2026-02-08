@@ -2,7 +2,9 @@ import { Router, Request, Response, NextFunction } from 'express';
 import validator from 'validator';
 import { AuthService } from '../services/auth.service';
 import { authenticateToken, generateToken } from '../middleware/auth.middleware';
-import { validateUserInput } from '../middleware/validation.middleware';
+import { validateRequest } from '../middleware/validateRequest';
+import { loginSchema } from '../schemas';
+import { strictLimiter } from '../middleware/rateLimiter';
 import { escapeHtml } from '../utils/normalize.function';
 
 const router = Router();
@@ -15,7 +17,12 @@ const normalizePin = (req: Request, _res: Response, next: NextFunction) => {
   next();
 };
 
-router.post('/login', normalizePin, validateUserInput, async (req: Request, res: Response) => {
+router.post(
+  '/login',
+  strictLimiter,
+  normalizePin,
+  validateRequest(loginSchema),
+  async (req: Request, res: Response) => {
   const rawPin = req.body.pin as string | undefined;
   const pin = rawPin ? validator.whitelist(rawPin, '0-9') : '';
   if (!pin) {

@@ -4,10 +4,8 @@ import { InventoryService } from '../services/inventory.service';
 import { ProductService } from '../services/product.service';
 import { InventoryItem } from '../models/inventory-item.model';
 import { authenticateToken, AuthRequest } from '../middleware/auth.middleware';
-import {
-  validateInventoryItemInput,
-  validateInventoryTransactionInput,
-} from '../middleware/validation.middleware';
+import { validateRequest } from '../middleware/validateRequest';
+import { inventoryItemSchema, inventoryTransactionSchema } from '../schemas';
 import {
   validateReferentialIntegrity,
   validateDataConsistency,
@@ -15,6 +13,7 @@ import {
 } from '../middleware/data-integrity.middleware';
 import { logTransaction } from '../controllers/inventory.controller';
 import { escapeHtml } from '../utils/normalize.function';
+import { standardLimiter } from '../middleware/rateLimiter';
 
 const router = Router();
 const inventoryService = new InventoryService();
@@ -136,7 +135,8 @@ router.get('/location/:locationId', authenticateToken, async (req: AuthRequest, 
 router.post(
   '/',
   authenticateToken,
-  validateInventoryItemInput,
+  standardLimiter,
+  validateRequest(inventoryItemSchema),
   validateReferentialIntegrity,
   validateDataConsistency,
   validateBusinessRules,
@@ -190,7 +190,8 @@ router.post(
 router.put(
   '/:id',
   authenticateToken,
-  validateInventoryItemInput,
+  standardLimiter,
+  validateRequest(inventoryItemSchema),
   validateReferentialIntegrity,
   validateBusinessRules,
   async (req: AuthRequest, res: Response) => {
@@ -227,7 +228,7 @@ router.put(
 );
 
 // DELETE /inventory-items/:id - Delete an inventory item
-router.delete('/:id', authenticateToken, async (req: AuthRequest, res: Response) => {
+router.delete('/:id', authenticateToken, standardLimiter, async (req: AuthRequest, res: Response) => {
   try {
     const id = Number.parseInt(req.params.id, 10);
     if (Number.isNaN(id)) {
@@ -251,6 +252,12 @@ router.delete('/:id', authenticateToken, async (req: AuthRequest, res: Response)
 });
 
 // POST /inventory-items/transaction - Log a new transaction
-router.post('/transaction', authenticateToken, validateInventoryTransactionInput, logTransaction);
+router.post(
+  '/transaction',
+  authenticateToken,
+  standardLimiter,
+  validateRequest(inventoryTransactionSchema),
+  logTransaction,
+);
 
 export default router;
