@@ -86,6 +86,7 @@ describe('UploadService', () => {
       expect(fs.writeFile).toHaveBeenCalledWith(expect.stringContaining(filename), mockBuffer);
       expect(mockCsvParserService.processFile).toHaveBeenCalledWith(
         expect.stringContaining(filename),
+        { uploadKey: key, userId: 1 },
       );
       expect(fs.unlink).toHaveBeenCalledWith(expect.stringContaining(filename));
     });

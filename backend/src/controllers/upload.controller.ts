@@ -25,6 +25,10 @@ export class UploadController {
       res.json(result);
     } catch (error) {
       console.error('Initiate upload error:', error);
+      if (error instanceof Error && error.message.includes('exceeds maximum')) {
+        res.status(400).json({ error: error.message });
+        return;
+      }
       res.status(500).json({ error: error instanceof Error ? error.message : 'Unknown error' });
     }
   }
