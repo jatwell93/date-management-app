@@ -14,10 +14,11 @@ const serviceProvider = new ServiceProvider();
 const uploadController = new UploadController(serviceProvider.getUploadService());
 
 // Configure Multer for direct uploads (MemoryStorage for small files)
+// Task 5.4: Configure file upload size limit (10MB)
 const upload = multer({
   storage: multer.memoryStorage(),
   limits: {
-    fileSize: 5 * 1024 * 1024, // 5MB limit for direct upload (safety margin over 2MB threshold)
+    fileSize: 10 * 1024 * 1024, // 10MB limit for direct upload
   },
 });
 

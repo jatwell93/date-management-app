@@ -38,10 +38,10 @@
 
 ## 5. Database & Request Security
 
-- [ ] 5.1 Verify `DATABASE_URL` includes `sslmode=require` parameter
-- [ ] 5.2 Add TLS verification check in `src/database.ts` (log success or warning on startup)
-- [ ] 5.3 Configure Express to limit request payload: `app.use(express.json({ limit: '10mb' }))`
-- [ ] 5.4 Configure multer for file uploads with size limit: `multer({ limits: { fileSize: 10 * 1024 * 1024 } })`
+- [x] 5.1 Verify `DATABASE_URL` includes `sslmode=require` parameter
+- [x] 5.2 Add TLS verification check in `src/database.ts` (log success or warning on startup)
+- [x] 5.3 Configure Express to limit request payload: `app.use(express.json({ limit: '10mb' }))`
+- [x] 5.4 Configure multer for file uploads with size limit: `multer({ limits: { fileSize: 10 * 1024 * 1024 } })`
 
 ## 6. Secrets Scanning & Prevention
 

@@ -58,7 +58,9 @@ app.use(
 app.use(globalLimiter);
 
 // Middleware
-app.use(express.json());
+// Task 5.3: Configure request payload size limit (10MB)
+app.use(express.json({ limit: '10mb' }));
+app.use(express.urlencoded({ extended: true, limit: '10mb' }));
 
 // Apply CORS middleware with environment-based origin whitelist
 app.use(corsMiddleware);
