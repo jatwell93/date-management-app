@@ -1,7 +1,11 @@
-import { PrismaClient } from '@prisma/client';
+import { PrismaClient } from './generated/client';
 import { getDefaultDatabaseClient } from '../database/database-factory';
 import { getDefaultStorageProvider } from '../storage/storage-factory';
 import { StorageProvider } from '../storage/storage-provider.interface';
+import { getDb } from '../database';
+import { Database as DB } from 'better-sqlite3';
+import { AnalyticsService } from './analytics.service';
+import { ReportService } from './report.service';
 import { AuthService } from './auth.service';
 import { CSVParserService } from './csv-parser.service';
 import { StorageQuotaService } from './storage-quota.service';
@@ -11,15 +15,19 @@ import { UserService } from './user.service';
 export class ServiceProvider {
   private prisma: PrismaClient;
   private storageProvider: StorageProvider;
+  private db: DB;
   private authService?: AuthService;
   private userService?: UserService;
   private csvParserService?: CSVParserService;
   private storageQuotaService?: StorageQuotaService;
   private uploadService?: UploadService;
+  private analyticsService?: AnalyticsService;
+  private reportService?: ReportService;
 
   constructor(prismaClient?: PrismaClient, storageProvider?: StorageProvider) {
     this.prisma = prismaClient ?? getDefaultDatabaseClient();
     this.storageProvider = storageProvider ?? getDefaultStorageProvider();
+    this.db = getDb();
   }
 
   getAuthService(): AuthService {
@@ -59,5 +67,19 @@ export class ServiceProvider {
       );
     }
     return this.uploadService;
+  }
+
+  getAnalyticsService(): AnalyticsService {
+    if (!this.analyticsService) {
+      this.analyticsService = new AnalyticsService(this.db);
+    }
+    return this.analyticsService;
+  }
+
+  getReportService(): ReportService {
+    if (!this.reportService) {
+      this.reportService = new ReportService(this.db);
+    }
+    return this.reportService;
   }
 }

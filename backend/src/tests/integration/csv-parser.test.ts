@@ -13,7 +13,7 @@
 import * as fs from 'fs';
 import * as path from 'path';
 import * as os from 'os';
-import { PrismaClient } from '@prisma/client';
+import { PrismaClient } from './generated/client';
 import { CSVParserService, ProgressEvent } from '../../services/csv-parser.service';
 import { getDefaultDatabaseClient } from '../../database/database-factory';
 

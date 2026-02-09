@@ -9,7 +9,7 @@
  */
 
 import { CSVParserService } from '../../services/csv-parser.service';
-import { PrismaClient } from '@prisma/client';
+import { PrismaClient } from './generated/client';
 
 describe('CSV Injection Prevention', () => {
   let csvParser: CSVParserService;

@@ -8,7 +8,7 @@
  * - Supports dependency injection for testing
  */
 
-import { PrismaClient } from '@prisma/client';
+import { PrismaClient } from './generated/client';
 import { ServiceProvider } from '../../services/service-provider';
 import { StorageProvider } from '../../storage/storage-provider.interface';
 

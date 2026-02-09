@@ -52,7 +52,7 @@
   },
   "devDependencies": {
     "@cloudflare/workers-types": "^4.20260124.0",
-    "@prisma/client": "^5.22.0",
+    "@prisma/client": "^7.3.0",
     "@types/bcrypt": "^5.0.2",
     "@types/better-sqlite3": "^7.6.13",
     "@types/cors": "^2.8.19",
@@ -75,7 +75,7 @@
     "jest-environment-jsdom": "^30.2.0",
     "nodemon": "^3.1.0",
     "prettier": "^3.6.2",
-    "prisma": "^5.22.0",
+    "prisma": "^7.3.0",
     "supertest": "^7.0.0",
     "ts-jest": "^29.1.2",
     "ts-node": "^10.9.2",

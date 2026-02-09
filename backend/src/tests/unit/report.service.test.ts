@@ -1,25 +1,39 @@
 import { ReportService } from '../../services/report.service';
-import { getDb } from '../../database';
+import { ReportRepository } from '../../repositories/report.repository';
+import { Database as DB } from 'better-sqlite3';
 
-// Mock the database module
-jest.mock('../../database', () => ({
-  getDb: jest.fn(),
-}));
+// Mock the ReportRepository
+jest.mock('../../repositories/report.repository');
 
 describe('ReportService', () => {
   let reportService: ReportService;
+  let mockRepository: jest.Mocked<ReportRepository>;
+  let mockDb: Partial<DB>;
 
   beforeEach(() => {
-    reportService = new ReportService();
-    const mockStatement = {
-      run: jest.fn(),
-      all: jest.fn(),
-      get: jest.fn(),
-    };
-    const mockDb = {
-      prepare: jest.fn(() => mockStatement),
-    };
-    (getDb as jest.Mock).mockReturnValue(mockDb);
+    // Create a mock database instance
+    mockDb = {} as DB;
+
+    // Create service with mock database
+    reportService = new ReportService(mockDb as DB);
+
+    // Create mock repository
+    mockRepository = {
+      getMonthlyExpiryReport: jest.fn(),
+      getOverallExpiryReport: jest.fn(),
+      getDetailedExpiryReport: jest.fn(),
+      getMonthlyMarkdownReport: jest.fn(),
+      getUsageReport: jest.fn(),
+      getDailyUsageReport: jest.fn(),
+      getDashboardAnalytics: jest.fn(),
+      getLossBySkuReport: jest.fn(),
+      getLossByDepartmentReport: jest.fn(),
+      getItemsByUserReport: jest.fn(),
+      getItemsByDateReport: jest.fn(),
+    } as any;
+
+    // Inject the mock repository into the service
+    (reportService as any).repository = mockRepository;
   });
 
   afterEach(() => {
@@ -31,24 +45,56 @@ describe('ReportService', () => {
       { month: '2025-08', totalMarkdownValue: 150.75, itemCount: 25 },
       { month: '2025-09', totalMarkdownValue: 200.5, itemCount: 30 },
     ];
-    const mockStatement = (getDb() as any).prepare();
-    mockStatement.all.mockResolvedValue(mockReport);
+    mockRepository.getMonthlyMarkdownReport.mockResolvedValue(mockReport);
 
     const report = await reportService.getMonthlyMarkdownReport();
 
     expect(report).toEqual(mockReport);
+    expect(mockRepository.getMonthlyMarkdownReport).toHaveBeenCalledTimes(1);
   });
 
   it('should return usage report', async () => {
     const mockUsageReport = [
-      { user: 'Manager', scans: 100, markdowns: 10 },
-      { user: 'Team Member', scans: 50, markdowns: 5 },
+      { role: 'Manager', userCount: 5, totalActions: 100 },
+      { role: 'Team Member', userCount: 10, totalActions: 150 },
     ];
-    const mockStatement = (getDb() as any).prepare();
-    mockStatement.all.mockResolvedValue(mockUsageReport);
+    mockRepository.getUsageReport.mockResolvedValue(mockUsageReport);
 
     const usageReport = await reportService.getUsageReport();
 
     expect(usageReport).toEqual(mockUsageReport);
+    expect(mockRepository.getUsageReport).toHaveBeenCalledTimes(1);
+  });
+
+  it('should return monthly expiry report', async () => {
+    const mockReport = [
+      { month: '2025-08', expiredCount: 10, markdownCount: 5 },
+      { month: '2025-09', expiredCount: 15, markdownCount: 8 },
+    ];
+    mockRepository.getMonthlyExpiryReport.mockResolvedValue(mockReport);
+
+    const report = await reportService.getMonthlyExpiryReport();
+
+    expect(report).toEqual(mockReport);
+    expect(mockRepository.getMonthlyExpiryReport).toHaveBeenCalledTimes(1);
+  });
+
+  it('should return dashboard analytics', async () => {
+    const mockAnalytics = {
+      totalItems: 1000,
+      expiringThisWeek: 25,
+      expiringThisMonth: 100,
+      totalExpired: 50,
+      totalMarkdown: 30,
+      totalValue: 50000,
+      expiredValue: 1500,
+      markdownValue: 800,
+    };
+    mockRepository.getDashboardAnalytics.mockResolvedValue(mockAnalytics);
+
+    const analytics = await reportService.getDashboardAnalytics();
+
+    expect(analytics).toEqual(mockAnalytics);
+    expect(mockRepository.getDashboardAnalytics).toHaveBeenCalledTimes(1);
   });
 });

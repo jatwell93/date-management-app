@@ -8,7 +8,7 @@
  * the services can be used with injected PrismaClient instances.
  */
 
-import { PrismaClient } from '@prisma/client';
+import { PrismaClient } from './generated/client';
 import { InventoryService } from '../../services/inventory.service';
 import { StoreAreaService } from '../../services/store-area.service';
 import { ProductService } from '../../services/product.service';

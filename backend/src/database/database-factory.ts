@@ -9,7 +9,7 @@
  * with proper connection pooling for production.
  */
 
-import { PrismaClient } from '@prisma/client';
+import { PrismaClient } from './generated/client';
 
 export type DatabaseEnvironment = 'development' | 'production' | 'test';
 

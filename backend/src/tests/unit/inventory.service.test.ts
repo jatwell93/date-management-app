@@ -1,5 +1,5 @@
 import { InventoryService } from '../../services/inventory.service';
-import { PrismaClient } from '@prisma/client';
+import { PrismaClient } from './generated/client';
 
 describe('InventoryService', () => {
   let inventoryService: InventoryService;

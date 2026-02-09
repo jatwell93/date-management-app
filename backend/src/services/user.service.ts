@@ -1,4 +1,4 @@
-import { PrismaClient } from '@prisma/client';
+import { PrismaClient } from './generated/client';
 import { getDefaultDatabaseClient } from '../database/database-factory';
 import { User } from '../models/user.model';
 import { AuthService } from './auth.service';

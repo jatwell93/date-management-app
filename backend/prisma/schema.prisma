@@ -5,10 +5,6 @@
 // 1. Copy schema.planetscale.prisma to schema.prisma
 // 2. Or use prisma generate --schema=./prisma/schema.planetscale.prisma
 
-generator client {
-  provider = "prisma-client-js"
-}
-
 // Development: SQLite
 // For production, use production/schema.prisma
 datasource db {

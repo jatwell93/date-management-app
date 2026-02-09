@@ -7,10 +7,6 @@
 // Or for migrations:
 // npx prisma migrate dev --schema=./prisma/production/schema.prisma
 
-generator client {
-  provider = "prisma-client-js"
-}
-
 // Production: PostgreSQL (Neon Serverless)
 // When using this schema, set DATABASE_URL to your Neon connection string
 // or copy NEON_CONNECTION_STRING to DATABASE_URL

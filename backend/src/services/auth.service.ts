@@ -1,6 +1,6 @@
 import jwt from 'jsonwebtoken';
 import bcrypt from 'bcrypt';
-import { PrismaClient } from '@prisma/client';
+import { PrismaClient } from './generated/client';
 import { getDefaultDatabaseClient } from '../database/database-factory';
 import { Logger } from '../utils/logger';
 

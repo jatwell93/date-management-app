@@ -1,11 +1,12 @@
 import { Router, Request, Response } from 'express';
 import validator from 'validator';
-import { ReportService } from '../services/report.service';
+import { ServiceProvider } from '../services/service-provider';
 import { authenticateToken } from '../middleware/auth.middleware';
 import { escapeHtml } from '../utils/normalize.function';
 
 const router = Router();
-const reportService = new ReportService();
+const serviceProvider = new ServiceProvider();
+const reportService = serviceProvider.getReportService();
 
 // GET /reports/expiry - Get monthly expiry report (FR-004)
 router.get('/expiry', authenticateToken, async (req: Request, res: Response) => {

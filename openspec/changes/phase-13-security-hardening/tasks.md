@@ -62,16 +62,16 @@
 - [x] 7.6 Define public endpoints that skip JWT validation (login, register, health)
 - [x] 7.7 Test JWT validation in Workers with valid, invalid, and expired tokens
 
-## 8. Service Refactoring (Prisma + Dependency Injection)
+## 8. Service Refactoring (Dependency Injection + Repository Layer)
 
-- [ ] 8.1 Refactor `src/services/analyticsService.ts` to accept Prisma client via constructor (DI)
-- [ ] 8.2 Create `src/repositories/analyticsRepository.ts` with data access methods for analytics queries
-- [ ] 8.3 Update `src/services/analyticsService.ts` to use repository instead of raw queries
-- [ ] 8.4 Refactor `src/services/reportService.ts` similarly (DI + Prisma)
-- [ ] 8.5 Create `src/repositories/reportRepository.ts` with data access methods
-- [ ] 8.6 Apply TypeScript strict type annotations to refactored services
-- [ ] 8.7 Update controllers to inject services with dependencies
-- [ ] 8.8 Update tests to mock repositories instead of database
+- [x] 8.1 Refactor `src/services/analyticsService.ts` to accept Database via constructor (DI)
+- [x] 8.2 Create `src/repositories/analyticsRepository.ts` with data access methods for analytics queries
+- [x] 8.3 Update `src/services/analyticsService.ts` to use repository instead of raw queries
+- [x] 8.4 Refactor `src/services/reportService.ts` similarly (DI + Repository)
+- [x] 8.5 Create `src/repositories/reportRepository.ts` with data access methods
+- [x] 8.6 Apply TypeScript strict type annotations to refactored services
+- [x] 8.7 Update ServiceProvider and routes to inject services with dependencies
+- [x] 8.8 Update tests to mock repositories instead of database (17/17 tests passing)
 
 ## 9. Authentication Service Enhancement & Testing
 

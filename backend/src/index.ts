@@ -27,7 +27,7 @@ import { globalLimiter } from './middleware/rateLimiter';
 import { SchedulerService } from './services/scheduler.service';
 import { DatabaseMonitoringService } from './services/database.monitoring.service';
 import { ApplicationMonitoringService } from './services/application.monitoring.service';
-import { AnalyticsService } from './services/analytics.service';
+import { ServiceProvider } from './services/service-provider';
 import { envConfig } from './config/environment';
 
 const app = express();
@@ -121,18 +121,24 @@ if (!isTestEnv) {
 
   // Listen for application alerts
   appMonitoringService.on('alert', (alert) => {
-    console.log(`Application Alert [${alert.severity.toUpperCase()}]: ${alert.message}`, {
-      type: alert.type,
-      timestamp: alert.timestamp,
-      metadata: alert.metadata,
-    });
+    console.log(
+      'Application Alert [%s]: %s',
+      alert.severity.toUpperCase(),
+      alert.message,
+      {
+        type: alert.type,
+        timestamp: alert.timestamp,
+        metadata: alert.metadata,
+      },
+    );
   });
 
   // Apply application monitoring middleware
   app.use(appMonitoringService.requestTrackingMiddleware());
 
-  // Initialize analytics service
-  const analyticsService = AnalyticsService.getInstance();
+  // Initialize analytics service via ServiceProvider (Task 8.7)
+  const serviceProvider = new ServiceProvider();
+  const analyticsService = serviceProvider.getAnalyticsService();
   analyticsService.initialize({
     enableTracking: true,
     enableSessionTracking: true,

@@ -12,7 +12,7 @@ import {
   withTransaction,
   withTransactionOptions,
 } from '../../database/database-factory';
-import { PrismaClient } from '@prisma/client';
+import { PrismaClient } from './generated/client';
 
 // Store original env
 const originalEnv = process.env;
