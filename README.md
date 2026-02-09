@@ -51,6 +51,14 @@ For developers, see the **Backend README** for comprehensive setup:
 
 ## Security
 
+For comprehensive security documentation, see **[docs/security.md](docs/security.md)** which covers:
+- Input validation and CSV injection prevention
+- Authentication & token management
+- Rate limiting and CORS security
+- Database and transport security
+- Error handling and secrets management
+- Best practices for developers
+
 ### Secrets Scanning (Task 6.5)
 
 This project uses [git-secrets](https://github.com/awslabs/git-secrets) to prevent committing sensitive data like API keys, passwords, and tokens.
