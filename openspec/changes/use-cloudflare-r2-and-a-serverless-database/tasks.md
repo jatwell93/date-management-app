@@ -234,23 +234,23 @@
 
 ## 13. Security Hardening
 
-- [ ] 13.1 Implement CSV injection sanitization in parser
-- [ ] 13.2 Add input validation for all API endpoints
-- [ ] 13.3 Configure rate limiting on upload endpoints
-- [ ] 13.4 Enable TLS-only connections to Neon (verify sslmode=require in connection string)
-- [ ] 13.5 Verify no secrets in codebase (use git-secrets or similar)
-- [ ] 13.6 Configure CORS to whitelist production domain only
-- [ ] 13.7 Add request size limits (10MB max)
-- [ ] 13.8 Implement JWT token validation in Workers
-- [ ] 13.9 Run security audit with `npm audit`
-- [ ] 13.10 Document security measures in `docs/security.md`
+- [x] 13.1 Implement CSV injection sanitization in parser
+- [x] 13.2 Add input validation for all API endpoints
+- [x] 13.3 Configure rate limiting on upload endpoints
+- [x] 13.4 Enable TLS-only connections to Neon (verify sslmode=require in connection string)
+- [x] 13.5 Verify no secrets in codebase (use git-secrets or similar)
+- [x] 13.6 Configure CORS to whitelist production domain only
+- [x] 13.7 Add request size limits (10MB max)
+- [x] 13.8 Implement JWT token validation in Workers
+- [x] 13.9 Run security audit with `npm audit`
+- [x] 13.10 Document security measures in `docs/security.md`
 ### Refer to tech-debt.md for steps 13.11 - 13.16
-- [ ] 13.11 Refactor AnalyticsService (split & Prisma)
-- [ ] 13.12 Refactor ReportService (Prisma)
-- [ ] 13.13 Create AnalyticsRepository + ReportRepository
-- [ ] 13.14 Service-level TypeScript type fixes
-- [ ] 13.15 Global error handler + custom errors
-- [ ] 13.16 AuthService test coverage >80%
+- [x] 13.11 Refactor AnalyticsService (split & Prisma)
+- [x] 13.12 Refactor ReportService (Prisma)
+- [x] 13.13 Create AnalyticsRepository + ReportRepository
+- [x] 13.14 Service-level TypeScript type fixes
+- [x] 13.15 Global error handler + custom errors
+- [x] 13.16 AuthService test coverage >80%
   - Deliverable: All services use Prisma/DI; error handling consistent
 
 
