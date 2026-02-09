@@ -54,13 +54,13 @@
 
 ## 7. Workers Edge Security (JWT Validation)
 
-- [ ] 7.1 Create JWT middleware in `workers/src/middleware/auth.ts` using `jose` library
-- [ ] 7.2 Extract JWT from `Authorization: Bearer <token>` header in Workers middleware
-- [ ] 7.3 Verify JWT signature using public key (from Neon Auth or environment)
-- [ ] 7.4 Return 401 if token is missing, invalid, or expired
-- [ ] 7.5 Pass validated user ID to backend in `x-user-id` header
-- [ ] 7.6 Define public endpoints that skip JWT validation (login, register, health)
-- [ ] 7.7 Test JWT validation in Workers with valid, invalid, and expired tokens
+- [x] 7.1 Create JWT middleware in `workers/src/middleware/auth.ts` using `jose` library
+- [x] 7.2 Extract JWT from `Authorization: Bearer <token>` header in Workers middleware
+- [x] 7.3 Verify JWT signature using public key (from Neon Auth or environment)
+- [x] 7.4 Return 401 if token is missing, invalid, or expired
+- [x] 7.5 Pass validated user ID to backend in `x-user-id` header
+- [x] 7.6 Define public endpoints that skip JWT validation (login, register, health)
+- [x] 7.7 Test JWT validation in Workers with valid, invalid, and expired tokens
 
 ## 8. Service Refactoring (Prisma + Dependency Injection)
 

@@ -27,6 +27,7 @@ import {
   getRequestMetrics,
   formatMetricsForAnalytics,
 } from './middleware/metrics.middleware';
+import { authenticateRequest, addUserIdHeader, unauthorized, getPublicEndpoints } from './middleware/auth';
 import { handleHealthCheck } from './health';
 import { createDatabaseClient } from '../../backend/src/database/database-factory';
 
@@ -188,16 +189,59 @@ function registerExpressRouter(
 }
 
 /**
+ * Task 7.1: Create JWT authentication middleware for Workers
+ * Validates JWT tokens at edge before routing to backend
+ */
+function createJWTAuthMiddleware(env: Env): ExpressMiddleware {
+  return async (req: ExpressRequest, res: ExpressResponse, next: () => void) => {
+    // Task 7.6: Skip validation for public endpoints
+    const publicEndpoints = getPublicEndpoints();
+    const isPublic = publicEndpoints.some(endpoint => req.path.startsWith(endpoint));
+    
+    // Allow public endpoints without authentication
+    if (isPublic) {
+      return next(); // Continue to next middleware
+    }
+
+    // Task 7.3: Verify JWT signature using secret from environment
+    // Task 7.4: Return 401 if token is missing, invalid, or expired
+    const authResult = await authenticateRequest(req, env.JWT_SECRET);
+
+    if (!authResult.authenticated) {
+      // Send 401 Unauthorized response
+      res.status(401);
+      res.setHeader('Content-Type', 'application/json');
+      res.setHeader('WWW-Authenticate', 'Bearer realm="API"');
+      res.json({
+        code: 'UNAUTHORIZED',
+        message: authResult.error || 'Authentication required',
+        timestamp: new Date().toISOString(),
+      });
+      return; // Stop processing, response already sent
+    }
+
+    if (authResult.userId) {
+      // Task 7.5: Pass validated user ID to backend in x-user-id header
+      req.headers['x-user-id'] = String(authResult.userId);
+      req.userId = authResult.userId;
+    }
+
+    return next(); // Continue to next middleware
+  };
+}
+
+/**
  * Initialize Workers router with all Express routes
  */
 function createRouter(env: Env): WorkersRouter {
   const router = new WorkersRouter();
 
-  // Global middleware
+  // Global middleware execution order (important!)
   router.use(createMetricsInitializer()); // Initialize metrics tracking first
   router.use(createProductionCors(env));
   router.use(createRequestLogger(env));
   router.use(createRateLimiter(env));
+  router.use(createJWTAuthMiddleware(env)); // Task 7: JWT validation (after rate limiting)
 
   // Register imported Express routes
   // Each route is prefixed with /api to match backend URL structure
