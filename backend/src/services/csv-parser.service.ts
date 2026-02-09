@@ -15,7 +15,7 @@
  * - Duplicate SKU detection
  */
 
-import { PrismaClient } from './generated/client';
+import { PrismaClient } from '../prisma/generated/client';
 import { EventEmitter } from 'events';
 import { parse } from 'csv-parse';
 import * as fs from 'fs';

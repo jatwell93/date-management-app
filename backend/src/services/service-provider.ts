@@ -1,4 +1,4 @@
-import { PrismaClient } from './generated/client';
+import { PrismaClient } from '../prisma/generated/client';
 import { getDefaultDatabaseClient } from '../database/database-factory';
 import { getDefaultStorageProvider } from '../storage/storage-factory';
 import { StorageProvider } from '../storage/storage-provider.interface';
