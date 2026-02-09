@@ -4,9 +4,24 @@ import { PrismaClient } from '@prisma/client';
 import { getDefaultDatabaseClient } from '../database/database-factory';
 import { Logger } from '../utils/logger';
 import { AuthenticationError, InternalError } from '../errors';
+import crypto from 'crypto';
+
+export interface TokenPair {
+  accessToken: string;
+  refreshToken: string;
+}
+
+export interface TokenPayload {
+  userId: number;
+  role: string;
+  iat?: number;
+  exp?: number;
+}
 
 export class AuthService {
   private prisma: PrismaClient;
+  private readonly ACCESS_TOKEN_EXPIRY = '1h';
+  private readonly REFRESH_TOKEN_EXPIRY = '7d';
 
   constructor(prismaClient?: PrismaClient) {
     this.prisma = prismaClient ?? getDefaultDatabaseClient();
@@ -156,6 +171,160 @@ export class AuthService {
         stack: error instanceof Error ? error.stack : undefined,
       });
       throw new InternalError('Authentication failed');
+    }
+  }
+
+  /**
+   * Generate both access and refresh tokens for a user
+   */
+  async generateTokens(userId: number, role: string): Promise<TokenPair> {
+    try {
+      const secret = process.env.JWT_SECRET || 'your_jwt_secret';
+      
+      // Generate access token (short-lived)
+      const accessToken = jwt.sign(
+        { userId, role },
+        secret,
+        { expiresIn: this.ACCESS_TOKEN_EXPIRY }
+      );
+
+      // Generate refresh token (long-lived)
+      const refreshToken = crypto.randomBytes(64).toString('hex');
+      const expiresAt = new Date();
+      expiresAt.setDate(expiresAt.getDate() + 7); // 7 days from now
+
+      // Store refresh token in database
+      await this.prisma.refreshToken.create({
+        data: {
+          userId,
+          token: refreshToken,
+          expiresAt,
+        },
+      });
+
+      Logger.info('Auth service: Generated token pair', { userId });
+      return { accessToken, refreshToken };
+    } catch (error) {
+      Logger.error('Auth service: Error generating tokens', {
+        error: error instanceof Error ? error.message : 'Unknown error',
+      });
+      throw new InternalError('Token generation failed');
+    }
+  }
+
+  /**
+   * Verify and decode a JWT access token
+   */
+  verifyToken(token: string): TokenPayload {
+    try {
+      const secret = process.env.JWT_SECRET || 'your_jwt_secret';
+      const decoded = jwt.verify(token, secret) as TokenPayload;
+      return decoded;
+    } catch (error) {
+      Logger.warn('Auth service: Token verification failed', {
+        error: error instanceof Error ? error.message : 'Unknown error',
+      });
+      throw new AuthenticationError('Invalid or expired token');
+    }
+  }
+
+  /**
+   * Refresh access token using a valid refresh token
+   */
+  async refreshAccessToken(refreshToken: string): Promise<string> {
+    try {
+      // Find refresh token in database
+      const storedToken = await this.prisma.refreshToken.findUnique({
+        where: { token: refreshToken },
+        include: { user: true },
+      });
+
+      if (!storedToken) {
+        Logger.warn('Auth service: Refresh token not found');
+        throw new AuthenticationError('Invalid refresh token');
+      }
+
+      // Check if token is expired
+      if (storedToken.expiresAt < new Date()) {
+        // Clean up expired token
+        await this.prisma.refreshToken.delete({ where: { id: storedToken.id } });
+        Logger.warn('Auth service: Refresh token expired', { userId: storedToken.userId });
+        throw new AuthenticationError('Refresh token expired');
+      }
+
+      // Check if token is revoked
+      if (storedToken.revokedAt) {
+        Logger.warn('Auth service: Refresh token revoked', { userId: storedToken.userId });
+        throw new AuthenticationError('Refresh token revoked');
+      }
+
+      // Generate new access token
+      const secret = process.env.JWT_SECRET || 'your_jwt_secret';
+      const accessToken = jwt.sign(
+        { userId: storedToken.userId, role: storedToken.user.role },
+        secret,
+        { expiresIn: this.ACCESS_TOKEN_EXPIRY }
+      );
+
+      Logger.info('Auth service: Access token refreshed', { userId: storedToken.userId });
+      return accessToken;
+    } catch (error) {
+      if (error instanceof AuthenticationError) {
+        throw error;
+      }
+      Logger.error('Auth service: Error refreshing access token', {
+        error: error instanceof Error ? error.message : 'Unknown error',
+      });
+      throw new InternalError('Token refresh failed');
+    }
+  }
+
+  /**
+   * Revoke a refresh token (e.g., on logout)
+   */
+  async revokeRefreshToken(refreshToken: string): Promise<void> {
+    try {
+      const storedToken = await this.prisma.refreshToken.findUnique({
+        where: { token: refreshToken },
+      });
+
+      if (!storedToken) {
+        Logger.warn('Auth service: Attempt to revoke non-existent token');
+        return; // Silently succeed if token doesn't exist
+      }
+
+      await this.prisma.refreshToken.update({
+        where: { id: storedToken.id },
+        data: { revokedAt: new Date() },
+      });
+
+      Logger.info('Auth service: Refresh token revoked', { userId: storedToken.userId });
+    } catch (error) {
+      Logger.error('Auth service: Error revoking token', {
+        error: error instanceof Error ? error.message : 'Unknown error',
+      });
+      throw new InternalError('Token revocation failed');
+    }
+  }
+
+  /**
+   * Clean up expired refresh tokens (should be run periodically)
+   */
+  async cleanupExpiredTokens(): Promise<number> {
+    try {
+      const result = await this.prisma.refreshToken.deleteMany({
+        where: {
+          expiresAt: { lt: new Date() },
+        },
+      });
+
+      Logger.info('Auth service: Cleaned up expired tokens', { count: result.count });
+      return result.count;
+    } catch (error) {
+      Logger.error('Auth service: Error cleaning up expired tokens', {
+        error: error instanceof Error ? error.message : 'Unknown error',
+      });
+      return 0;
     }
   }
 }

@@ -1,18 +1,27 @@
 import { PrismaClient } from '@prisma/client';
 import jwt from 'jsonwebtoken';
 import bcrypt from 'bcrypt';
+import crypto from 'crypto';
 import { AuthService } from '../../services/auth.service';
 import { AuthenticationError, InternalError } from '../../errors';
 
 // Mock the jsonwebtoken module
 jest.mock('jsonwebtoken', () => ({
   sign: jest.fn(),
+  verify: jest.fn(),
 }));
 
 // Mock the bcrypt module
 jest.mock('bcrypt', () => ({
   hash: jest.fn(),
   compare: jest.fn(),
+}));
+
+// Mock crypto for refresh tokens
+jest.mock('crypto', () => ({
+  randomBytes: jest.fn(() => ({
+    toString: jest.fn(() => 'mock_refresh_token_hex'),
+  })),
 }));
 
 describe('AuthService', () => {
@@ -24,12 +33,21 @@ describe('AuthService', () => {
       user: {
         findMany: jest.fn(),
       },
+      refreshToken: {
+        create: jest.fn(),
+        findUnique: jest.fn(),
+        update: jest.fn(),
+        delete: jest.fn(),
+        deleteMany: jest.fn(),
+      },
     } as unknown as PrismaClient;
 
     authService = new AuthService(prisma);
     (jwt.sign as jest.Mock).mockReturnValue('mock_jwt_token');
+    (jwt.verify as jest.Mock).mockReturnValue({ userId: 1, role: 'Manager' });
     (bcrypt.compare as jest.Mock).mockResolvedValue(true);
     (bcrypt.hash as jest.Mock).mockResolvedValue('hashed_pin');
+    process.env.JWT_SECRET = 'test_secret';
   });
 
   afterEach(() => {
@@ -95,7 +113,7 @@ describe('AuthService', () => {
       });
     });
 
-    it('throws AuthenticationError for invalid PIN', async () => {
+    it('throws AuthenticationError for invalid PIN (incorrect password)', async () => {
       (prisma.user.findMany as jest.Mock).mockResolvedValue([
         { id: 1, pin: 'hashed_pin', role: 'Manager' },
       ]);
@@ -115,6 +133,183 @@ describe('AuthService', () => {
       (prisma.user.findMany as jest.Mock).mockRejectedValue(new Error('DB failure'));
 
       await expect(authService.login('5624')).rejects.toBeInstanceOf(InternalError);
+    });
+  });
+
+  describe('generateTokens', () => {
+    it('generates access and refresh tokens for a user', async () => {
+      (prisma.refreshToken.create as jest.Mock).mockResolvedValue({
+        id: 1,
+        userId: 1,
+        token: 'mock_refresh_token_hex',
+        expiresAt: expect.any(Date),
+      });
+
+      const tokens = await authService.generateTokens(1, 'Manager');
+
+      expect(tokens.accessToken).toBe('mock_jwt_token');
+      expect(tokens.refreshToken).toBe('mock_refresh_token_hex');
+      expect(prisma.refreshToken.create).toHaveBeenCalledWith({
+        data: {
+          userId: 1,
+          token: 'mock_refresh_token_hex',
+          expiresAt: expect.any(Date),
+        },
+      });
+    });
+
+    it('throws InternalError on database failure', async () => {
+      (prisma.refreshToken.create as jest.Mock).mockRejectedValue(new Error('DB failure'));
+
+      await expect(authService.generateTokens(1, 'Manager')).rejects.toBeInstanceOf(InternalError);
+    });
+  });
+
+  describe('verifyToken', () => {
+    it('successfully verifies and decodes a valid token', () => {
+      (jwt.verify as jest.Mock).mockReturnValue({ userId: 7, role: 'Staff', exp: 1234567890 });
+
+      const payload = authService.verifyToken('valid_token');
+
+      expect(payload.userId).toBe(7);
+      expect(payload.role).toBe('Staff');
+      expect(jwt.verify).toHaveBeenCalledWith('valid_token', 'test_secret');
+    });
+
+    it('throws AuthenticationError for expired token', () => {
+      (jwt.verify as jest.Mock).mockImplementation(() => {
+        const error: any = new Error('jwt expired');
+        error.name = 'TokenExpiredError';
+        throw error;
+      });
+
+      expect(() => authService.verifyToken('expired_token')).toThrow(AuthenticationError);
+    });
+
+    it('throws AuthenticationError for tampered/invalid signature', () => {
+      (jwt.verify as jest.Mock).mockImplementation(() => {
+        const error: any = new Error('invalid signature');
+        error.name = 'JsonWebTokenError';
+        throw error;
+      });
+
+      expect(() => authService.verifyToken('tampered_token')).toThrow(AuthenticationError);
+    });
+  });
+
+  describe('refreshAccessToken', () => {
+    it('issues new access token with valid refresh token', async () => {
+      const futureDate = new Date(Date.now() + 7 * 24 * 60 * 60 * 1000); // 7 days from now
+      (prisma.refreshToken.findUnique as jest.Mock).mockResolvedValue({
+        id: 1,
+        userId: 5,
+        token: 'valid_refresh_token',
+        expiresAt: futureDate,
+        revokedAt: null,
+        user: { id: 5, role: 'Staff', pin: 'hashed', createdAt: new Date(), updatedAt: new Date() },
+      });
+
+      const newAccessToken = await authService.refreshAccessToken('valid_refresh_token');
+
+      expect(newAccessToken).toBe('mock_jwt_token');
+      expect(jwt.sign).toHaveBeenCalledWith({ userId: 5, role: 'Staff' }, 'test_secret', {
+        expiresIn: '1h',
+      });
+    });
+
+    it('throws AuthenticationError for non-existent refresh token', async () => {
+      (prisma.refreshToken.findUnique as jest.Mock).mockResolvedValue(null);
+
+      await expect(authService.refreshAccessToken('invalid_token')).rejects.toBeInstanceOf(
+        AuthenticationError,
+      );
+    });
+
+    it('throws AuthenticationError and deletes expired refresh token', async () => {
+      const pastDate = new Date(Date.now() - 1000); // Expired
+      (prisma.refreshToken.findUnique as jest.Mock).mockResolvedValue({
+        id: 1,
+        userId: 5,
+        token: 'expired_refresh_token',
+        expiresAt: pastDate,
+        revokedAt: null,
+        user: { id: 5, role: 'Staff', pin: 'hashed', createdAt: new Date(), updatedAt: new Date() },
+      });
+
+      await expect(authService.refreshAccessToken('expired_refresh_token')).rejects.toBeInstanceOf(
+        AuthenticationError,
+      );
+      expect(prisma.refreshToken.delete).toHaveBeenCalledWith({ where: { id: 1 } });
+    });
+
+    it('throws AuthenticationError for revoked refresh token', async () => {
+      const futureDate = new Date(Date.now() + 7 * 24 * 60 * 60 * 1000);
+      (prisma.refreshToken.findUnique as jest.Mock).mockResolvedValue({
+        id: 1,
+        userId: 5,
+        token: 'revoked_token',
+        expiresAt: futureDate,
+        revokedAt: new Date(), // Token was revoked
+        user: { id: 5, role: 'Staff', pin: 'hashed', createdAt: new Date(), updatedAt: new Date() },
+      });
+
+      await expect(authService.refreshAccessToken('revoked_token')).rejects.toBeInstanceOf(
+        AuthenticationError,
+      );
+    });
+  });
+
+  describe('revokeRefreshToken', () => {
+    it('successfully revokes a refresh token', async () => {
+      (prisma.refreshToken.findUnique as jest.Mock).mockResolvedValue({
+        id: 1,
+        userId: 5,
+        token: 'token_to_revoke',
+        expiresAt: new Date(),
+      });
+      (prisma.refreshToken.update as jest.Mock).mockResolvedValue({});
+
+      await authService.revokeRefreshToken('token_to_revoke');
+
+      expect(prisma.refreshToken.update).toHaveBeenCalledWith({
+        where: { id: 1 },
+        data: { revokedAt: expect.any(Date) },
+      });
+    });
+
+    it('silently succeeds when token does not exist', async () => {
+      (prisma.refreshToken.findUnique as jest.Mock).mockResolvedValue(null);
+
+      await expect(authService.revokeRefreshToken('non_existent_token')).resolves.toBeUndefined();
+      expect(prisma.refreshToken.update).not.toHaveBeenCalled();
+    });
+
+    it('throws InternalError on database failure', async () => {
+      (prisma.refreshToken.findUnique as jest.Mock).mockResolvedValue({ id: 1 });
+      (prisma.refreshToken.update as jest.Mock).mockRejectedValue(new Error('DB failure'));
+
+      await expect(authService.revokeRefreshToken('token')).rejects.toBeInstanceOf(InternalError);
+    });
+  });
+
+  describe('cleanupExpiredTokens', () => {
+    it('deletes expired tokens and returns count', async () => {
+      (prisma.refreshToken.deleteMany as jest.Mock).mockResolvedValue({ count: 5 });
+
+      const count = await authService.cleanupExpiredTokens();
+
+      expect(count).toBe(5);
+      expect(prisma.refreshToken.deleteMany).toHaveBeenCalledWith({
+        where: { expiresAt: { lt: expect.any(Date) } },
+      });
+    });
+
+    it('returns 0 on database failure', async () => {
+      (prisma.refreshToken.deleteMany as jest.Mock).mockRejectedValue(new Error('DB failure'));
+
+      const count = await authService.cleanupExpiredTokens();
+
+      expect(count).toBe(0);
     });
   });
 });
