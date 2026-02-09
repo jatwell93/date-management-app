@@ -1,4 +1,4 @@
-import { PrismaClient } from '../prisma/generated/client/client';
+import { PrismaClient } from '@prisma/client';
 import { AuthService } from '../../services/auth.service';
 import { UserService } from '../../services/user.service';
 import { ConflictError } from '../../errors';

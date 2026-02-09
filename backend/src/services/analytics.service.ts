@@ -17,6 +17,14 @@ export enum AnalyticsEventType {
 }
 
 // Interface for analytics events
+export interface AnalyticsMetadata extends Record<string, unknown> {
+  path?: string;
+  method?: string;
+  role?: string;
+  reportType?: string;
+  dataSize?: number;
+}
+
 export interface AnalyticsEvent {
   id?: number;
   userId?: number;
@@ -29,7 +37,7 @@ export interface AnalyticsEvent {
   userAgent?: string;
   ipAddress?: string;
   timestamp: Date;
-  metadata?: any;
+  metadata?: AnalyticsMetadata;
 }
 
 // Interface for user session tracking

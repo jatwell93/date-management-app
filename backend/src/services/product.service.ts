@@ -5,6 +5,7 @@ import { parse } from 'csv-parse';
 import * as XLSX from 'xlsx';
 import fs from 'fs';
 import * as path from 'path';
+import { isPrismaNotFound, isPrismaErrorCode } from '../utils/prisma-error';
 
 // Helper function to detect file type by content
 async function detectFileType(
@@ -294,7 +295,7 @@ export class ProductService {
         data: this.buildProductUpdateData(product),
       });
       return this.mapPrismaToModel(updatedProduct);
-    } catch (error: any) {
+    } catch (error: unknown) {
       return this.handlePrismaNotFound(error);
     }
   }
@@ -316,8 +317,8 @@ export class ProductService {
   /**
    * Handle Prisma P2025 (record not found) error, rethrow others
    */
-  private handlePrismaNotFound(error: any): null {
-    if (error.code === 'P2025') {
+  private handlePrismaNotFound(error: unknown): null {
+    if (isPrismaNotFound(error)) {
       return null;
     }
     throw error;
@@ -329,9 +330,9 @@ export class ProductService {
         where: { id },
       });
       return true;
-    } catch (error: any) {
+    } catch (error: unknown) {
       // Prisma throws P2025 when record not found
-      if (error.code === 'P2025') {
+      if (isPrismaNotFound(error)) {
         return false;
       }
       throw error;
@@ -585,8 +586,9 @@ export class ProductService {
               let existingProduct: Product | null = null;
               try {
                 existingProduct = await this.getProductBySkuOrBarcode(sku, barcode);
-              } catch (duplicateError: any) {
-                errors.push(`Row ${recordCount}: ${duplicateError.message}`);
+              } catch (duplicateError: unknown) {
+                const errorMessage = duplicateError instanceof Error ? duplicateError.message : 'Unknown error';
+                errors.push(`Row ${recordCount}: ${errorMessage}`);
                 return; // Skip processing this row
               }
 
@@ -600,9 +602,10 @@ export class ProductService {
                     costPrice: cost,
                   });
                   updated++;
-                } catch (updateError: any) {
+                } catch (updateError: unknown) {
+                  const errorMessage = updateError instanceof Error ? updateError.message : 'Unknown error';
                   errors.push(
-                    `Row ${recordCount}: Failed to update existing product (SKU: ${sku}) - ${updateError.message}`,
+                    `Row ${recordCount}: Failed to update existing product (SKU: ${sku}) - ${errorMessage}`,
                   );
                 }
               } else {
@@ -615,16 +618,18 @@ export class ProductService {
                     costPrice: cost,
                   });
                   imported++;
-                } catch (createError: any) {
+                } catch (createError: unknown) {
+                  const errorMessage = createError instanceof Error ? createError.message : 'Unknown error';
                   errors.push(
-                    `Row ${recordCount}: Failed to create new product (SKU: ${sku}) - ${createError.message}`,
+                    `Row ${recordCount}: Failed to create new product (SKU: ${sku}) - ${errorMessage}`,
                   );
                 }
               }
-            } catch (error: any) {
+            } catch (error: unknown) {
+              const errorMessage = error instanceof Error ? error.message : 'Unknown error';
               console.error(`Error processing row ${recordCount}:`, error);
               errors.push(
-                `Row ${recordCount}: Unexpected error processing data - ${error.message}`,
+                `Row ${recordCount}: Unexpected error processing data - ${errorMessage}`,
               );
             }
           })();

@@ -13,12 +13,20 @@ export enum ApplicationAlertType {
 }
 
 // Interface for application alert events
+export interface ApplicationAlertMetadata extends Record<string, unknown> {
+  endpoint?: string;
+  method?: string;
+  duration?: number;
+  errorCount?: number;
+  errorMessage?: string;
+}
+
 export interface ApplicationAlertEvent {
   type: ApplicationAlertType;
   message: string;
   severity: 'low' | 'medium' | 'high' | 'critical';
   timestamp: Date;
-  metadata?: any;
+  metadata?: ApplicationAlertMetadata;
 }
 
 // Metrics interface for application monitoring

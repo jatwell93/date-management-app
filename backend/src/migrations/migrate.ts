@@ -7,8 +7,9 @@ export async function runMigrations(): Promise<void> {
 
   try {
     await migrationService.runMigrations();
-  } catch (error) {
-    Logger.error('Migration process failed:', error);
+  } catch (error: unknown) {
+    const errorMsg = error instanceof Error ? error.message : 'Unknown error';
+    Logger.error('Migration process failed:', { error: errorMsg });
     throw error;
   }
 }

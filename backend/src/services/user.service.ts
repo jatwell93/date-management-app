@@ -90,8 +90,8 @@ export class UserService {
         data,
       });
       return true;
-    } catch (error: any) {
-      if (error?.code === 'P2025') {
+    } catch (error: unknown) {
+      if (error instanceof Object && 'code' in error && (error as Record<string, unknown>).code === 'P2025') {
         return false;
       }
       throw error;
@@ -102,8 +102,8 @@ export class UserService {
     try {
       await this.prisma.user.delete({ where: { id } });
       return true;
-    } catch (error: any) {
-      if (error?.code === 'P2025') {
+    } catch (error: unknown) {
+      if (error instanceof Object && 'code' in error && (error as Record<string, unknown>).code === 'P2025') {
         return false;
       }
       throw error;

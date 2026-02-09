@@ -54,8 +54,9 @@ export class MigrationService {
             // Mark the migration as executed
             this.migrationModel.markMigrationExecuted(db, migration.id, migration.name);
             Logger.info(`Migration ${migration.name} completed successfully`);
-          } catch (error) {
-            Logger.error(`Migration ${migration.name} failed:`, error);
+          } catch (error: unknown) {
+            const errorMsg = error instanceof Error ? error.message : 'Unknown error';
+            Logger.error(`Migration ${migration.name} failed:`, { error: errorMsg });
             throw error;
           }
         } else {
@@ -66,8 +67,9 @@ export class MigrationService {
       }
 
       Logger.info('All migrations completed');
-    } catch (error) {
-      Logger.error('Migration process failed:', error);
+    } catch (error: unknown) {
+      const errorMsg = error instanceof Error ? error.message : 'Unknown error';
+      Logger.error('Migration process failed:', { error: errorMsg });
       throw error;
     } finally {
       db.close();
@@ -302,8 +304,9 @@ export class MigrationService {
               // Update the status in the database
               updateStmt.run(newStatus, item.id);
               updatedCount++;
-            } catch (error) {
-              Logger.error(`Error updating item ${item.id}:`, error);
+            } catch (error: unknown) {
+              const errorMsg = error instanceof Error ? error.message : 'Unknown error';
+              Logger.error(`Error updating item ${item.id}:`, { error: errorMsg });
             }
           }
 
@@ -419,8 +422,9 @@ export class MigrationService {
       this.migrationModel.removeMigrationRecord(db, lastMigration.name);
 
       Logger.info(`Migration ${lastMigration.name} rolled back successfully`);
-    } catch (error) {
-      Logger.error('Migration rollback failed:', error);
+    } catch (error: unknown) {
+      const errorMsg = error instanceof Error ? error.message : 'Unknown error';
+      Logger.error('Migration rollback failed:', { error: errorMsg });
       throw error;
     } finally {
       db.close();

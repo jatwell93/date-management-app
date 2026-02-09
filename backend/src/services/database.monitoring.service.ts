@@ -15,12 +15,20 @@ export enum DatabaseAlertType {
 }
 
 // Interface for database alert events
+export interface DatabaseAlertMetadata extends Record<string, unknown> {
+  query?: string;
+  duration?: number;
+  tableName?: string;
+  rowCount?: number;
+  reason?: string;
+}
+
 export interface DatabaseAlertEvent {
   type: DatabaseAlertType;
   message: string;
   severity: 'low' | 'medium' | 'high' | 'critical';
   timestamp: Date;
-  metadata?: any;
+  metadata?: DatabaseAlertMetadata;
 }
 
 // Metrics interface for database monitoring

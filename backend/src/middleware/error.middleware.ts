@@ -8,6 +8,17 @@ import {
 } from '../errors';
 
 /**
+ * Type-safe error payload structure
+ */
+interface ErrorPayload {
+  code: string;
+  message: string;
+  statusCode: number;
+  errors?: Record<string, unknown>[];
+  stack?: string;
+}
+
+/**
  * Enhanced Error Handler Middleware (Phase 13)
  * 
  * Handles both custom BaseError instances and generic Error objects.
@@ -22,7 +33,7 @@ export const errorHandler = (err: Error, req: Request, res: Response, _next: Nex
 
   // Determine status code and error payload
   let statusCode = 500;
-  let errorPayload: any = {
+  let errorPayload: ErrorPayload = {
     code: 'INTERNAL_ERROR',
     message: 'An unexpected error occurred',
     statusCode: 500,
