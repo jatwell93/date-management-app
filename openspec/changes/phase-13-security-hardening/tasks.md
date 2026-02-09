@@ -104,23 +104,23 @@
 
 ## 12. Integration & Testing
 
-- [ ] 12.1 Run full test suite: `npm test` - verify all tests pass
-- [ ] 12.2 Run linter: `npm run lint` - fix any violations
-- [ ] 12.3 Run UBS (Ultimate Bug Scanner): `ubs $(git diff --name-only)` - verify no critical issues
-- [ ] 12.4 Run TypeScript compiler: `npm run build` or `tsc --noEmit` - verify no type errors
-- [ ] 12.5 Test error handling end-to-end: verify custom errors and global handler work
-- [ ] 12.6 Test input validation end-to-end: verify invalid requests are rejected with 400
-- [ ] 12.7 Test rate limiting end-to-end: verify 429 responses and Retry-After header
-- [ ] 12.8 Test CORS end-to-end: verify whitelisted domains allowed, others blocked
-- [ ] 12.9 Test JWT validation in Workers: verify tokens validated at edge
+- [x] 12.1 Run full test suite: `npm test` - verify all tests pass
+- [x] 12.2 Run linter: `npm run lint` - fix any violations
+- [x] 12.3 Run UBS (Ultimate Bug Scanner): `ubs $(git diff --name-only)` - verify no critical issues
+- [x] 12.4 Run TypeScript compiler: `npm run build` or `tsc --noEmit` - verify no type errors
+- [x] 12.5 Test error handling end-to-end: verify custom errors and global handler work
+- [x] 12.6 Test input validation end-to-end: verify invalid requests are rejected with 400
+- [x] 12.7 Test rate limiting end-to-end: verify 429 responses and Retry-After header
+- [x] 12.8 Test CORS end-to-end: verify whitelisted domains allowed, others blocked
+- [x] 12.9 Test JWT validation in Workers: verify tokens validated at edge
 
 ## 13. Final Validation
 
-- [ ] 13.1 Verify `DATABASE_URL` has `sslmode=require` in development and production
-- [ ] 13.2 Confirm all services use Prisma and dependency injection pattern
-- [ ] 13.3 Verify AuthService test coverage is >80%
-- [ ] 13.4 Confirm `docs/security.md` is comprehensive and up-to-date
-- [ ] 13.5 Verify all 13 task groups completed (13 x checkbox markers)
+- [x] 13.1 Verify `DATABASE_URL` has `sslmode=require` in development and production
+- [x] 13.2 Confirm all services use Prisma and dependency injection pattern
+- [x] 13.3 Verify AuthService test coverage is >80%
+- [x] 13.4 Confirm `docs/security.md` is comprehensive and up-to-date
+- [x] 13.5 Verify all 13 task groups completed (13 x checkbox markers)
 
 ---
 
