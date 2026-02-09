@@ -96,9 +96,15 @@ class WorkersRouter {
 
   addRoute(pattern: string, handler: any, middleware: ExpressMiddleware[] = []) {
     // Convert Express-style pattern to RegExp
-    const regexPattern = pattern
-      .replace(/\*/g, '.*')
+    // First escape all regex metacharacters so the pattern is treated literally,
+    // then re-introduce our Express-style wildcards and params.
+    const escapedPattern = pattern.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+    const regexPattern = escapedPattern
+      // Express-style "*" wildcard: match any characters
+      .replace(/\\\*/g, '.*')
+      // Escape forward slashes for use in the RegExp constructor
       .replace(/\//g, '\\/')
+      // Express-style named params: ":name"
       .replace(/:(\w+)/g, '(?<$1>[^/]+)');
     
     const regex = new RegExp(`^${regexPattern}$`);
