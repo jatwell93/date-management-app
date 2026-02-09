@@ -112,23 +112,29 @@ router.put(
 );
 
 // DELETE /users/:id - Delete a user (Manager only)
-router.delete('/:id', authenticateToken, requireManager, standardLimiter, async (req: Request, res: Response) => {
-  try {
-    const id = Number.parseInt(req.params.id, 10);
-    if (Number.isNaN(id)) {
-      return res.status(400).json({ message: 'Invalid user id' });
-    }
-    const deleted = await userService.deleteUser(id);
+router.delete(
+  '/:id',
+  authenticateToken,
+  requireManager,
+  standardLimiter,
+  async (req: Request, res: Response) => {
+    try {
+      const id = Number.parseInt(req.params.id, 10);
+      if (Number.isNaN(id)) {
+        return res.status(400).json({ message: 'Invalid user id' });
+      }
+      const deleted = await userService.deleteUser(id);
 
-    if (!deleted) {
-      return res.status(404).json({ message: 'User not found' });
-    }
+      if (!deleted) {
+        return res.status(404).json({ message: 'User not found' });
+      }
 
-    res.json(escapeHtml({ message: 'User deleted successfully' }));
-  } catch (_error) {
-    // console.error("Error deleting user:", _error);
-    res.status(500).json({ message: 'Internal server error' });
-  }
-});
+      res.json(escapeHtml({ message: 'User deleted successfully' }));
+    } catch (_error) {
+      // console.error("Error deleting user:", _error);
+      res.status(500).json({ message: 'Internal server error' });
+    }
+  },
+);
 
 export default router;

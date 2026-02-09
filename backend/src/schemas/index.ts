@@ -1,6 +1,6 @@
 /**
  * Zod Validation Schemas for Phase 13 Security Hardening
- * 
+ *
  * Centralized validation schemas for all API endpoints using Zod.
  * Provides type-safe validation with detailed error messages.
  */
@@ -18,9 +18,7 @@ export const loginSchema = z.object({
       .min(4, 'PIN must be at least 4 digits')
       .max(6, 'PIN must be at most 6 digits')
       .regex(/^\d+$/, 'PIN must contain only digits'),
-    role: z
-      .enum(['Manager', 'Team Member'] as const)
-      .optional(),
+    role: z.enum(['Manager', 'Team Member'] as const).optional(),
   }),
 });
 
@@ -124,17 +122,15 @@ export const inventoryItemSchema = z.object({
           .refine((val) => val > 0, 'Location ID must be positive'),
       ),
     status: z
-      .enum(
-        [
-          'Normal',
-          'Near Expiry',
-          'Expired',
-          'Damaged',
-          'Markdown 1',
-          'Markdown 2',
-          'Markdown 3',
-        ] as const,
-      )
+      .enum([
+        'Normal',
+        'Near Expiry',
+        'Expired',
+        'Damaged',
+        'Markdown 1',
+        'Markdown 2',
+        'Markdown 3',
+      ] as const)
       .optional(),
     quantity: z
       .number()
@@ -267,7 +263,10 @@ export const backupRestoreSchema = z.object({
     backupPath: z
       .string()
       .min(1, 'Backup path is required')
-      .refine((val) => !val.includes('..'), 'Backup path cannot contain parent directory references')
+      .refine(
+        (val) => !val.includes('..'),
+        'Backup path cannot contain parent directory references',
+      )
       .refine((val) => {
         const path = require('path');
         const normalized = path.normalize(val);

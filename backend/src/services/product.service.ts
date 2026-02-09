@@ -587,7 +587,8 @@ export class ProductService {
               try {
                 existingProduct = await this.getProductBySkuOrBarcode(sku, barcode);
               } catch (duplicateError: unknown) {
-                const errorMessage = duplicateError instanceof Error ? duplicateError.message : 'Unknown error';
+                const errorMessage =
+                  duplicateError instanceof Error ? duplicateError.message : 'Unknown error';
                 errors.push(`Row ${recordCount}: ${errorMessage}`);
                 return; // Skip processing this row
               }
@@ -603,7 +604,8 @@ export class ProductService {
                   });
                   updated++;
                 } catch (updateError: unknown) {
-                  const errorMessage = updateError instanceof Error ? updateError.message : 'Unknown error';
+                  const errorMessage =
+                    updateError instanceof Error ? updateError.message : 'Unknown error';
                   errors.push(
                     `Row ${recordCount}: Failed to update existing product (SKU: ${sku}) - ${errorMessage}`,
                   );
@@ -619,7 +621,8 @@ export class ProductService {
                   });
                   imported++;
                 } catch (createError: unknown) {
-                  const errorMessage = createError instanceof Error ? createError.message : 'Unknown error';
+                  const errorMessage =
+                    createError instanceof Error ? createError.message : 'Unknown error';
                   errors.push(
                     `Row ${recordCount}: Failed to create new product (SKU: ${sku}) - ${errorMessage}`,
                   );
@@ -628,9 +631,7 @@ export class ProductService {
             } catch (error: unknown) {
               const errorMessage = error instanceof Error ? error.message : 'Unknown error';
               console.error(`Error processing row ${recordCount}:`, error);
-              errors.push(
-                `Row ${recordCount}: Unexpected error processing data - ${errorMessage}`,
-              );
+              errors.push(`Row ${recordCount}: Unexpected error processing data - ${errorMessage}`);
             }
           })();
 

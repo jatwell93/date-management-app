@@ -1,6 +1,6 @@
 /**
  * Custom Error Classes for Phase 13 Security Hardening
- * 
+ *
  * These errors provide semantic meaning and consistent HTTP status codes
  * across the application. Use these instead of generic Error.
  */
@@ -13,12 +13,12 @@ export class BaseError extends Error {
   constructor(message: string, statusCode: number, code: string, isOperational = true) {
     super(message);
     Object.setPrototypeOf(this, new.target.prototype);
-    
+
     this.name = this.constructor.name;
     this.statusCode = statusCode;
     this.code = code;
     this.isOperational = isOperational;
-    
+
     Error.captureStackTrace(this);
   }
 }

@@ -1,6 +1,6 @@
 /**
  * CORS (Cross-Origin Resource Sharing) Middleware for Phase 13 Security Hardening
- * 
+ *
  * Configures CORS with environment-based origin whitelist.
  * - Development: localhost:3000, localhost:3001
  * - Production: CORS_ORIGINS environment variable (comma-separated)

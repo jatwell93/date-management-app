@@ -349,9 +349,7 @@ describe('StorageQuotaService', () => {
       mockPrisma.upload.create.mockRejectedValue(new Error('Database error'));
 
       // Should not throw - graceful degradation
-      await expect(
-        service.recordUpload(1, 'key', 'file.csv', 1000),
-      ).resolves.not.toThrow();
+      await expect(service.recordUpload(1, 'key', 'file.csv', 1000)).resolves.not.toThrow();
     });
   });
 
@@ -423,9 +421,9 @@ describe('StorageQuotaService', () => {
         _sum: { fileSizeBytes: 0 },
       });
 
-      await expect(
-        service.getStorageQuota(1, 'invalid' as any),
-      ).rejects.toThrow('Invalid subscription tier: invalid');
+      await expect(service.getStorageQuota(1, 'invalid' as any)).rejects.toThrow(
+        'Invalid subscription tier: invalid',
+      );
     });
 
     it('should handle database errors in calculateUserStorageUsage', async () => {

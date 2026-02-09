@@ -121,16 +121,11 @@ if (!isTestEnv) {
 
   // Listen for application alerts
   appMonitoringService.on('alert', (alert) => {
-    console.log(
-      'Application Alert [%s]: %s',
-      alert.severity.toUpperCase(),
-      alert.message,
-      {
-        type: alert.type,
-        timestamp: alert.timestamp,
-        metadata: alert.metadata,
-      },
-    );
+    console.log('Application Alert [%s]: %s', alert.severity.toUpperCase(), alert.message, {
+      type: alert.type,
+      timestamp: alert.timestamp,
+      metadata: alert.metadata,
+    });
   });
 
   // Apply application monitoring middleware

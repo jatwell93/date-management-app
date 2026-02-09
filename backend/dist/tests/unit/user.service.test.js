@@ -1,6 +1,7 @@
 "use strict";
 Object.defineProperty(exports, "__esModule", { value: true });
 const user_service_1 = require("../../services/user.service");
+const errors_1 = require("../../errors");
 describe('UserService', () => {
     let prisma;
     let authService;
@@ -28,7 +29,9 @@ describe('UserService', () => {
     describe('createUser', () => {
         it('creates a user with a hashed PIN', async () => {
             authService.validatePin.mockReturnValue({ isValid: true });
+            authService.verifyPin.mockResolvedValue(false);
             authService.hashPin.mockResolvedValue('hashed_pin');
+            prisma.user.findMany.mockResolvedValue([]);
             prisma.user.create.mockResolvedValue({
                 id: 1,
                 pin: 'hashed_pin',
@@ -38,6 +41,9 @@ describe('UserService', () => {
             });
             const result = await service.createUser({ pin: '123456', role: 'Manager' });
             expect(authService.validatePin).toHaveBeenCalledWith('123456');
+            expect(prisma.user.findMany).toHaveBeenCalledWith({
+                select: { id: true, pin: true },
+            });
             expect(authService.hashPin).toHaveBeenCalledWith('123456');
             expect(prisma.user.create).toHaveBeenCalledWith({
                 data: {
@@ -52,6 +58,15 @@ describe('UserService', () => {
                 created_at: createdAt.toISOString(),
                 updated_at: updatedAt.toISOString(),
             });
+        });
+        it('throws ConflictError when PIN is already in use', async () => {
+            authService.validatePin.mockReturnValue({ isValid: true });
+            authService.verifyPin.mockResolvedValue(true);
+            prisma.user.findMany.mockResolvedValue([
+                { id: 2, pin: 'existing_hashed_pin' },
+            ]);
+            await expect(service.createUser({ pin: '123456', role: 'Manager' })).rejects.toBeInstanceOf(errors_1.ConflictError);
+            expect(prisma.user.create).not.toHaveBeenCalled();
         });
     });
     describe('getUsers', () => {

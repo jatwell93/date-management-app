@@ -1,6 +1,6 @@
 /**
  * Integration Tests for ServiceProvider DI Container
- * 
+ *
  * Validates that ServiceProvider correctly:
  * - Instantiates services with proper dependencies
  * - Provides lazy-loaded singleton instances
@@ -130,10 +130,10 @@ describe('ServiceProvider Integration Tests', () => {
     it('should provide same PrismaClient to all services', async () => {
       // Mock a user query
       (mockPrisma.user.findMany as jest.Mock).mockResolvedValue([
-        { 
-          id: 1, 
-          username: 'test', 
-          pin: 'hashed-pin', 
+        {
+          id: 1,
+          username: 'test',
+          pin: 'hashed-pin',
           role: 'Manager',
           createdAt: new Date(),
           updatedAt: new Date(),
@@ -164,7 +164,7 @@ describe('ServiceProvider Integration Tests', () => {
     it('should accept custom Prisma client for testing', () => {
       const customPrisma = {} as PrismaClient;
       const customProvider = new ServiceProvider(customPrisma);
-      
+
       const authService = customProvider.getAuthService();
       expect(authService).toBeDefined();
     });
@@ -172,7 +172,7 @@ describe('ServiceProvider Integration Tests', () => {
     it('should accept custom storage provider for testing', () => {
       const customStorage = new MockStorageProvider();
       const customProvider = new ServiceProvider(undefined, customStorage);
-      
+
       const uploadService = customProvider.getUploadService();
       expect(uploadService).toBeDefined();
     });
@@ -181,7 +181,7 @@ describe('ServiceProvider Integration Tests', () => {
       const customPrisma = {} as PrismaClient;
       const customStorage = new MockStorageProvider();
       const customProvider = new ServiceProvider(customPrisma, customStorage);
-      
+
       expect(customProvider.getAuthService()).toBeDefined();
       expect(customProvider.getUserService()).toBeDefined();
       expect(customProvider.getUploadService()).toBeDefined();
@@ -191,10 +191,10 @@ describe('ServiceProvider Integration Tests', () => {
   describe('Error Handling', () => {
     it('should propagate errors from services without breaking container', async () => {
       (mockPrisma.user.findMany as jest.Mock).mockRejectedValue(new Error('Database error'));
-      
+
       const userService = serviceProvider.getUserService();
       await expect(userService.getUsers()).rejects.toThrow('Database error');
-      
+
       // Container should still be functional after error
       const authService = serviceProvider.getAuthService();
       expect(authService).toBeDefined();

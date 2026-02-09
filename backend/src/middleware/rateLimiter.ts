@@ -1,11 +1,11 @@
 /**
  * Rate Limiting Middleware for Phase 13 Security Hardening
- * 
+ *
  * Provides rate limiting with different presets:
  * - standard: 100 requests per 15 minutes
  * - strict: 5 requests per 15 minutes (for login/register)
  * - upload: 10 requests per 1 hour (for file uploads)
- * 
+ *
  * Uses express-rate-limit for flexible, in-memory rate limiting.
  */
 
@@ -34,7 +34,9 @@ export const standardLimiter = rateLimit({
     res.status(429).json({
       code: 'RATE_LIMIT_EXCEEDED',
       message: 'Too many requests from this IP, please try again later.',
-      retryAfter: (req as any).rateLimit?.resetTime ? new Date((req as any).rateLimit.resetTime).toISOString() : undefined,
+      retryAfter: (req as any).rateLimit?.resetTime
+        ? new Date((req as any).rateLimit.resetTime).toISOString()
+        : undefined,
     });
   },
   store: undefined, // Uses default memory store (fine for single-instance, use Redis for distributed)
@@ -60,7 +62,9 @@ export const strictLimiter = rateLimit({
     res.status(429).json({
       code: 'RATE_LIMIT_EXCEEDED',
       message: 'Too many login attempts, please try again later.',
-      retryAfter: (req as any).rateLimit?.resetTime ? new Date((req as any).rateLimit.resetTime).toISOString() : undefined,
+      retryAfter: (req as any).rateLimit?.resetTime
+        ? new Date((req as any).rateLimit.resetTime).toISOString()
+        : undefined,
     });
   },
 });
@@ -85,7 +89,9 @@ export const uploadLimiter = rateLimit({
     res.status(429).json({
       code: 'RATE_LIMIT_EXCEEDED',
       message: 'Too many uploads from this IP, please try again later.',
-      retryAfter: (req as any).rateLimit?.resetTime ? new Date((req as any).rateLimit.resetTime).toISOString() : undefined,
+      retryAfter: (req as any).rateLimit?.resetTime
+        ? new Date((req as any).rateLimit.resetTime).toISOString()
+        : undefined,
     });
   },
 });
@@ -113,7 +119,7 @@ export const globalLimiter = rateLimit({
 /**
  * Bypass rate limiting for specific IPs or requests
  * Useful for internal services or trusted clients
- * 
+ *
  * @param allowedIps - Array of IPs to bypass rate limiting
  * @returns Middleware that skips rate limiting for allowed IPs
  */
@@ -127,7 +133,7 @@ export const skipRateLimitForIps = (allowedIps: string[]) => {
 /**
  * Bypass rate limiting for specific paths
  * Useful for health checks or public endpoints
- * 
+ *
  * @param allowedPaths - Array of paths to bypass rate limiting
  * @returns Middleware that skips rate limiting for allowed paths
  */

@@ -1,14 +1,16 @@
 /**
  * Analytics Repository
- * 
+ *
  * Data access layer for analytics events and user sessions.
  * Handles all database operations for analytics tracking.
- * 
+ *
  * Task 8.2: Create analytics repository with dependency injection
  */
 
-import { Database as DB } from 'better-sqlite3';
+import Database from 'better-sqlite3';
 import { Logger } from '../utils/logger';
+
+type DB = InstanceType<typeof Database>;
 import {
   AnalyticsEvent,
   AnalyticsEventType,
@@ -67,7 +69,9 @@ export class AnalyticsRepository {
       this.db.exec(
         'CREATE INDEX IF NOT EXISTS idx_analytics_events_event_type ON analytics_events(event_type)',
       );
-      this.db.exec('CREATE INDEX IF NOT EXISTS idx_user_sessions_user_id ON user_sessions(user_id)');
+      this.db.exec(
+        'CREATE INDEX IF NOT EXISTS idx_user_sessions_user_id ON user_sessions(user_id)',
+      );
       this.db.exec(
         'CREATE INDEX IF NOT EXISTS idx_user_sessions_session_id ON user_sessions(session_id)',
       );

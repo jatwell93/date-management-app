@@ -44,6 +44,7 @@ const csv_parse_1 = require("csv-parse");
 const XLSX = __importStar(require("xlsx"));
 const fs_1 = __importDefault(require("fs"));
 const path = __importStar(require("path"));
+const prisma_error_1 = require("../utils/prisma-error");
 // Helper function to detect file type by content
 async function detectFileType(filePath, originalFilename) {
     // First check by original filename if provided
@@ -327,7 +328,7 @@ class ProductService {
      * Handle Prisma P2025 (record not found) error, rethrow others
      */
     handlePrismaNotFound(error) {
-        if (error.code === 'P2025') {
+        if ((0, prisma_error_1.isPrismaNotFound)(error)) {
             return null;
         }
         throw error;
@@ -341,7 +342,7 @@ class ProductService {
         }
         catch (error) {
             // Prisma throws P2025 when record not found
-            if (error.code === 'P2025') {
+            if ((0, prisma_error_1.isPrismaNotFound)(error)) {
                 return false;
             }
             throw error;
@@ -534,7 +535,8 @@ class ProductService {
                             existingProduct = await this.getProductBySkuOrBarcode(sku, barcode);
                         }
                         catch (duplicateError) {
-                            errors.push(`Row ${recordCount}: ${duplicateError.message}`);
+                            const errorMessage = duplicateError instanceof Error ? duplicateError.message : 'Unknown error';
+                            errors.push(`Row ${recordCount}: ${errorMessage}`);
                             return; // Skip processing this row
                         }
                         if (existingProduct) {
@@ -549,7 +551,8 @@ class ProductService {
                                 updated++;
                             }
                             catch (updateError) {
-                                errors.push(`Row ${recordCount}: Failed to update existing product (SKU: ${sku}) - ${updateError.message}`);
+                                const errorMessage = updateError instanceof Error ? updateError.message : 'Unknown error';
+                                errors.push(`Row ${recordCount}: Failed to update existing product (SKU: ${sku}) - ${errorMessage}`);
                             }
                         }
                         else {
@@ -564,13 +567,15 @@ class ProductService {
                                 imported++;
                             }
                             catch (createError) {
-                                errors.push(`Row ${recordCount}: Failed to create new product (SKU: ${sku}) - ${createError.message}`);
+                                const errorMessage = createError instanceof Error ? createError.message : 'Unknown error';
+                                errors.push(`Row ${recordCount}: Failed to create new product (SKU: ${sku}) - ${errorMessage}`);
                             }
                         }
                     }
                     catch (error) {
+                        const errorMessage = error instanceof Error ? error.message : 'Unknown error';
                         console.error(`Error processing row ${recordCount}:`, error);
-                        errors.push(`Row ${recordCount}: Unexpected error processing data - ${error.message}`);
+                        errors.push(`Row ${recordCount}: Unexpected error processing data - ${errorMessage}`);
                     }
                 })();
                 processingPromises.push(rowProcessingPromise);

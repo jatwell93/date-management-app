@@ -1,5 +1,7 @@
-import { Database as DB } from 'better-sqlite3';
+import Database from 'better-sqlite3';
 import { Logger } from '../utils/logger';
+
+type DB = InstanceType<typeof Database>;
 import { AnalyticsRepository } from '../repositories/analytics.repository';
 
 // Define analytics event types
@@ -78,7 +80,7 @@ export interface AnalyticsConfig {
 /**
  * Analytics Service with Dependency Injection
  * Provides tracking and analytics for application usage and user adoption
- * 
+ *
  * Task 8.1 & 8.3: Refactored from singleton to DI pattern with repository
  */
 export class AnalyticsService {
@@ -124,8 +126,6 @@ export class AnalyticsService {
       this.startBatchProcessing();
     }
   }
-
-
 
   /**
    * Track an analytics event
@@ -227,8 +227,6 @@ export class AnalyticsService {
       this.batchProcessing = false;
     }
   }
-
-
 
   /**
    * Start the batch processing interval

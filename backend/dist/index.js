@@ -63,7 +63,7 @@ const rateLimiter_1 = require("./middleware/rateLimiter");
 const scheduler_service_1 = require("./services/scheduler.service");
 const database_monitoring_service_1 = require("./services/database.monitoring.service");
 const application_monitoring_service_1 = require("./services/application.monitoring.service");
-const analytics_service_1 = require("./services/analytics.service");
+const service_provider_1 = require("./services/service-provider");
 const environment_1 = require("./config/environment");
 const app = (0, express_1.default)();
 const port = environment_1.envConfig.PORT;
@@ -88,7 +88,9 @@ app.use((0, helmet_1.default)({
 // Apply global rate limiter (DDoS protection - 1000 requests per minute per IP)
 app.use(rateLimiter_1.globalLimiter);
 // Middleware
-app.use(express_1.default.json());
+// Task 5.3: Configure request payload size limit (10MB)
+app.use(express_1.default.json({ limit: '10mb' }));
+app.use(express_1.default.urlencoded({ extended: true, limit: '10mb' }));
 // Apply CORS middleware with environment-based origin whitelist
 app.use(cors_1.corsMiddleware);
 // Initialize database
@@ -142,7 +144,7 @@ if (!isTestEnv) {
     });
     // Listen for application alerts
     appMonitoringService.on('alert', (alert) => {
-        console.log(`Application Alert [${alert.severity.toUpperCase()}]: ${alert.message}`, {
+        console.log('Application Alert [%s]: %s', alert.severity.toUpperCase(), alert.message, {
             type: alert.type,
             timestamp: alert.timestamp,
             metadata: alert.metadata,
@@ -150,8 +152,9 @@ if (!isTestEnv) {
     });
     // Apply application monitoring middleware
     app.use(appMonitoringService.requestTrackingMiddleware());
-    // Initialize analytics service
-    const analyticsService = analytics_service_1.AnalyticsService.getInstance();
+    // Initialize analytics service via ServiceProvider (Task 8.7)
+    const serviceProvider = new service_provider_1.ServiceProvider();
+    const analyticsService = serviceProvider.getAnalyticsService();
     analyticsService.initialize({
         enableTracking: true,
         enableSessionTracking: true,

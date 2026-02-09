@@ -118,7 +118,7 @@ describe('StorageQuotaWarning - Smoke Tests', () => {
 
       // Verify modal is gone
       expect(screen.queryByText(/Storage QuotaWarning/i)).not.toBeInTheDocument();
-      
+
       // Verify main app still accessible
       expect(screen.getByText('Warning dismissed')).toBeInTheDocument();
     });
@@ -285,7 +285,7 @@ describe('StorageQuotaWarning - Smoke Tests', () => {
 
     it('should show loading state without blocking', async () => {
       localStorage.setItem('authToken', 'test-token');
-      
+
       // Delay the response to simulate loading
       fetchMock.mockResponseOnce(
         () =>
@@ -373,11 +373,11 @@ describe('StorageQuotaWarning - Smoke Tests', () => {
 
       expect(remindLaterButton).toBeVisible();
       expect(upgradeButton).toBeVisible();
-      
+
       // Both buttons should be tabbable
       remindLaterButton.focus();
       expect(document.activeElement).toBe(remindLaterButton);
-      
+
       upgradeButton.focus();
       expect(document.activeElement).toBe(upgradeButton);
     });

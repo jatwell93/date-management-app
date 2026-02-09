@@ -2,6 +2,7 @@
 Object.defineProperty(exports, "__esModule", { value: true });
 exports.UserService = void 0;
 const database_factory_1 = require("../database/database-factory");
+const errors_1 = require("../errors");
 const auth_service_1 = require("./auth.service");
 class UserService {
     constructor(prismaClient, authService) {
@@ -11,7 +12,16 @@ class UserService {
     async createUser(user) {
         const pinValidation = this.authService.validatePin(user.pin);
         if (!pinValidation.isValid) {
-            throw new Error(pinValidation.message || 'Invalid PIN format');
+            throw new errors_1.ValidationError(pinValidation.message || 'Invalid PIN format');
+        }
+        const existingUsers = await this.prisma.user.findMany({
+            select: { id: true, pin: true },
+        });
+        for (const existingUser of existingUsers) {
+            const isDuplicate = await this.authService.verifyPin(user.pin, existingUser.pin);
+            if (isDuplicate) {
+                throw new errors_1.ConflictError('PIN already in use');
+            }
         }
         const hashedPin = await this.authService.hashPin(user.pin);
         const created = await this.prisma.user.create({
@@ -60,7 +70,9 @@ class UserService {
             return true;
         }
         catch (error) {
-            if (error?.code === 'P2025') {
+            if (error instanceof Object &&
+                'code' in error &&
+                error.code === 'P2025') {
                 return false;
             }
             throw error;
@@ -72,7 +84,9 @@ class UserService {
             return true;
         }
         catch (error) {
-            if (error?.code === 'P2025') {
+            if (error instanceof Object &&
+                'code' in error &&
+                error.code === 'P2025') {
                 return false;
             }
             throw error;

@@ -13,7 +13,13 @@ const router = Router();
 
 // Database backup routes - only accessible to authenticated users
 router.post('/backup', authenticateToken, standardLimiter, createBackup);
-router.post('/restore', authenticateToken, standardLimiter, validateRequest(backupRestoreSchema), restoreBackup);
+router.post(
+  '/restore',
+  authenticateToken,
+  standardLimiter,
+  validateRequest(backupRestoreSchema),
+  restoreBackup,
+);
 router.get('/backups', authenticateToken, listBackups);
 
 export default router;

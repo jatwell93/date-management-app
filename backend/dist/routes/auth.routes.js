@@ -11,6 +11,7 @@ const validateRequest_1 = require("../middleware/validateRequest");
 const schemas_1 = require("../schemas");
 const rateLimiter_1 = require("../middleware/rateLimiter");
 const normalize_function_1 = require("../utils/normalize.function");
+const errors_1 = require("../errors");
 const router = (0, express_1.Router)();
 const authService = new auth_service_1.AuthService();
 const normalizePin = (req, _res, next) => {
@@ -37,15 +38,13 @@ router.post('/login', rateLimiter_1.strictLimiter, normalizePin, (0, validateReq
         // For this implementation, we're using direct PIN comparison.
         // In a real application, you would properly compare hashes
         const token = await authService.login(pin);
-        if (token) {
-            res.json((0, normalize_function_1.escapeHtml)({ token }));
-        }
-        else {
-            res.status(401).json({ message: 'Invalid PIN' });
-        }
+        res.json((0, normalize_function_1.escapeHtml)({ token }));
     }
-    catch (_error) {
-        // console.error("Login error:", _error);
+    catch (error) {
+        if (error instanceof errors_1.AuthenticationError) {
+            return res.status(401).json({ message: error.message });
+        }
+        // console.error("Login error:", error);
         res.status(500).json({ message: 'Internal server error' });
     }
 });

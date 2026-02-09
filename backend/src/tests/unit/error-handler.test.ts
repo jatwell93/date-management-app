@@ -23,20 +23,20 @@ describe('Error Handler Middleware - Phase 13', () => {
   beforeEach(() => {
     jsonMock = jest.fn();
     statusMock = jest.fn().mockReturnThis();
-    
+
     mockRes = {
       status: statusMock,
       json: jsonMock,
       headersSent: false,
     };
-    
+
     mockReq = {
       url: '/test',
       method: 'GET',
       ip: '127.0.0.1',
       get: jest.fn().mockReturnValue('Test User Agent'),
     };
-    
+
     mockNext = jest.fn();
   });
 

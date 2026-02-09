@@ -43,9 +43,9 @@ export interface StorageQuotaInfo {
 
 /**
  * Storage Quota Service
- * 
+ *
  * Tracks storage usage per tenant and enforces quota limits.
- * 
+ *
  * TODO: Multi-tenant implementation
  * - Once multi-tenant support is added, modify methods to accept userId/tenantId
  * - Track subscription tier in User or Workspace model
@@ -58,14 +58,14 @@ export class StorageQuotaService {
 
   /**
    * Get storage quota information for a tenant/user
-   * 
+   *
    * @param userId - User ID (for future multi-tenant support)
    * @param subscriptionTier - Current subscription tier ('free', 'pro', 'enterprise')
    * @returns StorageQuotaInfo with usage and limits
    */
   async getStorageQuota(
     userId: number,
-    subscriptionTier: 'free' | 'pro' | 'enterprise' = 'free'
+    subscriptionTier: 'free' | 'pro' | 'enterprise' = 'free',
   ): Promise<StorageQuotaInfo> {
     // Calculate total bytes used by this user
     const usedBytes = await this.calculateUserStorageUsage(userId);
@@ -101,7 +101,7 @@ export class StorageQuotaService {
   async canUploadFile(
     userId: number,
     fileSizeBytes: number,
-    subscriptionTier: 'free' | 'pro' | 'enterprise' = 'free'
+    subscriptionTier: 'free' | 'pro' | 'enterprise' = 'free',
   ): Promise<boolean> {
     const quota = await this.getStorageQuota(userId, subscriptionTier);
     return quota.used + fileSizeBytes <= quota.limit;
@@ -109,7 +109,7 @@ export class StorageQuotaService {
 
   /**
    * Calculate total storage usage for a user
-   * 
+   *
    * TODO: Update to use actual file metadata tracking
    * Current implementation estimates from S3/R2 object listing
    */
@@ -186,7 +186,7 @@ export class StorageQuotaService {
    */
   async getStorageUsageString(
     userId: number,
-    subscriptionTier: 'free' | 'pro' | 'enterprise' = 'free'
+    subscriptionTier: 'free' | 'pro' | 'enterprise' = 'free',
   ): Promise<string> {
     const quota = await this.getStorageQuota(userId, subscriptionTier);
     return `${this.formatBytes(quota.used)} of ${quota.displayLimit}`;

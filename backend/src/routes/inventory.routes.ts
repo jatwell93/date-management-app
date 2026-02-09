@@ -228,28 +228,33 @@ router.put(
 );
 
 // DELETE /inventory-items/:id - Delete an inventory item
-router.delete('/:id', authenticateToken, standardLimiter, async (req: AuthRequest, res: Response) => {
-  try {
-    const id = Number.parseInt(req.params.id, 10);
-    if (Number.isNaN(id)) {
-      return res.status(400).json({ message: 'Invalid inventory item id' });
-    }
-    const userId = req.userId; // Get user ID from auth middleware
-    if (!userId) {
-      return res.status(401).json({ message: 'Access denied: No user ID found' });
-    }
-    const deleted = await inventoryService.deleteInventoryItem(id, userId);
+router.delete(
+  '/:id',
+  authenticateToken,
+  standardLimiter,
+  async (req: AuthRequest, res: Response) => {
+    try {
+      const id = Number.parseInt(req.params.id, 10);
+      if (Number.isNaN(id)) {
+        return res.status(400).json({ message: 'Invalid inventory item id' });
+      }
+      const userId = req.userId; // Get user ID from auth middleware
+      if (!userId) {
+        return res.status(401).json({ message: 'Access denied: No user ID found' });
+      }
+      const deleted = await inventoryService.deleteInventoryItem(id, userId);
 
-    if (!deleted) {
-      return res.status(404).json({ message: 'Inventory item not found' });
-    }
+      if (!deleted) {
+        return res.status(404).json({ message: 'Inventory item not found' });
+      }
 
-    res.json({ message: 'Inventory item deleted successfully' });
-  } catch (error) {
-    console.error('Delete inventory item error:', error);
-    res.status(500).json({ message: 'Internal server error' });
-  }
-});
+      res.json({ message: 'Inventory item deleted successfully' });
+    } catch (error) {
+      console.error('Delete inventory item error:', error);
+      res.status(500).json({ message: 'Internal server error' });
+    }
+  },
+);
 
 // POST /inventory-items/transaction - Log a new transaction
 router.post(

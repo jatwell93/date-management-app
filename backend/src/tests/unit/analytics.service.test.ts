@@ -1,6 +1,8 @@
 import { AnalyticsService, AnalyticsEventType } from '../../services/analytics.service';
 import { AnalyticsRepository } from '../../repositories/analytics.repository';
-import { Database as DB } from 'better-sqlite3';
+import Database from 'better-sqlite3';
+
+type DB = InstanceType<typeof Database>;
 
 // Mock the AnalyticsRepository
 jest.mock('../../repositories/analytics.repository');
@@ -142,10 +144,7 @@ describe('AnalyticsService', () => {
       expect(sessionId).toBeTruthy();
       expect(typeof sessionId).toBe('string');
       expect(sessionId.length).toBeGreaterThan(0);
-      expect(mockRepository.startSession).toHaveBeenCalledWith(
-        sessionData,
-        expect.any(String),
-      );
+      expect(mockRepository.startSession).toHaveBeenCalledWith(sessionData, expect.any(String));
     });
 
     it('should not start session when tracking disabled', () => {

@@ -27,15 +27,16 @@ const makeResponse = () => {
   return res;
 };
 
-const makeRequest = (overrides: Partial<AuthRequest> = {}): AuthRequest => ({
-  headers: {},
-  header: jest.fn().mockReturnValue('test-agent'),
-  ip: '127.0.0.1',
-  get: jest.fn().mockReturnValue('test-agent'),
-  path: '/secure',
-  method: 'GET',
-  ...overrides,
-} as AuthRequest);
+const makeRequest = (overrides: Partial<AuthRequest> = {}): AuthRequest =>
+  ({
+    headers: {},
+    header: jest.fn().mockReturnValue('test-agent'),
+    ip: '127.0.0.1',
+    get: jest.fn().mockReturnValue('test-agent'),
+    path: '/secure',
+    method: 'GET',
+    ...overrides,
+  }) as AuthRequest;
 
 describe('auth middleware', () => {
   const next = jest.fn();

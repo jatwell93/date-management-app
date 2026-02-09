@@ -3,7 +3,7 @@ import { getDefaultDatabaseClient } from '../database/database-factory';
 import { getDefaultStorageProvider } from '../storage/storage-factory';
 import { StorageProvider } from '../storage/storage-provider.interface';
 import { getDb } from '../database';
-import { Database as DB } from 'better-sqlite3';
+import Database from 'better-sqlite3';
 import { AnalyticsService } from './analytics.service';
 import { ReportService } from './report.service';
 import { AuthService } from './auth.service';
@@ -11,6 +11,8 @@ import { CSVParserService } from './csv-parser.service';
 import { StorageQuotaService } from './storage-quota.service';
 import { UploadService } from './upload.service';
 import { UserService } from './user.service';
+
+type DB = InstanceType<typeof Database>;
 
 export class ServiceProvider {
   private prisma: PrismaClient;

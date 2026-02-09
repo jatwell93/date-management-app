@@ -1,13 +1,15 @@
 /**
  * Report Repository
- * 
+ *
  * Data access layer for report generation.
  * Handles all database queries for reports and dashboard analytics.
- * 
+ *
  * Task 8.5: Create report repository with dependency injection
  */
 
-import { Database as DB } from 'better-sqlite3';
+import Database from 'better-sqlite3';
+
+type DB = InstanceType<typeof Database>;
 
 // Report interfaces
 export interface MonthlyExpiryReport {

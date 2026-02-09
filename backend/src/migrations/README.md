@@ -5,6 +5,7 @@ This directory contains the database migration system for the application. The s
 ## Overview
 
 The migration system provides:
+
 - Version-controlled database schema changes
 - Tracking of which migrations have been applied
 - Rollback capabilities for development
@@ -13,6 +14,7 @@ The migration system provides:
 ## Migration Structure
 
 Each migration is defined with:
+
 - An ID (integer)
 - A name (unique string identifier)
 - An `up` function to apply the migration
@@ -78,7 +80,7 @@ export const newMigration: Migration = {
   down: (db: Database.Database) => {
     // Rollback schema changes
     db.exec(`DROP TABLE IF EXISTS new_table;`);
-  }
+  },
 };
 ```
 
@@ -95,19 +97,21 @@ export const addNotesToProductsMigration: Migration = {
   name: '006-add-notes-field-to-products',
   up: (db: Database.Database) => {
     // Add a notes column to the products table
-    const tableInfo = db.prepare("PRAGMA table_info(products)").all();
+    const tableInfo = db.prepare('PRAGMA table_info(products)').all();
     const hasNotesColumn = tableInfo.some((column: any) => column.name === 'notes');
-    
+
     if (!hasNotesColumn) {
       db.exec("ALTER TABLE products ADD COLUMN notes TEXT DEFAULT ''");
-      console.log("Added notes column to products table");
+      console.log('Added notes column to products table');
     }
   },
   down: (db: Database.Database) => {
     // Note: SQLite doesn't support dropping columns directly
     // In a real scenario, you would need to recreate the table
-    console.log("Skipping rollback for adding notes column (SQLite doesn't support dropping columns)");
-  }
+    console.log(
+      "Skipping rollback for adding notes column (SQLite doesn't support dropping columns)",
+    );
+  },
 };
 ```
 

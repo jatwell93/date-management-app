@@ -1,11 +1,6 @@
 import { Request, Response, NextFunction } from 'express';
 import { Logger } from '../utils/logger';
-import { 
-  BaseError, 
-  isBaseError, 
-  ValidationError,
-  InternalError 
-} from '../errors';
+import { BaseError, isBaseError, ValidationError, InternalError } from '../errors';
 
 /**
  * Type-safe error payload structure
@@ -20,7 +15,7 @@ interface ErrorPayload {
 
 /**
  * Enhanced Error Handler Middleware (Phase 13)
- * 
+ *
  * Handles both custom BaseError instances and generic Error objects.
  * Provides standardized JSON responses with appropriate HTTP status codes.
  * Logs errors with context for debugging and monitoring.
@@ -56,7 +51,7 @@ export const errorHandler = (err: Error, req: Request, res: Response, _next: Nex
     // Generic Error - treat as internal error
     const isDevelopment = process.env.NODE_ENV === 'development';
     errorPayload.message = isDevelopment ? err.message : 'An unexpected error occurred';
-    
+
     // Include stack trace in development
     if (isDevelopment && err.stack) {
       errorPayload.stack = err.stack;

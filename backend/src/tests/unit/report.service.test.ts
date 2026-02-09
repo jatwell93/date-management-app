@@ -1,6 +1,8 @@
 import { ReportService } from '../../services/report.service';
 import { ReportRepository } from '../../repositories/report.repository';
-import { Database as DB } from 'better-sqlite3';
+import Database from 'better-sqlite3';
+
+type DB = InstanceType<typeof Database>;
 
 // Mock the ReportRepository
 jest.mock('../../repositories/report.repository');

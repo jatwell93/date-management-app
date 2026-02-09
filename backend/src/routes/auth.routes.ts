@@ -24,35 +24,36 @@ router.post(
   normalizePin,
   validateRequest(loginSchema),
   async (req: Request, res: Response) => {
-  const rawPin = req.body.pin as string | undefined;
-  const pin = rawPin ? validator.whitelist(rawPin, '0-9') : '';
-  if (!pin) {
-    return res.status(400).json({ message: 'PIN is required' });
-  }
-
-  if (rawPin && pin !== rawPin) {
-    return res.status(400).json({ message: 'PIN must contain only digits' });
-  }
-
-  // Validate PIN strength
-  const pinValidation = authService.validatePin(pin);
-  if (!pinValidation.isValid) {
-    return res.status(400).json({ message: pinValidation.message });
-  }
-
-  try {
-    // For this implementation, we're using direct PIN comparison.
-    // In a real application, you would properly compare hashes
-    const token = await authService.login(pin);
-    res.json(escapeHtml({ token }));
-  } catch (error) {
-    if (error instanceof AuthenticationError) {
-      return res.status(401).json({ message: error.message });
+    const rawPin = req.body.pin as string | undefined;
+    const pin = rawPin ? validator.whitelist(rawPin, '0-9') : '';
+    if (!pin) {
+      return res.status(400).json({ message: 'PIN is required' });
     }
-    // console.error("Login error:", error);
-    res.status(500).json({ message: 'Internal server error' });
-  }
-});
+
+    if (rawPin && pin !== rawPin) {
+      return res.status(400).json({ message: 'PIN must contain only digits' });
+    }
+
+    // Validate PIN strength
+    const pinValidation = authService.validatePin(pin);
+    if (!pinValidation.isValid) {
+      return res.status(400).json({ message: pinValidation.message });
+    }
+
+    try {
+      // For this implementation, we're using direct PIN comparison.
+      // In a real application, you would properly compare hashes
+      const token = await authService.login(pin);
+      res.json(escapeHtml({ token }));
+    } catch (error) {
+      if (error instanceof AuthenticationError) {
+        return res.status(401).json({ message: error.message });
+      }
+      // console.error("Login error:", error);
+      res.status(500).json({ message: 'Internal server error' });
+    }
+  },
+);
 
 // Token refresh endpoint
 router.post('/refresh', authenticateToken, async (req: Request, res: Response) => {

@@ -1,6 +1,6 @@
 /**
  * Integration Tests for Upload Routes with ServiceProvider
- * 
+ *
  * Validates that upload routes correctly:
  * - Use ServiceProvider for dependency injection
  * - Handle file uploads through the complete flow
@@ -110,7 +110,7 @@ describe('Upload Routes with ServiceProvider Integration', () => {
     // Create Express app with upload routes
     app = express();
     app.use(express.json());
-    
+
     // Mock auth middleware
     app.use((req: any, _res, next) => {
       req.userId = 1;
@@ -126,10 +126,10 @@ describe('Upload Routes with ServiceProvider Integration', () => {
 
     // Setup routes with ServiceProvider
     const uploadController = new UploadController(serviceProvider.getUploadService());
-    
+
     app.post('/api/upload/initiate', (req, res) => uploadController.initiate(req, res));
     app.post('/api/upload/direct', upload.single('file'), (req, res) =>
-      uploadController.direct(req, res)
+      uploadController.direct(req, res),
     );
     app.post('/api/upload/complete', (req, res) => uploadController.complete(req, res));
   });
@@ -202,7 +202,7 @@ describe('Upload Routes with ServiceProvider Integration', () => {
   describe('POST /api/upload/direct', () => {
     it('should handle direct file upload for small CSV', async () => {
       const csvContent = 'Name,SKU,Cost\nProduct A,SKU001,10.50\nProduct B,SKU002,20.00';
-      
+
       const response = await request(app)
         .post('/api/upload/direct')
         .attach('file', Buffer.from(csvContent), 'test.csv')
@@ -213,16 +213,14 @@ describe('Upload Routes with ServiceProvider Integration', () => {
     });
 
     it('should reject upload without file', async () => {
-      const response = await request(app)
-        .post('/api/upload/direct')
-        .expect(400);
+      const response = await request(app).post('/api/upload/direct').expect(400);
 
       expect(response.body.error).toContain('file');
     });
 
     it('should process CSV and create products via ServiceProvider', async () => {
       const csvContent = 'Name,SKU,Cost\nProduct A,SKU001,10.50';
-      
+
       const response = await request(app)
         .post('/api/upload/direct')
         .attach('file', Buffer.from(csvContent), 'products.csv')
@@ -276,10 +274,7 @@ describe('Upload Routes with ServiceProvider Integration', () => {
     });
 
     it('should validate key is provided', async () => {
-      const response = await request(app)
-        .post('/api/upload/complete')
-        .send({})
-        .expect(400);
+      const response = await request(app).post('/api/upload/complete').send({}).expect(400);
 
       expect(response.body.error).toContain('key');
     });
@@ -288,7 +283,7 @@ describe('Upload Routes with ServiceProvider Integration', () => {
   describe('ServiceProvider Integration', () => {
     it('should process CSV files through ServiceProvider', async () => {
       const csvContent = 'Name,SKU,Cost\nProduct A,SKU001,10.50';
-      
+
       const response = await request(app)
         .post('/api/upload/direct')
         .attach('file', Buffer.from(csvContent), 'test.csv')
@@ -299,7 +294,7 @@ describe('Upload Routes with ServiceProvider Integration', () => {
 
     it('should handle file uploads with ServiceProvider storage', async () => {
       const csvContent = 'Name,SKU,Cost\nProduct A,SKU001,10.50';
-      
+
       const response = await request(app)
         .post('/api/upload/direct')
         .attach('file', Buffer.from(csvContent), 'test.csv')
@@ -343,7 +338,11 @@ describe('Upload Routes with ServiceProvider Integration', () => {
       // Step 1: Initiate upload (will be direct in test environment)
       const initiateRes = await request(app)
         .post('/api/upload/initiate')
-        .send({ filename: 'large-products.csv', fileSize: 5 * 1024 * 1024, contentType: 'text/csv' })
+        .send({
+          filename: 'large-products.csv',
+          fileSize: 5 * 1024 * 1024,
+          contentType: 'text/csv',
+        })
         .expect(200);
 
       // In test environment, strategy will be direct (not production)

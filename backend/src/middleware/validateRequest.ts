@@ -1,6 +1,6 @@
 /**
  * Zod-based Request Validation Middleware for Phase 13 Security Hardening
- * 
+ *
  * Validates request body, params, and query parameters using Zod schemas.
  * Returns standardized validation errors in the format:
  * { errors: [{ field: "fieldName", message: "error message" }] }
@@ -14,12 +14,12 @@ import { ValidationError } from '../errors';
  * Creates a middleware that validates request against a Zod schema
  * @param schema - Zod schema to validate against (can validate body, params, query)
  * @returns Express middleware function
- * 
+ *
  * @example
  * ```typescript
  * import { validateRequest } from './middleware/validateRequest';
  * import { loginSchema } from './schemas';
- * 
+ *
  * router.post('/login', validateRequest(loginSchema), loginController);
  * ```
  */
@@ -63,17 +63,17 @@ export const validateRequest = (schema: ZodType) => {
 /**
  * Validates only the request body
  * @param schema - Zod schema for the body
- * 
+ *
  * @example
  * ```typescript
  * import { validateBody } from './middleware/validateRequest';
  * import { z } from 'zod';
- * 
+ *
  * const schema = z.object({
  *   email: z.string().email(),
  *   password: z.string().min(8),
  * });
- * 
+ *
  * router.post('/register', validateBody(schema), registerController);
  * ```
  */

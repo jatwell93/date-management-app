@@ -21,7 +21,7 @@ const SentryTest: React.FC = () => {
 
   const testWorkersError = async () => {
     const workersUrl = process.env.REACT_APP_WORKERS_URL;
-    
+
     if (!workersUrl) {
       setError('Workers URL not configured. Please set REACT_APP_WORKERS_URL in your .env file.');
       return;
@@ -30,14 +30,14 @@ const SentryTest: React.FC = () => {
     try {
       // Make a request to the deployed Workers endpoint that will throw an error
       const response = await fetch(`${workersUrl}/api/test-error`);
-      
+
       if (response.ok) {
         // If we get a 200 response, something is wrong
         const text = await response.text();
         setError(`Unexpected success response: ${text}`);
         return;
       }
-      
+
       // We expect a 500 error response from the Workers error
       if (response.status === 500) {
         // This is expected - the Workers endpoint threw an error and returned 500

@@ -5,11 +5,12 @@ var __importDefault = (this && this.__importDefault) || function (mod) {
 Object.defineProperty(exports, "__esModule", { value: true });
 const express_1 = require("express");
 const validator_1 = __importDefault(require("validator"));
-const report_service_1 = require("../services/report.service");
+const service_provider_1 = require("../services/service-provider");
 const auth_middleware_1 = require("../middleware/auth.middleware");
 const normalize_function_1 = require("../utils/normalize.function");
 const router = (0, express_1.Router)();
-const reportService = new report_service_1.ReportService();
+const serviceProvider = new service_provider_1.ServiceProvider();
+const reportService = serviceProvider.getReportService();
 // GET /reports/expiry - Get monthly expiry report (FR-004)
 router.get('/expiry', auth_middleware_1.authenticateToken, async (req, res) => {
     try {

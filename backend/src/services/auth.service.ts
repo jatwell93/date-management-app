@@ -180,13 +180,11 @@ export class AuthService {
   async generateTokens(userId: number, role: string): Promise<TokenPair> {
     try {
       const secret = process.env.JWT_SECRET || 'your_jwt_secret';
-      
+
       // Generate access token (short-lived)
-      const accessToken = jwt.sign(
-        { userId, role },
-        secret,
-        { expiresIn: this.ACCESS_TOKEN_EXPIRY }
-      );
+      const accessToken = jwt.sign({ userId, role }, secret, {
+        expiresIn: this.ACCESS_TOKEN_EXPIRY,
+      });
 
       // Generate refresh token (long-lived)
       const refreshToken = crypto.randomBytes(64).toString('hex');
@@ -263,7 +261,7 @@ export class AuthService {
       const accessToken = jwt.sign(
         { userId: storedToken.userId, role: storedToken.user.role },
         secret,
-        { expiresIn: this.ACCESS_TOKEN_EXPIRY }
+        { expiresIn: this.ACCESS_TOKEN_EXPIRY },
       );
 
       Logger.info('Auth service: Access token refreshed', { userId: storedToken.userId });

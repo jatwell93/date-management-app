@@ -1,6 +1,6 @@
 /**
  * Tests for Zod Request Validation Middleware (Phase 13 Security Hardening)
- * 
+ *
  * Tests the validateRequest middleware to ensure:
  * - Valid requests pass through
  * - Invalid requests are rejected with proper error format
@@ -10,7 +10,12 @@
 
 import { Request, Response, NextFunction } from 'express';
 import { z } from 'zod';
-import { validateRequest, validateBody, validateParams, validateQuery } from '../../middleware/validateRequest';
+import {
+  validateRequest,
+  validateBody,
+  validateParams,
+  validateQuery,
+} from '../../middleware/validateRequest';
 import { ValidationError } from '../../errors';
 
 describe('Zod Request Validation Middleware', () => {
@@ -87,7 +92,7 @@ describe('Zod Request Validation Middleware', () => {
       expect(mockNext).toHaveBeenCalledWith(expect.any(ValidationError));
       const error = (mockNext as jest.Mock).mock.calls[0][0] as ValidationError;
       expect(error.errors).toBeDefined();
-      expect(error.errors!.some(e => e.field === 'id')).toBe(true);
+      expect(error.errors!.some((e) => e.field === 'id')).toBe(true);
     });
 
     it('should include multiple field errors', async () => {
@@ -134,7 +139,7 @@ describe('Zod Request Validation Middleware', () => {
 
       expect(mockNext).toHaveBeenCalledWith(expect.any(ValidationError));
       const error = (mockNext as jest.Mock).mock.calls[0][0] as ValidationError;
-      expect(error.errors!.some(e => e.field === 'username')).toBe(true);
+      expect(error.errors!.some((e) => e.field === 'username')).toBe(true);
     });
 
     it('should fail validation with short password', async () => {
@@ -147,7 +152,7 @@ describe('Zod Request Validation Middleware', () => {
 
       expect(mockNext).toHaveBeenCalledWith(expect.any(ValidationError));
       const error = (mockNext as jest.Mock).mock.calls[0][0] as ValidationError;
-      expect(error.errors!.some(e => e.field === 'password')).toBe(true);
+      expect(error.errors!.some((e) => e.field === 'password')).toBe(true);
     });
 
     it('should fail validation with missing required fields', async () => {
@@ -257,11 +262,11 @@ describe('Zod Request Validation Middleware', () => {
 
       expect(mockNext).toHaveBeenCalledWith(expect.any(ValidationError));
       const error = (mockNext as jest.Mock).mock.calls[0][0] as ValidationError;
-      
+
       // Check error structure matches { errors: [{ field, message }] }
       expect(error.errors).toBeDefined();
       expect(Array.isArray(error.errors)).toBe(true);
-      error.errors!.forEach(err => {
+      error.errors!.forEach((err) => {
         expect(err).toHaveProperty('field');
         expect(err).toHaveProperty('message');
         expect(typeof err.field).toBe('string');
@@ -280,8 +285,8 @@ describe('Zod Request Validation Middleware', () => {
       await middleware(mockRequest as Request, mockResponse as Response, mockNext);
 
       const error = (mockNext as jest.Mock).mock.calls[0][0] as ValidationError;
-      const fields = error.errors!.map(e => e.field);
-      
+      const fields = error.errors!.map((e) => e.field);
+
       expect(fields).toContain('email');
       expect(fields).toContain('pin');
     });
@@ -324,10 +329,12 @@ describe('Zod Request Validation Middleware', () => {
     it('should handle array validation', async () => {
       const schema = z.object({
         body: z.object({
-          items: z.array(z.object({
-            id: z.number(),
-            name: z.string(),
-          })),
+          items: z.array(
+            z.object({
+              id: z.number(),
+              name: z.string(),
+            }),
+          ),
         }),
       });
 

@@ -1,4 +1,4 @@
-import { Database as DB } from 'better-sqlite3';
+import Database from 'better-sqlite3';
 import {
   ReportRepository,
   MonthlyExpiryReport,
@@ -13,10 +13,12 @@ import {
 } from '../repositories/report.repository';
 import { SchedulerService } from './scheduler.service';
 
+type DB = InstanceType<typeof Database>;
+
 /**
  * Report Service with Dependency Injection
  * Generates various reports for inventory management and analytics
- * 
+ *
  * Task 8.4 & 8.6: Refactored to use DI pattern with repository
  */
 export class ReportService {

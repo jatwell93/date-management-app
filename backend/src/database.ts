@@ -20,7 +20,8 @@ function verifyDatabaseSecurity(): void {
       return;
     }
 
-    const hasSSLMode = DATABASE_URL.includes('sslmode=require') || DATABASE_URL.includes('sslmode=verify-full');
+    const hasSSLMode =
+      DATABASE_URL.includes('sslmode=require') || DATABASE_URL.includes('sslmode=verify-full');
 
     if (NODE_ENV === 'production' && !hasSSLMode) {
       Logger.error('⚠️  SECURITY WARNING: DATABASE_URL missing sslmode=require in production!');
@@ -40,7 +41,7 @@ function verifyDatabaseSecurity(): void {
 export function getDb(): DB {
   if (!db) {
     db = new Database(envConfig.DATABASE_PATH || './database.sqlite');
-    
+
     // Verify security configuration on first connection
     verifyDatabaseSecurity();
   }
