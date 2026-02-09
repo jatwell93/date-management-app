@@ -44,9 +44,55 @@ For developers, see the **Backend README** for comprehensive setup:
 - **Dual Database Support** (Phase 11): SQLite for development, Neon PostgreSQL for production. Test compatibility with `npm run test:both`.
 - **Scalable Storage** (Phase 11): Local filesystem for development, Cloudflare R2 for production. Presigned URL support for secure uploads.
 - **Edge Compute** (Phase 11): Cloudflare Workers for serverless deployment, authentication middleware, and performance optimization.
+- **Security Hardening** (Phase 13): Input validation, rate limiting, CORS, secrets scanning, TLS/SSL enforcement.
 - RESTful API endpoints for all data operations.
 - TypeScript for type safety and developer experience.
 - React frontend for a responsive user interface.
+
+## Security
+
+### Secrets Scanning (Task 6.5)
+
+This project uses [git-secrets](https://github.com/awslabs/git-secrets) to prevent committing sensitive data like API keys, passwords, and tokens.
+
+**Quick Start:**
+```bash
+# Install git-secrets (required once)
+# macOS:
+brew install git-secrets
+
+# Ubuntu/Debian:
+sudo apt-get install git-secrets
+
+# Windows (Git Bash):
+# See: https://github.com/awslabs/git-secrets#installing-git-secrets
+
+# Setup for this repository (required once)
+bash scripts/setup-git-secrets.sh
+
+# Scan before committing (recommended)
+npm run secrets-scan
+
+# Pre-commit hook automatically runs on every commit
+```
+
+**What gets scanned:**
+- AWS Access Keys & Secret Keys
+- API tokens (GitHub, OpenAI, Slack, etc.)
+- Database connection strings with passwords
+- Private keys (RSA, DSA, EC, OpenSSH)
+- JWT secrets
+- Cloudflare R2 credentials
+- Neon Database API keys
+
+**Important Notes:**
+- ✅ Pre-commit hook blocks commits containing secrets
+- ✅ GitHub Actions workflow scans on every push
+- ✅ `.env.example` files are allowed (safe templates)
+- ✅ Test fixtures with fake credentials are allowed
+- ⚠️ To bypass (NOT RECOMMENDED): `git commit --no-verify`
+
+For more details, see [`.git-secrets-config`](.git-secrets-config) for the full list of patterns and exceptions.
 
 ## Technologies Used
 

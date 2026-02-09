@@ -45,12 +45,12 @@
 
 ## 6. Secrets Scanning & Prevention
 
-- [ ] 6.1 Install and configure `git-secrets` locally with standard patterns (AWS keys, JWT, API tokens)
-- [ ] 6.2 Create `.git-secrets-config` or update `.gitignore-secrets` with project-specific patterns (if needed)
-- [ ] 6.3 Create GitHub Actions workflow `.github/workflows/secrets-scan.yml` that runs `git-secrets` on push
-- [ ] 6.4 Add pre-commit hook script in `scripts/pre-commit-secrets.sh` to run `git-secrets` before commit
-- [ ] 6.5 Document secrets scanning in `README.md`: "Run `npm run secrets-scan` before committing"
-- [ ] 6.6 Test secrets scanning: attempt to commit a test secret, verify hook blocks it
+- [x] 6.1 Install and configure `git-secrets` locally with standard patterns (AWS keys, JWT, API tokens)
+- [x] 6.2 Create `.git-secrets-config` or update `.gitignore-secrets` with project-specific patterns (if needed)
+- [x] 6.3 Create GitHub Actions workflow `.github/workflows/secrets-scan.yml` that runs `git-secrets` on push
+- [x] 6.4 Add pre-commit hook script in `scripts/pre-commit-secrets.sh` to run `git-secrets` before commit
+- [x] 6.5 Document secrets scanning in `README.md`: "Run `npm run secrets-scan` before committing"
+- [x] 6.6 Test secrets scanning: attempt to commit a test secret, verify hook blocks it
 
 ## 7. Workers Edge Security (JWT Validation)
 
