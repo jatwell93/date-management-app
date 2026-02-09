@@ -6,14 +6,15 @@
 - ✅ Phase 1: Schema Preparation (9/9 tasks) - Multi-tenant database schema created and migrated
 - ✅ Phase 3: TypeScript Interfaces (8/8 tasks) - All models and types defined
 - ✅ Phase 4: Authentication Layer (10/10 tasks) - JWT auth with organization context complete
+- ✅ Phase 5: Feature Gating Middleware (8/8 tasks) - Tier-based feature access & usage limits
 
 **Skipped:**
 - ⏭️ Phase 2: Data Migration (9 tasks) - Not needed for fresh SaaS launch
 
 **Remaining:**
-- 📋 Phase 5-17: Feature gating, routes, services, Stripe integration, trial system, UI, testing, deployment (152 tasks)
+- 📋 Phase 6-17: Routes refactor, services refactor, Stripe integration, trial system, UI, testing, deployment (126 tasks)
 
-**Current Status:** 27/161 tasks complete (17% done) | Authentication layer enables Phase 5 feature gating
+**Current Status:** 35/161 tasks complete (22% done) | Feature gating enables route-layer tenant filtering
 
 > **Legend**: `**USER:**` = Manual action required (account setup, dashboard config, announcements)  
 > Everything else = Developer implementation tasks
@@ -65,14 +66,14 @@
 
 ## 5. Feature Gating Middleware (Phase 2 - Week 3)
 
-- [ ] 5.1 Create `requireFeature(featureKey: string)` middleware in `backend/src/middleware/feature-gate.middleware.ts`
-- [ ] 5.2 Implement feature lookup: Query tier_feature_flags by tierLevel and featureKey
-- [ ] 5.3 Return 403 Forbidden if feature not enabled for tier with upgrade CTA
-- [ ] 5.4 Create `checkUsageLimit(limitKey: string)` middleware for SKU/user limits
-- [ ] 5.5 Implement usage limit check: Query organization_usage and compare against max_skus/max_users
-- [ ] 5.6 Return 403 Forbidden with upgrade message if limit reached
-- [ ] 5.7 Write unit tests for feature gating with Starter/Professional/Premium tiers
-- [ ] 5.8 Write tests for usage limit enforcement (e.g., 500 SKU limit on Starter)
+- [x] 5.1 Create `requireFeature(featureKey: string)` middleware in `backend/src/middleware/feature-gate.middleware.ts`
+- [x] 5.2 Implement feature lookup: Query tier_feature_flags by tierLevel and featureKey
+- [x] 5.3 Return 403 Forbidden if feature not enabled for tier with upgrade CTA
+- [x] 5.4 Create `checkUsageLimit(limitKey: string)` middleware for SKU/user limits
+- [x] 5.5 Implement usage limit check: Query organization_usage and compare against max_skus/max_users
+- [x] 5.6 Return 403 Forbidden with upgrade message if limit reached
+- [x] 5.7 Write unit tests for feature gating with Starter/Professional/Premium tiers
+- [x] 5.8 Write tests for usage limit enforcement (e.g., 500 SKU limit on Starter)
 
 ## 6. Route Layer Refactor (Phase 3 - Week 4)
 
