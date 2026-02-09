@@ -256,9 +256,27 @@
 
 ## 14. Database Migrations
 
+> **⚠️ BLOCKED BY MULTI-TENANT FOUNDATION** (as of Feb 9, 2026)
+>
+> This phase is **PAUSED** pending completion of `plan-saas-monetization-model` (multi-tenant SaaS foundation).
+>
+> **Why Blocked**:
+> - Multi-tenant schema adds `Organization`, `subscription_tiers`, and `organizationId` to ALL models
+> - Deploying single-tenant migrations now would require a **second migration** for multi-tenant
+> - Second migration = production downtime + data backfill + rollback complexity
+>
+> **Resume Timeline**: Week 8 (after multi-tenant schema complete)
+>
+> **What Changes**: Migrations will include multi-tenant tables from day 1:
+> - Organization, subscription_tiers, tier_feature_flags, organization_usage
+> - Product, InventoryItem, User, Upload will have organizationId column
+> - Production launches with SaaS model, not single-tenant
+>
+> See: `openspec/changes/TRANSITION_STRATEGY.md` for full context
+
 - [ ] 14.1 Keep existing SQLite migrations in `backend/migrations/` for development
 - [ ] 14.2 Create Neon branch for schema changes (`neon branches create`)
-- [ ] 14.3 Apply Prisma migrations to Neon branch
+- [ ] 14.3 Apply Prisma migrations to Neon branch (includes multi-tenant schema)
 - [ ] 14.4 Test migrations on branch before deploying to main
 - [ ] 14.5 Merge branch to main (`neon branches merge`)
 - [ ] 14.6 Document migration workflow in `docs/database-migrations.md`
@@ -274,12 +292,32 @@
 
 ## 15. Production Deployment
 
+> **⚠️ BLOCKED BY MULTI-TENANT FOUNDATION** (as of Feb 9, 2026)
+>
+> This phase is **PAUSED** pending completion of `plan-saas-monetization-model` (multi-tenant SaaS foundation).
+>
+> **Why Blocked**:
+> - Deploying single-tenant routes now would require **immediate refactoring** for multi-tenant
+> - All routes must filter by `req.organizationId` (not yet implemented)
+> - JWT payload must include `organizationId` (not yet implemented)
+> - Workers would launch without subscription/billing model
+>
+> **Resume Timeline**: Week 8 (after multi-tenant routes + Stripe integration complete)
+>
+> **What Changes**: Production launches with multi-tenant routes from day 1:
+> - JWT includes `{userId, organizationId, role, tierLevel}`
+> - All endpoints filter by organization (zero cross-tenant access)
+> - Stripe webhook handlers active (subscription lifecycle managed)
+> - Trial system operational (14-day trials with auto-downgrade)
+>
+> See: `openspec/changes/TRANSITION_STRATEGY.md` for full context
+
 - [ ] 15.1 Create production Cloudflare Workers service
 - [ ] 15.2 Configure custom domain for production API
 - [ ] 15.3 Set up DNS records pointing to Workers
-- [ ] 15.4 Deploy Workers with `wrangler publish`
+- [ ] 15.4 Deploy Workers with `wrangler publish` (with multi-tenant routes)
 - [ ] 15.5 Verify health check endpoint accessible (`https://api.domain.com/health`)
-- [ ] 15.6 Test CSV upload flow end-to-end in production
+- [ ] 15.6 Test CSV upload flow end-to-end in production (with organizationId)
 - [ ] 15.7 Monitor initial production traffic (first 24 hours)
 - [ ] 15.8 Verify costs match projections (Cloudflare + Neon)
 - [ ] 15.9 Update frontend to use production API endpoint

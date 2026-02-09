@@ -16,41 +16,128 @@ datasource db {
   url      = env("DATABASE_URL")
 }
 // ============================================================================
+// Multi-Tenant SaaS Models
+// ============================================================================
 
-model Product {
-  id        Int      @id @default(autoincrement())
-  barcode   String   @unique
-  sku       String   @unique
+model Organization {
+  id        String   @id @default(uuid())
   name      String
-  costPrice Float    @map("cost_price")
-  notes     String   @default("")
+  slug      String   @unique
   createdAt DateTime @default(now()) @map("created_at")
   updatedAt DateTime @updatedAt @map("updated_at")
 
   // Relations
+  subscriptionTiers       SubscriptionTier[]
+  organizationUsages      OrganizationUsage[]
+  products                Product[]
+  inventoryItems          InventoryItem[]
+  storeAreas              StoreArea[]
+  users                   User[]
+  uploads                 Upload[]
+  auditLogs               AuditLog[]
+  itemTransactions        ItemTransaction[]
+  expiredItemTransactions ExpiredItemTransaction[]
+
+  @@map("organizations")
+}
+
+model SubscriptionTier {
+  id                   Int      @id @default(autoincrement())
+  organizationId       String   @map("organization_id")
+  tierLevel            String   @map("tier_level") // 'starter' | 'professional' | 'premium' | 'concierge'
+  stripeSubscriptionId String?  @map("stripe_subscription_id")
+  trialEndDate         DateTime? @map("trial_end_date")
+  status               String   @default("active") // 'active' | 'canceled' | 'past_due' | 'trialing'
+  billingCycle         String   @default("monthly") @map("billing_cycle") // 'monthly' | 'annual'
+  createdAt            DateTime @default(now()) @map("created_at")
+  updatedAt            DateTime @updatedAt @map("updated_at")
+
+  // Relations
+  organization Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+
+  @@index([organizationId])
+  @@index([tierLevel])
+  @@index([status])
+  @@map("subscription_tiers")
+}
+
+model TierFeatureFlag {
+  id         Int     @id @default(autoincrement())
+  tierLevel  String  @map("tier_level")
+  featureKey String  @map("feature_key")
+  enabled    Boolean @default(true)
+  limitValue Int?    @map("limit_value") // For limits like max_skus, max_users
+
+  @@unique([tierLevel, featureKey])
+  @@index([tierLevel])
+  @@map("tier_feature_flags")
+}
+
+model OrganizationUsage {
+  id                Int     @id @default(autoincrement())
+  organizationId    String  @map("organization_id")
+  activeUsers       Int     @default(0) @map("active_users")
+  maxUsers          Int     @map("max_users")
+  totalSkus         Int     @default(0) @map("total_skus")
+  maxSkus           Int     @map("max_skus")
+  storageUsedBytes  Int     @default(0) @map("storage_used_bytes")
+  createdAt         DateTime @default(now()) @map("created_at")
+  updatedAt         DateTime @updatedAt @map("updated_at")
+
+  // Relations
+  organization Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+
+  @@unique([organizationId])
+  @@map("organization_usage")
+}
+
+// ============================================================================
+// Existing Models (updated for multi-tenancy)
+// ============================================================================
+
+model Product {
+  id             Int      @id @default(autoincrement())
+  organizationId String?  @map("organization_id")
+  barcode        String
+  sku            String
+  name           String
+  costPrice      Float    @map("cost_price")
+  notes          String   @default("")
+  createdAt      DateTime @default(now()) @map("created_at")
+  updatedAt      DateTime @updatedAt @map("updated_at")
+
+  // Relations
+  organization   Organization?   @relation(fields: [organizationId], references: [id])
   inventoryItems InventoryItem[]
 
+  @@unique([organizationId, sku])
+  @@unique([organizationId, barcode])
+  @@index([organizationId, sku])
+  @@index([organizationId, barcode])
   @@index([sku])
   @@index([barcode])
   @@map("products")
 }
 
 model InventoryItem {
-  id         Int      @id @default(autoincrement())
-  productId  Int      @map("product_id")
-  expiryDate DateTime @map("expiry_date")
-  locationId Int      @map("location_id")
-  status     String   @default("Normal")
-  createdAt  DateTime @default(now()) @map("created_at")
-  updatedAt  DateTime @updatedAt @map("updated_at")
+  id             Int      @id @default(autoincrement())
+  organizationId String?  @map("organization_id")
+  productId      Int      @map("product_id")
+  expiryDate     DateTime @map("expiry_date")
+  locationId     Int      @map("location_id")
+  status         String   @default("Normal")
+  createdAt      DateTime @default(now()) @map("created_at")
+  updatedAt      DateTime @updatedAt @map("updated_at")
 
   // Relations
-  product                  Product     @relation(fields: [productId], references: [id])
-  storeArea                StoreArea   @relation(fields: [locationId], references: [id])
+  organization             Organization?            @relation(fields: [organizationId], references: [id])
+  product                  Product                  @relation(fields: [productId], references: [id])
+  storeArea                StoreArea                @relation(fields: [locationId], references: [id])
   auditLogs                AuditLog[]
   itemTransactions         ItemTransaction[]
   expiredItemTransactions  ExpiredItemTransaction[]
 
+  @@index([organizationId])
   @@index([productId])
   @@index([locationId])
   @@index([expiryDate])
@@ -59,36 +146,42 @@ model InventoryItem {
 }
 
 model StoreArea {
-  id            Int       @id @default(autoincrement())
-  name          String
-  subDepartment String?   @map("sub_department")
-  lastChecked   DateTime? @map("last_checked")
-  createdAt     DateTime  @default(now()) @map("created_at")
-  updatedAt     DateTime  @updatedAt @map("updated_at")
+  id             Int       @id @default(autoincrement())
+  organizationId String?   @map("organization_id")
+  name           String
+  subDepartment  String?   @map("sub_department")
+  lastChecked    DateTime? @map("last_checked")
+  createdAt      DateTime  @default(now()) @map("created_at")
+  updatedAt      DateTime  @updatedAt @map("updated_at")
 
   // Relations
+  organization   Organization?  @relation(fields: [organizationId], references: [id])
   inventoryItems InventoryItem[]
 
   // Unique constraint on name + sub_department combination
-  @@unique([name, subDepartment])
+  @@unique([organizationId, name, subDepartment])
+  @@index([organizationId])
   @@index([name])
   @@map("store_areas")
 }
 
 model User {
-  id        Int      @id @default(autoincrement())
-  pin       String
-  role      String
-  createdAt DateTime @default(now()) @map("created_at")
-  updatedAt DateTime @updatedAt @map("updated_at")
+  id             Int      @id @default(autoincrement())
+  organizationId String?  @map("organization_id")
+  pin            String
+  role           String
+  createdAt      DateTime @default(now()) @map("created_at")
+  updatedAt      DateTime @updatedAt @map("updated_at")
 
   // Relations
+  organization             Organization?            @relation(fields: [organizationId], references: [id])
   auditLogs                AuditLog[]
   itemTransactions         ItemTransaction[]
   expiredItemTransactions  ExpiredItemTransaction[]
   uploads                  Upload[]
   refreshTokens            RefreshToken[]
 
+  @@index([organizationId])
   @@map("users")
 }
 
@@ -112,15 +205,18 @@ model RefreshToken {
 
 model AuditLog {
   id                Int      @id @default(autoincrement())
+  organizationId    String?  @map("organization_id")
   userId            Int      @map("user_id")
   inventoryItemId   Int      @map("inventory_item_id")
   changeDescription String   @map("change_description")
   createdAt         DateTime @default(now()) @map("created_at")
 
   // Relations
-  user          User          @relation(fields: [userId], references: [id])
-  inventoryItem InventoryItem @relation(fields: [inventoryItemId], references: [id])
+  organization   Organization?  @relation(fields: [organizationId], references: [id])
+  user           User           @relation(fields: [userId], references: [id])
+  inventoryItem  InventoryItem  @relation(fields: [inventoryItemId], references: [id])
 
+  @@index([organizationId])
   @@index([userId])
   @@index([inventoryItemId])
   @@map("audit_log")
@@ -129,6 +225,7 @@ model AuditLog {
 // Item Transactions (for in/out/adjustment tracking)
 model ItemTransaction {
   id              Int      @id @default(autoincrement())
+  organizationId  String?  @map("organization_id")
   inventoryItemId Int      @map("inventory_item_id")
   userId          Int      @map("user_id")
   type            String   // 'in', 'out', 'adjustment'
@@ -137,9 +234,11 @@ model ItemTransaction {
   transactionDate DateTime @default(now()) @map("transaction_date")
 
   // Relations
-  inventoryItem InventoryItem @relation(fields: [inventoryItemId], references: [id])
-  user          User          @relation(fields: [userId], references: [id])
+  organization   Organization?  @relation(fields: [organizationId], references: [id])
+  inventoryItem  InventoryItem  @relation(fields: [inventoryItemId], references: [id])
+  user           User           @relation(fields: [userId], references: [id])
 
+  @@index([organizationId])
   @@index([inventoryItemId])
   @@index([userId])
   @@index([type])
@@ -149,6 +248,7 @@ model ItemTransaction {
 
 model ExpiredItemTransaction {
   id              Int      @id @default(autoincrement())
+  organizationId  String?  @map("organization_id")
   inventoryItemId Int      @map("inventory_item_id")
   userId          Int      @map("user_id")
   action          String   // 'sold_through' or 'expired'
@@ -159,9 +259,11 @@ model ExpiredItemTransaction {
   updatedAt       DateTime @updatedAt @map("updated_at")
 
   // Relations
-  inventoryItem InventoryItem @relation(fields: [inventoryItemId], references: [id])
-  user          User          @relation(fields: [userId], references: [id])
+  organization   Organization?  @relation(fields: [organizationId], references: [id])
+  inventoryItem  InventoryItem  @relation(fields: [inventoryItemId], references: [id])
+  user           User           @relation(fields: [userId], references: [id])
 
+  @@index([organizationId])
   @@index([inventoryItemId])
   @@index([userId])
   @@index([action])
@@ -175,6 +277,7 @@ model ExpiredItemTransaction {
 
 model Upload {
   id              Int      @id @default(autoincrement())
+  organizationId  String?  @map("organization_id")
   userId          Int      @map("user_id")
   fileKey         String   @unique @map("file_key")
   fileName        String   @map("file_name")
@@ -185,8 +288,10 @@ model Upload {
   updatedAt       DateTime @updatedAt @map("updated_at")
 
   // Relations
-  user            User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  organization    Organization? @relation(fields: [organizationId], references: [id])
+  user            User          @relation(fields: [userId], references: [id], onDelete: Cascade)
 
+  @@index([organizationId, createdAt])
   @@index([userId, createdAt])
   @@index([status])
   @@index([createdAt])

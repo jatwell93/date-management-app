@@ -49,6 +49,7 @@ prompts/
 skills/
 instructions/
 agents/
+other/
 
 # Coverage
 coverage/
