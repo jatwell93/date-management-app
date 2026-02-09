@@ -1,6 +1,7 @@
-import { PrismaClient } from './generated/client';
+import { PrismaClient } from '../prisma/generated/client/client';
 import { AuthService } from '../../services/auth.service';
 import { UserService } from '../../services/user.service';
+import { ConflictError } from '../../errors';
 
 describe('UserService', () => {
   let prisma: PrismaClient;
@@ -34,7 +35,9 @@ describe('UserService', () => {
   describe('createUser', () => {
     it('creates a user with a hashed PIN', async () => {
       (authService.validatePin as jest.Mock).mockReturnValue({ isValid: true });
+      (authService.verifyPin as jest.Mock).mockResolvedValue(false);
       (authService.hashPin as jest.Mock).mockResolvedValue('hashed_pin');
+      (prisma.user.findMany as jest.Mock).mockResolvedValue([]);
       (prisma.user.create as jest.Mock).mockResolvedValue({
         id: 1,
         pin: 'hashed_pin',
@@ -46,6 +49,9 @@ describe('UserService', () => {
       const result = await service.createUser({ pin: '123456', role: 'Manager' });
 
       expect(authService.validatePin).toHaveBeenCalledWith('123456');
+      expect(prisma.user.findMany).toHaveBeenCalledWith({
+        select: { id: true, pin: true },
+      });
       expect(authService.hashPin).toHaveBeenCalledWith('123456');
       expect(prisma.user.create).toHaveBeenCalledWith({
         data: {
@@ -60,6 +66,19 @@ describe('UserService', () => {
         created_at: createdAt.toISOString(),
         updated_at: updatedAt.toISOString(),
       });
+    });
+
+    it('throws ConflictError when PIN is already in use', async () => {
+      (authService.validatePin as jest.Mock).mockReturnValue({ isValid: true });
+      (authService.verifyPin as jest.Mock).mockResolvedValue(true);
+      (prisma.user.findMany as jest.Mock).mockResolvedValue([
+        { id: 2, pin: 'existing_hashed_pin' },
+      ]);
+
+      await expect(service.createUser({ pin: '123456', role: 'Manager' })).rejects.toBeInstanceOf(
+        ConflictError,
+      );
+      expect(prisma.user.create).not.toHaveBeenCalled();
     });
   });
 

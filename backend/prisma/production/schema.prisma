@@ -1,11 +1,15 @@
 // Prisma Schema for Date Management App - Neon PostgreSQL Production
-// 
+//
 // Use this schema for production deployment with Neon:
 // npx prisma generate --schema=./prisma/production/schema.prisma
 // npx prisma db push --schema=./prisma/production/schema.prisma
 //
 // Or for migrations:
 // npx prisma migrate dev --schema=./prisma/production/schema.prisma
+
+generator client {
+  provider = "prisma-client-js"
+}
 
 // Production: PostgreSQL (Neon Serverless)
 // When using this schema, set DATABASE_URL to your Neon connection string
@@ -17,7 +21,6 @@ datasource db {
 
 // ============================================================================
 // Core Models
-// ============================================================================
 
 model Product {
   id        Int      @id @default(autoincrement())

@@ -1,8 +1,9 @@
 import jwt from 'jsonwebtoken';
 import bcrypt from 'bcrypt';
-import { PrismaClient } from './generated/client';
+import { PrismaClient } from '@prisma/client';
 import { getDefaultDatabaseClient } from '../database/database-factory';
 import { Logger } from '../utils/logger';
+import { AuthenticationError, InternalError } from '../errors';
 
 export class AuthService {
   private prisma: PrismaClient;
@@ -112,7 +113,7 @@ export class AuthService {
     return await bcrypt.compare(pin, hashedPin);
   }
 
-  async login(pin: string): Promise<string | null> {
+  async login(pin: string): Promise<string> {
     try {
       // Get all users and iterate through them to find a match
       const users = await this.prisma.user.findMany({
@@ -145,13 +146,16 @@ export class AuthService {
       }
 
       Logger.warn('Auth service: Authentication failed for provided PIN');
-      return null;
+      throw new AuthenticationError('Invalid PIN');
     } catch (error) {
+      if (error instanceof AuthenticationError) {
+        throw error;
+      }
       Logger.error('Auth service: Error during authentication', {
         error: error instanceof Error ? error.message : 'Unknown error',
         stack: error instanceof Error ? error.stack : undefined,
       });
-      return null;
+      throw new InternalError('Authentication failed');
     }
   }
 }

@@ -258,4 +258,30 @@ export class AnalyticsService {
   public async exportData(startDate: Date, endDate: Date): Promise<AnalyticsEvent[]> {
     return this.repository.exportData(startDate, endDate);
   }
+
+  // ============================================================================
+  // Static Singleton for Backward Compatibility
+  // ============================================================================
+
+  private static instance: AnalyticsService | null = null;
+
+  /**
+   * Get or create singleton instance (for middleware compatibility)
+   * Uses the database from ServiceProvider
+   */
+  public static getInstance(): AnalyticsService {
+    if (!AnalyticsService.instance) {
+      const db = require('../database/database-factory').getDefaultDatabaseClient();
+      AnalyticsService.instance = new AnalyticsService(db);
+      AnalyticsService.instance.initialize();
+    }
+    return AnalyticsService.instance;
+  }
+
+  /**
+   * Reset singleton (for testing)
+   */
+  public static resetInstance(): void {
+    AnalyticsService.instance = null;
+  }
 }

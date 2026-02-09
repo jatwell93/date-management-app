@@ -10,7 +10,7 @@
  */
 
 import { CSVParserService, CSVParseResult, ProgressEvent } from '../../services/csv-parser.service';
-import { PrismaClient } from './generated/client';
+import { PrismaClient } from '@prisma/client';
 import * as fs from 'fs';
 import * as path from 'path';
 import * as os from 'os';

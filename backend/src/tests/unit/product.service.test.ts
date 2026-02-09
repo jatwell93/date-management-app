@@ -1,5 +1,5 @@
 import { ProductService } from '../../services/product.service';
-import { PrismaClient } from './generated/client';
+import { PrismaClient } from '@prisma/client';
 
 describe('ProductService', () => {
   let productService: ProductService;

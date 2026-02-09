@@ -1,4 +1,4 @@
-import { PrismaClient } from './generated/client';
+import { PrismaClient } from '@prisma/client';
 import { getDefaultDatabaseClient } from '../database/database-factory';
 import { InventoryItem } from '../models/inventory-item.model';
 import { ItemTransaction } from '../models/item-transaction.model';

@@ -3,7 +3,7 @@ import app from '../../index';
 import express from 'express';
 import fs from 'fs';
 import path from 'path';
-import { PrismaClient } from './generated/client';
+import { PrismaClient } from '@prisma/client';
 
 const prisma = new PrismaClient();
 app.use(express.json());

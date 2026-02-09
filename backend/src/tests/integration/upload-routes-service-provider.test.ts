@@ -10,7 +10,7 @@
 import request from 'supertest';
 import express, { Express } from 'express';
 import multer from 'multer';
-import { PrismaClient } from './generated/client';
+import { PrismaClient } from '@prisma/client';
 import { ServiceProvider } from '../../services/service-provider';
 import { StorageProvider } from '../../storage/storage-provider.interface';
 import { UploadController } from '../../controllers/upload.controller';

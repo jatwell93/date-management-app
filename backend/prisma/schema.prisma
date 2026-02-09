@@ -1,9 +1,13 @@
 // Prisma Schema for Date Management App
 // Supports SQLite (development) and MySQL/PlanetScale (production)
-// 
+//
 // For production deployment with PlanetScale:
 // 1. Copy schema.planetscale.prisma to schema.prisma
 // 2. Or use prisma generate --schema=./prisma/schema.planetscale.prisma
+
+generator client {
+  provider = "prisma-client-js"
+}
 
 // Development: SQLite
 // For production, use production/schema.prisma
@@ -11,9 +15,6 @@ datasource db {
   provider = "sqlite"
   url      = env("DATABASE_URL")
 }
-
-// ============================================================================
-// Core Models
 // ============================================================================
 
 model Product {

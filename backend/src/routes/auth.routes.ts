@@ -6,6 +6,7 @@ import { validateRequest } from '../middleware/validateRequest';
 import { loginSchema } from '../schemas';
 import { strictLimiter } from '../middleware/rateLimiter';
 import { escapeHtml } from '../utils/normalize.function';
+import { AuthenticationError } from '../errors';
 
 const router = Router();
 const authService = new AuthService();
@@ -43,13 +44,12 @@ router.post(
     // For this implementation, we're using direct PIN comparison.
     // In a real application, you would properly compare hashes
     const token = await authService.login(pin);
-    if (token) {
-      res.json(escapeHtml({ token }));
-    } else {
-      res.status(401).json({ message: 'Invalid PIN' });
+    res.json(escapeHtml({ token }));
+  } catch (error) {
+    if (error instanceof AuthenticationError) {
+      return res.status(401).json({ message: error.message });
     }
-  } catch (_error) {
-    // console.error("Login error:", _error);
+    // console.error("Login error:", error);
     res.status(500).json({ message: 'Internal server error' });
   }
 });

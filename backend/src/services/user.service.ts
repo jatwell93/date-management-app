@@ -1,6 +1,7 @@
-import { PrismaClient } from './generated/client';
+import { PrismaClient } from '@prisma/client';
 import { getDefaultDatabaseClient } from '../database/database-factory';
 import { User } from '../models/user.model';
+import { ConflictError, ValidationError } from '../errors';
 import { AuthService } from './auth.service';
 
 export class UserService {
@@ -15,7 +16,18 @@ export class UserService {
   async createUser(user: Omit<User, 'id' | 'created_at' | 'updated_at'>): Promise<User> {
     const pinValidation = this.authService.validatePin(user.pin);
     if (!pinValidation.isValid) {
-      throw new Error(pinValidation.message || 'Invalid PIN format');
+      throw new ValidationError(pinValidation.message || 'Invalid PIN format');
+    }
+
+    const existingUsers = await this.prisma.user.findMany({
+      select: { id: true, pin: true },
+    });
+
+    for (const existingUser of existingUsers) {
+      const isDuplicate = await this.authService.verifyPin(user.pin, existingUser.pin);
+      if (isDuplicate) {
+        throw new ConflictError('PIN already in use');
+      }
     }
 
     const hashedPin = await this.authService.hashPin(user.pin);

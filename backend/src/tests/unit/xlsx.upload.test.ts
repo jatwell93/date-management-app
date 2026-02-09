@@ -2,7 +2,7 @@ import { ProductService } from '../../services/product.service';
 import fs from 'fs';
 import path from 'path';
 import * as XLSX from 'xlsx';
-import { PrismaClient } from './generated/client';
+import { PrismaClient } from '../prisma/generated/client';
 
 // Mock Prisma manually
 const mockPrisma = {

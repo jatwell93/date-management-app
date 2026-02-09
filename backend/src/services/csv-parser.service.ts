@@ -15,7 +15,7 @@
  * - Duplicate SKU detection
  */
 
-import { PrismaClient } from '../prisma/generated/client';
+import { PrismaClient } from '@prisma/client';
 import { EventEmitter } from 'events';
 import { parse } from 'csv-parse';
 import * as fs from 'fs';
@@ -473,11 +473,11 @@ export class CSVParserService extends EventEmitter {
   private sanitizeValue(value: string): string {
     let sanitized = value;
 
-    // Escape dangerous prefixes with backslash
+    // Escape dangerous prefixes with single quote (Excel treats as literal)
     for (const prefix of CSV_INJECTION_PREFIXES) {
       if (sanitized.startsWith(prefix)) {
-        // Prefix with backslash to escape the dangerous character
-        sanitized = '\\' + sanitized;
+        // Prefix with single quote to neutralize formula injection
+        sanitized = "'" + sanitized;
         break;
       }
     }

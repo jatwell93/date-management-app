@@ -20,4 +20,4 @@ export {
 } from './database-factory';
 
 // Re-export Prisma client and types for convenience
-export { PrismaClient } from './generated/client';
+export { PrismaClient } from '@prisma/client';
