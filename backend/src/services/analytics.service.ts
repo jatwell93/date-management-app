@@ -1,7 +1,5 @@
 import Database from 'better-sqlite3';
 import { Logger } from '../utils/logger';
-
-type DB = InstanceType<typeof Database>;
 import { AnalyticsRepository } from '../repositories/analytics.repository';
 
 // Define analytics event types

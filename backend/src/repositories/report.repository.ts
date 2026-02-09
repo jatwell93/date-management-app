@@ -9,8 +9,6 @@
 
 import Database from 'better-sqlite3';
 
-type DB = InstanceType<typeof Database>;
-
 // Report interfaces
 export interface MonthlyExpiryReport {
   month: string;
@@ -80,7 +78,7 @@ export interface DashboardAnalytics {
 }
 
 export class ReportRepository {
-  constructor(private db: DB) {}
+  constructor(private db: InstanceType<typeof Database>) {}
 
   /**
    * Get monthly expiry report

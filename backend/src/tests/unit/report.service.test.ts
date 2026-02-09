@@ -2,15 +2,13 @@ import { ReportService } from '../../services/report.service';
 import { ReportRepository } from '../../repositories/report.repository';
 import Database from 'better-sqlite3';
 
-type DB = InstanceType<typeof Database>;
-
 // Mock the ReportRepository
 jest.mock('../../repositories/report.repository');
 
 describe('ReportService', () => {
   let reportService: ReportService;
   let mockRepository: jest.Mocked<ReportRepository>;
-  let mockDb: Partial<DB>;
+  let mockDb: Partial<InstanceType<typeof Database>>;
 
   beforeEach(() => {
     // Create a mock database instance

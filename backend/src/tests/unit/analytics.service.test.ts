@@ -2,15 +2,13 @@ import { AnalyticsService, AnalyticsEventType } from '../../services/analytics.s
 import { AnalyticsRepository } from '../../repositories/analytics.repository';
 import Database from 'better-sqlite3';
 
-type DB = InstanceType<typeof Database>;
-
 // Mock the AnalyticsRepository
 jest.mock('../../repositories/analytics.repository');
 
 describe('AnalyticsService', () => {
   let analyticsService: AnalyticsService;
   let mockRepository: jest.Mocked<AnalyticsRepository>;
-  let mockDb: Partial<DB>;
+  let mockDb: Partial<InstanceType<typeof Database>>;
 
   beforeEach(() => {
     // Create a mock database instance

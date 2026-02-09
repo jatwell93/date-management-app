@@ -13,8 +13,6 @@ import {
 } from '../repositories/report.repository';
 import { SchedulerService } from './scheduler.service';
 
-type DB = InstanceType<typeof Database>;
-
 /**
  * Report Service with Dependency Injection
  * Generates various reports for inventory management and analytics

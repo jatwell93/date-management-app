@@ -8,9 +8,6 @@
  */
 
 import Database from 'better-sqlite3';
-import { Logger } from '../utils/logger';
-
-type DB = InstanceType<typeof Database>;
 import {
   AnalyticsEvent,
   AnalyticsEventType,
@@ -19,7 +16,7 @@ import {
 } from '../services/analytics.service';
 
 export class AnalyticsRepository {
-  constructor(private db: DB) {}
+  constructor(private db: InstanceType<typeof Database>) {}
 
   /**
    * Initialize analytics tables if they don't exist

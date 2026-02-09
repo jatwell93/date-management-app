@@ -12,8 +12,6 @@ import { StorageQuotaService } from './storage-quota.service';
 import { UploadService } from './upload.service';
 import { UserService } from './user.service';
 
-type DB = InstanceType<typeof Database>;
-
 export class ServiceProvider {
   private prisma: PrismaClient;
   private storageProvider: StorageProvider;
