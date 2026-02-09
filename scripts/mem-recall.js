@@ -13,7 +13,7 @@
  * Output is formatted for easy consumption by AI agents.
  */
 
-const { execSync } = require('child_process');
+const { execSync, execFileSync } = require('child_process');
 const path = require('path');
 
 // Load environment variables from .env file
@@ -41,24 +41,19 @@ function retrieveContext(query) {
 
   // Check if API key is available in environment (for potential future use)
   const hasApiKey = !!process.env.GEMINI_API_KEY || !!process.env.OPENAI_API_KEY;
-  const semanticFlags = ' --mode lex';
+  const semanticFlags = ['--mode', 'lex'];
 
-  // Cross-platform environment variable prefix
-  const envPrefix = hasApiKey
-    ? process.platform === 'win32'
-      ? `set GEMINI_API_KEY=${process.env.GEMINI_API_KEY} && set GOOGLE_API_KEY=${process.env.GEMINI_API_KEY} && `
-      : `GEMINI_API_KEY=${process.env.GEMINI_API_KEY} GOOGLE_API_KEY=${process.env.GEMINI_API_KEY} `
-    : '';
+  // Cross-platform environment variable prefix is no longer needed because we pass
+  // environment variables directly via the `env` option when spawning the process.
 
   try {
-    const cmd = `${envPrefix}memvid find "${MEMORY_FILE}" --query "${query.replace(/"/g, '\\"')}" --json${semanticFlags}`;
-
     // Create clean env (keep API keys for remote providers)
     const cleanEnv = { ...process.env };
 
-    const output = execSync(cmd, {
+    const args = ['find', MEMORY_FILE, '--query', query, '--json', ...semanticFlags];
+
+    const output = execFileSync('memvid', args, {
       encoding: 'utf8',
-      shell: true,
       stdio: ['pipe', 'pipe', 'pipe'],
       env: cleanEnv,
     });
@@ -91,8 +86,9 @@ function retrieveContext(query) {
   } catch (error) {
     // Try non-JSON output as fallback
     try {
-      const fallbackCmd = `memvid find "${MEMORY_FILE}" --query "${query.replace(/"/g, '\\"')}"`;
-      execSync(fallbackCmd, { stdio: 'inherit', shell: true, env: cleanEnv });
+      const cleanEnv = { ...process.env };
+      const fallbackArgs = ['find', MEMORY_FILE, '--query', query];
+      execFileSync('memvid', fallbackArgs, { stdio: 'inherit', env: cleanEnv });
     } catch (fallbackError) {
       console.error('❌ Retrieval failed:', error.message);
       process.exit(1);
