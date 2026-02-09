@@ -1,6 +1,7 @@
 import Database from 'better-sqlite3';
 import { Logger } from '../utils/logger';
 import { AnalyticsRepository } from '../repositories/analytics.repository';
+import { randomBytes } from 'crypto';
 
 // Define analytics event types
 export enum AnalyticsEventType {
@@ -196,7 +197,8 @@ export class AnalyticsService {
    * Generate a unique session ID
    */
   private generateSessionId(): string {
-    return 'sess_' + Date.now().toString(36) + Math.random().toString(36).substr(2, 9);
+    const randomPart = randomBytes(16).toString('hex');
+    return 'sess_' + randomPart;
   }
 
   /**
