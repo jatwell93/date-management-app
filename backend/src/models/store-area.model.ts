@@ -7,6 +7,7 @@ import { Database } from 'sqlite';
 
 export interface StoreArea {
   id: number;
+  organizationId: string;
   name: string;
   subDepartment?: string; // New field for sub-departments
   lastChecked?: string;

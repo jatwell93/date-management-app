@@ -7,6 +7,7 @@ import { Database } from 'sqlite';
 
 export interface Product {
   id: number;
+  organizationId: string;
   barcode: string;
   sku: string;
   name: string;

@@ -4,6 +4,7 @@ import { PrismaClient } from '@prisma/client';
 import { getDefaultDatabaseClient } from '../database/database-factory';
 import { Logger } from '../utils/logger';
 import { AuthenticationError, InternalError } from '../errors';
+import { TierLevel, SubscriptionStatus } from '../types/subscription';
 import crypto from 'crypto';
 
 export interface TokenPair {
@@ -14,8 +15,18 @@ export interface TokenPair {
 export interface TokenPayload {
   userId: number;
   role: string;
+  organizationId: string;
+  tierLevel: TierLevel;
   iat?: number;
   exp?: number;
+}
+
+export interface LoginResponse {
+  token: string;
+  userId: number;
+  role: string;
+  organizationId: string;
+  tierLevel: TierLevel;
 }
 
 export class AuthService {
@@ -128,11 +139,16 @@ export class AuthService {
     return await bcrypt.compare(pin, hashedPin);
   }
 
-  async login(pin: string): Promise<string> {
+  async login(pin: string): Promise<LoginResponse> {
     try {
       // Get all users and iterate through them to find a match
       const users = await this.prisma.user.findMany({
-        select: { id: true, pin: true, role: true },
+        select: { 
+          id: true, 
+          pin: true, 
+          role: true,
+          organizationId: true,
+        },
       });
       Logger.debug('Auth service: Attempting to authenticate user', {
         userCount: users.length,
@@ -144,19 +160,63 @@ export class AuthService {
 
         const isValidPin = await bcrypt.compare(pin, user.pin);
         if (isValidPin) {
+          // Verify user has an organization
+          if (!user.organizationId) {
+            Logger.error('Auth service: User has no organization assigned', { userId: user.id });
+            throw new AuthenticationError('User organization not configured');
+          }
+
+          // Query organization and its subscription tier
+          const subscriptionTier = await this.prisma.subscriptionTier.findFirst({
+            where: { organizationId: user.organizationId },
+            orderBy: { createdAt: 'desc' },
+          });
+
+          if (!subscriptionTier) {
+            Logger.error('Auth service: No subscription tier found for organization', {
+              organizationId: user.organizationId,
+            });
+            throw new AuthenticationError('Organization subscription not configured');
+          }
+
+          // Verify organization subscription is not canceled
+          if (subscriptionTier.status === SubscriptionStatus.CANCELED) {
+            Logger.warn('Auth service: Login attempt for canceled organization', {
+              organizationId: user.organizationId,
+              userId: user.id,
+            });
+            throw new AuthenticationError(
+              'Organization subscription has been canceled. Please contact support.',
+            );
+          }
+
           Logger.info('Auth service: User authenticated successfully', {
             userId: user.id,
+            organizationId: user.organizationId,
+            tierLevel: subscriptionTier.tierLevel,
             role: user.role,
           });
 
           const token = jwt.sign(
-            { userId: user.id, role: user.role },
+            {
+              userId: user.id,
+              role: user.role,
+              organizationId: user.organizationId,
+              tierLevel: subscriptionTier.tierLevel,
+            },
             process.env.JWT_SECRET || 'your_jwt_secret',
             {
               expiresIn: '1h', // Token expires in 1 hour
             },
           );
-          return token;
+
+          return {
+            token,
+            userId: user.id,
+            role: user.role,
+            organizationId: user.organizationId,
+            tierLevel: subscriptionTier.tierLevel as TierLevel,
+          };
         }
       }
 

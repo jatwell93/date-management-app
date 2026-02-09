@@ -9,9 +9,16 @@ const analytics_service_1 = require("../services/analytics.service");
 const authenticateToken = (req, res, next) => {
     // Test environment bypass
     if (process.env.NODE_ENV === 'test' && process.env.TEST_AUTH_BYPASS === 'true') {
-        req.user = { id: 1, role: 'Manager' }; // Mock user
+        req.user = {
+            id: 1,
+            role: 'Manager',
+            organizationId: 'default-org',
+            tierLevel: 'professional'
+        };
         req.userId = 1;
         req.userRole = 'Manager';
+        req.organizationId = 'default-org';
+        req.tierLevel = 'professional';
         return next();
     }
     const authHeader = req.headers['authorization'];
@@ -99,12 +106,29 @@ const authenticateToken = (req, res, next) => {
         });
         return res.status(403).json({ message: 'Access denied: Token has expired' });
     }
+    // Validate required multi-tenant fields
+    if (!decodedToken.organizationId || !decodedToken.tierLevel) {
+        const analyticsService = analytics_service_1.AnalyticsService.getInstance();
+        analyticsService.trackEvent({
+            eventType: analytics_service_1.AnalyticsEventType.USER_LOGOUT,
+            eventCategory: 'Auth',
+            eventAction: 'missing_tenant_context',
+            ipAddress: req.ip,
+            userAgent: req.get('User-Agent') || undefined,
+            metadata: { path: req.path, method: req.method },
+        });
+        return res.status(403).json({ message: 'Access denied: Missing tenant context in token' });
+    }
     // Now that we've verified, we can safely access the properties
     req.userId = decodedToken.userId;
     req.userRole = decodedToken.role;
+    req.organizationId = decodedToken.organizationId;
+    req.tierLevel = decodedToken.tierLevel;
     req.user = {
         id: decodedToken.userId,
         role: decodedToken.role,
+        organizationId: decodedToken.organizationId,
+        tierLevel: decodedToken.tierLevel,
     };
     // Track successful authenticated request
     const analyticsService = analytics_service_1.AnalyticsService.getInstance();
@@ -115,15 +139,20 @@ const authenticateToken = (req, res, next) => {
         eventAction: 'protected_route_access',
         ipAddress: req.ip,
         userAgent: req.get('User-Agent') || undefined,
-        metadata: { path: req.path, method: req.method, role: decodedToken.role },
+        metadata: {
+            path: req.path,
+            method: req.method,
+            role: decodedToken.role,
+            organizationId: decodedToken.organizationId,
+        },
     });
     next();
 };
 exports.authenticateToken = authenticateToken;
 // Function to generate a JWT token with configurable expiration
-const generateToken = (userId, role, expiresIn = '24h') => {
+const generateToken = (userId, role, organizationId, tierLevel, expiresIn = '24h') => {
     const secret = process.env.JWT_SECRET || 'your_jwt_secret';
-    return jsonwebtoken_1.default.sign({ userId, role }, secret, {
+    return jsonwebtoken_1.default.sign({ userId, role, organizationId, tierLevel }, secret, {
         expiresIn: expiresIn,
     });
 };

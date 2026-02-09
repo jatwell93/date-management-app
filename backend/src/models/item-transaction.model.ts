@@ -2,6 +2,7 @@ import { getDb } from '../database';
 
 export interface ItemTransaction {
   id?: number;
+  organizationId: string;
   inventory_item_id: number;
   user_id: number;
   type: 'in' | 'out' | 'adjustment';

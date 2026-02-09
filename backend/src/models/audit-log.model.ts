@@ -7,6 +7,7 @@ import { Database } from 'sqlite';
 
 export interface AuditLog {
   id: number;
+  organizationId: string;
   user_id: number;
   inventory_item_id: number;
   change_description: string;

@@ -1,27 +1,42 @@
 import { Request, Response, NextFunction } from 'express';
 import jwt, { Secret } from 'jsonwebtoken';
 import { AnalyticsService, AnalyticsEventType } from '../services/analytics.service';
+import { TierLevel, SubscriptionStatus } from '../types/subscription';
+import { getDefaultDatabaseClient } from '../database/database-factory';
 
 export interface AuthRequest extends Request {
   userId?: number;
   userRole?: string;
+  organizationId?: string;
+  tierLevel?: TierLevel;
   user?: {
     id: number;
     role: string;
+    organizationId: string;
+    tierLevel: TierLevel;
   };
 }
 
 export interface TokenPayload extends jwt.JwtPayload {
   userId: number;
   role: string;
+  organizationId: string;
+  tierLevel: TierLevel;
 }
 
 export const authenticateToken = (req: AuthRequest, res: Response, next: NextFunction) => {
   // Test environment bypass
   if (process.env.NODE_ENV === 'test' && process.env.TEST_AUTH_BYPASS === 'true') {
-    req.user = { id: 1, role: 'Manager' }; // Mock user
+    req.user = { 
+      id: 1, 
+      role: 'Manager',
+      organizationId: 'default-org',
+      tierLevel: 'professional'
+    };
     req.userId = 1;
     req.userRole = 'Manager';
+    req.organizationId = 'default-org';
+    req.tierLevel = 'professional';
     return next();
   }
 
@@ -118,12 +133,103 @@ export const authenticateToken = (req: AuthRequest, res: Response, next: NextFun
     return res.status(403).json({ message: 'Access denied: Token has expired' });
   }
 
+  // Validate required multi-tenant fields
+  if (!decodedToken.organizationId || !decodedToken.tierLevel) {
+    const analyticsService = AnalyticsService.getInstance();
+    analyticsService.trackEvent({
+      eventType: AnalyticsEventType.USER_LOGOUT,
+      eventCategory: 'Auth',
+      eventAction: 'missing_tenant_context',
+      ipAddress: req.ip,
+      userAgent: req.get('User-Agent') || undefined,
+      metadata: { path: req.path, method: req.method },
+    });
+
+    return res.status(403).json({ message: 'Access denied: Missing tenant context in token' });
+  }
+
+  // Validate organization exists and is active (task 4.4)
+  try {
+    const prisma = getDefaultDatabaseClient();
+    const subscription = await prisma.subscriptionTier.findFirst({
+      where: { organizationId: decodedToken.organizationId },
+      orderBy: { createdAt: 'desc' },
+    });
+
+    if (!subscription) {
+      const analyticsService = AnalyticsService.getInstance();
+      analyticsService.trackEvent({
+        userId: decodedToken.userId,
+        eventType: AnalyticsEventType.USER_LOGOUT,
+        eventCategory: 'Auth',
+        eventAction: 'organization_subscription_not_found',
+        ipAddress: req.ip,
+        userAgent: req.get('User-Agent') || undefined,
+        metadata: { 
+          organizationId: decodedToken.organizationId,
+          path: req.path, 
+          method: req.method 
+        },
+      });
+
+      return res.status(403).json({ 
+        message: 'Access denied: Organization subscription not configured' 
+      });
+    }
+
+    // Check if subscription is canceled
+    if (subscription.status === SubscriptionStatus.CANCELED) {
+      const analyticsService = AnalyticsService.getInstance();
+      analyticsService.trackEvent({
+        userId: decodedToken.userId,
+        eventType: AnalyticsEventType.USER_LOGOUT,
+        eventCategory: 'Auth',
+        eventAction: 'organization_subscription_canceled',
+        ipAddress: req.ip,
+        userAgent: req.get('User-Agent') || undefined,
+        metadata: { 
+          organizationId: decodedToken.organizationId,
+          path: req.path, 
+          method: req.method 
+        },
+      });
+
+      return res.status(403).json({ 
+        message: 'Access denied: Organization subscription has been canceled. Please contact support.' 
+      });
+    }
+  } catch (error) {
+    const analyticsService = AnalyticsService.getInstance();
+    analyticsService.trackEvent({
+      userId: decodedToken.userId,
+      eventType: AnalyticsEventType.USER_LOGOUT,
+      eventCategory: 'Auth',
+      eventAction: 'organization_validation_error',
+      ipAddress: req.ip,
+      userAgent: req.get('User-Agent') || undefined,
+      metadata: { 
+        organizationId: decodedToken.organizationId,
+        path: req.path, 
+        method: req.method,
+        error: error instanceof Error ? error.message : 'Unknown error'
+      },
+    });
+
+    return res.status(500).json({ 
+      message: 'Error validating organization access' 
+    });
+  }
+
   // Now that we've verified, we can safely access the properties
   req.userId = decodedToken.userId;
   req.userRole = decodedToken.role;
+  req.organizationId = decodedToken.organizationId;
+  req.tierLevel = decodedToken.tierLevel;
   req.user = {
     id: decodedToken.userId,
     role: decodedToken.role,
+    organizationId: decodedToken.organizationId,
+    tierLevel: decodedToken.tierLevel,
   };
 
   // Track successful authenticated request
@@ -135,7 +241,12 @@ export const authenticateToken = (req: AuthRequest, res: Response, next: NextFun
     eventAction: 'protected_route_access',
     ipAddress: req.ip,
     userAgent: req.get('User-Agent') || undefined,
-    metadata: { path: req.path, method: req.method, role: decodedToken.role },
+    metadata: { 
+      path: req.path, 
+      method: req.method, 
+      role: decodedToken.role,
+      organizationId: decodedToken.organizationId,
+    },
   });
 
   next();
@@ -145,12 +256,18 @@ export const authenticateToken = (req: AuthRequest, res: Response, next: NextFun
 export const generateToken = (
   userId: number,
   role: string,
+  organizationId: string,
+  tierLevel: TierLevel,
   expiresIn: string | number = '24h',
 ): string => {
   const secret = process.env.JWT_SECRET || 'your_jwt_secret';
-  return jwt.sign({ userId, role }, secret, {
-    expiresIn: expiresIn as any,
-  });
+  return jwt.sign(
+    { userId, role, organizationId, tierLevel }, 
+    secret, 
+    {
+      expiresIn: expiresIn as any,
+    }
+  );
 };
 
 export const requireManager = (req: AuthRequest, res: Response, next: NextFunction) => {

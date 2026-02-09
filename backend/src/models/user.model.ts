@@ -1,5 +1,8 @@
+import { TierLevel } from '../types/subscription';
+
 export interface User {
   id: number;
+  organizationId: string;
   pin: string;
   role: 'Manager' | 'Team Member';
   created_at: string;

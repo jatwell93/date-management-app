@@ -7,6 +7,7 @@ import { Database } from 'sqlite';
 
 export interface InventoryItem {
   id: number;
+  organizationId: string;
   productId: number;
   expiryDate: string;
   locationId: number;
