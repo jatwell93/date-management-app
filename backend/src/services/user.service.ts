@@ -7,8 +7,10 @@ import { AuthService } from './auth.service';
 export class UserService {
   private prisma: PrismaClient;
   private authService: AuthService;
+  private organizationId: string;
 
-  constructor(prismaClient?: PrismaClient, authService?: AuthService) {
+  constructor(organizationId: string, prismaClient?: PrismaClient, authService?: AuthService) {
+    this.organizationId = organizationId;
     this.prisma = prismaClient ?? getDefaultDatabaseClient();
     this.authService = authService ?? new AuthService(this.prisma);
   }
@@ -20,13 +22,16 @@ export class UserService {
     }
 
     const existingUsers = await this.prisma.user.findMany({
+      where: {
+        organizationId: this.organizationId,
+      },
       select: { id: true, pin: true },
     });
 
     for (const existingUser of existingUsers) {
       const isDuplicate = await this.authService.verifyPin(user.pin, existingUser.pin);
       if (isDuplicate) {
-        throw new ConflictError('PIN already in use');
+        throw new ConflictError('PIN already in use within this organization');
       }
     }
 
@@ -36,6 +41,7 @@ export class UserService {
       data: {
         pin: hashedPin,
         role: user.role,
+        organizationId: this.organizationId,
       },
     });
 
@@ -43,17 +49,30 @@ export class UserService {
   }
 
   async getUsers(): Promise<User[]> {
-    const users = await this.prisma.user.findMany();
+    const users = await this.prisma.user.findMany({
+      where: {
+        organizationId: this.organizationId,
+      },
+    });
     return users.map((user) => this.mapPrismaToModel(user));
   }
 
   async getUserById(id: number): Promise<User | undefined> {
-    const user = await this.prisma.user.findUnique({ where: { id } });
+    const user = await this.prisma.user.findFirst({
+      where: {
+        id,
+        organizationId: this.organizationId,
+      },
+    });
     return user ? this.mapPrismaToModel(user) : undefined;
   }
 
   async getUserByPin(pin: string): Promise<User | undefined> {
-    const users = await this.prisma.user.findMany();
+    const users = await this.prisma.user.findMany({
+      where: {
+        organizationId: this.organizationId,
+      },
+    });
 
     for (const user of users) {
       const isValid = await this.authService.verifyPin(pin, user.pin);
@@ -86,7 +105,10 @@ export class UserService {
 
     try {
       await this.prisma.user.update({
-        where: { id },
+        where: {
+          id,
+          organizationId: this.organizationId,
+        },
         data,
       });
       return true;
@@ -104,7 +126,12 @@ export class UserService {
 
   async deleteUser(id: number): Promise<boolean> {
     try {
-      await this.prisma.user.delete({ where: { id } });
+      await this.prisma.user.delete({
+        where: {
+          id,
+          organizationId: this.organizationId,
+        },
+      });
       return true;
     } catch (error: unknown) {
       if (
@@ -120,6 +147,7 @@ export class UserService {
 
   private mapPrismaToModel(user: {
     id: number;
+    organizationId: string;
     pin: string;
     role: string;
     createdAt: Date;
@@ -127,6 +155,7 @@ export class UserService {
   }): User {
     return {
       id: user.id,
+      organizationId: user.organizationId,
       pin: user.pin,
       role: user.role as User['role'],
       created_at: user.createdAt.toISOString(),

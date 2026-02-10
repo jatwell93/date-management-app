@@ -5,12 +5,15 @@ import { ItemTransaction } from '../models/item-transaction.model';
 
 export class InventoryService {
   private prisma: PrismaClient;
+  private organizationId: number;
 
   /**
    * Constructor with optional dependency injection
+   * @param organizationId - Organization ID for tenant isolation
    * @param prismaClient - Optional PrismaClient for testing/custom configurations
    */
-  constructor(prismaClient?: PrismaClient) {
+  constructor(organizationId: number, prismaClient?: PrismaClient) {
+    this.organizationId = organizationId;
     this.prisma = prismaClient ?? getDefaultDatabaseClient();
   }
 
@@ -18,7 +21,13 @@ export class InventoryService {
    * Get all inventory items
    */
   async getAllInventoryItems(): Promise<InventoryItem[]> {
-    const items = await this.prisma.inventoryItem.findMany();
+    const items = await this.prisma.inventoryItem.findMany({
+      where: {
+        product: {
+          organizationId: this.organizationId,
+        },
+      },
+    });
     return items.map(this.mapPrismaToModel);
   }
 
@@ -26,8 +35,13 @@ export class InventoryService {
    * Get an inventory item by its ID
    */
   async getInventoryItemById(id: number): Promise<InventoryItem | null> {
-    const item = await this.prisma.inventoryItem.findUnique({
-      where: { id },
+    const item = await this.prisma.inventoryItem.findFirst({
+      where: {
+        id,
+        product: {
+          organizationId: this.organizationId,
+        },
+      },
     });
     return item ? this.mapPrismaToModel(item) : null;
   }
@@ -37,7 +51,12 @@ export class InventoryService {
    */
   async getInventoryItemsByProductId(productId: number): Promise<InventoryItem[]> {
     const items = await this.prisma.inventoryItem.findMany({
-      where: { productId },
+      where: {
+        productId,
+        product: {
+          organizationId: this.organizationId,
+        },
+      },
     });
     return items.map(this.mapPrismaToModel);
   }
@@ -50,7 +69,12 @@ export class InventoryService {
     limit: number,
   ): Promise<InventoryItem[]> {
     const items = await this.prisma.inventoryItem.findMany({
-      where: { productId },
+      where: {
+        productId,
+        product: {
+          organizationId: this.organizationId,
+        },
+      },
       orderBy: { createdAt: 'desc' },
       take: limit,
     });
@@ -62,7 +86,15 @@ export class InventoryService {
    */
   async getInventoryItemsByLocationId(locationId: number): Promise<InventoryItem[]> {
     const items = await this.prisma.inventoryItem.findMany({
-      where: { locationId },
+      where: {
+        locationId,
+        location: {
+          organizationId: this.organizationId,
+        },
+        product: {
+          organizationId: this.organizationId,
+        },
+      },
     });
     return items.map(this.mapPrismaToModel);
   }
@@ -75,6 +107,28 @@ export class InventoryService {
     userId: number,
   ): Promise<InventoryItem> {
     const { productId, expiryDate, locationId } = item;
+
+    // Validate that the product belongs to the organization
+    const product = await this.prisma.product.findFirst({
+      where: {
+        id: productId,
+        organizationId: this.organizationId,
+      },
+    });
+    if (!product) {
+      throw new Error('Product not found or does not belong to this organization');
+    }
+
+    // Validate that the location belongs to the organization
+    const location = await this.prisma.location.findFirst({
+      where: {
+        id: locationId,
+        organizationId: this.organizationId,
+      },
+    });
+    if (!location) {
+      throw new Error('Location not found or does not belong to this organization');
+    }
 
     // Calculate markdown status
     const calculatedStatus: 'Normal' | 'Markdown 1' | 'Markdown 2' | 'Markdown 3' | 'Expired' =
@@ -113,6 +167,32 @@ export class InventoryService {
       return existingItem; // No updates to perform
     }
 
+    // Validate product belongs to organization if being updated
+    if (updates.productId !== undefined) {
+      const product = await this.prisma.product.findFirst({
+        where: {
+          id: updates.productId,
+          organizationId: this.organizationId,
+        },
+      });
+      if (!product) {
+        throw new Error('Product not found or does not belong to this organization');
+      }
+    }
+
+    // Validate location belongs to organization if being updated
+    if (updates.locationId !== undefined) {
+      const location = await this.prisma.location.findFirst({
+        where: {
+          id: updates.locationId,
+          organizationId: this.organizationId,
+        },
+      });
+      if (!location) {
+        throw new Error('Location not found or does not belong to this organization');
+      }
+    }
+
     // If expiry date is updated, recalculate markdown status
     let statusUpdate = updates.status;
     if (updates.expiryDate) {
@@ -143,7 +223,7 @@ export class InventoryService {
     // Get the item before deleting to use in audit log
     const item = await this.getInventoryItemById(id);
     if (!item) {
-      return false; // Item doesn't exist
+      return false; // Item doesn't exist or doesn't belong to this organization
     }
 
     // Create audit log entry before deleting the item
@@ -196,6 +276,12 @@ export class InventoryService {
    * FR-003: Implement logic for automated markdown calculations
    */
   async autoCalculateMarkdownStatus(itemId: number, expiryDate: string): Promise<void> {
+    // First verify the item belongs to this organization
+    const item = await this.getInventoryItemById(itemId);
+    if (!item) {
+      throw new Error('Inventory item not found or does not belong to this organization');
+    }
+
     const now = new Date();
     const expiry = new Date(expiryDate);
     const daysDiff = Math.ceil((expiry.getTime() - now.getTime()) / (1000 * 60 * 60 * 24));
@@ -272,6 +358,17 @@ export class InventoryService {
     inventoryItemId: number,
     changeDescription: string,
   ): Promise<void> {
+    // Validate that the user belongs to the organization
+    const user = await this.prisma.user.findFirst({
+      where: {
+        id: userId,
+        organizationId: this.organizationId,
+      },
+    });
+    if (!user) {
+      throw new Error('User not found or does not belong to this organization');
+    }
+
     await this.prisma.auditLog.create({
       data: {
         userId,
@@ -288,6 +385,23 @@ export class InventoryService {
     transaction: Omit<ItemTransaction, 'id' | 'transactionDate'>,
   ): Promise<number> {
     const { inventory_item_id, user_id, type, quantity_change, notes } = transaction;
+
+    // Validate that the inventory item belongs to the organization
+    const item = await this.getInventoryItemById(inventory_item_id);
+    if (!item) {
+      throw new Error('Inventory item not found or does not belong to this organization');
+    }
+
+    // Validate that the user belongs to the organization
+    const user = await this.prisma.user.findFirst({
+      where: {
+        id: user_id,
+        organizationId: this.organizationId,
+      },
+    });
+    if (!user) {
+      throw new Error('User not found or does not belong to this organization');
+    }
 
     const result = await this.prisma.itemTransaction.create({
       data: {

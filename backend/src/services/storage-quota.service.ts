@@ -133,6 +133,7 @@ export class StorageQuotaService {
   }
 
   async recordUpload(
+    organizationId: string,
     userId: number,
     fileKey: string,
     fileName: string,
@@ -140,6 +141,7 @@ export class StorageQuotaService {
     contentType?: string,
   ): Promise<void> {
     try {
+      // Record the upload metadata
       await prisma.upload.create({
         data: {
           userId,
@@ -150,19 +152,62 @@ export class StorageQuotaService {
           status: 'completed',
         },
       });
+
+      // Update organization storage usage
+      await prisma.organizationUsage.upsert({
+        where: {
+          organizationId,
+        },
+        update: {
+          storageUsedBytes: {
+            increment: fileSizeBytes,
+          },
+        },
+        create: {
+          organizationId,
+          storageUsedBytes: fileSizeBytes,
+          totalSkus: 0,
+          activeUsers: 0,
+          maxUsers: 0, // Will be set by subscription tier
+          maxSkus: 0,  // Will be set by subscription tier
+        },
+      });
     } catch (error) {
       console.warn('Failed to record upload metadata:', error);
+      throw error;
     }
   }
 
-  async markUploadDeleted(fileKey: string): Promise<void> {
+  async markUploadDeleted(organizationId: string, fileKey: string): Promise<void> {
     try {
-      await prisma.upload.update({
+      // Get the file size before marking as deleted
+      const upload = await prisma.upload.findUnique({
         where: { fileKey },
-        data: { status: 'deleted' },
+        select: { fileSizeBytes: true },
       });
+
+      if (upload) {
+        // Mark upload as deleted
+        await prisma.upload.update({
+          where: { fileKey },
+          data: { status: 'deleted' },
+        });
+
+        // Decrement organization storage usage
+        await prisma.organizationUsage.update({
+          where: {
+            organizationId,
+          },
+          data: {
+            storageUsedBytes: {
+              decrement: upload.fileSizeBytes,
+            },
+          },
+        });
+      }
     } catch (error) {
       console.warn(`Failed to mark upload ${fileKey} as deleted:`, error);
+      throw error;
     }
   }
 

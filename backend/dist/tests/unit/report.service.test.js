@@ -14,17 +14,17 @@ describe('ReportService', () => {
         reportService = new report_service_1.ReportService(mockDb);
         // Create mock repository
         mockRepository = {
-            getMonthlyExpiryReport: jest.fn(),
-            getOverallExpiryReport: jest.fn(),
-            getDetailedExpiryReport: jest.fn(),
-            getMonthlyMarkdownReport: jest.fn(),
-            getUsageReport: jest.fn(),
-            getDailyUsageReport: jest.fn(),
-            getDashboardAnalytics: jest.fn(),
-            getLossBySkuReport: jest.fn(),
-            getLossByDepartmentReport: jest.fn(),
-            getItemsByUserReport: jest.fn(),
-            getItemsByDateReport: jest.fn(),
+            getMonthlyExpiryReport: jest.fn().mockResolvedValue([]),
+            getOverallExpiryReport: jest.fn().mockResolvedValue({}),
+            getDetailedExpiryReport: jest.fn().mockResolvedValue([]),
+            getMonthlyMarkdownReport: jest.fn().mockResolvedValue([]),
+            getUsageReport: jest.fn().mockResolvedValue([]),
+            getDailyUsageReport: jest.fn().mockResolvedValue([]),
+            getDashboardAnalytics: jest.fn().mockResolvedValue({}),
+            getLossBySkuReport: jest.fn().mockResolvedValue([]),
+            getLossByDepartmentReport: jest.fn().mockResolvedValue([]),
+            getItemsByUserReport: jest.fn().mockResolvedValue([]),
+            getItemsByDateReport: jest.fn().mockResolvedValue([]),
         };
         // Inject the mock repository into the service
         reportService.repository = mockRepository;

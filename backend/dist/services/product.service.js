@@ -250,9 +250,11 @@ class ProductService {
     /**
      * Constructor with optional dependency injection
      * @param prismaClient - Optional PrismaClient for testing/custom configurations
+     * @param organizationId - Organization ID for tenant filtering
      */
-    constructor(prismaClient) {
+    constructor(prismaClient, organizationId) {
         this.prisma = prismaClient ?? (0, database_factory_1.getDefaultDatabaseClient)();
+        this.organizationId = organizationId ?? 'default-org'; // Fallback for backward compatibility
     }
     // Expose parser for tests that reference it via ProductService["extractCostValueEnhanced"]
     static extractCostValueEnhanced(costStr) {
@@ -260,6 +262,9 @@ class ProductService {
     }
     async getAllProducts(limit, offset) {
         const products = await this.prisma.product.findMany({
+            where: {
+                organizationId: this.organizationId,
+            },
             ...(limit !== undefined && { take: limit }),
             ...(offset !== undefined && { skip: offset }),
         });
@@ -267,32 +272,56 @@ class ProductService {
     }
     async getProductById(id) {
         const product = await this.prisma.product.findUnique({
-            where: { id },
+            where: {
+                id,
+                organizationId: this.organizationId,
+            },
         });
         return product ? this.mapPrismaToModel(product) : null;
     }
     async getProductByBarcode(barcode) {
         const product = await this.prisma.product.findUnique({
-            where: { barcode },
+            where: {
+                organizationId_barcode: {
+                    organizationId: this.organizationId,
+                    barcode,
+                },
+            },
         });
         return product ? this.mapPrismaToModel(product) : null;
     }
     async getProductBySku(sku) {
         const product = await this.prisma.product.findUnique({
-            where: { sku },
+            where: {
+                organizationId_sku: {
+                    organizationId: this.organizationId,
+                    sku,
+                },
+            },
         });
         return product ? this.mapPrismaToModel(product) : null;
     }
     async createProduct(product) {
-        const newProduct = await this.prisma.product.create({
-            data: {
-                barcode: product.barcode,
-                sku: product.sku,
-                name: product.name,
-                costPrice: product.costPrice,
-            },
+        const result = await this.prisma.$transaction(async (tx) => {
+            const newProduct = await tx.product.create({
+                data: {
+                    barcode: product.barcode,
+                    sku: product.sku,
+                    name: product.name,
+                    costPrice: product.costPrice,
+                    organizationId: this.organizationId,
+                },
+            });
+            // Increment organization usage counter
+            await tx.organizationUsage.update({
+                where: { organizationId: this.organizationId },
+                data: {
+                    totalSkus: { increment: 1 },
+                },
+            });
+            return newProduct;
         });
-        return this.mapPrismaToModel(newProduct);
+        return this.mapPrismaToModel(result);
     }
     async updateProduct(id, product) {
         if (Object.keys(product).length === 0) {
@@ -300,7 +329,10 @@ class ProductService {
         }
         try {
             const updatedProduct = await this.prisma.product.update({
-                where: { id },
+                where: {
+                    id,
+                    organizationId: this.organizationId,
+                },
                 data: this.buildProductUpdateData(product),
             });
             return this.mapPrismaToModel(updatedProduct);
@@ -335,8 +367,21 @@ class ProductService {
     }
     async deleteProduct(id) {
         try {
-            await this.prisma.product.delete({
-                where: { id },
+            await this.prisma.$transaction(async (tx) => {
+                // Delete the product
+                await tx.product.delete({
+                    where: {
+                        id,
+                        organizationId: this.organizationId,
+                    },
+                });
+                // Decrement organization usage counter
+                await tx.organizationUsage.update({
+                    where: { organizationId: this.organizationId },
+                    data: {
+                        totalSkus: { decrement: 1 },
+                    },
+                });
             });
             return true;
         }
@@ -951,12 +996,22 @@ class ProductService {
         return null;
     }
     async getProductBySkuOrBarcode(sku, barcode) {
-        // Check for products by SKU and barcode independently
+        // Check for products by SKU and barcode independently within the organization
         const bySku = await this.prisma.product.findUnique({
-            where: { sku },
+            where: {
+                organizationId_sku: {
+                    organizationId: this.organizationId,
+                    sku,
+                },
+            },
         });
         const byBarcode = await this.prisma.product.findUnique({
-            where: { barcode },
+            where: {
+                organizationId_barcode: {
+                    organizationId: this.organizationId,
+                    barcode,
+                },
+            },
         });
         // If both match different products, this is an error case
         if (bySku && byBarcode && bySku.id !== byBarcode.id) {

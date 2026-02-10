@@ -1,4 +1,37 @@
 "use strict";
+var __createBinding = (this && this.__createBinding) || (Object.create ? (function(o, m, k, k2) {
+    if (k2 === undefined) k2 = k;
+    var desc = Object.getOwnPropertyDescriptor(m, k);
+    if (!desc || ("get" in desc ? !m.__esModule : desc.writable || desc.configurable)) {
+      desc = { enumerable: true, get: function() { return m[k]; } };
+    }
+    Object.defineProperty(o, k2, desc);
+}) : (function(o, m, k, k2) {
+    if (k2 === undefined) k2 = k;
+    o[k2] = m[k];
+}));
+var __setModuleDefault = (this && this.__setModuleDefault) || (Object.create ? (function(o, v) {
+    Object.defineProperty(o, "default", { enumerable: true, value: v });
+}) : function(o, v) {
+    o["default"] = v;
+});
+var __importStar = (this && this.__importStar) || (function () {
+    var ownKeys = function(o) {
+        ownKeys = Object.getOwnPropertyNames || function (o) {
+            var ar = [];
+            for (var k in o) if (Object.prototype.hasOwnProperty.call(o, k)) ar[ar.length] = k;
+            return ar;
+        };
+        return ownKeys(o);
+    };
+    return function (mod) {
+        if (mod && mod.__esModule) return mod;
+        var result = {};
+        if (mod != null) for (var k = ownKeys(mod), i = 0; i < k.length; i++) if (k[i] !== "default") __createBinding(result, mod, k[i]);
+        __setModuleDefault(result, mod);
+        return result;
+    };
+})();
 var __importDefault = (this && this.__importDefault) || function (mod) {
     return (mod && mod.__esModule) ? mod : { "default": mod };
 };
@@ -13,6 +46,7 @@ const data_integrity_middleware_1 = require("../middleware/data-integrity.middle
 const multer_1 = __importDefault(require("multer"));
 const normalize_function_1 = require("../utils/normalize.function");
 const rateLimiter_1 = require("../middleware/rateLimiter");
+const path = __importStar(require("path"));
 const router = (0, express_1.Router)();
 const productService = new product_service_1.ProductService();
 // Configure multer for file uploads - accept CSV, XLSX, and XLS files
@@ -198,9 +232,18 @@ router.post('/upload-csv', auth_middleware_1.authenticateToken, rateLimiter_1.st
                 details: 'Please select a CSV, XLSX, or XLS file to upload. The file should contain columns for SKU, Name, Cost, and Barcode with acceptable alternative names.',
             });
         }
+        // Normalize and validate the uploaded file path to ensure it is within the upload directory
+        const uploadDir = path.dirname(req.file.path);
+        const safeFilePath = path.resolve(uploadDir, path.basename(req.file.path));
+        if (!safeFilePath.startsWith(uploadDir + path.sep)) {
+            return res.status(400).json({
+                message: 'Invalid file path',
+                details: 'The uploaded file path is not valid.',
+            });
+        }
         // Process the uploaded file (passing original filename for type detection)
         // TODO: Phase 7 - Update service to accept organizationId parameter
-        const result = await productService.processCSVUpload(req.file.path, req.file.originalname); // , req.organizationId!
+        const result = await productService.processCSVUpload(safeFilePath, req.file.originalname); // , req.organizationId!
         // Send response with processing results and any errors
         const responseObj = {
             success: result.errors.length === 0, // Add explicit success field
@@ -226,11 +269,18 @@ router.post('/upload-csv', auth_middleware_1.authenticateToken, rateLimiter_1.st
         // Clean up the uploaded file after processing
         if (req.file) {
             const fs = require('fs');
-            fs.unlink(req.file.path, (err) => {
-                if (err) {
-                    console.error('Error deleting uploaded file:', err);
-                }
-            });
+            const uploadDir = path.dirname(req.file.path);
+            const safeFilePath = path.resolve(uploadDir, path.basename(req.file.path));
+            if (safeFilePath.startsWith(uploadDir + path.sep)) {
+                fs.unlink(safeFilePath, (err) => {
+                    if (err) {
+                        console.error('Error deleting uploaded file:', err);
+                    }
+                });
+            }
+            else {
+                console.error('Skipping deletion of file with invalid path:', req.file.path);
+            }
         }
     }
 });

@@ -12,24 +12,24 @@ describe('ReportService', () => {
 
   beforeEach(() => {
     // Create a mock database instance
-    mockDb = {} as DB;
+    mockDb = {} as Database;
 
     // Create service with mock database
-    reportService = new ReportService(mockDb as DB);
+    reportService = new ReportService(mockDb as Database);
 
     // Create mock repository
     mockRepository = {
-      getMonthlyExpiryReport: jest.fn(),
-      getOverallExpiryReport: jest.fn(),
-      getDetailedExpiryReport: jest.fn(),
-      getMonthlyMarkdownReport: jest.fn(),
-      getUsageReport: jest.fn(),
-      getDailyUsageReport: jest.fn(),
-      getDashboardAnalytics: jest.fn(),
-      getLossBySkuReport: jest.fn(),
-      getLossByDepartmentReport: jest.fn(),
-      getItemsByUserReport: jest.fn(),
-      getItemsByDateReport: jest.fn(),
+      getMonthlyExpiryReport: jest.fn().mockResolvedValue([]),
+      getOverallExpiryReport: jest.fn().mockResolvedValue({}),
+      getDetailedExpiryReport: jest.fn().mockResolvedValue([]),
+      getMonthlyMarkdownReport: jest.fn().mockResolvedValue([]),
+      getUsageReport: jest.fn().mockResolvedValue([]),
+      getDailyUsageReport: jest.fn().mockResolvedValue([]),
+      getDashboardAnalytics: jest.fn().mockResolvedValue({}),
+      getLossBySkuReport: jest.fn().mockResolvedValue([]),
+      getLossByDepartmentReport: jest.fn().mockResolvedValue([]),
+      getItemsByUserReport: jest.fn().mockResolvedValue([]),
+      getItemsByDateReport: jest.fn().mockResolvedValue([]),
     } as any;
 
     // Inject the mock repository into the service
@@ -45,7 +45,7 @@ describe('ReportService', () => {
       { month: '2025-08', totalMarkdownValue: 150.75, itemCount: 25 },
       { month: '2025-09', totalMarkdownValue: 200.5, itemCount: 30 },
     ];
-    mockRepository.getMonthlyMarkdownReport.mockResolvedValue(mockReport);
+    (mockRepository.getMonthlyMarkdownReport as any).mockResolvedValue(mockReport);
 
     const report = await reportService.getMonthlyMarkdownReport();
 
@@ -58,7 +58,7 @@ describe('ReportService', () => {
       { role: 'Manager', userCount: 5, totalActions: 100 },
       { role: 'Team Member', userCount: 10, totalActions: 150 },
     ];
-    mockRepository.getUsageReport.mockResolvedValue(mockUsageReport);
+    (mockRepository.getUsageReport as any).mockResolvedValue(mockUsageReport);
 
     const usageReport = await reportService.getUsageReport();
 
@@ -71,7 +71,7 @@ describe('ReportService', () => {
       { month: '2025-08', expiredCount: 10, markdownCount: 5 },
       { month: '2025-09', expiredCount: 15, markdownCount: 8 },
     ];
-    mockRepository.getMonthlyExpiryReport.mockResolvedValue(mockReport);
+    (mockRepository.getMonthlyExpiryReport as any).mockResolvedValue(mockReport);
 
     const report = await reportService.getMonthlyExpiryReport();
 
@@ -90,7 +90,7 @@ describe('ReportService', () => {
       expiredValue: 1500,
       markdownValue: 800,
     };
-    mockRepository.getDashboardAnalytics.mockResolvedValue(mockAnalytics);
+    (mockRepository.getDashboardAnalytics as any).mockResolvedValue(mockAnalytics);
 
     const analytics = await reportService.getDashboardAnalytics();
 

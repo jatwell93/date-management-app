@@ -109,7 +109,7 @@ describe('Multi-Tenant Route Filtering Integration Tests', () => {
     } as any;
 
     // Setup mock data for org1
-    mockPrisma.product.findMany.mockImplementation((args) => {
+    (mockPrisma.product.findMany as jest.Mock).mockImplementation((args: any) => {
       if (args?.where?.organizationId === org1.id) {
         return Promise.resolve([
           { id: 1, name: 'Product 1', sku: 'SKU001', organizationId: org1.id },
@@ -118,7 +118,7 @@ describe('Multi-Tenant Route Filtering Integration Tests', () => {
       return Promise.resolve([]);
     });
 
-    mockPrisma.inventoryItem.findMany.mockImplementation((args) => {
+    (mockPrisma.inventoryItem.findMany as jest.Mock).mockImplementation((args: any) => {
       if (args?.where?.organizationId === org1.id) {
         return Promise.resolve([
           { id: 1, productId: 1, expiryDate: '2024-12-31', organizationId: org1.id },
@@ -127,7 +127,7 @@ describe('Multi-Tenant Route Filtering Integration Tests', () => {
       return Promise.resolve([]);
     });
 
-    mockPrisma.user.findMany.mockImplementation((args) => {
+    (mockPrisma.user.findMany as jest.Mock).mockImplementation((args: any) => {
       if (args?.where?.organizationId === org1.id) {
         return Promise.resolve([
           { id: 1, pin: '1234', role: 'Manager', organizationId: org1.id },
@@ -137,7 +137,7 @@ describe('Multi-Tenant Route Filtering Integration Tests', () => {
     });
 
     // Setup mock data for org2
-    mockPrisma.product.findMany.mockImplementation((args) => {
+    (mockPrisma.product.findMany as jest.Mock).mockImplementation((args: any) => {
       if (args?.where?.organizationId === org2.id) {
         return Promise.resolve([
           { id: 2, name: 'Product 2', sku: 'SKU002', organizationId: org2.id },

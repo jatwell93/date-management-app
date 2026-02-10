@@ -16,6 +16,7 @@ export interface InitiateUploadResponse {
 
 export class UploadService {
   constructor(
+    private organizationId: string,
     private storage: StorageProvider,
     private csvParser: CSVParserService,
     private storageQuotaService: StorageQuotaService = new StorageQuotaService(),
@@ -106,6 +107,7 @@ export class UploadService {
 
       // Track upload for quota purposes
       await this.storageQuotaService.recordUpload(
+        this.organizationId,
         userId,
         key,
         path.basename(key),
@@ -191,5 +193,21 @@ export class UploadService {
     }
 
     return key;
+  }
+
+  /**
+   * Delete an uploaded file and update storage quota
+   */
+  async deleteUpload(key: string): Promise<void> {
+    try {
+      // Delete from storage
+      await this.storage.delete(key);
+
+      // Update storage quota (mark as deleted and decrement usage)
+      await this.storageQuotaService.markUploadDeleted(this.organizationId, key);
+    } catch (error) {
+      console.error(`Failed to delete upload ${key}:`, error);
+      throw error;
+    }
   }
 }

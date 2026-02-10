@@ -93,14 +93,14 @@
 
 ## 7. Service Layer Refactor (Phase 3 - Week 4)
 
-- [ ] 7.1 Update productService.getAllProducts() to accept organizationId parameter
-- [ ] 7.2 Update productService.createProduct() to accept organizationId and increment organization_usage.total_skus
-- [ ] 7.3 Update productService.deleteProduct() to decrement organization_usage.total_skus
-- [ ] 7.4 Update inventoryService methods to filter by organizationId
-- [ ] 7.5 Update userService methods to filter by organizationId
-- [ ] 7.6 Update uploadService.recordUpload() to accept organizationId and update organization_usage.storage_used_bytes
-- [ ] 7.7 Update uploadService.deleteUpload() to decrement organization_usage.storage_used_bytes
-- [ ] 7.8 Create organizationService with getOrganization(), updateOrganization() methods
+- [x] 7.1 Update productService.getAllProducts() to accept organizationId parameter
+- [x] 7.2 Update productService.createProduct() to accept organizationId and increment organization_usage.total_skus
+- [x] 7.3 Update productService.deleteProduct() to decrement organization_usage.total_skus
+- [x] 7.4 Update inventoryService methods to filter by organizationId
+- [x] 7.5 Update userService methods to filter by organizationId
+- [x] 7.6 Update uploadService.recordUpload() to accept organizationId and update organization_usage.storage_used_bytes
+- [x] 7.7 Update uploadService.deleteUpload() to decrement organization_usage.storage_used_bytes
+- [x] 7.8 Create organizationService with getOrganization(), updateOrganization() methods
 - [ ] 7.9 Write unit tests for services with organizationId parameter
 - [ ] 7.10 Write tests for usage counter atomicity (increment/decrement in transactions)
 

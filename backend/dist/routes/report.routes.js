@@ -7,6 +7,7 @@ const express_1 = require("express");
 const validator_1 = __importDefault(require("validator"));
 const service_provider_1 = require("../services/service-provider");
 const auth_middleware_1 = require("../middleware/auth.middleware");
+const feature_gate_middleware_1 = require("../middleware/feature-gate.middleware");
 const normalize_function_1 = require("../utils/normalize.function");
 const router = (0, express_1.Router)();
 const serviceProvider = new service_provider_1.ServiceProvider();
@@ -137,7 +138,7 @@ router.get('/items-by-date', auth_middleware_1.authenticateToken, async (req, re
     }
 });
 // GET /dashboard/analytics - Get dashboard analytics data (FR-005)
-router.get('/analytics', auth_middleware_1.authenticateToken, async (req, res) => {
+router.get('/analytics', auth_middleware_1.authenticateToken, (0, feature_gate_middleware_1.requireFeature)('advanced_analytics'), async (req, res) => {
     try {
         const analytics = await reportService.getDashboardAnalytics();
         res.json((0, normalize_function_1.escapeHtml)(analytics));
