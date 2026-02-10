@@ -9,6 +9,7 @@ import { validateBusinessRules } from '../middleware/data-integrity.middleware';
 import multer, { FileFilterCallback } from 'multer';
 import { escapeHtml } from '../utils/normalize.function';
 import { standardLimiter } from '../middleware/rateLimiter';
+import * as path from 'path';
 
 const router = Router();
 const productService = new ProductService();
@@ -239,9 +240,19 @@ router.post(
         });
       }
 
+      // Normalize and validate the uploaded file path to ensure it is within the upload directory
+      const uploadDir = path.dirname(req.file.path);
+      const safeFilePath = path.resolve(uploadDir, path.basename(req.file.path));
+      if (!safeFilePath.startsWith(uploadDir + path.sep)) {
+        return res.status(400).json({
+          message: 'Invalid file path',
+          details: 'The uploaded file path is not valid.',
+        });
+      }
+
       // Process the uploaded file (passing original filename for type detection)
       // TODO: Phase 7 - Update service to accept organizationId parameter
-      const result = await productService.processCSVUpload(req.file.path, req.file.originalname); // , req.organizationId!
+      const result = await productService.processCSVUpload(safeFilePath, req.file.originalname); // , req.organizationId!
 
       // Send response with processing results and any errors
       const responseObj: any = {
@@ -270,11 +281,17 @@ router.post(
       // Clean up the uploaded file after processing
       if (req.file) {
         const fs = require('fs');
-        fs.unlink(req.file.path, (err: any) => {
-          if (err) {
-            console.error('Error deleting uploaded file:', err);
-          }
-        });
+        const uploadDir = path.dirname(req.file.path);
+        const safeFilePath = path.resolve(uploadDir, path.basename(req.file.path));
+        if (safeFilePath.startsWith(uploadDir + path.sep)) {
+          fs.unlink(safeFilePath, (err: any) => {
+            if (err) {
+              console.error('Error deleting uploaded file:', err);
+            }
+          });
+        } else {
+          console.error('Skipping deletion of file with invalid path:', req.file.path);
+        }
       }
     }
   },
