@@ -18,7 +18,7 @@
  *   node scripts/mem-log.js DECISION "State Management" "Using React Context instead of Redux for simplicity"
  */
 
-const { execSync } = require('child_process');
+const { execSync, execFileSync } = require('child_process');
 const path = require('path');
 
 // Load environment variables from .env file
@@ -59,24 +59,27 @@ function logMemory(kind, title, message) {
   const hasApiKey = !!process.env.GEMINI_API_KEY || !!process.env.OPENAI_API_KEY;
   const embeddingFlags = '';
 
-  // Cross-platform environment variable prefix
-  const envPrefix = hasApiKey
-    ? process.platform === 'win32'
-      ? `set GEMINI_API_KEY=${process.env.GEMINI_API_KEY} && set GOOGLE_API_KEY=${process.env.GEMINI_API_KEY} && `
-      : `GEMINI_API_KEY=${process.env.GEMINI_API_KEY} GOOGLE_API_KEY=${process.env.GEMINI_API_KEY} `
-    : '';
+  // Prepare environment for memvid (keep API keys for remote providers)
+  const cleanEnv = { ...process.env };
+  if (hasApiKey && process.env.GEMINI_API_KEY) {
+    cleanEnv.GEMINI_API_KEY = process.env.GEMINI_API_KEY;
+    cleanEnv.GOOGLE_API_KEY = process.env.GEMINI_API_KEY;
+  }
 
   try {
-    // Use echo with pipe
-    const cmd = `${envPrefix}echo "${fullMessage.replace(/"/g, '\\"')}" | memvid put "${MEMORY_FILE}" --title "${title}" --kind "${normalizedKind.toLowerCase()}"${embeddingFlags}`;
+    const args = [
+      'put',
+      MEMORY_FILE,
+      '--title',
+      title,
+      '--kind',
+      normalizedKind.toLowerCase(),
+    ];
 
-    // Create clean env (keep API keys for remote providers)
-    const cleanEnv = { ...process.env };
-
-    execSync(cmd, {
-      stdio: 'inherit',
-      shell: true,
+    execFileSync('memvid', args, {
       env: cleanEnv,
+      stdio: ['pipe', 'inherit', 'inherit'],
+      input: fullMessage,
     });
 
     console.log(`\n✅ Memory logged: [${normalizedKind}] ${title}`);
