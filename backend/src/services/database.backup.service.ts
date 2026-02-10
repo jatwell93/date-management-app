@@ -1,5 +1,5 @@
 import { promises as fs } from 'fs';
-import { join } from 'path';
+import { join, resolve } from 'path';
 import { Logger } from '../utils/logger';
 
 interface BackupConfig {
@@ -75,11 +75,21 @@ export class DatabaseBackupService {
   async restoreFromBackup(backupPath: string): Promise<boolean> {
     try {
       await this.ensureBackupDirectoryPromise;
+
+      // Resolve and validate that the backup path is within the configured backup directory
+      const backupDir = resolve(this.config.backupDirectory);
+      const resolvedBackupPath = resolve(backupDir, backupPath);
+
+      if (!resolvedBackupPath.startsWith(backupDir + (backupDir.endsWith('/') || backupDir.endsWith('\\') ? '' : '/'))) {
+        Logger.error(`Invalid backup path outside backup directory: ${backupPath}`);
+        return false;
+      }
+
       // Validate backup file exists
       try {
-        await fs.access(backupPath);
+        await fs.access(resolvedBackupPath);
       } catch {
-        Logger.error(`Backup file does not exist: ${backupPath}`);
+        Logger.error(`Backup file does not exist: ${resolvedBackupPath}`);
         return false;
       }
 
@@ -87,9 +97,9 @@ export class DatabaseBackupService {
       const originalDbPath = process.env.DATABASE_PATH || './database.sqlite';
 
       // Copy the backup file back to the original location
-      await fs.copyFile(backupPath, originalDbPath);
+      await fs.copyFile(resolvedBackupPath, originalDbPath);
 
-      Logger.info(`Database restored from backup: ${backupPath}`);
+      Logger.info(`Database restored from backup: ${resolvedBackupPath}`);
 
       return true;
     } catch (error) {
