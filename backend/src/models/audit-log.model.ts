@@ -57,6 +57,7 @@ export class AuditLogModel {
     const result = await this.db.get(query, [userId, inventoryItemId, changeDescription]);
     return {
       id: result.id,
+      organizationId: result.organization_id,
       user_id: result.user_id,
       inventory_item_id: result.inventory_item_id,
       change_description: result.change_description,

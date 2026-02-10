@@ -33,10 +33,11 @@ const upload = (0, multer_1.default)({
         }
     },
 });
-// GET /products - Get all products
+// GET /products - Get all products for the user's organization
 router.get('/', auth_middleware_1.authenticateToken, async (req, res) => {
     try {
-        const products = await productService.getAllProducts();
+        // TODO: Phase 7 - Update service to accept organizationId parameter
+        const products = await productService.getAllProducts(); // req.organizationId!
         res.json((0, normalize_function_1.escapeHtml)(products));
     }
     catch (_error) {
@@ -55,6 +56,12 @@ router.get('/:id', auth_middleware_1.authenticateToken, async (req, res) => {
         if (!product) {
             return res.status(404).json({ message: 'Product not found' });
         }
+        // Validate product belongs to user's organization
+        if (product.organizationId !== req.organizationId) {
+            return res
+                .status(403)
+                .json({ message: 'Access denied: Product belongs to different organization' });
+        }
         res.json((0, normalize_function_1.escapeHtml)(product));
     }
     catch (_error) {
@@ -66,7 +73,8 @@ router.get('/:id', auth_middleware_1.authenticateToken, async (req, res) => {
 router.get('/by-barcode/:barcode', auth_middleware_1.authenticateToken, async (req, res) => {
     try {
         const barcode = req.params.barcode;
-        const product = await productService.getProductByBarcode(barcode);
+        // TODO: Phase 7 - Update service to accept organizationId parameter
+        const product = await productService.getProductByBarcode(barcode); // , req.organizationId!
         if (!product) {
             return res.status(404).json({ message: 'Product not found' });
         }
@@ -81,7 +89,8 @@ router.get('/by-barcode/:barcode', auth_middleware_1.authenticateToken, async (r
 router.get('/by-sku/:sku', auth_middleware_1.authenticateToken, async (req, res) => {
     try {
         const sku = req.params.sku;
-        const product = await productService.getProductBySku(sku);
+        // TODO: Phase 7 - Update service to accept organizationId parameter
+        const product = await productService.getProductBySku(sku); // , req.organizationId!
         if (!product) {
             return res.status(404).json({ message: 'Product not found' });
         }
@@ -104,6 +113,7 @@ router.post('/', auth_middleware_1.authenticateToken, rateLimiter_1.standardLimi
             sku,
             name,
             costPrice,
+            organizationId: req.organizationId,
         });
         res.status(201).json((0, normalize_function_1.escapeHtml)(newProduct));
     }
@@ -120,6 +130,16 @@ router.put('/:id', auth_middleware_1.authenticateToken, rateLimiter_1.standardLi
             return res.status(400).json({ message: 'Invalid product id' });
         }
         const { barcode, sku, name, costPrice } = req.body;
+        // Check if product exists and belongs to user's organization
+        const existingProduct = await productService.getProductById(id);
+        if (!existingProduct) {
+            return res.status(404).json({ message: 'Product not found' });
+        }
+        if (existingProduct.organizationId !== req.organizationId) {
+            return res
+                .status(403)
+                .json({ message: 'Access denied: Product belongs to different organization' });
+        }
         // Build update object
         const updateData = {};
         if (barcode !== undefined)
@@ -148,6 +168,16 @@ router.delete('/:id', auth_middleware_1.authenticateToken, rateLimiter_1.standar
         if (Number.isNaN(id)) {
             return res.status(400).json({ message: 'Invalid product id' });
         }
+        // Check if product exists and belongs to user's organization
+        const existingProduct = await productService.getProductById(id);
+        if (!existingProduct) {
+            return res.status(404).json({ message: 'Product not found' });
+        }
+        if (existingProduct.organizationId !== req.organizationId) {
+            return res
+                .status(403)
+                .json({ message: 'Access denied: Product belongs to different organization' });
+        }
         const deleted = await productService.deleteProduct(id);
         if (!deleted) {
             return res.status(404).json({ message: 'Product not found' });
@@ -169,7 +199,8 @@ router.post('/upload-csv', auth_middleware_1.authenticateToken, rateLimiter_1.st
             });
         }
         // Process the uploaded file (passing original filename for type detection)
-        const result = await productService.processCSVUpload(req.file.path, req.file.originalname);
+        // TODO: Phase 7 - Update service to accept organizationId parameter
+        const result = await productService.processCSVUpload(req.file.path, req.file.originalname); // , req.organizationId!
         // Send response with processing results and any errors
         const responseObj = {
             success: result.errors.length === 0, // Add explicit success field

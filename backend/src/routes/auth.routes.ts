@@ -59,13 +59,13 @@ router.post(
 router.post('/refresh', authenticateToken, async (req: Request, res: Response) => {
   try {
     // Regenerate token with updated expiration
-    const { userId, userRole } = req as any; // Using 'any' to access custom properties added by auth middleware
+    const authReq = req as any; // Using 'any' to access custom properties added by auth middleware
 
-    if (!userId || !userRole) {
+    if (!authReq.userId || !authReq.userRole || !authReq.organizationId || !authReq.tierLevel) {
       return res.status(401).json({ message: 'User not authenticated' });
     }
 
-    const newToken = generateToken(userId, userRole, '1h');
+    const newToken = generateToken(authReq.userId, authReq.userRole, authReq.organizationId, authReq.tierLevel, '1h');
     res.json(escapeHtml({ token: newToken }));
   } catch (error) {
     console.error('Token refresh error:', error);

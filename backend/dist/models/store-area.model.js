@@ -90,6 +90,7 @@ class StoreAreaModel {
         const result = await this.db.get(query, [name, subDepartment || null, lastChecked || null]);
         return {
             id: result.id,
+            organizationId: result.organization_id,
             name: result.name,
             subDepartment: result.sub_department,
             lastChecked: result.last_checked,
@@ -107,6 +108,7 @@ class StoreAreaModel {
             return null;
         return {
             id: result.id,
+            organizationId: result.organization_id,
             name: result.name,
             subDepartment: result.sub_department,
             lastChecked: result.last_checked,
@@ -124,6 +126,7 @@ class StoreAreaModel {
             return [];
         return results.map((result) => ({
             id: result.id,
+            organizationId: result.organization_id,
             name: result.name,
             subDepartment: result.sub_department,
             lastChecked: result.last_checked,
@@ -141,6 +144,7 @@ class StoreAreaModel {
             return null;
         return {
             id: result.id,
+            organizationId: result.organization_id,
             name: result.name,
             subDepartment: result.sub_department,
             lastChecked: result.last_checked,
@@ -156,6 +160,7 @@ class StoreAreaModel {
         const results = await this.db.all(query);
         return results.map((result) => ({
             id: result.id,
+            organizationId: result.organization_id,
             name: result.name,
             subDepartment: result.sub_department,
             lastChecked: result.last_checked,
@@ -188,6 +193,7 @@ class StoreAreaModel {
             return null;
         return {
             id: result.id,
+            organizationId: result.organization_id,
             name: result.name,
             subDepartment: result.sub_department,
             lastChecked: result.last_checked,

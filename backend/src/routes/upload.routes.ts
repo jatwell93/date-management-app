@@ -1,6 +1,7 @@
 import express from 'express';
 import multer from 'multer';
-import { authenticateToken } from '../middleware/auth.middleware';
+import { authenticateToken, AuthRequest } from '../middleware/auth.middleware';
+import { checkUsageLimit } from '../middleware/feature-gate.middleware';
 import { UploadController } from '../controllers/upload.controller';
 import { ServiceProvider } from '../services/service-provider';
 import { validateRequest } from '../middleware/validateRequest';
@@ -29,16 +30,17 @@ const upload = multer({
 router.post(
   '/initiate',
   authenticateToken,
+  checkUsageLimit('storage_bytes'),
   uploadLimiter,
   validateRequest(uploadInitiateSchema),
-  (req, res) => uploadController.initiate(req, res),
+  (req: AuthRequest, res) => uploadController.initiate(req, res),
 );
 
 /**
  * POST /api/upload/direct
  * Handle direct file upload logic
  */
-router.post('/direct', authenticateToken, uploadLimiter, upload.single('file'), (req, res) =>
+router.post('/direct', authenticateToken, checkUsageLimit('storage_bytes'), uploadLimiter, upload.single('file'), (req: AuthRequest, res) =>
   uploadController.direct(req, res),
 );
 
@@ -49,9 +51,10 @@ router.post('/direct', authenticateToken, uploadLimiter, upload.single('file'), 
 router.post(
   '/complete',
   authenticateToken,
+  checkUsageLimit('storage_bytes'),
   uploadLimiter,
   validateRequest(uploadCompleteSchema),
-  (req, res) => uploadController.complete(req, res),
+  (req: AuthRequest, res) => uploadController.complete(req, res),
 );
 
 export default router;

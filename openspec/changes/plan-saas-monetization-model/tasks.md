@@ -77,18 +77,19 @@
 
 ## 6. Route Layer Refactor (Phase 3 - Week 4)
 
-- [ ] 6.1 Update `/products` GET route: Filter by `WHERE organization_id = req.organizationId`
-- [ ] 6.2 Update `/products` POST route: Add organizationId from req.organizationId before insert
-- [ ] 6.3 Update `/products/:id` PUT/DELETE routes: Validate product.organization_id matches req.organizationId
-- [ ] 6.4 Update `/inventory-items` GET route: Filter by req.organizationId
-- [ ] 6.5 Update `/inventory-items` POST route: Add organizationId, check SKU limit with checkUsageLimit middleware
-- [ ] 6.6 Update `/inventory-items/:id` PUT/DELETE routes: Validate item.organization_id matches req.organizationId
-- [ ] 6.7 Update `/users` GET route: Filter by req.organizationId
-- [ ] 6.8 Update `/users` POST route: Add organizationId, check user limit with checkUsageLimit middleware
-- [ ] 6.9 Update `/uploads` GET route: Filter by req.organizationId
-- [ ] 6.10 Update `/uploads` POST route: Add organizationId, check storage limit
-- [ ] 6.11 Add feature gate to `/api/analytics` route: requireFeature('advanced_analytics')
-- [ ] 6.12 Write integration tests for all routes with tenant filtering
+- [x] 6.1 Update `/products` GET route: Filter by `WHERE organization_id = req.organizationId`
+- [x] 6.2 Update `/products` POST route: Add organizationId from req.organizationId before insert
+- [x] 6.3 Update `/products/:id` PUT/DELETE routes: Validate product.organization_id matches req.organizationId
+- [x] 6.4 Update `/inventory-items` GET route: Filter by req.organizationId
+- [x] 6.5 Update `/inventory-items` POST route: Add organizationId, check SKU limit with checkUsageLimit middleware
+- [x] 6.6 Update `/inventory-items/:id` PUT/DELETE routes: Validate item.organization_id matches req.organizationId
+- [x] 6.7 Update `/users` GET route: Filter by req.organizationId
+- [x] 6.8 Update `/users` POST route: Add organizationId, check user limit with checkUsageLimit middleware
+- [x] 6.9 Update `/users` PUT/DELETE routes: Validate user.organization_id matches req.organizationId
+- [x] 6.10 Update `/uploads` GET route: Filter by req.organizationId
+- [x] 6.11 Update `/uploads` POST route: Add organizationId, check storage limit
+- [x] 6.12 Add feature gate to `/api/analytics` route: requireFeature('advanced_analytics')
+- [x] 6.13 Write integration tests for all routes with tenant filtering
 
 ## 7. Service Layer Refactor (Phase 3 - Week 4)
 

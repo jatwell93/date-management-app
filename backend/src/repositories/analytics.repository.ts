@@ -14,6 +14,7 @@ import {
   UserSession,
   AnalyticsMetrics,
 } from '../services/analytics.service';
+import { Logger } from '../utils/logger';
 
 export class AnalyticsRepository {
   constructor(private db: InstanceType<typeof Database>) {}
@@ -83,41 +84,39 @@ export class AnalyticsRepository {
    * Store a batch of events to the database
    */
   storeEventsBatch(events: AnalyticsEvent[]): void {
-    const transaction = this.db.transaction((events: AnalyticsEvent[]) => {
-      const stmt = this.db.prepare(`
-        INSERT INTO analytics_events (
-          user_id,
-          session_id,
-          event_type,
-          event_category,
-          event_action,
-          event_label,
-          event_value,
-          user_agent,
-          ip_address,
-          timestamp,
-          metadata
-        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-      `);
+    // Note: better-sqlite3 doesn't support transactions the same way as sqlite3
+    // For now, we'll insert events one by one
+    const stmt = this.db.prepare(`
+      INSERT INTO analytics_events (
+        user_id,
+        session_id,
+        event_type,
+        event_category,
+        event_action,
+        event_label,
+        event_value,
+        user_agent,
+        ip_address,
+        timestamp,
+        metadata
+      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+    `);
 
-      for (const event of events) {
-        stmt.run(
-          event.userId || null,
-          event.sessionId || null,
-          event.eventType,
-          event.eventCategory,
-          event.eventAction,
-          event.eventLabel || null,
-          event.eventValue || null,
-          event.userAgent || null,
-          event.ipAddress || null,
-          event.timestamp.toISOString(),
-          event.metadata ? JSON.stringify(event.metadata) : null,
-        );
-      }
-    });
-
-    transaction(events);
+    for (const event of events) {
+      stmt.run(
+        event.userId || null,
+        event.sessionId || null,
+        event.eventType,
+        event.eventCategory,
+        event.eventAction,
+        event.eventLabel || null,
+        event.eventValue || null,
+        event.userAgent || null,
+        event.ipAddress || null,
+        event.timestamp.toISOString(),
+        event.metadata ? JSON.stringify(event.metadata) : null,
+      );
+    }
   }
 
   /**

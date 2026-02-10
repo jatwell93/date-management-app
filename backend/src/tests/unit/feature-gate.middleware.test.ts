@@ -46,7 +46,7 @@ describe('Feature Gating Middleware', () => {
       organizationId: 'org-1',
       tierLevel: 'professional',
       ip: '127.0.0.1',
-      get: jest.fn(() => 'Mozilla/5.0'),
+      get: jest.fn((name: string) => name === 'set-cookie' ? undefined : ['Mozilla/5.0']) as any,
     };
 
     res = {
@@ -68,7 +68,7 @@ describe('Feature Gating Middleware', () => {
       subscriptionTier: {
         findFirst: jest.fn(),
       },
-    };
+    } as any;
 
     (getDefaultDatabaseClient as jest.Mock).mockReturnValue(prisma);
   });
@@ -152,7 +152,7 @@ describe('Feature Gating Middleware', () => {
     it('returns 403 when tier_feature_flag record not found', async () => {
       (prisma.tierFeatureFlag!.findUnique as jest.Mock).mockResolvedValue(null);
 
-      const middleware = requireFeature('unknown_feature');
+      const middleware = requireFeature('unknown_feature' as FeatureKey);
       await middleware(req as AuthRequest, res as Response, next);
 
       expect(res.status).toHaveBeenCalledWith(403);
@@ -400,7 +400,7 @@ describe('Feature Gating Middleware', () => {
     it('returns disabled for missing feature record', async () => {
       (prisma.tierFeatureFlag!.findUnique as jest.Mock).mockResolvedValue(null);
 
-      const result = await checkFeature('starter', 'unknown_feature');
+      const result = await checkFeature('starter', 'unknown_feature' as FeatureKey);
 
       expect(result.isEnabled).toBe(false);
     });

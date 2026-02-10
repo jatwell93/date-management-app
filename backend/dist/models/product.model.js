@@ -39,6 +39,7 @@ class ProductModel {
         const result = await this.db.get(query, [barcode, sku, name, costPrice]);
         return {
             id: result.id,
+            organizationId: result.organization_id,
             barcode: result.barcode,
             sku: result.sku,
             name: result.name,
@@ -57,6 +58,7 @@ class ProductModel {
             return null;
         return {
             id: result.id,
+            organizationId: result.organization_id,
             barcode: result.barcode,
             sku: result.sku,
             name: result.name,
@@ -75,6 +77,7 @@ class ProductModel {
             return null;
         return {
             id: result.id,
+            organizationId: result.organization_id,
             barcode: result.barcode,
             sku: result.sku,
             name: result.name,
@@ -98,6 +101,7 @@ class ProductModel {
             return null;
         return {
             id: result.id,
+            organizationId: result.organization_id,
             barcode: result.barcode,
             sku: result.sku,
             name: result.name,

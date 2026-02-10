@@ -1,21 +1,23 @@
 import { Router, Request, Response } from 'express';
 import { UserService } from '../services/user.service';
 import { User } from '../models/user.model';
-import { authenticateToken, requireManager } from '../middleware/auth.middleware';
+import { authenticateToken, requireManager, AuthRequest } from '../middleware/auth.middleware';
 import { validateDataIntegrity } from '../middleware/validation.middleware';
 import { validateRequest } from '../middleware/validateRequest';
 import { userSchema } from '../schemas';
 import { validateBusinessRules } from '../middleware/data-integrity.middleware';
 import { escapeHtml } from '../utils/normalize.function';
 import { standardLimiter } from '../middleware/rateLimiter';
+import { checkUsageLimit } from '../middleware/feature-gate.middleware';
 
 const router = Router();
 const userService = new UserService();
 
 // GET /users - Get all users (Manager only)
-router.get('/', authenticateToken, requireManager, async (req: Request, res: Response) => {
+router.get('/', authenticateToken, requireManager, async (req: AuthRequest, res: Response) => {
   try {
-    const users = await userService.getUsers();
+    // const users = await userService.getUsers();
+    const users = await userService.getUsers(/* req.organizationId */);
     res.json(escapeHtml(users));
   } catch (_error) {
     // console.error("Error getting users:", _error);
@@ -24,7 +26,7 @@ router.get('/', authenticateToken, requireManager, async (req: Request, res: Res
 });
 
 // GET /users/:id - Get a specific user by ID (Manager only)
-router.get('/:id', authenticateToken, requireManager, async (req: Request, res: Response) => {
+router.get('/:id', authenticateToken, requireManager, async (req: AuthRequest, res: Response) => {
   try {
     const id = Number.parseInt(req.params.id, 10);
     if (Number.isNaN(id)) {
@@ -34,6 +36,11 @@ router.get('/:id', authenticateToken, requireManager, async (req: Request, res: 
 
     if (!user) {
       return res.status(404).json({ message: 'User not found' });
+    }
+
+    // Validate ownership: user.organization_id must match req.organizationId
+    if (user.organizationId !== req.organizationId) {
+      return res.status(403).json({ message: 'Access denied: User belongs to different organization' });
     }
 
     res.json(escapeHtml(user));
@@ -48,11 +55,12 @@ router.post(
   '/',
   authenticateToken,
   requireManager,
+  checkUsageLimit('max_users'),
   standardLimiter,
   validateRequest(userSchema),
   validateDataIntegrity,
   validateBusinessRules,
-  async (req: Request, res: Response) => {
+  async (req: AuthRequest, res: Response) => {
     try {
       const { pin, role } = req.body;
 
@@ -60,10 +68,16 @@ router.post(
         return res.status(400).json({ message: 'PIN and role are required' });
       }
 
+      // Validate organization context
+      if (!req.organizationId) {
+        return res.status(401).json({ message: 'Access denied: No organization context found' });
+      }
+
       // FIX: Use Omit to create a type that represents a user *before* it's saved to the DB.
       const newUser: Omit<User, 'id' | 'created_at' | 'updated_at'> = {
         pin,
         role,
+        organizationId: req.organizationId, // Use req.organizationId from auth context
       };
 
       const createdUser = await userService.createUser(newUser);
@@ -84,12 +98,24 @@ router.put(
   validateRequest(userSchema),
   validateDataIntegrity,
   validateBusinessRules,
-  async (req: Request, res: Response) => {
+  async (req: AuthRequest, res: Response) => {
     try {
       const id = Number.parseInt(req.params.id, 10);
       if (Number.isNaN(id)) {
         return res.status(400).json({ message: 'Invalid user id' });
       }
+
+      // First, get the user to validate ownership
+      const existingUser = await userService.getUserById(id);
+      if (!existingUser) {
+        return res.status(404).json({ message: 'User not found' });
+      }
+
+      // Validate ownership: user.organization_id must match req.organizationId
+      if (existingUser.organizationId !== req.organizationId) {
+        return res.status(403).json({ message: 'Access denied: User belongs to different organization' });
+      }
+
       const { pin, role } = req.body;
 
       const user: Partial<User> = {};
@@ -117,12 +143,24 @@ router.delete(
   authenticateToken,
   requireManager,
   standardLimiter,
-  async (req: Request, res: Response) => {
+  async (req: AuthRequest, res: Response) => {
     try {
       const id = Number.parseInt(req.params.id, 10);
       if (Number.isNaN(id)) {
         return res.status(400).json({ message: 'Invalid user id' });
       }
+
+      // First, get the user to validate ownership
+      const existingUser = await userService.getUserById(id);
+      if (!existingUser) {
+        return res.status(404).json({ message: 'User not found' });
+      }
+
+      // Validate ownership: user.organization_id must match req.organizationId
+      if (existingUser.organizationId !== req.organizationId) {
+        return res.status(403).json({ message: 'Access denied: User belongs to different organization' });
+      }
+
       const deleted = await userService.deleteUser(id);
 
       if (!deleted) {

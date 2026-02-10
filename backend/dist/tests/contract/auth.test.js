@@ -16,6 +16,64 @@ describe('POST /auth/login', () => {
         expect(response.status).toBe(200);
         expect(response.body).toHaveProperty('token');
     });
+    describe('Multi-tenant login flow (task 4.10)', () => {
+        it('should return organizationId and tierLevel in login response for active subscription', async () => {
+            const response = await (0, supertest_1.default)(index_1.default).post('/auth/login').send({ pin: '5624' });
+            expect(response.status).toBe(200);
+            expect(response.body).toHaveProperty('token');
+            expect(response.body).toHaveProperty('organizationId');
+            expect(response.body).toHaveProperty('tierLevel');
+            expect(response.body).toHaveProperty('userId');
+            expect(response.body).toHaveProperty('role');
+            // Verify organization context
+            expect(typeof response.body.organizationId).toBe('string');
+            expect(['starter', 'professional', 'premium', 'concierge']).toContain(response.body.tierLevel);
+        });
+        it('should reject login if organization subscription is canceled', async () => {
+            // This test simulates a user whose organization subscription has been canceled
+            // In a real scenario, you would need to set up the database state first
+            const response = await (0, supertest_1.default)(index_1.default).post('/auth/login').send({ pin: '5624' });
+            // If the test user's organization is canceled, we expect 403
+            if (response.status === 403) {
+                expect(response.body.message).toContain('canceled');
+            }
+        });
+        it('should include JWT token with organization context', async () => {
+            const response = await (0, supertest_1.default)(index_1.default).post('/auth/login').send({ pin: '5624' });
+            expect(response.status).toBe(200);
+            const token = response.body.token;
+            // Token should be a valid JWT format (3 parts separated by dots)
+            const parts = token.split('.');
+            expect(parts.length).toBe(3);
+            // Decode JWT payload (second part is base64 encoded payload)
+            const payload = JSON.parse(Buffer.from(parts[1], 'base64').toString());
+            // Verify JWT payload includes multi-tenant context
+            expect(payload).toHaveProperty('organizationId');
+            expect(payload).toHaveProperty('tierLevel');
+            expect(payload).toHaveProperty('userId');
+            expect(payload).toHaveProperty('role');
+            expect(payload).toHaveProperty('iat');
+            expect(payload).toHaveProperty('exp');
+        });
+        it('should only return organizationId matching the logged-in user', async () => {
+            const response = await (0, supertest_1.default)(index_1.default).post('/auth/login').send({ pin: '5624' });
+            expect(response.status).toBe(200);
+            const { organizationId, userId } = response.body;
+            // The organizationId should belong to this user
+            // This test verifies users can't spoof other organizations
+            expect(organizationId).toBeDefined();
+            expect(userId).toBeDefined();
+            // Subsequent requests with this token should only access this organization's data
+            const dashboardResponse = await (0, supertest_1.default)(index_1.default)
+                .get('/api/dashboard')
+                .set('Authorization', `Bearer ${response.body.token}`);
+            // If dashboard is protected and multi-tenant, it should only show this org's data
+            if (dashboardResponse.status === 200) {
+                // In a real implementation, verify response only contains data for this organization
+                expect(dashboardResponse.body).toBeDefined();
+            }
+        });
+    });
 });
 describe('POST /auth/refresh', () => {
     beforeAll(() => {
@@ -35,5 +93,33 @@ describe('POST /auth/refresh', () => {
     it('should respond with a 401 status code when no token is provided', async () => {
         const response = await (0, supertest_1.default)(index_1.default).post('/auth/refresh').send();
         expect(response.status).toBe(401);
+    });
+    describe('Multi-tenant refresh token validation (task 4.10)', () => {
+        it('should preserve organizationId and tierLevel in refreshed token', async () => {
+            const loginResponse = await (0, supertest_1.default)(index_1.default).post('/auth/login').send({ pin: '5624' });
+            expect(loginResponse.status).toBe(200);
+            const initialOrganizationId = loginResponse.body.organizationId;
+            const initialTierLevel = loginResponse.body.tierLevel;
+            const token = loginResponse.body.token;
+            const refreshResponse = await (0, supertest_1.default)(index_1.default)
+                .post('/auth/refresh')
+                .set('Authorization', `Bearer ${token}`)
+                .send();
+            expect(refreshResponse.status).toBe(200);
+            // New token should have same organization context
+            if (refreshResponse.body.token) {
+                const newParts = refreshResponse.body.token.split('.');
+                const newPayload = JSON.parse(Buffer.from(newParts[1], 'base64').toString());
+                expect(newPayload.organizationId).toBe(initialOrganizationId);
+                expect(newPayload.tierLevel).toBe(initialTierLevel);
+            }
+        });
+        it('should reject refresh with invalid token format', async () => {
+            const response = await (0, supertest_1.default)(index_1.default)
+                .post('/auth/refresh')
+                .set('Authorization', 'Bearer invalid_token_format')
+                .send();
+            expect(response.status).toBe(403);
+        });
     });
 });

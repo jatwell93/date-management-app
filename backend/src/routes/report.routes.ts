@@ -2,6 +2,7 @@ import { Router, Request, Response } from 'express';
 import validator from 'validator';
 import { ServiceProvider } from '../services/service-provider';
 import { authenticateToken } from '../middleware/auth.middleware';
+import { requireFeature } from '../middleware/feature-gate.middleware';
 import { escapeHtml } from '../utils/normalize.function';
 
 const router = Router();
@@ -134,7 +135,7 @@ router.get('/items-by-date', authenticateToken, async (req: Request, res: Respon
 });
 
 // GET /dashboard/analytics - Get dashboard analytics data (FR-005)
-router.get('/analytics', authenticateToken, async (req: Request, res: Response) => {
+router.get('/analytics', authenticateToken, requireFeature('advanced_analytics'), async (req: Request, res: Response) => {
   try {
     const analytics = await reportService.getDashboardAnalytics();
     res.json(escapeHtml(analytics));

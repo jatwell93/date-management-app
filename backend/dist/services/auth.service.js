@@ -9,6 +9,7 @@ const bcrypt_1 = __importDefault(require("bcrypt"));
 const database_factory_1 = require("../database/database-factory");
 const logger_1 = require("../utils/logger");
 const errors_1 = require("../errors");
+const subscription_1 = require("../types/subscription");
 const crypto_1 = __importDefault(require("crypto"));
 class AuthService {
     constructor(prismaClient) {
@@ -110,7 +111,12 @@ class AuthService {
         try {
             // Get all users and iterate through them to find a match
             const users = await this.prisma.user.findMany({
-                select: { id: true, pin: true, role: true },
+                select: {
+                    id: true,
+                    pin: true,
+                    role: true,
+                    organizationId: true,
+                },
             });
             logger_1.Logger.debug('Auth service: Attempting to authenticate user', {
                 userCount: users.length,
@@ -120,14 +126,51 @@ class AuthService {
                 logger_1.Logger.debug('Auth service: Checking user for authentication', { userId: user.id });
                 const isValidPin = await bcrypt_1.default.compare(pin, user.pin);
                 if (isValidPin) {
+                    // Verify user has an organization
+                    if (!user.organizationId) {
+                        logger_1.Logger.error('Auth service: User has no organization assigned', { userId: user.id });
+                        throw new errors_1.AuthenticationError('User organization not configured');
+                    }
+                    // Query organization and its subscription tier
+                    const subscriptionTier = await this.prisma.subscriptionTier.findFirst({
+                        where: { organizationId: user.organizationId },
+                        orderBy: { createdAt: 'desc' },
+                    });
+                    if (!subscriptionTier) {
+                        logger_1.Logger.error('Auth service: No subscription tier found for organization', {
+                            organizationId: user.organizationId,
+                        });
+                        throw new errors_1.AuthenticationError('Organization subscription not configured');
+                    }
+                    // Verify organization subscription is not canceled
+                    if (subscriptionTier.status === subscription_1.SubscriptionStatus.CANCELED) {
+                        logger_1.Logger.warn('Auth service: Login attempt for canceled organization', {
+                            organizationId: user.organizationId,
+                            userId: user.id,
+                        });
+                        throw new errors_1.AuthenticationError('Organization subscription has been canceled. Please contact support.');
+                    }
                     logger_1.Logger.info('Auth service: User authenticated successfully', {
                         userId: user.id,
+                        organizationId: user.organizationId,
+                        tierLevel: subscriptionTier.tierLevel,
                         role: user.role,
                     });
-                    const token = jsonwebtoken_1.default.sign({ userId: user.id, role: user.role }, process.env.JWT_SECRET || 'your_jwt_secret', {
+                    const token = jsonwebtoken_1.default.sign({
+                        userId: user.id,
+                        role: user.role,
+                        organizationId: user.organizationId,
+                        tierLevel: subscriptionTier.tierLevel,
+                    }, process.env.JWT_SECRET || 'your_jwt_secret', {
                         expiresIn: '1h', // Token expires in 1 hour
                     });
-                    return token;
+                    return {
+                        token,
+                        userId: user.id,
+                        role: user.role,
+                        organizationId: user.organizationId,
+                        tierLevel: subscriptionTier.tierLevel,
+                    };
                 }
             }
             logger_1.Logger.warn('Auth service: Authentication failed for provided PIN');

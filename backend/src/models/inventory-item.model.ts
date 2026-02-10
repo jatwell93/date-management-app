@@ -60,6 +60,7 @@ export class InventoryItemModel {
     const result = await this.db.get(query, [productId, expiryDate, locationId, status]);
     return {
       id: result.id,
+      organizationId: result.organization_id,
       productId: result.product_id,
       expiryDate: result.expiry_date,
       locationId: result.location_id,
@@ -80,6 +81,7 @@ export class InventoryItemModel {
 
     return {
       id: result.id,
+      organizationId: result.organization_id,
       productId: result.product_id,
       expiryDate: result.expiry_date,
       locationId: result.location_id,
@@ -98,6 +100,7 @@ export class InventoryItemModel {
 
     return results.map((result) => ({
       id: result.id,
+      organizationId: result.organization_id,
       productId: result.product_id,
       expiryDate: result.expiry_date,
       locationId: result.location_id,
@@ -116,6 +119,7 @@ export class InventoryItemModel {
 
     return results.map((result) => ({
       id: result.id,
+      organizationId: result.organization_id,
       productId: result.product_id,
       expiryDate: result.expiry_date,
       locationId: result.location_id,
@@ -145,6 +149,7 @@ export class InventoryItemModel {
 
     return {
       id: result.id,
+      organizationId: result.organization_id,
       productId: result.product_id,
       expiryDate: result.expiry_date,
       locationId: result.location_id,

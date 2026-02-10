@@ -3,6 +3,8 @@ import { Logger } from '../utils/logger';
 import { AnalyticsRepository } from '../repositories/analytics.repository';
 import { randomBytes } from 'crypto';
 
+type DB = InstanceType<typeof Database>;
+
 // Define analytics event types
 export enum AnalyticsEventType {
   USER_LOGIN = 'USER_LOGIN',

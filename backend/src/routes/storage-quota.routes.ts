@@ -61,6 +61,15 @@ router.get('/:userId', async (req: AuthRequest, res: Response): Promise<void> =>
       return;
     }
 
+    // Validate organization ownership
+    if (!req.organizationId) {
+      res.status(401).json({
+        error: 'Unauthorized',
+        message: 'Organization context required',
+      });
+      return;
+    }
+
     // Validate tier
     const validTiers = ['free', 'pro', 'enterprise'];
     if (!validTiers.includes(tier as string)) {
@@ -128,6 +137,15 @@ router.get('/:userId/can-upload', async (req: AuthRequest, res: Response): Promi
       res.status(403).json({
         error: 'Forbidden',
         message: 'You can only check your own storage quota',
+      });
+      return;
+    }
+
+    // Validate organization ownership
+    if (!req.organizationId) {
+      res.status(401).json({
+        error: 'Unauthorized',
+        message: 'Organization context required',
       });
       return;
     }

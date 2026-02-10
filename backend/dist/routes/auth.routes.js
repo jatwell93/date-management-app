@@ -52,11 +52,11 @@ router.post('/login', rateLimiter_1.strictLimiter, normalizePin, (0, validateReq
 router.post('/refresh', auth_middleware_1.authenticateToken, async (req, res) => {
     try {
         // Regenerate token with updated expiration
-        const { userId, userRole } = req; // Using 'any' to access custom properties added by auth middleware
-        if (!userId || !userRole) {
+        const authReq = req; // Using 'any' to access custom properties added by auth middleware
+        if (!authReq.userId || !authReq.userRole || !authReq.organizationId || !authReq.tierLevel) {
             return res.status(401).json({ message: 'User not authenticated' });
         }
-        const newToken = (0, auth_middleware_1.generateToken)(userId, userRole, '1h');
+        const newToken = (0, auth_middleware_1.generateToken)(authReq.userId, authReq.userRole, authReq.organizationId, authReq.tierLevel, '1h');
         res.json((0, normalize_function_1.escapeHtml)({ token: newToken }));
     }
     catch (error) {

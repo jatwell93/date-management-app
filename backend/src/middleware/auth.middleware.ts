@@ -24,7 +24,7 @@ export interface TokenPayload extends jwt.JwtPayload {
   tierLevel: TierLevel;
 }
 
-export const authenticateToken = (req: AuthRequest, res: Response, next: NextFunction) => {
+export const authenticateToken = async (req: AuthRequest, res: Response, next: NextFunction) => {
   // Test environment bypass
   if (process.env.NODE_ENV === 'test' && process.env.TEST_AUTH_BYPASS === 'true') {
     req.user = { 
