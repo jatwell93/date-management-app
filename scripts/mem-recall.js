@@ -64,10 +64,9 @@ function retrieveContext(query) {
       // Fall back to lexical search if semantic returns nothing
       if (hasApiKey) {
         console.log('No semantic matches. Trying lexical search...\n');
-        const lexCmd = `${envPrefix}memvid find "${MEMORY_FILE}" --query "${query.replace(/"/g, '\\"')}" --json --mode lex`;
-        const lexOutput = execSync(lexCmd, {
+        const lexArgs = ['find', MEMORY_FILE, '--query', query, '--json', '--mode', 'lex'];
+        const lexOutput = execFileSync('memvid', lexArgs, {
           encoding: 'utf8',
-          shell: true,
           stdio: ['pipe', 'pipe', 'pipe'],
           env: cleanEnv,
         });
