@@ -1,7 +1,7 @@
 import { Router, Request, Response } from 'express';
 import { ProductService } from '../services/product.service';
 import { Product } from '../models/product.model';
-import { authenticateToken } from '../middleware/auth.middleware';
+import { authenticateToken, AuthRequest } from '../middleware/auth.middleware';
 import { validateDataIntegrity } from '../middleware/validation.middleware';
 import { validateRequest } from '../middleware/validateRequest';
 import { productSchema } from '../schemas';
@@ -33,10 +33,11 @@ const upload = multer({
   },
 });
 
-// GET /products - Get all products
-router.get('/', authenticateToken, async (req: Request, res: Response) => {
+// GET /products - Get all products for the user's organization
+router.get('/', authenticateToken, async (req: AuthRequest, res: Response) => {
   try {
-    const products = await productService.getAllProducts();
+    // TODO: Phase 7 - Update service to accept organizationId parameter
+    const products = await productService.getAllProducts(); // req.organizationId!
     res.json(escapeHtml(products));
   } catch (_error) {
     // console.error("Get products error:", _error);
@@ -45,7 +46,7 @@ router.get('/', authenticateToken, async (req: Request, res: Response) => {
 });
 
 // GET /products/:id - Get a specific product by ID
-router.get('/:id', authenticateToken, async (req: Request, res: Response) => {
+router.get('/:id', authenticateToken, async (req: AuthRequest, res: Response) => {
   try {
     const id = Number.parseInt(req.params.id, 10);
     if (Number.isNaN(id)) {
@@ -57,6 +58,13 @@ router.get('/:id', authenticateToken, async (req: Request, res: Response) => {
       return res.status(404).json({ message: 'Product not found' });
     }
 
+    // Validate product belongs to user's organization
+    if (product.organizationId !== req.organizationId) {
+      return res
+        .status(403)
+        .json({ message: 'Access denied: Product belongs to different organization' });
+    }
+
     res.json(escapeHtml(product));
   } catch (_error) {
     // console.error("Get product error:", _error);
@@ -65,10 +73,11 @@ router.get('/:id', authenticateToken, async (req: Request, res: Response) => {
 });
 
 // GET /products/by-barcode/:barcode - Get a specific product by barcode
-router.get('/by-barcode/:barcode', authenticateToken, async (req: Request, res: Response) => {
+router.get('/by-barcode/:barcode', authenticateToken, async (req: AuthRequest, res: Response) => {
   try {
     const barcode = req.params.barcode;
-    const product = await productService.getProductByBarcode(barcode);
+    // TODO: Phase 7 - Update service to accept organizationId parameter
+    const product = await productService.getProductByBarcode(barcode); // , req.organizationId!
 
     if (!product) {
       return res.status(404).json({ message: 'Product not found' });
@@ -82,10 +91,11 @@ router.get('/by-barcode/:barcode', authenticateToken, async (req: Request, res: 
 });
 
 // GET /products/by-sku/:sku - Get a specific product by SKU
-router.get('/by-sku/:sku', authenticateToken, async (req: Request, res: Response) => {
+router.get('/by-sku/:sku', authenticateToken, async (req: AuthRequest, res: Response) => {
   try {
     const sku = req.params.sku;
-    const product = await productService.getProductBySku(sku);
+    // TODO: Phase 7 - Update service to accept organizationId parameter
+    const product = await productService.getProductBySku(sku); // , req.organizationId!
 
     if (!product) {
       return res.status(404).json({ message: 'Product not found' });
@@ -106,7 +116,7 @@ router.post(
   validateRequest(productSchema),
   validateDataIntegrity,
   validateBusinessRules,
-  async (req: Request, res: Response) => {
+  async (req: AuthRequest, res: Response) => {
     const { barcode, sku, name, costPrice } = req.body;
     if (!barcode || !sku || !name || costPrice === undefined) {
       return res.status(400).json({ message: 'Missing required product fields' });
@@ -118,6 +128,7 @@ router.post(
         sku,
         name,
         costPrice,
+        organizationId: req.organizationId!,
       } as Omit<Product, 'id' | 'createdAt' | 'updatedAt'>);
       res.status(201).json(escapeHtml(newProduct));
     } catch (_error) {
@@ -135,13 +146,24 @@ router.put(
   validateRequest(productSchema),
   validateDataIntegrity,
   validateBusinessRules,
-  async (req: Request, res: Response) => {
+  async (req: AuthRequest, res: Response) => {
     try {
       const id = Number.parseInt(req.params.id, 10);
       if (Number.isNaN(id)) {
         return res.status(400).json({ message: 'Invalid product id' });
       }
       const { barcode, sku, name, costPrice } = req.body;
+
+      // Check if product exists and belongs to user's organization
+      const existingProduct = await productService.getProductById(id);
+      if (!existingProduct) {
+        return res.status(404).json({ message: 'Product not found' });
+      }
+      if (existingProduct.organizationId !== req.organizationId) {
+        return res
+          .status(403)
+          .json({ message: 'Access denied: Product belongs to different organization' });
+      }
 
       // Build update object
       const updateData: Partial<Omit<Product, 'id' | 'createdAt' | 'updatedAt'>> = {};
@@ -165,24 +187,41 @@ router.put(
 );
 
 // DELETE /products/:id - Delete a product
-router.delete('/:id', authenticateToken, standardLimiter, async (req: Request, res: Response) => {
-  try {
-    const id = Number.parseInt(req.params.id, 10);
-    if (Number.isNaN(id)) {
-      return res.status(400).json({ message: 'Invalid product id' });
-    }
-    const deleted = await productService.deleteProduct(id);
+router.delete(
+  '/:id',
+  authenticateToken,
+  standardLimiter,
+  async (req: AuthRequest, res: Response) => {
+    try {
+      const id = Number.parseInt(req.params.id, 10);
+      if (Number.isNaN(id)) {
+        return res.status(400).json({ message: 'Invalid product id' });
+      }
 
-    if (!deleted) {
-      return res.status(404).json({ message: 'Product not found' });
-    }
+      // Check if product exists and belongs to user's organization
+      const existingProduct = await productService.getProductById(id);
+      if (!existingProduct) {
+        return res.status(404).json({ message: 'Product not found' });
+      }
+      if (existingProduct.organizationId !== req.organizationId) {
+        return res
+          .status(403)
+          .json({ message: 'Access denied: Product belongs to different organization' });
+      }
 
-    res.json(escapeHtml({ message: 'Product deleted successfully' }));
-  } catch (_error) {
-    // console.error("Delete product error:", _error);
-    res.status(500).json({ message: 'Internal server error' });
-  }
-});
+      const deleted = await productService.deleteProduct(id);
+
+      if (!deleted) {
+        return res.status(404).json({ message: 'Product not found' });
+      }
+
+      res.json(escapeHtml({ message: 'Product deleted successfully' }));
+    } catch (_error) {
+      // console.error("Delete product error:", _error);
+      res.status(500).json({ message: 'Internal server error' });
+    }
+  },
+);
 
 // POST /products/upload-csv - Upload and process a CSV, XLSX, or XLS file of products
 router.post(
@@ -190,7 +229,7 @@ router.post(
   authenticateToken,
   standardLimiter,
   upload.single('file'),
-  async (req: Request, res: Response) => {
+  async (req: AuthRequest, res: Response) => {
     try {
       if (!req.file) {
         return res.status(400).json({
@@ -201,7 +240,8 @@ router.post(
       }
 
       // Process the uploaded file (passing original filename for type detection)
-      const result = await productService.processCSVUpload(req.file.path, req.file.originalname);
+      // TODO: Phase 7 - Update service to accept organizationId parameter
+      const result = await productService.processCSVUpload(req.file.path, req.file.originalname); // , req.organizationId!
 
       // Send response with processing results and any errors
       const responseObj: any = {
