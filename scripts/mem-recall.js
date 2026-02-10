@@ -32,6 +32,23 @@ if (apiKey) {
 
 const MEMORY_FILE = path.join(__dirname, '..', 'project-memory.mv2');
 
+// Helper to safely execute memvid with proper path resolution
+function runMemvid(args, env) {
+  try {
+    // Use shell: true to properly resolve memvid from PATH (handles npm global installs)
+    // Arguments are passed as array which prevents shell injection
+    const output = execSync(`memvid ${args.map(arg => `"${arg}"`).join(' ')}`, {
+      encoding: 'utf8',
+      stdio: ['pipe', 'pipe', 'pipe'],
+      env,
+      shell: true,
+    });
+    return output;
+  } catch (error) {
+    throw error;
+  }
+}
+
 function retrieveContext(query) {
   if (!query) {
     console.error('Usage: node mem-recall.js <query>');
@@ -52,11 +69,7 @@ function retrieveContext(query) {
 
     const args = ['find', MEMORY_FILE, '--query', query, '--json', ...semanticFlags];
 
-    const output = execFileSync('memvid', args, {
-      encoding: 'utf8',
-      stdio: ['pipe', 'pipe', 'pipe'],
-      env: cleanEnv,
-    });
+    const output = runMemvid(args, cleanEnv);
 
     const results = JSON.parse(output);
 
@@ -65,11 +78,7 @@ function retrieveContext(query) {
       if (hasApiKey) {
         console.log('No semantic matches. Trying lexical search...\n');
         const lexArgs = ['find', MEMORY_FILE, '--query', query, '--json', '--mode', 'lex'];
-        const lexOutput = execFileSync('memvid', lexArgs, {
-          encoding: 'utf8',
-          stdio: ['pipe', 'pipe', 'pipe'],
-          env: cleanEnv,
-        });
+        const lexOutput = runMemvid(lexArgs, cleanEnv);
         const lexResults = JSON.parse(lexOutput);
         if (lexResults.hits && lexResults.hits.length > 0) {
           displayResults(query, lexResults, 'lexical');
@@ -87,7 +96,7 @@ function retrieveContext(query) {
     try {
       const cleanEnv = { ...process.env };
       const fallbackArgs = ['find', MEMORY_FILE, '--query', query];
-      execFileSync('memvid', fallbackArgs, { stdio: 'inherit', env: cleanEnv });
+      runMemvid(fallbackArgs, cleanEnv);
     } catch (fallbackError) {
       console.error('❌ Retrieval failed:', error.message);
       process.exit(1);
