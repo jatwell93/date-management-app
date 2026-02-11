@@ -23,7 +23,22 @@ import ErrorBoundary from './components/ErrorBoundary';
 import { synchronizeOfflineData } from './lib/sync-manager';
 import { jwtDecode, JwtPayload } from 'jwt-decode';
 import { ToastProvider } from './components/ui/toast-provider';
+import { HandheldProvider } from './contexts/HandheldContext';
 import './globals.css';
+
+// Helper function to check for forceHandheld query parameter
+const checkForceHandheldQueryParam = () => {
+  const urlParams = new URLSearchParams(window.location.search);
+  const forceHandheld = urlParams.get('forceHandheld');
+  if (forceHandheld === 'true') {
+    localStorage.setItem('forceHandheld', 'true');
+    // Clean up the URL by removing the query param
+    const newUrl = window.location.pathname + window.location.hash;
+    window.history.replaceState({}, document.title, newUrl);
+    return true;
+  }
+  return false;
+};
 
 // Helper function to verify if a token is still valid by checking its expiration
 const verifyToken = (token: string | null): boolean => {
@@ -106,10 +121,9 @@ function App() {
   };
 
   useEffect(() => {
-    // Re-evaluate role if token changes (e.g., on initial load or if token is manually set)
-    setUserRole(decodeTokenAndGetRole(token));
-    setUserId(decodeTokenAndGetUserId(token));
-  }, [token]);
+    // Check for forceHandheld query parameter on app initialization
+    checkForceHandheldQueryParam();
+  }, []);
 
   useEffect(() => {
     const handleOnline = () => {
@@ -132,8 +146,9 @@ function App() {
 
   return (
     <ToastProvider>
-      <Router>
-        <div className="min-h-screen bg-background text-foreground">
+      <HandheldProvider>
+        <Router>
+          <div className="min-h-screen bg-background text-foreground">
           {isLoggedIn && userId && <StorageQuotaWarning userId={userId} subscriptionTier="free" />}
           {isLoggedIn && (
             <nav className="bg-primary text-primary-foreground p-4 shadow-md">
@@ -504,6 +519,7 @@ function App() {
           </main>
         </div>
       </Router>
+    </HandheldProvider>
     </ToastProvider>
   );
 }
