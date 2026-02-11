@@ -4,7 +4,7 @@ import './StorageQuotaWarning.css';
 /**
  * Storage Quota Warning Modal Component
  * Displays when user's storage usage exceeds 80% of their plan limit
- * 
+ *
  * Usage:
  * <StorageQuotaWarning
  *   userId={123}
@@ -70,9 +70,7 @@ export const StorageQuotaWarning: React.FC<StorageQuotaWarningProps> = ({
         // Check if warning should be shown
         if (data.isWarning) {
           // Check if user has dismissed recently
-          const lastDismissed = localStorage.getItem(
-            `storage-quota-dismissed-${userId}`
-          );
+          const lastDismissed = localStorage.getItem(`storage-quota-dismissed-${userId}`);
           if (!lastDismissed) {
             setDismissed(false);
           } else {
@@ -122,7 +120,7 @@ export const StorageQuotaWarning: React.FC<StorageQuotaWarningProps> = ({
   return (
     <div className="storage-quota-warning">
       <div className="storage-quota-warning__overlay" onClick={handleDismiss} />
-      
+
       <div className="storage-quota-warning__modal">
         <div className="storage-quota-warning__header">
           <h2>Storage Quota Warning</h2>
@@ -137,7 +135,7 @@ export const StorageQuotaWarning: React.FC<StorageQuotaWarningProps> = ({
 
         <div className="storage-quota-warning__content">
           <div className="storage-quota-warning__icon">⚠️</div>
-          
+
           <p className="storage-quota-warning__message">
             You're using <strong>{quota.percentageUsed}%</strong> of your storage quota
           </p>
@@ -158,14 +156,19 @@ export const StorageQuotaWarning: React.FC<StorageQuotaWarningProps> = ({
 
           <p className="storage-quota-warning__details">
             {remainingBytes > 0 ? (
-              <>You have <strong>{formatBytes(remainingBytes)}</strong> of storage remaining.</>
+              <>
+                You have <strong>{formatBytes(remainingBytes)}</strong> of storage remaining.
+              </>
             ) : (
               <>You have reached your storage limit. Upgrade your plan to continue uploading.</>
             )}
           </p>
 
           <div className="storage-quota-warning__tier-info">
-            <p>Current Plan: <strong>{quota.tier.charAt(0).toUpperCase() + quota.tier.slice(1)}</strong></p>
+            <p>
+              Current Plan:{' '}
+              <strong>{quota.tier.charAt(0).toUpperCase() + quota.tier.slice(1)}</strong>
+            </p>
           </div>
         </div>
 
@@ -178,7 +181,7 @@ export const StorageQuotaWarning: React.FC<StorageQuotaWarningProps> = ({
               Upgrade Plan
             </button>
           )}
-          
+
           <button
             className="storage-quota-warning__button storage-quota-warning__button--secondary"
             onClick={handleDismiss}
@@ -188,7 +191,8 @@ export const StorageQuotaWarning: React.FC<StorageQuotaWarningProps> = ({
         </div>
 
         <p className="storage-quota-warning__footer">
-          We'll remind you again in {autoHideDays} days. You can manage your storage by deleting old uploads.
+          We'll remind you again in {autoHideDays} days. You can manage your storage by deleting old
+          uploads.
         </p>
       </div>
     </div>

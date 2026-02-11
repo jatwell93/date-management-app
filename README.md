@@ -1,6 +1,6 @@
 # Date Management Application
 
-Full-stack inventory management system with React (frontend), Node.js/Express (backend), dual database support (SQLite dev + Neon PostgreSQL prod), and Cloudflare Workers edge compute.
+Full-stack date management system with React (frontend), Node.js/Express (backend), dual database support (SQLite dev + Neon PostgreSQL prod), and Cloudflare Workers edge compute.
 
 **Phase 11 Status**: ✅ Complete — Dual environment testing, R2 storage, Workers deployment verified
 

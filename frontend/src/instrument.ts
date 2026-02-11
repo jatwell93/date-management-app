@@ -9,7 +9,7 @@ if (sentryDsn && process.env.NODE_ENV !== 'test') {
     // Recommended: Modern functional integrations
     integrations: [
       // Captures performance data for page loads and navigations
-      Sentry.browserTracingIntegration(), 
+      Sentry.browserTracingIntegration(),
       // Replaces 'new Sentry.Replay()'
       Sentry.replayIntegration({
         maskAllText: true,

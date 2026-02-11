@@ -106,7 +106,7 @@
 
 ## 8. Stripe Configuration (Phase 4 - Week 5)
 
-- [ ] 8.1 **USER:** Create Stripe account and obtain API keys (test mode + production mode) at https://dashboard.stripe.com
+- [x] 8.1 **USER:** Create Stripe account and obtain API keys (test mode + production mode) at https://dashboard.stripe.com
 - [ ] 8.2 **USER:** Create Stripe product "Pharmacy Expiry Management SaaS" in Stripe dashboard
 - [ ] 8.3 **USER:** Create price: starter_monthly ($99/month) with metadata tier=starter
 - [ ] 8.4 **USER:** Create price: starter_annual ($990/year) with metadata tier=starter

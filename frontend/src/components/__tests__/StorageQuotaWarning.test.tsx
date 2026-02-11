@@ -38,7 +38,7 @@ describe('StorageQuotaWarning', () => {
             headers: {
               Authorization: 'Bearer mock-jwt-token',
             },
-          })
+          }),
         );
       });
     });
@@ -50,10 +50,7 @@ describe('StorageQuotaWarning', () => {
       render(<StorageQuotaWarning userId={mockUserId} subscriptionTier="pro" />);
 
       await waitFor(() => {
-        expect(fetchMock).toHaveBeenCalledWith(
-          '/api/storage-quota/1?tier=pro',
-          expect.anything()
-        );
+        expect(fetchMock).toHaveBeenCalledWith('/api/storage-quota/1?tier=pro', expect.anything());
       });
     });
 
@@ -200,9 +197,7 @@ describe('StorageQuotaWarning', () => {
       render(<StorageQuotaWarning userId={mockUserId} />);
 
       await waitFor(() => {
-        expect(
-          screen.getByText(/You have reached your storage limit/i)
-        ).toBeInTheDocument();
+        expect(screen.getByText(/You have reached your storage limit/i)).toBeInTheDocument();
       });
     });
 
@@ -347,14 +342,9 @@ describe('StorageQuotaWarning', () => {
       // Set dismiss timestamp to 3 days ago
       const threeDaysAgo = new Date();
       threeDaysAgo.setDate(threeDaysAgo.getDate() - 3);
-      localStorage.setItem(
-        `storage-quota-dismissed-${mockUserId}`,
-        threeDaysAgo.toISOString()
-      );
+      localStorage.setItem(`storage-quota-dismissed-${mockUserId}`, threeDaysAgo.toISOString());
 
-      const { container } = render(
-        <StorageQuotaWarning userId={mockUserId} autoHideDays={7} />
-      );
+      const { container } = render(<StorageQuotaWarning userId={mockUserId} autoHideDays={7} />);
 
       await waitFor(() => {
         expect(container.firstChild).toBeNull(); // Should not render
@@ -365,10 +355,7 @@ describe('StorageQuotaWarning', () => {
       // Set dismiss timestamp to 8 days ago (past default 7 days)
       const eightDaysAgo = new Date();
       eightDaysAgo.setDate(eightDaysAgo.getDate() - 8);
-      localStorage.setItem(
-        `storage-quota-dismissed-${mockUserId}`,
-        eightDaysAgo.toISOString()
-      );
+      localStorage.setItem(`storage-quota-dismissed-${mockUserId}`, eightDaysAgo.toISOString());
 
       render(<StorageQuotaWarning userId={mockUserId} autoHideDays={7} />);
 
@@ -381,14 +368,9 @@ describe('StorageQuotaWarning', () => {
       // Set dismiss timestamp to 2 days ago
       const twoDaysAgo = new Date();
       twoDaysAgo.setDate(twoDaysAgo.getDate() - 2);
-      localStorage.setItem(
-        `storage-quota-dismissed-${mockUserId}`,
-        twoDaysAgo.toISOString()
-      );
+      localStorage.setItem(`storage-quota-dismissed-${mockUserId}`, twoDaysAgo.toISOString());
 
-      const { container } = render(
-        <StorageQuotaWarning userId={mockUserId} autoHideDays={3} />
-      );
+      const { container } = render(<StorageQuotaWarning userId={mockUserId} autoHideDays={3} />);
 
       await waitFor(() => {
         expect(container.firstChild).toBeNull(); // Should not render (within 3 days)

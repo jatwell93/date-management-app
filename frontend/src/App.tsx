@@ -134,9 +134,7 @@ function App() {
     <ToastProvider>
       <Router>
         <div className="min-h-screen bg-background text-foreground">
-          {isLoggedIn && userId && (
-            <StorageQuotaWarning userId={userId} subscriptionTier="free" />
-          )}
+          {isLoggedIn && userId && <StorageQuotaWarning userId={userId} subscriptionTier="free" />}
           {isLoggedIn && (
             <nav className="bg-primary text-primary-foreground p-4 shadow-md">
               <div className="container mx-auto">

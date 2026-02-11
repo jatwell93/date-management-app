@@ -1,6 +1,6 @@
 /**
  * Smoke Tests for StorageQuotaWarning Integration
- * 
+ *
  * These tests verify the modal integrates correctly with the main app
  * and behaves as expected in realistic scenarios.
  */
@@ -12,7 +12,10 @@ import fetchMock from 'jest-fetch-mock';
 import { StorageQuotaWarning } from '../StorageQuotaWarning';
 
 // Mock the App component parts we need
-const MockAppWithStorageWarning: React.FC<{ userId: number; tier: 'free' | 'pro' | 'enterprise' }> = ({ userId, tier }) => {
+const MockAppWithStorageWarning: React.FC<{
+  userId: number;
+  tier: 'free' | 'pro' | 'enterprise';
+}> = ({ userId, tier }) => {
   const [showWarning, setShowWarning] = React.useState(true);
 
   if (!showWarning) {
@@ -51,7 +54,7 @@ describe('StorageQuotaWarning - Smoke Tests', () => {
           displayLimit: '1 GB',
           warningThreshold: 80,
           isWarning: true,
-        })
+        }),
       );
 
       render(<MockAppWithStorageWarning userId={1} tier="free" />);
@@ -77,7 +80,7 @@ describe('StorageQuotaWarning - Smoke Tests', () => {
           displayLimit: '1 GB',
           warningThreshold: 80,
           isWarning: false, // No warning
-        })
+        }),
       );
 
       render(<MockAppWithStorageWarning userId={1} tier="free" />);
@@ -102,7 +105,7 @@ describe('StorageQuotaWarning - Smoke Tests', () => {
           displayLimit: '1 GB',
           warningThreshold: 80,
           isWarning: true,
-        })
+        }),
       );
 
       render(<MockAppWithStorageWarning userId={1} tier="free" />);
@@ -139,7 +142,7 @@ describe('StorageQuotaWarning - Smoke Tests', () => {
           displayLimit: '1 GB',
           warningThreshold: 80,
           isWarning: true,
-        })
+        }),
       );
 
       render(<MockAppWithStorageWarning userId={1} tier="free" />);
@@ -164,7 +167,7 @@ describe('StorageQuotaWarning - Smoke Tests', () => {
           displayLimit: '10 GB',
           warningThreshold: 80,
           isWarning: true,
-        })
+        }),
       );
 
       render(<MockAppWithStorageWarning userId={2} tier="pro" />);
@@ -189,7 +192,7 @@ describe('StorageQuotaWarning - Smoke Tests', () => {
           displayLimit: '1 GB',
           warningThreshold: 80,
           isWarning: true,
-        })
+        }),
       );
 
       render(<MockAppWithStorageWarning userId={1} tier="free" />);
@@ -269,7 +272,7 @@ describe('StorageQuotaWarning - Smoke Tests', () => {
           displayLimit: '1 GB',
           warningThreshold: 80,
           isWarning: true,
-        })
+        }),
       );
 
       const startTime = performance.now();
@@ -303,9 +306,9 @@ describe('StorageQuotaWarning - Smoke Tests', () => {
                     isWarning: true,
                   }),
                 }),
-              100
-            )
-          )
+              100,
+            ),
+          ),
       );
 
       render(<MockAppWithStorageWarning userId={1} tier="free" />);
@@ -318,7 +321,7 @@ describe('StorageQuotaWarning - Smoke Tests', () => {
         () => {
           expect(screen.getByText(/Storage Quota Warning/i)).toBeInTheDocument();
         },
-        { timeout: 2000 }
+        { timeout: 2000 },
       );
     });
   });
@@ -335,7 +338,7 @@ describe('StorageQuotaWarning - Smoke Tests', () => {
           displayLimit: '1 GB',
           warningThreshold: 80,
           isWarning: true,
-        })
+        }),
       );
 
       render(<MockAppWithStorageWarning userId={1} tier="free" />);
@@ -358,7 +361,7 @@ describe('StorageQuotaWarning - Smoke Tests', () => {
           displayLimit: '1 GB',
           warningThreshold: 80,
           isWarning: true,
-        })
+        }),
       );
 
       render(<MockAppWithStorageWarning userId={1} tier="free" />);

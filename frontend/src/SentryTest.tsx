@@ -42,8 +42,13 @@ const SentryTest: React.FC = () => {
       if (response.status === 500) {
         // This is expected - the Workers endpoint threw an error and returned 500
         const errorData = await response.json().catch(() => ({ error: 'Internal Server Error' }));
-        Sentry.captureMessage(`Workers error test successful: ${errorData.error || 'Internal Server Error'}`, 'info');
-        setError(`Workers error triggered successfully: ${errorData.error || 'Internal Server Error'}`);
+        Sentry.captureMessage(
+          `Workers error test successful: ${errorData.error || 'Internal Server Error'}`,
+          'info',
+        );
+        setError(
+          `Workers error triggered successfully: ${errorData.error || 'Internal Server Error'}`,
+        );
       } else {
         // Unexpected status code
         const text = await response.text();
@@ -52,7 +57,9 @@ const SentryTest: React.FC = () => {
     } catch (err) {
       // Network error or other fetch failure
       Sentry.captureException(err);
-      setError(`Network error testing Workers: ${err instanceof Error ? err.message : 'Unknown error'}`);
+      setError(
+        `Network error testing Workers: ${err instanceof Error ? err.message : 'Unknown error'}`,
+      );
     }
   };
 

@@ -23,8 +23,8 @@
 
 ***
 
-### Note on Dependencies
-Package-specific patterns (Express middleware, Jest patterns, TypeORM, etc.) are in `packages.md`. Load that file when working with external packages to keep token usage efficient.
+### Note on SKILLS/AGENTS
+SKILLs and AGENTS live in .github/ and can should be used when the work needs specific knowledge that a skill or agent contains 
 
 ### Note on MCP
 **Always** check for tools and MCP servers to assist with modifications e.g. use the shadcn-UI-mcp to find default components rather than building from scratch.
