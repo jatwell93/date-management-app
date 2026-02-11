@@ -7,14 +7,14 @@
 
 ## 2. Device Detection Hook
 
-- [ ] 2.1 Implement `frontend/src/hooks/useHandheldDetection.ts` hook that:
+- [x] 2.1 Implement `frontend/src/hooks/useHandheldDetection.ts` hook that:
   - Checks localStorage for `forceHandheld` override flag
   - Falls back to user agent pattern matching (Zebra/Honeywell/CipherLab)
   - Falls back to screen dimension heuristic (≤600×800)
   - Returns `{ isHandheld: boolean }`
-- [ ] 2.2 Add `useHandheldDetection` hook provider wrapper to `App.tsx` context
-- [ ] 2.3 Write unit tests for detection hook covering all three detection methods (override, UA, dimensions)
-- [ ] 2.4 Add localStorage override via query param handler: `?forceHandheld=true` sets localStorage for testing on desktop
+- [x] 2.2 Add `useHandheldDetection` hook provider wrapper to `App.tsx` context
+- [x] 2.3 Write unit tests for detection hook covering all three detection methods (override, UA, dimensions)
+- [x] 2.4 Add localStorage override via query param handler: `?forceHandheld=true` sets localStorage for testing on desktop
 
 ## 3. Hardware Barcode Input
 
@@ -24,6 +24,7 @@
   - Detects Enter key as end marker
   - Distinguishes from human typing by timing threshold (multiple keystrokes within 50ms = hardware scan)
   - Emits `onScan(barcode)` callback
+  - **📚 Before starting:** Use refs to search for "React hooks state management keyboard events" and "Web API keydown event handling" for patterns
 - [ ] 3.2 Update `useHardwareScan` to handle GS1-128 barcodes by passing raw string to `parseGS1Barcode()`
 - [ ] 3.3 Write keyboard wedge input simulator test utility for unit testing hardware scan behavior
 - [ ] 3.4 Write unit tests for `useHardwareScan` covering:
@@ -38,6 +39,7 @@
   - Expiry date extraction from (17) with YYMMDD → ISO date conversion
   - Serial number extraction from (21)
   - Non-GS1 fallback (returns raw barcode)
+  - **📚 Before starting:** Use refs to search for "GS1-128 barcode application identifiers" and "Jest pure function testing patterns" for implementation and test examples
 
 ## 4. Component Updates: Camera and Scanner
 
@@ -47,14 +49,18 @@
   - Add debounce utility to track recent barcode scans (last 2 seconds)
   - In continuous mode, skip submitting duplicate barcodes within 2-second window
   - Add barcode tracking for debugging (optional console logging for development)
+  - **📚 Before starting:** Refer to existing CameraScanner implementation in codebase; use refs to search "Quagga barcode scanner configuration" if extending detection logic
 - [ ] 4.2 Update `frontend/src/components/Scanner.tsx`:
   - Add `defaultMode?: 'text' | 'camera'` prop (defaults to 'text')
   - Update `useHardwareScan` hook call to listen for hardware barcode input whenever component is mounted
   - Route hardware scan input through the same `onScan(barcode)` callback as camera and text input
   - Update JSX to respect `defaultMode` prop (show camera first if defaultMode='camera' on handheld)
 - [ ] 4.3 Write component tests for Scanner with mocked hardware scan events
+  - **📚 Before starting:** Use refs to search "Jest React component testing mocking keyboard events" for mock patterns
 - [ ] 4.4 Update existing `CameraScanner.test.tsx` to cover continuous mode scenarios
+  - **📚 Before starting:** Use refs to search "Jest React component snapshot testing" for testing video/camera components
 - [ ] 4.5 Update existing `Scanner.test.tsx` to cover handheld mode rendering with hardware input
+  - **📚 Before starting:** Use refs to search "React Testing Library conditional rendering" for handheld detection mocking patterns
 
 ## 5. Handheld UI Components
 
@@ -97,6 +103,7 @@
   - Add `currentStrategy: 'real-time' | 'batch' | 'manual'` property
   - Add `setSyncStrategy(strategy)` method to change strategies at runtime
   - Persist selected strategy in localStorage
+  - **📚 Before starting:** Use refs to search "localforage API configuration" and "exponential backoff retry pattern JavaScript" for storage and retry logic examples
 - [ ] 7.2 Modify sync interval logic:
   - Real-time: trigger `performSync()` directly after each `onScan()` success
   - Batch: change interval from 30s to 600s (10 minutes)
@@ -142,6 +149,7 @@
 ## 11. Testing and Validation
 
 - [ ] 11.1 Run `npm test` with coverage to verify:
+  - **📚 Reference:** Use refs to search "Jest coverage configuration" and "React PWA testing patterns" for testing best practices
   - Device detection hook coverage >90%
   - Hardware scan hook coverage >90%
   - GS1 parser coverage >95%
