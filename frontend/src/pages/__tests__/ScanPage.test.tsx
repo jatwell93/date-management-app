@@ -204,7 +204,7 @@ describe('ScanPage Integration', () => {
     render(
       <HandheldProvider>
         <ScanPage token={mockToken} />
-      </HandheldProvider>
+      </HandheldProvider>,
     );
 
     await waitFor(() => {
@@ -218,7 +218,7 @@ describe('ScanPage Integration', () => {
     render(
       <HandheldProvider>
         <ScanPage token={mockToken} />
-      </HandheldProvider>
+      </HandheldProvider>,
     );
 
     // Wait for scanner to be rendered
@@ -244,7 +244,7 @@ describe('ScanPage Integration', () => {
     render(
       <HandheldProvider>
         <ScanPage token={mockToken} />
-      </HandheldProvider>
+      </HandheldProvider>,
     );
 
     // Wait for scanner to be rendered
@@ -274,7 +274,7 @@ describe('ScanPage Integration', () => {
     render(
       <HandheldProvider>
         <ScanPage token={mockToken} />
-      </HandheldProvider>
+      </HandheldProvider>,
     );
 
     // Wait for scanner to be rendered
@@ -294,7 +294,7 @@ describe('ScanPage Integration', () => {
     render(
       <HandheldProvider>
         <ScanPage token={mockToken} />
-      </HandheldProvider>
+      </HandheldProvider>,
     );
 
     // Wait for store areas
@@ -337,7 +337,7 @@ describe('ScanPage Integration', () => {
     render(
       <HandheldProvider>
         <ScanPage token={mockToken} />
-      </HandheldProvider>
+      </HandheldProvider>,
     );
 
     // Wait for store areas
@@ -389,7 +389,7 @@ describe('ScanPage Integration', () => {
       render(
         <HandheldProvider>
           <ScanPage token={mockToken} />
-        </HandheldProvider>
+        </HandheldProvider>,
       );
 
       // Wait for store areas to load
@@ -430,7 +430,7 @@ describe('ScanPage Integration', () => {
       render(
         <HandheldProvider>
           <ScanPage token={mockToken} />
-        </HandheldProvider>
+        </HandheldProvider>,
       );
 
       // Wait for store areas
@@ -452,7 +452,7 @@ describe('ScanPage Integration', () => {
       render(
         <HandheldProvider>
           <ScanPage token={mockToken} />
-        </HandheldProvider>
+        </HandheldProvider>,
       );
 
       // Wait for store areas
@@ -468,7 +468,7 @@ describe('ScanPage Integration', () => {
       render(
         <HandheldProvider>
           <ScanPage token={mockToken} />
-        </HandheldProvider>
+        </HandheldProvider>,
       );
 
       // Wait for store areas
@@ -486,7 +486,7 @@ describe('ScanPage Integration', () => {
       render(
         <HandheldProvider>
           <ScanPage token={mockToken} />
-        </HandheldProvider>
+        </HandheldProvider>,
       );
 
       // Wait for store areas
@@ -504,7 +504,7 @@ describe('ScanPage Integration', () => {
       render(
         <HandheldProvider>
           <ScanPage token={mockToken} />
-        </HandheldProvider>
+        </HandheldProvider>,
       );
 
       // Wait for store areas
@@ -539,7 +539,7 @@ describe('ScanPage Integration', () => {
       render(
         <HandheldProvider>
           <ScanPage token={mockToken} />
-        </HandheldProvider>
+        </HandheldProvider>,
       );
 
       // Wait for store areas
@@ -554,7 +554,7 @@ describe('ScanPage Integration', () => {
       render(
         <HandheldProvider>
           <ScanPage token={mockToken} />
-        </HandheldProvider>
+        </HandheldProvider>,
       );
 
       // Wait for store areas
@@ -583,7 +583,7 @@ describe('ScanPage Integration', () => {
       render(
         <HandheldProvider>
           <ScanPage token={mockToken} />
-        </HandheldProvider>
+        </HandheldProvider>,
       );
 
       // Wait for store areas

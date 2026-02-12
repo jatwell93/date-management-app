@@ -83,8 +83,12 @@ export function Scanner({ onScan, defaultMode = 'text', isHandheld = false }: Sc
         </form>
       ) : (
         <div className={`mb-4 ${isHandheld ? 'h-full flex flex-col' : ''}`}>
-          <div className={`flex justify-between items-center mb-2 ${isHandheld ? 'px-4 py-2' : ''}`}>
-            <h3 className={`text-lg font-semibold text-foreground ${isHandheld ? 'text-xl' : ''}`}>Camera Scanner</h3>
+          <div
+            className={`flex justify-between items-center mb-2 ${isHandheld ? 'px-4 py-2' : ''}`}
+          >
+            <h3 className={`text-lg font-semibold text-foreground ${isHandheld ? 'text-xl' : ''}`}>
+              Camera Scanner
+            </h3>
             <button
               type="button"
               onClick={() => setUseCamera(false)}

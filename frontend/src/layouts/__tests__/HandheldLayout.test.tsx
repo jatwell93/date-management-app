@@ -21,7 +21,8 @@ jest.mock('../../contexts/HandheldContext', () => ({
   useHandheldDetectionContext: jest.fn(),
 }));
 
-const mockUseHandheldDetectionContext = require('../../contexts/HandheldContext').useHandheldDetectionContext;
+const mockUseHandheldDetectionContext =
+  require('../../contexts/HandheldContext').useHandheldDetectionContext;
 
 describe('HandheldLayout', () => {
   const mockOnSyncNow = jest.fn();
@@ -43,7 +44,12 @@ describe('HandheldLayout', () => {
   it('renders children content', () => {
     mockUseHandheldDetectionContext.mockReturnValue({
       isHandheld: true,
-      detectionResult: { isHandheld: true, method: 'userAgent', screenWidth: 480, screenHeight: 800 },
+      detectionResult: {
+        isHandheld: true,
+        method: 'userAgent',
+        screenWidth: 480,
+        screenHeight: 800,
+      },
     });
 
     render(
@@ -51,7 +57,7 @@ describe('HandheldLayout', () => {
         <HandheldLayout {...defaultProps}>
           <div data-testid="child-content">Test Content</div>
         </HandheldLayout>
-      </HandheldProvider>
+      </HandheldProvider>,
     );
 
     expect(screen.getByTestId('child-content')).toBeInTheDocument();
@@ -61,7 +67,12 @@ describe('HandheldLayout', () => {
   it('renders HandheldScanToolbar when isHandheld=true', () => {
     mockUseHandheldDetectionContext.mockReturnValue({
       isHandheld: true,
-      detectionResult: { isHandheld: true, method: 'userAgent', screenWidth: 480, screenHeight: 800 },
+      detectionResult: {
+        isHandheld: true,
+        method: 'userAgent',
+        screenWidth: 480,
+        screenHeight: 800,
+      },
     });
 
     render(
@@ -69,7 +80,7 @@ describe('HandheldLayout', () => {
         <HandheldLayout {...defaultProps}>
           <div>Content</div>
         </HandheldLayout>
-      </HandheldProvider>
+      </HandheldProvider>,
     );
 
     expect(screen.getByTestId('handheld-scan-toolbar')).toBeInTheDocument();
@@ -78,7 +89,12 @@ describe('HandheldLayout', () => {
   it('does not render HandheldScanToolbar when isHandheld=false', () => {
     mockUseHandheldDetectionContext.mockReturnValue({
       isHandheld: false,
-      detectionResult: { isHandheld: false, method: 'unknown', screenWidth: 1200, screenHeight: 800 },
+      detectionResult: {
+        isHandheld: false,
+        method: 'unknown',
+        screenWidth: 1200,
+        screenHeight: 800,
+      },
     });
 
     render(
@@ -86,7 +102,7 @@ describe('HandheldLayout', () => {
         <HandheldLayout {...defaultProps}>
           <div>Content</div>
         </HandheldLayout>
-      </HandheldProvider>
+      </HandheldProvider>,
     );
 
     expect(screen.queryByTestId('handheld-scan-toolbar')).not.toBeInTheDocument();
@@ -95,7 +111,12 @@ describe('HandheldLayout', () => {
   it('applies full viewport height styling for handheld devices', () => {
     mockUseHandheldDetectionContext.mockReturnValue({
       isHandheld: true,
-      detectionResult: { isHandheld: true, method: 'userAgent', screenWidth: 480, screenHeight: 800 },
+      detectionResult: {
+        isHandheld: true,
+        method: 'userAgent',
+        screenWidth: 480,
+        screenHeight: 800,
+      },
     });
 
     const { container } = render(
@@ -103,7 +124,7 @@ describe('HandheldLayout', () => {
         <HandheldLayout {...defaultProps}>
           <div>Content</div>
         </HandheldLayout>
-      </HandheldProvider>
+      </HandheldProvider>,
     );
 
     const layout = container.firstChild;
@@ -115,7 +136,12 @@ describe('HandheldLayout', () => {
   it('applies full-screen layout without max-width container for handheld devices', () => {
     mockUseHandheldDetectionContext.mockReturnValue({
       isHandheld: true,
-      detectionResult: { isHandheld: true, method: 'userAgent', screenWidth: 480, screenHeight: 800 },
+      detectionResult: {
+        isHandheld: true,
+        method: 'userAgent',
+        screenWidth: 480,
+        screenHeight: 800,
+      },
     });
 
     const { container } = render(
@@ -123,7 +149,7 @@ describe('HandheldLayout', () => {
         <HandheldLayout {...defaultProps}>
           <div>Content</div>
         </HandheldLayout>
-      </HandheldProvider>
+      </HandheldProvider>,
     );
 
     const mainContent = container.querySelector('main');
@@ -135,7 +161,12 @@ describe('HandheldLayout', () => {
   it('applies desktop layout with max-width container when isHandheld=false', () => {
     mockUseHandheldDetectionContext.mockReturnValue({
       isHandheld: false,
-      detectionResult: { isHandheld: false, method: 'unknown', screenWidth: 1200, screenHeight: 800 },
+      detectionResult: {
+        isHandheld: false,
+        method: 'unknown',
+        screenWidth: 1200,
+        screenHeight: 800,
+      },
     });
 
     const { container } = render(
@@ -143,7 +174,7 @@ describe('HandheldLayout', () => {
         <HandheldLayout {...defaultProps}>
           <div>Content</div>
         </HandheldLayout>
-      </HandheldProvider>
+      </HandheldProvider>,
     );
 
     const mainContent = container.querySelector('main');
@@ -155,7 +186,12 @@ describe('HandheldLayout', () => {
   it('passes toolbar props to HandheldScanToolbar', () => {
     mockUseHandheldDetectionContext.mockReturnValue({
       isHandheld: true,
-      detectionResult: { isHandheld: true, method: 'userAgent', screenWidth: 480, screenHeight: 800 },
+      detectionResult: {
+        isHandheld: true,
+        method: 'userAgent',
+        screenWidth: 480,
+        screenHeight: 800,
+      },
     });
 
     render(
@@ -163,7 +199,7 @@ describe('HandheldLayout', () => {
         <HandheldLayout {...defaultProps}>
           <div>Content</div>
         </HandheldLayout>
-      </HandheldProvider>
+      </HandheldProvider>,
     );
 
     expect(screen.getByTestId('toolbar-user-name')).toHaveTextContent('John Doe');
@@ -179,7 +215,11 @@ describe('HandheldLayout', () => {
     const consoleSpy = jest.spyOn(console, 'error').mockImplementation(() => {});
 
     expect(() => {
-      render(<HandheldLayout {...defaultProps}><div>Content</div></HandheldLayout>);
+      render(
+        <HandheldLayout {...defaultProps}>
+          <div>Content</div>
+        </HandheldLayout>,
+      );
     }).toThrow('useHandheldDetectionContext must be used within a HandheldProvider');
 
     consoleSpy.mockRestore();

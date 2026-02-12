@@ -18,7 +18,7 @@ export interface KeyboardWedgeSimulatorOptions {
  */
 export const simulateHardwareScan = async (
   barcode: string,
-  options: KeyboardWedgeSimulatorOptions = {}
+  options: KeyboardWedgeSimulatorOptions = {},
 ): Promise<void> => {
   const { typingSpeed = 0, enterDelay = 0 } = options;
 
@@ -35,13 +35,13 @@ export const simulateHardwareScan = async (
 
     // Small delay between characters if simulating slower hardware
     if (typingSpeed > 0) {
-      await new Promise(resolve => setTimeout(resolve, typingSpeed));
+      await new Promise((resolve) => setTimeout(resolve, typingSpeed));
     }
   }
 
   // Wait for Enter key delay
   if (enterDelay > 0) {
-    await new Promise(resolve => setTimeout(resolve, enterDelay));
+    await new Promise((resolve) => setTimeout(resolve, enterDelay));
   }
 
   // Dispatch Enter key to complete the scan
@@ -62,7 +62,7 @@ export const simulateHardwareScan = async (
  */
 export const simulateHumanTyping = async (
   text: string,
-  options: { minDelay?: number; maxDelay?: number } = {}
+  options: { minDelay?: number; maxDelay?: number } = {},
 ): Promise<void> => {
   const { minDelay = 100, maxDelay = 300 } = options;
 
@@ -78,7 +78,7 @@ export const simulateHumanTyping = async (
 
     // Random delay between minDelay and maxDelay
     const delay = Math.random() * (maxDelay - minDelay) + minDelay;
-    await new Promise(resolve => setTimeout(resolve, delay));
+    await new Promise((resolve) => setTimeout(resolve, delay));
   }
 
   // Simulate Enter key for completion
@@ -98,7 +98,7 @@ export const simulateHumanTyping = async (
  */
 export const simulateRapidEnterPresses = async (
   count: number = 2,
-  delay: number = 10
+  delay: number = 10,
 ): Promise<void> => {
   for (let i = 0; i < count; i++) {
     const enterEvent = new KeyboardEvent('keydown', {
@@ -110,7 +110,7 @@ export const simulateRapidEnterPresses = async (
     document.dispatchEvent(enterEvent);
 
     if (delay > 0 && i < count - 1) {
-      await new Promise(resolve => setTimeout(resolve, delay));
+      await new Promise((resolve) => setTimeout(resolve, delay));
     }
   }
 };
@@ -122,7 +122,7 @@ export const simulateRapidEnterPresses = async (
  */
 export const waitForScanResult = (
   onScan: (result: HardwareScanResult) => void,
-  timeout: number = 1000
+  timeout: number = 1000,
 ): Promise<HardwareScanResult | null> => {
   return new Promise((resolve) => {
     const timeoutId = setTimeout(() => {
@@ -147,7 +147,7 @@ export const waitForScanResult = (
  */
 export const createMockScanResult = (
   barcode: string,
-  overrides: Partial<HardwareScanResult> = {}
+  overrides: Partial<HardwareScanResult> = {},
 ): HardwareScanResult => ({
   barcode,
   timestamp: Date.now(),
@@ -158,10 +158,7 @@ export const createMockScanResult = (
 /**
  * Test utility to create GS1 mock scan results
  */
-export const createMockGS1ScanResult = (
-  barcode: string,
-  gs1Data: any
-): HardwareScanResult => ({
+export const createMockGS1ScanResult = (barcode: string, gs1Data: any): HardwareScanResult => ({
   barcode,
   timestamp: Date.now(),
   source: 'hardware',

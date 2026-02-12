@@ -1,0 +1,398 @@
+/**
+ * Handheld Styling for PDT Devices
+ * Optimizes UI for 5" screens (≤600×900px) including typography, touch targets, and spacing
+ * Used by Zebra TC21-HC, CipherLab RS36, Honeywell CT45 XP, and similar devices
+ */
+
+@media (max-width: 600px) and (max-height: 900px) {
+  /* ============================================
+     1. TYPOGRAPHY OVERRIDES
+     ============================================ */
+
+  /* Base font size: 16px (from default 14px) for better readability on 5" screens */
+  body {
+    font-size: 16px;
+  }
+
+  /* Form labels: explicit 14px with better line spacing */
+  label,
+  .label,
+  [class*='label'] {
+    font-size: 14px;
+    line-height: 1.4;
+    margin-bottom: 0.5rem;
+  }
+
+  /* Help text and secondary text: minimum 14px */
+  .help-text,
+  .text-help,
+  small,
+  [class*='helper'],
+  [class*='hint'] {
+    font-size: 14px;
+    line-height: 1.4;
+  }
+
+  /* Headings: proportional reduction for compact display */
+  h1 {
+    font-size: 20px;
+    line-height: 1.2;
+    margin-bottom: 0.75rem;
+  }
+
+  h2 {
+    font-size: 18px;
+    line-height: 1.2;
+    margin-bottom: 0.5rem;
+  }
+
+  h3 {
+    font-size: 16px;
+    line-height: 1.2;
+    margin-bottom: 0.5rem;
+  }
+
+  /* ============================================
+     2. TOUCH TARGET SIZING (WCAG AA: 44×44px, Industry Standard: 48×48px)
+     ============================================ */
+
+  /* Primary and secondary buttons: 48×48px minimum */
+  button,
+  [role='button'],
+  .btn,
+  [class*='button'],
+  input[type='button'],
+  input[type='submit'],
+  input[type='reset'] {
+    min-height: 48px;
+    min-width: 48px;
+    padding: 12px 16px;
+    font-size: 16px;
+  }
+
+  /* Anchor links used as buttons: 48×48px */
+  a[role='button'],
+  a.btn,
+  [class*='btn'] {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    min-height: 48px;
+    min-width: 48px;
+    padding: 12px 16px;
+    font-size: 16px;
+  }
+
+  /* Form inputs: 44px height (with padding for adequate touch area) */
+  input[type='text'],
+  input[type='email'],
+  input[type='password'],
+  input[type='search'],
+  input[type='tel'],
+  input[type='url'],
+  input[type='number'],
+  textarea,
+  select,
+  [class*='input'],
+  [role='combobox'] {
+    min-height: 44px;
+    padding: 10px 12px;
+    font-size: 16px;
+  }
+
+  /* Checkboxes and radio buttons: 44×44px touch target (with label) */
+  input[type='checkbox'],
+  input[type='radio'],
+  [role='checkbox'],
+  [role='radio'] {
+    min-height: 44px;
+    min-width: 44px;
+    cursor: pointer;
+  }
+
+  /* Dropdown and select elements */
+  select {
+    min-height: 44px;
+    padding: 8px 12px;
+  }
+
+  /* Toolbar icons and small buttons: 48×48px */
+  [class*='icon-button'],
+  [class*='toolbar'] button,
+  button[type='icon'],
+  .icon-btn {
+    min-height: 48px;
+    min-width: 48px;
+    padding: 8px;
+  }
+
+  /* Link touch targets: ensure adequate click area */
+  a {
+    padding: 4px 2px; /* Subtle padding to expand touch area */
+  }
+
+  /* ============================================
+     3. SPACING & PADDING OPTIMIZATION
+     ============================================ */
+
+  /* Card and section padding: 12px (down from 16px) to maximize vertical space */
+  [class*='card'],
+  [class*='panel'],
+  [class*='section'],
+  .rounded-lg,
+  [role='region'] {
+    padding: 12px;
+  }
+
+  /* Vertical margins between form sections: 8-12px */
+  .space-y-4 {
+    --space-y: 8px;
+  }
+
+  .space-y-6 {
+    --space-y: 10px;
+  }
+
+  /* Horizontal padding on page edges: 8-12px */
+  main {
+    padding: 8px 12px !important;
+  }
+
+  /* Gap between list items and flex children: 8px */
+  [class*='gap'] {
+    gap: 8px;
+  }
+
+  /* ============================================
+     4. HIDE NON-ESSENTIAL UI FOR HANDHELD
+     ============================================ */
+
+  /* Hide the main desktop navigation bar (replaced by HandheldScanToolbar) */
+  nav[class*='bg-primary'] {
+    display: none !important;
+  }
+
+  /* Alternative: if nav isn't easy to target, try container approach */
+  nav.main-nav,
+  [class*='navbar'] {
+    display: none !important;
+  }
+
+  /* Hide Markdown Calculator link (not a handheld workflow) */
+  a[href='/markdown-calculator'] {
+    display: none !important;
+  }
+
+  /* Hide Reports dropdown menu items - target the dropdown trigger */
+  li a[href='/reports'],
+  li a[href='/detailed-expiry-report'],
+  li a[href='/expired-items'],
+  li a[href='/usage-report'] {
+    display: none !important;
+  }
+
+  /* Hide User Management and Store Area links (Manager-only) */
+  li a[href='/user-management'],
+  li a[href='/store-area-management'],
+  li a[href='/csv-upload'] {
+    display: none !important;
+  }
+
+  /* Alternative: hide by direct link selector */
+  a[href='/reports'],
+  a[href='/detailed-expiry-report'],
+  a[href='/expired-items'],
+  a[href='/usage-report'],
+  a[href='/user-management'],
+  a[href='/store-area-management'],
+  a[href='/csv-upload'] {
+    display: none !important;
+  }
+
+  /* ============================================
+     5. FULL-SCREEN SCAN AREA
+     ============================================ */
+
+  /* Camera scanner full-screen mode: fill available height minus toolbar */
+  .camera-scanner {
+    height: calc(100vh - 80px) !important;
+  }
+
+  /* Video element: full width and height */
+  video,
+  canvas[class*='scan'] {
+    width: 100%;
+    height: 100%;
+    object-fit: cover;
+  }
+
+  /* Scanner controls: positioned at bottom, adequate spacing */
+  [class*='scan-controls'],
+  [class*='scanner-footer'] {
+    padding: 12px;
+    gap: 8px;
+    display: flex;
+    flex-wrap: wrap;
+  }
+
+  /* ============================================
+     6. HANDHELD LAYOUT UTILITIES
+     ============================================ */
+
+  /* Full-screen scan area indicator */
+  .full-screen-scan {
+    height: 100vh !important;
+    width: 100vw !important;
+    overflow: hidden;
+  }
+
+  /* Handheld scanner wrapper */
+  .handheld-scanner {
+    height: 100%;
+    width: 100%;
+    display: flex;
+    flex-direction: column;
+  }
+
+  /* Toolbar spacing and sizing */
+  [class*='handheld-scan-toolbar'],
+  [class*='toolbar'] {
+    min-height: 60px;
+    padding: 8px 12px;
+    gap: 8px;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+  }
+
+  /* Sync status indicator visibility */
+  [class*='sync-status'],
+  [class*='sync-indicator'] {
+    font-size: 14px;
+    font-weight: 500;
+  }
+
+  /* ============================================
+     7. FORM OPTIMIZATION
+     ============================================ */
+
+  /* Form groups: tighter spacing */
+  [class*='form-group'],
+  fieldset {
+    margin-bottom: 12px;
+  }
+
+  /* Input with label: stack vertically with minimal gap */
+  label + input,
+  label + select,
+  label + textarea {
+    margin-top: 4px;
+  }
+
+  /* Error messages: clear visibility */
+  [class*='error'],
+  [role='alert'],
+  .text-red-500 {
+    font-size: 14px;
+    padding: 8px;
+    margin-top: 4px;
+  }
+
+  /* ============================================
+     8. TOUCH-FRIENDLY INTERACTIVE ELEMENTS
+     ============================================ */
+
+  /* Dropdown menus: larger touch area and better spacing */
+  [role='menu'],
+  [role='listbox'],
+  [class*='menu'] {
+    padding: 8px 0;
+  }
+
+  [role='menuitem'],
+  [role='option'],
+  [class*='menu-item'] {
+    padding: 12px 16px;
+    font-size: 16px;
+    min-height: 44px;
+  }
+
+  /* Modal dialogs: full width on small screens */
+  [role='dialog'],
+  .modal,
+  [class*='dialog'] {
+    width: 100vw !important;
+    max-width: 100% !important;
+    margin: 0 !important;
+    border-radius: 0 !important;
+  }
+
+  /* ============================================
+     9. ACCESSIBILITY & VISIBILITY
+     ============================================ */
+
+  /* Ensure screen reader text remains visible in layout */
+  .sr-only {
+    position: absolute;
+    width: 1px;
+    height: 1px;
+    padding: 0;
+    margin: -1px;
+    overflow: hidden;
+    clip: rect(0, 0, 0, 0);
+    white-space: nowrap;
+    border-width: 0;
+  }
+
+  /* Focus indicators: prominent for handheld */
+  button:focus,
+  input:focus,
+  select:focus,
+  textarea:focus,
+  a:focus {
+    outline: 2px solid #0284c7;
+    outline-offset: 2px;
+  }
+
+  /* ============================================
+     10. CONTAINER QUERIES / RESPONSIVE IMAGES
+     ============================================ */
+
+  /* Images: no larger than viewport */
+  img {
+    max-width: 100%;
+    height: auto;
+  }
+
+  /* Ensure no horizontal scrolling */
+  body {
+    overflow-x: hidden;
+  }
+
+  /* ============================================
+     11. DISABLE UNNECESSARY FEATURES
+     ============================================ */
+
+  /* Disable text selection for optimal touch experience (can be re-enabled per component) */
+  [class*='unselectable'] {
+    user-select: none;
+  }
+
+  /* Prevent double-tap zoom delay */
+  button,
+  input[type='button'],
+  input[type='submit'],
+  a[role='button'] {
+    touch-action: manipulation;
+  }
+}
+
+/* ============================================
+   ADDITIONAL: High-DPI / Retina Adjustments
+   ============================================ */
+@media (max-width: 600px) and (max-height: 900px) and (min-device-pixel-ratio: 2) {
+  /* Slightly adjust fonts for high-DPI screens */
+  body {
+    -webkit-text-size-adjust: 100%;
+  }
+}

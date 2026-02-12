@@ -1,0 +1,4 @@
+Performing delta analysis between . and feature/handheld-ui-components.
+Any uncommitted changes are also included.
+
+No issues found!
