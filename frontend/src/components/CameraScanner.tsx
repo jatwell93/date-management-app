@@ -1,5 +1,6 @@
 import React, { useEffect, useRef, useState, useCallback } from 'react';
 import Quagga from 'quagga';
+import { triggerHaptic } from '../lib/haptic';
 
 interface CameraScannerProps {
   onDetected: (code: string) => void;
@@ -81,6 +82,14 @@ export function CameraScanner({
 
       Quagga.onDetected((data: any) => {
         if (data && data.codeResult && data.codeResult.code) {
+          // Trigger haptic feedback on successful barcode detection
+          triggerHaptic(50);
+
+          onDetected(data.codeResult.code);
+          // Stop the scanner after a successful detection to prevent continuous scanning
+          setTimeout(() => {
+            Quagga.stop();
+          }, 1000);
           const barcode = data.codeResult.code;
 
           // Skip duplicate barcodes within 2-second window
@@ -137,7 +146,7 @@ export function CameraScanner({
           <div className="text-center p-4">
             <p className={`text-red-500 font-medium mb-2 ${isHandheld ? 'text-lg' : ''}`}>
               Camera Error
-            </p>
+            </p>https://github.com/jatwell93/date-management-app/pull/43/conflict?name=frontend%252Fsrc%252Fcomponents%252FCameraScanner.tsx&ancestor_oid=194e9f71835f3e60d728284252d7a2774dadb636&base_oid=86fa756a17a89b31b528ac167b5b5364a0b67140&head_oid=09703e50d4720e29d982fa6914a1b8c565010df2
             <p className={`text-gray-600 ${isHandheld ? 'text-base' : 'text-sm'}`}>{error}</p>
             <button
               type="button"
