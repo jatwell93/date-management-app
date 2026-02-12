@@ -31,7 +31,8 @@ jest.mock('../../contexts/HandheldContext', () => ({
   useHandheldDetectionContext: jest.fn(),
 }));
 
-const mockUseHandheldDetectionContext = require('../../contexts/HandheldContext').useHandheldDetectionContext;
+const mockUseHandheldDetectionContext =
+  require('../../contexts/HandheldContext').useHandheldDetectionContext;
 
 describe('HandheldScanner', () => {
   const mockOnScan = jest.fn();
@@ -43,13 +44,18 @@ describe('HandheldScanner', () => {
   it('renders Scanner with defaultMode="camera" when isHandheld=true', () => {
     mockUseHandheldDetectionContext.mockReturnValue({
       isHandheld: true,
-      detectionResult: { isHandheld: true, method: 'userAgent', screenWidth: 480, screenHeight: 800 },
+      detectionResult: {
+        isHandheld: true,
+        method: 'userAgent',
+        screenWidth: 480,
+        screenHeight: 800,
+      },
     });
 
     render(
       <HandheldProvider>
         <HandheldScanner onScan={mockOnScan} />
-      </HandheldProvider>
+      </HandheldProvider>,
     );
 
     expect(screen.getByTestId('scanner-mock')).toBeInTheDocument();
@@ -59,13 +65,18 @@ describe('HandheldScanner', () => {
   it('renders Scanner with defaultMode="text" when isHandheld=false', () => {
     mockUseHandheldDetectionContext.mockReturnValue({
       isHandheld: false,
-      detectionResult: { isHandheld: false, method: 'unknown', screenWidth: 1200, screenHeight: 800 },
+      detectionResult: {
+        isHandheld: false,
+        method: 'unknown',
+        screenWidth: 1200,
+        screenHeight: 800,
+      },
     });
 
     render(
       <HandheldProvider>
         <HandheldScanner onScan={mockOnScan} />
-      </HandheldProvider>
+      </HandheldProvider>,
     );
 
     expect(screen.getByTestId('scanner-mock')).toBeInTheDocument();
@@ -75,13 +86,18 @@ describe('HandheldScanner', () => {
   it('applies handheld-specific styling classes', () => {
     mockUseHandheldDetectionContext.mockReturnValue({
       isHandheld: true,
-      detectionResult: { isHandheld: true, method: 'userAgent', screenWidth: 480, screenHeight: 800 },
+      detectionResult: {
+        isHandheld: true,
+        method: 'userAgent',
+        screenWidth: 480,
+        screenHeight: 800,
+      },
     });
 
     const { container } = render(
       <HandheldProvider>
         <HandheldScanner onScan={mockOnScan} />
-      </HandheldProvider>
+      </HandheldProvider>,
     );
 
     // Check for handheld-specific classes
@@ -93,13 +109,18 @@ describe('HandheldScanner', () => {
   it('passes onScan prop to Scanner component', () => {
     mockUseHandheldDetectionContext.mockReturnValue({
       isHandheld: true,
-      detectionResult: { isHandheld: true, method: 'userAgent', screenWidth: 480, screenHeight: 800 },
+      detectionResult: {
+        isHandheld: true,
+        method: 'userAgent',
+        screenWidth: 480,
+        screenHeight: 800,
+      },
     });
 
     render(
       <HandheldProvider>
         <HandheldScanner onScan={mockOnScan} />
-      </HandheldProvider>
+      </HandheldProvider>,
     );
 
     // The mock Scanner should receive the onScan prop

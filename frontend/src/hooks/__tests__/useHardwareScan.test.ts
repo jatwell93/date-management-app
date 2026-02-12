@@ -37,10 +37,10 @@ describe('useHardwareScan', () => {
 
     it('should respect enabled prop', () => {
       const { result: enabledResult } = renderHook(() =>
-        useHardwareScan({ onScan: mockOnScan, enabled: true })
+        useHardwareScan({ onScan: mockOnScan, enabled: true }),
       );
       const { result: disabledResult } = renderHook(() =>
-        useHardwareScan({ onScan: mockOnScan, enabled: false })
+        useHardwareScan({ onScan: mockOnScan, enabled: false }),
       );
 
       expect(enabledResult.current.isListening).toBe(true);

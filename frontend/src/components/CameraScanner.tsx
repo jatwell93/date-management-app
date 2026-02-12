@@ -9,7 +9,13 @@ interface CameraScannerProps {
   isHandheld?: boolean;
 }
 
-export function CameraScanner({ onDetected, onScannerReady, onScannerReset, continuous = false, isHandheld = false }: CameraScannerProps) {
+export function CameraScanner({
+  onDetected,
+  onScannerReady,
+  onScannerReset,
+  continuous = false,
+  isHandheld = false,
+}: CameraScannerProps) {
   const videoRef = useRef<HTMLDivElement>(null);
   const [error, setError] = useState<string | null>(null);
   const recentScansRef = useRef<Set<string>>(new Set());
@@ -123,11 +129,15 @@ export function CameraScanner({ onDetected, onScannerReady, onScannerReset, cont
   if (error) {
     return (
       <div className={`camera-scanner ${isHandheld ? 'h-full flex flex-col' : ''}`}>
-        <div className={`w-full bg-gray-200 flex items-center justify-center rounded border border-dashed ${
-          isHandheld ? 'flex-1 min-h-[300px]' : 'h-64'
-        }`}>
+        <div
+          className={`w-full bg-gray-200 flex items-center justify-center rounded border border-dashed ${
+            isHandheld ? 'flex-1 min-h-[300px]' : 'h-64'
+          }`}
+        >
           <div className="text-center p-4">
-            <p className={`text-red-500 font-medium mb-2 ${isHandheld ? 'text-lg' : ''}`}>Camera Error</p>
+            <p className={`text-red-500 font-medium mb-2 ${isHandheld ? 'text-lg' : ''}`}>
+              Camera Error
+            </p>
             <p className={`text-gray-600 ${isHandheld ? 'text-base' : 'text-sm'}`}>{error}</p>
             <button
               type="button"
@@ -146,13 +156,22 @@ export function CameraScanner({ onDetected, onScannerReady, onScannerReset, cont
 
   return (
     <div className={`camera-scanner ${isHandheld ? 'h-full flex flex-col' : ''}`}>
-      <div ref={videoRef} className={`w-full bg-black flex items-center justify-center rounded ${
-        isHandheld ? 'flex-1' : 'h-64'
-      }`}>
+      <div
+        ref={videoRef}
+        className={`w-full bg-black flex items-center justify-center rounded ${
+          isHandheld ? 'flex-1' : 'h-64'
+        }`}
+      >
         <div className="text-white text-center">
           <p className={isHandheld ? 'text-lg' : ''}>Camera feed will appear here</p>
-          <p className={`mt-2 ${isHandheld ? 'text-base' : 'text-sm'}`}>Point your camera at a barcode</p>
-          {continuous && <p className={`mt-1 text-yellow-300 ${isHandheld ? 'text-sm' : 'text-xs'}`}>Continuous scan mode</p>}
+          <p className={`mt-2 ${isHandheld ? 'text-base' : 'text-sm'}`}>
+            Point your camera at a barcode
+          </p>
+          {continuous && (
+            <p className={`mt-1 text-yellow-300 ${isHandheld ? 'text-sm' : 'text-xs'}`}>
+              Continuous scan mode
+            </p>
+          )}
         </div>
       </div>
       <button

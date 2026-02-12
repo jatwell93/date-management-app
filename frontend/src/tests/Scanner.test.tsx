@@ -47,7 +47,7 @@ describe('Scanner', () => {
       clearBuffer: jest.fn(),
       lastScan: null,
     });
-    
+
     // Default Quagga mock - success
     (Quagga.init as jest.Mock).mockImplementation((config, callback) => {
       callback(null); // Success

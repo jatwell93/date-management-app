@@ -588,17 +588,15 @@ export function ScanPage({ token }: ScanPageProps) {
           userName="User" // TODO: Get from auth context
           syncStatus={navigator.onLine ? 'synced' : 'offline'} // TODO: Get from sync context
           onSyncNow={handleSyncNow}
-          onSettingsClick={() => {}} // TODO: Implement settings navigation
+          onSettingsClick={() => {
+            // TODO: Implement settings navigation
+          }}
           queueLength={0} // TODO: Get from offline storage
         >
-          <div data-testid="scan-page-main">
-            {renderContent()}
-          </div>
+          <div data-testid="scan-page-main">{renderContent()}</div>
         </HandheldLayout>
       ) : (
-        <div data-testid="scan-page-main">
-          {renderContent()}
-        </div>
+        <div data-testid="scan-page-main">{renderContent()}</div>
       )}
     </>
   );

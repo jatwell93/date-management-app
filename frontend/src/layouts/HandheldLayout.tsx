@@ -7,8 +7,12 @@ export const HandheldLayout: React.FC<HandheldLayoutProps> = ({
   children,
   userName,
   syncStatus = 'synced',
-  onSyncNow = () => {},
-  onSettingsClick = () => {},
+  onSyncNow = () => {
+    // Default empty handler
+  },
+  onSettingsClick = () => {
+    // Default empty handler
+  },
   queueLength = 0,
 }) => {
   const { isHandheld } = useHandheldDetectionContext();
@@ -16,7 +20,7 @@ export const HandheldLayout: React.FC<HandheldLayoutProps> = ({
   return (
     <div className={isHandheld ? 'h-screen flex flex-col' : ''}>
       {isHandheld && (
-        <HandheldScanToolbar 
+        <HandheldScanToolbar
           userName={userName}
           syncStatus={syncStatus}
           onSyncNow={onSyncNow}
@@ -24,11 +28,7 @@ export const HandheldLayout: React.FC<HandheldLayoutProps> = ({
           queueLength={queueLength}
         />
       )}
-      <main className={
-        isHandheld
-          ? 'flex-1 overflow-auto'
-          : 'p-4 max-w-7xl mx-auto'
-      }>
+      <main className={isHandheld ? 'flex-1 overflow-auto' : 'p-4 max-w-7xl mx-auto'}>
         {children}
       </main>
     </div>

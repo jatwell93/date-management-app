@@ -56,7 +56,10 @@ export const useHardwareScan = ({
       // Check for duplicate scans within dedup window
       const now = Date.now();
       const lastScanTime = lastScanRef.current?.timestamp || 0;
-      if (now - lastScanTime < TIMING_CONSTANTS.DEDUP_WINDOW_MS && lastScanRef.current?.barcode === barcode) {
+      if (
+        now - lastScanTime < TIMING_CONSTANTS.DEDUP_WINDOW_MS &&
+        lastScanRef.current?.barcode === barcode
+      ) {
         clearBuffer();
         return;
       }
@@ -78,10 +81,13 @@ export const useHardwareScan = ({
 
       // Store last barcode for dedup
       try {
-        localStorage.setItem(LAST_SCAN_KEY, JSON.stringify({
-          barcode,
-          timestamp: now,
-        }));
+        localStorage.setItem(
+          LAST_SCAN_KEY,
+          JSON.stringify({
+            barcode,
+            timestamp: now,
+          }),
+        );
       } catch (error) {
         // Ignore localStorage errors (e.g., quota exceeded)
         console.warn('Failed to store last scan in localStorage:', error);
@@ -90,7 +96,7 @@ export const useHardwareScan = ({
       onScan(scanResult);
       clearBuffer();
     },
-    [onScan, minLength, maxLength, clearBuffer]
+    [onScan, minLength, maxLength, clearBuffer],
   );
 
   // Handle keydown events
@@ -102,7 +108,10 @@ export const useHardwareScan = ({
       const timeSinceLastKey = now - lastKeyTimeRef.current;
 
       // If this is the first key or within the hardware scan threshold
-      if (lastKeyTimeRef.current === 0 || timeSinceLastKey <= TIMING_CONSTANTS.KEYBOARD_WEDGE_THRESHOLD_MS) {
+      if (
+        lastKeyTimeRef.current === 0 ||
+        timeSinceLastKey <= TIMING_CONSTANTS.KEYBOARD_WEDGE_THRESHOLD_MS
+      ) {
         // Handle special keys
         if (event.key === 'Enter') {
           // Enter key marks end of barcode
@@ -138,7 +147,7 @@ export const useHardwareScan = ({
         clearBuffer();
       }
     },
-    [enabled, minLength, processScan, clearBuffer]
+    [enabled, minLength, processScan, clearBuffer],
   );
 
   // Set up event listeners

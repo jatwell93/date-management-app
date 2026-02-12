@@ -155,7 +155,7 @@ const ExpiredItemsPage: React.FC<ExpiredItemsPageProps> = ({ token }) => {
     try {
       setProcessError(null);
 
-      let processUnitsDiscarded = action === 'expired' ? unitsDiscarded : 0;
+      const processUnitsDiscarded = action === 'expired' ? unitsDiscarded : 0;
 
       await processExpiredItem(
         {

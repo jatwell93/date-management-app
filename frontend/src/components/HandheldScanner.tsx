@@ -16,7 +16,7 @@ export const HandheldScanner: React.FC<HandheldScannerProps> = ({
   const { isHandheld } = useHandheldDetectionContext();
 
   // Determine default mode based on handheld detection
-  const scannerDefaultMode = isHandheld ? 'camera' : (defaultMode || 'text');
+  const scannerDefaultMode = isHandheld ? 'camera' : defaultMode || 'text';
 
   return (
     <div className={`handheld-scanner ${isHandheld ? 'full-screen-scan' : ''} ${className}`}>

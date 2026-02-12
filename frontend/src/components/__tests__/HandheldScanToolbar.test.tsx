@@ -9,7 +9,8 @@ jest.mock('../../contexts/HandheldContext', () => ({
   useHandheldDetectionContext: jest.fn(),
 }));
 
-const mockUseHandheldDetectionContext = require('../../contexts/HandheldContext').useHandheldDetectionContext;
+const mockUseHandheldDetectionContext =
+  require('../../contexts/HandheldContext').useHandheldDetectionContext;
 
 describe('HandheldScanToolbar', () => {
   const mockOnSyncNow = jest.fn();
@@ -27,7 +28,12 @@ describe('HandheldScanToolbar', () => {
     jest.clearAllMocks();
     mockUseHandheldDetectionContext.mockReturnValue({
       isHandheld: true,
-      detectionResult: { isHandheld: true, method: 'userAgent', screenWidth: 480, screenHeight: 800 },
+      detectionResult: {
+        isHandheld: true,
+        method: 'userAgent',
+        screenWidth: 480,
+        screenHeight: 800,
+      },
     });
   });
 
@@ -35,7 +41,7 @@ describe('HandheldScanToolbar', () => {
     render(
       <HandheldProvider>
         <HandheldScanToolbar {...defaultProps} />
-      </HandheldProvider>
+      </HandheldProvider>,
     );
 
     expect(screen.getByText('John Doe')).toBeInTheDocument();
@@ -45,7 +51,7 @@ describe('HandheldScanToolbar', () => {
     render(
       <HandheldProvider>
         <HandheldScanToolbar {...defaultProps} syncStatus="syncing" />
-      </HandheldProvider>
+      </HandheldProvider>,
     );
 
     expect(screen.getByText('Syncing...')).toBeInTheDocument();
@@ -55,7 +61,7 @@ describe('HandheldScanToolbar', () => {
     const { rerender } = render(
       <HandheldProvider>
         <HandheldScanToolbar {...defaultProps} syncStatus="synced" />
-      </HandheldProvider>
+      </HandheldProvider>,
     );
 
     expect(screen.getByText('Synced')).toBeInTheDocument();
@@ -63,7 +69,7 @@ describe('HandheldScanToolbar', () => {
     rerender(
       <HandheldProvider>
         <HandheldScanToolbar {...defaultProps} syncStatus="offline" />
-      </HandheldProvider>
+      </HandheldProvider>,
     );
 
     expect(screen.getByText('Offline')).toBeInTheDocument();
@@ -71,7 +77,7 @@ describe('HandheldScanToolbar', () => {
     rerender(
       <HandheldProvider>
         <HandheldScanToolbar {...defaultProps} syncStatus="failed" />
-      </HandheldProvider>
+      </HandheldProvider>,
     );
 
     expect(screen.getByText('Sync Failed')).toBeInTheDocument();
@@ -81,7 +87,7 @@ describe('HandheldScanToolbar', () => {
     render(
       <HandheldProvider>
         <HandheldScanToolbar {...defaultProps} queueLength={0} />
-      </HandheldProvider>
+      </HandheldProvider>,
     );
 
     const syncButton = screen.getByRole('button', { name: /sync now/i });
@@ -92,7 +98,7 @@ describe('HandheldScanToolbar', () => {
     render(
       <HandheldProvider>
         <HandheldScanToolbar {...defaultProps} queueLength={5} />
-      </HandheldProvider>
+      </HandheldProvider>,
     );
 
     const syncButton = screen.getByRole('button', { name: /sync now/i });
@@ -103,7 +109,7 @@ describe('HandheldScanToolbar', () => {
     render(
       <HandheldProvider>
         <HandheldScanToolbar {...defaultProps} queueLength={3} />
-      </HandheldProvider>
+      </HandheldProvider>,
     );
 
     const syncButton = screen.getByRole('button', { name: /sync now/i });
@@ -122,7 +128,7 @@ describe('HandheldScanToolbar', () => {
     render(
       <HandheldProvider>
         <HandheldScanToolbar {...defaultProps} />
-      </HandheldProvider>
+      </HandheldProvider>,
     );
 
     // Toolbar should render successfully with context sync strategy
@@ -133,7 +139,7 @@ describe('HandheldScanToolbar', () => {
     render(
       <HandheldProvider>
         <HandheldScanToolbar {...defaultProps} />
-      </HandheldProvider>
+      </HandheldProvider>,
     );
 
     const settingsButton = screen.getByRole('button', { name: /settings/i });
@@ -144,7 +150,7 @@ describe('HandheldScanToolbar', () => {
     render(
       <HandheldProvider>
         <HandheldScanToolbar {...defaultProps} />
-      </HandheldProvider>
+      </HandheldProvider>,
     );
 
     const settingsButton = screen.getByRole('button', { name: /settings/i });
@@ -157,7 +163,7 @@ describe('HandheldScanToolbar', () => {
     const { container } = render(
       <HandheldProvider>
         <HandheldScanToolbar {...defaultProps} />
-      </HandheldProvider>
+      </HandheldProvider>,
     );
 
     const toolbar = container.firstChild;
@@ -169,7 +175,7 @@ describe('HandheldScanToolbar', () => {
     const { container } = render(
       <HandheldProvider>
         <HandheldScanToolbar {...defaultProps} />
-      </HandheldProvider>
+      </HandheldProvider>,
     );
 
     const toolbar = container.firstChild;

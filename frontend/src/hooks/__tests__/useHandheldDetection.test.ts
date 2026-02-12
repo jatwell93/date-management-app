@@ -44,7 +44,7 @@ describe('useHandheldDetection', () => {
     // Reset user agent
     Object.defineProperty(navigator, 'userAgent', {
       value: 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36',
-      writable: true
+      writable: true,
     });
   });
 
@@ -78,7 +78,7 @@ describe('useHandheldDetection', () => {
     it('should detect Zebra device', () => {
       Object.defineProperty(navigator, 'userAgent', {
         value: 'Mozilla/5.0 (Linux; Android 8.1.0; TC21) AppleWebKit/537.36',
-        writable: true
+        writable: true,
       });
 
       const { result } = renderHook(() => useHandheldDetection());
@@ -91,7 +91,7 @@ describe('useHandheldDetection', () => {
     it('should detect Honeywell device', () => {
       Object.defineProperty(navigator, 'userAgent', {
         value: 'Mozilla/5.0 (Linux; Android 8.1.0; CT45) AppleWebKit/537.36 Honeywell',
-        writable: true
+        writable: true,
       });
 
       const { result } = renderHook(() => useHandheldDetection());
@@ -104,7 +104,7 @@ describe('useHandheldDetection', () => {
     it('should detect CipherLab device', () => {
       Object.defineProperty(navigator, 'userAgent', {
         value: 'Mozilla/5.0 (Linux; Android 8.1.0; RS36) AppleWebKit/537.36 CipherLab',
-        writable: true
+        writable: true,
       });
 
       const { result } = renderHook(() => useHandheldDetection());
@@ -217,7 +217,7 @@ describe('useHandheldDetection', () => {
       localStorageMock.getItem.mockReturnValue('true');
       Object.defineProperty(navigator, 'userAgent', {
         value: 'Mozilla/5.0 (Linux; Android 8.1.0; TC21) AppleWebKit/537.36',
-        writable: true
+        writable: true,
       });
 
       const { result } = renderHook(() => useHandheldDetection());
@@ -230,7 +230,7 @@ describe('useHandheldDetection', () => {
     it('should prioritize user agent over screen dimensions', () => {
       Object.defineProperty(navigator, 'userAgent', {
         value: 'Mozilla/5.0 (Linux; Android 8.1.0; TC21) AppleWebKit/537.36',
-        writable: true
+        writable: true,
       });
       Object.defineProperty(window, 'innerWidth', { value: 1200, writable: true });
       Object.defineProperty(window, 'innerHeight', { value: 800, writable: true });

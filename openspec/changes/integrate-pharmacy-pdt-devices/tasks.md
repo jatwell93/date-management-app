@@ -83,19 +83,19 @@
 
 ## 6. Handheld Styling
 
-- [ ] 6.1 Create `frontend/src/styles/handheld.css` with media queries for:
+- [x] 6.1 Create `frontend/src/styles/handheld.css` with media queries for:
   - Small screens: `@media (max-width: 600px) and (max-height: 900px)`
   - Base font size increased to 16px (from default 14px)
   - Button minimum size 48×48 px with adequate padding
   - Input fields minimum height 44px (exceeds 48px but ensures readability)
   - Card padding/margins slightly tighter to maximize vertical space (12px instead of 16px)
   - Form labels and help text slightly larger (14px, line-height 1.4)
-- [ ] 6.2 Add CSS to hide non-essential UI on handheld (if `isHandheld` class on body):
+- [x] 6.2 Add CSS to hide non-essential UI on handheld (if `isHandheld` class on body):
   - Markdown calculator link (not a handheld workflow)
   - Reports dropdown (accessible via menu but not primary nav)
   - User management / store area links (hidden unless Manager, then in dropdown)
-- [ ] 6.3 Add full-screen scan area CSS (height: 100vh - header height when in camera mode)
-- [ ] 6.4 Import handheld.css in App.tsx or globals.css
+- [x] 6.3 Add full-screen scan area CSS (height: 100vh - header height when in camera mode)
+- [x] 6.4 Import handheld.css in App.tsx or globals.css
 
 ## 7. Sync Strategy Implementation
 
