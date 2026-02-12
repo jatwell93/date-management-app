@@ -1,5 +1,8 @@
 import React, { useState, useEffect } from 'react';
 import { Scanner } from '../components/Scanner';
+import { HandheldScanner } from '../components/HandheldScanner';
+import { HandheldScanToolbar } from '../components/HandheldScanToolbar';
+import { HandheldLayout } from '../layouts/HandheldLayout';
 import { Card, CardContent, CardHeader, CardTitle } from '../components/ui/card';
 import { Input } from '../components/ui/input';
 import { Button } from '../components/ui/button';
@@ -14,6 +17,10 @@ import {
 import { offlineStorage } from '../lib/offline-storage';
 import { isWithinMarkdownPeriod, calculateMarkdownPrice } from '../lib/utils';
 import { apiService } from '../lib/api.service';
+import { parseGS1Barcode } from '../lib/gs1-parser';
+import { synchronizeOfflineData } from '../lib/sync-manager';
+import { useHandheldDetectionContext } from '../contexts/HandheldContext';
+import { HardwareScanResult } from '../types/handheld';
 import {
   AlertDialog,
   AlertDialogAction,
@@ -65,6 +72,7 @@ interface RecentInventoryItem {
 }
 
 export function ScanPage({ token }: ScanPageProps) {
+  const { isHandheld } = useHandheldDetectionContext();
   const [scannedBarcode, setScannedBarcode] = useState<string | null>(null);
   const [productDetails, setProductDetails] = useState<ProductDetails | null>(null);
   const [expiryDate, setExpiryDate] = useState<string>('');
@@ -116,7 +124,8 @@ export function ScanPage({ token }: ScanPageProps) {
     }
   }, [productDetails, expiryDate]);
 
-  const handleBarcodeScan = async (input: string) => {
+  const handleBarcodeScan = async (result: HardwareScanResult) => {
+    let input = result.barcode;
     setScannedBarcode(input);
     setProductDetails(null);
     setRecentEntries(null); // Reset recent entries when scanning a new item
@@ -131,6 +140,20 @@ export function ScanPage({ token }: ScanPageProps) {
     }
 
     try {
+      // Try to parse GS1 barcode and auto-populate expiry date
+      try {
+        const gs1Data = parseGS1Barcode(input);
+        if (gs1Data.expiryDate) {
+          setExpiryDate(gs1Data.expiryDate);
+        }
+        // Use the GTIN from GS1 data if available, otherwise use original input
+        const barcodeToSearch = gs1Data.gtin || input;
+        input = barcodeToSearch;
+      } catch (gs1Error) {
+        // If GS1 parsing fails, continue with original input
+        console.log('GS1 parsing failed, using original barcode:', gs1Error);
+      }
+
       let product: ProductDetails | null = null;
 
       const isSkuSearch = input.length <= 8;
@@ -300,41 +323,62 @@ export function ScanPage({ token }: ScanPageProps) {
   };
 
   const confirmDelete = async () => {
-    if (!token || itemToDelete === null) {
-      setError('Authentication token is missing or item to delete is not specified.');
-      setAlertDialogOpen(false);
-      return;
-    }
+    if (!token || !itemToDelete) return;
 
     try {
       await apiService.delete(`/inventory-items/${itemToDelete}`, token);
-
-      setRecentEntries((prevEntries) =>
-        prevEntries ? prevEntries.filter((entry) => entry.id !== itemToDelete) : null,
-      );
-
       setSuccessMessage('Inventory entry deleted successfully!');
-      setTimeout(() => setSuccessMessage(null), 3000);
+      setAlertDialogOpen(false);
+      setItemToDelete(null);
+      // Refresh recent entries if we have product details
+      if (productDetails) {
+        const recent: RecentInventoryItem[] = await apiService.get<RecentInventoryItem[]>(
+          `/inventory-items/recent/product/${productDetails.id}`,
+          token,
+        );
+        setRecentEntries(recent);
+      }
     } catch (err: unknown) {
       if (err instanceof Error) {
         setError(err.message);
       } else {
-        setError('An unknown error occurred while deleting the entry');
+        setError('An unknown error occurred');
       }
-    } finally {
-      setAlertDialogOpen(false);
-      setItemToDelete(null);
     }
   };
 
-  return (
+  const handleSyncNow = async () => {
+    if (!token) {
+      setError('Authentication token is missing.');
+      return;
+    }
+
+    try {
+      setError(null);
+      await synchronizeOfflineData(token);
+      setSuccessMessage('Sync completed successfully!');
+      setTimeout(() => setSuccessMessage(null), 3000);
+    } catch (err: unknown) {
+      if (err instanceof Error) {
+        setError(`Sync failed: ${err.message}`);
+      } else {
+        setError('Sync failed: An unknown error occurred');
+      }
+    }
+  };
+
+  const renderContent = () => (
     <div className="container mx-auto p-4 max-w-3xl">
       <Card className="w-full mx-auto border border-border bg-card text-card-foreground shadow-lg">
         <CardHeader className="bg-muted/50 border-b border-border">
           <CardTitle className="text-2xl font-bold text-center">Inventory Scan</CardTitle>
         </CardHeader>
         <CardContent className="p-6">
-          <Scanner onScan={handleBarcodeScan} />
+          {isHandheld ? (
+            <HandheldScanner onScan={handleBarcodeScan} />
+          ) : (
+            <Scanner onScan={handleBarcodeScan} />
+          )}
           {error && (
             <div
               className="bg-inventory-error-50 border border-inventory-error-400 text-inventory-error-800 px-4 py-3 rounded relative text-center mt-4"
@@ -535,5 +579,27 @@ export function ScanPage({ token }: ScanPageProps) {
         </CardContent>
       </Card>
     </div>
+  );
+
+  return (
+    <>
+      {isHandheld ? (
+        <HandheldLayout
+          userName="User" // TODO: Get from auth context
+          syncStatus={navigator.onLine ? 'synced' : 'offline'} // TODO: Get from sync context
+          onSyncNow={handleSyncNow}
+          onSettingsClick={() => {}} // TODO: Implement settings navigation
+          queueLength={0} // TODO: Get from offline storage
+        >
+          <div data-testid="scan-page-main">
+            {renderContent()}
+          </div>
+        </HandheldLayout>
+      ) : (
+        <div data-testid="scan-page-main">
+          {renderContent()}
+        </div>
+      )}
+    </>
   );
 }

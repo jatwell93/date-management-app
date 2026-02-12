@@ -47,6 +47,9 @@ export interface EnvironmentConfig {
   DIRECT_UPLOAD_THRESHOLD_BYTES: number;
   SENTRY_DSN?: string;
   SENTRY_FRONTEND_DSN?: string;
+  // Stripe Configuration (for SaaS monetization)
+  STRIPE_SECRET_KEY?: string;
+  STRIPE_WEBHOOK_SECRET?: string;
   // Error Handling Configuration
   ERROR_HIDE_STACK_TRACE_IN_PRODUCTION: boolean;
   ERROR_LOG_LEVEL: string;
@@ -153,6 +156,9 @@ function validateEnvironment(env: RawEnv, allowMissingRequired: boolean): Enviro
       : directThreshold,
     SENTRY_DSN: env.SENTRY_DSN,
     SENTRY_FRONTEND_DSN: env.SENTRY_FRONTEND_DSN,
+    // Stripe Configuration (for SaaS monetization)
+    STRIPE_SECRET_KEY: env.STRIPE_SECRET_KEY,
+    STRIPE_WEBHOOK_SECRET: env.STRIPE_WEBHOOK_SECRET,
     // Error Handling Configuration
     ERROR_HIDE_STACK_TRACE_IN_PRODUCTION: nodeEnv === 'production',
     ERROR_LOG_LEVEL: env.ERROR_LOG_LEVEL || 'error',

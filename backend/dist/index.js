@@ -56,6 +56,7 @@ const database_backup_routes_1 = __importDefault(require("./routes/database.back
 const expired_item_routes_1 = __importDefault(require("./routes/expired-item.routes"));
 const upload_routes_1 = __importDefault(require("./routes/upload.routes"));
 const storage_quota_routes_1 = __importDefault(require("./routes/storage-quota.routes"));
+const webhook_routes_1 = __importDefault(require("./routes/webhook.routes"));
 const auth_middleware_1 = require("./middleware/auth.middleware");
 const error_middleware_1 = require("./middleware/error.middleware");
 const cors_1 = require("./middleware/cors");
@@ -87,6 +88,9 @@ app.use((0, helmet_1.default)({
 }));
 // Apply global rate limiter (DDoS protection - 1000 requests per minute per IP)
 app.use(rateLimiter_1.globalLimiter);
+// IMPORTANT: Webhook route with raw body parser must come BEFORE express.json()
+// Stripe signature verification requires the raw body
+app.use('/api/webhooks', express_1.default.raw({ type: 'application/json' }), webhook_routes_1.default);
 // Middleware
 // Task 5.3: Configure request payload size limit (10MB)
 app.use(express_1.default.json({ limit: '10mb' }));

@@ -24,6 +24,7 @@ import { synchronizeOfflineData } from './lib/sync-manager';
 import { jwtDecode, JwtPayload } from 'jwt-decode';
 import { ToastProvider } from './components/ui/toast-provider';
 import { HandheldProvider } from './contexts/HandheldContext';
+import { HandheldLayout } from './layouts/HandheldLayout';
 import './globals.css';
 
 // Helper function to check for forceHandheld query parameter
@@ -84,6 +85,18 @@ const decodeTokenAndGetUserId = (token: string | null): number | null => {
   }
 };
 
+// Helper function to decode JWT and get user name
+const decodeTokenAndGetUserName = (token: string | null): string | null => {
+  if (!token) return null;
+  try {
+    const decodedToken = jwtDecode<JwtPayload & { name?: string; email?: string }>(token);
+    return decodedToken.name || decodedToken.email || null;
+  } catch (error) {
+    console.error('Error decoding user name:', error);
+    return null;
+  }
+};
+
 function App() {
   const [isLoggedIn, setIsLoggedIn] = useState(() => {
     const token = localStorage.getItem('authToken');
@@ -102,6 +115,9 @@ function App() {
   const [userId, setUserId] = useState<number | null>(() => {
     return decodeTokenAndGetUserId(localStorage.getItem('authToken'));
   });
+  const [userName, setUserName] = useState<string | null>(() => {
+    return decodeTokenAndGetUserName(localStorage.getItem('authToken'));
+  });
   const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
 
   const handleLogin = (newToken: string) => {
@@ -110,6 +126,7 @@ function App() {
     setToken(newToken);
     setUserRole(decodeTokenAndGetRole(newToken));
     setUserId(decodeTokenAndGetUserId(newToken));
+    setUserName(decodeTokenAndGetUserName(newToken));
   };
 
   const handleLogout = () => {
@@ -118,6 +135,7 @@ function App() {
     setToken(null);
     setUserRole(null);
     setUserId(null);
+    setUserName(null);
   };
 
   useEffect(() => {
@@ -434,9 +452,16 @@ function App() {
             </nav>
           )}
 
-          <main className="p-4 max-w-7xl mx-auto">
-            <ErrorBoundary>
-              <Routes>
+          <HandheldLayout 
+            userName={userName || undefined}
+            syncStatus="synced"
+            onSyncNow={() => {}}
+            onSettingsClick={() => {}}
+            queueLength={0}
+          >
+            <main className="p-4 max-w-7xl mx-auto">
+              <ErrorBoundary>
+                <Routes>
                 <Route
                   path="/login"
                   element={
@@ -516,7 +541,8 @@ function App() {
                 <Route path="*" element={<Navigate to="/login" />} />
               </Routes>
             </ErrorBoundary>
-          </main>
+            </main>
+          </HandheldLayout>
         </div>
       </Router>
     </HandheldProvider>

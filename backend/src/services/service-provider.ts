@@ -2,8 +2,7 @@ import { PrismaClient } from '@prisma/client';
 import { getDefaultDatabaseClient } from '../database/database-factory';
 import { getDefaultStorageProvider } from '../storage/storage-factory';
 import { StorageProvider } from '../storage/storage-provider.interface';
-import { getDb } from '../database';
-import Database from 'better-sqlite3';
+import { getDb, type DB } from '../database';
 import { AnalyticsService } from './analytics.service';
 import { ReportService } from './report.service';
 import { AuthService } from './auth.service';
@@ -39,7 +38,7 @@ export class ServiceProvider {
 
   getUserService(): UserService {
     if (!this.userService) {
-      this.userService = new UserService(this.prisma, this.getAuthService());
+      this.userService = new UserService('default-org', this.prisma, this.getAuthService());
     }
     return this.userService;
   }
@@ -61,6 +60,7 @@ export class ServiceProvider {
   getUploadService(): UploadService {
     if (!this.uploadService) {
       this.uploadService = new UploadService(
+        'default-org',
         this.storageProvider,
         this.getCSVParserService(),
         this.getStorageQuotaService(),

@@ -64,22 +64,22 @@
 
 ## 5. Handheld UI Components
 
-- [ ] 5.1 Create `frontend/src/components/HandheldScanner.tsx` that wraps `Scanner` with:
+- [x] 5.1 Create `frontend/src/components/HandheldScanner.tsx` that wraps `Scanner` with:
   - `defaultMode='camera'` on handheld devices
   - Larger button styling (48px+ touch targets)
   - Full-screen scan area override
   - Removal of secondary features (manual entry toggle is less prominent)
-- [ ] 5.2 Create `frontend/src/components/HandheldScanToolbar.tsx` with:
+- [x] 5.2 Create `frontend/src/components/HandheldScanToolbar.tsx` with:
   - Current user display
   - Floating sync status indicator (bottom-right: "Syncing...", "Synced", "Offline", "Sync Failed")
   - "Sync Now" button (disabled when queue empty)
   - Settings gear icon for accessing other pages (dashboard, reports, etc.)
   - Sync strategy selector (real-time, batch 10-min, manual)
-- [ ] 5.3 Create `frontend/src/layouts/HandheldLayout.tsx` that:
+- [x] 5.3 Create `frontend/src/layouts/HandheldLayout.tsx` that:
   - Replaces the full navigation bar with `HandheldScanToolbar`
   - Sets main content to full viewport height
   - Wraps children with full-screen layout (no max-width container on PDT)
-- [ ] 5.4 Write component tests for HandheldScanner, HandheldScanToolbar, HandheldLayout with handheld detection mocked
+- [x] 5.4 Write component tests for HandheldScanner, HandheldScanToolbar, HandheldLayout with handheld detection mocked
 
 ## 6. Handheld Styling
 

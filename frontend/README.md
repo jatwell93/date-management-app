@@ -1,8 +1,88 @@
-# Getting Started with Create React App
+# LLXPRT - Date Management Application (React Frontend)
 
-This project was bootstrapped with [Create React App](https://github.com/facebook/create-react-app).
+This is a Progressive Web App (PWA) for pharmacy inventory date management and markdown tracking. The app is optimized for both desktop and handheld pharmacy PDT devices (Zebra TC21-HC, CipherLab RS36, etc.).
 
-## Available Scripts
+## Handheld UI Components Documentation
+
+The application includes specialized components for pharmacy PDT devices:
+
+- **[Handheld Components Guide](../../docs/handheld-components.md)** - Usage examples for HandheldScanner, HandheldScanToolbar, and HandheldLayout
+- **[Accessibility Guidelines](../../docs/handheld-accessibility.md)** - Touch target sizes, color contrast, keyboard navigation, screen reader support
+- **[PWA Configuration](../../docs/handheld-pwa.md)** - Manifest.json setup, service worker, HTTPS deployment
+- **[Testing Guide](../../docs/handheld-testing.md)** - Unit tests, integration tests, device emulation, actual hardware testing
+
+## Quick Start
+
+### Installation
+
+```bash
+cd frontend
+npm install
+```
+
+### Development
+
+```bash
+npm start
+```
+
+Opens [http://localhost:3000](http://localhost:3000) with hot reload.
+
+### Testing
+
+```bash
+# Run all tests
+npm test
+
+# Run with coverage
+npm test -- --coverage
+
+# Watch mode
+npm test -- --watch
+
+# Handheld component tests only
+npm test -- --testPathPattern="ScanPage"
+```
+
+### Production Build
+
+```bash
+npm run build
+```
+
+Builds the app for production to the `build/` folder with optimizations.
+
+## Project Structure
+
+```
+frontend/
+├── src/
+│   ├── components/
+│   │   ├── HandheldScanner.tsx          # Full-screen camera scanner for PDT
+│   │   ├── HandheldScanToolbar.tsx      # Floating sync/settings toolbar
+│   │   ├── Scanner.tsx                  # Base scanner component
+│   │   └── ...
+│   ├── layouts/
+│   │   └── HandheldLayout.tsx           # Conditional handheld/desktop layout
+│   ├── pages/
+│   │   ├── ScanPage.tsx                 # Primary scan workflow page
+│   │   └── ...
+│   ├── contexts/
+│   │   └── HandheldContext.tsx          # Device detection context
+│   ├── services/
+│   │   ├── apiService.ts                # API client
+│   │   └── ...
+│   └── types/
+│       └── handheld.ts                  # TypeScript interfaces
+├── public/
+│   ├── manifest.json                    # PWA manifest (portrait, standalone)
+│   ├── index.html                       # HTML entry point
+│   └── ...
+├── package.json
+└── README.md
+```
+
+## Available Scripts (CRA)
 
 In the project directory, you can run:
 
