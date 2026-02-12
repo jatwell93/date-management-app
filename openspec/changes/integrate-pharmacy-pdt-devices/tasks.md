@@ -99,40 +99,40 @@
 
 ## 7. Sync Strategy Implementation
 
-- [ ] 7.1 Update `frontend/src/lib/offline-sync.ts` to add `SyncStrategy` type and class:
+- [x] 7.1 Update `frontend/src/lib/offline-sync.ts` to add `SyncStrategy` type and class:
   - Add `currentStrategy: 'real-time' | 'batch' | 'manual'` property
   - Add `setSyncStrategy(strategy)` method to change strategies at runtime
   - Persist selected strategy in localStorage
   - **📚 Before starting:** Use refs to search "localforage API configuration" and "exponential backoff retry pattern JavaScript" for storage and retry logic examples
-- [ ] 7.2 Modify sync interval logic:
+- [x] 7.2 Modify sync interval logic:
   - Real-time: trigger `performSync()` directly after each `onScan()` success
   - Batch: change interval from 30s to 600s (10 minutes)
   - Manual: disable automatic interval, only sync on `performSync()` call
-- [ ] 7.3 Add exponential backoff retry logic to `performSync()`:
+- [x] 7.3 Add exponential backoff retry logic to `performSync()`:
   - On first failure, retry in 5 seconds
   - On second failure, retry in 10 seconds
   - On third failure, retry in 20 seconds
   - If all three fail, retain items in queue and wait for next sync cycle
-- [ ] 7.4 Update offline sync manager to call `setSyncStrategy()` when handheld context changes
-- [ ] 7.5 In `ScanPage.tsx`, detect sync strategy changes and update the manager
-- [ ] 7.6 Write unit tests for offline sync strategies: real-time immediate sync, batch interval accumulation, manual trigger
+- [x] 7.4 Update offline sync manager to call `setSyncStrategy()` when handheld context changes
+- [x] 7.5 In `ScanPage.tsx`, detect sync strategy changes and update the manager
+- [x] 7.6 Write unit tests for offline sync strategies: real-time immediate sync, batch interval accumulation, manual trigger
 
 ## 8. ScanPage Integration
 
-- [ ] 8.1 Update `frontend/src/pages/ScanPage.tsx`:
+- [x] 8.1 Update `frontend/src/pages/ScanPage.tsx`:
   - Detect `isHandheld` from context at top of component
   - Conditionally render `HandheldScanner` instead of `Scanner` when `isHandheld=true`
   - Auto-populate expiry date field if GS1 parse result contains `expiryDate`
   - Display sync strategy selector and "Sync Now" button in toolbar (mobile/handheld) or sidebar (desktop)
-- [ ] 8.2 Update `ScanPage` to pass parsed GS1 data to product lookup and inventory creation
-- [ ] 8.3 Update error handling to display friendly messages on 5" screens (or scroll error message into view)
+- [x] 8.2 Update `ScanPage` to pass parsed GS1 data to product lookup and inventory creation
+- [x] 8.3 Update error handling to display friendly messages on 5" screens (or scroll error message into view)
 
 ## 9. App.tsx Integration
 
-- [ ] 9.1 Wrap `App.tsx` main content with `HandheldLayout` when `isHandheld=true`
-- [ ] 9.2 Update default route on app init: if `isHandheld=true`, redirect `/` to `/scan`
-- [ ] 9.3 Ensure handheld detection context provider wraps entire Router tree
-- [ ] 9.4 Update `manifest.json`:
+- [x] 9.1 Wrap `App.tsx` main content with `HandheldLayout` when `isHandheld=true`
+- [x] 9.2 Update default route on app init: if `isHandheld=true`, redirect `/` to `/scan`
+- [x] 9.3 Ensure handheld detection context provider wraps entire Router tree
+- [x] 9.4 Update `manifest.json`:
   - Consider setting `start_url: "/scan"` for handheld "Add to Home Screen" installs (optional based on open question #1)
   - Ensure `display: "standalone"` and `orientation: "portrait"` are set
 

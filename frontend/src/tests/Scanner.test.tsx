@@ -39,7 +39,6 @@ jest.mock('../hooks/useHardwareScan', () => ({
   useHardwareScan: jest.fn(),
 }));
 
-
 // Import the mocked hook
 import { useHardwareScan } from '../hooks/useHardwareScan';
 

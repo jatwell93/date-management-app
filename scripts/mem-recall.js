@@ -13,7 +13,7 @@
  * Output is formatted for easy consumption by AI agents.
  */
 
-const { execSync, execFileSync } = require('child_process');
+const { execSync } = require('child_process');
 const path = require('path');
 
 // Load environment variables from .env file
@@ -32,12 +32,30 @@ if (apiKey) {
 
 const MEMORY_FILE = path.join(__dirname, '..', 'project-memory.mv2');
 
+function escapeForShell(value) {
+  return String(value).replace(/"/g, '\\"');
+}
+
+function ensureMemvidAvailable(env) {
+  try {
+    execSync('memvid --version', {
+      encoding: 'utf8',
+      stdio: ['ignore', 'ignore', 'ignore'],
+      env,
+    });
+  } catch (error) {
+    console.error('❌ memvid is not available in PATH for this Node process.');
+    console.error('   Install or expose memvid, then retry.');
+    console.error('   Example check: memvid --version');
+    console.error(`   Details: ${error.message}`);
+    process.exit(1);
+  }
+}
+
 // Helper to safely execute memvid with proper path resolution
 function runMemvid(args, env) {
   try {
-    // Use shell: true to properly resolve memvid from PATH (handles npm global installs)
-    // Arguments are passed as array which prevents shell injection
-    const output = execSync(`memvid ${args.map(arg => `"${arg}"`).join(' ')}`, {
+    const output = execSync(`memvid ${args.map((arg) => `"${escapeForShell(arg)}"`).join(' ')}`, {
       encoding: 'utf8',
       stdio: ['pipe', 'pipe', 'pipe'],
       env,
@@ -56,35 +74,21 @@ function retrieveContext(query) {
     process.exit(1);
   }
 
-  // Check if API key is available in environment (for potential future use)
-  const hasApiKey = !!process.env.GEMINI_API_KEY || !!process.env.OPENAI_API_KEY;
-  const semanticFlags = ['--mode', 'lex'];
-
-  // Cross-platform environment variable prefix is no longer needed because we pass
-  // environment variables directly via the `env` option when spawning the process.
+  const searchFlags = ['--mode', 'lex'];
 
   try {
     // Create clean env (keep API keys for remote providers)
     const cleanEnv = { ...process.env };
 
-    const args = ['find', MEMORY_FILE, '--query', query, '--json', ...semanticFlags];
+    ensureMemvidAvailable(cleanEnv);
+
+    const args = ['find', MEMORY_FILE, '--query', query, '--json', ...searchFlags];
 
     const output = runMemvid(args, cleanEnv);
 
     const results = JSON.parse(output);
 
     if (!results.hits || results.hits.length === 0) {
-      // Fall back to lexical search if semantic returns nothing
-      if (hasApiKey) {
-        console.log('No semantic matches. Trying lexical search...\n');
-        const lexArgs = ['find', MEMORY_FILE, '--query', query, '--json', '--mode', 'lex'];
-        const lexOutput = runMemvid(lexArgs, cleanEnv);
-        const lexResults = JSON.parse(lexOutput);
-        if (lexResults.hits && lexResults.hits.length > 0) {
-          displayResults(query, lexResults, 'lexical');
-          return;
-        }
-      }
       console.log('No project memories found for this query.');
       console.log('Add memories with: node scripts/mem-log.js <kind> <title> <message>');
       return;

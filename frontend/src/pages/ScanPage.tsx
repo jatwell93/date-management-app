@@ -21,6 +21,7 @@ import { parseGS1Barcode } from '../lib/gs1-parser';
 import { synchronizeOfflineData } from '../lib/sync-manager';
 import { useHandheldDetectionContext } from '../contexts/HandheldContext';
 import { HardwareScanResult } from '../types/handheld';
+import { offlineSyncService } from '../lib/offline-sync';
 import {
   AlertDialog,
   AlertDialogAction,
@@ -72,7 +73,7 @@ interface RecentInventoryItem {
 }
 
 export function ScanPage({ token }: ScanPageProps) {
-  const { isHandheld } = useHandheldDetectionContext();
+  const { isHandheld, syncStrategy } = useHandheldDetectionContext();
   const [scannedBarcode, setScannedBarcode] = useState<string | null>(null);
   const [productDetails, setProductDetails] = useState<ProductDetails | null>(null);
   const [expiryDate, setExpiryDate] = useState<string>('');
@@ -89,6 +90,16 @@ export function ScanPage({ token }: ScanPageProps) {
   const [recentEntries, setRecentEntries] = useState<RecentInventoryItem[] | null>(null);
   const [isAlertDialogOpen, setAlertDialogOpen] = useState(false);
   const [itemToDelete, setItemToDelete] = useState<number | null>(null);
+
+  // Effect to scroll error messages into view on handheld devices
+  useEffect(() => {
+    if (error && isHandheld) {
+      const errorElement = document.querySelector('[role="alert"]');
+      if (errorElement) {
+        errorElement.scrollIntoView({ behavior: 'smooth', block: 'center' });
+      }
+    }
+  }, [error, isHandheld]);
 
   useEffect(() => {
     const fetchStoreAreas = async () => {
@@ -591,7 +602,7 @@ export function ScanPage({ token }: ScanPageProps) {
           onSettingsClick={() => {
             // TODO: Implement settings navigation
           }}
-          queueLength={0} // TODO: Get from offline storage
+          queueLength={offlineSyncService.getPendingOperationCount()}
         >
           <div data-testid="scan-page-main">{renderContent()}</div>
         </HandheldLayout>

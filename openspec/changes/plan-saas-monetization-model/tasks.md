@@ -133,6 +133,7 @@
 
 ## 10. Stripe Webhook Handlers (Phase 4 - Week 5)
 
+**NOTE:** Use skills/stripe-webhooks
 - [ ] 10.1 Create webhook route: POST /api/webhooks/stripe with raw body parsing
 - [ ] 10.2 Implement signature verification using stripe.webhooks.constructEvent()
 - [ ] 10.3 Create handler for `customer.subscription.created`: Create subscription_tiers record

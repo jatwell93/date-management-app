@@ -10,17 +10,25 @@ type OfflineOperation = {
   timestamp: number;
 };
 
+// Define sync strategy types
+export type SyncStrategy = 'real-time' | 'batch' | 'manual';
+
 // Queue to store offline operations
 const OFFLINE_QUEUE_KEY = 'offline-queue';
+const SYNC_STRATEGY_KEY = 'sync-strategy';
 
 class OfflineSyncService {
   private isOnline = navigator.onLine;
   private syncInterval: NodeJS.Timeout | null = null;
   private syncInProgress = false;
+  private currentStrategy: SyncStrategy;
 
   constructor() {
     // Initialize online/offline status
     this.isOnline = navigator.onLine;
+
+    // Load sync strategy from localStorage or default to 'real-time'
+    this.currentStrategy = this.loadSyncStrategy();
 
     // Set up event listeners for online/offline status
     window.addEventListener('online', this.handleOnline.bind(this));
@@ -30,11 +38,62 @@ class OfflineSyncService {
     this.scheduleSync();
   }
 
+  // Load sync strategy from localStorage
+  private loadSyncStrategy(): SyncStrategy {
+    const storedStrategy = localStorage.getItem(SYNC_STRATEGY_KEY);
+    if (storedStrategy && ['real-time', 'batch', 'manual'].includes(storedStrategy)) {
+      return storedStrategy as SyncStrategy;
+    }
+    return 'real-time'; // default strategy
+  }
+
+  // Set sync strategy and persist to localStorage
+  setSyncStrategy(strategy: SyncStrategy) {
+    this.currentStrategy = strategy;
+    localStorage.setItem(SYNC_STRATEGY_KEY, strategy);
+
+    // Reschedule sync with new strategy
+    this.rescheduleSync();
+  }
+
+  // Get current sync strategy
+  getSyncStrategy(): SyncStrategy {
+    return this.currentStrategy;
+  }
+
+  // Reschedule sync based on current strategy
+  private rescheduleSync() {
+    // Clear existing interval
+    if (this.syncInterval) {
+      clearInterval(this.syncInterval);
+      this.syncInterval = null;
+    }
+
+    // Schedule new interval based on strategy
+    if (this.currentStrategy === 'manual') {
+      // For manual strategy, don't schedule automatic syncs
+      return;
+    }
+
+    // Determine interval based on strategy
+    const intervalTime = this.currentStrategy === 'batch' ? 600000 : 30000; // 10 minutes for batch, 30 seconds for real-time
+
+    this.syncInterval = setInterval(() => {
+      if (this.isOnline && !this.syncInProgress) {
+        this.performSync();
+      }
+    }, intervalTime);
+  }
+
   // Handle going online
   private handleOnline() {
     console.log('Device is now online, starting sync...');
     this.isOnline = true;
-    this.performSync();
+
+    // Only sync automatically if not in manual mode
+    if (this.currentStrategy !== 'manual') {
+      this.performSync();
+    }
   }
 
   // Handle going offline
@@ -45,12 +104,7 @@ class OfflineSyncService {
 
   // Schedule periodic sync
   private scheduleSync() {
-    // Try to sync every 30 seconds when online
-    this.syncInterval = setInterval(() => {
-      if (this.isOnline && !this.syncInProgress) {
-        this.performSync();
-      }
-    }, 30000);
+    this.rescheduleSync();
   }
 
   // Add an operation to the offline queue
@@ -78,6 +132,12 @@ class OfflineSyncService {
       localStorage.setItem(OFFLINE_QUEUE_KEY, JSON.stringify(queue));
 
       console.log(`Operation queued: ${action} ${entityType}`, operation);
+
+      // If in real-time mode, trigger sync immediately
+      if (this.currentStrategy === 'real-time') {
+        this.performSync();
+      }
+
       resolve();
     });
   }
@@ -101,47 +161,100 @@ class OfflineSyncService {
     localStorage.setItem(OFFLINE_QUEUE_KEY, JSON.stringify(updatedQueue));
   }
 
-  // Perform synchronization
+  // Perform synchronization - main entry point that uses retry logic
   async performSync() {
+    // Use the retry logic version
+    await this.performSyncWithRetry();
+  }
+
+  // Perform synchronization with exponential backoff retry logic
+  async performSyncWithRetry() {
     if (this.syncInProgress) {
       console.log('Sync already in progress, skipping...');
       return;
     }
 
     this.syncInProgress = true;
-    console.log('Starting synchronization...');
+    console.log('Starting synchronization with retry logic...');
 
-    try {
-      // Get operations from the queue
-      const queue = this.getOfflineQueue();
-      if (queue.length === 0) {
-        console.log('No operations to sync');
-        return;
-      }
+    let retryCount = 0;
+    const maxRetries = 3;
+    let delay = 5000; // Initial delay of 5 seconds
 
-      console.log(`Found ${queue.length} operations to sync`);
+    while (retryCount < maxRetries) {
+      try {
+        // Get operations from the queue
+        const queue = this.getOfflineQueue();
+        if (queue.length === 0) {
+          console.log('No operations to sync');
+          return;
+        }
 
-      // Process each operation in sequence
-      for (const operation of queue) {
-        try {
-          // Attempt to sync the operation with the backend
-          await this.syncOperation(operation);
+        console.log(`Found ${queue.length} operations to sync`);
 
-          // If successful, remove from queue
-          this.removeOperation(operation.id);
-          console.log(`Successfully synced operation: ${operation.id}`);
-        } catch (error) {
-          console.error(`Failed to sync operation ${operation.id}:`, error);
-          // Keep the operation in the queue for retry
-          break; // Stop processing further operations if one fails
+        // Process each operation in sequence
+        let allSuccessful = true;
+        let successfulCount = 0;
+        for (const operation of queue) {
+          try {
+            // Attempt to sync the operation with the backend
+            await this.syncOperation(operation);
+
+            // If successful, remove from queue
+            this.removeOperation(operation.id);
+            successfulCount++;
+            console.log(`Successfully synced operation: ${operation.id}`);
+          } catch (error) {
+            console.error(`Failed to sync operation ${operation.id}:`, error);
+            // Keep the operation in the queue for retry
+            allSuccessful = false;
+            break; // Stop processing further operations if one fails
+          }
+        }
+
+        if (allSuccessful) {
+          console.log('All operations synced successfully');
+          break; // Exit retry loop if all operations were successful
+        } else if (successfulCount > 0) {
+          console.log('Some operations synced, not retrying failed ones');
+          break;
+        } else {
+          console.log(`Sync failed, attempt ${retryCount + 1}/${maxRetries}`);
+          retryCount++;
+
+          if (retryCount < maxRetries) {
+            console.log(`Waiting ${delay / 1000}s before retry...`);
+            await this.delay(delay);
+
+            // Double the delay for next retry (exponential backoff)
+            delay *= 2;
+          }
+        }
+      } catch (error) {
+        console.error('Error during sync:', error);
+        retryCount++;
+
+        if (retryCount < maxRetries) {
+          console.log(`Waiting ${delay / 1000}s before retry...`);
+          await this.delay(delay);
+
+          // Double the delay for next retry (exponential backoff)
+          delay *= 2;
+        }
+      } finally {
+        if (retryCount >= maxRetries) {
+          console.log('Max retries reached, keeping items in queue for next sync cycle');
         }
       }
-    } catch (error) {
-      console.error('Error during sync:', error);
-    } finally {
-      this.syncInProgress = false;
-      console.log('Synchronization completed');
     }
+
+    this.syncInProgress = false;
+    console.log('Synchronization completed');
+  }
+
+  // Helper function to create a delay
+  private delay(ms: number): Promise<void> {
+    return new Promise((resolve) => setTimeout(resolve, ms));
   }
 
   // Sync a single operation

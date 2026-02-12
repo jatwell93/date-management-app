@@ -41,8 +41,14 @@ describe('OfflineSyncService', () => {
     localStorage.clear();
     jest.clearAllMocks();
 
-    // Reset fetch mock for each test
-    global.fetch = jest.fn();
+    // Set API base URL for tests
+    process.env.REACT_APP_API_BASE_URL = 'http://localhost:3001';
+
+    // Reset fetch mock to default
+    global.fetch = jest.fn().mockResolvedValue({
+      ok: true,
+      json: () => Promise.resolve({ success: true }),
+    });
 
     offlineSyncService.clearQueue();
     // Reset online status
@@ -99,7 +105,7 @@ describe('OfflineSyncService', () => {
     it('should sync operations when online', async () => {
       (global.fetch as jest.Mock).mockResolvedValue({
         ok: true,
-        json: async () => ({ success: true }),
+        json: () => Promise.resolve({ success: true }),
       });
 
       await offlineSyncService.addOperation('create', 'product', { name: 'Sync Me' });
@@ -119,7 +125,7 @@ describe('OfflineSyncService', () => {
       (global.fetch as jest.Mock)
         .mockResolvedValueOnce({
           ok: true,
-          json: async () => ({ success: true }),
+          json: () => Promise.resolve({ success: true }),
         })
         .mockRejectedValueOnce(new Error('Network Error'));
 
@@ -145,7 +151,7 @@ describe('OfflineSyncService', () => {
       // Second attempt succeeds
       (global.fetch as jest.Mock).mockResolvedValueOnce({
         ok: true,
-        json: async () => ({ success: true }),
+        json: () => Promise.resolve({ success: true }),
       });
 
       await offlineSyncService.performSync();
@@ -185,7 +191,7 @@ describe('OfflineSyncService', () => {
     beforeEach(() => {
       (global.fetch as jest.Mock).mockResolvedValue({
         ok: true,
-        json: async () => ({ success: true }),
+        json: () => Promise.resolve({ success: true }),
       });
       // Force reset internal state again just to be safe
       (offlineSyncService as any).syncInProgress = false;
@@ -226,6 +232,58 @@ describe('OfflineSyncService', () => {
         expect.stringContaining('/store-areas/456'),
         expect.objectContaining({ method: 'DELETE' }),
       );
+    });
+  });
+
+  describe('Sync Strategies', () => {
+    beforeEach(() => {
+      (global.fetch as jest.Mock).mockResolvedValue({
+        ok: true,
+        json: () => Promise.resolve({ success: true }),
+      });
+      // Reset strategy to default
+      offlineSyncService.setSyncStrategy('real-time');
+    });
+
+    it('should set and get sync strategy', () => {
+      offlineSyncService.setSyncStrategy('batch');
+      expect(offlineSyncService.getSyncStrategy()).toBe('batch');
+    });
+
+    it('should trigger sync immediately in real-time mode', async () => {
+      offlineSyncService.setSyncStrategy('real-time');
+      const performSyncSpy = jest.spyOn(offlineSyncService, 'performSync');
+      performSyncSpy.mockResolvedValue();
+
+      await offlineSyncService.addOperation('create', 'product', { name: 'Test' });
+
+      expect(performSyncSpy).toHaveBeenCalledTimes(1);
+
+      performSyncSpy.mockRestore();
+    });
+
+    it('should not trigger sync immediately in batch mode', async () => {
+      offlineSyncService.setSyncStrategy('batch');
+      const performSyncSpy = jest.spyOn(offlineSyncService, 'performSync');
+      performSyncSpy.mockResolvedValue();
+
+      await offlineSyncService.addOperation('create', 'product', { name: 'Test' });
+
+      expect(performSyncSpy).not.toHaveBeenCalled();
+
+      performSyncSpy.mockRestore();
+    });
+
+    it('should not trigger sync immediately in manual mode', async () => {
+      offlineSyncService.setSyncStrategy('manual');
+      const performSyncSpy = jest.spyOn(offlineSyncService, 'performSync');
+      performSyncSpy.mockResolvedValue();
+
+      await offlineSyncService.addOperation('create', 'product', { name: 'Test' });
+
+      expect(performSyncSpy).not.toHaveBeenCalled();
+
+      performSyncSpy.mockRestore();
     });
   });
 });
