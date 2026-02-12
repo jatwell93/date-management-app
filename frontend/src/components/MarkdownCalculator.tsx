@@ -5,6 +5,7 @@ import { Label } from './ui/label';
 import { Button } from './ui/button';
 import { Scanner } from './Scanner'; // Import the Scanner component
 import { apiService } from '../lib/api.service';
+import { HardwareScanResult } from '../types/handheld';
 
 interface MarkdownCalculatorProps {
   token: string | null;
@@ -27,7 +28,8 @@ export function MarkdownCalculator({ token }: MarkdownCalculatorProps) {
   const [productDetails, setProductDetails] = useState<ProductDetails | null>(null);
   const [error, setError] = useState<string | null>(null);
 
-  const handleBarcodeScan = async (input: string) => {
+  const handleBarcodeScan = async (result: HardwareScanResult) => {
+    const input = result.barcode;
     setScannedInput(input);
     setProductDetails(null);
     setError(null);

@@ -120,6 +120,7 @@ export class StoreAreaService {
    */
   private mapPrismaToModel(area: {
     id: number;
+    organizationId: string | null;
     name: string;
     subDepartment: string | null;
     lastChecked: Date | null;
@@ -128,6 +129,7 @@ export class StoreAreaService {
   }): StoreArea {
     return {
       id: area.id,
+      organizationId: area.organizationId ?? 'default-org',
       name: area.name,
       subDepartment: area.subDepartment ?? undefined,
       lastChecked: area.lastChecked?.toISOString() ?? undefined,

@@ -18,7 +18,7 @@
  *   node scripts/mem-log.js DECISION "State Management" "Using React Context instead of Redux for simplicity"
  */
 
-const { execSync, execFileSync } = require('child_process');
+const { execSync } = require('child_process');
 const path = require('path');
 
 // Load environment variables from .env file
@@ -38,6 +38,25 @@ if (apiKey) {
 const MEMORY_FILE = path.join(__dirname, '..', 'project-memory.mv2');
 
 const VALID_KINDS = ['FIX', 'PATTERN', 'DECISION', 'FEATURE', 'ERROR', 'ARCHITECTURE', 'WORKFLOW'];
+
+function escapeForShell(value) {
+  return String(value).replace(/"/g, '\\"');
+}
+
+function ensureMemvidAvailable(env) {
+  try {
+    execSync('memvid --version', {
+      env,
+      stdio: ['ignore', 'ignore', 'ignore'],
+    });
+  } catch (error) {
+    console.error('❌ memvid is not available in PATH for this Node process.');
+    console.error('   Install or expose memvid, then retry.');
+    console.error('   Example check: memvid --version');
+    console.error(`   Details: ${error.message}`);
+    process.exit(1);
+  }
+}
 
 function logMemory(kind, title, message) {
   if (!kind || !title || !message) {
@@ -66,17 +85,12 @@ function logMemory(kind, title, message) {
     cleanEnv.GOOGLE_API_KEY = process.env.GEMINI_API_KEY;
   }
 
-  try {
-    const args = [
-      'put',
-      MEMORY_FILE,
-      '--title',
-      title,
-      '--kind',
-      normalizedKind.toLowerCase(),
-    ];
+  ensureMemvidAvailable(cleanEnv);
 
-    execFileSync('memvid', args, {
+  try {
+    // Use execSync with explicit quoting so arguments with spaces are preserved
+    const command = `memvid put "${escapeForShell(MEMORY_FILE)}" --title "${escapeForShell(title)}" --kind ${normalizedKind.toLowerCase()}`;
+    execSync(command, {
       env: cleanEnv,
       stdio: ['pipe', 'inherit', 'inherit'],
       input: fullMessage,

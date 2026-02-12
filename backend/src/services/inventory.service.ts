@@ -5,15 +5,15 @@ import { ItemTransaction } from '../models/item-transaction.model';
 
 export class InventoryService {
   private prisma: PrismaClient;
-  private organizationId: number;
+  private organizationId: string;
 
   /**
    * Constructor with optional dependency injection
    * @param organizationId - Organization ID for tenant isolation
    * @param prismaClient - Optional PrismaClient for testing/custom configurations
    */
-  constructor(organizationId: number, prismaClient?: PrismaClient) {
-    this.organizationId = organizationId;
+  constructor(organizationId?: string, prismaClient?: PrismaClient) {
+    this.organizationId = organizationId ?? 'default-org';
     this.prisma = prismaClient ?? getDefaultDatabaseClient();
   }
 
@@ -88,9 +88,6 @@ export class InventoryService {
     const items = await this.prisma.inventoryItem.findMany({
       where: {
         locationId,
-        location: {
-          organizationId: this.organizationId,
-        },
         product: {
           organizationId: this.organizationId,
         },
@@ -120,7 +117,7 @@ export class InventoryService {
     }
 
     // Validate that the location belongs to the organization
-    const location = await this.prisma.location.findFirst({
+    const location = await this.prisma.storeArea.findFirst({
       where: {
         id: locationId,
         organizationId: this.organizationId,
@@ -182,7 +179,7 @@ export class InventoryService {
 
     // Validate location belongs to organization if being updated
     if (updates.locationId !== undefined) {
-      const location = await this.prisma.location.findFirst({
+      const location = await this.prisma.storeArea.findFirst({
         where: {
           id: updates.locationId,
           organizationId: this.organizationId,
@@ -421,6 +418,7 @@ export class InventoryService {
    */
   private mapPrismaToModel(item: {
     id: number;
+    organizationId?: string | null;
     productId: number;
     expiryDate: Date;
     locationId: number;
@@ -430,6 +428,7 @@ export class InventoryService {
   }): InventoryItem {
     return {
       id: item.id,
+      organizationId: item.organizationId ?? this.organizationId,
       productId: item.productId,
       expiryDate: item.expiryDate.toISOString().split('T')[0], // Convert Date to YYYY-MM-DD string
       locationId: item.locationId,

@@ -7,125 +7,132 @@
 
 ## 2. Device Detection Hook
 
-- [ ] 2.1 Implement `frontend/src/hooks/useHandheldDetection.ts` hook that:
+- [x] 2.1 Implement `frontend/src/hooks/useHandheldDetection.ts` hook that:
   - Checks localStorage for `forceHandheld` override flag
   - Falls back to user agent pattern matching (Zebra/Honeywell/CipherLab)
   - Falls back to screen dimension heuristic (≤600×800)
   - Returns `{ isHandheld: boolean }`
-- [ ] 2.2 Add `useHandheldDetection` hook provider wrapper to `App.tsx` context
-- [ ] 2.3 Write unit tests for detection hook covering all three detection methods (override, UA, dimensions)
-- [ ] 2.4 Add localStorage override via query param handler: `?forceHandheld=true` sets localStorage for testing on desktop
+- [x] 2.2 Add `useHandheldDetection` hook provider wrapper to `App.tsx` context
+- [x] 2.3 Write unit tests for detection hook covering all three detection methods (override, UA, dimensions)
+- [x] 2.4 Add localStorage override via query param handler: `?forceHandheld=true` sets localStorage for testing on desktop
 
 ## 3. Hardware Barcode Input
 
-- [ ] 3.1 Implement `frontend/src/hooks/useHardwareScan.ts` hook that:
+- [x] 3.1 Implement `frontend/src/hooks/useHardwareScan.ts` hook that:
   - Listens for `keydown` events on the document
   - Accumulates keystroke characters within the 50ms timing window
   - Detects Enter key as end marker
   - Distinguishes from human typing by timing threshold (multiple keystrokes within 50ms = hardware scan)
   - Emits `onScan(barcode)` callback
-- [ ] 3.2 Update `useHardwareScan` to handle GS1-128 barcodes by passing raw string to `parseGS1Barcode()`
-- [ ] 3.3 Write keyboard wedge input simulator test utility for unit testing hardware scan behavior
-- [ ] 3.4 Write unit tests for `useHardwareScan` covering:
+  - **📚 Before starting:** Use refs to search for "React hooks state management keyboard events" and "Web API keydown event handling" for patterns
+- [x] 3.2 Update `useHardwareScan` to handle GS1-128 barcodes by passing raw string to `parseGS1Barcode()`
+- [x] 3.3 Write keyboard wedge input simulator test utility for unit testing hardware scan behavior
+- [x] 3.4 Write unit tests for `useHardwareScan` covering:
   - Rapid keystroke assembly with 50ms threshold
   - Slow typing does NOT trigger hardware scan path
   - Enter key termination
   - GS1-128 barcode detection and parsing
   - Duplicate keystroke prevention (no double-submission on rapid Enter)
-- [ ] 3.5 Write unit tests for `parseGS1Barcode` with pharmacy barcode fixtures:
+- [x] 3.5 Write unit tests for `parseGS1Barcode` with pharmacy barcode fixtures:
   - GTIN extraction from (01)
   - Batch/lot extraction from (10)
   - Expiry date extraction from (17) with YYMMDD → ISO date conversion
   - Serial number extraction from (21)
   - Non-GS1 fallback (returns raw barcode)
+  - **📚 Before starting:** Use refs to search for "GS1-128 barcode application identifiers" and "Jest pure function testing patterns" for implementation and test examples
 
 ## 4. Component Updates: Camera and Scanner
 
-- [ ] 4.1 Update `frontend/src/components/CameraScanner.tsx`:
+- [x] 4.1 Update `frontend/src/components/CameraScanner.tsx`:
   - Add `continuous?: boolean` prop (defaults to false)
   - Change Quagga initialization to respect `continuous` prop (don't call `Quagga.stop()` after detection if continuous=true)
   - Add debounce utility to track recent barcode scans (last 2 seconds)
   - In continuous mode, skip submitting duplicate barcodes within 2-second window
   - Add barcode tracking for debugging (optional console logging for development)
-- [ ] 4.2 Update `frontend/src/components/Scanner.tsx`:
+  - **📚 Before starting:** Refer to existing CameraScanner implementation in codebase; use refs to search "Quagga barcode scanner configuration" if extending detection logic
+- [x] 4.2 Update `frontend/src/components/Scanner.tsx`:
   - Add `defaultMode?: 'text' | 'camera'` prop (defaults to 'text')
   - Update `useHardwareScan` hook call to listen for hardware barcode input whenever component is mounted
   - Route hardware scan input through the same `onScan(barcode)` callback as camera and text input
   - Update JSX to respect `defaultMode` prop (show camera first if defaultMode='camera' on handheld)
-- [ ] 4.3 Write component tests for Scanner with mocked hardware scan events
-- [ ] 4.4 Update existing `CameraScanner.test.tsx` to cover continuous mode scenarios
-- [ ] 4.5 Update existing `Scanner.test.tsx` to cover handheld mode rendering with hardware input
+- [x] 4.3 Write component tests for Scanner with mocked hardware scan events
+  - **📚 Before starting:** Use refs to search "Jest React component testing mocking keyboard events" for mock patterns
+- [x] 4.4 Update existing `CameraScanner.test.tsx` to cover continuous mode scenarios
+  - **📚 Before starting:** Use refs to search "Jest React component snapshot testing" for testing video/camera components
+- [x] 4.5 Update existing `Scanner.test.tsx` to cover handheld mode rendering with hardware input
+  - **📚 Before starting:** Use refs to search "React Testing Library conditional rendering" for handheld detection mocking patterns
 
 ## 5. Handheld UI Components
 
-- [ ] 5.1 Create `frontend/src/components/HandheldScanner.tsx` that wraps `Scanner` with:
+- [x] 5.1 Create `frontend/src/components/HandheldScanner.tsx` that wraps `Scanner` with:
   - `defaultMode='camera'` on handheld devices
   - Larger button styling (48px+ touch targets)
   - Full-screen scan area override
   - Removal of secondary features (manual entry toggle is less prominent)
-- [ ] 5.2 Create `frontend/src/components/HandheldScanToolbar.tsx` with:
+- [x] 5.2 Create `frontend/src/components/HandheldScanToolbar.tsx` with:
   - Current user display
   - Floating sync status indicator (bottom-right: "Syncing...", "Synced", "Offline", "Sync Failed")
   - "Sync Now" button (disabled when queue empty)
   - Settings gear icon for accessing other pages (dashboard, reports, etc.)
   - Sync strategy selector (real-time, batch 10-min, manual)
-- [ ] 5.3 Create `frontend/src/layouts/HandheldLayout.tsx` that:
+- [x] 5.3 Create `frontend/src/layouts/HandheldLayout.tsx` that:
   - Replaces the full navigation bar with `HandheldScanToolbar`
   - Sets main content to full viewport height
   - Wraps children with full-screen layout (no max-width container on PDT)
-- [ ] 5.4 Write component tests for HandheldScanner, HandheldScanToolbar, HandheldLayout with handheld detection mocked
+- [x] 5.4 Write component tests for HandheldScanner, HandheldScanToolbar, HandheldLayout with handheld detection mocked
 
 ## 6. Handheld Styling
 
-- [ ] 6.1 Create `frontend/src/styles/handheld.css` with media queries for:
+- [x] 6.1 Create `frontend/src/styles/handheld.css` with media queries for:
   - Small screens: `@media (max-width: 600px) and (max-height: 900px)`
   - Base font size increased to 16px (from default 14px)
   - Button minimum size 48×48 px with adequate padding
   - Input fields minimum height 44px (exceeds 48px but ensures readability)
   - Card padding/margins slightly tighter to maximize vertical space (12px instead of 16px)
   - Form labels and help text slightly larger (14px, line-height 1.4)
-- [ ] 6.2 Add CSS to hide non-essential UI on handheld (if `isHandheld` class on body):
+- [x] 6.2 Add CSS to hide non-essential UI on handheld (if `isHandheld` class on body):
   - Markdown calculator link (not a handheld workflow)
   - Reports dropdown (accessible via menu but not primary nav)
   - User management / store area links (hidden unless Manager, then in dropdown)
-- [ ] 6.3 Add full-screen scan area CSS (height: 100vh - header height when in camera mode)
-- [ ] 6.4 Import handheld.css in App.tsx or globals.css
+- [x] 6.3 Add full-screen scan area CSS (height: 100vh - header height when in camera mode)
+- [x] 6.4 Import handheld.css in App.tsx or globals.css
 
 ## 7. Sync Strategy Implementation
 
-- [ ] 7.1 Update `frontend/src/lib/offline-sync.ts` to add `SyncStrategy` type and class:
+- [x] 7.1 Update `frontend/src/lib/offline-sync.ts` to add `SyncStrategy` type and class:
   - Add `currentStrategy: 'real-time' | 'batch' | 'manual'` property
   - Add `setSyncStrategy(strategy)` method to change strategies at runtime
   - Persist selected strategy in localStorage
-- [ ] 7.2 Modify sync interval logic:
+  - **📚 Before starting:** Use refs to search "localforage API configuration" and "exponential backoff retry pattern JavaScript" for storage and retry logic examples
+- [x] 7.2 Modify sync interval logic:
   - Real-time: trigger `performSync()` directly after each `onScan()` success
   - Batch: change interval from 30s to 600s (10 minutes)
   - Manual: disable automatic interval, only sync on `performSync()` call
-- [ ] 7.3 Add exponential backoff retry logic to `performSync()`:
+- [x] 7.3 Add exponential backoff retry logic to `performSync()`:
   - On first failure, retry in 5 seconds
   - On second failure, retry in 10 seconds
   - On third failure, retry in 20 seconds
   - If all three fail, retain items in queue and wait for next sync cycle
-- [ ] 7.4 Update offline sync manager to call `setSyncStrategy()` when handheld context changes
-- [ ] 7.5 In `ScanPage.tsx`, detect sync strategy changes and update the manager
-- [ ] 7.6 Write unit tests for offline sync strategies: real-time immediate sync, batch interval accumulation, manual trigger
+- [x] 7.4 Update offline sync manager to call `setSyncStrategy()` when handheld context changes
+- [x] 7.5 In `ScanPage.tsx`, detect sync strategy changes and update the manager
+- [x] 7.6 Write unit tests for offline sync strategies: real-time immediate sync, batch interval accumulation, manual trigger
 
 ## 8. ScanPage Integration
 
-- [ ] 8.1 Update `frontend/src/pages/ScanPage.tsx`:
+- [x] 8.1 Update `frontend/src/pages/ScanPage.tsx`:
   - Detect `isHandheld` from context at top of component
   - Conditionally render `HandheldScanner` instead of `Scanner` when `isHandheld=true`
   - Auto-populate expiry date field if GS1 parse result contains `expiryDate`
   - Display sync strategy selector and "Sync Now" button in toolbar (mobile/handheld) or sidebar (desktop)
-- [ ] 8.2 Update `ScanPage` to pass parsed GS1 data to product lookup and inventory creation
-- [ ] 8.3 Update error handling to display friendly messages on 5" screens (or scroll error message into view)
+- [x] 8.2 Update `ScanPage` to pass parsed GS1 data to product lookup and inventory creation
+- [x] 8.3 Update error handling to display friendly messages on 5" screens (or scroll error message into view)
 
 ## 9. App.tsx Integration
 
-- [ ] 9.1 Wrap `App.tsx` main content with `HandheldLayout` when `isHandheld=true`
-- [ ] 9.2 Update default route on app init: if `isHandheld=true`, redirect `/` to `/scan`
-- [ ] 9.3 Ensure handheld detection context provider wraps entire Router tree
-- [ ] 9.4 Update `manifest.json`:
+- [x] 9.1 Wrap `App.tsx` main content with `HandheldLayout` when `isHandheld=true`
+- [x] 9.2 Update default route on app init: if `isHandheld=true`, redirect `/` to `/scan`
+- [x] 9.3 Ensure handheld detection context provider wraps entire Router tree
+- [x] 9.4 Update `manifest.json`:
   - Consider setting `start_url: "/scan"` for handheld "Add to Home Screen" installs (optional based on open question #1)
   - Ensure `display: "standalone"` and `orientation: "portrait"` are set
 
@@ -142,6 +149,7 @@
 ## 11. Testing and Validation
 
 - [ ] 11.1 Run `npm test` with coverage to verify:
+  - **📚 Reference:** Use refs to search "Jest coverage configuration" and "React PWA testing patterns" for testing best practices
   - Device detection hook coverage >90%
   - Hardware scan hook coverage >90%
   - GS1 parser coverage >95%

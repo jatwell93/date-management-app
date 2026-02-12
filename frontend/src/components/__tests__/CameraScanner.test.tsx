@@ -158,4 +158,141 @@ describe('CameraScanner', () => {
 
     jest.useRealTimers();
   });
+
+  describe('continuous mode', () => {
+    beforeEach(() => {
+      jest.useFakeTimers();
+    });
+
+    afterEach(() => {
+      jest.useRealTimers();
+    });
+
+    it('does not stop scanner after detection when continuous=true', () => {
+      let onDetectedCallback: ((data: any) => void) | null = null;
+      (Quagga.onDetected as jest.Mock).mockImplementation((cb) => {
+        onDetectedCallback = cb;
+      });
+
+      render(<CameraScanner onDetected={mockOnDetected} continuous={true} />);
+
+      act(() => {
+        if (onDetectedCallback) {
+          onDetectedCallback({ codeResult: { code: '123456' } });
+        }
+      });
+
+      // Advance time beyond the normal stop delay
+      act(() => {
+        jest.advanceTimersByTime(2000);
+      });
+
+      // Should NOT have stopped the scanner
+      expect(Quagga.stop).not.toHaveBeenCalled();
+    });
+
+    it('stops scanner after detection when continuous=false (default)', () => {
+      let onDetectedCallback: ((data: any) => void) | null = null;
+      (Quagga.onDetected as jest.Mock).mockImplementation((cb) => {
+        onDetectedCallback = cb;
+      });
+
+      render(<CameraScanner onDetected={mockOnDetected} />);
+
+      act(() => {
+        if (onDetectedCallback) {
+          onDetectedCallback({ codeResult: { code: '123456' } });
+        }
+      });
+
+      // Advance time to trigger stop
+      act(() => {
+        jest.advanceTimersByTime(1000);
+      });
+
+      expect(Quagga.stop).toHaveBeenCalled();
+    });
+
+    it('prevents duplicate barcode scans within 2-second window', () => {
+      let onDetectedCallback: ((data: any) => void) | null = null;
+      (Quagga.onDetected as jest.Mock).mockImplementation((cb) => {
+        onDetectedCallback = cb;
+      });
+
+      render(<CameraScanner onDetected={mockOnDetected} continuous={true} />);
+
+      // First scan
+      act(() => {
+        if (onDetectedCallback) {
+          onDetectedCallback({ codeResult: { code: 'DUPLICATE' } });
+        }
+      });
+
+      expect(mockOnDetected).toHaveBeenCalledTimes(1);
+      expect(mockOnDetected).toHaveBeenCalledWith('DUPLICATE');
+
+      // Second scan of same barcode immediately after
+      act(() => {
+        if (onDetectedCallback) {
+          onDetectedCallback({ codeResult: { code: 'DUPLICATE' } });
+        }
+      });
+
+      // Should not trigger again (duplicate prevention)
+      expect(mockOnDetected).toHaveBeenCalledTimes(1);
+
+      // Advance time past the 2-second window
+      act(() => {
+        jest.advanceTimersByTime(2100);
+      });
+
+      // Third scan should work now
+      act(() => {
+        if (onDetectedCallback) {
+          onDetectedCallback({ codeResult: { code: 'DUPLICATE' } });
+        }
+      });
+
+      expect(mockOnDetected).toHaveBeenCalledTimes(2);
+    });
+
+    it('allows different barcodes to be scanned immediately', () => {
+      let onDetectedCallback: ((data: any) => void) | null = null;
+      (Quagga.onDetected as jest.Mock).mockImplementation((cb) => {
+        onDetectedCallback = cb;
+      });
+
+      render(<CameraScanner onDetected={mockOnDetected} continuous={true} />);
+
+      // First barcode
+      act(() => {
+        if (onDetectedCallback) {
+          onDetectedCallback({ codeResult: { code: 'BARCODE1' } });
+        }
+      });
+
+      // Different barcode immediately after
+      act(() => {
+        if (onDetectedCallback) {
+          onDetectedCallback({ codeResult: { code: 'BARCODE2' } });
+        }
+      });
+
+      expect(mockOnDetected).toHaveBeenCalledTimes(2);
+      expect(mockOnDetected).toHaveBeenNthCalledWith(1, 'BARCODE1');
+      expect(mockOnDetected).toHaveBeenNthCalledWith(2, 'BARCODE2');
+    });
+
+    it('shows continuous scan mode indicator', () => {
+      render(<CameraScanner onDetected={mockOnDetected} continuous={true} />);
+
+      expect(screen.getByText(/Continuous scan mode/i)).toBeInTheDocument();
+    });
+
+    it('does not show continuous mode indicator when continuous=false', () => {
+      render(<CameraScanner onDetected={mockOnDetected} continuous={false} />);
+
+      expect(screen.queryByText(/Continuous scan mode/i)).not.toBeInTheDocument();
+    });
+  });
 });
