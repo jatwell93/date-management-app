@@ -18,22 +18,22 @@
 
 ## 3. Hardware Barcode Input
 
-- [ ] 3.1 Implement `frontend/src/hooks/useHardwareScan.ts` hook that:
+- [x] 3.1 Implement `frontend/src/hooks/useHardwareScan.ts` hook that:
   - Listens for `keydown` events on the document
   - Accumulates keystroke characters within the 50ms timing window
   - Detects Enter key as end marker
   - Distinguishes from human typing by timing threshold (multiple keystrokes within 50ms = hardware scan)
   - Emits `onScan(barcode)` callback
   - **📚 Before starting:** Use refs to search for "React hooks state management keyboard events" and "Web API keydown event handling" for patterns
-- [ ] 3.2 Update `useHardwareScan` to handle GS1-128 barcodes by passing raw string to `parseGS1Barcode()`
-- [ ] 3.3 Write keyboard wedge input simulator test utility for unit testing hardware scan behavior
-- [ ] 3.4 Write unit tests for `useHardwareScan` covering:
+- [x] 3.2 Update `useHardwareScan` to handle GS1-128 barcodes by passing raw string to `parseGS1Barcode()`
+- [x] 3.3 Write keyboard wedge input simulator test utility for unit testing hardware scan behavior
+- [x] 3.4 Write unit tests for `useHardwareScan` covering:
   - Rapid keystroke assembly with 50ms threshold
   - Slow typing does NOT trigger hardware scan path
   - Enter key termination
   - GS1-128 barcode detection and parsing
   - Duplicate keystroke prevention (no double-submission on rapid Enter)
-- [ ] 3.5 Write unit tests for `parseGS1Barcode` with pharmacy barcode fixtures:
+- [x] 3.5 Write unit tests for `parseGS1Barcode` with pharmacy barcode fixtures:
   - GTIN extraction from (01)
   - Batch/lot extraction from (10)
   - Expiry date extraction from (17) with YYMMDD → ISO date conversion
@@ -43,23 +43,23 @@
 
 ## 4. Component Updates: Camera and Scanner
 
-- [ ] 4.1 Update `frontend/src/components/CameraScanner.tsx`:
+- [x] 4.1 Update `frontend/src/components/CameraScanner.tsx`:
   - Add `continuous?: boolean` prop (defaults to false)
   - Change Quagga initialization to respect `continuous` prop (don't call `Quagga.stop()` after detection if continuous=true)
   - Add debounce utility to track recent barcode scans (last 2 seconds)
   - In continuous mode, skip submitting duplicate barcodes within 2-second window
   - Add barcode tracking for debugging (optional console logging for development)
   - **📚 Before starting:** Refer to existing CameraScanner implementation in codebase; use refs to search "Quagga barcode scanner configuration" if extending detection logic
-- [ ] 4.2 Update `frontend/src/components/Scanner.tsx`:
+- [x] 4.2 Update `frontend/src/components/Scanner.tsx`:
   - Add `defaultMode?: 'text' | 'camera'` prop (defaults to 'text')
   - Update `useHardwareScan` hook call to listen for hardware barcode input whenever component is mounted
   - Route hardware scan input through the same `onScan(barcode)` callback as camera and text input
   - Update JSX to respect `defaultMode` prop (show camera first if defaultMode='camera' on handheld)
-- [ ] 4.3 Write component tests for Scanner with mocked hardware scan events
+- [x] 4.3 Write component tests for Scanner with mocked hardware scan events
   - **📚 Before starting:** Use refs to search "Jest React component testing mocking keyboard events" for mock patterns
-- [ ] 4.4 Update existing `CameraScanner.test.tsx` to cover continuous mode scenarios
+- [x] 4.4 Update existing `CameraScanner.test.tsx` to cover continuous mode scenarios
   - **📚 Before starting:** Use refs to search "Jest React component snapshot testing" for testing video/camera components
-- [ ] 4.5 Update existing `Scanner.test.tsx` to cover handheld mode rendering with hardware input
+- [x] 4.5 Update existing `Scanner.test.tsx` to cover handheld mode rendering with hardware input
   - **📚 Before starting:** Use refs to search "React Testing Library conditional rendering" for handheld detection mocking patterns
 
 ## 5. Handheld UI Components

@@ -1,13 +1,23 @@
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { CameraScanner } from './CameraScanner';
+import { useHardwareScan } from '../hooks/useHardwareScan';
 
 interface ScannerProps {
   onScan: (scannedInput: string) => void;
+  defaultMode?: 'text' | 'camera';
 }
 
-export function Scanner({ onScan }: ScannerProps) {
+export function Scanner({ onScan, defaultMode = 'text' }: ScannerProps) {
   const [input, setInput] = useState('');
-  const [useCamera, setUseCamera] = useState(false);
+  const [useCamera, setUseCamera] = useState(defaultMode === 'camera');
+
+  // Initialize hardware scan hook
+  const { isListening } = useHardwareScan({
+    onScan: (result) => {
+      onScan(result.barcode);
+    },
+    enabled: true, // Always listen for hardware scans
+  });
 
   const handleInputChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     setInput(e.target.value);

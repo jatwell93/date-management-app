@@ -1,15 +1,34 @@
-import React, { useEffect, useRef, useState } from 'react';
+import React, { useEffect, useRef, useState, useCallback } from 'react';
 import Quagga from 'quagga';
 
 interface CameraScannerProps {
   onDetected: (code: string) => void;
   onScannerReady?: () => void;
   onScannerReset?: () => void;
+  continuous?: boolean;
 }
 
-export function CameraScanner({ onDetected, onScannerReady, onScannerReset }: CameraScannerProps) {
+export function CameraScanner({ onDetected, onScannerReady, onScannerReset, continuous = false }: CameraScannerProps) {
   const videoRef = useRef<HTMLDivElement>(null);
   const [error, setError] = useState<string | null>(null);
+  const recentScansRef = useRef<Set<string>>(new Set());
+
+  // Debounce utility to track recent barcode scans (last 2 seconds)
+  const isDuplicateScan = useCallback((barcode: string): boolean => {
+    if (recentScansRef.current.has(barcode)) {
+      return true;
+    }
+
+    // Add to recent scans
+    recentScansRef.current.add(barcode);
+
+    // Remove after 2 seconds
+    setTimeout(() => {
+      recentScansRef.current.delete(barcode);
+    }, 2000);
+
+    return false;
+  }, []);
 
   useEffect(() => {
     const initScanner = () => {
@@ -55,11 +74,22 @@ export function CameraScanner({ onDetected, onScannerReady, onScannerReset }: Ca
 
       Quagga.onDetected((data: any) => {
         if (data && data.codeResult && data.codeResult.code) {
-          onDetected(data.codeResult.code);
-          // Stop the scanner after a successful detection to prevent continuous scanning
-          setTimeout(() => {
-            Quagga.stop();
-          }, 1000);
+          const barcode = data.codeResult.code;
+
+          // Skip duplicate barcodes within 2-second window
+          if (isDuplicateScan(barcode)) {
+            console.log('Skipping duplicate barcode scan:', barcode);
+            return;
+          }
+
+          onDetected(barcode);
+
+          // Only stop the scanner after detection if not in continuous mode
+          if (!continuous) {
+            setTimeout(() => {
+              Quagga.stop();
+            }, 1000);
+          }
         }
       });
     };
@@ -72,7 +102,7 @@ export function CameraScanner({ onDetected, onScannerReady, onScannerReset }: Ca
         Quagga.stop();
       }
     };
-  }, [onDetected]);
+  }, [onDetected, continuous, isDuplicateScan]);
 
   const handleResetScanner = () => {
     setError(null); // Clear any error when resetting
@@ -115,6 +145,7 @@ export function CameraScanner({ onDetected, onScannerReady, onScannerReset }: Ca
         <div className="text-white text-center">
           <p>Camera feed will appear here</p>
           <p className="text-sm mt-2">Point your camera at a barcode</p>
+          {continuous && <p className="text-xs mt-1 text-yellow-300">Continuous scan mode</p>}
         </div>
       </div>
       <button

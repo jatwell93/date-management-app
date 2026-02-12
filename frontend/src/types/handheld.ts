@@ -19,6 +19,7 @@ export interface HardwareScanResult {
   timestamp: number;
   source: 'hardware' | 'camera' | 'manual';
   confidence?: number; // For camera scans
+  gs1Data?: GS1ParseResult; // For GS1-128 barcodes
 }
 
 // Parsed result from GS1-128 barcode

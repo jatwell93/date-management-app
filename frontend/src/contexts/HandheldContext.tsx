@@ -9,20 +9,6 @@ import { SYNC_STRATEGIES, STORAGE_KEYS, DEFAULTS } from '../config/handheld';
 
 type SyncStrategy = (typeof SYNC_STRATEGIES)[keyof typeof SYNC_STRATEGIES];
 
-type SyncStrategy = (typeof SYNC_STRATEGIES)[keyof typeof SYNC_STRATEGIES];
-
-// Storage keys for localStorage
-const STORAGE_KEYS = {
-  SYNC_STRATEGY: 'handheld_sync_strategy',
-} as const;
-
-// Default values
-const DEFAULTS = {
-  SYNC_STRATEGY: 'automatic' as SyncStrategy,
-  HAPTIC_ENABLED: true,
-  AUDIO_FEEDBACK_ENABLED: true,
-} as const;
-
 // Create the context
 const HandheldContext = createContext<IHandheldContext | null>(null);
 
