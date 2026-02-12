@@ -20,6 +20,7 @@ import databaseBackupRoutes from './routes/database.backup.routes';
 import expiredItemRoutes from './routes/expired-item.routes';
 import uploadRoutes from './routes/upload.routes';
 import storageQuotaRoutes from './routes/storage-quota.routes';
+import webhookRoutes from './routes/webhook.routes';
 import { authenticateToken } from './middleware/auth.middleware';
 import { errorHandler } from './middleware/error.middleware';
 import { corsMiddleware } from './middleware/cors';
@@ -32,6 +33,10 @@ import { envConfig } from './config/environment';
 
 const app = express();
 const port = envConfig.PORT;
+
+// Required when running behind reverse proxies/tunnels (ngrok, nginx, cloud load balancers)
+// so middleware like express-rate-limit can safely use X-Forwarded-For.
+app.set('trust proxy', 1);
 
 // Security headers using Helmet
 app.use(
@@ -55,7 +60,17 @@ app.use(
 );
 
 // Apply global rate limiter (DDoS protection - 1000 requests per minute per IP)
-app.use(globalLimiter);
+// BUT: Skip webhooks since they're from trusted external services
+app.use((req, res, next) => {
+  if (req.path.startsWith('/api/webhooks')) {
+    return next(); // Skip rate limiter for webhooks
+  }
+  globalLimiter(req, res, next);
+});
+
+// IMPORTANT: Webhook route with raw body parser must come BEFORE express.json()
+// Stripe signature verification requires the raw body
+app.use('/api/webhooks', express.raw({ type: 'application/json' }), webhookRoutes);
 
 // Middleware
 // Task 5.3: Configure request payload size limit (10MB)

@@ -107,17 +107,17 @@
 ## 8. Stripe Configuration (Phase 4 - Week 5)
 
 - [x] 8.1 **USER:** Create Stripe account and obtain API keys (test mode + production mode) at https://dashboard.stripe.com
-- [ ] 8.2 **USER:** Create Stripe product "Pharmacy Expiry Management SaaS" in Stripe dashboard
-- [ ] 8.3 **USER:** Create price: starter_monthly ($99/month) with metadata tier=starter
-- [ ] 8.4 **USER:** Create price: starter_annual ($990/year) with metadata tier=starter
-- [ ] 8.5 **USER:** Create price: professional_monthly ($249/month) with metadata tier=professional
-- [ ] 8.6 **USER:** Create price: professional_annual ($2,490/year) with metadata tier=professional
-- [ ] 8.7 **USER:** Create price: premium_monthly ($499/month) with metadata tier=premium
-- [ ] 8.8 **USER:** Create price: premium_annual ($4,990/year) with metadata tier=premium
-- [ ] 8.9 **USER:** Create price: concierge_addon ($600/month) with metadata addon=concierge
-- [ ] 8.10 **USER:** Configure Stripe webhook endpoint in dashboard (Settings → Webhooks → Add endpoint → URL: https://yourdomain.com/api/webhooks/stripe)
-- [ ] 8.11 **USER:** Add webhook endpoint secret to `.env` file as `STRIPE_WEBHOOK_SECRET` (copy from Stripe dashboard)
-- [ ] 8.12 Document Stripe configuration in `docs/stripe-setup.md`
+- [x] 8.2 **USER:** Create Stripe product "Pharmacy Expiry Management SaaS" in Stripe dashboard
+- [x] 8.3 **USER:** Create price: starter_monthly ($99/month) with metadata tier=starter
+- [x] 8.4 **USER:** Create price: starter_annual ($990/year) with metadata tier=starter
+- [x] 8.5 **USER:** Create price: professional_monthly ($249/month) with metadata tier=professional
+- [x] 8.6 **USER:** Create price: professional_annual ($2,490/year) with metadata tier=professional
+- [x] 8.7 **USER:** Create price: premium_monthly ($499/month) with metadata tier=premium
+- [x] 8.8 **USER:** Create price: premium_annual ($4,990/year) with metadata tier=premium
+- [x] 8.9 **USER:** Create price: concierge_addon ($600/month) with metadata addon=concierge
+- [x] 8.10 **USER:** Configure Stripe webhook endpoint in dashboard (Settings → Webhooks → Add endpoint → URL: https://yourdomain.com/api/webhooks/stripe)
+- [x] 8.11 **USER:** Add webhook endpoint secret to `.env` file as `STRIPE_WEBHOOK_SECRET` (copy from Stripe dashboard)
+- [x] 8.12 Document Stripe configuration in `docs/stripe-setup.md`
 
 ## 9. Stripe Subscription Service (Phase 4 - Week 5)
 

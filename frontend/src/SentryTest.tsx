@@ -7,7 +7,7 @@ const SentryTest: React.FC = () => {
   const triggerFrontendError = () => {
     try {
       // This will throw a ReferenceError
-      console.log(nonExistentVariable);
+      throw new Error('Test frontend error');
     } catch (err) {
       Sentry.captureException(err);
       setError('Frontend error triggered and sent to Sentry');

@@ -395,6 +395,7 @@ export class ProductService {
    */
   private mapPrismaToModel(product: {
     id: number;
+    organizationId: string | null;
     barcode: string;
     sku: string;
     name: string;
@@ -405,6 +406,7 @@ export class ProductService {
   }): Product {
     return {
       id: product.id,
+      organizationId: product.organizationId ?? this.organizationId,
       barcode: product.barcode,
       sku: product.sku,
       name: product.name,

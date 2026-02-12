@@ -1,4 +1,4 @@
-import Database from 'better-sqlite3';
+import { type DB } from '../database';
 import {
   ReportRepository,
   MonthlyExpiryReport,

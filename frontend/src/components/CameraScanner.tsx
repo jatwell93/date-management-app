@@ -6,9 +6,10 @@ interface CameraScannerProps {
   onScannerReady?: () => void;
   onScannerReset?: () => void;
   continuous?: boolean;
+  isHandheld?: boolean;
 }
 
-export function CameraScanner({ onDetected, onScannerReady, onScannerReset, continuous = false }: CameraScannerProps) {
+export function CameraScanner({ onDetected, onScannerReady, onScannerReset, continuous = false, isHandheld = false }: CameraScannerProps) {
   const videoRef = useRef<HTMLDivElement>(null);
   const [error, setError] = useState<string | null>(null);
   const recentScansRef = useRef<Set<string>>(new Set());
@@ -121,15 +122,19 @@ export function CameraScanner({ onDetected, onScannerReady, onScannerReset, cont
 
   if (error) {
     return (
-      <div className="camera-scanner">
-        <div className="w-full h-64 bg-gray-200 flex items-center justify-center rounded border border-dashed">
+      <div className={`camera-scanner ${isHandheld ? 'h-full flex flex-col' : ''}`}>
+        <div className={`w-full bg-gray-200 flex items-center justify-center rounded border border-dashed ${
+          isHandheld ? 'flex-1 min-h-[300px]' : 'h-64'
+        }`}>
           <div className="text-center p-4">
-            <p className="text-red-500 font-medium mb-2">Camera Error</p>
-            <p className="text-sm text-gray-600">{error}</p>
+            <p className={`text-red-500 font-medium mb-2 ${isHandheld ? 'text-lg' : ''}`}>Camera Error</p>
+            <p className={`text-gray-600 ${isHandheld ? 'text-base' : 'text-sm'}`}>{error}</p>
             <button
               type="button"
               onClick={handleResetScanner}
-              className="mt-4 px-4 py-2 bg-primary hover:bg-primary/90 text-primary-foreground rounded"
+              className={`mt-4 px-4 py-2 bg-primary hover:bg-primary/90 text-primary-foreground rounded ${
+                isHandheld ? 'py-3 text-lg min-h-[48px]' : ''
+              }`}
             >
               Try Again
             </button>
@@ -140,18 +145,22 @@ export function CameraScanner({ onDetected, onScannerReady, onScannerReset, cont
   }
 
   return (
-    <div className="camera-scanner">
-      <div ref={videoRef} className="w-full h-64 bg-black flex items-center justify-center rounded">
+    <div className={`camera-scanner ${isHandheld ? 'h-full flex flex-col' : ''}`}>
+      <div ref={videoRef} className={`w-full bg-black flex items-center justify-center rounded ${
+        isHandheld ? 'flex-1' : 'h-64'
+      }`}>
         <div className="text-white text-center">
-          <p>Camera feed will appear here</p>
-          <p className="text-sm mt-2">Point your camera at a barcode</p>
-          {continuous && <p className="text-xs mt-1 text-yellow-300">Continuous scan mode</p>}
+          <p className={isHandheld ? 'text-lg' : ''}>Camera feed will appear here</p>
+          <p className={`mt-2 ${isHandheld ? 'text-base' : 'text-sm'}`}>Point your camera at a barcode</p>
+          {continuous && <p className={`mt-1 text-yellow-300 ${isHandheld ? 'text-sm' : 'text-xs'}`}>Continuous scan mode</p>}
         </div>
       </div>
       <button
         type="button"
         onClick={handleResetScanner}
-        className="mt-2 px-4 py-2 bg-primary hover:bg-primary/90 text-primary-foreground rounded"
+        className={`mt-2 px-4 py-2 bg-primary hover:bg-primary/90 text-primary-foreground rounded ${
+          isHandheld ? 'py-3 text-lg min-h-[48px]' : ''
+        }`}
       >
         Reset Scanner
       </button>

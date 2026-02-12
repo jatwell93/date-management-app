@@ -121,7 +121,7 @@ class UserService {
     mapPrismaToModel(user) {
         return {
             id: user.id,
-            organizationId: user.organizationId,
+            organizationId: user.organizationId ?? this.organizationId,
             pin: user.pin,
             role: user.role,
             created_at: user.createdAt.toISOString(),

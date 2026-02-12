@@ -9,8 +9,8 @@ export class UserService {
   private authService: AuthService;
   private organizationId: string;
 
-  constructor(organizationId: string, prismaClient?: PrismaClient, authService?: AuthService) {
-    this.organizationId = organizationId;
+  constructor(organizationId?: string, prismaClient?: PrismaClient, authService?: AuthService) {
+    this.organizationId = organizationId ?? 'default-org';
     this.prisma = prismaClient ?? getDefaultDatabaseClient();
     this.authService = authService ?? new AuthService(this.prisma);
   }
@@ -147,7 +147,7 @@ export class UserService {
 
   private mapPrismaToModel(user: {
     id: number;
-    organizationId: string;
+    organizationId: string | null;
     pin: string;
     role: string;
     createdAt: Date;
@@ -155,7 +155,7 @@ export class UserService {
   }): User {
     return {
       id: user.id,
-      organizationId: user.organizationId,
+      organizationId: user.organizationId ?? this.organizationId,
       pin: user.pin,
       role: user.role as User['role'],
       created_at: user.createdAt.toISOString(),

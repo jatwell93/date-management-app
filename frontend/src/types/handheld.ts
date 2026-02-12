@@ -85,16 +85,17 @@ export interface HandheldScannerProps extends ScannerProps {
 // Layout component props
 export interface HandheldLayoutProps {
   children: React.ReactNode;
-  showToolbar?: boolean;
-  toolbarContent?: React.ReactNode;
+  userName?: string;
+  syncStatus?: 'syncing' | 'synced' | 'offline' | 'failed';
+  onSyncNow?: () => void;
+  onSettingsClick?: () => void;
+  queueLength?: number;
 }
 
 // Toolbar component props
 export interface HandheldScanToolbarProps {
   userName?: string;
   syncStatus: 'syncing' | 'synced' | 'offline' | 'failed';
-  syncStrategy: SyncStrategy;
-  onSyncStrategyChange: (strategy: SyncStrategy) => void;
   onSyncNow: () => void;
   onSettingsClick: () => void;
   queueLength: number;

@@ -9,7 +9,7 @@ class InventoryService {
      * @param prismaClient - Optional PrismaClient for testing/custom configurations
      */
     constructor(organizationId, prismaClient) {
-        this.organizationId = organizationId;
+        this.organizationId = organizationId ?? 'default-org';
         this.prisma = prismaClient ?? (0, database_factory_1.getDefaultDatabaseClient)();
     }
     /**
@@ -76,9 +76,6 @@ class InventoryService {
         const items = await this.prisma.inventoryItem.findMany({
             where: {
                 locationId,
-                location: {
-                    organizationId: this.organizationId,
-                },
                 product: {
                     organizationId: this.organizationId,
                 },
@@ -102,7 +99,7 @@ class InventoryService {
             throw new Error('Product not found or does not belong to this organization');
         }
         // Validate that the location belongs to the organization
-        const location = await this.prisma.location.findFirst({
+        const location = await this.prisma.storeArea.findFirst({
             where: {
                 id: locationId,
                 organizationId: this.organizationId,
@@ -151,7 +148,7 @@ class InventoryService {
         }
         // Validate location belongs to organization if being updated
         if (updates.locationId !== undefined) {
-            const location = await this.prisma.location.findFirst({
+            const location = await this.prisma.storeArea.findFirst({
                 where: {
                     id: updates.locationId,
                     organizationId: this.organizationId,
@@ -362,6 +359,7 @@ class InventoryService {
     mapPrismaToModel(item) {
         return {
             id: item.id,
+            organizationId: item.organizationId ?? this.organizationId,
             productId: item.productId,
             expiryDate: item.expiryDate.toISOString().split('T')[0], // Convert Date to YYYY-MM-DD string
             locationId: item.locationId,

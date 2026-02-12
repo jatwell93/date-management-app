@@ -399,6 +399,7 @@ class ProductService {
     mapPrismaToModel(product) {
         return {
             id: product.id,
+            organizationId: product.organizationId ?? this.organizationId,
             barcode: product.barcode,
             sku: product.sku,
             name: product.name,
