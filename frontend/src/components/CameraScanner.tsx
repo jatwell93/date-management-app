@@ -1,5 +1,6 @@
 import React, { useEffect, useRef, useState } from 'react';
 import Quagga from 'quagga';
+import { triggerHaptic } from '../lib/haptic';
 
 interface CameraScannerProps {
   onDetected: (code: string) => void;
@@ -55,6 +56,9 @@ export function CameraScanner({ onDetected, onScannerReady, onScannerReset }: Ca
 
       Quagga.onDetected((data: any) => {
         if (data && data.codeResult && data.codeResult.code) {
+          // Trigger haptic feedback on successful barcode detection
+          triggerHaptic(50);
+
           onDetected(data.codeResult.code);
           // Stop the scanner after a successful detection to prevent continuous scanning
           setTimeout(() => {

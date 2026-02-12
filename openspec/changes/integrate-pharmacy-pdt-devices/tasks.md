@@ -131,13 +131,13 @@
 
 ## 10. Haptic Feedback
 
-- [ ] 10.1 Create `frontend/src/lib/haptic.ts` utility:
+- [x] 10.1 Create `frontend/src/lib/haptic.ts` utility:
   - Export `triggerHaptic(durationMs: number = 50)` function
   - Use Vibration API if available: `navigator.vibrate(durationMs)`
   - Gracefully handle devices without Vibration API (try-catch, no console errors)
-- [ ] 10.2 Call `triggerHaptic()` in `useHardwareScan` hook on successful barcode assembly (after Enter detected)
-- [ ] 10.3 Call `triggerHaptic()` in `CameraScanner` on successful barcode detection (when `onDetected` fires)
-- [ ] 10.4 Add unit tests for haptic utility (mock Vibration API)
+- [x] 10.2 Call `triggerHaptic()` in `useHardwareScan` hook on successful barcode assembly (after Enter detected)
+- [x] 10.3 Call `triggerHaptic()` in `CameraScanner` on successful barcode detection (when `onDetected` fires)
+- [x] 10.4 Add unit tests for haptic utility (mock Vibration API)
 
 ## 11. Testing and Validation
 
