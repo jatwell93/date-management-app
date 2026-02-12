@@ -3,6 +3,17 @@ import { render, screen, fireEvent, act } from '@testing-library/react';
 import { Scanner } from '../components/Scanner';
 import { HardwareScanResult } from '../types/handheld';
 import '@testing-library/jest-dom';
+import '@testing-library/jest-dom';
+
+// Add the CameraScanner mock here
+jest.mock('../components/CameraScanner', () => ({
+  CameraScanner: ({ onScan }: { onScan: (barcode: string) => void }) => (
+    <div>
+      <div>Camera Scanner</div>
+      <button onClick={() => onScan('CAMERA_SCAN_123')}>Trigger Scan</button>
+    </div>
+  ),
+}));
 
 // Mock Quagga for camera mode
 jest.mock('quagga', () => ({
@@ -27,6 +38,7 @@ Object.defineProperty(global.navigator, 'mediaDevices', {
 jest.mock('../hooks/useHardwareScan', () => ({
   useHardwareScan: jest.fn(),
 }));
+
 
 // Import the mocked hook
 import { useHardwareScan } from '../hooks/useHardwareScan';
