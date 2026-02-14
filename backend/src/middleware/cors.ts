@@ -19,7 +19,7 @@ const parseAllowedOrigins = (): string[] => {
 
   // Development origins (always allowed in development)
   if (envConfig.NODE_ENV !== 'production') {
-    allowedOrigins.push('http://localhost:3000', 'http://localhost:3001');
+    allowedOrigins.push('http://localhost:3000', 'http://localhost:3001', 'http://localhost:3002');
   }
 
   // Production/configured origins

@@ -39,78 +39,79 @@ export function CameraScanner({
     return false;
   }, []);
 
+  // Extract scanner initialization logic so it can be reused
+  const initScanner = useCallback(() => {
+    if (!videoRef.current) return;
+
+    Quagga.init(
+      {
+        inputStream: {
+          name: 'Live',
+          type: 'LiveStream',
+          target: videoRef.current,
+          constraints: {
+            facingMode: 'environment', // Prefer rear camera if available
+            width: 640,
+            height: 480,
+          },
+        },
+        decoder: {
+          readers: [
+            'code_128_reader',
+            'ean_reader',
+            'ean_8_reader',
+            'code_39_reader',
+            'code_39_vin_reader',
+            'codabar_reader',
+            'upc_reader',
+            'upc_e_reader',
+            'i2of5_reader',
+          ],
+        },
+      },
+      (err: unknown) => {
+        if (err) {
+          const initError = err instanceof Error ? err : new Error('Unknown camera error');
+          Sentry.captureException(initError, {
+            tags: { feature: 'camera-scanner' },
+          });
+          setError('Error accessing camera. Please ensure you have granted camera permissions.');
+          return;
+        }
+
+        Quagga.start();
+        onScannerReady?.();
+      },
+    );
+
+    Quagga.onDetected((data: unknown) => {
+      const code = (data as { codeResult?: { code?: string } })?.codeResult?.code;
+      if (!code) {
+        return;
+      }
+
+      // Trigger haptic feedback on successful barcode detection
+      triggerHaptic(50);
+
+      const barcode = code;
+
+      // Skip duplicate barcodes within 2-second window
+      if (isDuplicateScan(barcode)) {
+        return;
+      }
+
+      onDetected(barcode);
+
+      // Only stop the scanner after detection if not in continuous mode
+      if (!continuous) {
+        setTimeout(() => {
+          Quagga.stop();
+        }, 1000);
+      }
+    });
+  }, [onDetected, onScannerReady, continuous, isDuplicateScan]);
+
   useEffect(() => {
-    const initScanner = () => {
-      if (!videoRef.current) return;
-
-      Quagga.init(
-        {
-          inputStream: {
-            name: 'Live',
-            type: 'LiveStream',
-            target: videoRef.current,
-            constraints: {
-              facingMode: 'environment', // Prefer rear camera if available
-              width: 640,
-              height: 480,
-            },
-          },
-          decoder: {
-            readers: [
-              'code_128_reader',
-              'ean_reader',
-              'ean_8_reader',
-              'code_39_reader',
-              'code_39_vin_reader',
-              'codabar_reader',
-              'upc_reader',
-              'upc_e_reader',
-              'i2of5_reader',
-            ],
-          },
-        },
-        (err: unknown) => {
-          if (err) {
-            const initError = err instanceof Error ? err : new Error('Unknown camera error');
-            Sentry.captureException(initError, {
-              tags: { feature: 'camera-scanner' },
-            });
-            setError('Error accessing camera. Please ensure you have granted camera permissions.');
-            return;
-          }
-
-          Quagga.start();
-          onScannerReady?.();
-        },
-      );
-
-      Quagga.onDetected((data: unknown) => {
-        const code = (data as { codeResult?: { code?: string } })?.codeResult?.code;
-        if (!code) {
-          return;
-        }
-
-        // Trigger haptic feedback on successful barcode detection
-        triggerHaptic(50);
-
-        const barcode = code;
-
-        // Skip duplicate barcodes within 2-second window
-        if (isDuplicateScan(barcode)) {
-          return;
-        }
-
-        onDetected(barcode);
-
-        // Only stop the scanner after detection if not in continuous mode
-        if (!continuous) {
-          setTimeout(() => {
-            Quagga.stop();
-          }, 1000);
-        }
-      });
-    };
-
     initScanner();
 
     // Cleanup function
@@ -119,7 +120,7 @@ export function CameraScanner({
         Quagga.stop();
       }
     };
-  }, [onDetected, onScannerReady, continuous, isDuplicateScan]);
+  }, [initScanner]);
 
   const handleResetScanner = () => {
     setError(null); // Clear any error when resetting
@@ -129,10 +130,8 @@ export function CameraScanner({
 
     // Small timeout to ensure scanner stops before restarting
     setTimeout(() => {
-      if (Quagga) {
-        Quagga.start();
-        onScannerReset?.();
-      }
+      initScanner(); // Re-initialize scanner instead of just calling start()
+      onScannerReset?.();
     }, 300);
   };
 

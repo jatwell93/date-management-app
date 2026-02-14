@@ -6,7 +6,6 @@ import { validateDataIntegrity } from '../middleware/validation.middleware';
 import { validateRequest } from '../middleware/validateRequest';
 import { userSchema } from '../schemas';
 import { validateBusinessRules } from '../middleware/data-integrity.middleware';
-import { escapeHtml } from '../utils/normalize.function';
 import { standardLimiter } from '../middleware/rateLimiter';
 import { checkUsageLimit } from '../middleware/feature-gate.middleware';
 
@@ -18,7 +17,7 @@ router.get('/', authenticateToken, requireManager, async (req: AuthRequest, res:
   try {
     // const users = await userService.getUsers();
     const users = await userService.getUsers(/* req.organizationId */);
-    res.json(escapeHtml(users));
+    res.json(users);
   } catch (_error) {
     // console.error("Error getting users:", _error);
     res.status(500).json({ message: 'Internal server error' });
@@ -43,7 +42,7 @@ router.get('/:id', authenticateToken, requireManager, async (req: AuthRequest, r
       return res.status(403).json({ message: 'Access denied: User belongs to different organization' });
     }
 
-    res.json(escapeHtml(user));
+    res.json(user);
   } catch (_error) {
     // console.error("Error getting user:", _error);
     res.status(500).json({ message: 'Internal server error' });
@@ -81,7 +80,7 @@ router.post(
       };
 
       const createdUser = await userService.createUser(newUser);
-      res.status(201).json(escapeHtml(createdUser));
+      res.status(201).json(createdUser);
     } catch (_error) {
       // console.error("Error creating user:", _error);
       res.status(500).json({ message: 'Internal server error' });
@@ -129,7 +128,7 @@ router.put(
       }
 
       const updatedUser = await userService.getUserById(id);
-      res.json(escapeHtml(updatedUser));
+      res.json(updatedUser);
     } catch (_error) {
       // console.error("Error updating user:", _error);
       res.status(500).json({ message: 'Internal server error' });
@@ -167,7 +166,7 @@ router.delete(
         return res.status(404).json({ message: 'User not found' });
       }
 
-      res.json(escapeHtml({ message: 'User deleted successfully' }));
+      res.json({ message: 'User deleted successfully' });
     } catch (_error) {
       // console.error("Error deleting user:", _error);
       res.status(500).json({ message: 'Internal server error' });

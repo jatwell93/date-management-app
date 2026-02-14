@@ -5,6 +5,7 @@ import { getDefaultDatabaseClient } from '../database/database-factory';
 import { Logger } from '../utils/logger';
 import { AuthenticationError, InternalError } from '../errors';
 import { TierLevel, SubscriptionStatus } from '../types/subscription';
+import { envConfig } from '../config/environment';
 import crypto from 'crypto';
 
 export interface TokenPair {
@@ -204,7 +205,7 @@ export class AuthService {
               organizationId: user.organizationId,
               tierLevel: subscriptionTier.tierLevel,
             },
-            process.env.JWT_SECRET || 'your_jwt_secret',
+            envConfig.JWT_SECRET,
             {
               expiresIn: '1h', // Token expires in 1 hour
             },
@@ -239,7 +240,7 @@ export class AuthService {
    */
   async generateTokens(userId: number, role: string): Promise<TokenPair> {
     try {
-      const secret = process.env.JWT_SECRET || 'your_jwt_secret';
+      const secret = envConfig.JWT_SECRET;
 
       // Generate access token (short-lived)
       const accessToken = jwt.sign({ userId, role }, secret, {
@@ -275,7 +276,7 @@ export class AuthService {
    */
   verifyToken(token: string): TokenPayload {
     try {
-      const secret = process.env.JWT_SECRET || 'your_jwt_secret';
+      const secret = envConfig.JWT_SECRET;
       const decoded = jwt.verify(token, secret) as TokenPayload;
       return decoded;
     } catch (error) {
@@ -317,7 +318,7 @@ export class AuthService {
       }
 
       // Generate new access token
-      const secret = process.env.JWT_SECRET || 'your_jwt_secret';
+      const secret = envConfig.JWT_SECRET;
       const accessToken = jwt.sign(
         { userId: storedToken.userId, role: storedToken.user.role },
         secret,

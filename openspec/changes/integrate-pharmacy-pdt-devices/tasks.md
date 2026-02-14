@@ -167,63 +167,160 @@
 
 ## 12. PWA Configuration
 
-- [ ] 12.1 Verify `frontend/public/manifest.json` has:
+- [x] 12.1 Verify `frontend/public/manifest.json` has:
   - `"display": "standalone"`
   - `"orientation": "portrait"`
   - `"start_url": "/"` (or `/scan` if answering open question #1)
-- [ ] 12.2 Test PWA "Add to Home Screen" flow on a real Android device (or Android emulator with Chrome)
-- [ ] 12.3 Verify service worker caching includes new handheld.css and component bundles
+- [x] 12.2 Test PWA "Add to Home Screen" flow on a real Android device (or Android emulator with Chrome)
+- [x] 12.3 Verify service worker caching includes new handheld.css and component bundles
 
 ## 13. Documentation and Config Guides
 
-- [ ] 13.1 Create `docs/handheld-devices.md` with per-vendor configuration guides:
+- [x] 13.1 Create `docs/handheld-devices.md` with per-vendor configuration guides:
   - **Zebra TC21-HC**: DataWedge config steps (keyboard wedge mode, standard format), troubleshooting
   - **Honeywell CT45 XP**: Honeywell Settings app config steps, troubleshooting
   - **CipherLab RS36**: CipherLab Reader Config steps, troubleshooting
-- [ ] 13.2 Create `docs/handheld-debug-guide.md` with:
+- [x] 13.2 Create `docs/handheld-debug-guide.md` with:
   - How to enable debug mode (`localStorage.setItem('forceHandheld', 'true')`)
   - Test scan diagnostic page (displays raw keyboard events for troubleshooting)
   - How to inspect browser network timing for sync performance
-- [ ] 13.3 Update `frontend/README.md` with handheld PWA setup instructions
-- [ ] 13.4 Create troubleshooting section in docs for common issues:
+- [x] 13.3 Update `frontend/README.md` with handheld PWA setup instructions
+- [x] 13.4 Create troubleshooting section in docs for common issues:
   - Keyboard wedge not working (device config required)
   - Duplicate scans (timing threshold may need adjustment)
   - GS1 separator characters stripped (document fallback behavior)
 
 ## 14. Pharmacy A Pilot Testing (Week 4)
 
+**TESTING STRATEGY:** Desktop pre-testing validates core functionality (70-80%) before going to pharmacy. Physical device testing focuses on hardware-specific validation (keyboard wedge timing, battery, low-light) and real-world workflow.
+
+### 14.0 Desktop Pre-Testing Phase (Before Pharmacy Visit - 3-4 hours)
+
+- [x] 14.0.1 Set up desktop test environment:
+  - Ensure `npm start` runs successfully in frontend directory
+  - Open DevTools (F12) console for all testing below
+  - Keep [handheld-debug-guide.md](docs/handheld-debug-guide.md) open for reference
+  
+- [ ] 14.0.2 Test handheld UI detection and rendering:
+  - Open app with `http://localhost:3000/?forceHandheld=true`
+  - Verify handheld layout loads (full-screen scanner, large buttons, HandheldScanToolbar visible)
+  - Verify desktop browser window resized to ≤600×800px triggers handheld mode automatically
+  - Check that all handheld-only components render (HandheldScanner, sync status, strategy selector)
+  
+- [ ] 14.0.3 Test keyboard input detection (50ms threshold):
+  - Use DevTools Console snippet from [handheld-debug-guide.md](docs/handheld-debug-guide.md#manually-keyboard-event-injection)
+  - Simulate fast barcode scan (10ms keystroke delay):
+    ```javascript
+    simulateScan('1234567890', 10);
+    ```
+  - Verify barcode appears in input field and is recognized as "hardware scan"
+  - Simulate slow human typing (100ms delay):
+    ```javascript
+    simulateScan('1234567890', 100);
+    ```
+  - Verify slow typing does NOT trigger hardware scan path (should treat as manual entry)
+  - Check console logs show timing detection working correctly
+  
+- [ ] 14.0.4 Test GS1-128 barcode parsing:
+  - Simulate scan of GS1-128 test barcode:
+    ```javascript
+    simulateScan('0137939393141710B256092121B256', 10); // Example GS1 barcode
+    ```
+  - Verify parsed data appears in console: GTIN, batch, expiry, serial
+  - Verify expiry date field auto-fills on ScanPage
+  - Test with fixture barcodes from [handheld-debug-guide.md](docs/handheld-debug-guide.md#test-data-barcode-fixtures)
+  
+- [ ] 14.0.5 Test offline sync logic and strategies:
+  - In DevTools Network tab, throttle connection to "Offline" (DevTools > Network > Offline)
+  - Simulate scan:
+    ```javascript
+    simulateScan('5901234123457', 10);
+    ```
+  - Verify barcode queued locally (check IndexedDB in DevTools > Application > Storage)
+  - Verify sync status shows "Offline" in toolbar
+  - Restore network connection (back to "No throttling")
+  - Verify sync completes and status shows "Synced"
+  
+- [ ] 14.0.6 Test all three sync strategies:
+  - **Real-time mode:** Scan 3 barcodes, verify each syncs immediately (<2s) to network requests
+  - **Batch mode:** Switch to batch strategy, scan 3 barcodes, verify none sync immediately; wait 10+ minutes or trigger manual sync, verify all 3 sync together
+  - **Manual mode:** Switch to manual, scan 3 barcodes, verify no automatic sync; tap "Sync Now", verify scans sync
+  - Document any timing issues for pharmacy visit
+  
+- [ ] 14.0.7 Test haptic feedback simulation:
+  - Open DevTools Console
+  - Navigate to ScanPage and scan a barcode (simulated or real)
+  - Check console for haptic API calls: `navigator.vibrate()` being invoked
+  - If testing on a device (not just desktop), verify slight vibration on scan
+  
+- [ ] 14.0.8 Performance baseline on desktop:
+  - Open DevTools Performance tab
+  - Simulate 10 rapid scans in real-time mode
+  - Record Performance profile
+  - Note frame rate, memory usage, CPU spike frequency (for comparison at pharmacy)
+  - Target: <200ms per scan processing, no frame drops on handheld UI
+  
+- [ ] 14.0.9 Pre-test checklist pass:
+  - [ ] Handheld layout renders correctly
+  - [ ] Keyboard input detection working (50ms threshold validated)
+  - [ ] GS1 parsing extracts all fields correctly
+  - [ ] Offline queue persists and syncs when reconnected
+  - [ ] All 3 sync strategies work in isolation
+  - [ ] No console errors or warnings
+  - [ ] Haptic API calls logged (actual haptic depends on device)
+
+---
+
+### 14.1 Pharmacy A On-Site Testing (Week 4 - Physical Device)
+
 - [ ] 14.1 Schedule 1-2 hour session at Pharmacy A during low-traffic period
 - [ ] 14.2 Create test account with Manager role for pilot pharmacy
 - [ ] 14.3 Prepare test barcodes: 5-10 EAN-13 codes for common pharmacy items + 5-10 GS1-128 pharmaceutical barcodes
+  - Print or screenshot barcodes to bring to pharmacy
+  - Have backup barcodes (actual products) in case printed ones don't scan
 - [ ] 14.4 **Morning Setup (30 min):**
   - Log into app on Zebra TC21-HC device
-  - Verify handheld UI layout and button responsiveness
-  - Test barcode scanner permission grant
-  - Confirm WiFi connection and initial sync
-- [ ] 14.5 **Basic Scanning (1 hour):**
-  - Scan 20 product barcodes
-  - Verify correct product lookup for each
-  - Monitor sync timing (target: <2s per scan in real-time mode)
-  - Check battery impact (observe drain rate over 60 min)
-  - Test low-light scanning (pharmacy areas with varied lighting)
-- [ ] 14.6 **GS1-128 Expiry Testing (30 min):**
+  - Verify handheld UI layout matches desktop pre-testing (confirm layout/buttons identical)
+  - Test barcode scanner permission grant (Camera permission)
+  - Confirm WiFi connection and perform initial sync
+  - Verify app performance baseline (no lag, responsive buttons)
+- [ ] 14.5 **Hardware Keyboard Wedge Testing (45 min):**
+  - Scan 5 simple EAN-13 barcodes
+  - Verify timing threshold is correct: barcodes should appear instantly (not delayed by 50ms detection window)
+  - Check for any missing characters (barcode truncation)
+  - Monitor: Sync timing (target: <2s per scan in real-time mode)
+  - Note: Keyboard wedge timing on live device may differ slightly from desktop simulator—document any exceptions
+- [ ] 14.6 **GS1-128 Pharmaceutical Barcode Testing (30 min):**
   - Scan 5 pharmaceutical barcodes with GS1-128 format
-  - Verify expiry date is auto-populated in the form field
-  - Confirm batch/lot number is captured (if required by Pharmacy A workflow)
-- [ ] 14.7 **Offline Scenario (30 min):**
-  - Disconnect WiFi, perform 5 scans offline
-  - Verify data persists in IndexedDB
-  - Reconnect WiFi and verify sync completes
-  - Test manual "Sync Now" button
-- [ ] 14.8 **Performance Observations (ongoing):**
-  - Measure battery drain: expected 20-30% over 2 hours
-  - Measure sync time per item: target <2s in real-time mode
-  - Note any keyboard wedge reliability issues (missed characters, phantom scans)
-  - Observe staff interaction with 48px+ buttons (gloved hand usability)
-- [ ] 14.9 **Post-Pilot Debrief:**
-  - Gather informal feedback from 1-2 pharmacy staff
+  - Verify FNC1 separator characters are preserved (open DevTools Network tab to see raw payload)
+  - Verify expiry date is auto-populated in form field
+  - Confirm batch/lot number is captured in API payload (if required by Pharmacy A workflow)
+  - Test low-light scanning (scan in poorly lit pharmacy area)—note quality issues
+- [ ] 14.7 **Offline & Sync Resilience (30 min):**
+  - Disconnect WiFi on device
+  - Perform 5 scans offline
+  - Verify data persists locally (visual confirmation: items in queue appear on UI)
+  - Reconnect WiFi (or enable airplane mode → disable to reconnect)
+  - Verify sync completes and all 5 items appear in the dashboard
+  - Test manual "Sync Now" button (should trigger immediate sync)
+- [ ] 14.8 **Real-World Performance Observations (Ongoing, 60 min):**
+  - **Battery drain:** Note battery % at start, observe drain over 1 hour of active scanning; target: 20-30% drain
+  - **Sync latency:** Use Network tab (DevTools) to measure sync time per item; target: <2s in real-time mode
+  - **Keyboard wedge reliability:** Count any missed characters or phantom scans; target: 100% accuracy
+  - **Gloved hand usability:** Observe staff (if possible) using 48px+ buttons with gloves; note any misclicks
+  - **Screen responsiveness:** Tap buttons rapidly; verify no lag or missed taps
+- [ ] 14.9 **Error Handling & Edge Cases (15 min):**
+  - Attempt invalid barcode (scan non-barcode item or show barcode upside down)—should fail gracefully
+  - Trigger sync error (disconnect WiFi mid-sync)—should queue and retry automatically
+  - Test error message visibility on 5" screen (should be readable, not cut off)
+- [ ] 14.10 **Post-Pilot Debrief (15 min):**
+  - Gather informal feedback from 1-2 pharmacy staff:
+    - "Is the scan speed fast enough for your workflow?"
+    - "Are the buttons easy to tap with gloves?"
+    - "Did you encounter any issues?"
   - Document any UX issues or feature requests
-  - Plan iteration or refinements for Phase 1B (optional)
+  - Take photos/video of app in use (with permission) for portfolio/demo
+  - Plan iteration or refinements for Phase 1B (optional next iteration)
 
 ## 15. Post-MVP Optional Features (Defer to Phase 1B+)
 

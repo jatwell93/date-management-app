@@ -7,7 +7,6 @@ import { validateRequest } from '../middleware/validateRequest';
 import { productSchema } from '../schemas';
 import { validateBusinessRules } from '../middleware/data-integrity.middleware';
 import multer, { FileFilterCallback } from 'multer';
-import { escapeHtml } from '../utils/normalize.function';
 import { standardLimiter } from '../middleware/rateLimiter';
 import * as path from 'path';
 
@@ -39,7 +38,7 @@ router.get('/', authenticateToken, async (req: AuthRequest, res: Response) => {
   try {
     // TODO: Phase 7 - Update service to accept organizationId parameter
     const products = await productService.getAllProducts(); // req.organizationId!
-    res.json(escapeHtml(products));
+    res.json(products);
   } catch (_error) {
     // console.error("Get products error:", _error);
     res.status(500).json({ message: 'Internal server error' });
@@ -66,7 +65,7 @@ router.get('/:id', authenticateToken, async (req: AuthRequest, res: Response) =>
         .json({ message: 'Access denied: Product belongs to different organization' });
     }
 
-    res.json(escapeHtml(product));
+    res.json(product);
   } catch (_error) {
     // console.error("Get product error:", _error);
     res.status(500).json({ message: 'Internal server error' });
@@ -84,7 +83,7 @@ router.get('/by-barcode/:barcode', authenticateToken, async (req: AuthRequest, r
       return res.status(404).json({ message: 'Product not found' });
     }
 
-    res.json(escapeHtml(product));
+    res.json(product);
   } catch (_error) {
     // console.error("Get product by barcode error:", _error);
     res.status(500).json({ message: 'Internal server error' });
@@ -102,7 +101,7 @@ router.get('/by-sku/:sku', authenticateToken, async (req: AuthRequest, res: Resp
       return res.status(404).json({ message: 'Product not found' });
     }
 
-    res.json(escapeHtml(product));
+    res.json(product);
   } catch (_error) {
     // console.error("Get product by SKU error:", _error);
     res.status(500).json({ message: 'Internal server error' });
@@ -131,7 +130,7 @@ router.post(
         costPrice,
         organizationId: req.organizationId!,
       } as Omit<Product, 'id' | 'createdAt' | 'updatedAt'>);
-      res.status(201).json(escapeHtml(newProduct));
+      res.status(201).json(newProduct);
     } catch (_error) {
       // console.error("Create product error:", _error);
       res.status(500).json({ message: 'Internal server error' });
@@ -179,7 +178,7 @@ router.put(
         return res.status(404).json({ message: 'Product not found' });
       }
 
-      res.json(escapeHtml(updatedProduct));
+      res.json(updatedProduct);
     } catch (_error) {
       // console.error("Update product error:", _error);
       res.status(500).json({ message: 'Internal server error' });
@@ -216,7 +215,7 @@ router.delete(
         return res.status(404).json({ message: 'Product not found' });
       }
 
-      res.json(escapeHtml({ message: 'Product deleted successfully' }));
+      res.json({ message: 'Product deleted successfully' });
     } catch (_error) {
       // console.error("Delete product error:", _error);
       res.status(500).json({ message: 'Internal server error' });
@@ -269,7 +268,7 @@ router.post(
         responseObj.errors = result.errors;
       }
 
-      res.json(escapeHtml(responseObj));
+      res.json(responseObj);
     } catch (error: any) {
       console.error('CSV upload error:', error);
       res.status(500).json({

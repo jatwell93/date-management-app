@@ -3,6 +3,7 @@ import jwt, { Secret } from 'jsonwebtoken';
 import { AnalyticsService, AnalyticsEventType } from '../services/analytics.service';
 import { TierLevel, SubscriptionStatus } from '../types/subscription';
 import { getDefaultDatabaseClient } from '../database/database-factory';
+import { envConfig } from '../config/environment';
 
 export interface AuthRequest extends Request {
   userId?: number;
@@ -63,7 +64,7 @@ export const authenticateToken = async (req: AuthRequest, res: Response, next: N
 
   // First try with the current JWT secret
   try {
-    decodedToken = jwt.verify(token, process.env.JWT_SECRET || 'your_jwt_secret') as TokenPayload;
+    decodedToken = jwt.verify(token, envConfig.JWT_SECRET) as TokenPayload;
   } catch (_err) {
     // If current secret fails, try with old secret (for rotation period)
     if (process.env.JWT_SECRET_OLD) {
@@ -260,10 +261,9 @@ export const generateToken = (
   tierLevel: TierLevel,
   expiresIn: string | number = '24h',
 ): string => {
-  const secret = process.env.JWT_SECRET || 'your_jwt_secret';
   return jwt.sign(
     { userId, role, organizationId, tierLevel }, 
-    secret, 
+    envConfig.JWT_SECRET,
     {
       expiresIn: expiresIn as any,
     }

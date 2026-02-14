@@ -5,7 +5,6 @@ import { authenticateToken, generateToken } from '../middleware/auth.middleware'
 import { validateRequest } from '../middleware/validateRequest';
 import { loginSchema } from '../schemas';
 import { strictLimiter } from '../middleware/rateLimiter';
-import { escapeHtml } from '../utils/normalize.function';
 import { AuthenticationError } from '../errors';
 
 const router = Router();
@@ -43,8 +42,8 @@ router.post(
     try {
       // For this implementation, we're using direct PIN comparison.
       // In a real application, you would properly compare hashes
-      const token = await authService.login(pin);
-      res.json(escapeHtml({ token }));
+      const authResult = await authService.login(pin);
+      res.json(authResult);
     } catch (error) {
       if (error instanceof AuthenticationError) {
         return res.status(401).json({ message: error.message });
@@ -66,7 +65,7 @@ router.post('/refresh', authenticateToken, async (req: Request, res: Response) =
     }
 
     const newToken = generateToken(authReq.userId, authReq.userRole, authReq.organizationId, authReq.tierLevel, '1h');
-    res.json(escapeHtml({ token: newToken }));
+    res.json({ token: newToken });
   } catch (error) {
     console.error('Token refresh error:', error);
     res.status(500).json({ message: 'Internal server error' });

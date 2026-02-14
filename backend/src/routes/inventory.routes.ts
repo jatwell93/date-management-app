@@ -12,7 +12,6 @@ import {
   validateBusinessRules,
 } from '../middleware/data-integrity.middleware';
 import { logTransaction } from '../controllers/inventory.controller';
-import { escapeHtml } from '../utils/normalize.function';
 import { standardLimiter } from '../middleware/rateLimiter';
 import { checkUsageLimit } from '../middleware/feature-gate.middleware';
 
@@ -24,7 +23,7 @@ router.get('/', authenticateToken, async (req: AuthRequest, res: Response) => {
   try {
     // const items = await inventoryService.getAllInventoryItems();
     const items = await inventoryService.getAllInventoryItems();
-    res.json(escapeHtml(items));
+    res.json(items);
   } catch (error) {
     console.error('Get inventory items error:', error);
     res.status(500).json({ message: 'Internal server error' });
@@ -49,7 +48,7 @@ router.get('/:id', authenticateToken, async (req: AuthRequest, res: Response) =>
       return res.status(403).json({ message: 'Access denied: Item belongs to different organization' });
     }
 
-    res.json(escapeHtml(item));
+    res.json(item);
   } catch (error) {
     console.error('Get inventory item error:', error);
     res.status(500).json({ message: 'Internal server error' });
@@ -65,7 +64,7 @@ router.get('/product/:productId', authenticateToken, async (req: AuthRequest, re
     }
     // const items = await inventoryService.getInventoryItemsByProductId(productId);
     const items = await inventoryService.getInventoryItemsByProductId(productId);
-    res.json(escapeHtml(items));
+    res.json(items);
   } catch (error) {
     console.error('Get inventory items by product error:', error);
     res.status(500).json({ message: 'Internal server error' });
@@ -97,7 +96,7 @@ router.get('/by-barcode/:barcode', authenticateToken, async (req: AuthRequest, r
     // Then get inventory items for that product
     // const items = await inventoryService.getInventoryItemsByProductId(product.id, /* req.organizationId */);
     const items = await inventoryService.getInventoryItemsByProductId(product.id);
-    res.json(escapeHtml(items));
+    res.json(items);
   } catch (error) {
     console.error('Get inventory items by barcode error:', error);
     res.status(500).json({ message: 'Internal server error' });
@@ -119,7 +118,7 @@ router.get(
 
       // const items = await inventoryService.getRecentInventoryItemsByProductId(productId, limit);
       const items = await inventoryService.getRecentInventoryItemsByProductId(productId, limit);
-      res.json(escapeHtml(items));
+      res.json(items);
     } catch (error) {
       console.error('Get recent inventory items by product error:', error);
       res.status(500).json({ message: 'Internal server error' });
@@ -136,7 +135,7 @@ router.get('/location/:locationId', authenticateToken, async (req: AuthRequest, 
     }
     // const items = await inventoryService.getInventoryItemsByLocationId(locationId);
     const items = await inventoryService.getInventoryItemsByLocationId(locationId);
-    res.json(escapeHtml(items));
+    res.json(items);
   } catch (error) {
     console.error('Get inventory items by location error:', error);
     res.status(500).json({ message: 'Internal server error' });
@@ -197,7 +196,7 @@ router.post(
         } as Omit<InventoryItem, 'id' | 'createdAt' | 'updatedAt'>,
         userId,
       );
-      res.status(201).json(escapeHtml(newInventoryItem));
+      res.status(201).json(newInventoryItem);
     } catch (error: any) {
       // Check if the error is about location not existing
       if (error.message === 'Location does not exist') {
@@ -254,7 +253,7 @@ router.put(
         return res.status(404).json({ message: 'Inventory item not found' });
       }
 
-      res.json(escapeHtml(updatedItem));
+      res.json(updatedItem);
     } catch (error) {
       console.error('Update inventory item error:', error);
       res.status(500).json({ message: 'Internal server error' });
