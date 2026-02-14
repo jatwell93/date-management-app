@@ -11,7 +11,7 @@
  *
  * Gracefully handles devices without Vibration API support or when API is unavailable
  */
-export function triggerHaptic(durationMs: number = 50): void {
+export function triggerHaptic(durationMs = 50): void {
   try {
     // Check if Vibration API is available
     if (navigator && typeof navigator.vibrate === 'function') {

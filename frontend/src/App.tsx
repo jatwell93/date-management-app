@@ -1,4 +1,5 @@
 import React, { useState, useEffect } from 'react';
+import * as Sentry from '@sentry/react';
 import {
   BrowserRouter as Router,
   Routes,
@@ -59,7 +60,7 @@ const verifyToken = (token: string | null): boolean => {
     // If the token is expired, return false
     return decodedToken.exp ? decodedToken.exp > currentTime : false;
   } catch (error) {
-    console.error('Error decoding session:', error);
+    Sentry.captureException(error, { tags: { feature: 'auth' } });
     return false; // If there's an error decoding, treat it as invalid
   }
 };
@@ -75,10 +76,13 @@ const decodeTokenAndGetRole = (token: string | null): 'Manager' | 'Team Member' 
     } else if (role === 'Team Member') {
       return 'Team Member';
     }
-    console.warn('Unknown role in session, defaulting to Team Member');
+    Sentry.captureMessage('Unknown role in session, defaulting to Team Member', {
+      level: 'warning',
+      tags: { feature: 'auth' },
+    });
     return 'Team Member'; // Default role if not specified
   } catch (error) {
-    console.error('Error decoding session:', error);
+    Sentry.captureException(error, { tags: { feature: 'auth' } });
     return 'Team Member'; // Default to Team Member on error
   }
 };
@@ -89,7 +93,7 @@ const decodeTokenAndGetUserId = (token: string | null): number | null => {
     const decodedToken = jwtDecode<JwtPayload & { userId?: number }>(token);
     return typeof decodedToken.userId === 'number' ? decodedToken.userId : null;
   } catch (error) {
-    console.error('Error decoding user ID:', error);
+    Sentry.captureException(error, { tags: { feature: 'auth' } });
     return null;
   }
 };
@@ -101,7 +105,7 @@ const decodeTokenAndGetUserName = (token: string | null): string | null => {
     const decodedToken = jwtDecode<JwtPayload & { name?: string; email?: string }>(token);
     return decodedToken.name || decodedToken.email || null;
   } catch (error) {
-    console.error('Error decoding user name:', error);
+    Sentry.captureException(error, { tags: { feature: 'auth' } });
     return null;
   }
 };
@@ -155,10 +159,7 @@ function AppContent({
                 {/* Mobile menu button */}
                 <button
                   className="md:hidden text-primary-foreground focus:outline-none p-2 hover:bg-primary-foreground/10 rounded-md transition-colors"
-                  onClick={() => {
-                    console.log('Hamburger clicked, current state:', isMobileMenuOpen);
-                    setIsMobileMenuOpen(!isMobileMenuOpen);
-                  }}
+                  onClick={() => setIsMobileMenuOpen(!isMobileMenuOpen)}
                   aria-label="Toggle mobile menu"
                 >
                   {isMobileMenuOpen ? (
@@ -637,7 +638,7 @@ function App() {
     setUserRole(null);
     localStorage.removeItem('session');
     // Clear any offline data on logout
-    synchronizeOfflineData();
+    synchronizeOfflineData(null);
   };
 
   return (

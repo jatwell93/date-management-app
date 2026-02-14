@@ -3,7 +3,7 @@
  */
 
 import React, { createContext, useContext, useState, useEffect, useCallback } from 'react';
-import { IHandheldContext, HandheldDetectionResult } from '../types/handheld';
+import { IHandheldContext } from '../types/handheld';
 import { useHandheldDetection } from '../hooks/useHandheldDetection';
 import { SYNC_STRATEGIES, STORAGE_KEYS, DEFAULTS } from '../config/handheld';
 import { offlineSyncService } from '../lib/offline-sync';

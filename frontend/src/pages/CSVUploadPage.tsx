@@ -33,11 +33,6 @@ export const CSVUploadPage: React.FC<{ token: string | null }> = ({ token }) => 
       return;
     }
 
-    console.info('client_upload_metrics', {
-      event,
-      ...data,
-    });
-
     Sentry.captureMessage('client_upload_metrics', {
       level: 'info',
       extra: {
@@ -56,6 +51,106 @@ export const CSVUploadPage: React.FC<{ token: string | null }> = ({ token }) => 
       return 'unknown_error';
     }
     return 'unknown_error';
+  };
+
+  const MAX_UPLOAD_SIZE = 10 * 1024 * 1024;
+
+  const isAllowedUploadType = (file: File): boolean => {
+    return (
+      file.type === 'text/csv' ||
+      file.type === 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' ||
+      file.type === 'application/vnd.ms-excel' ||
+      file.name.endsWith('.csv') ||
+      file.name.endsWith('.xlsx') ||
+      file.name.endsWith('.xls')
+    );
+  };
+
+  const validateSelectedFile = (file: File | null): string | null => {
+    if (!file) {
+      return 'Please select a CSV, XLSX, or XLS file to upload';
+    }
+
+    if (!isAllowedUploadType(file)) {
+      return 'Please select a valid CSV, XLSX, or XLS file';
+    }
+
+    if (file.size > MAX_UPLOAD_SIZE) {
+      return 'File size exceeds 10MB limit';
+    }
+
+    return null;
+  };
+
+  const normalizeUploadFile = async (
+    file: File,
+  ): Promise<{ fileToUpload: File; fileNameToUpload: string }> => {
+    const fileExtension = file.name.split('.').pop()?.toLowerCase();
+    if ((fileExtension === 'xlsx' || fileExtension === 'xls') && file.type !== 'text/csv') {
+      setProgressMessage('Converting spreadsheet to CSV...');
+      const buffer = await file.arrayBuffer();
+      const workbook = XLSX.read(buffer, { type: 'array' });
+      const firstSheetName = workbook.SheetNames[0];
+      const worksheet = workbook.Sheets[firstSheetName];
+      const csvContent = XLSX.utils.sheet_to_csv(worksheet);
+      const fileToUpload = new File([csvContent], file.name.replace(/\.[^/.]+$/, '.csv'), {
+        type: 'text/csv',
+      });
+
+      return {
+        fileToUpload,
+        fileNameToUpload: fileToUpload.name,
+      };
+    }
+
+    return {
+      fileToUpload: file,
+      fileNameToUpload: file.name,
+    };
+  };
+
+  const uploadWithRetry = async (url: string, options: RequestInit, retries = 3) => {
+    for (let i = 0; i < retries; i++) {
+      try {
+        const res = await fetch(url, options);
+        if (res.ok) return res;
+        Sentry.captureMessage('Upload attempt failed with status', {
+          level: 'warning',
+          extra: { attempt: i + 1, status: res.status },
+        });
+        if (i < retries - 1) {
+          logUploadMetric('upload_retry', {
+            attempt: i + 1,
+            status: res.status,
+            errorCategory: 'http_error',
+          });
+        }
+      } catch (err) {
+        if (err instanceof Error) {
+          Sentry.captureException(err, {
+            tags: { feature: 'csv-upload' },
+            extra: { attempt: i + 1 },
+          });
+        } else {
+          Sentry.captureMessage('Upload attempt failed with unknown error', {
+            level: 'warning',
+            extra: { attempt: i + 1 },
+          });
+        }
+        if (i < retries - 1) {
+          logUploadMetric('upload_retry', {
+            attempt: i + 1,
+            errorCategory: 'network_error',
+          });
+        }
+      }
+      if (i < retries - 1) {
+        const delay = 1000 * Math.pow(2, i);
+        await new Promise((r) => setTimeout(r, delay));
+      }
+    }
+
+    throw new Error('Upload failed after multiple attempts');
   };
 
   const handleFileChange = (event: React.ChangeEvent<HTMLInputElement>) => {
@@ -110,37 +205,17 @@ export const CSVUploadPage: React.FC<{ token: string | null }> = ({ token }) => 
   const handleSubmit = async (event: React.FormEvent) => {
     event.preventDefault();
 
-    if (!selectedFile) {
+    const validationError = validateSelectedFile(selectedFile);
+    if (validationError) {
       setUploadResult({
         success: false,
-        message: 'Please select a CSV, XLSX, or XLS file to upload',
+        message: validationError,
       });
       return;
     }
 
-    // Validate file type
-    if (
-      selectedFile.type !== 'text/csv' &&
-      selectedFile.type !== 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' &&
-      selectedFile.type !== 'application/vnd.ms-excel' &&
-      !selectedFile.name.endsWith('.csv') &&
-      !selectedFile.name.endsWith('.xlsx') &&
-      !selectedFile.name.endsWith('.xls')
-    ) {
-      setUploadResult({
-        success: false,
-        message: 'Please select a valid CSV, XLSX, or XLS file',
-      });
-      return;
-    }
-
-    // Validate file size (10MB limit)
-    const MAX_SIZE = 10 * 1024 * 1024;
-    if (selectedFile.size > MAX_SIZE) {
-      setUploadResult({
-        success: false,
-        message: 'File size exceeds 10MB limit',
-      });
+    const file = selectedFile;
+    if (!file) {
       return;
     }
 
@@ -152,26 +227,7 @@ export const CSVUploadPage: React.FC<{ token: string | null }> = ({ token }) => 
     const uploadStartTime = Date.now();
 
     try {
-      let fileToUpload = selectedFile;
-      let fileNameToUpload = selectedFile.name;
-
-      // Convert XLSX/XLS to CSV if needed
-      const fileExtension = selectedFile.name.split('.').pop()?.toLowerCase();
-      if (
-        (fileExtension === 'xlsx' || fileExtension === 'xls') &&
-        selectedFile.type !== 'text/csv'
-      ) {
-        setProgressMessage('Converting spreadsheet to CSV...');
-        const buffer = await selectedFile.arrayBuffer();
-        const workbook = XLSX.read(buffer, { type: 'array' });
-        const firstSheetName = workbook.SheetNames[0];
-        const worksheet = workbook.Sheets[firstSheetName];
-        const csvContent = XLSX.utils.sheet_to_csv(worksheet);
-        fileToUpload = new File([csvContent], selectedFile.name.replace(/\.[^/.]+$/, '.csv'), {
-          type: 'text/csv',
-        });
-        fileNameToUpload = fileToUpload.name;
-      }
+      const { fileToUpload, fileNameToUpload } = await normalizeUploadFile(file);
 
       // 1. Initiate Upload
       setProgressMessage('Initiating upload...');
@@ -208,36 +264,6 @@ export const CSVUploadPage: React.FC<{ token: string | null }> = ({ token }) => 
           return prev + 5;
         });
       }, 500);
-
-      const uploadWithRetry = async (url: string, options: RequestInit, retries = 3) => {
-        for (let i = 0; i < retries; i++) {
-          try {
-            const res = await fetch(url, options);
-            if (res.ok) return res;
-            console.warn(`Upload attempt ${i + 1} failed with status: ${res.status}`);
-            if (i < retries - 1) {
-              logUploadMetric('upload_retry', {
-                attempt: i + 1,
-                status: res.status,
-                errorCategory: 'http_error',
-              });
-            }
-          } catch (err) {
-            console.warn(`Upload attempt ${i + 1} failed:`, err);
-            if (i < retries - 1) {
-              logUploadMetric('upload_retry', {
-                attempt: i + 1,
-                errorCategory: 'network_error',
-              });
-            }
-          }
-          if (i < retries - 1) {
-            const delay = 1000 * Math.pow(2, i); // Exponential backoff
-            await new Promise((r) => setTimeout(r, delay));
-          }
-        }
-        throw new Error('Upload failed after multiple attempts');
-      };
 
       try {
         if (strategy === 'direct') {
@@ -309,13 +335,22 @@ export const CSVUploadPage: React.FC<{ token: string | null }> = ({ token }) => 
       setUploadProgress(0);
       setProgressMessage('');
     } catch (error) {
-      console.error(error);
+      if (error instanceof Error) {
+        Sentry.captureException(error, {
+          tags: { feature: 'csv-upload' },
+        });
+      } else {
+        Sentry.captureMessage('Upload failed with unknown error', {
+          level: 'error',
+          tags: { feature: 'csv-upload' },
+        });
+      }
       setUploadResult({
         success: false,
         message: error instanceof Error ? error.message : 'An error occurred during upload',
       });
       logUploadMetric('upload_complete', {
-        fileSize: selectedFile?.size || 0,
+        fileSize: file.size,
         durationMs: Date.now() - uploadStartTime,
         result: 'failure',
         method: 'unknown',
@@ -502,34 +537,32 @@ export const CSVUploadPage: React.FC<{ token: string | null }> = ({ token }) => 
                       {error.includes('column') && error.toLowerCase().includes('name') ? (
                         <span>
                           {error} -{' '}
-                          <a
-                            href="#"
+                          <button
+                            type="button"
                             className="text-inventory-primary-600 hover:underline"
-                            onClick={(e) => {
-                              e.preventDefault();
+                            onClick={() => {
                               document
                                 .querySelector('h3.text-lg.font-medium.text-inventory-primary-800')
                                 ?.scrollIntoView({ behavior: 'smooth' });
                             }}
                           >
                             See format guidelines
-                          </a>
+                          </button>
                         </span>
                       ) : error.includes('cost') && error.toLowerCase().includes('format') ? (
                         <span>
                           {error} -{' '}
-                          <a
-                            href="#"
+                          <button
+                            type="button"
                             className="text-inventory-primary-600 hover:underline"
-                            onClick={(e) => {
-                              e.preventDefault();
+                            onClick={() => {
                               document
                                 .querySelector('h3.text-lg.font-medium.text-inventory-primary-800')
                                 ?.scrollIntoView({ behavior: 'smooth' });
                             }}
                           >
                             See cost format guidelines
-                          </a>
+                          </button>
                         </span>
                       ) : (
                         <span>{error}</span>

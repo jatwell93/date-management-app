@@ -1,16 +1,14 @@
 import React from 'react';
 import { render, screen, fireEvent, act } from '@testing-library/react';
 import { Scanner } from '../components/Scanner';
-import { HardwareScanResult } from '../types/handheld';
-import '@testing-library/jest-dom';
 import '@testing-library/jest-dom';
 
 // Add the CameraScanner mock here
 jest.mock('../components/CameraScanner', () => ({
-  CameraScanner: ({ onScan }: { onScan: (barcode: string) => void }) => (
+  CameraScanner: ({ onDetected }: { onDetected: (barcode: string) => void }) => (
     <div>
       <div>Camera Scanner</div>
-      <button onClick={() => onScan('CAMERA_SCAN_123')}>Trigger Scan</button>
+      <button onClick={() => onDetected('CAMERA_SCAN_123')}>Trigger Scan</button>
     </div>
   ),
 }));
@@ -52,11 +50,9 @@ describe('Scanner', () => {
 
   beforeEach(() => {
     jest.clearAllMocks();
-    // Default mock implementation
-    mockUseHardwareScan.mockReturnValue({
-      isListening: true,
-      clearBuffer: jest.fn(),
-      lastScan: null,
+    // Default mock implementation - hook returns void (no return value)
+    mockUseHardwareScan.mockImplementation(() => {
+      // No return value - side effect based hook
     });
 
     // Default Quagga mock - success
@@ -79,7 +75,13 @@ describe('Scanner', () => {
     });
     fireEvent.click(screen.getByRole('button', { name: /Submit/i }));
 
-    expect(mockOnScan).toHaveBeenCalledWith('12345');
+    expect(mockOnScan).toHaveBeenCalledWith(
+      expect.objectContaining({
+        barcode: '12345',
+        source: 'manual',
+        timestamp: expect.any(Number),
+      }),
+    );
     expect(screen.getByPlaceholderText(/Scan barcode or enter manually/i)).toHaveValue(''); // Input should be cleared
   });
 
@@ -95,7 +97,13 @@ describe('Scanner', () => {
     const form = input.closest('form');
     fireEvent.submit(form!);
 
-    expect(mockOnScan).toHaveBeenCalledWith('67890');
+    expect(mockOnScan).toHaveBeenCalledWith(
+      expect.objectContaining({
+        barcode: '67890',
+        source: 'manual',
+        timestamp: expect.any(Number),
+      }),
+    );
     expect(screen.getByPlaceholderText(/Scan barcode or enter manually/i)).toHaveValue(''); // Input should be cleared
   });
 
@@ -121,79 +129,37 @@ describe('Scanner', () => {
   });
 
   describe('hardware scan integration', () => {
-    it('initializes useHardwareScan hook with correct props', () => {
+    it('initializes useHardwareScan hook', () => {
       render(<Scanner onScan={mockOnScan} />);
 
-      expect(mockUseHardwareScan).toHaveBeenCalledWith({
-        onScan: expect.any(Function),
-        enabled: true,
-      });
+      // Hook should be called with a callback function and options
+      expect(mockUseHardwareScan).toHaveBeenCalledWith(expect.any(Function), expect.any(Object));
     });
 
-    it('routes hardware scan results through onScan callback', () => {
-      let capturedOnScanCallback: ((result: HardwareScanResult) => void) | null = null;
+    it('routes hardware scan through onScan callback as HardwareScanResult', () => {
+      let capturedOnScanCallback: ((barcode: string) => void) | null = null;
 
-      mockUseHardwareScan.mockImplementation((config) => {
-        capturedOnScanCallback = config.onScan;
-        return {
-          isListening: true,
-          clearBuffer: jest.fn(),
-          lastScan: null,
-        };
+      mockUseHardwareScan.mockImplementation((cb) => {
+        capturedOnScanCallback = cb;
       });
 
       render(<Scanner onScan={mockOnScan} />);
 
-      // Simulate hardware scan
-      const mockHardwareResult: HardwareScanResult = {
-        barcode: '987654321',
-        timestamp: Date.now(),
-        source: 'hardware',
-        gs1Data: {
-          raw: '(01)98765432109876',
-          gtin: '98765432109876',
-          isValid: true,
-          errors: [],
-        },
-      };
-
+      // Simulate hardware scan callback
       act(() => {
         if (capturedOnScanCallback) {
-          capturedOnScanCallback(mockHardwareResult);
+          capturedOnScanCallback('123456789');
         }
       });
 
-      expect(mockOnScan).toHaveBeenCalledWith('987654321');
-    });
-
-    it('handles hardware scans without GS1 data', () => {
-      let capturedOnScanCallback: ((result: HardwareScanResult) => void) | null = null;
-
-      mockUseHardwareScan.mockImplementation((config) => {
-        capturedOnScanCallback = config.onScan;
-        return {
-          isListening: true,
-          clearBuffer: jest.fn(),
-          lastScan: null,
-        };
-      });
-
-      render(<Scanner onScan={mockOnScan} />);
-
-      // Simulate hardware scan without GS1 data
-      const mockHardwareResult: HardwareScanResult = {
-        barcode: '123456789',
-        timestamp: Date.now(),
-        source: 'hardware',
-      };
-
-      act(() => {
-        if (capturedOnScanCallback) {
-          capturedOnScanCallback(mockHardwareResult);
-        }
-      });
-
-      expect(mockOnScan).toHaveBeenCalledWith('123456789');
+      // Verify onScan was called with HardwareScanResult
+      expect(mockOnScan).toHaveBeenCalledWith(
+        expect.objectContaining({
+          barcode: '123456789',
+          source: 'hardware',
+          timestamp: expect.any(Number),
+        }),
+      );
     });
   });
 

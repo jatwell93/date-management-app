@@ -1,4 +1,5 @@
 import React, { useState, useEffect } from 'react';
+import * as Sentry from '@sentry/react';
 import { useNavigate } from 'react-router-dom';
 import { ExpiredItem } from '../types/inventory';
 import { apiService } from '../lib/api.service';
@@ -35,6 +36,7 @@ import {
   Title,
   Tooltip,
   Legend,
+  ChartOptions,
 } from 'chart.js';
 import { Bar } from 'react-chartjs-2';
 
@@ -95,7 +97,16 @@ const ExpiredItemsPage: React.FC<ExpiredItemsPageProps> = ({ token }) => {
         setExpiredItems(data);
       } catch (err) {
         setError('Failed to fetch expired items');
-        console.error('Error fetching expired items:', err);
+        if (err instanceof Error) {
+          Sentry.captureException(err, {
+            tags: { feature: 'expired-items' },
+          });
+        } else {
+          Sentry.captureMessage('Error fetching expired items', {
+            level: 'error',
+            tags: { feature: 'expired-items' },
+          });
+        }
       } finally {
         setLoading(false);
       }
@@ -145,7 +156,16 @@ const ExpiredItemsPage: React.FC<ExpiredItemsPageProps> = ({ token }) => {
       setIsConfirmDialogOpen(true);
     } catch (err) {
       setProcessError('Failed to process expired item');
-      console.error('Error processing expired item:', err);
+      if (err instanceof Error) {
+        Sentry.captureException(err, {
+          tags: { feature: 'expired-items' },
+        });
+      } else {
+        Sentry.captureMessage('Error processing expired item', {
+          level: 'error',
+          tags: { feature: 'expired-items' },
+        });
+      }
     }
   };
 
@@ -182,7 +202,16 @@ const ExpiredItemsPage: React.FC<ExpiredItemsPageProps> = ({ token }) => {
       const errorMessage = 'Failed to process expired item';
       setProcessError(errorMessage);
       showErrorToast(errorMessage);
-      console.error('Error processing expired item:', err);
+      if (err instanceof Error) {
+        Sentry.captureException(err, {
+          tags: { feature: 'expired-items' },
+        });
+      } else {
+        Sentry.captureMessage('Error processing expired item', {
+          level: 'error',
+          tags: { feature: 'expired-items' },
+        });
+      }
     } finally {
       setIsConfirmDialogOpen(false);
     }
@@ -249,7 +278,7 @@ const ExpiredItemsPage: React.FC<ExpiredItemsPageProps> = ({ token }) => {
   };
 
   // FIXED: properly formed chart options with ticks callback and balanced braces
-  const chartOptions: any = {
+  const chartOptions: ChartOptions<'bar'> = {
     responsive: true,
     plugins: {
       title: {
@@ -264,7 +293,7 @@ const ExpiredItemsPage: React.FC<ExpiredItemsPageProps> = ({ token }) => {
         beginAtZero: true,
         ticks: {
           // format tick values as dollar amounts
-          callback: (value: any) => {
+          callback: (value) => {
             // Chart.js may pass objects for tick objects; coerce to number when possible
             const num = typeof value === 'number' ? value : Number(value);
             if (Number.isFinite(num)) {

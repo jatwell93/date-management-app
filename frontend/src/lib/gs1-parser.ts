@@ -3,8 +3,7 @@
  * Parses Application Identifiers (01), (10), (17), (21) commonly used in pharmaceutical barcodes
  */
 
-import { GS1ParseResult, GS1ParseError } from '../types/handheld';
-import { GS1_APPLICATION_IDENTIFIERS, TIMING_CONSTANTS } from '../config/handheld';
+import { GS1ParseResult } from '../types/handheld';
 
 /**
  * Converts YYMMDD format to ISO date string
@@ -67,7 +66,7 @@ export function parseGS1Barcode(barcode: string): GS1ParseResult {
     }
 
     // Extract batch/lot number (10) - variable length, up to 20 chars
-    const batchMatch = remaining.match(/\(10\)([^\(\)]{1,20})/);
+    const batchMatch = remaining.match(/\(10\)([^()]{1,20})/);
     if (batchMatch) {
       result.batchLot = batchMatch[1].trim();
       remaining = remaining.replace(batchMatch[0], '');
@@ -86,7 +85,7 @@ export function parseGS1Barcode(barcode: string): GS1ParseResult {
     }
 
     // Extract serial number (21) - variable length
-    const serialMatch = remaining.match(/\(21\)([^\(\)]{1,20})/);
+    const serialMatch = remaining.match(/\(21\)([^()]{1,20})/);
     if (serialMatch) {
       result.serialNumber = serialMatch[1].trim();
       remaining = remaining.replace(serialMatch[0], '');

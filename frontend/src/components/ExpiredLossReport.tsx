@@ -1,4 +1,5 @@
 import React, { useState, useEffect } from 'react';
+import * as Sentry from '@sentry/react';
 import { getExpiredLossesReport } from '../services/expiredItemService';
 import {
   Table,
@@ -37,7 +38,16 @@ const ExpiredLossReport: React.FC<ExpiredLossReportProps> = ({ token }) => {
         setLossesByStoreArea(data.lossesByStoreArea);
       } catch (err) {
         setError('Failed to fetch expired losses report');
-        console.error('Error fetching expired losses report:', err);
+        if (err instanceof Error) {
+          Sentry.captureException(err, {
+            tags: { feature: 'expired-loss-report' },
+          });
+        } else {
+          Sentry.captureMessage('Failed to fetch expired losses report', {
+            level: 'error',
+            tags: { feature: 'expired-loss-report' },
+          });
+        }
       } finally {
         setLoading(false);
       }

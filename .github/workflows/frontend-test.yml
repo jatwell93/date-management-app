@@ -36,7 +36,7 @@ jobs:
 
       - name: Run Tests (Changed Files Only)
         if: github.event_name == 'pull_request'
-        run: npm run test:diff
+        run: npm run test:diff || npm run test:coverage
 
       - name: Run Full Tests
         if: github.event_name != 'pull_request'

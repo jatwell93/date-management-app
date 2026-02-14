@@ -1,5 +1,6 @@
 // Service functions for expired items
 
+import * as Sentry from '@sentry/react';
 import { ExpiredItem, ProcessExpiredItemRequest, ExpiredItemTransaction } from '../types/inventory';
 
 // Get all expired items
@@ -27,7 +28,16 @@ export const getExpiredItems = async (token: string | null): Promise<ExpiredItem
     const data = await response.json();
     return data;
   } catch (error) {
-    console.error('Error fetching expired items:', error);
+    if (error instanceof Error) {
+      Sentry.captureException(error, {
+        tags: { feature: 'expired-items' },
+      });
+    } else {
+      Sentry.captureMessage('Error fetching expired items', {
+        level: 'error',
+        tags: { feature: 'expired-items' },
+      });
+    }
     throw error;
   }
 };
@@ -61,7 +71,16 @@ export const processExpiredItem = async (
     const data = await response.json();
     return data;
   } catch (error) {
-    console.error('Error processing expired item:', error);
+    if (error instanceof Error) {
+      Sentry.captureException(error, {
+        tags: { feature: 'expired-items' },
+      });
+    } else {
+      Sentry.captureMessage('Error processing expired item', {
+        level: 'error',
+        tags: { feature: 'expired-items' },
+      });
+    }
     throw error;
   }
 };
@@ -98,7 +117,16 @@ export const getExpiredLossesReport = async (
     const data = await response.json();
     return data;
   } catch (error) {
-    console.error('Error fetching expired losses report:', error);
+    if (error instanceof Error) {
+      Sentry.captureException(error, {
+        tags: { feature: 'expired-loss-report' },
+      });
+    } else {
+      Sentry.captureMessage('Error fetching expired losses report', {
+        level: 'error',
+        tags: { feature: 'expired-loss-report' },
+      });
+    }
     throw error;
   }
 };

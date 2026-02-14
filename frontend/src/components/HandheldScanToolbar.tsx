@@ -1,6 +1,7 @@
 import React from 'react';
 import { useHandheldDetectionContext } from '../contexts/HandheldContext';
 import { HandheldScanToolbarProps } from '../types/handheld';
+import { SyncStrategy } from '../config/handheld';
 
 export const HandheldScanToolbar: React.FC<HandheldScanToolbarProps> = ({
   userName,
@@ -87,7 +88,7 @@ export const HandheldScanToolbar: React.FC<HandheldScanToolbarProps> = ({
               id="sync-strategy"
               data-testid="sync-strategy-selector"
               value={syncStrategy}
-              onChange={(e) => setSyncStrategy(e.target.value as any)}
+              onChange={(e) => setSyncStrategy(e.target.value as SyncStrategy)}
               className="w-full px-3 py-2 text-sm border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500 min-h-[44px]"
             >
               <option value="real-time">Real-time</option>

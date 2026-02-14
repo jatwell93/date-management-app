@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from 'react';
+import * as Sentry from '@sentry/react';
 import { Scanner } from '../components/Scanner';
 import { HandheldScanner } from '../components/HandheldScanner';
-import { HandheldScanToolbar } from '../components/HandheldScanToolbar';
 import { HandheldLayout } from '../layouts/HandheldLayout';
 import { Card, CardContent, CardHeader, CardTitle } from '../components/ui/card';
 import { Input } from '../components/ui/input';
@@ -73,7 +73,7 @@ interface RecentInventoryItem {
 }
 
 export function ScanPage({ token }: ScanPageProps) {
-  const { isHandheld, syncStrategy } = useHandheldDetectionContext();
+  const { isHandheld } = useHandheldDetectionContext();
   const [scannedBarcode, setScannedBarcode] = useState<string | null>(null);
   const [productDetails, setProductDetails] = useState<ProductDetails | null>(null);
   const [expiryDate, setExpiryDate] = useState<string>('');
@@ -135,15 +135,85 @@ export function ScanPage({ token }: ScanPageProps) {
     }
   }, [productDetails, expiryDate]);
 
-  const handleBarcodeScan = async (result: HardwareScanResult) => {
-    let input = result.barcode;
-    setScannedBarcode(input);
+  const resetScanState = (barcode: string) => {
+    setScannedBarcode(barcode);
     setProductDetails(null);
-    setRecentEntries(null); // Reset recent entries when scanning a new item
+    setRecentEntries(null);
     setError(null);
     setSuccessMessage(null);
     setShowNewProductForm(false);
     setMarkdownPrice(null);
+  };
+
+  const resolveBarcodeForLookup = (rawBarcode: string): string => {
+    try {
+      const gs1Data = parseGS1Barcode(rawBarcode);
+      if (gs1Data.expiryDate) {
+        setExpiryDate(gs1Data.expiryDate);
+      }
+      return gs1Data.gtin || rawBarcode;
+    } catch (gs1Error) {
+      if (gs1Error instanceof Error) {
+        Sentry.captureException(gs1Error, {
+          tags: { feature: 'scan-page', area: 'gs1-parse' },
+        });
+      }
+      return rawBarcode;
+    }
+  };
+
+  const fetchProductWithFallback = async (
+    barcode: string,
+    authToken: string,
+  ): Promise<ProductDetails | null> => {
+    const isSkuSearch = barcode.length <= 8;
+    const primaryEndpoint = isSkuSearch
+      ? `/products/by-sku/${barcode}`
+      : `/products/by-barcode/${barcode}`;
+    const fallbackEndpoint = isSkuSearch
+      ? `/products/by-barcode/${barcode}`
+      : `/products/by-sku/${barcode}`;
+
+    const primaryResult = await apiService.get<ProductDetails>(primaryEndpoint, authToken);
+    if (primaryResult) {
+      return primaryResult;
+    }
+
+    return apiService.get<ProductDetails>(fallbackEndpoint, authToken);
+  };
+
+  const loadProductRelatedData = async (product: ProductDetails, authToken: string) => {
+    try {
+      await apiService.get<InventoryItem[]>(
+        `/inventory-items/by-barcode/${product.barcode}`,
+        authToken,
+      );
+    } catch (inventoryErr: unknown) {
+      if (inventoryErr instanceof Error) {
+        Sentry.captureException(inventoryErr, {
+          tags: { feature: 'scan-page', area: 'inventory-items' },
+        });
+      }
+    }
+
+    try {
+      const recent: RecentInventoryItem[] = await apiService.get<RecentInventoryItem[]>(
+        `/inventory-items/recent/product/${product.id}`,
+        authToken,
+      );
+      setRecentEntries(recent);
+    } catch (recentErr: unknown) {
+      if (recentErr instanceof Error) {
+        Sentry.captureException(recentErr, {
+          tags: { feature: 'scan-page', area: 'recent-entries' },
+        });
+      }
+    }
+  };
+
+  const handleBarcodeScan = async (result: HardwareScanResult) => {
+    const rawBarcode = result.barcode;
+    resetScanState(rawBarcode);
 
     if (!token) {
       setError('Authentication token is missing.');
@@ -151,37 +221,8 @@ export function ScanPage({ token }: ScanPageProps) {
     }
 
     try {
-      // Try to parse GS1 barcode and auto-populate expiry date
-      try {
-        const gs1Data = parseGS1Barcode(input);
-        if (gs1Data.expiryDate) {
-          setExpiryDate(gs1Data.expiryDate);
-        }
-        // Use the GTIN from GS1 data if available, otherwise use original input
-        const barcodeToSearch = gs1Data.gtin || input;
-        input = barcodeToSearch;
-      } catch (gs1Error) {
-        // If GS1 parsing fails, continue with original input
-        console.log('GS1 parsing failed, using original barcode:', gs1Error);
-      }
-
-      let product: ProductDetails | null = null;
-
-      const isSkuSearch = input.length <= 8;
-
-      if (isSkuSearch) {
-        product = await apiService.get<ProductDetails>(`/products/by-sku/${input}`, token);
-      } else {
-        product = await apiService.get<ProductDetails>(`/products/by-barcode/${input}`, token);
-      }
-
-      if (!product) {
-        if (isSkuSearch) {
-          product = await apiService.get<ProductDetails>(`/products/by-barcode/${input}`, token);
-        } else {
-          product = await apiService.get<ProductDetails>(`/products/by-sku/${input}`, token);
-        }
-      }
+      const barcodeToSearch = resolveBarcodeForLookup(rawBarcode);
+      const product = await fetchProductWithFallback(barcodeToSearch, token);
 
       if (!product) {
         setShowNewProductForm(true);
@@ -190,25 +231,7 @@ export function ScanPage({ token }: ScanPageProps) {
 
       setProductDetails(product);
 
-      try {
-        await apiService.get<InventoryItem[]>(
-          `/inventory-items/by-barcode/${product.barcode}`,
-          token,
-        );
-      } catch (inventoryErr: unknown) {
-        console.error('Error fetching inventory items:', inventoryErr);
-      }
-
-      try {
-        const recent: RecentInventoryItem[] = await apiService.get<RecentInventoryItem[]>(
-          `/inventory-items/recent/product/${product.id}`,
-          token,
-        );
-        console.log('Fetched recent entries:', recent); // Debug log
-        setRecentEntries(recent);
-      } catch (recentErr: unknown) {
-        console.error('Error fetching recent inventory entries:', recentErr);
-      }
+      await loadProductRelatedData(product, token);
     } catch (err: unknown) {
       if (err instanceof Error) {
         if (err.message.includes('404')) {

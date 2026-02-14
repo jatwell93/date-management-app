@@ -6,6 +6,7 @@ on:
       - 'backend/**'
   push:
     branches:
+      - main
       - master
     paths:
       - 'backend/**'
@@ -37,8 +38,7 @@ jobs:
 
       - name: Run Tests (Changed Files Only)
         if: github.event_name == 'pull_request'
-        # Run diff coverage but continue even if thresholds fail (implied by no thresholds set in jest.config)
-        run: npm run test:diff
+        run: npm run test:diff || npm run test:coverage
 
       - name: Run Full Tests
         if: github.event_name != 'pull_request'

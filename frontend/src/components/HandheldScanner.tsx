@@ -8,9 +8,6 @@ export const HandheldScanner: React.FC<HandheldScannerProps> = ({
   defaultMode,
   continuous,
   disabled,
-  showToolbar = true,
-  syncStatus,
-  onSyncNow,
   className = '',
 }) => {
   const { isHandheld } = useHandheldDetectionContext();

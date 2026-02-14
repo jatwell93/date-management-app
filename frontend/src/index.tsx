@@ -9,9 +9,7 @@ import reportWebVitals from './reportWebVitals';
 import * as Sentry from '@sentry/react';
 
 const root = ReactDOM.createRoot(document.getElementById('root') as HTMLElement, {
-  onUncaughtError: Sentry.reactErrorHandler((error, errorInfo) => {
-    console.warn('Uncaught error', error, errorInfo.componentStack);
-  }),
+  onUncaughtError: Sentry.reactErrorHandler(),
   onCaughtError: Sentry.reactErrorHandler(),
   onRecoverableError: Sentry.reactErrorHandler(),
 });

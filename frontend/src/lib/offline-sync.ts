@@ -1,4 +1,5 @@
 // offline-sync.ts - Handles offline data synchronization for the PWA
+import * as Sentry from '@sentry/react';
 import { v4 as uuidv4 } from 'uuid';
 
 // Define types for offline operations
@@ -6,7 +7,7 @@ type OfflineOperation = {
   id: string;
   action: 'create' | 'update' | 'delete';
   entityType: 'product' | 'inventory-item' | 'store-area' | 'user';
-  data: any;
+  data: Record<string, unknown>;
   timestamp: number;
 };
 
@@ -16,6 +17,22 @@ export type SyncStrategy = 'real-time' | 'batch' | 'manual';
 // Queue to store offline operations
 const OFFLINE_QUEUE_KEY = 'offline-queue';
 const SYNC_STRATEGY_KEY = 'sync-strategy';
+
+const logSyncEvent = (
+  message: string,
+  level: 'info' | 'warning' | 'error' = 'info',
+  extra?: Record<string, unknown>,
+) => {
+  if (process.env.NODE_ENV === 'test') {
+    return;
+  }
+
+  Sentry.captureMessage(message, {
+    level,
+    tags: { feature: 'offline-sync' },
+    extra,
+  });
+};
 
 class OfflineSyncService {
   private isOnline = navigator.onLine;
@@ -87,7 +104,7 @@ class OfflineSyncService {
 
   // Handle going online
   private handleOnline() {
-    console.log('Device is now online, starting sync...');
+    logSyncEvent('Device is now online, starting sync...');
     this.isOnline = true;
 
     // Only sync automatically if not in manual mode
@@ -98,7 +115,7 @@ class OfflineSyncService {
 
   // Handle going offline
   private handleOffline() {
-    console.log('Device is now offline');
+    logSyncEvent('Device is now offline');
     this.isOnline = false;
   }
 
@@ -111,7 +128,7 @@ class OfflineSyncService {
   addOperation(
     action: 'create' | 'update' | 'delete',
     entityType: 'product' | 'inventory-item' | 'store-area' | 'user',
-    data: any,
+    data: Record<string, unknown>,
   ): Promise<void> {
     return new Promise((resolve) => {
       const operation: OfflineOperation = {
@@ -131,7 +148,7 @@ class OfflineSyncService {
       // Save updated queue to localStorage
       localStorage.setItem(OFFLINE_QUEUE_KEY, JSON.stringify(queue));
 
-      console.log(`Operation queued: ${action} ${entityType}`, operation);
+      logSyncEvent('Operation queued', 'info', { action, entityType, operationId: operation.id });
 
       // If in real-time mode, trigger sync immediately
       if (this.currentStrategy === 'real-time') {
@@ -167,15 +184,65 @@ class OfflineSyncService {
     await this.performSyncWithRetry();
   }
 
+  private async processQueueOperations(
+    queue: OfflineOperation[],
+  ): Promise<{ allSuccessful: boolean; successfulCount: number }> {
+    let allSuccessful = true;
+    let successfulCount = 0;
+
+    for (const operation of queue) {
+      try {
+        await this.syncOperation(operation);
+        this.removeOperation(operation.id);
+        successfulCount++;
+        logSyncEvent('Successfully synced operation', 'info', {
+          operationId: operation.id,
+        });
+      } catch (error) {
+        if (error instanceof Error) {
+          Sentry.captureException(error, {
+            tags: { feature: 'offline-sync' },
+            extra: { operationId: operation.id },
+          });
+        } else {
+          logSyncEvent('Failed to sync operation', 'error', {
+            operationId: operation.id,
+          });
+        }
+        allSuccessful = false;
+        break;
+      }
+    }
+
+    return { allSuccessful, successfulCount };
+  }
+
+  private async waitBeforeRetry(delay: number): Promise<number> {
+    logSyncEvent('Waiting before retry', 'info', { delayMs: delay });
+    await this.delay(delay);
+    return delay * 2;
+  }
+
+  private handleUnexpectedSyncError(error: unknown) {
+    if (error instanceof Error) {
+      Sentry.captureException(error, {
+        tags: { feature: 'offline-sync' },
+      });
+      return;
+    }
+
+    logSyncEvent('Error during sync', 'error');
+  }
+
   // Perform synchronization with exponential backoff retry logic
   async performSyncWithRetry() {
     if (this.syncInProgress) {
-      console.log('Sync already in progress, skipping...');
+      logSyncEvent('Sync already in progress, skipping...');
       return;
     }
 
     this.syncInProgress = true;
-    console.log('Starting synchronization with retry logic...');
+    logSyncEvent('Starting synchronization with retry logic...');
 
     let retryCount = 0;
     const maxRetries = 3;
@@ -183,73 +250,53 @@ class OfflineSyncService {
 
     while (retryCount < maxRetries) {
       try {
-        // Get operations from the queue
         const queue = this.getOfflineQueue();
         if (queue.length === 0) {
-          console.log('No operations to sync');
+          logSyncEvent('No operations to sync');
           return;
         }
+        logSyncEvent('Found operations to sync', 'info', { count: queue.length });
 
-        console.log(`Found ${queue.length} operations to sync`);
-
-        // Process each operation in sequence
-        let allSuccessful = true;
-        let successfulCount = 0;
-        for (const operation of queue) {
-          try {
-            // Attempt to sync the operation with the backend
-            await this.syncOperation(operation);
-
-            // If successful, remove from queue
-            this.removeOperation(operation.id);
-            successfulCount++;
-            console.log(`Successfully synced operation: ${operation.id}`);
-          } catch (error) {
-            console.error(`Failed to sync operation ${operation.id}:`, error);
-            // Keep the operation in the queue for retry
-            allSuccessful = false;
-            break; // Stop processing further operations if one fails
-          }
-        }
+        const { allSuccessful, successfulCount } = await this.processQueueOperations(queue);
 
         if (allSuccessful) {
-          console.log('All operations synced successfully');
-          break; // Exit retry loop if all operations were successful
-        } else if (successfulCount > 0) {
-          console.log('Some operations synced, not retrying failed ones');
+          logSyncEvent('All operations synced successfully');
           break;
-        } else {
-          console.log(`Sync failed, attempt ${retryCount + 1}/${maxRetries}`);
-          retryCount++;
-
-          if (retryCount < maxRetries) {
-            console.log(`Waiting ${delay / 1000}s before retry...`);
-            await this.delay(delay);
-
-            // Double the delay for next retry (exponential backoff)
-            delay *= 2;
-          }
         }
-      } catch (error) {
-        console.error('Error during sync:', error);
+
+        if (successfulCount > 0) {
+          logSyncEvent('Some operations synced, not retrying failed ones');
+          break;
+        }
+
+        logSyncEvent('Sync failed, retrying', 'warning', {
+          attempt: retryCount + 1,
+          maxRetries,
+        });
         retryCount++;
 
         if (retryCount < maxRetries) {
-          console.log(`Waiting ${delay / 1000}s before retry...`);
-          await this.delay(delay);
+          delay = await this.waitBeforeRetry(delay);
+        }
+      } catch (error) {
+        this.handleUnexpectedSyncError(error);
+        retryCount++;
 
-          // Double the delay for next retry (exponential backoff)
-          delay *= 2;
+        if (retryCount < maxRetries) {
+          delay = await this.waitBeforeRetry(delay);
         }
       } finally {
         if (retryCount >= maxRetries) {
-          console.log('Max retries reached, keeping items in queue for next sync cycle');
+          logSyncEvent(
+            'Max retries reached, keeping items in queue for next sync cycle',
+            'warning',
+          );
         }
       }
     }
 
     this.syncInProgress = false;
-    console.log('Synchronization completed');
+    logSyncEvent('Synchronization completed');
   }
 
   // Helper function to create a delay
@@ -314,7 +361,7 @@ class OfflineSyncService {
 
     // Parse the response
     const result = await response.json();
-    console.log(`Synced ${action} for ${entityType}:`, result);
+    logSyncEvent('Synced operation', 'info', { action, entityType, result });
   }
 
   // Get authentication headers

@@ -29,7 +29,7 @@ const MockAppWithStorageWarning: React.FC<{
         userId={userId}
         subscriptionTier={tier}
         onDismiss={() => setShowWarning(false)}
-        onUpgrade={() => console.log('Navigate to upgrade')}
+        onUpgrade={() => undefined}
       />
     </div>
   );

@@ -26,6 +26,7 @@ interface DataTableProps<TData, TValue> {
 }
 
 // Global filter function
+// eslint-disable-next-line @typescript-eslint/no-explicit-any -- FilterFn must be generic across all TData types
 const fuzzyFilter: FilterFn<any> = (row, columnId, filterValue) => {
   const searchTerms = filterValue?.toLowerCase().split(/\s+/) || [];
   const cellValue = String(row.getValue(columnId)).toLowerCase();

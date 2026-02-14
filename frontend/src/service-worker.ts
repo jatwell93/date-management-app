@@ -46,6 +46,7 @@ registerRoute(
     // Return true to signal that we want to handle the request.
     return true;
   },
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any -- WB_MANIFEST entries have dynamic shape from Workbox
   createHandlerBoundToURL((WB_MANIFEST[0] as any).url),
 );
 

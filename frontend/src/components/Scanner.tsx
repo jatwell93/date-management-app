@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react';
+import { useState } from 'react';
 import { CameraScanner } from './CameraScanner';
 import { useHardwareScan } from '../hooks/useHardwareScan';
 import { HardwareScanResult } from '../types/handheld';
@@ -15,13 +15,18 @@ export function Scanner({ onScan, defaultMode = 'text', isHandheld = false }: Sc
   const [input, setInput] = useState('');
   const [useCamera, setUseCamera] = useState(defaultMode === 'camera');
 
-  // Initialize hardware scan hook
-  const { isListening } = useHardwareScan({
-    onScan: (result) => {
+  // Initialize hardware scan hook - converts barcode string to HardwareScanResult
+  useHardwareScan(
+    (barcode) => {
+      const result: HardwareScanResult = {
+        barcode: barcode,
+        timestamp: Date.now(),
+        source: 'hardware',
+      };
       onScan(result);
     },
-    enabled: true, // Always listen for hardware scans
-  });
+    { timingThreshold: 50 },
+  );
 
   const handleInputChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     setInput(e.target.value);
@@ -100,12 +105,7 @@ export function Scanner({ onScan, defaultMode = 'text', isHandheld = false }: Sc
             </button>
           </div>
           <div className={isHandheld ? 'flex-1' : ''}>
-            <CameraScanner
-              onDetected={handleScan}
-              onScannerReady={() => console.log('Scanner ready')}
-              onScannerReset={() => console.log('Scanner reset')}
-              isHandheld={isHandheld}
-            />
+            <CameraScanner onDetected={handleScan} isHandheld={isHandheld} />
           </div>
         </div>
       )}

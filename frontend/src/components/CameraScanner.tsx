@@ -1,5 +1,6 @@
 import React, { useEffect, useRef, useState, useCallback } from 'react';
 import Quagga from 'quagga';
+import * as Sentry from '@sentry/react';
 import { triggerHaptic } from '../lib/haptic';
 
 interface CameraScannerProps {
@@ -68,9 +69,12 @@ export function CameraScanner({
             ],
           },
         },
-        (err: any) => {
+        (err: unknown) => {
           if (err) {
-            console.error('Error initializing Quagga:', err);
+            const initError = err instanceof Error ? err : new Error('Unknown camera error');
+            Sentry.captureException(initError, {
+              tags: { feature: 'camera-scanner' },
+            });
             setError('Error accessing camera. Please ensure you have granted camera permissions.');
             return;
           }
@@ -80,32 +84,29 @@ export function CameraScanner({
         },
       );
 
-      Quagga.onDetected((data: any) => {
-        if (data && data.codeResult && data.codeResult.code) {
-          // Trigger haptic feedback on successful barcode detection
-          triggerHaptic(50);
+      Quagga.onDetected((data: unknown) => {
+        const code = (data as { codeResult?: { code?: string } })?.codeResult?.code;
+        if (!code) {
+          return;
+        }
 
-          onDetected(data.codeResult.code);
-          // Stop the scanner after a successful detection to prevent continuous scanning
+        // Trigger haptic feedback on successful barcode detection
+        triggerHaptic(50);
+
+        const barcode = code;
+
+        // Skip duplicate barcodes within 2-second window
+        if (isDuplicateScan(barcode)) {
+          return;
+        }
+
+        onDetected(barcode);
+
+        // Only stop the scanner after detection if not in continuous mode
+        if (!continuous) {
           setTimeout(() => {
             Quagga.stop();
           }, 1000);
-          const barcode = data.codeResult.code;
-
-          // Skip duplicate barcodes within 2-second window
-          if (isDuplicateScan(barcode)) {
-            console.log('Skipping duplicate barcode scan:', barcode);
-            return;
-          }
-
-          onDetected(barcode);
-
-          // Only stop the scanner after detection if not in continuous mode
-          if (!continuous) {
-            setTimeout(() => {
-              Quagga.stop();
-            }, 1000);
-          }
         }
       });
     };
@@ -118,7 +119,7 @@ export function CameraScanner({
         Quagga.stop();
       }
     };
-  }, [onDetected, continuous, isDuplicateScan]);
+  }, [onDetected, onScannerReady, continuous, isDuplicateScan]);
 
   const handleResetScanner = () => {
     setError(null); // Clear any error when resetting
@@ -146,7 +147,7 @@ export function CameraScanner({
           <div className="text-center p-4">
             <p className={`text-red-500 font-medium mb-2 ${isHandheld ? 'text-lg' : ''}`}>
               Camera Error
-            </p>https://github.com/jatwell93/date-management-app/pull/43/conflict?name=frontend%252Fsrc%252Fcomponents%252FCameraScanner.tsx&ancestor_oid=194e9f71835f3e60d728284252d7a2774dadb636&base_oid=86fa756a17a89b31b528ac167b5b5364a0b67140&head_oid=09703e50d4720e29d982fa6914a1b8c565010df2
+            </p>
             <p className={`text-gray-600 ${isHandheld ? 'text-base' : 'text-sm'}`}>{error}</p>
             <button
               type="button"

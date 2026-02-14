@@ -45,7 +45,7 @@ class ApiService {
     return this.request<T>(endpoint, { method: 'GET', headers });
   }
 
-  async post<T>(endpoint: string, data: any, token?: string): Promise<T> {
+  async post<T>(endpoint: string, data: unknown, token?: string): Promise<T> {
     const headers: HeadersInit = {};
     if (token) {
       headers.Authorization = `Bearer ${token}`;
@@ -58,7 +58,7 @@ class ApiService {
     });
   }
 
-  async put<T>(endpoint: string, data: any, token?: string): Promise<T> {
+  async put<T>(endpoint: string, data: unknown, token?: string): Promise<T> {
     const headers: HeadersInit = {};
     if (token) {
       headers.Authorization = `Bearer ${token}`;

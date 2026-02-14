@@ -74,11 +74,12 @@ export function MarkdownCalculator({ token }: MarkdownCalculatorProps) {
 
       setProductDetails(product);
       setCostPrice(product.cost_price);
-    } catch (err: any) {
-      if (err.message.includes('404')) {
+    } catch (err: unknown) {
+      const message = err instanceof Error ? err.message : '';
+      if (message.includes('404')) {
         setError('Product not found for this SKU or Barcode.');
       } else {
-        setError(err.message || 'An error occurred while searching for the product.');
+        setError(message || 'An error occurred while searching for the product.');
       }
     }
   };
