@@ -18,7 +18,7 @@ export const DEVICE_PATTERNS = {
 // Screen dimension thresholds for handheld detection
 export const SCREEN_THRESHOLDS = {
   MAX_WIDTH: 600, // pixels
-  MAX_HEIGHT: 900, // pixels
+  MAX_HEIGHT: 800, // pixels (✓ Fixed from 900 to match spec `≤600×800`)
   MIN_RATIO: 0.5, // width/height ratio for portrait orientation
 } as const;
 

@@ -9,6 +9,7 @@
 
 import { useEffect, useRef, useCallback } from 'react';
 import { triggerHaptic } from '../lib/haptic';
+import { TIMING_CONSTANTS } from '../config/handheld'; // ✓ Import config constants (fixes 17.9)
 
 interface UseHardwareScanOptions {
   timingThreshold?: number; // ms - max time between keystrokes for hardware scan detection
@@ -67,8 +68,8 @@ export function useHardwareScan(
           accumulatorRef.current = '';
           isHardwareScanRef.current = false;
 
-          // Trigger haptic feedback on successful scan
-          triggerHaptic(50);
+          // Trigger haptic feedback on successful scan using config constant (fixes 17.9)
+          triggerHaptic(TIMING_CONSTANTS.HAPTIC_DURATION_MS);
 
           // Invoke callback with barcode
           // (GS1-128 parsing can be done in parent component as needed)
