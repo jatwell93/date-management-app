@@ -148,7 +148,7 @@
 - [ ] 10.12 Write integration tests for all webhook handlers with test events
 
 ## 11. Trial System (Phase 4 - Week 6)
-
+- [ ] 11.0 Investigate the usefulness of https://github.com/themacn/trial-abuse-guard and https://github.com/eramitgupta/disposable-email will implementing either or both save time in the long run. Use tools to search for other options (should be free and opensource)
 - [ ] 11.1 Create trial signup flow: POST /api/signup with trial_tier=professional
 - [ ] 11.2 Set trial_end_date = now + 14 days in subscription_tiers record
 - [ ] 11.3 Create cron job: Check trial_end_date daily and downgrade expired trials
