@@ -40,7 +40,7 @@ export const TIMING_CONSTANTS = {
 // Local storage keys
 export const STORAGE_KEYS = {
   FORCE_HANDHELD: 'forceHandheld',
-  SYNC_STRATEGY: 'syncStrategy',
+  SYNC_STRATEGY: 'sync-strategy', // ✓ Fixed: matches test expectations and offline-sync.ts line 48
   LAST_BARCODE: 'lastBarcode',
 } as const;
 

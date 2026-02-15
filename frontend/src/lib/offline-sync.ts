@@ -17,7 +17,7 @@ export type SyncStrategy = 'real-time' | 'batch' | 'manual';
 
 // Queue to store offline operations
 const OFFLINE_QUEUE_KEY = 'offline-queue';
-const SYNC_STRATEGY_KEY = STORAGE_KEYS.SYNC_STRATEGY;
+const SYNC_STRATEGY_KEY = STORAGE_KEYS.SYNC_STRATEGY; // ✓ Unified key from config
 
 const logSyncEvent = (
   message: string,
@@ -367,7 +367,7 @@ class OfflineSyncService {
 
   // Get authentication headers
   private getAuthHeaders() {
-    const token = localStorage.getItem('token');
+    const token = localStorage.getItem('session'); // ✓ Fixed: app stores token as 'session', not 'token'
     if (token) {
       return {
         Authorization: `Bearer ${token}`,
@@ -378,7 +378,7 @@ class OfflineSyncService {
 
   // Get properly typed headers for fetch requests
   private getHeaders(): { 'Content-Type': string; Authorization?: string } {
-    const token = localStorage.getItem('token');
+    const token = localStorage.getItem('session'); // ✓ Fixed: app stores token as 'session', not 'token'
     const headers: { 'Content-Type': string; Authorization?: string } = {
       'Content-Type': 'application/json',
     };
