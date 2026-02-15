@@ -11,7 +11,12 @@ interface ScannerProps {
   isHandheld?: boolean;
 }
 
-export function Scanner({ onScan, defaultMode = 'text', isHandheld = false }: ScannerProps) {
+export function Scanner({ 
+  onScan, 
+  defaultMode = 'text', 
+  continuous = false, // ✓ Added default (fixes 17.6)
+  isHandheld = false 
+}: ScannerProps) {
   const [input, setInput] = useState('');
   const [useCamera, setUseCamera] = useState(defaultMode === 'camera');
 
@@ -52,7 +57,10 @@ export function Scanner({ onScan, defaultMode = 'text', isHandheld = false }: Sc
       source: 'camera',
     };
     onScan(result);
-    setUseCamera(false); // Return to text input after scan
+    // ✓ Only return to text input if NOT in continuous mode (fixes 17.6)
+    if (!continuous) {
+      setUseCamera(false);
+    }
   };
 
   return (
@@ -105,7 +113,11 @@ export function Scanner({ onScan, defaultMode = 'text', isHandheld = false }: Sc
             </button>
           </div>
           <div className={isHandheld ? 'flex-1 camera-scanner-fullscreen' : ''}>
-            <CameraScanner onDetected={handleScan} isHandheld={isHandheld} />
+            <CameraScanner 
+              onDetected={handleScan} 
+              isHandheld={isHandheld}
+              continuous={continuous}  // ✓ Pass continuous mode (fixes 17.6)
+            />
           </div>
         </div>
       )}
