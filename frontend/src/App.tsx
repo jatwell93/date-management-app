@@ -29,7 +29,7 @@ import {
   DropdownMenuTrigger,
 } from './components/ui/dropdown-menu';
 import ErrorBoundary from './components/ErrorBoundary';
-import { synchronizeOfflineData } from './lib/sync-manager';
+import { synchronizeOfflineData, getPendingInventoryItemCount } from './lib/sync-manager';
 import { offlineSyncService } from './lib/offline-sync';
 import { offlineStorage } from './lib/offline-storage';
 import { jwtDecode, JwtPayload } from 'jwt-decode';
@@ -134,7 +134,6 @@ function AppContent({
   isMobileMenuOpen: boolean;
   setIsMobileMenuOpen: (open: boolean) => void;
 }) {
-  const PENDING_INVENTORY_ITEMS_PREFIX = 'pending-inventory-item-';
   const { isHandheld } = useHandheldDetectionContext();
   const location = useLocation();
   const navigate = useNavigate();
@@ -143,10 +142,7 @@ function AppContent({
 
   const refreshPendingQueueCount = useCallback(async () => {
     try {
-      const keys = await offlineStorage.keys();
-      const pendingInventoryCount = keys.filter((key) =>
-        key.startsWith(PENDING_INVENTORY_ITEMS_PREFIX),
-      ).length;
+      const pendingInventoryCount = await getPendingInventoryItemCount(); // ✓ Use centralized function (fixes 17.3)
       const operationQueueCount = offlineSyncService.getPendingOperationCount();
       setPendingQueueCount(pendingInventoryCount + operationQueueCount);
     } catch (_error) {

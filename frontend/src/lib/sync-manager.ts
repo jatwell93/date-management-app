@@ -3,6 +3,12 @@ import { apiService } from './api.service';
 
 const PENDING_INVENTORY_ITEMS_PREFIX = 'pending-inventory-item-';
 
+// ✓ Get count of pending inventory items (fixes 17.3)
+export async function getPendingInventoryItemCount(): Promise<number> {
+  const keys = await offlineStorage.keys();
+  return keys.filter((key) => key.startsWith(PENDING_INVENTORY_ITEMS_PREFIX)).length;
+}
+
 export async function synchronizeOfflineData(token: string | null) {
   if (!token) {
     // console.warn("Synchronization skipped: No authentication token available.");
