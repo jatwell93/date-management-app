@@ -18,7 +18,7 @@ export const DEVICE_PATTERNS = {
 // Screen dimension thresholds for handheld detection
 export const SCREEN_THRESHOLDS = {
   MAX_WIDTH: 600, // pixels
-  MAX_HEIGHT: 900, // pixels
+  MAX_HEIGHT: 800, // pixels (✓ Fixed from 900 to match spec `≤600×800`)
   MIN_RATIO: 0.5, // width/height ratio for portrait orientation
 } as const;
 
@@ -40,7 +40,7 @@ export const TIMING_CONSTANTS = {
 // Local storage keys
 export const STORAGE_KEYS = {
   FORCE_HANDHELD: 'forceHandheld',
-  SYNC_STRATEGY: 'syncStrategy',
+  SYNC_STRATEGY: 'sync-strategy', // ✓ Fixed: matches test expectations and offline-sync.ts line 48
   LAST_BARCODE: 'lastBarcode',
 } as const;
 

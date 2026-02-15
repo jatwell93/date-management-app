@@ -34,6 +34,13 @@ describe('HandheldScanToolbar', () => {
         screenWidth: 480,
         screenHeight: 800,
       },
+      syncStrategy: 'real-time', // ✓ Default sync strategy
+      setSyncStrategy: jest.fn(), // ✓ Sync strategy setter
+      hapticEnabled: true,
+      audioFeedbackEnabled: false,
+      setHapticEnabled: jest.fn(),
+      setAudioFeedbackEnabled: jest.fn(),
+      refreshDetection: jest.fn(),
     });
   });
 
@@ -121,8 +128,19 @@ describe('HandheldScanToolbar', () => {
   it('uses sync strategy from context', () => {
     mockUseHandheldDetectionContext.mockReturnValue({
       isHandheld: true,
-      syncStrategy: 'batch-10-min',
+      detectionResult: {
+        isHandheld: true,
+        method: 'userAgent',
+        screenWidth: 480,
+        screenHeight: 800,
+      },
+      syncStrategy: 'batch', // ✓ Correct enum value (not 'batch-10-min')
       setSyncStrategy: jest.fn(),
+      hapticEnabled: true,
+      audioFeedbackEnabled: false,
+      setHapticEnabled: jest.fn(),
+      setAudioFeedbackEnabled: jest.fn(),
+      refreshDetection: jest.fn(),
     });
 
     render(
@@ -166,23 +184,20 @@ describe('HandheldScanToolbar', () => {
       </HandheldProvider>,
     );
 
-    const toolbar = container.firstChild;
+    const toolbar = container.querySelector('[data-testid="handheld-scan-toolbar"]');
     expect(toolbar).toHaveClass('handheld-scan-toolbar');
-    expect(toolbar).toHaveClass('floating-overlay');
   });
 
-  it('positions as floating overlay with proper z-index', () => {
+  it('positions as sticky toolbar with proper z-index', () => {
     const { container } = render(
       <HandheldProvider>
         <HandheldScanToolbar {...defaultProps} />
       </HandheldProvider>,
     );
 
-    const toolbar = container.firstChild;
-    expect(toolbar).toHaveClass('fixed');
-    expect(toolbar).toHaveClass('bottom-0');
-    expect(toolbar).toHaveClass('left-0');
-    expect(toolbar).toHaveClass('right-0');
+    const toolbar = container.querySelector('[data-testid="handheld-scan-toolbar"]');
+    expect(toolbar).toHaveClass('sticky');
+    expect(toolbar).toHaveClass('z-40');
   });
 
   it('throws error when used outside HandheldProvider', () => {

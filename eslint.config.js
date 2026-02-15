@@ -45,11 +45,8 @@ module.exports = [
     files: ['src/**/*.{ts,tsx}'],
     languageOptions: {
       parser: tsParser,
-      parserOptions: {
-        ecmaVersion: 'latest',
-        sourceType: 'module',
-        ecmaFeatures: { jsx: true },
-      },
+      ecmaVersion: 'latest',
+      sourceType: 'module',
       globals: globals.node,
     },
     plugins: {
@@ -62,10 +59,8 @@ module.exports = [
     files: ['backend/**/*.{ts,tsx}'],
     languageOptions: {
       parser: tsParser,
-      parserOptions: {
-        ecmaVersion: 'latest',
-        sourceType: 'module',
-      },
+      ecmaVersion: 'latest',
+      sourceType: 'module',
       globals: globals.node,
     },
     plugins: {
@@ -79,11 +74,8 @@ module.exports = [
     files: ['frontend/src/**/*.{ts,tsx}'],
     languageOptions: {
       parser: tsParser,
-      parserOptions: {
-        ecmaVersion: 'latest',
-        sourceType: 'module',
-        ecmaFeatures: { jsx: true },
-      },
+      ecmaVersion: 'latest',
+      sourceType: 'module',
       globals: globals.browser,
     },
     plugins: {
@@ -132,7 +124,6 @@ module.exports = [
     languageOptions: {
       ecmaVersion: 'latest',
       sourceType: 'module',
-      ecmaFeatures: { jsx: true },
       globals: globals.browser,
     },
     plugins: {

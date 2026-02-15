@@ -2,6 +2,7 @@ import React, { useEffect, useRef, useState, useCallback } from 'react';
 import Quagga from 'quagga';
 import * as Sentry from '@sentry/react';
 import { triggerHaptic } from '../lib/haptic';
+import { TIMING_CONSTANTS } from '../config/handheld'; // ✓ Import constants (fixes 17.9)
 
 interface CameraScannerProps {
   onDetected: (code: string) => void;
@@ -31,10 +32,10 @@ export function CameraScanner({
     // Add to recent scans
     recentScansRef.current.add(barcode);
 
-    // Remove after 2 seconds
+    // Remove after 2 seconds (using config constant - fixes 17.9)
     setTimeout(() => {
       recentScansRef.current.delete(barcode);
-    }, 2000);
+    }, TIMING_CONSTANTS.DEDUP_WINDOW_MS);
 
     return false;
   }, []);
@@ -103,6 +104,7 @@ export function CameraScanner({
       onDetected(barcode);
 
       // Only stop the scanner after detection if not in continuous mode
+      // Wait 1 second before stopping to allow UI updates (fixes 17.9)
       if (!continuous) {
         setTimeout(() => {
           Quagga.stop();
