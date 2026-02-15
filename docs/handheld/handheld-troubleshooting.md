@@ -8,7 +8,7 @@ Quick reference for common issues when using the date-management app on pharmacy
 
 Your Zebra device is likely in **kiosk mode**, which restricts home screen access. This is common in pharmacy environments using FRED Mobility or Zebra EHS.
 
-**Important:** There is no user-accessible "exit" trick. Kiosk mode is designed by the device admin to prevent exactly what you're trying to do. Only the **pharmacy IT or device owner** can unlock it.
+**Important:** There is no user-accessible "exit" trick without admin authorization. Kiosk mode is designed to block the home screen. Only the **pharmacy IT or device owner** can unlock it or provide an admin PIN.
 
 ### Issue: Can't access Android home screen (locked in FRED or EHS)
 
@@ -28,13 +28,19 @@ Your Zebra device is likely in **kiosk mode**, which restricts home screen acces
    - Ask your pharmacy IT: "Is this device using Zebra EHS, FRED Mobility, or another MDM?"
    - OR they can check: **Settings** → **Apps** → **Default apps** → **Home app** (shows the active launcher)
 
-2. **Request temporary unlock from pharmacy IT:**
+2. **If IT provides admin access, try authorized exit paths:**
+   - **EHS Admin Login:** Open launcher menu (three dots) > **Tools** > **Admin Login**, enter the admin PIN, then set **Default Home App** to **Quickstep**
+   - **SOTI MobiControl:** Long-press **Back** for 3-5 seconds to reveal admin login (if enabled)
+   - **Hidden admin prompt (model-dependent):** Some Zebra devices accept key sequences like `Shift` + `Blue` + `0` or `Shift` + `Blue` + `Up` to show admin login
+   - If these are blocked, proceed to the IT unlock request
+
+3. **Request temporary unlock from pharmacy IT:**
    - **For Zebra EHS:** Ask IT to disable kiosk profile or expose Android home screen
    - **For FRED Mobility:** Ask IT to whitelist your app domain in FRED, or temporarily unlock the device
    - **For other MDM:** Ask IT to use their MDM console to exit kiosk mode temporarily
    - See detailed requests in [handheld-devices.md - Special Case: Step 3](handheld-devices.md#step-3-request-it-to-temporarily-unlock-required-for-app-testing)
 
-3. **Alternatively, ask IT to whitelist your app inside the kiosk:**
+4. **Alternatively, ask IT to whitelist your app inside the kiosk:**
    - If they don't want to unlock, ask them to add your app URL to the approved list
    - For FRED: Create a browser launcher pointing to your app
    - For EHS: Add your app to the allowed app list

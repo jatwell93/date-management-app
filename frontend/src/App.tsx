@@ -7,6 +7,7 @@ import {
   Link,
   Navigate,
   useLocation,
+  useNavigate,
 } from 'react-router-dom';
 import { LoginPage } from './components/LoginPage';
 import { ScanPage } from './pages/ScanPage';
@@ -134,14 +135,15 @@ function AppContent({
 }) {
   const { isHandheld } = useHandheldDetectionContext();
   const location = useLocation();
+  const navigate = useNavigate();
 
-  // Redirect handheld devices to /scan by default
+  // Redirect handheld devices to /scan by default (only when logged in)
   useEffect(() => {
-    if (isHandheld && isLoggedIn && location.pathname !== '/scan') {
-      // Only redirect if not already on scan page
-      window.location.href = '/scan';
+    if (isHandheld && isLoggedIn && location.pathname !== '/scan' && !location.pathname.startsWith('/login')) {
+      // Use React Router navigation instead of full page reload
+      navigate('/scan', { replace: true });
     }
-  }, [isHandheld, isLoggedIn, location.pathname]);
+  }, [isHandheld, isLoggedIn, location.pathname, navigate]);
 
   return (
     <div className="min-h-screen bg-background text-foreground">

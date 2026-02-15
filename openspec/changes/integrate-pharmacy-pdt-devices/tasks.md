@@ -346,6 +346,19 @@
 
 ---
 
+## 17. Audit Gaps (Added During Review)
+
+- [ ] 17.1 Align sync strategy values across UI and sync service (replace `batch-10-min` value with `batch`, keep label “Batch (10 min)”, and ensure comparisons use the same enum)
+- [ ] 17.2 Unify sync strategy persistence key across context and offline sync (use `STORAGE_KEYS.SYNC_STRATEGY` everywhere)
+- [ ] 17.3 Reconcile offline queues so toolbar queue length reflects real pending inventory items and “Sync Now” operates on the same queue
+- [ ] 17.4 Align offline sync auth token retrieval with session storage (`session`) or inject token explicitly to `OfflineSyncService`
+- [ ] 17.5 Remove duplicate handheld layout wrapping (pick App-level or ScanPage-level wrapper, render toolbar once)
+- [ ] 17.6 Wire `Scanner` `continuous`/`disabled` props through to `CameraScanner` and hardware listener so continuous mode and disable work end-to-end
+- [ ] 17.7 Extend GS1 parsing to handle FNC1/GS separators and bracketless AI formats; add tests using ASCII 29 and raw AI strings
+- [ ] 17.8 Align handheld dimension threshold with spec (≤600×800) or update spec/config to match; add a detection test that locks the chosen threshold
+- [ ] 17.9 Replace magic numbers in scan-related logic with `handheld.ts` constants (timing threshold, dedup window, haptic duration)
+- [ ] 17.10 Decide on audio feedback scope (implement optional audio confirmation or update proposal/spec to mark as deferred)
+
 **Estimated Effort:** 120–160 hours (6–8 weeks for one developer)
 
 **Critical Path Priority:** Setup → Detection → Hardware Input → Components → Styling → Sync Strategy → Pilot Testing

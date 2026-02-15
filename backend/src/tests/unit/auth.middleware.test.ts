@@ -1,11 +1,24 @@
 import jwt from 'jsonwebtoken';
 import { authenticateToken, requireManager, AuthRequest } from '../../middleware/auth.middleware';
+import { SubscriptionStatus } from '../../types/subscription';
 
 const trackEvent = jest.fn();
+let mockPrisma: any;
+let mockIsAccessActive: jest.Mock;
 
 jest.mock('jsonwebtoken', () => ({
   verify: jest.fn(),
   sign: jest.fn(),
+}));
+
+jest.mock('../../database/database-factory', () => ({
+  getDefaultDatabaseClient: () => mockPrisma,
+}));
+
+jest.mock('../../services/subscription.service', () => ({
+  SubscriptionService: jest.fn().mockImplementation(() => ({
+    isAccessActive: (...args: any[]) => mockIsAccessActive(...args),
+  })),
 }));
 
 jest.mock('../../services/analytics.service', () => ({
@@ -47,6 +60,12 @@ describe('auth middleware', () => {
     process.env.TEST_AUTH_BYPASS = 'false';
     process.env.JWT_SECRET = 'test_secret';
     delete process.env.JWT_SECRET_OLD;
+    mockPrisma = {
+      subscriptionTier: {
+        findFirst: jest.fn(),
+      },
+    };
+    mockIsAccessActive = jest.fn();
   });
 
   describe('authenticateToken', () => {
@@ -132,25 +151,107 @@ describe('auth middleware', () => {
       expect(next).not.toHaveBeenCalled();
     });
 
-    it('accepts valid token and sets user fields', () => {
+    it('accepts valid token and sets user fields', async () => {
       const req = makeRequest({ headers: { authorization: 'Bearer token' } });
       const res = makeResponse();
 
       (jwt.verify as jest.Mock).mockReturnValue({
         userId: 7,
         role: 'Manager',
+        organizationId: 'org-1',
+        tierLevel: 'professional',
         exp: Math.floor(Date.now() / 1000) + 300,
       });
 
-      authenticateToken(req, res, next);
+      (mockPrisma.subscriptionTier.findFirst as jest.Mock).mockResolvedValue({
+        id: 1,
+        organizationId: 'org-1',
+        tierLevel: 'professional',
+        status: SubscriptionStatus.ACTIVE,
+        billingCycle: 'monthly',
+        createdAt: new Date(),
+        updatedAt: new Date(),
+      });
+
+      mockIsAccessActive.mockResolvedValue(true);
+
+      await authenticateToken(req, res, next);
 
       expect(req.userId).toBe(7);
       expect(req.userRole).toBe('Manager');
-      expect(req.user).toEqual({ id: 7, role: 'Manager' });
+      expect(req.user).toEqual({
+        id: 7,
+        role: 'Manager',
+        organizationId: 'org-1',
+        tierLevel: 'professional',
+      });
       expect(trackEvent).toHaveBeenCalledWith(
         expect.objectContaining({ eventAction: 'protected_route_access' }),
       );
       expect(next).toHaveBeenCalled();
+    });
+
+    it('allows access when subscription is canceled but Stripe still active', async () => {
+      const req = makeRequest({ headers: { authorization: 'Bearer token' } });
+      const res = makeResponse();
+
+      (jwt.verify as jest.Mock).mockReturnValue({
+        userId: 7,
+        role: 'Manager',
+        organizationId: 'org-1',
+        tierLevel: 'professional',
+        exp: Math.floor(Date.now() / 1000) + 300,
+      });
+
+      (mockPrisma.subscriptionTier.findFirst as jest.Mock).mockResolvedValue({
+        id: 1,
+        organizationId: 'org-1',
+        tierLevel: 'professional',
+        status: SubscriptionStatus.CANCELED,
+        billingCycle: 'monthly',
+        createdAt: new Date(),
+        updatedAt: new Date(),
+      });
+
+      mockIsAccessActive.mockResolvedValue(true);
+
+      await authenticateToken(req, res, next);
+
+      expect(next).toHaveBeenCalled();
+      expect(res.status).not.toHaveBeenCalledWith(403);
+    });
+
+    it('rejects access when subscription is canceled and period ended', async () => {
+      const req = makeRequest({ headers: { authorization: 'Bearer token' } });
+      const res = makeResponse();
+
+      (jwt.verify as jest.Mock).mockReturnValue({
+        userId: 7,
+        role: 'Manager',
+        organizationId: 'org-1',
+        tierLevel: 'professional',
+        exp: Math.floor(Date.now() / 1000) + 300,
+      });
+
+      (mockPrisma.subscriptionTier.findFirst as jest.Mock).mockResolvedValue({
+        id: 1,
+        organizationId: 'org-1',
+        tierLevel: 'professional',
+        status: SubscriptionStatus.CANCELED,
+        billingCycle: 'monthly',
+        createdAt: new Date(),
+        updatedAt: new Date(),
+      });
+
+      mockIsAccessActive.mockResolvedValue(false);
+
+      await authenticateToken(req, res, next);
+
+      expect(res.status).toHaveBeenCalledWith(403);
+      expect(res.json).toHaveBeenCalledWith({
+        message: 'Access denied: Organization subscription has been canceled. Please contact support.',
+      });
+      expect(next).not.toHaveBeenCalled();
     });
   });
 

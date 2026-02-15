@@ -10,6 +10,7 @@ import { CSVParserService } from './csv-parser.service';
 import { StorageQuotaService } from './storage-quota.service';
 import { UploadService } from './upload.service';
 import { UserService } from './user.service';
+import { SubscriptionService } from './subscription.service';
 
 export class ServiceProvider {
   private prisma: PrismaClient;
@@ -22,6 +23,7 @@ export class ServiceProvider {
   private uploadService?: UploadService;
   private analyticsService?: AnalyticsService;
   private reportService?: ReportService;
+  private subscriptionService?: SubscriptionService;
 
   constructor(prismaClient?: PrismaClient, storageProvider?: StorageProvider) {
     this.prisma = prismaClient ?? getDefaultDatabaseClient();
@@ -81,5 +83,12 @@ export class ServiceProvider {
       this.reportService = new ReportService(this.db);
     }
     return this.reportService;
+  }
+
+  getSubscriptionService(): SubscriptionService {
+    if (!this.subscriptionService) {
+      this.subscriptionService = new SubscriptionService(this.prisma);
+    }
+    return this.subscriptionService;
   }
 }

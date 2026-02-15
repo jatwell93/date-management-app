@@ -10,7 +10,8 @@
   "license": "Apache-2.0",
   "keywords": [],
   "scripts": {
-    "test": "echo \"Error: specify frontend or backend\" && exit 1",
+    "test": "echo \"Error: specify frontend or backend (npm run test:backend or npm run test:frontend)\" && exit 1",
+    "test:backend": "npm run test --prefix backend",
     "test:backend:coverage": "npm run test:coverage --prefix backend",
     "test:backend:diff": "npm run test:diff --prefix backend",
     "test:frontend:coverage": "npm run test:coverage --prefix frontend",

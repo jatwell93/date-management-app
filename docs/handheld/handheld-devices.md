@@ -78,6 +78,22 @@ If your pharmacy IT hasn't explicitly locked down ALL navigation:
 3. After logout, see if an **"Exit to Android" or "Back to Home"** option appears
 4. If successful, you'll see the Android home screen
 
+**Authorized admin exit (EHS/SOTI only, if IT provides access):**
+1. If the kiosk launcher shows a menu (often three dots), open **Tools** or **Admin Login**
+2. Enter the admin PIN provided by pharmacy IT
+3. Once in admin mode, open **Settings** and switch the default home app to **Quickstep**
+4. Press Home to return to the native Android launcher
+
+**If the admin menu is hidden (model-dependent):**
+- Some Zebra configs allow an admin prompt using hardware keys (examples reported in the field: `Shift` + `Blue` + `0`, `Shift` + `Blue` + `Up`, `Shift` + `Blue` + `Space`)
+- These sequences are often disabled in strict kiosk mode and require an admin PIN
+- Do not attempt without authorization from the device owner
+
+**SOTI MobiControl (if in use):**
+- Long-press **Back** for 3-5 seconds to reveal an admin login prompt
+- Some builds allow a swipe-up gesture to show the Android nav bar
+- These require admin credentials and may be disabled by policy
+
 **Physical/soft keys (if partially accessible):**
 1. If you can see the **navigation bar** (triangle/circle/square) at the bottom:
    - Long-press **Home** (circle) or **Back** (triangle) to bring up recent apps
@@ -172,6 +188,25 @@ Once you have temporary home screen access (or the app is whitelisted in FRED):
    - Scan a test barcode
    - The barcode should appear in an input field
    - If nothing appears, keyboard output may still be disabled or the profile isn't active
+
+---
+
+### Admin-Only Controls (EHS and MDM)
+
+Use these only if you are the device owner or have explicit IT authorization.
+
+**Disable EHS kiosk mode via broadcast (device owner / MDM only):**
+
+```java
+// Zebra EHS broadcast (requires admin privileges)
+Intent intent = new Intent("com.symbol.enterprisehomescreen.actions.MODIFY_KIOSK_MODE");
+intent.putExtra("enable", false);
+sendBroadcast(intent);
+```
+
+**EHS config file override (device owner / MDM only):**
+- If you manage `enterprisehomescreen.xml` under `/enterprise/usr/`, set `<kiosk_mode_enabled>` to `0`
+- Redeploy the config via your MDM and reboot the device
 
 ---
 

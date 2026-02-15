@@ -1,9 +1,10 @@
 import { Request, Response, NextFunction } from 'express';
 import jwt, { Secret } from 'jsonwebtoken';
 import { AnalyticsService, AnalyticsEventType } from '../services/analytics.service';
-import { TierLevel, SubscriptionStatus } from '../types/subscription';
+import { BillingCycle, TierLevel, SubscriptionStatus } from '../types/subscription';
 import { getDefaultDatabaseClient } from '../database/database-factory';
 import { envConfig } from '../config/environment';
+import { SubscriptionService } from '../services/subscription.service';
 
 export interface AuthRequest extends Request {
   userId?: number;
@@ -24,6 +25,12 @@ export interface TokenPayload extends jwt.JwtPayload {
   organizationId: string;
   tierLevel: TierLevel;
 }
+
+const isTierLevel = (value: string): value is TierLevel =>
+  ['starter', 'professional', 'premium', 'concierge'].includes(value as TierLevel);
+
+const isBillingCycle = (value: string): value is BillingCycle =>
+  Object.values(BillingCycle).includes(value as BillingCycle);
 
 export const authenticateToken = async (req: AuthRequest, res: Response, next: NextFunction) => {
   // Test environment bypass
@@ -178,26 +185,67 @@ export const authenticateToken = async (req: AuthRequest, res: Response, next: N
       });
     }
 
-    // Check if subscription is canceled
+    // Check if subscription is canceled (allow access until Stripe period end if applicable)
     if (subscription.status === SubscriptionStatus.CANCELED) {
-      const analyticsService = AnalyticsService.getInstance();
-      analyticsService.trackEvent({
-        userId: decodedToken.userId,
-        eventType: AnalyticsEventType.USER_LOGOUT,
-        eventCategory: 'Auth',
-        eventAction: 'organization_subscription_canceled',
-        ipAddress: req.ip,
-        userAgent: req.get('User-Agent') || undefined,
-        metadata: { 
-          organizationId: decodedToken.organizationId,
-          path: req.path, 
-          method: req.method 
-        },
+      const tierLevel = isTierLevel(subscription.tierLevel) ? subscription.tierLevel : null;
+      const billingCycle = isBillingCycle(subscription.billingCycle) ? subscription.billingCycle : null;
+
+      if (!tierLevel || !billingCycle) {
+        const analyticsService = AnalyticsService.getInstance();
+        analyticsService.trackEvent({
+          userId: decodedToken.userId,
+          eventType: AnalyticsEventType.USER_LOGOUT,
+          eventCategory: 'Auth',
+          eventAction: 'organization_subscription_invalid',
+          ipAddress: req.ip,
+          userAgent: req.get('User-Agent') || undefined,
+          metadata: {
+            organizationId: decodedToken.organizationId,
+            path: req.path,
+            method: req.method,
+            subscriptionTierLevel: subscription.tierLevel,
+            subscriptionBillingCycle: subscription.billingCycle,
+          },
+        });
+
+        return res.status(403).json({
+          message: 'Access denied: Organization subscription is invalid. Please contact support.',
+        });
+      }
+
+      const subscriptionService = new SubscriptionService(prisma);
+      const hasActiveAccess = await subscriptionService.isAccessActive({
+        id: subscription.id,
+        organizationId: subscription.organizationId,
+        tierLevel,
+        stripeSubscriptionId: subscription.stripeSubscriptionId ?? undefined,
+        trialEndDate: subscription.trialEndDate ?? undefined,
+        status: subscription.status,
+        billingCycle,
+        createdAt: subscription.createdAt,
+        updatedAt: subscription.updatedAt,
       });
 
-      return res.status(403).json({ 
-        message: 'Access denied: Organization subscription has been canceled. Please contact support.' 
-      });
+      if (!hasActiveAccess) {
+        const analyticsService = AnalyticsService.getInstance();
+        analyticsService.trackEvent({
+          userId: decodedToken.userId,
+          eventType: AnalyticsEventType.USER_LOGOUT,
+          eventCategory: 'Auth',
+          eventAction: 'organization_subscription_canceled',
+          ipAddress: req.ip,
+          userAgent: req.get('User-Agent') || undefined,
+          metadata: { 
+            organizationId: decodedToken.organizationId,
+            path: req.path, 
+            method: req.method 
+          },
+        });
+
+        return res.status(403).json({ 
+          message: 'Access denied: Organization subscription has been canceled. Please contact support.' 
+        });
+      }
     }
   } catch (error) {
     const analyticsService = AnalyticsService.getInstance();
