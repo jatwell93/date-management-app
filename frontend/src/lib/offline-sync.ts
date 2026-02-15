@@ -1,6 +1,7 @@
 // offline-sync.ts - Handles offline data synchronization for the PWA
 import * as Sentry from '@sentry/react';
 import { v4 as uuidv4 } from 'uuid';
+import { STORAGE_KEYS } from '../config/handheld';
 
 // Define types for offline operations
 type OfflineOperation = {
@@ -16,7 +17,7 @@ export type SyncStrategy = 'real-time' | 'batch' | 'manual';
 
 // Queue to store offline operations
 const OFFLINE_QUEUE_KEY = 'offline-queue';
-const SYNC_STRATEGY_KEY = 'sync-strategy';
+const SYNC_STRATEGY_KEY = STORAGE_KEYS.SYNC_STRATEGY;
 
 const logSyncEvent = (
   message: string,

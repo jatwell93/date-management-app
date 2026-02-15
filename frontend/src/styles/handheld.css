@@ -213,8 +213,13 @@
      5. FULL-SCREEN SCAN AREA
      ============================================ */
 
-  /* Camera scanner full-screen mode: fill available height minus toolbar */
+  /* Camera scanner base sizing */
   .camera-scanner {
+    height: 100%;
+  }
+
+  /* Camera scanner full-screen mode: fill available height minus toolbar */
+  .camera-scanner-fullscreen .camera-scanner {
     height: calc(100vh - 80px) !important;
   }
 

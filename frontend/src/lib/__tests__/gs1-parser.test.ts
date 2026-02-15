@@ -132,6 +132,25 @@ describe('parseGS1Barcode', () => {
       expect(result.serialNumber).toBe('XYZ789');
       expect(result.isValid).toBe(true);
     });
+
+    it('parses raw GS1 barcode without brackets', () => {
+      const barcode = '01193123456789011726051521XYZ789';
+      const result = parseGS1Barcode(barcode);
+
+      expect(result.gtin).toBe('19312345678901');
+      expect(result.expiryDate).toBe('2026-05-15');
+      expect(result.serialNumber).toBe('XYZ789');
+      expect(result.isValid).toBe(true);
+    });
+
+    it('parses fixture-style raw GS1 barcode with batch and serial', () => {
+      const barcode = '0137939393141710B256092121B256';
+      const result = parseGS1Barcode(barcode);
+
+      expect(result.gtin).toBe('37939393141710');
+      expect(result.serialNumber).toContain('B256');
+      expect(result.isValid).toBe(true);
+    });
   });
 
   describe('Non-GS1 barcodes', () => {
@@ -209,6 +228,7 @@ describe('isGS1Barcode', () => {
     expect(isGS1Barcode('(17)250315')).toBe(true);
     expect(isGS1Barcode('(21)SN123')).toBe(true);
     expect(isGS1Barcode('(01)123(10)ABC(17)250101(21)XYZ')).toBe(true);
+    expect(isGS1Barcode('01123123456789011725031521SN123')).toBe(true);
   });
 
   it('returns false for non-GS1 barcodes', () => {

@@ -82,6 +82,29 @@ export const useHandheldDetection = (): UseHandheldDetectionResult => {
     setDetectionResult(result);
   }, []);
 
+  useEffect(() => {
+    let resizeTimeout: number | undefined;
+    const handleResize = () => {
+      if (resizeTimeout) {
+        window.clearTimeout(resizeTimeout);
+      }
+      resizeTimeout = window.setTimeout(() => {
+        refresh();
+      }, 150);
+    };
+
+    window.addEventListener('resize', handleResize);
+    window.addEventListener('orientationchange', handleResize);
+
+    return () => {
+      if (resizeTimeout) {
+        window.clearTimeout(resizeTimeout);
+      }
+      window.removeEventListener('resize', handleResize);
+      window.removeEventListener('orientationchange', handleResize);
+    };
+  }, [refresh]);
+
   return {
     isHandheld: detectionResult?.isHandheld ?? false,
     detectionMethod: detectionResult?.method ?? 'unknown',

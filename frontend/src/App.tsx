@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
 import * as Sentry from '@sentry/react';
 import {
   BrowserRouter as Router,
@@ -31,6 +31,7 @@ import {
 import ErrorBoundary from './components/ErrorBoundary';
 import { synchronizeOfflineData } from './lib/sync-manager';
 import { offlineSyncService } from './lib/offline-sync';
+import { offlineStorage } from './lib/offline-storage';
 import { jwtDecode, JwtPayload } from 'jwt-decode';
 import { ToastProvider } from './components/ui/toast-provider';
 import { HandheldProvider, useHandheldDetectionContext } from './contexts/HandheldContext';
@@ -133,13 +134,58 @@ function AppContent({
   isMobileMenuOpen: boolean;
   setIsMobileMenuOpen: (open: boolean) => void;
 }) {
+  const PENDING_INVENTORY_ITEMS_PREFIX = 'pending-inventory-item-';
   const { isHandheld } = useHandheldDetectionContext();
   const location = useLocation();
   const navigate = useNavigate();
+  const [isOnline, setIsOnline] = useState<boolean>(navigator.onLine);
+  const [pendingQueueCount, setPendingQueueCount] = useState(0);
+
+  const refreshPendingQueueCount = useCallback(async () => {
+    try {
+      const keys = await offlineStorage.keys();
+      const pendingInventoryCount = keys.filter((key) =>
+        key.startsWith(PENDING_INVENTORY_ITEMS_PREFIX),
+      ).length;
+      const operationQueueCount = offlineSyncService.getPendingOperationCount();
+      setPendingQueueCount(pendingInventoryCount + operationQueueCount);
+    } catch (_error) {
+      setPendingQueueCount(offlineSyncService.getPendingOperationCount());
+    }
+  }, []);
+
+  useEffect(() => {
+    const handleOnline = () => setIsOnline(true);
+    const handleOffline = () => setIsOnline(false);
+
+    window.addEventListener('online', handleOnline);
+    window.addEventListener('offline', handleOffline);
+
+    return () => {
+      window.removeEventListener('online', handleOnline);
+      window.removeEventListener('offline', handleOffline);
+    };
+  }, []);
+
+  useEffect(() => {
+    void refreshPendingQueueCount();
+    const intervalId = window.setInterval(() => {
+      void refreshPendingQueueCount();
+    }, 2000);
+
+    return () => {
+      window.clearInterval(intervalId);
+    };
+  }, [isLoggedIn, refreshPendingQueueCount]);
 
   // Redirect handheld devices to /scan by default (only when logged in)
   useEffect(() => {
-    if (isHandheld && isLoggedIn && location.pathname !== '/scan' && !location.pathname.startsWith('/login')) {
+    if (
+      isHandheld &&
+      isLoggedIn &&
+      location.pathname !== '/scan' &&
+      !location.pathname.startsWith('/login')
+    ) {
       // Use React Router navigation instead of full page reload
       navigate('/scan', { replace: true });
     }
@@ -426,14 +472,15 @@ function AppContent({
       {isHandheld ? (
         <HandheldLayout
           userName={userName || undefined}
-          syncStatus="synced"
-          onSyncNow={() => {
-            // TODO: Implement sync now handler
+          syncStatus={isOnline ? 'synced' : 'offline'}
+          onSyncNow={async () => {
+            await synchronizeOfflineData(token);
+            await refreshPendingQueueCount();
           }}
           onSettingsClick={() => {
             // TODO: Implement settings navigation
           }}
-          queueLength={offlineSyncService.getPendingOperationCount()}
+          queueLength={pendingQueueCount}
         >
           <main className="p-4 max-w-7xl mx-auto">
             <ErrorBoundary>

@@ -2,7 +2,6 @@ import React, { useState, useEffect } from 'react';
 import * as Sentry from '@sentry/react';
 import { Scanner } from '../components/Scanner';
 import { HandheldScanner } from '../components/HandheldScanner';
-import { HandheldLayout } from '../layouts/HandheldLayout';
 import { Card, CardContent, CardHeader, CardTitle } from '../components/ui/card';
 import { Input } from '../components/ui/input';
 import { Button } from '../components/ui/button';
@@ -402,12 +401,20 @@ export function ScanPage({ token }: ScanPageProps) {
   };
 
   const renderContent = () => (
-    <div className="container mx-auto p-4 max-w-3xl">
-      <Card className="w-full mx-auto border border-border bg-card text-card-foreground shadow-lg">
-        <CardHeader className="bg-muted/50 border-b border-border">
-          <CardTitle className="text-2xl font-bold text-center">Inventory Scan</CardTitle>
-        </CardHeader>
-        <CardContent className="p-6">
+    <div className={isHandheld ? 'h-full w-full p-0' : 'container mx-auto p-4 max-w-3xl'}>
+      <Card
+        className={
+          isHandheld
+            ? 'w-full h-full border-0 rounded-none shadow-none bg-card text-card-foreground'
+            : 'w-full mx-auto border border-border bg-card text-card-foreground shadow-lg'
+        }
+      >
+        {!isHandheld && (
+          <CardHeader className="bg-muted/50 border-b border-border">
+            <CardTitle className="text-2xl font-bold text-center">Inventory Scan</CardTitle>
+          </CardHeader>
+        )}
+        <CardContent className={isHandheld ? 'p-0 h-full' : 'p-6'}>
           {isHandheld ? (
             <HandheldScanner onScan={handleBarcodeScan} />
           ) : (
@@ -617,21 +624,7 @@ export function ScanPage({ token }: ScanPageProps) {
 
   return (
     <>
-      {isHandheld ? (
-        <HandheldLayout
-          userName="User" // TODO: Get from auth context
-          syncStatus={navigator.onLine ? 'synced' : 'offline'} // TODO: Get from sync context
-          onSyncNow={handleSyncNow}
-          onSettingsClick={() => {
-            // TODO: Implement settings navigation
-          }}
-          queueLength={offlineSyncService.getPendingOperationCount()}
-        >
-          <div data-testid="scan-page-main">{renderContent()}</div>
-        </HandheldLayout>
-      ) : (
-        <div data-testid="scan-page-main">{renderContent()}</div>
-      )}
+      <div data-testid="scan-page-main">{renderContent()}</div>
     </>
   );
 }

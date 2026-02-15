@@ -44,7 +44,7 @@ export const HandheldScanToolbar: React.FC<HandheldScanToolbarProps> = ({
   return (
     <div
       data-testid="handheld-scan-toolbar"
-      className="handheld-scan-toolbar floating-overlay fixed bottom-0 left-0 right-0 bg-white border-t border-gray-200 shadow-lg z-50"
+      className="handheld-scan-toolbar sticky top-0 bg-white border-b border-gray-200 shadow-sm z-40"
     >
       <div className="px-4 py-3">
         {/* Top row: User name and sync status */}
@@ -92,7 +92,7 @@ export const HandheldScanToolbar: React.FC<HandheldScanToolbarProps> = ({
               className="w-full px-3 py-2 text-sm border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500 min-h-[44px]"
             >
               <option value="real-time">Real-time</option>
-              <option value="batch-10-min">Batch (10 min)</option>
+              <option value="batch">Batch (10 min)</option>
               <option value="manual">Manual</option>
             </select>
           </div>

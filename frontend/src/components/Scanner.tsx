@@ -58,7 +58,7 @@ export function Scanner({ onScan, defaultMode = 'text', isHandheld = false }: Sc
   return (
     <div className={isHandheld ? 'h-full flex flex-col' : ''}>
       {!useCamera ? (
-        <form onSubmit={handleFormSubmit} className={isHandheld ? 'flex-1 flex flex-col p-4' : ''}>
+        <form onSubmit={handleFormSubmit} className={isHandheld ? 'flex-1 flex flex-col p-3' : ''}>
           <input
             type="text"
             value={input}
@@ -87,9 +87,9 @@ export function Scanner({ onScan, defaultMode = 'text', isHandheld = false }: Sc
           </div>
         </form>
       ) : (
-        <div className={`mb-4 ${isHandheld ? 'h-full flex flex-col' : ''}`}>
+        <div className={isHandheld ? 'h-full flex flex-col' : 'mb-4'}>
           <div
-            className={`flex justify-between items-center mb-2 ${isHandheld ? 'px-4 py-2' : ''}`}
+            className={`flex justify-between items-center mb-2 ${isHandheld ? 'px-3 py-2' : ''}`}
           >
             <h3 className={`text-lg font-semibold text-foreground ${isHandheld ? 'text-xl' : ''}`}>
               Camera Scanner
@@ -104,7 +104,7 @@ export function Scanner({ onScan, defaultMode = 'text', isHandheld = false }: Sc
               Use Text Input
             </button>
           </div>
-          <div className={isHandheld ? 'flex-1' : ''}>
+          <div className={isHandheld ? 'flex-1 camera-scanner-fullscreen' : ''}>
             <CameraScanner onDetected={handleScan} isHandheld={isHandheld} />
           </div>
         </div>

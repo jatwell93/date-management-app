@@ -5,6 +5,8 @@
 
 import { GS1ParseResult } from '../types/handheld';
 
+const GS_SEPARATOR = String.fromCharCode(29);
+
 /**
  * Converts YYMMDD format to ISO date string
  * @param yymmdd - Date in YYMMDD format (e.g., "250315" for March 15, 2025)
@@ -54,9 +56,10 @@ export function parseGS1Barcode(barcode: string): GS1ParseResult {
   }
 
   try {
-    // GS1-128 barcodes start with the FNC1 character (represented as ']C1' or group separator)
-    // For simplicity, we'll look for AI patterns directly
-    let remaining = barcode;
+    // GS1-128 may include FNC1 prefixes/group separators or bracketed AIs.
+    // Support both bracketed (e.g., (01)...) and raw AI (e.g., 01...10...21...).
+    const normalizedBarcode = barcode.replace(/^\]C1/, '').replace(/\u001d/g, GS_SEPARATOR);
+    let remaining = normalizedBarcode;
 
     // Extract GTIN (01) - 14 digits after (01)
     const gtinMatch = remaining.match(/\(01\)(\d{14})/);
@@ -91,6 +94,90 @@ export function parseGS1Barcode(barcode: string): GS1ParseResult {
       remaining = remaining.replace(serialMatch[0], '');
     }
 
+    // If bracketed parsing didn't find anything, try raw AI parsing.
+    if (
+      !result.gtin &&
+      !result.batchLot &&
+      !result.expiryDate &&
+      !result.serialNumber &&
+      !/[()]/.test(normalizedBarcode)
+    ) {
+      const raw = normalizedBarcode;
+      let index = 0;
+
+      const findNextBoundary = (startIndex: number, candidates: string[]): number => {
+        let boundary = raw.length;
+
+        const separatorIndex = raw.indexOf(GS_SEPARATOR, startIndex);
+        if (separatorIndex !== -1) {
+          boundary = Math.min(boundary, separatorIndex);
+        }
+
+        for (const ai of candidates) {
+          const aiIndex = raw.indexOf(ai, startIndex);
+          if (aiIndex !== -1) {
+            boundary = Math.min(boundary, aiIndex);
+          }
+        }
+
+        return boundary;
+      };
+
+      while (index < raw.length) {
+        if (raw[index] === GS_SEPARATOR) {
+          index += 1;
+          continue;
+        }
+
+        const ai = raw.slice(index, index + 2);
+
+        if (ai === '01' && index + 16 <= raw.length && !result.gtin) {
+          const gtin = raw.slice(index + 2, index + 16);
+          if (/^\d{14}$/.test(gtin)) {
+            result.gtin = gtin;
+          }
+          index += 16;
+          continue;
+        }
+
+        if (ai === '17' && index + 8 <= raw.length && !result.expiryDate) {
+          const yymmdd = raw.slice(index + 2, index + 8);
+          const isoDate = convertYYMMDDToISO(yymmdd);
+          if (isoDate) {
+            result.expiryDate = isoDate;
+          } else {
+            result.errors.push(`Invalid expiry date format: ${yymmdd}`);
+          }
+          index += 8;
+          continue;
+        }
+
+        if (ai === '10' && !result.batchLot) {
+          const start = index + 2;
+          const end = findNextBoundary(start, ['17', '21']);
+          const batch = raw.slice(start, end).replace(new RegExp(GS_SEPARATOR, 'g'), '').trim();
+          if (batch) {
+            result.batchLot = batch;
+          }
+          index = end;
+          continue;
+        }
+
+        if (ai === '21' && !result.serialNumber) {
+          const start = index + 2;
+          const end = findNextBoundary(start, ['10', '17']);
+          const serial = raw.slice(start, end).replace(new RegExp(GS_SEPARATOR, 'g'), '').trim();
+          if (serial) {
+            result.serialNumber = serial;
+          }
+          index = end;
+          continue;
+        }
+
+        index += 1;
+      }
+    }
+
     // Check if we successfully parsed any GS1 data
     result.isValid = !!(result.gtin || result.batchLot || result.expiryDate || result.serialNumber);
 
@@ -113,13 +200,17 @@ export function parseGS1Barcode(barcode: string): GS1ParseResult {
 export function isGS1Barcode(barcode: string): boolean {
   if (!barcode) return false;
 
+  const normalizedBarcode = barcode.replace(/^\]C1/, '');
+
   // Check for common GS1 AIs
   const gs1Patterns = [
     /\(01\)/, // GTIN
     /\(10\)/, // Batch
     /\(17\)/, // Expiry
     /\(21\)/, // Serial
+    /01\d{14}/, // Raw GTIN AI format
+    /17\d{6}/, // Raw expiry AI format
   ];
 
-  return gs1Patterns.some((pattern) => pattern.test(barcode));
+  return gs1Patterns.some((pattern) => pattern.test(normalizedBarcode));
 }
