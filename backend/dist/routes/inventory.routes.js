@@ -12,7 +12,6 @@ const validateRequest_1 = require("../middleware/validateRequest");
 const schemas_1 = require("../schemas");
 const data_integrity_middleware_1 = require("../middleware/data-integrity.middleware");
 const inventory_controller_1 = require("../controllers/inventory.controller");
-const normalize_function_1 = require("../utils/normalize.function");
 const rateLimiter_1 = require("../middleware/rateLimiter");
 const feature_gate_middleware_1 = require("../middleware/feature-gate.middleware");
 const router = (0, express_1.Router)();
@@ -22,7 +21,7 @@ router.get('/', auth_middleware_1.authenticateToken, async (req, res) => {
     try {
         // const items = await inventoryService.getAllInventoryItems();
         const items = await inventoryService.getAllInventoryItems();
-        res.json((0, normalize_function_1.escapeHtml)(items));
+        res.json(items);
     }
     catch (error) {
         console.error('Get inventory items error:', error);
@@ -42,9 +41,11 @@ router.get('/:id', auth_middleware_1.authenticateToken, async (req, res) => {
         }
         // Validate ownership: item.organization_id must match req.organizationId
         if (item.organizationId !== req.organizationId) {
-            return res.status(403).json({ message: 'Access denied: Item belongs to different organization' });
+            return res
+                .status(403)
+                .json({ message: 'Access denied: Item belongs to different organization' });
         }
-        res.json((0, normalize_function_1.escapeHtml)(item));
+        res.json(item);
     }
     catch (error) {
         console.error('Get inventory item error:', error);
@@ -60,7 +61,7 @@ router.get('/product/:productId', auth_middleware_1.authenticateToken, async (re
         }
         // const items = await inventoryService.getInventoryItemsByProductId(productId);
         const items = await inventoryService.getInventoryItemsByProductId(productId);
-        res.json((0, normalize_function_1.escapeHtml)(items));
+        res.json(items);
     }
     catch (error) {
         console.error('Get inventory items by product error:', error);
@@ -87,7 +88,7 @@ router.get('/by-barcode/:barcode', auth_middleware_1.authenticateToken, async (r
         // Then get inventory items for that product
         // const items = await inventoryService.getInventoryItemsByProductId(product.id, /* req.organizationId */);
         const items = await inventoryService.getInventoryItemsByProductId(product.id);
-        res.json((0, normalize_function_1.escapeHtml)(items));
+        res.json(items);
     }
     catch (error) {
         console.error('Get inventory items by barcode error:', error);
@@ -105,7 +106,7 @@ router.get('/recent/product/:productId', auth_middleware_1.authenticateToken, as
         const limit = Number.isNaN(limitParam) || limitParam <= 0 ? 5 : limitParam;
         // const items = await inventoryService.getRecentInventoryItemsByProductId(productId, limit);
         const items = await inventoryService.getRecentInventoryItemsByProductId(productId, limit);
-        res.json((0, normalize_function_1.escapeHtml)(items));
+        res.json(items);
     }
     catch (error) {
         console.error('Get recent inventory items by product error:', error);
@@ -121,7 +122,7 @@ router.get('/location/:locationId', auth_middleware_1.authenticateToken, async (
         }
         // const items = await inventoryService.getInventoryItemsByLocationId(locationId);
         const items = await inventoryService.getInventoryItemsByLocationId(locationId);
-        res.json((0, normalize_function_1.escapeHtml)(items));
+        res.json(items);
     }
     catch (error) {
         console.error('Get inventory items by location error:', error);
@@ -166,7 +167,7 @@ router.post('/', auth_middleware_1.authenticateToken, (0, feature_gate_middlewar
             locationId,
             status,
         }, userId);
-        res.status(201).json((0, normalize_function_1.escapeHtml)(newInventoryItem));
+        res.status(201).json(newInventoryItem);
     }
     catch (error) {
         // Check if the error is about location not existing
@@ -191,7 +192,9 @@ router.put('/:id', auth_middleware_1.authenticateToken, rateLimiter_1.standardLi
         }
         // Validate ownership: item.organization_id must match req.organizationId
         if (existingItem.organizationId !== req.organizationId) {
-            return res.status(403).json({ message: 'Access denied: Item belongs to different organization' });
+            return res
+                .status(403)
+                .json({ message: 'Access denied: Item belongs to different organization' });
         }
         const { productId, expiryDate, locationId, status } = req.body;
         const userId = req.userId; // Get user ID from auth middleware
@@ -212,7 +215,7 @@ router.put('/:id', auth_middleware_1.authenticateToken, rateLimiter_1.standardLi
         if (!updatedItem) {
             return res.status(404).json({ message: 'Inventory item not found' });
         }
-        res.json((0, normalize_function_1.escapeHtml)(updatedItem));
+        res.json(updatedItem);
     }
     catch (error) {
         console.error('Update inventory item error:', error);
@@ -233,7 +236,9 @@ router.delete('/:id', auth_middleware_1.authenticateToken, rateLimiter_1.standar
         }
         // Validate ownership: item.organization_id must match req.organizationId
         if (existingItem.organizationId !== req.organizationId) {
-            return res.status(403).json({ message: 'Access denied: Item belongs to different organization' });
+            return res
+                .status(403)
+                .json({ message: 'Access denied: Item belongs to different organization' });
         }
         const userId = req.userId; // Get user ID from auth middleware
         if (!userId) {

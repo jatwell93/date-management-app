@@ -7,7 +7,6 @@ const validation_middleware_1 = require("../middleware/validation.middleware");
 const validateRequest_1 = require("../middleware/validateRequest");
 const schemas_1 = require("../schemas");
 const data_integrity_middleware_1 = require("../middleware/data-integrity.middleware");
-const normalize_function_1 = require("../utils/normalize.function");
 const rateLimiter_1 = require("../middleware/rateLimiter");
 const router = (0, express_1.Router)();
 const storeAreaService = new store_area_service_1.StoreAreaService();
@@ -15,7 +14,7 @@ const storeAreaService = new store_area_service_1.StoreAreaService();
 router.get('/', auth_middleware_1.authenticateToken, async (req, res) => {
     try {
         const areas = await storeAreaService.getAllStoreAreas();
-        res.json((0, normalize_function_1.escapeHtml)(areas));
+        res.json(areas);
     }
     catch (error) {
         console.error('Get store areas error:', error);
@@ -34,7 +33,7 @@ router.get('/:id', auth_middleware_1.authenticateToken, async (req, res) => {
         if (!area) {
             return res.status(404).json({ message: 'Store area not found' });
         }
-        res.json((0, normalize_function_1.escapeHtml)(area));
+        res.json(area);
     }
     catch (error) {
         console.error('Get store area error:', error);
@@ -50,7 +49,7 @@ router.get('/name/:name', auth_middleware_1.authenticateToken, async (req, res) 
         if (!areas || areas.length === 0) {
             return res.status(404).json({ message: 'Store areas not found' });
         }
-        res.json((0, normalize_function_1.escapeHtml)(areas));
+        res.json(areas);
     }
     catch (error) {
         console.error('Get store areas by name error:', error);
@@ -70,7 +69,7 @@ router.post('/', auth_middleware_1.authenticateToken, rateLimiter_1.standardLimi
             subDepartment,
             lastChecked,
         });
-        res.status(201).json((0, normalize_function_1.escapeHtml)(newArea));
+        res.status(201).json(newArea);
     }
     catch (error) {
         console.error('Create store area error:', error);
@@ -98,7 +97,7 @@ router.put('/:id', auth_middleware_1.authenticateToken, rateLimiter_1.standardLi
         if (!updatedArea) {
             return res.status(404).json({ message: 'Store area not found' });
         }
-        res.json((0, normalize_function_1.escapeHtml)(updatedArea));
+        res.json(updatedArea);
     }
     catch (error) {
         console.error('Update store area error:', error);
@@ -117,7 +116,7 @@ router.delete('/:id', auth_middleware_1.authenticateToken, rateLimiter_1.standar
         if (!deleted) {
             return res.status(404).json({ message: 'Store area not found' });
         }
-        res.json((0, normalize_function_1.escapeHtml)({ message: 'Store area deleted successfully' }));
+        res.json({ message: 'Store area deleted successfully' });
     }
     catch (error) {
         console.error('Delete store area error:', error);

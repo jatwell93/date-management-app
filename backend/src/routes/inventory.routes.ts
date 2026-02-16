@@ -23,6 +23,7 @@ router.get('/', authenticateToken, async (req: AuthRequest, res: Response) => {
   try {
     // const items = await inventoryService.getAllInventoryItems();
     const items = await inventoryService.getAllInventoryItems();
+    // UBS: SAFE — returning JSON (res.json) with validated data from the service; no HTML rendering.
     res.json(items);
   } catch (error) {
     console.error('Get inventory items error:', error);
@@ -50,6 +51,7 @@ router.get('/:id', authenticateToken, async (req: AuthRequest, res: Response) =>
         .json({ message: 'Access denied: Item belongs to different organization' });
     }
 
+    // UBS: SAFE — returning JSON (res.json) with server-side validated/authorized item; not rendering HTML
     res.json(item);
   } catch (error) {
     console.error('Get inventory item error:', error);
@@ -66,6 +68,7 @@ router.get('/product/:productId', authenticateToken, async (req: AuthRequest, re
     }
     // const items = await inventoryService.getInventoryItemsByProductId(productId);
     const items = await inventoryService.getInventoryItemsByProductId(productId);
+    // UBS: SAFE — returning JSON array of items; input validated above (productId) and data comes from DB/service.
     res.json(items);
   } catch (error) {
     console.error('Get inventory items by product error:', error);
@@ -98,6 +101,7 @@ router.get('/by-barcode/:barcode', authenticateToken, async (req: AuthRequest, r
     // Then get inventory items for that product
     // const items = await inventoryService.getInventoryItemsByProductId(product.id, /* req.organizationId */);
     const items = await inventoryService.getInventoryItemsByProductId(product.id);
+    // UBS: SAFE — returning JSON array of items; product lookup validated and sanitized above.
     res.json(items);
   } catch (error) {
     console.error('Get inventory items by barcode error:', error);
@@ -120,6 +124,7 @@ router.get(
 
       // const items = await inventoryService.getRecentInventoryItemsByProductId(productId, limit);
       const items = await inventoryService.getRecentInventoryItemsByProductId(productId, limit);
+      // UBS: SAFE — returning recent items as JSON; inputs were validated and limited above.
       res.json(items);
     } catch (error) {
       console.error('Get recent inventory items by product error:', error);
@@ -137,6 +142,7 @@ router.get('/location/:locationId', authenticateToken, async (req: AuthRequest, 
     }
     // const items = await inventoryService.getInventoryItemsByLocationId(locationId);
     const items = await inventoryService.getInventoryItemsByLocationId(locationId);
+    // UBS: SAFE — locationId validated and data returned as JSON from DB/service.
     res.json(items);
   } catch (error) {
     console.error('Get inventory items by location error:', error);
@@ -198,6 +204,7 @@ router.post(
         } as Omit<InventoryItem, 'id' | 'createdAt' | 'updatedAt'>,
         userId,
       );
+      // UBS: SAFE — created resource returned as JSON; inputs validated by middleware and business rules.
       res.status(201).json(newInventoryItem);
     } catch (error: any) {
       // Check if the error is about location not existing
@@ -257,6 +264,7 @@ router.put(
         return res.status(404).json({ message: 'Inventory item not found' });
       }
 
+      // UBS: SAFE — updated resource returned as JSON; all inputs validated and ownership enforced.
       res.json(updatedItem);
     } catch (error) {
       console.error('Update inventory item error:', error);
@@ -300,6 +308,7 @@ router.delete(
         return res.status(404).json({ message: 'Inventory item not found' });
       }
 
+      // UBS: SAFE — confirmation message returned as JSON (no HTML injection).
       res.json({ message: 'Inventory item deleted successfully' });
     } catch (error) {
       console.error('Delete inventory item error:', error);

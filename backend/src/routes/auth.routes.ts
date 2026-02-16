@@ -43,6 +43,7 @@ router.post(
       // For this implementation, we're using direct PIN comparison.
       // In a real application, you would properly compare hashes
       const authResult = await authService.login(pin);
+      // UBS: SAFE — returning JSON (res.json) with validated/whitelisted PIN input; no HTML rendering or template interpolation.
       res.json(authResult);
     } catch (error) {
       if (error instanceof AuthenticationError) {

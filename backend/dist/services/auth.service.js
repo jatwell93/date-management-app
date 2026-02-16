@@ -10,6 +10,7 @@ const database_factory_1 = require("../database/database-factory");
 const logger_1 = require("../utils/logger");
 const errors_1 = require("../errors");
 const subscription_1 = require("../types/subscription");
+const environment_1 = require("../config/environment");
 const crypto_1 = __importDefault(require("crypto"));
 class AuthService {
     constructor(prismaClient) {
@@ -161,7 +162,7 @@ class AuthService {
                         role: user.role,
                         organizationId: user.organizationId,
                         tierLevel: subscriptionTier.tierLevel,
-                    }, process.env.JWT_SECRET || 'your_jwt_secret', {
+                    }, environment_1.envConfig.JWT_SECRET, {
                         expiresIn: '1h', // Token expires in 1 hour
                     });
                     return {
@@ -192,7 +193,7 @@ class AuthService {
      */
     async generateTokens(userId, role) {
         try {
-            const secret = process.env.JWT_SECRET || 'your_jwt_secret';
+            const secret = environment_1.envConfig.JWT_SECRET;
             // Generate access token (short-lived)
             const accessToken = jsonwebtoken_1.default.sign({ userId, role }, secret, {
                 expiresIn: this.ACCESS_TOKEN_EXPIRY,
@@ -224,7 +225,7 @@ class AuthService {
      */
     verifyToken(token) {
         try {
-            const secret = process.env.JWT_SECRET || 'your_jwt_secret';
+            const secret = environment_1.envConfig.JWT_SECRET;
             const decoded = jsonwebtoken_1.default.verify(token, secret);
             return decoded;
         }
@@ -262,7 +263,7 @@ class AuthService {
                 throw new errors_1.AuthenticationError('Refresh token revoked');
             }
             // Generate new access token
-            const secret = process.env.JWT_SECRET || 'your_jwt_secret';
+            const secret = environment_1.envConfig.JWT_SECRET;
             const accessToken = jsonwebtoken_1.default.sign({ userId: storedToken.userId, role: storedToken.user.role }, secret, { expiresIn: this.ACCESS_TOKEN_EXPIRY });
             logger_1.Logger.info('Auth service: Access token refreshed', { userId: storedToken.userId });
             return accessToken;

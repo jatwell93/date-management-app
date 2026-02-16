@@ -1,0 +1,44 @@
+# Files and folders UBS should ignore (reduce scanner noise)
+# Exclude generated/build/coverage artifacts and environment example files
+
+# build / dist / compiled outputs
+dist/
+build/
+frontend/build/
+workers/.wrangler/
+
+# coverage reports and HTML output
+coverage/
+**/coverage/
+**/lcov-report/
+**/lcov.info
+
+# TypeScript / JS compiled artifacts
+**/*.map
+**/*.min.js
+
+# Prisma / generated client
+backend/prisma/generated/
+
+# Environment files and examples (treat .env entries as false-positives)
+.env
+.env.*
+.env.example
+
+# Database files
+*.sqlite*
+
+# Node modules / caches
+node_modules/
+.cache/
+
+# Other noisy/generated artifacts
+backend/dist/
+frontend/build/
+backend/coverage/
+bug-scan-report.json
+bug-scan-backend.json
+
+# Ignore IDE / OS files
+.vscode/
+.DS_Store

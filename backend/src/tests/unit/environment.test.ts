@@ -44,13 +44,13 @@ describe('EnvironmentConfig', () => {
   it('uses provided JWT_SECRET when NODE_ENV is test', () => {
     process.env.NODE_ENV = 'test';
     delete process.env.PORT;
-    process.env.JWT_SECRET = 'test-secret';
+    process.env.JWT_SECRET = 'test_secret';
 
     const envModule = loadEnvModule();
 
     expect(envModule.envConfig.NODE_ENV).toBe('test');
     expect(envModule.envConfig.PORT).toBe(3001);
-    expect(envModule.envConfig.JWT_SECRET).toBe('test-secret');
+    expect(envModule.envConfig.JWT_SECRET).toBe('test_secret');
   });
 
   it('throws when development is missing JWT_SECRET', () => {

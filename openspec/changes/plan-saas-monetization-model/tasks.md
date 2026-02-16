@@ -166,6 +166,11 @@
 - [ ] 11.7 Create trial dashboard: Display trial status, days remaining, upgrade CTA
 - [ ] 11.8 Write tests for trial expiration logic with time mocking
 - [ ] 11.9 Write tests for trial abuse prevention (duplicate email/phone)
+- [ ] 11.10 (Deferred) Create SendGrid templates in dashboard (manual step)
+- [ ] **Blocked** until a verified sender/domain is available
+- [ ] Template: "Trial Ending Soon" (for trial_will_end)
+- [ ] Template: "Payment Failed" (for invoice.payment_failed)
+- [ ] Template: "Downgrade Warning" (for tier downgrade)
 
 ## 12. Subscription Management UI (Phase 4 - Week 6)
 

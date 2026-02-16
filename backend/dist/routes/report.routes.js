@@ -8,7 +8,6 @@ const validator_1 = __importDefault(require("validator"));
 const service_provider_1 = require("../services/service-provider");
 const auth_middleware_1 = require("../middleware/auth.middleware");
 const feature_gate_middleware_1 = require("../middleware/feature-gate.middleware");
-const normalize_function_1 = require("../utils/normalize.function");
 const router = (0, express_1.Router)();
 const serviceProvider = new service_provider_1.ServiceProvider();
 const reportService = serviceProvider.getReportService();
@@ -16,7 +15,7 @@ const reportService = serviceProvider.getReportService();
 router.get('/expiry', auth_middleware_1.authenticateToken, async (req, res) => {
     try {
         const report = await reportService.getMonthlyExpiryReport();
-        res.json((0, normalize_function_1.escapeHtml)(report));
+        res.json(report);
     }
     catch (_error) {
         // console.error("Get monthly expiry report error:", _error);
@@ -27,7 +26,7 @@ router.get('/expiry', auth_middleware_1.authenticateToken, async (req, res) => {
 router.get('/expiry-overall', auth_middleware_1.authenticateToken, async (req, res) => {
     try {
         const report = await reportService.getOverallExpiryReport();
-        res.json((0, normalize_function_1.escapeHtml)(report));
+        res.json(report);
     }
     catch (_error) {
         // console.error("Get overall expiry report error:", _error);
@@ -38,7 +37,7 @@ router.get('/expiry-overall', auth_middleware_1.authenticateToken, async (req, r
 router.get('/expiry-details', auth_middleware_1.authenticateToken, async (req, res) => {
     try {
         const report = await reportService.getDetailedExpiryReport();
-        res.json((0, normalize_function_1.escapeHtml)(report));
+        res.json(report);
     }
     catch (_error) {
         // console.error("Get detailed expiry report error:", _error);
@@ -49,7 +48,7 @@ router.get('/expiry-details', auth_middleware_1.authenticateToken, async (req, r
 router.get('/monthly-markdown', auth_middleware_1.authenticateToken, async (req, res) => {
     try {
         const report = await reportService.getMonthlyMarkdownReport();
-        res.json((0, normalize_function_1.escapeHtml)(report));
+        res.json(report);
     }
     catch (_error) {
         // console.error("Get monthly markdown report error:", _error);
@@ -60,7 +59,7 @@ router.get('/monthly-markdown', auth_middleware_1.authenticateToken, async (req,
 router.post('/update-statuses', auth_middleware_1.authenticateToken, async (req, res) => {
     try {
         await reportService.updateAllMarkdownStatuses();
-        res.json((0, normalize_function_1.escapeHtml)({ message: 'All inventory markdown statuses updated successfully.' }));
+        res.json({ message: 'All inventory markdown statuses updated successfully.' });
     }
     catch (_error) {
         // console.error("Update markdown statuses error:", _error);
@@ -71,7 +70,7 @@ router.post('/update-statuses', auth_middleware_1.authenticateToken, async (req,
 router.get('/usage', auth_middleware_1.authenticateToken, async (req, res) => {
     try {
         const report = await reportService.getUsageReport();
-        res.json((0, normalize_function_1.escapeHtml)(report));
+        res.json(report);
     }
     catch (_error) {
         // console.error("Get usage report error:", _error);
@@ -82,7 +81,7 @@ router.get('/usage', auth_middleware_1.authenticateToken, async (req, res) => {
 router.get('/daily-usage', auth_middleware_1.authenticateToken, async (req, res) => {
     try {
         const report = await reportService.getDailyUsageReport();
-        res.json((0, normalize_function_1.escapeHtml)(report));
+        res.json(report);
     }
     catch (_error) {
         // console.error("Get daily usage report error:", _error);
@@ -93,7 +92,7 @@ router.get('/daily-usage', auth_middleware_1.authenticateToken, async (req, res)
 router.get('/loss-by-sku', auth_middleware_1.authenticateToken, async (req, res) => {
     try {
         const report = await reportService.getLossBySkuReport();
-        res.json((0, normalize_function_1.escapeHtml)(report));
+        res.json(report);
     }
     catch (_error) {
         // console.error("Get loss by SKU report error:", _error);
@@ -104,7 +103,7 @@ router.get('/loss-by-sku', auth_middleware_1.authenticateToken, async (req, res)
 router.get('/loss-by-department', auth_middleware_1.authenticateToken, async (req, res) => {
     try {
         const report = await reportService.getLossByDepartmentReport();
-        res.json((0, normalize_function_1.escapeHtml)(report));
+        res.json(report);
     }
     catch (_error) {
         // console.error("Get loss by department report error:", _error);
@@ -119,7 +118,7 @@ router.get('/items-by-user', auth_middleware_1.authenticateToken, async (req, re
             return res.status(400).json({ message: 'Invalid timeFrame value' });
         }
         const report = await reportService.getItemsByUserReport(timeFrame);
-        res.json((0, normalize_function_1.escapeHtml)(report));
+        res.json(report);
     }
     catch (_error) {
         // console.error("Get items by user report error:", _error);
@@ -130,7 +129,7 @@ router.get('/items-by-user', auth_middleware_1.authenticateToken, async (req, re
 router.get('/items-by-date', auth_middleware_1.authenticateToken, async (req, res) => {
     try {
         const report = await reportService.getItemsByDateReport();
-        res.json((0, normalize_function_1.escapeHtml)(report));
+        res.json(report);
     }
     catch (_error) {
         // console.error("Get items by date report error:", _error);
@@ -141,7 +140,7 @@ router.get('/items-by-date', auth_middleware_1.authenticateToken, async (req, re
 router.get('/analytics', auth_middleware_1.authenticateToken, (0, feature_gate_middleware_1.requireFeature)('advanced_analytics'), async (req, res) => {
     try {
         const analytics = await reportService.getDashboardAnalytics();
-        res.json((0, normalize_function_1.escapeHtml)(analytics));
+        res.json(analytics);
     }
     catch (_error) {
         // console.error("Get dashboard analytics error:", _error);

@@ -7,7 +7,6 @@ const validation_middleware_1 = require("../middleware/validation.middleware");
 const validateRequest_1 = require("../middleware/validateRequest");
 const schemas_1 = require("../schemas");
 const data_integrity_middleware_1 = require("../middleware/data-integrity.middleware");
-const normalize_function_1 = require("../utils/normalize.function");
 const rateLimiter_1 = require("../middleware/rateLimiter");
 const feature_gate_middleware_1 = require("../middleware/feature-gate.middleware");
 const router = (0, express_1.Router)();
@@ -17,7 +16,7 @@ router.get('/', auth_middleware_1.authenticateToken, auth_middleware_1.requireMa
     try {
         // const users = await userService.getUsers();
         const users = await userService.getUsers( /* req.organizationId */);
-        res.json((0, normalize_function_1.escapeHtml)(users));
+        res.json(users);
     }
     catch (_error) {
         // console.error("Error getting users:", _error);
@@ -37,9 +36,11 @@ router.get('/:id', auth_middleware_1.authenticateToken, auth_middleware_1.requir
         }
         // Validate ownership: user.organization_id must match req.organizationId
         if (user.organizationId !== req.organizationId) {
-            return res.status(403).json({ message: 'Access denied: User belongs to different organization' });
+            return res
+                .status(403)
+                .json({ message: 'Access denied: User belongs to different organization' });
         }
-        res.json((0, normalize_function_1.escapeHtml)(user));
+        res.json(user);
     }
     catch (_error) {
         // console.error("Error getting user:", _error);
@@ -64,7 +65,7 @@ router.post('/', auth_middleware_1.authenticateToken, auth_middleware_1.requireM
             organizationId: req.organizationId, // Use req.organizationId from auth context
         };
         const createdUser = await userService.createUser(newUser);
-        res.status(201).json((0, normalize_function_1.escapeHtml)(createdUser));
+        res.status(201).json(createdUser);
     }
     catch (_error) {
         // console.error("Error creating user:", _error);
@@ -85,7 +86,9 @@ router.put('/:id', auth_middleware_1.authenticateToken, auth_middleware_1.requir
         }
         // Validate ownership: user.organization_id must match req.organizationId
         if (existingUser.organizationId !== req.organizationId) {
-            return res.status(403).json({ message: 'Access denied: User belongs to different organization' });
+            return res
+                .status(403)
+                .json({ message: 'Access denied: User belongs to different organization' });
         }
         const { pin, role } = req.body;
         const user = {};
@@ -98,7 +101,7 @@ router.put('/:id', auth_middleware_1.authenticateToken, auth_middleware_1.requir
             return res.status(404).json({ message: 'User not found' });
         }
         const updatedUser = await userService.getUserById(id);
-        res.json((0, normalize_function_1.escapeHtml)(updatedUser));
+        res.json(updatedUser);
     }
     catch (_error) {
         // console.error("Error updating user:", _error);
@@ -119,13 +122,15 @@ router.delete('/:id', auth_middleware_1.authenticateToken, auth_middleware_1.req
         }
         // Validate ownership: user.organization_id must match req.organizationId
         if (existingUser.organizationId !== req.organizationId) {
-            return res.status(403).json({ message: 'Access denied: User belongs to different organization' });
+            return res
+                .status(403)
+                .json({ message: 'Access denied: User belongs to different organization' });
         }
         const deleted = await userService.deleteUser(id);
         if (!deleted) {
             return res.status(404).json({ message: 'User not found' });
         }
-        res.json((0, normalize_function_1.escapeHtml)({ message: 'User deleted successfully' }));
+        res.json({ message: 'User deleted successfully' });
     }
     catch (_error) {
         // console.error("Error deleting user:", _error);

@@ -111,7 +111,7 @@ export class AuthService {
     let isSequential = true;
     // Check increasing sequence
     for (let i = 1; i < pin.length; i++) {
-      if (parseInt(pin[i]) !== parseInt(pin[i - 1]) + 1) {
+      if (parseInt(pin[i], 10) !== parseInt(pin[i - 1], 10) + 1) {
         isSequential = false;
         break;
       }
@@ -122,7 +122,7 @@ export class AuthService {
     // Check decreasing sequence
     isSequential = true;
     for (let i = 1; i < pin.length; i++) {
-      if (parseInt(pin[i]) !== parseInt(pin[i - 1]) - 1) {
+      if (parseInt(pin[i], 10) !== parseInt(pin[i - 1], 10) - 1) {
         isSequential = false;
         break;
       }

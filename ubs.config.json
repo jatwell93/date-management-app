@@ -1,0 +1,19 @@
+{
+  "exclude": [
+    "dist/**",
+    "build/**",
+    "coverage/**",
+    "**/coverage/**",
+    "frontend/build/**",
+    "backend/dist/**",
+    "backend/coverage/**",
+    ".env",
+    ".env.*",
+    ".env.example",
+    "**/*.map",
+    "**/*.min.js",
+    "node_modules/**",
+    "bug-scan-report.json"
+  ],
+  "note": "This file is used by developers to pass exclusion patterns to UBS if supported (and is referenced by .ubsignore)."
+}

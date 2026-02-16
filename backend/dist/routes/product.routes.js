@@ -44,7 +44,6 @@ const validateRequest_1 = require("../middleware/validateRequest");
 const schemas_1 = require("../schemas");
 const data_integrity_middleware_1 = require("../middleware/data-integrity.middleware");
 const multer_1 = __importDefault(require("multer"));
-const normalize_function_1 = require("../utils/normalize.function");
 const rateLimiter_1 = require("../middleware/rateLimiter");
 const path = __importStar(require("path"));
 const router = (0, express_1.Router)();
@@ -72,7 +71,7 @@ router.get('/', auth_middleware_1.authenticateToken, async (req, res) => {
     try {
         // TODO: Phase 7 - Update service to accept organizationId parameter
         const products = await productService.getAllProducts(); // req.organizationId!
-        res.json((0, normalize_function_1.escapeHtml)(products));
+        res.json(products);
     }
     catch (_error) {
         // console.error("Get products error:", _error);
@@ -96,7 +95,7 @@ router.get('/:id', auth_middleware_1.authenticateToken, async (req, res) => {
                 .status(403)
                 .json({ message: 'Access denied: Product belongs to different organization' });
         }
-        res.json((0, normalize_function_1.escapeHtml)(product));
+        res.json(product);
     }
     catch (_error) {
         // console.error("Get product error:", _error);
@@ -112,7 +111,7 @@ router.get('/by-barcode/:barcode', auth_middleware_1.authenticateToken, async (r
         if (!product) {
             return res.status(404).json({ message: 'Product not found' });
         }
-        res.json((0, normalize_function_1.escapeHtml)(product));
+        res.json(product);
     }
     catch (_error) {
         // console.error("Get product by barcode error:", _error);
@@ -128,7 +127,7 @@ router.get('/by-sku/:sku', auth_middleware_1.authenticateToken, async (req, res)
         if (!product) {
             return res.status(404).json({ message: 'Product not found' });
         }
-        res.json((0, normalize_function_1.escapeHtml)(product));
+        res.json(product);
     }
     catch (_error) {
         // console.error("Get product by SKU error:", _error);
@@ -149,7 +148,7 @@ router.post('/', auth_middleware_1.authenticateToken, rateLimiter_1.standardLimi
             costPrice,
             organizationId: req.organizationId,
         });
-        res.status(201).json((0, normalize_function_1.escapeHtml)(newProduct));
+        res.status(201).json(newProduct);
     }
     catch (_error) {
         // console.error("Create product error:", _error);
@@ -188,7 +187,7 @@ router.put('/:id', auth_middleware_1.authenticateToken, rateLimiter_1.standardLi
         if (!updatedProduct) {
             return res.status(404).json({ message: 'Product not found' });
         }
-        res.json((0, normalize_function_1.escapeHtml)(updatedProduct));
+        res.json(updatedProduct);
     }
     catch (_error) {
         // console.error("Update product error:", _error);
@@ -216,7 +215,7 @@ router.delete('/:id', auth_middleware_1.authenticateToken, rateLimiter_1.standar
         if (!deleted) {
             return res.status(404).json({ message: 'Product not found' });
         }
-        res.json((0, normalize_function_1.escapeHtml)({ message: 'Product deleted successfully' }));
+        res.json({ message: 'Product deleted successfully' });
     }
     catch (_error) {
         // console.error("Delete product error:", _error);
@@ -256,7 +255,7 @@ router.post('/upload-csv', auth_middleware_1.authenticateToken, rateLimiter_1.st
         if (result.errors.length > 0) {
             responseObj.errors = result.errors;
         }
-        res.json((0, normalize_function_1.escapeHtml)(responseObj));
+        res.json(responseObj);
     }
     catch (error) {
         console.error('CSV upload error:', error);
