@@ -19,6 +19,8 @@ import { SubscriptionService } from './subscription.service';
 import { EmailService } from './email.service';
 import { TIER_LIMITS, TierLevel, SubscriptionStatus } from '../types/subscription';
 import { NotFoundError } from '../errors';
+import * as Sentry from '@sentry/node';
+import { ApplicationMonitoringService } from './application.monitoring.service';
 
 // Simple logging utility
 const log = {
@@ -186,29 +188,43 @@ export class WebhookService {
    * DECISION 17.5.5: Stripe customer metadata is source of truth
    */
   private async validateWebhookMetadata(customerId: string): Promise<string> {
-    const customer = await this.stripe!.customers.retrieve(customerId);
+    const monitor = ApplicationMonitoringService.getInstance();
+    try {
+      const customer = await this.stripe!.customers.retrieve(customerId);
 
-    if (customer.deleted) {
-      throw new NotFoundError('Customer has been deleted');
+      if (customer.deleted) {
+        const err = new NotFoundError('Customer has been deleted');
+        Sentry.captureException(err, { level: 'warning', extra: { customerId } });
+        throw err;
+      }
+
+      const organizationId = customer.metadata?.organizationId;
+      if (!organizationId) {
+        const err = new Error('Missing organizationId in Stripe customer metadata');
+        log.error('Missing organizationId in Stripe customer metadata', { customerId });
+        Sentry.captureException(err, { level: 'warning', extra: { customerId } });
+        // record a validation warning metric (skipped counted via 'skipped')
+        monitor.recordWebhookEvent('validate_metadata', 0, 'skipped');
+        throw err;
+      }
+
+      // Verify organization exists
+      const organization = await this.prisma.organization.findUnique({
+        where: { id: organizationId },
+      });
+
+      if (!organization) {
+        const err = new NotFoundError(`Organization ${organizationId} not found`);
+        log.error('Organization not found', { organizationId, customerId });
+        Sentry.captureException(err, { level: 'warning', extra: { customerId, organizationId } });
+        throw err;
+      }
+
+      return organizationId;
+    } catch (error) {
+      // rethrow after capturing
+      throw error;
     }
-
-    const organizationId = customer.metadata?.organizationId;
-    if (!organizationId) {
-      log.error('Missing organizationId in Stripe customer metadata', { customerId });
-      throw new Error('Missing organizationId in Stripe customer metadata');
-    }
-
-    // Verify organization exists
-    const organization = await this.prisma.organization.findUnique({
-      where: { id: organizationId },
-    });
-
-    if (!organization) {
-      log.error('Organization not found', { organizationId, customerId });
-      throw new NotFoundError(`Organization ${organizationId} not found`);
-    }
-
-    return organizationId;
   }
 
   /**
@@ -236,6 +252,9 @@ export class WebhookService {
    * Creates subscription_tiers record with organization metadata validation.
    */
   private async handleSubscriptionCreated(subscription: Stripe.Subscription): Promise<void> {
+    const monitor = ApplicationMonitoringService.getInstance();
+    const start = Date.now();
+
     try {
       log.info('Subscription created', {
         subscriptionId: subscription.id,
@@ -293,8 +312,17 @@ export class WebhookService {
         });
       });
 
+      const duration = Date.now() - start;
+      monitor.recordWebhookEvent('customer.subscription.created', duration, 'success');
+
       log.info('Subscription created successfully', { organizationId, tierLevel });
-    } catch (error) {
+    } catch (error: any) {
+      const duration = Date.now() - start;
+      monitor.recordWebhookEvent('customer.subscription.created', duration, 'error');
+      Sentry.captureException(error, {
+        level: 'error',
+        extra: { subscriptionId: subscription.id, customerId: subscription.customer },
+      });
       log.error('Failed to handle subscription created', {
         error: error instanceof Error ? error.message : 'Unknown error',
         subscriptionId: subscription.id,
@@ -310,6 +338,9 @@ export class WebhookService {
    * DECISION 17.5.8: Apply soft lock (read-only mode) when downgrading over limit.
    */
   private async handleSubscriptionUpdated(subscription: Stripe.Subscription): Promise<void> {
+    const monitor = ApplicationMonitoringService.getInstance();
+    const start = Date.now();
+
     try {
       log.info('Subscription updated', {
         subscriptionId: subscription.id,
@@ -394,8 +425,17 @@ export class WebhookService {
         });
       });
 
+      const duration = Date.now() - start;
+      monitor.recordWebhookEvent('customer.subscription.updated', duration, 'success');
+
       log.info('Subscription updated successfully', { organizationId, newTierLevel });
-    } catch (error) {
+    } catch (error: any) {
+      const duration = Date.now() - start;
+      monitor.recordWebhookEvent('customer.subscription.updated', duration, 'error');
+      Sentry.captureException(error, {
+        level: 'error',
+        extra: { subscriptionId: subscription.id, customerId: subscription.customer },
+      });
       log.error('Failed to handle subscription updated', {
         error: error instanceof Error ? error.message : 'Unknown error',
         subscriptionId: subscription.id,
@@ -411,6 +451,9 @@ export class WebhookService {
    * DECISION 17.5.8: Apply soft lock if usage > Starter limits.
    */
   private async handleSubscriptionDeleted(subscription: Stripe.Subscription): Promise<void> {
+    const monitor = ApplicationMonitoringService.getInstance();
+    const start = Date.now();
+
     try {
       log.info('Subscription deleted', {
         subscriptionId: subscription.id,
@@ -471,8 +514,14 @@ export class WebhookService {
         });
       });
 
+      const duration = Date.now() - start;
+      monitor.recordWebhookEvent('customer.subscription.deleted', duration, 'success');
+
       log.info('Subscription deleted successfully', { organizationId });
-    } catch (error) {
+    } catch (error: any) {
+      const duration = Date.now() - start;
+      monitor.recordWebhookEvent('customer.subscription.deleted', duration, 'error');
+      Sentry.captureException(error, { level: 'error', extra: { subscriptionId: subscription.id } });
       log.error('Failed to handle subscription deleted', {
         error: error instanceof Error ? error.message : 'Unknown error',
         subscriptionId: subscription.id,
@@ -488,6 +537,9 @@ export class WebhookService {
    * DECISION 17.5.5: Link via customer metadata organizationId.
    */
   private async handleCheckoutSessionCompleted(session: Stripe.Checkout.Session): Promise<void> {
+    const monitor = ApplicationMonitoringService.getInstance();
+    const start = Date.now();
+
     try {
       log.info('Checkout session completed', {
         sessionId: session.id,
@@ -522,7 +574,12 @@ export class WebhookService {
       });
 
       log.info('Checkout completed successfully', { organizationId });
-    } catch (error) {
+      const duration = Date.now() - start;
+      monitor.recordWebhookEvent('checkout.session.completed', duration, 'success');
+    } catch (error: any) {
+      const duration = Date.now() - start;
+      monitor.recordWebhookEvent('checkout.session.completed', duration, 'error');
+      Sentry.captureException(error, { level: 'error', extra: { sessionId: session.id } });
       log.error('Failed to handle checkout completed', {
         error: error instanceof Error ? error.message : 'Unknown error',
         sessionId: session.id,
@@ -538,6 +595,9 @@ export class WebhookService {
    * DECISION 17.5.9: 7-day grace period before auto-downgrade (handled by cron).
    */
   private async handleInvoicePaymentFailed(invoice: Stripe.Invoice): Promise<void> {
+    const monitor = ApplicationMonitoringService.getInstance();
+    const start = Date.now();
+
     try {
       log.error('Invoice payment failed', {
         invoiceId: invoice.id,
@@ -574,7 +634,12 @@ export class WebhookService {
       );
 
       log.info('Payment failure handled', { organizationId, invoiceId: invoice.id });
-    } catch (error) {
+      const duration = Date.now() - start;
+      monitor.recordWebhookEvent('invoice.payment_failed', duration, 'success');
+    } catch (error: any) {
+      const duration = Date.now() - start;
+      monitor.recordWebhookEvent('invoice.payment_failed', duration, 'error');
+      Sentry.captureException(error, { level: 'error', extra: { invoiceId: invoice.id } });
       log.error('Failed to handle payment failure', {
         error: error instanceof Error ? error.message : 'Unknown error',
         invoiceId: invoice.id,
@@ -590,6 +655,9 @@ export class WebhookService {
    * DECISION 17.5.4: Use SendGrid for email notifications.
    */
   private async handleTrialWillEnd(subscription: Stripe.Subscription): Promise<void> {
+    const monitor = ApplicationMonitoringService.getInstance();
+    const start = Date.now();
+
     try {
       log.info('Trial will end soon', {
         subscriptionId: subscription.id,
@@ -607,7 +675,15 @@ export class WebhookService {
       await this.emailService.sendTrialReminderEmail(organizationId, daysRemaining);
 
       log.info('Trial reminder sent', { organizationId, daysRemaining });
-    } catch (error) {
+      const duration = Date.now() - start;
+      monitor.recordWebhookEvent('customer.subscription.trial_will_end', duration, 'success');
+    } catch (error: any) {
+      const duration = Date.now() - start;
+      monitor.recordWebhookEvent('customer.subscription.trial_will_end', duration, 'error');
+      Sentry.captureException(error, {
+        level: 'error',
+        extra: { subscriptionId: subscription.id },
+      });
       log.error('Failed to handle trial will end', {
         error: error instanceof Error ? error.message : 'Unknown error',
         subscriptionId: subscription.id,

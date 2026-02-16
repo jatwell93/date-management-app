@@ -14,6 +14,7 @@
 
 import { Router, Request, Response } from 'express';
 import { webhookService } from '../services/webhook.service';
+import { ApplicationMonitoringService } from '../services/application.monitoring.service';
 
 const router = Router();
 
@@ -42,11 +43,18 @@ const handleStripeWebhook = async (req: Request, res: Response) => {
 
     // Step 2: Check idempotency (duplicate detection)
     const isNew = await webhookService.isNewEvent(event.id);
+    const monitor = ApplicationMonitoringService.getInstance();
+    const startTs = Date.now();
+
     if (!isNew) {
       console.log('[WEBHOOK] Duplicate webhook event, returning success without reprocessing', {
         eventId: event.id,
         eventType: event.type,
       });
+
+      // record idempotency skip metric
+      monitor.recordWebhookEvent(event.type, 0, 'skipped');
+
       // Return 200 OK for duplicate events (Stripe expects idempotent response)
       return webhookService.sendSuccess(res);
     }
@@ -55,6 +63,9 @@ const handleStripeWebhook = async (req: Request, res: Response) => {
     try {
       await webhookService.handleEvent(event);
       await webhookService.markEventProcessed(event.id, event.type);
+      const duration = Date.now() - startTs;
+      monitor.recordWebhookEvent(event.type, duration, 'success');
+
       console.log('[WEBHOOK] Webhook event processed successfully', {
         eventId: event.id,
         eventType: event.type,
@@ -62,6 +73,9 @@ const handleStripeWebhook = async (req: Request, res: Response) => {
       return webhookService.sendSuccess(res);
     } catch (handleError) {
       const error = handleError as Error;
+      const duration = Date.now() - startTs;
+      monitor.recordWebhookEvent(event.type, duration, 'error');
+
       console.error('[WEBHOOK] Error processing webhook event', {
         eventId: event.id,
         eventType: event.type,

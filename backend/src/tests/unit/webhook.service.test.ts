@@ -304,6 +304,76 @@ describe('WebhookService', () => {
         expect.any(Number),
       );
     });
+
+    it('records webhook metrics on successful subscription created', async () => {
+      const monitor = require('../../services/application.monitoring.service').ApplicationMonitoringService.getInstance();
+      // reset webhook metrics
+      (monitor as any).metrics.webhook = { total: 0, byEvent: {}, idempotencySkips: 0 };
+
+      prisma.subscriptionTier.create.mockResolvedValue({ id: 1 });
+      prisma.organizationUsage.upsert.mockResolvedValue({ id: 1 });
+      prisma.auditLog.create.mockResolvedValue({ id: 1 });
+
+      const subscription = {
+        id: 'sub_created_metrics',
+        customer: customerId,
+        status: 'active',
+        items: {
+          data: [
+            {
+              price: {
+                recurring: { interval: 'month' },
+                metadata: { tier: 'starter' },
+              },
+            },
+          ],
+        },
+        trial_end: null,
+      } as unknown as Stripe.Subscription;
+
+      await (service as any).handleSubscriptionCreated(subscription);
+
+      const wm = monitor.getWebhookMetrics();
+      expect(wm.total).toBeGreaterThanOrEqual(1);
+      expect(wm.byEvent['customer.subscription.created'].count).toBe(1);
+      expect(wm.byEvent['customer.subscription.created'].avgLatencyMs).toBeGreaterThan(0);
+    });
+
+    it('captures Sentry and records metric when handler errors', async () => {
+      const monitor = require('../../services/application.monitoring.service').ApplicationMonitoringService.getInstance();
+      (monitor as any).metrics.webhook = { total: 0, byEvent: {}, idempotencySkips: 0 };
+
+      prisma.subscriptionTier.create.mockResolvedValue({ id: 1 });
+      prisma.organizationUsage.upsert.mockResolvedValue({ id: 1 });
+      // Make auditLog.create throw to simulate DB error
+      prisma.auditLog.create.mockRejectedValue(new Error('audit failed'));
+
+      const Sentry = require('@sentry/node');
+      jest.spyOn(Sentry, 'captureException').mockImplementation(() => undefined);
+
+      const subscription = {
+        id: 'sub_created_error',
+        customer: customerId,
+        status: 'active',
+        items: {
+          data: [
+            {
+              price: {
+                recurring: { interval: 'month' },
+                metadata: { tier: 'starter' },
+              },
+            },
+          ],
+        },
+        trial_end: null,
+      } as unknown as Stripe.Subscription;
+
+      await expect((service as any).handleSubscriptionCreated(subscription)).rejects.toThrow();
+
+      expect(Sentry.captureException).toHaveBeenCalled();
+      const wm = monitor.getWebhookMetrics();
+      expect(wm.byEvent['customer.subscription.created'].failures).toBe(1);
+    });
   });
 
   describe('metadata validation', () => {

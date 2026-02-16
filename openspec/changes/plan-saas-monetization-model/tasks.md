@@ -148,6 +148,12 @@
 - [ ] 10.10 Implement dead letter queue: Send to queue after 72h retry failures
 - [ ] 10.11 Add webhook failure rate monitoring: Alert if >5% failures in 1-hour window
 - [ ] 10.12 Write integration tests for all webhook handlers with test events
+**USER STEPS**
+- [x] Set SENTRY_DSN in environment (backend .env / deploy)
+- [ ] In Sentry UI create rules (example):
+- [ ] webhook_handler_error > 1/day → PagerDuty / Slack
+- [ ] ProcessedWebhookEvent anomaly → Slack/Email
+- [ ] (Optional) Tune thresholds in ApplicationMonitoringService.initialize() config
 
 ## 11. Trial System (Phase 4 - Week 6)
 - [ ] 11.0 Investigate the usefulness of https://github.com/themacn/trial-abuse-guard and https://github.com/eramitgupta/disposable-email will implementing either or both save time in the long run. Use tools to search for other options (should be free and opensource)

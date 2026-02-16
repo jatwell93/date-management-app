@@ -134,13 +134,26 @@ if (!isTestEnv) {
     ],
   });
 
-  // Listen for application alerts
+  // Listen for application alerts and forward critical/warning alerts to Sentry
   appMonitoringService.on('alert', (alert) => {
     console.log('Application Alert [%s]: %s', alert.severity.toUpperCase(), alert.message, {
       type: alert.type,
       timestamp: alert.timestamp,
       metadata: alert.metadata,
     });
+
+    // Forward to Sentry for visibility and alerting
+    if (alert.severity === 'high' || alert.severity === 'critical') {
+      Sentry.captureMessage(alert.message, {
+        level: 'error',
+        extra: alert.metadata,
+      });
+    } else {
+      Sentry.captureMessage(alert.message, {
+        level: 'warning',
+        extra: alert.metadata,
+      });
+    }
   });
 
   // Apply application monitoring middleware

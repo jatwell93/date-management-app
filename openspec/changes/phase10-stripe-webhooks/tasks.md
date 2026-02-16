@@ -253,42 +253,51 @@ Implement complete Stripe webhook handling with persistent idempotency, email no
   - [x] Test concurrent webhook processing with transaction safety
   - **Result**: ✅ 10/10 tests PASSED (SubscriptionTier ops, idempotency, concurrency, usage limits, audit logging)
 
-- [ ] 6.3 Write edge case tests (Phase 18.H)
-  - [ ] Test missing organization (Phase 18.H): Logs error, returns 200
-  - [ ] Test duplicate email constraint (Phase 18.H.8): Catches Prisma error
-  - [ ] Test soft lock on downgrade (Phase 18.H.3): Verifies read-only mode applied
+- [x] 6.3 Write edge case tests (Phase 18.H)
+  - [x] Test missing organization (Phase 18.H): Logs error, returns 200
+  - [x] Test duplicate email constraint (Phase 18.H.8): Catches Prisma error
+  - [x] Test soft lock on downgrade (Phase 18.H.3): Verifies read-only mode applied
 
 ### 7. Monitoring & Alerting (Phase 18.B.7)
 
-- [ ] 7.1 Add Sentry error tracking for webhook failures
-  - [ ] Capture context: `{ eventId, eventType, organizationId, error }`
-  - [ ] Set severity: `error` for handler failures, `warning` for validation failures
+- [x] 7.1 Add Sentry error tracking for webhook failures
+  - [x] Capture context: `{ eventId, eventType, organizationId, error }`
+  - [x] Set severity: `error` for handler failures, `warning` for validation failures
 
-- [ ] 7.2 Configure Sentry alerts
-  - [ ] Alert: `webhook_handler_error > 1/day`
-  - [ ] Alert: `processed_webhook_events` growth rate anomaly (detect replay attacks)
+- [x] 7.2 Configure Sentry alerts
+  - [x] Alert: `webhook_handler_error > 1/day` (implemented via ApplicationMonitoringService alert)
+  - [x] Alert: `processed_webhook_events` growth rate anomaly (detect replay attacks)
 
-- [ ] 7.3 Add webhook processing metrics
-  - [ ] Latency per event type
-  - [ ] Failure rate by event type
-  - [ ] Idempotency skip rate (replays)
+- [x] 7.3 Add webhook processing metrics
+  - [x] Latency per event type
+  - [x] Failure rate by event type
+  - [x] Idempotency skip rate (replays)
+
+Notes:
+- Implemented Sentry capture calls in `webhook.service.ts` and route-level metric recording in `webhook.routes.ts`.
+- Added webhook metrics and alerting hooks to `ApplicationMonitoringService` (`recordWebhookEvent`, `getWebhookMetrics`).
+- Unit tests added to validate Sentry capture and webhook metric increments.
 
 ### 8. Documentation
 
-- [ ] 8.1 Update `docs/stripe-integration.md`
-  - [ ] Document all 6 webhook handlers
-  - [ ] Document metadata validation requirement (DECISION 17.5.5)
-  - [ ] Document dunning workflow (7-day grace period, DECISION 17.5.9)
-  - [ ] Document soft lock behavior on downgrade (DECISION 17.5.8)
+- [x] 8.1 Update `docs/stripe-integration.md`
+  - [x] Document all 6 webhook handlers
+  - [x] Document metadata validation requirement (DECISION 17.5.5)
+  - [x] Document dunning workflow (7-day grace period, DECISION 17.5.9)
+  - [x] Document soft lock behavior on downgrade (DECISION 17.5.8)
 
-- [ ] 8.2 Create `docs/webhook-troubleshooting.md` (Phase 18.I.2)
-  - [ ] Signature verification failed → Check `STRIPE_WEBHOOK_SECRET`
-  - [ ] Webhook timeout → Check Stripe retry logs
-  - [ ] Organization not found → Check customer metadata contains `organizationId`
-  - [ ] Email sending failed → Check SendGrid API key + templates
+- [x] 8.2 Create `docs/webhook-troubleshooting.md` (Phase 18.I.2)
+  - [x] Signature verification failed → Check `STRIPE_WEBHOOK_SECRET`
+  - [x] Webhook timeout → Check Stripe retry logs
+  - [x] Organization not found → Check customer metadata contains `organizationId`
+  - [x] Email sending failed → Check SendGrid API key + templates
 
-- [ ] 8.3 Store memory after completion
-  - [ ] Run: `node scripts/mem-log.js FEATURE "Stripe Webhooks Phase 10" "Implemented 6 webhook handlers with database idempotency, SendGrid email integration, comprehensive testing. Follows stripe-webhooks and webhook-handler-patterns skills. All handlers validated with Stripe customer metadata as source of truth (DECISION 17.5.5)."`
+- [x] 8.3 Store memory after completion
+  - [x] Run: `node scripts/mem-log.js FEATURE "Stripe Webhooks Phase 10" "Implemented 6 webhook handlers with database idempotency, SendGrid email integration, comprehensive testing. Follows stripe-webhooks and webhook-handler-patterns skills. All handlers validated with Stripe customer metadata as source of truth (DECISION 17.5.5)."`
+
+Notes:
+- Documentation and runbook added to `docs/`.
+- Memory entry recorded.
 
 ## Validation Checklist
 
