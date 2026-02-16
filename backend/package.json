@@ -18,8 +18,8 @@
     "migrate:rollback": "ts-node -e \"(async () => { const { MigrationService } = await import('./src/migrations/migration.service.ts'); const service = new MigrationService(); await service.rollbackLastMigration(); })();\"",
     "seed": "node scripts/seed-users.js",
     "secrets-scan": "git secrets --scan || echo 'git-secrets not installed. Install from: https://github.com/awslabs/git-secrets'",
-    "lint": "eslint . --ext .ts",
-    "lint:fix": "eslint . --ext .ts --fix"
+    "lint": "eslint .",
+    "lint:fix": "eslint . --fix"
   },
   "keywords": [],
   "author": "",
