@@ -370,6 +370,7 @@ export class InventoryService {
       data: {
         userId,
         inventoryItemId,
+        action: 'inventory_changed',
         changeDescription,
       },
     });

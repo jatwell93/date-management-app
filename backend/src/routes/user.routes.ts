@@ -39,7 +39,9 @@ router.get('/:id', authenticateToken, requireManager, async (req: AuthRequest, r
 
     // Validate ownership: user.organization_id must match req.organizationId
     if (user.organizationId !== req.organizationId) {
-      return res.status(403).json({ message: 'Access denied: User belongs to different organization' });
+      return res
+        .status(403)
+        .json({ message: 'Access denied: User belongs to different organization' });
     }
 
     res.json(user);
@@ -112,7 +114,9 @@ router.put(
 
       // Validate ownership: user.organization_id must match req.organizationId
       if (existingUser.organizationId !== req.organizationId) {
-        return res.status(403).json({ message: 'Access denied: User belongs to different organization' });
+        return res
+          .status(403)
+          .json({ message: 'Access denied: User belongs to different organization' });
       }
 
       const { pin, role } = req.body;
@@ -157,7 +161,9 @@ router.delete(
 
       // Validate ownership: user.organization_id must match req.organizationId
       if (existingUser.organizationId !== req.organizationId) {
-        return res.status(403).json({ message: 'Access denied: User belongs to different organization' });
+        return res
+          .status(403)
+          .json({ message: 'Access denied: User belongs to different organization' });
       }
 
       const deleted = await userService.deleteUser(id);

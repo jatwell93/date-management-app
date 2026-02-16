@@ -40,8 +40,13 @@ router.post(
  * POST /api/upload/direct
  * Handle direct file upload logic
  */
-router.post('/direct', authenticateToken, checkUsageLimit('storage_bytes'), uploadLimiter, upload.single('file'), (req: AuthRequest, res) =>
-  uploadController.direct(req, res),
+router.post(
+  '/direct',
+  authenticateToken,
+  checkUsageLimit('storage_bytes'),
+  uploadLimiter,
+  upload.single('file'),
+  (req: AuthRequest, res) => uploadController.direct(req, res),
 );
 
 /**

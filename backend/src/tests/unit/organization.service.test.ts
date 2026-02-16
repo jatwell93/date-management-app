@@ -144,7 +144,7 @@ describe('OrganizationService', () => {
       mockPrisma.organization.update.mockRejectedValue(error);
 
       await expect(
-        organizationService.updateOrganization('org-123', { name: 'New Name' })
+        organizationService.updateOrganization('org-123', { name: 'New Name' }),
       ).rejects.toThrow('Database connection failed');
     });
   });

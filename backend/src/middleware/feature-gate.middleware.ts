@@ -5,13 +5,13 @@ import { AnalyticsService, AnalyticsEventType } from '../services/analytics.serv
 import { Logger } from '../utils/logger';
 
 // Feature keys from tier_feature_flags table
-export type FeatureKey = 
-  | 'max_skus' 
-  | 'max_users' 
-  | 'advanced_analytics' 
-  | 'api_access' 
-  | 'priority_support' 
-  | 'dedicated_support' 
+export type FeatureKey =
+  | 'max_skus'
+  | 'max_users'
+  | 'advanced_analytics'
+  | 'api_access'
+  | 'priority_support'
+  | 'dedicated_support'
   | 'custom_integrations';
 
 // Usage limit keys
@@ -39,8 +39,8 @@ export const requireFeature = (featureKey: FeatureKey) => {
   return async (req: AuthRequest, res: Response, next: NextFunction) => {
     try {
       if (!req.organizationId || !req.tierLevel) {
-        return res.status(403).json({ 
-          message: 'Access denied: Missing tenant context' 
+        return res.status(403).json({
+          message: 'Access denied: Missing tenant context',
         });
       }
 

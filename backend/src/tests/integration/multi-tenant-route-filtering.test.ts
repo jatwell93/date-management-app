@@ -16,7 +16,8 @@ import { StorageProvider } from '../../storage/storage-provider.interface';
 import app from '../..';
 
 // Mock authentication middleware to simulate different users/organizations
-const mockAuthenticateToken = (userId: number, organizationId: string, tierLevel: string = 'starter') =>
+const mockAuthenticateToken =
+  (userId: number, organizationId: string, tierLevel: string = 'starter') =>
   (req: any, _res: any, next: any) => {
     req.userId = userId;
     req.organizationId = organizationId;
@@ -129,9 +130,7 @@ describe('Multi-Tenant Route Filtering Integration Tests', () => {
 
     (mockPrisma.user.findMany as jest.Mock).mockImplementation((args: any) => {
       if (args?.where?.organizationId === org1.id) {
-        return Promise.resolve([
-          { id: 1, pin: '1234', role: 'Manager', organizationId: org1.id },
-        ]);
+        return Promise.resolve([{ id: 1, pin: '1234', role: 'Manager', organizationId: org1.id }]);
       }
       return Promise.resolve([]);
     });
@@ -173,9 +172,7 @@ describe('Multi-Tenant Route Filtering Integration Tests', () => {
       // Mock the authentication middleware for org1 user
       testApp.use('/api/products', mockAuthenticateToken(user1.id, org1.id));
 
-      const response = await request(testApp)
-        .get('/api/products')
-        .expect(200);
+      const response = await request(testApp).get('/api/products').expect(200);
 
       // Should return products from org1 only
       expect(response.body).toBeDefined();
@@ -188,9 +185,7 @@ describe('Multi-Tenant Route Filtering Integration Tests', () => {
 
       // This test verifies the route structure allows tenant filtering
       // In actual implementation, the service would filter by organizationId
-      const response = await request(testApp)
-        .get('/api/products')
-        .expect(200);
+      const response = await request(testApp).get('/api/products').expect(200);
 
       expect(response.body).toBeDefined();
     });
@@ -222,9 +217,7 @@ describe('Multi-Tenant Route Filtering Integration Tests', () => {
     it('should filter inventory items by organization', async () => {
       testApp.use('/api/inventory-items', mockAuthenticateToken(user1.id, org1.id));
 
-      const response = await request(testApp)
-        .get('/api/inventory-items')
-        .expect(200);
+      const response = await request(testApp).get('/api/inventory-items').expect(200);
 
       expect(response.body).toBeDefined();
       // Should only return items from user's organization
@@ -256,9 +249,7 @@ describe('Multi-Tenant Route Filtering Integration Tests', () => {
     it('should prevent cross-tenant user access', async () => {
       testApp.use('/api/users', mockAuthenticateToken(user1.id, org1.id));
 
-      const response = await request(testApp)
-        .get('/api/users')
-        .expect(200);
+      const response = await request(testApp).get('/api/users').expect(200);
 
       expect(response.body).toBeDefined();
       // Should only return users from user's organization
@@ -343,9 +334,7 @@ describe('Multi-Tenant Route Filtering Integration Tests', () => {
     it('should allow premium tier access to analytics', async () => {
       testApp.use('/api/reports', mockAuthenticateToken(user1.id, org1.id, 'premium'));
 
-      const response = await request(testApp)
-        .get('/api/reports/analytics')
-        .expect(200);
+      const response = await request(testApp).get('/api/reports/analytics').expect(200);
 
       expect(response.body).toBeDefined();
       // requireFeature('advanced_analytics') should allow premium tier
@@ -354,9 +343,7 @@ describe('Multi-Tenant Route Filtering Integration Tests', () => {
     it('should block starter tier access to analytics', async () => {
       testApp.use('/api/reports', mockAuthenticateToken(user1.id, org1.id, 'starter'));
 
-      const response = await request(testApp)
-        .get('/api/reports/analytics')
-        .expect(403);
+      const response = await request(testApp).get('/api/reports/analytics').expect(403);
 
       expect(response.body.error).toBe('Feature not available');
       expect(response.body.message).toContain('upgrade');
@@ -382,9 +369,7 @@ describe('Multi-Tenant Route Filtering Integration Tests', () => {
         next();
       });
 
-      const response = await request(testApp)
-        .get('/api/products')
-        .expect(200);
+      const response = await request(testApp).get('/api/products').expect(200);
 
       // The route should still work, but services would filter by the spoofed orgId
       // In Phase 7, services will validate organization ownership
@@ -405,9 +390,7 @@ describe('Multi-Tenant Route Filtering Integration Tests', () => {
       });
 
       // Routes should handle missing organizationId gracefully
-      const response = await request(testApp)
-        .get('/api/products')
-        .expect(200);
+      const response = await request(testApp).get('/api/products').expect(200);
 
       expect(response.body).toBeDefined();
     });

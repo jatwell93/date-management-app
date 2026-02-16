@@ -144,9 +144,9 @@ export class AuthService {
     try {
       // Get all users and iterate through them to find a match
       const users = await this.prisma.user.findMany({
-        select: { 
-          id: true, 
-          pin: true, 
+        select: {
+          id: true,
+          pin: true,
           role: true,
           organizationId: true,
         },

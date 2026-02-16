@@ -44,7 +44,12 @@ async function seedUsers() {
       });
       console.log('✅ Subscription tier created:', subscriptionTier.id);
     } else {
-      console.log('Subscription tier exists:', subscriptionTier.id, 'Status:', subscriptionTier.status);
+      console.log(
+        'Subscription tier exists:',
+        subscriptionTier.id,
+        'Status:',
+        subscriptionTier.status,
+      );
     }
 
     // Step 3: Hash the default PINs
@@ -89,7 +94,6 @@ async function seedUsers() {
     console.log('   Manager: PIN 5624 (Role: Manager)');
     console.log('   Staff:   PIN 1234 (Role: Staff)');
     console.log('\nYou can now log in with either PIN.');
-
   } catch (error) {
     console.error('User seeding failed:', error.message);
     process.exit(1);

@@ -223,6 +223,28 @@ describe('AnalyticsService', () => {
     });
   });
 
+  describe('resetInstance', () => {
+    beforeEach(() => {
+      jest.useFakeTimers();
+    });
+
+    afterEach(() => {
+      jest.useRealTimers();
+    });
+
+    it('clears the batch interval when resetting the singleton', () => {
+      const clearSpy = jest.spyOn(global, 'clearInterval');
+
+      analyticsService.initialize({ enableTracking: true });
+      (AnalyticsService as any).instance = analyticsService;
+
+      AnalyticsService.resetInstance();
+
+      expect(clearSpy).toHaveBeenCalled();
+      clearSpy.mockRestore();
+    });
+  });
+
   describe('cleanOldData', () => {
     it('should clean old data via repository', async () => {
       // @ts-expect-error - Mock setup, TypeScript can't infer jest.Mock type

@@ -134,14 +134,19 @@ router.get('/items-by-date', authenticateToken, async (req: Request, res: Respon
 });
 
 // GET /dashboard/analytics - Get dashboard analytics data (FR-005)
-router.get('/analytics', authenticateToken, requireFeature('advanced_analytics'), async (req: Request, res: Response) => {
-  try {
-    const analytics = await reportService.getDashboardAnalytics();
-    res.json(analytics);
-  } catch (_error) {
-    // console.error("Get dashboard analytics error:", _error);
-    res.status(500).json({ message: 'Internal server error' });
-  }
-});
+router.get(
+  '/analytics',
+  authenticateToken,
+  requireFeature('advanced_analytics'),
+  async (req: Request, res: Response) => {
+    try {
+      const analytics = await reportService.getDashboardAnalytics();
+      res.json(analytics);
+    } catch (_error) {
+      // console.error("Get dashboard analytics error:", _error);
+      res.status(500).json({ message: 'Internal server error' });
+    }
+  },
+);
 
 export default router;

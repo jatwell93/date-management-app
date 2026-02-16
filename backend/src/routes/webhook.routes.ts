@@ -1,19 +1,20 @@
 /**
  * Stripe Webhook Routes
- * 
+ *
  * Endpoint: POST /api/webhooks/stripe
- * 
+ *
  * Handler sequence (required by webhook-handler-patterns skill):
  * 1. Verify signature first (reject invalid with 4xx)
  * 2. Parse payload second (after verification)
  * 3. Handle idempotently (check event ID, process, store)
- * 
+ *
  * Important: This route uses express.raw() middleware to preserve the raw body
  * for Stripe signature verification.
  */
 
 import { Router, Request, Response } from 'express';
 import { webhookService } from '../services/webhook.service';
+import { ApplicationMonitoringService } from '../services/application.monitoring.service';
 
 const router = Router();
 
@@ -41,11 +42,19 @@ const handleStripeWebhook = async (req: Request, res: Response) => {
     }
 
     // Step 2: Check idempotency (duplicate detection)
-    if (!webhookService.isNewEvent(event.id)) {
+    const isNew = await webhookService.isNewEvent(event.id);
+    const monitor = ApplicationMonitoringService.getInstance();
+    const startTs = Date.now();
+
+    if (!isNew) {
       console.log('[WEBHOOK] Duplicate webhook event, returning success without reprocessing', {
         eventId: event.id,
         eventType: event.type,
       });
+
+      // record idempotency skip metric
+      monitor.recordWebhookEvent(event.type, 0, 'skipped');
+
       // Return 200 OK for duplicate events (Stripe expects idempotent response)
       return webhookService.sendSuccess(res);
     }
@@ -53,7 +62,10 @@ const handleStripeWebhook = async (req: Request, res: Response) => {
     // Step 3: Handle event idempotently
     try {
       await webhookService.handleEvent(event);
-      webhookService.markEventProcessed(event.id, event.type);
+      await webhookService.markEventProcessed(event.id, event.type);
+      const duration = Date.now() - startTs;
+      monitor.recordWebhookEvent(event.type, duration, 'success');
+
       console.log('[WEBHOOK] Webhook event processed successfully', {
         eventId: event.id,
         eventType: event.type,
@@ -61,6 +73,9 @@ const handleStripeWebhook = async (req: Request, res: Response) => {
       return webhookService.sendSuccess(res);
     } catch (handleError) {
       const error = handleError as Error;
+      const duration = Date.now() - startTs;
+      monitor.recordWebhookEvent(event.type, duration, 'error');
+
       console.error('[WEBHOOK] Error processing webhook event', {
         eventId: event.id,
         eventType: event.type,
@@ -81,17 +96,14 @@ const handleStripeWebhook = async (req: Request, res: Response) => {
 
 /**
  * POST /api/webhooks/stripe
- * 
+ *
  * Receive Stripe webhook events
- * 
+ *
  * CRITICAL: This endpoint is public (no authentication required)
  * Stripe sends events via HTTP POST with HMAC signature in stripe-signature header
- * 
+ *
  * Signature is computed over raw request body, so express.raw() middleware is required
  */
-router.post(
-  '/stripe',
-  handleStripeWebhook,
-);
+router.post('/stripe', handleStripeWebhook);
 
 export default router;

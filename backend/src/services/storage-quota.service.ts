@@ -169,7 +169,7 @@ export class StorageQuotaService {
           totalSkus: 0,
           activeUsers: 0,
           maxUsers: 0, // Will be set by subscription tier
-          maxSkus: 0,  // Will be set by subscription tier
+          maxSkus: 0, // Will be set by subscription tier
         },
       });
     } catch (error) {

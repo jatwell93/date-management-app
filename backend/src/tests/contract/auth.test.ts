@@ -29,7 +29,9 @@ describe('POST /auth/login', () => {
 
       // Verify organization context
       expect(typeof response.body.organizationId).toBe('string');
-      expect(['starter', 'professional', 'premium', 'concierge']).toContain(response.body.tierLevel);
+      expect(['starter', 'professional', 'premium', 'concierge']).toContain(
+        response.body.tierLevel,
+      );
     });
 
     it('should reject login if organization subscription is canceled', async () => {

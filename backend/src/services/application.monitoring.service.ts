@@ -44,6 +44,12 @@ export interface ApplicationMetrics {
     generateReport: { count: number; avgTime: number; errorRate: number };
     login: { count: number; avgTime: number; errorRate: number };
   };
+  // Webhook-specific metrics (Stripe webhooks)
+  webhook: {
+    total: number;
+    byEvent: Record<string, { count: number; failures: number; avgLatencyMs: number }>;
+    idempotencySkips: number; // number of duplicate events skipped
+  };
   errors: {
     totalErrors: number;
     errorRate: number; // percentage
@@ -64,6 +70,8 @@ export interface ApplicationMonitoringConfig {
     errorRate: number; // percentage
     responseTimeThreshold: number; // in ms
     requestPerMinuteThreshold: number; // count
+    webhookFailureThreshold?: number; // number of webhook failures per check interval that triggers alert
+    idempotencySkipRateThreshold?: number; // percentage threshold for idempotency skips
   };
   checkInterval: number; // in milliseconds
   enableLogging: boolean;
@@ -96,6 +104,12 @@ export class ApplicationMonitoringService extends EventEmitter {
       generateReport: { count: 0, avgTime: 0, errorRate: 0 },
       login: { count: 0, avgTime: 0, errorRate: 0 },
     },
+    // Webhook metrics initial state
+    webhook: {
+      total: 0,
+      byEvent: {},
+      idempotencySkips: 0,
+    },
     errors: {
       totalErrors: 0,
       errorRate: 0,
@@ -121,6 +135,8 @@ export class ApplicationMonitoringService extends EventEmitter {
         errorRate: 5, // 5%
         responseTimeThreshold: 1000, // 1 second
         requestPerMinuteThreshold: 1000, // 1000 requests per minute
+        webhookFailureThreshold: 1, // 1 failure per check interval triggers alert
+        idempotencySkipRateThreshold: 10, // 10% idempotency skips is suspicious
       },
       checkInterval: 60000, // 1 minute
       enableLogging: true,
@@ -327,6 +343,35 @@ export class ApplicationMonitoringService extends EventEmitter {
   }
 
   /**
+   * Record webhook handling metrics
+   */
+  public recordWebhookEvent(eventType: string, latencyMs: number, status: 'success' | 'error' | 'skipped') {
+    this.metrics.webhook.total++;
+
+    if (!this.metrics.webhook.byEvent[eventType]) {
+      this.metrics.webhook.byEvent[eventType] = { count: 0, failures: 0, avgLatencyMs: 0 };
+    }
+
+    const entry = this.metrics.webhook.byEvent[eventType];
+    entry.count++;
+
+    // Update average latency
+    entry.avgLatencyMs = (entry.avgLatencyMs * (entry.count - 1) + latencyMs) / entry.count;
+
+    if (status === 'error') {
+      entry.failures++;
+    }
+
+    if (status === 'skipped') {
+      this.metrics.webhook.idempotencySkips++;
+    }
+  }
+
+  public getWebhookMetrics() {
+    return { ...this.metrics.webhook };
+  }
+
+  /**
    * Emit an alert event
    */
   private emitAlert(alert: ApplicationAlertEvent): void {
@@ -370,6 +415,31 @@ export class ApplicationMonitoringService extends EventEmitter {
           avgResponseTime: this.metrics.performance.avgResponseTime,
           threshold: this.config.alertThresholds.responseTimeThreshold,
         },
+      });
+    }
+
+    // Webhook-specific alerts: failure spike or idempotency anomalies
+    const webhookMetrics = this.metrics.webhook;
+    const totalFailures = Object.values(webhookMetrics.byEvent).reduce((s, e) => s + e.failures, 0);
+    if (totalFailures > (this.config.alertThresholds.webhookFailureThreshold || 0)) {
+      this.emitAlert({
+        type: ApplicationAlertType.ANOMALOUS_USER_BEHAVIOR,
+        message: `Webhook handler failures detected: ${totalFailures} failures in the last interval`,
+        severity: 'high',
+        timestamp: new Date(),
+        metadata: { totalFailures, webhookMetrics },
+      });
+    }
+
+    const totalWebhooks = webhookMetrics.total || 0;
+    const idempotencySkipRate = totalWebhooks === 0 ? 0 : (webhookMetrics.idempotencySkips / totalWebhooks) * 100;
+    if (idempotencySkipRate > (this.config.alertThresholds.idempotencySkipRateThreshold || 100)) {
+      this.emitAlert({
+        type: ApplicationAlertType.ANOMALOUS_USER_BEHAVIOR,
+        message: `High idempotency skip rate: ${idempotencySkipRate.toFixed(2)}%`,
+        severity: 'medium',
+        timestamp: new Date(),
+        metadata: { idempotencySkipRate, webhookMetrics },
       });
     }
   }

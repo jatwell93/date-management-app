@@ -256,7 +256,7 @@ export class ProductService {
 
   async getProductById(id: number): Promise<Product | null> {
     const product = await this.prisma.product.findUnique({
-      where: { 
+      where: {
         id,
         organizationId: this.organizationId,
       },
@@ -266,7 +266,7 @@ export class ProductService {
 
   async getProductByBarcode(barcode: string): Promise<Product | null> {
     const product = await this.prisma.product.findUnique({
-      where: { 
+      where: {
         organizationId_barcode: {
           organizationId: this.organizationId,
           barcode,
@@ -278,7 +278,7 @@ export class ProductService {
 
   async getProductBySku(sku: string): Promise<Product | null> {
     const product = await this.prisma.product.findUnique({
-      where: { 
+      where: {
         organizationId_sku: {
           organizationId: this.organizationId,
           sku,
@@ -288,7 +288,9 @@ export class ProductService {
     return product ? this.mapPrismaToModel(product) : null;
   }
 
-  async createProduct(product: Omit<Product, 'id' | 'createdAt' | 'updatedAt' | 'organizationId'>): Promise<Product> {
+  async createProduct(
+    product: Omit<Product, 'id' | 'createdAt' | 'updatedAt' | 'organizationId'>,
+  ): Promise<Product> {
     const result = await this.prisma.$transaction(async (tx) => {
       const newProduct = await tx.product.create({
         data: {
@@ -324,7 +326,7 @@ export class ProductService {
 
     try {
       const updatedProduct = await this.prisma.product.update({
-        where: { 
+        where: {
           id,
           organizationId: this.organizationId,
         },
@@ -365,7 +367,7 @@ export class ProductService {
       await this.prisma.$transaction(async (tx) => {
         // Delete the product
         await tx.product.delete({
-          where: { 
+          where: {
             id,
             organizationId: this.organizationId,
           },
@@ -1160,7 +1162,7 @@ export class ProductService {
   private async getProductBySkuOrBarcode(sku: string, barcode: string): Promise<Product | null> {
     // Check for products by SKU and barcode independently within the organization
     const bySku = await this.prisma.product.findUnique({
-      where: { 
+      where: {
         organizationId_sku: {
           organizationId: this.organizationId,
           sku,
@@ -1169,7 +1171,7 @@ export class ProductService {
     });
 
     const byBarcode = await this.prisma.product.findUnique({
-      where: { 
+      where: {
         organizationId_barcode: {
           organizationId: this.organizationId,
           barcode,
