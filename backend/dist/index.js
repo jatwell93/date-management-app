@@ -68,6 +68,9 @@ const service_provider_1 = require("./services/service-provider");
 const environment_1 = require("./config/environment");
 const app = (0, express_1.default)();
 const port = environment_1.envConfig.PORT;
+// Required when running behind reverse proxies/tunnels (ngrok, nginx, cloud load balancers)
+// so middleware like express-rate-limit can safely use X-Forwarded-For.
+app.set('trust proxy', 1);
 // Security headers using Helmet
 app.use((0, helmet_1.default)({
     contentSecurityPolicy: {
@@ -87,7 +90,13 @@ app.use((0, helmet_1.default)({
     },
 }));
 // Apply global rate limiter (DDoS protection - 1000 requests per minute per IP)
-app.use(rateLimiter_1.globalLimiter);
+// BUT: Skip webhooks since they're from trusted external services
+app.use((req, res, next) => {
+    if (req.path.startsWith('/api/webhooks')) {
+        return next(); // Skip rate limiter for webhooks
+    }
+    (0, rateLimiter_1.globalLimiter)(req, res, next);
+});
 // IMPORTANT: Webhook route with raw body parser must come BEFORE express.json()
 // Stripe signature verification requires the raw body
 app.use('/api/webhooks', express_1.default.raw({ type: 'application/json' }), webhook_routes_1.default);
@@ -146,13 +155,26 @@ if (!isTestEnv) {
             '/api/reports/expiry',
         ],
     });
-    // Listen for application alerts
+    // Listen for application alerts and forward critical/warning alerts to Sentry
     appMonitoringService.on('alert', (alert) => {
         console.log('Application Alert [%s]: %s', alert.severity.toUpperCase(), alert.message, {
             type: alert.type,
             timestamp: alert.timestamp,
             metadata: alert.metadata,
         });
+        // Forward to Sentry for visibility and alerting
+        if (alert.severity === 'high' || alert.severity === 'critical') {
+            Sentry.captureMessage(alert.message, {
+                level: 'error',
+                extra: alert.metadata,
+            });
+        }
+        else {
+            Sentry.captureMessage(alert.message, {
+                level: 'warning',
+                extra: alert.metadata,
+            });
+        }
     });
     // Apply application monitoring middleware
     app.use(appMonitoringService.requestTrackingMiddleware());

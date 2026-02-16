@@ -8,6 +8,10 @@ const jsonwebtoken_1 = __importDefault(require("jsonwebtoken"));
 const analytics_service_1 = require("../services/analytics.service");
 const subscription_1 = require("../types/subscription");
 const database_factory_1 = require("../database/database-factory");
+const environment_1 = require("../config/environment");
+const subscription_service_1 = require("../services/subscription.service");
+const isTierLevel = (value) => ['starter', 'professional', 'premium', 'concierge'].includes(value);
+const isBillingCycle = (value) => Object.values(subscription_1.BillingCycle).includes(value);
 const authenticateToken = async (req, res, next) => {
     // Test environment bypass
     if (process.env.NODE_ENV === 'test' && process.env.TEST_AUTH_BYPASS === 'true') {
@@ -15,7 +19,7 @@ const authenticateToken = async (req, res, next) => {
             id: 1,
             role: 'Manager',
             organizationId: 'default-org',
-            tierLevel: 'professional'
+            tierLevel: 'professional',
         };
         req.userId = 1;
         req.userRole = 'Manager';
@@ -42,7 +46,7 @@ const authenticateToken = async (req, res, next) => {
     let decodedToken;
     // First try with the current JWT secret
     try {
-        decodedToken = jsonwebtoken_1.default.verify(token, process.env.JWT_SECRET || 'your_jwt_secret');
+        decodedToken = jsonwebtoken_1.default.verify(token, environment_1.envConfig.JWT_SECRET);
     }
     catch (_err) {
         // If current secret fails, try with old secret (for rotation period)
@@ -140,32 +144,71 @@ const authenticateToken = async (req, res, next) => {
                 metadata: {
                     organizationId: decodedToken.organizationId,
                     path: req.path,
-                    method: req.method
+                    method: req.method,
                 },
             });
             return res.status(403).json({
-                message: 'Access denied: Organization subscription not configured'
+                message: 'Access denied: Organization subscription not configured',
             });
         }
-        // Check if subscription is canceled
+        // Check if subscription is canceled (allow access until Stripe period end if applicable)
         if (subscription.status === subscription_1.SubscriptionStatus.CANCELED) {
-            const analyticsService = analytics_service_1.AnalyticsService.getInstance();
-            analyticsService.trackEvent({
-                userId: decodedToken.userId,
-                eventType: analytics_service_1.AnalyticsEventType.USER_LOGOUT,
-                eventCategory: 'Auth',
-                eventAction: 'organization_subscription_canceled',
-                ipAddress: req.ip,
-                userAgent: req.get('User-Agent') || undefined,
-                metadata: {
-                    organizationId: decodedToken.organizationId,
-                    path: req.path,
-                    method: req.method
-                },
+            const tierLevel = isTierLevel(subscription.tierLevel) ? subscription.tierLevel : null;
+            const billingCycle = isBillingCycle(subscription.billingCycle)
+                ? subscription.billingCycle
+                : null;
+            if (!tierLevel || !billingCycle) {
+                const analyticsService = analytics_service_1.AnalyticsService.getInstance();
+                analyticsService.trackEvent({
+                    userId: decodedToken.userId,
+                    eventType: analytics_service_1.AnalyticsEventType.USER_LOGOUT,
+                    eventCategory: 'Auth',
+                    eventAction: 'organization_subscription_invalid',
+                    ipAddress: req.ip,
+                    userAgent: req.get('User-Agent') || undefined,
+                    metadata: {
+                        organizationId: decodedToken.organizationId,
+                        path: req.path,
+                        method: req.method,
+                        subscriptionTierLevel: subscription.tierLevel,
+                        subscriptionBillingCycle: subscription.billingCycle,
+                    },
+                });
+                return res.status(403).json({
+                    message: 'Access denied: Organization subscription is invalid. Please contact support.',
+                });
+            }
+            const subscriptionService = new subscription_service_1.SubscriptionService(prisma);
+            const hasActiveAccess = await subscriptionService.isAccessActive({
+                id: subscription.id,
+                organizationId: subscription.organizationId,
+                tierLevel,
+                stripeSubscriptionId: subscription.stripeSubscriptionId ?? undefined,
+                trialEndDate: subscription.trialEndDate ?? undefined,
+                status: subscription.status,
+                billingCycle,
+                createdAt: subscription.createdAt,
+                updatedAt: subscription.updatedAt,
             });
-            return res.status(403).json({
-                message: 'Access denied: Organization subscription has been canceled. Please contact support.'
-            });
+            if (!hasActiveAccess) {
+                const analyticsService = analytics_service_1.AnalyticsService.getInstance();
+                analyticsService.trackEvent({
+                    userId: decodedToken.userId,
+                    eventType: analytics_service_1.AnalyticsEventType.USER_LOGOUT,
+                    eventCategory: 'Auth',
+                    eventAction: 'organization_subscription_canceled',
+                    ipAddress: req.ip,
+                    userAgent: req.get('User-Agent') || undefined,
+                    metadata: {
+                        organizationId: decodedToken.organizationId,
+                        path: req.path,
+                        method: req.method,
+                    },
+                });
+                return res.status(403).json({
+                    message: 'Access denied: Organization subscription has been canceled. Please contact support.',
+                });
+            }
         }
     }
     catch (error) {
@@ -181,11 +224,11 @@ const authenticateToken = async (req, res, next) => {
                 organizationId: decodedToken.organizationId,
                 path: req.path,
                 method: req.method,
-                error: error instanceof Error ? error.message : 'Unknown error'
+                error: error instanceof Error ? error.message : 'Unknown error',
             },
         });
         return res.status(500).json({
-            message: 'Error validating organization access'
+            message: 'Error validating organization access',
         });
     }
     // Now that we've verified, we can safely access the properties
@@ -220,8 +263,7 @@ const authenticateToken = async (req, res, next) => {
 exports.authenticateToken = authenticateToken;
 // Function to generate a JWT token with configurable expiration
 const generateToken = (userId, role, organizationId, tierLevel, expiresIn = '24h') => {
-    const secret = process.env.JWT_SECRET || 'your_jwt_secret';
-    return jsonwebtoken_1.default.sign({ userId, role, organizationId, tierLevel }, secret, {
+    return jsonwebtoken_1.default.sign({ userId, role, organizationId, tierLevel }, environment_1.envConfig.JWT_SECRET, {
         expiresIn: expiresIn,
     });
 };

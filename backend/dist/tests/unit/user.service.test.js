@@ -41,7 +41,11 @@ describe('UserService', () => {
                 createdAt,
                 updatedAt,
             });
-            const result = await service.createUser({ pin: '123456', role: 'Manager', organizationId: testOrganizationId });
+            const result = await service.createUser({
+                pin: '123456',
+                role: 'Manager',
+                organizationId: testOrganizationId,
+            });
             expect(authService.validatePin).toHaveBeenCalledWith('123456');
             expect(prisma.user.findMany).toHaveBeenCalledWith({
                 where: {
@@ -79,7 +83,14 @@ describe('UserService', () => {
     describe('getUsers', () => {
         it('returns all users for the organization', async () => {
             prisma.user.findMany.mockResolvedValue([
-                { id: 1, organizationId: testOrganizationId, pin: 'hashed_pin', role: 'Manager', createdAt, updatedAt },
+                {
+                    id: 1,
+                    organizationId: testOrganizationId,
+                    pin: 'hashed_pin',
+                    role: 'Manager',
+                    createdAt,
+                    updatedAt,
+                },
             ]);
             const result = await service.getUsers();
             expect(prisma.user.findMany).toHaveBeenCalledWith({
@@ -127,7 +138,14 @@ describe('UserService', () => {
     describe('getUserByPin', () => {
         it('returns user when PIN matches within organization', async () => {
             prisma.user.findMany.mockResolvedValue([
-                { id: 1, organizationId: testOrganizationId, pin: 'hashed_pin', role: 'Manager', createdAt, updatedAt },
+                {
+                    id: 1,
+                    organizationId: testOrganizationId,
+                    pin: 'hashed_pin',
+                    role: 'Manager',
+                    createdAt,
+                    updatedAt,
+                },
             ]);
             authService.verifyPin.mockResolvedValue(true);
             const result = await service.getUserByPin('123456');
@@ -141,7 +159,14 @@ describe('UserService', () => {
         });
         it('returns undefined when no PIN matches in organization', async () => {
             prisma.user.findMany.mockResolvedValue([
-                { id: 1, organizationId: testOrganizationId, pin: 'hashed_pin', role: 'Manager', createdAt, updatedAt },
+                {
+                    id: 1,
+                    organizationId: testOrganizationId,
+                    pin: 'hashed_pin',
+                    role: 'Manager',
+                    createdAt,
+                    updatedAt,
+                },
             ]);
             authService.verifyPin.mockResolvedValue(false);
             const result = await service.getUserByPin('9999');

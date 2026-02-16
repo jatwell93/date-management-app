@@ -6,7 +6,7 @@ const errors_1 = require("../errors");
 const auth_service_1 = require("./auth.service");
 class UserService {
     constructor(organizationId, prismaClient, authService) {
-        this.organizationId = organizationId;
+        this.organizationId = organizationId ?? 'default-org';
         this.prisma = prismaClient ?? (0, database_factory_1.getDefaultDatabaseClient)();
         this.authService = authService ?? new auth_service_1.AuthService(this.prisma);
     }

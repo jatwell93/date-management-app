@@ -73,7 +73,7 @@ export const validateInventoryItemInput = (req: Request, res: Response, next: Ne
   // Validate product_id (positive integer)
   if (
     product_id !== undefined &&
-    (!validator.isInt(String(product_id), { min: 1 }) || parseInt(product_id) <= 0)
+    (!validator.isInt(String(product_id), { min: 1 }) || parseInt(product_id, 10) <= 0)
   ) {
     return res.status(400).json({ error: 'Product ID must be a positive integer' });
   }
@@ -81,7 +81,7 @@ export const validateInventoryItemInput = (req: Request, res: Response, next: Ne
   // Validate location_id (positive integer)
   if (
     location_id &&
-    (!validator.isInt(String(location_id), { min: 1 }) || parseInt(location_id) <= 0)
+    (!validator.isInt(String(location_id), { min: 1 }) || parseInt(location_id, 10) <= 0)
   ) {
     return res.status(400).json({ error: 'Location ID must be a positive integer' });
   }
@@ -154,7 +154,7 @@ export const validateStoreAreaInput = (req: Request, res: Response, next: NextFu
 export const validateDataIntegrity = (req: Request, res: Response, next: NextFunction) => {
   // Check request size to prevent oversized payloads
   const contentLength = req.get('Content-Length');
-  if (contentLength && parseInt(contentLength) > 10 * 1024 * 1024) {
+  if (contentLength && parseInt(contentLength, 10) > 10 * 1024 * 1024) {
     // 10MB limit
     return res
       .status(413)

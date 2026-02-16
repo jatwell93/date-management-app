@@ -1,0 +1,42 @@
+{"type":"finding","project":"C:/Users/josha/date-management-app/workers","language":"js","severity":"good","count":0,"title":"All DOM queries appear to be guarded","description":""}
+{"type":"finding","project":"C:/Users/josha/date-management-app/workers","language":"js","severity":"good","count":0,"title":"Minimal optional chaining opportunities","description":""}
+{"type":"finding","project":"C:/Users/josha/date-management-app/workers","language":"js","severity":"info","count":11,"title":"Deep property access detected","description":""}
+{"type":"finding","project":"C:/Users/josha/date-management-app/workers","language":"js","severity":"info","count":8,"title":"Division operations found","description":""}
+{"type":"finding","project":"C:/Users/josha/date-management-app/workers","language":"js","severity":"good","count":0,"title":"No direct NaN comparisons","description":""}
+{"type":"finding","project":"C:/Users/josha/date-management-app/workers","language":"js","severity":"good","count":0,"title":"All NaN checks use Number.isNaN()","description":""}
+{"type":"finding","project":"C:/Users/josha/date-management-app/workers","language":"js","severity":"info","count":3,"title":"Bitwise operations detected - ensure integer inputs","description":""}
+{"type":"finding","project":"C:/Users/josha/date-management-app/workers","language":"js","severity":"warning","count":2,"title":"Sparse array creation detected","description":"Use Array.from({length:n},()=>val)"}
+{"type":"finding","project":"C:/Users/josha/date-management-app/workers","language":"js","severity":"good","count":0,"title":"All comparisons use strict equality","description":""}
+{"type":"finding","project":"C:/Users/josha/date-management-app/workers","language":"js","severity":"info","count":23,"title":"Type comparisons - verify both sides match","description":""}
+{"type":"finding","project":"C:/Users/josha/date-management-app/workers","language":"js","severity":"info","count":62,"title":"Async functions found","description":"Verifying proper await/error handling..."}
+{"type":"finding","project":"C:/Users/josha/date-management-app/workers","language":"js","severity":"good","count":0,"title":"All async operations appear protected","description":""}
+{"type":"finding","project":"C:/Users/josha/date-management-app/workers","language":"js","severity":"info","count":0,"title":"Async fallback disabled","description":"Run with --fail-on-warning to surface missing .catch()/try blocks when ast-grep is unavailable"}
+{"type":"finding","project":"C:/Users/josha/date-management-app/workers","language":"js","severity":"good","count":0,"title":"Hooks dependency arrays look accurate","description":""}
+{"type":"finding","project":"C:/Users/josha/date-management-app/workers","language":"js","severity":"good","count":0,"title":"No unsafe type narrowing patterns detected","description":""}
+{"type":"finding","project":"C:/Users/josha/date-management-app/workers","language":"js","severity":"good","count":0,"title":"Error handling patterns look healthy","description":""}
+{"type":"finding","project":"C:/Users/josha/date-management-app/workers","language":"js","severity":"good","count":0,"title":"No eval() detected","description":""}
+{"type":"finding","project":"C:/Users/josha/date-management-app/workers","language":"js","severity":"critical","count":2,"title":"Possible hardcoded secrets","description":"Use environment variables or secret managers"}
+{"type":"finding","project":"C:/Users/josha/date-management-app/workers","language":"js","severity":"good","count":0,"title":"No tainted sources reach dangerous sinks","description":""}
+{"type":"finding","project":"C:/Users/josha/date-management-app/workers","language":"js","severity":"info","count":55,"title":"Arrow functions with { } - verify return intent","description":"() => {x:1} returns undefined; wrap object: () => ({x:1})"}
+{"type":"finding","project":"C:/Users/josha/date-management-app/workers","language":"js","severity":"info","count":59,"title":"Many callback-style functions detected","description":"Review for unnecessary nesting; prefer async/await or Promises"}
+{"type":"finding","project":"C:/Users/josha/date-management-app/workers","language":"js","severity":"warning","count":6,"title":"Function declarations in blocks - use function expressions","description":"Hoisting is inconsistent"}
+{"type":"finding","project":"C:/Users/josha/date-management-app/workers","language":"js","severity":"good","count":0,"title":"All parseInt calls specify radix","description":""}
+{"type":"finding","project":"C:/Users/josha/date-management-app/workers","language":"js","severity":"good","count":0,"title":"JSON.parse usage appears guarded by try/catch","description":""}
+{"type":"finding","project":"C:/Users/josha/date-management-app/workers","language":"js","severity":"info","count":11,"title":"Date construction - verify input validation","description":"new Date('invalid') → Invalid Date"}
+{"type":"finding","project":"C:/Users/josha/date-management-app/workers","language":"js","severity":"warning","count":7,"title":"Switch cases may be missing break","description":"Add break or /* falls through */"}
+{"type":"finding","project":"C:/Users/josha/date-management-app/workers","language":"js","severity":"warning","count":8,"title":"Nested ternary operators - unreadable","description":"Refactor to if/else"}
+{"type":"finding","project":"C:/Users/josha/date-management-app/workers","language":"js","severity":"good","count":0,"title":"Minimal console usage","description":""}
+{"type":"finding","project":"C:/Users/josha/date-management-app/workers","language":"js","severity":"good","count":0,"title":"No debugger statements","description":""}
+{"type":"finding","project":"C:/Users/josha/date-management-app/workers","language":"js","severity":"info","count":0,"title":"Event listeners attached","description":""}
+{"type":"finding","project":"C:/Users/josha/date-management-app/workers","language":"js","severity":"info","count":0,"title":"Event listeners removed","description":""}
+{"type":"finding","project":"C:/Users/josha/date-management-app/workers","language":"js","severity":"good","count":0,"title":"No var declarations (using let/const)","description":""}
+{"type":"finding","project":"C:/Users/josha/date-management-app/workers","language":"js","severity":"good","count":0,"title":"Using const appropriately","description":""}
+{"type":"finding","project":"C:/Users/josha/date-management-app/workers","language":"js","severity":"info","count":276,"title":"Many variable declarations - check for unused vars","description":"Use ESLint no-unused-vars for precision"}
+{"type":"finding","project":"C:/Users/josha/date-management-app/workers","language":"js","severity":"good","count":0,"title":"No technical debt markers","description":""}
+{"type":"finding","project":"C:/Users/josha/date-management-app/workers","language":"js","severity":"info","count":0,"title":"DOM queries found","description":"Ensure all queries have null checks before property access"}
+{"type":"finding","project":"C:/Users/josha/date-management-app/workers","language":"js","severity":"info","count":20,"title":"Explicit any types present","description":"Prefer unknown or generics"}
+{"type":"finding","project":"C:/Users/josha/date-management-app/workers","language":"js","severity":"info","count":2,"title":"Non-null assertions used","description":"Audit for potential NPE at runtime"}
+{"type":"finding","project":"C:/Users/josha/date-management-app/workers","language":"js","severity":"good","count":0,"title":"All tracked resource acquisitions have matching cleanups","description":""}
+{"type":"finding","project":"C:/Users/josha/date-management-app/workers","language":"js","severity":"good","count":0,"title":"All tracked resource acquisitions have matching cleanups","description":""}
+{"type":"scanner","project":"C:/Users/josha/date-management-app/workers","language":"js","files":19,"critical":2,"warning":23,"info":530,"timestamp":"2026-02-16T12:41:26Z"}
+{"type":"totals","project":"C:/Users/josha/date-management-app/workers","files":19,"critical":2,"warning":23,"info":530,"timestamp":"2026-02-16 23:41:28"}

@@ -57,12 +57,6 @@ Implement complete Stripe webhook handling with persistent idempotency, email no
     - Mention soft lock (read-only mode)
     - Log `downgrade_warning_sent` event
 
-- [ ] 2.4 (Deferred) Create SendGrid templates in dashboard (manual step)
-  - [ ] Blocked until a verified sender/domain is available
-  - [ ] Template: "Trial Ending Soon" (for trial_will_end)
-  - [ ] Template: "Payment Failed" (for invoice.payment_failed)
-  - [ ] Template: "Downgrade Warning" (for tier downgrade)
-
 ### 3. Webhook Handlers Implementation (Phase 18.B.3)
 
 - [x] 3.1 Implement `handleSubscriptionCreated` (Phase 18.B.3.1)

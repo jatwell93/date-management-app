@@ -45,7 +45,12 @@ describe('AuthService', () => {
         };
         authService = new auth_service_1.AuthService(prisma);
         jsonwebtoken_1.default.sign.mockReturnValue('mock_jwt_token');
-        jsonwebtoken_1.default.verify.mockReturnValue({ userId: 1, role: 'Manager', organizationId: 'org-1', tierLevel: 'professional' });
+        jsonwebtoken_1.default.verify.mockReturnValue({
+            userId: 1,
+            role: 'Manager',
+            organizationId: 'org-1',
+            tierLevel: 'professional',
+        });
         bcrypt_1.default.compare.mockResolvedValue(true);
         bcrypt_1.default.hash.mockResolvedValue('hashed_pin');
         process.env.JWT_SECRET = 'test_secret';
@@ -149,7 +154,7 @@ describe('AuthService', () => {
                 createdAt: new Date(),
             });
             await expect(authService.login('5624')).rejects.toBeInstanceOf(errors_1.AuthenticationError);
-            expect((await authService.login('5624').catch(e => e.message)).includes('canceled')).toBeDefined();
+            expect((await authService.login('5624').catch((e) => e.message)).includes('canceled')).toBeDefined();
             expect(jsonwebtoken_1.default.sign).not.toHaveBeenCalled();
         });
         it('throws AuthenticationError for invalid PIN (incorrect password)', async () => {

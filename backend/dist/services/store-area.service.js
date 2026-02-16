@@ -98,6 +98,7 @@ class StoreAreaService {
     mapPrismaToModel(area) {
         return {
             id: area.id,
+            organizationId: area.organizationId ?? 'default-org',
             name: area.name,
             subDepartment: area.subDepartment ?? undefined,
             lastChecked: area.lastChecked?.toISOString() ?? undefined,

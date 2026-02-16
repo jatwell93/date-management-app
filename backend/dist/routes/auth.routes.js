@@ -10,7 +10,6 @@ const auth_middleware_1 = require("../middleware/auth.middleware");
 const validateRequest_1 = require("../middleware/validateRequest");
 const schemas_1 = require("../schemas");
 const rateLimiter_1 = require("../middleware/rateLimiter");
-const normalize_function_1 = require("../utils/normalize.function");
 const errors_1 = require("../errors");
 const router = (0, express_1.Router)();
 const authService = new auth_service_1.AuthService();
@@ -37,8 +36,8 @@ router.post('/login', rateLimiter_1.strictLimiter, normalizePin, (0, validateReq
     try {
         // For this implementation, we're using direct PIN comparison.
         // In a real application, you would properly compare hashes
-        const token = await authService.login(pin);
-        res.json((0, normalize_function_1.escapeHtml)({ token }));
+        const authResult = await authService.login(pin);
+        res.json(authResult);
     }
     catch (error) {
         if (error instanceof errors_1.AuthenticationError) {
@@ -57,7 +56,7 @@ router.post('/refresh', auth_middleware_1.authenticateToken, async (req, res) =>
             return res.status(401).json({ message: 'User not authenticated' });
         }
         const newToken = (0, auth_middleware_1.generateToken)(authReq.userId, authReq.userRole, authReq.organizationId, authReq.tierLevel, '1h');
-        res.json((0, normalize_function_1.escapeHtml)({ token: newToken }));
+        res.json({ token: newToken });
     }
     catch (error) {
         console.error('Token refresh error:', error);
