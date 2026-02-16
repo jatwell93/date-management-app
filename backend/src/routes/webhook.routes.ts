@@ -1,13 +1,13 @@
 /**
  * Stripe Webhook Routes
- * 
+ *
  * Endpoint: POST /api/webhooks/stripe
- * 
+ *
  * Handler sequence (required by webhook-handler-patterns skill):
  * 1. Verify signature first (reject invalid with 4xx)
  * 2. Parse payload second (after verification)
  * 3. Handle idempotently (check event ID, process, store)
- * 
+ *
  * Important: This route uses express.raw() middleware to preserve the raw body
  * for Stripe signature verification.
  */
@@ -41,7 +41,8 @@ const handleStripeWebhook = async (req: Request, res: Response) => {
     }
 
     // Step 2: Check idempotency (duplicate detection)
-    if (!webhookService.isNewEvent(event.id)) {
+    const isNew = await webhookService.isNewEvent(event.id);
+    if (!isNew) {
       console.log('[WEBHOOK] Duplicate webhook event, returning success without reprocessing', {
         eventId: event.id,
         eventType: event.type,
@@ -53,7 +54,7 @@ const handleStripeWebhook = async (req: Request, res: Response) => {
     // Step 3: Handle event idempotently
     try {
       await webhookService.handleEvent(event);
-      webhookService.markEventProcessed(event.id, event.type);
+      await webhookService.markEventProcessed(event.id, event.type);
       console.log('[WEBHOOK] Webhook event processed successfully', {
         eventId: event.id,
         eventType: event.type,
@@ -81,17 +82,14 @@ const handleStripeWebhook = async (req: Request, res: Response) => {
 
 /**
  * POST /api/webhooks/stripe
- * 
+ *
  * Receive Stripe webhook events
- * 
+ *
  * CRITICAL: This endpoint is public (no authentication required)
  * Stripe sends events via HTTP POST with HMAC signature in stripe-signature header
- * 
+ *
  * Signature is computed over raw request body, so express.raw() middleware is required
  */
-router.post(
-  '/stripe',
-  handleStripeWebhook,
-);
+router.post('/stripe', handleStripeWebhook);
 
 export default router;

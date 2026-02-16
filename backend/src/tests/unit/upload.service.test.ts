@@ -61,7 +61,9 @@ describe('UploadService', () => {
       (envConfig as any).NODE_ENV = 'production';
       (envConfig as any).DIRECT_UPLOAD_THRESHOLD_BYTES = 1024; // 1KB threshold
 
-      (mockStorage.getPresignedUploadUrl as jest.Mock).mockResolvedValue('https://presigned-url.com');
+      (mockStorage.getPresignedUploadUrl as jest.Mock).mockResolvedValue(
+        'https://presigned-url.com',
+      );
 
       const result = await uploadService.initiateUpload('large.csv', 5 * 1024 * 1024, 'text/csv'); // 5MB
 
@@ -79,7 +81,7 @@ describe('UploadService', () => {
       const maxSize = 10 * 1024 * 1024; // 10MB
 
       await expect(
-        uploadService.initiateUpload('too-big.csv', maxSize + 1, 'text/csv')
+        uploadService.initiateUpload('too-big.csv', maxSize + 1, 'text/csv'),
       ).rejects.toThrow(`File size exceeds maximum limit of ${maxSize} bytes`);
     });
   });
@@ -107,19 +109,19 @@ describe('UploadService', () => {
         key,
         '123-test.csv',
         fileBuffer.length,
-        'text/csv'
+        'text/csv',
       );
-      expect(mockCsvParser.processFile).toHaveBeenCalledWith(
-        expect.stringContaining('test.csv'),
-        { uploadKey: key, userId }
-      );
+      expect(mockCsvParser.processFile).toHaveBeenCalledWith(expect.stringContaining('test.csv'), {
+        uploadKey: key,
+        userId,
+      });
     });
 
     it('should throw error if file does not exist in storage', async () => {
       mockStorage.exists.mockResolvedValue(false);
 
       await expect(uploadService.completeUpload('uploads/123-test.csv', 1)).rejects.toThrow(
-        'File upload verification failed: File not found in storage'
+        'File upload verification failed: File not found in storage',
       );
     });
   });
@@ -141,7 +143,7 @@ describe('UploadService', () => {
       expect(mockStorage.upload).toHaveBeenCalledWith(
         expect.stringMatching(/^uploads\/\d+-test\.csv$/),
         buffer,
-        contentType
+        contentType,
       );
       expect(key).toMatch(/^uploads\/\d+-test\.csv$/);
     });

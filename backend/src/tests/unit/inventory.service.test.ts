@@ -111,7 +111,7 @@ describe('InventoryService', () => {
         .mockResolvedValueOnce(null); // Product not found in org
 
       await expect(inventoryService.createInventoryItem(newItemData, 1)).rejects.toThrow(
-        'Product not found or does not belong to this organization'
+        'Product not found or does not belong to this organization',
       );
     });
 
@@ -128,7 +128,7 @@ describe('InventoryService', () => {
       mockPrisma.location.findFirst.mockResolvedValue(null); // Location not found in org
 
       await expect(inventoryService.createInventoryItem(newItemData, 1)).rejects.toThrow(
-        'Location not found or does not belong to this organization'
+        'Location not found or does not belong to this organization',
       );
     });
   });
@@ -153,7 +153,11 @@ describe('InventoryService', () => {
       });
       mockPrisma.user.findFirst.mockResolvedValue({ id: 1, organizationId });
 
-      const updatedItem = await inventoryService.updateInventoryItem(1, { status: 'Markdown 1' } as any, 1);
+      const updatedItem = await inventoryService.updateInventoryItem(
+        1,
+        { status: 'Markdown 1' } as any,
+        1,
+      );
 
       expect(updatedItem).not.toBeNull();
       expect(updatedItem?.status).toBe('Markdown 1');
@@ -402,7 +406,7 @@ describe('InventoryService', () => {
       mockPrisma.inventoryItem.findFirst.mockResolvedValue(null);
 
       await expect(inventoryService.autoCalculateMarkdownStatus(1, '2025-12-31')).rejects.toThrow(
-        'Inventory item not found or does not belong to this organization'
+        'Inventory item not found or does not belong to this organization',
       );
     });
   });
@@ -460,13 +464,15 @@ describe('InventoryService', () => {
     it('should throw error if inventory item does not belong to organization', async () => {
       mockPrisma.inventoryItem.findFirst.mockResolvedValue(null);
 
-      await expect(inventoryService.logTransaction({
-        inventory_item_id: 1,
-        user_id: 1,
-        type: 'in',
-        quantity_change: 10,
-        notes: 'Test transaction',
-      } as any)).rejects.toThrow('Inventory item not found or does not belong to this organization');
+      await expect(
+        inventoryService.logTransaction({
+          inventory_item_id: 1,
+          user_id: 1,
+          type: 'in',
+          quantity_change: 10,
+          notes: 'Test transaction',
+        } as any),
+      ).rejects.toThrow('Inventory item not found or does not belong to this organization');
     });
 
     it('should throw error if user does not belong to organization', async () => {
@@ -483,13 +489,15 @@ describe('InventoryService', () => {
       mockPrisma.inventoryItem.findFirst.mockResolvedValue(mockItem);
       mockPrisma.user.findFirst.mockResolvedValue(null);
 
-      await expect(inventoryService.logTransaction({
-        inventory_item_id: 1,
-        user_id: 1,
-        type: 'in',
-        quantity_change: 10,
-        notes: 'Test transaction',
-      } as any)).rejects.toThrow('User not found or does not belong to this organization');
+      await expect(
+        inventoryService.logTransaction({
+          inventory_item_id: 1,
+          user_id: 1,
+          type: 'in',
+          quantity_change: 10,
+          notes: 'Test transaction',
+        } as any),
+      ).rejects.toThrow('User not found or does not belong to this organization');
     });
   });
 

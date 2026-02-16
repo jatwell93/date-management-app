@@ -64,7 +64,13 @@ router.post('/refresh', authenticateToken, async (req: Request, res: Response) =
       return res.status(401).json({ message: 'User not authenticated' });
     }
 
-    const newToken = generateToken(authReq.userId, authReq.userRole, authReq.organizationId, authReq.tierLevel, '1h');
+    const newToken = generateToken(
+      authReq.userId,
+      authReq.userRole,
+      authReq.organizationId,
+      authReq.tierLevel,
+      '1h',
+    );
     res.json({ token: newToken });
   } catch (error) {
     console.error('Token refresh error:', error);

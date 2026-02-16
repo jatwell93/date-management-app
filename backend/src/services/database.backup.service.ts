@@ -80,7 +80,11 @@ export class DatabaseBackupService {
       const backupDir = resolve(this.config.backupDirectory);
       const resolvedBackupPath = resolve(backupDir, backupPath);
 
-      if (!resolvedBackupPath.startsWith(backupDir + (backupDir.endsWith('/') || backupDir.endsWith('\\') ? '' : '/'))) {
+      if (
+        !resolvedBackupPath.startsWith(
+          backupDir + (backupDir.endsWith('/') || backupDir.endsWith('\\') ? '' : '/'),
+        )
+      ) {
         Logger.error(`Invalid backup path outside backup directory: ${backupPath}`);
         return false;
       }

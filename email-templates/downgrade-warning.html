@@ -1,0 +1,133 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Subscription Downgrade - Action Required</title>
+    <style>
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif;
+            line-height: 1.6;
+            color: #333;
+            max-width: 600px;
+            margin: 0 auto;
+            padding: 20px;
+            background-color: #f4f4f4;
+        }
+        .container {
+            background-color: #ffffff;
+            border-radius: 8px;
+            padding: 40px;
+            box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+        }
+        h1 {
+            color: #fd7e14;
+            font-size: 24px;
+            margin-bottom: 20px;
+        }
+        .warning {
+            background-color: #fff3cd;
+            border-left: 4px solid #ffc107;
+            padding: 15px;
+            margin: 20px 0;
+            border-radius: 4px;
+        }
+        .stats {
+            background-color: #f8f9fa;
+            padding: 20px;
+            margin: 20px 0;
+            border-radius: 4px;
+            text-align: center;
+        }
+        .stat-item {
+            display: inline-block;
+            margin: 10px 20px;
+        }
+        .stat-number {
+            font-size: 32px;
+            font-weight: bold;
+            color: #dc3545;
+        }
+        .stat-label {
+            font-size: 14px;
+            color: #666;
+        }
+        .cta-button {
+            display: inline-block;
+            background-color: #007bff;
+            color: #ffffff;
+            text-decoration: none;
+            padding: 12px 30px;
+            border-radius: 5px;
+            margin: 20px 0;
+            font-weight: 600;
+        }
+        .secondary-button {
+            display: inline-block;
+            background-color: #28a745;
+            color: #ffffff;
+            text-decoration: none;
+            padding: 12px 30px;
+            border-radius: 5px;
+            margin: 10px 5px;
+            font-weight: 600;
+        }
+        .footer {
+            margin-top: 30px;
+            padding-top: 20px;
+            border-top: 1px solid #e0e0e0;
+            font-size: 14px;
+            color: #666;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>⚠️ Subscription Downgrade - Action Required</h1>
+        
+        <p>Hi there,</p>
+        
+        <div class="warning">
+            <strong>Your subscription for {{organizationName}} has been downgraded.</strong>
+        </div>
+        
+        <p>Your account has been moved to a lower tier plan. Unfortunately, your current usage exceeds the limits of your new plan.</p>
+        
+        <div class="stats">
+            <div class="stat-item">
+                <div class="stat-number">{{currentUsage}}</div>
+                <div class="stat-label">Current Items</div>
+            </div>
+            <div class="stat-item">
+                <div class="stat-number">{{newLimit}}</div>
+                <div class="stat-label">New Limit</div>
+            </div>
+            <div class="stat-item">
+                <div class="stat-number">{{excessItems}}</div>
+                <div class="stat-label">Items to Remove</div>
+            </div>
+        </div>
+        
+        <p><strong>What this means:</strong></p>
+        <ul>
+            <li>Your account is currently in <strong>read-only mode</strong></li>
+            <li>You can view your existing items but cannot create new ones</li>
+            <li>To regain full access, you need to remove {{excessItems}} items or upgrade your plan</li>
+        </ul>
+        
+        <p><strong>Your options:</strong></p>
+        
+        <div style="text-align: center;">
+            <a href="https://yourdomain.com/products" class="cta-button">Manage Your Items</a>
+            <a href="https://yourdomain.com/upgrade" class="secondary-button">Upgrade Plan</a>
+        </div>
+        
+        <p>If you have any questions about your account or need assistance managing your items, please don't hesitate to reach out by replying to this email.</p>
+        
+        <div class="footer">
+            <p>Best regards,<br>The Team</p>
+            <p style="font-size: 12px; color: #999;">This is an automated notification regarding your account status.</p>
+        </div>
+    </div>
+</body>
+</html>

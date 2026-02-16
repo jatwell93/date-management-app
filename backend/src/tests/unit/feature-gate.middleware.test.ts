@@ -46,7 +46,7 @@ describe('Feature Gating Middleware', () => {
       organizationId: 'org-1',
       tierLevel: 'professional',
       ip: '127.0.0.1',
-      get: jest.fn((name: string) => name === 'set-cookie' ? undefined : ['Mozilla/5.0']) as any,
+      get: jest.fn((name: string) => (name === 'set-cookie' ? undefined : ['Mozilla/5.0'])) as any,
     };
 
     res = {
@@ -114,7 +114,7 @@ describe('Feature Gating Middleware', () => {
           currentTier: 'starter',
           upgradeCTA: expect.any(String),
           upgradeUrl: expect.any(String),
-        })
+        }),
       );
       expect(next).not.toHaveBeenCalled();
     });
@@ -169,14 +169,14 @@ describe('Feature Gating Middleware', () => {
       expect(res.json).toHaveBeenCalledWith(
         expect.objectContaining({
           message: expect.stringContaining('Missing tenant context'),
-        })
+        }),
       );
       expect(next).not.toHaveBeenCalled();
     });
 
     it('handles database errors gracefully', async () => {
       (prisma.tierFeatureFlag!.findUnique as jest.Mock).mockRejectedValue(
-        new Error('Database error')
+        new Error('Database error'),
       );
 
       const middleware = requireFeature('advanced_analytics');
@@ -186,7 +186,7 @@ describe('Feature Gating Middleware', () => {
       expect(res.json).toHaveBeenCalledWith(
         expect.objectContaining({
           message: 'Error checking feature access',
-        })
+        }),
       );
     });
   });
@@ -236,7 +236,7 @@ describe('Feature Gating Middleware', () => {
           percentageUsed: 100,
           upgradeCTA: expect.any(String),
           upgradeUrl: expect.any(String),
-        })
+        }),
       );
       expect(next).not.toHaveBeenCalled();
     });
@@ -279,7 +279,7 @@ describe('Feature Gating Middleware', () => {
         expect.objectContaining({
           message: expect.stringContaining('Usage limit reached'),
           limitKey: 'max_users',
-        })
+        }),
       );
     });
 
@@ -306,7 +306,7 @@ describe('Feature Gating Middleware', () => {
           limit: 500,
           percentageUsed: 80,
           message: expect.stringContaining('80'),
-        })
+        }),
       );
     });
 
@@ -340,14 +340,14 @@ describe('Feature Gating Middleware', () => {
       expect(res.json).toHaveBeenCalledWith(
         expect.objectContaining({
           message: expect.stringContaining('Missing organization context'),
-        })
+        }),
       );
       expect(next).not.toHaveBeenCalled();
     });
 
     it('handles database errors gracefully', async () => {
       (prisma.organizationUsage!.findUnique as jest.Mock).mockRejectedValue(
-        new Error('Database error')
+        new Error('Database error'),
       );
 
       const middleware = checkUsageLimit('max_skus');
@@ -357,7 +357,7 @@ describe('Feature Gating Middleware', () => {
       expect(res.json).toHaveBeenCalledWith(
         expect.objectContaining({
           message: 'Error checking usage limit',
-        })
+        }),
       );
     });
   });
@@ -423,8 +423,23 @@ describe('Feature Gating Middleware', () => {
     const tierFeatures = {
       starter: ['max_skus', 'max_users'],
       professional: ['max_skus', 'max_users', 'api_access', 'priority_support'],
-      premium: ['max_skus', 'max_users', 'api_access', 'priority_support', 'advanced_analytics', 'dedicated_support'],
-      concierge: ['max_skus', 'max_users', 'api_access', 'priority_support', 'advanced_analytics', 'dedicated_support', 'custom_integrations'],
+      premium: [
+        'max_skus',
+        'max_users',
+        'api_access',
+        'priority_support',
+        'advanced_analytics',
+        'dedicated_support',
+      ],
+      concierge: [
+        'max_skus',
+        'max_users',
+        'api_access',
+        'priority_support',
+        'advanced_analytics',
+        'dedicated_support',
+        'custom_integrations',
+      ],
     };
 
     it('starter tier does not have advanced_analytics', async () => {

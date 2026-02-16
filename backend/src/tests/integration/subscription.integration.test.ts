@@ -40,7 +40,9 @@ describe('SubscriptionService Integration Tests', () => {
     it('should complete a full subscription lifecycle', async () => {
       // Skip if STRIPE_SECRET_KEY not configured
       if (!process.env.STRIPE_SECRET_KEY || !process.env.STRIPE_SECRET_KEY.startsWith('sk_test_')) {
-        console.log('⏭️  Skipping Stripe integration tests (requires STRIPE_SECRET_KEY in test mode) - test passed with skip');
+        console.log(
+          '⏭️  Skipping Stripe integration tests (requires STRIPE_SECRET_KEY in test mode) - test passed with skip',
+        );
         expect(true).toBe(true); // Pass test as skipped
         return;
       }
@@ -122,7 +124,9 @@ describe('SubscriptionService Integration Tests', () => {
 
       // Simulate webhook: fetch latest Stripe state and sync
       const stripe = require('stripe')(process.env.STRIPE_SECRET_KEY);
-      const stripeSubscription = await stripe.subscriptions.retrieve(createdSub.stripeSubscriptionId!);
+      const stripeSubscription = await stripe.subscriptions.retrieve(
+        createdSub.stripeSubscriptionId!,
+      );
 
       const syncedSub = await subscriptionService.syncSubscriptionState(
         testOrganizationId,
@@ -210,9 +214,9 @@ describe('SubscriptionService Integration Tests', () => {
       });
 
       // Try to update non-existent subscription
-      await expect(
-        subscriptionService.updateSubscription(testOrg.id, 'price_new'),
-      ).rejects.toThrow('No subscription found');
+      await expect(subscriptionService.updateSubscription(testOrg.id, 'price_new')).rejects.toThrow(
+        'No subscription found',
+      );
 
       // Cleanup
       await prisma.organization.delete({

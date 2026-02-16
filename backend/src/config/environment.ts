@@ -50,6 +50,10 @@ export interface EnvironmentConfig {
   // Stripe Configuration (for SaaS monetization)
   STRIPE_SECRET_KEY?: string;
   STRIPE_WEBHOOK_SECRET?: string;
+  // SendGrid Configuration (for email notifications)
+  SENDGRID_API_KEY?: string;
+  SENDGRID_FROM_EMAIL?: string;
+  SENDGRID_FROM_EMAIL?: string;
   // Error Handling Configuration
   ERROR_HIDE_STACK_TRACE_IN_PRODUCTION: boolean;
   ERROR_LOG_LEVEL: string;
@@ -100,11 +104,7 @@ function resolveJwtSecret(nodeEnv: string, rawSecret: string | undefined): strin
     return rawSecret;
   }
 
-  if (nodeEnv === 'production') {
-    return fail('JWT_SECRET environment variable is empty');
-  }
-
-  return nodeEnv === 'test' ? 'test-secret' : 'dev-secret';
+  return fail('JWT_SECRET environment variable is empty');
 }
 
 function resolveFrontendUrl(env: RawEnv): string {
@@ -122,9 +122,6 @@ function validateEnvironment(env: RawEnv, allowMissingRequired: boolean): Enviro
 
   const port = parseNumber(env.PORT, portDefault, 'PORT');
   const jwtSecret = resolveJwtSecret(nodeEnv, env.JWT_SECRET);
-  if (!allowMissingRequired && isProduction && (!env.JWT_SECRET || env.JWT_SECRET.trim() === '')) {
-    fail('JWT_SECRET environment variable is empty');
-  }
 
   const maxUploadSize = Number(env.MAX_UPLOAD_SIZE_BYTES || env.MAX_FILE_SIZE || 10 * 1024 * 1024);
   const directThreshold = Number(
@@ -159,6 +156,10 @@ function validateEnvironment(env: RawEnv, allowMissingRequired: boolean): Enviro
     // Stripe Configuration (for SaaS monetization)
     STRIPE_SECRET_KEY: env.STRIPE_SECRET_KEY,
     STRIPE_WEBHOOK_SECRET: env.STRIPE_WEBHOOK_SECRET,
+    // SendGrid Configuration (for email notifications)
+    SENDGRID_API_KEY: env.SENDGRID_API_KEY,
+    SENDGRID_FROM_EMAIL: env.SENDGRID_FROM_EMAIL,
+    SENDGRID_FROM_EMAIL: env.SENDGRID_FROM_EMAIL,
     // Error Handling Configuration
     ERROR_HIDE_STACK_TRACE_IN_PRODUCTION: nodeEnv === 'production',
     ERROR_LOG_LEVEL: env.ERROR_LOG_LEVEL || 'error',

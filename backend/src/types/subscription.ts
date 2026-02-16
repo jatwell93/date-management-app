@@ -29,7 +29,7 @@ export const AVAILABLE_FEATURES = {
   CUSTOM_INTEGRATIONS: 'custom_integrations',
 } as const;
 
-export type FeatureKey = typeof AVAILABLE_FEATURES[keyof typeof AVAILABLE_FEATURES];
+export type FeatureKey = (typeof AVAILABLE_FEATURES)[keyof typeof AVAILABLE_FEATURES];
 
 /**
  * Tier configuration with default limits

@@ -22,9 +22,11 @@ export class SubscriptionService {
 
   constructor(prismaClient?: PrismaClient, stripeClient?: Stripe) {
     this.prisma = prismaClient ?? getDefaultDatabaseClient();
-    this.stripe = stripeClient ?? new Stripe(envConfig.STRIPE_SECRET_KEY!, {
-      apiVersion: '2023-08-16',
-    });
+    this.stripe =
+      stripeClient ??
+      new Stripe(envConfig.STRIPE_SECRET_KEY!, {
+        apiVersion: '2023-08-16',
+      });
   }
 
   /**
@@ -60,9 +62,7 @@ export class SubscriptionService {
         : null;
 
       return Boolean(
-        stripeSubscription.cancel_at_period_end &&
-          periodEnd &&
-          periodEnd.getTime() > Date.now(),
+        stripeSubscription.cancel_at_period_end && periodEnd && periodEnd.getTime() > Date.now(),
       );
     } catch (error) {
       Logger.warn('Failed to verify Stripe access window', {
@@ -138,7 +138,9 @@ export class SubscriptionService {
         },
       });
 
-      Logger.info(`Created subscription ${stripeSubscription.id} for organization ${organizationId}`);
+      Logger.info(
+        `Created subscription ${stripeSubscription.id} for organization ${organizationId}`,
+      );
 
       return this.mapPrismaToModel(subscriptionTier);
     } catch (error) {
@@ -314,7 +316,9 @@ export class SubscriptionService {
         },
       });
 
-      Logger.info(`Reactivated subscription ${subscriptionTier.stripeSubscriptionId} for organization ${organizationId}`);
+      Logger.info(
+        `Reactivated subscription ${subscriptionTier.stripeSubscriptionId} for organization ${organizationId}`,
+      );
 
       return this.mapPrismaToModel(updated);
     } catch (error) {

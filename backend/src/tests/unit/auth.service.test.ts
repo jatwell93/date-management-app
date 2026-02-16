@@ -48,7 +48,12 @@ describe('AuthService', () => {
 
     authService = new AuthService(prisma);
     (jwt.sign as jest.Mock).mockReturnValue('mock_jwt_token');
-    (jwt.verify as jest.Mock).mockReturnValue({ userId: 1, role: 'Manager', organizationId: 'org-1', tierLevel: 'professional' });
+    (jwt.verify as jest.Mock).mockReturnValue({
+      userId: 1,
+      role: 'Manager',
+      organizationId: 'org-1',
+      tierLevel: 'professional',
+    });
     (bcrypt.compare as jest.Mock).mockResolvedValue(true);
     (bcrypt.hash as jest.Mock).mockResolvedValue('hashed_pin');
     process.env.JWT_SECRET = 'test_secret';
@@ -131,7 +136,7 @@ describe('AuthService', () => {
       expect(jwt.sign).toHaveBeenCalledWith(
         { userId: 1, role: 'Manager', organizationId: 'org-1', tierLevel: 'professional' },
         expect.any(String),
-        { expiresIn: '1h' }
+        { expiresIn: '1h' },
       );
 
       expect(prisma.user.findMany).toHaveBeenCalledWith({
@@ -179,7 +184,9 @@ describe('AuthService', () => {
       });
 
       await expect(authService.login('5624')).rejects.toBeInstanceOf(AuthenticationError);
-      expect((await authService.login('5624').catch(e => e.message)).includes('canceled')).toBeDefined();
+      expect(
+        (await authService.login('5624').catch((e) => e.message)).includes('canceled'),
+      ).toBeDefined();
       expect(jwt.sign).not.toHaveBeenCalled();
     });
 

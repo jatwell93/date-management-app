@@ -8,7 +8,7 @@ module.exports = {
       env: {
         NODE_ENV: 'development',
         PORT: 3001,
-        JWT_SECRET: 'your_jwt_secret', // Should be overridden in production
+        JWT_SECRET: process.env.JWT_SECRET,
         DATABASE_PATH: './database.sqlite',
       },
       env_production: {

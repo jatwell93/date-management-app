@@ -20,11 +20,12 @@ datasource db {
 // ============================================================================
 
 model Organization {
-  id        String   @id @default(uuid())
-  name      String
-  slug      String   @unique
-  createdAt DateTime @default(now()) @map("created_at")
-  updatedAt DateTime @updatedAt @map("updated_at")
+  id           String   @id @default(uuid())
+  name         String
+  slug         String   @unique
+  contactEmail String?  @map("contact_email") // For subscription/billing notifications
+  createdAt    DateTime @default(now()) @map("created_at")
+  updatedAt    DateTime @updatedAt @map("updated_at")
 
   // Relations
   subscriptionTiers       SubscriptionTier[]
@@ -89,6 +90,15 @@ model OrganizationUsage {
 
   @@unique([organizationId])
   @@map("organization_usage")
+}
+
+model ProcessedWebhookEvent {
+  id          String   @id // Stripe event ID
+  eventType   String   @map("event_type")
+  processedAt DateTime @default(now()) @map("processed_at")
+
+  @@index([eventType, processedAt])
+  @@map("processed_webhook_events")
 }
 
 // ============================================================================
@@ -206,19 +216,21 @@ model RefreshToken {
 model AuditLog {
   id                Int      @id @default(autoincrement())
   organizationId    String?  @map("organization_id")
-  userId            Int      @map("user_id")
-  inventoryItemId   Int      @map("inventory_item_id")
+  userId            Int?     @map("user_id") // Optional for system/webhook events
+  inventoryItemId   Int?     @map("inventory_item_id") // Made optional for webhook audit logs
+  action            String   // E.g., "webhook_processed", "subscription_updated", "item_adjusted"
   changeDescription String   @map("change_description")
   createdAt         DateTime @default(now()) @map("created_at")
 
   // Relations
   organization   Organization?  @relation(fields: [organizationId], references: [id])
-  user           User           @relation(fields: [userId], references: [id])
-  inventoryItem  InventoryItem  @relation(fields: [inventoryItemId], references: [id])
+  user           User?          @relation(fields: [userId], references: [id])
+  inventoryItem  InventoryItem? @relation(fields: [inventoryItemId], references: [id])
 
   @@index([organizationId])
   @@index([userId])
   @@index([inventoryItemId])
+  @@index([action])
   @@map("audit_log")
 }
 

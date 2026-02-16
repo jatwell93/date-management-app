@@ -98,6 +98,10 @@ export default Sentry.withSentry(
         return handleHealthCheck(request, env);
       }
 
+      if (pathname.startsWith('/api/') && !env.JWT_SECRET?.trim()) {
+        return errorResponse('JWT_SECRET is required', 500, env, requestOrigin);
+      }
+
       // API routes
       if (pathname.startsWith('/api/')) {
         // Initialize database connection
@@ -261,11 +265,19 @@ async function verifyBcryptPassword(password: string, storedHash: string): Promi
   return verifyPassword(password, storedHash);
 }
 
+function requireJwtSecret(env: Env): Uint8Array {
+  const secret = env.JWT_SECRET?.trim();
+  if (!secret) {
+    throw new Error('JWT_SECRET is required');
+  }
+  return new TextEncoder().encode(secret);
+}
+
 /**
  * Create JWT token using jose
  */
 async function createToken(userId: number, env: Env): Promise<string> {
-  const secret = new TextEncoder().encode(env.JWT_SECRET || 'development-secret');
+  const secret = requireJwtSecret(env);
   
   return await new SignJWT({ userId })
     .setProtectedHeader({ alg: 'HS256' })
@@ -284,8 +296,8 @@ async function authenticateRequest(request: Request, env: Env): Promise<{ userId
   }
 
   const token = authHeader.slice(7);
+  const secret = requireJwtSecret(env);
   try {
-    const secret = new TextEncoder().encode(env.JWT_SECRET || 'development-secret');
     const { payload } = await jwtVerify(token, secret);
     return { userId: payload.userId as number };
   } catch {

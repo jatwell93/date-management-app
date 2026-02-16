@@ -60,10 +60,9 @@ async function seedTierFeatureFlags() {
     });
 
     console.log('\n✅ Tier feature flags created:');
-    counts.forEach(count => {
+    counts.forEach((count) => {
       console.log(`   ${count.tierLevel}: ${count._count} features`);
     });
-
   } catch (error) {
     console.error('Tier feature flags seeding failed:', error.message);
     process.exit(1);

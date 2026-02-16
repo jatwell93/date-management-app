@@ -249,7 +249,8 @@ describe('auth middleware', () => {
 
       expect(res.status).toHaveBeenCalledWith(403);
       expect(res.json).toHaveBeenCalledWith({
-        message: 'Access denied: Organization subscription has been canceled. Please contact support.',
+        message:
+          'Access denied: Organization subscription has been canceled. Please contact support.',
       });
       expect(next).not.toHaveBeenCalled();
     });

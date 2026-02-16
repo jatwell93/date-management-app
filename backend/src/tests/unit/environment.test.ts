@@ -32,7 +32,7 @@ describe('EnvironmentConfig', () => {
   it('defaults to development when NODE_ENV is missing', () => {
     delete process.env.NODE_ENV;
     delete process.env.PORT;
-    delete process.env.JWT_SECRET;
+    process.env.JWT_SECRET = 'dev-secret';
 
     const envModule = loadEnvModule();
 
@@ -41,16 +41,25 @@ describe('EnvironmentConfig', () => {
     expect(envModule.envConfig.JWT_SECRET).toBe('dev-secret');
   });
 
-  it('uses test defaults when NODE_ENV is test and JWT_SECRET missing', () => {
+  it('uses provided JWT_SECRET when NODE_ENV is test', () => {
     process.env.NODE_ENV = 'test';
     delete process.env.PORT;
-    delete process.env.JWT_SECRET;
+    process.env.JWT_SECRET = 'test-secret';
 
     const envModule = loadEnvModule();
 
     expect(envModule.envConfig.NODE_ENV).toBe('test');
     expect(envModule.envConfig.PORT).toBe(3001);
     expect(envModule.envConfig.JWT_SECRET).toBe('test-secret');
+  });
+
+  it('throws when development is missing JWT_SECRET', () => {
+    process.env.NODE_ENV = 'development';
+    process.env.PORT = '3001';
+    delete process.env.JWT_SECRET;
+
+    expect(() => loadEnvModule()).toThrow('process.exit called');
+    expect(mockConsoleError).toHaveBeenCalledWith('JWT_SECRET environment variable is empty');
   });
 
   it('throws when production is missing JWT_SECRET', () => {

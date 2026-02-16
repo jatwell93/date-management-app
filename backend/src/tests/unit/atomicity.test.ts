@@ -88,7 +88,7 @@ describe('Usage Counter Atomicity Tests', () => {
       mockPrisma.product.create.mockRejectedValue(error);
 
       await expect(productService.createProduct(productData)).rejects.toThrow(
-        'Database constraint violation'
+        'Database constraint violation',
       );
 
       // Verify transaction was attempted but rolled back
@@ -179,7 +179,7 @@ describe('Usage Counter Atomicity Tests', () => {
       expect(result).toBe(true);
       expect(mockPrisma.$transaction).toHaveBeenCalled();
       expect(mockPrisma.product.delete).toHaveBeenCalledWith({
-        where: { 
+        where: {
           id: 1,
           organizationId,
         },
@@ -196,7 +196,7 @@ describe('Usage Counter Atomicity Tests', () => {
       mockPrisma.product.delete.mockRejectedValue(error);
 
       await expect(productService.deleteProduct(1)).rejects.toThrow(
-        'Foreign key constraint violation'
+        'Foreign key constraint violation',
       );
 
       // Verify transaction was attempted but rolled back

@@ -45,7 +45,9 @@ router.get('/:id', authenticateToken, async (req: AuthRequest, res: Response) =>
 
     // Validate ownership: item.organization_id must match req.organizationId
     if (item.organizationId !== req.organizationId) {
-      return res.status(403).json({ message: 'Access denied: Item belongs to different organization' });
+      return res
+        .status(403)
+        .json({ message: 'Access denied: Item belongs to different organization' });
     }
 
     res.json(item);
@@ -231,7 +233,9 @@ router.put(
 
       // Validate ownership: item.organization_id must match req.organizationId
       if (existingItem.organizationId !== req.organizationId) {
-        return res.status(403).json({ message: 'Access denied: Item belongs to different organization' });
+        return res
+          .status(403)
+          .json({ message: 'Access denied: Item belongs to different organization' });
       }
 
       const { productId, expiryDate, locationId, status } = req.body;
@@ -281,7 +285,9 @@ router.delete(
 
       // Validate ownership: item.organization_id must match req.organizationId
       if (existingItem.organizationId !== req.organizationId) {
-        return res.status(403).json({ message: 'Access denied: Item belongs to different organization' });
+        return res
+          .status(403)
+          .json({ message: 'Access denied: Item belongs to different organization' });
       }
 
       const userId = req.userId; // Get user ID from auth middleware

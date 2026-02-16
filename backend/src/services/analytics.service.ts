@@ -89,6 +89,7 @@ export class AnalyticsService {
   private repository: AnalyticsRepository;
   private eventQueue: AnalyticsEvent[] = [];
   private batchProcessing: boolean = false;
+  private batchInterval?: NodeJS.Timeout;
 
   /**
    * Constructor with dependency injection
@@ -234,10 +235,21 @@ export class AnalyticsService {
    * Start the batch processing interval
    */
   private startBatchProcessing(): void {
+    if (this.batchInterval) {
+      return;
+    }
+
     // Process the queue every 30 seconds
-    setInterval(() => {
+    this.batchInterval = setInterval(() => {
       void this.processEventQueue();
     }, 30000);
+  }
+
+  private stopBatchProcessing(): void {
+    if (this.batchInterval) {
+      clearInterval(this.batchInterval);
+      this.batchInterval = undefined;
+    }
   }
 
   /**
@@ -290,6 +302,7 @@ export class AnalyticsService {
    * Reset singleton (for testing)
    */
   public static resetInstance(): void {
+    AnalyticsService.instance?.stopBatchProcessing();
     AnalyticsService.instance = null;
   }
 }

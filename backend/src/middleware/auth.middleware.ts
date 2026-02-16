@@ -35,11 +35,11 @@ const isBillingCycle = (value: string): value is BillingCycle =>
 export const authenticateToken = async (req: AuthRequest, res: Response, next: NextFunction) => {
   // Test environment bypass
   if (process.env.NODE_ENV === 'test' && process.env.TEST_AUTH_BYPASS === 'true') {
-    req.user = { 
-      id: 1, 
+    req.user = {
+      id: 1,
       role: 'Manager',
       organizationId: 'default-org',
-      tierLevel: 'professional'
+      tierLevel: 'professional',
     };
     req.userId = 1;
     req.userRole = 'Manager';
@@ -173,22 +173,24 @@ export const authenticateToken = async (req: AuthRequest, res: Response, next: N
         eventAction: 'organization_subscription_not_found',
         ipAddress: req.ip,
         userAgent: req.get('User-Agent') || undefined,
-        metadata: { 
+        metadata: {
           organizationId: decodedToken.organizationId,
-          path: req.path, 
-          method: req.method 
+          path: req.path,
+          method: req.method,
         },
       });
 
-      return res.status(403).json({ 
-        message: 'Access denied: Organization subscription not configured' 
+      return res.status(403).json({
+        message: 'Access denied: Organization subscription not configured',
       });
     }
 
     // Check if subscription is canceled (allow access until Stripe period end if applicable)
     if (subscription.status === SubscriptionStatus.CANCELED) {
       const tierLevel = isTierLevel(subscription.tierLevel) ? subscription.tierLevel : null;
-      const billingCycle = isBillingCycle(subscription.billingCycle) ? subscription.billingCycle : null;
+      const billingCycle = isBillingCycle(subscription.billingCycle)
+        ? subscription.billingCycle
+        : null;
 
       if (!tierLevel || !billingCycle) {
         const analyticsService = AnalyticsService.getInstance();
@@ -235,15 +237,16 @@ export const authenticateToken = async (req: AuthRequest, res: Response, next: N
           eventAction: 'organization_subscription_canceled',
           ipAddress: req.ip,
           userAgent: req.get('User-Agent') || undefined,
-          metadata: { 
+          metadata: {
             organizationId: decodedToken.organizationId,
-            path: req.path, 
-            method: req.method 
+            path: req.path,
+            method: req.method,
           },
         });
 
-        return res.status(403).json({ 
-          message: 'Access denied: Organization subscription has been canceled. Please contact support.' 
+        return res.status(403).json({
+          message:
+            'Access denied: Organization subscription has been canceled. Please contact support.',
         });
       }
     }
@@ -256,16 +259,16 @@ export const authenticateToken = async (req: AuthRequest, res: Response, next: N
       eventAction: 'organization_validation_error',
       ipAddress: req.ip,
       userAgent: req.get('User-Agent') || undefined,
-      metadata: { 
+      metadata: {
         organizationId: decodedToken.organizationId,
-        path: req.path, 
+        path: req.path,
         method: req.method,
-        error: error instanceof Error ? error.message : 'Unknown error'
+        error: error instanceof Error ? error.message : 'Unknown error',
       },
     });
 
-    return res.status(500).json({ 
-      message: 'Error validating organization access' 
+    return res.status(500).json({
+      message: 'Error validating organization access',
     });
   }
 
@@ -290,9 +293,9 @@ export const authenticateToken = async (req: AuthRequest, res: Response, next: N
     eventAction: 'protected_route_access',
     ipAddress: req.ip,
     userAgent: req.get('User-Agent') || undefined,
-    metadata: { 
-      path: req.path, 
-      method: req.method, 
+    metadata: {
+      path: req.path,
+      method: req.method,
       role: decodedToken.role,
       organizationId: decodedToken.organizationId,
     },
@@ -309,13 +312,9 @@ export const generateToken = (
   tierLevel: TierLevel,
   expiresIn: string | number = '24h',
 ): string => {
-  return jwt.sign(
-    { userId, role, organizationId, tierLevel }, 
-    envConfig.JWT_SECRET,
-    {
-      expiresIn: expiresIn as any,
-    }
-  );
+  return jwt.sign({ userId, role, organizationId, tierLevel }, envConfig.JWT_SECRET, {
+    expiresIn: expiresIn as any,
+  });
 };
 
 export const requireManager = (req: AuthRequest, res: Response, next: NextFunction) => {
