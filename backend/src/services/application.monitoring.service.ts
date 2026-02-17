@@ -345,7 +345,11 @@ export class ApplicationMonitoringService extends EventEmitter {
   /**
    * Record webhook handling metrics
    */
-  public recordWebhookEvent(eventType: string, latencyMs: number, status: 'success' | 'error' | 'skipped') {
+  public recordWebhookEvent(
+    eventType: string,
+    latencyMs: number,
+    status: 'success' | 'error' | 'skipped',
+  ) {
     this.metrics.webhook.total++;
 
     if (!this.metrics.webhook.byEvent[eventType]) {
@@ -432,7 +436,8 @@ export class ApplicationMonitoringService extends EventEmitter {
     }
 
     const totalWebhooks = webhookMetrics.total || 0;
-    const idempotencySkipRate = totalWebhooks === 0 ? 0 : (webhookMetrics.idempotencySkips / totalWebhooks) * 100;
+    const idempotencySkipRate =
+      totalWebhooks === 0 ? 0 : (webhookMetrics.idempotencySkips / totalWebhooks) * 100;
     if (idempotencySkipRate > (this.config.alertThresholds.idempotencySkipRateThreshold || 100)) {
       this.emitAlert({
         type: ApplicationAlertType.ANOMALOUS_USER_BEHAVIOR,

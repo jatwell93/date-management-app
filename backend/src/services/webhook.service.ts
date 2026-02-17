@@ -521,7 +521,10 @@ export class WebhookService {
     } catch (error: any) {
       const duration = Date.now() - start;
       monitor.recordWebhookEvent('customer.subscription.deleted', duration, 'error');
-      Sentry.captureException(error, { level: 'error', extra: { subscriptionId: subscription.id } });
+      Sentry.captureException(error, {
+        level: 'error',
+        extra: { subscriptionId: subscription.id },
+      });
       log.error('Failed to handle subscription deleted', {
         error: error instanceof Error ? error.message : 'Unknown error',
         subscriptionId: subscription.id,

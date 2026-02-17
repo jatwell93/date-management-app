@@ -17,14 +17,14 @@ describe('Webhook Edge Cases', () => {
 
   beforeAll(() => {
     webhookService = new WebhookService();
-    
+
     // Create mock Stripe instance
     mockStripe = {
       customers: {
         retrieve: jest.fn(),
       },
     } as any;
-    
+
     // Inject mock into service
     (webhookService as any).stripe = mockStripe;
   });
@@ -80,9 +80,9 @@ describe('Webhook Edge Cases', () => {
         },
       } as any;
 
-      await expect(
-        (webhookService as any).handleSubscriptionCreated(subscription)
-      ).rejects.toThrow(NotFoundError);
+      await expect((webhookService as any).handleSubscriptionCreated(subscription)).rejects.toThrow(
+        NotFoundError,
+      );
 
       // Verify no subscription tier was created
       const tier = await prisma.subscriptionTier.findFirst({
@@ -114,9 +114,9 @@ describe('Webhook Edge Cases', () => {
         },
       } as any;
 
-      await expect(
-        (webhookService as any).handleSubscriptionUpdated(subscription)
-      ).rejects.toThrow(NotFoundError);
+      await expect((webhookService as any).handleSubscriptionUpdated(subscription)).rejects.toThrow(
+        NotFoundError,
+      );
     });
   });
 
@@ -143,9 +143,9 @@ describe('Webhook Edge Cases', () => {
         },
       } as any;
 
-      await expect(
-        (webhookService as any).handleSubscriptionCreated(subscription)
-      ).rejects.toThrow('Missing organizationId in Stripe customer metadata');
+      await expect((webhookService as any).handleSubscriptionCreated(subscription)).rejects.toThrow(
+        'Missing organizationId in Stripe customer metadata',
+      );
     });
 
     it('should throw error when metadata field is null', async () => {
@@ -170,9 +170,9 @@ describe('Webhook Edge Cases', () => {
         },
       } as any;
 
-      await expect(
-        (webhookService as any).handleSubscriptionCreated(subscription)
-      ).rejects.toThrow('Missing organizationId in Stripe customer metadata');
+      await expect((webhookService as any).handleSubscriptionCreated(subscription)).rejects.toThrow(
+        'Missing organizationId in Stripe customer metadata',
+      );
     });
   });
 
@@ -198,7 +198,7 @@ describe('Webhook Edge Cases', () => {
 
       // Simulate concurrent attempts to mark as processed
       const attempts = Array.from({ length: 3 }, () =>
-        webhookService.markEventProcessed(eventId, 'customer.subscription.created')
+        webhookService.markEventProcessed(eventId, 'customer.subscription.created'),
       );
 
       // All should succeed without throwing errors
@@ -300,7 +300,7 @@ describe('Webhook Edge Cases', () => {
       // First: Process updated event (subscription doesn't exist yet)
       // This should work without throwing - sync service handles missing subscription
       await expect(
-        (webhookService as any).handleSubscriptionUpdated(subscription)
+        (webhookService as any).handleSubscriptionUpdated(subscription),
       ).resolves.not.toThrow();
 
       // Then: Process created event
@@ -349,7 +349,7 @@ describe('Webhook Edge Cases', () => {
 
       // Should not crash even if subscription doesn't exist in DB
       await expect(
-        (webhookService as any).handleSubscriptionDeleted(subscription)
+        (webhookService as any).handleSubscriptionDeleted(subscription),
       ).resolves.not.toThrow();
     });
   });
@@ -423,9 +423,9 @@ describe('Webhook Edge Cases', () => {
         },
       } as any;
 
-      await expect(
-        (webhookService as any).handleSubscriptionCreated(subscription)
-      ).rejects.toThrow(NotFoundError);
+      await expect((webhookService as any).handleSubscriptionCreated(subscription)).rejects.toThrow(
+        NotFoundError,
+      );
     });
   });
 
@@ -462,7 +462,7 @@ describe('Webhook Edge Cases', () => {
 
       // Should handle gracefully - still notify about payment failure
       await expect(
-        (webhookService as any).handleInvoicePaymentFailed(invoice)
+        (webhookService as any).handleInvoicePaymentFailed(invoice),
       ).resolves.not.toThrow();
     });
   });
@@ -498,9 +498,7 @@ describe('Webhook Edge Cases', () => {
       } as any;
 
       // Should still send reminder even if trial already ended
-      await expect(
-        (webhookService as any).handleTrialWillEnd(subscription)
-      ).resolves.not.toThrow();
+      await expect((webhookService as any).handleTrialWillEnd(subscription)).resolves.not.toThrow();
     });
 
     it('should handle missing trial_end timestamp', async () => {
@@ -534,9 +532,7 @@ describe('Webhook Edge Cases', () => {
 
       // Should handle gracefully - defaults trial_end to 0 (results in negative days)
       // Handler will still send email (though Stripe wouldn't normally send this event)
-      await expect(
-        (webhookService as any).handleTrialWillEnd(subscription)
-      ).resolves.not.toThrow();
+      await expect((webhookService as any).handleTrialWillEnd(subscription)).resolves.not.toThrow();
     });
   });
 

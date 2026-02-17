@@ -86,7 +86,7 @@ export class EmailService {
 
       await sgMail.send(msg);
 
-      // Log trial_reminder_sent event 
+      // Log trial_reminder_sent event
       await this.prisma.auditLog.create({
         data: {
           organizationId,
