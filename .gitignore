@@ -43,6 +43,7 @@ Thumbs.db
 .gemini/
 .specify/
 .vscode/
+.windsurf/
 specs/
 .quint/
 prompts/

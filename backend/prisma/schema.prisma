@@ -34,6 +34,7 @@ model Organization {
   inventoryItems          InventoryItem[]
   storeAreas              StoreArea[]
   users                   User[]
+  organizationInvites     OrganizationInvite[]
   uploads                 Upload[]
   auditLogs               AuditLog[]
   itemTransactions        ItemTransaction[]
@@ -178,7 +179,10 @@ model StoreArea {
 model User {
   id             Int      @id @default(autoincrement())
   organizationId String?  @map("organization_id")
-  pin            String
+  clerkUserId    String?  @unique @map("clerk_user_id")
+  email          String?  @unique
+  username       String?  @unique
+  pin            String?
   role           String
   createdAt      DateTime @default(now()) @map("created_at")
   updatedAt      DateTime @updatedAt @map("updated_at")
@@ -190,9 +194,34 @@ model User {
   expiredItemTransactions  ExpiredItemTransaction[]
   uploads                  Upload[]
   refreshTokens            RefreshToken[]
+  sentInvites              OrganizationInvite[] @relation("InvitedBy")
 
   @@index([organizationId])
+  @@index([clerkUserId])
+  @@index([email])
+  @@index([username])
   @@map("users")
+}
+
+model OrganizationInvite {
+  id              String                   @id @default(uuid())
+  organizationId  String                   @map("organization_id")
+  email           String
+  role            String
+  token           String                   @unique
+  status          String                   @default("PENDING")
+  expiresAt       DateTime                 @map("expires_at")
+  acceptedAt      DateTime?                @map("accepted_at")
+  invitedByUserId Int                      @map("invited_by_user_id")
+  createdAt       DateTime                 @default(now()) @map("created_at")
+
+  organization    Organization             @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  invitedByUser   User                     @relation("InvitedBy", fields: [invitedByUserId], references: [id], onDelete: Cascade)
+
+  @@index([organizationId])
+  @@index([email])
+  @@index([status])
+  @@map("organization_invites")
 }
 
 model RefreshToken {

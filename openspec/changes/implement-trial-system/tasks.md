@@ -24,7 +24,7 @@
   - [x] Set `CLERK_SECRET_KEY` + `CLERK_PUBLISHABLE_KEY` + `CLERK_WEBHOOK_SECRET` in `.env.example`
   - [x] Test JWT verification with unit tests (9 test cases passing)
 - [ ] Clerk webhook configuration:
-  - [ ] Create webhook endpoint: `POST /webhooks/clerk`
+  - [ ] Create webhook endpoint: `POST /webhooks/clerk` **NOTE** Configured at https://play.svix.com/in/e_XYN9vGi7uhZhk4ISNivRFm5dYZp/ for testing
   - [ ] Get Clerk webhook signing secret
   - [ ] Configure webhook in Clerk dashboard to point to backend
   - [ ] Verify webhook signature verification working
@@ -36,11 +36,11 @@
 
 ## Phase 1B: Schema Migration (Database)
 
-- [ ] Add `clerkUserId` (STRING, UNIQUE) column to `users` table
-- [ ] Add `email` (STRING, UNIQUE) column to `users` table
-- [ ] Add `username` (STRING, UNIQUE) column to `users` table (**for audit logging**)
+- [x] Add `clerkUserId` (STRING, UNIQUE) column to `users` table
+- [x] Add `email` (STRING, UNIQUE) column to `users` table
+- [x] Add `username` (STRING, UNIQUE) column to `users` table (**for audit logging**)
 - [ ] Remove `pin` (VARCHAR) column from `users` table
-- [ ] Create `organization_invites` table (id, organizationId, email, role, token, status, expiresAt, acceptedAt, invitedByUserId, createdAt)
+- [x] Create `organization_invites` table (id, organizationId, email, role, token, status, expiresAt, acceptedAt, invitedByUserId, createdAt)
 - [ ] Add `stripeCustomerId` (STRING) column to `subscription_tiers` table
 - [ ] Add `trialEndDate` (DATETIME, NULLABLE) column to `subscription_tiers` table
 - [ ] Add `trialStartedAt` (DATETIME, NULLABLE) column to `subscription_tiers` table
@@ -68,22 +68,22 @@
 
 ## Phase 1D: Multi-User Invites (MVP)
 
-- [ ] Define invite statuses: `PENDING`, `ACCEPTED`, `EXPIRED`, `REVOKED`
-- [ ] Create `POST /api/organizations/invites` (admin-only)
-  - [ ] Validate email, role, and org membership
-  - [ ] Enforce max users for current tier (trial: 3 users)
-  - [ ] Create invite with token + expiresAt (e.g., 7 days)
-  - [ ] Send invite email via SendGrid with accept link
-- [ ] Create `POST /api/organizations/invites/accept`
-  - [ ] Validate invite token + expiry
-  - [ ] Require Clerk signup (email/password or OAuth)
-  - [ ] Create user in DB with same organizationId + role
-  - [ ] Mark invite accepted, set acceptedAt
-- [ ] Create `GET /api/organizations/invites` (admin-only)
-  - [ ] List pending invites for org
-- [ ] Create `DELETE /api/organizations/invites/:inviteId` (admin-only)
-  - [ ] Revoke invite (status -> REVOKED)
-- [ ] Add tests for invite flow (create, accept, expiry, max users)
+- [x] Define invite statuses: `PENDING`, `ACCEPTED`, `EXPIRED`, `REVOKED`
+- [x] Create `POST /api/organizations/invites` (admin-only)
+  - [x] Validate email, role, and org membership
+  - [x] Enforce max users for current tier (trial: 3 users)
+  - [x] Create invite with token + expiresAt (e.g., 7 days)
+  - [x] Send invite email via SendGrid with accept link
+- [x] Create `POST /api/organizations/invites/accept`
+  - [x] Validate invite token + expiry
+  - [x] Require Clerk signup (email/password or OAuth)
+  - [x] Create user in DB with same organizationId + role
+  - [x] Mark invite accepted, set acceptedAt
+- [x] Create `GET /api/organizations/invites` (admin-only)
+  - [x] List pending invites for org
+- [x] Create `DELETE /api/organizations/invites/:inviteId` (admin-only)
+  - [x] Revoke invite (status -> REVOKED)
+- [x] Add tests for invite flow (create, accept, expiry, max users)
 
 ## Phase 2: Trial Abuse Prevention (Disposable Email Check)
 
@@ -363,3 +363,28 @@
 - ✅ **Issue #10 (Payment Intent)**: Phase 9 Stripe webhook handler
 - ✅ **Issue #11 (Org-User Auth)**: Phase 7 converts checks authorization
 - ✅ **Issue #12 (Idempotency Tests)**: Phase 11 includes race condition + duplicate tests
+
+---
+
+## NOTE FOR V2: Full Role Migration
+
+**Current Approach (Phase 1D MVP):** Role mapping strategy
+- Invites store roles as `admin` / `member`
+- Users created with mapped roles: `Manager` / `Team Member` 
+- Minimal code churn, defers refactor to later phase
+- Allows Clerk signup + multi-user invites to ship quickly
+
+**V2 Migration (Future Phase):** Full role system alignment
+- Standardize everywhere to either `admin` / `member` OR `Manager` / `Team Member`
+- Remove role mapping translation layer from `OrganizationInviteService.mapInviteRole()`
+- Update authorization checks (`requireManager()` middleware) to use consistent role values
+- Update audit logs and role-based features to use single role system
+- This refactor is cleaner long-term but adds 2-3 hours of work
+- **Recommended for v2** once Clerk auth + invites are validated in production and stable
+
+**Files to Update in V2 Role Migration:**
+- `src/middleware/auth.middleware.ts` (requireManager logic)
+- `src/services/organization-invite.service.ts` (remove mapInviteRole method)
+- `src/models/user.model.ts` (role union type)
+- All unit tests referencing roles
+- Audit logging if applicable

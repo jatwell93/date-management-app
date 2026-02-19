@@ -54,6 +54,15 @@ export class AuthorizationError extends BaseError {
 }
 
 /**
+ * 402 Payment Required - Subscription or usage limit reached
+ */
+export class PaymentRequiredError extends BaseError {
+  constructor(message = 'Payment required') {
+    super(message, 402, 'PAYMENT_REQUIRED');
+  }
+}
+
+/**
  * 404 Not Found - Resource not found
  */
 export class NotFoundError extends BaseError {

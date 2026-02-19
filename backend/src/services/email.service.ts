@@ -107,6 +107,60 @@ export class EmailService {
   }
 
   /**
+   * Send organization invite email
+   */
+  async sendOrganizationInviteEmail(params: {
+    organizationId: string;
+    toEmail: string;
+    organizationName: string;
+    inviteUrl: string;
+    invitedByUserId?: number;
+  }): Promise<void> {
+    try {
+      if (!envConfig.SENDGRID_API_KEY) {
+        Logger.warn('Cannot send invite: SendGrid not configured', {
+          organizationId: params.organizationId,
+        });
+        return;
+      }
+
+      const fromEmail = envConfig.SENDGRID_FROM_EMAIL || 'noreply@yourdomain.com';
+      const appUrl = envConfig.FRONTEND_URL;
+      const msg = {
+        to: params.toEmail,
+        from: fromEmail,
+        subject: `You're invited to ${params.organizationName}`,
+        text: `You have been invited to join ${params.organizationName}. Accept your invite: ${params.inviteUrl}`,
+        html: `<p>You have been invited to join <strong>${params.organizationName}</strong>.</p><p><a href="${params.inviteUrl}">Accept your invite</a></p><p>${appUrl}</p>`,
+      };
+
+      await sgMail.send(msg);
+
+      if (params.invitedByUserId) {
+        await this.prisma.auditLog.create({
+          data: {
+            organizationId: params.organizationId,
+            action: 'organization_invite_sent',
+            userId: params.invitedByUserId,
+            changeDescription: `Invite sent to ${params.toEmail}`,
+          },
+        });
+      }
+
+      Logger.info('Organization invite email sent', {
+        organizationId: params.organizationId,
+        toEmail: params.toEmail,
+      });
+    } catch (error) {
+      Logger.error('Failed to send organization invite email', {
+        organizationId: params.organizationId,
+        error: error instanceof Error ? error.message : 'Unknown error',
+      });
+      throw error;
+    }
+  }
+
+  /**
    * Send dunning email when payment fails
    *
    * @param organizationId - Organization UUID
