@@ -153,7 +153,6 @@ describe('OrganizationInviteService', () => {
             email: 'user@example.com',
             username: 'user',
             role: 'Team Member',
-            pin: null,
           }),
         }),
       );

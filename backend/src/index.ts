@@ -191,6 +191,7 @@ app.use('/database', authenticateToken, databaseBackupRoutes);
 app.use('/expired-items', authenticateToken, expiredItemRoutes);
 app.use('/api/upload', authenticateToken, uploadRoutes);
 app.use('/api/storage-quota', authenticateToken, storageQuotaRoutes);
+app.use('/api/subscription', authenticateToken, (await import('./routes/subscription.routes')).default);
 
 app.get('/', (req, res) => {
   res.json({

@@ -11,6 +11,8 @@ export interface SubscriptionTier {
   tierLevel: TierLevel;
   stripeSubscriptionId?: string;
   trialEndDate?: Date;
+  trialStartedAt?: Date;
+  trialConvertedAt?: Date;
   status: SubscriptionStatus;
   billingCycle: BillingCycle;
   createdAt: Date;

@@ -26,24 +26,20 @@ beforeEach(async () => {
       where: { id: 1 },
       update: {
         role: 'Manager',
-        pin: '$2b$10$UMJOpNj6R17PoIKYLkQYjezcshKlz8uxxdV9CDt8YE8BzpfVGexF2', // Hash for 5624
       },
       create: {
         id: 1,
         role: 'Manager',
-        pin: '$2b$10$UMJOpNj6R17PoIKYLkQYjezcshKlz8uxxdV9CDt8YE8BzpfVGexF2', // Hash for 5624
       },
     }),
     prisma.user.upsert({
       where: { id: 2 },
       update: {
         role: 'Staff',
-        pin: '$2b$10$bAs8NbKUfEI6VU9ScMw5mO.h2lQDTfXnGZSSJnAR5pUXZNUS96RHO', // Hash for 1234
       },
       create: {
         id: 2,
         role: 'Staff',
-        pin: '$2b$10$bAs8NbKUfEI6VU9ScMw5mO.h2lQDTfXnGZSSJnAR5pUXZNUS96RHO', // Hash for 1234
       },
     }),
   ]);

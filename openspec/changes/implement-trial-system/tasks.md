@@ -18,53 +18,84 @@
 - [x] Frontend setup:
   - [x] Wrap app with `<ClerkProvider>` at top level (index.tsx)
   - [x] Set `REACT_APP_CLERK_PUBLISHABLE_KEY` in `.env.example`
-  - [ ] Test Clerk auth UI locally (SignUp component renders)
+  - [x] Test Clerk auth UI locally (SignUp component renders)
 - [x] Backend setup:
   - [x] Create `src/middleware/clerk-auth.middleware.ts` to verify JWTs
   - [x] Set `CLERK_SECRET_KEY` + `CLERK_PUBLISHABLE_KEY` + `CLERK_WEBHOOK_SECRET` in `.env.example`
   - [x] Test JWT verification with unit tests (9 test cases passing)
-- [ ] Clerk webhook configuration:
-  - [ ] Create webhook endpoint: `POST /webhooks/clerk` **NOTE** Configured at https://play.svix.com/in/e_XYN9vGi7uhZhk4ISNivRFm5dYZp/ for testing
-  - [ ] Get Clerk webhook signing secret
-  - [ ] Configure webhook in Clerk dashboard to point to backend
-  - [ ] Verify webhook signature verification working
-- [ ] End-to-end local test:
-  - [ ] Sign up new user via React SignUp component (email/password)
-  - [ ] Verify Clerk webhook received on backend
-  - [ ] Verify User + Organization records created in database
-  - [ ] Verify JWT contains username field
+- [x] Clerk webhook configuration:
+  - [x] Create webhook endpoint: `POST /webhooks/clerk` **NOTE** Configured at https://play.svix.com/in/e_XYN9vGi7uhZhk4ISNivRFm5dYZp/ for testing
+  - [x] Get Clerk webhook signing secret - Added to doppler
+  - [x] Configure webhook in Clerk dashboard to point to backend (via ngrok)
+  - [x] Verify webhook signature verification working
+- [x] End-to-end local test:
+  - [x] Sign up new user via React SignUp component (email/password)
+  - [x] Verify Clerk webhook received on backend
+  - [x] Verify User + Organization records created in database
+  - [x] Verify JWT contains username field
 
 ## Phase 1B: Schema Migration (Database)
 
 - [x] Add `clerkUserId` (STRING, UNIQUE) column to `users` table
 - [x] Add `email` (STRING, UNIQUE) column to `users` table
 - [x] Add `username` (STRING, UNIQUE) column to `users` table (**for audit logging**)
-- [ ] Remove `pin` (VARCHAR) column from `users` table
+- [x] Remove `pin` (VARCHAR) column from `users` table (already removed in schema)
 - [x] Create `organization_invites` table (id, organizationId, email, role, token, status, expiresAt, acceptedAt, invitedByUserId, createdAt)
-- [ ] Add `stripeCustomerId` (STRING) column to `subscription_tiers` table
-- [ ] Add `trialEndDate` (DATETIME, NULLABLE) column to `subscription_tiers` table
-- [ ] Add `trialStartedAt` (DATETIME, NULLABLE) column to `subscription_tiers` table
-- [ ] Add `trialConvertedAt` (DATETIME, NULLABLE) column to `subscription_tiers` table
-- [ ] Create `trial_events` table (id, organizationId, eventType, occurredAt, metadata JSON, sentRemindersAt JSON, indexes on organizationId/eventType/occurredAt)
-- [ ] Update Prisma schema to reflect all changes
-- [ ] Run migration: `npx prisma migrate dev --name add_clerk_auth_trial_system`
-- [ ] Verify migration in staging (no data loss for existing orgs with placeholders)
+- [x] Add `clerkOrganizationId` (STRING, UNIQUE) column to `organizations` table
+- [x] Add `stripeCustomerId` (STRING) column to `subscription_tiers` table (already in schema)
+- [x] Add `trialEndDate` (DATETIME, NULLABLE) column to `subscription_tiers` table
+- [x] Add `trialStartedAt` (DATETIME, NULLABLE) column to `subscription_tiers` table
+- [x] Add `trialConvertedAt` (DATETIME, NULLABLE) column to `subscription_tiers` table
+- [x] Create `trial_events` table (id, organizationId, eventType, occurredAt, metadata JSON, sentRemindersAt JSON, indexes on organizationId/eventType/occurredAt)
+- [x] Create `clerk_webhook_events` table for idempotency tracking
+- [x] Update Prisma schema to reflect all changes
+- [x] Run migration: `npx prisma migrate dev --name add_clerk_auth_trial_system` (schema already reflects all changes)
+- [x] Verify migration in staging (completed)
 
 ## Phase 1C: Auth Middleware & Routes (Clerk Integration)
 
-- [ ] Create `src/middleware/clerkAuth.ts`: Extract userId + org from Clerk JWT in all protected routes
-- [ ] Update `src/routes/auth.ts`:
-  - [ ] Remove PIN login endpoint (`POST /auth/login`)
-  - [ ] Remove PIN-based controller logic
-  - [ ] Add `POST /auth/refresh` for JWT refresh (if needed)
-  - [ ] Add `POST /auth/logout` endpoint
-- [ ] Create `src/routes/webhook.ts`:
-  - [ ] `POST /webhooks/clerk`: Receive user.created, user.updated, org.created events
-  - [ ] Verify Clerk webhook signature
-  - [ ] Handle user.created: Create User + Organization + SubscriptionTier (trial)
-  - [ ] Handle org.created: Create Organization record (if not already created)
-- [ ] Create Stripe customer during org creation (new SubscriptionService method)
-- [ ] Test webhook locally with Clerk CLI: `clerk run`
+- [x] Create `src/middleware/clerkAuth.ts`: Extract userId + org from Clerk JWT in all protected routes
+- [x] Update `src/routes/auth.ts`:
+  - [x] Remove PIN login endpoint (`POST /auth/login`)
+  - [x] Remove PIN-based controller logic
+  - [x] Add `POST /auth/refresh` for JWT refresh (if needed) - Clerk handles JWT refresh automatically, not required
+  - [x] Add `POST /auth/logout` endpoint
+- [x] Create `src/routes/webhook.ts`:
+  - [x] `POST /webhooks/clerk`: Receive user.created, user.updated, org.created events
+  - [x] Verify Clerk webhook signature
+  - [x] Handle user.created: Create User + Organization + SubscriptionTier (trial)
+  - [x] Handle org.created: Create Organization record (if not already created)
+  - [x] Handle organizationMembership.created: Link user to org with role
+  - [x] Handle organizationMembership.deleted: Unlink user from org
+  - [x] Fix webhook idempotency: use svix-id header as event ID
+- [x] Create Stripe customer during org creation (new SubscriptionService method)
+- [x] Test webhook locally with ngrok + Clerk dashboard
+
+## Phase 1E: Organisation UI (Clerk Components)
+
+- [x] Enable Clerk Organizations in Clerk dashboard
+- [x] Add `hasOrganization` to auth context via `useOrganization()` hook
+- [x] Build `/onboarding` page with Clerk `<CreateOrganization>` component
+  - [x] Redirects to `/scan` after org created
+  - [x] Route guard: signed-in users with existing org redirect to `/scan`
+  - [x] Route guard: unauthenticated users redirect to `/login`
+- [x] Build `/settings` page with Clerk `<OrganizationProfile>` component
+  - [x] Manager-only: Team Members redirected to `/scan`
+  - [x] Unauthenticated users redirected to `/login`
+- [x] Add Settings nav link for Managers (desktop + mobile)
+
+## Phase 1F: E2E Test Suite (Playwright)
+
+- [x] Install `@playwright/test` at project root
+- [x] Create `playwright.config.ts` with global setup + auth state projects
+- [x] Create `e2e/global-setup.ts`: signs in once, saves `storageState` for reuse
+- [x] Write `e2e/auth/sign-up.spec.ts`: sign-up + OTP via Mailinator
+- [x] Write `e2e/auth/sign-in.spec.ts`: sign-in, invalid credentials
+- [x] Write `e2e/onboarding/org-creation.spec.ts`: onboarding flow, org redirect
+- [x] Write `e2e/settings/org-settings.spec.ts`: settings access, nav visibility
+- [x] Write `e2e/routing/route-guards.spec.ts`: all 12 protected routes + Manager guards
+- [x] Write `e2e/webhooks/webhook-pipeline.spec.ts`: webhook endpoint security
+- [x] Add `test:e2e`, `test:e2e:ui`, `test:e2e:headed` scripts to root `package.json`
 
 ## Phase 1D: Multi-User Invites (MVP)
 
@@ -87,119 +118,119 @@
 
 ## Phase 2: Trial Abuse Prevention (Disposable Email Check)
 
-- [ ] Install `disposable-email` package: `npm install disposable-email`
-- [ ] Create `src/services/trialAbuseGuard.ts`: TrialAbuseGuard class with `validateTrialSignup()`
-- [ ] Add disposable email validation to signup webhook handler
-- [ ] Test abuse guard: Attempt signup with `test@mailinator.com` (should be rejected)
-- [ ] Test abuse guard: Attempt signup with `test@gmail.com` (should pass)
+- [x] ~~Install `disposable-email` package~~ - **NOT NEEDED** - Clerk provides this natively
+- [x] ~~Create `src/services/trialAbuseGuard.ts`~~ - **NOT NEEDED** - Clerk handles this in Dashboard
+- [x] Enable disposable email blocking in Clerk Dashboard:
+  - [x] Go to Clerk Dashboard → Security → Restrictions
+  - [x] Toggle on "Block disposable email addresses"
+  - [x] This blocks 160,000+ known disposable email providers automatically
 
 ## Phase 3: Trial Subscription Creation
 
-- [ ] Extend `src/services/subscriptionService.ts`:
-  - [ ] Add `createTrialSubscription(organizationId, trialDays)` method
-  - [ ] Default trial: 14 days, tier: "professional"
-  - [ ] Set `trialEndDate` to now + 14 days at 00:00 UTC
-  - [ ] Set `status` to `TRIALING`
-  - [ ] Return created subscription
-- [ ] Add `createStripeCustomer(organizationId, email)` method
-  - [ ] Create customer in Stripe
-  - [ ] Store `stripeCustomerId` in DB
-  - [ ] Return customer ID
-- [ ] Update webhook handler: Call `createTrialSubscription()` when org created
-- [ ] Test: Sign up via Clerk, verify trial_subscription table populated with correct dates
+- [x] Extend `src/services/subscriptionService.ts`:
+  - [x] Add `createTrialSubscription(organizationId, trialDays)` method (already implemented)
+  - [x] Default trial: 14 days, tier: "professional"
+  - [x] Set `trialEndDate` to now + 14 days at 00:00 UTC
+  - [x] Set `status` to `TRIALING`
+  - [x] Return created subscription
+- [x] Add `createStripeCustomer(organizationId, email)` method (integrated in createTrialSubscription)
+  - [x] Create customer in Stripe
+  - [x] Store `stripeCustomerId` in DB
+  - [x] Return customer ID
+- [x] Update webhook handler: Call `createTrialSubscription()` when org created (in clerk-webhook.service.ts)
+- [x] Test: Sign up via Clerk, verify trial_subscription table populated with correct dates (verified via E2E)
 
 ## Phase 4: Trial Status Endpoints (Read-Only)
 
-- [ ] Create `src/controllers/trialController.ts`
-- [ ] Add `getTrialStatus(req, res)` controller:
-  - [ ] Get current user from Clerk JWT
-  - [ ] Query subscription_tiers for user's org
-  - [ ] If TRIALING: Return trial details (start, end, daysRemaining, tier limits)
-  - [ ] If not TRIALING: Return current tier info (no trial)
-  - [ ] Add tests: Trial user, non-trial user, expired trial edge case
-- [ ] Create `GET /api/subscription/trial-status` route
-- [ ] Add Clerk auth middleware to route
-- [ ] Test endpoint: Verify response structure matches spec
+- [x] Create `src/routes/subscription.routes.ts` (controller + route combined)
+- [x] Add `GET /api/subscription/trial-status` endpoint:
+  - [x] Get current user from Clerk JWT
+  - [x] Query subscription_tiers for user's org
+  - [x] If TRIALING: Return trial details (start, end, daysRemaining, tier limits)
+  - [x] If not TRIALING: Return current tier info (no trial)
+  - [x] Returns tier limits based on tierLevel (starter/professional/premium/concierge)
+- [x] Add Clerk auth middleware to route
+- [x] Test endpoint: Verify response structure matches spec
 
 ## Phase 5: Trial Reminder System (Scheduled Job)
 
-- [ ] Extend `src/services/subscriptionService.ts`:
-  - [ ] Add `findTrialsNeedingReminders()` method
-  - [ ] Query trials where trialEndDate in next 24h AND daysRemaining in [10, 5, 2]
-  - [ ] Filter out trials where reminder already sent (check `sentRemindersAt` in trial_events)
-  - [ ] Return list with organizationId, daysRemaining, email, orgName
-- [ ] Extend `src/services/emailService.ts`:
-  - [ ] Add `sendTrialReminder(to, orgName, daysRemaining, upgradeUrl)` method
-  - [ ] Use SendGrid template (create template first)
-  - [ ] Pass daysRemaining, org name, upgrade URL to template
-- [ ] Create `src/jobs/trialExpirationJob.ts`:
-  - [ ] Schedule with node-cron: `0 0 * * *` (daily 00:00 UTC)
-  - [ ] Step 1: Call `downgradeExpiredTrials()` (implemented Phase 6)
-  - [ ] Step 2: Call `findTrialsNeedingReminders()` and iterate
-  - [ ] Step 3: For each reminder, call `sendTrialReminder()`
-  - [ ] Step 4: Log event via `logTrialEvent('trial_reminder_sent', {daysRemaining})`
-  - [ ] Error handling: Try/catch per reminder, log to Sentry, don't crash job
-- [ ] Register job in `src/index.ts` (app startup)
-- [ ] Test job locally:
-  - [ ] Manually call job function, verify console logs
-  - [ ] Check SendGrid logs for sent emails
-  - [ ] Verify trial_events table updated
+- [x] Extend `src/services/subscriptionService.ts`:
+  - [x] Add `findTrialsNeedingReminders()` method
+  - [x] Query trials where trialEndDate in next 24h AND daysRemaining in [10, 5, 2]
+  - [x] Filter out trials where reminder already sent (check `sentRemindersAt` in trial_events)
+  - [x] Return list with organizationId, daysRemaining, email, orgName
+- [x] Extend `src/services/emailService.ts`:
+  - [x] Add `sendTrialReminder(to, orgName, daysRemaining, upgradeUrl)` method
+  - [x] Use SendGrid template (create template first)
+  - [x] Pass daysRemaining, org name, upgrade URL to template
+- [x] Create `src/jobs/trialExpirationJob.ts`:
+  - [x] Schedule with node-cron: `0 0 * * *` (daily 00:00 UTC)
+  - [x] Step 1: Call `downgradeExpiredTrials()` (Phase 6)
+  - [x] Step 2: Call `findTrialsNeedingReminders()` and iterate
+  - [x] Step 3: For each reminder, call `sendTrialReminder()`
+  - [x] Step 4: Log event via `logTrialEvent('trial_reminder_sent', {daysRemaining})`
+  - [x] Error handling: Try/catch per reminder, log to Sentry, don't crash job
+- [x] Register job in `src/index.ts` (app startup)
+- [x] Test job locally:
+  - [x] Manually call job function, verify console logs
+  - [x] Check SendGrid logs for sent emails
+  - [x] Verify trial_events table updated
 
 ## Phase 6: Trial Downgrade (Expired → Starter, Wrapped in Transaction)
 
-- [ ] Extend `src/services/subscriptionService.ts`:
-  - [ ] Add `downgradeExpiredTrials()` method
-  - [ ] Use `prisma.$transaction()` for atomicity
-  - [ ] Query all TRIALING subscriptions with `trialEndDate < now()`
-  - [ ] For each: Update status → ACTIVE, tierLevel → starter, stripeSubscriptionId → NULL
-  - [ ] Log event via `logTrialEvent('trial_expired', {daysTrialed})`
-  - [ ] Return count of downgraded trials
-- [ ] Extend `src/services/emailService.ts`:
-  - [ ] Add `sendTrialDowngradeWarning(to, orgName, upgradeUrl)` method
-  - [ ] Use SendGrid template
-  - [ ] Include starter tier limits (500 SKUs, 1 user)
-- [ ] Update `src/jobs/trialExpirationJob.ts`:
-  - [ ] After downgrading trials, send downgrade warning emails
-  - [ ] Query recently downgraded trials, get admin email, send warning
-- [ ] Add tests:
-  - [ ] Test downgrade with 1 trial (atomicity)
-  - [ ] Test downgrade with 5 trials (bulk)
-  - [ ] Test race condition: Simultaneous conversions prevented by transaction
-  - [ ] Test email sent after downgrade
+- [x] Extend `src/services/subscriptionService.ts`:
+  - [x] Add `downgradeExpiredTrials()` method
+  - [x] Use `prisma.$transaction()` for atomicity
+  - [x] Query all TRIALING subscriptions with `trialEndDate < now()`
+  - [x] For each: Update status → ACTIVE, tierLevel → starter, stripeSubscriptionId → NULL
+  - [x] Log event via `logTrialEvent('trial_expired', {downgradedTo: 'starter'})`
+  - [x] Return count of downgraded trials
+- [x] Extend `src/services/emailService.ts`:
+  - [x] Add `sendTrialDowngradeWarning(to, orgName, upgradeUrl)` method
+  - [x] Use SendGrid template
+  - [x] Include starter tier limits (500 SKUs, 1 user)
+- [x] Update `src/jobs/trialExpirationJob.ts`:
+  - [x] After downgrading trials, send downgrade warning emails
+  - [x] Query recently downgraded trials, get admin email, send warning
+- [x] Add tests:
+  - [x] Test downgrade with 1 trial (atomicity)
+  - [x] Test downgrade with 5 trials (bulk)
+  - [x] Test race condition: Simultaneous conversions prevented by transaction
+  - [x] Test email sent after downgrade
 
 ## Phase 7: Trial Conversion (Trial → Paid, Wrapped in Transaction)
 
-- [ ] Extend `src/services/subscriptionService.ts`:
-  - [ ] Add `convertTrialToPaid(organizationId, stripePaymentMethodId, billingCycle)` method
-  - [ ] Use `prisma.$transaction()` for atomicity
-  - [ ] Verify subscription status is TRIALING (guard against already-converted)
-  - [ ] Call Stripe to create subscription:
-    - [ ] Use `stripeCustomerId` (already created at org creation)
-    - [ ] Use monthly/annual price from pricing table
-    - [ ] Set `payment_method` + `default_payment_method`
-    - [ ] Use `payment_behavior: 'error_if_incomplete'` (fail fast)
-  - [ ] On success: Update status → ACTIVE, store `stripeSubscriptionId`, set `trialConvertedAt`
-  - [ ] On Stripe error: Throw error (payment failed, insufficient funds, etc.)
-  - [ ] Log event via `logTrialEvent('trial_converted', {daysTrialed, stripeSubscriptionId})`
-- [ ] Create `src/controllers/trialController.ts`:
-  - [ ] Add `convertTrialToPaid(req, res)` controller
-  - [ ] Extract userId + organizationId from Clerk JWT
-  - [ ] Verify user is org admin (authorization check - fixes Issue #11)
-  - [ ] Extract stripePaymentMethodId + billingCycle from request body
-  - [ ] Call `subscriptionService.convertTrialToPaid()`
-  - [ ] Return updated subscription details
-  - [ ] Error handling:
-    - [ ] BadRequestError: Not in trial (return 400)
-    - [ ] Stripe error: Return 402 (payment required) with message
-    - [ ] Auth error: Return 403 (not authorized)
-- [ ] Create `POST /api/subscription/convert-trial` route
-- [ ] Add Clerk auth + org-user authorization middleware
-- [ ] Add tests:
-  - [ ] Successful conversion (trial → active, Stripe charge works)
-  - [ ] Payment declined (Stripe error handling)
-  - [ ] Already converted (status check prevents double-charge)
-  - [ ] Simultaneous conversions (race condition test - both fail atomically)
-  - [ ] Unauthorized user (non-admin can't convert org's trial)
+- [x] Extend `src/services/subscriptionService.ts`:
+  - [x] Add `convertTrialToPaid(organizationId, stripePaymentMethodId, billingCycle)` method
+  - [x] Use `prisma.$transaction()` for atomicity
+  - [x] Verify subscription status is TRIALING (guard against already-converted)
+  - [x] Call Stripe to create subscription:
+    - [x] Use `stripeCustomerId` (already created at org creation)
+    - [x] Use monthly/annual price from pricing table
+    - [x] Set `payment_method` + `default_payment_method`
+    - [x] Use `payment_behavior: 'error_if_incomplete'` (fail fast)
+  - [x] On success: Update status → ACTIVE, store `stripeSubscriptionId`, set `trialConvertedAt`
+  - [x] On Stripe error: Throw error (payment failed, insufficient funds, etc.)
+  - [x] Log event via `logTrialEvent('trial_converted', {stripeSubscriptionId, billingCycle})`
+- [x] Create `src/controllers/trialController.ts`:
+  - [x] Add `convertTrialToPaid(req, res)` controller
+  - [x] Extract userId + organizationId from Clerk JWT
+  - [x] Verify user is org admin (authorization check - fixes Issue #11)
+  - [x] Extract stripePaymentMethodId + billingCycle from request body
+  - [x] Call `subscriptionService.convertTrialToPaid()`
+  - [x] Return updated subscription details
+  - [x] Error handling:
+    - [x] BadRequestError: Not in trial (return 400)
+    - [x] Stripe error: Return 402 (payment required) with message
+    - [x] Auth error: Return 403 (not authorized)
+- [x] Create `POST /api/subscription/convert-trial` route
+- [x] Add Clerk auth + org-user authorization middleware
+- [x] Add tests:
+  - [x] Successful conversion (trial → active, Stripe charge works)
+  - [x] Payment declined (Stripe error handling)
+  - [x] Already converted (status check prevents double-charge)
+  - [x] Simultaneous conversions (race condition test - both fail atomically)
+  - [x] Unauthorized user (non-admin can't convert org's trial)
 
 ## Phase 8: Trial Status Display (Frontend)
 

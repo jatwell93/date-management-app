@@ -1,0 +1,14 @@
+# Windsurf Configuration to fix bash execution on Windows
+terminal:
+  # Use Windows Terminal instead of direct bash execution
+  shell: "C:\\Program Files\\WindowsApps\\Microsoft.PowerShell_8wekyb3d8bbwe\\pwsh.exe"
+  
+# Alternative: Use CMD if PowerShell isn't available
+# terminal:
+#   shell: "C:\\Windows\\System32\\cmd.exe"
+
+# Git configuration
+git:
+  executable: "git"
+  autoFetch: false
+  confirmSync: false

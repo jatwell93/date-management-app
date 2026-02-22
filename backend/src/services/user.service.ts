@@ -29,21 +29,18 @@ export class UserService {
       where: {
         organizationId: this.organizationId,
       },
-      select: { id: true, pin: true },
+      select: { id: true },
     });
 
     for (const existingUser of existingUsers) {
-      const isDuplicate = await this.authService.verifyPin(user.pin, existingUser.pin);
+      const isDuplicate = false; // PIN auth removed — use Clerk authentication; existingUser unused
       if (isDuplicate) {
         throw new ConflictError('PIN already in use within this organization');
       }
     }
 
-    const hashedPin = await this.authService.hashPin(user.pin);
-
     const created = await this.prisma.user.create({
       data: {
-        pin: hashedPin,
         role: user.role,
         organizationId: this.organizationId,
       },
@@ -79,13 +76,9 @@ export class UserService {
     });
 
     for (const user of users) {
-      if (!user.pin) {
-        continue;
-      }
-      const isValid = await this.authService.verifyPin(pin, user.pin);
-      if (isValid) {
-        return this.mapPrismaToModel(user);
-      }
+      void pin; // PIN auth removed — use Clerk authentication
+      void user;
+      break;
     }
 
     return undefined;
@@ -95,16 +88,7 @@ export class UserService {
     id: number,
     user: Partial<Omit<User, 'id' | 'created_at' | 'updated_at'>>,
   ): Promise<boolean> {
-    const data: { pin?: string; role?: User['role'] } = {};
-
-    if (user.pin) {
-      const pinValidation = this.authService.validatePin(user.pin);
-      if (!pinValidation.isValid) {
-        throw new Error(pinValidation.message || 'Invalid PIN format');
-      }
-
-      data.pin = await this.authService.hashPin(user.pin);
-    }
+    const data: { role?: User['role'] } = {};
 
     if (user.role !== undefined) {
       data.role = user.role;
@@ -180,7 +164,6 @@ export class UserService {
         email: params.email,
         username: params.username ?? null,
         role: params.role,
-        pin: null,
       },
     });
 
@@ -193,7 +176,6 @@ export class UserService {
     clerkUserId?: string | null;
     email?: string | null;
     username?: string | null;
-    pin?: string | null;
     role: string;
     createdAt: Date;
     updatedAt: Date;
@@ -204,7 +186,6 @@ export class UserService {
       clerkUserId: user.clerkUserId ?? null,
       email: user.email ?? null,
       username: user.username ?? null,
-      pin: user.pin ?? null,
       role: user.role as User['role'],
       created_at: user.createdAt.toISOString(),
       updated_at: user.updatedAt.toISOString(),

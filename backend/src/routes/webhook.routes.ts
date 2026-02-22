@@ -14,6 +14,7 @@
 
 import { Router, Request, Response } from 'express';
 import { webhookService } from '../services/webhook.service';
+import { clerkWebhookService } from '../services/clerk-webhook.service';
 import { ApplicationMonitoringService } from '../services/application.monitoring.service';
 
 const router = Router();
@@ -105,5 +106,100 @@ const handleStripeWebhook = async (req: Request, res: Response) => {
  * Signature is computed over raw request body, so express.raw() middleware is required
  */
 router.post('/stripe', handleStripeWebhook);
+
+/**
+ * POST /api/webhooks/clerk
+ *
+ * Receive Clerk webhook events
+ *
+ * CRITICAL: This endpoint is public (no authentication required)
+ * Clerk sends events via HTTP POST with Svix signatures in svix-* headers
+ *
+ * Signature is computed over raw request body, so express.raw() middleware is required
+ */
+const handleClerkWebhook = async (req: Request, res: Response) => {
+  try {
+    // Step 1: Verify Clerk signature (using raw body)
+    const headers = {
+      'svix-id': req.headers['svix-id'] as string,
+      'svix-timestamp': req.headers['svix-timestamp'] as string,
+      'svix-signature': req.headers['svix-signature'] as string,
+    };
+
+    if (!headers['svix-id'] || !headers['svix-timestamp'] || !headers['svix-signature']) {
+      console.warn('[CLERK_WEBHOOK] Webhook request missing required Svix headers');
+      return clerkWebhookService.sendError(res, 'Missing required Svix headers', 400);
+    }
+
+    let event;
+    try {
+      const rawBody = req.body; // Body is raw Buffer when using express.raw()
+      event = clerkWebhookService.verifySignature(rawBody as Buffer, headers);
+    } catch (verifyError) {
+      const error = verifyError as Error;
+      console.error('[CLERK_WEBHOOK] Webhook signature verification failed', {
+        error: error.message,
+        headers,
+      });
+      return clerkWebhookService.sendError(res, error.message, 400);
+    }
+
+    // Step 2: Check idempotency (duplicate detection)
+    // svix-id is the unique message ID from Clerk — use it as the idempotency key
+    const svixEventId = headers['svix-id'];
+    const eventType = (event as any).type;
+    const isNew = await clerkWebhookService.isNewEvent(svixEventId);
+    const monitor = ApplicationMonitoringService.getInstance();
+    const startTs = Date.now();
+
+    if (!isNew) {
+      console.log('[CLERK_WEBHOOK] Duplicate webhook event, returning success without reprocessing', {
+        eventId: svixEventId,
+        eventType,
+      });
+
+      // Record idempotency skip metric
+      monitor.recordWebhookEvent(eventType, 0, 'skipped');
+
+      // Return 200 OK for duplicate events (Clerk expects idempotent response)
+      return clerkWebhookService.sendSuccess(res);
+    }
+
+    // Step 3: Handle event idempotently
+    try {
+      await clerkWebhookService.handleEvent(event);
+      await clerkWebhookService.markEventProcessed(svixEventId, eventType);
+      const duration = Date.now() - startTs;
+      monitor.recordWebhookEvent(eventType, duration, 'success');
+
+      console.log('[CLERK_WEBHOOK] Webhook event processed successfully', {
+        eventId: svixEventId,
+        eventType,
+      });
+      return clerkWebhookService.sendSuccess(res);
+    } catch (handleError) {
+      const error = handleError as Error;
+      const duration = Date.now() - startTs;
+      monitor.recordWebhookEvent(eventType, duration, 'error');
+
+      console.error('[CLERK_WEBHOOK] Error processing webhook event', {
+        eventId: svixEventId,
+        eventType,
+        error: error.message,
+      });
+
+      // Return 500 for processing errors (Clerk will retry)
+      return clerkWebhookService.sendError(res, 'Error processing webhook event', 500);
+    }
+  } catch (error) {
+    const err = error as Error;
+    console.error('[CLERK_WEBHOOK] Unexpected error in webhook handler', {
+      error: err.message,
+    });
+    return clerkWebhookService.sendError(res, 'Internal server error', 500);
+  }
+};
+
+router.post('/clerk', handleClerkWebhook);
 
 export default router;

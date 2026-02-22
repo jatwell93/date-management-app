@@ -51,6 +51,7 @@ skills/
 instructions/
 agents/
 other/
+.agentlens/
 
 # Coverage
 coverage/
@@ -63,3 +64,8 @@ tech-debt.md
 
 #cloudflare workers
 workers/.wrangler/
+
+# Playwright
+e2e/.auth/
+test-results/
+playwright-report/

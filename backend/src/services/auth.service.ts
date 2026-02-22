@@ -146,7 +146,6 @@ export class AuthService {
       const users = await this.prisma.user.findMany({
         select: {
           id: true,
-          pin: true,
           role: true,
           organizationId: true,
         },
@@ -159,7 +158,7 @@ export class AuthService {
       for (const user of users) {
         Logger.debug('Auth service: Checking user for authentication', { userId: user.id });
 
-        const isValidPin = await bcrypt.compare(pin, user.pin);
+        const isValidPin = false; // PIN auth removed — use Clerk authentication
         if (isValidPin) {
           // Verify user has an organization
           if (!user.organizationId) {

@@ -3,6 +3,7 @@ import { render, screen, waitFor, fireEvent } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { ScanPage } from '../ScanPage';
 import { HandheldProvider } from '../../contexts/HandheldContext';
+import { SyncStrategy } from '../../config/handheld';
 import { apiService } from '../../lib/api.service';
 import { offlineStorage } from '../../lib/offline-storage';
 
@@ -13,7 +14,7 @@ jest.mock('../../lib/offline-storage');
 // Mock HandheldContext
 const mockHandheldContext = {
   isHandheld: false,
-  syncStrategy: 'immediate' as const,
+  syncStrategy: 'real-time' as SyncStrategy,
   setSyncStrategy: jest.fn(),
   detectionResult: null,
   hapticEnabled: true,
@@ -168,7 +169,7 @@ describe('ScanPage Integration', () => {
 
     // Reset handheld context mock
     mockHandheldContext.isHandheld = false;
-    mockHandheldContext.syncStrategy = 'immediate';
+    mockHandheldContext.syncStrategy = 'real-time' as SyncStrategy;
 
     // Default API mocks
     (apiService.get as jest.Mock).mockImplementation((url) => {
@@ -382,7 +383,7 @@ describe('ScanPage Integration', () => {
     afterEach(() => {
       // Reset to desktop mode for other tests
       mockHandheldContext.isHandheld = false;
-      mockHandheldContext.syncStrategy = 'immediate';
+      mockHandheldContext.syncStrategy = 'real-time' as SyncStrategy;
     });
 
     it('renders HandheldScanner instead of regular Scanner when in handheld mode', async () => {

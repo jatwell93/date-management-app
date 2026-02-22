@@ -75,6 +75,52 @@ export class SubscriptionService {
   }
 
   /**
+   * Create a trial subscription for a newly created organization.
+   * No Stripe subscription is created — trial is tracked locally only.
+   * Stripe customer is created here so it can be reused on conversion.
+   *
+   * @param organizationId - Organization UUID
+   * @param trialDays - Number of trial days (default: 14)
+   */
+  async createTrialSubscription(
+    organizationId: string,
+    trialDays: number = 14,
+  ): Promise<void> {
+    const organization = await this.prisma.organization.findUnique({
+      where: { id: organizationId },
+    });
+
+    if (!organization) {
+      throw new NotFoundError(`Organization ${organizationId} not found`);
+    }
+
+    // Create Stripe customer now so it's ready for conversion later
+    const stripeCustomer = await this.stripe.customers.create({
+      email: organization.contactEmail ?? undefined,
+      description: `Org: ${organization.name}`,
+      metadata: { organizationId },
+    });
+
+    const trialEndDate = new Date();
+    trialEndDate.setUTCDate(trialEndDate.getUTCDate() + trialDays);
+    trialEndDate.setUTCHours(0, 0, 0, 0); // Expire at 00:00 UTC on day N
+
+    await this.prisma.subscriptionTier.create({
+      data: {
+        organizationId,
+        tierLevel: 'professional' as TierLevel,
+        status: SubscriptionStatus.TRIALING,
+        stripeCustomerId: stripeCustomer.id,
+        trialStartedAt: new Date(),
+        trialEndDate,
+        billingCycle: BillingCycle.MONTHLY,
+      },
+    });
+
+    Logger.info(`Trial subscription created for organization ${organizationId}, ends ${trialEndDate.toISOString()}`);
+  }
+
+  /**
    * Create a new subscription for an organization
    * 1. Verify organization exists
    * 2. Create Stripe customer
@@ -431,6 +477,272 @@ export class SubscriptionService {
         // Map incomplete states to active (they may transition)
         return SubscriptionStatus.ACTIVE;
     }
+  }
+
+  // ========== Phase 5: Trial Reminder System ==========
+
+  /**
+   * Find trials that need reminder emails
+   * Queries trials where trialEndDate is in the next 24h AND daysRemaining is [10, 5, 2]
+   * Filters out trials where reminder already sent (check sentRemindersAt in trial_events)
+   */
+  async findTrialsNeedingReminders(): Promise<
+    Array<{
+      organizationId: string;
+      organizationName: string;
+      contactEmail: string | null;
+      daysRemaining: number;
+      trialEndDate: Date;
+    }>
+  > {
+    const now = new Date();
+    const tomorrow = new Date(now.getTime() + 24 * 60 * 60 * 1000);
+
+    // Find trials expiring in the next 24 hours
+    const expiringTrials = await this.prisma.subscriptionTier.findMany({
+      where: {
+        status: SubscriptionStatus.TRIALING,
+        trialEndDate: {
+          gte: now,
+          lte: tomorrow,
+        },
+      },
+      include: {
+        organization: {
+          select: {
+            id: true,
+            name: true,
+            contactEmail: true,
+          },
+        },
+      },
+    });
+
+    const results: Array<{
+      organizationId: string;
+      organizationName: string;
+      contactEmail: string | null;
+      daysRemaining: number;
+      trialEndDate: Date;
+    }> = [];
+
+    for (const trial of expiringTrials) {
+      const daysRemaining = Math.ceil(
+        (trial.trialEndDate!.getTime() - now.getTime()) / (1000 * 60 * 60 * 24),
+      );
+
+      // Only send for specific day thresholds
+      if (![10, 5, 2].includes(daysRemaining)) continue;
+
+      // Check if reminder already sent for this day
+      const existingEvent = await this.prisma.trialEvent.findFirst({
+        where: {
+          organizationId: trial.organizationId,
+          eventType: 'trial_reminder_sent',
+          occurredAt: {
+            gte: new Date(now.getTime() - 24 * 60 * 60 * 1000), // Last 24h
+          },
+        },
+      });
+
+      if (existingEvent) continue;
+
+      results.push({
+        organizationId: trial.organizationId,
+        organizationName: trial.organization.name,
+        contactEmail: trial.organization.contactEmail,
+        daysRemaining,
+        trialEndDate: trial.trialEndDate!,
+      });
+    }
+
+    return results;
+  }
+
+  /**
+   * Log a trial event for tracking reminders and conversions
+   */
+  async logTrialEvent(
+    organizationId: string,
+    eventType: string,
+    metadata: Record<string, any> = {},
+  ): Promise<void> {
+    await this.prisma.trialEvent.create({
+      data: {
+        organizationId,
+        eventType,
+        metadata: JSON.stringify(metadata),
+        occurredAt: new Date(),
+      },
+    });
+  }
+
+  // ========== Phase 6: Trial Downgrade (Expired → Starter) ==========
+
+  /**
+   * Downgrade all expired trials to starter tier
+   * Uses prisma.$transaction() for atomicity
+   * Returns count of downgraded trials
+   */
+  async downgradeExpiredTrials(): Promise<number> {
+    const now = new Date();
+
+    // Find all TRIALING subscriptions that have expired
+    const expiredTrials = await this.prisma.subscriptionTier.findMany({
+      where: {
+        status: SubscriptionStatus.TRIALING,
+        trialEndDate: {
+          lt: now,
+        },
+      },
+      select: {
+        id: true,
+        organizationId: true,
+      },
+    });
+
+    if (expiredTrials.length === 0) {
+      return 0;
+    }
+
+    // Downgrade each in a transaction
+    let downgradedCount = 0;
+
+    for (const trial of expiredTrials) {
+      try {
+        await this.prisma.$transaction(async (tx) => {
+          // Update subscription to starter tier
+          await tx.subscriptionTier.update({
+            where: { id: trial.id },
+            data: {
+              status: SubscriptionStatus.ACTIVE,
+              tierLevel: 'starter',
+              stripeSubscriptionId: null,
+            },
+          });
+
+          // Log the event
+          await tx.trialEvent.create({
+            data: {
+              organizationId: trial.organizationId,
+              eventType: 'trial_expired',
+              metadata: JSON.stringify({ downgradedTo: 'starter' }),
+              occurredAt: new Date(),
+            },
+          });
+        });
+
+        downgradedCount++;
+        Logger.info(`Downgraded expired trial for organization ${trial.organizationId}`);
+      } catch (error) {
+        Logger.error(`Failed to downgrade trial for org ${trial.organizationId}: ${String(error)}`);
+        // Continue with other trials even if one fails
+      }
+    }
+
+    return downgradedCount;
+  }
+
+  // ========== Phase 7: Trial Conversion (Trial → Paid) ==========
+
+  /**
+   * Convert a trial subscription to a paid subscription
+   * Uses prisma.$transaction() for atomicity
+   */
+  async convertTrialToPaid(
+    organizationId: string,
+    stripePaymentMethodId: string,
+    billingCycle: BillingCycle,
+  ): Promise<SubscriptionTier> {
+    // Get the trial subscription
+    const trial = await this.prisma.subscriptionTier.findFirst({
+      where: {
+        organizationId,
+        status: SubscriptionStatus.TRIALING,
+      },
+      include: {
+        organization: true,
+      },
+    });
+
+    if (!trial) {
+      throw new NotFoundError(`No active trial found for organization ${organizationId}`);
+    }
+
+    if (!trial.stripeCustomerId) {
+      throw new InternalError('No Stripe customer found for this trial');
+    }
+
+    // Get the price ID based on tier and billing cycle
+    const priceId = this.getPriceIdForTier(trial.tierLevel as TierLevel, billingCycle);
+
+    try {
+      // Create the subscription in Stripe
+      const stripeSubscription = await this.stripe.subscriptions.create({
+        customer: trial.stripeCustomerId,
+        items: [{ price: priceId }],
+        default_payment_method: stripePaymentMethodId,
+        payment_behavior: 'error_if_incomplete',
+      });
+
+      // Update local database in transaction
+      const updated = await this.prisma.$transaction(async (tx) => {
+        // Update subscription tier
+        const updatedTier = await tx.subscriptionTier.update({
+          where: { id: trial.id },
+          data: {
+            status: SubscriptionStatus.ACTIVE,
+            stripeSubscriptionId: stripeSubscription.id,
+            trialConvertedAt: new Date(),
+            billingCycle,
+          },
+        });
+
+        // Log the conversion event
+        await tx.trialEvent.create({
+          data: {
+            organizationId,
+            eventType: 'trial_converted',
+            metadata: JSON.stringify({
+              stripeSubscriptionId: stripeSubscription.id,
+              billingCycle,
+            }),
+            occurredAt: new Date(),
+          },
+        });
+
+        return updatedTier;
+      });
+
+      Logger.info(`Converted trial to paid for organization ${organizationId}`);
+      return this.mapPrismaToModel(updated);
+    } catch (error: any) {
+      Logger.error(`Failed to convert trial for org ${organizationId}:`, error);
+      throw new InternalError(`Payment failed: ${error.message}`);
+    }
+  }
+
+  /**
+   * Get Stripe price ID for a given tier and billing cycle
+   */
+  private getPriceIdForTier(tierLevel: TierLevel, billingCycle: BillingCycle): string {
+    const prices: Record<string, { monthly: string; annual: string }> = {
+      professional: {
+        monthly: process.env.STRIPE_PROFESSIONAL_MONTHLY_PRICE_ID || 'price_professional_monthly',
+        annual: process.env.STRIPE_PROFESSIONAL_ANNUAL_PRICE_ID || 'price_professional_annual',
+      },
+      premium: {
+        monthly: process.env.STRIPE_PREMIUM_MONTHLY_PRICE_ID || 'price_premium_monthly',
+        annual: process.env.STRIPE_PREMIUM_ANNUAL_PRICE_ID || 'price_premium_annual',
+      },
+      concierge: {
+        monthly: process.env.STRIPE_CONCIERGE_MONTHLY_PRICE_ID || 'price_concierge_monthly',
+        annual: process.env.STRIPE_CONCIERGE_ANNUAL_PRICE_ID || 'price_concierge_annual',
+      },
+    };
+
+    const tierPrices = prices[tierLevel] || prices.professional;
+    return billingCycle === BillingCycle.ANNUAL ? tierPrices.annual : tierPrices.monthly;
   }
 
   /**

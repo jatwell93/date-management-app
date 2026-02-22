@@ -163,7 +163,6 @@ export class OrganizationInviteService {
           email: normalizedEmail,
           username: params.username ?? null,
           role,
-          pin: null,
         },
       });
 
