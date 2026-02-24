@@ -53,7 +53,10 @@ export interface EnvironmentConfig {
   // SendGrid Configuration (for email notifications)
   SENDGRID_API_KEY?: string;
   SENDGRID_FROM_EMAIL?: string;
-  SENDGRID_FROM_EMAIL?: string;
+  // Clerk Configuration (for authentication)
+  CLERK_SECRET_KEY?: string;
+  CLERK_PUBLISHABLE_KEY?: string;
+  CLERK_WEBHOOK_SECRET?: string;
   // Error Handling Configuration
   ERROR_HIDE_STACK_TRACE_IN_PRODUCTION: boolean;
   ERROR_LOG_LEVEL: string;
@@ -159,7 +162,10 @@ function validateEnvironment(env: RawEnv, allowMissingRequired: boolean): Enviro
     // SendGrid Configuration (for email notifications)
     SENDGRID_API_KEY: env.SENDGRID_API_KEY,
     SENDGRID_FROM_EMAIL: env.SENDGRID_FROM_EMAIL,
-    SENDGRID_FROM_EMAIL: env.SENDGRID_FROM_EMAIL,
+    // Clerk Configuration (for authentication)
+    CLERK_SECRET_KEY: env.CLERK_SECRET_KEY, // Required in production, optional during development
+    CLERK_PUBLISHABLE_KEY: env.CLERK_PUBLISHABLE_KEY,
+    CLERK_WEBHOOK_SECRET: env.CLERK_WEBHOOK_SECRET,
     // Error Handling Configuration
     ERROR_HIDE_STACK_TRACE_IN_PRODUCTION: nodeEnv === 'production',
     ERROR_LOG_LEVEL: env.ERROR_LOG_LEVEL || 'error',

@@ -25,7 +25,7 @@ describe('useHardwareScan', () => {
     const simulateRapidKeystrokes = () => {
       // Simulate hardware scan: rapid keystrokes within 50ms window
       const keys = ['1', '2', '3', '4', '5', '6', '7', '8'];
-      
+
       keys.forEach((key, index) => {
         setTimeout(() => {
           const event = new KeyboardEvent('keydown', { key });

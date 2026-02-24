@@ -180,13 +180,16 @@ describe('WebhookService Database Integration', () => {
             id: eventId,
             eventType: 'customer.subscription.created',
           },
-        })
+        }),
       ).rejects.toThrow();
     });
 
     it('should query processed events by type with index', async () => {
       const eventType = 'customer.subscription.created';
-      const eventIds = Array.from({ length: 3 }, () => `evt_${crypto.randomBytes(6).toString('hex')}`);
+      const eventIds = Array.from(
+        { length: 3 },
+        () => `evt_${crypto.randomBytes(6).toString('hex')}`,
+      );
 
       // Insert multiple events
       for (const id of eventIds) {
@@ -224,7 +227,7 @@ describe('WebhookService Database Integration', () => {
         prisma.subscriptionTier.update({
           where: { id: tier.id },
           data: { status: i === 4 ? 'past_due' : 'active' },
-        })
+        }),
       );
 
       await Promise.all(updates);

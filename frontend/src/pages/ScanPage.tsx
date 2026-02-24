@@ -283,7 +283,7 @@ export function ScanPage({ token }: ScanPageProps) {
     }
 
     const parsedLocationId = parseInt(selectedLocationId);
-    if (isNaN(parsedLocationId)) {
+    if (Number.isNaN(parsedLocationId)) {
       setError('Please select a valid location.');
       return;
     }

@@ -1,4 +1,4 @@
-import { offlineSyncService } from '../lib/offline-sync';
+import { offlineSyncService } from '../../lib/offline-sync';
 
 // Mock uuid to avoid ESM issues
 jest.mock('uuid', () => ({
@@ -98,7 +98,7 @@ describe('OfflineSyncService - Sync Strategy Tests', () => {
     service.setSyncStrategy('real-time');
 
     // Spy on performSync to verify it's called
-    const performSyncSpy = jest.spyOn(service, 'performSync').mockResolvedValue();
+    const performSyncSpy = jest.spyOn(service, 'performSync').mockResolvedValue(undefined);
 
     // Add an operation
     await service.addOperation('create', 'product', { name: 'Test Product' });
@@ -114,7 +114,7 @@ describe('OfflineSyncService - Sync Strategy Tests', () => {
     service.setSyncStrategy('batch');
 
     // Spy on performSync to verify it's not called immediately
-    const performSyncSpy = jest.spyOn(service, 'performSync').mockResolvedValue();
+    const performSyncSpy = jest.spyOn(service, 'performSync').mockResolvedValue(undefined);
 
     // Add an operation
     await service.addOperation('create', 'product', { name: 'Test Product' });

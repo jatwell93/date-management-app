@@ -11,6 +11,9 @@
   "keywords": [],
   "scripts": {
     "test": "echo \"Error: specify frontend or backend (npm run test:backend or npm run test:frontend)\" && exit 1",
+    "test:e2e": "playwright test",
+    "test:e2e:ui": "playwright test --ui",
+    "test:e2e:headed": "playwright test --headed",
     "test:backend": "npm run test --prefix backend",
     "test:backend:coverage": "npm run test:coverage --prefix backend",
     "test:backend:diff": "npm run test:diff --prefix backend",
@@ -28,6 +31,7 @@
   },
   "devDependencies": {
     "@eslint/js": "^8.57.1",
+    "@playwright/test": "^1.58.2",
     "@types/node": "^22.7.5",
     "@typescript-eslint/eslint-plugin": "^8.44.1",
     "@typescript-eslint/parser": "^8.44.1",

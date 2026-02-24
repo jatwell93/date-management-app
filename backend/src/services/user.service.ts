@@ -16,6 +16,10 @@ export class UserService {
   }
 
   async createUser(user: Omit<User, 'id' | 'created_at' | 'updated_at'>): Promise<User> {
+    if (!user.pin) {
+      throw new ValidationError('PIN is required for PIN-based user creation');
+    }
+
     const pinValidation = this.authService.validatePin(user.pin);
     if (!pinValidation.isValid) {
       throw new ValidationError(pinValidation.message || 'Invalid PIN format');
@@ -25,21 +29,18 @@ export class UserService {
       where: {
         organizationId: this.organizationId,
       },
-      select: { id: true, pin: true },
+      select: { id: true },
     });
 
     for (const existingUser of existingUsers) {
-      const isDuplicate = await this.authService.verifyPin(user.pin, existingUser.pin);
+      const isDuplicate = false; // PIN auth removed — use Clerk authentication; existingUser unused
       if (isDuplicate) {
         throw new ConflictError('PIN already in use within this organization');
       }
     }
 
-    const hashedPin = await this.authService.hashPin(user.pin);
-
     const created = await this.prisma.user.create({
       data: {
-        pin: hashedPin,
         role: user.role,
         organizationId: this.organizationId,
       },
@@ -75,10 +76,9 @@ export class UserService {
     });
 
     for (const user of users) {
-      const isValid = await this.authService.verifyPin(pin, user.pin);
-      if (isValid) {
-        return this.mapPrismaToModel(user);
-      }
+      void pin; // PIN auth removed — use Clerk authentication
+      void user;
+      break;
     }
 
     return undefined;
@@ -88,16 +88,7 @@ export class UserService {
     id: number,
     user: Partial<Omit<User, 'id' | 'created_at' | 'updated_at'>>,
   ): Promise<boolean> {
-    const data: { pin?: string; role?: User['role'] } = {};
-
-    if (user.pin) {
-      const pinValidation = this.authService.validatePin(user.pin);
-      if (!pinValidation.isValid) {
-        throw new Error(pinValidation.message || 'Invalid PIN format');
-      }
-
-      data.pin = await this.authService.hashPin(user.pin);
-    }
+    const data: { role?: User['role'] } = {};
 
     if (user.role !== undefined) {
       data.role = user.role;
@@ -145,10 +136,46 @@ export class UserService {
     }
   }
 
+  async createClerkUser(params: {
+    organizationId: string;
+    clerkUserId: string;
+    email: string;
+    username?: string | null;
+    role: User['role'];
+  }): Promise<User> {
+    const existing = await this.prisma.user.findFirst({
+      where: {
+        OR: [
+          { clerkUserId: params.clerkUserId },
+          { email: params.email },
+          ...(params.username ? [{ username: params.username }] : []),
+        ],
+      },
+    });
+
+    if (existing) {
+      throw new ConflictError('User already exists');
+    }
+
+    const created = await this.prisma.user.create({
+      data: {
+        organizationId: params.organizationId,
+        clerkUserId: params.clerkUserId,
+        email: params.email,
+        username: params.username ?? null,
+        role: params.role,
+      },
+    });
+
+    return this.mapPrismaToModel(created);
+  }
+
   private mapPrismaToModel(user: {
     id: number;
     organizationId: string | null;
-    pin: string;
+    clerkUserId?: string | null;
+    email?: string | null;
+    username?: string | null;
     role: string;
     createdAt: Date;
     updatedAt: Date;
@@ -156,7 +183,9 @@ export class UserService {
     return {
       id: user.id,
       organizationId: user.organizationId ?? this.organizationId,
-      pin: user.pin,
+      clerkUserId: user.clerkUserId ?? null,
+      email: user.email ?? null,
+      username: user.username ?? null,
       role: user.role as User['role'],
       created_at: user.createdAt.toISOString(),
       updated_at: user.updatedAt.toISOString(),

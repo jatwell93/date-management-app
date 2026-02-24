@@ -136,18 +136,18 @@
 ## 10. Stripe Webhook Handlers (Phase 4 - Week 5)
 
 **NOTE:** Use skills/stripe-webhooks
-- [ ] 10.1 Create webhook route: POST /api/webhooks/stripe with raw body parsing
-- [ ] 10.2 Implement signature verification using stripe.webhooks.constructEvent()
-- [ ] 10.3 Create handler for `customer.subscription.created`: Create subscription_tiers record
-- [ ] 10.4 Create handler for `customer.subscription.updated`: Update tier_level, current_period_end
-- [ ] 10.5 Create handler for `customer.subscription.deleted`: Set status=canceled, downgrade to Starter
-- [ ] 10.6 Create handler for `customer.subscription.trial_will_end`: Send conversion reminder email
-- [ ] 10.7 Create handler for `checkout.session.completed`: Mark is_trial=false
-- [ ] 10.8 Create handler for `invoice.payment_failed`: Set status=past_due, trigger dunning
-- [ ] 10.9 Implement idempotency check: Query processed_webhook_events table by event.id
-- [ ] 10.10 Implement dead letter queue: Send to queue after 72h retry failures
-- [ ] 10.11 Add webhook failure rate monitoring: Alert if >5% failures in 1-hour window
-- [ ] 10.12 Write integration tests for all webhook handlers with test events
+- [x] 10.1 Create webhook route: POST /api/webhooks/stripe with raw body parsing
+- [x] 10.2 Implement signature verification using stripe.webhooks.constructEvent()
+- [x] 10.3 Create handler for `customer.subscription.created`: Create subscription_tiers record
+- [x] 10.4 Create handler for `customer.subscription.updated`: Update tier_level, current_period_end
+- [x] 10.5 Create handler for `customer.subscription.deleted`: Set status=canceled, downgrade to Starter
+- [x] 10.6 Create handler for `customer.subscription.trial_will_end`: Send conversion reminder email
+- [x] 10.7 Create handler for `checkout.session.completed`: Mark is_trial=false
+- [x] 10.8 Create handler for `invoice.payment_failed`: Set status=past_due, trigger dunning
+- [x] 10.9 Implement idempotency check: Query processed_webhook_events table by event.id
+- [x] 10.10 Implement dead letter queue: Send to queue after 72h retry failures
+- [x] 10.11 Add webhook failure rate monitoring: Alert if >5% failures in 1-hour window
+- [x] 10.12 Write integration tests for all webhook handlers with test events
 **USER STEPS**
 - [x] Set SENTRY_DSN in environment (backend .env / deploy)
 - [ ] In Sentry UI create rules (example):
@@ -811,11 +811,4 @@ If ANY of these are true on deployment day, **DO NOT DEPLOY**:
 - **System uptime** > 99.5%
 - **Subscription revenue** tracking correctly (Stripe sync good)
 
----
-
-**Status**: ✅ **COMPREHENSIVE REVIEW COMPLETE**  
-**Recommendation**: Start with Phase 17.5 clarifications immediately  
-**Owner**: Backend Lead (coordinate with Product & DevOps)  
-**Due Date for Clarifications**: EOW (end of week)  
-**Deploy Target**: Week 10-11
 

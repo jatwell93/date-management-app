@@ -279,5 +279,14 @@ describe('auth middleware', () => {
 
       expect(next).toHaveBeenCalled();
     });
+
+    it('allows admin role', () => {
+      const req = makeRequest({ userId: 1, userRole: 'admin' });
+      const res = makeResponse();
+
+      requireManager(req, res, next);
+
+      expect(next).toHaveBeenCalled();
+    });
   });
 });

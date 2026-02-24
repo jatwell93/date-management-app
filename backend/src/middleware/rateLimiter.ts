@@ -142,3 +142,30 @@ export const skipRateLimitForPaths = (allowedPaths: string[]) => {
     return allowedPaths.some((path) => req.path.startsWith(path));
   };
 };
+
+/**
+ * Trial conversion rate limiter: 5 requests per hour
+ * Used for /convert-trial endpoint to prevent rapid re-submits
+ */
+export const trialConversionLimiter = rateLimit({
+  windowMs: 60 * 60 * 1000, // 1 hour
+  max: 5, // Limit each IP to 5 requests per windowMs
+  message: 'Too many trial conversion attempts, please try again later.',
+  statusCode: 429,
+  skipSuccessfulRequests: false,
+  skipFailedRequests: false,
+  handler: (req: Request, res: Response) => {
+    Logger.warn('Rate limit exceeded (trial conversion)', {
+      ip: (req.headers['x-forwarded-for'] as string) || req.ip,
+      endpoint: req.path,
+      method: req.method,
+    });
+    res.status(429).json({
+      code: 'RATE_LIMIT_EXCEEDED',
+      message: 'Too many trial conversion attempts, please try again later.',
+      retryAfter: (req as any).rateLimit?.resetTime
+        ? new Date((req as any).rateLimit.resetTime).toISOString()
+        : undefined,
+    });
+  },
+});

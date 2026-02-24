@@ -306,7 +306,8 @@ describe('WebhookService', () => {
     });
 
     it('records webhook metrics on successful subscription created', async () => {
-      const monitor = require('../../services/application.monitoring.service').ApplicationMonitoringService.getInstance();
+      const monitor =
+        require('../../services/application.monitoring.service').ApplicationMonitoringService.getInstance();
       // reset webhook metrics
       (monitor as any).metrics.webhook = { total: 0, byEvent: {}, idempotencySkips: 0 };
 
@@ -340,7 +341,8 @@ describe('WebhookService', () => {
     });
 
     it('captures Sentry and records metric when handler errors', async () => {
-      const monitor = require('../../services/application.monitoring.service').ApplicationMonitoringService.getInstance();
+      const monitor =
+        require('../../services/application.monitoring.service').ApplicationMonitoringService.getInstance();
       (monitor as any).metrics.webhook = { total: 0, byEvent: {}, idempotencySkips: 0 };
 
       prisma.subscriptionTier.create.mockResolvedValue({ id: 1 });

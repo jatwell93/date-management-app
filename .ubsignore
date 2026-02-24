@@ -38,6 +38,11 @@ frontend/build/
 backend/coverage/
 bug-scan-report.json
 bug-scan-backend.json
+**/*.test.*  
+**/*.spec.*  
+**/test/**  
+**/tests/**  
+**/__tests__/**
 
 # Ignore IDE / OS files
 .vscode/

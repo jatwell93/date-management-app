@@ -2,9 +2,9 @@
 # AGENTS.md
 **Node.js/Express/TypeScript Development Guide**
 
-**Version:** 1.2.2  
+**Version:** 1.2.3  
 **Status:** Canonical guide for AI-assisted Node/Express/TypeScript development  
-**Last Updated:** January 2026
+**Last Updated:** February 2026
 
 ***
 
@@ -24,7 +24,7 @@
 ***
 
 ### Note on SKILLS/AGENTS
-SKILLs and AGENTS live in .github/ and can should be used when the work needs specific knowledge that a skill or agent contains 
+SKILLs and AGENTS live in .github/ for VSCode and .agents/ for Windsurf and can should be used when the work needs specific knowledge that a skill or agent contains 
 
 ### Note on MCP
 **Always** check for tools and MCP servers to assist with modifications e.g. use the shadcn-UI-mcp to find default components rather than building from scratch.
@@ -289,7 +289,7 @@ async function activateUser(user: User): Promise<User> {
 
 ### Project Structure
 
-Use `codemap` to understand the project structure:
+Use `codemap` for a quick check of the project structure:
 
 ```bash
 codemap .               # Project structure
@@ -297,47 +297,56 @@ codemap --deps          # How files connect
 codemap --diff          # What changed vs main
 codemap --diff --ref branch  # Changes vs specific branch
 ```
+# Agentlens Integration
 
-### Required Usage
+This project uses **agentlens** for AI-optimized documentation.
 
-**BEFORE** starting any task, run `codemap .` first.
+## Reading Protocol
 
-**ALWAYS** run `codemap --deps` when:
-- User asks how something works
-- Refactoring or moving code
-- Tracing imports or dependencies
+Follow this order to understand the codebase efficiently:
 
-**ALWAYS** run `codemap --diff` when:
-- Reviewing or summarizing changes
-- Before committing code
-- User asks what changed
-- Use `--ref branch` when comparing against something other than main
+1. **Start here**: `.agentlens/INDEX.md` - Project overview and module routing
+2. **AI instructions**: `.agentlens/AGENT.md` - How to use the documentation
+3. **Module details**: `.agentlens/modules/{module}/MODULE.md` - File lists and entry points
+4. **Before editing**: Check `.agentlens/modules/{module}/memory.md` for warnings/TODOs
 
-### Searching: ast-grep vs ripgrep
+## Documentation Structure
 
-Use **ast-grep** when structure matters. It parses code and matches AST nodes—results ignore comments/strings, understand syntax, and support safe rewrites.
+```
+.agentlens/
+├── INDEX.md              # Start here - global routing table
+├── AGENT.md              # AI agent instructions
+├── modules/
+│   └── {module-slug}/
+│       ├── MODULE.md     # Module summary
+│       ├── outline.md    # Symbol maps for large files
+│       ├── memory.md     # Warnings, TODOs, business rules
+│       └── imports.md    # Dependencies
+└── files/                # Deep docs for complex files
+```
 
--   **Refactors/codemods**: Rename APIs, change import forms, rewrite call sites
--   **Policy checks**: Enforce patterns repo-wide
--   **Editor/automation**: LSP mode, JSON output
+## During Development
 
-Use **ripgrep** when text is enough. Fastest way to grep literals/regex across files.
+- Use `.agentlens/modules/{module}/outline.md` to find symbols in large files
+- Check `.agentlens/modules/{module}/imports.md` for dependencies
+- For complex files, see `.agentlens/files/{file-slug}.md`
 
--   **Recon**: Find strings, TODOs, log lines, config values
--   **Pre-filter**: Narrow candidates before precise pass
+## Commands
 
-**Quick Commands:**
+| Task | Command |
+|------|---------|
+| Regenerate docs | `agentlens` |
+| Fast update (changed only) | `agentlens --diff main` |
+| Check if stale | `agentlens --check` |
+| Force full regen | `agentlens --force` |
 
-### Find structured code (ignores comments/strings)  
-`ast-grep run -l typescript -p 'User.where($$X)' -r 'usersRepo.findBy($$$X)' -U `
-  
-### Quick textual hunt  
-`rg -n TODO -t ts `
-  
-### Combine: ripgrep for speed, ast-grep for precision  
-`rg -l params src/ | xargs ast-grep run -l typescript -p 'params' -r 'validatedParams' -U`
+## Key Patterns
 
-***
+- **Module boundaries**: `mod.rs` (Rust), `index.ts` (TS), `__init__.py` (Python)
+- **Large files**: >500 lines, have symbol outlines
+- **Complex files**: >30 symbols, have L2 deep docs
+- **Hub files**: Imported by 3+ files, marked with 🔗
+- **Memory markers**: TODO, FIXME, WARNING, SAFETY, RULE
 
 ## 3. Session Startup Context
 
@@ -387,43 +396,7 @@ Before starting work, clarify:
 
 ***
 
-## 4. Project Structure Memory Bank
-
-### Recommended Documentation Files
-
-Create these in your project root for reference:
-
-```bash
-root/
-├── README.md              # Project overview, setup, running tests (created)
-├── AGENTS.md              # This file
-├── packages.md            # Package patterns & best practices (load when needed)
-├── openspec/              # OpenSpec workflow directory
-│   ├── project.md         # Project conventions and context
-│   ├── AGENTS.md          # OpenSpec instructions for agents
-│   ├── specs/             # Current deployed capabilities
-│   │   └── [capability]/
-│   │       ├── spec.md    # Requirements and scenarios
-│   │       └── design.md  # Technical patterns (optional)
-│   └── changes/           # Proposed changes
-│       ├── [change-name]/
-│       │   ├── proposal.md    # Why, what, impact
-│       │   ├── tasks.md       # Implementation checklist
-│       │   ├── design.md      # Technical decisions (optional)
-│       │   └── specs/         # Delta changes
-│       │       └── [capability]/
-│       │           └── spec.md
-│       └── archive/       # Completed changes
-├── docs/
-│   ├── architecture.md    # System design, components, integrations (create when needed)
-│   ├── database-schema.md # Data model overview, key relationships (create when needed)
-│   ├── api-conventions.md # API standards, response formats (create when needed)
-│   ├── testing-patterns.md # How to write tests, fixtures, mocks (create when needed)
-│   ├── deployment.md      # How to deploy, CI/CD, env vars (create when needed)
-│   └── decisions.md       # Architectural decision records (ADRs) (create when needed)
-└── .env.example           # Environment variables (no secrets!)
-```
-
+## 4. Project Structure 
 ### Documentation Standards
 
 **README.md** should include:
@@ -439,11 +412,6 @@ root/
 - Key data flows (e.g., user signup flow)
 - External integrations
 - Performance considerations
-
-**packages.md** should include:
-- Setup instructions for major packages
-- Common usage patterns
-- When to load this file vs AGENTS.md
 
 ----------
 
@@ -900,7 +868,7 @@ Before APPROVAL, verify:
 
 **Good:**
 
-```
+```typescript 
 // src/controllers/usersController.ts  
 import { Request, Response } from 'express';  
 import { usersService } from '../services/usersService';  
@@ -1025,4 +993,3 @@ Must pass before merge:
 -   ❌ Create markdown TODOs instead of OpenSpec changes
 -   ❌ Skip OpenSpec validation steps
 -   ❌ Eject CRA unless absolutely necessary
-

@@ -318,7 +318,7 @@ export const generateToken = (
 };
 
 export const requireManager = (req: AuthRequest, res: Response, next: NextFunction) => {
-  if (req.userRole !== 'Manager') {
+  if (req.userRole !== 'Manager' && req.userRole !== 'admin') {
     // Track unauthorized manager access attempt
     const analyticsService = AnalyticsService.getInstance();
     analyticsService.trackEvent({

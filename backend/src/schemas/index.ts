@@ -33,6 +33,19 @@ export const userSchema = z.object({
   }),
 });
 
+export const organizationInviteCreateSchema = z.object({
+  body: z.object({
+    email: z.string().email('Email must be valid'),
+    role: z.enum(['admin', 'member'] as const),
+  }),
+});
+
+export const organizationInviteAcceptSchema = z.object({
+  body: z.object({
+    token: z.string().min(1, 'Invite token is required'),
+  }),
+});
+
 export const refreshTokenSchema = z.object({
   body: z.object({
     refreshToken: z.string().min(1, 'Refresh token is required').optional(),

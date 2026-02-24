@@ -270,12 +270,14 @@ npm run lint
 # Fix linting issues
 npm run lint --fix
 
-# Run security scan
+# Run security scan (UBS ignores patterns in .ubsignore and ubs.config.json)
 ubs .
 
-# Full quality check
+# Full quality check (UBS will skip files matched by .ubsignore)
 npm run test:coverage && npm run lint && ubs .
 ```
+
+> Note: add or update `.ubsignore` at the repository root to silence scanner noise from generated files (coverage/, dist/, build/) and `.env` examples. A sample `.ubsignore` and `ubs.config.json` are included in the repo.
 
 **Expected Results:**
 - ✅ **Tests**: All suites passing (37+ backend suites, 297+ tests)

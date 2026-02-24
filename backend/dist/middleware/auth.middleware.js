@@ -269,7 +269,7 @@ const generateToken = (userId, role, organizationId, tierLevel, expiresIn = '24h
 };
 exports.generateToken = generateToken;
 const requireManager = (req, res, next) => {
-    if (req.userRole !== 'Manager') {
+    if (req.userRole !== 'Manager' && req.userRole !== 'admin') {
         // Track unauthorized manager access attempt
         const analyticsService = analytics_service_1.AnalyticsService.getInstance();
         analyticsService.trackEvent({

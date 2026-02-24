@@ -80,3 +80,12 @@ global.ResizeObserver = class ResizeObserver {
   unobserve() {}
   disconnect() {}
 };
+
+// Mock uuid to fix ESM import issues in tests
+jest.mock('uuid', () => ({
+  __esModule: true,
+  v4: () => 'test-uuid-' + Math.random().toString(36).substr(2, 9),
+  default: {
+    v4: () => 'test-uuid-' + Math.random().toString(36).substr(2, 9),
+  },
+}));

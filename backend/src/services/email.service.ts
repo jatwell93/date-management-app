@@ -12,6 +12,7 @@ import { PrismaClient } from '@prisma/client';
 import { envConfig } from '../config/environment';
 import { getDefaultDatabaseClient } from '../database/database-factory';
 import { Logger } from '../utils/logger';
+import * as Sentry from '@sentry/node';
 
 const TEMPLATE_IDS = {
   trialEndingSoon: 'd-916668c6137341c292fad8cf219cb0ee',
@@ -86,7 +87,7 @@ export class EmailService {
 
       await sgMail.send(msg);
 
-      // Log trial_reminder_sent event 
+      // Log trial_reminder_sent event
       await this.prisma.auditLog.create({
         data: {
           organizationId,
@@ -101,6 +102,74 @@ export class EmailService {
       Logger.error('Failed to send trial reminder email', {
         organizationId,
         error: error instanceof Error ? error.message : 'Unknown error',
+      });
+      Sentry.captureException(error, {
+        level: 'error',
+        tags: { service: 'email-service', event: 'trial-reminder-email' },
+        extra: { organizationId, template: 'trialEndingSoon' },
+      });
+      throw error;
+    }
+  }
+
+  /**
+   * Send organization invite email
+   */
+  async sendOrganizationInviteEmail(params: {
+    organizationId: string;
+    toEmail: string;
+    organizationName: string;
+    inviteUrl: string;
+    invitedByUserId?: number;
+  }): Promise<void> {
+    try {
+      if (!envConfig.SENDGRID_API_KEY) {
+        Logger.warn('Cannot send invite: SendGrid not configured', {
+          organizationId: params.organizationId,
+        });
+        return;
+      }
+
+      const fromEmail = envConfig.SENDGRID_FROM_EMAIL || 'noreply@yourdomain.com';
+      const appUrl = envConfig.FRONTEND_URL;
+      const msg = {
+        to: params.toEmail,
+        from: fromEmail,
+        subject: `You're invited to ${params.organizationName}`,
+        text: `You have been invited to join ${params.organizationName}. Accept your invite: ${params.inviteUrl}`,
+        html: `<p>You have been invited to join <strong>${params.organizationName}</strong>.</p><p><a href="${params.inviteUrl}">Accept your invite</a></p><p>${appUrl}</p>`,
+      };
+
+      await sgMail.send(msg);
+
+      if (params.invitedByUserId) {
+        await this.prisma.auditLog.create({
+          data: {
+            organizationId: params.organizationId,
+            action: 'organization_invite_sent',
+            userId: params.invitedByUserId,
+            changeDescription: `Invite sent to ${params.toEmail}`,
+          },
+        });
+      }
+
+      Logger.info('Organization invite email sent', {
+        organizationId: params.organizationId,
+        toEmail: params.toEmail,
+      });
+    } catch (error) {
+      Logger.error('Failed to send organization invite email', {
+        organizationId: params.organizationId,
+        error: error instanceof Error ? error.message : 'Unknown error',
+      });
+      Sentry.captureException(error, {
+        level: 'error',
+        tags: { service: 'email-service', event: 'organization-invite-email' },
+        extra: {
+          organizationId: params.organizationId,
+          toEmail: params.toEmail,
+          template: 'organizationInvite',
+        },
       });
       throw error;
     }
@@ -175,6 +244,11 @@ export class EmailService {
       Logger.error('Failed to send dunning email', {
         organizationId,
         error: error instanceof Error ? error.message : 'Unknown error',
+      });
+      Sentry.captureException(error, {
+        level: 'error',
+        tags: { service: 'email-service', event: 'dunning-email' },
+        extra: { organizationId, template: 'dunning' },
       });
       throw error;
     }
@@ -263,6 +337,113 @@ export class EmailService {
       Logger.error('Failed to send downgrade warning email', {
         organizationId,
         error: error instanceof Error ? error.message : 'Unknown error',
+      });
+      Sentry.captureException(error, {
+        level: 'error',
+        tags: { service: 'email-service', event: 'downgrade-warning-email' },
+        extra: { organizationId, currentUsage, newLimit, template: 'downgradeWarning' },
+      });
+      throw error;
+    }
+  }
+
+  /**
+   * Send payment failed alert email to organization admin
+   *
+   * @param organizationId - Organization UUID
+   * @param paymentIntentId - Stripe payment intent ID
+   * @param errorMessage - Error message from Stripe
+   */
+  async sendPaymentFailedEmail(
+    organizationId: string,
+    paymentIntentId: string,
+    errorMessage: string,
+  ): Promise<void> {
+    try {
+      if (!envConfig.SENDGRID_API_KEY) {
+        Logger.warn('Cannot send payment failed email: SendGrid not configured', {
+          organizationId,
+        });
+        return;
+      }
+
+      // Query organization details
+      const organization = await this.prisma.organization.findUnique({
+        where: { id: organizationId },
+        select: {
+          id: true,
+          name: true,
+          contactEmail: true,
+          users: {
+            take: 1,
+            select: { id: true },
+          },
+        },
+      });
+
+      if (!organization || !organization.contactEmail || !organization.users[0]) {
+        Logger.error('Organization, contact email, or user not found for payment failed email', {
+          organizationId,
+        });
+        return;
+      }
+
+      const userEmail = organization.contactEmail;
+      const organizationName = organization.name;
+
+      const msg = {
+        to: userEmail,
+        from: envConfig.SENDGRID_FROM_EMAIL || 'noreply@inventorymanager.com',
+        subject: `Payment Failed - ${organizationName}`,
+        text: `Your payment of $${(2900 / 100).toFixed(2)} could not be processed. Please update your payment method to avoid service interruption.
+
+Error: ${errorMessage}
+Payment Intent ID: ${paymentIntentId}
+
+Please update your payment method in your billing settings to continue using the service without interruption.
+
+Thank you,
+The Inventory Manager Team`,
+        html: `
+          <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto;">
+            <h2>Payment Failed</h2>
+            <p>Hello,</p>
+            <p>We were unable to process your payment of <strong>$${(2900 / 100).toFixed(2)}</strong>.</p>
+            <p><strong>Error:</strong> ${errorMessage}</p>
+            <p><strong>Payment Intent ID:</strong> ${paymentIntentId}</p>
+            <p>Please update your payment method in your billing settings to continue using the service without interruption.</p>
+            <p>Thank you,<br>The Inventory Manager Team</p>
+          </div>
+        `,
+      };
+
+      await sgMail.send(msg);
+
+      // Log payment_failed_email_sent event
+      await this.prisma.auditLog.create({
+        data: {
+          organizationId,
+          action: 'payment_failed_email_sent',
+          userId: organization.users[0].id,
+          changeDescription: `Payment failed email sent for intent ${paymentIntentId}: ${errorMessage}`,
+        },
+      });
+
+      Logger.info('Payment failed email sent', {
+        organizationId,
+        paymentIntentId,
+        userEmail,
+      });
+    } catch (error) {
+      Logger.error('Failed to send payment failed email', {
+        organizationId,
+        paymentIntentId,
+        error: error instanceof Error ? error.message : 'Unknown error',
+      });
+      Sentry.captureException(error, {
+        level: 'error',
+        tags: { service: 'email-service', event: 'payment-failed-email' },
+        extra: { organizationId, paymentIntentId, template: 'paymentFailed' },
       });
       throw error;
     }

@@ -111,7 +111,7 @@ function extractCostValue(costStr) {
     }
     // Now parse as float
     const value = parseFloat(cleanedStr);
-    if (isNaN(value)) {
+    if (Number.isNaN(value)) {
         return null;
     }
     return value;
@@ -240,7 +240,7 @@ function extractCostValueEnhanced(costStr) {
     }
     // Parse the value
     const value = parseFloat(normalizedStr);
-    if (isNaN(value)) {
+    if (Number.isNaN(value)) {
         return null;
     }
     // Apply negative sign if originally detected

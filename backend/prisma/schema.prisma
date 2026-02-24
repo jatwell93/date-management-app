@@ -20,12 +20,13 @@ datasource db {
 // ============================================================================
 
 model Organization {
-  id           String   @id @default(uuid())
-  name         String
-  slug         String   @unique
-  contactEmail String?  @map("contact_email") // For subscription/billing notifications
-  createdAt    DateTime @default(now()) @map("created_at")
-  updatedAt    DateTime @updatedAt @map("updated_at")
+  id                  String   @id @default(uuid())
+  clerkOrganizationId String?  @unique @map("clerk_organization_id")
+  name                String
+  slug                String   @unique
+  contactEmail        String?  @map("contact_email") // For subscription/billing notifications
+  createdAt           DateTime @default(now()) @map("created_at")
+  updatedAt           DateTime @updatedAt @map("updated_at")
 
   // Relations
   subscriptionTiers       SubscriptionTier[]
@@ -34,10 +35,12 @@ model Organization {
   inventoryItems          InventoryItem[]
   storeAreas              StoreArea[]
   users                   User[]
+  organizationInvites     OrganizationInvite[]
   uploads                 Upload[]
   auditLogs               AuditLog[]
   itemTransactions        ItemTransaction[]
   expiredItemTransactions ExpiredItemTransaction[]
+  trialEvents             TrialEvent[]
 
   @@map("organizations")
 }
@@ -47,7 +50,10 @@ model SubscriptionTier {
   organizationId       String   @map("organization_id")
   tierLevel            String   @map("tier_level") // 'starter' | 'professional' | 'premium' | 'concierge'
   stripeSubscriptionId String?  @map("stripe_subscription_id")
+  stripeCustomerId     String?  @map("stripe_customer_id")
   trialEndDate         DateTime? @map("trial_end_date")
+  trialStartedAt       DateTime? @map("trial_started_at")
+  trialConvertedAt     DateTime? @map("trial_converted_at")
   status               String   @default("active") // 'active' | 'canceled' | 'past_due' | 'trialing'
   billingCycle         String   @default("monthly") @map("billing_cycle") // 'monthly' | 'annual'
   createdAt            DateTime @default(now()) @map("created_at")
@@ -59,7 +65,25 @@ model SubscriptionTier {
   @@index([organizationId])
   @@index([tierLevel])
   @@index([status])
+  @@index([trialEndDate])
   @@map("subscription_tiers")
+}
+
+model TrialEvent {
+  id             String   @id @default(cuid())
+  organizationId String   @map("organization_id")
+  eventType      String   @map("event_type") // trial_started | trial_converted | trial_expired | trial_reminder_sent
+  occurredAt     DateTime @default(now()) @map("occurred_at")
+  metadata       String?  // JSON string (SQLite doesn't support Json natively)
+  sentRemindersAt String? @map("sent_reminders_at") // JSON string: { "10": true, "5": true, "2": true }
+
+  // Relations
+  organization   Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+
+  @@index([organizationId])
+  @@index([eventType])
+  @@index([occurredAt])
+  @@map("trial_events")
 }
 
 model TierFeatureFlag {
@@ -99,6 +123,15 @@ model ProcessedWebhookEvent {
 
   @@index([eventType, processedAt])
   @@map("processed_webhook_events")
+}
+
+model ClerkWebhookEvent {
+  id          String   @id // Clerk event ID
+  eventType   String   @map("event_type")
+  processedAt DateTime @default(now()) @map("processed_at")
+
+  @@index([eventType, processedAt])
+  @@map("clerk_webhook_events")
 }
 
 // ============================================================================
@@ -178,7 +211,9 @@ model StoreArea {
 model User {
   id             Int      @id @default(autoincrement())
   organizationId String?  @map("organization_id")
-  pin            String
+  clerkUserId    String?  @unique @map("clerk_user_id")
+  email          String?  @unique
+  username       String?  @unique
   role           String
   createdAt      DateTime @default(now()) @map("created_at")
   updatedAt      DateTime @updatedAt @map("updated_at")
@@ -190,9 +225,34 @@ model User {
   expiredItemTransactions  ExpiredItemTransaction[]
   uploads                  Upload[]
   refreshTokens            RefreshToken[]
+  sentInvites              OrganizationInvite[] @relation("InvitedBy")
 
   @@index([organizationId])
+  @@index([clerkUserId])
+  @@index([email])
+  @@index([username])
   @@map("users")
+}
+
+model OrganizationInvite {
+  id              String                   @id @default(uuid())
+  organizationId  String                   @map("organization_id")
+  email           String
+  role            String
+  token           String                   @unique
+  status          String                   @default("PENDING")
+  expiresAt       DateTime                 @map("expires_at")
+  acceptedAt      DateTime?                @map("accepted_at")
+  invitedByUserId Int                      @map("invited_by_user_id")
+  createdAt       DateTime                 @default(now()) @map("created_at")
+
+  organization    Organization             @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  invitedByUser   User                     @relation("InvitedBy", fields: [invitedByUserId], references: [id], onDelete: Cascade)
+
+  @@index([organizationId])
+  @@index([email])
+  @@index([status])
+  @@map("organization_invites")
 }
 
 model RefreshToken {

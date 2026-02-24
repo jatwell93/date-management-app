@@ -9,7 +9,10 @@ import {
   useLocation,
   useNavigate,
 } from 'react-router-dom';
-import { LoginPage } from './components/LoginPage';
+import { ClerkSignInPage, ClerkSignUpPage } from './components/ClerkAuthPage';
+import { OnboardingPage } from './pages/OnboardingPage';
+import { SettingsPage } from './pages/SettingsPage';
+import { useAuthContext } from './components/ClerkAuthProvider';
 import { ScanPage } from './pages/ScanPage';
 import { DashboardPage } from './pages/DashboardPage';
 import { ReportsPage } from './pages/ReportsPage';
@@ -21,6 +24,8 @@ import { CSVUploadPage } from './pages/CSVUploadPage';
 import { DetailedExpiryReportPage } from './pages/DetailedExpiryReportPage';
 import ExpiredItemsPage from './pages/ExpiredItemsPage';
 import { StorageQuotaWarning } from './components/StorageQuotaWarning';
+import { TrialBanner } from './components/TrialBanner';
+import { TrialUpgradeFlow } from './components/TrialUpgradeFlow';
 import SentryTest from './SentryTest';
 import {
   DropdownMenu,
@@ -31,7 +36,7 @@ import {
 import ErrorBoundary from './components/ErrorBoundary';
 import { synchronizeOfflineData, getPendingInventoryItemCount } from './lib/sync-manager';
 import { offlineSyncService } from './lib/offline-sync';
-import { offlineStorage } from './lib/offline-storage';
+import { offlineStorage as _offlineStorage } from './lib/offline-storage';
 import { jwtDecode, JwtPayload } from 'jwt-decode';
 import { ToastProvider } from './components/ui/toast-provider';
 import { HandheldProvider, useHandheldDetectionContext } from './contexts/HandheldContext';
@@ -54,7 +59,7 @@ const checkForceHandheldQueryParam = () => {
 };
 
 // Helper function to verify if a token is still valid by checking its expiration
-const verifyToken = (token: string | null): boolean => {
+const _verifyToken = (token: string | null): boolean => {
   if (!token) return false;
   try {
     const decodedToken = jwtDecode<JwtPayload>(token);
@@ -68,7 +73,7 @@ const verifyToken = (token: string | null): boolean => {
 };
 
 // Helper function to decode JWT and get role
-const decodeTokenAndGetRole = (token: string | null): 'Manager' | 'Team Member' | null => {
+const _decodeTokenAndGetRole = (token: string | null): 'Manager' | 'Team Member' | null => {
   if (!token) return null;
   try {
     const decodedToken = jwtDecode<JwtPayload & { role?: string }>(token);
@@ -89,7 +94,7 @@ const decodeTokenAndGetRole = (token: string | null): 'Manager' | 'Team Member' 
   }
 };
 
-const decodeTokenAndGetUserId = (token: string | null): number | null => {
+const _decodeTokenAndGetUserId = (token: string | null): number | null => {
   if (!token) return null;
   try {
     const decodedToken = jwtDecode<JwtPayload & { userId?: number }>(token);
@@ -101,7 +106,7 @@ const decodeTokenAndGetUserId = (token: string | null): number | null => {
 };
 
 // Helper function to decode JWT and get user name
-const decodeTokenAndGetUserName = (token: string | null): string | null => {
+const _decodeTokenAndGetUserName = (token: string | null): string | null => {
   if (!token) return null;
   try {
     const decodedToken = jwtDecode<JwtPayload & { name?: string; email?: string }>(token);
@@ -114,26 +119,22 @@ const decodeTokenAndGetUserName = (token: string | null): string | null => {
 
 // Component that uses handheld context for conditional rendering
 function AppContent({
-  isLoggedIn,
-  userId,
-  userName,
-  userRole,
-  token,
-  handleLogout,
-  handleLogin,
   isMobileMenuOpen,
   setIsMobileMenuOpen,
 }: {
-  isLoggedIn: boolean;
-  userId: number | null;
-  userName: string | null;
-  userRole: 'Manager' | 'Team Member' | null;
-  token: string | null;
-  handleLogout: () => void;
-  handleLogin: (newToken: string) => void;
   isMobileMenuOpen: boolean;
   setIsMobileMenuOpen: (open: boolean) => void;
 }) {
+  const {
+    isLoggedIn,
+    isFullySignedIn,
+    hasOrganization,
+    userId,
+    userName,
+    userRole,
+    token,
+    handleLogout,
+  } = useAuthContext();
   const { isHandheld } = useHandheldDetectionContext();
   const location = useLocation();
   const navigate = useNavigate();
@@ -190,6 +191,7 @@ function AppContent({
   return (
     <div className="min-h-screen bg-background text-foreground">
       {isLoggedIn && userId && <StorageQuotaWarning userId={userId} subscriptionTier="free" />}
+      {isLoggedIn && token && <TrialBanner token={token} />}
       {isLoggedIn && !isHandheld && (
         <nav className="bg-primary text-primary-foreground p-4 shadow-md">
           <div className="container mx-auto">
@@ -324,6 +326,11 @@ function AppContent({
                           CSV Upload
                         </Link>
                       </li>
+                      <li>
+                        <Link to="/settings" className="hover:opacity-90 transition-opacity">
+                          Settings
+                        </Link>
+                      </li>
                     </>
                   )}
                 </ul>
@@ -416,6 +423,15 @@ function AppContent({
                       Markdown Calculator
                     </Link>
                   </li>
+                  <li>
+                    <Link
+                      to="/upgrade"
+                      className="block hover:opacity-90 transition-opacity"
+                      onClick={() => setIsMobileMenuOpen(false)}
+                    >
+                      Upgrade
+                    </Link>
+                  </li>
                   {userRole === 'Manager' && (
                     <>
                       <li>
@@ -443,6 +459,15 @@ function AppContent({
                           onClick={() => setIsMobileMenuOpen(false)}
                         >
                           CSV Upload
+                        </Link>
+                      </li>
+                      <li>
+                        <Link
+                          to="/settings"
+                          className="block hover:opacity-90 transition-opacity"
+                          onClick={() => setIsMobileMenuOpen(false)}
+                        >
+                          Settings
                         </Link>
                       </li>
                     </>
@@ -483,8 +508,76 @@ function AppContent({
               <Routes>
                 <Route
                   path="/login"
+                  element={isFullySignedIn ? <Navigate to="/scan" /> : <ClerkSignInPage />}
+                />
+                <Route
+                  path="/login/*"
+                  element={isFullySignedIn ? <Navigate to="/scan" /> : <ClerkSignInPage />}
+                />
+                <Route
+                  path="/sign-up"
+                  element={isFullySignedIn ? <Navigate to="/scan" /> : <ClerkSignUpPage />}
+                />
+                <Route
+                  path="/sign-up/*"
+                  element={isFullySignedIn ? <Navigate to="/scan" /> : <ClerkSignUpPage />}
+                />
+                <Route
+                  path="/onboarding"
                   element={
-                    isLoggedIn ? <Navigate to="/scan" /> : <LoginPage onLogin={handleLogin} />
+                    isFullySignedIn ? (
+                      hasOrganization ? (
+                        <Navigate to="/scan" />
+                      ) : (
+                        <OnboardingPage />
+                      )
+                    ) : (
+                      <Navigate to="/login" />
+                    )
+                  }
+                />
+                <Route
+                  path="/onboarding/*"
+                  element={
+                    isFullySignedIn ? (
+                      hasOrganization ? (
+                        <Navigate to="/scan" />
+                      ) : (
+                        <OnboardingPage />
+                      )
+                    ) : (
+                      <Navigate to="/login" />
+                    )
+                  }
+                />
+                <Route
+                  path="/settings"
+                  element={
+                    isLoggedIn && userRole === 'Manager' ? (
+                      <SettingsPage />
+                    ) : isLoggedIn ? (
+                      <Navigate to="/scan" />
+                    ) : (
+                      <Navigate to="/login" />
+                    )
+                  }
+                />
+                <Route
+                  path="/settings/*"
+                  element={
+                    isLoggedIn && userRole === 'Manager' ? (
+                      <SettingsPage />
+                    ) : isLoggedIn ? (
+                      <Navigate to="/scan" />
+                    ) : (
+                      <Navigate to="/login" />
+                    )
+                  }
+                />
+                <Route
+                  path="/upgrade"
+                  element={
+                    isLoggedIn ? <TrialUpgradeFlow token={token} /> : <Navigate to="/login" />
                   }
                 />
                 <Route
@@ -568,7 +661,75 @@ function AppContent({
             <Routes>
               <Route
                 path="/login"
-                element={isLoggedIn ? <Navigate to="/scan" /> : <LoginPage onLogin={handleLogin} />}
+                element={isFullySignedIn ? <Navigate to="/scan" /> : <ClerkSignInPage />}
+              />
+              <Route
+                path="/login/*"
+                element={isFullySignedIn ? <Navigate to="/scan" /> : <ClerkSignInPage />}
+              />
+              <Route
+                path="/sign-up"
+                element={isFullySignedIn ? <Navigate to="/scan" /> : <ClerkSignUpPage />}
+              />
+              <Route
+                path="/sign-up/*"
+                element={isFullySignedIn ? <Navigate to="/scan" /> : <ClerkSignUpPage />}
+              />
+              <Route
+                path="/onboarding"
+                element={
+                  isFullySignedIn ? (
+                    hasOrganization ? (
+                      <Navigate to="/scan" />
+                    ) : (
+                      <OnboardingPage />
+                    )
+                  ) : (
+                    <Navigate to="/login" />
+                  )
+                }
+              />
+              <Route
+                path="/onboarding/*"
+                element={
+                  isFullySignedIn ? (
+                    hasOrganization ? (
+                      <Navigate to="/scan" />
+                    ) : (
+                      <OnboardingPage />
+                    )
+                  ) : (
+                    <Navigate to="/login" />
+                  )
+                }
+              />
+              <Route
+                path="/settings"
+                element={
+                  isLoggedIn && userRole === 'Manager' ? (
+                    <SettingsPage />
+                  ) : isLoggedIn ? (
+                    <Navigate to="/scan" />
+                  ) : (
+                    <Navigate to="/login" />
+                  )
+                }
+              />
+              <Route
+                path="/settings/*"
+                element={
+                  isLoggedIn && userRole === 'Manager' ? (
+                    <SettingsPage />
+                  ) : isLoggedIn ? (
+                    <Navigate to="/scan" />
+                  ) : (
+                    <Navigate to="/login" />
+                  )
+                }
+              />
+              <Route
+                path="/upgrade"
+                element={isLoggedIn ? <TrialUpgradeFlow token={token} /> : <Navigate to="/login" />}
               />
               <Route
                 path="/scan"
@@ -642,11 +803,6 @@ function AppContent({
 }
 
 function App() {
-  const [isLoggedIn, setIsLoggedIn] = useState(false);
-  const [token, setToken] = useState<string | null>(null);
-  const [userId, setUserId] = useState<number | null>(null);
-  const [userName, setUserName] = useState<string | null>(null);
-  const [userRole, setUserRole] = useState<'Manager' | 'Team Member' | null>(null);
   const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
 
   // Check for forceHandheld query parameter on mount
@@ -654,50 +810,11 @@ function App() {
     checkForceHandheldQueryParam();
   }, []);
 
-  // Check for existing session on mount
-  useEffect(() => {
-    const storedToken = localStorage.getItem('session');
-    if (storedToken && verifyToken(storedToken)) {
-      setToken(storedToken);
-      setIsLoggedIn(true);
-      setUserId(decodeTokenAndGetUserId(storedToken));
-      setUserName(decodeTokenAndGetUserName(storedToken));
-      setUserRole(decodeTokenAndGetRole(storedToken));
-    }
-  }, []);
-
-  const handleLogin = (newToken: string) => {
-    setToken(newToken);
-    setIsLoggedIn(true);
-    setUserId(decodeTokenAndGetUserId(newToken));
-    setUserName(decodeTokenAndGetUserName(newToken));
-    setUserRole(decodeTokenAndGetRole(newToken));
-    localStorage.setItem('session', newToken);
-  };
-
-  const handleLogout = () => {
-    setToken(null);
-    setIsLoggedIn(false);
-    setUserId(null);
-    setUserName(null);
-    setUserRole(null);
-    localStorage.removeItem('session');
-    // Clear any offline data on logout
-    synchronizeOfflineData(null);
-  };
-
   return (
     <ToastProvider>
       <HandheldProvider>
         <Router>
           <AppContent
-            isLoggedIn={isLoggedIn}
-            userId={userId}
-            userName={userName}
-            userRole={userRole}
-            token={token}
-            handleLogout={handleLogout}
-            handleLogin={handleLogin}
             isMobileMenuOpen={isMobileMenuOpen}
             setIsMobileMenuOpen={setIsMobileMenuOpen}
           />
