@@ -25,7 +25,7 @@ describe('Clerk Integration Setup', () => {
 
   it('should throw error if REACT_APP_CLERK_PUBLISHABLE_KEY is missing', () => {
     const consoleSpy = jest.spyOn(console, 'error').mockImplementation();
-    
+
     // This should fail during initialization
     const missingKey = process.env.REACT_APP_CLERK_PUBLISHABLE_KEY?.trim() === '';
     expect(missingKey === true || process.env.REACT_APP_CLERK_PUBLISHABLE_KEY).toBeDefined();

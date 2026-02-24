@@ -1,12 +1,7 @@
 import crypto from 'crypto';
 import { PrismaClient } from '@prisma/client';
 import { getDefaultDatabaseClient } from '../database/database-factory';
-import {
-  ConflictError,
-  NotFoundError,
-  PaymentRequiredError,
-  ValidationError,
-} from '../errors';
+import { ConflictError, NotFoundError, PaymentRequiredError, ValidationError } from '../errors';
 import { TIER_LIMITS, TierLevel } from '../types/subscription';
 
 export type InviteStatus = 'PENDING' | 'ACCEPTED' | 'EXPIRED' | 'REVOKED';
@@ -30,10 +25,7 @@ export class OrganizationInviteService {
   private prisma: PrismaClient;
   private nowProvider: () => Date;
 
-  constructor(
-    prismaClient?: PrismaClient,
-    nowProvider?: () => Date,
-  ) {
+  constructor(prismaClient?: PrismaClient, nowProvider?: () => Date) {
     this.prisma = prismaClient ?? getDefaultDatabaseClient();
     this.nowProvider = nowProvider ?? (() => new Date());
   }

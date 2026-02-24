@@ -75,11 +75,21 @@ We will acknowledge your report within 48 hours and provide a detailed response 
 ## Security Measures Implemented
 
 ### 1. Authentication & Authorization
-- JWT-based authentication with 1-hour access token expiry
-- Refresh tokens (7-day expiry) with revocation support
-- PIN validation (4-6 digits, prevents predictable patterns)
-- bcrypt hashing (10 salt rounds) for PIN storage
-- Token rotation support (JWT_SECRET_OLD for graceful rotation)
+- **Clerk Authentication** (OAuth 2.0/OpenID Connect)
+  - JWT tokens signed by Clerk with RSA keys
+  - Token verification via `CLERK_SECRET_KEY`
+  - Automatic token rotation and session management
+  - PCI compliant - no card data ever touches our servers
+  - Social login providers: Google, Microsoft
+  - Multi-factor authentication support (configurable)
+- **Organization-based Authorization**
+  - Users belong to organizations with roles (Manager, Member)
+  - Resource access validated against organization membership
+  - Clerk Organizations integration for team management
+- **Legacy PIN Support** (deprecated)
+  - 4-6 digit PIN validation with bcrypt hashing (10 salt rounds)
+  - 1-hour access token expiry with refresh tokens
+  - JWT_SECRET_OLD support for graceful rotation
 
 ### 2. Input Validation
 - Zod schemas for all API endpoints
@@ -101,17 +111,23 @@ We will acknowledge your report within 48 hours and provide a detailed response 
 variable
 
 ### 5. Database Security  
-- Prisma ORM (prevents SQL injection)
-- TLS/SSL required for Neon PostgreSQL (`sslmode=require`)
-- Parameterized queries throughout
-- Refresh token storage with expiry tracking
+- **Prisma ORM** (prevents SQL injection)
+- **Transaction Atomicity**: All critical operations use `prisma.$transaction()`
+  - Trial conversions: Stripe + DB updates in single transaction
+  - Subscription downgrades: Tier + status updates atomic
+  - Webhook processing: Idempotent with transaction rollback on errors
+- **TLS/SSL** required for Neon PostgreSQL (`sslmode=require`)
+- **Parameterized queries** throughout
+- **Refresh token storage** with expiry tracking
 
-### 6. Error Handling
-- Custom error classes (AuthenticationError, ValidationError, etc.)
-- Global error handler middleware
-- Structured error responses
-- Sensitive data excluded from error messages
-- All errors logged with correlation IDs
+### 6. Error Handling & Logging
+- **Custom error classes** (AuthenticationError, ValidationError, etc.)
+- **Global error handler middleware**
+- **Structured error responses**
+- **Sensitive data excluded** from error messages and logs
+- **No card numbers or PII** in application logs
+- **Sentry integration** with context (organizationId, userId)
+- **Correlation IDs** for request tracing
 
 ### 7. Secrets Management
 - No hardcoded secrets in codebase

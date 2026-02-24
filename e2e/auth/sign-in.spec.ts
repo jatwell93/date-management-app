@@ -15,8 +15,8 @@ test.describe('Sign-in flow', () => {
     await expect(page).toHaveURL(/\/login/);
 
     await page.getByLabel(/email|username/i).first().fill('testclerk2026b@mailinator.com');
-    await page.getByLabel(/password/i).fill('Xk9#mPqL2026$vN!');
-    await page.getByRole('button', { name: /continue|sign in/i }).click();
+    await page.locator('input[name="password"], input[id="password-field"]').fill('Xk9#mPqL2026$vN!');
+    await page.locator('button[data-localization-key="formButtonPrimary"]').click();
 
     await expect(page).toHaveURL(/\/scan|\/onboarding/, { timeout: 15000 });
   });
@@ -25,8 +25,8 @@ test.describe('Sign-in flow', () => {
     await page.goto('/login');
 
     await page.getByLabel(/email|username/i).first().fill('notauser@mailinator.com');
-    await page.getByLabel(/password/i).fill('WrongPassword123!');
-    await page.getByRole('button', { name: /continue|sign in/i }).click();
+    await page.locator('input[name="password"], input[id="password-field"]').fill('WrongPassword123!');
+    await page.locator('button[data-localization-key="formButtonPrimary"]').click();
 
     await expect(page.getByText(/invalid|incorrect|error/i)).toBeVisible({ timeout: 8000 });
     await expect(page).toHaveURL(/\/login/);

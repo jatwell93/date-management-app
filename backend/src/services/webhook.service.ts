@@ -178,6 +178,18 @@ export class WebhookService {
         break;
       }
 
+      case 'payment_intent.succeeded': {
+        const paymentIntent = event.data.object as Stripe.PaymentIntent;
+        await this.handlePaymentIntentSucceeded(paymentIntent);
+        break;
+      }
+
+      case 'payment_intent.payment_failed': {
+        const paymentIntent = event.data.object as Stripe.PaymentIntent;
+        await this.handlePaymentIntentFailed(paymentIntent);
+        break;
+      }
+
       default:
         log.info(`Unhandled webhook event type: ${event.type}`);
     }
@@ -690,6 +702,159 @@ export class WebhookService {
       log.error('Failed to handle trial will end', {
         error: error instanceof Error ? error.message : 'Unknown error',
         subscriptionId: subscription.id,
+      });
+      throw error;
+    }
+  }
+
+  /**
+   * Handle payment_intent.succeeded
+   *
+   * Confirms payment for trial conversion, updates subscription status to ACTIVE.
+   */
+  private async handlePaymentIntentSucceeded(paymentIntent: Stripe.PaymentIntent): Promise<void> {
+    const monitor = ApplicationMonitoringService.getInstance();
+    const start = Date.now();
+
+    try {
+      log.info('Payment intent succeeded', {
+        paymentIntentId: paymentIntent.id,
+        customerId: paymentIntent.customer,
+        amount: paymentIntent.amount,
+      });
+
+      // Extract organizationId from customer metadata
+      const organizationId = await this.validateWebhookMetadata(paymentIntent.customer as string);
+
+      // Find subscription by customer and update status to ACTIVE
+      await this.prisma.$transaction(async (tx) => {
+        // Find the TRIALING subscription for this organization
+        const subscription = await tx.subscriptionTier.findFirst({
+          where: {
+            organizationId,
+            status: SubscriptionStatus.TRIALING,
+          },
+        });
+
+        if (!subscription) {
+          log.warn(
+            'No TRIALING subscription found for organization, skipping payment confirmation',
+            {
+              organizationId,
+              paymentIntentId: paymentIntent.id,
+            },
+          );
+          return;
+        }
+
+        // Update status to ACTIVE
+        await tx.subscriptionTier.update({
+          where: { id: subscription.id },
+          data: {
+            status: SubscriptionStatus.ACTIVE,
+            trialConvertedAt: new Date(),
+          },
+        });
+
+        // Log trial conversion event
+        await tx.trialEvent.create({
+          data: {
+            organizationId,
+            eventType: 'payment_confirmed',
+            metadata: JSON.stringify({
+              paymentIntentId: paymentIntent.id,
+              amount: paymentIntent.amount,
+            }),
+          },
+        });
+
+        // Log audit event
+        await tx.auditLog.create({
+          data: {
+            organizationId,
+            action: 'trial_converted',
+            changeDescription: `Trial converted to paid subscription via payment intent ${paymentIntent.id}`,
+          },
+        });
+      });
+
+      const duration = Date.now() - start;
+      monitor.recordWebhookEvent('payment_intent.succeeded', duration, 'success');
+
+      log.info('Payment intent processed successfully', {
+        organizationId,
+        paymentIntentId: paymentIntent.id,
+      });
+    } catch (error: any) {
+      const duration = Date.now() - start;
+      monitor.recordWebhookEvent('payment_intent.succeeded', duration, 'error');
+      Sentry.captureException(error, {
+        level: 'error',
+        extra: { paymentIntentId: paymentIntent.id },
+      });
+      log.error('Failed to handle payment intent succeeded', {
+        error: error instanceof Error ? error.message : 'Unknown error',
+        paymentIntentId: paymentIntent.id,
+      });
+      throw error;
+    }
+  }
+
+  /**
+   * Handle payment_intent.payment_failed
+   *
+   * Logs failure event and sends alert email to admin.
+   */
+  private async handlePaymentIntentFailed(paymentIntent: Stripe.PaymentIntent): Promise<void> {
+    const monitor = ApplicationMonitoringService.getInstance();
+    const start = Date.now();
+
+    try {
+      log.error('Payment intent failed', {
+        paymentIntentId: paymentIntent.id,
+        customerId: paymentIntent.customer,
+        amount: paymentIntent.amount,
+        error: paymentIntent.last_payment_error?.message,
+      });
+
+      // Extract organizationId from customer metadata
+      const organizationId = await this.validateWebhookMetadata(paymentIntent.customer as string);
+
+      // Log failure event
+      await this.prisma.trialEvent.create({
+        data: {
+          organizationId,
+          eventType: 'payment_failed',
+          metadata: JSON.stringify({
+            paymentIntentId: paymentIntent.id,
+            amount: paymentIntent.amount,
+            error: paymentIntent.last_payment_error?.message,
+            errorCode: paymentIntent.last_payment_error?.code,
+          }),
+        },
+      });
+
+      // Send alert email to admin
+      await this.emailService.sendPaymentFailedEmail(
+        organizationId,
+        paymentIntent.id,
+        paymentIntent.last_payment_error?.message || 'Unknown error',
+      );
+
+      const duration = Date.now() - start;
+      monitor.recordWebhookEvent('payment_intent.payment_failed', duration, 'success');
+
+      log.info('Payment failure handled', { organizationId, paymentIntentId: paymentIntent.id });
+    } catch (error: any) {
+      const duration = Date.now() - start;
+      monitor.recordWebhookEvent('payment_intent.payment_failed', duration, 'error');
+      Sentry.captureException(error, {
+        level: 'error',
+        extra: { paymentIntentId: paymentIntent.id },
+      });
+      log.error('Failed to handle payment intent failed', {
+        error: error instanceof Error ? error.message : 'Unknown error',
+        paymentIntentId: paymentIntent.id,
       });
       throw error;
     }

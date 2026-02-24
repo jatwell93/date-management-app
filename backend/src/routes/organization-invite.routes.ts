@@ -3,10 +3,7 @@ import { authenticateToken, requireManager, AuthRequest } from '../middleware/au
 import { clerkAuth, ClerkAuthRequest } from '../middleware/clerk-auth.middleware';
 import { standardLimiter } from '../middleware/rateLimiter';
 import { validateRequest } from '../middleware/validateRequest';
-import {
-  organizationInviteAcceptSchema,
-  organizationInviteCreateSchema,
-} from '../schemas';
+import { organizationInviteAcceptSchema, organizationInviteCreateSchema } from '../schemas';
 import { OrganizationInviteService } from '../services/organization-invite.service';
 import { OrganizationService } from '../services/organization.service';
 import { EmailService } from '../services/email.service';

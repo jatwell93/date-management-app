@@ -64,6 +64,9 @@ describe('UserService', () => {
             expect(result).toEqual({
                 id: 1,
                 organizationId: testOrganizationId,
+                clerkUserId: null,
+                email: null,
+                username: null,
                 pin: 'hashed_pin',
                 role: 'Manager',
                 created_at: createdAt.toISOString(),
@@ -102,6 +105,9 @@ describe('UserService', () => {
                 {
                     id: 1,
                     organizationId: testOrganizationId,
+                    clerkUserId: null,
+                    email: null,
+                    username: null,
                     pin: 'hashed_pin',
                     role: 'Manager',
                     created_at: createdAt.toISOString(),

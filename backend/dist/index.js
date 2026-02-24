@@ -57,6 +57,8 @@ const expired_item_routes_1 = __importDefault(require("./routes/expired-item.rou
 const upload_routes_1 = __importDefault(require("./routes/upload.routes"));
 const storage_quota_routes_1 = __importDefault(require("./routes/storage-quota.routes"));
 const webhook_routes_1 = __importDefault(require("./routes/webhook.routes"));
+const organization_invite_routes_1 = __importDefault(require("./routes/organization-invite.routes"));
+const subscription_routes_1 = __importDefault(require("./routes/subscription.routes"));
 const auth_middleware_1 = require("./middleware/auth.middleware");
 const error_middleware_1 = require("./middleware/error.middleware");
 const cors_1 = require("./middleware/cors");
@@ -201,10 +203,12 @@ app.use('/store-areas', auth_middleware_1.authenticateToken, store_area_routes_1
 app.use('/reports', auth_middleware_1.authenticateToken, report_routes_1.default);
 app.use('/dashboard', auth_middleware_1.authenticateToken, dashboard_routes_1.default);
 app.use('/users', auth_middleware_1.authenticateToken, user_routes_1.default);
+app.use('/api/organizations', organization_invite_routes_1.default);
 app.use('/database', auth_middleware_1.authenticateToken, database_backup_routes_1.default);
 app.use('/expired-items', auth_middleware_1.authenticateToken, expired_item_routes_1.default);
 app.use('/api/upload', auth_middleware_1.authenticateToken, upload_routes_1.default);
 app.use('/api/storage-quota', auth_middleware_1.authenticateToken, storage_quota_routes_1.default);
+app.use('/api/subscription', subscription_routes_1.default);
 app.get('/', (req, res) => {
     res.json({
         message: 'Date Management API is running!',

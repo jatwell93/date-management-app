@@ -15,6 +15,7 @@ import { Logger } from '../utils/logger';
 import { SubscriptionTier } from '../models/subscription-tier.model';
 import { BillingCycle, SubscriptionStatus, TierLevel, TIER_LIMITS } from '../types/subscription';
 import { InternalError, NotFoundError } from '../errors';
+import * as Sentry from '@sentry/node';
 
 export class SubscriptionService {
   private prisma: PrismaClient;
@@ -82,10 +83,7 @@ export class SubscriptionService {
    * @param organizationId - Organization UUID
    * @param trialDays - Number of trial days (default: 14)
    */
-  async createTrialSubscription(
-    organizationId: string,
-    trialDays: number = 14,
-  ): Promise<void> {
+  async createTrialSubscription(organizationId: string, trialDays: number = 14): Promise<void> {
     const organization = await this.prisma.organization.findUnique({
       where: { id: organizationId },
     });
@@ -117,7 +115,9 @@ export class SubscriptionService {
       },
     });
 
-    Logger.info(`Trial subscription created for organization ${organizationId}, ends ${trialEndDate.toISOString()}`);
+    Logger.info(
+      `Trial subscription created for organization ${organizationId}, ends ${trialEndDate.toISOString()}`,
+    );
   }
 
   /**
@@ -189,8 +189,28 @@ export class SubscriptionService {
       );
 
       return this.mapPrismaToModel(subscriptionTier);
-    } catch (error) {
+    } catch (error: any) {
       Logger.error(`Failed to create subscription: ${error}`);
+
+      // Capture Stripe errors with request ID for debugging
+      if (error instanceof Stripe.errors.StripeError) {
+        Sentry.captureException(error, {
+          level: 'error',
+          tags: { service: 'subscription-service', event: 'create-subscription' },
+          extra: {
+            organizationId,
+            stripeRequestId: error.requestId,
+            stripeCode: error.code,
+            stripeDeclineCode: error.decline_code,
+          },
+        });
+      } else {
+        Sentry.captureException(error, {
+          level: 'error',
+          tags: { service: 'subscription-service', event: 'create-subscription' },
+          extra: { organizationId },
+        });
+      }
 
       if (error instanceof NotFoundError) {
         throw error;
@@ -483,7 +503,7 @@ export class SubscriptionService {
 
   /**
    * Find trials that need reminder emails
-   * Queries trials where trialEndDate is in the next 24h AND daysRemaining is [10, 5, 2]
+   * Queries trials where trialEndDate is in the next 14 days AND daysRemaining is [10, 5, 2]
    * Filters out trials where reminder already sent (check sentRemindersAt in trial_events)
    */
   async findTrialsNeedingReminders(): Promise<
@@ -496,15 +516,15 @@ export class SubscriptionService {
     }>
   > {
     const now = new Date();
-    const tomorrow = new Date(now.getTime() + 24 * 60 * 60 * 1000);
+    const fourteenDaysFromNow = new Date(now.getTime() + 14 * 24 * 60 * 60 * 1000);
 
-    // Find trials expiring in the next 24 hours
+    // Find trials expiring in the next 14 days
     const expiringTrials = await this.prisma.subscriptionTier.findMany({
       where: {
         status: SubscriptionStatus.TRIALING,
         trialEndDate: {
           gte: now,
-          lte: tomorrow,
+          lte: fourteenDaysFromNow,
         },
       },
       include: {
@@ -718,8 +738,76 @@ export class SubscriptionService {
       return this.mapPrismaToModel(updated);
     } catch (error: any) {
       Logger.error(`Failed to convert trial for org ${organizationId}:`, error);
+
+      // Capture Stripe errors with request ID for debugging
+      if (error instanceof Stripe.errors.StripeError) {
+        Sentry.captureException(error, {
+          level: 'error',
+          tags: { service: 'subscription-service', event: 'convert-trial' },
+          extra: {
+            organizationId,
+            stripeRequestId: error.requestId,
+            stripeCode: error.code,
+          },
+        });
+      } else {
+        Sentry.captureException(error, {
+          level: 'error',
+          tags: { service: 'subscription-service', event: 'convert-trial' },
+          extra: { organizationId },
+        });
+      }
+
       throw new InternalError(`Payment failed: ${error.message}`);
     }
+  }
+
+  /**
+   * Get recently downgraded trials (last 24 hours) for sending warning emails
+   */
+  async getRecentlyDowngradedTrials(): Promise<
+    Array<{
+      organizationId: string;
+      organizationName: string;
+      contactEmail: string | null;
+    }>
+  > {
+    const yesterday = new Date(Date.now() - 24 * 60 * 60 * 1000);
+
+    const events = await this.prisma.trialEvent.findMany({
+      where: {
+        eventType: 'trial_expired',
+        occurredAt: {
+          gte: yesterday,
+        },
+      },
+      orderBy: {
+        occurredAt: 'desc',
+      },
+    });
+
+    const results: Array<{
+      organizationId: string;
+      organizationName: string;
+      contactEmail: string | null;
+    }> = [];
+
+    for (const event of events) {
+      const org = await this.prisma.organization.findUnique({
+        where: { id: event.organizationId },
+        select: { name: true, contactEmail: true },
+      });
+
+      if (org) {
+        results.push({
+          organizationId: event.organizationId,
+          organizationName: org.name,
+          contactEmail: org.contactEmail,
+        });
+      }
+    }
+
+    return results;
   }
 
   /**

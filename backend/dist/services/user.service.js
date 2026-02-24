@@ -11,6 +11,9 @@ class UserService {
         this.authService = authService ?? new auth_service_1.AuthService(this.prisma);
     }
     async createUser(user) {
+        if (!user.pin) {
+            throw new errors_1.ValidationError('PIN is required for PIN-based user creation');
+        }
         const pinValidation = this.authService.validatePin(user.pin);
         if (!pinValidation.isValid) {
             throw new errors_1.ValidationError(pinValidation.message || 'Invalid PIN format');
@@ -19,18 +22,16 @@ class UserService {
             where: {
                 organizationId: this.organizationId,
             },
-            select: { id: true, pin: true },
+            select: { id: true },
         });
         for (const existingUser of existingUsers) {
-            const isDuplicate = await this.authService.verifyPin(user.pin, existingUser.pin);
+            const isDuplicate = false; // PIN auth removed — use Clerk authentication; existingUser unused
             if (isDuplicate) {
                 throw new errors_1.ConflictError('PIN already in use within this organization');
             }
         }
-        const hashedPin = await this.authService.hashPin(user.pin);
         const created = await this.prisma.user.create({
             data: {
-                pin: hashedPin,
                 role: user.role,
                 organizationId: this.organizationId,
             },
@@ -61,22 +62,14 @@ class UserService {
             },
         });
         for (const user of users) {
-            const isValid = await this.authService.verifyPin(pin, user.pin);
-            if (isValid) {
-                return this.mapPrismaToModel(user);
-            }
+            void pin; // PIN auth removed — use Clerk authentication
+            void user;
+            break;
         }
         return undefined;
     }
     async updateUser(id, user) {
         const data = {};
-        if (user.pin) {
-            const pinValidation = this.authService.validatePin(user.pin);
-            if (!pinValidation.isValid) {
-                throw new Error(pinValidation.message || 'Invalid PIN format');
-            }
-            data.pin = await this.authService.hashPin(user.pin);
-        }
         if (user.role !== undefined) {
             data.role = user.role;
         }
@@ -118,11 +111,37 @@ class UserService {
             throw error;
         }
     }
+    async createClerkUser(params) {
+        const existing = await this.prisma.user.findFirst({
+            where: {
+                OR: [
+                    { clerkUserId: params.clerkUserId },
+                    { email: params.email },
+                    ...(params.username ? [{ username: params.username }] : []),
+                ],
+            },
+        });
+        if (existing) {
+            throw new errors_1.ConflictError('User already exists');
+        }
+        const created = await this.prisma.user.create({
+            data: {
+                organizationId: params.organizationId,
+                clerkUserId: params.clerkUserId,
+                email: params.email,
+                username: params.username ?? null,
+                role: params.role,
+            },
+        });
+        return this.mapPrismaToModel(created);
+    }
     mapPrismaToModel(user) {
         return {
             id: user.id,
             organizationId: user.organizationId ?? this.organizationId,
-            pin: user.pin,
+            clerkUserId: user.clerkUserId ?? null,
+            email: user.email ?? null,
+            username: user.username ?? null,
             role: user.role,
             created_at: user.createdAt.toISOString(),
             updated_at: user.updatedAt.toISOString(),

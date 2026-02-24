@@ -22,6 +22,7 @@ import uploadRoutes from './routes/upload.routes';
 import storageQuotaRoutes from './routes/storage-quota.routes';
 import webhookRoutes from './routes/webhook.routes';
 import organizationInviteRoutes from './routes/organization-invite.routes';
+import subscriptionRoutes from './routes/subscription.routes';
 import { authenticateToken } from './middleware/auth.middleware';
 import { errorHandler } from './middleware/error.middleware';
 import { corsMiddleware } from './middleware/cors';
@@ -191,7 +192,7 @@ app.use('/database', authenticateToken, databaseBackupRoutes);
 app.use('/expired-items', authenticateToken, expiredItemRoutes);
 app.use('/api/upload', authenticateToken, uploadRoutes);
 app.use('/api/storage-quota', authenticateToken, storageQuotaRoutes);
-app.use('/api/subscription', authenticateToken, (await import('./routes/subscription.routes')).default);
+app.use('/api/subscription', subscriptionRoutes);
 
 app.get('/', (req, res) => {
   res.json({

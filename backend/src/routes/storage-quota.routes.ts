@@ -37,7 +37,7 @@ router.get('/:userId', async (req: AuthRequest, res: Response): Promise<void> =>
 
     // Validate userId is numeric
     const userIdNum = parseInt(userId, 10);
-    if (isNaN(userIdNum)) {
+    if (Number.isNaN(userIdNum)) {
       res.status(400).json({
         error: 'Invalid user ID',
         message: 'User ID must be a number',
@@ -117,7 +117,7 @@ router.get('/:userId/can-upload', async (req: AuthRequest, res: Response): Promi
 
     // Validate parameters
     const userIdNum = parseInt(userId, 10);
-    if (isNaN(userIdNum)) {
+    if (Number.isNaN(userIdNum)) {
       res.status(400).json({
         error: 'Invalid user ID',
         message: 'User ID must be a number',
@@ -150,7 +150,7 @@ router.get('/:userId/can-upload', async (req: AuthRequest, res: Response): Promi
       return;
     }
 
-    if (!size || isNaN(parseInt(size as string, 10))) {
+    if (!size || Number.isNaN(parseInt(size as string, 10))) {
       res.status(400).json({
         error: 'Missing file size',
         message: 'size query parameter is required and must be a number',

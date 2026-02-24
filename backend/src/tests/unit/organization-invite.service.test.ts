@@ -33,10 +33,7 @@ describe('OrganizationInviteService', () => {
       }),
     };
 
-    service = new OrganizationInviteService(
-      mockPrisma as unknown as PrismaClient,
-      () => now,
-    );
+    service = new OrganizationInviteService(mockPrisma as unknown as PrismaClient, () => now);
   });
 
   afterEach(() => {

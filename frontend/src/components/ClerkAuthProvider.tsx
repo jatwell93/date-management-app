@@ -174,7 +174,7 @@ export function ClerkAuthProvider({ children, publishableKey }: ClerkAuthProvide
   return (
     <ClerkProvider
       publishableKey={publishableKey}
-      afterSignOutUrl="/"
+      afterSignOutUrl="/login"
       signInUrl="/login"
       signUpUrl="/sign-up"
     >

@@ -24,6 +24,8 @@ import { CSVUploadPage } from './pages/CSVUploadPage';
 import { DetailedExpiryReportPage } from './pages/DetailedExpiryReportPage';
 import ExpiredItemsPage from './pages/ExpiredItemsPage';
 import { StorageQuotaWarning } from './components/StorageQuotaWarning';
+import { TrialBanner } from './components/TrialBanner';
+import { TrialUpgradeFlow } from './components/TrialUpgradeFlow';
 import SentryTest from './SentryTest';
 import {
   DropdownMenu,
@@ -189,6 +191,7 @@ function AppContent({
   return (
     <div className="min-h-screen bg-background text-foreground">
       {isLoggedIn && userId && <StorageQuotaWarning userId={userId} subscriptionTier="free" />}
+      {isLoggedIn && token && <TrialBanner token={token} />}
       {isLoggedIn && !isHandheld && (
         <nav className="bg-primary text-primary-foreground p-4 shadow-md">
           <div className="container mx-auto">
@@ -420,6 +423,15 @@ function AppContent({
                       Markdown Calculator
                     </Link>
                   </li>
+                  <li>
+                    <Link
+                      to="/upgrade"
+                      className="block hover:opacity-90 transition-opacity"
+                      onClick={() => setIsMobileMenuOpen(false)}
+                    >
+                      Upgrade
+                    </Link>
+                  </li>
                   {userRole === 'Manager' && (
                     <>
                       <li>
@@ -560,6 +572,12 @@ function AppContent({
                     ) : (
                       <Navigate to="/login" />
                     )
+                  }
+                />
+                <Route
+                  path="/upgrade"
+                  element={
+                    isLoggedIn ? <TrialUpgradeFlow token={token} /> : <Navigate to="/login" />
                   }
                 />
                 <Route
@@ -708,6 +726,10 @@ function AppContent({
                     <Navigate to="/login" />
                   )
                 }
+              />
+              <Route
+                path="/upgrade"
+                element={isLoggedIn ? <TrialUpgradeFlow token={token} /> : <Navigate to="/login" />}
               />
               <Route
                 path="/scan"

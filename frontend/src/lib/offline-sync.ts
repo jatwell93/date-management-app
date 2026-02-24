@@ -163,7 +163,12 @@ class OfflineSyncService {
   // Get the offline queue
   private getOfflineQueue(): OfflineOperation[] {
     const queueStr = localStorage.getItem(OFFLINE_QUEUE_KEY);
-    return queueStr ? JSON.parse(queueStr) : [];
+    if (!queueStr) return [];
+    try {
+      return JSON.parse(queueStr);
+    } catch {
+      return [];
+    }
   }
 
   // Get pending operations for a specific entity type

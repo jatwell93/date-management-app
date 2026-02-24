@@ -45,8 +45,12 @@ describe('SubscriptionService', () => {
       subscriptionTier: {
         findUnique: jest.fn(),
         findFirst: jest.fn(),
+        findMany: jest.fn(),
         create: jest.fn(),
         update: jest.fn(),
+      },
+      trialEvent: {
+        create: jest.fn(),
       },
       $transaction: jest.fn((callback) => callback(mockPrisma)),
     } as any;
@@ -251,6 +255,176 @@ describe('SubscriptionService', () => {
     it('should throw NotFoundError if subscription does not exist', async () => {
       const organizationId = 'org-123';
       (mockPrisma.subscriptionTier.findFirst as jest.Mock).mockResolvedValueOnce(null);
+    });
+  });
+
+  describe('createTrialSubscription', () => {
+    it('should create trial subscription with correct UTC dates', async () => {
+      const organizationId = 'org-123';
+
+      // Mock organization exists
+      (mockPrisma.organization.findUnique as jest.Mock).mockResolvedValueOnce({
+        id: organizationId,
+        name: 'Test Pharmacy',
+        contactEmail: 'test@example.com',
+      });
+
+      // Mock Stripe customer creation
+      const stripeCustomer = { id: 'cus_test123' } as Stripe.Customer;
+      (mockStripe.customers.create as jest.Mock).mockResolvedValueOnce(stripeCustomer);
+
+      // Mock subscription_tiers create
+      (mockPrisma.subscriptionTier.create as jest.Mock).mockResolvedValueOnce({
+        id: 1,
+        organizationId,
+        tierLevel: 'professional',
+        status: SubscriptionStatus.TRIALING,
+        stripeCustomerId: 'cus_test123',
+        trialStartedAt: new Date(),
+        trialEndDate: new Date(),
+        billingCycle: BillingCycle.MONTHLY,
+      });
+
+      await service.createTrialSubscription(organizationId, 14);
+
+      // Verify trial end date is set to 00:00 UTC
+      const createCall = mockPrisma.subscriptionTier.create as jest.Mock;
+      expect(createCall).toHaveBeenCalled();
+
+      const createData = createCall.mock.calls[0][0];
+      const trialEndDate = new Date(createData.data.trialEndDate);
+      expect(trialEndDate.getUTCHours()).toBe(0);
+      expect(trialEndDate.getUTCMinutes()).toBe(0);
+      expect(trialEndDate.getUTCSeconds()).toBe(0);
+    });
+
+    it('should throw NotFoundError if organization does not exist', async () => {
+      (mockPrisma.organization.findUnique as jest.Mock).mockResolvedValueOnce(null);
+
+      await expect(service.createTrialSubscription('org-nonexistent', 14)).rejects.toThrow(
+        NotFoundError,
+      );
+    });
+  });
+
+  describe('convertTrialToPaid', () => {
+    it('should convert trial to paid subscription atomically', async () => {
+      const organizationId = 'org-123';
+      const paymentMethodId = 'pm_test123';
+
+      // Mock existing TRIALING subscription
+      (mockPrisma.subscriptionTier.findFirst as jest.Mock).mockResolvedValueOnce({
+        id: 1,
+        organizationId,
+        tierLevel: 'professional',
+        stripeCustomerId: 'cus_test123',
+        status: SubscriptionStatus.TRIALING,
+      });
+
+      // Mock Stripe subscription creation
+      const stripeSubscription = {
+        id: 'sub_test123',
+        status: 'active' as const,
+      } as unknown as Stripe.Subscription;
+      (mockStripe.subscriptions.create as jest.Mock).mockResolvedValueOnce(stripeSubscription);
+
+      // Mock $transaction to execute callback
+      mockPrisma.$transaction = jest.fn((callback) => callback(mockPrisma));
+
+      // Mock subscription update within transaction
+      (mockPrisma.subscriptionTier.update as jest.Mock).mockResolvedValueOnce({
+        id: 1,
+        organizationId,
+        tierLevel: 'professional',
+        status: SubscriptionStatus.ACTIVE,
+        stripeSubscriptionId: 'sub_test123',
+        trialConvertedAt: new Date(),
+        billingCycle: BillingCycle.MONTHLY,
+      });
+
+      // Mock trialEvent create
+      (mockPrisma.trialEvent.create as jest.Mock).mockResolvedValueOnce({ id: '1' });
+
+      const result = await service.convertTrialToPaid(
+        organizationId,
+        paymentMethodId,
+        BillingCycle.MONTHLY,
+      );
+
+      expect(result.status).toBe(SubscriptionStatus.ACTIVE);
+      expect(result.stripeSubscriptionId).toBe('sub_test123');
+      expect(mockPrisma.$transaction).toHaveBeenCalled();
+    });
+
+    it('should throw NotFoundError if no TRIALING subscription exists', async () => {
+      (mockPrisma.subscriptionTier.findFirst as jest.Mock).mockResolvedValueOnce(null);
+
+      await expect(
+        service.convertTrialToPaid('org-123', 'pm_test123', BillingCycle.MONTHLY),
+      ).rejects.toThrow(NotFoundError);
+    });
+
+    it('should throw InternalError if no Stripe customer exists', async () => {
+      (mockPrisma.subscriptionTier.findFirst as jest.Mock).mockResolvedValueOnce({
+        id: 1,
+        organizationId: 'org-123',
+        stripeCustomerId: null,
+        status: SubscriptionStatus.TRIALING,
+      });
+
+      await expect(
+        service.convertTrialToPaid('org-123', 'pm_test123', BillingCycle.MONTHLY),
+      ).rejects.toThrow(InternalError);
+    });
+  });
+
+  describe('downgradeExpiredTrials', () => {
+    it('should downgrade expired trials to starter tier', async () => {
+      // Mock expired trials
+      (mockPrisma.subscriptionTier.findMany as jest.Mock).mockResolvedValueOnce([
+        { id: 1, organizationId: 'org-1' },
+        { id: 2, organizationId: 'org-2' },
+      ]);
+
+      // Mock $transaction for each downgrade
+      mockPrisma.$transaction = jest.fn((callback) => callback(mockPrisma));
+      (mockPrisma.subscriptionTier.update as jest.Mock).mockResolvedValue({});
+      (mockPrisma.trialEvent.create as jest.Mock).mockResolvedValue({});
+
+      const count = await service.downgradeExpiredTrials();
+
+      expect(count).toBe(2);
+      expect(mockPrisma.subscriptionTier.update).toHaveBeenCalledTimes(2);
+    });
+
+    it('should return 0 if no expired trials', async () => {
+      (mockPrisma.subscriptionTier.findMany as jest.Mock).mockResolvedValueOnce([]);
+
+      const count = await service.downgradeExpiredTrials();
+
+      expect(count).toBe(0);
+    });
+
+    it('should continue processing if one downgrade fails', async () => {
+      // Mock expired trials
+      (mockPrisma.subscriptionTier.findMany as jest.Mock).mockResolvedValueOnce([
+        { id: 1, organizationId: 'org-1' },
+        { id: 2, organizationId: 'org-2' },
+      ]);
+
+      // Mock $transaction
+      mockPrisma.$transaction = jest.fn((callback) => callback(mockPrisma));
+
+      // First update fails, second succeeds
+      (mockPrisma.subscriptionTier.update as jest.Mock)
+        .mockRejectedValueOnce(new Error('DB error'))
+        .mockResolvedValueOnce({});
+
+      (mockPrisma.trialEvent.create as jest.Mock).mockResolvedValue({});
+
+      const count = await service.downgradeExpiredTrials();
+
+      expect(count).toBe(1);
     });
   });
 

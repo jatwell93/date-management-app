@@ -79,7 +79,7 @@ export function extractCostValue(costStr: string): number | null {
   // Now parse as float
   const value = parseFloat(cleanedStr);
 
-  if (isNaN(value)) {
+  if (Number.isNaN(value)) {
     return null;
   }
 
@@ -217,7 +217,7 @@ export function extractCostValueEnhanced(costStr: string): number | null {
   // Parse the value
   const value = parseFloat(normalizedStr);
 
-  if (isNaN(value)) {
+  if (Number.isNaN(value)) {
     return null;
   }
 

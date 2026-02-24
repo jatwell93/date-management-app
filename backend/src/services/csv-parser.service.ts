@@ -583,7 +583,7 @@ export class CSVParserService extends EventEmitter {
     cleaned = cleaned.replace(/[^\d.]/g, '');
 
     const value = parseFloat(cleaned);
-    return isNaN(value) ? null : isNegative ? -value : value;
+    return Number.isNaN(value) ? null : isNegative ? -value : value;
   }
 
   /**

@@ -37,10 +37,7 @@ export class ClerkWebhookService {
   private subscriptionService: SubscriptionService;
   private monitor: ApplicationMonitoringService;
 
-  constructor(
-    prismaClient?: PrismaClient,
-    subscriptionService?: SubscriptionService,
-  ) {
+  constructor(prismaClient?: PrismaClient, subscriptionService?: SubscriptionService) {
     this.prisma = prismaClient ?? getDefaultDatabaseClient();
     this.subscriptionService = subscriptionService ?? new SubscriptionService(this.prisma);
     this.monitor = ApplicationMonitoringService.getInstance();
@@ -55,7 +52,7 @@ export class ClerkWebhookService {
     }
 
     const wh = new Webhook(envConfig.CLERK_WEBHOOK_SECRET);
-    
+
     // Get the svix-specific headers
     const svixId = headers['svix-id'];
     const svixTimestamp = headers['svix-timestamp'];
@@ -141,11 +138,13 @@ export class ClerkWebhookService {
    */
   private async handleUserCreated(data: any): Promise<void> {
     const { id, email_addresses, username, first_name, last_name, organization_memberships } = data;
-    
+
     try {
       // Get primary email
-      const primaryEmail = email_addresses.find((email: any) => email.id === data.primary_email_address_id)?.email_address;
-      
+      const primaryEmail = email_addresses.find(
+        (email: any) => email.id === data.primary_email_address_id,
+      )?.email_address;
+
       if (!primaryEmail) {
         log.error('User created event missing primary email', { userId: id });
         return;
@@ -184,18 +183,17 @@ export class ClerkWebhookService {
         },
       });
 
-      log.info('User created successfully', { 
-        userId: user.id, 
+      log.info('User created successfully', {
+        userId: user.id,
         clerkUserId: id,
         email: primaryEmail,
-        organizationId 
+        organizationId,
       });
 
       // If user has an organization and no subscription yet, create trial
       if (organizationId) {
         await this.ensureTrialSubscription(organizationId, primaryEmail);
       }
-
     } catch (error) {
       log.error('Error handling user.created event', { userId: id, error });
       Sentry.captureException(error, { extra: { userId: id, eventType: 'user.created' } });
@@ -208,11 +206,13 @@ export class ClerkWebhookService {
    */
   private async handleUserUpdated(data: any): Promise<void> {
     const { id, email_addresses, username, first_name, last_name } = data;
-    
+
     try {
       // Get primary email
-      const primaryEmail = email_addresses.find((email: any) => email.id === data.primary_email_address_id)?.email_address;
-      
+      const primaryEmail = email_addresses.find(
+        (email: any) => email.id === data.primary_email_address_id,
+      )?.email_address;
+
       // Update user record
       await this.prisma.user.updateMany({
         where: { clerkUserId: id },
@@ -224,7 +224,6 @@ export class ClerkWebhookService {
       });
 
       log.info('User updated successfully', { clerkUserId: id, email: primaryEmail });
-
     } catch (error) {
       log.error('Error handling user.updated event', { userId: id, error });
       Sentry.captureException(error, { extra: { userId: id, eventType: 'user.updated' } });
@@ -237,7 +236,7 @@ export class ClerkWebhookService {
    */
   private async handleOrganizationCreated(data: any): Promise<void> {
     const { id, name, created_by } = data;
-    
+
     try {
       // Find or create organization
       const org = await this.findOrCreateOrganization({
@@ -246,15 +245,16 @@ export class ClerkWebhookService {
         created_by,
       });
 
-      log.info('Organization created/updated successfully', { 
-        organizationId: org.id, 
+      log.info('Organization created/updated successfully', {
+        organizationId: org.id,
         clerkOrganizationId: id,
-        name 
+        name,
       });
-
     } catch (error) {
       log.error('Error handling organization.created event', { organizationId: id, error });
-      Sentry.captureException(error, { extra: { organizationId: id, eventType: 'organization.created' } });
+      Sentry.captureException(error, {
+        extra: { organizationId: id, eventType: 'organization.created' },
+      });
       throw error;
     }
   }
@@ -293,16 +293,28 @@ export class ClerkWebhookService {
       if (updated.count === 0) {
         log.warn('organizationMembership.created: no user found to update', { clerkUserId });
       } else {
-        log.info('User linked to organization', { clerkUserId, organizationId: org.id, role: appRole });
+        log.info('User linked to organization', {
+          clerkUserId,
+          organizationId: org.id,
+          role: appRole,
+        });
       }
 
       // Ensure trial subscription exists for the organization
-      const user = await this.prisma.user.findFirst({ where: { clerkUserId }, select: { email: true } });
+      const user = await this.prisma.user.findFirst({
+        where: { clerkUserId },
+        select: { email: true },
+      });
       await this.ensureTrialSubscription(org.id, user?.email ?? '');
-
     } catch (error) {
-      log.error('Error handling organizationMembership.created', { clerkUserId, clerkOrgId, error });
-      Sentry.captureException(error, { extra: { clerkUserId, clerkOrgId, eventType: 'organizationMembership.created' } });
+      log.error('Error handling organizationMembership.created', {
+        clerkUserId,
+        clerkOrgId,
+        error,
+      });
+      Sentry.captureException(error, {
+        extra: { clerkUserId, clerkOrgId, eventType: 'organizationMembership.created' },
+      });
       throw error;
     }
   }
@@ -331,10 +343,15 @@ export class ClerkWebhookService {
       });
 
       log.info('User unlinked from organization', { clerkUserId, clerkOrgId });
-
     } catch (error) {
-      log.error('Error handling organizationMembership.deleted', { clerkUserId, clerkOrgId, error });
-      Sentry.captureException(error, { extra: { clerkUserId, clerkOrgId, eventType: 'organizationMembership.deleted' } });
+      log.error('Error handling organizationMembership.deleted', {
+        clerkUserId,
+        clerkOrgId,
+        error,
+      });
+      Sentry.captureException(error, {
+        extra: { clerkUserId, clerkOrgId, eventType: 'organizationMembership.deleted' },
+      });
       throw error;
     }
   }
@@ -354,7 +371,9 @@ export class ClerkWebhookService {
         data: {
           clerkOrganizationId: clerkOrg.id,
           name: clerkOrg.name || 'Default Organization',
-          slug: (clerkOrg.slug || clerkOrg.name || clerkOrg.id).toLowerCase().replace(/[^a-z0-9-]/g, '-'),
+          slug: (clerkOrg.slug || clerkOrg.name || clerkOrg.id)
+            .toLowerCase()
+            .replace(/[^a-z0-9-]/g, '-'),
           createdAt: new Date(),
           updatedAt: new Date(),
         },
@@ -383,7 +402,6 @@ export class ClerkWebhookService {
       await this.subscriptionService.createTrialSubscription(organizationId, 14);
 
       log.info('Trial subscription created', { organizationId, email });
-
     } catch (error) {
       log.error('Error creating trial subscription', { organizationId, error });
       // Don't throw - user is created, we can retry subscription later

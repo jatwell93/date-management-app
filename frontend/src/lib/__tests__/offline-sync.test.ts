@@ -1,14 +1,4 @@
 import { offlineSyncService } from '../offline-sync';
-import { v4 as uuidv4 } from 'uuid';
-
-// Mock uuid to avoid ESM issues
-jest.mock('uuid', () => ({
-  __esModule: true,
-  v4: () => 'test-uuid-' + Math.random().toString(36).substr(2, 9),
-  default: {
-    v4: () => 'test-uuid-' + Math.random().toString(36).substr(2, 9),
-  },
-}));
 
 // Mock localStorage
 const localStorageMock = (() => {

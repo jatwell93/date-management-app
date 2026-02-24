@@ -84,7 +84,7 @@ class AuthService {
         let isSequential = true;
         // Check increasing sequence
         for (let i = 1; i < pin.length; i++) {
-            if (parseInt(pin[i]) !== parseInt(pin[i - 1]) + 1) {
+            if (parseInt(pin[i], 10) !== parseInt(pin[i - 1], 10) + 1) {
                 isSequential = false;
                 break;
             }
@@ -94,7 +94,7 @@ class AuthService {
         // Check decreasing sequence
         isSequential = true;
         for (let i = 1; i < pin.length; i++) {
-            if (parseInt(pin[i]) !== parseInt(pin[i - 1]) - 1) {
+            if (parseInt(pin[i], 10) !== parseInt(pin[i - 1], 10) - 1) {
                 isSequential = false;
                 break;
             }
@@ -114,7 +114,6 @@ class AuthService {
             const users = await this.prisma.user.findMany({
                 select: {
                     id: true,
-                    pin: true,
                     role: true,
                     organizationId: true,
                 },
@@ -125,7 +124,7 @@ class AuthService {
             // Look for a user whose hashed pin matches the PIN that was provided
             for (const user of users) {
                 logger_1.Logger.debug('Auth service: Checking user for authentication', { userId: user.id });
-                const isValidPin = await bcrypt_1.default.compare(pin, user.pin);
+                const isValidPin = false; // PIN auth removed — use Clerk authentication
                 if (isValidPin) {
                     // Verify user has an organization
                     if (!user.organizationId) {

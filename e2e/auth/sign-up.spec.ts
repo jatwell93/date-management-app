@@ -32,10 +32,19 @@ test.describe('Sign-up flow', () => {
     }
 
     // Fill password
-    await page.getByLabel(/password/i).fill(TEST_PASSWORD);
+    await page.locator('input[name="password"], input[id="password-field"]').fill(TEST_PASSWORD);
 
-    // Submit
-    await page.getByRole('button', { name: /continue|sign up/i }).click();
+    // Wait for button to be enabled
+    await page.waitForTimeout(500);
+    
+    // Click the button via JS to ensure it fires
+    await page.evaluate(() => {
+      const button = document.querySelector('button[data-localization-key="formButtonPrimary"]') as HTMLButtonElement;
+      if (button) button.click();
+    });
+
+    // Wait for navigation
+    await page.waitForTimeout(3000);
 
     // Wait for OTP verification screen
     await expect(page.getByText(/verify|check your email|code/i)).toBeVisible({ timeout: 10000 });

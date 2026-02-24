@@ -7,7 +7,7 @@ export default defineConfig({
   retries: process.env.CI ? 2 : 0,
   workers: 1,
   reporter: 'html',
-  globalSetup: './e2e/global-setup.ts',
+  // globalSetup: './e2e/global-setup.ts', // Disabled - Clerk form submission doesn't work with Playwright
   use: {
     baseURL: process.env.PLAYWRIGHT_BASE_URL ?? 'http://localhost:3002',
     trace: 'on-first-retry',

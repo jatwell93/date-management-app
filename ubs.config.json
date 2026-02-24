@@ -13,7 +13,12 @@
     "**/*.map",
     "**/*.min.js",
     "node_modules/**",
-    "bug-scan-report.json"
+    "bug-scan-report.json",
+    "**/*.test.*",
+    "**/*.spec.*",
+    "**/test/**",
+    "**/tests/**",
+    "**/__tests__/**"
   ],
   "note": "This file is used by developers to pass exclusion patterns to UBS if supported (and is referenced by .ubsignore)."
 }

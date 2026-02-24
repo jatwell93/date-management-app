@@ -153,10 +153,13 @@ const handleClerkWebhook = async (req: Request, res: Response) => {
     const startTs = Date.now();
 
     if (!isNew) {
-      console.log('[CLERK_WEBHOOK] Duplicate webhook event, returning success without reprocessing', {
-        eventId: svixEventId,
-        eventType,
-      });
+      console.log(
+        '[CLERK_WEBHOOK] Duplicate webhook event, returning success without reprocessing',
+        {
+          eventId: svixEventId,
+          eventType,
+        },
+      );
 
       // Record idempotency skip metric
       monitor.recordWebhookEvent(eventType, 0, 'skipped');
