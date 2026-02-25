@@ -109,9 +109,13 @@ function ClerkAuthInner({ children }: { children: React.ReactNode }) {
 
   // Handle Clerk authentication state changes
   useEffect(() => {
+    let isMounted = true;
+
     if (isLoaded && isSignedIn && user) {
       // Get the session token from Clerk
       getToken().then((clerkToken) => {
+        if (!isMounted) return;
+        
         if (clerkToken) {
           setToken(clerkToken);
           setIsLoggedIn(true);
@@ -126,6 +130,10 @@ function ClerkAuthInner({ children }: { children: React.ReactNode }) {
           setUserRole(decodeTokenAndGetRole(clerkToken));
           localStorage.setItem('session', clerkToken);
         }
+      }).catch((error) => {
+        if (!isMounted) return;
+        Sentry.captureException(error, { tags: { feature: 'auth', action: 'getToken' } });
+        console.error('Failed to get Clerk token:', error);
       });
     } else if (isLoaded && !isSignedIn) {
       // User signed out
@@ -137,6 +145,10 @@ function ClerkAuthInner({ children }: { children: React.ReactNode }) {
       setUserRole(null);
       localStorage.removeItem('session');
     }
+    
+    return () => {
+      isMounted = false;
+    };
   }, [isSignedIn, isLoaded, user, getToken]);
 
   const handleLogin = (newToken: string) => {

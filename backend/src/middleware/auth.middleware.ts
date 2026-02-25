@@ -45,7 +45,12 @@ function getAuthorizedParties(): string[] {
     partySet.add(envConfig.CORS_ORIGIN);
   }
 
-  return Array.from(partySet);
+  const parties = Array.from(partySet);
+  if (parties.length === CLERK_DEV_ORIGINS.length && process.env.NODE_ENV === 'production') {
+    console.warn('WARNING: No production origins configured for Clerk token verification. Please set FRONTEND_URL or CORS_ORIGIN.');
+  }
+
+  return parties;
 }
 
 const isTierLevel = (value: string): value is TierLevel =>
@@ -53,6 +58,19 @@ const isTierLevel = (value: string): value is TierLevel =>
 
 const isBillingCycle = (value: string): value is BillingCycle =>
   Object.values(BillingCycle).includes(value as BillingCycle);
+
+const hasRequiredTokenFields = (token: any): boolean => {
+  return (
+    'userId' in token &&
+    'role' in token &&
+    'organizationId' in token &&
+    'tierLevel' in token
+  );
+};
+
+// Simple memory cache for subscription status
+const subscriptionCache = new Map<string, { subscription: any, timestamp: number }>();
+const CACHE_TTL_MS = 5 * 60 * 1000; // 5 minutes
 
 export const authenticateToken = async (req: AuthRequest, res: Response, next: NextFunction) => {
   // Test environment bypass
@@ -176,8 +194,8 @@ export const authenticateToken = async (req: AuthRequest, res: Response, next: N
     }
   }
 
-  // FIX: Add a check to ensure the decoded token payload exists and is an object
-  if (!decodedToken || typeof decodedToken === 'string') {
+  // Check for expected object structure
+  if (!decodedToken || typeof decodedToken !== 'object') {
     // Track invalid token payload
     const analyticsService = AnalyticsService.getInstance();
     analyticsService.trackEvent({
@@ -189,7 +207,22 @@ export const authenticateToken = async (req: AuthRequest, res: Response, next: N
       metadata: { path: req.path, method: req.method },
     });
 
-    return res.status(403).json({ message: 'Access denied: Invalid token payload' }); // Token is valid, but payload is missing or in wrong format
+    return res.status(403).json({ message: 'Access denied: Invalid token payload' });
+  }
+
+  // Validate required fields exist in the token payload
+  if (!hasRequiredTokenFields(decodedToken)) {
+    const analyticsService = AnalyticsService.getInstance();
+    analyticsService.trackEvent({
+      eventType: AnalyticsEventType.USER_LOGOUT,
+      eventCategory: 'Auth',
+      eventAction: 'missing_token_fields',
+      ipAddress: req.ip,
+      userAgent: req.get('User-Agent') || undefined,
+      metadata: { path: req.path, method: req.method },
+    });
+
+    return res.status(403).json({ message: 'Access denied: Malformed token payload' });
   }
 
   // Check for token expiration (manually if not automatically handled by jwt.verify)
@@ -225,11 +258,52 @@ export const authenticateToken = async (req: AuthRequest, res: Response, next: N
 
   // Validate organization exists and is active (task 4.4)
   try {
-    const prisma = getDefaultDatabaseClient();
-    const subscription = await prisma.subscriptionTier.findFirst({
-      where: { organizationId: decodedToken.organizationId },
-      orderBy: { createdAt: 'desc' },
-    });
+    const orgId = decodedToken.organizationId;
+    let subscription: any = null;
+    let hasActiveAccess = true;
+
+    // Check cache first
+    const cached = subscriptionCache.get(orgId);
+    if (cached && Date.now() - cached.timestamp < CACHE_TTL_MS) {
+      subscription = cached.subscription.data;
+      hasActiveAccess = cached.subscription.hasActiveAccess;
+    } else {
+      const prisma = getDefaultDatabaseClient();
+      subscription = await prisma.subscriptionTier.findFirst({
+        where: { organizationId: orgId },
+        orderBy: { createdAt: 'desc' },
+      });
+
+      if (subscription && subscription.status === SubscriptionStatus.CANCELED) {
+        const tierLevel = isTierLevel(subscription.tierLevel) ? subscription.tierLevel : null;
+        const billingCycle = isBillingCycle(subscription.billingCycle) ? subscription.billingCycle : null;
+
+        if (tierLevel && billingCycle) {
+          const subscriptionService = new SubscriptionService(prisma);
+          hasActiveAccess = await subscriptionService.isAccessActive({
+            id: subscription.id,
+            organizationId: subscription.organizationId,
+            tierLevel,
+            stripeSubscriptionId: subscription.stripeSubscriptionId ?? undefined,
+            trialEndDate: subscription.trialEndDate ?? undefined,
+            trialStartedAt: subscription.trialStartedAt ?? undefined,
+            trialConvertedAt: subscription.trialConvertedAt ?? undefined,
+            status: subscription.status,
+            billingCycle,
+            createdAt: subscription.createdAt,
+            updatedAt: subscription.updatedAt,
+          });
+        } else {
+          hasActiveAccess = false;
+        }
+      }
+
+      // Update cache
+      subscriptionCache.set(orgId, {
+        subscription: { data: subscription, hasActiveAccess },
+        timestamp: Date.now(),
+      });
+    }
 
     if (!subscription) {
       const analyticsService = AnalyticsService.getInstance();
@@ -281,19 +355,6 @@ export const authenticateToken = async (req: AuthRequest, res: Response, next: N
           message: 'Access denied: Organization subscription is invalid. Please contact support.',
         });
       }
-
-      const subscriptionService = new SubscriptionService(prisma);
-      const hasActiveAccess = await subscriptionService.isAccessActive({
-        id: subscription.id,
-        organizationId: subscription.organizationId,
-        tierLevel,
-        stripeSubscriptionId: subscription.stripeSubscriptionId ?? undefined,
-        trialEndDate: subscription.trialEndDate ?? undefined,
-        status: subscription.status,
-        billingCycle,
-        createdAt: subscription.createdAt,
-        updatedAt: subscription.updatedAt,
-      });
 
       if (!hasActiveAccess) {
         const analyticsService = AnalyticsService.getInstance();

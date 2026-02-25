@@ -1,9 +1,11 @@
+export const API_BASE_URL = process.env.REACT_APP_API_URL || 'http://localhost:3001';
+
 class ApiService {
   private baseUrl: string;
 
   constructor() {
     // Use environment variable or default to localhost:3001
-    this.baseUrl = process.env.REACT_APP_API_URL || 'http://localhost:3001';
+    this.baseUrl = API_BASE_URL;
   }
 
   private async request<T>(endpoint: string, options: RequestInit): Promise<T> {

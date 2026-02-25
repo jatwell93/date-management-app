@@ -2,6 +2,7 @@ import { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { Button } from './ui/button';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from './ui/card';
+import { API_BASE_URL } from '../lib/api.service';
 
 interface SubscriptionTierResponse {
   status: 'ACTIVE' | 'TRIALING' | 'EXPIRED' | 'CANCELED';
@@ -24,8 +25,6 @@ interface TrialStatusResponse {
     features: string[];
   };
 }
-
-const API_BASE_URL = process.env.REACT_APP_API_URL || 'http://localhost:3001';
 
 interface TrialUpgradeFlowProps {
   token: string | null;

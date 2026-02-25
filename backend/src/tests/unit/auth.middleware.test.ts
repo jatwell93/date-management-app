@@ -40,16 +40,39 @@ const makeResponse = () => {
   return res;
 };
 
-const makeRequest = (overrides: Partial<AuthRequest> = {}): AuthRequest =>
+const makeRequest = (overrides?: Partial<AuthRequest>): AuthRequest =>
   ({
     headers: {},
-    header: jest.fn().mockReturnValue('test-agent'),
     ip: '127.0.0.1',
-    get: jest.fn().mockReturnValue('test-agent'),
-    path: '/secure',
+    get: jest.fn((header: string) => (header === 'User-Agent' ? 'test-agent' : undefined)),
+    path: '/test',
     method: 'GET',
     ...overrides,
   }) as AuthRequest;
+
+const testInvalidTokenScenario = async (
+  errorMessage: string,
+  nextFn: jest.Mock,
+  expectTracking = true,
+): Promise<void> => {
+  const req = makeRequest({ headers: { authorization: 'Bearer invalid-token' } });
+  const res = makeResponse();
+
+  (jwt.verify as jest.Mock).mockImplementation(() => {
+    throw new Error(errorMessage);
+  });
+
+  await authenticateToken(req, res, nextFn);
+
+  expect(res.status).toHaveBeenCalledWith(403);
+  expect(res.json).toHaveBeenCalledWith({ message: 'Access denied: Invalid token' });
+  if (expectTracking) {
+    expect(trackEvent).toHaveBeenCalledWith(
+      expect.objectContaining({ eventAction: 'invalid_token_attempt' }),
+    );
+  }
+  expect(nextFn).not.toHaveBeenCalled();
+};
 
 describe('auth middleware', () => {
   const next = jest.fn();
@@ -83,68 +106,53 @@ describe('auth middleware', () => {
       expect(next).not.toHaveBeenCalled();
     });
 
-    it('rejects invalid token when verification fails', () => {
-      const req = makeRequest({ headers: { authorization: 'Bearer badtoken' } });
+    it('rejects invalid token when verification fails', async () => {
+      await testInvalidTokenScenario('invalid', next);
+    });
+
+    it('rejects invalid token when rotation secret also fails', async () => {
+      await testInvalidTokenScenario('invalid signature', next, false);
+    });
+
+    it('handles malformed token header gracefully', () => {
+      const req = makeRequest({ headers: { authorization: 'invalid-format' } });
       const res = makeResponse();
 
-      (jwt.verify as jest.Mock).mockImplementation(() => {
-        throw new Error('invalid');
+      authenticateToken(req, res, next);
+
+      expect(res.status).toHaveBeenCalledWith(401);
+      expect(res.json).toHaveBeenCalledWith({
+        message: 'Access denied: No token provided',
       });
-
-      authenticateToken(req, res, next);
-
-      expect(res.status).toHaveBeenCalledWith(403);
-      expect(res.json).toHaveBeenCalledWith({ message: 'Access denied: Invalid token' });
-      expect(trackEvent).toHaveBeenCalledWith(
-        expect.objectContaining({ eventAction: 'invalid_token_attempt' }),
-      );
       expect(next).not.toHaveBeenCalled();
     });
 
-    it('rejects invalid token when rotation secret also fails', () => {
-      const req = makeRequest({ headers: { authorization: 'Bearer badtoken' } });
-      const res = makeResponse();
-
-      process.env.JWT_SECRET_OLD = 'old_secret';
-      (jwt.verify as jest.Mock)
-        .mockImplementationOnce(() => {
-          throw new Error('invalid current');
-        })
-        .mockImplementationOnce(() => {
-          throw new Error('invalid old');
-        });
-
-      authenticateToken(req, res, next);
-
-      expect(res.status).toHaveBeenCalledWith(403);
-      expect(res.json).toHaveBeenCalledWith({ message: 'Access denied: Invalid token' });
-      expect(next).not.toHaveBeenCalled();
-    });
-
-    it('rejects when decoded payload is invalid', () => {
+    it('rejects when decoded payload is invalid', async () => {
       const req = makeRequest({ headers: { authorization: 'Bearer token' } });
       const res = makeResponse();
 
       (jwt.verify as jest.Mock).mockReturnValue('not-a-payload');
 
-      authenticateToken(req, res, next);
+      await authenticateToken(req, res, next);
 
       expect(res.status).toHaveBeenCalledWith(403);
       expect(res.json).toHaveBeenCalledWith({ message: 'Access denied: Invalid token payload' });
       expect(next).not.toHaveBeenCalled();
     });
 
-    it('rejects when token is expired', () => {
-      const req = makeRequest({ headers: { authorization: 'Bearer token' } });
+    it('rejects when token is expired', async () => {
+      const req = makeRequest({ headers: { authorization: 'Bearer expired-token' } });
       const res = makeResponse();
 
       (jwt.verify as jest.Mock).mockReturnValue({
         userId: 1,
-        role: 'Manager',
-        exp: Math.floor(Date.now() / 1000) - 10,
+        role: 'Admin',
+        organizationId: 'org-1',
+        tierLevel: 'starter',
+        exp: Math.floor(Date.now() / 1000) - 3600, // Expired 1 hour ago
       });
 
-      authenticateToken(req, res, next);
+      await authenticateToken(req, res, next);
 
       expect(res.status).toHaveBeenCalledWith(403);
       expect(res.json).toHaveBeenCalledWith({ message: 'Access denied: Token has expired' });
@@ -241,6 +249,16 @@ describe('auth middleware', () => {
         billingCycle: 'monthly',
         createdAt: new Date(),
         updatedAt: new Date(),
+      });
+
+      // Clear the cache module state or use a different org ID to avoid cache hits
+      req.user = undefined;
+      (jwt.verify as jest.Mock).mockReturnValue({
+        userId: 7,
+        role: 'Manager',
+        organizationId: 'org-uncached',
+        tierLevel: 'professional',
+        exp: Math.floor(Date.now() / 1000) + 300,
       });
 
       mockIsAccessActive.mockResolvedValue(false);

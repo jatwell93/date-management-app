@@ -12,27 +12,8 @@ jest.mock('@sendgrid/mail', () => ({
 
 jest.mock('../../database/database-factory');
 
-type MockPrisma = Partial<PrismaClient> & {
-  processedWebhookEvent: {
-    findUnique: jest.Mock;
-    create: jest.Mock;
-  };
-  organization: {
-    findUnique: jest.Mock;
-  };
-  subscriptionTier: {
-    create: jest.Mock;
-    updateMany: jest.Mock;
-    findFirst: jest.Mock;
-  };
-  organizationUsage: {
-    upsert: jest.Mock;
-    update: jest.Mock;
-    findUnique: jest.Mock;
-  };
-  auditLog: {
-    create: jest.Mock;
-  };
+type MockPrisma = {
+  [key: string]: any;
   $transaction: jest.Mock;
 };
 
@@ -79,7 +60,7 @@ describe('WebhookService', () => {
       sendDowngradeWarningEmail: jest.fn(),
     } as unknown as jest.Mocked<EmailService>;
 
-    service = new WebhookService(prisma as PrismaClient, undefined, emailService);
+    service = new WebhookService(prisma as unknown as PrismaClient, undefined, emailService);
 
     mockStripe = {
       customers: {

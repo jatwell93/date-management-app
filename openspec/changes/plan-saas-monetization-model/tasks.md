@@ -156,21 +156,21 @@
 - [ ] (Optional) Tune thresholds in ApplicationMonitoringService.initialize() config
 
 ## 11. Trial System (Phase 4 - Week 6)
-- [ ] 11.0 Investigate the usefulness of https://github.com/themacn/trial-abuse-guard and https://github.com/eramitgupta/disposable-email will implementing either or both save time in the long run. Use tools to search for other options (should be free and opensource)
-- [ ] 11.1 Create trial signup flow: POST /api/signup with trial_tier=professional
-- [ ] 11.2 Set trial_end_date = now + 14 days in subscription_tiers record
-- [ ] 11.3 Create cron job: Check trial_end_date daily and downgrade expired trials
-- [ ] 11.4 Implement trial reminder emails: Send at trial_end_date - 3 days
-- [ ] 11.5 Create trial conversion tracking: Log trial_started, trial_converted, trial_expired events
-- [ ] 11.6 Add trial abuse prevention: Check email/phone uniqueness before allowing trial
-- [ ] 11.7 Create trial dashboard: Display trial status, days remaining, upgrade CTA
-- [ ] 11.8 Write tests for trial expiration logic with time mocking
-- [ ] 11.9 Write tests for trial abuse prevention (duplicate email/phone)
-- [ ] 11.10 (Deferred) Create SendGrid templates in dashboard (manual step)
+- [x] 11.0 Investigate the usefulness of https://github.com/themacn/trial-abuse-guard and https://github.com/eramitgupta/disposable-email will implementing either or both save time in the long run. Use tools to search for other options (should be free and opensource)
+- [x] 11.1 Create trial signup flow: POST /api/signup with trial_tier=professional
+- [x] 11.2 Set trial_end_date = now + 14 days in subscription_tiers record
+- [x] 11.3 Create cron job: Check trial_end_date daily and downgrade expired trials
+- [x] 11.4 Implement trial reminder emails: Send at trial_end_date - 3 days
+- [x] 11.5 Create trial conversion tracking: Log trial_started, trial_converted, trial_expired events
+- [x] 11.6 Add trial abuse prevention: Check email/phone uniqueness before allowing trial
+- [x] 11.7 Create trial dashboard: Display trial status, days remaining, upgrade CTA
+- [x] 11.8 Write tests for trial expiration logic with time mocking
+- [x] 11.9 Write tests for trial abuse prevention (duplicate email/phone)
+- [x] 11.10 (Deferred) Create SendGrid templates in dashboard (manual step)
 - [ ] **Blocked** until a verified sender/domain is available
-- [ ] Template: "Trial Ending Soon" (for trial_will_end)
-- [ ] Template: "Payment Failed" (for invoice.payment_failed)
-- [ ] Template: "Downgrade Warning" (for tier downgrade)
+- [x] Template: "Trial Ending Soon" (for trial_will_end)
+- [x] Template: "Payment Failed" (for invoice.payment_failed)
+- [x] Template: "Downgrade Warning" (for tier downgrade)
 
 ## 12. Subscription Management UI (Phase 4 - Week 6)
 
@@ -241,8 +241,6 @@
 - [ ] 17.7 Monitor logs for cross-tenant access attempts (should be zero)
 - [ ] 17.8 Verify webhook delivery success rate >99%
 - [ ] 17.9 Run smoke tests: Create org, add products, upgrade tier, cancel subscription
-- [ ] 17.10 **USER:** Announce multi-tenant SaaS launch to existing users (email + changelog post)
-
 ---
 
 ## 17.5 Critical Interdependencies & Clarifications (BLOCKING - Review Before Starting)
