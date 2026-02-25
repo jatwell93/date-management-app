@@ -165,8 +165,12 @@ export class ClerkWebhookService {
       let organizationId: string | null = null;
 
       if (orgMembership?.organization) {
-        // Find or create organization
+        // Find or create organization from Clerk
         const org = await this.findOrCreateOrganization(orgMembership.organization);
+        organizationId = org.id;
+      } else {
+        // Auto-create organization for email/password signups
+        const org = await this.createDefaultOrganization(id, primaryEmail);
         organizationId = org.id;
       }
 
@@ -190,10 +194,8 @@ export class ClerkWebhookService {
         organizationId,
       });
 
-      // If user has an organization and no subscription yet, create trial
-      if (organizationId) {
-        await this.ensureTrialSubscription(organizationId, primaryEmail);
-      }
+      // Create trial subscription for the organization
+      await this.ensureTrialSubscription(organizationId, primaryEmail);
     } catch (error) {
       log.error('Error handling user.created event', { userId: id, error });
       Sentry.captureException(error, { extra: { userId: id, eventType: 'user.created' } });
@@ -379,6 +381,32 @@ export class ClerkWebhookService {
         },
       });
     }
+
+    return org;
+  }
+
+  /**
+   * Create default organization for new email/password signups
+   */
+  private async createDefaultOrganization(clerkUserId: string, email: string): Promise<{ id: string }> {
+    const orgName = email.split('@')[0] + "'s Organization";
+    const slug = `${email.split('@')[0]}-${Date.now()}`.toLowerCase().replace(/[^a-z0-9-]/g, '-');
+    
+    const org = await this.prisma.organization.create({
+      data: {
+        name: orgName,
+        slug: slug,
+        contactEmail: email,
+        createdAt: new Date(),
+        updatedAt: new Date(),
+      },
+    });
+
+    log.info('Created default organization for new user', {
+      organizationId: org.id,
+      clerkUserId,
+      email,
+    });
 
     return org;
   }

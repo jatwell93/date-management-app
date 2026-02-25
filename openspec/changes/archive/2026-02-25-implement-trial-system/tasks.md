@@ -252,10 +252,10 @@
   - [x] On click: Redirect to Stripe checkout (populated with customer + trial days adjustment)
   - [x] Checkout confirmation redirect back to app
 - [x] Add `<TrialBanner />` to main layout
-- [ ] Test frontend:
-  - [ ] Trial user sees trial banner + upgrade button
-  - [ ] Non-trial user sees appropriate banner
-  - [ ] Upgrade button workflow completes
+- [x] Test frontend:
+  - [x] Trial user sees trial banner + upgrade button
+  - [x] Non-trial user sees appropriate banner
+  - [x] Upgrade button workflow completes
 
 ## Phase 9: Stripe Webhook Integration (Confirm Payment Intent)
 
@@ -273,11 +273,11 @@
     - [x] Log failure: `logTrialEvent('payment_failed', {intent_id, error})`
   - [x] Handle other events gracefully (return 200 even if unhandled)
   - [x] Error handling: Log to Sentry, return 500 if database write fails (Stripe will retry)
-- [ ] Add webhook endpoint to Stripe dashboard
+- [-] Add webhook endpoint to Stripe dashboard
 - [x] Test:
   - [x] Use Stripe CLI: `stripe listen --forward-to localhost:3000/webhooks/stripe`
   - [x] Trigger test payment: `stripe trigger payment_intent.succeeded`
-  - [ ] Verify local DB updated (requires real customer with org metadata)
+  - [-] Verify local DB updated (requires real customer with org metadata)
 
 ## Phase 10: Error Handling & Edge Cases
 
@@ -353,10 +353,10 @@
   - [x] `npm run test:backend:diff` (all new tests added)
   - [x] `npm run lint` (no TypeScript errors)
   - [x] `ubs $(git diff --name-only)` (no UBS warnings)
-- [ ] Verify all tests passing:
-  - [ ] `npm run test:backend:diff` (all new tests added)
-  - [ ] `npm run lint` (no TypeScript errors)
-  - [ ] `ubs $(git diff --name-only)` (no UBS warnings)
+- [x] Verify all tests passing:
+  - [x] `npm run test:backend:diff` (all new tests added)
+  - [x] `npm run lint` (no TypeScript errors)
+  - [x] `ubs $(git diff --name-only)` (no UBS warnings)
 
 ## Summary by Phase
 

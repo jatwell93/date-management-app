@@ -25,6 +25,8 @@ interface TrialStatusResponse {
   };
 }
 
+const API_BASE_URL = process.env.REACT_APP_API_URL || 'http://localhost:3001';
+
 interface TrialUpgradeFlowProps {
   token: string | null;
 }
@@ -44,7 +46,7 @@ export function TrialUpgradeFlow({ token }: TrialUpgradeFlowProps) {
 
     const fetchTrialStatus = async () => {
       try {
-        const response = await fetch('/api/subscription/trial-status', {
+        const response = await fetch(`${API_BASE_URL}/api/subscription/trial-status`, {
           headers: {
             Authorization: `Bearer ${token}`,
           },
@@ -74,7 +76,7 @@ export function TrialUpgradeFlow({ token }: TrialUpgradeFlowProps) {
     setError(null);
 
     try {
-      const response = await fetch('/api/subscription/convert-trial', {
+      const response = await fetch(`${API_BASE_URL}/api/subscription/convert-trial`, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',

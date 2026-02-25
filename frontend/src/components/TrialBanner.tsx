@@ -25,6 +25,8 @@ interface TrialStatusResponse {
   };
 }
 
+const API_BASE_URL = process.env.REACT_APP_API_URL || 'http://localhost:3001';
+
 interface TrialBannerProps {
   token: string | null;
 }
@@ -43,7 +45,7 @@ export function TrialBanner({ token }: TrialBannerProps) {
 
     const fetchTrialStatus = async () => {
       try {
-        const response = await fetch('/api/subscription/trial-status', {
+        const response = await fetch(`${API_BASE_URL}/api/subscription/trial-status`, {
           headers: {
             Authorization: `Bearer ${token}`,
           },

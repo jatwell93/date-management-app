@@ -2,6 +2,22 @@ import { Request, Response, NextFunction } from 'express';
 import { verifyToken } from '@clerk/backend';
 import { envConfig } from '../config/environment';
 
+const CLERK_DEV_ORIGINS = ['http://localhost:3002', 'http://127.0.0.1:3002'];
+
+function getAuthorizedParties(): string[] {
+  const partySet = new Set<string>(CLERK_DEV_ORIGINS);
+
+  if (envConfig.FRONTEND_URL) {
+    partySet.add(envConfig.FRONTEND_URL);
+  }
+
+  if (envConfig.CORS_ORIGIN) {
+    partySet.add(envConfig.CORS_ORIGIN);
+  }
+
+  return Array.from(partySet);
+}
+
 /**
  * Clerk JWT Token Claims
  * Clerk tokens contain these standard claims plus custom metadata
@@ -71,6 +87,7 @@ export const clerkAuth = async (req: ClerkAuthRequest, res: Response, next: Next
     // Verify Clerk token
     const decoded = (await verifyToken(token, {
       secretKey: envConfig.CLERK_SECRET_KEY,
+      authorizedParties: getAuthorizedParties(),
     })) as unknown as ClerkTokenPayload;
 
     // Attach Clerk user context to request
@@ -87,8 +104,11 @@ export const clerkAuth = async (req: ClerkAuthRequest, res: Response, next: Next
 
     next();
   } catch (error) {
-    console.error('Clerk token verification failed:', error);
-    return res.status(401).json({ error: 'Invalid or expired token' });
+    console.error('Clerk token verification failed:', error instanceof Error ? error.message : error);
+    if (error instanceof Error && error.stack) {
+      console.error(error.stack);
+    }
+    return res.status(401).json({ error: 'Invalid or expired token', details: error instanceof Error ? error.message : String(error) });
   }
 };
 
@@ -113,6 +133,7 @@ export const clerkAuthOptional = async (
     const token = authHeader.substring(7);
     const decoded = (await verifyToken(token, {
       secretKey: envConfig.CLERK_SECRET_KEY,
+      authorizedParties: getAuthorizedParties(),
     })) as unknown as ClerkTokenPayload;
 
     req.auth = {

@@ -86,7 +86,7 @@ export const useAuthContext = () => {
 // Inner component that uses Clerk hooks
 function ClerkAuthInner({ children }: { children: React.ReactNode }) {
   const { isSignedIn, user, isLoaded } = useUser();
-  const { getToken } = useAuth();
+  const { getToken, signOut } = useAuth();
   const { organization, isLoaded: isOrgLoaded } = useOrganization();
   const [token, setToken] = useState<string | null>(null);
   const [isLoggedIn, setIsLoggedIn] = useState(false);
@@ -127,9 +127,15 @@ function ClerkAuthInner({ children }: { children: React.ReactNode }) {
           localStorage.setItem('session', clerkToken);
         }
       });
-    } else if (isLoaded) {
+    } else if (isLoaded && !isSignedIn) {
       // User signed out
-      handleLogout();
+      setToken(null);
+      setIsLoggedIn(false);
+      setIsFullySignedIn(false);
+      setUserId(null);
+      setUserName(null);
+      setUserRole(null);
+      localStorage.removeItem('session');
     }
   }, [isSignedIn, isLoaded, user, getToken]);
 
@@ -142,7 +148,7 @@ function ClerkAuthInner({ children }: { children: React.ReactNode }) {
     localStorage.setItem('session', newToken);
   };
 
-  const handleLogout = () => {
+  const clearClientAuthState = () => {
     setToken(null);
     setIsLoggedIn(false);
     setIsFullySignedIn(false);
@@ -150,6 +156,19 @@ function ClerkAuthInner({ children }: { children: React.ReactNode }) {
     setUserName(null);
     setUserRole(null);
     localStorage.removeItem('session');
+  };
+
+  const handleLogout = async () => {
+    try {
+      await signOut({ redirectUrl: '/login' });
+    } catch (error) {
+      Sentry.captureException(error, { tags: { feature: 'auth', action: 'logout' } });
+    } finally {
+      clearClientAuthState();
+      if (window.location.pathname !== '/login') {
+        window.location.replace('/login');
+      }
+    }
   };
 
   const hasOrganization = isOrgLoaded && !!organization;

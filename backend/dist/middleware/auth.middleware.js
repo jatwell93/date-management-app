@@ -5,11 +5,23 @@ var __importDefault = (this && this.__importDefault) || function (mod) {
 Object.defineProperty(exports, "__esModule", { value: true });
 exports.requireManager = exports.generateToken = exports.authenticateToken = void 0;
 const jsonwebtoken_1 = __importDefault(require("jsonwebtoken"));
+const backend_1 = require("@clerk/backend");
 const analytics_service_1 = require("../services/analytics.service");
 const subscription_1 = require("../types/subscription");
 const database_factory_1 = require("../database/database-factory");
 const environment_1 = require("../config/environment");
 const subscription_service_1 = require("../services/subscription.service");
+const CLERK_DEV_ORIGINS = ['http://localhost:3002', 'http://127.0.0.1:3002'];
+function getAuthorizedParties() {
+    const partySet = new Set(CLERK_DEV_ORIGINS);
+    if (environment_1.envConfig.FRONTEND_URL) {
+        partySet.add(environment_1.envConfig.FRONTEND_URL);
+    }
+    if (environment_1.envConfig.CORS_ORIGIN) {
+        partySet.add(environment_1.envConfig.CORS_ORIGIN);
+    }
+    return Array.from(partySet);
+}
 const isTierLevel = (value) => ['starter', 'professional', 'premium', 'concierge'].includes(value);
 const isBillingCycle = (value) => Object.values(subscription_1.BillingCycle).includes(value);
 const authenticateToken = async (req, res, next) => {
@@ -42,8 +54,53 @@ const authenticateToken = async (req, res, next) => {
         });
         return res.status(401).json({ message: 'Access denied: No token provided' }); // No token
     }
-    // Check for valid token with current secret, and if that fails, check with old secret for rotation
-    let decodedToken;
+    // Check for valid token with current secret and old secret.
+    // If both fail, fall back to Clerk JWT verification for migrated clients.
+    let decodedToken = null;
+    const resolveFromClerkToken = async () => {
+        if (!environment_1.envConfig.CLERK_SECRET_KEY) {
+            return null;
+        }
+        try {
+            const clerkDecoded = (await (0, backend_1.verifyToken)(token, {
+                secretKey: environment_1.envConfig.CLERK_SECRET_KEY,
+                authorizedParties: getAuthorizedParties(),
+            }));
+            const prisma = (0, database_factory_1.getDefaultDatabaseClient)();
+            const user = await prisma.user.findUnique({
+                where: { clerkUserId: clerkDecoded.sub },
+                select: {
+                    id: true,
+                    role: true,
+                    organizationId: true,
+                },
+            });
+            if (!user?.organizationId) {
+                return null;
+            }
+            const subscription = await prisma.subscriptionTier.findFirst({
+                where: { organizationId: user.organizationId },
+                orderBy: { createdAt: 'desc' },
+            });
+            if (!subscription) {
+                return null;
+            }
+            const normalizedTier = subscription.tierLevel.toLowerCase();
+            if (!isTierLevel(normalizedTier)) {
+                return null;
+            }
+            return {
+                userId: user.id,
+                role: user.role,
+                organizationId: user.organizationId,
+                tierLevel: normalizedTier,
+                exp: clerkDecoded.exp,
+            };
+        }
+        catch {
+            return null;
+        }
+    };
     // First try with the current JWT secret
     try {
         decodedToken = jsonwebtoken_1.default.verify(token, environment_1.envConfig.JWT_SECRET);
@@ -55,23 +112,15 @@ const authenticateToken = async (req, res, next) => {
                 decodedToken = jsonwebtoken_1.default.verify(token, process.env.JWT_SECRET_OLD);
             }
             catch (_rotationErr) {
-                // Both secrets failed, return unauthorized
-                // Track invalid token attempt
-                const analyticsService = analytics_service_1.AnalyticsService.getInstance();
-                analyticsService.trackEvent({
-                    eventType: analytics_service_1.AnalyticsEventType.USER_LOGOUT,
-                    eventCategory: 'Auth',
-                    eventAction: 'invalid_token_attempt',
-                    ipAddress: req.ip,
-                    userAgent: req.get('User-Agent') || undefined,
-                    metadata: { path: req.path, method: req.method },
-                });
-                return res.status(403).json({ message: 'Access denied: Invalid token' });
+                decodedToken = await resolveFromClerkToken();
             }
         }
         else {
-            // Only current secret was available and it failed
-            // Track invalid token attempt
+            decodedToken = await resolveFromClerkToken();
+        }
+        if (!decodedToken) {
+            // JWT verification failed and Clerk fallback also failed.
+            // Track invalid token attempt.
             const analyticsService = analytics_service_1.AnalyticsService.getInstance();
             analyticsService.trackEvent({
                 eventType: analytics_service_1.AnalyticsEventType.USER_LOGOUT,

@@ -126,7 +126,7 @@ function AppContent({
   setIsMobileMenuOpen: (open: boolean) => void;
 }) {
   const {
-    isLoggedIn,
+    isLoggedIn: hasSession,
     isFullySignedIn,
     hasOrganization,
     userId,
@@ -135,6 +135,7 @@ function AppContent({
     token,
     handleLogout,
   } = useAuthContext();
+  const isLoggedIn = hasSession && isFullySignedIn;
   const { isHandheld } = useHandheldDetectionContext();
   const location = useLocation();
   const navigate = useNavigate();
@@ -508,24 +509,24 @@ function AppContent({
               <Routes>
                 <Route
                   path="/login"
-                  element={isFullySignedIn ? <Navigate to="/scan" /> : <ClerkSignInPage />}
+                  element={isLoggedIn ? <Navigate to="/scan" /> : <ClerkSignInPage />}
                 />
                 <Route
                   path="/login/*"
-                  element={isFullySignedIn ? <Navigate to="/scan" /> : <ClerkSignInPage />}
+                  element={isLoggedIn ? <Navigate to="/scan" /> : <ClerkSignInPage />}
                 />
                 <Route
                   path="/sign-up"
-                  element={isFullySignedIn ? <Navigate to="/scan" /> : <ClerkSignUpPage />}
+                  element={isLoggedIn ? <Navigate to="/scan" /> : <ClerkSignUpPage />}
                 />
                 <Route
                   path="/sign-up/*"
-                  element={isFullySignedIn ? <Navigate to="/scan" /> : <ClerkSignUpPage />}
+                  element={isLoggedIn ? <Navigate to="/scan" /> : <ClerkSignUpPage />}
                 />
                 <Route
                   path="/onboarding"
                   element={
-                    isFullySignedIn ? (
+                    isLoggedIn ? (
                       hasOrganization ? (
                         <Navigate to="/scan" />
                       ) : (
@@ -539,7 +540,7 @@ function AppContent({
                 <Route
                   path="/onboarding/*"
                   element={
-                    isFullySignedIn ? (
+                    isLoggedIn ? (
                       hasOrganization ? (
                         <Navigate to="/scan" />
                       ) : (
@@ -661,24 +662,24 @@ function AppContent({
             <Routes>
               <Route
                 path="/login"
-                element={isFullySignedIn ? <Navigate to="/scan" /> : <ClerkSignInPage />}
+                element={isLoggedIn ? <Navigate to="/scan" /> : <ClerkSignInPage />}
               />
               <Route
                 path="/login/*"
-                element={isFullySignedIn ? <Navigate to="/scan" /> : <ClerkSignInPage />}
+                element={isLoggedIn ? <Navigate to="/scan" /> : <ClerkSignInPage />}
               />
               <Route
                 path="/sign-up"
-                element={isFullySignedIn ? <Navigate to="/scan" /> : <ClerkSignUpPage />}
+                element={isLoggedIn ? <Navigate to="/scan" /> : <ClerkSignUpPage />}
               />
               <Route
                 path="/sign-up/*"
-                element={isFullySignedIn ? <Navigate to="/scan" /> : <ClerkSignUpPage />}
+                element={isLoggedIn ? <Navigate to="/scan" /> : <ClerkSignUpPage />}
               />
               <Route
                 path="/onboarding"
                 element={
-                  isFullySignedIn ? (
+                  isLoggedIn ? (
                     hasOrganization ? (
                       <Navigate to="/scan" />
                     ) : (
@@ -692,7 +693,7 @@ function AppContent({
               <Route
                 path="/onboarding/*"
                 element={
-                  isFullySignedIn ? (
+                  isLoggedIn ? (
                     hasOrganization ? (
                       <Navigate to="/scan" />
                     ) : (

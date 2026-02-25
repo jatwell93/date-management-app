@@ -7,9 +7,9 @@ export function ClerkSignUpPage() {
       <div className="w-full max-w-md">
         <Card className="mb-4">
           <CardHeader>
-            <CardTitle className="text-2xl font-bold text-center">Start Your Free Trial</CardTitle>
+            <CardTitle className="text-2xl font-bold text-center">Date Management App</CardTitle>
             <CardDescription className="text-center">
-              Sign up for a 14-day professional trial
+              Manage inventory dates and compliance in one place.
             </CardDescription>
           </CardHeader>
           <CardContent>
@@ -27,9 +27,9 @@ export function ClerkSignInPage() {
       <div className="w-full max-w-md">
         <Card>
           <CardHeader>
-            <CardTitle className="text-2xl font-bold text-center">Sign In</CardTitle>
+            <CardTitle className="text-2xl font-bold text-center">Date Management App</CardTitle>
             <CardDescription className="text-center">
-              Welcome back! Sign in to continue.
+              Manage inventory dates and compliance in one place.
             </CardDescription>
           </CardHeader>
           <CardContent>
