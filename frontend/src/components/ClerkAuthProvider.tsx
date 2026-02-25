@@ -101,6 +101,7 @@ function ClerkAuthInner({ children }: { children: React.ReactNode }) {
     if (storedToken && verifyToken(storedToken)) {
       setToken(storedToken);
       setIsLoggedIn(true);
+      setIsFullySignedIn(true);
       setUserId(decodeTokenAndGetUserId(storedToken));
       setUserName(decodeTokenAndGetUserName(storedToken));
       setUserRole(decodeTokenAndGetRole(storedToken));
@@ -113,28 +114,30 @@ function ClerkAuthInner({ children }: { children: React.ReactNode }) {
 
     if (isLoaded && isSignedIn && user) {
       // Get the session token from Clerk
-      getToken().then((clerkToken) => {
-        if (!isMounted) return;
-        
-        if (clerkToken) {
-          setToken(clerkToken);
-          setIsLoggedIn(true);
-          setIsFullySignedIn(true);
-          setUserId(decodeTokenAndGetUserId(clerkToken));
-          setUserName(
-            decodeTokenAndGetUserName(clerkToken) ||
-              user.fullName ||
-              user.primaryEmailAddress?.emailAddress ||
-              null,
-          );
-          setUserRole(decodeTokenAndGetRole(clerkToken));
-          localStorage.setItem('session', clerkToken);
-        }
-      }).catch((error) => {
-        if (!isMounted) return;
-        Sentry.captureException(error, { tags: { feature: 'auth', action: 'getToken' } });
-        console.error('Failed to get Clerk token:', error);
-      });
+      getToken()
+        .then((clerkToken) => {
+          if (!isMounted) return;
+
+          if (clerkToken) {
+            setToken(clerkToken);
+            setIsLoggedIn(true);
+            setIsFullySignedIn(true);
+            setUserId(decodeTokenAndGetUserId(clerkToken));
+            setUserName(
+              decodeTokenAndGetUserName(clerkToken) ||
+                user.fullName ||
+                user.primaryEmailAddress?.emailAddress ||
+                null,
+            );
+            setUserRole(decodeTokenAndGetRole(clerkToken));
+            localStorage.setItem('session', clerkToken);
+          }
+        })
+        .catch((error) => {
+          if (!isMounted) return;
+          Sentry.captureException(error, { tags: { feature: 'auth', action: 'getToken' } });
+          console.error('Failed to get Clerk token:', error);
+        });
     } else if (isLoaded && !isSignedIn) {
       // User signed out
       setToken(null);
@@ -145,7 +148,7 @@ function ClerkAuthInner({ children }: { children: React.ReactNode }) {
       setUserRole(null);
       localStorage.removeItem('session');
     }
-    
+
     return () => {
       isMounted = false;
     };

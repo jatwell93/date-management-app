@@ -1,13 +1,15 @@
 import { Router, Request, Response, RequestHandler } from 'express';
-import { clerkAuth } from '../middleware/clerk-auth.middleware';
-import { PrismaClient } from '@prisma/client';
+import { clerkAuth, ClerkAuthRequest } from '../middleware/clerk-auth.middleware';
+import { getDefaultDatabaseClient } from '../database/database-factory';
 import { SubscriptionService } from '../services/subscription.service';
 import { BillingCycle } from '../types/subscription';
 import { trialConversionLimiter } from '../middleware/rateLimiter';
+import { getStripeClient } from '../utils/stripe';
+import { validateRedirectUrl, validateStripePriceId } from '../utils/url-validator';
 
 type SubscriptionStatusType = 'ACTIVE' | 'TRIALING' | 'EXPIRED' | 'CANCELED';
 
-const prisma = new PrismaClient();
+const prisma = getDefaultDatabaseClient();
 
 const router = Router();
 
@@ -77,7 +79,7 @@ router.get(
   clerkAuth as unknown as RequestHandler,
   async (req: Request, res: Response) => {
     try {
-      const userId = (req as any).userId;
+      const userId = (req as ClerkAuthRequest).userId;
 
       const user = await prisma.user.findUnique({
         where: { clerkUserId: userId },
@@ -148,7 +150,7 @@ router.post(
   clerkAuth as unknown as RequestHandler,
   async (req: Request, res: Response) => {
     try {
-      const userId = (req as any).userId;
+      const userId = (req as ClerkAuthRequest).userId;
       const { paymentMethodId, billingCycle } = req.body as ConvertTrialRequest;
 
       if (!paymentMethodId) {
@@ -193,6 +195,130 @@ router.post(
       console.error('Error converting trial:', error);
       const statusCode = error.statusCode || 500;
       res.status(statusCode).json({ error: error.message || 'Failed to convert trial' });
+    }
+  },
+);
+
+// Create Stripe Checkout Session for subscription upgrade
+router.post(
+  '/create-checkout-session',
+  clerkAuth as unknown as RequestHandler,
+  async (req: Request, res: Response) => {
+    try {
+      const userId = (req as ClerkAuthRequest).userId;
+      const { priceId, successUrl, cancelUrl } = req.body;
+
+      // Validate required fields
+      if (!priceId || !successUrl || !cancelUrl) {
+        res.status(400).json({ error: 'priceId, successUrl, and cancelUrl are required' });
+        return;
+      }
+
+      // Validate input formats
+      try {
+        validateStripePriceId(priceId);
+        validateRedirectUrl(successUrl, 'successUrl');
+        validateRedirectUrl(cancelUrl, 'cancelUrl');
+      } catch (validationError: any) {
+        res.status(400).json({ error: validationError.message });
+        return;
+      }
+
+      const user = await prisma.user.findUnique({
+        where: { clerkUserId: userId },
+        include: { organization: { include: { subscriptionTiers: true } } },
+      });
+
+      if (!user?.organization) {
+        res.status(404).json({ error: 'Organization not found' });
+        return;
+      }
+
+      const subscription = user.organization.subscriptionTiers?.[0];
+      const stripe = getStripeClient();
+
+      // Get or create Stripe customer
+      let customerId = subscription?.stripeCustomerId;
+      if (!customerId) {
+        const customer = await stripe.customers.create({
+          email: user.organization.contactEmail ?? undefined,
+          metadata: { organizationId: user.organization.id },
+        });
+        customerId = customer.id;
+
+        // Persist the customer ID to database
+        if (subscription) {
+          await prisma.subscriptionTier.update({
+            where: { id: subscription.id },
+            data: { stripeCustomerId: customerId },
+          });
+        }
+      }
+
+      // Create Checkout Session
+      const session = await stripe.checkout.sessions.create({
+        customer: customerId,
+        mode: 'subscription',
+        payment_method_types: ['card'],
+        line_items: [{ price: priceId, quantity: 1 }],
+        success_url: successUrl,
+        cancel_url: cancelUrl,
+        metadata: { organizationId: user.organization.id },
+      });
+
+      res.json({ sessionId: session.id, url: session.url });
+    } catch (error: any) {
+      console.error('Error creating checkout session:', error);
+      res.status(500).json({ error: error.message || 'Failed to create checkout session' });
+    }
+  },
+);
+
+// Create Stripe Customer Portal Session for billing management
+router.post(
+  '/create-portal-session',
+  clerkAuth as unknown as RequestHandler,
+  async (req: Request, res: Response) => {
+    try {
+      const userId = (req as ClerkAuthRequest).userId;
+      const { returnUrl } = req.body;
+
+      // Validate returnUrl if provided
+      if (returnUrl) {
+        try {
+          validateRedirectUrl(returnUrl, 'returnUrl');
+        } catch (validationError: any) {
+          res.status(400).json({ error: validationError.message });
+          return;
+        }
+      }
+
+      const user = await prisma.user.findUnique({
+        where: { clerkUserId: userId },
+        include: { organization: { include: { subscriptionTiers: true } } },
+      });
+
+      if (!user?.organization) {
+        res.status(404).json({ error: 'Organization not found' });
+        return;
+      }
+
+      const subscription = user.organization.subscriptionTiers?.[0];
+      if (!subscription?.stripeCustomerId) {
+        res.status(400).json({ error: 'No Stripe customer found' });
+        return;
+      }
+
+      const stripe = getStripeClient();
+      const session = await stripe.billingPortal.sessions.create({
+        customer: subscription.stripeCustomerId,
+        return_url: returnUrl || `${process.env.FRONTEND_URL}/settings`,
+      });
+
+      res.json({ url: session.url });
+    } catch (error: any) {
+      console.error('Error creating portal session:', error);
+      res.status(500).json({ error: error.message || 'Failed to create portal session' });
     }
   },
 );

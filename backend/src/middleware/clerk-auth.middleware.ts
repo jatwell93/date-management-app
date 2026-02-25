@@ -56,6 +56,13 @@ export interface ClerkAuthRequest extends Request {
 }
 
 /**
+ * Type helper for using clerkAuth middleware with Express RequestHandler
+ * Avoids unsafe 'as unknown as RequestHandler' casting
+ */
+import type { RequestHandler } from 'express';
+export type ClerkAuthHandler = RequestHandler;
+
+/**
  * Clerk Authentication Middleware
  * Verifies Clerk JWT tokens and attaches user context to request
  *
