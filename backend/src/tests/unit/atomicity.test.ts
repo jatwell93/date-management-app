@@ -19,6 +19,11 @@ describe('Usage Counter Atomicity Tests', () => {
       organizationUsage: {
         upsert: jest.fn(),
         update: jest.fn(),
+        findUnique: jest.fn().mockResolvedValue({
+          organizationId,
+          totalSkus: 0,
+          maxSkus: 1000,
+        }),
       },
       $transaction: jest.fn((callback) => callback(mockPrisma)),
     };
@@ -52,8 +57,8 @@ describe('Usage Counter Atomicity Tests', () => {
       // Mock organization usage update
       mockPrisma.organizationUsage.update.mockResolvedValue({
         organizationId,
-        total_skus: 1,
-        storage_used_bytes: 0,
+        totalSkus: 1,
+        storageUsedBytes: 0,
       });
 
       const result = await productService.createProduct(productData);
@@ -136,8 +141,8 @@ describe('Usage Counter Atomicity Tests', () => {
         .mockResolvedValueOnce(mockProduct2);
 
       mockPrisma.organizationUsage.update
-        .mockResolvedValueOnce({ organizationId, total_skus: 1, storage_used_bytes: 0 })
-        .mockResolvedValueOnce({ organizationId, total_skus: 2, storage_used_bytes: 0 });
+        .mockResolvedValueOnce({ organizationId, totalSkus: 1, storageUsedBytes: 0 })
+        .mockResolvedValueOnce({ organizationId, totalSkus: 2, storageUsedBytes: 0 });
 
       // Create both products concurrently
       const [result1, result2] = await Promise.all([
@@ -170,8 +175,8 @@ describe('Usage Counter Atomicity Tests', () => {
       // Mock usage decrement
       mockPrisma.organizationUsage.update.mockResolvedValue({
         organizationId,
-        total_skus: 0,
-        storage_used_bytes: 0,
+        totalSkus: 0,
+        storageUsedBytes: 0,
       });
 
       const result = await productService.deleteProduct(1);
@@ -186,7 +191,7 @@ describe('Usage Counter Atomicity Tests', () => {
       });
       expect(mockPrisma.organizationUsage.update).toHaveBeenCalledWith({
         where: { organizationId },
-        data: { total_skus: { decrement: 1 } },
+        data: { totalSkus: { decrement: 1 } },
       });
     });
 
@@ -254,12 +259,12 @@ describe('Usage Counter Atomicity Tests', () => {
         .mockResolvedValueOnce({
           organizationId,
           totalSkus: 1,
-          storage_used_bytes: 0,
+          storageUsedBytes: 0,
         })
         .mockResolvedValueOnce({
           organizationId,
           totalSkus: 0,
-          storage_used_bytes: 0,
+          storageUsedBytes: 0,
         });
 
       // Simulate create and immediate delete (race condition scenario)

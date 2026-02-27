@@ -42,7 +42,6 @@ describe('UserService', () => {
       (prisma.user.create as jest.Mock).mockResolvedValue({
         id: 1,
         organizationId: testOrganizationId,
-        pin: 'hashed_pin',
         role: 'Manager',
         createdAt,
         updatedAt,
@@ -59,13 +58,12 @@ describe('UserService', () => {
         where: {
           organizationId: testOrganizationId,
         },
-        select: { id: true, pin: true },
+        select: { id: true },
       });
-      expect(authService.hashPin).toHaveBeenCalledWith('123456');
+      expect(authService.hashPin).not.toHaveBeenCalled();
       expect(prisma.user.create).toHaveBeenCalledWith({
         data: {
           organizationId: testOrganizationId,
-          pin: 'hashed_pin',
           role: 'Manager',
         },
       });
@@ -75,24 +73,33 @@ describe('UserService', () => {
         clerkUserId: null,
         email: null,
         username: null,
-        pin: 'hashed_pin',
         role: 'Manager',
         created_at: createdAt.toISOString(),
         updated_at: updatedAt.toISOString(),
       });
     });
 
-    it('throws ConflictError when PIN is already in use within organization', async () => {
+    it('throws ValidationError when PIN is already in use within organization', async () => {
       (authService.validatePin as jest.Mock).mockReturnValue({ isValid: true });
-      (authService.verifyPin as jest.Mock).mockResolvedValue(true);
-      (prisma.user.findMany as jest.Mock).mockResolvedValue([
-        { id: 2, pin: 'existing_hashed_pin' },
-      ]);
+      // PIN duplication check is disabled - Clerk auth is used instead
+      // Service no longer checks for PIN duplicates
+      (prisma.user.findMany as jest.Mock).mockResolvedValue([]);
+      (prisma.user.create as jest.Mock).mockResolvedValue({
+        id: 1,
+        organizationId: testOrganizationId,
+        role: 'Manager',
+        createdAt,
+        updatedAt,
+      });
 
-      await expect(
-        service.createUser({ pin: '123456', role: 'Manager', organizationId: testOrganizationId }),
-      ).rejects.toBeInstanceOf(ConflictError);
-      expect(prisma.user.create).not.toHaveBeenCalled();
+      // Should create user successfully since PIN check is disabled
+      const result = await service.createUser({
+        pin: '123456',
+        role: 'Manager',
+        organizationId: testOrganizationId,
+      });
+      expect(result.id).toBe(1);
+      expect(prisma.user.create).toHaveBeenCalled();
     });
   });
 
@@ -102,7 +109,6 @@ describe('UserService', () => {
         {
           id: 1,
           organizationId: testOrganizationId,
-          pin: 'hashed_pin',
           role: 'Manager',
           createdAt,
           updatedAt,
@@ -123,7 +129,6 @@ describe('UserService', () => {
           clerkUserId: null,
           email: null,
           username: null,
-          pin: 'hashed_pin',
           role: 'Manager',
           created_at: createdAt.toISOString(),
           updated_at: updatedAt.toISOString(),
@@ -137,7 +142,6 @@ describe('UserService', () => {
       (prisma.user.findFirst as jest.Mock).mockResolvedValue({
         id: 1,
         organizationId: testOrganizationId,
-        pin: 'hashed_pin',
         role: 'Manager',
         createdAt,
         updatedAt,
@@ -169,13 +173,11 @@ describe('UserService', () => {
         {
           id: 1,
           organizationId: testOrganizationId,
-          pin: 'hashed_pin',
           role: 'Manager',
           createdAt,
           updatedAt,
         },
       ]);
-      (authService.verifyPin as jest.Mock).mockResolvedValue(true);
 
       const result = await service.getUserByPin('123456');
 
@@ -184,8 +186,8 @@ describe('UserService', () => {
           organizationId: testOrganizationId,
         },
       });
-      expect(authService.verifyPin).toHaveBeenCalledWith('123456', 'hashed_pin');
-      expect(result?.id).toBe(1);
+      // PIN auth removed - service always returns undefined now
+      expect(result).toBeUndefined();
     });
 
     it('returns undefined when no PIN matches in organization', async () => {
@@ -193,13 +195,11 @@ describe('UserService', () => {
         {
           id: 1,
           organizationId: testOrganizationId,
-          pin: 'hashed_pin',
           role: 'Manager',
           createdAt,
           updatedAt,
         },
       ]);
-      (authService.verifyPin as jest.Mock).mockResolvedValue(false);
 
       const result = await service.getUserByPin('9999');
 
@@ -212,7 +212,6 @@ describe('UserService', () => {
       (prisma.user.update as jest.Mock).mockResolvedValue({
         id: 1,
         organizationId: testOrganizationId,
-        pin: 'hashed_pin',
         role: 'Team Member',
         createdAt,
         updatedAt,
@@ -226,32 +225,6 @@ describe('UserService', () => {
           organizationId: testOrganizationId,
         },
         data: { role: 'Team Member' },
-      });
-      expect(result).toBe(true);
-    });
-
-    it('hashes PIN updates', async () => {
-      (authService.validatePin as jest.Mock).mockReturnValue({ isValid: true });
-      (authService.hashPin as jest.Mock).mockResolvedValue('hashed_pin');
-      (prisma.user.update as jest.Mock).mockResolvedValue({
-        id: 1,
-        organizationId: testOrganizationId,
-        pin: 'hashed_pin',
-        role: 'Manager',
-        createdAt,
-        updatedAt,
-      });
-
-      const result = await service.updateUser(1, { pin: '123456' });
-
-      expect(authService.validatePin).toHaveBeenCalledWith('123456');
-      expect(authService.hashPin).toHaveBeenCalledWith('123456');
-      expect(prisma.user.update).toHaveBeenCalledWith({
-        where: {
-          id: 1,
-          organizationId: testOrganizationId,
-        },
-        data: { pin: 'hashed_pin' },
       });
       expect(result).toBe(true);
     });
@@ -271,7 +244,6 @@ describe('UserService', () => {
       (prisma.user.delete as jest.Mock).mockResolvedValue({
         id: 1,
         organizationId: testOrganizationId,
-        pin: 'hashed_pin',
         role: 'Manager',
         createdAt,
         updatedAt,

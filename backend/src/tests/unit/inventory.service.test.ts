@@ -4,7 +4,7 @@ import { PrismaClient } from '@prisma/client';
 describe('InventoryService', () => {
   let inventoryService: InventoryService;
   let mockPrisma: any;
-  const organizationId = 123;
+  const organizationId = 'org-123';
 
   beforeEach(() => {
     mockPrisma = {
@@ -19,7 +19,7 @@ describe('InventoryService', () => {
       product: {
         findFirst: jest.fn(),
       },
-      location: {
+      storeArea: {
         findFirst: jest.fn(),
       },
       user: {
@@ -60,7 +60,7 @@ describe('InventoryService', () => {
 
       // Mock product and location validation
       mockPrisma.product.findFirst.mockResolvedValue({ id: 1, organizationId });
-      mockPrisma.location.findFirst.mockResolvedValue({ id: 1, organizationId });
+      mockPrisma.storeArea.findFirst.mockResolvedValue({ id: 1, organizationId });
       mockPrisma.inventoryItem.findFirst.mockResolvedValue(null); // No existing item
       mockPrisma.inventoryItem.create.mockResolvedValue(mockCreatedItem);
       mockPrisma.user.findFirst.mockResolvedValue({ id: 1, organizationId });
@@ -75,7 +75,7 @@ describe('InventoryService', () => {
           organizationId,
         },
       });
-      expect(mockPrisma.location.findFirst).toHaveBeenCalledWith({
+      expect(mockPrisma.storeArea.findFirst).toHaveBeenCalledWith({
         where: {
           id: 1,
           organizationId,
@@ -93,6 +93,7 @@ describe('InventoryService', () => {
         data: {
           userId: 1,
           inventoryItemId: 1,
+          action: 'inventory_changed',
           changeDescription: expect.any(String),
         },
       });
@@ -125,7 +126,7 @@ describe('InventoryService', () => {
 
       mockPrisma.inventoryItem.findFirst.mockResolvedValue(null); // No existing item
       mockPrisma.product.findFirst.mockResolvedValue({ id: 1, organizationId }); // Product exists in org
-      mockPrisma.location.findFirst.mockResolvedValue(null); // Location not found in org
+      mockPrisma.storeArea.findFirst.mockResolvedValue(null); // Location not found in org
 
       await expect(inventoryService.createInventoryItem(newItemData, 1)).rejects.toThrow(
         'Location not found or does not belong to this organization',
@@ -177,6 +178,7 @@ describe('InventoryService', () => {
         data: {
           userId: 1,
           inventoryItemId: 1,
+          action: 'inventory_changed',
           changeDescription: expect.any(String),
         },
       });
@@ -206,6 +208,7 @@ describe('InventoryService', () => {
           id: 1,
           productId: 1,
           locationId: 1,
+          organizationId,
           expiryDate: new Date(),
           status: 'Normal',
           createdAt: new Date(),
@@ -235,6 +238,7 @@ describe('InventoryService', () => {
           id: 1,
           productId: 1,
           locationId: 1,
+          organizationId,
           expiryDate: new Date(),
           status: 'Normal',
           createdAt: new Date(),
@@ -265,6 +269,7 @@ describe('InventoryService', () => {
           id: 1,
           productId: 1,
           locationId: 1,
+          organizationId,
           expiryDate: new Date(),
           status: 'Normal',
           createdAt: new Date(),
@@ -297,6 +302,7 @@ describe('InventoryService', () => {
           id: 1,
           productId: 1,
           locationId: 1,
+          organizationId,
           expiryDate: new Date(),
           status: 'Normal',
           createdAt: new Date(),
@@ -312,9 +318,6 @@ describe('InventoryService', () => {
       expect(mockPrisma.inventoryItem.findMany).toHaveBeenCalledWith({
         where: {
           locationId: 1,
-          location: {
-            organizationId,
-          },
           product: {
             organizationId,
           },
@@ -354,6 +357,7 @@ describe('InventoryService', () => {
         data: {
           userId: 1,
           inventoryItemId: 1,
+          action: 'inventory_changed',
           changeDescription: 'Inventory item with ID 1 deleted.',
         },
       });

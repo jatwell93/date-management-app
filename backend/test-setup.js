@@ -7,21 +7,14 @@ module.exports = async () => {
 
   console.log('\nSetting up test database...');
   try {
-    execSync('npx prisma db push --schema=./src/prisma/schema.prisma --accept-data-loss', {
-      stdio: 'ignore',
+    // Correct schema path (prisma/schema.prisma is the actual location)
+    execSync('npx prisma db push --schema=./prisma/schema.prisma --accept-data-loss', {
+      stdio: 'inherit',
       cwd: process.cwd(),
     });
-    console.log('Test database migrated.');
+    console.log('Test database migrated successfully.');
   } catch (error) {
-    // Try allow fallback if the schema path is different
-    try {
-      execSync('npx prisma db push --schema=./prisma/schema.prisma --accept-data-loss', {
-        stdio: 'ignore',
-        cwd: process.cwd(),
-      });
-      console.log('Test database migrated.');
-    } catch (e) {
-      console.error('Failed to migrate test database:', e.message);
-    }
+    console.error('Failed to migrate test database:', error.message);
+    throw error; // Fail fast if schema can't sync
   }
 };

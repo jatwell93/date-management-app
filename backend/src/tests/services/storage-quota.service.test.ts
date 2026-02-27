@@ -7,6 +7,11 @@ jest.mock('../../database/database-factory', () => {
       aggregate: jest.fn(),
       create: jest.fn(),
       update: jest.fn(),
+      findUnique: jest.fn(),
+    },
+    organizationUsage: {
+      upsert: jest.fn(),
+      update: jest.fn(),
     },
   };
   return {
@@ -315,6 +320,7 @@ describe('StorageQuotaService', () => {
 
   describe('recordUpload', () => {
     it('should create upload record with correct data', async () => {
+      const organizationId = 'org-123';
       const userId = 1;
       const fileKey = 'uploads/test-file.csv';
       const fileName = 'test-file.csv';
@@ -331,7 +337,7 @@ describe('StorageQuotaService', () => {
         status: 'completed',
       });
 
-      await service.recordUpload(userId, fileKey, fileName, fileSizeBytes, contentType);
+      await service.recordUpload(organizationId, userId, fileKey, fileName, fileSizeBytes, contentType);
 
       expect(mockPrisma.upload.create).toHaveBeenCalledWith({
         data: {
@@ -343,38 +349,71 @@ describe('StorageQuotaService', () => {
           status: 'completed',
         },
       });
+
+      expect(mockPrisma.organizationUsage.upsert).toHaveBeenCalledWith({
+        where: { organizationId },
+        update: {
+          storageUsedBytes: { increment: fileSizeBytes },
+        },
+        create: {
+          organizationId,
+          storageUsedBytes: fileSizeBytes,
+          totalSkus: 0,
+          activeUsers: 0,
+          maxUsers: 0,
+          maxSkus: 0,
+        },
+      });
     });
 
     it('should handle recordUpload errors gracefully', async () => {
       mockPrisma.upload.create.mockRejectedValue(new Error('Database error'));
 
-      // Should not throw - graceful degradation
-      await expect(service.recordUpload(1, 'key', 'file.csv', 1000)).resolves.not.toThrow();
+      // Service logs and re-throws the error
+      await expect(service.recordUpload('org-123', 1, 'key', 'file.csv', 1000)).rejects.toThrow('Database error');
     });
   });
 
   describe('markUploadDeleted', () => {
     it('should update upload status to deleted', async () => {
+      const organizationId = 'org-123';
       const fileKey = 'uploads/test-file.csv';
+
+      mockPrisma.upload.findUnique.mockResolvedValue({
+        id: 1,
+        fileKey,
+        fileSizeBytes: 1024,
+      });
 
       mockPrisma.upload.update.mockResolvedValue({
         id: 1,
         status: 'deleted',
       });
 
-      await service.markUploadDeleted(fileKey);
+      await service.markUploadDeleted(organizationId, fileKey);
 
+      expect(mockPrisma.upload.findUnique).toHaveBeenCalledWith({
+        where: { fileKey },
+        select: { fileSizeBytes: true },
+      });
       expect(mockPrisma.upload.update).toHaveBeenCalledWith({
         where: { fileKey },
         data: { status: 'deleted' },
       });
+
+      expect(mockPrisma.organizationUsage.update).toHaveBeenCalledWith({
+        where: { organizationId },
+        data: {
+          storageUsedBytes: { decrement: 1024 },
+        },
+      });
     });
 
     it('should handle markUploadDeleted errors gracefully', async () => {
-      mockPrisma.upload.update.mockRejectedValue(new Error('Not found'));
+      mockPrisma.upload.findUnique.mockResolvedValue(null);
 
       // Should not throw - graceful degradation
-      await expect(service.markUploadDeleted('missing-key')).resolves.not.toThrow();
+      await expect(service.markUploadDeleted('org-123', 'missing-key')).resolves.not.toThrow();
     });
   });
 

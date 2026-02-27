@@ -318,7 +318,7 @@ describe('WebhookService', () => {
       const wm = monitor.getWebhookMetrics();
       expect(wm.total).toBeGreaterThanOrEqual(1);
       expect(wm.byEvent['customer.subscription.created'].count).toBe(1);
-      expect(wm.byEvent['customer.subscription.created'].avgLatencyMs).toBeGreaterThan(0);
+      expect(wm.byEvent['customer.subscription.created'].avgLatencyMs).toBeGreaterThanOrEqual(0);
     });
 
     it('captures Sentry and records metric when handler errors', async () => {

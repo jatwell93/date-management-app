@@ -468,7 +468,7 @@ export class CSVParserService extends EventEmitter {
 
   /**
    * Sanitize a string value to prevent CSV injection
-   * Uses backslash escape for dangerous prefixes
+   * Uses single quote prefix for dangerous prefixes (Excel treats as literal)
    */
   private sanitizeValue(value: string): string {
     let sanitized = value;

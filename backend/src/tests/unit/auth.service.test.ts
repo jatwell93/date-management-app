@@ -106,101 +106,17 @@ describe('AuthService', () => {
   });
 
   describe('login', () => {
-    it('returns a LoginResponse with JWT token and organization context on successful login', async () => {
-      // Multi-tenant setup: User with organizationId (task 4.5)
+    it('always throws AuthenticationError since PIN auth is disabled (Clerk is used)', async () => {
+      // PIN auth removed — isValidPin is hardcoded to false in login()
       (prisma.user.findMany as jest.Mock).mockResolvedValue([
-        { id: 1, pin: 'hashed_pin', role: 'Manager', organizationId: 'org-1' },
-      ]);
-
-      // Query subscription tier for organization (task 4.6)
-      (prisma.subscriptionTier.findFirst as jest.Mock).mockResolvedValue({
-        id: 'sub-tier-1',
-        organizationId: 'org-1',
-        tierLevel: 'professional',
-        status: SubscriptionStatus.ACTIVE,
-        createdAt: new Date(),
-      });
-
-      const response = await authService.login('5624');
-
-      // Verify LoginResponse includes organizationId and tierLevel (task 4.8)
-      expect(response).toEqual({
-        token: 'mock_jwt_token',
-        userId: 1,
-        role: 'Manager',
-        organizationId: 'org-1',
-        tierLevel: 'professional',
-      });
-
-      // Verify JWT includes organization context (task 4.9)
-      expect(jwt.sign).toHaveBeenCalledWith(
-        { userId: 1, role: 'Manager', organizationId: 'org-1', tierLevel: 'professional' },
-        expect.any(String),
-        { expiresIn: '1h' },
-      );
-
-      expect(prisma.user.findMany).toHaveBeenCalledWith({
-        select: { id: true, pin: true, role: true, organizationId: true },
-      });
-      expect(prisma.subscriptionTier.findFirst).toHaveBeenCalledWith({
-        where: { organizationId: 'org-1' },
-        orderBy: { createdAt: 'desc' },
-      });
-    });
-
-    it('throws AuthenticationError when user has no organizationId assigned', async () => {
-      (prisma.user.findMany as jest.Mock).mockResolvedValue([
-        { id: 1, pin: 'hashed_pin', role: 'Manager', organizationId: null },
+        { id: 1, role: 'Manager', organizationId: 'org-1' },
       ]);
 
       await expect(authService.login('5624')).rejects.toBeInstanceOf(AuthenticationError);
       expect(jwt.sign).not.toHaveBeenCalled();
     });
 
-    it('throws AuthenticationError when subscription tier not found for organization', async () => {
-      (prisma.user.findMany as jest.Mock).mockResolvedValue([
-        { id: 1, pin: 'hashed_pin', role: 'Manager', organizationId: 'org-1' },
-      ]);
-
-      // No subscription tier for organization
-      (prisma.subscriptionTier.findFirst as jest.Mock).mockResolvedValue(null);
-
-      await expect(authService.login('5624')).rejects.toBeInstanceOf(AuthenticationError);
-      expect(jwt.sign).not.toHaveBeenCalled();
-    });
-
-    it('throws AuthenticationError when organization subscription is canceled (task 4.7)', async () => {
-      (prisma.user.findMany as jest.Mock).mockResolvedValue([
-        { id: 1, pin: 'hashed_pin', role: 'Manager', organizationId: 'org-1' },
-      ]);
-
-      // Subscription is canceled
-      (prisma.subscriptionTier.findFirst as jest.Mock).mockResolvedValue({
-        id: 'sub-tier-1',
-        organizationId: 'org-1',
-        tierLevel: 'professional',
-        status: SubscriptionStatus.CANCELED,
-        createdAt: new Date(),
-      });
-
-      await expect(authService.login('5624')).rejects.toBeInstanceOf(AuthenticationError);
-      expect(
-        (await authService.login('5624').catch((e) => e.message)).includes('canceled'),
-      ).toBeDefined();
-      expect(jwt.sign).not.toHaveBeenCalled();
-    });
-
-    it('throws AuthenticationError for invalid PIN (incorrect password)', async () => {
-      (prisma.user.findMany as jest.Mock).mockResolvedValue([
-        { id: 1, pin: 'hashed_pin', role: 'Manager', organizationId: 'org-1' },
-      ]);
-      (bcrypt.compare as jest.Mock).mockResolvedValue(false);
-
-      await expect(authService.login('wrong_pin')).rejects.toBeInstanceOf(AuthenticationError);
-      expect(jwt.sign).not.toHaveBeenCalled();
-    });
-
-    it('throws AuthenticationError when no users match', async () => {
+    it('throws AuthenticationError when no users exist', async () => {
       (prisma.user.findMany as jest.Mock).mockResolvedValue([]);
 
       await expect(authService.login('5624')).rejects.toBeInstanceOf(AuthenticationError);
