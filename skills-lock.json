@@ -1,0 +1,10 @@
+{
+  "version": 1,
+  "skills": {
+    "jest-testing-expert": {
+      "source": "cin12211/orca-q",
+      "sourceType": "github",
+      "computedHash": "f070b432e1423b827414456beb44548164b17f4f21dbfb051bbc6ae55d871cae"
+    }
+  }
+}

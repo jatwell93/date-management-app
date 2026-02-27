@@ -27,7 +27,7 @@ jest.mock('../../middleware/auth.middleware', () => ({
 class InMemoryStorageProvider implements StorageProvider {
   private store = new Map<string, Buffer>();
 
-  async upload(key: string, data: Buffer): Promise<string> {
+  async upload(key: string, data: Buffer, _contentType: string): Promise<string> {
     this.store.set(key, data);
     return key;
   }
@@ -51,17 +51,26 @@ class InMemoryStorageProvider implements StorageProvider {
     return this.store.has(key);
   }
 
-  async getPresignedUploadUrl(key: string): Promise<string> {
+  async getPresignedUploadUrl(key: string, _expiresIn: number): Promise<string> {
     return `https://example.test/presigned/${encodeURIComponent(key)}`;
   }
 }
 
-const createTestApp = (storage: StorageProvider, csvParser: { processFile: jest.Mock }) => {
+const createTestApp = (
+  storage: StorageProvider,
+  csvParser: { processFile: jest.Mock },
+  storageQuotaService: { recordUpload: jest.Mock; markUploadDeleted: jest.Mock },
+) => {
   const app = express();
   app.use(express.json());
 
   const upload = multer({ storage: multer.memoryStorage() });
-  const uploadService = new UploadService(storage, csvParser as any);
+  const uploadService = new UploadService(
+    'org-load-test',
+    storage,
+    csvParser as any,
+    storageQuotaService as any,
+  );
   const controller = new UploadController(uploadService);
 
   app.post('/api/upload/direct', upload.single('file'), (req, res) => controller.direct(req, res));
@@ -76,8 +85,12 @@ describeMaybe('Upload Load Test', () => {
   it('handles 1000 concurrent direct uploads', async () => {
     const storage = new InMemoryStorageProvider();
     const csvParser = { processFile: jest.fn().mockResolvedValue({ imported: 1, errors: [] }) };
+    const storageQuotaService = {
+      recordUpload: jest.fn().mockResolvedValue(undefined),
+      markUploadDeleted: jest.fn().mockResolvedValue(undefined),
+    };
 
-    const app = createTestApp(storage, csvParser);
+    const app = createTestApp(storage, csvParser, storageQuotaService);
 
     const fileBuffer = Buffer.from('SKU,Name,Cost,Barcode\nSKU1,Test,1.00,123\n');
     const requests = Array.from({ length: 1000 }, () =>

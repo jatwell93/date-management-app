@@ -14,6 +14,10 @@ const mockPrisma = {
     delete: jest.fn(),
     upsert: jest.fn(),
   },
+  organizationUsage: {
+    findUnique: jest.fn().mockResolvedValue({ organizationId: 'default-org', totalSkus: 0, maxSkus: 1000 }),
+    update: jest.fn(),
+  },
   $transaction: jest.fn((callback) => callback(mockPrisma)),
 } as unknown as PrismaClient; // Cast to PrismaClient to satisfy type checker
 
@@ -29,6 +33,13 @@ describe('XLSX Upload Functionality Tests', () => {
   beforeEach(() => {
     // Reset mocks
     jest.clearAllMocks();
+
+    // Reset organizationUsage mock (cleared by clearAllMocks)
+    (mockPrisma.organizationUsage.findUnique as jest.Mock).mockResolvedValue({
+      organizationId: 'default-org',
+      totalSkus: 0,
+      maxSkus: 1000,
+    });
 
     // Initialize service with mocked Prisma
     productService = new ProductService(mockPrisma);
@@ -210,6 +221,13 @@ describe('XLSX Upload Functionality Tests', () => {
     let testXLSXPath: string;
 
     beforeEach(() => {
+      // Reset organizationUsage mock for this nested describe
+      (mockPrisma.organizationUsage.findUnique as jest.Mock).mockResolvedValue({
+        organizationId: 'default-org',
+        totalSkus: 0,
+        maxSkus: 1000,
+      });
+
       (mockPrisma.product.findMany as jest.Mock).mockResolvedValue([
         {
           id: 1,
@@ -217,6 +235,7 @@ describe('XLSX Upload Functionality Tests', () => {
           name: 'Old Name',
           costPrice: 10.0,
           barcode: '1234567890123',
+          organizationId: 'default-org',
           createdAt: new Date(),
           updatedAt: new Date(),
           expiryDate: null,

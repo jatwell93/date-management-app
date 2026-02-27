@@ -1,6 +1,7 @@
 import { UploadService } from '../../services/upload.service';
 import { StorageProvider } from '../../storage/storage-provider.interface';
 import { CSVParserService } from '../../services/csv-parser.service';
+import { StorageQuotaService } from '../../services/storage-quota.service';
 
 // Mock dependencies
 const mockStorageProvider = {
@@ -14,6 +15,11 @@ const mockStorageProvider = {
 const mockCsvParserService = {
   processFile: jest.fn(),
 } as unknown as jest.Mocked<CSVParserService>;
+
+const mockStorageQuotaService = {
+  recordUpload: jest.fn().mockResolvedValue(undefined),
+  markUploadDeleted: jest.fn().mockResolvedValue(undefined),
+} as unknown as jest.Mocked<StorageQuotaService>;
 
 jest.mock('../../config/environment', () => ({
   envConfig: {
@@ -32,10 +38,16 @@ import * as fs from 'fs/promises';
 
 describe('UploadService', () => {
   let uploadService: UploadService;
+  const organizationId = 'org-123';
 
   beforeEach(() => {
     jest.clearAllMocks();
-    uploadService = new UploadService(mockStorageProvider, mockCsvParserService);
+    uploadService = new UploadService(
+      organizationId,
+      mockStorageProvider,
+      mockCsvParserService,
+      mockStorageQuotaService,
+    );
   });
 
   describe('initiateUpload', () => {

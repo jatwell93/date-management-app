@@ -34,11 +34,25 @@ jest.mock('../../config/environment', () => ({
   },
 }));
 
+// Mock StorageQuotaService to prevent real database access
+jest.mock('../../services/storage-quota.service', () => ({
+  StorageQuotaService: jest.fn().mockImplementation(() => ({
+    recordUpload: jest.fn().mockResolvedValue(undefined),
+    markUploadDeleted: jest.fn().mockResolvedValue(undefined),
+    getStorageQuota: jest.fn().mockResolvedValue({
+      used: 0,
+      limit: 10 * 1024 * 1024 * 1024,
+      percentageUsed: 0,
+      tier: 'free',
+    }),
+  })),
+}));
+
 // In-memory storage provider for testing
 class TestStorageProvider implements StorageProvider {
   private store = new Map<string, Buffer>();
 
-  async upload(key: string, data: Buffer): Promise<string> {
+  async upload(key: string, data: Buffer, _contentType: string): Promise<string> {
     this.store.set(key, data);
     return key;
   }
@@ -59,7 +73,7 @@ class TestStorageProvider implements StorageProvider {
     return this.store.has(key);
   }
 
-  async getPresignedUploadUrl(key: string): Promise<string> {
+  async getPresignedUploadUrl(key: string, _expiresIn: number): Promise<string> {
     return `https://test.example.com/upload/${encodeURIComponent(key)}`;
   }
 
@@ -79,7 +93,7 @@ describe('Upload Routes with ServiceProvider Integration', () => {
   let serviceProvider: ServiceProvider;
 
   beforeEach(() => {
-    // Create mock Prisma client
+    // Create mock Prisma client with all models needed by StorageQuotaService
     mockPrisma = {
       product: {
         findMany: jest.fn().mockResolvedValue([]),
@@ -97,6 +111,16 @@ describe('Upload Routes with ServiceProvider Integration', () => {
           createdAt: new Date(),
           updatedAt: new Date(),
         })),
+      },
+      upload: {
+        aggregate: jest.fn().mockResolvedValue({ _sum: { fileSizeBytes: 0 } }),
+        create: jest.fn().mockResolvedValue({ id: 1 }),
+        findUnique: jest.fn(),
+        update: jest.fn().mockResolvedValue({}),
+      },
+      organizationUsage: {
+        upsert: jest.fn().mockResolvedValue({}),
+        update: jest.fn().mockResolvedValue({}),
       },
       $disconnect: jest.fn(),
     } as any;
@@ -248,7 +272,7 @@ describe('Upload Routes with ServiceProvider Integration', () => {
 
       // Simulate file storage by manually storing file
       const csvContent = 'Name,SKU,Cost\nProduct A,SKU001,10.50';
-      await testStorage.upload(storageKey, Buffer.from(csvContent));
+      await testStorage.upload(storageKey, Buffer.from(csvContent), 'text/csv');
 
       // Complete the upload
       const completeRes = await request(app)
@@ -351,7 +375,7 @@ describe('Upload Routes with ServiceProvider Integration', () => {
 
       // Step 2: Simulate file storage (as if uploaded via presigned URL)
       const csvContent = 'Name,SKU,Cost\nProduct A,SKU001,10.50';
-      await testStorage.upload(storageKey, Buffer.from(csvContent));
+      await testStorage.upload(storageKey, Buffer.from(csvContent), 'text/csv');
 
       // Step 3: Complete upload to trigger processing
       const completeRes = await request(app)

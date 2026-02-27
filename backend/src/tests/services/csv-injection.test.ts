@@ -26,42 +26,42 @@ describe('CSV Injection Prevention', () => {
       const sanitize = (csvParser as any).sanitizeValue.bind(csvParser);
 
       const result = sanitize('=SUM(A1:A10)');
-      expect(result).toBe('\\=SUM(A1:A10)');
+      expect(result).toBe("'=SUM(A1:A10)");
     });
 
     it('should escape leading plus sign with backslash', () => {
       const sanitize = (csvParser as any).sanitizeValue.bind(csvParser);
 
       const result = sanitize('+1234567890');
-      expect(result).toBe('\\+1234567890');
+      expect(result).toBe("'+1234567890");
     });
 
     it('should escape leading minus sign with backslash', () => {
       const sanitize = (csvParser as any).sanitizeValue.bind(csvParser);
 
       const result = sanitize('-cmd|calc');
-      expect(result).toBe('\\-cmd|calc');
+      expect(result).toBe("'-cmd|calc");
     });
 
     it('should escape leading at sign with backslash', () => {
       const sanitize = (csvParser as any).sanitizeValue.bind(csvParser);
 
       const result = sanitize('@SUM(A1:A10)');
-      expect(result).toBe('\\@SUM(A1:A10)');
+      expect(result).toBe("'@SUM(A1:A10)");
     });
 
     it('should escape leading tab character with backslash', () => {
       const sanitize = (csvParser as any).sanitizeValue.bind(csvParser);
 
       const result = sanitize('\tmalicious');
-      expect(result).toBe('\\\tmalicious');
+      expect(result).toBe("'\tmalicious");
     });
 
     it('should escape leading carriage return with backslash', () => {
       const sanitize = (csvParser as any).sanitizeValue.bind(csvParser);
 
       const result = sanitize('\rmalicious');
-      expect(result).toBe('\\\rmalicious');
+      expect(result).toBe("'\rmalicious");
     });
   });
 
@@ -104,37 +104,37 @@ describe('CSV Injection Prevention', () => {
 
       // Only the first = should be escaped, not subsequent ones
       const result = sanitize('=SUM(A1)=5');
-      expect(result).toBe('\\=SUM(A1)=5');
+      expect(result).toBe("'=SUM(A1)=5");
     });
 
     it('should handle formulas with multiple cells', () => {
       const sanitize = (csvParser as any).sanitizeValue.bind(csvParser);
 
       const result = sanitize('=A1+B2-C3');
-      expect(result).toBe('\\=A1+B2-C3');
+      expect(result).toBe("'=A1+B2-C3");
     });
 
     it('should handle command injection attempts', () => {
       const sanitize = (csvParser as any).sanitizeValue.bind(csvParser);
 
-      expect(sanitize('=cmd|"/c calc"')).toBe('\\=cmd|"/c calc"');
-      expect(sanitize('-2+3+cmd|"/c calc"')).toBe('\\-2+3+cmd|"/c calc"');
-      expect(sanitize('+cmd|"/c calc"')).toBe('\\+cmd|"/c calc"');
-      expect(sanitize('@cmd|"/c calc"')).toBe('\\@cmd|"/c calc"');
+      expect(sanitize('=cmd|"/c calc"')).toBe("'=cmd|\"/c calc\"");
+      expect(sanitize('-2+3+cmd|"/c calc"')).toBe("'-2+3+cmd|\"/c calc\"");
+      expect(sanitize('+cmd|"/c calc"')).toBe("'+cmd|\"/c calc\"");
+      expect(sanitize('@cmd|"/c calc"')).toBe("'@cmd|\"/c calc\"");
     });
 
     it('should handle DDE (Dynamic Data Exchange) injection attempts', () => {
       const sanitize = (csvParser as any).sanitizeValue.bind(csvParser);
 
-      expect(sanitize('=cmd|"/c powershell"!A1')).toBe('\\=cmd|"/c powershell"!A1');
-      expect(sanitize('+DDE("cmd";"/c calc";"!A0")')).toBe('\\+DDE("cmd";"/c calc";"!A0")');
+      expect(sanitize('=cmd|"/c powershell"!A1')).toBe("'=cmd|\"/c powershell\"!A1");
+      expect(sanitize('+DDE("cmd";"/c calc";"!A0")')).toBe("'+DDE(\"cmd\";\"/c calc\";\"!A0\")");
     });
 
     it('should handle hyperlink injection attempts', () => {
       const sanitize = (csvParser as any).sanitizeValue.bind(csvParser);
 
       expect(sanitize('=HYPERLINK("http://evil.com","Click here")')).toBe(
-        '\\=HYPERLINK("http://evil.com","Click here")',
+        "'=HYPERLINK(\"http://evil.com\",\"Click here\")",
       );
     });
 
@@ -142,7 +142,7 @@ describe('CSV Injection Prevention', () => {
       const sanitize = (csvParser as any).sanitizeValue.bind(csvParser);
 
       expect(sanitize('Cafe Muller')).toBe('Cafe Muller');
-      expect(sanitize('=JP_TEST')).toBe('\\=JP_TEST');
+      expect(sanitize('=JP_TEST')).toBe("'=JP_TEST");
     });
 
     it('should handle cells with special CSV characters', () => {
@@ -173,9 +173,9 @@ describe('CSV Injection Prevention', () => {
 
       injectionAttempts.forEach((attempt) => {
         const result = sanitize(attempt);
-        // All should start with backslash escape
-        expect(result.startsWith('\\')).toBe(true);
-        // Original injection attempt should be preserved after backslash
+        // All should start with apostrophe escape
+        expect(result.startsWith("'")).toBe(true);
+        // Original injection attempt should be preserved after apostrophe
         expect(result.substring(1)).toBe(attempt);
       });
     });

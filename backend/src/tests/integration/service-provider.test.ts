@@ -14,7 +14,7 @@ import { StorageProvider } from '../../storage/storage-provider.interface';
 
 // Mock storage provider for testing
 class MockStorageProvider implements StorageProvider {
-  async upload(key: string, data: Buffer): Promise<string> {
+  async upload(key: string, _data: Buffer, _contentType: string): Promise<string> {
     return `mock://${key}`;
   }
 
@@ -30,7 +30,7 @@ class MockStorageProvider implements StorageProvider {
     return true;
   }
 
-  async getPresignedUploadUrl(key: string): Promise<string> {
+  async getPresignedUploadUrl(key: string, _expiresIn: number): Promise<string> {
     return `https://mock.example.com/upload/${key}`;
   }
 }

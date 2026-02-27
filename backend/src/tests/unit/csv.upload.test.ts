@@ -15,6 +15,10 @@ describe('CSV Upload Functionality Tests', () => {
         create: jest.fn(),
         update: jest.fn(),
       },
+      organizationUsage: {
+        findUnique: jest.fn().mockResolvedValue({ organizationId: 'default-org', totalSkus: 0, maxSkus: 1000 }),
+        update: jest.fn(),
+      },
       $transaction: jest.fn((callback) => callback(mockPrisma)),
     };
     productService = new ProductService(mockPrisma as unknown as PrismaClient);
@@ -63,8 +67,19 @@ describe('CSV Header Name Recognition', () => {
   let mockPrisma: any;
 
   beforeEach(() => {
-    mockPrisma = { product: {} };
-    productService = new ProductService(mockPrisma);
+    mockPrisma = {
+      product: {
+        findUnique: jest.fn(),
+        create: jest.fn(),
+        update: jest.fn(),
+      },
+      organizationUsage: {
+        findUnique: jest.fn().mockResolvedValue({ organizationId: 'default-org', totalSkus: 0, maxSkus: 1000 }),
+        update: jest.fn(),
+      },
+      $transaction: jest.fn((callback) => callback(mockPrisma)),
+    };
+    productService = new ProductService(mockPrisma as unknown as PrismaClient);
   });
 
   it('should recognize alternative SKU column names', () => {
@@ -337,6 +352,10 @@ describe('Comprehensive CSV Processing Tests', () => {
       product: {
         findUnique: jest.fn(),
         create: jest.fn(),
+        update: jest.fn(),
+      },
+      organizationUsage: {
+        findUnique: jest.fn().mockResolvedValue({ organizationId: 'default-org', totalSkus: 0, maxSkus: 1000 }),
         update: jest.fn(),
       },
       $transaction: jest.fn((callback) => callback(mockPrisma)),

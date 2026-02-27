@@ -1,21 +1,19 @@
 import request from 'supertest';
 import app from '../../index';
-import express from 'express';
-app.use(express.json());
 
 describe('"Manager Report" Integration Scenario', () => {
+  const originalTestAuthBypass = process.env.TEST_AUTH_BYPASS;
+
+  afterEach(() => {
+    process.env.TEST_AUTH_BYPASS = originalTestAuthBypass;
+  });
+
   it('should allow a manager to generate a monthly markdown report', async () => {
-    // Step 1: Log in as a manager (simulate by getting a token)
-    const loginResponse = await request(app).post('/auth/login').send({ pin: '5624' }); // Default manager PIN
+    // Use test auth bypass instead of removed /auth/login endpoint
+    process.env.TEST_AUTH_BYPASS = 'true';
 
-    expect(loginResponse.status).toBe(200);
-    const token = loginResponse.body.token;
-    expect(token).toBeDefined();
-
-    // Step 2: Request the monthly markdown report
-    const reportResponse = await request(app)
-      .get('/reports/monthly-markdown')
-      .set('Authorization', `Bearer ${token}`);
+    // Request the monthly markdown report (auth bypass injects manager user)
+    const reportResponse = await request(app).get('/reports/monthly-markdown');
 
     expect(reportResponse.status).toBe(200);
     expect(reportResponse.headers['content-type']).toContain('application/json');

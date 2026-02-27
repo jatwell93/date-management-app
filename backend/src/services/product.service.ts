@@ -292,6 +292,20 @@ export class ProductService {
     product: Omit<Product, 'id' | 'createdAt' | 'updatedAt' | 'organizationId'>,
   ): Promise<Product> {
     const result = await this.prisma.$transaction(async (tx) => {
+      // Atomic check-and-increment to prevent TOCTOU race conditions
+      const usage = await tx.organizationUsage.findUnique({
+        where: { organizationId: this.organizationId },
+      });
+      
+      if (!usage) {
+        throw new Error('Organization usage record not found');
+      }
+      
+      // Check limit BEFORE creating product (within same transaction)
+      if (usage.totalSkus >= usage.maxSkus) {
+        throw new Error(`SKU limit reached for this organization (${usage.maxSkus} max)`);
+      }
+      
       const newProduct = await tx.product.create({
         data: {
           barcode: product.barcode,
@@ -302,7 +316,7 @@ export class ProductService {
         },
       });
 
-      // Increment organization usage counter
+      // Increment organization usage counter atomically
       await tx.organizationUsage.update({
         where: { organizationId: this.organizationId },
         data: {
