@@ -8,12 +8,24 @@
  * Pattern: Reuse existing security patterns from route tests
  */
 
+// Set environment before imports
+process.env.TEST_AUTH_BYPASS = 'false';
+
+// Mock jsonwebtoken to control JWT verification in tests
+const mockJwtVerify = jest.fn();
+jest.mock('jsonwebtoken', () => ({
+  ...jest.requireActual('jsonwebtoken'),
+  verify: mockJwtVerify,
+}));
+
 import { PrismaClient } from '@prisma/client';
 import { getDefaultDatabaseClient } from '../../database/database-factory';
 import request from 'supertest';
 import { ProductService } from '../../services/product.service';
 import { SubscriptionStatus } from '../../types/subscription';
-import express, { Request, Response, NextFunction } from 'express';
+import express, { Response, NextFunction } from 'express';
+import jwt from 'jsonwebtoken';
+import { authenticateToken, AuthRequest } from '../../middleware/auth.middleware';
 
 // Mock Stripe
 jest.mock('stripe', () => {
@@ -39,6 +51,7 @@ describe('Multi-Tenant Penetration Tests', () => {
   beforeEach(async () => {
     // Clean up test data
     await prisma.product.deleteMany({});
+    await prisma.trialEvent.deleteMany({});
     await prisma.subscriptionTier.deleteMany({});
     await prisma.organizationUsage.deleteMany({});
     await prisma.organization.deleteMany({});
@@ -60,6 +73,15 @@ describe('Multi-Tenant Penetration Tests', () => {
       },
     });
 
+    // Reset mock before each test
+    mockJwtVerify.mockReset();
+    mockJwtVerify.mockImplementation((token, secret, options, callback) => {
+      // Default: return invalid token error (for tests that expect failure)
+      if (callback) {
+        (callback as jwt.VerifyCallback)(new jwt.JsonWebTokenError('invalid signature'), undefined);
+      }
+      return undefined;
+    });
     // Create subscriptions
     await prisma.subscriptionTier.createMany({
       data: [
@@ -106,11 +128,17 @@ describe('Multi-Tenant Penetration Tests', () => {
     app = express();
     app.use(express.json());
 
-    // Mock authentication middleware - only accepts org from Authorization header
-    const mockAuthMiddleware: express.RequestHandler = (req: Request, res: Response, next: NextFunction) => {
+    // JWT validation test route - uses REAL authenticateToken middleware
+    app.get('/api/secure/products', authenticateToken, (req: AuthRequest, res: Response) => {
+      // Return org ID from token to verify correct extraction
+      return res.json({ organizationId: req.organizationId, tierLevel: req.tierLevel });
+    });
+
+    // Standard mock routes for other tests
+    const mockAuthMiddleware = (req: AuthRequest, res: Response, next: NextFunction) => {
       if (req.headers['authorization']) {
         const parts = (req.headers['authorization'] as string).split(' ')[1]?.split(':');
-        req.organizationId = parts?.[1] || null;
+        req.organizationId = parts?.[1] || undefined;
       }
       if (!req.organizationId) {
         return res.status(403).json({ message: 'Access denied: Missing organization context' });
@@ -120,17 +148,17 @@ describe('Multi-Tenant Penetration Tests', () => {
     app.use(mockAuthMiddleware);
 
     // Mock routes for testing
-    app.get('/api/products', (req: Request, res: Response) => {
+    app.get('/api/products', (req: AuthRequest, res: Response) => {
       // Return empty array — tenant-scoped, no leaking
       return res.json([]);
     });
-    app.post('/api/products', (req: Request, res: Response) => {
+    app.post('/api/products', (req: AuthRequest, res: Response) => {
       if (req.body.organizationId && req.body.organizationId !== req.organizationId) {
         return res.status(403).json({ message: 'Access denied: Unauthorized organization access' });
       }
       return res.status(201).json({ id: 'prod_123', ...req.body });
     });
-    app.get('/api/products/:id', async (req: Request, res: Response) => {
+    app.get('/api/products/:id', async (req: AuthRequest, res: Response) => {
       // Use real ProductService to enforce tenant isolation
       const productService = new ProductService(prisma, req.organizationId!);
       const product = await productService.getProductById(Number(req.params.id));
@@ -366,8 +394,156 @@ describe('Multi-Tenant Penetration Tests', () => {
 
       expect(responseEmpty.status).toBe(403);
     });
+
+    it('should reject JWT with invalid signature', async () => {
+      // Mock jwt.verify to throw an error (simulating invalid signature)
+      mockJwtVerify.mockImplementation((token: string, secret: string, options: any, callback: any) => {
+        if (callback) {
+          callback(new jwt.JsonWebTokenError('invalid signature'), undefined);
+        }
+        return undefined;
+      });
+
+      const fakeToken = 'invalid.token.here';
+
+      // Attempt to access with invalid JWT - should fail signature validation
+      const response = await request(app)
+        .get('/api/secure/products')
+        .set('Authorization', `Bearer ${fakeToken}`);
+
+      // Real JWT validation returns 403 for invalid signature
+      expect(response.status).toBe(403);
+      expect(response.body.message).toContain('Invalid token');
+    });
+
+    it('should reject JWT with tampered payload', async () => {
+      // Mock jwt.verify to throw an error (simulating tampered payload -> invalid signature)
+      mockJwtVerify.mockImplementation((token: string, secret: string, options: any, callback: any) => {
+        if (callback) {
+          callback(new jwt.JsonWebTokenError('invalid signature'), undefined);
+        }
+        return undefined;
+      });
+
+      const tamperedToken = 'tampered.token.here';
+
+      const response = await request(app)
+        .get('/api/secure/products')
+        .set('Authorization', `Bearer ${tamperedToken}`);
+
+      // Should be rejected due to invalid signature
+      expect(response.status).toBe(403);
+      expect(response.body.message).toContain('Invalid token');
+    });
+
+    it('should accept valid JWT and extract correct organization', async () => {
+      // Mock jwt.verify to return a valid decoded token
+      mockJwtVerify.mockImplementation((token: string, secret: string, options: any, callback: any) => {
+        const decoded = {
+          userId: 1,
+          organizationId: orgA.id,
+          role: 'Manager',
+          tierLevel: 'professional',
+          exp: Math.floor(Date.now() / 1000) + 3600, // 1 hour from now
+        };
+        if (callback) {
+          callback(null, decoded as any);
+        }
+        return decoded;
+      });
+
+      const fakeToken = 'valid.token.here';
+
+      const response = await request(app)
+        .get('/api/secure/products')
+        .set('Authorization', `Bearer ${fakeToken}`);
+
+      // Valid token should succeed
+      expect(response.status).toBe(200);
+      expect(response.body.organizationId).toBe(orgA.id);
+      expect(response.body.tierLevel).toBe('professional');
+    });
+
+    it('should reject expired JWT', async () => {
+      // Mock jwt.verify to throw token expired error
+      mockJwtVerify.mockImplementation((token: string, secret: string, options: any, callback: any) => {
+        if (callback) {
+          callback(new jwt.TokenExpiredError('jwt expired', new Date()), undefined);
+        }
+        return undefined;
+      });
+
+      const expiredToken = 'expired.token.here';
+
+      const response = await request(app)
+        .get('/api/secure/products')
+        .set('Authorization', `Bearer ${expiredToken}`);
+
+      // Expired token should be rejected (returns 'Invalid token' because
+      // the middleware falls back to Clerk auth which also fails)
+      expect(response.status).toBe(403);
+      expect(response.body.message).toContain('Invalid token');
+    });
+
+    it('should reject JWT with missing required fields', async () => {
+      // Mock jwt.verify to return a token missing required fields
+      mockJwtVerify.mockImplementation((token: string, secret: string, options: any, callback: any) => {
+        const decoded = {
+          userId: 1,
+          role: 'Manager',
+          // Missing organizationId and tierLevel
+        };
+        if (callback) {
+          callback(null, decoded as any);
+        }
+        return decoded;
+      });
+
+      const incompleteToken = 'incomplete.token.here';
+
+      const response = await request(app)
+        .get('/api/secure/products')
+        .set('Authorization', `Bearer ${incompleteToken}`);
+
+      // Missing required fields should be rejected
+      expect(response.status).toBe(403);
+      expect(response.body.message).toMatch(/Missing tenant context|Malformed token/);
+    });
+
+    it('should reject JWT for organization without subscription', async () => {
+      // Create org without subscription
+      const orphanOrg = await prisma.organization.create({
+        data: {
+          name: 'Orphan Org',
+          slug: 'orphan-org',
+          contactEmail: 'orphan@test.com',
+        },
+      });
+
+      // Mock jwt.verify to return valid token for orphan org
+      mockJwtVerify.mockImplementation((token: string, secret: string, options: any, callback: any) => {
+        const decoded = {
+          userId: 1,
+          organizationId: orphanOrg.id,
+          role: 'Manager',
+          tierLevel: 'professional',
+          exp: Math.floor(Date.now() / 1000) + 3600,
+        };
+        if (callback) {
+          callback(null, decoded as any);
+        }
+        return decoded;
+      });
+
+      const token = 'valid.for.orphan';
+
+      const response = await request(app)
+        .get('/api/secure/products')
+        .set('Authorization', `Bearer ${token}`);
+
+      // Should be rejected due to missing subscription
+      expect(response.status).toBe(403);
+      expect(response.body.message).toContain('subscription not configured');
+    });
   });
 });
-
-const tenant1Token = 'Bearer token:tenant1';
-const tenant2Token = 'Bearer token:tenant2';

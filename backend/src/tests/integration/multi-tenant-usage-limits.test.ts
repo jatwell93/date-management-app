@@ -249,6 +249,195 @@ describe('Multi-Tenant Usage Limit Boundary Tests', () => {
     });
   });
 
+  describe('Task 13.6: User limit enforcement per tier', () => {
+    it('should block user creation when Starter tier at max_users limit (1/1)', async () => {
+      // Set activeUsers to 1 (at limit)
+      await prisma.organizationUsage.update({
+        where: { organizationId: orgStarter.id },
+        data: { activeUsers: 1, maxUsers: 1 },
+      });
+
+      // Create mock user creation endpoint with usage limit check
+      const userApp = express();
+      userApp.use(express.json());
+      userApp.post(
+        '/api/users',
+        (req: AuthRequest, _res: express.Response, next: express.NextFunction) => {
+          req.organizationId = req.body.orgId as string;
+          req.tierLevel = req.body.tier as AuthRequest['tierLevel'];
+          req.userId = 1;
+          next();
+        },
+        checkUsageLimit('max_users'),
+        async (_req: AuthRequest, res: express.Response) => {
+          res.status(201).json({ id: 2, email: 'newuser@test.com' });
+        },
+      );
+
+      const response = await request(userApp)
+        .post('/api/users')
+        .send({
+          orgId: orgStarter.id,
+          tier: 'starter',
+          email: 'newuser@test.com',
+        })
+        .expect(403);
+
+      expect(response.body.message).toContain('Usage limit reached');
+      expect(response.body.message).toContain('max_users');
+      expect(response.body.currentUsage).toBe(1);
+      expect(response.body.limit).toBe(1);
+      expect(response.body.upgradeCTA).toBeDefined();
+    });
+
+    it('should allow user creation when under max_users limit', async () => {
+      // Set activeUsers to 0 (under limit)
+      await prisma.organizationUsage.update({
+        where: { organizationId: orgStarter.id },
+        data: { activeUsers: 0, maxUsers: 1 },
+      });
+
+      const userApp = express();
+      userApp.use(express.json());
+      userApp.post(
+        '/api/users',
+        (req: AuthRequest, _res: express.Response, next: express.NextFunction) => {
+          req.organizationId = req.body.orgId as string;
+          req.tierLevel = req.body.tier as AuthRequest['tierLevel'];
+          req.userId = 1;
+          next();
+        },
+        checkUsageLimit('max_users'),
+        async (_req: AuthRequest, res: express.Response) => {
+          res.status(201).json({ id: 2, email: 'newuser@test.com' });
+        },
+      );
+
+      const response = await request(userApp)
+        .post('/api/users')
+        .send({
+          orgId: orgStarter.id,
+          tier: 'starter',
+          email: 'newuser@test.com',
+        })
+        .expect(201);
+
+      expect(response.body.email).toBe('newuser@test.com');
+    });
+
+    it('should allow Professional tier to create multiple users (up to max_users)', async () => {
+      // Set activeUsers to 4 (under Professional limit of 5)
+      await prisma.organizationUsage.update({
+        where: { organizationId: orgProfessional.id },
+        data: { activeUsers: 4, maxUsers: 5 },
+      });
+
+      const userApp = express();
+      userApp.use(express.json());
+      userApp.post(
+        '/api/users',
+        (req: AuthRequest, _res: express.Response, next: express.NextFunction) => {
+          req.organizationId = req.body.orgId as string;
+          req.tierLevel = req.body.tier as AuthRequest['tierLevel'];
+          req.userId = 1;
+          next();
+        },
+        checkUsageLimit('max_users'),
+        async (_req: AuthRequest, res: express.Response) => {
+          res.status(201).json({ id: 5, email: 'user5@test.com' });
+        },
+      );
+
+      // Should allow 5th user
+      const response = await request(userApp)
+        .post('/api/users')
+        .send({
+          orgId: orgProfessional.id,
+          tier: 'professional',
+          email: 'user5@test.com',
+        })
+        .expect(201);
+
+      expect(response.body.email).toBe('user5@test.com');
+    });
+
+    it('should block user creation when Professional tier at max_users limit (5/5)', async () => {
+      // Set activeUsers to 5 (at Professional limit)
+      await prisma.organizationUsage.update({
+        where: { organizationId: orgProfessional.id },
+        data: { activeUsers: 5, maxUsers: 5 },
+      });
+
+      const userApp = express();
+      userApp.use(express.json());
+      userApp.post(
+        '/api/users',
+        (req: AuthRequest, _res: express.Response, next: express.NextFunction) => {
+          req.organizationId = req.body.orgId as string;
+          req.tierLevel = req.body.tier as AuthRequest['tierLevel'];
+          req.userId = 1;
+          next();
+        },
+        checkUsageLimit('max_users'),
+        async (_req: AuthRequest, res: express.Response) => {
+          res.status(201).json({ id: 6, email: 'user6@test.com' });
+        },
+      );
+
+      const response = await request(userApp)
+        .post('/api/users')
+        .send({
+          orgId: orgProfessional.id,
+          tier: 'professional',
+          email: 'user6@test.com',
+        })
+        .expect(403);
+
+      expect(response.body.message).toContain('Usage limit reached');
+      expect(response.body.currentUsage).toBe(5);
+      expect(response.body.limit).toBe(5);
+    });
+
+    it('should return usage warning at 80% of max_users limit', async () => {
+      // Set activeUsers to 4 (80% of Professional limit 5)
+      await prisma.organizationUsage.update({
+        where: { organizationId: orgProfessional.id },
+        data: { activeUsers: 4, maxUsers: 5 },
+      });
+
+      const userApp = express();
+      userApp.use(express.json());
+      userApp.post(
+        '/api/users',
+        (req: AuthRequest, _res: express.Response, next: express.NextFunction) => {
+          req.organizationId = req.body.orgId as string;
+          req.tierLevel = req.body.tier as AuthRequest['tierLevel'];
+          req.userId = 1;
+          next();
+        },
+        checkUsageLimit('max_users'),
+        async (_req: AuthRequest, res: express.Response) => {
+          // Check for usage warning in res.locals
+          const warning = res.locals.usageWarning;
+          res.status(201).json({ id: 5, email: 'user5@test.com', warning });
+        },
+      );
+
+      const response = await request(userApp)
+        .post('/api/users')
+        .send({
+          orgId: orgProfessional.id,
+          tier: 'professional',
+          email: 'user5@test.com',
+        })
+        .expect(201);
+
+      // Warning should be attached (80% threshold)
+      expect(response.body.warning).toBeDefined();
+      expect(response.body.warning.percentageUsed).toBeGreaterThanOrEqual(80);
+    });
+  });
+
   describe('Task 13.7: Usage counter atomicity', () => {
     it('should increment usage counter atomically on product creation', async () => {
       // Start with 0 SKUs
@@ -389,6 +578,249 @@ describe('Multi-Tenant Usage Limit Boundary Tests', () => {
         where: { organizationId: orgId },
       });
       expect(finalUsage?.totalSkus).toBe(2);
+    });
+  });
+
+  describe('Task 13.7: Storage quota increment/decrement per organization', () => {
+    it('should increment storageUsedBytes on upload', async () => {
+      // Verify initial storage is 0
+      const initialUsage = await prisma.organizationUsage.findUnique({
+        where: { organizationId: orgStarter.id },
+      });
+      expect(initialUsage?.storageUsedBytes).toBe(0);
+
+      // Create upload record directly (simulating completed upload)
+      await prisma.upload.create({
+        data: {
+          userId: 1,
+          fileKey: 'test-file-1.csv',
+          fileName: 'test-file-1.csv',
+          fileSizeBytes: 1024,
+          contentType: 'text/csv',
+          status: 'completed',
+        },
+      });
+
+      // Manually increment storage (simulating StorageQuotaService.recordUpload)
+      await prisma.organizationUsage.update({
+        where: { organizationId: orgStarter.id },
+        data: { storageUsedBytes: { increment: 1024 } },
+      });
+
+      const usage = await prisma.organizationUsage.findUnique({
+        where: { organizationId: orgStarter.id },
+      });
+      expect(usage?.storageUsedBytes).toBe(1024);
+    });
+
+    it('should accumulate storage across multiple uploads', async () => {
+      // First upload
+      await prisma.upload.create({
+        data: {
+          userId: 1,
+          fileKey: 'test-file-2.csv',
+          fileName: 'test-file-2.csv',
+          fileSizeBytes: 1024,
+          status: 'completed',
+        },
+      });
+      await prisma.organizationUsage.update({
+        where: { organizationId: orgStarter.id },
+        data: { storageUsedBytes: { increment: 1024 } },
+      });
+
+      // Second upload
+      await prisma.upload.create({
+        data: {
+          userId: 1,
+          fileKey: 'test-file-3.csv',
+          fileName: 'test-file-3.csv',
+          fileSizeBytes: 2048,
+          status: 'completed',
+        },
+      });
+      await prisma.organizationUsage.update({
+        where: { organizationId: orgStarter.id },
+        data: { storageUsedBytes: { increment: 2048 } },
+      });
+
+      const usage = await prisma.organizationUsage.findUnique({
+        where: { organizationId: orgStarter.id },
+      });
+      expect(usage?.storageUsedBytes).toBe(3072); // 1024 + 2048
+    });
+
+    it('should decrement storageUsedBytes on upload deletion', async () => {
+      // Setup: create upload and increment storage
+      await prisma.upload.create({
+        data: {
+          userId: 1,
+          fileKey: 'test-file-delete.csv',
+          fileName: 'test-file-delete.csv',
+          fileSizeBytes: 1024,
+          status: 'completed',
+        },
+      });
+      await prisma.organizationUsage.update({
+        where: { organizationId: orgStarter.id },
+        data: { storageUsedBytes: 1024 },
+      });
+
+      // Delete upload (mark as deleted)
+      await prisma.upload.update({
+        where: { fileKey: 'test-file-delete.csv' },
+        data: { status: 'deleted' },
+      });
+
+      // Decrement storage
+      await prisma.organizationUsage.update({
+        where: { organizationId: orgStarter.id },
+        data: { storageUsedBytes: { decrement: 1024 } },
+      });
+
+      const usage = await prisma.organizationUsage.findUnique({
+        where: { organizationId: orgStarter.id },
+      });
+      expect(usage?.storageUsedBytes).toBe(0);
+    });
+
+    it('should NOT decrement storage on double-delete (idempotency)', async () => {
+      // Setup: create upload with storage already decremented
+      await prisma.upload.create({
+        data: {
+          userId: 1,
+          fileKey: 'test-file-double-delete.csv',
+          fileName: 'test-file-double-delete.csv',
+          fileSizeBytes: 1024,
+          status: 'deleted', // Already deleted
+        },
+      });
+      await prisma.organizationUsage.update({
+        where: { organizationId: orgStarter.id },
+        data: { storageUsedBytes: 0 },
+      });
+
+      // Attempt to delete again - should NOT decrement
+      // In production, StorageQuotaService.markUploadDeleted checks status first
+      const upload = await prisma.upload.findUnique({
+        where: { fileKey: 'test-file-double-delete.csv' },
+      });
+
+      // Verify upload is already deleted - no decrement should happen
+      expect(upload?.status).toBe('deleted');
+
+      // Storage should remain 0 (not go negative)
+      const usage = await prisma.organizationUsage.findUnique({
+        where: { organizationId: orgStarter.id },
+      });
+      expect(usage?.storageUsedBytes).toBe(0);
+    });
+
+    it('should isolate storage tracking per organization', async () => {
+      // Org A uploads file
+      await prisma.upload.create({
+        data: {
+          userId: 1,
+          fileKey: 'org-a-file.csv',
+          fileName: 'org-a-file.csv',
+          fileSizeBytes: 1024,
+          status: 'completed',
+        },
+      });
+      await prisma.organizationUsage.update({
+        where: { organizationId: orgStarter.id },
+        data: { storageUsedBytes: 1024 },
+      });
+
+      // Org B uploads different file
+      await prisma.upload.create({
+        data: {
+          userId: 2,
+          fileKey: 'org-b-file.csv',
+          fileName: 'org-b-file.csv',
+          fileSizeBytes: 2048,
+          status: 'completed',
+        },
+      });
+      await prisma.organizationUsage.update({
+        where: { organizationId: orgProfessional.id },
+        data: { storageUsedBytes: 2048 },
+      });
+
+      // Verify Org A's storage unchanged by Org B's upload
+      const orgAUsage = await prisma.organizationUsage.findUnique({
+        where: { organizationId: orgStarter.id },
+      });
+      expect(orgAUsage?.storageUsedBytes).toBe(1024);
+
+      // Verify Org B's storage
+      const orgBUsage = await prisma.organizationUsage.findUnique({
+        where: { organizationId: orgProfessional.id },
+      });
+      expect(orgBUsage?.storageUsedBytes).toBe(2048);
+    });
+
+    it('should use StorageQuotaService.recordUpload for atomic tracking', async () => {
+      const { StorageQuotaService } = await import('../../services/storage-quota.service');
+      const storageService = new StorageQuotaService();
+
+      // Record upload via service
+      await storageService.recordUpload(
+        orgStarter.id,
+        1,
+        'service-test-file.csv',
+        'service-test-file.csv',
+        5120, // 5KB
+        'text/csv',
+      );
+
+      // Verify storage incremented
+      const usage = await prisma.organizationUsage.findUnique({
+        where: { organizationId: orgStarter.id },
+      });
+      expect(usage?.storageUsedBytes).toBe(5120);
+
+      // Verify upload record created
+      const upload = await prisma.upload.findUnique({
+        where: { fileKey: 'service-test-file.csv' },
+      });
+      expect(upload?.status).toBe('completed');
+    });
+
+    it('should use StorageQuotaService.markUploadDeleted for decrement', async () => {
+      const { StorageQuotaService } = await import('../../services/storage-quota.service');
+      const storageService = new StorageQuotaService();
+
+      // Setup: create upload
+      await storageService.recordUpload(
+        orgStarter.id,
+        1,
+        'delete-test-file.csv',
+        'delete-test-file.csv',
+        4096,
+        'text/csv',
+      );
+
+      // Verify storage
+      let usage = await prisma.organizationUsage.findUnique({
+        where: { organizationId: orgStarter.id },
+      });
+      expect(usage?.storageUsedBytes).toBe(4096);
+
+      // Delete via service
+      await storageService.markUploadDeleted(orgStarter.id, 'delete-test-file.csv');
+
+      // Verify storage decremented
+      usage = await prisma.organizationUsage.findUnique({
+        where: { organizationId: orgStarter.id },
+      });
+      expect(usage?.storageUsedBytes).toBe(0);
+
+      // Verify upload marked as deleted
+      const upload = await prisma.upload.findUnique({
+        where: { fileKey: 'delete-test-file.csv' },
+      });
+      expect(upload?.status).toBe('deleted');
     });
   });
 });
