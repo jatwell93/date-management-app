@@ -12,6 +12,7 @@
 
 import { PrismaClient } from '@prisma/client';
 import { getDefaultDatabaseClient } from '../../database/database-factory';
+import { Product } from '../../models/product.model';
 import { ProductService } from '../../services/product.service';
 import { SubscriptionStatus } from '../../types/subscription';
 
@@ -144,7 +145,7 @@ describeLoadTests('Multi-Tenant Load Tests', () => {
       const productsPerOrg = 10;
 
       // Create products concurrently from all 3 orgs
-      const promises: Promise<{ id: string; name: string; sku: string; barcode: string; costPrice: number }>[] = [];
+      const promises: Promise<Product>[] = [];
 
       for (let i = 0; i < productsPerOrg; i++) {
         const productService1 = new ProductService(prisma, org1.id);
@@ -219,7 +220,7 @@ describeLoadTests('Multi-Tenant Load Tests', () => {
       const productsPerOrg = 20;
 
       // Create products concurrently
-      const promises: Promise<{ id: string; name: string; sku: string; barcode: string; costPrice: number }>[] = [];
+      const promises: Promise<Product>[] = [];
 
       for (let i = 0; i < productsPerOrg; i++) {
         const productService1 = new ProductService(prisma, org1.id);
@@ -266,7 +267,7 @@ describeLoadTests('Multi-Tenant Load Tests', () => {
 
       // Create many products concurrently from single org
       const productService = new ProductService(prisma, org1.id);
-      const promises: Promise<{ id: string; name: string; sku: string; barcode: string; costPrice: number }>[] = [];
+      const promises: Promise<Product>[] = [];
 
       for (let i = 0; i < concurrentOps; i++) {
         promises.push(
@@ -316,7 +317,7 @@ describeLoadTests('Multi-Tenant Load Tests', () => {
       }
 
       // Mix of concurrent reads and writes
-      const promises: (Promise<{ id: string; name: string; sku: string; barcode: string; costPrice: number }[]> | Promise<{ id: string; name: string; sku: string; barcode: string; costPrice: number }>)[] = [];
+      const promises: (Promise<Product[]> | Promise<Product>)[] = [];
 
       // 20 reads
       for (let i = 0; i < 20; i++) {
@@ -360,7 +361,7 @@ describeLoadTests('Multi-Tenant Load Tests', () => {
       const productsPerOrg = 15;
 
       // Concurrent operations across all 3 orgs
-      const promises: Promise<{ id: string; name: string; sku: string; barcode: string; costPrice: number }>[] = [];
+      const promises: Promise<Product>[] = [];
 
       for (let i = 0; i < productsPerOrg; i++) {
         // Org 1

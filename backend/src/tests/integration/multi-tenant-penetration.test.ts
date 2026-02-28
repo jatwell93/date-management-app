@@ -397,12 +397,14 @@ describe('Multi-Tenant Penetration Tests', () => {
 
     it('should reject JWT with invalid signature', async () => {
       // Mock jwt.verify to throw an error (simulating invalid signature)
-      mockJwtVerify.mockImplementation((token: string, secret: string, options: any, callback: any) => {
-        if (callback) {
-          callback(new jwt.JsonWebTokenError('invalid signature'), undefined);
-        }
-        return undefined;
-      });
+      mockJwtVerify.mockImplementation(
+        (token: string, secret: string, options: any, callback: any) => {
+          if (callback) {
+            callback(new jwt.JsonWebTokenError('invalid signature'), undefined);
+          }
+          return undefined;
+        },
+      );
 
       const fakeToken = 'invalid.token.here';
 
@@ -418,12 +420,14 @@ describe('Multi-Tenant Penetration Tests', () => {
 
     it('should reject JWT with tampered payload', async () => {
       // Mock jwt.verify to throw an error (simulating tampered payload -> invalid signature)
-      mockJwtVerify.mockImplementation((token: string, secret: string, options: any, callback: any) => {
-        if (callback) {
-          callback(new jwt.JsonWebTokenError('invalid signature'), undefined);
-        }
-        return undefined;
-      });
+      mockJwtVerify.mockImplementation(
+        (token: string, secret: string, options: any, callback: any) => {
+          if (callback) {
+            callback(new jwt.JsonWebTokenError('invalid signature'), undefined);
+          }
+          return undefined;
+        },
+      );
 
       const tamperedToken = 'tampered.token.here';
 
@@ -438,19 +442,21 @@ describe('Multi-Tenant Penetration Tests', () => {
 
     it('should accept valid JWT and extract correct organization', async () => {
       // Mock jwt.verify to return a valid decoded token
-      mockJwtVerify.mockImplementation((token: string, secret: string, options: any, callback: any) => {
-        const decoded = {
-          userId: 1,
-          organizationId: orgA.id,
-          role: 'Manager',
-          tierLevel: 'professional',
-          exp: Math.floor(Date.now() / 1000) + 3600, // 1 hour from now
-        };
-        if (callback) {
-          callback(null, decoded as any);
-        }
-        return decoded;
-      });
+      mockJwtVerify.mockImplementation(
+        (token: string, secret: string, options: any, callback: any) => {
+          const decoded = {
+            userId: 1,
+            organizationId: orgA.id,
+            role: 'Manager',
+            tierLevel: 'professional',
+            exp: Math.floor(Date.now() / 1000) + 3600, // 1 hour from now
+          };
+          if (callback) {
+            callback(null, decoded as any);
+          }
+          return decoded;
+        },
+      );
 
       const fakeToken = 'valid.token.here';
 
@@ -466,12 +472,14 @@ describe('Multi-Tenant Penetration Tests', () => {
 
     it('should reject expired JWT', async () => {
       // Mock jwt.verify to throw token expired error
-      mockJwtVerify.mockImplementation((token: string, secret: string, options: any, callback: any) => {
-        if (callback) {
-          callback(new jwt.TokenExpiredError('jwt expired', new Date()), undefined);
-        }
-        return undefined;
-      });
+      mockJwtVerify.mockImplementation(
+        (token: string, secret: string, options: any, callback: any) => {
+          if (callback) {
+            callback(new jwt.TokenExpiredError('jwt expired', new Date()), undefined);
+          }
+          return undefined;
+        },
+      );
 
       const expiredToken = 'expired.token.here';
 
@@ -487,17 +495,19 @@ describe('Multi-Tenant Penetration Tests', () => {
 
     it('should reject JWT with missing required fields', async () => {
       // Mock jwt.verify to return a token missing required fields
-      mockJwtVerify.mockImplementation((token: string, secret: string, options: any, callback: any) => {
-        const decoded = {
-          userId: 1,
-          role: 'Manager',
-          // Missing organizationId and tierLevel
-        };
-        if (callback) {
-          callback(null, decoded as any);
-        }
-        return decoded;
-      });
+      mockJwtVerify.mockImplementation(
+        (token: string, secret: string, options: any, callback: any) => {
+          const decoded = {
+            userId: 1,
+            role: 'Manager',
+            // Missing organizationId and tierLevel
+          };
+          if (callback) {
+            callback(null, decoded as any);
+          }
+          return decoded;
+        },
+      );
 
       const incompleteToken = 'incomplete.token.here';
 
@@ -521,19 +531,21 @@ describe('Multi-Tenant Penetration Tests', () => {
       });
 
       // Mock jwt.verify to return valid token for orphan org
-      mockJwtVerify.mockImplementation((token: string, secret: string, options: any, callback: any) => {
-        const decoded = {
-          userId: 1,
-          organizationId: orphanOrg.id,
-          role: 'Manager',
-          tierLevel: 'professional',
-          exp: Math.floor(Date.now() / 1000) + 3600,
-        };
-        if (callback) {
-          callback(null, decoded as any);
-        }
-        return decoded;
-      });
+      mockJwtVerify.mockImplementation(
+        (token: string, secret: string, options: any, callback: any) => {
+          const decoded = {
+            userId: 1,
+            organizationId: orphanOrg.id,
+            role: 'Manager',
+            tierLevel: 'professional',
+            exp: Math.floor(Date.now() / 1000) + 3600,
+          };
+          if (callback) {
+            callback(null, decoded as any);
+          }
+          return decoded;
+        },
+      );
 
       const token = 'valid.for.orphan';
 

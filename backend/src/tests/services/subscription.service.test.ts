@@ -329,7 +329,7 @@ describe('SubscriptionService', () => {
       (mockStripe.subscriptions.create as jest.Mock).mockResolvedValueOnce(stripeSubscription);
 
       // Mock $transaction to execute callback
-      mockPrisma.$transaction = jest.fn((callback) => callback(mockPrisma));
+      (mockPrisma.$transaction as jest.Mock) = jest.fn((callback) => callback(mockPrisma));
 
       // Mock subscription update within transaction
       (mockPrisma.subscriptionTier.update as jest.Mock).mockResolvedValueOnce({
@@ -387,7 +387,7 @@ describe('SubscriptionService', () => {
       ]);
 
       // Mock $transaction for each downgrade
-      mockPrisma.$transaction = jest.fn((callback) => callback(mockPrisma));
+      (mockPrisma.$transaction as jest.Mock) = jest.fn((callback) => callback(mockPrisma));
       (mockPrisma.subscriptionTier.update as jest.Mock).mockResolvedValue({});
       (mockPrisma.trialEvent.create as jest.Mock).mockResolvedValue({});
 
@@ -413,7 +413,7 @@ describe('SubscriptionService', () => {
       ]);
 
       // Mock $transaction
-      mockPrisma.$transaction = jest.fn((callback) => callback(mockPrisma));
+      (mockPrisma.$transaction as jest.Mock) = jest.fn((callback) => callback(mockPrisma));
 
       // First update fails, second succeeds
       (mockPrisma.subscriptionTier.update as jest.Mock)

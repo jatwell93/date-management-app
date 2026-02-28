@@ -15,7 +15,9 @@ const mockPrisma = {
     upsert: jest.fn(),
   },
   organizationUsage: {
-    findUnique: jest.fn().mockResolvedValue({ organizationId: 'default-org', totalSkus: 0, maxSkus: 1000 }),
+    findUnique: jest
+      .fn()
+      .mockResolvedValue({ organizationId: 'default-org', totalSkus: 0, maxSkus: 1000 }),
     update: jest.fn(),
   },
   $transaction: jest.fn((callback) => callback(mockPrisma)),

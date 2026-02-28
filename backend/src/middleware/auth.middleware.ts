@@ -47,7 +47,9 @@ function getAuthorizedParties(): string[] {
 
   const parties = Array.from(partySet);
   if (parties.length === CLERK_DEV_ORIGINS.length && process.env.NODE_ENV === 'production') {
-    console.warn('WARNING: No production origins configured for Clerk token verification. Please set FRONTEND_URL or CORS_ORIGIN.');
+    console.warn(
+      'WARNING: No production origins configured for Clerk token verification. Please set FRONTEND_URL or CORS_ORIGIN.',
+    );
   }
 
   return parties;
@@ -60,17 +62,13 @@ const isBillingCycle = (value: string): value is BillingCycle =>
   Object.values(BillingCycle).includes(value as BillingCycle);
 
 const hasRequiredTokenFields = (token: any): boolean => {
-  return (
-    'userId' in token &&
-    'role' in token &&
-    'organizationId' in token &&
-    'tierLevel' in token
-  );
+  return 'userId' in token && 'role' in token && 'organizationId' in token && 'tierLevel' in token;
 };
 
 // Simple memory cache for subscription status
-const subscriptionCache = new Map<string, { subscription: any, timestamp: number }>();
+const subscriptionCache = new Map<string, { subscription: any; timestamp: number }>();
 const CACHE_TTL_MS = 5 * 60 * 1000; // 5 minutes
+export const TEST_AUTH_BYPASS_ORG_ID = 'default-org';
 
 export const authenticateToken = async (req: AuthRequest, res: Response, next: NextFunction) => {
   // Test environment bypass
@@ -78,12 +76,12 @@ export const authenticateToken = async (req: AuthRequest, res: Response, next: N
     req.user = {
       id: 1,
       role: 'Manager',
-      organizationId: 'default-org',
+      organizationId: TEST_AUTH_BYPASS_ORG_ID,
       tierLevel: 'professional',
     };
     req.userId = 1;
     req.userRole = 'Manager';
-    req.organizationId = 'default-org';
+    req.organizationId = TEST_AUTH_BYPASS_ORG_ID;
     req.tierLevel = 'professional';
     return next();
   }
@@ -276,7 +274,9 @@ export const authenticateToken = async (req: AuthRequest, res: Response, next: N
 
       if (subscription && subscription.status === SubscriptionStatus.CANCELED) {
         const tierLevel = isTierLevel(subscription.tierLevel) ? subscription.tierLevel : null;
-        const billingCycle = isBillingCycle(subscription.billingCycle) ? subscription.billingCycle : null;
+        const billingCycle = isBillingCycle(subscription.billingCycle)
+          ? subscription.billingCycle
+          : null;
 
         if (tierLevel && billingCycle) {
           const subscriptionService = new SubscriptionService(prisma);

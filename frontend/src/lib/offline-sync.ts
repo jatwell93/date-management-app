@@ -259,7 +259,7 @@ class OfflineSyncService {
         const queue = this.getOfflineQueue();
         if (queue.length === 0) {
           logSyncEvent('No operations to sync');
-          return;
+          break;
         }
         logSyncEvent('Found operations to sync', 'info', { count: queue.length });
 

@@ -51,7 +51,7 @@ describe('Multi-Tenant Usage Limit Boundary Tests', () => {
       prisma,
       { name: 'Starter Pharmacy' },
       { tierLevel: 'starter', status: SubscriptionStatus.ACTIVE },
-      { maxUsers: 1, maxSkus: 500, totalSkus: 0, activeUsers: 1 }
+      { maxUsers: 1, maxSkus: 500, totalSkus: 0, activeUsers: 1 },
     );
     orgStarter = starterSetup.org;
 
@@ -60,9 +60,36 @@ describe('Multi-Tenant Usage Limit Boundary Tests', () => {
       prisma,
       { name: 'Professional Pharmacy' },
       { tierLevel: 'professional', status: SubscriptionStatus.ACTIVE },
-      { maxUsers: 5, maxSkus: 2000, totalSkus: 0, activeUsers: 1 }
+      { maxUsers: 5, maxSkus: 2000, totalSkus: 0, activeUsers: 1 },
     );
     orgProfessional = professionalSetup.org;
+
+    // Seed users bound to each organization for FK-safe upload tracking tests
+    await prisma.user.upsert({
+      where: { id: 1 },
+      update: {
+        organizationId: orgStarter.id,
+        role: 'Manager',
+      },
+      create: {
+        id: 1,
+        organizationId: orgStarter.id,
+        role: 'Manager',
+      },
+    });
+
+    await prisma.user.upsert({
+      where: { id: 2 },
+      update: {
+        organizationId: orgProfessional.id,
+        role: 'Staff',
+      },
+      create: {
+        id: 2,
+        organizationId: orgProfessional.id,
+        role: 'Staff',
+      },
+    });
 
     // Create test Express app
     app = express();
@@ -559,9 +586,21 @@ describe('Multi-Tenant Usage Limit Boundary Tests', () => {
 
       // Create 3 concurrent requests, but limit is 2
       const promises = [
-        productService.createProduct({ ...productData, sku: productData.sku + '1', barcode: productData.barcode + '1' }),
-        productService.createProduct({ ...productData, sku: productData.sku + '2', barcode: productData.barcode + '2' }),
-        productService.createProduct({ ...productData, sku: productData.sku + '3', barcode: productData.barcode + '3' }),
+        productService.createProduct({
+          ...productData,
+          sku: productData.sku + '1',
+          barcode: productData.barcode + '1',
+        }),
+        productService.createProduct({
+          ...productData,
+          sku: productData.sku + '2',
+          barcode: productData.barcode + '2',
+        }),
+        productService.createProduct({
+          ...productData,
+          sku: productData.sku + '3',
+          barcode: productData.barcode + '3',
+        }),
       ];
 
       // With atomic check-and-increment, expect exactly 2 to succeed, 1 to fail
@@ -592,6 +631,7 @@ describe('Multi-Tenant Usage Limit Boundary Tests', () => {
       // Create upload record directly (simulating completed upload)
       await prisma.upload.create({
         data: {
+          organizationId: orgStarter.id,
           userId: 1,
           fileKey: 'test-file-1.csv',
           fileName: 'test-file-1.csv',
@@ -617,6 +657,7 @@ describe('Multi-Tenant Usage Limit Boundary Tests', () => {
       // First upload
       await prisma.upload.create({
         data: {
+          organizationId: orgStarter.id,
           userId: 1,
           fileKey: 'test-file-2.csv',
           fileName: 'test-file-2.csv',
@@ -632,6 +673,7 @@ describe('Multi-Tenant Usage Limit Boundary Tests', () => {
       // Second upload
       await prisma.upload.create({
         data: {
+          organizationId: orgStarter.id,
           userId: 1,
           fileKey: 'test-file-3.csv',
           fileName: 'test-file-3.csv',
@@ -654,6 +696,7 @@ describe('Multi-Tenant Usage Limit Boundary Tests', () => {
       // Setup: create upload and increment storage
       await prisma.upload.create({
         data: {
+          organizationId: orgStarter.id,
           userId: 1,
           fileKey: 'test-file-delete.csv',
           fileName: 'test-file-delete.csv',
@@ -688,6 +731,7 @@ describe('Multi-Tenant Usage Limit Boundary Tests', () => {
       // Setup: create upload with storage already decremented
       await prisma.upload.create({
         data: {
+          organizationId: orgStarter.id,
           userId: 1,
           fileKey: 'test-file-double-delete.csv',
           fileName: 'test-file-double-delete.csv',
@@ -720,6 +764,7 @@ describe('Multi-Tenant Usage Limit Boundary Tests', () => {
       // Org A uploads file
       await prisma.upload.create({
         data: {
+          organizationId: orgStarter.id,
           userId: 1,
           fileKey: 'org-a-file.csv',
           fileName: 'org-a-file.csv',
@@ -735,6 +780,7 @@ describe('Multi-Tenant Usage Limit Boundary Tests', () => {
       // Org B uploads different file
       await prisma.upload.create({
         data: {
+          organizationId: orgProfessional.id,
           userId: 2,
           fileKey: 'org-b-file.csv',
           fileName: 'org-b-file.csv',

@@ -30,7 +30,12 @@ beforeEach(async () => {
   await prisma.organization.upsert({
     where: { id: 'default-org' },
     update: {},
-    create: { id: 'default-org', name: 'Default Test Org', slug: `default-org-${uniqueSuffix}`, contactEmail: 'test@default.org' },
+    create: {
+      id: 'default-org',
+      name: 'Default Test Org',
+      slug: `default-org-${uniqueSuffix}`,
+      contactEmail: 'test@default.org',
+    },
   });
   await prisma.user.upsert({
     where: { id: 1 },

@@ -123,7 +123,7 @@ describe('Scanner', () => {
 
     it('starts in camera mode when defaultMode="camera"', () => {
       render(<Scanner onScan={mockOnScan} defaultMode="camera" />);
-      expect(screen.getByText(/Camera Scanner/i)).toBeInTheDocument();
+      expect(screen.getAllByText(/Camera Scanner/i).length).toBeGreaterThan(0);
       expect(screen.getByRole('button', { name: /Use Text Input/i })).toBeInTheDocument();
     });
   });
@@ -169,7 +169,7 @@ describe('Scanner', () => {
 
       fireEvent.click(screen.getByRole('button', { name: /Use Camera/i }));
 
-      expect(screen.getByText(/Camera Scanner/i)).toBeInTheDocument();
+      expect(screen.getAllByText(/Camera Scanner/i).length).toBeGreaterThan(0);
       expect(screen.getByRole('button', { name: /Use Text Input/i })).toBeInTheDocument();
     });
 

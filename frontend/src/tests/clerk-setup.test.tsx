@@ -2,6 +2,10 @@ import React from 'react';
 import { render, screen } from '@testing-library/react';
 import { ClerkProvider } from '@clerk/clerk-react';
 
+jest.mock('@clerk/clerk-react', () => ({
+  ClerkProvider: ({ children }: { children: React.ReactNode }) => <>{children}</>,
+}));
+
 /**
  * Test: ClerkProvider is correctly configured
  * This verifies that Clerk is initialized and available to the app

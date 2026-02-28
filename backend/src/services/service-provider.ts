@@ -11,11 +11,13 @@ import { StorageQuotaService } from './storage-quota.service';
 import { UploadService } from './upload.service';
 import { UserService } from './user.service';
 import { SubscriptionService } from './subscription.service';
+import { TEST_AUTH_BYPASS_ORG_ID } from '../middleware/auth.middleware';
 
 export class ServiceProvider {
   private prisma: PrismaClient;
   private storageProvider: StorageProvider;
   private db: DB;
+  private organizationId: string;
   private authService?: AuthService;
   private userService?: UserService;
   private csvParserService?: CSVParserService;
@@ -25,9 +27,22 @@ export class ServiceProvider {
   private reportService?: ReportService;
   private subscriptionService?: SubscriptionService;
 
-  constructor(prismaClient?: PrismaClient, storageProvider?: StorageProvider) {
-    this.prisma = prismaClient ?? getDefaultDatabaseClient();
-    this.storageProvider = storageProvider ?? getDefaultStorageProvider();
+  constructor(
+    organizationIdOrPrisma?: string | PrismaClient,
+    prismaOrStorageProvider?: PrismaClient | StorageProvider,
+    storageProviderArg?: StorageProvider,
+  ) {
+    if (typeof organizationIdOrPrisma === 'string') {
+      this.organizationId = organizationIdOrPrisma;
+      this.prisma =
+        (prismaOrStorageProvider as PrismaClient | undefined) ?? getDefaultDatabaseClient();
+      this.storageProvider = storageProviderArg ?? getDefaultStorageProvider();
+    } else {
+      this.organizationId = TEST_AUTH_BYPASS_ORG_ID;
+      this.prisma = organizationIdOrPrisma ?? getDefaultDatabaseClient();
+      this.storageProvider =
+        (prismaOrStorageProvider as StorageProvider | undefined) ?? getDefaultStorageProvider();
+    }
     this.db = getDb();
   }
 
@@ -40,7 +55,7 @@ export class ServiceProvider {
 
   getUserService(): UserService {
     if (!this.userService) {
-      this.userService = new UserService('default-org', this.prisma, this.getAuthService());
+      this.userService = new UserService(this.organizationId, this.prisma, this.getAuthService());
     }
     return this.userService;
   }
@@ -54,7 +69,7 @@ export class ServiceProvider {
 
   getStorageQuotaService(): StorageQuotaService {
     if (!this.storageQuotaService) {
-      this.storageQuotaService = new StorageQuotaService();
+      this.storageQuotaService = new StorageQuotaService(this.organizationId);
     }
     return this.storageQuotaService;
   }
@@ -62,7 +77,7 @@ export class ServiceProvider {
   getUploadService(): UploadService {
     if (!this.uploadService) {
       this.uploadService = new UploadService(
-        'default-org',
+        this.organizationId,
         this.storageProvider,
         this.getCSVParserService(),
         this.getStorageQuotaService(),

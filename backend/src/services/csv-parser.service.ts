@@ -21,6 +21,7 @@ import { parse } from 'csv-parse';
 import * as fs from 'fs';
 import { getDefaultDatabaseClient } from '../database/database-factory';
 import { Logger } from '../utils/logger';
+import { TEST_AUTH_BYPASS_ORG_ID } from '../middleware/auth.middleware';
 
 // ============================================================================
 // Types & Interfaces
@@ -35,6 +36,8 @@ export interface CSVParserOptions {
   skipInvalidRows?: boolean;
   /** Maximum file size in bytes (default: 10MB) */
   maxFileSize?: number;
+  /** Organization ID for tenant-scoped product imports */
+  organizationId?: string;
 }
 
 export interface ParsedRow {
@@ -144,6 +147,7 @@ const CSV_INJECTION_PREFIXES = ['=', '+', '-', '@', '\t', '\r'];
 export class CSVParserService extends EventEmitter {
   private prisma: PrismaClient;
   private options: Required<CSVParserOptions>;
+  private organizationId: string;
 
   /**
    * Constructor with optional dependency injection
@@ -153,11 +157,13 @@ export class CSVParserService extends EventEmitter {
   constructor(prismaClient?: PrismaClient, options: CSVParserOptions = {}) {
     super();
     this.prisma = prismaClient ?? getDefaultDatabaseClient();
+    this.organizationId = options.organizationId ?? TEST_AUTH_BYPASS_ORG_ID;
     this.options = {
       batchSize: options.batchSize ?? 100,
       progressInterval: options.progressInterval ?? 1000,
       skipInvalidRows: options.skipInvalidRows ?? true,
       maxFileSize: options.maxFileSize ?? 10 * 1024 * 1024, // 10MB
+      organizationId: this.organizationId,
     };
   }
 
@@ -598,6 +604,7 @@ export class CSVParserService extends EventEmitter {
         // Check if product exists by SKU or barcode
         const existing = await tx.product.findFirst({
           where: {
+            organizationId: this.organizationId,
             OR: [{ sku: row.sku }, { barcode: row.barcode }],
           },
         });
@@ -618,6 +625,7 @@ export class CSVParserService extends EventEmitter {
           // Create new product
           await tx.product.create({
             data: {
+              organizationId: this.organizationId,
               sku: row.sku,
               name: row.name,
               barcode: row.barcode,

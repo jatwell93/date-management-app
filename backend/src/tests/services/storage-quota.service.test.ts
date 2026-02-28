@@ -337,10 +337,18 @@ describe('StorageQuotaService', () => {
         status: 'completed',
       });
 
-      await service.recordUpload(organizationId, userId, fileKey, fileName, fileSizeBytes, contentType);
+      await service.recordUpload(
+        organizationId,
+        userId,
+        fileKey,
+        fileName,
+        fileSizeBytes,
+        contentType,
+      );
 
       expect(mockPrisma.upload.create).toHaveBeenCalledWith({
         data: {
+          organizationId,
           userId,
           fileKey,
           fileName,
@@ -370,7 +378,9 @@ describe('StorageQuotaService', () => {
       mockPrisma.upload.create.mockRejectedValue(new Error('Database error'));
 
       // Service logs and re-throws the error
-      await expect(service.recordUpload('org-123', 1, 'key', 'file.csv', 1000)).rejects.toThrow('Database error');
+      await expect(service.recordUpload('org-123', 1, 'key', 'file.csv', 1000)).rejects.toThrow(
+        'Database error',
+      );
     });
   });
 

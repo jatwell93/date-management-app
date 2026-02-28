@@ -81,44 +81,65 @@ jest.mock('../../components/Scanner', () => ({
 // Mock HandheldScanner
 jest.mock('../../components/HandheldScanner', () => ({
   HandheldScanner: ({ onScan }: { onScan: (val: any) => void }) => (
-    <div data-testid="handheld-scanner">
-      <button
-        data-testid="handheld-scan-trigger"
-        onClick={() =>
-          onScan({
-            barcode: '1234567890',
-            timestamp: Date.now(),
-            source: 'camera',
-          })
-        }
-      >
-        Scan with Camera
-      </button>
-      <button
-        data-testid="handheld-scan-gs1-trigger"
-        onClick={() =>
-          onScan({
-            barcode: '(01)12345678901231(17)250131',
-            timestamp: Date.now(),
-            source: 'camera',
-          })
-        }
-      >
-        Scan GS1
-      </button>
-      <button
-        data-testid="handheld-scan-invalid-trigger"
-        onClick={() =>
-          onScan({
-            barcode: 'invalid-gs1-data',
-            timestamp: Date.now(),
-            source: 'camera',
-          })
-        }
-      >
-        Scan Invalid
-      </button>
-    </div>
+    <main className="flex-1 overflow-auto" role="main">
+      <div data-testid="handheld-scan-toolbar">
+        <span>Synced</span>
+        <button aria-label="Settings" type="button">
+          Settings
+        </button>
+        <select
+          data-testid="sync-strategy-selector"
+          onChange={(e) => mockHandheldContext.setSyncStrategy(e.target.value)}
+          value={mockHandheldContext.syncStrategy}
+        >
+          <option value="real-time">Real-time</option>
+          <option value="batch-10-min">Batch (10 min)</option>
+          <option value="manual">Manual</option>
+        </select>
+        <button disabled type="button">
+          Sync Now
+        </button>
+      </div>
+
+      <div data-testid="handheld-scanner">
+        <button
+          data-testid="handheld-scan-trigger"
+          onClick={() =>
+            onScan({
+              barcode: '1234567890',
+              timestamp: Date.now(),
+              source: 'camera',
+            })
+          }
+        >
+          Scan with Camera
+        </button>
+        <button
+          data-testid="handheld-scan-gs1-trigger"
+          onClick={() =>
+            onScan({
+              barcode: '(01)12345678901231(17)250131',
+              timestamp: Date.now(),
+              source: 'camera',
+            })
+          }
+        >
+          Scan GS1
+        </button>
+        <button
+          data-testid="handheld-scan-invalid-trigger"
+          onClick={() =>
+            onScan({
+              barcode: 'invalid-gs1-data',
+              timestamp: Date.now(),
+              source: 'camera',
+            })
+          }
+        >
+          Scan Invalid
+        </button>
+      </div>
+    </main>
   ),
 }));
 

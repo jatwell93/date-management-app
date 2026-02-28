@@ -259,7 +259,11 @@ describe('Multi-Tenant Trial Workflow Tests', () => {
           stripeCustomerId: 'cus_trial_convert',
         },
       });
-      await subscriptionService.convertTrialToPaid(orgTrial.id, 'pm_test_card', BillingCycle.MONTHLY);
+      await subscriptionService.convertTrialToPaid(
+        orgTrial.id,
+        'pm_test_card',
+        BillingCycle.MONTHLY,
+      );
 
       // Verify conversion was tracked
       const updatedSubscription = await prisma.subscriptionTier.findFirst({

@@ -17,7 +17,9 @@ function getAuthorizedParties(): string[] {
 
   const parties = Array.from(partySet);
   if (parties.length === CLERK_DEV_ORIGINS.length && process.env.NODE_ENV === 'production') {
-    console.warn('WARNING: No production origins configured for Clerk token verification. Please set FRONTEND_URL or CORS_ORIGIN.');
+    console.warn(
+      'WARNING: No production origins configured for Clerk token verification. Please set FRONTEND_URL or CORS_ORIGIN.',
+    );
   }
 
   return parties;
@@ -116,11 +118,17 @@ export const clerkAuth = async (req: ClerkAuthRequest, res: Response, next: Next
 
     next();
   } catch (error) {
-    console.error('Clerk token verification failed:', error instanceof Error ? error.message : error);
+    console.error(
+      'Clerk token verification failed:',
+      error instanceof Error ? error.message : error,
+    );
     if (error instanceof Error && error.stack) {
       console.error(error.stack);
     }
-    return res.status(401).json({ error: 'Invalid or expired token', details: error instanceof Error ? error.message : String(error) });
+    return res.status(401).json({
+      error: 'Invalid or expired token',
+      details: error instanceof Error ? error.message : String(error),
+    });
   }
 };
 

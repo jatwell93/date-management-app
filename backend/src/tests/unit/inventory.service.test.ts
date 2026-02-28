@@ -83,6 +83,7 @@ describe('InventoryService', () => {
       });
       expect(mockPrisma.inventoryItem.create).toHaveBeenCalledWith({
         data: {
+          organizationId,
           productId: 1,
           expiryDate: new Date('2025-12-31'),
           locationId: 1,
@@ -91,6 +92,7 @@ describe('InventoryService', () => {
       });
       expect(mockPrisma.auditLog.create).toHaveBeenCalledWith({
         data: {
+          organizationId,
           userId: 1,
           inventoryItemId: 1,
           action: 'inventory_changed',
@@ -176,6 +178,7 @@ describe('InventoryService', () => {
       });
       expect(mockPrisma.auditLog.create).toHaveBeenCalledWith({
         data: {
+          organizationId,
           userId: 1,
           inventoryItemId: 1,
           action: 'inventory_changed',
@@ -355,6 +358,7 @@ describe('InventoryService', () => {
       });
       expect(mockPrisma.auditLog.create).toHaveBeenCalledWith({
         data: {
+          organizationId,
           userId: 1,
           inventoryItemId: 1,
           action: 'inventory_changed',
@@ -456,6 +460,7 @@ describe('InventoryService', () => {
       });
       expect(mockPrisma.itemTransaction.create).toHaveBeenCalledWith({
         data: {
+          organizationId,
           inventoryItemId: 1,
           userId: 1,
           type: 'in',

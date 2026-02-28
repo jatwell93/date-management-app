@@ -2,6 +2,7 @@ import { PrismaClient } from '@prisma/client';
 import { getDefaultDatabaseClient } from '../database/database-factory';
 import { InventoryItem } from '../models/inventory-item.model';
 import { ItemTransaction } from '../models/item-transaction.model';
+import { TEST_AUTH_BYPASS_ORG_ID } from '../middleware/auth.middleware';
 
 export class InventoryService {
   private prisma: PrismaClient;
@@ -9,11 +10,11 @@ export class InventoryService {
 
   /**
    * Constructor with optional dependency injection
-   * @param organizationId - Organization ID for tenant isolation
+   * @param organizationId - Organization ID for tenant isolation (optional in tests)
    * @param prismaClient - Optional PrismaClient for testing/custom configurations
    */
   constructor(organizationId?: string, prismaClient?: PrismaClient) {
-    this.organizationId = organizationId ?? 'default-org';
+    this.organizationId = organizationId ?? TEST_AUTH_BYPASS_ORG_ID;
     this.prisma = prismaClient ?? getDefaultDatabaseClient();
   }
 
@@ -133,6 +134,7 @@ export class InventoryService {
 
     const newItem = await this.prisma.inventoryItem.create({
       data: {
+        organizationId: this.organizationId,
         productId,
         expiryDate: new Date(expiryDate), // Convert string to Date for Prisma
         locationId,
@@ -368,6 +370,7 @@ export class InventoryService {
 
     await this.prisma.auditLog.create({
       data: {
+        organizationId: this.organizationId,
         userId,
         inventoryItemId,
         action: 'inventory_changed',
@@ -403,6 +406,7 @@ export class InventoryService {
 
     const result = await this.prisma.itemTransaction.create({
       data: {
+        organizationId: this.organizationId,
         inventoryItemId: inventory_item_id,
         userId: user_id,
         type,

@@ -3,6 +3,7 @@ import { getDefaultDatabaseClient } from '../database/database-factory';
 import { User } from '../models/user.model';
 import { ConflictError, ValidationError } from '../errors';
 import { AuthService } from './auth.service';
+import { TEST_AUTH_BYPASS_ORG_ID } from '../middleware/auth.middleware';
 
 export class UserService {
   private prisma: PrismaClient;
@@ -10,7 +11,7 @@ export class UserService {
   private organizationId: string;
 
   constructor(organizationId?: string, prismaClient?: PrismaClient, authService?: AuthService) {
-    this.organizationId = organizationId ?? 'default-org';
+    this.organizationId = organizationId ?? TEST_AUTH_BYPASS_ORG_ID;
     this.prisma = prismaClient ?? getDefaultDatabaseClient();
     this.authService = authService ?? new AuthService(this.prisma);
   }

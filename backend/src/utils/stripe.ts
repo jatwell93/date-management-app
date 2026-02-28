@@ -1,6 +1,6 @@
 /**
  * Stripe Utility Module
- * 
+ *
  * Provides singleton Stripe instance with validation
  * Ensures STRIPE_SECRET_KEY is validated at startup
  */
@@ -22,9 +22,7 @@ function validateStripeConfig(): void {
   }
 
   if (!envConfig.STRIPE_SECRET_KEY.startsWith('sk_')) {
-    throw new Error(
-      'STRIPE_SECRET_KEY appears to be invalid. It should start with "sk_".',
-    );
+    throw new Error('STRIPE_SECRET_KEY appears to be invalid. It should start with "sk_".');
   }
 }
 
@@ -35,13 +33,13 @@ function validateStripeConfig(): void {
 export function getStripeClient(): Stripe {
   if (!stripeInstance) {
     validateStripeConfig();
-    
+
     stripeInstance = new Stripe(envConfig.STRIPE_SECRET_KEY!, {
       apiVersion: '2023-08-16',
       typescript: true,
     });
   }
-  
+
   return stripeInstance;
 }
 

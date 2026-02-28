@@ -35,11 +35,11 @@ export interface CreateUsageOptions {
  */
 export async function createTestOrganization(
   prisma: PrismaClient,
-  options: CreateOrgOptions = {}
+  options: CreateOrgOptions = {},
 ): Promise<{ id: string; slug: string; name: string }> {
   orgCounter++;
   const timestamp = Date.now();
-  
+
   const org = await prisma.organization.create({
     data: {
       name: options.name || `Test Org ${orgCounter}`,
@@ -60,7 +60,7 @@ export async function createTestOrgWithSubscription(
   prisma: PrismaClient,
   orgOptions: CreateOrgOptions = {},
   subscriptionOptions: CreateSubscriptionOptions = {},
-  usageOptions: CreateUsageOptions = {}
+  usageOptions: CreateUsageOptions = {},
 ) {
   const org = await createTestOrganization(prisma, orgOptions);
 
@@ -91,17 +91,14 @@ export async function createTestOrgWithSubscription(
 /**
  * Creates multiple test organizations for cross-tenant isolation tests
  */
-export async function createMultipleTestOrgs(
-  prisma: PrismaClient,
-  count: number = 2
-) {
+export async function createMultipleTestOrgs(prisma: PrismaClient, count: number = 2) {
   const orgs = [];
-  
+
   for (let i = 0; i < count; i++) {
     const org = await createTestOrgWithSubscription(prisma);
     orgs.push(org);
   }
-  
+
   return orgs;
 }
 

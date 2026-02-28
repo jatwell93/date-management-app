@@ -41,7 +41,7 @@ describe('Prisma-based Services Integration', () => {
 
   describe('Service Instantiation with DI', () => {
     it('should create InventoryService with injected PrismaClient', () => {
-      const service = new InventoryService(prisma);
+      const service = new InventoryService('test-org', prisma);
       expect(service).toBeInstanceOf(InventoryService);
     });
 
@@ -51,7 +51,7 @@ describe('Prisma-based Services Integration', () => {
     });
 
     it('should create StoreAreaService with injected PrismaClient', () => {
-      const service = new StoreAreaService(prisma);
+      const service = new StoreAreaService('test-org', prisma);
       expect(service).toBeInstanceOf(StoreAreaService);
     });
 
@@ -93,12 +93,12 @@ describe('Prisma-based Services Integration', () => {
     // without actually executing them (which would require a migrated DB)
 
     it('InventoryService.getAllInventoryItems should be a function returning Promise', () => {
-      const service = new InventoryService(prisma);
+      const service = new InventoryService('test-org', prisma);
       expect(typeof service.getAllInventoryItems).toBe('function');
     });
 
     it('StoreAreaService.getAllStoreAreas should be a function returning Promise', () => {
-      const service = new StoreAreaService(prisma);
+      const service = new StoreAreaService('test-org', prisma);
       expect(typeof service.getAllStoreAreas).toBe('function');
     });
 

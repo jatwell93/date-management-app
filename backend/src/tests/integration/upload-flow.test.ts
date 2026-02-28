@@ -72,7 +72,12 @@ const createTestApp = (
   });
 
   const upload = multer({ storage: multer.memoryStorage() });
-  const uploadService = new UploadService('org-test-upload', storage, csvParser as any, storageQuotaService as any);
+  const uploadService = new UploadService(
+    'org-test-upload',
+    storage,
+    csvParser as any,
+    storageQuotaService as any,
+  );
   const controller = new UploadController(uploadService);
 
   app.post('/api/upload/initiate', (req, res) => controller.initiate(req, res));

@@ -19,10 +19,10 @@ describe('UpgradeModal', () => {
       />,
     );
 
-    expect(screen.getByText('Starter')).toBeInTheDocument();
-    expect(screen.getByText('Professional')).toBeInTheDocument();
-    expect(screen.getByText('Premium')).toBeInTheDocument();
-    expect(screen.getByText('Concierge')).toBeInTheDocument();
+    expect(screen.getByTestId('tier-card-starter')).toBeInTheDocument();
+    expect(screen.getByTestId('tier-card-professional')).toBeInTheDocument();
+    expect(screen.getByTestId('tier-card-premium')).toBeInTheDocument();
+    expect(screen.getByTestId('tier-card-concierge')).toBeInTheDocument();
   });
 
   it('displays pricing for each tier', () => {
@@ -50,13 +50,13 @@ describe('UpgradeModal', () => {
       />,
     );
 
-    expect(screen.getByText(/Max SKUs/i)).toBeInTheDocument();
-    expect(screen.getByText(/Max Users/i)).toBeInTheDocument();
-    expect(screen.getByText(/Advanced Analytics/i)).toBeInTheDocument();
+    expect(screen.getAllByText(/Max SKUs/i).length).toBeGreaterThan(0);
+    expect(screen.getAllByText(/Max Users/i).length).toBeGreaterThan(0);
+    expect(screen.getAllByText(/Advanced Analytics/i).length).toBeGreaterThan(0);
   });
 
   it('highlights current tier', () => {
-    const { container } = render(
+    render(
       <UpgradeModal
         isOpen={true}
         onClose={mockOnClose}
@@ -65,7 +65,7 @@ describe('UpgradeModal', () => {
       />,
     );
 
-    const professionalCard = container.querySelector('[data-tier="professional"]');
+    const professionalCard = screen.getByTestId('tier-card-professional');
     expect(professionalCard).toHaveClass('border-blue-500');
   });
 
@@ -79,7 +79,7 @@ describe('UpgradeModal', () => {
       />,
     );
 
-    const upgradeButton = screen.getAllByText(/Upgrade/i)[0];
+    const upgradeButton = screen.getAllByRole('button', { name: /upgrade/i })[0];
     fireEvent.click(upgradeButton);
 
     expect(mockOnSelectPlan).toHaveBeenCalled();
@@ -95,7 +95,7 @@ describe('UpgradeModal', () => {
       />,
     );
 
-    const closeButton = screen.getByLabelText(/close/i);
+    const closeButton = screen.getByRole('button', { name: /close/i });
     fireEvent.click(closeButton);
 
     expect(mockOnClose).toHaveBeenCalled();

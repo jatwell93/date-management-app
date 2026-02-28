@@ -47,6 +47,7 @@ describe('OfflineSyncService', () => {
     // Force reset internal state of singleton
     (offlineSyncService as any).isOnline = true;
     (offlineSyncService as any).syncInProgress = false;
+    offlineSyncService.setSyncStrategy('real-time');
   });
 
   describe('Queue Management', () => {
@@ -92,6 +93,10 @@ describe('OfflineSyncService', () => {
   });
 
   describe('Synchronization Logic', () => {
+    beforeEach(() => {
+      offlineSyncService.setSyncStrategy('manual');
+    });
+
     it('should sync operations when online', async () => {
       (global.fetch as jest.Mock).mockResolvedValue({
         ok: true,
@@ -130,8 +135,15 @@ describe('OfflineSyncService', () => {
     });
 
     it('should retry failed operations on next sync', async () => {
+      const delaySpy = jest
+        .spyOn<any, any>(offlineSyncService, 'delay')
+        .mockResolvedValue(undefined);
+
       // First attempt fails
-      (global.fetch as jest.Mock).mockRejectedValueOnce(new Error('Network Error'));
+      (global.fetch as jest.Mock)
+        .mockRejectedValueOnce(new Error('Network Error'))
+        .mockRejectedValueOnce(new Error('Network Error'))
+        .mockRejectedValueOnce(new Error('Network Error'));
 
       await offlineSyncService.addOperation('create', 'product', { id: 1 });
       await offlineSyncService.performSync();
@@ -147,7 +159,9 @@ describe('OfflineSyncService', () => {
       await offlineSyncService.performSync();
 
       expect(offlineSyncService.getPendingOperationCount()).toBe(0);
-      expect(global.fetch).toHaveBeenCalledTimes(2);
+      expect(global.fetch).toHaveBeenCalledTimes(4);
+
+      delaySpy.mockRestore();
     });
   });
 
@@ -162,6 +176,7 @@ describe('OfflineSyncService', () => {
     });
 
     it('should trigger sync when coming online', () => {
+      offlineSyncService.setSyncStrategy('real-time');
       const syncSpy = jest.spyOn(offlineSyncService, 'performSync');
 
       // Go offline

@@ -804,7 +804,7 @@ describe('Multi-Tenant Subscription Transition Tests', () => {
       });
       expect(usage?.totalSkus).toBe(600);
       expect(usage?.maxSkus).toBe(500);
-      expect(usage?.totalSkus).toBeGreaterThan(usage?.maxSkus!);
+      expect(usage?.totalSkus).toBeGreaterThan(usage?.maxSkus ?? 0);
     });
 
     it('should preserve all data on downgrade even when significantly over limit', async () => {

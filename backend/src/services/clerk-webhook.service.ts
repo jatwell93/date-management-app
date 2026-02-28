@@ -336,12 +336,9 @@ export class ClerkWebhookService {
         return;
       }
 
-      await this.prisma.user.updateMany({
+      // Delete user when removed from organization (organizationId is now non-nullable)
+      await this.prisma.user.deleteMany({
         where: { clerkUserId, organization: { clerkOrganizationId: clerkOrgId } },
-        data: {
-          organizationId: null,
-          updatedAt: new Date(),
-        },
       });
 
       log.info('User unlinked from organization', { clerkUserId, clerkOrgId });
@@ -388,10 +385,13 @@ export class ClerkWebhookService {
   /**
    * Create default organization for new email/password signups
    */
-  private async createDefaultOrganization(clerkUserId: string, email: string): Promise<{ id: string }> {
+  private async createDefaultOrganization(
+    clerkUserId: string,
+    email: string,
+  ): Promise<{ id: string }> {
     const orgName = email.split('@')[0] + "'s Organization";
     const slug = `${email.split('@')[0]}-${Date.now()}`.toLowerCase().replace(/[^a-z0-9-]/g, '-');
-    
+
     const org = await this.prisma.organization.create({
       data: {
         name: orgName,

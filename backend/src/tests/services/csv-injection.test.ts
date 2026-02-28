@@ -117,24 +117,24 @@ describe('CSV Injection Prevention', () => {
     it('should handle command injection attempts', () => {
       const sanitize = (csvParser as any).sanitizeValue.bind(csvParser);
 
-      expect(sanitize('=cmd|"/c calc"')).toBe("'=cmd|\"/c calc\"");
-      expect(sanitize('-2+3+cmd|"/c calc"')).toBe("'-2+3+cmd|\"/c calc\"");
-      expect(sanitize('+cmd|"/c calc"')).toBe("'+cmd|\"/c calc\"");
-      expect(sanitize('@cmd|"/c calc"')).toBe("'@cmd|\"/c calc\"");
+      expect(sanitize('=cmd|"/c calc"')).toBe('\'=cmd|"/c calc"');
+      expect(sanitize('-2+3+cmd|"/c calc"')).toBe('\'-2+3+cmd|"/c calc"');
+      expect(sanitize('+cmd|"/c calc"')).toBe('\'+cmd|"/c calc"');
+      expect(sanitize('@cmd|"/c calc"')).toBe('\'@cmd|"/c calc"');
     });
 
     it('should handle DDE (Dynamic Data Exchange) injection attempts', () => {
       const sanitize = (csvParser as any).sanitizeValue.bind(csvParser);
 
-      expect(sanitize('=cmd|"/c powershell"!A1')).toBe("'=cmd|\"/c powershell\"!A1");
-      expect(sanitize('+DDE("cmd";"/c calc";"!A0")')).toBe("'+DDE(\"cmd\";\"/c calc\";\"!A0\")");
+      expect(sanitize('=cmd|"/c powershell"!A1')).toBe('\'=cmd|"/c powershell"!A1');
+      expect(sanitize('+DDE("cmd";"/c calc";"!A0")')).toBe('\'+DDE("cmd";"/c calc";"!A0")');
     });
 
     it('should handle hyperlink injection attempts', () => {
       const sanitize = (csvParser as any).sanitizeValue.bind(csvParser);
 
       expect(sanitize('=HYPERLINK("http://evil.com","Click here")')).toBe(
-        "'=HYPERLINK(\"http://evil.com\",\"Click here\")",
+        '\'=HYPERLINK("http://evil.com","Click here")',
       );
     });
 

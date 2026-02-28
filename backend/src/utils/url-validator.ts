@@ -1,6 +1,6 @@
 /**
  * URL Validation Utility
- * 
+ *
  * Validates redirect URLs to prevent open redirect vulnerabilities
  */
 
@@ -35,7 +35,7 @@ export function validateRedirectUrl(url: string, fieldName: string = 'URL'): voi
 
   // Build allowed domains list
   const allowedDomains = new Set<string>();
-  
+
   // Add frontend URL domain
   try {
     const frontendUrl = new URL(envConfig.FRONTEND_URL);

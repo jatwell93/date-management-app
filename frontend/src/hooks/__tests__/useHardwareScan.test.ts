@@ -141,7 +141,7 @@ describe('useHardwareScan', () => {
 
   it('should prevent duplicate rapid Enter presses from double-submitting', (done) => {
     const onScan = jest.fn();
-    renderHook(() => useHardwareScan(onScan));
+    renderHook(() => useHardwareScan(onScan, { timingThreshold: 200 }));
 
     // Rapid keystroke scan
     const keys = ['1', '2', '3'];

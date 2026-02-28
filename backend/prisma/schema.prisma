@@ -140,7 +140,7 @@ model ClerkWebhookEvent {
 
 model Product {
   id             Int      @id @default(autoincrement())
-  organizationId String?  @map("organization_id")
+  organizationId String   @map("organization_id")
   barcode        String
   sku            String
   name           String
@@ -150,7 +150,7 @@ model Product {
   updatedAt      DateTime @updatedAt @map("updated_at")
 
   // Relations
-  organization   Organization?   @relation(fields: [organizationId], references: [id])
+  organization   Organization   @relation(fields: [organizationId], references: [id], onDelete: Cascade)
   inventoryItems InventoryItem[]
 
   @@unique([organizationId, sku])
@@ -164,7 +164,7 @@ model Product {
 
 model InventoryItem {
   id             Int      @id @default(autoincrement())
-  organizationId String?  @map("organization_id")
+  organizationId String   @map("organization_id")
   productId      Int      @map("product_id")
   expiryDate     DateTime @map("expiry_date")
   locationId     Int      @map("location_id")
@@ -173,7 +173,7 @@ model InventoryItem {
   updatedAt      DateTime @updatedAt @map("updated_at")
 
   // Relations
-  organization             Organization?            @relation(fields: [organizationId], references: [id])
+  organization             Organization            @relation(fields: [organizationId], references: [id], onDelete: Cascade)
   product                  Product                  @relation(fields: [productId], references: [id])
   storeArea                StoreArea                @relation(fields: [locationId], references: [id])
   auditLogs                AuditLog[]
@@ -190,7 +190,7 @@ model InventoryItem {
 
 model StoreArea {
   id             Int       @id @default(autoincrement())
-  organizationId String?   @map("organization_id")
+  organizationId String   @map("organization_id")
   name           String
   subDepartment  String?   @map("sub_department")
   lastChecked    DateTime? @map("last_checked")
@@ -198,7 +198,7 @@ model StoreArea {
   updatedAt      DateTime  @updatedAt @map("updated_at")
 
   // Relations
-  organization   Organization?  @relation(fields: [organizationId], references: [id])
+  organization   Organization  @relation(fields: [organizationId], references: [id], onDelete: Cascade)
   inventoryItems InventoryItem[]
 
   // Unique constraint on name + sub_department combination
@@ -210,7 +210,7 @@ model StoreArea {
 
 model User {
   id             Int      @id @default(autoincrement())
-  organizationId String?  @map("organization_id")
+  organizationId String   @map("organization_id")
   clerkUserId    String?  @unique @map("clerk_user_id")
   email          String?  @unique
   username       String?  @unique
@@ -219,7 +219,7 @@ model User {
   updatedAt      DateTime @updatedAt @map("updated_at")
 
   // Relations
-  organization             Organization?            @relation(fields: [organizationId], references: [id])
+  organization             Organization            @relation(fields: [organizationId], references: [id], onDelete: Cascade)
   auditLogs                AuditLog[]
   itemTransactions         ItemTransaction[]
   expiredItemTransactions  ExpiredItemTransaction[]
@@ -275,7 +275,7 @@ model RefreshToken {
 
 model AuditLog {
   id                Int      @id @default(autoincrement())
-  organizationId    String?  @map("organization_id")
+  organizationId    String   @map("organization_id")
   userId            Int?     @map("user_id") // Optional for system/webhook events
   inventoryItemId   Int?     @map("inventory_item_id") // Made optional for webhook audit logs
   action            String   // E.g., "webhook_processed", "subscription_updated", "item_adjusted"
@@ -283,7 +283,7 @@ model AuditLog {
   createdAt         DateTime @default(now()) @map("created_at")
 
   // Relations
-  organization   Organization?  @relation(fields: [organizationId], references: [id])
+  organization   Organization  @relation(fields: [organizationId], references: [id], onDelete: Cascade)
   user           User?          @relation(fields: [userId], references: [id])
   inventoryItem  InventoryItem? @relation(fields: [inventoryItemId], references: [id])
 
@@ -297,7 +297,7 @@ model AuditLog {
 // Item Transactions (for in/out/adjustment tracking)
 model ItemTransaction {
   id              Int      @id @default(autoincrement())
-  organizationId  String?  @map("organization_id")
+  organizationId  String   @map("organization_id")
   inventoryItemId Int      @map("inventory_item_id")
   userId          Int      @map("user_id")
   type            String   // 'in', 'out', 'adjustment'
@@ -306,7 +306,7 @@ model ItemTransaction {
   transactionDate DateTime @default(now()) @map("transaction_date")
 
   // Relations
-  organization   Organization?  @relation(fields: [organizationId], references: [id])
+  organization   Organization  @relation(fields: [organizationId], references: [id], onDelete: Cascade)
   inventoryItem  InventoryItem  @relation(fields: [inventoryItemId], references: [id])
   user           User           @relation(fields: [userId], references: [id])
 
@@ -320,7 +320,7 @@ model ItemTransaction {
 
 model ExpiredItemTransaction {
   id              Int      @id @default(autoincrement())
-  organizationId  String?  @map("organization_id")
+  organizationId  String   @map("organization_id")
   inventoryItemId Int      @map("inventory_item_id")
   userId          Int      @map("user_id")
   action          String   // 'sold_through' or 'expired'
@@ -331,7 +331,7 @@ model ExpiredItemTransaction {
   updatedAt       DateTime @updatedAt @map("updated_at")
 
   // Relations
-  organization   Organization?  @relation(fields: [organizationId], references: [id])
+  organization   Organization  @relation(fields: [organizationId], references: [id], onDelete: Cascade)
   inventoryItem  InventoryItem  @relation(fields: [inventoryItemId], references: [id])
   user           User           @relation(fields: [userId], references: [id])
 
@@ -349,7 +349,7 @@ model ExpiredItemTransaction {
 
 model Upload {
   id              Int      @id @default(autoincrement())
-  organizationId  String?  @map("organization_id")
+  organizationId  String   @map("organization_id")
   userId          Int      @map("user_id")
   fileKey         String   @unique @map("file_key")
   fileName        String   @map("file_name")
@@ -360,7 +360,7 @@ model Upload {
   updatedAt       DateTime @updatedAt @map("updated_at")
 
   // Relations
-  organization    Organization? @relation(fields: [organizationId], references: [id])
+  organization    Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
   user            User          @relation(fields: [userId], references: [id], onDelete: Cascade)
 
   @@index([organizationId, createdAt])

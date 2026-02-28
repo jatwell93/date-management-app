@@ -14,7 +14,7 @@ function stopBackgroundServices(): void {
 
 beforeEach(async () => {
   await prisma.$executeRawUnsafe('PRAGMA foreign_keys = OFF;');
-  
+
   // Clean up tables in dependency order (children first, then parents)
   // This prevents FK violations during cleanup
   const childTables = [
@@ -34,7 +34,7 @@ beforeEach(async () => {
     'clerk_webhook_events',
     'tier_feature_flags',
   ];
-  
+
   // Delete child records first
   for (const table of childTables) {
     try {
@@ -43,7 +43,7 @@ beforeEach(async () => {
       // Table might not exist or already empty
     }
   }
-  
+
   // Clean parent tables (users + organizations)
   // Child FK references are already deleted above with FKs OFF
   for (const table of ['users', 'organizations']) {
@@ -55,6 +55,17 @@ beforeEach(async () => {
   }
 
   // Seed essential data (Users for legacy tests)
+  // First create the default organization, then link users to it
+  await prisma.organization.upsert({
+    where: { id: 'default-org' },
+    update: {},
+    create: {
+      id: 'default-org',
+      name: 'Default Organization',
+      slug: 'default-org',
+    },
+  });
+
   await Promise.all([
     prisma.user.upsert({
       where: { id: 1 },
@@ -64,6 +75,7 @@ beforeEach(async () => {
       create: {
         id: 1,
         role: 'Manager',
+        organizationId: 'default-org',
       },
     }),
     prisma.user.upsert({
@@ -74,12 +86,13 @@ beforeEach(async () => {
       create: {
         id: 2,
         role: 'Staff',
+        organizationId: 'default-org',
       },
     }),
   ]);
-  
+
   await prisma.$executeRawUnsafe('PRAGMA foreign_keys = ON;');
-  
+
   // Reset factory counters for consistent test data
   resetOrgCounter();
 });

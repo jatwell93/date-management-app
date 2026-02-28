@@ -1,8 +1,7 @@
 import React from 'react';
-import { render, screen, act } from '@testing-library/react';
+import { render, screen, act, fireEvent } from '@testing-library/react';
 import { CameraScanner } from '../CameraScanner';
 import Quagga from 'quagga';
-import userEvent from '@testing-library/user-event';
 
 // Mock Quagga
 jest.mock('quagga', () => ({
@@ -132,6 +131,9 @@ describe('CameraScanner', () => {
     (Quagga.init as jest.Mock).mockImplementationOnce((config, callback) => {
       callback(new Error('Permission denied'));
     });
+    (Quagga.init as jest.Mock).mockImplementation((config, callback) => {
+      callback(null);
+    });
 
     render(<CameraScanner onDetected={mockOnDetected} />);
 
@@ -143,7 +145,7 @@ describe('CameraScanner', () => {
     jest.clearAllMocks();
 
     // 2. Click retry
-    userEvent.click(retryButton);
+    fireEvent.click(retryButton);
 
     // Verity stop called immediately
     expect(Quagga.stop).toHaveBeenCalled();

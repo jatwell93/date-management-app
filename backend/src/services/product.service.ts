@@ -1,5 +1,6 @@
 import { PrismaClient } from '@prisma/client';
 import { getDefaultDatabaseClient } from '../database/database-factory';
+import { TEST_AUTH_BYPASS_ORG_ID } from '../middleware/auth.middleware';
 import { Product } from '../models/product.model';
 import { parse } from 'csv-parse';
 import * as XLSX from 'xlsx';
@@ -232,11 +233,11 @@ export class ProductService {
   /**
    * Constructor with optional dependency injection
    * @param prismaClient - Optional PrismaClient for testing/custom configurations
-   * @param organizationId - Organization ID for tenant filtering
+   * @param organizationId - Organization ID for tenant filtering (optional in tests)
    */
   constructor(prismaClient?: PrismaClient, organizationId?: string) {
     this.prisma = prismaClient ?? getDefaultDatabaseClient();
-    this.organizationId = organizationId ?? 'default-org'; // Fallback for backward compatibility
+    this.organizationId = organizationId ?? TEST_AUTH_BYPASS_ORG_ID;
   }
 
   // Expose parser for tests that reference it via ProductService["extractCostValueEnhanced"]
@@ -296,16 +297,16 @@ export class ProductService {
       const usage = await tx.organizationUsage.findUnique({
         where: { organizationId: this.organizationId },
       });
-      
+
       if (!usage) {
         throw new Error('Organization usage record not found');
       }
-      
+
       // Check limit BEFORE creating product (within same transaction)
       if (usage.totalSkus >= usage.maxSkus) {
         throw new Error(`SKU limit reached for this organization (${usage.maxSkus} max)`);
       }
-      
+
       const newProduct = await tx.product.create({
         data: {
           barcode: product.barcode,

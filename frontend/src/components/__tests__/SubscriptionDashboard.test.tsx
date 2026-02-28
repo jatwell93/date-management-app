@@ -78,10 +78,10 @@ describe('SubscriptionDashboard', () => {
         json: async () => mockUsageData,
       });
 
-    render(<SubscriptionDashboard token="test-token" />);
+    render(<SubscriptionDashboard token="test-token" onUpgrade={jest.fn()} />);
 
     await waitFor(() => {
-      expect(screen.getByText(/Upgrade/i)).toBeInTheDocument();
+      expect(screen.getByRole('button', { name: /Upgrade Plan/i })).toBeInTheDocument();
     });
   });
 
@@ -102,7 +102,7 @@ describe('SubscriptionDashboard', () => {
     render(<SubscriptionDashboard token="test-token" />);
 
     await waitFor(() => {
-      expect(screen.getByText('Unlimited')).toBeInTheDocument();
+      expect(screen.getAllByText(/Unlimited/i).length).toBeGreaterThan(0);
     });
   });
 

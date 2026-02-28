@@ -138,7 +138,7 @@ describe('useHandheldDetection', () => {
 
     it('should detect handheld at threshold dimensions', () => {
       Object.defineProperty(window, 'innerWidth', { value: 600, writable: true });
-      Object.defineProperty(window, 'innerHeight', { value: 900, writable: true });
+      Object.defineProperty(window, 'innerHeight', { value: 800, writable: true });
 
       const { result } = renderHook(() => useHandheldDetection());
 

@@ -1,11 +1,18 @@
 import { offlineSyncService } from '../lib/offline-sync';
 
 // Mock localStorage
+let localStorageStore: Record<string, string> = {};
 const localStorageMock = {
-  getItem: jest.fn(),
-  setItem: jest.fn(),
-  removeItem: jest.fn(),
-  clear: jest.fn(),
+  getItem: jest.fn((key: string) => localStorageStore[key] ?? null),
+  setItem: jest.fn((key: string, value: string) => {
+    localStorageStore[key] = value;
+  }),
+  removeItem: jest.fn((key: string) => {
+    delete localStorageStore[key];
+  }),
+  clear: jest.fn(() => {
+    localStorageStore = {};
+  }),
 };
 Object.defineProperty(window, 'localStorage', {
   value: localStorageMock,
@@ -25,8 +32,15 @@ jest.useFakeTimers();
 
 describe('OfflineSyncService - Sync Strategies', () => {
   beforeEach(() => {
+    jest.restoreAllMocks();
     jest.clearAllMocks();
     jest.clearAllTimers();
+    localStorageStore = {};
+
+    offlineSyncService.clearQueue();
+    (offlineSyncService as any).syncInProgress = false;
+    (offlineSyncService as any).isOnline = true;
+    offlineSyncService.setSyncStrategy('real-time');
 
     // Reset localStorage mocks
     localStorageMock.getItem.mockClear();
@@ -34,9 +48,16 @@ describe('OfflineSyncService - Sync Strategies', () => {
     localStorageMock.removeItem.mockClear();
     localStorageMock.clear.mockClear();
 
-    // Default localStorage behavior
-    localStorageMock.getItem.mockReturnValue(null);
-    localStorageMock.setItem.mockImplementation(() => {});
+    localStorageMock.getItem.mockImplementation((key: string) => localStorageStore[key] ?? null);
+    localStorageMock.setItem.mockImplementation((key: string, value: string) => {
+      localStorageStore[key] = value;
+    });
+    localStorageMock.removeItem.mockImplementation((key: string) => {
+      delete localStorageStore[key];
+    });
+    localStorageMock.clear.mockImplementation(() => {
+      localStorageStore = {};
+    });
 
     // Reset fetch mock
     (global.fetch as jest.Mock).mockClear();
@@ -214,25 +235,23 @@ describe('OfflineSyncService - Sync Strategies', () => {
         locationId: 1,
       });
 
+      const delaySpy = jest
+        .spyOn<any, any>(offlineSyncService, 'delay')
+        .mockResolvedValue(undefined);
+
       // Start sync
-      const syncPromise = offlineSyncService.performSync();
-
-      // First retry after 5 seconds
-      jest.advanceTimersByTime(5000);
-      await Promise.resolve(); // Allow microtasks
-
-      // Second retry after another 10 seconds (total 15s)
-      jest.advanceTimersByTime(10000);
-      await Promise.resolve();
-
-      // Third attempt should succeed
-      jest.advanceTimersByTime(20000);
-      await syncPromise;
+      await offlineSyncService.performSync();
 
       expect(global.fetch).toHaveBeenCalledTimes(3);
+      expect(delaySpy).toHaveBeenCalledWith(5000);
+      delaySpy.mockRestore();
     });
 
     it('should stop retrying after max attempts and keep items in queue', async () => {
+      const delaySpy = jest
+        .spyOn<any, any>(offlineSyncService, 'delay')
+        .mockResolvedValue(undefined);
+
       // Mock fetch to always fail
       (global.fetch as jest.Mock).mockResolvedValue({
         ok: false,
@@ -251,11 +270,10 @@ describe('OfflineSyncService - Sync Strategies', () => {
       // Start sync and let all retries fail
       await offlineSyncService.performSync();
 
-      // Advance timers for all retry attempts
-      jest.advanceTimersByTime(5 * 60 * 1000); // 5 minutes of retries
-
       // Items should still be in queue
       expect(offlineSyncService.getPendingOperationCount()).toBe(initialQueueLength);
+      expect(delaySpy).toHaveBeenCalledWith(5000);
+      delaySpy.mockRestore();
     });
   });
 });

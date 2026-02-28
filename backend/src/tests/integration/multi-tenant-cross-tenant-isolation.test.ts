@@ -294,13 +294,16 @@ describe('Multi-Tenant Cross-Tenant Isolation Tests', () => {
       });
 
       const inventoryServiceB = new InventoryService(orgB.id, prisma);
-      const inventoryItemB = await inventoryServiceB.createInventoryItem({
-        productId: productB.id,
-        expiryDate: new Date('2025-12-31'),
-        quantity: 10,
-        batchNumber: 'BATCH-B1',
-        locationId: storeAreaB.id,
-      });
+      const inventoryItemB = await inventoryServiceB.createInventoryItem(
+        {
+          organizationId: orgB.id,
+          productId: productB.id,
+          expiryDate: new Date('2025-12-31').toISOString(),
+          locationId: storeAreaB.id,
+          status: 'Normal',
+        },
+        userB.id,
+      );
 
       // User A attempts to access Org B's inventory
       const inventoryServiceA = new InventoryService(orgA.id, prisma);

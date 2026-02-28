@@ -63,17 +63,18 @@ describe('Multi-Tenant Route Filtering Integration Tests', () => {
     next();
   };
 
-  const requireFeature = (featureKey: string) => (req: AuthRequest, res: Response, next: NextFunction) => {
-    const tier = req.tierLevel || 'starter';
-    const features = tierFeatures[tier] || [];
-    if (!features.includes(featureKey)) {
-      return res.status(403).json({
-        error: 'Feature not available',
-        message: 'Please upgrade your plan to access this feature',
-      });
-    }
-    next();
-  };
+  const requireFeature =
+    (featureKey: string) => (req: AuthRequest, res: Response, next: NextFunction) => {
+      const tier = req.tierLevel || 'starter';
+      const features = tierFeatures[tier] || [];
+      if (!features.includes(featureKey)) {
+        return res.status(403).json({
+          error: 'Feature not available',
+          message: 'Please upgrade your plan to access this feature',
+        });
+      }
+      next();
+    };
 
   const checkUsageLimit = () => (_req: AuthRequest, _res: Response, next: NextFunction) => next();
 
@@ -116,7 +117,9 @@ describe('Multi-Tenant Route Filtering Integration Tests', () => {
       const paramUserId = parseInt(req.params.userId, 10);
       if (!req.userId) return res.status(401).json({ error: 'Unauthorized' });
       if (req.userId !== paramUserId) {
-        return res.status(403).json({ error: 'Forbidden', message: 'You can only access your own storage quota' });
+        return res
+          .status(403)
+          .json({ error: 'Forbidden', message: 'You can only access your own storage quota' });
       }
       res.json({ used: 1024, limit: 10485760, percentageUsed: 0.01, tier: req.tierLevel });
     });
@@ -127,9 +130,13 @@ describe('Multi-Tenant Route Filtering Integration Tests', () => {
     });
 
     // Analytics routes — feature-gated
-    testApp.get('/api/reports/analytics', requireFeature('advanced_analytics'), (req: AuthRequest, res: Response) => {
-      res.json({ data: [], organizationId: req.organizationId });
-    });
+    testApp.get(
+      '/api/reports/analytics',
+      requireFeature('advanced_analytics'),
+      (req: AuthRequest, res: Response) => {
+        res.json({ data: [], organizationId: req.organizationId });
+      },
+    );
   });
 
   describe('Product Routes Tenant Filtering', () => {
@@ -156,7 +163,12 @@ describe('Multi-Tenant Route Filtering Integration Tests', () => {
 
   describe('Inventory Routes Tenant Filtering', () => {
     it('should enforce SKU limits based on subscription tier', async () => {
-      authConfig = { ...authConfig, userId: user1.id, organizationId: org1.id, tierLevel: 'starter' };
+      authConfig = {
+        ...authConfig,
+        userId: user1.id,
+        organizationId: org1.id,
+        tierLevel: 'starter',
+      };
 
       const response = await request(testApp)
         .post('/api/inventory-items')
@@ -179,7 +191,12 @@ describe('Multi-Tenant Route Filtering Integration Tests', () => {
 
   describe('User Routes Tenant Filtering', () => {
     it('should enforce user limits based on subscription tier', async () => {
-      authConfig = { ...authConfig, userId: user1.id, organizationId: org1.id, tierLevel: 'starter' };
+      authConfig = {
+        ...authConfig,
+        userId: user1.id,
+        organizationId: org1.id,
+        tierLevel: 'starter',
+      };
 
       const response = await request(testApp)
         .post('/api/users')
@@ -206,9 +223,7 @@ describe('Multi-Tenant Route Filtering Integration Tests', () => {
     it('should validate organization ownership for storage quota access', async () => {
       authConfig = { ...authConfig, userId: user1.id, organizationId: org1.id };
 
-      const response = await request(testApp)
-        .get('/api/storage-quota/1')
-        .expect(200);
+      const response = await request(testApp).get('/api/storage-quota/1').expect(200);
 
       expect(response.body).toBeDefined();
       expect(response.body.used).toBeDefined();
@@ -217,9 +232,7 @@ describe('Multi-Tenant Route Filtering Integration Tests', () => {
     it('should reject access to storage quota of different organization user', async () => {
       authConfig = { ...authConfig, userId: user1.id, organizationId: org1.id };
 
-      const response = await request(testApp)
-        .get('/api/storage-quota/2')
-        .expect(403);
+      const response = await request(testApp).get('/api/storage-quota/2').expect(403);
 
       expect(response.body.error).toBe('Forbidden');
       expect(response.body.message).toContain('own storage quota');
@@ -228,7 +241,12 @@ describe('Multi-Tenant Route Filtering Integration Tests', () => {
 
   describe('Upload Routes Tenant Filtering', () => {
     it('should enforce storage limits on upload operations', async () => {
-      authConfig = { ...authConfig, userId: user1.id, organizationId: org1.id, tierLevel: 'starter' };
+      authConfig = {
+        ...authConfig,
+        userId: user1.id,
+        organizationId: org1.id,
+        tierLevel: 'starter',
+      };
 
       const response = await request(testApp)
         .post('/api/upload/initiate')
@@ -254,7 +272,12 @@ describe('Multi-Tenant Route Filtering Integration Tests', () => {
 
   describe('Analytics Route Feature Gating', () => {
     it('should allow premium tier access to analytics', async () => {
-      authConfig = { ...authConfig, userId: user1.id, organizationId: org1.id, tierLevel: 'premium' };
+      authConfig = {
+        ...authConfig,
+        userId: user1.id,
+        organizationId: org1.id,
+        tierLevel: 'premium',
+      };
 
       const response = await request(testApp).get('/api/reports/analytics').expect(200);
 
@@ -263,7 +286,12 @@ describe('Multi-Tenant Route Filtering Integration Tests', () => {
     });
 
     it('should block starter tier access to analytics', async () => {
-      authConfig = { ...authConfig, userId: user1.id, organizationId: org1.id, tierLevel: 'starter' };
+      authConfig = {
+        ...authConfig,
+        userId: user1.id,
+        organizationId: org1.id,
+        tierLevel: 'starter',
+      };
 
       const response = await request(testApp).get('/api/reports/analytics').expect(403);
 
@@ -275,7 +303,12 @@ describe('Multi-Tenant Route Filtering Integration Tests', () => {
   describe('Cross-Tenant Access Prevention', () => {
     it('should prevent organization context spoofing', async () => {
       // User1 with org2 context — services scope to the provided orgId
-      authConfig = { ...authConfig, userId: user1.id, organizationId: org2.id, tierLevel: 'starter' };
+      authConfig = {
+        ...authConfig,
+        userId: user1.id,
+        organizationId: org2.id,
+        tierLevel: 'starter',
+      };
 
       const response = await request(testApp).get('/api/products').expect(200);
 
@@ -285,7 +318,12 @@ describe('Multi-Tenant Route Filtering Integration Tests', () => {
     });
 
     it('should require organization context for all tenant-scoped routes', async () => {
-      authConfig = { ...authConfig, userId: user1.id, organizationId: org1.id, tierLevel: 'starter' };
+      authConfig = {
+        ...authConfig,
+        userId: user1.id,
+        organizationId: org1.id,
+        tierLevel: 'starter',
+      };
 
       const response = await request(testApp).get('/api/products').expect(200);
 
@@ -295,7 +333,12 @@ describe('Multi-Tenant Route Filtering Integration Tests', () => {
 
   describe('Usage Limit Enforcement', () => {
     it('should track and enforce SKU limits per organization', async () => {
-      authConfig = { ...authConfig, userId: user1.id, organizationId: org1.id, tierLevel: 'starter' };
+      authConfig = {
+        ...authConfig,
+        userId: user1.id,
+        organizationId: org1.id,
+        tierLevel: 'starter',
+      };
 
       const response = await request(testApp)
         .post('/api/inventory-items')
@@ -307,7 +350,12 @@ describe('Multi-Tenant Route Filtering Integration Tests', () => {
     });
 
     it('should track and enforce user limits per organization', async () => {
-      authConfig = { ...authConfig, userId: user1.id, organizationId: org1.id, tierLevel: 'starter' };
+      authConfig = {
+        ...authConfig,
+        userId: user1.id,
+        organizationId: org1.id,
+        tierLevel: 'starter',
+      };
 
       const response = await request(testApp)
         .post('/api/users')
@@ -319,7 +367,12 @@ describe('Multi-Tenant Route Filtering Integration Tests', () => {
     });
 
     it('should track and enforce storage limits per organization', async () => {
-      authConfig = { ...authConfig, userId: user1.id, organizationId: org1.id, tierLevel: 'starter' };
+      authConfig = {
+        ...authConfig,
+        userId: user1.id,
+        organizationId: org1.id,
+        tierLevel: 'starter',
+      };
 
       const response = await request(testApp)
         .post('/api/upload/initiate')

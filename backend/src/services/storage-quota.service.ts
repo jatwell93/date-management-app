@@ -1,4 +1,5 @@
 import { getDefaultDatabaseClient } from '../database/database-factory';
+import { TEST_AUTH_BYPASS_ORG_ID } from '../middleware/auth.middleware';
 
 /**
  * Subscription tier configuration
@@ -45,16 +46,15 @@ export interface StorageQuotaInfo {
  * Storage Quota Service
  *
  * Tracks storage usage per tenant and enforces quota limits.
- *
- * TODO: Multi-tenant implementation
- * - Once multi-tenant support is added, modify methods to accept userId/tenantId
- * - Track subscription tier in User or Workspace model
- * - Isolate storage calculations per tenant
  */
 const prisma = getDefaultDatabaseClient();
 
 export class StorageQuotaService {
-  constructor() {}
+  private organizationId: string;
+
+  constructor(organizationId?: string) {
+    this.organizationId = organizationId ?? TEST_AUTH_BYPASS_ORG_ID;
+  }
 
   /**
    * Get storage quota information for a tenant/user
@@ -144,6 +144,7 @@ export class StorageQuotaService {
       // Record the upload metadata
       await prisma.upload.create({
         data: {
+          organizationId,
           userId,
           fileKey,
           fileName,
