@@ -118,7 +118,7 @@ export class InventoryService {
         if (currentUsage.totalInventoryItems >= currentUsage.maxInventoryItems) {
           throw new Error(
             `Cannot create inventory item: maximum limit of ${currentUsage.maxInventoryItems} inventory items reached. ` +
-            `Current usage: ${currentUsage.totalInventoryItems}.`
+              `Current usage: ${currentUsage.totalInventoryItems}.`,
           );
         }
       }
@@ -178,14 +178,20 @@ export class InventoryService {
   /**
    * Validate product belongs to organization
    */
-  private async validateProductOwnership(productId: number, client: PrismaClient | any): Promise<void> {
+  private async validateProductOwnership(
+    productId: number,
+    client: PrismaClient | any,
+  ): Promise<void> {
     await this.validateResourceOwnership('product', productId, client);
   }
 
   /**
    * Validate location belongs to organization
    */
-  private async validateLocationOwnership(locationId: number, client: PrismaClient | any): Promise<void> {
+  private async validateLocationOwnership(
+    locationId: number,
+    client: PrismaClient | any,
+  ): Promise<void> {
     await this.validateResourceOwnership('storeArea', locationId, client);
   }
 
@@ -322,7 +328,7 @@ export class InventoryService {
       // Log warning about counter inconsistency
       console.warn(
         `Attempted to decrement totalInventoryItems for organization ${this.organizationId} but counter is already 0. ` +
-        'This may indicate data inconsistency.'
+          'This may indicate data inconsistency.',
       );
     }
   }
@@ -402,9 +408,11 @@ export class InventoryService {
   /**
    * Format change description for audit logs
    */
-  private formatChangeDescription(updates: Partial<Omit<InventoryItem, 'id' | 'createdAt' | 'updatedAt'>>): string {
+  private formatChangeDescription(
+    updates: Partial<Omit<InventoryItem, 'id' | 'createdAt' | 'updatedAt'>>,
+  ): string {
     const changes: string[] = [];
-    
+
     if (updates.productId !== undefined) {
       changes.push(`product changed to ID ${updates.productId}`);
     }
@@ -417,8 +425,8 @@ export class InventoryService {
     if (updates.status !== undefined) {
       changes.push(`status changed to ${updates.status}`);
     }
-    
-    return changes.length > 0 
+
+    return changes.length > 0
       ? `Inventory item updated: ${changes.join(', ')}`
       : 'Inventory item updated (no changes detected)';
   }
@@ -539,5 +547,86 @@ export class InventoryService {
       createdAt: item.createdAt.toISOString(),
       updatedAt: item.updatedAt.toISOString(),
     };
+  }
+
+  /**
+   * Bulk update markdown statuses for multiple inventory items
+   * Optimized for scheduler performance - reduces database round trips
+   */
+  async bulkUpdateMarkdownStatuses(
+    items: Array<{ id: number; expiryDate: string }>,
+  ): Promise<void> {
+    if (items.length === 0) {
+      return;
+    }
+
+    // Process in batches to avoid overwhelming the database
+    const batchSize = 100;
+    const batches = [];
+
+    for (let i = 0; i < items.length; i += batchSize) {
+      batches.push(items.slice(i, i + batchSize));
+    }
+
+    console.log(`Processing ${items.length} items in ${batches.length} batches...`);
+
+    for (const batch of batches) {
+      try {
+        // Prepare bulk update operations
+        const updateOperations = batch.map((item) => {
+          const status = this.calculateMarkdownStatusInternal(item.expiryDate);
+          return {
+            where: {
+              id: item.id,
+              organizationId: this.organizationId, // Ensure tenant isolation
+            },
+            data: { status },
+          };
+        });
+
+        // Execute all updates in a transaction for consistency
+        await this.prisma.$transaction(async (tx) => {
+          // Verify all items belong to this organization before updating
+          const itemIds = batch.map((item) => item.id);
+          const existingItems = await tx.inventoryItem.findMany({
+            where: {
+              id: { in: itemIds },
+              organizationId: this.organizationId,
+            },
+            select: { id: true },
+          });
+
+          const existingItemIds = new Set(existingItems.map((item) => item.id));
+
+          // Filter out updates for items that don't exist or don't belong to org
+          const validUpdates = updateOperations.filter((op) => existingItemIds.has(op.where.id));
+
+          if (validUpdates.length === 0) {
+            console.warn(`No valid items found in batch for organization ${this.organizationId}`);
+            return;
+          }
+
+          // Execute bulk update using raw SQL for better performance
+          const updateCases = validUpdates
+            .map((op, index) => `WHEN ${op.where.id} THEN '${op.data.status}'`)
+            .join(' ');
+
+          const itemIdsToUpdate = validUpdates.map((op) => op.where.id);
+
+          await tx.$executeRaw`
+            UPDATE inventory_items 
+            SET status = CASE id ${updateCases} END,
+                updated_at = CURRENT_TIMESTAMP
+            WHERE id IN (${itemIdsToUpdate})
+              AND organization_id = ${this.organizationId}
+          `;
+        });
+
+        console.log(`Batch completed: ${batch.length} items processed`);
+      } catch (error) {
+        console.error(`Failed to update batch:`, error);
+        throw error;
+      }
+    }
   }
 }

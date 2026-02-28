@@ -10,13 +10,17 @@ import { standardLimiter } from '../middleware/rateLimiter';
 import { checkUsageLimit } from '../middleware/feature-gate.middleware';
 
 const router = Router();
-const userService = new UserService();
+
+// Helper function to get services with organization context
+function getUserServiceForRequest(req: AuthRequest) {
+  return new UserService(req.organizationId);
+}
 
 // GET /users - Get all users (Manager only)
 router.get('/', authenticateToken, requireManager, async (req: AuthRequest, res: Response) => {
   try {
-    // const users = await userService.getUsers();
-    const users = await userService.getUsers(/* req.organizationId */);
+    const userService = getUserServiceForRequest(req);
+    const users = await userService.getUsers();
     res.json(users);
   } catch (_error) {
     // console.error("Error getting users:", _error);
@@ -31,6 +35,7 @@ router.get('/:id', authenticateToken, requireManager, async (req: AuthRequest, r
     if (Number.isNaN(id)) {
       return res.status(400).json({ message: 'Invalid user id' });
     }
+    const userService = getUserServiceForRequest(req);
     const user = await userService.getUserById(id);
 
     if (!user) {
@@ -81,6 +86,7 @@ router.post(
         organizationId: req.organizationId, // Use req.organizationId from auth context
       };
 
+      const userService = getUserServiceForRequest(req);
       const createdUser = await userService.createUser(newUser);
       res.status(201).json(createdUser);
     } catch (_error) {
@@ -107,6 +113,7 @@ router.put(
       }
 
       // First, get the user to validate ownership
+      const userService = getUserServiceForRequest(req);
       const existingUser = await userService.getUserById(id);
       if (!existingUser) {
         return res.status(404).json({ message: 'User not found' });
@@ -166,6 +173,7 @@ router.delete(
           .json({ message: 'Access denied: User belongs to different organization' });
       }
 
+      const userService = getUserServiceForRequest(req);
       const deleted = await userService.deleteUser(id);
 
       if (!deleted) {

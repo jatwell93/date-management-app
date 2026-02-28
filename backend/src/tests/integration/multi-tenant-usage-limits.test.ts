@@ -808,7 +808,7 @@ describe('Multi-Tenant Usage Limit Boundary Tests', () => {
 
     it('should use StorageQuotaService.recordUpload for atomic tracking', async () => {
       const { StorageQuotaService } = await import('../../services/storage-quota.service');
-      const storageService = new StorageQuotaService();
+      const storageService = new StorageQuotaService(orgStarter.id);
 
       // Record upload via service
       await storageService.recordUpload(
@@ -835,7 +835,7 @@ describe('Multi-Tenant Usage Limit Boundary Tests', () => {
 
     it('should use StorageQuotaService.markUploadDeleted for decrement', async () => {
       const { StorageQuotaService } = await import('../../services/storage-quota.service');
-      const storageService = new StorageQuotaService();
+      const storageService = new StorageQuotaService(orgStarter.id);
 
       // Setup: create upload
       await storageService.recordUpload(

@@ -519,7 +519,7 @@
   - `organizationId String? @map("organization_id")` → `organizationId String @map("organization_id")`
   - `organization Organization?` → `organization Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)`
 
-- [ ] 14.2.9 **Generate Prisma migration** for dev:
+- [x] 14.2.9 **Generate Prisma migration** for dev:
   ```bash
   cd backend
   npx prisma migrate dev --name make_organization_id_required
@@ -528,7 +528,7 @@
   - Confirm it contains `ALTER TABLE ... ALTER COLUMN organization_id SET NOT NULL` (or SQLite equivalent: table recreation)
   - **SQLite note**: SQLite doesn't support `ALTER COLUMN`. Prisma will recreate tables. This is expected for dev only. Production uses PostgreSQL which supports `ALTER COLUMN` natively.
 
-- [ ] 14.2.10 **Regenerate Prisma client**:
+- [x] 14.2.10 **Regenerate Prisma client**:
   ```bash
   npx prisma generate
   ```
@@ -581,7 +581,7 @@ the dev schema (minus the SQLite datasource — production uses PostgreSQL via N
     - `OrganizationInvite.organization` ✅ (line 249)
   - If any of the 8 models from 14.2 are missing `onDelete: Cascade`, add it now
 
-- [ ] 14.4.2 **Generate migration** if any cascade changes were needed beyond 14.2:
+- [x] 14.4.2 **Generate migration** if any cascade changes were needed beyond 14.2:
   ```bash
   npx prisma migrate dev --name add_cascade_delete_constraints
   ```
@@ -600,7 +600,7 @@ every service MUST receive a real `organizationId` from the auth middleware — 
 
 **File**: `backend/src/services/service-provider.ts`
 
-- [ ] 14.5.1a **Refactor `ServiceProvider` constructor** to accept `organizationId: string` as a required parameter:
+- [x] 14.5.1a **Refactor `ServiceProvider` constructor** to accept `organizationId: string` as a required parameter:
   ```typescript
   constructor(
     private organizationId: string,
@@ -613,11 +613,11 @@ every service MUST receive a real `organizationId` from the auth middleware — 
   }
   ```
 
-- [ ] 14.5.1b **Update `getUserService()`** (line 42): Change `'default-org'` → `this.organizationId`
+- [x] 14.5.1b **Update `getUserService()`** (line 42): Change `'default-org'` → `this.organizationId`
 
-- [ ] 14.5.1c **Update `getUploadService()`** (line 64): Change `'default-org'` → `this.organizationId`
+- [x] 14.5.1c **Update `getUploadService()`** (line 64): Change `'default-org'` → `this.organizationId`
 
-- [ ] 14.5.1d **Find all callsites** of `new ServiceProvider()` and pass `organizationId`:
+- [x] 14.5.1d **Find all callsites** of `new ServiceProvider()` and pass `organizationId`:
   ```bash
   # Run from backend/
   npx grep -rn "new ServiceProvider" src/
@@ -629,7 +629,7 @@ every service MUST receive a real `organizationId` from the auth middleware — 
 
 **File**: `backend/src/services/product.service.ts` (~line 239)
 
-- [ ] 14.5.2a **Change constructor** from:
+- [x] 14.5.2a **Change constructor** from:
   ```typescript
   this.organizationId = organizationId ?? 'default-org';
   ```
@@ -641,7 +641,7 @@ every service MUST receive a real `organizationId` from the auth middleware — 
   this.organizationId = organizationId;
   ```
 
-- [ ] 14.5.2b **Update all callsites** of `new ProductService(prisma)` that don't pass `organizationId`:
+- [x] 14.5.2b **Update all callsites** of `new ProductService(prisma)` that don't pass `organizationId`:
   - Search: `new ProductService(` across `backend/src/`
   - Each must now pass an explicit `organizationId` as the second argument
 
@@ -649,7 +649,7 @@ every service MUST receive a real `organizationId` from the auth middleware — 
 
 **File**: `backend/src/services/inventory.service.ts` (~line 16)
 
-- [ ] 14.5.3a **Change constructor** from:
+- [x] 14.5.3a **Change constructor** from:
   ```typescript
   this.organizationId = organizationId ?? 'default-org';
   ```
@@ -665,14 +665,14 @@ every service MUST receive a real `organizationId` from the auth middleware — 
 
 **File**: `backend/src/services/user.service.ts` (~line 13)
 
-- [ ] 14.5.4a **Same pattern**: Remove `?? 'default-org'`, throw if missing.
+- [x] 14.5.4a **Same pattern**: Remove `?? 'default-org'`, throw if missing.
 
 #### 14.5.5 StoreAreaService — Add organizationId filtering
 
 **File**: `backend/src/services/store-area.service.ts`
 **CRITICAL**: This service currently has NO `organizationId` field and NO tenant filtering in queries.
 
-- [ ] 14.5.5a **Add `organizationId` as a required constructor parameter**:
+- [x] 14.5.5a **Add `organizationId` as a required constructor parameter**:
   ```typescript
   private organizationId: string;
 
@@ -685,32 +685,32 @@ every service MUST receive a real `organizationId` from the auth middleware — 
   }
   ```
 
-- [ ] 14.5.5b **Add `organizationId` WHERE clause** to ALL queries in the service:
+- [x] 14.5.5b **Add `organizationId` WHERE clause** to ALL queries in the service:
   - `getAllStoreAreas()`: Add `where: { organizationId: this.organizationId }`
   - `getStoreAreaById()`: Add `where: { id, organizationId: this.organizationId }`
   - `getStoreAreaByName()`: Add `organizationId: this.organizationId` to the where clause
   - Any other query methods — search for `findMany`, `findUnique`, `findFirst`, `create`, `update`, `delete`
 
-- [ ] 14.5.5c **Update `mapPrismaToModel`** (~line 132): Remove `?? 'default-org'` fallback:
+- [x] 14.5.5c **Update `mapPrismaToModel`** (~line 132): Remove `?? 'default-org'` fallback:
   ```typescript
   organizationId: area.organizationId, // No longer nullable
   ```
 
-- [ ] 14.5.5d **Update all callsites** of `new StoreAreaService()` to pass `organizationId`
+- [x] 14.5.5d **Update all callsites** of `new StoreAreaService()` to pass `organizationId`
 
 #### 14.5.6 StorageQuotaService — Remove single-tenant TODO
 
 **File**: `backend/src/services/storage-quota.service.ts`
 
-- [ ] 14.5.6a **Remove the TODO comment** at lines 49-53 that says "Once multi-tenant support is added..."
-- [ ] 14.5.6b **If the service still uses a global Prisma client** (`const prisma = getDefaultDatabaseClient()` at module level, line 54), refactor to use constructor injection with `organizationId`
-- [ ] 14.5.6c **Update `getStorageQuota()`** to filter by `organizationId` instead of `userId` alone
+- [x] 14.5.6a **Remove the TODO comment** at lines 49-53 that says "Once multi-tenant support is added..."
+- [x] 14.5.6b **If the service still uses a global Prisma client** (`const prisma = getDefaultDatabaseClient()` at module level, line 54), refactor to use constructor injection with `organizationId`
+- [x] 14.5.6c **Update `getStorageQuota()`** to filter by `organizationId` instead of `userId` alone
 
 #### 14.5.7 Auth Middleware — Remove TEST_AUTH_BYPASS 'default-org' (Optional)
 
 **File**: `backend/src/middleware/auth.middleware.ts` (~line 77-88)
 
-- [ ] 14.5.7a **Keep `TEST_AUTH_BYPASS`** for tests but ensure it uses a consistent test org ID.
+- [x] 14.5.7a **Keep `TEST_AUTH_BYPASS`** for tests but ensure it uses a consistent test org ID.
   - This is NOT a legacy path — it's test infrastructure. Leave as-is unless test architecture changes.
   - **Decision**: No change needed here. Document that `'default-org'` in tests is intentional test fixture data.
 
@@ -733,7 +733,7 @@ in auth middleware and service constructors. This task is effectively a no-op ve
   - `auth.middleware.ts` line 245: `if (!decodedToken.organizationId || !decodedToken.tierLevel)` → returns 403
   - This means NO request can reach a route handler without `organizationId`. Multi-tenant is enforced.
 
-- [ ] 14.6.3 **Document decision**: Add a note to this task confirming MULTI_TENANT_ENABLED was never implemented
+- [x] 14.6.3 **Document decision**: Add a note to this task confirming MULTI_TENANT_ENABLED was never implemented
   as an env var — multi-tenancy was built as always-on by design.
 
 ---
@@ -749,17 +749,17 @@ in auth middleware and service constructors. This task is effectively a no-op ve
   - `CLERK_SECRET_KEY` ✅ (line 95)
   - `CLERK_WEBHOOK_SECRET` ✅ (line 97)
 
-- [ ] 14.7.2 **Add missing required markers** to `backend/.env.example`:
+- [x] 14.7.2 **Add missing required markers** to `backend/.env.example`:
   - Mark Stripe keys as `# REQUIRED for SaaS mode` with clear instructions
   - Mark Clerk keys as `# REQUIRED for authentication`
   - Add: `# REQUIRED: At least one of STRIPE_SECRET_KEY or CLERK_SECRET_KEY must be set`
 
 - [x] 14.7.3 **Verify `frontend/.env.example`** has `REACT_APP_CLERK_PUBLISHABLE_KEY` ✅ (line 15)
 
-- [ ] 14.7.4 **Check root `.env.example`** exists and has relevant keys. If not, create one that references
+- [x] 14.7.4 **Check root `.env.example`** exists and has relevant keys. If not, create one that references
   both backend and frontend examples.
 
-- [ ] 14.7.5 **Update `backend/SECURITY.md`** if it references old auth patterns (PIN-based):
+- [x] 14.7.5 **Update `backend/SECURITY.md`** if it references old auth patterns (PIN-based):
   - Ensure it documents Clerk as the primary auth provider
   - Remove references to PIN-based authentication if still present
 
@@ -803,8 +803,7 @@ in auth middleware and service constructors. This task is effectively a no-op ve
   cd backend && npm run audit:org-ids
   ```
   - Must exit with code 0
-
-
+  
 ---
 
 ### 14.9 Final Review Checklist

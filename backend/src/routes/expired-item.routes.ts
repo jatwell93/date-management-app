@@ -6,11 +6,18 @@ import { expiredItemProcessSchema } from '../schemas';
 import { standardLimiter } from '../middleware/rateLimiter';
 
 const router = Router();
-const expiredItemService = new ExpiredItemService();
+
+// Helper function to get services with organization context
+function getExpiredItemServiceForRequest(req: AuthRequest) {
+  // Note: ExpiredItemService needs to be refactored to accept organizationId
+  // For now, we'll instantiate it without organizationId
+  return new ExpiredItemService();
+}
 
 // GET /expired-items - Get all expired items
 router.get('/', authenticateToken, async (req: AuthRequest, res: Response) => {
   try {
+    const expiredItemService = getExpiredItemServiceForRequest(req);
     const items = await expiredItemService.getAllExpiredItems();
     res.json(items);
   } catch (error) {
@@ -66,6 +73,7 @@ router.post(
         return res.status(401).json({ message: 'Access denied: No user ID found' });
       }
 
+      const expiredItemService = getExpiredItemServiceForRequest(req);
       const transaction = await expiredItemService.processExpiredItem(
         inventoryItemId,
         userId,

@@ -324,7 +324,10 @@ describe('Usage Counter Atomicity Tests', () => {
         },
         $transaction: jest.fn((callback) => callback(mockPrisma)),
       };
-      inventoryService = new InventoryService(organizationId, mockPrisma as unknown as PrismaClient);
+      inventoryService = new InventoryService(
+        organizationId,
+        mockPrisma as unknown as PrismaClient,
+      );
     });
 
     it('should atomically increment total_inventory_items when inventory item is created successfully', async () => {
@@ -357,8 +360,7 @@ describe('Usage Counter Atomicity Tests', () => {
       // Mock the calculateMarkdownStatus method to return 'Normal' for the future date
       const futureDate = new Date();
       futureDate.setFullYear(futureDate.getFullYear() + 1);
-      jest.spyOn(inventoryService, 'calculateMarkdownStatus')
-        .mockResolvedValue('Normal');
+      jest.spyOn(inventoryService, 'calculateMarkdownStatus').mockResolvedValue('Normal');
 
       const result = await inventoryService.createInventoryItem(itemData, 1);
 
@@ -627,7 +629,7 @@ describe('Usage Counter Atomicity Tests', () => {
       // Mock product and location validation
       mockPrisma.product.findFirst.mockResolvedValue({ id: 1, organizationId });
       mockPrisma.storeArea.findFirst.mockResolvedValue({ id: 1, organizationId });
-      
+
       // Mock usage limit reached
       mockPrisma.organizationUsage.findUnique.mockResolvedValue({
         organizationId,
@@ -636,7 +638,7 @@ describe('Usage Counter Atomicity Tests', () => {
       });
 
       await expect(inventoryService.createInventoryItem(itemData, 1)).rejects.toThrow(
-        'Cannot create inventory item: maximum limit of 100 inventory items reached. Current usage: 100.'
+        'Cannot create inventory item: maximum limit of 100 inventory items reached. Current usage: 100.',
       );
 
       expect(mockPrisma.$transaction).toHaveBeenCalled();

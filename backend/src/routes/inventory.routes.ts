@@ -16,12 +16,18 @@ import { standardLimiter } from '../middleware/rateLimiter';
 import { checkUsageLimit } from '../middleware/feature-gate.middleware';
 
 const router = Router();
-const inventoryService = new InventoryService();
+
+// Helper function to get services with organization context
+function getServicesForRequest(req: AuthRequest) {
+  const inventoryService = new InventoryService(req.organizationId);
+  const productService = new ProductService(undefined, req.organizationId);
+  return { inventoryService, productService };
+}
 
 // GET /inventory-items - Get all inventory items
 router.get('/', authenticateToken, async (req: AuthRequest, res: Response) => {
   try {
-    // const items = await inventoryService.getAllInventoryItems();
+    const { inventoryService } = getServicesForRequest(req);
     const items = await inventoryService.getAllInventoryItems();
     // UBS: SAFE — returning JSON (res.json) with validated data from the service; no HTML rendering.
     res.json(items);
@@ -38,6 +44,7 @@ router.get('/:id', authenticateToken, async (req: AuthRequest, res: Response) =>
     if (Number.isNaN(id)) {
       return res.status(400).json({ message: 'Invalid inventory item id' });
     }
+    const { inventoryService } = getServicesForRequest(req);
     const item = await inventoryService.getInventoryItemById(id);
 
     if (!item) {
@@ -66,7 +73,7 @@ router.get('/product/:productId', authenticateToken, async (req: AuthRequest, re
     if (Number.isNaN(productId)) {
       return res.status(400).json({ message: 'Invalid product id' });
     }
-    // const items = await inventoryService.getInventoryItemsByProductId(productId);
+    const { inventoryService } = getServicesForRequest(req);
     const items = await inventoryService.getInventoryItemsByProductId(productId);
     // UBS: SAFE — returning JSON array of items; input validated above (productId) and data comes from DB/service.
     res.json(items);
@@ -90,8 +97,7 @@ router.get('/by-barcode/:barcode', authenticateToken, async (req: AuthRequest, r
     }
 
     // First, get the product by barcode to get its ID
-    const productService = new ProductService();
-    // const product = await productService.getProductByBarcode(barcode);
+    const { productService, inventoryService } = getServicesForRequest(req);
     const product = await productService.getProductByBarcode(barcode);
 
     if (!product) {
@@ -99,7 +105,6 @@ router.get('/by-barcode/:barcode', authenticateToken, async (req: AuthRequest, r
     }
 
     // Then get inventory items for that product
-    // const items = await inventoryService.getInventoryItemsByProductId(product.id, /* req.organizationId */);
     const items = await inventoryService.getInventoryItemsByProductId(product.id);
     // UBS: SAFE — returning JSON array of items; product lookup validated and sanitized above.
     res.json(items);
@@ -122,7 +127,7 @@ router.get(
       const limitParam = Number.parseInt(String(req.query.limit ?? ''), 10);
       const limit = Number.isNaN(limitParam) || limitParam <= 0 ? 5 : limitParam;
 
-      // const items = await inventoryService.getRecentInventoryItemsByProductId(productId, limit);
+      const { inventoryService } = getServicesForRequest(req);
       const items = await inventoryService.getRecentInventoryItemsByProductId(productId, limit);
       // UBS: SAFE — returning recent items as JSON; inputs were validated and limited above.
       res.json(items);
@@ -140,7 +145,7 @@ router.get('/location/:locationId', authenticateToken, async (req: AuthRequest, 
     if (Number.isNaN(locationId)) {
       return res.status(400).json({ message: 'Invalid location id' });
     }
-    // const items = await inventoryService.getInventoryItemsByLocationId(locationId);
+    const { inventoryService } = getServicesForRequest(req);
     const items = await inventoryService.getInventoryItemsByLocationId(locationId);
     // UBS: SAFE — locationId validated and data returned as JSON from DB/service.
     res.json(items);
@@ -185,16 +190,7 @@ router.post(
       if (!userId) {
         return res.status(401).json({ message: 'Access denied: No user ID found' });
       }
-      // const newInventoryItem = await inventoryService.createInventoryItem(
-      //   {
-      //     productId,
-      //     expiryDate,
-      //     locationId,
-      //     status,
-      //     organizationId: req.organizationId,
-      //   } as Omit<InventoryItem, 'id' | 'createdAt' | 'updatedAt'>,
-      //   userId,
-      // );
+      const { inventoryService } = getServicesForRequest(req);
       const newInventoryItem = await inventoryService.createInventoryItem(
         {
           productId,
@@ -233,6 +229,7 @@ router.put(
       }
 
       // First, get the item to validate ownership
+      const { inventoryService } = getServicesForRequest(req);
       const existingItem = await inventoryService.getInventoryItemById(id);
       if (!existingItem) {
         return res.status(404).json({ message: 'Inventory item not found' });
@@ -286,6 +283,7 @@ router.delete(
       }
 
       // First, get the item to validate ownership
+      const { inventoryService } = getServicesForRequest(req);
       const existingItem = await inventoryService.getInventoryItemById(id);
       if (!existingItem) {
         return res.status(404).json({ message: 'Inventory item not found' });

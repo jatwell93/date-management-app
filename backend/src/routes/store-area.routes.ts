@@ -1,7 +1,7 @@
 import { Router, Request, Response } from 'express';
 import { StoreAreaService } from '../services/store-area.service';
 import { StoreArea } from '../models/store-area.model';
-import { authenticateToken } from '../middleware/auth.middleware';
+import { authenticateToken, AuthRequest } from '../middleware/auth.middleware';
 import { validateDataIntegrity } from '../middleware/validation.middleware';
 import { validateRequest } from '../middleware/validateRequest';
 import { storeAreaSchema } from '../schemas';
@@ -9,11 +9,16 @@ import { validateBusinessRules } from '../middleware/data-integrity.middleware';
 import { standardLimiter } from '../middleware/rateLimiter';
 
 const router = Router();
-const storeAreaService = new StoreAreaService();
+
+// Helper function to get services with organization context
+function getStoreAreaServiceForRequest(req: AuthRequest) {
+  return new StoreAreaService(req.organizationId);
+}
 
 // GET /store-areas - Get all store areas
-router.get('/', authenticateToken, async (req: Request, res: Response) => {
+router.get('/', authenticateToken, async (req: AuthRequest, res: Response) => {
   try {
+    const storeAreaService = getStoreAreaServiceForRequest(req);
     const areas = await storeAreaService.getAllStoreAreas();
     res.json(areas);
   } catch (error: any) {
@@ -24,12 +29,13 @@ router.get('/', authenticateToken, async (req: Request, res: Response) => {
 });
 
 // GET /store-areas/:id - Get a specific store area by ID
-router.get('/:id', authenticateToken, async (req: Request, res: Response) => {
+router.get('/:id', authenticateToken, async (req: AuthRequest, res: Response) => {
   try {
     const id = Number.parseInt(req.params.id, 10);
     if (Number.isNaN(id)) {
       return res.status(400).json({ message: 'Invalid store area id' });
     }
+    const storeAreaService = getStoreAreaServiceForRequest(req);
     const area = await storeAreaService.getStoreAreaById(id);
 
     if (!area) {
@@ -45,9 +51,10 @@ router.get('/:id', authenticateToken, async (req: Request, res: Response) => {
 });
 
 // GET /store-areas/name/:name - Get store areas by name (can be multiple with different sub-departments)
-router.get('/name/:name', authenticateToken, async (req: Request, res: Response) => {
+router.get('/name/:name', authenticateToken, async (req: AuthRequest, res: Response) => {
   try {
     const name = req.params.name;
+    const storeAreaService = getStoreAreaServiceForRequest(req);
     const areas = await storeAreaService.getStoreAreaByName(name);
 
     if (!areas || areas.length === 0) {
@@ -70,13 +77,14 @@ router.post(
   validateRequest(storeAreaSchema),
   validateDataIntegrity,
   validateBusinessRules,
-  async (req: Request, res: Response) => {
+  async (req: AuthRequest, res: Response) => {
     const { name, subDepartment, lastChecked } = req.body;
     if (!name) {
       return res.status(400).json({ message: 'Missing required store area fields' });
     }
 
     try {
+      const storeAreaService = getStoreAreaServiceForRequest(req);
       const newArea = await storeAreaService.createStoreArea({
         name,
         subDepartment,
@@ -99,7 +107,7 @@ router.put(
   validateRequest(storeAreaSchema),
   validateDataIntegrity,
   validateBusinessRules,
-  async (req: Request, res: Response) => {
+  async (req: AuthRequest, res: Response) => {
     try {
       const id = Number.parseInt(req.params.id, 10);
       if (Number.isNaN(id)) {
@@ -113,6 +121,7 @@ router.put(
       if (subDepartment !== undefined) updateData.subDepartment = subDepartment;
       if (lastChecked !== undefined) updateData.lastChecked = lastChecked;
 
+      const storeAreaService = getStoreAreaServiceForRequest(req);
       const updatedArea = await storeAreaService.updateStoreArea(id, updateData);
 
       if (!updatedArea) {
@@ -129,24 +138,30 @@ router.put(
 );
 
 // DELETE /store-areas/:id - Delete a store area
-router.delete('/:id', authenticateToken, standardLimiter, async (req: Request, res: Response) => {
-  try {
-    const id = Number.parseInt(req.params.id, 10);
-    if (Number.isNaN(id)) {
-      return res.status(400).json({ message: 'Invalid store area id' });
-    }
-    const deleted = await storeAreaService.deleteStoreArea(id);
+router.delete(
+  '/:id',
+  authenticateToken,
+  standardLimiter,
+  async (req: AuthRequest, res: Response) => {
+    try {
+      const id = Number.parseInt(req.params.id, 10);
+      if (Number.isNaN(id)) {
+        return res.status(400).json({ message: 'Invalid store area id' });
+      }
+      const storeAreaService = getStoreAreaServiceForRequest(req);
+      const deleted = await storeAreaService.deleteStoreArea(id);
 
-    if (!deleted) {
-      return res.status(404).json({ message: 'Store area not found' });
-    }
+      if (!deleted) {
+        return res.status(404).json({ message: 'Store area not found' });
+      }
 
-    res.json({ message: 'Store area deleted successfully' });
-  } catch (error: any) {
-    console.error('Delete store area error:', error);
-    const errorMessage = error.message || 'Internal server error';
-    res.status(500).json({ message: errorMessage });
-  }
-});
+      res.json({ message: 'Store area deleted successfully' });
+    } catch (error: any) {
+      console.error('Delete store area error:', error);
+      const errorMessage = error.message || 'Internal server error';
+      res.status(500).json({ message: errorMessage });
+    }
+  },
+);
 
 export default router;

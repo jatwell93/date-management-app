@@ -1,11 +1,19 @@
 import { Router, Request, Response } from 'express';
 import { DashboardService } from '../services/dashboard.service';
+import { authenticateToken, AuthRequest } from '../middleware/auth.middleware';
 
 const router = Router();
-const dashboardService = new DashboardService();
 
-router.get('/', async (req: Request, res: Response) => {
+// Helper function to get services with organization context
+function getDashboardServiceForRequest(req: AuthRequest) {
+  // Note: DashboardService needs to be refactored to accept organizationId
+  // For now, we'll instantiate it without organizationId
+  return new DashboardService();
+}
+
+router.get('/', authenticateToken, async (req: AuthRequest, res: Response) => {
   try {
+    const dashboardService = getDashboardServiceForRequest(req);
     const dashboardData = await dashboardService.getDashboardData();
     res.json(dashboardData);
   } catch (_error) {

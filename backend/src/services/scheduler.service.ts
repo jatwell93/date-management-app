@@ -6,7 +6,6 @@ import { SubscriptionService } from './subscription.service';
 import { EmailService } from './email.service';
 
 export class SchedulerService {
-  private static inventoryService = new InventoryService();
   private static databaseBackupService = new DatabaseBackupService();
 
   // Initialize scheduled tasks
@@ -84,27 +83,117 @@ export class SchedulerService {
     }
   }
 
-  // Update markdown statuses for all inventory items
+  // Update markdown statuses for all inventory items across all organizations
   static async updateAllInventoryMarkdownStatuses() {
     try {
-      // Get all inventory items from the database
+      // Get all organizations
       const db = getDb();
-      const inventoryItems = db
-        .prepare('SELECT id, expiry_date FROM inventory_items')
-        .all() as Array<{ id: number; expiry_date: string }>;
+      const organizations = db.prepare('SELECT id FROM organizations').all() as Array<{
+        id: string;
+      }>;
 
-      console.log(`Processing ${inventoryItems.length} inventory items for markdown updates...`);
+      console.log(`Processing markdown updates for ${organizations.length} organizations...`);
 
-      // Process each inventory item
-      for (const item of inventoryItems) {
+      const orgResults: Array<{ orgId: string; total: number; failed: number; errors: string[] }> =
+        [];
+
+      // Process each organization
+      for (const org of organizations) {
+        const orgResult = { orgId: org.id, total: 0, failed: 0, errors: [] as string[] };
+
         try {
-          await this.inventoryService.autoCalculateMarkdownStatus(item.id, item.expiry_date);
+          const inventoryService = new InventoryService(org.id);
+          const inventoryItems = db
+            .prepare('SELECT id, expiry_date FROM inventory_items WHERE organization_id = ?')
+            .bind(org.id)
+            .all() as Array<{ id: number; expiry_date: string }>;
+
+          console.log(
+            `Processing ${inventoryItems.length} inventory items for organization ${org.id}...`,
+          );
+
+          orgResult.total = inventoryItems.length;
+
+          // Process items in bulk for better performance
+          try {
+            await inventoryService.bulkUpdateMarkdownStatuses(inventoryItems);
+          } catch (error) {
+            // If bulk update fails, fall back to individual updates with retry
+            console.warn(
+              `Bulk update failed for organization ${org.id}, falling back to individual updates:`,
+              error,
+            );
+
+            for (const item of inventoryItems) {
+              let retries = 0;
+              const maxRetries = 2;
+
+              while (retries <= maxRetries) {
+                try {
+                  await inventoryService.autoCalculateMarkdownStatus(item.id, item.expiry_date);
+                  break; // Success, exit retry loop
+                } catch (error) {
+                  if (retries === maxRetries) {
+                    // Final retry failed, record the error
+                    const errorMsg = `Failed to update markdown status for item ${item.id} after ${maxRetries + 1} attempts: ${error.message}`;
+                    console.error(errorMsg);
+                    orgResult.errors.push(errorMsg);
+                    orgResult.failed++;
+                  } else {
+                    // Wait before retry (exponential backoff)
+                    const delayMs = Math.pow(2, retries) * 100; // 100ms, 200ms, 400ms
+                    await new Promise((resolve) => setTimeout(resolve, delayMs));
+                    retries++;
+                  }
+                }
+              }
+            }
+          }
+
+          // Log organization summary
+          if (orgResult.failed > 0) {
+            console.warn(
+              `Organization ${org.id} completed with ${orgResult.failed}/${orgResult.total} failures`,
+            );
+            // Log first few errors for debugging
+            orgResult.errors.slice(0, 3).forEach((error) => console.warn(`  - ${error}`));
+          }
         } catch (error) {
-          console.error(`Error updating markdown status for item ${item.id}:`, error);
+          const orgError = `Critical error processing organization ${org.id}: ${error.message}`;
+          console.error(orgError);
+          orgResult.errors.push(orgError);
+          orgResult.failed = orgResult.total; // Mark all as failed
+        }
+
+        orgResults.push(orgResult);
+      }
+
+      // Summary report
+      const totalItems = orgResults.reduce((sum, r) => sum + r.total, 0);
+      const totalFailed = orgResults.reduce((sum, r) => sum + r.failed, 0);
+      const successRate =
+        totalItems > 0 ? (((totalItems - totalFailed) / totalItems) * 100).toFixed(1) : '100';
+
+      console.log(`\nMarkdown update summary:`);
+      console.log(`- Total organizations: ${organizations.length}`);
+      console.log(`- Total items processed: ${totalItems}`);
+      console.log(`- Total failures: ${totalFailed}`);
+      console.log(`- Success rate: ${successRate}%`);
+
+      if (totalFailed > 0) {
+        console.warn(`\n${totalFailed} items failed to update. Check logs for details.`);
+
+        // Optionally send alert for high failure rates
+        const failureRate = totalFailed / totalItems;
+        if (failureRate > 0.1) {
+          // More than 10% failure rate
+          console.error(
+            `High failure rate detected (${(failureRate * 100).toFixed(1)}%). Consider manual intervention.`,
+          );
         }
       }
 
-      console.log('Completed scheduled markdown updates.');
+      console.log('Completed scheduled markdown updates for all organizations.');
     } catch (error) {
       console.error('Error in scheduled markdown update process:', error);
     }

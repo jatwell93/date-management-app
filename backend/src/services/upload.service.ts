@@ -19,7 +19,7 @@ export class UploadService {
     private organizationId: string,
     private storage: StorageProvider,
     private csvParser: CSVParserService,
-    private storageQuotaService: StorageQuotaService = new StorageQuotaService(),
+    private storageQuotaService: StorageQuotaService,
   ) {}
 
   /**

@@ -10,9 +10,12 @@ import { uploadLimiter } from '../middleware/rateLimiter';
 
 const router = express.Router();
 
-// Initialize dependencies via ServiceProvider
-const serviceProvider = new ServiceProvider();
-const uploadController = new UploadController(serviceProvider.getUploadService());
+// Helper function to get services with organization context
+function getServicesForRequest(req: AuthRequest) {
+  const serviceProvider = new ServiceProvider({ organizationId: req.organizationId });
+  const uploadController = new UploadController(serviceProvider.getUploadService());
+  return { uploadController };
+}
 
 // Configure Multer for direct uploads (MemoryStorage for small files)
 // Task 5.4: Configure file upload size limit (10MB)
@@ -33,7 +36,10 @@ router.post(
   checkUsageLimit('storage_bytes'),
   uploadLimiter,
   validateRequest(uploadInitiateSchema),
-  (req: AuthRequest, res) => uploadController.initiate(req, res),
+  (req: AuthRequest, res) => {
+    const { uploadController } = getServicesForRequest(req);
+    return uploadController.initiate(req, res);
+  },
 );
 
 /**
@@ -46,7 +52,10 @@ router.post(
   checkUsageLimit('storage_bytes'),
   uploadLimiter,
   upload.single('file'),
-  (req: AuthRequest, res) => uploadController.direct(req, res),
+  (req: AuthRequest, res) => {
+    const { uploadController } = getServicesForRequest(req);
+    return uploadController.direct(req, res);
+  },
 );
 
 /**
@@ -59,7 +68,10 @@ router.post(
   checkUsageLimit('storage_bytes'),
   uploadLimiter,
   validateRequest(uploadCompleteSchema),
-  (req: AuthRequest, res) => uploadController.complete(req, res),
+  (req: AuthRequest, res) => {
+    const { uploadController } = getServicesForRequest(req);
+    return uploadController.complete(req, res);
+  },
 );
 
 export default router;

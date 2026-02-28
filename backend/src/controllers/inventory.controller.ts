@@ -1,12 +1,20 @@
 import { Request, Response } from 'express';
 import { InventoryService } from '../services/inventory.service';
 import { Logger } from '../utils/logger';
+import { AuthRequest } from '../middleware/auth.middleware';
 
-const inventoryService = new InventoryService();
-
-export const logTransaction = async (req: Request, res: Response): Promise<void> => {
+export const logTransaction = async (req: AuthRequest, res: Response): Promise<void> => {
   try {
+    if (!req.organizationId) {
+      res.status(401).json({
+        error: 'Unauthorized',
+        message: 'Organization context required',
+      });
+      return;
+    }
+
     const transaction = req.body;
+    const inventoryService = new InventoryService(req.organizationId);
     const newTransactionId = await inventoryService.logTransaction(transaction);
 
     res.status(201).json({

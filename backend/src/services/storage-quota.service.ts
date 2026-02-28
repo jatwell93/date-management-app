@@ -1,3 +1,4 @@
+import { PrismaClient } from '@prisma/client';
 import { getDefaultDatabaseClient } from '../database/database-factory';
 import { getOrganizationId } from '../utils/auth-bypass';
 
@@ -47,28 +48,39 @@ export interface StorageQuotaInfo {
  *
  * Tracks storage usage per tenant and enforces quota limits.
  */
-const prisma = getDefaultDatabaseClient();
-
 export class StorageQuotaService {
+  private prisma: PrismaClient;
   private organizationId: string;
 
-  constructor(organizationId?: string) {
-    this.organizationId = getOrganizationId(organizationId);
+  constructor(organizationId?: string, prismaClient?: PrismaClient) {
+    if (!organizationId || organizationId.trim() === '') {
+      throw new Error('Organization ID is required and cannot be empty');
+    }
+    // Basic format validation - organization IDs should be UUID-like or alphanumeric strings
+    if (!/^[a-zA-Z0-9_-]+$/.test(organizationId)) {
+      throw new Error(
+        'Organization ID format is invalid. Must contain only alphanumeric characters, hyphens, and underscores',
+      );
+    }
+    if (organizationId.length > 100) {
+      throw new Error('Organization ID is too long. Maximum 100 characters allowed');
+    }
+
+    this.organizationId = organizationId;
+    this.prisma = prismaClient ?? getDefaultDatabaseClient();
   }
 
   /**
-   * Get storage quota information for a tenant/user
+   * Get storage quota information for a tenant/organization
    *
-   * @param userId - User ID (for future multi-tenant support)
    * @param subscriptionTier - Current subscription tier ('free', 'pro', 'enterprise')
    * @returns StorageQuotaInfo with usage and limits
    */
   async getStorageQuota(
-    userId: number,
     subscriptionTier: 'free' | 'pro' | 'enterprise' = 'free',
   ): Promise<StorageQuotaInfo> {
-    // Calculate total bytes used by this user
-    const usedBytes = await this.calculateUserStorageUsage(userId);
+    // Calculate total bytes used by this organization
+    const usedBytes = await this.calculateOrganizationStorageUsage();
 
     // Get tier configuration
     const tierConfig = SUBSCRIPTION_TIERS[subscriptionTier];
@@ -95,29 +107,26 @@ export class StorageQuotaService {
   }
 
   /**
-   * Check if user can upload a file of given size
+   * Check if organization can upload a file of given size
    * Returns true if upload would not exceed quota
    */
   async canUploadFile(
-    userId: number,
     fileSizeBytes: number,
     subscriptionTier: 'free' | 'pro' | 'enterprise' = 'free',
   ): Promise<boolean> {
-    const quota = await this.getStorageQuota(userId, subscriptionTier);
+    const quota = await this.getStorageQuota(subscriptionTier);
     return quota.used + fileSizeBytes <= quota.limit;
   }
 
   /**
-   * Calculate total storage usage for a user
-   *
-   * TODO: Update to use actual file metadata tracking
-   * Current implementation estimates from S3/R2 object listing
+   * Calculate total storage usage for an organization
+   * Updated to use organizationId instead of userId for proper multi-tenant support
    */
-  private async calculateUserStorageUsage(userId: number): Promise<number> {
+  private async calculateOrganizationStorageUsage(): Promise<number> {
     try {
-      const result = await prisma.upload.aggregate({
+      const result = await this.prisma.upload.aggregate({
         where: {
-          userId,
+          organizationId: this.organizationId,
           status: 'completed',
         },
         _sum: {
@@ -127,7 +136,10 @@ export class StorageQuotaService {
 
       return result._sum.fileSizeBytes ?? 0;
     } catch (error) {
-      console.error(`Failed to calculate storage usage for user ${userId}:`, error);
+      console.error(
+        `Failed to calculate storage usage for organization ${this.organizationId}:`,
+        error,
+      );
       return 0;
     }
   }
@@ -141,37 +153,40 @@ export class StorageQuotaService {
     contentType?: string,
   ): Promise<void> {
     try {
-      // Record the upload metadata
-      await prisma.upload.create({
-        data: {
-          organizationId,
-          userId,
-          fileKey,
-          fileName,
-          fileSizeBytes,
-          contentType,
-          status: 'completed',
-        },
-      });
-
-      // Update organization storage usage
-      await prisma.organizationUsage.upsert({
-        where: {
-          organizationId,
-        },
-        update: {
-          storageUsedBytes: {
-            increment: fileSizeBytes,
+      // Use transaction to ensure both operations succeed or fail together
+      await this.prisma.$transaction(async (tx) => {
+        // Record the upload metadata
+        await tx.upload.create({
+          data: {
+            organizationId,
+            userId,
+            fileKey,
+            fileName,
+            fileSizeBytes,
+            contentType,
+            status: 'completed',
           },
-        },
-        create: {
-          organizationId,
-          storageUsedBytes: fileSizeBytes,
-          totalSkus: 0,
-          activeUsers: 0,
-          maxUsers: 0, // Will be set by subscription tier
-          maxSkus: 0, // Will be set by subscription tier
-        },
+        });
+
+        // Update organization storage usage
+        await tx.organizationUsage.upsert({
+          where: {
+            organizationId,
+          },
+          update: {
+            storageUsedBytes: {
+              increment: fileSizeBytes,
+            },
+          },
+          create: {
+            organizationId,
+            storageUsedBytes: fileSizeBytes,
+            totalSkus: 0,
+            activeUsers: 0,
+            maxUsers: 0, // Will be set by subscription tier
+            maxSkus: 0, // Will be set by subscription tier
+          },
+        });
       });
     } catch (error) {
       console.warn('Failed to record upload metadata:', error);
@@ -181,33 +196,36 @@ export class StorageQuotaService {
 
   async markUploadDeleted(organizationId: string, fileKey: string): Promise<void> {
     try {
-      // Get the file size before marking as deleted
-      const upload = await prisma.upload.findUnique({
-        where: { fileKey },
-        select: { fileSizeBytes: true },
-      });
-
-      if (upload) {
-        // Mark upload as deleted
-        await prisma.upload.update({
+      // Use transaction to ensure both operations succeed or fail together
+      await this.prisma.$transaction(async (tx) => {
+        // Get the file size before marking as deleted
+        const upload = (await tx.upload.findUnique({
           where: { fileKey },
-          data: { status: 'deleted' },
-        });
+          select: { fileSizeBytes: true },
+        })) as { fileSizeBytes: number } | null;
 
-        // Decrement organization storage usage
-        await prisma.organizationUsage.update({
-          where: {
-            organizationId,
-          },
-          data: {
-            storageUsedBytes: {
-              decrement: upload.fileSizeBytes,
+        if (upload) {
+          // Mark upload as deleted
+          await tx.upload.update({
+            where: { fileKey },
+            data: { status: 'deleted' },
+          });
+
+          // Decrement organization storage usage
+          await tx.organizationUsage.update({
+            where: {
+              organizationId,
             },
-          },
-        });
-      }
+            data: {
+              storageUsedBytes: {
+                decrement: upload.fileSizeBytes,
+              },
+            },
+          });
+        }
+      });
     } catch (error) {
-      console.warn(`Failed to mark upload ${fileKey} as deleted:`, error);
+      console.error('Failed to mark upload as deleted:', error);
       throw error;
     }
   }
@@ -231,10 +249,9 @@ export class StorageQuotaService {
    * Example: "245 MB of 1 GB"
    */
   async getStorageUsageString(
-    userId: number,
     subscriptionTier: 'free' | 'pro' | 'enterprise' = 'free',
   ): Promise<string> {
-    const quota = await this.getStorageQuota(userId, subscriptionTier);
+    const quota = await this.getStorageQuota(subscriptionTier);
     return `${this.formatBytes(quota.used)} of ${quota.displayLimit}`;
   }
 }

@@ -11,7 +11,11 @@ import { standardLimiter } from '../middleware/rateLimiter';
 import * as path from 'path';
 
 const router = Router();
-const productService = new ProductService();
+
+// Helper function to get services with organization context
+function getProductServiceForRequest(req: AuthRequest) {
+  return new ProductService(undefined, req.organizationId);
+}
 
 // Configure multer for file uploads - accept CSV, XLSX, and XLS files
 const upload = multer({
@@ -36,8 +40,8 @@ const upload = multer({
 // GET /products - Get all products for the user's organization
 router.get('/', authenticateToken, async (req: AuthRequest, res: Response) => {
   try {
-    // TODO: Phase 7 - Update service to accept organizationId parameter
-    const products = await productService.getAllProducts(); // req.organizationId!
+    const productService = getProductServiceForRequest(req);
+    const products = await productService.getAllProducts();
     res.json(products);
   } catch (_error) {
     // console.error("Get products error:", _error);
@@ -52,6 +56,7 @@ router.get('/:id', authenticateToken, async (req: AuthRequest, res: Response) =>
     if (Number.isNaN(id)) {
       return res.status(400).json({ message: 'Invalid product id' });
     }
+    const productService = getProductServiceForRequest(req);
     const product = await productService.getProductById(id);
 
     if (!product) {
@@ -76,8 +81,8 @@ router.get('/:id', authenticateToken, async (req: AuthRequest, res: Response) =>
 router.get('/by-barcode/:barcode', authenticateToken, async (req: AuthRequest, res: Response) => {
   try {
     const barcode = req.params.barcode;
-    // TODO: Phase 7 - Update service to accept organizationId parameter
-    const product = await productService.getProductByBarcode(barcode); // , req.organizationId!
+    const productService = getProductServiceForRequest(req);
+    const product = await productService.getProductByBarcode(barcode);
 
     if (!product) {
       return res.status(404).json({ message: 'Product not found' });
@@ -94,8 +99,8 @@ router.get('/by-barcode/:barcode', authenticateToken, async (req: AuthRequest, r
 router.get('/by-sku/:sku', authenticateToken, async (req: AuthRequest, res: Response) => {
   try {
     const sku = req.params.sku;
-    // TODO: Phase 7 - Update service to accept organizationId parameter
-    const product = await productService.getProductBySku(sku); // , req.organizationId!
+    const productService = getProductServiceForRequest(req);
+    const product = await productService.getProductBySku(sku);
 
     if (!product) {
       return res.status(404).json({ message: 'Product not found' });
@@ -123,6 +128,7 @@ router.post(
     }
 
     try {
+      const productService = getProductServiceForRequest(req);
       const newProduct = await productService.createProduct({
         barcode,
         sku,
@@ -155,6 +161,7 @@ router.put(
       const { barcode, sku, name, costPrice } = req.body;
 
       // Check if product exists and belongs to user's organization
+      const productService = getProductServiceForRequest(req);
       const existingProduct = await productService.getProductById(id);
       if (!existingProduct) {
         return res.status(404).json({ message: 'Product not found' });
@@ -250,8 +257,8 @@ router.post(
       }
 
       // Process the uploaded file (passing original filename for type detection)
-      // TODO: Phase 7 - Update service to accept organizationId parameter
-      const result = await productService.processCSVUpload(safeFilePath, req.file.originalname); // , req.organizationId!
+      const productService = getProductServiceForRequest(req);
+      const result = await productService.processCSVUpload(safeFilePath, req.file.originalname);
 
       // Send response with processing results and any errors
       const responseObj: any = {

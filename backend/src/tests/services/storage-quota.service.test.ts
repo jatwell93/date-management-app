@@ -13,6 +13,8 @@ jest.mock('../../database/database-factory', () => {
       upsert: jest.fn(),
       update: jest.fn(),
     },
+    $transaction: jest.fn((callback) => callback(mockPrisma)),
+    $executeRaw: jest.fn(),
   };
   return {
     getDefaultDatabaseClient: jest.fn(() => mockPrisma),
@@ -27,7 +29,7 @@ describe('StorageQuotaService', () => {
 
   beforeEach(() => {
     jest.clearAllMocks();
-    service = new StorageQuotaService();
+    service = new StorageQuotaService('test-org');
     mockPrisma = getDefaultDatabaseClient();
   });
 
@@ -48,7 +50,7 @@ describe('StorageQuotaService', () => {
         _sum: { fileSizeBytes: 0 },
       });
 
-      const result = await service.getStorageQuota(userId, 'free');
+      const result = await service.getStorageQuota('free');
 
       expect(result).toMatchObject({
         used: 0,
@@ -67,7 +69,7 @@ describe('StorageQuotaService', () => {
         _sum: { fileSizeBytes: halfGig },
       });
 
-      const result = await service.getStorageQuota(userId, 'free');
+      const result = await service.getStorageQuota('free');
 
       expect(result.used).toBe(halfGig);
       expect(result.percentageUsed).toBeCloseTo(50, 0);
@@ -80,7 +82,7 @@ describe('StorageQuotaService', () => {
         _sum: { fileSizeBytes: justBelow },
       });
 
-      const result = await service.getStorageQuota(userId, 'free');
+      const result = await service.getStorageQuota('free');
 
       expect(result.percentageUsed).toBeLessThan(80);
       expect(result.isWarning).toBe(false);
@@ -93,7 +95,7 @@ describe('StorageQuotaService', () => {
         _sum: { fileSizeBytes: exactly80 },
       });
 
-      const result = await service.getStorageQuota(userId, 'free');
+      const result = await service.getStorageQuota('free');
 
       expect(result.percentageUsed).toBeGreaterThanOrEqual(80);
       expect(result.isWarning).toBe(true);
@@ -105,7 +107,7 @@ describe('StorageQuotaService', () => {
         _sum: { fileSizeBytes: ninety },
       });
 
-      const result = await service.getStorageQuota(userId, 'free');
+      const result = await service.getStorageQuota('free');
 
       expect(result.percentageUsed).toBeCloseTo(90, 0);
       expect(result.isWarning).toBe(true);
@@ -116,7 +118,7 @@ describe('StorageQuotaService', () => {
         _sum: { fileSizeBytes: FREE_TIER_LIMIT },
       });
 
-      const result = await service.getStorageQuota(userId, 'free');
+      const result = await service.getStorageQuota('free');
 
       expect(result.percentageUsed).toBe(100);
       expect(result.used).toBe(result.limit);
@@ -129,7 +131,7 @@ describe('StorageQuotaService', () => {
         _sum: { fileSizeBytes: overQuota },
       });
 
-      const result = await service.getStorageQuota(userId, 'free');
+      const result = await service.getStorageQuota('free');
 
       expect(result.percentageUsed).toBeGreaterThan(100);
       expect(result.isWarning).toBe(true);
@@ -146,7 +148,7 @@ describe('StorageQuotaService', () => {
         _sum: { fileSizeBytes: fiveGig },
       });
 
-      const result = await service.getStorageQuota(userId, 'pro');
+      const result = await service.getStorageQuota('pro');
 
       expect(result.used).toBe(fiveGig);
       expect(result.limit).toBe(PRO_TIER_LIMIT);
@@ -162,7 +164,7 @@ describe('StorageQuotaService', () => {
         _sum: { fileSizeBytes: eightyFivePercent },
       });
 
-      const result = await service.getStorageQuota(userId, 'pro');
+      const result = await service.getStorageQuota('pro');
 
       expect(result.percentageUsed).toBeCloseTo(85, 0);
       expect(result.isWarning).toBe(true);
@@ -175,7 +177,7 @@ describe('StorageQuotaService', () => {
         _sum: { fileSizeBytes: exactly80 },
       });
 
-      const result = await service.getStorageQuota(userId, 'pro');
+      const result = await service.getStorageQuota('pro');
 
       expect(result.percentageUsed).toBeGreaterThanOrEqual(80);
       expect(result.isWarning).toBe(true);
@@ -187,7 +189,7 @@ describe('StorageQuotaService', () => {
         _sum: { fileSizeBytes: ninePointFiveGig },
       });
 
-      const result = await service.getStorageQuota(userId, 'pro');
+      const result = await service.getStorageQuota('pro');
 
       expect(result.percentageUsed).toBeCloseTo(95, 0);
       expect(result.isWarning).toBe(true);
@@ -204,7 +206,7 @@ describe('StorageQuotaService', () => {
         _sum: { fileSizeBytes: fiveHundredGig },
       });
 
-      const result = await service.getStorageQuota(userId, 'enterprise');
+      const result = await service.getStorageQuota('enterprise');
 
       expect(result.used).toBe(fiveHundredGig);
       expect(result.limit).toBe(ENTERPRISE_LIMIT);
@@ -221,7 +223,7 @@ describe('StorageQuotaService', () => {
         _sum: { fileSizeBytes: exactly80 },
       });
 
-      const result = await service.getStorageQuota(userId, 'enterprise');
+      const result = await service.getStorageQuota('enterprise');
 
       expect(result.percentageUsed).toBeGreaterThanOrEqual(80);
       expect(result.isWarning).toBe(true);
@@ -233,7 +235,7 @@ describe('StorageQuotaService', () => {
         _sum: { fileSizeBytes: nineHundredFiftyGig },
       });
 
-      const result = await service.getStorageQuota(userId, 'enterprise');
+      const result = await service.getStorageQuota('enterprise');
 
       expect(result.percentageUsed).toBeCloseTo(95, 0);
       expect(result.isWarning).toBe(true);
@@ -250,7 +252,7 @@ describe('StorageQuotaService', () => {
         _sum: { fileSizeBytes: currentUsage },
       });
 
-      const canUpload = await service.canUploadFile(userId, fileSize, 'free');
+      const canUpload = await service.canUploadFile(fileSize, 'free');
 
       expect(canUpload).toBe(true);
     });
@@ -262,7 +264,7 @@ describe('StorageQuotaService', () => {
         _sum: { fileSizeBytes: currentUsage },
       });
 
-      const canUpload = await service.canUploadFile(userId, fileSize, 'free');
+      const canUpload = await service.canUploadFile(fileSize, 'free');
 
       expect(canUpload).toBe(false);
     });
@@ -275,7 +277,7 @@ describe('StorageQuotaService', () => {
         _sum: { fileSizeBytes: currentUsage },
       });
 
-      const canUpload = await service.canUploadFile(userId, fileSize, 'free');
+      const canUpload = await service.canUploadFile(fileSize, 'free');
 
       expect(canUpload).toBe(true);
     });
@@ -288,7 +290,7 @@ describe('StorageQuotaService', () => {
         _sum: { fileSizeBytes: currentUsage },
       });
 
-      const canUpload = await service.canUploadFile(userId, fileSize, 'free');
+      const canUpload = await service.canUploadFile(fileSize, 'free');
 
       expect(canUpload).toBe(false);
     });
@@ -300,7 +302,7 @@ describe('StorageQuotaService', () => {
         _sum: { fileSizeBytes: currentUsage },
       });
 
-      const canUpload = await service.canUploadFile(userId, fileSize, 'pro');
+      const canUpload = await service.canUploadFile(fileSize, 'pro');
 
       expect(canUpload).toBe(true); // 2GB + 5GB = 7GB < 10GB limit
     });
@@ -312,7 +314,7 @@ describe('StorageQuotaService', () => {
         _sum: { fileSizeBytes: currentUsage },
       });
 
-      const canUpload = await service.canUploadFile(userId, fileSize, 'enterprise');
+      const canUpload = await service.canUploadFile(fileSize, 'enterprise');
 
       expect(canUpload).toBe(true); // 100GB + 500GB = 600GB < 1TB limit
     });
@@ -435,7 +437,7 @@ describe('StorageQuotaService', () => {
         _sum: { fileSizeBytes: usage },
       });
 
-      const result = await service.getStorageUsageString(userId, 'free');
+      const result = await service.getStorageUsageString('free');
 
       expect(result).toMatch(/^245 MB of 1 GB$/);
     });
@@ -447,7 +449,7 @@ describe('StorageQuotaService', () => {
         _sum: { fileSizeBytes: usage },
       });
 
-      const result = await service.getStorageUsageString(userId, 'pro');
+      const result = await service.getStorageUsageString('pro');
 
       expect(result).toMatch(/^7\.5 GB of 10 GB$/);
     });
@@ -459,7 +461,7 @@ describe('StorageQuotaService', () => {
         _sum: { fileSizeBytes: null },
       });
 
-      const result = await service.getStorageQuota(1, 'free');
+      const result = await service.getStorageQuota('free');
 
       expect(result.used).toBe(0);
       expect(result.percentageUsed).toBe(0);
@@ -470,7 +472,7 @@ describe('StorageQuotaService', () => {
         _sum: { fileSizeBytes: 0 },
       });
 
-      await expect(service.getStorageQuota(1, 'invalid' as any)).rejects.toThrow(
+      await expect(service.getStorageQuota('invalid' as any)).rejects.toThrow(
         'Invalid subscription tier: invalid',
       );
     });
@@ -478,7 +480,7 @@ describe('StorageQuotaService', () => {
     it('should handle database errors in calculateUserStorageUsage', async () => {
       mockPrisma.upload.aggregate.mockRejectedValue(new Error('Connection lost'));
 
-      const result = await service.getStorageQuota(1, 'free');
+      const result = await service.getStorageQuota('free');
 
       // Should return 0 usage on error (graceful degradation)
       expect(result.used).toBe(0);
@@ -491,7 +493,7 @@ describe('StorageQuotaService', () => {
         _sum: { fileSizeBytes: usage },
       });
 
-      const result = await service.getStorageQuota(1, 'free');
+      const result = await service.getStorageQuota('free');
 
       // Should round to 87.6, not include more decimals
       expect(result.percentageUsed.toString()).toMatch(/^\d+\.\d$/);
@@ -511,7 +513,7 @@ describe('StorageQuotaService', () => {
           _sum: { fileSizeBytes: usage },
         });
 
-        const result = await service.getStorageQuota(1, tier);
+        const result = await service.getStorageQuota(tier);
 
         expect(result.isWarning).toBe(true);
         expect(result.warningThreshold).toBe(80);
@@ -529,7 +531,7 @@ describe('StorageQuotaService', () => {
           _sum: { fileSizeBytes: usage },
         });
 
-        const result = await service.getStorageQuota(1, tier);
+        const result = await service.getStorageQuota(tier);
 
         expect(result.isWarning).toBe(false);
       }

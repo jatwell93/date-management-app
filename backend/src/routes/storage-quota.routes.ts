@@ -9,8 +9,10 @@ import { AuthRequest } from '../middleware/auth.middleware';
 
 const router = Router();
 
-// Initialize storage quota service
-const storageQuotaService = new StorageQuotaService();
+// Helper function to get services with organization context
+function getStorageQuotaServiceForRequest(req: AuthRequest) {
+  return new StorageQuotaService(req.organizationId);
+}
 
 /**
  * GET /api/storage-quota/:userId
@@ -81,10 +83,8 @@ router.get('/:userId', async (req: AuthRequest, res: Response): Promise<void> =>
     }
 
     // Get storage quota information
-    const quota = await storageQuotaService.getStorageQuota(
-      userIdNum,
-      tier as 'free' | 'pro' | 'enterprise',
-    );
+    const storageQuotaService = getStorageQuotaServiceForRequest(req);
+    const quota = await storageQuotaService.getStorageQuota(tier as 'free' | 'pro' | 'enterprise');
 
     res.status(200).json(quota);
   } catch (error) {
@@ -169,8 +169,8 @@ router.get('/:userId/can-upload', async (req: AuthRequest, res: Response): Promi
     }
 
     // Check if user can upload
+    const storageQuotaService = getStorageQuotaServiceForRequest(req);
     const canUpload = await storageQuotaService.canUploadFile(
-      userIdNum,
       fileSizeBytes,
       tier as 'free' | 'pro' | 'enterprise',
     );
@@ -181,7 +181,6 @@ router.get('/:userId/can-upload', async (req: AuthRequest, res: Response): Promi
       });
     } else {
       const quota = await storageQuotaService.getStorageQuota(
-        userIdNum,
         tier as 'free' | 'pro' | 'enterprise',
       );
 
