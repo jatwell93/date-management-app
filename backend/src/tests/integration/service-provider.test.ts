@@ -61,7 +61,7 @@ describe('ServiceProvider Integration Tests', () => {
     } as any;
 
     mockStorage = new MockStorageProvider();
-    serviceProvider = new ServiceProvider(mockPrisma, mockStorage);
+    serviceProvider = ServiceProvider.withClients(mockPrisma, mockStorage);
   });
 
   afterEach(async () => {
@@ -163,7 +163,7 @@ describe('ServiceProvider Integration Tests', () => {
   describe('Custom Dependencies (Test Injection)', () => {
     it('should accept custom Prisma client for testing', () => {
       const customPrisma = {} as PrismaClient;
-      const customProvider = new ServiceProvider(customPrisma);
+      const customProvider = ServiceProvider.withClients(customPrisma);
 
       const authService = customProvider.getAuthService();
       expect(authService).toBeDefined();
@@ -171,7 +171,7 @@ describe('ServiceProvider Integration Tests', () => {
 
     it('should accept custom storage provider for testing', () => {
       const customStorage = new MockStorageProvider();
-      const customProvider = new ServiceProvider(undefined, customStorage);
+      const customProvider = new ServiceProvider({ storageProvider: customStorage });
 
       const uploadService = customProvider.getUploadService();
       expect(uploadService).toBeDefined();
@@ -180,7 +180,7 @@ describe('ServiceProvider Integration Tests', () => {
     it('should support full mock injection for isolated testing', () => {
       const customPrisma = {} as PrismaClient;
       const customStorage = new MockStorageProvider();
-      const customProvider = new ServiceProvider(customPrisma, customStorage);
+      const customProvider = ServiceProvider.withClients(customPrisma, customStorage);
 
       expect(customProvider.getAuthService()).toBeDefined();
       expect(customProvider.getUserService()).toBeDefined();

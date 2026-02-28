@@ -122,7 +122,7 @@ export const authenticateToken = async (req: AuthRequest, res: Response, next: N
       const prisma = getDefaultDatabaseClient();
 
       const user = await prisma.user.findUnique({
-        where: { clerkUserId: clerkDecoded.sub },
+        where: { clerkUserId: clerkDecoded.sub, deletedAt: null },
         select: {
           id: true,
           role: true,
@@ -130,7 +130,8 @@ export const authenticateToken = async (req: AuthRequest, res: Response, next: N
         },
       });
 
-      if (!user?.organizationId) {
+      // Exclude soft-deleted users
+      if (!user || user.organizationId === null) {
         return null;
       }
 

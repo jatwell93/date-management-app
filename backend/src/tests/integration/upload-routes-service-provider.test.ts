@@ -129,7 +129,7 @@ describe('Upload Routes with ServiceProvider Integration', () => {
     testStorage = new TestStorageProvider();
 
     // Create service provider with test dependencies
-    serviceProvider = new ServiceProvider(mockPrisma, testStorage);
+    serviceProvider = ServiceProvider.withClients(mockPrisma, testStorage);
 
     // Create Express app with upload routes
     app = express();

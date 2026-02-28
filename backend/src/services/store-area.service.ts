@@ -1,7 +1,7 @@
 import { PrismaClient } from '@prisma/client';
 import { getDefaultDatabaseClient } from '../database/database-factory';
 import { StoreArea } from '../models/store-area.model';
-import { TEST_AUTH_BYPASS_ORG_ID } from '../middleware/auth.middleware';
+import { getOrganizationId } from '../utils/auth-bypass';
 
 export class StoreAreaService {
   private prisma: PrismaClient;
@@ -13,7 +13,7 @@ export class StoreAreaService {
    * @param prismaClient - Optional PrismaClient for testing/custom configurations
    */
   constructor(organizationId?: string, prismaClient?: PrismaClient) {
-    this.organizationId = organizationId ?? TEST_AUTH_BYPASS_ORG_ID;
+    this.organizationId = getOrganizationId(organizationId);
     this.prisma = prismaClient ?? getDefaultDatabaseClient();
   }
 
@@ -26,7 +26,7 @@ export class StoreAreaService {
   }
 
   async getStoreAreaById(id: number): Promise<StoreArea | null> {
-    const result = await this.prisma.storeArea.findUnique({
+    const result = await this.prisma.storeArea.findFirst({
       where: { id, organizationId: this.organizationId },
     });
     return result ? this.mapPrismaToModel(result) : null;

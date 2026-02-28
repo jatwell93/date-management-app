@@ -1,5 +1,5 @@
 import { getDefaultDatabaseClient } from '../database/database-factory';
-import { TEST_AUTH_BYPASS_ORG_ID } from '../middleware/auth.middleware';
+import { getOrganizationId } from '../utils/auth-bypass';
 
 /**
  * Subscription tier configuration
@@ -53,7 +53,7 @@ export class StorageQuotaService {
   private organizationId: string;
 
   constructor(organizationId?: string) {
-    this.organizationId = organizationId ?? TEST_AUTH_BYPASS_ORG_ID;
+    this.organizationId = getOrganizationId(organizationId);
   }
 
   /**

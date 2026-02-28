@@ -1,6 +1,6 @@
 import { PrismaClient } from '@prisma/client';
 import { getDefaultDatabaseClient } from '../database/database-factory';
-import { TEST_AUTH_BYPASS_ORG_ID } from '../middleware/auth.middleware';
+import { getOrganizationId } from '../utils/auth-bypass';
 import { Product } from '../models/product.model';
 import { parse } from 'csv-parse';
 import * as XLSX from 'xlsx';
@@ -237,7 +237,7 @@ export class ProductService {
    */
   constructor(prismaClient?: PrismaClient, organizationId?: string) {
     this.prisma = prismaClient ?? getDefaultDatabaseClient();
-    this.organizationId = organizationId ?? TEST_AUTH_BYPASS_ORG_ID;
+    this.organizationId = getOrganizationId(organizationId);
   }
 
   // Expose parser for tests that reference it via ProductService["extractCostValueEnhanced"]

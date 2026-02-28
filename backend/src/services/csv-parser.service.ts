@@ -21,7 +21,7 @@ import { parse } from 'csv-parse';
 import * as fs from 'fs';
 import { getDefaultDatabaseClient } from '../database/database-factory';
 import { Logger } from '../utils/logger';
-import { TEST_AUTH_BYPASS_ORG_ID } from '../middleware/auth.middleware';
+import { getOrganizationId } from '../utils/auth-bypass';
 
 // ============================================================================
 // Types & Interfaces
@@ -157,7 +157,7 @@ export class CSVParserService extends EventEmitter {
   constructor(prismaClient?: PrismaClient, options: CSVParserOptions = {}) {
     super();
     this.prisma = prismaClient ?? getDefaultDatabaseClient();
-    this.organizationId = options.organizationId ?? TEST_AUTH_BYPASS_ORG_ID;
+    this.organizationId = options.organizationId ?? getOrganizationId();
     this.options = {
       batchSize: options.batchSize ?? 100,
       progressInterval: options.progressInterval ?? 1000,

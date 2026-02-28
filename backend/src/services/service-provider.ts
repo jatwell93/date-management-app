@@ -11,7 +11,13 @@ import { StorageQuotaService } from './storage-quota.service';
 import { UploadService } from './upload.service';
 import { UserService } from './user.service';
 import { SubscriptionService } from './subscription.service';
-import { TEST_AUTH_BYPASS_ORG_ID } from '../middleware/auth.middleware';
+import { getOrganizationId, TEST_AUTH_BYPASS_ORG_ID } from '../utils/auth-bypass';
+
+export interface ServiceProviderConfig {
+  organizationId?: string;
+  prisma?: PrismaClient;
+  storageProvider?: StorageProvider;
+}
 
 export class ServiceProvider {
   private prisma: PrismaClient;
@@ -27,23 +33,24 @@ export class ServiceProvider {
   private reportService?: ReportService;
   private subscriptionService?: SubscriptionService;
 
-  constructor(
-    organizationIdOrPrisma?: string | PrismaClient,
-    prismaOrStorageProvider?: PrismaClient | StorageProvider,
-    storageProviderArg?: StorageProvider,
-  ) {
-    if (typeof organizationIdOrPrisma === 'string') {
-      this.organizationId = organizationIdOrPrisma;
-      this.prisma =
-        (prismaOrStorageProvider as PrismaClient | undefined) ?? getDefaultDatabaseClient();
-      this.storageProvider = storageProviderArg ?? getDefaultStorageProvider();
-    } else {
-      this.organizationId = TEST_AUTH_BYPASS_ORG_ID;
-      this.prisma = organizationIdOrPrisma ?? getDefaultDatabaseClient();
-      this.storageProvider =
-        (prismaOrStorageProvider as StorageProvider | undefined) ?? getDefaultStorageProvider();
-    }
+  constructor(config: ServiceProviderConfig = {}) {
+    this.organizationId = getOrganizationId(config.organizationId);
+    this.prisma = config.prisma ?? getDefaultDatabaseClient();
+    this.storageProvider = config.storageProvider ?? getDefaultStorageProvider();
     this.db = getDb();
+  }
+
+  // Factory methods for common patterns
+  static forOrganization(organizationId: string, config?: Omit<ServiceProviderConfig, 'organizationId'>): ServiceProvider {
+    return new ServiceProvider({ ...config, organizationId });
+  }
+
+  static forTesting(config?: ServiceProviderConfig): ServiceProvider {
+    return new ServiceProvider({ organizationId: TEST_AUTH_BYPASS_ORG_ID, ...config });
+  }
+
+  static withClients(prisma: PrismaClient, storageProvider?: StorageProvider, config?: Omit<ServiceProviderConfig, 'prisma' | 'storageProvider'>): ServiceProvider {
+    return new ServiceProvider({ prisma, storageProvider, ...config });
   }
 
   getAuthService(): AuthService {

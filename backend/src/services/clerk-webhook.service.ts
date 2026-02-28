@@ -336,9 +336,22 @@ export class ClerkWebhookService {
         return;
       }
 
-      // Delete user when removed from organization (organizationId is now non-nullable)
-      await this.prisma.user.deleteMany({
-        where: { clerkUserId, organization: { clerkOrganizationId: clerkOrgId } },
+      // Soft delete user when removed from organization (preserve audit history)
+      // First find the organization by clerkOrganizationId
+      const org = await this.prisma.organization.findUnique({
+        where: { clerkOrganizationId: clerkOrgId },
+        select: { id: true },
+      });
+
+      if (!org) {
+        log.error('Organization not found for clerk org id', { clerkOrgId });
+        return;
+      }
+
+      // Now update user directly using organizationId
+      await this.prisma.user.updateMany({
+        where: { clerkUserId, organizationId: org.id },
+        data: { deletedAt: new Date() },
       });
 
       log.info('User unlinked from organization', { clerkUserId, clerkOrgId });

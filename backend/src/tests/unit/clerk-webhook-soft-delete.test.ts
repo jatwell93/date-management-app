@@ -1,0 +1,121 @@
+import { PrismaClient } from '@prisma/client';
+import { ClerkWebhookService } from '../clerk-webhook.service';
+
+describe('ClerkWebhookService - Soft Delete', () => {
+  let prisma: PrismaClient;
+  let service: ClerkWebhookService;
+  let orgId: string;
+  let userId: number;
+
+  beforeEach(async () => {
+    prisma = new PrismaClient({
+      datasources: {
+        db: {
+          url: process.env.DATABASE_URL || 'file:./test.db',
+        },
+      },
+    });
+
+    service = new ClerkWebhookService(prisma);
+
+    // Create test organization
+    const org = await prisma.organization.create({
+      data: {
+        id: `org-${Date.now()}`,
+        name: 'Test Org',
+        slug: `test-org-${Date.now()}`,
+        contactEmail: 'test@example.com',
+      },
+    });
+    orgId = org.id;
+
+    // Create test user
+    const user = await prisma.user.create({
+      data: {
+        clerkUserId: `user_${Date.now()}`,
+        email: 'test@example.com',
+        username: 'testuser',
+        role: 'user',
+        organizationId: orgId,
+      },
+    });
+    userId = user.id;
+  });
+
+  afterEach(async () => {
+    // Clean up
+    await prisma.user.deleteMany({
+      where: { organizationId: orgId },
+    });
+    await prisma.organization.deleteMany({
+      where: { id: orgId },
+    });
+    await prisma.$disconnect();
+  });
+
+  it('should soft delete user instead of hard delete', async () => {
+    const mockData = {
+      type: 'organizationMembership.deleted',
+      data: {
+        public_user_data: {
+          user_id: `user_${Date.now()}`,
+        },
+        organization: {
+          id: orgId,
+        },
+      },
+    };
+
+    // Update the user to match the mock data
+    await prisma.user.update({
+      where: { id: userId },
+      data: { clerkUserId: mockData.data.public_user_data.user_id },
+    });
+
+    // Call the webhook handler
+    await service.handleOrganizationMembershipDeleted(mockData);
+
+    // Verify user is soft deleted (not actually deleted)
+    const deletedUser = await prisma.user.findFirst({
+      where: {
+        clerkUserId: mockData.data.public_user_data.user_id,
+        organizationId: orgId,
+      },
+    });
+
+    expect(deletedUser).not.toBeNull();
+    expect(deletedUser?.deletedAt).not.toBeNull();
+    expect(deletedUser?.deletedAt).toBeInstanceOf(Date);
+  });
+
+  it('should preserve audit logs after user soft delete', async () => {
+    // Create an audit log for the user
+    await prisma.auditLog.create({
+      data: {
+        organizationId: orgId,
+        userId: userId,
+        action: 'inventory_changed',
+        changeDescription: 'Test audit log',
+      },
+    });
+
+    const auditLogBefore = await prisma.auditLog.findFirst({
+      where: { userId: userId },
+    });
+    expect(auditLogBefore).not.toBeNull();
+
+    // Soft delete the user
+    await prisma.user.update({
+      where: { id: userId },
+      data: { deletedAt: new Date() },
+    });
+
+    // Verify audit log still exists but user reference is null
+    const auditLogAfter = await prisma.auditLog.findFirst({
+      where: { id: auditLogBefore!.id },
+    });
+
+    expect(auditLogAfter).not.toBeNull();
+    expect(auditLogAfter?.userId).toBeNull(); // Should be null due to SET NULL
+  });
+});

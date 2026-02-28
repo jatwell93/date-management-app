@@ -2,11 +2,18 @@ import { PrismaClient } from '@prisma/client';
 import { getDefaultDatabaseClient } from '../database/database-factory';
 import { InventoryItem } from '../models/inventory-item.model';
 import { ItemTransaction } from '../models/item-transaction.model';
-import { TEST_AUTH_BYPASS_ORG_ID } from '../middleware/auth.middleware';
+import { getOrganizationId } from '../utils/auth-bypass';
 
 export class InventoryService {
   private prisma: PrismaClient;
   private organizationId: string;
+
+  // Markdown thresholds in days
+  private static readonly MARKDOWN_THRESHOLDS = {
+    markdown3: 7,   // Within 1 week: cost price - 20%
+    markdown2: 14,  // Within 2 weeks: cost price
+    markdown1: 30,  // Within 1 month: cost price + 20%
+  } as const;
 
   /**
    * Constructor with optional dependency injection
@@ -14,7 +21,7 @@ export class InventoryService {
    * @param prismaClient - Optional PrismaClient for testing/custom configurations
    */
   constructor(organizationId?: string, prismaClient?: PrismaClient) {
-    this.organizationId = organizationId ?? TEST_AUTH_BYPASS_ORG_ID;
+    this.organizationId = getOrganizationId(organizationId);
     this.prisma = prismaClient ?? getDefaultDatabaseClient();
   }
 
@@ -24,9 +31,7 @@ export class InventoryService {
   async getAllInventoryItems(): Promise<InventoryItem[]> {
     const items = await this.prisma.inventoryItem.findMany({
       where: {
-        product: {
-          organizationId: this.organizationId,
-        },
+        organizationId: this.organizationId,
       },
     });
     return items.map(this.mapPrismaToModel);
@@ -39,9 +44,7 @@ export class InventoryService {
     const item = await this.prisma.inventoryItem.findFirst({
       where: {
         id,
-        product: {
-          organizationId: this.organizationId,
-        },
+        organizationId: this.organizationId,
       },
     });
     return item ? this.mapPrismaToModel(item) : null;
@@ -54,9 +57,7 @@ export class InventoryService {
     const items = await this.prisma.inventoryItem.findMany({
       where: {
         productId,
-        product: {
-          organizationId: this.organizationId,
-        },
+        organizationId: this.organizationId,
       },
     });
     return items.map(this.mapPrismaToModel);
@@ -72,9 +73,7 @@ export class InventoryService {
     const items = await this.prisma.inventoryItem.findMany({
       where: {
         productId,
-        product: {
-          organizationId: this.organizationId,
-        },
+        organizationId: this.organizationId,
       },
       orderBy: { createdAt: 'desc' },
       take: limit,
@@ -89,9 +88,7 @@ export class InventoryService {
     const items = await this.prisma.inventoryItem.findMany({
       where: {
         locationId,
-        product: {
-          organizationId: this.organizationId,
-        },
+        organizationId: this.organizationId,
       },
     });
     return items.map(this.mapPrismaToModel);
@@ -242,6 +239,15 @@ export class InventoryService {
   calculateMarkdownStatusSync(
     expiryDate: string,
   ): 'Normal' | 'Markdown 1' | 'Markdown 2' | 'Markdown 3' | 'Expired' {
+    return this.calculateMarkdownStatusInternal(expiryDate);
+  }
+
+  /**
+   * Internal shared implementation for markdown calculations
+   */
+  private calculateMarkdownStatusInternal(
+    expiryDate: string,
+  ): 'Normal' | 'Markdown 1' | 'Markdown 2' | 'Markdown 3' | 'Expired' {
     if (!expiryDate) {
       return 'Normal';
     }
@@ -256,13 +262,13 @@ export class InventoryService {
 
     // Apply markdown rules based on days difference (from feature requirements)
     // Note: These are simple examples. Real logic might be more complex.
-    if (daysDiff <= 7) {
+    if (daysDiff <= InventoryService.MARKDOWN_THRESHOLDS.markdown3) {
       // Within 1 week from expiry: cost price - 20% (Markdown 3)
       return 'Markdown 3';
-    } else if (daysDiff <= 14) {
+    } else if (daysDiff <= InventoryService.MARKDOWN_THRESHOLDS.markdown2) {
       // Within 2 weeks from expiry: cost price (Markdown 2)
       return 'Markdown 2';
-    } else if (daysDiff <= 30) {
+    } else if (daysDiff <= InventoryService.MARKDOWN_THRESHOLDS.markdown1) {
       // Within 1 month from expiry: cost price + 20% (Markdown 1)
       return 'Markdown 1';
     } else {
@@ -281,31 +287,7 @@ export class InventoryService {
       throw new Error('Inventory item not found or does not belong to this organization');
     }
 
-    const now = new Date();
-    const expiry = new Date(expiryDate);
-    const daysDiff = Math.ceil((expiry.getTime() - now.getTime()) / (1000 * 60 * 60 * 24));
-
-    let status: 'Normal' | 'Markdown 1' | 'Markdown 2' | 'Markdown 3' | 'Expired' = 'Normal';
-
-    if (daysDiff <= 0) {
-      status = 'Expired';
-    } else {
-      // Apply markdown rules based on days difference (from feature requirements)
-      // Note: These are simple examples. Real logic might be more complex.
-      if (daysDiff <= 7) {
-        // Within 1 week from expiry: cost price - 20% (Markdown 3)
-        status = 'Markdown 3';
-      } else if (daysDiff <= 14) {
-        // Within 2 weeks from expiry: cost price (Markdown 2)
-        status = 'Markdown 2';
-      } else if (daysDiff <= 30) {
-        // Within 1 month from expiry: cost price + 20% (Markdown 1)
-        status = 'Markdown 1';
-      } else {
-        // More than 1 month from expiry: Normal (no markdown)
-        status = 'Normal';
-      }
-    }
+    const status = this.calculateMarkdownStatusInternal(expiryDate);
 
     // Update the inventory item's status in the database
     await this.prisma.inventoryItem.update({
@@ -320,33 +302,7 @@ export class InventoryService {
   async calculateMarkdownStatus(
     expiryDate: string,
   ): Promise<'Normal' | 'Markdown 1' | 'Markdown 2' | 'Markdown 3' | 'Expired'> {
-    if (!expiryDate) {
-      return 'Normal';
-    }
-
-    const now = new Date();
-    const expiry = new Date(expiryDate);
-    const daysDiff = Math.ceil((expiry.getTime() - now.getTime()) / (1000 * 60 * 60 * 24));
-
-    if (daysDiff <= 0) {
-      return 'Expired';
-    }
-
-    // Apply markdown rules based on days difference (from feature requirements)
-    // Note: These are simple examples. Real logic might be more complex.
-    if (daysDiff <= 30) {
-      // Within 1 month from expiry: cost price - 20% (Markdown 3)
-      return 'Markdown 3';
-    } else if (daysDiff <= 60) {
-      // Within 2 months from expiry: cost price (Markdown 2)
-      return 'Markdown 2';
-    } else if (daysDiff <= 90) {
-      // Within 3 months from expiry: cost price + 20% (Markdown 1)
-      return 'Markdown 1';
-    } else {
-      // More than 3 months from expiry: Normal (no markdown)
-      return 'Normal';
-    }
+    return this.calculateMarkdownStatusInternal(expiryDate);
   }
 
   /**
