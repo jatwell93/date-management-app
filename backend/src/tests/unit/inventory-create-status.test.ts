@@ -63,6 +63,19 @@ describe('InventoryService - createInventoryItem Status Handling', () => {
     });
     locationId = location.id;
 
+    // Create organization usage record
+    await prisma.organizationUsage.create({
+      data: {
+        organizationId: orgId,
+        activeUsers: 0,
+        maxUsers: 10,
+        totalSkus: 0,
+        maxSkus: 1000,
+        totalInventoryItems: 0,
+        storageUsedBytes: 0,
+      },
+    });
+
     service = new InventoryService(orgId, prisma);
   });
 
@@ -78,6 +91,9 @@ describe('InventoryService - createInventoryItem Status Handling', () => {
       where: { organizationId: orgId },
     });
     await prisma.user.deleteMany({
+      where: { organizationId: orgId },
+    });
+    await prisma.organizationUsage.deleteMany({
       where: { organizationId: orgId },
     });
     await prisma.organization.deleteMany({

@@ -47,7 +47,9 @@ describe('Auth Bypass Safety', () => {
     it('should throw error in production without organizationId', () => {
       process.env.NODE_ENV = 'production';
       process.env.TEST_AUTH_BYPASS = 'false';
-      expect(() => getOrganizationId()).toThrow('Organization ID is required in production environments');
+      expect(() => getOrganizationId()).toThrow(
+        'Organization ID is required in production environments',
+      );
     });
   });
 
@@ -67,7 +69,9 @@ describe('Auth Bypass Safety', () => {
     it('should throw error in production without organizationId', () => {
       process.env.NODE_ENV = 'production';
       process.env.TEST_AUTH_BYPASS = 'false';
-      expect(() => new InventoryService()).toThrow('Organization ID is required in production environments');
+      expect(() => new InventoryService()).toThrow(
+        'Organization ID is required in production environments',
+      );
     });
   });
 });

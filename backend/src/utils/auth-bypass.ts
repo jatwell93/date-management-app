@@ -19,10 +19,10 @@ export const getOrganizationId = (organizationId?: string): string => {
   if (organizationId) {
     return organizationId;
   }
-  
+
   if (isTestEnvironment()) {
     return TEST_AUTH_BYPASS_ORG_ID;
   }
-  
+
   throw new Error('Organization ID is required in production environments');
 };

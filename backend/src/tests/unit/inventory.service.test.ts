@@ -31,6 +31,10 @@ describe('InventoryService', () => {
       itemTransaction: {
         create: jest.fn(),
       },
+      organizationUsage: {
+        update: jest.fn(),
+        findUnique: jest.fn(),
+      },
       $transaction: jest.fn((callback) => callback(mockPrisma)),
     };
     inventoryService = new InventoryService(organizationId, mockPrisma as unknown as PrismaClient);
@@ -64,6 +68,7 @@ describe('InventoryService', () => {
       mockPrisma.inventoryItem.findFirst.mockResolvedValue(null); // No existing item
       mockPrisma.inventoryItem.create.mockResolvedValue(mockCreatedItem);
       mockPrisma.user.findFirst.mockResolvedValue({ id: 1, organizationId });
+      mockPrisma.organizationUsage.update.mockResolvedValue({});
 
       const createdItem = await inventoryService.createInventoryItem(newItemData as any, 1);
 
@@ -89,6 +94,10 @@ describe('InventoryService', () => {
           locationId: 1,
           status: 'Normal',
         },
+      });
+      expect(mockPrisma.organizationUsage.update).toHaveBeenCalledWith({
+        where: { organizationId },
+        data: { totalInventoryItems: { increment: 1 } },
       });
       expect(mockPrisma.auditLog.create).toHaveBeenCalledWith({
         data: {
@@ -331,7 +340,13 @@ describe('InventoryService', () => {
 
       mockPrisma.inventoryItem.findFirst.mockResolvedValue(mockItem);
       mockPrisma.user.findFirst.mockResolvedValue({ id: 1, organizationId });
+      mockPrisma.auditLog.create.mockResolvedValue({});
       mockPrisma.inventoryItem.delete.mockResolvedValue(mockItem);
+      mockPrisma.organizationUsage.findUnique.mockResolvedValue({
+        organizationId,
+        totalInventoryItems: 10,
+      });
+      mockPrisma.organizationUsage.update.mockResolvedValue({});
 
       const result = await inventoryService.deleteInventoryItem(1, 1);
 
@@ -353,6 +368,10 @@ describe('InventoryService', () => {
       });
       expect(mockPrisma.inventoryItem.delete).toHaveBeenCalledWith({
         where: { id: 1 },
+      });
+      expect(mockPrisma.organizationUsage.update).toHaveBeenCalledWith({
+        where: { organizationId },
+        data: { totalInventoryItems: { decrement: 1 } },
       });
     });
 

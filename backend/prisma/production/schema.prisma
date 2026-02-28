@@ -100,15 +100,17 @@ model TierFeatureFlag {
 }
 
 model OrganizationUsage {
-  id                Int     @id @default(autoincrement())
-  organizationId    String  @map("organization_id")
-  activeUsers       Int     @default(0) @map("active_users")
-  maxUsers          Int     @map("max_users")
-  totalSkus         Int     @default(0) @map("total_skus")
-  maxSkus           Int     @map("max_skus")
-  storageUsedBytes  Int     @default(0) @map("storage_used_bytes")
-  createdAt         DateTime @default(now()) @map("created_at")
-  updatedAt         DateTime @updatedAt @map("updated_at")
+  id                  Int     @id @default(autoincrement())
+  organizationId      String  @map("organization_id")
+  activeUsers         Int     @default(0) @map("active_users")
+  maxUsers            Int     @map("max_users")
+  totalSkus           Int     @default(0) @map("total_skus")
+  maxSkus             Int     @map("max_skus")
+  totalInventoryItems Int     @default(0) @map("total_inventory_items")
+  maxInventoryItems   Int?    @map("max_inventory_items")
+  storageUsedBytes    Int     @default(0) @map("storage_used_bytes")
+  createdAt           DateTime @default(now()) @map("created_at")
+  updatedAt           DateTime @updatedAt @map("updated_at")
 
   // Relations
   organization Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)

@@ -21,7 +21,7 @@ describe('StoreAreaService - findUnique fix', () => {
     // Create test organizations
     org1Id = 'org-1';
     org2Id = 'org-2';
-    
+
     try {
       await prisma.organization.create({
         data: { id: org1Id, name: 'Org 1', slug: 'org-1' },
@@ -29,7 +29,7 @@ describe('StoreAreaService - findUnique fix', () => {
     } catch (e) {
       // Ignore if already exists
     }
-    
+
     try {
       await prisma.organization.create({
         data: { id: org2Id, name: 'Org 2', slug: 'org-2' },

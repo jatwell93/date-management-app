@@ -41,7 +41,7 @@ async function main() {
       where: { organizationId: null },
       data: { organizationId: DEFAULT_ORG_ID },
     });
-    
+
     if (count.count > 0) {
       console.log(`✅ Updated ${count.count} ${table.name}(s)`);
     }
@@ -50,12 +50,12 @@ async function main() {
   // Verify no NULL values remain
   console.log('\n🔍 Verifying no NULL values remain...');
   let hasNulls = false;
-  
+
   for (const table of tables) {
     const nullCount = await table.model.count({
       where: { organizationId: null },
     });
-    
+
     if (nullCount > 0) {
       console.log(`❌ ${table.name} still has ${nullCount} NULL organizationId values`);
       hasNulls = true;

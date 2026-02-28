@@ -1,0 +1,3 @@
+# Prisma configuration for the IDE
+# This tells the Prisma language server to only use the main schema file
+schema-path = "./prisma/schema.prisma"

@@ -24,7 +24,7 @@ describe('InventoryService - Tenant Filtering Optimization', () => {
     // Create two test organizations
     org1Id = `org1-${Date.now()}`;
     org2Id = `org2-${Date.now()}`;
-    
+
     await prisma.organization.createMany({
       data: [
         { id: org1Id, name: 'Org 1', slug: `org1-${Date.now()}`, contactEmail: 'org1@test.com' },

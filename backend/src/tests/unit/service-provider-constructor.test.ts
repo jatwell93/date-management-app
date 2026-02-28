@@ -67,11 +67,11 @@ describe('ServiceProvider - Constructor Fix', () => {
       // This should be impossible with the new API:
       // new ServiceProvider(prisma, storage) // Ambiguous!
       // new ServiceProvider(orgId, prisma)   // Clear!
-      
+
       const mockPrisma = {} as PrismaClient;
       const provider1 = ServiceProvider.withClients(mockPrisma);
       const provider2 = ServiceProvider.forOrganization('org-123');
-      
+
       expect(provider1).toBeDefined();
       expect(provider2).toBeDefined();
     });

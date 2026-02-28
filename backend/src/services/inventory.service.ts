@@ -10,9 +10,9 @@ export class InventoryService {
 
   // Markdown thresholds in days
   private static readonly MARKDOWN_THRESHOLDS = {
-    markdown3: 7,   // Within 1 week: cost price - 20%
-    markdown2: 14,  // Within 2 weeks: cost price
-    markdown1: 30,  // Within 1 month: cost price + 20%
+    markdown3: 7, // Within 1 week: cost price - 20%
+    markdown2: 14, // Within 2 weeks: cost price
+    markdown1: 30, // Within 1 month: cost price + 20%
   } as const;
 
   /**
@@ -103,47 +103,100 @@ export class InventoryService {
   ): Promise<InventoryItem> {
     const { productId, expiryDate, locationId } = item;
 
-    // Validate that the product belongs to the organization
-    const product = await this.prisma.product.findFirst({
+    const result = await this.prisma.$transaction(async (tx) => {
+      // Validate that the product and location belong to the organization
+      await this.validateProductOwnership(productId, tx);
+      await this.validateLocationOwnership(locationId, tx);
+
+      // Check usage limits before creating the item
+      const currentUsage = await tx.organizationUsage.findUnique({
+        where: { organizationId: this.organizationId },
+        select: { totalInventoryItems: true, maxInventoryItems: true },
+      });
+
+      if (currentUsage && currentUsage.maxInventoryItems !== null) {
+        if (currentUsage.totalInventoryItems >= currentUsage.maxInventoryItems) {
+          throw new Error(
+            `Cannot create inventory item: maximum limit of ${currentUsage.maxInventoryItems} inventory items reached. ` +
+            `Current usage: ${currentUsage.totalInventoryItems}.`
+          );
+        }
+      }
+
+      // Calculate markdown status
+      const calculatedStatus: 'Normal' | 'Markdown 1' | 'Markdown 2' | 'Markdown 3' | 'Expired' =
+        item.status || (await this.calculateMarkdownStatus(item.expiryDate));
+
+      const newItem = await tx.inventoryItem.create({
+        data: {
+          organizationId: this.organizationId,
+          productId,
+          expiryDate: new Date(expiryDate), // Convert string to Date for Prisma
+          locationId,
+          status: calculatedStatus,
+        },
+      });
+
+      // Increment organization usage counter atomically
+      await tx.organizationUsage.update({
+        where: { organizationId: this.organizationId },
+        data: {
+          totalInventoryItems: { increment: 1 },
+        },
+      });
+
+      // Create audit log entry
+      const changeDescription = `Inventory item created with expiry date ${expiryDate} and status ${calculatedStatus}.`;
+      await this.createAuditLogInTransaction(tx, userId, newItem.id, changeDescription);
+
+      return newItem;
+    });
+
+    return this.mapPrismaToModel(result);
+  }
+
+  /**
+   * Validate resource belongs to organization
+   */
+  private async validateResourceOwnership(
+    resourceType: 'product' | 'storeArea',
+    resourceId: number,
+    client: PrismaClient | any,
+  ): Promise<void> {
+    const resource = await client[resourceType].findFirst({
       where: {
-        id: productId,
+        id: resourceId,
         organizationId: this.organizationId,
       },
     });
-    if (!product) {
-      throw new Error('Product not found or does not belong to this organization');
+    if (!resource) {
+      const resourceTypeName = resourceType === 'storeArea' ? 'Location' : 'Product';
+      throw new Error(`${resourceTypeName} not found or does not belong to this organization`);
     }
+  }
 
-    // Validate that the location belongs to the organization
-    const location = await this.prisma.storeArea.findFirst({
-      where: {
-        id: locationId,
-        organizationId: this.organizationId,
-      },
-    });
-    if (!location) {
-      throw new Error('Location not found or does not belong to this organization');
+  /**
+   * Validate product belongs to organization
+   */
+  private async validateProductOwnership(productId: number, client: PrismaClient | any): Promise<void> {
+    await this.validateResourceOwnership('product', productId, client);
+  }
+
+  /**
+   * Validate location belongs to organization
+   */
+  private async validateLocationOwnership(locationId: number, client: PrismaClient | any): Promise<void> {
+    await this.validateResourceOwnership('storeArea', locationId, client);
+  }
+
+  /**
+   * Handle Prisma errors consistently
+   */
+  private handlePrismaError(error: unknown): null {
+    if (error && typeof error === 'object' && (error as any).code === 'P2025') {
+      return null;
     }
-
-    // Calculate markdown status
-    const calculatedStatus: 'Normal' | 'Markdown 1' | 'Markdown 2' | 'Markdown 3' | 'Expired' =
-      item.status || (await this.calculateMarkdownStatus(item.expiryDate));
-
-    const newItem = await this.prisma.inventoryItem.create({
-      data: {
-        organizationId: this.organizationId,
-        productId,
-        expiryDate: new Date(expiryDate), // Convert string to Date for Prisma
-        locationId,
-        status: calculatedStatus,
-      },
-    });
-
-    // Create audit log entry
-    const changeDescription = `Inventory item created with expiry date ${expiryDate} and status ${calculatedStatus}.`;
-    await this.createAuditLog(userId, newItem.id, changeDescription);
-
-    return this.mapPrismaToModel(newItem);
+    throw error;
   }
 
   /**
@@ -154,83 +207,124 @@ export class InventoryService {
     updates: Partial<Omit<InventoryItem, 'id' | 'createdAt' | 'updatedAt'>>,
     userId: number,
   ): Promise<InventoryItem | null> {
-    const existingItem = await this.getInventoryItemById(id);
-    if (!existingItem) {
-      return null;
-    }
-
     if (Object.keys(updates).length === 0) {
-      return existingItem; // No updates to perform
+      // No updates to perform - still need to check if item exists
+      const existingItem = await this.getInventoryItemById(id);
+      return existingItem;
     }
 
-    // Validate product belongs to organization if being updated
-    if (updates.productId !== undefined) {
-      const product = await this.prisma.product.findFirst({
-        where: {
-          id: updates.productId,
-          organizationId: this.organizationId,
-        },
+    try {
+      const result = await this.prisma.$transaction(async (tx) => {
+        // Get the item within transaction to ensure it still exists
+        const existingItem = await tx.inventoryItem.findFirst({
+          where: {
+            id,
+            organizationId: this.organizationId,
+          },
+        });
+        if (!existingItem) {
+          return null;
+        }
+
+        // Validate relationships if being updated
+        if (updates.productId !== undefined) {
+          await this.validateProductOwnership(updates.productId, tx);
+        }
+        if (updates.locationId !== undefined) {
+          await this.validateLocationOwnership(updates.locationId, tx);
+        }
+
+        // If expiry date is updated, recalculate markdown status
+        let statusUpdate = updates.status;
+        if (updates.expiryDate) {
+          statusUpdate = await this.calculateMarkdownStatus(updates.expiryDate);
+        }
+
+        const updatedItem = await tx.inventoryItem.update({
+          where: { id },
+          data: {
+            ...(updates.productId !== undefined && { productId: updates.productId }),
+            ...(updates.expiryDate !== undefined && { expiryDate: new Date(updates.expiryDate) }),
+            ...(updates.locationId !== undefined && { locationId: updates.locationId }),
+            ...(statusUpdate !== undefined && { status: statusUpdate }),
+          },
+        });
+
+        // Create audit log entry within transaction
+        const changeDescription = this.formatChangeDescription(updates);
+        await this.createAuditLogInTransaction(tx, userId, id, changeDescription);
+
+        return updatedItem;
       });
-      if (!product) {
-        throw new Error('Product not found or does not belong to this organization');
-      }
+
+      return result ? this.mapPrismaToModel(result) : null;
+    } catch (error: unknown) {
+      return this.handlePrismaError(error);
     }
-
-    // Validate location belongs to organization if being updated
-    if (updates.locationId !== undefined) {
-      const location = await this.prisma.storeArea.findFirst({
-        where: {
-          id: updates.locationId,
-          organizationId: this.organizationId,
-        },
-      });
-      if (!location) {
-        throw new Error('Location not found or does not belong to this organization');
-      }
-    }
-
-    // If expiry date is updated, recalculate markdown status
-    let statusUpdate = updates.status;
-    if (updates.expiryDate) {
-      statusUpdate = await this.calculateMarkdownStatus(updates.expiryDate);
-    }
-
-    const updatedItem = await this.prisma.inventoryItem.update({
-      where: { id },
-      data: {
-        ...(updates.productId !== undefined && { productId: updates.productId }),
-        ...(updates.expiryDate !== undefined && { expiryDate: new Date(updates.expiryDate) }), // Convert string to Date
-        ...(updates.locationId !== undefined && { locationId: updates.locationId }),
-        ...(statusUpdate !== undefined && { status: statusUpdate }),
-      },
-    });
-
-    // Create audit log entry
-    const changeDescription = `Inventory item updated: ${JSON.stringify(updates)}`;
-    await this.createAuditLog(userId, id, changeDescription);
-
-    return this.mapPrismaToModel(updatedItem);
   }
 
   /**
    * Delete an inventory item
    */
   async deleteInventoryItem(id: number, userId: number): Promise<boolean> {
-    // Get the item before deleting to use in audit log
-    const item = await this.getInventoryItemById(id);
-    if (!item) {
-      return false; // Item doesn't exist or doesn't belong to this organization
+    try {
+      await this.prisma.$transaction(async (tx) => {
+        // Get the item before deleting to use in audit log
+        const item = await tx.inventoryItem.findFirst({
+          where: {
+            id,
+            organizationId: this.organizationId,
+          },
+        });
+        if (!item) {
+          throw new Error('Inventory item not found');
+        }
+
+        // Create audit log entry before deleting the item
+        const changeDescription = `Inventory item with ID ${id} deleted.`;
+        await this.createAuditLogInTransaction(tx, userId, id, changeDescription);
+
+        // Delete the inventory item
+        await tx.inventoryItem.delete({
+          where: { id },
+        });
+
+        // Decrement organization usage counter, but prevent negative values
+        await this.decrementInventoryCount(tx);
+      });
+
+      return true;
+    } catch (error: unknown) {
+      if (error instanceof Error && error.message === 'Inventory item not found') {
+        return false;
+      }
+      return this.handlePrismaError(error) === null ? false : true;
     }
+  }
 
-    // Create audit log entry before deleting the item
-    const changeDescription = `Inventory item with ID ${id} deleted.`;
-    await this.createAuditLog(userId, id, changeDescription);
-
-    await this.prisma.inventoryItem.delete({
-      where: { id },
+  /**
+   * Decrement inventory count with validation
+   */
+  private async decrementInventoryCount(client: PrismaClient | any): Promise<void> {
+    const currentUsage = await client.organizationUsage.findUnique({
+      where: { organizationId: this.organizationId },
+      select: { totalInventoryItems: true },
     });
 
-    return true;
+    if (currentUsage && currentUsage.totalInventoryItems > 0) {
+      await client.organizationUsage.update({
+        where: { organizationId: this.organizationId },
+        data: {
+          totalInventoryItems: { decrement: 1 },
+        },
+      });
+    } else if (currentUsage && currentUsage.totalInventoryItems === 0) {
+      // Log warning about counter inconsistency
+      console.warn(
+        `Attempted to decrement totalInventoryItems for organization ${this.organizationId} but counter is already 0. ` +
+        'This may indicate data inconsistency.'
+      );
+    }
   }
 
   /**
@@ -306,15 +400,40 @@ export class InventoryService {
   }
 
   /**
-   * Create an audit log entry
+   * Format change description for audit logs
    */
-  private async createAuditLog(
+  private formatChangeDescription(updates: Partial<Omit<InventoryItem, 'id' | 'createdAt' | 'updatedAt'>>): string {
+    const changes: string[] = [];
+    
+    if (updates.productId !== undefined) {
+      changes.push(`product changed to ID ${updates.productId}`);
+    }
+    if (updates.expiryDate !== undefined) {
+      changes.push(`expiry date changed to ${updates.expiryDate}`);
+    }
+    if (updates.locationId !== undefined) {
+      changes.push(`location changed to ID ${updates.locationId}`);
+    }
+    if (updates.status !== undefined) {
+      changes.push(`status changed to ${updates.status}`);
+    }
+    
+    return changes.length > 0 
+      ? `Inventory item updated: ${changes.join(', ')}`
+      : 'Inventory item updated (no changes detected)';
+  }
+
+  /**
+   * Create an audit log entry (base method that works with any Prisma client)
+   */
+  private async createAuditLogBase(
+    client: PrismaClient | any,
     userId: number,
     inventoryItemId: number,
     changeDescription: string,
   ): Promise<void> {
     // Validate that the user belongs to the organization
-    const user = await this.prisma.user.findFirst({
+    const user = await client.user.findFirst({
       where: {
         id: userId,
         organizationId: this.organizationId,
@@ -324,7 +443,7 @@ export class InventoryService {
       throw new Error('User not found or does not belong to this organization');
     }
 
-    await this.prisma.auditLog.create({
+    await client.auditLog.create({
       data: {
         organizationId: this.organizationId,
         userId,
@@ -333,6 +452,29 @@ export class InventoryService {
         changeDescription,
       },
     });
+  }
+
+  /**
+   * Create an audit log entry
+   */
+  private async createAuditLog(
+    userId: number,
+    inventoryItemId: number,
+    changeDescription: string,
+  ): Promise<void> {
+    await this.createAuditLogBase(this.prisma, userId, inventoryItemId, changeDescription);
+  }
+
+  /**
+   * Create an audit log entry within a transaction
+   */
+  private async createAuditLogInTransaction(
+    tx: any,
+    userId: number,
+    inventoryItemId: number,
+    changeDescription: string,
+  ): Promise<void> {
+    await this.createAuditLogBase(tx, userId, inventoryItemId, changeDescription);
   }
 
   /**

@@ -102,10 +102,10 @@
 - [x] 7.6 Update uploadService.recordUpload() to accept organizationId and update organization_usage.storage_used_bytes
 - [x] 7.7 Update uploadService.deleteUpload() to decrement organization_usage.storage_used_bytes
 - [x] 7.8 Create organizationService with getOrganization(), updateOrganization() methods
-- [ ] 7.9 Write unit tests for services with organizationId parameter
-- [ ] 7.10 Write tests for usage counter atomicity (increment/decrement in transactions)
-- [ ] 7.11 Update inventoryService.createInventoryItem() to increment organization_usage.total_inventory_items
-- [ ] 7.12 Update inventoryService.deleteInventoryItem() to decrement organization_usage.total_inventory_items
+- [x] 7.9 Write unit tests for services with organizationId parameter
+- [x] 7.10 Write tests for usage counter atomicity (increment/decrement in transactions)
+- [x] 7.11 Update inventoryService.createInventoryItem() to increment organization_usage.total_inventory_items
+- [x] 7.12 Update inventoryService.deleteInventoryItem() to decrement organization_usage.total_inventory_items
 
 ## 8. Stripe Configuration (Phase 4 - Week 5)
 
@@ -475,7 +475,7 @@
   "audit:org-ids": "npx ts-node scripts/audit-org-ids.ts"
   ```
 
-- [ ] 14.1.3 **Run the audit script** against the dev SQLite database and confirm exit code 0.
+- [x] 14.1.3 **Run the audit script** against the dev SQLite database and confirm exit code 0.
   - If NULLs exist, stop and backfill them before proceeding (this is a blocker).
 
 ---

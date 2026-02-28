@@ -41,7 +41,10 @@ export class ServiceProvider {
   }
 
   // Factory methods for common patterns
-  static forOrganization(organizationId: string, config?: Omit<ServiceProviderConfig, 'organizationId'>): ServiceProvider {
+  static forOrganization(
+    organizationId: string,
+    config?: Omit<ServiceProviderConfig, 'organizationId'>,
+  ): ServiceProvider {
     return new ServiceProvider({ ...config, organizationId });
   }
 
@@ -49,7 +52,11 @@ export class ServiceProvider {
     return new ServiceProvider({ organizationId: TEST_AUTH_BYPASS_ORG_ID, ...config });
   }
 
-  static withClients(prisma: PrismaClient, storageProvider?: StorageProvider, config?: Omit<ServiceProviderConfig, 'prisma' | 'storageProvider'>): ServiceProvider {
+  static withClients(
+    prisma: PrismaClient,
+    storageProvider?: StorageProvider,
+    config?: Omit<ServiceProviderConfig, 'prisma' | 'storageProvider'>,
+  ): ServiceProvider {
     return new ServiceProvider({ prisma, storageProvider, ...config });
   }
 

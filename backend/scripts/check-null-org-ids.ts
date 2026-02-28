@@ -16,13 +16,13 @@ async function checkNulls() {
   ];
 
   let hasNulls = false;
-  
+
   for (const table of tables) {
     try {
       const nullCount = await table.model.count({
         where: { organizationId: null },
       });
-      
+
       if (nullCount > 0) {
         console.log(`❌ ${table.name} has ${nullCount} NULL organizationId values`);
         hasNulls = true;
