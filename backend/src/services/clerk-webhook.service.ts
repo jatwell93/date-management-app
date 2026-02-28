@@ -349,8 +349,19 @@ export class ClerkWebhookService {
       }
 
       // Now update user directly using organizationId
-      await this.prisma.user.updateMany({
+      // Find the user first to get their ID
+      const user = await this.prisma.user.findFirst({
         where: { clerkUserId, organizationId: org.id },
+      });
+
+      if (!user) {
+        log.warn('User not found for soft delete', { clerkUserId, organizationId: org.id });
+        return;
+      }
+
+      // Soft delete the user using update (not updateMany) to trigger foreign key constraints
+      await this.prisma.user.update({
+        where: { id: user.id },
         data: { deletedAt: new Date() },
       });
 

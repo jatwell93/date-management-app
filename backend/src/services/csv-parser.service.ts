@@ -439,17 +439,17 @@ export class CSVParserService extends EventEmitter {
     }
 
     // Sanitize values (CSV injection protection)
-    const sku = this.sanitizeValue(rawSku!.trim());
-    const name = this.sanitizeValue(rawName!.trim());
-    const barcode = this.sanitizeValue(rawBarcode!.trim());
+    const sku = this.sanitizeValue(rawSku?.trim() || '');
+    const name = this.sanitizeValue(rawName?.trim() || '');
+    const barcode = this.sanitizeValue(rawBarcode?.trim() || '');
 
     // Parse cost value
-    const costPrice = this.parseCostValue(rawCost!.trim());
+    const costPrice = this.parseCostValue(rawCost?.trim() || '');
     if (costPrice === null) {
       errors.push({
         rowNumber,
         field: 'cost',
-        value: rawCost!,
+        value: rawCost || '',
         message: 'Invalid cost format. Expected numeric value (e.g., "12.99", "$12.99")',
       });
       return { row: null, errors };

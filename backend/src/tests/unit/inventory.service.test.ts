@@ -167,9 +167,7 @@ describe('InventoryService', () => {
       expect(mockPrisma.inventoryItem.findFirst).toHaveBeenCalledWith({
         where: {
           id: 1,
-          product: {
-            organizationId,
-          },
+          organizationId,
         },
       });
       expect(mockPrisma.inventoryItem.update).toHaveBeenCalledWith({
@@ -196,9 +194,7 @@ describe('InventoryService', () => {
       expect(mockPrisma.inventoryItem.findFirst).toHaveBeenCalledWith({
         where: {
           id: 999,
-          product: {
-            organizationId,
-          },
+          organizationId,
         },
       });
     });
@@ -226,9 +222,7 @@ describe('InventoryService', () => {
       expect(items).toHaveLength(1);
       expect(mockPrisma.inventoryItem.findMany).toHaveBeenCalledWith({
         where: {
-          product: {
-            organizationId,
-          },
+          organizationId,
         },
       });
     });
@@ -257,9 +251,7 @@ describe('InventoryService', () => {
       expect(mockPrisma.inventoryItem.findMany).toHaveBeenCalledWith({
         where: {
           productId: 1,
-          product: {
-            organizationId,
-          },
+          organizationId,
         },
       });
     });
@@ -288,9 +280,7 @@ describe('InventoryService', () => {
       expect(mockPrisma.inventoryItem.findMany).toHaveBeenCalledWith({
         where: {
           productId: 1,
-          product: {
-            organizationId,
-          },
+          organizationId,
         },
         orderBy: { createdAt: 'desc' },
         take: 5,
@@ -321,9 +311,7 @@ describe('InventoryService', () => {
       expect(mockPrisma.inventoryItem.findMany).toHaveBeenCalledWith({
         where: {
           locationId: 1,
-          product: {
-            organizationId,
-          },
+          organizationId,
         },
       });
     });
@@ -351,9 +339,7 @@ describe('InventoryService', () => {
       expect(mockPrisma.inventoryItem.findFirst).toHaveBeenCalledWith({
         where: {
           id: 1,
-          product: {
-            organizationId,
-          },
+          organizationId,
         },
       });
       expect(mockPrisma.auditLog.create).toHaveBeenCalledWith({
@@ -399,9 +385,7 @@ describe('InventoryService', () => {
       expect(mockPrisma.inventoryItem.findFirst).toHaveBeenCalledWith({
         where: {
           id: 1,
-          product: {
-            organizationId,
-          },
+          organizationId,
         },
       });
       expect(mockPrisma.inventoryItem.update).toHaveBeenCalledWith({
@@ -447,9 +431,7 @@ describe('InventoryService', () => {
       expect(mockPrisma.inventoryItem.findFirst).toHaveBeenCalledWith({
         where: {
           id: 1,
-          product: {
-            organizationId,
-          },
+          organizationId,
         },
       });
       expect(mockPrisma.user.findFirst).toHaveBeenCalledWith({

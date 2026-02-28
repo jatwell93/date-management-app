@@ -736,12 +736,12 @@ in auth middleware and service constructors. This task is effectively a no-op ve
 
 ### 14.9 Final Review Checklist
 
-- [ ] 14.9.1 **Schema parity check**: Diff `backend/prisma/schema.prisma` vs `backend/prisma/production/schema.prisma`
+- [x] 14.9.1 **Schema parity check**: Diff `backend/prisma/schema.prisma` vs `backend/prisma/production/schema.prisma`
   — only the `datasource` block should differ
-- [ ] 14.9.2 **No `'default-org'` in non-test code**: `grep -rn "default-org" backend/src/ --include="*.ts" | grep -v "test"` should return 0 results (except `auth.middleware.ts` TEST_AUTH_BYPASS)
-- [ ] 14.9.3 **No optional organizationId in schema**: `grep "organizationId.*String?" backend/prisma/schema.prisma` should return 0 results
-- [ ] 14.9.4 **All relations have onDelete: Cascade**: Verify all 8 org relations have cascade delete
-- [ ] 14.9.5 **Commit with descriptive message**: `feat: finalize multi-tenant migration - make organizationId required, remove legacy fallbacks`
+- [x] 14.9.2 **No `'default-org'` in non-test code**: `grep -rn "default-org" backend/src/ --include="*.ts" | grep -v "test"` should return 0 results (except `auth.middleware.ts` TEST_AUTH_BYPASS)
+- [x] 14.9.3 **No optional organizationId in schema**: `grep "organizationId.*String?" backend/prisma/schema.prisma` should return 0 results
+- [x] 14.9.4 **All relations have onDelete: Cascade**: Verify all 8 org relations have cascade delete
+- [x] 14.9.5 **Commit with descriptive message**: `feat: finalize multi-tenant migration - make organizationId required, remove legacy fallbacks`
 
 ## 15. Documentation (Phase 5 - Week 7)
 
