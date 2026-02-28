@@ -44,6 +44,7 @@ For developers, see the **Backend README** for comprehensive setup:
 - **Dual Database Support** (Phase 11): SQLite for development, Neon PostgreSQL for production. Test compatibility with `npm run test:both`.
 - **Scalable Storage** (Phase 11): Local filesystem for development, Cloudflare R2 for production. Presigned URL support for secure uploads.
 - **Edge Compute** (Phase 11): Cloudflare Workers for serverless deployment, authentication middleware, and performance optimization.
+- **Multi-Tenant Architecture** (Phase 14): Organization isolation with tenant-scoped queries and per-org roles.
 - **Security Hardening** (Phase 13): Input validation, rate limiting, CORS, secrets scanning, TLS/SSL enforcement.
 - RESTful API endpoints for all data operations.
 - TypeScript for type safety and developer experience.

@@ -38,6 +38,39 @@ It covers the six webhook handlers, required metadata, idempotency, email flows,
 - Integration tests: Prisma + SQLite for DB behavior, idempotency and concurrency (`backend/src/tests/integration`).
 - Edge cases: missing metadata, deleted customers, out-of-order events, concurrent processing covered.
 
+## Subscription Lifecycle
+
+```
+Checkout → subscription.created → trial_will_end → (trial converts) checkout.session.completed → subscription.updated (active)
+Upgrade  → subscription.updated (tier up) → invoice.paid
+Downgrade→ subscription.updated (tier down) → invoice.paid → 7-day grace → over-limit? downgrade warning email
+Cancel   → subscription.deleted → usage locked, read-only mode until period end
+```
+
+## Local Testing & CLI Tips
+
+```bash
+# Trigger Stripe test event delivery to local server (requires Stripe CLI)
+stripe listen --events customer.subscription.created,customer.subscription.updated,customer.subscription.deleted,invoice.payment_failed \
+  --forward-to http://localhost:3000/api/webhooks/stripe
+
+# Replay the last event
+stripe events resend evt_123
+
+# Generate fake checkout session
+node scripts/stripe/create-test-checkout.js --tier professional --org fake-org-uuid
+```
+
+## Testing Matrix
+
+| Scenario | Expected DB change | Email queued | Test file |
+|----------|-------------------|--------------|-----------|
+| Trial signup → conversion | `SubscriptionTier=starter→professional`, `trialEndDate=null` | trial_welcome | `webhook.service.test.ts` |
+| Upgrade professional→premium | Tier row updated | none | `subscription-upgrade.test.ts` |
+| Downgrade premium→starter (over limit) | Tier updated, `readOnlyMode=pending` | downgrade_warning | `downgrade-over-limit.test.ts` |
+| Payment failed (past_due) | `status=past_due` | dunning_email | `payment-failed.test.ts` |
+| Cancel subscription | `status=canceled`, tier=starter | cancel_confirm | `subscription-cancel.test.ts` |
+
 ## Operational notes
 - Webhook route: `POST /api/webhooks/stripe` — uses `express.raw()` for signature verification.
 - Duplicate events: returned 200 OK (idempotency skip); replays counted in metrics.

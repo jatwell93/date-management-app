@@ -7,14 +7,15 @@
 - ✅ Phase 3: TypeScript Interfaces (8/8 tasks) - All models and types defined
 - ✅ Phase 4: Authentication Layer (10/10 tasks) - JWT auth with organization context complete
 - ✅ Phase 5: Feature Gating Middleware (8/8 tasks) - Tier-based feature access & usage limits
+- ✅ Phase 6: Route Layer Refactor (13/13 tasks) - Tenant filtering added to all routes
 
 **Skipped:**
 - ⏭️ Phase 2: Data Migration (9 tasks) - Not needed for fresh SaaS launch
 
 **Remaining:**
-- 📋 Phase 6-17: Routes refactor, services refactor, Stripe integration, trial system, UI, testing, deployment (126 tasks)
+- 📋 Phase 7-20: Services refactor, Stripe integration, trial system, UI, testing, monitoring, deployment (126 tasks)
 
-**Current Status:** 35/161 tasks complete (22% done) | Feature gating enables route-layer tenant filtering
+**Current Status:** 48/161 tasks complete (30% done) | Feature gating enables route-layer tenant filtering
 
 > **Legend**: `**USER:**` = Manual action required (account setup, dashboard config, announcements)  
 > Everything else = Developer implementation tasks
@@ -120,6 +121,78 @@
 - [x] 8.10 **USER:** Configure Stripe webhook endpoint in dashboard (Settings → Webhooks → Add endpoint → URL: https://yourdomain.com/api/webhooks/stripe)
 - [x] 8.11 **USER:** Add webhook endpoint secret to `.env` file as `STRIPE_WEBHOOK_SECRET` (copy from Stripe dashboard)
 - [x] 8.12 Document Stripe configuration in `docs/stripe-setup.md`
+
+## 8A. Critical Interdependencies & Clarifications (BLOCKING - Review Before Starting) [MOVED FROM 17.5]
+
+> **These items must be resolved BEFORE implementation continues. They affect multiple phases and task clarity.**
+
+- [x] **8A.1 CREATE**: After Phase 1.6 migrates tier_feature_flags, verify all tiers have correct features:
+  - Script: `backend/scripts/verify-tier-flags.ts` that checks tier_feature_flags table
+  - Verify all 4 tiers (starter, professional, premium, concierge) have: `max_skus`, `max_users`, `max_inventory_items`
+  - Verify values match TIER_LIMITS:
+    - Starter (max_skus=500, max_users=1, max_inventory_items=5000)
+    - Professional (max_skus=2000, max_users=3, max_inventory_items=null)
+    - Premium (max_skus=null, max_users=10, max_inventory_items=null)
+    - Concierge (max_skus=null, max_users=10, max_inventory_items=null)
+  - Log ERROR + exit if any tier missing features
+  - Run on app startup in Phase 16A.F.2 (fail fast) and return 503 on /health until valid
+  - **Blocker for**: Phase 9+ (Stripe service needs correct tier limits)
+
+- [x] **8A.2 CLARIFY**: Confirm SKU limit semantics:
+  - Does `organization_usage.total_skus` count Products or InventoryItems?
+  - **Decision**: Products only (unique SKU catalog) count toward the SKU limit.
+  - Add separate InventoryItems cap by tier (Starter limited, higher tiers unlimited)
+  - Update Phase 16A.D.2: Apply `checkUsageLimit('max_skus')` to POST /products ONLY, not POST /inventory-items
+  - **Blocker for**: Phase 6.5, 6.8, task 16A.D.2
+
+- [x] **8A.3 DESIGN**: Single-tenant users → multi-tenant migration:
+  - **Decision**: Auto-create organization on first login for existing users.
+  - First login flow: prompt for organization name if missing, then create org + Professional trial subscription
+  - Onboard endpoint optional (admin tooling only), but not required for MVP
+  - Document in Phase 15.6 (migration guide)
+  - **Blocker for**: Phase 16A.C (signup), Phase 15.6
+
+- [x] **8A.4 VERIFY**: Email service exists and is configured:
+  - Check if `EmailService` already exists in `backend/src/services/`
+  - If missing: Create with methods for trial reminder, past_due notification, downgrade warning
+  - **Decision**: Use SendGrid. Verify SendGrid API key in `.env`
+  - **Blocker for**: Phase 16A.C.4, 16A.G.1, 16A.G.2
+
+- [x] **8A.5 STANDARD**: When creating Stripe customers in Phase 9, **ALWAYS set metadata**:
+  - `stripe.customers.create({ metadata: { organizationId: "org-uuid" } })`
+  - **Decision**: Metadata is the required source of truth for webhook routing
+  - Webhook handlers use this to route events → correct org
+  - **Blocker for**: Phase 9.3, Phase 16A.B.3.1-6
+
+- [x] **8A.6 MVP SCOPE**: Is multi-user in scope for MVP?
+  - **Decision**: YES - Multi-user from day one.
+  - Implement user management and enforce max_users per tier immediately
+  - Roles: keep Manager/Staff minimal for MVP
+  - **Blocker for**: Phase 16A.C.1, Phase 6.7-6.9
+
+- [x] **8A.7 AUDIT**: How are storage bytes calculated (Uploads, R2, etc.)?
+  - **Decision**: Sum Upload file sizes from DB records per organization
+  - Ensure Upload records persist file size and org id for calculation
+  - Phase 16A.D.3 implementation depends on this
+  - **Blocker for**: Phase 16A.D.3
+
+- [x] **8A.8 POLICY**: What happens when downgrading to lower SKU limit?
+  - Example: 3,000 products on Premium (unlimited) → downgrade to Professional (2,000 limit)
+  - **Decision**: Allow downgrade, but lock further creation until usage drops below limit
+  - Phase 16A.G.2 sends warning email
+  - Phase 16A.B.3.2 (updateSubscription handler) should set a "creation_locked" state for over-limit orgs
+  - **Blocker for**: Phase 16A.B.3.2, Phase 16A.G.2
+
+- [x] **8A.9 SPEC**: Exact dunning process:
+  - Day 0: `invoice.payment_failed` → status=past_due, queue email
+  - Days 1-5: Stripe auto-retries (configure in Stripe dashboard)
+  - Day 7: If still past_due, downgrade to Starter tier + cancel subscription
+  - Implement as daily cron job that finds past_due > 7 days, auto-downgrades
+  - **Blocker for**: Phase 16A.B.3.5, Phase 16A.G.1
+
+- [x] **8A.10 CONSOLIDATE**: Phase 11 (Trial System) and Phase 16A.C overlap.
+  - **Decision**: Merge Phase 11 tasks into Phase 16A.C and treat 16A.C as the implementation source of truth
+  - Mark Phase 11 complete after Phase 16A.C is done
 
 ## 9. Stripe Subscription Service (Phase 4 - Week 5)
 
@@ -745,14 +818,14 @@ in auth middleware and service constructors. This task is effectively a no-op ve
 
 ## 15. Documentation (Phase 5 - Week 7)
 
-- [ ] 15.1 Update README.md: Document multi-tenant architecture, organization model
-- [ ] 15.2 Create `docs/multi-tenant-guide.md`: Organization creation, user management, data isolation
-- [ ] 15.3 Create `docs/subscription-tiers.md`: Feature comparison, pricing, upgrade process
-- [ ] 15.4 Create `docs/stripe-integration.md`: Webhook handling, subscription lifecycle, testing
-- [ ] 15.5 Update `openspec/project.md`: Add multi-tenant conventions, tenant-scoped queries
-- [ ] 15.6 Create migration guide for existing single-tenant deployments
-- [ ] 15.7 Document trial system: Signup flow, conversion tracking, abuse prevention
-- [ ] 15.8 Create operational runbook: Handling webhook failures, trial expirations, subscription issues
+- [x] 15.1 Update README.md: Document multi-tenant architecture, organization model
+- [x] 15.2 Create `docs/multi-tenant-guide.md`: Organization creation, user management, data isolation
+- [x] 15.3 Create `docs/subscription-tiers.md`: Feature comparison, pricing, upgrade process
+- [x] 15.4 Create `docs/stripe-integration.md`: Webhook handling, subscription lifecycle, testing
+- [x] 15.5 Update `openspec/project.md`: Add multi-tenant conventions, tenant-scoped queries
+- [x] 15.6 Create migration guide for existing single-tenant deployments
+- [x] 15.7 Document trial system: Signup flow, conversion tracking, abuse prevention
+- [x] 15.8 Create operational runbook: Handling webhook failures, trial expirations, subscription issues
 
 ## 16. Monitoring & Observability (Phase 5 - Week 8)
 
@@ -762,6 +835,259 @@ in auth middleware and service constructors. This task is effectively a no-op ve
 - [ ] 16.4 Add logging: Cross-tenant access attempts (security), feature gate rejections (conversion)
 - [ ] 16.5 Configure Sentry alerting for webhook processing errors
 - [ ] 16.6 Create daily report: New trials, conversions, churns, revenue changes
+
+## 16A. Prevention Tasks - Gap Closure (CRITICAL - Must Complete Before Phase 17) [MOVED FROM 18]
+
+> **Context**: Gap analysis identified 20 critical implementation gaps between design spec and current code. 
+> These prevention tasks address root causes BEFORE deployment to avoid:
+> - **Data leaks** from incomplete organizationId filtering
+> - **Financial issues** from webhook processing failures  
+> - **Zero revenue** from missing trial system
+> - **Feature bypass** from unenforced limits
+> - **Support overload** from edge case handling
+
+### Phase 16A.B: Webhook & State Sync (CRITICAL - Revenue Protection)
+
+- [ ] 16A.B.1 **CREATE TABLE**: Create migration: `processed_webhook_events(id TEXT PRIMARY KEY, event_type TEXT, processed_at TIMESTAMP, INDEX(event_type, processed_at))`
+- [ ] 16A.B.2 **IDEMPOTENCY**: Update webhook.service.ts: Replace in-memory Map with database lookup. Implement `isNewEvent()` with SQL query + `markEventProcessed()` with INSERT. Handle unique constraint gracefully
+- [ ] 16A.B.3 **IMPLEMENT HANDLERS**: Complete all 6 empty webhook handlers in webhook.service.ts:
+  - [ ] 16A.B.3.1 `handleSubscriptionCreated`: Create subscription_tiers record, set status=active, update organization_usage limits. DECISION (8A.5): MUST validate Stripe customer metadata contains organizationId (metadata is source of truth). Log ERROR to Sentry and skip if missing.
+  - [ ] 16A.B.3.2 `handleSubscriptionUpdated`: Update tier_level, billing_cycle, current_period_end. DECISION (8A.8): On tier downgrade, apply soft lock (read-only mode) if current usage > new tier limit. Don't auto-delete products. Set read_only_mode flag on organization.
+  - [ ] 16A.B.3.3 `handleSubscriptionDeleted`: Set status=canceled, downgrade organization to Starter tier. DECISION (8A.8): Apply soft lock (read-only mode) if usage > Starter limits. Log downgrade event.
+  - [ ] 16A.B.3.4 `handleCheckoutSessionCompleted`: Find subscription_tiers by Stripe subscription ID, set is_trial=false (mark paid). DECISION (8A.5): Link via Stripe customer metadata organizationId.
+  - [ ] 16A.B.3.5 `handleInvoicePaymentFailed`: Set status=past_due, log to dunning queue. DECISION (8A.4): Queue SendGrid retry email to organization owner. DECISION (8A.9): Use 7-day grace period before auto-downgrade. (NOT disabled auto-retry in Stripe)
+  - [ ] 16A.B.3.6 `handleTrialWillEnd`: DECISION (8A.4): Queue SendGrid reminder email via email service. Test with Stripe test events
+- [ ] 16A.B.4 **CRON JOB**: Create scheduled task (cron or Bull queue): Every 1 hour, fetch all active subscriptions from Stripe API, sync to local subscription_tiers table. Log any divergences as warning
+- [ ] 16A.B.5 **TRANSACTION**: Wrap all webhook handlers in Prisma transactions. Use `$transaction()` to atomically update subscription_tiers + organization_usage + audit log
+- [ ] 16A.B.6 **VALIDATION**: Add pre-update validation in webhook handlers: Before updating subscription_tiers, verify organization exists. Log and skip if missing (prevents orphaned records)
+- [ ] 16A.B.7 **MONITORING**: Add Sentry alerts: webhook_handler_error >1/day, processed_webhook_events growth rate (detect replay attacks)
+
+### Phase 16A.C: Trial System (CRITICAL - Revenue Model)
+
+- [ ] 16A.C.1 **SIGNUP ENDPOINT**: Create POST /api/signup endpoint:
+  - [ ] Accept: email, password_pin, organization_name (optional - can be prompted later), phone
+  - [ ] DECISION (8A.3): Auto-create organization on first login if missing (prompt for org name if not provided)
+  - [ ] DECISION (8A.6): Multi-user support from day one - multiple users can belong to same organization
+  - [ ] Validate email uniqueness (prevent abuse) - check users table, not organizations
+  - [ ] Create organization record
+  - [ ] Create subscription_tiers with trial_end_date = now + 14 days, status=trialing
+  - [ ] DECISION (8A.2): Create organization_usage with Professional tier limits including max_inventory_items (to show value)
+  - [ ] Log trial_started event
+  - [ ] Return auth token + trial_end_date
+- [ ] 16A.C.2 **TRIAL DOWNGRADE CRON**: Create scheduled job (cron/Bull): Every 1 hour, find all subscription_tiers where trial_end_date < NOW and status=trialing. Update to status=active, tier_level=starter, reset organization_usage to Starter limits. Log trial_expired event
+- [ ] 16A.C.3 **TRIAL ABUSE PREVENTION**: Implement unique constraints in database:
+  - [ ] Create migrations for email + phone uniqueness in organizations table
+  - [ ] Add validation in signup endpoint: reject if email/phone used in last 90 days
+  - [ ] Monitor signup rate per IP address (alert if >10/day)
+- [ ] 16A.C.4 **TRIAL REMINDERS**: Integrate SendGrid email service into webhook handler `handleTrialWillEnd` per DECISION (8A.4):
+  - [ ] Fetch organization + subscription_tiers
+  - [ ] Calculate days until trial end
+  - [ ] Send SendGrid reminder email if trial_end_date in next 3 days (use SendGrid templates for professional formatting)
+  - [ ] Log trial_reminder_sent event
+  - [ ] Use SendGrid API key from environment variables (never hardcode)
+- [ ] 16A.C.5 **TRIAL CONVERSION CONVERSION TRACKING**: Add events to analytics.service:
+  - Trial started: log on signup
+  - Trial reminder sent: log in webhook handler
+  - Trial converted: log in webhook handler (checkout.session.completed when trial ended)
+  - Trial expired: log in cron downgrade
+- [ ] 16A.C.6 **TEST**: Write integration test:
+  - Create trial org, verify trial_end_date is 14 days out
+  - Advance time to day 10, trigger cron, verify reminder email queued
+  - Advance time to day 15, trigger cron, verify downgraded to Starter + limits reset
+  - Verify user cannot create products past Starter limit on day 15
+
+### Phase 16A.D: Feature Gating Enforcement (CRITICAL - Feature Bypass Prevention)
+
+- [ ] 16A.D.1 **AUDIT ROUTES**: Review all protected routes in product.routes.ts, inventory.routes.ts, user.routes.ts, upload.routes.ts, report.routes.ts. Add `checkUsageLimit()` middleware to POST routes, `requireFeature()` to premium routes
+- [ ] 16A.D.2 **APPLY MIDDLEWARE**: 
+  - [ ] POST /products: Add `checkUsageLimit('max_skus')` after authenticateToken
+  - [ ] POST /inventory-items: Add `checkUsageLimit('max_inventory_items')` + `checkUsageLimit('max_users')`
+  - [ ] POST /users: Add `checkUsageLimit('max_users')`
+  - [ ] GET /api/analytics: Add `requireFeature('advanced_analytics')`
+  - [ ] POST /uploads: Add `checkUsageLimit('storage_bytes')`
+- [ ] 16A.D.3 **STORAGE QUOTA FIX**: Update feature-gate.middleware.ts line 164: Replace hardcoded 10GB with query to subscription tier limits. Use TIER_LIMITS[tierLevel].storage_bytes. DECISION (8A.7): Calculate storage as sum of all file sizes (Blob.size) for the organization
+- [ ] 16A.D.4 **RACE CONDITION FIX**: Update feature-gate.middleware.ts lines 149-157: Replace non-atomic create-if-missing with Prisma `upsert()`. OR move creation to org signup (Phase 1.6)
+- [ ] 16A.D.5 **TEST**: Write tests for all feature gates:
+  - Starter user hits 500 SKU limit (POST 501st product → 403 Forbidden)
+  - Starter user hits inventory item cap (POST inventory-item over limit → 403 Forbidden)
+  - Professional user can create 2000+ SKUs (same request → 201 Created)
+  - Starter user tries GET /api/analytics → 403 Forbidden with upgrade CTA
+  - Usage warning appears at 80% limit (e.g., 400/500 SKUs)
+- [ ] 16A.D.6 **DATA MODEL**: Add inventory item cap plumbing:
+  - Add organization_usage.total_inventory_items + max_inventory_items columns
+  - Seed tier_feature_flags with max_inventory_items per tier
+  - Update LimitKey/FeatureKey enums and TIER_LIMITS to include max_inventory_items
+
+### Phase 16A.E: Token & Auth (CRITICAL - Access Correctness)
+
+- [ ] 16A.E.1 **AUDIT LOGIN FLOW**: Review auth.service.login() code. Verify it:
+  - [ ] Queries subscription_tiers after PIN validation
+  - [ ] Extracts tierLevel from subscription record
+  - [ ] Returns tierLevel in login response (NOT hardcoded or default)
+  - Add missing subscription query if needed
+- [ ] 16A.E.2 **TOKEN REFRESH**: Update auth.routes.ts token refresh endpoint (line 65):
+  - [ ] Query subscription_tiers for current tierLevel
+  - [ ] Call generateToken() with fresh tierLevel (don't reuse from old token)
+  - [ ] Test: Downgrade tier in Stripe, trigger webhook (sync subscription state), call /refresh, verify new token has Starter tier
+- [ ] 16A.E.3 **WEBHOOK METADATA VALIDATION**: In webhook handlers, before updating subscription_tier, verify:
+  - DECISION (8A.5): Stripe customer metadata is source of truth for organizationId
+  - Stripe customer metadata contains valid organizationId
+  - Organization record exists in database
+  - Log ERROR to Sentry and skip webhook if organization missing (don't create orphaned subscription records)
+  - Never trust organizationId from request body, only from Stripe metadata
+- [ ] 16A.E.4 **TEST**: Integration test:
+  - Login with org A, get token with Professional tier
+  - Downgrade org A to Starter manually in DB (simulate failed payment)
+  - Call /auth/refresh, verify returned token has Starter tier
+  - Try to POST /products (with requireFeature), verify uses refreshed Starter limits
+
+### Phase 16A.F: Testing & Quality (CRITICAL - Regression Prevention)
+
+- [ ] 16A.F.1 **MULTI-TENANT CONCURRENCY**: Write load tests (Phase 13.11-13.12):
+  - [ ] Spawn 10 concurrent requests to POST /products from different organizations
+  - [ ] Verify each org's SKU counter incremented exactly once (no race condition)
+  - [ ] Spawn requests near limit (e.g., 495/500 SKUs): verify both can create if total <500, both fail if >500
+  - [ ] Use transaction isolation level testing
+- [ ] 16A.F.2 **TIER FEATURE FLAGS VALIDATION**: Create boot-time validation script:
+  - [ ] On app startup, query tier_feature_flags table
+  - [ ] Verify all 4 tiers (starter, professional, premium, concierge) have all required features including max_inventory_items
+  - [ ] Log ERROR + exit if any tier missing features
+  - [ ] Include in pre-flight health check endpoint (GET /health should 503 until flags verified)
+- [ ] 16A.F.3 **CROSS-TENANT ISOLATION TEST**: (Phase 13.1-13.3)
+  - [ ] Create orgs A + B with different users
+  - [ ] Verify Org A user cannot GET /products from Org B (even with valid token)
+  - [ ] Test PUT/DELETE cross-tenant denial
+  - [ ] Attempt parameter tampering: ?organizationId=other-org → denied
+  - [ ] Add to CI/CD automated tests
+
+### Phase 16A.G: Operational (CRITICAL - Support Load)
+
+- [ ] 16A.G.1 **DUNNING STRATEGY**: Complete invoice.payment_failed handler (Phase 10.8):
+  - [ ] Set subscription status to past_due
+  - [ ] Queue SendGrid retry email to organization owner per 8A.4
+  - [ ] DECISION (8A.9): After 7-day grace period + 3 failed payment attempts: downgrade to Starter tier + log escalation alert
+  - [ ] Integrate with Stripe's automatic retry (configure in Stripe dashboard)
+  - [ ] DECISION (8A.8): On downgrade, apply soft lock (read-only mode) if usage > Starter limits
+- [ ] 16A.G.2 **PENDING DOWNGRADE COMMUNICATION**: When subscription downgrade scheduled (e.g., day before period end):
+  - [ ] If current usage > new tier limit, queue SendGrid warning email per 8A.4
+  - [ ] Include: current limit, new limit, recommendation to delete products
+  - [ ] DECISION (8A.8): Apply soft lock (read-only mode) on downgrade if over limit, don't auto-delete
+  - [ ] DECISION (8A.2): Limits are Products (unique SKUs) and InventoryItems (tracked items) separately
+  - [ ] Test: Upgrade to Premium (unlimited SKUs), add 3000 SKUs, downgrade to Professional (2000 SKUs), verify warning sent
+- [ ] 16A.G.3 **OPERATIONAL RUNBOOK**: Document:
+  - [ ] How to manually sync subscription state from Stripe (if cron fails)
+  - [ ] How to rescue failed webhook events (replay from processed_webhook_events table)
+  - [ ] How to handle customer disputes (find event in audit log, verify Stripe state matches)
+  - [ ] How to diagnose cross-tenant leaks (check organizationId NULL queries, audit logs)
+
+### Phase 16A.H: Edge Cases & Integration (CRITICAL - Prevents Unexpected Failures)
+
+- [ ] 16A.H.1 **TRIAL CHECKOUT RACE**: What if trial expires DURING Stripe checkout?
+  - [ ] Scenario: User on day 13 of trial, starts checkout, trial expires (day 14 limit reached) mid-checkout
+  - [ ] Solution: Webhook handles trial expiry by downgrading org. But user might complete checkout for Professional tier.
+  - [ ] Implementation: `handleCheckoutSessionCompleted` should always honor the paid upgrade, ignore trial_end_date
+  - [ ] Test: Manually trigger checkout on day 13, advance time to day 15 using stub, complete session, verify org remains Professional
+
+- [ ] 16A.H.2 **TIER FLAG SEEDING RACE**: Multiple app instances boot concurrently, both try to seed tier_feature_flags
+  - [ ] Solution: Use `UNIQUE` constraint + `INSERT IGNORE` / `ON CONFLICT DO NOTHING`
+  - [ ] Verify Phase 1.6 migration uses idempotent insert, not `INSERT INTO ... VALUES` which fails on duplicate
+  - [ ] Test: Run app with 2 instances simultaneously, verify both boot successfully
+
+- [ ] 16A.H.3 **DOWNGRADE OVER-LIMIT EDGE CASE**: User downgrades mid-billing-cycle when at limit
+  - [ ] Scenario: Professional (2,000 limit) with 2,000 products on day 15 of month, manually downgrades to Starter (500 limit)
+  - [ ] DECISION (8A.8): Apply soft lock (read-only mode) when downgrading over limit
+  - [ ] Solution: Allow downgrade but apply read-only mode. User cannot create new products/inventory items until deleted to fit limit.
+  - [ ] Implementation: Routes should allow downgrade, set read_only_mode flag on org, block POST endpoints for products/inventory
+  - [ ] Send SendGrid warning email per 8A.4 with instructions to delete excess items
+  - [ ] Test: Create org, add 1,500 products (fake), downgrade to Starter, verify read-only mode + warning email sent
+
+- [ ] 16A.H.4 **WEBHOOK EVENT ORDERING**: What if `subscription.updated` arrives BEFORE `subscription.created`?
+  - [ ] Scenario: If Stripe sends events out of order (rare but possible with network delays)
+  - [ ] Solution in Phase 16A.B.3.1-3.2: Handler should check if subscription_tiers record exists
+  - [ ] If doesn't exist, create it first, then apply update
+  - [ ] Test: Manually send out-of-order webhooks via Stripe CLI, verify idempotent handling
+
+- [ ] 16A.H.5 **STORAGE QUOTA CONCURRENCY**: Two users upload files simultaneously, both near 10GB limit
+  - [ ] Scenario: Org at 9.99GB limit, two users try to upload 100MB files concurrently
+  - [ ] Solution: `checkUsageLimit('storage_bytes')` middleware should use transactional lock
+  - [ ] Implementation: Query organisation_usage with `SELECT ... FOR UPDATE` to prevent race condition
+  - [ ] Prisma doesn't support `FOR UPDATE`, so use raw SQL in middleware or service layer
+  - [ ] Test: Concurrent upload requests to same org near limit, verify both don't exceed quota
+
+- [ ] 16A.H.6 **SKU DUPLICATE CHECK WITH ORG**: Product uniqueness is `(organizationId, SKU)`, not just SKU
+  - [ ] Scenario: Org A creates SKU "ASPIRIN-500", then Org B tries to create same SKU
+  - [ ] Solution: Schema already has `UNIQUE(organizationId, sku)` (Phase 1.8), so this is handled
+  - [ ] Verify: Check migration that it actually created the unique constraint in target DB
+  - [ ] Test: Create org A with SKU "TEST-1", create org B with SKU "TEST-1", verify both succeed (different orgs)
+
+- [ ] 16A.H.7 **PARTIAL WEBHOOK FAILURES**: Handler succeeds for some orgs but fails for batch
+  - [ ] Scenario: Webhook handler processes 100 org downgrades, 99 succeed, 1 fails due to missing org
+  - [ ] Current implementation: Handler is atomic per org, doesn't batch. So failure is per-event, not per-batch.
+  - [ ] Solution: Already atomic (Phase 16A.B.5), so if one update fails, webhook is retried (not skipped for other orgs)
+  - [ ] Test: Create webhook scenario with missing org, verify error handling + retry logic
+
+- [ ] 16A.H.8 **TRIAL SIGNUP DUPLICATE EMAIL TXN**: Two signup requests arrive simultaneously with same email
+  - [ ] Scenario: Race condition during email uniqueness check + insertion
+  - [ ] DECISION (8A.3): Auto-create org on first login, so duplicate email check happens at user level
+  - [ ] Solution: DB `UNIQUE` constraint on email in users table (not organizations)
+  - [ ] Implementation: Catch `Prisma.PrismaClientKnownRequestError` with code P2002 (unique violation)
+  - [ ] Return 409 "Email already registered" or 400 "Try again in 24 hours" (for abuse prevention)
+  - [ ] Test: Concurrent signup requests with same email, verify one succeeds, other gets 409
+
+- [ ] 16A.H.9 **TOKEN STALENESS ON RAPID TIER CHANGE**: User changes tier twice in 5 seconds
+  - [ ] Scenario: User on Professional, downgrades to Starter, immediately upgrades to Premium. Token is stale.
+  - [ ] Solution: Phase 16A.E.2 (token refresh) queries latest subscription_tiers, so next request has fresh tier
+  - [ ] But current request will use old tier until token expires (1 hour)
+  - [ ] Acceptable but risky: If user downgrades, limits are still high until token refresh
+  - [ ] Improvement: Add `X-Org-Tier-Version` header to responses, client can force /refresh if version changed
+  - [ ] For MVP: Acceptable. Monitor for this in logs (Phase 16.4)
+  - [ ] Test: Downgrade tier, immediately POST product, verify product creates with old limits until refresh
+
+- [ ] 16A.H.10 **SOFT-DELETED ORGANIZATIONS**: Can we soft-delete orgs (for compliance) vs hard-delete?
+  - [ ] Scenario: Customer wants account deleted for GDPR compliance
+  - [ ] Current schema: No `deleted_at` field on organizations
+  - [ ] Decision: Hard-delete for MVP (easier), soft-delete in Phase 2 if needed
+  - [ ] Implementation: When deleting org, also delete all related records (cascade)
+  - [ ] Verify: Test org deletion, confirm all products/users/uploads/subscriptions are deleted
+  - [ ] Test: Create org, add data, delete org, verify cascade + no orphans
+
+### Phase 16A.I: Documentation Gaps (CRITICAL - Prevents Support Overload)
+
+- [ ] 16A.I.1 **TIER DOWNGRADE GUIDE**: Create guide for when usage exceeds new tier limit:
+  - Document which products/inventory to delete to free space
+  - Provide CSV export of excess products before deletion
+  - Explain limits per tier clearly (500 SKUs = 500 unique products; inventory item cap is separate)
+
+- [ ] 16A.I.2 **WEBHOOK TROUBLESHOOTING**: Document common webhook failures:
+  - Signature verification failed → check `STRIPE_WEBHOOK_SECRET` in `.env` matches Stripe dashboard
+  - Webhook timeout → check Stripe event retry logs
+  - Organization not found → check Stripe customer metadata contains correct `organizationId`
+
+- [ ] 16A.I.3 **TRIAL EXPIRATION FAQ**: Document trial behavior:
+  - Trial starts on day 1, expires on day 14 at midnight UTC
+  - Reminder sent on days 10, 12, 14
+  - On day 15, if no payment → auto-downgrade to Starter tier
+  - After downgrade, can still create up to 500 SKUs
+
+- [ ] 16A.I.4 **PAST_DUE RECOVERY**: Document dunning workflow:
+  - Payment fails → past_due status (access still works)
+  - Email sent with payment update link
+  - After 7 days + failed retries → auto-downgrade to Starter
+  - Can't recover deleted products, so downgrade before deleting products
+
+- [ ] 16A.I.5 **CROSS-TENANT ISOLATION ASSURANCE**: Document for compliance teams:
+  - All queries include `WHERE organizationId = ?` filter
+  - Unique constraints are `(organizationId, sku)` not just `sku`
+  - Audit logs track all data access by organization
+  - Penetration tests confirm no cross-tenant access possible
+
+---
+
+**Phase 16A Effort Estimate**: 40-50 hours (prevention + edge cases + docs)  
+**Phase 16A Critical Path**: Clarifications (8A) → Webhooks (16A.B) → Trial (16A.C) → Feature gating (16A.D) → Auth (16A.E) → Edge cases (16A.H)  
+**MUST COMPLETE before Phase 17 Production Deployment**
+
+---
 
 ## 17. Production Deployment (Phase 6 - Week 8)
 
@@ -800,335 +1126,8 @@ in auth middleware and service constructors. This task is effectively a no-op ve
   - Does `organization_usage.total_skus` count Products or InventoryItems?
   - **Decision**: Products only (unique SKU catalog) count toward the SKU limit.
   - Add separate InventoryItems cap by tier (Starter limited, higher tiers unlimited)
-  - Update Phase 18.D.2: Apply `checkUsageLimit('max_skus')` to POST /products ONLY, not POST /inventory-items
-  - **Blocker for**: Phase 6.5, 6.8, task 18.D.2
-
-### Existing User Onboarding (BLOCKING Phase 18.C.1)
-
-- [ ] **17.5.3 DESIGN**: Single-tenant users → multi-tenant migration:
-  - **Decision**: Auto-create organization on first login for existing users.
-  - First login flow: prompt for organization name if missing, then create org + Professional trial subscription
-  - Onboard endpoint optional (admin tooling only), but not required for MVP
-  - Document in Phase 15.6 (migration guide)
-  - **Blocker for**: Phase 18.C (signup), Phase 15.6
-
-### Email Service Integration (BLOCKING Phase 18.C.4, 18.G.1-2)
-
-- [ ] **17.5.4 VERIFY**: Email service exists and is configured:
-  - Check if `EmailService` already exists in `backend/src/services/`
-  - If missing: Create with methods for trial reminder, past_due notification, downgrade warning
-  - **Decision**: Use SendGrid. Verify SendGrid API key in `.env`
-  - **Blocker for**: Phase 18.C.4, 18.G.1, 18.G.2
-
-### Stripe Customer Metadata (BLOCKING Phase 9 & 18.B)
-
-- [ ] **17.5.5 STANDARD**: When creating Stripe customers in Phase 9, **ALWAYS set metadata**:
-  - `stripe.customers.create({ metadata: { organizationId: "org-uuid" } })`
-  - **Decision**: Metadata is the required source of truth for webhook routing
-  - Webhook handlers use this to route events → correct org
-  - **Blocker for**: Phase 9.3, Phase 18.B.3.1-6
-
-### Multi-User Org Model (BLOCKING Phase 18.C.1)
-
-- [ ] **17.5.6 MVP SCOPE**: Is multi-user in scope for MVP?
-  - **Decision**: YES - Multi-user from day one.
-  - Implement user management and enforce max_users per tier immediately
-  - Roles: keep Manager/Staff minimal for MVP
-  - **Blocker for**: Phase 18.C.1, Phase 6.7-6.9
-
-### Storage Calculation (BLOCKING Phase 18.D.3)
-
-- [ ] **17.5.7 AUDIT**: How are storage bytes calculated (Uploads, R2, etc.)?
-  - **Decision**: Sum Upload file sizes from DB records per organization
-  - Ensure Upload records persist file size and org id for calculation
-  - Phase 18.D.3 implementation depends on this
-  - **Blocker for**: Phase 18.D.3
-
-### Downgrade Policy (BLOCKING Phase 18.B.3.2 & 18.G.2)
-
-- [ ] **17.5.8 POLICY**: What happens when downgrading to lower SKU limit?
-  - Example: 3,000 products on Premium (unlimited) → downgrade to Professional (2,000 limit)
-  - **Decision**: Allow downgrade, but lock further creation until usage drops below limit
-  - Phase 18.G.2 sends warning email
-  - Phase 18.B.3.2 (updateSubscription handler) should set a "creation_locked" state for over-limit orgs
-  - **Blocker for**: Phase 18.B.3.2, Phase 18.G.2
-
-### Dunning Flow (BLOCKING Phase 18.G.1)
-
-- [ ] **17.5.9 SPEC**: Exact dunning process:
-  - Day 0: `invoice.payment_failed` → status=past_due, queue email
-  - Days 1-5: Stripe auto-retries (configure in Stripe dashboard)
-  - Day 7: If still past_due, downgrade to Starter tier + cancel subscription
-  - Implement as daily cron job that finds past_due > 7 days, auto-downgrades
-  - **Blocker for**: Phase 18.B.3.5, Phase 18.G.1
-
-### Phase 11 vs 18.C (CLARIFICATION)
-
-- [ ] **17.5.10 CONSOLIDATE**: Phase 11 (Trial System) and Phase 18.C overlap.
-  - **Decision**: Merge Phase 11 tasks into Phase 18.C and treat 18.C as the implementation source of truth
-  - Mark Phase 11 complete after Phase 18.C is done
-
----
-
-## 18. Prevention Tasks - Gap Closure (CRITICAL - Must Complete Before Phase 17)
-
-> **Context**: Gap analysis identified 20 critical implementation gaps between design spec and current code. 
-> These prevention tasks address root causes BEFORE deployment to avoid:
-> - **Data leaks** from incomplete organizationId filtering
-> - **Financial issues** from webhook processing failures  
-> - **Zero revenue** from missing trial system
-> - **Feature bypass** from unenforced limits
-> - **Support overload** from edge case handling
-
-### Phase 18.A: Data Isolation & Security (CRITICAL)
-
-- [ ] 18.A.1 **AUDIT**: Perform query-level review of all 50+ database queries across all routes/services. Verify every query has `WHERE organizationId = ?` filter. Document any exceptions in [search_patterns.md](docs/multi-tenant-guide.md#query-patterns)
-- [ ] 18.A.2 **ENFORCE**: Make `organizationId` required parameter in all service methods. Add JSDoc @param organizationId (required). Refactor any service method accepting raw query without org parameter
-- [ ] 18.A.3 **TEST**: Add integration test: Create org A and org B, add products, verify org A cannot see org B products via API. Test cross-tenant access attempts via parameter tampering
-- [ ] 18.A.4 **MIGRATE**: Create migration: Run pre-flight audit script to find any orphaned records with NULL organizationId. Assign to default org or delete. Document findings
-- [ ] 18.A.5 **CONSTRAIN**: Create migration: ALTER TABLE Product/InventoryItem/User/Upload SET organizationId NOT NULL. Add CHECK constraint: `organizationId IS NOT NULL`
-- [ ] 18.A.6 **COMPLIANCE**: Add Sentry rule to alert on 403 "cross-tenant access denied" >1/hour (indicates probe attempts)
-
-### Phase 18.B: Webhook & State Sync (CRITICAL - Revenue Protection)
-
-- [ ] 18.B.1 **CREATE TABLE**: Create migration: `processed_webhook_events(id TEXT PRIMARY KEY, event_type TEXT, processed_at TIMESTAMP, INDEX(event_type, processed_at))`
-- [ ] 18.B.2 **IDEMPOTENCY**: Update webhook.service.ts: Replace in-memory Map with database lookup. Implement `isNewEvent()` with SQL query + `markEventProcessed()` with INSERT. Handle unique constraint gracefully
-- [ ] 18.B.3 **IMPLEMENT HANDLERS**: Complete all 6 empty webhook handlers in webhook.service.ts:
-  - [ ] 18.B.3.1 `handleSubscriptionCreated`: Create subscription_tiers record, set status=active, update organization_usage limits. DECISION (17.5.5): MUST validate Stripe customer metadata contains organizationId (metadata is source of truth). Log ERROR to Sentry and skip if missing.
-  - [ ] 18.B.3.2 `handleSubscriptionUpdated`: Update tier_level, billing_cycle, current_period_end. DECISION (17.5.8): On tier downgrade, apply soft lock (read-only mode) if current usage > new tier limit. Don't auto-delete products. Set read_only_mode flag on organization.
-  - [ ] 18.B.3.3 `handleSubscriptionDeleted`: Set status=canceled, downgrade organization to Starter tier. DECISION (17.5.8): Apply soft lock (read-only mode) if usage > Starter limits. Log downgrade event.
-  - [ ] 18.B.3.4 `handleCheckoutSessionCompleted`: Find subscription_tiers by Stripe subscription ID, set is_trial=false (mark paid). DECISION (17.5.5): Link via Stripe customer metadata organizationId.
-  - [ ] 18.B.3.5 `handleInvoicePaymentFailed`: Set status=past_due, log to dunning queue. DECISION (17.5.4): Queue SendGrid retry email to organization owner. DECISION (17.5.9): Use 7-day grace period before auto-downgrade. (NOT disabled auto-retry in Stripe)
-  - [ ] 18.B.3.6 `handleTrialWillEnd`: DECISION (17.5.4): Queue SendGrid reminder email via email service. Test with Stripe test events
-- [ ] 18.B.4 **CRON JOB**: Create scheduled task (cron or Bull queue): Every 1 hour, fetch all active subscriptions from Stripe API, sync to local subscription_tiers table. Log any divergences as warning
-- [ ] 18.B.5 **TRANSACTION**: Wrap all webhook handlers in Prisma transactions. Use `$transaction()` to atomically update subscription_tiers + organization_usage + audit log
-- [ ] 18.B.6 **VALIDATION**: Add pre-update validation in webhook handlers: Before updating subscription_tiers, verify organization exists. Log and skip if missing (prevents orphaned records)
-- [ ] 18.B.7 **MONITORING**: Add Sentry alerts: webhook_handler_error >1/day, processed_webhook_events growth rate (detect replay attacks)
-
-### Phase 18.C: Trial System (CRITICAL - Revenue Model)
-
-- [ ] 18.C.1 **SIGNUP ENDPOINT**: Create POST /api/signup endpoint:
-  - [ ] Accept: email, password_pin, organization_name (optional - can be prompted later), phone
-  - [ ] DECISION (17.5.3): Auto-create organization on first login if missing (prompt for org name if not provided)
-  - [ ] DECISION (17.5.6): Multi-user support from day one - multiple users can belong to same organization
-  - [ ] Validate email uniqueness (prevent abuse) - check users table, not organizations
-  - [ ] Create organization record
-  - [ ] Create subscription_tiers with trial_end_date = now + 14 days, status=trialing
-  - [ ] DECISION (17.5.2): Create organization_usage with Professional tier limits including max_inventory_items (to show value)
-  - [ ] Log trial_started event
-  - [ ] Return auth token + trial_end_date
-- [ ] 18.C.2 **TRIAL DOWNGRADE CRON**: Create scheduled job (cron/Bull): Every 1 hour, find all subscription_tiers where trial_end_date < NOW and status=trialing. Update to status=active, tier_level=starter, reset organization_usage to Starter limits. Log trial_expired event
-- [ ] 18.C.3 **TRIAL ABUSE PREVENTION**: Implement unique constraints in database:
-  - [ ] Create migrations for email + phone uniqueness in organizations table
-  - [ ] Add validation in signup endpoint: reject if email/phone used in last 90 days
-  - [ ] Monitor signup rate per IP address (alert if >10/day)
-- [ ] 18.C.4 **TRIAL REMINDERS**: Integrate SendGrid email service into webhook handler `handleTrialWillEnd` per DECISION (17.5.4):
-  - [ ] Fetch organization + subscription_tiers
-  - [ ] Calculate days until trial end
-  - [ ] Send SendGrid reminder email if trial_end_date in next 3 days (use SendGrid templates for professional formatting)
-  - [ ] Log trial_reminder_sent event
-  - [ ] Use SendGrid API key from environment variables (never hardcode)
-- [ ] 18.C.5 **TRIAL CONVERSION CONVERSION TRACKING**: Add events to analytics.service:
-  - Trial started: log on signup
-  - Trial reminder sent: log in webhook handler
-  - Trial converted: log in webhook handler (checkout.session.completed when trial ended)
-  - Trial expired: log in cron downgrade
-- [ ] 18.C.6 **TEST**: Write integration test:
-  - Create trial org, verify trial_end_date is 14 days out
-  - Advance time to day 10, trigger cron, verify reminder email queued
-  - Advance time to day 15, trigger cron, verify downgraded to Starter + limits reset
-  - Verify user cannot create products past Starter limit on day 15
-
-### Phase 18.D: Feature Gating Enforcement (CRITICAL - Feature Bypass Prevention)
-
-- [ ] 18.D.1 **AUDIT ROUTES**: Review all protected routes in product.routes.ts, inventory.routes.ts, user.routes.ts, upload.routes.ts, report.routes.ts. Add `checkUsageLimit()` middleware to POST routes, `requireFeature()` to premium routes
-- [ ] 18.D.2 **APPLY MIDDLEWARE**: 
-  - [ ] POST /products: Add `checkUsageLimit('max_skus')` after authenticateToken
-  - [ ] POST /inventory-items: Add `checkUsageLimit('max_inventory_items')` + `checkUsageLimit('max_users')`
-  - [ ] POST /users: Add `checkUsageLimit('max_users')`
-  - [ ] GET /api/analytics: Add `requireFeature('advanced_analytics')`
-  - [ ] POST /uploads: Add `checkUsageLimit('storage_bytes')`
-- [ ] 18.D.3 **STORAGE QUOTA FIX**: Update feature-gate.middleware.ts line 164: Replace hardcoded 10GB with query to subscription tier limits. Use TIER_LIMITS[tierLevel].storage_bytes. DECISION (17.5.7): Calculate storage as sum of all file sizes (Blob.size) for the organization
-- [ ] 18.D.4 **RACE CONDITION FIX**: Update feature-gate.middleware.ts lines 149-157: Replace non-atomic create-if-missing with Prisma `upsert()`. OR move creation to org signup (Phase 1.6)
-- [ ] 18.D.5 **TEST**: Write tests for all feature gates:
-  - Starter user hits 500 SKU limit (POST 501st product → 403 Forbidden)
-  - Starter user hits inventory item cap (POST inventory-item over limit → 403 Forbidden)
-  - Professional user can create 2000+ SKUs (same request → 201 Created)
-  - Starter user tries GET /api/analytics → 403 Forbidden with upgrade CTA
-  - Usage warning appears at 80% limit (e.g., 400/500 SKUs)
-- [ ] 18.D.6 **DATA MODEL**: Add inventory item cap plumbing:
-  - Add organization_usage.total_inventory_items + max_inventory_items columns
-  - Seed tier_feature_flags with max_inventory_items per tier
-  - Update LimitKey/FeatureKey enums and TIER_LIMITS to include max_inventory_items
-
-### Phase 18.E: Token & Auth (CRITICAL - Access Correctness)
-
-- [ ] 18.E.1 **AUDIT LOGIN FLOW**: Review auth.service.login() code. Verify it:
-  - [ ] Queries subscription_tiers after PIN validation
-  - [ ] Extracts tierLevel from subscription record
-  - [ ] Returns tierLevel in login response (NOT hardcoded or default)
-  - Add missing subscription query if needed
-- [ ] 18.E.2 **TOKEN REFRESH**: Update auth.routes.ts token refresh endpoint (line 65):
-  - [ ] Query subscription_tiers for current tierLevel
-  - [ ] Call generateToken() with fresh tierLevel (don't reuse from old token)
-  - [ ] Test: Downgrade tier in Stripe, trigger webhook (sync subscription state), call /refresh, verify new token has Starter tier
-- [ ] 18.E.3 **WEBHOOK METADATA VALIDATION**: In webhook handlers, before updating subscription_tier, verify:
-  - DECISION (17.5.5): Stripe customer metadata is source of truth for organizationId
-  - Stripe customer metadata contains valid organizationId
-  - Organization record exists in database
-  - Log ERROR to Sentry and skip webhook if organization missing (don't create orphaned subscription records)
-  - Never trust organizationId from request body, only from Stripe metadata
-- [ ] 18.E.4 **TEST**: Integration test:
-  - Login with org A, get token with Professional tier
-  - Downgrade org A to Starter manually in DB (simulate failed payment)
-  - Call /auth/refresh, verify returned token has Starter tier
-  - Try to POST /products (with requireFeature), verify uses refreshed Starter limits
-
-### Phase 18.F: Testing & Quality (CRITICAL - Regression Prevention)
-
-- [ ] 18.F.1 **MULTI-TENANT CONCURRENCY**: Write load tests (Phase 13.11-13.12):
-  - [ ] Spawn 10 concurrent requests to POST /products from different organizations
-  - [ ] Verify each org's SKU counter incremented exactly once (no race condition)
-  - [ ] Spawn requests near limit (e.g., 495/500 SKUs): verify both can create if total <500, both fail if >500
-  - [ ] Use transaction isolation level testing
-- [ ] 18.F.2 **TIER FEATURE FLAGS VALIDATION**: Create boot-time validation script:
-  - [ ] On app startup, query tier_feature_flags table
-  - [ ] Verify all 4 tiers (starter, professional, premium, concierge) have all required features including max_inventory_items
-  - [ ] Log ERROR + exit if any tier missing features
-  - [ ] Include in pre-flight health check endpoint (GET /health should 503 until flags verified)
-- [ ] 18.F.3 **CROSS-TENANT ISOLATION TEST**: (Phase 13.1-13.3)
-  - [ ] Create orgs A + B with different users
-  - [ ] Verify Org A user cannot GET /products from Org B (even with valid token)
-  - [ ] Test PUT/DELETE cross-tenant denial
-  - [ ] Attempt parameter tampering: ?organizationId=other-org → denied
-  - [ ] Add to CI/CD automated tests
-
-### Phase 18.G: Operational (CRITICAL - Support Load)
-
-- [ ] 18.G.1 **DUNNING STRATEGY**: Complete invoice.payment_failed handler (Phase 10.8):
-  - [ ] Set subscription status to past_due
-  - [ ] Queue SendGrid retry email to organization owner per 17.5.4
-  - [ ] DECISION (17.5.9): After 7-day grace period + 3 failed payment attempts: downgrade to Starter tier + log escalation alert
-  - [ ] Integrate with Stripe's automatic retry (configure in Stripe dashboard)
-  - [ ] DECISION (17.5.8): On downgrade, apply soft lock (read-only mode) if usage > Starter limits
-- [ ] 18.G.2 **PENDING DOWNGRADE COMMUNICATION**: When subscription downgrade scheduled (e.g., day before period end):
-  - [ ] If current usage > new tier limit, queue SendGrid warning email per 17.5.4
-  - [ ] Include: current limit, new limit, recommendation to delete products
-  - [ ] DECISION (17.5.8): Apply soft lock (read-only mode) on downgrade if over limit, don't auto-delete
-  - [ ] DECISION (17.5.2): Limits are Products (unique SKUs) and InventoryItems (tracked items) separately
-  - [ ] Test: Upgrade to Premium (unlimited SKUs), add 3000 SKUs, downgrade to Professional (2000 SKUs), verify warning sent
-- [ ] 18.G.3 **OPERATIONAL RUNBOOK**: Document:
-  - [ ] How to manually sync subscription state from Stripe (if cron fails)
-  - [ ] How to rescue failed webhook events (replay from processed_webhook_events table)
-  - [ ] How to handle customer disputes (find event in audit log, verify Stripe state matches)
-  - [ ] How to diagnose cross-tenant leaks (check organizationId NULL queries, audit logs)
-
-### Phase 18.H: Edge Cases & Integration (CRITICAL - Prevents Unexpected Failures)
-
-- [ ] 18.H.1 **TRIAL CHECKOUT RACE**: What if trial expires DURING Stripe checkout?
-  - [ ] Scenario: User on day 13 of trial, starts checkout, trial expires (day 14 limit reached) mid-checkout
-  - [ ] Solution: Webhook handles trial expiry by downgrading org. But user might complete checkout for Professional tier.
-  - [ ] Implementation: `handleCheckoutSessionCompleted` should always honor the paid upgrade, ignore trial_end_date
-  - [ ] Test: Manually trigger checkout on day 13, advance time to day 15 using stub, complete session, verify org remains Professional
-
-- [ ] 18.H.2 **TIER FLAG SEEDING RACE**: Multiple app instances boot concurrently, both try to seed tier_feature_flags
-  - [ ] Solution: Use `UNIQUE` constraint + `INSERT IGNORE` / `ON CONFLICT DO NOTHING`
-  - [ ] Verify Phase 1.6 migration uses idempotent insert, not `INSERT INTO ... VALUES` which fails on duplicate
-  - [ ] Test: Run app with 2 instances simultaneously, verify both boot successfully
-
-- [ ] 18.H.3 **DOWNGRADE OVER-LIMIT EDGE CASE**: User downgrades mid-billing-cycle when at limit
-  - [ ] Scenario: Professional (2,000 limit) with 2,000 products on day 15 of month, manually downgrades to Starter (500 limit)
-  - [ ] DECISION (17.5.8): Apply soft lock (read-only mode) when downgrading over limit
-  - [ ] Solution: Allow downgrade but apply read-only mode. User cannot create new products/inventory items until deleted to fit limit.
-  - [ ] Implementation: Routes should allow downgrade, set read_only_mode flag on org, block POST endpoints for products/inventory
-  - [ ] Send SendGrid warning email per 17.5.4 with instructions to delete excess items
-  - [ ] Test: Create org, add 1,500 products (fake), downgrade to Starter, verify read-only mode + warning email sent
-
-- [ ] 18.H.4 **WEBHOOK EVENT ORDERING**: What if `subscription.updated` arrives BEFORE `subscription.created`?
-  - [ ] Scenario: If Stripe sends events out of order (rare but possible with network delays)
-  - [ ] Solution in Phase 18.B.3.1-3.2: Handler should check if subscription_tiers record exists
-  - [ ] If doesn't exist, create it first, then apply update
-  - [ ] Test: Manually send out-of-order webhooks via Stripe CLI, verify idempotent handling
-
-- [ ] 18.H.5 **STORAGE QUOTA CONCURRENCY**: Two users upload files simultaneously, both near 10GB limit
-  - [ ] Scenario: Org at 9.99GB limit, two users try to upload 100MB files concurrently
-  - [ ] Solution: `checkUsageLimit('storage_bytes')` middleware should use transactional lock
-  - [ ] Implementation: Query organisation_usage with `SELECT ... FOR UPDATE` to prevent race condition
-  - [ ] Prisma doesn't support `FOR UPDATE`, so use raw SQL in middleware or service layer
-  - [ ] Test: Concurrent upload requests to same org near limit, verify both don't exceed quota
-
-- [ ] 18.H.6 **SKU DUPLICATE CHECK WITH ORG**: Product uniqueness is `(organizationId, SKU)`, not just SKU
-  - [ ] Scenario: Org A creates SKU "ASPIRIN-500", then Org B tries to create same SKU
-  - [ ] Solution: Schema already has `UNIQUE(organizationId, sku)` (Phase 1.8), so this is handled
-  - [ ] Verify: Check migration that it actually created the unique constraint in target DB
-  - [ ] Test: Create org A with SKU "TEST-1", create org B with SKU "TEST-1", verify both succeed (different orgs)
-
-- [ ] 18.H.7 **PARTIAL WEBHOOK FAILURES**: Handler succeeds for some orgs but fails for batch
-  - [ ] Scenario: Webhook handler processes 100 org downgrades, 99 succeed, 1 fails due to missing org
-  - [ ] Current implementation: Handler is atomic per org, doesn't batch. So failure is per-event, not per-batch.
-  - [ ] Solution: Already atomic (Phase 18.B.5), so if one update fails, webhook is retried (not skipped for other orgs)
-  - [ ] Test: Create webhook scenario with missing org, verify error handling + retry logic
-
-- [ ] 18.H.8 **TRIAL SIGNUP DUPLICATE EMAIL TXN**: Two signup requests arrive simultaneously with same email
-  - [ ] Scenario: Race condition during email uniqueness check + insertion
-  - [ ] DECISION (17.5.3): Auto-create org on first login, so duplicate email check happens at user level
-  - [ ] Solution: DB `UNIQUE` constraint on email in users table (not organizations)
-  - [ ] Implementation: Catch `Prisma.PrismaClientKnownRequestError` with code P2002 (unique violation)
-  - [ ] Return 409 "Email already registered" or 400 "Try again in 24 hours" (for abuse prevention)
-  - [ ] Test: Concurrent signup requests with same email, verify one succeeds, other gets 409
-
-- [ ] 18.H.9 **TOKEN STALENESS ON RAPID TIER CHANGE**: User changes tier twice in 5 seconds
-  - [ ] Scenario: User on Professional, downgrades to Starter, immediately upgrades to Premium. Token is stale.
-  - [ ] Solution: Phase 18.E.2 (token refresh) queries latest subscription_tiers, so next request has fresh tier
-  - [ ] But current request will use old tier until token expires (1 hour)
-  - [ ] Acceptable but risky: If user downgrades, limits are still high until token refresh
-  - [ ] Improvement: Add `X-Org-Tier-Version` header to responses, client can force /refresh if version changed
-  - [ ] For MVP: Acceptable. Monitor for this in logs (Phase 16.4)
-  - [ ] Test: Downgrade tier, immediately POST product, verify product creates with old limits until refresh
-
-- [ ] 18.H.10 **SOFT-DELETED ORGANIZATIONS**: Can we soft-delete orgs (for compliance) vs hard-delete?
-  - [ ] Scenario: Customer wants account deleted for GDPR compliance
-  - [ ] Current schema: No `deleted_at` field on organizations
-  - [ ] Decision: Hard-delete for MVP (easier), soft-delete in Phase 2 if needed
-  - [ ] Implementation in Phase 18.A.4: When deleting org, also delete all related records (cascade)
-  - [ ] Verify: Test org deletion, confirm all products/users/uploads/subscriptions are deleted
-  - [ ] Test: Create org, add data, delete org, verify cascade + no orphans
-
-### Phase 18.I: Documentation Gaps (CRITICAL - Prevents Support Overload)
-
-- [ ] 18.I.1 **TIER DOWNGRADE GUIDE**: Create guide for when usage exceeds new tier limit:
-  - Document which products/inventory to delete to free space
-  - Provide CSV export of excess products before deletion
-  - Explain limits per tier clearly (500 SKUs = 500 unique products; inventory item cap is separate)
-
-- [ ] 18.I.2 **WEBHOOK TROUBLESHOOTING**: Document common webhook failures:
-  - Signature verification failed → check `STRIPE_WEBHOOK_SECRET` in `.env` matches Stripe dashboard
-  - Webhook timeout → check Stripe event retry logs
-  - Organization not found → check Stripe customer metadata contains correct `organizationId`
-
-- [ ] 18.I.3 **TRIAL EXPIRATION FAQ**: Document trial behavior:
-  - Trial starts on day 1, expires on day 14 at midnight UTC
-  - Reminder sent on days 10, 12, 14
-  - On day 15, if no payment → auto-downgrade to Starter tier
-  - After downgrade, can still create up to 500 SKUs
-
-- [ ] 18.I.4 **PAST_DUE RECOVERY**: Document dunning workflow:
-  - Payment fails → past_due status (access still works)
-  - Email sent with payment update link
-  - After 7 days + failed retries → auto-downgrade to Starter
-  - Can't recover deleted products, so downgrade before deleting products
-
-- [ ] 18.I.5 **CROSS-TENANT ISOLATION ASSURANCE**: Document for compliance teams:
-  - All queries include `WHERE organizationId = ?` filter
-  - Unique constraints are `(organizationId, sku)` not just `sku`
-  - Audit logs track all data access by organization
-  - Penetration tests confirm no cross-tenant access possible
-
----
-
-**Phase 18 Effort Estimate**: 40-50 hours (prevention + edge cases + docs)  
-**Phase 18 Critical Path**: Clarifications (17.5) → Data isolation (18.A) → Webhooks (18.B) → Trial (18.C) → Feature gating (18.D) → Auth (18.E) → Edge cases (18.H)  
-**MUST COMPLETE before Phase 17 Production Deployment**
+  - Update Phase 16A.D.2: Apply `checkUsageLimit('max_skus')` to POST /products ONLY, not POST /inventory-items
+  - **Blocker for**: Phase 6.5, 6.8, task 16A.D.2
 
 ---
 
@@ -1138,40 +1137,40 @@ in auth middleware and service constructors. This task is effectively a no-op ve
 - [x] 20.1 All Phase 17.5 blocking items resolved (10 clarifications answered) ✅ **COMPLETE**
 - [ ] 20.2 Phase 6-7 routes/services fully verified with integration tests (6.13 passes)
 - [ ] 20.3 Phase 9 Stripe service fully implemented (createSubscription, updateSubscription, cancelSubscription working)
-- [ ] 20.4 Phase 10 webhook handlers fully implemented (all 6 handlers + idempotency + transactions per DECISION 17.5.5 - Stripe metadata validation)
-- [ ] 20.5 Phase 18 edge cases (18.H.1-10) all addressed + tested (including DECISION 17.5.8 soft lock downgrade)
-- [ ] 20.6 SendGrid email service integrated per DECISION 17.5.4 and tested with real emails
-- [ ] 20.7 Storage quota calculation per DECISION 17.5.7 (sum of Blob.size) verified per-organization
-- [ ] 20.8 Tier feature flags boot-time validation passing per DECISION 17.5.1 (Phase 18.F.2)
-- [ ] 20.9 Cross-tenant isolation tests passing (Phase 18.F.3, penetration tests) - Products-only SKU count per DECISION 17.5.2
-- [ ] 20.10 Load tests for concurrency passing (Phase 18.F.1)
-- [ ] 20.11 Schema audit script passing on test DB (Phase 14.1, Phase 18.A.4) - includes max_inventory_items per DECISION 17.5.2
-- [ ] 20.12 Stripe test mode webhook delivery 100% success for 24 hours (7-day dunning grace period per DECISION 17.5.9)
-- [ ] 20.13 All Sentry alerts configured (Phase 16 + Phase 18.B.7)
-- [ ] 20.14 Operational runbook complete (Phase 18.G.3) and team trained (auto-create org flow per DECISION 17.5.3)
+- [ ] 20.4 Phase 10 webhook handlers fully implemented (all 6 handlers + idempotency + transactions per DECISION 8A.5 - Stripe metadata validation)
+- [ ] 20.5 Phase 16A edge cases (16A.H.1-10) all addressed + tested (including DECISION 8A.8 soft lock downgrade)
+- [ ] 20.6 SendGrid email service integrated per DECISION 8A.4 and tested with real emails
+- [ ] 20.7 Storage quota calculation per DECISION 8A.7 (sum of Blob.size) verified per-organization
+- [ ] 20.8 Tier feature flags boot-time validation passing per DECISION 8A.1 (Phase 16A.F.2)
+- [ ] 20.9 Cross-tenant isolation tests passing (Phase 16A.F.3, penetration tests) - Products-only SKU count per DECISION 8A.2
+- [ ] 20.10 Load tests for concurrency passing (Phase 16A.F.1)
+- [ ] 20.11 Schema audit script passing on test DB (Phase 14.1) - includes max_inventory_items per DECISION 8A.2
+- [ ] 20.12 Stripe test mode webhook delivery 100% success for 24 hours (7-day dunning grace period per DECISION 8A.9)
+- [ ] 20.13 All Sentry alerts configured (Phase 16 + Phase 16A.B.7)
+- [ ] 20.14 Operational runbook complete (Phase 16A.G.3) and team trained (auto-create org flow per DECISION 8A.3)
 
 ---
 
-17.5 (Clarifications) ✅ COMPLETE - All decisions mapped into Phase 18
+8A (Clarifications) ✅ COMPLETE - All decisions mapped into Phase 16A
   ↓ 
 9 (Stripe Service) ☝ START HERE
   ↓ 
-10 (Webhook Handlers) → Implement with DECISION 17.5.5 (Stripe metadata source of truth)
+10 (Webhook Handlers) → Implement with DECISION 8A.5 (Stripe metadata source of truth)
   ↓
-18.B (Webhook State Sync) → Implement with DECISION 17.5.8 (soft lock downgrade)
+16A.B (Webhook State Sync) → Implement with DECISION 8A.8 (soft lock downgrade)
   ↓
-18.C (Trial System) → Implement with DECISION 17.5.3 (auto-create org), 17.5.4 (SendGrid)
+16A.C (Trial System) → Implement with DECISION 8A.3 (auto-create org), 8A.4 (SendGrid)
   ↓
-18.H (Edge Cases) → All decisions applied
+16A.H (Edge Cases) → All decisions applied
   ↓
 17 (Deployment)
 ```
 
 **Recommended Team Assignment**:
-- **Backend Lead**: 17.5 clarifications, Phase 9-10, Phase 18.A-I
-- **Frontend Lead**: Phase 12, Phase 18.D (UI feature gates)
-- **DevOps/QA**: Phase 14-17, Phase 18.F (testing & deployment)
-- **Product/Operations**: Phase 15-16, Phase 18.G (docs & monitoring)
+- **Backend Lead**: 8A clarifications, Phase 9-10, Phase 16A.B-I
+- **Frontend Lead**: Phase 12, Phase 16A.D (UI feature gates)
+- **DevOps/QA**: Phase 14-17, Phase 16A.F (testing & deployment)
+- **Product/Operations**: Phase 15-16, Phase 16A.G (docs & monitoring)
 
 **Start Date**: Week 1 → Production Deployment: Week 10-11  
 **Risk Level**: **HIGH** - Multi-tenant + SaaS billing = zero-tolerance for data leaks or financial errors
@@ -1181,7 +1180,7 @@ in auth middleware and service constructors. This task is effectively a no-op ve
 ```
 START
   ↓
-Phase 17.5 (Clarifications) - MUST RESOLVE FIRST ⚠️
+Phase 8A (Clarifications) - MUST RESOLVE FIRST ⚠️
   ↓
 Phase 1-5 (Schema/Auth) ✅ DONE
   ↓
@@ -1191,13 +1190,13 @@ Phase 9 (Stripe Service)
   ↓
 Phase 10 (Webhook Handlers)
   ↓
-Phase 18.B (Webhook State Sync)
+Phase 16A.B (Webhook State Sync)
   ↓
-Phase 18.C (Trial System)
+Phase 16A.C (Trial System)
   ↓
-Phase 18.H (Edge Cases)
+Phase 16A.H (Edge Cases)
   ↓
-Phase 18.F (Testing)
+Phase 16A.F (Testing)
   ↓
 Phase 20 (Validation - 14 gates)
   ↓
@@ -1208,28 +1207,28 @@ PRODUCTION DEPLOYMENT
 
 | Decision | Affects | Solution DECIDED |
 |---------|----------|----------|
-| **Phase 17.5.1** (Tier flag verification) | Phase 9+ | ✅ **DECIDED**: Create boot-time validation script with fail-fast health check endpoint |
-| **Phase 17.5.2** (SKU semantics) | Phase 6.5, 18.D.2 | ✅ **DECIDED**: Products-only count (unique catalog), separate max_inventory_items cap (Starter=5000, others=unlimited) |
-| **Phase 17.5.3** (User onboarding) | Phase 18.C.1 | ✅ **DECIDED**: Auto-create org on first login (prompt for org name), multi-user from day one |
-| **Phase 17.5.4** (Email service) | Phase 18.C.4, 18.G | ✅ **DECIDED**: SendGrid integration with professional templates |
-| **Phase 17.5.5** (Stripe metadata) | Phase 9.3, 18.B | ✅ **DECIDED**: Stripe customer metadata is source of truth for organizationId (never trust request body) |
-| **Phase 17.5.6** (Multi-user scope) | Phase 18.C.1, Phase 6.7 | ✅ **DECIDED**: Multi-user support from day one (multiple users per org) |
-| **Phase 17.5.7** (Storage calculation) | Phase 18.D.3 | ✅ **DECIDED**: Sum of all file sizes (Blob.size) per organization |
-| **Phase 17.5.8** (Downgrade policy) | Phase 18.B.3.2, 18.G.2 | ✅ **DECIDED**: Soft lock (read-only mode) when usage > new tier limit, no auto-deletion |
-| **Phase 17.5.9** (Dunning flow) | Phase 18.B.3.5, 18.G.1 | ✅ **DECIDED**: 7-day grace period + 3 failed attempts before auto-downgrade to Starter |
-| **Phase 17.5.10** (Phase 11 vs 18.C) | Task management clarity | ✅ **DECIDED**: Merged Phase 11 into Phase 18.C (Trial System) |
+| **Phase 8A.1** (Tier flag verification) | Phase 9+ | ✅ **DECIDED**: Create boot-time validation script with fail-fast health check endpoint |
+| **Phase 8A.2** (SKU semantics) | Phase 6.5, 16A.D.2 | ✅ **DECIDED**: Products-only count (unique catalog), separate max_inventory_items cap (Starter=5000, others=unlimited) |
+| **Phase 8A.3** (User onboarding) | Phase 16A.C.1 | ✅ **DECIDED**: Auto-create org on first login (prompt for org name), multi-user from day one |
+| **Phase 8A.4** (Email service) | Phase 16A.C.4, 16A.G | ✅ **DECIDED**: SendGrid integration with professional templates |
+| **Phase 8A.5** (Stripe metadata) | Phase 9.3, 16A.B | ✅ **DECIDED**: Stripe customer metadata is source of truth for organizationId (never trust request body) |
+| **Phase 8A.6** (Multi-user scope) | Phase 16A.C.1, Phase 6.7 | ✅ **DECIDED**: Multi-user support from day one (multiple users per org) |
+| **Phase 8A.7** (Storage calculation) | Phase 16A.D.3 | ✅ **DECIDED**: Sum of all file sizes (Blob.size) per organization |
+| **Phase 8A.8** (Downgrade policy) | Phase 16A.B.3.2, 16A.G.2 | ✅ **DECIDED**: Soft lock (read-only mode) when usage > new tier limit, no auto-deletion |
+| **Phase 8A.9** (Dunning flow) | Phase 16A.B.3.5, 16A.G.1 | ✅ **DECIDED**: 7-day grace period + 3 failed attempts before auto-downgrade to Starter |
+| **Phase 8A.10** (Phase 11 vs 16A.C) | Task management clarity | ✅ **DECIDED**: Merged Phase 11 into Phase 16A.C (Trial System) |
 
 ### Red Flags That Stop Deployment ⛔
 
 If ANY of these are true on deployment day, **DO NOT DEPLOY**:
 
-1. ✅ ~~Phase 17.5 items remain unresolved or unanswered~~ **RESOLVED - All decisions made**
-2. ❌ Cross-tenant tests fail (Phase 13.3 or 18.A.3)
-3. ❌ Webhook idempotency test fails (replay test in Phase 18.B.2)
-4. ❌ Tier feature flags validation fails on startup (Phase 18.F.2)
-5. ❌ Load test shows race conditions (Phase 18.F.1)
-6. ❌ SendGrid email service not configured or tested (DECISION 17.5.4)
-7. ❌ Stripe customer metadata not being set (DECISION 17.5.5 - must be source of truth)
+1. ✅ ~~Phase 8A items remain unresolved or unanswered~~ **RESOLVED - All decisions made**
+2. ❌ Cross-tenant tests fail (Phase 13.3)
+3. ❌ Webhook idempotency test fails (replay test in Phase 16A.B.2)
+4. ❌ Tier feature flags validation fails on startup (Phase 16A.F.2)
+5. ❌ Load test shows race conditions (Phase 16A.F.1)
+6. ❌ SendGrid email service not configured or tested (DECISION 8A.4)
+7. ❌ Stripe customer metadata not being set (DECISION 8A.5 - must be source of truth)
 8. ❌ Any Phase 20 gate fails (14 validation items)
 9. ❌ Penetration test finds cross-tenant data leak
 10. ❌ Webhook delivery success <99% in 24-hour test
@@ -1243,19 +1242,19 @@ If ANY of these are true on deployment day, **DO NOT DEPLOY**:
 **New Approach**: "Clarify first, prevent later, test thoroughly"  
 
 **Original Tests**: Phases 13, 16  
-**New Tests**: Phase 18.F (concurrency), Phase 18.H (edge cases), Phase 20 (validation gates)
+**New Tests**: Phase 16A.F (concurrency), Phase 16A.H (edge cases), Phase 20 (validation gates)
 
 **Original Documentation**: Phases 15  
-**New Documentation**: + Phase 18.I (edge case docs & troubleshooting)
+**New Documentation**: + Phase 16A.I (edge case docs & troubleshooting)
 
 ---
 
 ## 🚀 Next Steps (In Order)
 
 ### ✅ Week 1: Resolution Phase - COMPLETE
-1. ✅ **Team Meeting**: Review Phase 17.5 (10 questions)
-2. ✅ **Decisions**: Document answers to all 17.5 items
-3. ✅ **Update**: Modify this document with decisions - ALL MAPPED INTO PHASE 18
+1. ✅ **Team Meeting**: Review Phase 8A (10 questions)
+2. ✅ **Decisions**: Document answers to all 8A items
+3. ✅ **Update**: Modify this document with decisions - ALL MAPPED INTO PHASE 16A
 4. **Next**: Set up Stripe account (Phase 8 user tasks)
 
 ### Weeks 2-4: Foundation
@@ -1266,16 +1265,16 @@ If ANY of these are true on deployment day, **DO NOT DEPLOY**:
 ### Weeks 5-7: Core Implementation
 1. **Phase 9**: Stripe Service (createSubscription, etc.)
 2. **Phase 10**: Webhook Handlers (all 6 implemented)
-3. **Phase 18.B**: Webhook State Sync (database idempotency)
-4. **Phase 18.C**: Trial System (signup, downgrade cron)
+3. **Phase 16A.B**: Webhook State Sync (database idempotency)
+4. **Phase 16A.C**: Trial System (signup, downgrade cron)
 
 ### Weeks 8-9: Quality & Safety
-1. **Phase 18.A-E**: Data isolation, feature gating, auth, testing
-2. **Phase 18.H**: Edge case handling (10 scenarios)
-3. **Phase 18.F**: Load tests, concurrency tests, isolation tests
+1. **Phase 16A.D-E**: Feature gating, auth, testing
+2. **Phase 16A.H**: Edge case handling (10 scenarios)
+3. **Phase 16A.F**: Load tests, concurrency tests, isolation tests
 
 ### Week 10: Validation & Deploy
-1. **Phase 18.G**: Operations & runbooks
+1. **Phase 16A.G**: Operations & runbooks
 2. **Phase 20**: Run all 14 validation gates
 3. **Smoke tests**: Create org, add products, upgrade, cancel
 4. **Deploy**: Phase 17 production deployment
