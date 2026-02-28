@@ -8,14 +8,15 @@
 - ✅ Phase 4: Authentication Layer (10/10 tasks) - JWT auth with organization context complete
 - ✅ Phase 5: Feature Gating Middleware (8/8 tasks) - Tier-based feature access & usage limits
 - ✅ Phase 6: Route Layer Refactor (13/13 tasks) - Tenant filtering added to all routes
+- ✅ Phase 16: Monitoring & Observability (6/6 tasks) - SaaS metrics, alerts, dashboard, daily reports
 
 **Skipped:**
 - ⏭️ Phase 2: Data Migration (9 tasks) - Not needed for fresh SaaS launch
 
 **Remaining:**
-- 📋 Phase 7-20: Services refactor, Stripe integration, trial system, UI, testing, monitoring, deployment (126 tasks)
+- 📋 Phase 7-20: Services refactor, Stripe integration, trial system, UI, testing, deployment (120 tasks)
 
-**Current Status:** 48/161 tasks complete (30% done) | Feature gating enables route-layer tenant filtering
+**Current Status:** 54/161 tasks complete (34% done) | Monitoring & Observability complete with comprehensive SaaS metrics
 
 > **Legend**: `**USER:**` = Manual action required (account setup, dashboard config, announcements)  
 > Everything else = Developer implementation tasks
@@ -826,14 +827,48 @@ in auth middleware and service constructors. This task is effectively a no-op ve
 - [x] 15.7 Document trial system: Signup flow, conversion tracking, abuse prevention
 - [x] 15.8 Create operational runbook: Handling webhook failures, trial expirations, subscription issues
 
-## 16. Monitoring & Observability (Phase 5 - Week 8)
+## 16. Monitoring & Observability (Phase 5 - Week 8) ✅ COMPLETED
 
-- [ ] 16.1 Add metrics: trial_conversion_rate, avg_revenue_per_user, churn_rate
-- [ ] 16.2 Add alerts: webhook_failure_rate >5%, trial_conversion_rate <10%, payment_failure_rate >2%
-- [ ] 16.3 Create dashboard: Subscription tier distribution, usage by tier, revenue projections
-- [ ] 16.4 Add logging: Cross-tenant access attempts (security), feature gate rejections (conversion)
-- [ ] 16.5 Configure Sentry alerting for webhook processing errors
-- [ ] 16.6 Create daily report: New trials, conversions, churns, revenue changes
+- [x] 16.1 Add metrics: trial_conversion_rate, avg_revenue_per_user, churn_rate
+  - ✅ Created `MetricsSnapshot` table for daily metric storage
+  - ✅ Implemented `SaasMetricsService` with calculation methods for all metrics
+  - ✅ Integrated with `ApplicationMonitoringService` for real-time tracking
+  
+- [x] 16.2 Add alerts: webhook_failure_rate >5%, trial_conversion_rate <10%, payment_failure_rate >2%
+  - ✅ Implemented alert thresholds in `SaasMetricsService`
+  - ✅ Created `HourlyWebhookCheckJob` for real-time webhook monitoring
+  - ✅ Added alert logging to Sentry and console
+  
+- [x] 16.3 Create dashboard: Subscription tier distribution, usage by tier, revenue projections
+  - ✅ Created admin metrics routes:
+    - `/api/admin/metrics/dashboard` - Comprehensive metrics view
+    - `/api/admin/metrics/subscription-tiers` - Tier distribution and revenue
+    - `/api/admin/metrics/revenue-projections` - Revenue projections with trend analysis
+    - `/api/admin/metrics/historical` - Historical data retrieval
+    - `/api/admin/metrics/alerts` - Current alert status
+  
+- [x] 16.4 Add logging: Cross-tenant access attempts (security), feature gate rejections (conversion)
+  - ✅ Created `tenant-isolation.middleware.ts` for cross-tenant access detection
+  - ✅ Enhanced `feature-gate.middleware.ts` with detailed conversion tracking
+  - ✅ All security events logged to Sentry with full context
+  
+- [x] 16.5 Configure Sentry alerting for webhook processing errors
+  - ✅ Enhanced `WebhookService` with comprehensive error reporting
+  - ✅ Added `reportWebhookError()` and `reportCriticalWebhookFailure()` methods
+  - ✅ Implemented error classification (client vs server errors)
+  
+- [x] 16.6 Create daily report: New trials, conversions, churns, revenue changes
+  - ✅ Created `DailyReportService` with HTML report generation
+  - ✅ Implemented `DailyReportEmailJob` scheduled for 00:01 UTC
+  - ✅ Reports include: metrics summary, trends, tier distribution, alerts
+
+### Implementation Details:
+- **Database**: Added `MetricsSnapshot` and `WebhookMetrics` tables
+- **Services**: `SaasMetricsService`, `DailyReportService` 
+- **Jobs**: `DailyMetricsJob`, `HourlyWebhookCheckJob`, `DailyReportEmailJob`
+- **Middleware**: `tenant-isolation.middleware.ts` (new), enhanced `feature-gate.middleware.ts`
+- **Routes**: `admin.metrics.routes.ts` (new)
+- **Integration**: Full Sentry integration for errors and security events
 
 ## 16A. Prevention Tasks - Gap Closure (CRITICAL - Must Complete Before Phase 17) [MOVED FROM 18]
 
@@ -1087,18 +1122,34 @@ in auth middleware and service constructors. This task is effectively a no-op ve
 **MUST COMPLETE before Phase 17 Production Deployment**
 
 ---
+## 16B. Validation Checklist (Run Before Phase 17 Deployment)
+
+**Must-Pass Gates**:
+- [x] 16B.1 All Phase 17.5 blocking items resolved (10 clarifications answered) ✅ **COMPLETE**
+- [ ] 16B.2 Phase 6-7 routes/services fully verified with integration tests (6.13 passes)
+- [ ] 16B.3 Phase 9 Stripe service fully implemented (createSubscription, updateSubscription, cancelSubscription working)
+- [ ] 16B.4 Phase 10 webhook handlers fully implemented (all 6 handlers + idempotency + transactions per DECISION 8A.5 - Stripe metadata validation)
+- [ ] 16B.5 Phase 16A edge cases (16A.H.1-10) all addressed + tested (including DECISION 8A.8 soft lock downgrade)
+- [ ] 16B.6 SendGrid email service integrated per DECISION 8A.4 and tested with real emails
+- [ ] 16B.7 Storage quota calculation per DECISION 8A.7 (sum of Blob.size) verified per-organization
+- [ ] 16B.8 Tier feature flags boot-time validation passing per DECISION 8A.1 (Phase 16A.F.2)
+- [ ] 16B.9 Cross-tenant isolation tests passing (Phase 16A.F.3, penetration tests) - Products-only SKU count per DECISION 8A.2
+- [ ] 16B.10 Load tests for concurrency passing (Phase 16A.F.1)
+- [ ] 16B.11 Schema audit script passing on test DB (Phase 14.1) - includes max_inventory_items per DECISION 8A.2
+- [ ] 16B.12 Stripe test mode webhook delivery 100% success for 24 hours (7-day dunning grace period per DECISION 8A.9)
+- [ ] 16B.13 All Sentry alerts configured (Phase 16 + Phase 16A.B.7)
+- [ ] 16B.14 Operational runbook complete (Phase 16A.G.3) and team trained (auto-create org flow per DECISION 8A.3)
 
 ## 17. Production Deployment (Phase 6 - Week 8)
 
 - [ ] 17.1 Deploy schema migrations to production Neon PostgreSQL
-- [ ] 17.2 **USER:** Run backfill scripts on production data (coordinate maintenance window with dev team to execute scripts)
-- [ ] 17.3 Deploy backend code with multi-tenant routes + Stripe integration
-- [ ] 17.4 Deploy frontend code with subscription management UI
-- [ ] 17.5 **USER:** Configure production Stripe webhook endpoint in Stripe dashboard (update URL from test to production domain)
-- [ ] 17.6 Enable trial system and monitor conversion rate
-- [ ] 17.7 Monitor logs for cross-tenant access attempts (should be zero)
-- [ ] 17.8 Verify webhook delivery success rate >99%
-- [ ] 17.9 Run smoke tests: Create org, add products, upgrade tier, cancel subscription
+- [ ] 17.2 Deploy backend code with multi-tenant routes + Stripe integration
+- [ ] 17.3 Deploy frontend code with subscription management UI
+- [ ] 17.4 **USER:** Configure production Stripe webhook endpoint in Stripe dashboard (update URL from test to production domain)
+- [ ] 17.5 Enable trial system and monitor conversion rate
+- [ ] 17.6 Monitor logs for cross-tenant access attempts (should be zero)
+- [ ] 17.7 Verify webhook delivery success rate >99%
+- [ ] 17.8 Run smoke tests: Create org, add products, upgrade tier, cancel subscription
 ---
 
 ## 17.5 Critical Interdependencies & Clarifications (BLOCKING - Review Before Starting)
@@ -1128,155 +1179,16 @@ in auth middleware and service constructors. This task is effectively a no-op ve
   - Update Phase 16A.D.2: Apply `checkUsageLimit('max_skus')` to POST /products ONLY, not POST /inventory-items
   - **Blocker for**: Phase 6.5, 6.8, task 16A.D.2
 
----
+### Final Checks
 
-## 20. Validation Checklist (Run Before Phase 17 Deployment)
+- [ ] Review all tasks completed against spec and proposal and make sure there are no gaps. If any gaps between work done and spec remain update the task list
+- [ ] Run full type check and fix any errors and warnings
+- [ ] Run full lint check and fix any errors and warnings
+- [ ] Run full test check and fix any errors and warnings
+- [ ] Run full integration test check and fix any errors and warnings
+- [ ] Run full end-to-end test check and fix any errors and warnings
+- [ ] Run full security check and fix any errors and warnings
+- [ ] Run full performance check and fix any errors and warnings
+- [ ] Run full accessibility check and fix any errors and warnings
 
-**Must-Pass Gates**:
-- [x] 20.1 All Phase 17.5 blocking items resolved (10 clarifications answered) ✅ **COMPLETE**
-- [ ] 20.2 Phase 6-7 routes/services fully verified with integration tests (6.13 passes)
-- [ ] 20.3 Phase 9 Stripe service fully implemented (createSubscription, updateSubscription, cancelSubscription working)
-- [ ] 20.4 Phase 10 webhook handlers fully implemented (all 6 handlers + idempotency + transactions per DECISION 8A.5 - Stripe metadata validation)
-- [ ] 20.5 Phase 16A edge cases (16A.H.1-10) all addressed + tested (including DECISION 8A.8 soft lock downgrade)
-- [ ] 20.6 SendGrid email service integrated per DECISION 8A.4 and tested with real emails
-- [ ] 20.7 Storage quota calculation per DECISION 8A.7 (sum of Blob.size) verified per-organization
-- [ ] 20.8 Tier feature flags boot-time validation passing per DECISION 8A.1 (Phase 16A.F.2)
-- [ ] 20.9 Cross-tenant isolation tests passing (Phase 16A.F.3, penetration tests) - Products-only SKU count per DECISION 8A.2
-- [ ] 20.10 Load tests for concurrency passing (Phase 16A.F.1)
-- [ ] 20.11 Schema audit script passing on test DB (Phase 14.1) - includes max_inventory_items per DECISION 8A.2
-- [ ] 20.12 Stripe test mode webhook delivery 100% success for 24 hours (7-day dunning grace period per DECISION 8A.9)
-- [ ] 20.13 All Sentry alerts configured (Phase 16 + Phase 16A.B.7)
-- [ ] 20.14 Operational runbook complete (Phase 16A.G.3) and team trained (auto-create org flow per DECISION 8A.3)
-
----
-
-8A (Clarifications) ✅ COMPLETE - All decisions mapped into Phase 16A
-  ↓ 
-9 (Stripe Service) ☝ START HERE
-  ↓ 
-10 (Webhook Handlers) → Implement with DECISION 8A.5 (Stripe metadata source of truth)
-  ↓
-16A.B (Webhook State Sync) → Implement with DECISION 8A.8 (soft lock downgrade)
-  ↓
-16A.C (Trial System) → Implement with DECISION 8A.3 (auto-create org), 8A.4 (SendGrid)
-  ↓
-16A.H (Edge Cases) → All decisions applied
-  ↓
-17 (Deployment)
-```
-
-**Recommended Team Assignment**:
-- **Backend Lead**: 8A clarifications, Phase 9-10, Phase 16A.B-I
-- **Frontend Lead**: Phase 12, Phase 16A.D (UI feature gates)
-- **DevOps/QA**: Phase 14-17, Phase 16A.F (testing & deployment)
-- **Product/Operations**: Phase 15-16, Phase 16A.G (docs & monitoring)
-
-**Start Date**: Week 1 → Production Deployment: Week 10-11  
-**Risk Level**: **HIGH** - Multi-tenant + SaaS billing = zero-tolerance for data leaks or financial errors
-
----
-
-```
-START
-  ↓
-Phase 8A (Clarifications) - MUST RESOLVE FIRST ⚠️
-  ↓
-Phase 1-5 (Schema/Auth) ✅ DONE
-  ↓
-Phase 6-7 (Routes/Services) - VERIFY COMPLETION
-  ↓
-Phase 9 (Stripe Service)
-  ↓
-Phase 10 (Webhook Handlers)
-  ↓
-Phase 16A.B (Webhook State Sync)
-  ↓
-Phase 16A.C (Trial System)
-  ↓
-Phase 16A.H (Edge Cases)
-  ↓
-Phase 16A.F (Testing)
-  ↓
-Phase 20 (Validation - 14 gates)
-  ↓
-PRODUCTION DEPLOYMENT
-```
-
-### Blockers Identified ✅ RESOLVED - Phase 17.5 Decisions Made
-
-| Decision | Affects | Solution DECIDED |
-|---------|----------|----------|
-| **Phase 8A.1** (Tier flag verification) | Phase 9+ | ✅ **DECIDED**: Create boot-time validation script with fail-fast health check endpoint |
-| **Phase 8A.2** (SKU semantics) | Phase 6.5, 16A.D.2 | ✅ **DECIDED**: Products-only count (unique catalog), separate max_inventory_items cap (Starter=5000, others=unlimited) |
-| **Phase 8A.3** (User onboarding) | Phase 16A.C.1 | ✅ **DECIDED**: Auto-create org on first login (prompt for org name), multi-user from day one |
-| **Phase 8A.4** (Email service) | Phase 16A.C.4, 16A.G | ✅ **DECIDED**: SendGrid integration with professional templates |
-| **Phase 8A.5** (Stripe metadata) | Phase 9.3, 16A.B | ✅ **DECIDED**: Stripe customer metadata is source of truth for organizationId (never trust request body) |
-| **Phase 8A.6** (Multi-user scope) | Phase 16A.C.1, Phase 6.7 | ✅ **DECIDED**: Multi-user support from day one (multiple users per org) |
-| **Phase 8A.7** (Storage calculation) | Phase 16A.D.3 | ✅ **DECIDED**: Sum of all file sizes (Blob.size) per organization |
-| **Phase 8A.8** (Downgrade policy) | Phase 16A.B.3.2, 16A.G.2 | ✅ **DECIDED**: Soft lock (read-only mode) when usage > new tier limit, no auto-deletion |
-| **Phase 8A.9** (Dunning flow) | Phase 16A.B.3.5, 16A.G.1 | ✅ **DECIDED**: 7-day grace period + 3 failed attempts before auto-downgrade to Starter |
-| **Phase 8A.10** (Phase 11 vs 16A.C) | Task management clarity | ✅ **DECIDED**: Merged Phase 11 into Phase 16A.C (Trial System) |
-
-### Red Flags That Stop Deployment ⛔
-
-If ANY of these are true on deployment day, **DO NOT DEPLOY**:
-
-1. ✅ ~~Phase 8A items remain unresolved or unanswered~~ **RESOLVED - All decisions made**
-2. ❌ Cross-tenant tests fail (Phase 13.3)
-3. ❌ Webhook idempotency test fails (replay test in Phase 16A.B.2)
-4. ❌ Tier feature flags validation fails on startup (Phase 16A.F.2)
-5. ❌ Load test shows race conditions (Phase 16A.F.1)
-6. ❌ SendGrid email service not configured or tested (DECISION 8A.4)
-7. ❌ Stripe customer metadata not being set (DECISION 8A.5 - must be source of truth)
-8. ❌ Any Phase 20 gate fails (14 validation items)
-9. ❌ Penetration test finds cross-tenant data leak
-10. ❌ Webhook delivery success <99% in 24-hour test
-
-### Key Differences from Original Plan
-
-**Original Assumption**: All implementation details are clear  
-**Reality Found**: 10 blocking clarifications + 20 edge cases not specified  
-
-**Original Approach**: "Implement first, test later"  
-**New Approach**: "Clarify first, prevent later, test thoroughly"  
-
-**Original Tests**: Phases 13, 16  
-**New Tests**: Phase 16A.F (concurrency), Phase 16A.H (edge cases), Phase 20 (validation gates)
-
-**Original Documentation**: Phases 15  
-**New Documentation**: + Phase 16A.I (edge case docs & troubleshooting)
-
----
-
-## 🚀 Next Steps (In Order)
-
-### ✅ Week 1: Resolution Phase - COMPLETE
-1. ✅ **Team Meeting**: Review Phase 8A (10 questions)
-2. ✅ **Decisions**: Document answers to all 8A items
-3. ✅ **Update**: Modify this document with decisions - ALL MAPPED INTO PHASE 16A
-4. **Next**: Set up Stripe account (Phase 8 user tasks)
-
-### Weeks 2-4: Foundation
-1. **Verify** Phase 1-5 are truly complete (run all tests)
-2. **Implement** Phase 6-7 if not complete (routes, services)
-3. **Prepare** Phase 9 (Stripe Service) code structure
-
-### Weeks 5-7: Core Implementation
-1. **Phase 9**: Stripe Service (createSubscription, etc.)
-2. **Phase 10**: Webhook Handlers (all 6 implemented)
-3. **Phase 16A.B**: Webhook State Sync (database idempotency)
-4. **Phase 16A.C**: Trial System (signup, downgrade cron)
-
-### Weeks 8-9: Quality & Safety
-1. **Phase 16A.D-E**: Feature gating, auth, testing
-2. **Phase 16A.H**: Edge case handling (10 scenarios)
-3. **Phase 16A.F**: Load tests, concurrency tests, isolation tests
-
-### Week 10: Validation & Deploy
-1. **Phase 16A.G**: Operations & runbooks
-2. **Phase 20**: Run all 14 validation gates
-3. **Smoke tests**: Create org, add products, upgrade, cancel
-4. **Deploy**: Phase 17 production deployment
-
-
-
+# END

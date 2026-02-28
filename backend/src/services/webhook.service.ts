@@ -141,57 +141,66 @@ export class WebhookService {
       eventType: event.type,
     });
 
-    switch (event.type) {
-      case 'customer.subscription.created': {
-        const subscription = event.data.object as Stripe.Subscription;
-        await this.handleSubscriptionCreated(subscription);
-        break;
-      }
+    try {
+      switch (event.type) {
+        case 'customer.subscription.created': {
+          const subscription = event.data.object as Stripe.Subscription;
+          await this.handleSubscriptionCreated(subscription);
+          break;
+        }
 
-      case 'customer.subscription.updated': {
-        const subscription = event.data.object as Stripe.Subscription;
-        await this.handleSubscriptionUpdated(subscription);
-        break;
-      }
+        case 'customer.subscription.updated': {
+          const subscription = event.data.object as Stripe.Subscription;
+          await this.handleSubscriptionUpdated(subscription);
+          break;
+        }
 
-      case 'customer.subscription.deleted': {
-        const subscription = event.data.object as Stripe.Subscription;
-        await this.handleSubscriptionDeleted(subscription);
-        break;
-      }
+        case 'customer.subscription.deleted': {
+          const subscription = event.data.object as Stripe.Subscription;
+          await this.handleSubscriptionDeleted(subscription);
+          break;
+        }
 
-      case 'checkout.session.completed': {
-        const session = event.data.object as Stripe.Checkout.Session;
-        await this.handleCheckoutSessionCompleted(session);
-        break;
-      }
+        case 'checkout.session.completed': {
+          const session = event.data.object as Stripe.Checkout.Session;
+          await this.handleCheckoutSessionCompleted(session);
+          break;
+        }
 
-      case 'invoice.payment_failed': {
-        const invoice = event.data.object as Stripe.Invoice;
-        await this.handleInvoicePaymentFailed(invoice);
-        break;
-      }
+        case 'invoice.payment_failed': {
+          const invoice = event.data.object as Stripe.Invoice;
+          await this.handleInvoicePaymentFailed(invoice);
+          break;
+        }
 
-      case 'customer.subscription.trial_will_end': {
-        const subscription = event.data.object as Stripe.Subscription;
-        await this.handleTrialWillEnd(subscription);
-        break;
-      }
+        case 'customer.subscription.trial_will_end': {
+          const subscription = event.data.object as Stripe.Subscription;
+          await this.handleTrialWillEnd(subscription);
+          break;
+        }
 
-      case 'payment_intent.succeeded': {
-        const paymentIntent = event.data.object as Stripe.PaymentIntent;
-        await this.handlePaymentIntentSucceeded(paymentIntent);
-        break;
-      }
+        case 'payment_intent.succeeded': {
+          const paymentIntent = event.data.object as Stripe.PaymentIntent;
+          await this.handlePaymentIntentSucceeded(paymentIntent);
+          break;
+        }
 
-      case 'payment_intent.payment_failed': {
-        const paymentIntent = event.data.object as Stripe.PaymentIntent;
-        await this.handlePaymentIntentFailed(paymentIntent);
-        break;
-      }
+        case 'payment_intent.payment_failed': {
+          const paymentIntent = event.data.object as Stripe.PaymentIntent;
+          await this.handlePaymentIntentFailed(paymentIntent);
+          break;
+        }
 
-      default:
-        log.info(`Unhandled webhook event type: ${event.type}`);
+        default:
+          log.info(`Unhandled webhook event type: ${event.type}`);
+      }
+    } catch (error) {
+      // Report webhook processing error with context
+      this.reportWebhookError(error as Error, {
+        eventType: event.type,
+        eventId: event.id,
+      });
+      throw error;
     }
   }
 
@@ -228,7 +237,20 @@ export class WebhookService {
       if (!organization) {
         const err = new NotFoundError(`Organization ${organizationId} not found`);
         log.error('Organization not found', { organizationId, customerId });
-        Sentry.captureException(err, { level: 'warning', extra: { customerId, organizationId } });
+
+        // Report critical webhook failure - organization not found
+        this.reportCriticalWebhookFailure(
+          `Organization ${organizationId} not found for customer ${customerId}`,
+          {
+            eventType: 'validate_metadata',
+            details: {
+              customerId,
+              organizationId,
+              customerEmail: (customer as any).email,
+            },
+          },
+        );
+
         throw err;
       }
 
@@ -835,11 +857,11 @@ export class WebhookService {
       });
 
       // Send alert email to admin
-      await this.emailService.sendPaymentFailedEmail(
+      await this.emailService.sendPaymentFailedEmail({
         organizationId,
-        paymentIntent.id,
-        paymentIntent.last_payment_error?.message || 'Unknown error',
-      );
+        paymentIntentId: paymentIntent.id,
+        errorMessage: paymentIntent.last_payment_error?.message || 'Unknown error',
+      });
 
       const duration = Date.now() - start;
       monitor.recordWebhookEvent('payment_intent.payment_failed', duration, 'success');
@@ -876,7 +898,94 @@ export class WebhookService {
    * Return 5xx only for temporary server errors (will trigger Stripe retry)
    */
   sendError(res: Response, message: string, statusCode = 400): Response {
+    // Log webhook errors to Sentry for monitoring
+    if (statusCode >= 500) {
+      // Server errors are critical as they may cause webhook delivery failures
+      Sentry.captureMessage(`Webhook server error: ${message}`, {
+        level: 'error',
+        tags: {
+          component: 'webhook',
+          error_type: 'server_error',
+          status_code: statusCode.toString(),
+        },
+        extra: {
+          message,
+          timestamp: new Date().toISOString(),
+        },
+      });
+    } else if (statusCode >= 400) {
+      // Client errors may indicate configuration issues
+      Sentry.captureMessage(`Webhook client error: ${message}`, {
+        level: 'warning',
+        tags: {
+          component: 'webhook',
+          error_type: 'client_error',
+          status_code: statusCode.toString(),
+        },
+        extra: {
+          message,
+          timestamp: new Date().toISOString(),
+        },
+      });
+    }
+
     return res.status(statusCode).json({ error: message });
+  }
+
+  /**
+   * Report webhook processing error to Sentry with context
+   */
+  private reportWebhookError(
+    error: Error,
+    context: {
+      eventType: string;
+      eventId?: string;
+      organizationId?: string;
+      customerId?: string;
+      subscriptionId?: string;
+    },
+  ): void {
+    Sentry.captureException(error, {
+      tags: {
+        component: 'webhook',
+        event_type: context.eventType,
+        error_type: error.constructor.name,
+      },
+      extra: {
+        eventId: context.eventId,
+        organizationId: context.organizationId,
+        customerId: context.customerId,
+        subscriptionId: context.subscriptionId,
+        errorMessage: error.message,
+        timestamp: new Date().toISOString(),
+      },
+    });
+  }
+
+  /**
+   * Report webhook critical failure
+   */
+  private reportCriticalWebhookFailure(
+    message: string,
+    context: {
+      eventType: string;
+      eventId?: string;
+      details?: Record<string, any>;
+    },
+  ): void {
+    Sentry.captureMessage(message, {
+      level: 'fatal',
+      tags: {
+        component: 'webhook',
+        event_type: context.eventType,
+        severity: 'critical',
+      },
+      extra: {
+        eventId: context.eventId,
+        ...context.details,
+        timestamp: new Date().toISOString(),
+      },
+    });
   }
 }
 

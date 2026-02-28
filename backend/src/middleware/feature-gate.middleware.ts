@@ -3,6 +3,7 @@ import { AuthRequest } from './auth.middleware';
 import { getDefaultDatabaseClient } from '../database/database-factory';
 import { AnalyticsService, AnalyticsEventType } from '../services/analytics.service';
 import { Logger } from '../utils/logger';
+import * as Sentry from '@sentry/node';
 
 // Feature keys from tier_feature_flags table
 export type FeatureKey =
@@ -44,49 +45,11 @@ export const requireFeature = (featureKey: FeatureKey) => {
         });
       }
 
-      const prisma = getDefaultDatabaseClient();
+      // Check feature availability
+      const result = await checkFeature(req.tierLevel, featureKey);
 
-      // Task 5.2: Query tier_feature_flags by tierLevel and featureKey
-      const featureFlag = await prisma.tierFeatureFlag.findUnique({
-        where: {
-          tierLevel_featureKey: {
-            tierLevel: req.tierLevel,
-            featureKey,
-          },
-        },
-      });
-
-      // Task 5.3: Return 403 Forbidden if feature not enabled for tier with upgrade CTA
-      if (!featureFlag || !featureFlag.enabled) {
-        const analyticsService = AnalyticsService.getInstance();
-        analyticsService.trackEvent({
-          userId: req.userId,
-          eventType: AnalyticsEventType.USER_LOGOUT,
-          eventCategory: 'FeatureGating',
-          eventAction: 'feature_access_denied',
-          ipAddress: req.ip,
-          userAgent: req.get('User-Agent') || undefined,
-          metadata: {
-            featureKey,
-            tierLevel: req.tierLevel,
-            organizationId: req.organizationId,
-          },
-        });
-
-        Logger.warn('Feature access denied', {
-          featureKey,
-          tierLevel: req.tierLevel,
-          organizationId: req.organizationId,
-          userId: req.userId,
-        });
-
-        return res.status(403).json({
-          message: `Feature "${featureKey}" is not available on your ${req.tierLevel} tier`,
-          feature: featureKey,
-          currentTier: req.tierLevel,
-          upgradeCTA: `Upgrade to access ${featureKey}`,
-          upgradeUrl: '/subscription/upgrade',
-        });
+      if (!result.isEnabled) {
+        return handleFeatureDenied(req, res, featureKey);
       }
 
       Logger.debug('Feature access granted', {
@@ -111,6 +74,61 @@ export const requireFeature = (featureKey: FeatureKey) => {
 };
 
 /**
+ * Handle feature access denial (analytics, logging, response)
+ */
+function handleFeatureDenied(req: AuthRequest, res: Response, featureKey: FeatureKey) {
+  const analyticsService = AnalyticsService.getInstance();
+
+  // Enhanced tracking for conversion opportunities
+  analyticsService.trackEvent({
+    userId: req.userId,
+    eventType: AnalyticsEventType.FEATURE_ACCESS_DENIED,
+    eventCategory: 'FeatureGating',
+    eventAction: 'feature_access_denied',
+    ipAddress: req.ip,
+    userAgent: req.get('User-Agent') || undefined,
+    metadata: {
+      featureKey,
+      tierLevel: req.tierLevel,
+      organizationId: req.organizationId,
+      path: req.path,
+      method: req.method,
+      timestamp: new Date().toISOString(),
+    },
+  });
+
+  // Detailed logging for conversion analysis
+  const logContext = {
+    featureKey,
+    tierLevel: req.tierLevel,
+    organizationId: req.organizationId,
+    userId: req.userId,
+    path: req.path,
+    method: req.method,
+    correlationId: req.headers?.['x-correlation-id'],
+    timestamp: new Date().toISOString(),
+  };
+
+  Logger.warn('Feature access denied - conversion opportunity', logContext);
+
+  // Send to Sentry for tracking popular features that drive upgrades
+  Sentry.addBreadcrumb({
+    category: 'feature_gate',
+    message: `Feature ${featureKey} blocked for tier ${req.tierLevel}`,
+    level: 'info',
+    data: logContext,
+  });
+
+  return res.status(403).json({
+    message: `Feature "${featureKey}" is not available on your ${req.tierLevel} tier`,
+    feature: featureKey,
+    currentTier: req.tierLevel,
+    upgradeCTA: `Upgrade to access ${featureKey}`,
+    upgradeUrl: '/subscription/upgrade',
+  });
+}
+
+/**
  * Middleware to check if organization is within usage limits
  * Returns 403 Forbidden with upgrade CTA if limit exceeded
  * Task 5.4-5.6
@@ -125,113 +143,27 @@ export const checkUsageLimit = (limitKey: LimitKey) => {
       }
 
       const prisma = getDefaultDatabaseClient();
+      const organizationUsage = await getOrCreateOrganizationUsage(prisma, req.organizationId);
 
-      // Task 5.5: Implement usage limit check
-      const organizationUsage = await prisma.organizationUsage.findUnique({
-        where: { organizationId: req.organizationId },
-      });
+      // Determine the limit and usage based on limitKey
+      const { currentUsage, limit } = await calculateUsageAndLimit(
+        prisma,
+        limitKey,
+        organizationUsage,
+        req.organizationId,
+      );
 
-      if (!organizationUsage) {
-        Logger.warn('Organization usage record not found', {
-          organizationId: req.organizationId,
-        });
-        // Create default usage record if not exists
-        await prisma.organizationUsage.create({
-          data: {
-            organizationId: req.organizationId,
-            activeUsers: 0,
-            maxUsers: 1, // Will be set by subscription tier
-            totalSkus: 0,
-            maxSkus: 500, // Will be set by subscription tier
-            storageUsedBytes: 0,
-          },
-        });
-        return next();
-      }
-
-      // Determine the limit based on limitKey
-      let currentUsage = 0;
-      let limit = 0;
-      let limitExceeded = false;
-
-      if (limitKey === 'max_skus') {
-        currentUsage = organizationUsage.totalSkus;
-        limit = organizationUsage.maxSkus;
-        limitExceeded = currentUsage >= limit;
-      } else if (limitKey === 'max_users') {
-        currentUsage = organizationUsage.activeUsers;
-        limit = organizationUsage.maxUsers;
-        limitExceeded = currentUsage >= limit;
-      } else if (limitKey === 'storage_bytes') {
-        currentUsage = organizationUsage.storageUsedBytes;
-        // Get max storage from subscription tier limits (typically in limitValue for storage)
-        const subscriptionTier = await prisma.subscriptionTier.findFirst({
-          where: { organizationId: req.organizationId },
-          orderBy: { createdAt: 'desc' },
-        });
-        // Assume storage limit in tier feature flags (default to 10GB = 10737418240 bytes)
-        limit = subscriptionTier ? 10737418240 : 10737418240;
-        limitExceeded = currentUsage >= limit;
-      }
-
-      const percentageUsed = (currentUsage / limit) * 100;
+      const percentageUsed = limit > 0 ? (currentUsage / limit) * 100 : 100;
+      const limitExceeded = currentUsage >= limit;
 
       // Task 5.6: Return 403 Forbidden with upgrade message if limit reached
       if (limitExceeded) {
-        const analyticsService = AnalyticsService.getInstance();
-        analyticsService.trackEvent({
-          userId: req.userId,
-          eventType: AnalyticsEventType.USER_LOGOUT,
-          eventCategory: 'UsageLimit',
-          eventAction: 'usage_limit_exceeded',
-          ipAddress: req.ip,
-          userAgent: req.get('User-Agent') || undefined,
-          metadata: {
-            limitKey,
-            currentUsage,
-            limit,
-            percentageUsed,
-            organizationId: req.organizationId,
-          },
-        });
-
-        Logger.warn('Usage limit exceeded', {
-          limitKey,
-          currentUsage,
-          limit,
-          organizationId: req.organizationId,
-          userId: req.userId,
-        });
-
-        return res.status(403).json({
-          message: `Usage limit reached for ${limitKey}`,
-          limitKey,
-          currentUsage,
-          limit,
-          percentageUsed,
-          upgradeCTA: 'Upgrade your plan to increase limits',
-          upgradeUrl: '/subscription/upgrade',
-        });
+        return handleLimitExceeded(req, res, limitKey, currentUsage, limit, percentageUsed);
       }
 
       // Warn if approaching limit (80%)
       if (percentageUsed >= 80) {
-        Logger.warn('Usage approaching limit', {
-          limitKey,
-          currentUsage,
-          limit,
-          percentageUsed,
-          organizationId: req.organizationId,
-        });
-
-        // Attach warning to response (optional)
-        res.locals.usageWarning = {
-          limitKey,
-          currentUsage,
-          limit,
-          percentageUsed,
-          message: `You are using ${percentageUsed.toFixed(0)}% of your ${limitKey} limit`,
-        };
+        handleApproachingLimit(req, res, limitKey, currentUsage, limit, percentageUsed);
       }
 
       Logger.debug('Usage check passed', {
@@ -256,6 +188,149 @@ export const checkUsageLimit = (limitKey: LimitKey) => {
     }
   };
 };
+
+async function getOrCreateOrganizationUsage(prisma: any, organizationId: string) {
+  let usage = await prisma.organizationUsage.findUnique({
+    where: { organizationId },
+  });
+
+  if (!usage) {
+    Logger.warn('Organization usage record not found', { organizationId });
+    // Create default usage record if not exists
+    usage = await prisma.organizationUsage.create({
+      data: {
+        organizationId,
+        activeUsers: 0,
+        maxUsers: 1,
+        totalSkus: 0,
+        maxSkus: 500,
+        storageUsedBytes: 0,
+      },
+    });
+  }
+  return usage;
+}
+
+async function calculateUsageAndLimit(
+  prisma: any,
+  limitKey: LimitKey,
+  usage: any,
+  organizationId: string,
+): Promise<{ currentUsage: number; limit: number }> {
+  let currentUsage = 0;
+  let limit = 0;
+
+  if (limitKey === 'max_skus') {
+    currentUsage = usage.totalSkus;
+    limit = usage.maxSkus;
+  } else if (limitKey === 'max_users') {
+    currentUsage = usage.activeUsers;
+    limit = usage.maxUsers;
+  } else if (limitKey === 'storage_bytes') {
+    currentUsage = usage.storageUsedBytes;
+    // Get max storage from subscription tier limits
+    const subscriptionTier = await prisma.subscriptionTier.findFirst({
+      where: { organizationId },
+      orderBy: { createdAt: 'desc' },
+    });
+    // Assume storage limit in tier feature flags (default to 10GB)
+    limit = subscriptionTier ? 10737418240 : 10737418240;
+  }
+
+  return { currentUsage, limit };
+}
+
+function handleLimitExceeded(
+  req: AuthRequest,
+  res: Response,
+  limitKey: LimitKey,
+  currentUsage: number,
+  limit: number,
+  percentageUsed: number,
+) {
+  const analyticsService = AnalyticsService.getInstance();
+
+  // Track usage limit exceeded for conversion analysis
+  analyticsService.trackEvent({
+    userId: req.userId,
+    eventType: AnalyticsEventType.USAGE_LIMIT_EXCEEDED,
+    eventCategory: 'UsageLimit',
+    eventAction: 'usage_limit_exceeded',
+    ipAddress: req.ip,
+    userAgent: req.get('User-Agent') || undefined,
+    metadata: {
+      limitKey,
+      currentUsage,
+      limit,
+      percentageUsed,
+      organizationId: req.organizationId,
+      path: req.path,
+      method: req.method,
+      timestamp: new Date().toISOString(),
+    },
+  });
+
+  // Enhanced logging for business insights
+  const logContext = {
+    limitKey,
+    currentUsage,
+    limit,
+    percentageUsed: Math.round(percentageUsed * 100) / 100,
+    organizationId: req.organizationId,
+    userId: req.userId,
+    tierLevel: req.tierLevel,
+    path: req.path,
+    method: req.method,
+    correlationId: req.headers?.['x-correlation-id'],
+    timestamp: new Date().toISOString(),
+  };
+
+  Logger.warn('Usage limit exceeded - upgrade opportunity', logContext);
+
+  // Send to Sentry for tracking usage patterns
+  Sentry.addBreadcrumb({
+    category: 'usage_limit',
+    message: `Limit ${limitKey} exceeded (${percentageUsed.toFixed(1)}%)`,
+    level: 'warning',
+    data: logContext,
+  });
+
+  return res.status(403).json({
+    message: `Usage limit reached for ${limitKey}`,
+    limitKey,
+    currentUsage,
+    limit,
+    percentageUsed,
+    upgradeCTA: 'Upgrade your plan to increase limits',
+    upgradeUrl: '/subscription/upgrade',
+  });
+}
+
+function handleApproachingLimit(
+  req: AuthRequest,
+  res: Response,
+  limitKey: LimitKey,
+  currentUsage: number,
+  limit: number,
+  percentageUsed: number,
+) {
+  Logger.warn('Usage approaching limit', {
+    limitKey,
+    currentUsage,
+    limit,
+    percentageUsed,
+    organizationId: req.organizationId,
+  });
+
+  // Attach warning to response (optional)
+  res.locals.usageWarning = {
+    limitKey,
+    currentUsage,
+    limit,
+    percentageUsed,
+    message: `You are using ${percentageUsed.toFixed(0)}% of your ${limitKey} limit`,
+  };
+}
 
 /**
  * Helper function to check feature availability without middleware

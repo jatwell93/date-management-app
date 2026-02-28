@@ -183,14 +183,20 @@ export class DatabaseMonitoringService extends EventEmitter {
         });
       }
     }, this.config.checkInterval);
+
+    if (typeof this.monitoringInterval.unref === 'function') {
+      this.monitoringInterval.unref();
+    }
   }
 
   /**
    * Stop the monitoring process
    */
-  public stopMonitoring(): void {
+  public stopMonitoring(silentIfNotRunning: boolean = false): void {
     if (!this.isMonitoring) {
-      Logger.warn('Database monitoring is not running');
+      if (!silentIfNotRunning) {
+        Logger.warn('Database monitoring is not running');
+      }
       return;
     }
 

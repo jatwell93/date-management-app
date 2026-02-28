@@ -330,3 +330,34 @@ model Migration {
 
   @@map("migrations")
 }
+
+model MetricsSnapshot {
+  id                   Int      @id @default(autoincrement())
+  date                 DateTime @unique
+  trialConversionRate  Float?   @map("trial_conversion_rate")
+  avgRevenuePerUser    Float?   @map("avg_revenue_per_user")
+  churnRate            Float?   @map("churn_rate")
+  totalTrials          Int      @default(0) @map("total_trials")
+  totalConversions     Int      @default(0) @map("total_conversions")
+  totalChurn           Int      @default(0) @map("total_churn")
+  totalRevenueCents    Int      @default(0) @map("total_revenue_cents")
+  tierDistribution     String?  @map("tier_distribution") // JSON string
+  createdAt            DateTime @default(now()) @map("created_at")
+
+  @@index([date])
+  @@map("metrics_snapshots")
+}
+
+model WebhookMetrics {
+  id           Int      @id @default(autoincrement())
+  eventType    String   @map("event_type")
+  totalCount   Int      @default(0) @map("total_count")
+  failureCount Int      @default(0) @map("failure_count")
+  date         DateTime
+  createdAt    DateTime @default(now()) @map("created_at")
+
+  @@unique([eventType, date])
+  @@index([eventType])
+  @@index([date])
+  @@map("webhook_metrics")
+}

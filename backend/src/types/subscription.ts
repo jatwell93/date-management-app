@@ -52,3 +52,57 @@ export const TIER_LIMITS: Record<TierLevel, Record<string, number | null>> = {
     max_users: 10,
   },
 };
+
+/**
+ * Standard pricing in cents for MRR calculations
+ */
+export const TIER_PRICES: Record<TierLevel, number> = {
+  starter: 0,
+  professional: 2900, // $29.00
+  premium: 9900, // $99.00
+  concierge: 29900, // $299.00
+};
+
+/**
+ * Default alert thresholds for metrics
+ */
+export const ALERT_THRESHOLDS = {
+  trialConversionRateMin: 10, // 10%
+  webhookFailureRateMax: 5, // 5%
+  paymentFailureRateMax: 2, // 2%
+  churnRateMax: 5, // 5%
+};
+
+/**
+ * Validate alert thresholds are within acceptable ranges
+ */
+export function validateAlertThresholds(
+  thresholds: Partial<typeof ALERT_THRESHOLDS>,
+): typeof ALERT_THRESHOLDS {
+  const validated = { ...ALERT_THRESHOLDS, ...thresholds };
+
+  // Validate percentage thresholds are between 0 and 100
+  if (validated.trialConversionRateMin < 0 || validated.trialConversionRateMin > 100) {
+    throw new Error(
+      `trialConversionRateMin must be between 0 and 100, got ${validated.trialConversionRateMin}`,
+    );
+  }
+
+  if (validated.webhookFailureRateMax < 0 || validated.webhookFailureRateMax > 100) {
+    throw new Error(
+      `webhookFailureRateMax must be between 0 and 100, got ${validated.webhookFailureRateMax}`,
+    );
+  }
+
+  if (validated.paymentFailureRateMax < 0 || validated.paymentFailureRateMax > 100) {
+    throw new Error(
+      `paymentFailureRateMax must be between 0 and 100, got ${validated.paymentFailureRateMax}`,
+    );
+  }
+
+  if (validated.churnRateMax < 0 || validated.churnRateMax > 100) {
+    throw new Error(`churnRateMax must be between 0 and 100, got ${validated.churnRateMax}`);
+  }
+
+  return validated;
+}

@@ -348,18 +348,126 @@ export class EmailService {
   }
 
   /**
-   * Send payment failed alert email to organization admin
-   *
-   * @param organizationId - Organization UUID
-   * @param paymentIntentId - Stripe payment intent ID
-   * @param errorMessage - Error message from Stripe
+   * Generic email sending method
    */
-  async sendPaymentFailedEmail(
-    organizationId: string,
-    paymentIntentId: string,
-    errorMessage: string,
-  ): Promise<void> {
+  async sendEmail(params: {
+    to: string;
+    subject: string;
+    html?: string;
+    text?: string;
+    templateName?: string;
+    templateData?: Record<string, any>;
+  }): Promise<void> {
     try {
+      if (!envConfig.SENDGRID_API_KEY) {
+        Logger.warn('Cannot send email: SendGrid not configured', { to: params.to });
+        return;
+      }
+
+      const fromEmail = envConfig.SENDGRID_FROM_EMAIL || 'noreply@yourdomain.com';
+      const msg: any = {
+        to: params.to,
+        from: fromEmail,
+        subject: params.subject,
+      };
+
+      if (params.html) msg.html = params.html;
+      if (params.text) msg.text = params.text;
+
+      await sgMail.send(msg);
+
+      Logger.info('Email sent successfully', {
+        to: params.to,
+        subject: params.subject,
+        templateName: params.templateName,
+      });
+    } catch (error) {
+      Logger.error('Failed to send email', {
+        to: params.to,
+        subject: params.subject,
+        error: error instanceof Error ? error.message : 'Unknown error',
+      });
+      throw error;
+    }
+  }
+
+  /**
+   * Send bulk email using SendGrid personalization
+   * More efficient than sending individual emails
+   */
+  async sendBulkEmail(params: {
+    to: string[];
+    subject: string;
+    html?: string;
+    text?: string;
+    templateId?: string;
+    templateData?: Record<string, any>;
+  }): Promise<void> {
+    try {
+      if (!envConfig.SENDGRID_API_KEY) {
+        Logger.warn('Cannot send bulk email: SendGrid not configured', {
+          recipientCount: params.to.length,
+        });
+        return;
+      }
+
+      const fromEmail = envConfig.SENDGRID_FROM_EMAIL || 'noreply@yourdomain.com';
+
+      // Create personalizations for each recipient
+      const personalizations = params.to.map((email) => ({
+        to: [{ email }],
+        ...(params.templateData && {
+          dynamicTemplateData: params.templateData,
+        }),
+      }));
+
+      const msg: any = {
+        from: fromEmail,
+        subject: params.subject,
+        personalizations,
+      };
+
+      // Add template ID if provided
+      if (params.templateId) {
+        msg.templateId = params.templateId;
+      } else if (params.html || params.text) {
+        msg.content = [];
+        if (params.html) {
+          msg.content.push({ type: 'text/html', value: params.html });
+        }
+        if (params.text) {
+          msg.content.push({ type: 'text/plain', value: params.text });
+        }
+      }
+
+      await sgMail.send(msg);
+
+      Logger.info('Bulk email sent successfully', {
+        recipientCount: params.to.length,
+        subject: params.subject,
+        templateId: params.templateId,
+      });
+    } catch (error) {
+      Logger.error('Failed to send bulk email', {
+        recipientCount: params.to.length,
+        subject: params.subject,
+        error: error instanceof Error ? error.message : 'Unknown error',
+      });
+      throw error;
+    }
+  }
+
+  /**
+   * Send payment failed alert email to organization admin
+   */
+  async sendPaymentFailedEmail(params: {
+    organizationId: string;
+    paymentIntentId: string;
+    errorMessage: string;
+  }): Promise<void> {
+    try {
+      const { organizationId, paymentIntentId, errorMessage } = params;
+
       if (!envConfig.SENDGRID_API_KEY) {
         Logger.warn('Cannot send payment failed email: SendGrid not configured', {
           organizationId,

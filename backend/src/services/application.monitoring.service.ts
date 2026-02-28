@@ -1,6 +1,7 @@
 import { Logger } from '../utils/logger';
 import { Request, Response, NextFunction } from 'express';
 import { EventEmitter } from 'events';
+import { SaasMetricsService, SaasMetrics } from './saas-metrics.service';
 
 // Define application alert types
 export enum ApplicationAlertType {
@@ -60,6 +61,8 @@ export interface ApplicationMetrics {
     healthyEndpoints: string[];
     unhealthyEndpoints: string[];
   };
+  // SaaS business metrics
+  saas?: SaasMetrics;
   timestamp: Date;
 }
 
@@ -88,6 +91,7 @@ export class ApplicationMonitoringService extends EventEmitter {
   private config: ApplicationMonitoringConfig;
   private isMonitoring: boolean = false;
   private monitoringInterval?: NodeJS.Timeout;
+  private saasMetricsService: SaasMetricsService;
 
   // Metrics store
   private metrics: ApplicationMetrics = {
@@ -150,6 +154,12 @@ export class ApplicationMonitoringService extends EventEmitter {
         '/api/reports/expiry',
       ],
     };
+
+    // Initialize SaaS metrics service
+    this.saasMetricsService = new SaasMetricsService();
+
+    // Set up graceful shutdown handlers
+    this.setupGracefulShutdown();
   }
 
   public static getInstance(): ApplicationMonitoringService {
@@ -203,14 +213,20 @@ export class ApplicationMonitoringService extends EventEmitter {
         });
       }
     }, this.config.checkInterval);
+
+    if (typeof this.monitoringInterval.unref === 'function') {
+      this.monitoringInterval.unref();
+    }
   }
 
   /**
    * Stop the monitoring process
    */
-  public stopMonitoring(): void {
+  public stopMonitoring(silentIfNotRunning: boolean = false): void {
     if (!this.isMonitoring) {
-      Logger.warn('Application monitoring is not running');
+      if (!silentIfNotRunning) {
+        Logger.warn('Application monitoring is not running');
+      }
       return;
     }
 
@@ -219,8 +235,43 @@ export class ApplicationMonitoringService extends EventEmitter {
       this.monitoringInterval = undefined;
     }
 
+    // Clean up request start times map
+    this.requestStartTimes.clear();
+
     this.isMonitoring = false;
     Logger.info('Application monitoring stopped');
+  }
+
+  /**
+   * Set up graceful shutdown handlers
+   */
+  private setupGracefulShutdown(): void {
+    const shutdown = (signal: string) => {
+      Logger.info(`Received ${signal}, shutting down monitoring service gracefully`);
+      this.stopMonitoring();
+    };
+
+    // Handle common shutdown signals
+    process.on('SIGTERM', () => shutdown('SIGTERM'));
+    process.on('SIGINT', () => shutdown('SIGINT'));
+
+    // Handle uncaught exceptions
+    process.on('uncaughtException', (error) => {
+      Logger.error('Uncaught exception, shutting down monitoring', {
+        error: error.message,
+        stack: error.stack,
+      });
+      this.stopMonitoring();
+      process.exit(1);
+    });
+
+    // Handle unhandled promise rejections
+    process.on('unhandledRejection', (reason, promise) => {
+      Logger.error('Unhandled promise rejection', {
+        reason: reason instanceof Error ? reason.message : reason,
+        promise: promise.toString(),
+      });
+    });
   }
 
   /**
@@ -240,7 +291,12 @@ export class ApplicationMonitoringService extends EventEmitter {
         const duration = endTime - startTime;
 
         // Record the request metrics
-        this.recordRequest(req.method + req.url, duration, res.statusCode, req.url);
+        this.recordRequest({
+          endpoint: req.method + req.url,
+          duration,
+          statusCode: res.statusCode,
+          url: req.url,
+        });
 
         // Clean up the start time
         this.requestStartTimes.delete(requestId);
@@ -253,7 +309,13 @@ export class ApplicationMonitoringService extends EventEmitter {
   /**
    * Record a request for performance monitoring
    */
-  public recordRequest(endpoint: string, duration: number, statusCode: number, url: string): void {
+  public recordRequest(params: {
+    endpoint: string;
+    duration: number;
+    statusCode: number;
+    url: string;
+  }): void {
+    const { endpoint, duration, statusCode, url } = params;
     this.metrics.performance.totalRequests++;
     this.metrics.performance.lastResponseTime = duration;
 
@@ -369,10 +431,40 @@ export class ApplicationMonitoringService extends EventEmitter {
     if (status === 'skipped') {
       this.metrics.webhook.idempotencySkips++;
     }
+
+    // Also record in SaaS metrics service
+    void this.saasMetricsService.recordWebhookMetrics(eventType, status === 'success');
   }
 
   public getWebhookMetrics() {
     return { ...this.metrics.webhook };
+  }
+
+  /**
+   * Get SaaS metrics directly
+   */
+  public async getSaasMetrics(): Promise<SaasMetrics | undefined> {
+    try {
+      return await this.saasMetricsService.getSaasMetrics();
+    } catch (error) {
+      Logger.error('Failed to get SaaS metrics', {
+        error: error instanceof Error ? error.message : 'Unknown error',
+      });
+      return undefined;
+    }
+  }
+
+  /**
+   * Store daily SaaS metrics snapshot
+   */
+  public async storeDailyMetrics(date?: Date): Promise<void> {
+    try {
+      await this.saasMetricsService.storeDailyMetrics(date || new Date());
+    } catch (error) {
+      Logger.error('Failed to store daily metrics', {
+        error: error instanceof Error ? error.message : 'Unknown error',
+      });
+    }
   }
 
   /**
@@ -461,6 +553,15 @@ export class ApplicationMonitoringService extends EventEmitter {
 
       // Update uptime
       this.metrics.health.uptime = process.uptime();
+
+      // Collect SaaS metrics
+      try {
+        this.metrics.saas = await this.saasMetricsService.getSaasMetrics();
+      } catch (error) {
+        Logger.error('Failed to collect SaaS metrics', {
+          error: error instanceof Error ? error.message : 'Unknown error',
+        });
+      }
 
       if (this.config.enableLogging) {
         Logger.debug('Application metrics collected', { metrics: this.metrics });

@@ -8,8 +8,8 @@ const prisma = new PrismaClient();
 
 function stopBackgroundServices(): void {
   AnalyticsService.resetInstance();
-  ApplicationMonitoringService.getInstance().stopMonitoring();
-  DatabaseMonitoringService.getInstance().stopMonitoring();
+  ApplicationMonitoringService.getInstance().stopMonitoring(true);
+  DatabaseMonitoringService.getInstance().stopMonitoring(true);
 }
 
 beforeEach(async () => {

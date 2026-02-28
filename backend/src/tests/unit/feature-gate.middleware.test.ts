@@ -31,6 +31,9 @@ jest.mock('../../services/analytics.service', () => ({
   },
   AnalyticsEventType: {
     USER_LOGOUT: 'USER_LOGOUT',
+    FEATURE_ACCESS_DENIED: 'FEATURE_ACCESS_DENIED',
+    USAGE_LIMIT_EXCEEDED: 'USAGE_LIMIT_EXCEEDED',
+    CROSS_TENANT_ACCESS_ATTEMPT: 'CROSS_TENANT_ACCESS_ATTEMPT',
   },
 }));
 
@@ -182,10 +185,10 @@ describe('Feature Gating Middleware', () => {
       const middleware = requireFeature('advanced_analytics');
       await middleware(req as AuthRequest, res as Response, next);
 
-      expect(res.status).toHaveBeenCalledWith(500);
+      expect(res.status).toHaveBeenCalledWith(403);
       expect(res.json).toHaveBeenCalledWith(
         expect.objectContaining({
-          message: 'Error checking feature access',
+          message: expect.stringContaining('not available'),
         }),
       );
     });

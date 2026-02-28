@@ -5,6 +5,11 @@
       "source": "cin12211/orca-q",
       "sourceType": "github",
       "computedHash": "f070b432e1423b827414456beb44548164b17f4f21dbfb051bbc6ae55d871cae"
+    },
+    "sentry-setup-ai-monitoring": {
+      "source": "getsentry/sentry-agent-skills",
+      "sourceType": "github",
+      "computedHash": "91959d0839b0399b395c2a6200c457b99571050481a44894559cb2a5f3d8c165"
     }
   }
 }

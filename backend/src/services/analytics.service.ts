@@ -17,6 +17,9 @@ export enum AnalyticsEventType {
   OFFLINE_SYNC = 'OFFLINE_SYNC',
   PWA_INSTALL = 'PWA_INSTALL',
   PWA_USAGE = 'PWA_USAGE',
+  FEATURE_ACCESS_DENIED = 'FEATURE_ACCESS_DENIED',
+  USAGE_LIMIT_EXCEEDED = 'USAGE_LIMIT_EXCEEDED',
+  CROSS_TENANT_ACCESS_ATTEMPT = 'CROSS_TENANT_ACCESS_ATTEMPT',
 }
 
 // Interface for analytics events
@@ -243,6 +246,11 @@ export class AnalyticsService {
     this.batchInterval = setInterval(() => {
       void this.processEventQueue();
     }, 30000);
+
+    // Do not keep the process alive solely for this background timer
+    if (typeof this.batchInterval.unref === 'function') {
+      this.batchInterval.unref();
+    }
   }
 
   private stopBatchProcessing(): void {

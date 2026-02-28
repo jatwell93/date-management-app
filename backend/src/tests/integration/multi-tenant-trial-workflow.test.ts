@@ -32,13 +32,29 @@ jest.mock('stripe', () => {
 describe('Multi-Tenant Trial Workflow Tests', () => {
   let prisma: PrismaClient;
   let subscriptionService: SubscriptionService;
+  let mockStripeClient: {
+    customers: { create: jest.Mock };
+    subscriptions: { create: jest.Mock };
+  };
 
   // Test organization
   let orgTrial: { id: string; name: string };
 
   beforeAll(async () => {
     prisma = getDefaultDatabaseClient();
-    subscriptionService = new SubscriptionService(prisma);
+    mockStripeClient = {
+      customers: {
+        create: jest.fn().mockResolvedValue({ id: 'cus_test_trial' }),
+      },
+      subscriptions: {
+        create: jest.fn().mockResolvedValue({
+          id: 'sub_test_trial',
+          status: 'active',
+        }),
+      },
+    };
+
+    subscriptionService = new SubscriptionService(prisma, mockStripeClient as any);
   });
 
   beforeEach(async () => {
