@@ -162,6 +162,23 @@ describe('WebhookService Database Integration', () => {
       });
       expect(audit?.action).toBe('tier_downgraded_soft_lock');
     });
+
+    it('should have pastDueSince field on subscription_tiers', async () => {
+      const subId = `sub_pds_${crypto.randomBytes(4).toString('hex')}`;
+
+      const created = await prisma.subscriptionTier.create({
+        data: {
+          organizationId: testOrganizationId,
+          tierLevel: 'professional',
+          stripeSubscriptionId: subId,
+          status: 'past_due',
+          billingCycle: 'monthly',
+          pastDueSince: new Date('2026-01-01T00:00:00Z'),
+        },
+      });
+
+      expect(created.pastDueSince).toEqual(new Date('2026-01-01T00:00:00Z'));
+    });
   });
 
   describe('Idempotency with ProcessedWebhookEvent', () => {

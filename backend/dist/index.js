@@ -36,7 +36,14 @@ var __importDefault = (this && this.__importDefault) || function (mod) {
     return (mod && mod.__esModule) ? mod : { "default": mod };
 };
 Object.defineProperty(exports, "__esModule", { value: true });
-require('../instrument');
+try {
+    // Optional instrumentation (Sentry/analytics). Safe to skip if missing.
+    // eslint-disable-next-line @typescript-eslint/no-var-requires
+    require('../instrument');
+}
+catch {
+    // Instrumentation not present in this environment; continue without it.
+}
 const express_1 = __importDefault(require("express"));
 const helmet_1 = __importDefault(require("helmet"));
 const Sentry = __importStar(require("@sentry/node"));
@@ -66,7 +73,8 @@ const rateLimiter_1 = require("./middleware/rateLimiter");
 const scheduler_service_1 = require("./services/scheduler.service");
 const database_monitoring_service_1 = require("./services/database.monitoring.service");
 const application_monitoring_service_1 = require("./services/application.monitoring.service");
-const service_provider_1 = require("./services/service-provider");
+const analytics_service_1 = require("./services/analytics.service");
+const database_1 = require("./database");
 const environment_1 = require("./config/environment");
 const app = (0, express_1.default)();
 const port = environment_1.envConfig.PORT;
@@ -180,9 +188,8 @@ if (!isTestEnv) {
     });
     // Apply application monitoring middleware
     app.use(appMonitoringService.requestTrackingMiddleware());
-    // Initialize analytics service via ServiceProvider (Task 8.7)
-    const serviceProvider = new service_provider_1.ServiceProvider();
-    const analyticsService = serviceProvider.getAnalyticsService();
+    // Initialize analytics service (Task 8.7)
+    const analyticsService = new analytics_service_1.AnalyticsService((0, database_1.getDb)());
     analyticsService.initialize({
         enableTracking: true,
         enableSessionTracking: true,

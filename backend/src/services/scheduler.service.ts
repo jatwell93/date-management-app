@@ -2,9 +2,9 @@ import cron from 'node-cron';
 import { InventoryService } from './inventory.service';
 import { getDb } from '../database';
 import { DatabaseBackupService } from './database.backup.service';
-import { SubscriptionService } from './subscription.service';
-import { EmailService } from './email.service';
 import { startStripeSyncJob } from '../jobs/stripe-sync.job';
+import { startTrialExpirationJob } from '../jobs/trialExpiration.job';
+import { startDunningJob } from '../jobs/dunning.job';
 
 export class SchedulerService {
   private static databaseBackupService = new DatabaseBackupService();
@@ -25,72 +25,16 @@ export class SchedulerService {
       this.createDatabaseBackup();
     });
 
-    // Schedule trial expiration job daily at 00:00 UTC
+    // Initialize trial expiration job (runs daily at 00:00 UTC)
     // Handles: expired trial downgrade, reminder emails, downgrade warnings
-    cron.schedule('0 0 * * *', () => {
-      console.log('Running trial expiration job...');
-      this.runTrialExpirationJob();
-    });
+    startTrialExpirationJob();
 
-    // Schedule hourly Stripe subscription sync (16A.B.4)
-    // Fetches all Stripe subscriptions and reconciles against local subscription_tiers
-    cron.schedule('0 * * * *', () => {
-      console.log('Running hourly Stripe subscription sync...');
-      // Actual sync logic handled by stripe-sync.job module
-    });
+    // Initialize dunning job (runs daily at 01:00 UTC)
+    // Handles: auto-downgrade past_due subscriptions after 7-day grace period
+    startDunningJob();
 
+    // Initialize Stripe sync job (runs hourly)
     startStripeSyncJob();
-  }
-
-  // Trial expiration job: downgrade expired trials, send reminders
-  static async runTrialExpirationJob() {
-    const subscriptionService = new SubscriptionService();
-    const emailService = new EmailService();
-
-    console.log('Starting trial expiration job');
-
-    try {
-      // Step 1: Downgrade expired trials to starter tier
-      const downgradedCount = await subscriptionService.downgradeExpiredTrials();
-      console.log(`Downgraded ${downgradedCount} expired trials to starter tier`);
-
-      // Step 2: Send downgrade warning emails
-      if (downgradedCount > 0) {
-        const recentDowngrades = await subscriptionService.getRecentlyDowngradedTrials();
-        for (const trial of recentDowngrades) {
-          try {
-            await emailService.sendDowngradeWarningEmail(trial.organizationId, 0, 500);
-          } catch (error) {
-            console.error(
-              `Failed to send downgrade warning for org ${trial.organizationId}:`,
-              String(error),
-            );
-          }
-        }
-      }
-
-      // Step 3: Find and send trial reminder emails
-      const trialsNeedingReminders = await subscriptionService.findTrialsNeedingReminders();
-      console.log(`Found ${trialsNeedingReminders.length} trials needing reminders`);
-
-      for (const trial of trialsNeedingReminders) {
-        try {
-          await emailService.sendTrialReminderEmail(trial.organizationId, trial.daysRemaining);
-          await subscriptionService.logTrialEvent(trial.organizationId, 'trial_reminder_sent', {
-            daysRemaining: trial.daysRemaining,
-          });
-          console.log(
-            `Sent trial reminder to org ${trial.organizationId}: ${trial.daysRemaining} days remaining`,
-          );
-        } catch (error) {
-          console.error(`Failed to send reminder for org ${trial.organizationId}:`, String(error));
-        }
-      }
-
-      console.log('Trial expiration job completed successfully');
-    } catch (error) {
-      console.error('Trial expiration job failed:', String(error));
-    }
   }
 
   // Update markdown statuses for all inventory items across all organizations

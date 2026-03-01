@@ -21,6 +21,7 @@ import { TIER_LIMITS, TierLevel, SubscriptionStatus } from '../types/subscriptio
 import { NotFoundError } from '../errors';
 import * as Sentry from '@sentry/node';
 import { ApplicationMonitoringService } from './application.monitoring.service';
+import { invalidateSubscriptionCache } from '../middleware/auth.middleware';
 
 // Simple logging utility
 const log = {
@@ -352,10 +353,13 @@ export class WebhookService {
         });
       });
 
+      // Instantly invalidate auth cache to apply tier changes
+      invalidateSubscriptionCache(organizationId);
+
       const duration = Date.now() - start;
       monitor.recordWebhookEvent('customer.subscription.created', duration, 'success');
 
-      log.info('Subscription created successfully', { organizationId, tierLevel });
+      log.info('Subscription handled successfully', { organizationId, subscriptionId: subscription.id });
     } catch (error: any) {
       const duration = Date.now() - start;
       monitor.recordWebhookEvent('customer.subscription.created', duration, 'error');
@@ -426,6 +430,7 @@ export class WebhookService {
           data: {
             maxSkus: limits.max_skus || 999999,
             maxUsers: limits.max_users || 999999,
+            maxInventoryItems: limits.max_inventory_items || 999999,
           },
         });
 
@@ -434,25 +439,32 @@ export class WebhookService {
           where: { organizationId },
         });
 
-        if (isDowngrade && limits.max_skus !== null && usage && usage.totalSkus > limits.max_skus) {
-          // Apply creation lock — blocks new product creation until usage drops
-          await tx.organization.update({
-            where: { id: organizationId },
-            data: { isCreationLocked: true },
-          });
+        if (isDowngrade && usage) {
+          const isOverSkuLimit = limits.max_skus !== null && usage.totalSkus > limits.max_skus;
+          const isOverInventoryLimit = limits.max_inventory_items !== null && usage.totalInventoryItems > limits.max_inventory_items;
+          
+          if (isOverSkuLimit || isOverInventoryLimit) {
+            // Apply creation lock — blocks new product/inventory creation until usage drops
+            await tx.organization.update({
+              where: { id: organizationId },
+              data: { isCreationLocked: true },
+            });
 
-          log.warn('Creation lock applied on tier downgrade', {
-            organizationId,
-            currentUsage: usage.totalSkus,
-            newLimit: limits.max_skus,
-          });
+            log.warn('Creation lock applied on tier downgrade', {
+              organizationId,
+              currentSkus: usage.totalSkus,
+              currentInventoryItems: usage.totalInventoryItems,
+              newSkuLimit: limits.max_skus,
+              newInventoryLimit: limits.max_inventory_items,
+            });
 
-          // Queue warning email (non-blocking)
-          await this.emailService.sendDowngradeWarningEmail(
-            organizationId,
-            usage.totalSkus,
-            limits.max_skus,
-          );
+            // Queue warning email (non-blocking)
+            await this.emailService.sendDowngradeWarningEmail(
+              organizationId,
+              usage.totalSkus,
+              limits.max_skus,
+            );
+          }
         } else if (!isDowngrade) {
           // If not locking (e.g. upgrade), ensure creation lock is cleared
           await tx.organization.update({
@@ -470,6 +482,9 @@ export class WebhookService {
           },
         });
       });
+
+      // Instantly invalidate auth cache to apply tier changes
+      invalidateSubscriptionCache(organizationId);
 
       const duration = Date.now() - start;
       monitor.recordWebhookEvent('customer.subscription.updated', duration, 'success');
@@ -527,6 +542,7 @@ export class WebhookService {
           data: {
             maxSkus: starterLimits.max_skus || 500,
             maxUsers: starterLimits.max_users || 1,
+            maxInventoryItems: starterLimits.max_inventory_items || 5000,
           },
         });
 
@@ -535,23 +551,30 @@ export class WebhookService {
           where: { organizationId },
         });
 
-        if (usage && usage.totalSkus > (starterLimits.max_skus || 500)) {
-          await tx.organization.update({
-            where: { id: organizationId },
-            data: { isCreationLocked: true },
-          });
+        if (usage) {
+          const isOverSkuLimit = usage.totalSkus > (starterLimits.max_skus || 500);
+          const isOverInventoryLimit = usage.totalInventoryItems > (starterLimits.max_inventory_items || 5000);
+          
+          if (isOverSkuLimit || isOverInventoryLimit) {
+            await tx.organization.update({
+              where: { id: organizationId },
+              data: { isCreationLocked: true },
+            });
 
-          log.warn('Creation lock applied on subscription cancellation', {
-            organizationId,
-            currentUsage: usage.totalSkus,
-            starterLimit: starterLimits.max_skus,
-          });
+            log.warn('Creation lock applied on subscription cancellation', {
+              organizationId,
+              currentSkus: usage.totalSkus,
+              currentInventoryItems: usage.totalInventoryItems,
+              starterSkuLimit: starterLimits.max_skus,
+              starterInventoryLimit: starterLimits.max_inventory_items,
+            });
 
-          await this.emailService.sendDowngradeWarningEmail(
-            organizationId,
-            usage.totalSkus,
-            starterLimits.max_skus || 500,
-          );
+            await this.emailService.sendDowngradeWarningEmail(
+              organizationId,
+              usage.totalSkus,
+              starterLimits.max_skus || 500,
+            );
+          }
         }
 
         // Log audit event
@@ -626,6 +649,9 @@ export class WebhookService {
         });
       });
 
+      // Instantly invalidate auth cache to apply tier changes
+      invalidateSubscriptionCache(organizationId);
+
       log.info('Checkout completed successfully', { organizationId });
       const duration = Date.now() - start;
       monitor.recordWebhookEvent('checkout.session.completed', duration, 'success');
@@ -661,12 +687,22 @@ export class WebhookService {
       // Extract and validate organizationId
       const organizationId = await this.validateWebhookMetadata(invoice.customer as string);
 
+      // Determine if this is the FIRST failure (transition) or a retry
+      const currentTier = await this.prisma.subscriptionTier.findFirst({
+        where: { organizationId },
+        select: { status: true, pastDueSince: true },
+      });
+
+      const isFirstFailure = currentTier?.status !== SubscriptionStatus.PAST_DUE;
+
       // Update subscription status to past_due
       await this.prisma.$transaction(async (tx) => {
         await tx.subscriptionTier.updateMany({
           where: { organizationId },
           data: {
             status: SubscriptionStatus.PAST_DUE,
+            // Only set pastDueSince on first transition — do NOT reset on Stripe retries
+            ...(isFirstFailure ? { pastDueSince: new Date() } : {}),
           },
         });
 
@@ -675,7 +711,7 @@ export class WebhookService {
           data: {
             organizationId,
             action: 'payment_failed',
-            changeDescription: `Invoice ${invoice.id} payment failed: ${invoice.amount_due} cents`,
+            changeDescription: `Invoice ${invoice.id} payment failed: ${invoice.amount_due} cents (attempt ${isFirstFailure ? 1 : 'retry'})`,
           },
         });
       });
@@ -785,12 +821,13 @@ export class WebhookService {
           return;
         }
 
-        // Update status to ACTIVE
+        // Update status to ACTIVE and clear pastDueSince (recovery from past_due)
         await tx.subscriptionTier.update({
           where: { id: subscription.id },
           data: {
             status: SubscriptionStatus.ACTIVE,
             trialConvertedAt: new Date(),
+            pastDueSince: null,
           },
         });
 

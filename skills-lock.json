@@ -31,6 +31,11 @@
       "sourceType": "github",
       "computedHash": "6a13eea450dda0b57edc358970f53c55ad7a2eb237d31decbc38e312555ddac5"
     },
+    "codemap": {
+      "source": "jordancoin/codemap",
+      "sourceType": "github",
+      "computedHash": "4609724565ff5802bff31a595f800331ea74c51af6c593459446ebcda77a770b"
+    },
     "dispatching-parallel-agents": {
       "source": "obra/superpowers",
       "sourceType": "github",

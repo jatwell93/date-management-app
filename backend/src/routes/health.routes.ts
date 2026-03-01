@@ -1,11 +1,59 @@
 import { Router } from 'express';
 import { getDb, releaseDb } from '../database';
 import { DatabaseMonitoringService } from '../services/database.monitoring.service';
+import {
+  validateTierFeatureFlags,
+  quickValidateTierFeatureFlags,
+  ValidationResult,
+} from '../utils/validate-tier-flags';
+import { getDefaultDatabaseClient } from '../database/database-factory';
 
 const router = Router();
 
+// Tier feature flags validation state (16A.F.2)
+let tierFlagsValidationResult: ValidationResult | null = null;
+let tierFlagsValidationTime: Date | null = null;
+
+/**
+ * Initialize tier feature flags validation at boot time
+ * Call this during application startup
+ */
+export async function initializeTierFlagValidation(): Promise<void> {
+  const prisma = getDefaultDatabaseClient();
+  tierFlagsValidationResult = await validateTierFeatureFlags(prisma);
+  tierFlagsValidationTime = new Date();
+}
+
+/**
+ * Re-validate tier feature flags (for health check refreshes)
+ */
+export async function revalidateTierFlags(): Promise<boolean> {
+  const prisma = getDefaultDatabaseClient();
+  const result = await validateTierFeatureFlags(prisma);
+  tierFlagsValidationResult = result;
+  tierFlagsValidationTime = new Date();
+  return result.valid;
+}
+
 // Health check endpoint
-router.get('/health', (req, res) => {
+router.get('/health', async (req, res) => {
+  // Check tier feature flags first (16A.F.2 - fail fast if invalid)
+  if (!tierFlagsValidationResult || !tierFlagsValidationResult.valid) {
+    return res.status(503).json({
+      status: 'unhealthy',
+      timestamp: new Date().toISOString(),
+      services: {
+        database: 'unknown',
+        api: 'healthy',
+        tierFeatureFlags: 'unconfigured',
+      },
+      error: 'Tier feature flags not properly configured',
+      details: tierFlagsValidationResult?.errors || ['Validation not performed'],
+      missingFeatures: tierFlagsValidationResult?.missingFeatures || [],
+      warnings: tierFlagsValidationResult?.warnings || [],
+    });
+  }
+
   let db;
   try {
     // Check database connectivity
@@ -19,6 +67,12 @@ router.get('/health', (req, res) => {
         services: {
           database: 'healthy',
           api: 'healthy',
+          tierFeatureFlags: 'configured',
+        },
+        tierFlags: {
+          validatedAt: tierFlagsValidationTime?.toISOString(),
+          flagCounts: tierFlagsValidationResult.flagCounts,
+          warnings: tierFlagsValidationResult.warnings,
         },
       });
     } else {
@@ -28,6 +82,7 @@ router.get('/health', (req, res) => {
         services: {
           database: 'unhealthy',
           api: 'healthy',
+          tierFeatureFlags: 'configured',
         },
         error: 'Database connectivity test failed',
       });
@@ -39,6 +94,7 @@ router.get('/health', (req, res) => {
       services: {
         database: 'unhealthy',
         api: 'healthy',
+        tierFeatureFlags: 'configured',
       },
       error: 'Database connectivity error: ' + (error as Error).message,
     });
@@ -58,7 +114,16 @@ router.get('/live', (req, res) => {
 });
 
 // Readiness probe (checks if the service is ready to accept traffic)
-router.get('/ready', (req, res) => {
+router.get('/ready', async (req, res) => {
+  // Check tier feature flags first (fail fast if misconfigured)
+  if (!tierFlagsValidationResult || !tierFlagsValidationResult.valid) {
+    return res.status(503).json({
+      status: 'not ready',
+      timestamp: new Date().toISOString(),
+      error: 'Tier feature flags not properly configured',
+    });
+  }
+
   let db;
   try {
     // Check if database is available

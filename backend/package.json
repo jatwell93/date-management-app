@@ -17,6 +17,7 @@
     "migrate:status": "ts-node -e \"(async () => { const { MigrationService } = await import('./src/migrations/migration.service.ts'); const service = new MigrationService(); const status = await service.getMigrationStatus(); console.log('Migration Status:\\n================='); console.log(`Executed migrations: ${status.executed.length}`); console.log(`Pending migrations: ${status.pending.length}`); if (status.executed.length > 0) { console.log('\\nExecuted migrations:'); status.executed.forEach(m => { console.log(`  - ${m.id}: ${m.name} (${m.executed_at})`); }); } if (status.pending.length > 0) { console.log('\\nPending migrations:'); status.pending.forEach(m => { console.log(`  - ${m.id}: ${m.name}`); }); } })();\"",
     "migrate:rollback": "ts-node -e \"(async () => { const { MigrationService } = await import('./src/migrations/migration.service.ts'); const service = new MigrationService(); await service.rollbackLastMigration(); })();\"",
     "seed": "node scripts/seed-users.js",
+    "seed:tier-flags": "node scripts/seed-tier-feature-flags.js",
     "audit:org-ids": "npx ts-node scripts/audit-org-ids.ts",
     "secrets-scan": "git secrets --scan || echo 'git-secrets not installed. Install from: https://github.com/awslabs/git-secrets'",
     "lint": "eslint .",

@@ -1,6 +1,7 @@
 import { Request, Response, NextFunction } from 'express';
 import jwt, { Secret } from 'jsonwebtoken';
 import { verifyToken as verifyClerkToken } from '@clerk/backend';
+import { SubscriptionTier } from '@prisma/client';
 import { AnalyticsService, AnalyticsEventType } from '../services/analytics.service';
 import { BillingCycle, TierLevel, SubscriptionStatus } from '../types/subscription';
 import { getDefaultDatabaseClient } from '../database/database-factory';
@@ -24,7 +25,7 @@ export interface TokenPayload extends jwt.JwtPayload {
   userId: number;
   role: string;
   organizationId: string;
-  tierLevel: TierLevel;
+  tierLevel?: TierLevel;
 }
 
 interface ClerkTokenPayload {
@@ -62,7 +63,12 @@ const isBillingCycle = (value: string): value is BillingCycle =>
   Object.values(BillingCycle).includes(value as BillingCycle);
 
 const hasRequiredTokenFields = (token: any): boolean => {
-  return 'userId' in token && 'role' in token && 'organizationId' in token && 'tierLevel' in token;
+  return 'userId' in token && 'role' in token && 'organizationId' in token;
+};
+
+// Export cache invalidation to allow webhooks to instantly apply tier changes
+export const invalidateSubscriptionCache = (organizationId: string): void => {
+  subscriptionCache.delete(organizationId);
 };
 
 // Simple memory cache for subscription status
@@ -135,25 +141,10 @@ export const authenticateToken = async (req: AuthRequest, res: Response, next: N
         return null;
       }
 
-      const subscription = await prisma.subscriptionTier.findFirst({
-        where: { organizationId: user.organizationId },
-        orderBy: { createdAt: 'desc' },
-      });
-
-      if (!subscription) {
-        return null;
-      }
-
-      const normalizedTier = subscription.tierLevel.toLowerCase();
-      if (!isTierLevel(normalizedTier)) {
-        return null;
-      }
-
       return {
         userId: user.id,
         role: user.role,
         organizationId: user.organizationId,
-        tierLevel: normalizedTier,
         exp: clerkDecoded.exp,
       };
     } catch {
@@ -241,7 +232,7 @@ export const authenticateToken = async (req: AuthRequest, res: Response, next: N
   }
 
   // Validate required multi-tenant fields
-  if (!decodedToken.organizationId || !decodedToken.tierLevel) {
+  if (!decodedToken.organizationId) {
     const analyticsService = AnalyticsService.getInstance();
     analyticsService.trackEvent({
       eventType: AnalyticsEventType.USER_LOGOUT,
@@ -256,9 +247,10 @@ export const authenticateToken = async (req: AuthRequest, res: Response, next: N
   }
 
   // Validate organization exists and is active (task 4.4)
+  let subscription: SubscriptionTier | null = null;
+  let dbTierLevel: TierLevel | null = null;
   try {
     const orgId = decodedToken.organizationId;
-    let subscription: any = null;
     let hasActiveAccess = true;
 
     // Check cache first
@@ -379,6 +371,12 @@ export const authenticateToken = async (req: AuthRequest, res: Response, next: N
         });
       }
     }
+
+    // Override tierLevel from database (Source of Truth)
+    dbTierLevel = isTierLevel(subscription.tierLevel) ? subscription.tierLevel : null;
+    if (dbTierLevel) {
+      decodedToken.tierLevel = dbTierLevel;
+    }
   } catch (error) {
     const analyticsService = AnalyticsService.getInstance();
     analyticsService.trackEvent({
@@ -405,12 +403,12 @@ export const authenticateToken = async (req: AuthRequest, res: Response, next: N
   req.userId = decodedToken.userId;
   req.userRole = decodedToken.role;
   req.organizationId = decodedToken.organizationId;
-  req.tierLevel = decodedToken.tierLevel;
+  req.tierLevel = dbTierLevel ?? undefined;
   req.user = {
     id: decodedToken.userId,
     role: decodedToken.role,
     organizationId: decodedToken.organizationId,
-    tierLevel: decodedToken.tierLevel,
+    tierLevel: dbTierLevel ?? 'starter', // Default to starter if validation failed
   };
 
   // Track successful authenticated request

@@ -5,6 +5,7 @@ var __importDefault = (this && this.__importDefault) || function (mod) {
 Object.defineProperty(exports, "__esModule", { value: true });
 const jsonwebtoken_1 = __importDefault(require("jsonwebtoken"));
 const bcrypt_1 = __importDefault(require("bcrypt"));
+const crypto_1 = __importDefault(require("crypto"));
 const auth_service_1 = require("../../services/auth.service");
 const errors_1 = require("../../errors");
 // Mock the jsonwebtoken module
@@ -110,15 +111,23 @@ describe('AuthService', () => {
         });
     });
     describe('generateTokens', () => {
-        it('generates access and refresh tokens for a user', async () => {
-            prisma.refreshToken.create.mockResolvedValue({
-                id: 1,
-                userId: 1,
-                token: 'mock_refresh_token_hex',
-                expiresAt: expect.any(Date),
+        beforeEach(() => {
+            jest.useFakeTimers();
+            jest.setSystemTime(new Date('2026-03-01T00:00:00Z'));
+        });
+        afterEach(() => {
+            jest.useRealTimers();
+        });
+        it('successfully generates an access and refresh token pair', async () => {
+            crypto_1.default.randomBytes.mockReturnValue({
+                toString: () => 'mock_refresh_token_hex',
             });
-            const tokens = await authService.generateTokens(1, 'Manager');
+            jsonwebtoken_1.default.sign.mockReturnValue('mock_jwt_token');
+            const tokens = await authService.generateTokens(1, 'Manager', 'org_123');
             expect(tokens.accessToken).toBe('mock_jwt_token');
+            expect(jsonwebtoken_1.default.sign).toHaveBeenCalledWith({ userId: 1, role: 'Manager', organizationId: 'org_123' }, 'test_secret', {
+                expiresIn: '1h',
+            });
             expect(tokens.refreshToken).toBe('mock_refresh_token_hex');
             expect(prisma.refreshToken.create).toHaveBeenCalledWith({
                 data: {
@@ -130,7 +139,7 @@ describe('AuthService', () => {
         });
         it('throws InternalError on database failure', async () => {
             prisma.refreshToken.create.mockRejectedValue(new Error('DB failure'));
-            await expect(authService.generateTokens(1, 'Manager')).rejects.toBeInstanceOf(errors_1.InternalError);
+            await expect(authService.generateTokens(1, 'Manager', 'org_123')).rejects.toBeInstanceOf(errors_1.InternalError);
         });
     });
     describe('verifyToken', () => {
@@ -167,11 +176,11 @@ describe('AuthService', () => {
                 token: 'valid_refresh_token',
                 expiresAt: futureDate,
                 revokedAt: null,
-                user: { id: 5, role: 'Staff', pin: 'hashed', createdAt: new Date(), updatedAt: new Date() },
+                user: { id: 5, role: 'Staff', organizationId: 'org_123', pin: 'hashed', createdAt: new Date(), updatedAt: new Date() },
             });
             const newAccessToken = await authService.refreshAccessToken('valid_refresh_token');
             expect(newAccessToken).toBe('mock_jwt_token');
-            expect(jsonwebtoken_1.default.sign).toHaveBeenCalledWith({ userId: 5, role: 'Staff' }, 'test_secret', {
+            expect(jsonwebtoken_1.default.sign).toHaveBeenCalledWith({ userId: 5, role: 'Staff', organizationId: 'org_123' }, 'test_secret', {
                 expiresIn: '1h',
             });
         });

@@ -558,4 +558,143 @@ describe('Multi-Tenant Penetration Tests', () => {
       expect(response.body.message).toContain('subscription not configured');
     });
   });
+
+  describe('16A.F.3.3 - Route Parameter Tampering Tests', () => {
+    it('should reject requests with modified org_id in route parameters', async () => {
+      // Setup mock to return valid token for orgA user
+      mockJwtVerify.mockReset();
+      mockJwtVerify.mockImplementation((token, secret, options, callback) => {
+        if (callback) {
+          (callback as jwt.VerifyCallback)(null, {
+            sub: 'user-org-a',
+            org_id: orgA.id,
+          });
+        }
+        return undefined;
+      });
+
+      // Create a product in orgA
+      const product = await prisma.product.create({
+        data: {
+          name: 'Org A Product',
+          sku: 'ORG-A-001',
+          organizationId: orgA.id,
+          category: 'TEST',
+        },
+      });
+
+      // Attempt to access product with tampered org_id parameter
+      const response = await request(app)
+        .get(`/api/secure/products/${product.id}`)
+        .query({ org_id: orgB.id }) // Tampered org_id
+        .set('Authorization', 'Bearer valid.token.here');
+
+      // Should be rejected - user cannot access product from different org
+      expect(response.status).toBe(403);
+      expect(response.body.error).toContain('not authorized');
+    });
+
+    it('should reject requests with SQL injection attempt in org_id parameter', async () => {
+      mockJwtVerify.mockReset();
+      mockJwtVerify.mockImplementation((token, secret, options, callback) => {
+        if (callback) {
+          (callback as jwt.VerifyCallback)(null, {
+            sub: 'user-org-a',
+            org_id: orgA.id,
+          });
+        }
+        return undefined;
+      });
+
+      // Attempt SQL injection via org_id parameter
+      const response = await request(app)
+        .get('/api/secure/products')
+        .query({ org_id: "' OR '1'='1" }) // SQL injection attempt
+        .set('Authorization', 'Bearer valid.token.here');
+
+      // Should reject the request
+      expect(response.status).toBe(400);
+      expect(response.body.error).toContain('Invalid');
+    });
+
+    it('should reject requests with null byte injection in org_id', async () => {
+      mockJwtVerify.mockReset();
+      mockJwtVerify.mockImplementation((token, secret, options, callback) => {
+        if (callback) {
+          (callback as jwt.VerifyCallback)(null, {
+            sub: 'user-org-a',
+            org_id: orgA.id,
+          });
+        }
+        return undefined;
+      });
+
+      // Attempt null byte injection
+      const response = await request(app)
+        .get('/api/secure/products')
+        .query({ org_id: `${orgB.id}\x00malicious` })
+        .set('Authorization', 'Bearer valid.token.here');
+
+      // Should reject as invalid org_id
+      expect(response.status).toBe(400);
+    });
+
+    it('should reject requests with path traversal attempt in org_id', async () => {
+      mockJwtVerify.mockReset();
+      mockJwtVerify.mockImplementation((token, secret, options, callback) => {
+        if (callback) {
+          (callback as jwt.VerifyCallback)(null, {
+            sub: 'user-org-a',
+            org_id: orgA.id,
+          });
+        }
+        return undefined;
+      });
+
+      // Attempt path traversal
+      const response = await request(app)
+        .get('/api/secure/products')
+        .query({ org_id: '../../../etc/passwd' })
+        .set('Authorization', 'Bearer valid.token.here');
+
+      // Should reject as invalid org_id
+      expect(response.status).toBe(400);
+    });
+
+    it('should maintain tenant isolation when org_id is provided via different methods', async () => {
+      mockJwtVerify.mockReset();
+      mockJwtVerify.mockImplementation((token, secret, options, callback) => {
+        if (callback) {
+          (callback as jwt.VerifyCallback)(null, {
+            sub: 'user-org-a',
+            org_id: orgA.id,
+          });
+        }
+        return undefined;
+      });
+
+      // Create product in orgA
+      const product = await prisma.product.create({
+        data: {
+          name: 'Org A Product',
+          sku: 'ORG-A-002',
+          organizationId: orgA.id,
+          category: 'TEST',
+        },
+      });
+
+      // Attempt to access via POST body with different org_id
+      const response = await request(app)
+        .post('/api/secure/products/access')
+        .send({
+          productId: product.id,
+          org_id: orgB.id, // Attempt to impersonate orgB
+        })
+        .set('Authorization', 'Bearer valid.token.here')
+        .set('Content-Type', 'application/json');
+
+      // Should reject - cannot access product via tampered org_id
+      expect(response.status).toBe(403);
+    });
+  });
 });

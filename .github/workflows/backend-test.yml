@@ -60,3 +60,57 @@ jobs:
         with:
           name: coverage-report
           path: backend/coverage/
+
+  # Multi-Tenant Tests - Dedicated job for SaaS monetization validation (16A.F.3.2)
+  multi-tenant-tests:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: ./backend
+
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: 'npm'
+          cache-dependency-path: backend/package-lock.json
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Seed Tier Feature Flags
+        run: npm run seed:tier-flags
+        continue-on-error: true
+
+      - name: Run Multi-Tenant Feature Gate Tests
+        run: npm test -- --testPathPattern="multi-tenant-feature-gates" --verbose
+
+      - name: Run Multi-Tenant Route Filtering Tests
+        run: npm test -- --testPathPattern="multi-tenant-route-filtering" --verbose
+
+      - name: Run Cross-Tenant Isolation Tests
+        run: npm test -- --testPathPattern="cross-tenant-isolation" --verbose
+
+      - name: Run Multi-Tenant Penetration Tests
+        run: npm test -- --testPathPattern="multi-tenant-penetration" --verbose
+
+      - name: Run Multi-Tenant Concurrency Load Tests
+        run: npm test -- --testPathPattern="multi-tenant-concurrency" --verbose
+
+      - name: Generate Multi-Tenant Test Summary
+        if: always()
+        run: |
+          echo "## Multi-Tenant Test Summary (16A.F.3)" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "### Test Categories:" >> $GITHUB_STEP_SUMMARY
+          echo "- Cross-Tenant Isolation" >> $GITHUB_STEP_SUMMARY
+          echo "- Security Penetration Tests" >> $GITHUB_STEP_SUMMARY
+          echo "- Concurrency Load Tests" >> $GITHUB_STEP_SUMMARY
+          echo "- Feature Gate Enforcement" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "All multi-tenant tests must pass for Phase 16B validation." >> $GITHUB_STEP_SUMMARY

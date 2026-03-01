@@ -190,11 +190,11 @@ class AuthService {
     /**
      * Generate both access and refresh tokens for a user
      */
-    async generateTokens(userId, role) {
+    async generateTokens(userId, role, organizationId) {
         try {
             const secret = environment_1.envConfig.JWT_SECRET;
             // Generate access token (short-lived)
-            const accessToken = jsonwebtoken_1.default.sign({ userId, role }, secret, {
+            const accessToken = jsonwebtoken_1.default.sign({ userId, role, organizationId }, secret, {
                 expiresIn: this.ACCESS_TOKEN_EXPIRY,
             });
             // Generate refresh token (long-lived)
@@ -263,7 +263,11 @@ class AuthService {
             }
             // Generate new access token
             const secret = environment_1.envConfig.JWT_SECRET;
-            const accessToken = jsonwebtoken_1.default.sign({ userId: storedToken.userId, role: storedToken.user.role }, secret, { expiresIn: this.ACCESS_TOKEN_EXPIRY });
+            const accessToken = jsonwebtoken_1.default.sign({
+                userId: storedToken.userId,
+                role: storedToken.user.role,
+                organizationId: storedToken.user.organizationId
+            }, secret, { expiresIn: this.ACCESS_TOKEN_EXPIRY });
             logger_1.Logger.info('Auth service: Access token refreshed', { userId: storedToken.userId });
             return accessToken;
         }

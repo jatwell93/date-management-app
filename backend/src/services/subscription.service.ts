@@ -685,6 +685,144 @@ export class SubscriptionService {
     return downgradedCount;
   }
 
+  // ========== Dunning: Auto-downgrade past_due subscriptions (7-day grace period) ==========
+
+  /**
+   * Downgrade subscriptions that have been past_due for more than 7 days.
+   * DECISION 8A.9: 7-day grace period before auto-downgrade.
+   *
+   * For each expired past_due subscription:
+   * 1. Atomically update to starter tier (status=active)
+   * 2. Reset organization_usage limits to Starter
+   * 3. Apply isCreationLocked if usage exceeds Starter limits
+   * 4. Log dunning_downgrade audit event
+   * 5. Send Sentry fatal escalation alert
+   *
+   * @returns Number of organizations downgraded
+   */
+  async downgradeExpiredPastDue(): Promise<number> {
+    const sevenDaysAgo = new Date(Date.now() - 7 * 24 * 60 * 60 * 1000);
+
+    // Find all past_due subscriptions that have exceeded the grace period
+    const expiredPastDue = await this.prisma.subscriptionTier.findMany({
+      where: {
+        status: SubscriptionStatus.PAST_DUE,
+        pastDueSince: { lte: sevenDaysAgo },
+      },
+      select: {
+        id: true,
+        organizationId: true,
+        pastDueSince: true,
+      },
+    });
+
+    if (expiredPastDue.length === 0) {
+      return 0;
+    }
+
+    const starterLimits = TIER_LIMITS.starter;
+    let downgradedCount = 0;
+
+    for (const tier of expiredPastDue) {
+      try {
+        await this.prisma.$transaction(async (tx) => {
+          // 1. Downgrade to Starter, clear pastDueSince
+          await tx.subscriptionTier.updateMany({
+            where: { organizationId: tier.organizationId },
+            data: {
+              status: SubscriptionStatus.ACTIVE,
+              tierLevel: 'starter',
+              pastDueSince: null,
+            },
+          });
+
+          // 2. Reset usage limits to Starter tier
+          await tx.organizationUsage.update({
+            where: { organizationId: tier.organizationId },
+            data: {
+              maxSkus: starterLimits.max_skus ?? 500,
+              maxUsers: starterLimits.max_users ?? 1,
+              maxInventoryItems: starterLimits.max_inventory_items ?? 5000,
+            },
+          });
+
+          // 3. Check if usage exceeds new Starter limits — apply creation lock if so
+          const usage = await tx.organizationUsage.findUnique({
+            where: { organizationId: tier.organizationId },
+          });
+
+          const isOverSkuLimit =
+            starterLimits.max_skus !== null &&
+            usage &&
+            usage.totalSkus > starterLimits.max_skus;
+
+          const isOverInventoryLimit =
+            starterLimits.max_inventory_items !== null &&
+            usage &&
+            usage.totalInventoryItems > starterLimits.max_inventory_items;
+
+          const isOverUserLimit =
+            starterLimits.max_users !== null &&
+            usage &&
+            usage.activeUsers > starterLimits.max_users;
+
+          if (isOverSkuLimit || isOverInventoryLimit || isOverUserLimit) {
+            await tx.organization.update({
+              where: { id: tier.organizationId },
+              data: { isCreationLocked: true },
+            });
+
+            Logger.warn('Creation lock applied after dunning downgrade', {
+              organizationId: tier.organizationId,
+              totalSkus: usage?.totalSkus,
+              totalInventoryItems: usage?.totalInventoryItems,
+              starterSkuLimit: starterLimits.max_skus,
+              starterInventoryLimit: starterLimits.max_inventory_items,
+            });
+          }
+
+          // 4. Log audit event
+          await tx.auditLog.create({
+            data: {
+              organizationId: tier.organizationId,
+              action: 'dunning_downgrade',
+              changeDescription: `Dunning auto-downgrade to Starter after 7-day past_due grace period. SKUs: ${usage?.totalSkus ?? 0}, InventoryItems: ${usage?.totalInventoryItems ?? 0}`,
+            },
+          });
+        });
+
+        // 5. Sentry fatal escalation alert (outside transaction — non-critical path)
+        Sentry.captureMessage(
+          `[DUNNING] Organization ${tier.organizationId} auto-downgraded to Starter after 7-day past_due grace period`,
+          {
+            level: 'fatal',
+            tags: { component: 'dunning', event: 'auto_downgrade' },
+            extra: {
+              organizationId: tier.organizationId,
+              pastDueSince: tier.pastDueSince?.toISOString(),
+              gracePeriodDays: 7,
+            },
+          },
+        );
+
+        downgradedCount++;
+        Logger.warn(`Dunning downgrade completed for organization ${tier.organizationId}`);
+      } catch (error) {
+        Logger.error(
+          `Dunning downgrade failed for org ${tier.organizationId}: ${String(error)}`,
+        );
+        Sentry.captureException(error, {
+          level: 'error',
+          tags: { component: 'dunning', event: 'downgrade_failed' },
+          extra: { organizationId: tier.organizationId },
+        });
+        // Continue with remaining orgs
+      }
+    }
+
+    return downgradedCount;
+  }
+
   // ========== Phase 7: Trial Conversion (Trial → Paid) ==========
 
   /**

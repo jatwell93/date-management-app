@@ -6,29 +6,33 @@ const prisma = new PrismaClient();
 
 const TIER_FEATURES = [
   // Starter Tier
-  { tierLevel: 'starter', featureKey: 'max_skus', limitValue: 500 },
-  { tierLevel: 'starter', featureKey: 'max_users', limitValue: 1 },
+  { tierLevel: 'starter', featureKey: 'max_skus', limitValue: 500, enabled: true },
+  { tierLevel: 'starter', featureKey: 'max_users', limitValue: 1, enabled: true },
+  { tierLevel: 'starter', featureKey: 'max_inventory_items', limitValue: 5000, enabled: true },
   { tierLevel: 'starter', featureKey: 'advanced_analytics', enabled: false },
   { tierLevel: 'starter', featureKey: 'api_access', enabled: false },
   { tierLevel: 'starter', featureKey: 'priority_support', enabled: false },
 
   // Professional Tier
-  { tierLevel: 'professional', featureKey: 'max_skus', limitValue: 2000 },
-  { tierLevel: 'professional', featureKey: 'max_users', limitValue: 3 },
+  { tierLevel: 'professional', featureKey: 'max_skus', limitValue: 2000, enabled: true },
+  { tierLevel: 'professional', featureKey: 'max_users', limitValue: 3, enabled: true },
+  { tierLevel: 'professional', featureKey: 'max_inventory_items', limitValue: 20000, enabled: true },
   { tierLevel: 'professional', featureKey: 'advanced_analytics', enabled: true },
   { tierLevel: 'professional', featureKey: 'api_access', enabled: false },
   { tierLevel: 'professional', featureKey: 'priority_support', enabled: false },
 
   // Premium Tier
-  { tierLevel: 'premium', featureKey: 'max_skus', limitValue: null }, // unlimited
-  { tierLevel: 'premium', featureKey: 'max_users', limitValue: 10 },
+  { tierLevel: 'premium', featureKey: 'max_skus', limitValue: null, enabled: true },
+  { tierLevel: 'premium', featureKey: 'max_users', limitValue: 10, enabled: true },
+  { tierLevel: 'premium', featureKey: 'max_inventory_items', limitValue: null, enabled: true },
   { tierLevel: 'premium', featureKey: 'advanced_analytics', enabled: true },
   { tierLevel: 'premium', featureKey: 'api_access', enabled: true },
   { tierLevel: 'premium', featureKey: 'priority_support', enabled: true },
 
   // Concierge Tier
-  { tierLevel: 'concierge', featureKey: 'max_skus', limitValue: null }, // unlimited
-  { tierLevel: 'concierge', featureKey: 'max_users', limitValue: 10 },
+  { tierLevel: 'concierge', featureKey: 'max_skus', limitValue: null, enabled: true },
+  { tierLevel: 'concierge', featureKey: 'max_users', limitValue: 10, enabled: true },
+  { tierLevel: 'concierge', featureKey: 'max_inventory_items', limitValue: null, enabled: true },
   { tierLevel: 'concierge', featureKey: 'advanced_analytics', enabled: true },
   { tierLevel: 'concierge', featureKey: 'api_access', enabled: true },
   { tierLevel: 'concierge', featureKey: 'priority_support', enabled: true },

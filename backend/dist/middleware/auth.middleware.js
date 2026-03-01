@@ -3,7 +3,7 @@ var __importDefault = (this && this.__importDefault) || function (mod) {
     return (mod && mod.__esModule) ? mod : { "default": mod };
 };
 Object.defineProperty(exports, "__esModule", { value: true });
-exports.requireManager = exports.generateToken = exports.authenticateToken = exports.TEST_AUTH_BYPASS_ORG_ID = void 0;
+exports.requireManager = exports.generateToken = exports.authenticateToken = exports.TEST_AUTH_BYPASS_ORG_ID = exports.invalidateSubscriptionCache = void 0;
 const jsonwebtoken_1 = __importDefault(require("jsonwebtoken"));
 const backend_1 = require("@clerk/backend");
 const analytics_service_1 = require("../services/analytics.service");
@@ -29,8 +29,13 @@ function getAuthorizedParties() {
 const isTierLevel = (value) => ['starter', 'professional', 'premium', 'concierge'].includes(value);
 const isBillingCycle = (value) => Object.values(subscription_1.BillingCycle).includes(value);
 const hasRequiredTokenFields = (token) => {
-    return 'userId' in token && 'role' in token && 'organizationId' in token && 'tierLevel' in token;
+    return 'userId' in token && 'role' in token && 'organizationId' in token;
 };
+// Export cache invalidation to allow webhooks to instantly apply tier changes
+const invalidateSubscriptionCache = (organizationId) => {
+    subscriptionCache.delete(organizationId);
+};
+exports.invalidateSubscriptionCache = invalidateSubscriptionCache;
 // Simple memory cache for subscription status
 const subscriptionCache = new Map();
 const CACHE_TTL_MS = 5 * 60 * 1000; // 5 minutes
@@ -90,22 +95,10 @@ const authenticateToken = async (req, res, next) => {
             if (!user || user.organizationId === null) {
                 return null;
             }
-            const subscription = await prisma.subscriptionTier.findFirst({
-                where: { organizationId: user.organizationId },
-                orderBy: { createdAt: 'desc' },
-            });
-            if (!subscription) {
-                return null;
-            }
-            const normalizedTier = subscription.tierLevel.toLowerCase();
-            if (!isTierLevel(normalizedTier)) {
-                return null;
-            }
             return {
                 userId: user.id,
                 role: user.role,
                 organizationId: user.organizationId,
-                tierLevel: normalizedTier,
                 exp: clerkDecoded.exp,
             };
         }

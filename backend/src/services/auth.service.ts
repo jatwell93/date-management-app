@@ -17,7 +17,7 @@ export interface TokenPayload {
   userId: number;
   role: string;
   organizationId: string;
-  tierLevel: TierLevel;
+  tierLevel?: TierLevel;
   iat?: number;
   exp?: number;
 }
@@ -237,12 +237,12 @@ export class AuthService {
   /**
    * Generate both access and refresh tokens for a user
    */
-  async generateTokens(userId: number, role: string): Promise<TokenPair> {
+  async generateTokens(userId: number, role: string, organizationId: string, tierLevel?: TierLevel): Promise<TokenPair> {
     try {
       const secret = envConfig.JWT_SECRET;
 
       // Generate access token (short-lived)
-      const accessToken = jwt.sign({ userId, role }, secret, {
+      const accessToken = jwt.sign({ userId, role, organizationId, tierLevel }, secret, {
         expiresIn: this.ACCESS_TOKEN_EXPIRY,
       });
 
@@ -316,10 +316,23 @@ export class AuthService {
         throw new AuthenticationError('Refresh token revoked');
       }
 
-      // Generate new access token
+      // Generate new access token with fresh tierLevel from database
       const secret = envConfig.JWT_SECRET;
+      
+      // Fetch current tierLevel from subscription to ensure token has latest tier
+      const subscription = await this.prisma.subscriptionTier.findFirst({
+        where: { organizationId: storedToken.user.organizationId },
+        orderBy: { createdAt: 'desc' },
+      });
+      const tierLevel = subscription?.tierLevel as TierLevel | undefined;
+      
       const accessToken = jwt.sign(
-        { userId: storedToken.userId, role: storedToken.user.role },
+        { 
+          userId: storedToken.userId, 
+          role: storedToken.user.role,
+          organizationId: storedToken.user.organizationId,
+          tierLevel
+        },
         secret,
         { expiresIn: this.ACCESS_TOKEN_EXPIRY },
       );

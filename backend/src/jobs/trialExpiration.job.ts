@@ -116,7 +116,9 @@ export async function runTrialExpirationJob(): Promise<void> {
 }
 
 // Run immediately if called directly (for testing)
-runTrialExpirationJob().catch((error) => {
-  Logger.error(`Failed to run trial expiration job: ${String(error)}`);
-  process.exit(1);
-});
+if (require.main === module) {
+  runTrialExpirationJob().catch((error) => {
+    Logger.error(`Failed to run trial expiration job: ${String(error)}`);
+    process.exit(1);
+  });
+}
