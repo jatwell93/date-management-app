@@ -102,6 +102,7 @@ router.get(
   async (req: AuthRequest, res: Response) => {
     try {
       // Get both reports
+      const expiredItemService = getExpiredItemServiceForRequest(req);
       const lossesBySKU = await expiredItemService.getFinancialLossesBySKU();
       const lossesByStoreArea = await expiredItemService.getFinancialLossesByStoreArea();
 

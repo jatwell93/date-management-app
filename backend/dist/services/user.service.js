@@ -4,9 +4,10 @@ exports.UserService = void 0;
 const database_factory_1 = require("../database/database-factory");
 const errors_1 = require("../errors");
 const auth_service_1 = require("./auth.service");
+const auth_bypass_1 = require("../utils/auth-bypass");
 class UserService {
     constructor(organizationId, prismaClient, authService) {
-        this.organizationId = organizationId ?? 'default-org';
+        this.organizationId = (0, auth_bypass_1.getOrganizationId)(organizationId);
         this.prisma = prismaClient ?? (0, database_factory_1.getDefaultDatabaseClient)();
         this.authService = authService ?? new auth_service_1.AuthService(this.prisma);
     }

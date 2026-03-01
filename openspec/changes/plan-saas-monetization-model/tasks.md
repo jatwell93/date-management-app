@@ -882,19 +882,19 @@ in auth middleware and service constructors. This task is effectively a no-op ve
 
 ### Phase 16A.B: Webhook & State Sync (CRITICAL - Revenue Protection)
 
-- [ ] 16A.B.1 **CREATE TABLE**: Create migration: `processed_webhook_events(id TEXT PRIMARY KEY, event_type TEXT, processed_at TIMESTAMP, INDEX(event_type, processed_at))`
-- [ ] 16A.B.2 **IDEMPOTENCY**: Update webhook.service.ts: Replace in-memory Map with database lookup. Implement `isNewEvent()` with SQL query + `markEventProcessed()` with INSERT. Handle unique constraint gracefully
-- [ ] 16A.B.3 **IMPLEMENT HANDLERS**: Complete all 6 empty webhook handlers in webhook.service.ts:
-  - [ ] 16A.B.3.1 `handleSubscriptionCreated`: Create subscription_tiers record, set status=active, update organization_usage limits. DECISION (8A.5): MUST validate Stripe customer metadata contains organizationId (metadata is source of truth). Log ERROR to Sentry and skip if missing.
-  - [ ] 16A.B.3.2 `handleSubscriptionUpdated`: Update tier_level, billing_cycle, current_period_end. DECISION (8A.8): On tier downgrade, apply soft lock (read-only mode) if current usage > new tier limit. Don't auto-delete products. Set read_only_mode flag on organization.
-  - [ ] 16A.B.3.3 `handleSubscriptionDeleted`: Set status=canceled, downgrade organization to Starter tier. DECISION (8A.8): Apply soft lock (read-only mode) if usage > Starter limits. Log downgrade event.
-  - [ ] 16A.B.3.4 `handleCheckoutSessionCompleted`: Find subscription_tiers by Stripe subscription ID, set is_trial=false (mark paid). DECISION (8A.5): Link via Stripe customer metadata organizationId.
-  - [ ] 16A.B.3.5 `handleInvoicePaymentFailed`: Set status=past_due, log to dunning queue. DECISION (8A.4): Queue SendGrid retry email to organization owner. DECISION (8A.9): Use 7-day grace period before auto-downgrade. (NOT disabled auto-retry in Stripe)
-  - [ ] 16A.B.3.6 `handleTrialWillEnd`: DECISION (8A.4): Queue SendGrid reminder email via email service. Test with Stripe test events
-- [ ] 16A.B.4 **CRON JOB**: Create scheduled task (cron or Bull queue): Every 1 hour, fetch all active subscriptions from Stripe API, sync to local subscription_tiers table. Log any divergences as warning
-- [ ] 16A.B.5 **TRANSACTION**: Wrap all webhook handlers in Prisma transactions. Use `$transaction()` to atomically update subscription_tiers + organization_usage + audit log
-- [ ] 16A.B.6 **VALIDATION**: Add pre-update validation in webhook handlers: Before updating subscription_tiers, verify organization exists. Log and skip if missing (prevents orphaned records)
-- [ ] 16A.B.7 **MONITORING**: Add Sentry alerts: webhook_handler_error >1/day, processed_webhook_events growth rate (detect replay attacks)
+- [x] 16A.B.1 **CREATE TABLE**: Create migration: `processed_webhook_events(id TEXT PRIMARY KEY, event_type TEXT, processed_at TIMESTAMP, INDEX(event_type, processed_at))`
+- [x] 16A.B.2 **IDEMPOTENCY**: Update webhook.service.ts: Replace in-memory Map with database lookup. Implement `isNewEvent()` with SQL query + `markEventProcessed()` with INSERT. Handle unique constraint gracefully
+- [x] 16A.B.3 **IMPLEMENT HANDLERS**: Complete all 6 empty webhook handlers in webhook.service.ts:
+  - [x] 16A.B.3.1 `handleSubscriptionCreated`: Create subscription_tiers record, set status=active, update organization_usage limits. DECISION (8A.5): MUST validate Stripe customer metadata contains organizationId (metadata is source of truth). Log ERROR to Sentry and skip if missing.
+  - [x] 16A.B.3.2 `handleSubscriptionUpdated`: Update tier_level, billing_cycle, current_period_end. DECISION (8A.8): On tier downgrade, apply soft lock (read-only mode) if current usage > new tier limit. Don't auto-delete products. Set read_only_mode flag on organization.
+  - [x] 16A.B.3.3 `handleSubscriptionDeleted`: Set status=canceled, downgrade organization to Starter tier. DECISION (8A.8): Apply soft lock (read-only mode) if usage > Starter limits. Log downgrade event.
+  - [x] 16A.B.3.4 `handleCheckoutSessionCompleted`: Find subscription_tiers by Stripe subscription ID, set is_trial=false (mark paid). DECISION (8A.5): Link via Stripe customer metadata organizationId.
+  - [x] 16A.B.3.5 `handleInvoicePaymentFailed`: Set status=past_due, log to dunning queue. DECISION (8A.4): Queue SendGrid retry email to organization owner. DECISION (8A.9): Use 7-day grace period before auto-downgrade. (NOT disabled auto-retry in Stripe)
+  - [x] 16A.B.3.6 `handleTrialWillEnd`: DECISION (8A.4): Queue SendGrid reminder email via email service. Test with Stripe test events
+- [x] 16A.B.4 **CRON JOB**: Create scheduled task (cron or Bull queue): Every 1 hour, fetch all active subscriptions from Stripe API, sync to local subscription_tiers table. Log any divergences as warning
+- [x] 16A.B.5 **TRANSACTION**: Wrap all webhook handlers in Prisma transactions. Use `$transaction()` to atomically update subscription_tiers + organization_usage + audit log
+- [x] 16A.B.6 **VALIDATION**: Add pre-update validation in webhook handlers: Before updating subscription_tiers, verify organization exists. Log and skip if missing (prevents orphaned records)
+- [x] 16A.B.7 **MONITORING**: Add Sentry alerts: webhook_handler_error >1/day, processed_webhook_events growth rate (detect replay attacks)
 
 ### Phase 16A.C: Trial System (CRITICAL - Revenue Model)
 

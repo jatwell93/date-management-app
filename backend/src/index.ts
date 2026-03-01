@@ -1,4 +1,10 @@
-require('../instrument');
+try {
+  // Optional instrumentation (Sentry/analytics). Safe to skip if missing.
+  // eslint-disable-next-line @typescript-eslint/no-var-requires
+  require('../instrument');
+} catch {
+  // Instrumentation not present in this environment; continue without it.
+}
 
 import express from 'express';
 import helmet from 'helmet';
@@ -30,7 +36,8 @@ import { globalLimiter } from './middleware/rateLimiter';
 import { SchedulerService } from './services/scheduler.service';
 import { DatabaseMonitoringService } from './services/database.monitoring.service';
 import { ApplicationMonitoringService } from './services/application.monitoring.service';
-import { ServiceProvider } from './services/service-provider';
+import { AnalyticsService } from './services/analytics.service';
+import { getDb } from './database';
 import { envConfig } from './config/environment';
 
 const app = express();
@@ -161,9 +168,8 @@ if (!isTestEnv) {
   // Apply application monitoring middleware
   app.use(appMonitoringService.requestTrackingMiddleware());
 
-  // Initialize analytics service via ServiceProvider (Task 8.7)
-  const serviceProvider = new ServiceProvider();
-  const analyticsService = serviceProvider.getAnalyticsService();
+  // Initialize analytics service (Task 8.7)
+  const analyticsService = new AnalyticsService(getDb());
   analyticsService.initialize({
     enableTracking: true,
     enableSessionTracking: true,

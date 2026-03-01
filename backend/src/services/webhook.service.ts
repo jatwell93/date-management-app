@@ -336,6 +336,12 @@ export class WebhookService {
           },
         });
 
+        // Clear creation lock if org was previously locked (new subscription covers usage)
+        await tx.organization.update({
+          where: { id: organizationId },
+          data: { isCreationLocked: false },
+        });
+
         // Log audit event
         await tx.auditLog.create({
           data: {
@@ -424,29 +430,35 @@ export class WebhookService {
         });
 
         // Check if usage exceeds new limit on downgrade
-        if (isDowngrade && limits.max_skus !== null) {
-          const usage = await tx.organizationUsage.findUnique({
-            where: { organizationId },
+        const usage = await tx.organizationUsage.findUnique({
+          where: { organizationId },
+        });
+
+        if (isDowngrade && limits.max_skus !== null && usage && usage.totalSkus > limits.max_skus) {
+          // Apply creation lock — blocks new product creation until usage drops
+          await tx.organization.update({
+            where: { id: organizationId },
+            data: { isCreationLocked: true },
           });
 
-          if (usage && usage.totalSkus > limits.max_skus) {
-            log.warn('Usage exceeds new tier limit, applying soft lock', {
-              organizationId,
-              currentUsage: usage.totalSkus,
-              newLimit: limits.max_skus,
-            });
+          log.warn('Creation lock applied on tier downgrade', {
+            organizationId,
+            currentUsage: usage.totalSkus,
+            newLimit: limits.max_skus,
+          });
 
-            // Note: readOnlyMode field doesn't exist in current schema
-            // This is a placeholder for future implementation
-            // For now, just send the warning email
-
-            // Queue warning email
-            await this.emailService.sendDowngradeWarningEmail(
-              organizationId,
-              usage.totalSkus,
-              limits.max_skus,
-            );
-          }
+          // Queue warning email (non-blocking)
+          await this.emailService.sendDowngradeWarningEmail(
+            organizationId,
+            usage.totalSkus,
+            limits.max_skus,
+          );
+        } else if (!isDowngrade) {
+          // If not locking (e.g. upgrade), ensure creation lock is cleared
+          await tx.organization.update({
+            where: { id: organizationId },
+            data: { isCreationLocked: false },
+          });
         }
 
         // Log audit event
@@ -518,19 +530,23 @@ export class WebhookService {
           },
         });
 
-        // Check if usage exceeds Starter limits
+        // Apply creation lock if usage exceeds Starter limits
         const usage = await tx.organizationUsage.findUnique({
           where: { organizationId },
         });
 
         if (usage && usage.totalSkus > (starterLimits.max_skus || 500)) {
-          log.warn('Usage exceeds Starter limit after cancellation', {
+          await tx.organization.update({
+            where: { id: organizationId },
+            data: { isCreationLocked: true },
+          });
+
+          log.warn('Creation lock applied on subscription cancellation', {
             organizationId,
             currentUsage: usage.totalSkus,
             starterLimit: starterLimits.max_skus,
           });
 
-          // Send warning email about over-limit state
           await this.emailService.sendDowngradeWarningEmail(
             organizationId,
             usage.totalSkus,

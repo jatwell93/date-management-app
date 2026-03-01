@@ -244,6 +244,51 @@ export class SaasMetricsService {
   }
 
   /**
+   * Get total webhook handler error count for the current calendar day (UTC)
+   * Used for the "webhook_handler_error > 1/day" Sentry alert (16A.B.7)
+   */
+  async getDailyWebhookErrorCount(): Promise<number> {
+    const startOfDay = new Date();
+    startOfDay.setUTCHours(0, 0, 0, 0);
+
+    const result = await this.prisma.webhookMetrics.findMany({
+      where: {
+        date: { gte: startOfDay },
+      },
+      select: { failureCount: true },
+    });
+
+    return result.reduce((total, row) => total + row.failureCount, 0);
+  }
+
+  /**
+   * Get the growth rate of processed_webhook_events in the last hour vs. previous hour.
+   * A rate > 10x the previous hour may indicate a replay attack (16A.B.7).
+   * Returns ratio: currentHourCount / previousHourCount (returns 1.0 if previousHour is 0).
+   */
+  async getProcessedWebhookEventGrowthRate(): Promise<number> {
+    const now = new Date();
+    const oneHourAgo = new Date(now.getTime() - 60 * 60 * 1000);
+    const twoHoursAgo = new Date(now.getTime() - 2 * 60 * 60 * 1000);
+
+    const [currentHourCount, previousHourCount] = await Promise.all([
+      this.prisma.processedWebhookEvent.count({
+        where: { processedAt: { gte: oneHourAgo } },
+      }),
+      this.prisma.processedWebhookEvent.count({
+        where: { processedAt: { gte: twoHoursAgo, lt: oneHourAgo } },
+      }),
+    ]);
+
+    if (previousHourCount === 0) {
+      // No baseline — only alert if current hour is abnormally high (>100 events with no history)
+      return currentHourCount > 100 ? 10.0 : 1.0;
+    }
+
+    return currentHourCount / previousHourCount;
+  }
+
+  /**
    * Calculate payment failure rate for the last 30 days
    * NOTE: Requires Stripe Invoice API integration for accurate calculation
    * Returns null if not implemented
@@ -336,13 +381,13 @@ export class SaasMetricsService {
 
     return {
       trialConversionRate,
-      avgRevenuePerUser: arpu, // Already in cents
+      avgRevenuePerUser,
       churnRate,
       webhookFailureRate,
       paymentFailureRate,
       tierDistribution,
       totalActiveSubscriptions,
-      monthlyRecurringRevenue: arpu * totalActiveSubscriptions, // In cents
+      monthlyRecurringRevenue: avgRevenuePerUser * totalActiveSubscriptions,
       newTrialsThisMonth: newTrials,
       conversionsThisMonth: conversions,
       churnsThisMonth: churns,

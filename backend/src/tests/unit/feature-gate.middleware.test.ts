@@ -71,6 +71,9 @@ describe('Feature Gating Middleware', () => {
       subscriptionTier: {
         findFirst: jest.fn(),
       },
+      organization: {
+        findUnique: jest.fn().mockResolvedValue({ isCreationLocked: false }),
+      },
     } as any;
 
     (getDefaultDatabaseClient as jest.Mock).mockReturnValue(prisma);

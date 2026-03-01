@@ -206,6 +206,7 @@ router.delete(
       }
 
       // Check if product exists and belongs to user's organization
+      const productService = getProductServiceForRequest(req);
       const existingProduct = await productService.getProductById(id);
       if (!existingProduct) {
         return res.status(404).json({ message: 'Product not found' });

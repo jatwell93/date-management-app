@@ -4,6 +4,13 @@ import { InventoryItem } from '../models/inventory-item.model';
 import { ItemTransaction } from '../models/item-transaction.model';
 import { getOrganizationId } from '../utils/auth-bypass';
 
+export interface CreateInventoryItemInput {
+  productId: number;
+  expiryDate: string;
+  locationId: number;
+  status?: InventoryItem['status'];
+}
+
 export class InventoryService {
   private prisma: PrismaClient;
   private organizationId: string;
@@ -98,7 +105,7 @@ export class InventoryService {
    * Create a new inventory item
    */
   async createInventoryItem(
-    item: Omit<InventoryItem, 'id' | 'createdAt' | 'updatedAt'>,
+    item: CreateInventoryItemInput,
     userId: number,
   ): Promise<InventoryItem> {
     const { productId, expiryDate, locationId } = item;

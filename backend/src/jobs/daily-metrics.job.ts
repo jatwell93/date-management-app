@@ -180,6 +180,7 @@ export class HourlyWebhookCheckJob {
     Logger.info('Starting hourly webhook metrics check');
 
     try {
+      // Check 1: Webhook failure rate (existing)
       const webhookFailureRate = await this.saasMetricsService.calculateWebhookFailureRate();
 
       Logger.info('Webhook metrics check completed', {
@@ -187,7 +188,6 @@ export class HourlyWebhookCheckJob {
         timestamp: new Date().toISOString(),
       });
 
-      // If failure rate is high, trigger immediate alert
       if (webhookFailureRate > ALERT_THRESHOLDS.webhookFailureRateMax) {
         Logger.error('High webhook failure rate detected', {
           failureRate: webhookFailureRate.toFixed(2) + '%',
@@ -201,6 +201,52 @@ export class HourlyWebhookCheckJob {
             severity: 'critical',
           },
         });
+      }
+
+      // Check 2: Raw error count for the day (NEW — 16A.B.7)
+      const dailyErrorCount = await this.saasMetricsService.getDailyWebhookErrorCount();
+
+      if (dailyErrorCount > 1) {
+        Logger.error('Webhook handler errors today exceeded threshold', {
+          dailyErrorCount,
+          threshold: 1,
+        });
+
+        Sentry.captureMessage(
+          `${dailyErrorCount} webhook handler errors today (threshold: >1/day)`,
+          {
+            level: 'error',
+            tags: {
+              component: 'webhook_monitoring',
+              alert_type: 'daily_error_count',
+            },
+            extra: { dailyErrorCount },
+          },
+        );
+      }
+
+      // Check 3: Replay attack detection via processed_webhook_events growth rate (NEW — 16A.B.7)
+      const growthRate = await this.saasMetricsService.getProcessedWebhookEventGrowthRate();
+      const REPLAY_ATTACK_GROWTH_THRESHOLD = 5.0; // >5x previous hour volume
+
+      if (growthRate > REPLAY_ATTACK_GROWTH_THRESHOLD) {
+        Logger.error('Potential replay attack detected: webhook event volume spike', {
+          growthRate: `${growthRate.toFixed(2)}x`,
+          threshold: `${REPLAY_ATTACK_GROWTH_THRESHOLD}x`,
+        });
+
+        Sentry.captureMessage(
+          `Potential replay attack: processed_webhook_events grew ${growthRate.toFixed(1)}x in the last hour`,
+          {
+            level: 'error',
+            tags: {
+              component: 'webhook_monitoring',
+              alert_type: 'replay_attack_suspected',
+              severity: 'critical',
+            },
+            extra: { growthRate },
+          },
+        );
       }
     } catch (error) {
       Logger.error('Hourly webhook check failed', {

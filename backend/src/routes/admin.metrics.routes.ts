@@ -365,12 +365,13 @@ router.get('/alerts', requireManager, async (req: AuthRequest, res: Response) =>
     }
 
     // Check payment failure rate
-    if (metrics.paymentFailureRate > ALERT_THRESHOLDS.paymentFailureRateMax) {
+    const paymentFailureRate = metrics.paymentFailureRate ?? 0;
+    if (paymentFailureRate > ALERT_THRESHOLDS.paymentFailureRateMax) {
       alerts.push({
         type: 'HIGH_PAYMENT_FAILURE',
         severity: 'medium',
-        message: `Payment failure rate is ${metrics.paymentFailureRate.toFixed(2)}% (threshold: ${ALERT_THRESHOLDS.paymentFailureRateMax}%)`,
-        value: metrics.paymentFailureRate,
+        message: `Payment failure rate is ${paymentFailureRate.toFixed(2)}% (threshold: ${ALERT_THRESHOLDS.paymentFailureRateMax}%)`,
+        value: paymentFailureRate,
         threshold: ALERT_THRESHOLDS.paymentFailureRateMax,
         trend: 'stable',
       });

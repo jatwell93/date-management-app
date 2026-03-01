@@ -9,11 +9,16 @@ const service_provider_1 = require("../services/service-provider");
 const auth_middleware_1 = require("../middleware/auth.middleware");
 const feature_gate_middleware_1 = require("../middleware/feature-gate.middleware");
 const router = (0, express_1.Router)();
-const serviceProvider = new service_provider_1.ServiceProvider();
-const reportService = serviceProvider.getReportService();
+// Helper function to get services with organization context
+function getServicesForRequest(req) {
+    const serviceProvider = new service_provider_1.ServiceProvider({ organizationId: req.organizationId });
+    const reportService = serviceProvider.getReportService();
+    return { reportService };
+}
 // GET /reports/expiry - Get monthly expiry report (FR-004)
 router.get('/expiry', auth_middleware_1.authenticateToken, async (req, res) => {
     try {
+        const { reportService } = getServicesForRequest(req);
         const report = await reportService.getMonthlyExpiryReport();
         res.json(report);
     }
@@ -25,6 +30,7 @@ router.get('/expiry', auth_middleware_1.authenticateToken, async (req, res) => {
 // GET /reports/expiry-overall - Get overall expiry report with all time counts
 router.get('/expiry-overall', auth_middleware_1.authenticateToken, async (req, res) => {
     try {
+        const { reportService } = getServicesForRequest(req);
         const report = await reportService.getOverallExpiryReport();
         res.json(report);
     }
@@ -36,6 +42,7 @@ router.get('/expiry-overall', auth_middleware_1.authenticateToken, async (req, r
 // GET /reports/expiry-details - Get detailed expiry report for next 90 days
 router.get('/expiry-details', auth_middleware_1.authenticateToken, async (req, res) => {
     try {
+        const { reportService } = getServicesForRequest(req);
         const report = await reportService.getDetailedExpiryReport();
         res.json(report);
     }
@@ -47,6 +54,7 @@ router.get('/expiry-details', auth_middleware_1.authenticateToken, async (req, r
 // GET /reports/monthly-markdown - Get monthly markdown report
 router.get('/monthly-markdown', auth_middleware_1.authenticateToken, async (req, res) => {
     try {
+        const { reportService } = getServicesForRequest(req);
         const report = await reportService.getMonthlyMarkdownReport();
         res.json(report);
     }
@@ -58,6 +66,7 @@ router.get('/monthly-markdown', auth_middleware_1.authenticateToken, async (req,
 // POST /reports/update-statuses - Manually update all inventory markdown statuses
 router.post('/update-statuses', auth_middleware_1.authenticateToken, async (req, res) => {
     try {
+        const { reportService } = getServicesForRequest(req);
         await reportService.updateAllMarkdownStatuses();
         res.json({ message: 'All inventory markdown statuses updated successfully.' });
     }
@@ -69,6 +78,7 @@ router.post('/update-statuses', auth_middleware_1.authenticateToken, async (req,
 // GET /reports/usage - Get usage report (FR-009)
 router.get('/usage', auth_middleware_1.authenticateToken, async (req, res) => {
     try {
+        const { reportService } = getServicesForRequest(req);
         const report = await reportService.getUsageReport();
         res.json(report);
     }
@@ -80,6 +90,7 @@ router.get('/usage', auth_middleware_1.authenticateToken, async (req, res) => {
 // GET /reports/daily-usage - Get daily usage report for past 90 days
 router.get('/daily-usage', auth_middleware_1.authenticateToken, async (req, res) => {
     try {
+        const { reportService } = getServicesForRequest(req);
         const report = await reportService.getDailyUsageReport();
         res.json(report);
     }
@@ -91,6 +102,7 @@ router.get('/daily-usage', auth_middleware_1.authenticateToken, async (req, res)
 // GET /reports/loss-by-sku - Get loss report by SKU
 router.get('/loss-by-sku', auth_middleware_1.authenticateToken, async (req, res) => {
     try {
+        const { reportService } = getServicesForRequest(req);
         const report = await reportService.getLossBySkuReport();
         res.json(report);
     }
@@ -102,6 +114,7 @@ router.get('/loss-by-sku', auth_middleware_1.authenticateToken, async (req, res)
 // GET /reports/loss-by-department - Get loss report by department
 router.get('/loss-by-department', auth_middleware_1.authenticateToken, async (req, res) => {
     try {
+        const { reportService } = getServicesForRequest(req);
         const report = await reportService.getLossByDepartmentReport();
         res.json(report);
     }
@@ -117,6 +130,7 @@ router.get('/items-by-user', auth_middleware_1.authenticateToken, async (req, re
         if (timeFrame && !validator_1.default.isInt(timeFrame, { min: 1, max: 3650 })) {
             return res.status(400).json({ message: 'Invalid timeFrame value' });
         }
+        const { reportService } = getServicesForRequest(req);
         const report = await reportService.getItemsByUserReport(timeFrame);
         res.json(report);
     }
@@ -128,6 +142,7 @@ router.get('/items-by-user', auth_middleware_1.authenticateToken, async (req, re
 // GET /reports/items-by-date - Get items added by date
 router.get('/items-by-date', auth_middleware_1.authenticateToken, async (req, res) => {
     try {
+        const { reportService } = getServicesForRequest(req);
         const report = await reportService.getItemsByDateReport();
         res.json(report);
     }
@@ -139,6 +154,7 @@ router.get('/items-by-date', auth_middleware_1.authenticateToken, async (req, re
 // GET /dashboard/analytics - Get dashboard analytics data (FR-005)
 router.get('/analytics', auth_middleware_1.authenticateToken, (0, feature_gate_middleware_1.requireFeature)('advanced_analytics'), async (req, res) => {
     try {
+        const { reportService } = getServicesForRequest(req);
         const analytics = await reportService.getDashboardAnalytics();
         res.json(analytics);
     }

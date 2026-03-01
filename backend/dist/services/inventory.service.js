@@ -2,14 +2,15 @@
 Object.defineProperty(exports, "__esModule", { value: true });
 exports.InventoryService = void 0;
 const database_factory_1 = require("../database/database-factory");
+const auth_bypass_1 = require("../utils/auth-bypass");
 class InventoryService {
     /**
      * Constructor with optional dependency injection
-     * @param organizationId - Organization ID for tenant isolation
+     * @param organizationId - Organization ID for tenant isolation (optional in tests)
      * @param prismaClient - Optional PrismaClient for testing/custom configurations
      */
     constructor(organizationId, prismaClient) {
-        this.organizationId = organizationId ?? 'default-org';
+        this.organizationId = (0, auth_bypass_1.getOrganizationId)(organizationId);
         this.prisma = prismaClient ?? (0, database_factory_1.getDefaultDatabaseClient)();
     }
     /**
@@ -18,9 +19,7 @@ class InventoryService {
     async getAllInventoryItems() {
         const items = await this.prisma.inventoryItem.findMany({
             where: {
-                product: {
-                    organizationId: this.organizationId,
-                },
+                organizationId: this.organizationId,
             },
         });
         return items.map(this.mapPrismaToModel);
@@ -32,9 +31,7 @@ class InventoryService {
         const item = await this.prisma.inventoryItem.findFirst({
             where: {
                 id,
-                product: {
-                    organizationId: this.organizationId,
-                },
+                organizationId: this.organizationId,
             },
         });
         return item ? this.mapPrismaToModel(item) : null;
@@ -46,9 +43,7 @@ class InventoryService {
         const items = await this.prisma.inventoryItem.findMany({
             where: {
                 productId,
-                product: {
-                    organizationId: this.organizationId,
-                },
+                organizationId: this.organizationId,
             },
         });
         return items.map(this.mapPrismaToModel);
@@ -60,9 +55,7 @@ class InventoryService {
         const items = await this.prisma.inventoryItem.findMany({
             where: {
                 productId,
-                product: {
-                    organizationId: this.organizationId,
-                },
+                organizationId: this.organizationId,
             },
             orderBy: { createdAt: 'desc' },
             take: limit,
@@ -76,9 +69,7 @@ class InventoryService {
         const items = await this.prisma.inventoryItem.findMany({
             where: {
                 locationId,
-                product: {
-                    organizationId: this.organizationId,
-                },
+                organizationId: this.organizationId,
             },
         });
         return items.map(this.mapPrismaToModel);
@@ -88,116 +79,202 @@ class InventoryService {
      */
     async createInventoryItem(item, userId) {
         const { productId, expiryDate, locationId } = item;
-        // Validate that the product belongs to the organization
-        const product = await this.prisma.product.findFirst({
+        const result = await this.prisma.$transaction(async (tx) => {
+            // Validate that the product and location belong to the organization
+            await this.validateProductOwnership(productId, tx);
+            await this.validateLocationOwnership(locationId, tx);
+            // Check usage limits before creating the item
+            const currentUsage = await tx.organizationUsage.findUnique({
+                where: { organizationId: this.organizationId },
+                select: { totalInventoryItems: true, maxInventoryItems: true },
+            });
+            if (currentUsage && currentUsage.maxInventoryItems !== null) {
+                if (currentUsage.totalInventoryItems >= currentUsage.maxInventoryItems) {
+                    throw new Error(`Cannot create inventory item: maximum limit of ${currentUsage.maxInventoryItems} inventory items reached. ` +
+                        `Current usage: ${currentUsage.totalInventoryItems}.`);
+                }
+            }
+            // Calculate markdown status
+            const calculatedStatus = item.status || (await this.calculateMarkdownStatus(item.expiryDate));
+            const newItem = await tx.inventoryItem.create({
+                data: {
+                    organizationId: this.organizationId,
+                    productId,
+                    expiryDate: new Date(expiryDate), // Convert string to Date for Prisma
+                    locationId,
+                    status: calculatedStatus,
+                },
+            });
+            // Increment organization usage counter atomically
+            await tx.organizationUsage.update({
+                where: { organizationId: this.organizationId },
+                data: {
+                    totalInventoryItems: { increment: 1 },
+                },
+            });
+            // Create audit log entry
+            const changeDescription = `Inventory item created with expiry date ${expiryDate} and status ${calculatedStatus}.`;
+            await this.createAuditLogInTransaction(tx, userId, newItem.id, changeDescription);
+            return newItem;
+        });
+        return this.mapPrismaToModel(result);
+    }
+    /**
+     * Validate resource belongs to organization
+     */
+    async validateResourceOwnership(resourceType, resourceId, client) {
+        const resource = await client[resourceType].findFirst({
             where: {
-                id: productId,
+                id: resourceId,
                 organizationId: this.organizationId,
             },
         });
-        if (!product) {
-            throw new Error('Product not found or does not belong to this organization');
+        if (!resource) {
+            const resourceTypeName = resourceType === 'storeArea' ? 'Location' : 'Product';
+            throw new Error(`${resourceTypeName} not found or does not belong to this organization`);
         }
-        // Validate that the location belongs to the organization
-        const location = await this.prisma.storeArea.findFirst({
-            where: {
-                id: locationId,
-                organizationId: this.organizationId,
-            },
-        });
-        if (!location) {
-            throw new Error('Location not found or does not belong to this organization');
+    }
+    /**
+     * Validate product belongs to organization
+     */
+    async validateProductOwnership(productId, client) {
+        await this.validateResourceOwnership('product', productId, client);
+    }
+    /**
+     * Validate location belongs to organization
+     */
+    async validateLocationOwnership(locationId, client) {
+        await this.validateResourceOwnership('storeArea', locationId, client);
+    }
+    /**
+     * Handle Prisma errors consistently
+     */
+    handlePrismaError(error) {
+        if (error && typeof error === 'object' && error.code === 'P2025') {
+            return null;
         }
-        // Calculate markdown status
-        const calculatedStatus = item.status || (await this.calculateMarkdownStatus(item.expiryDate));
-        const newItem = await this.prisma.inventoryItem.create({
-            data: {
-                productId,
-                expiryDate: new Date(expiryDate), // Convert string to Date for Prisma
-                locationId,
-                status: calculatedStatus,
-            },
-        });
-        // Create audit log entry
-        const changeDescription = `Inventory item created with expiry date ${expiryDate} and status ${calculatedStatus}.`;
-        await this.createAuditLog(userId, newItem.id, changeDescription);
-        return this.mapPrismaToModel(newItem);
+        throw error;
     }
     /**
      * Update an existing inventory item
      */
     async updateInventoryItem(id, updates, userId) {
-        const existingItem = await this.getInventoryItemById(id);
-        if (!existingItem) {
-            return null;
-        }
         if (Object.keys(updates).length === 0) {
-            return existingItem; // No updates to perform
+            // No updates to perform - still need to check if item exists
+            const existingItem = await this.getInventoryItemById(id);
+            return existingItem;
         }
-        // Validate product belongs to organization if being updated
-        if (updates.productId !== undefined) {
-            const product = await this.prisma.product.findFirst({
-                where: {
-                    id: updates.productId,
-                    organizationId: this.organizationId,
-                },
+        try {
+            const result = await this.prisma.$transaction(async (tx) => {
+                // Get the item within transaction to ensure it still exists
+                const existingItem = await tx.inventoryItem.findFirst({
+                    where: {
+                        id,
+                        organizationId: this.organizationId,
+                    },
+                });
+                if (!existingItem) {
+                    return null;
+                }
+                // Validate relationships if being updated
+                if (updates.productId !== undefined) {
+                    await this.validateProductOwnership(updates.productId, tx);
+                }
+                if (updates.locationId !== undefined) {
+                    await this.validateLocationOwnership(updates.locationId, tx);
+                }
+                // If expiry date is updated, recalculate markdown status
+                let statusUpdate = updates.status;
+                if (updates.expiryDate) {
+                    statusUpdate = await this.calculateMarkdownStatus(updates.expiryDate);
+                }
+                const updatedItem = await tx.inventoryItem.update({
+                    where: { id },
+                    data: {
+                        ...(updates.productId !== undefined && { productId: updates.productId }),
+                        ...(updates.expiryDate !== undefined && { expiryDate: new Date(updates.expiryDate) }),
+                        ...(updates.locationId !== undefined && { locationId: updates.locationId }),
+                        ...(statusUpdate !== undefined && { status: statusUpdate }),
+                    },
+                });
+                // Create audit log entry within transaction
+                const changeDescription = this.formatChangeDescription(updates);
+                await this.createAuditLogInTransaction(tx, userId, id, changeDescription);
+                return updatedItem;
             });
-            if (!product) {
-                throw new Error('Product not found or does not belong to this organization');
-            }
+            return result ? this.mapPrismaToModel(result) : null;
         }
-        // Validate location belongs to organization if being updated
-        if (updates.locationId !== undefined) {
-            const location = await this.prisma.storeArea.findFirst({
-                where: {
-                    id: updates.locationId,
-                    organizationId: this.organizationId,
-                },
-            });
-            if (!location) {
-                throw new Error('Location not found or does not belong to this organization');
-            }
+        catch (error) {
+            return this.handlePrismaError(error);
         }
-        // If expiry date is updated, recalculate markdown status
-        let statusUpdate = updates.status;
-        if (updates.expiryDate) {
-            statusUpdate = await this.calculateMarkdownStatus(updates.expiryDate);
-        }
-        const updatedItem = await this.prisma.inventoryItem.update({
-            where: { id },
-            data: {
-                ...(updates.productId !== undefined && { productId: updates.productId }),
-                ...(updates.expiryDate !== undefined && { expiryDate: new Date(updates.expiryDate) }), // Convert string to Date
-                ...(updates.locationId !== undefined && { locationId: updates.locationId }),
-                ...(statusUpdate !== undefined && { status: statusUpdate }),
-            },
-        });
-        // Create audit log entry
-        const changeDescription = `Inventory item updated: ${JSON.stringify(updates)}`;
-        await this.createAuditLog(userId, id, changeDescription);
-        return this.mapPrismaToModel(updatedItem);
     }
     /**
      * Delete an inventory item
      */
     async deleteInventoryItem(id, userId) {
-        // Get the item before deleting to use in audit log
-        const item = await this.getInventoryItemById(id);
-        if (!item) {
-            return false; // Item doesn't exist or doesn't belong to this organization
+        try {
+            await this.prisma.$transaction(async (tx) => {
+                // Get the item before deleting to use in audit log
+                const item = await tx.inventoryItem.findFirst({
+                    where: {
+                        id,
+                        organizationId: this.organizationId,
+                    },
+                });
+                if (!item) {
+                    throw new Error('Inventory item not found');
+                }
+                // Create audit log entry before deleting the item
+                const changeDescription = `Inventory item with ID ${id} deleted.`;
+                await this.createAuditLogInTransaction(tx, userId, id, changeDescription);
+                // Delete the inventory item
+                await tx.inventoryItem.delete({
+                    where: { id },
+                });
+                // Decrement organization usage counter, but prevent negative values
+                await this.decrementInventoryCount(tx);
+            });
+            return true;
         }
-        // Create audit log entry before deleting the item
-        const changeDescription = `Inventory item with ID ${id} deleted.`;
-        await this.createAuditLog(userId, id, changeDescription);
-        await this.prisma.inventoryItem.delete({
-            where: { id },
+        catch (error) {
+            if (error instanceof Error && error.message === 'Inventory item not found') {
+                return false;
+            }
+            return this.handlePrismaError(error) === null ? false : true;
+        }
+    }
+    /**
+     * Decrement inventory count with validation
+     */
+    async decrementInventoryCount(client) {
+        const currentUsage = await client.organizationUsage.findUnique({
+            where: { organizationId: this.organizationId },
+            select: { totalInventoryItems: true },
         });
-        return true;
+        if (currentUsage && currentUsage.totalInventoryItems > 0) {
+            await client.organizationUsage.update({
+                where: { organizationId: this.organizationId },
+                data: {
+                    totalInventoryItems: { decrement: 1 },
+                },
+            });
+        }
+        else if (currentUsage && currentUsage.totalInventoryItems === 0) {
+            // Log warning about counter inconsistency
+            console.warn(`Attempted to decrement totalInventoryItems for organization ${this.organizationId} but counter is already 0. ` +
+                'This may indicate data inconsistency.');
+        }
     }
     /**
      * Synchronous version of calculateMarkdownStatus for use in batch operations
      */
     calculateMarkdownStatusSync(expiryDate) {
+        return this.calculateMarkdownStatusInternal(expiryDate);
+    }
+    /**
+     * Internal shared implementation for markdown calculations
+     */
+    calculateMarkdownStatusInternal(expiryDate) {
         if (!expiryDate) {
             return 'Normal';
         }
@@ -209,15 +286,15 @@ class InventoryService {
         }
         // Apply markdown rules based on days difference (from feature requirements)
         // Note: These are simple examples. Real logic might be more complex.
-        if (daysDiff <= 7) {
+        if (daysDiff <= InventoryService.MARKDOWN_THRESHOLDS.markdown3) {
             // Within 1 week from expiry: cost price - 20% (Markdown 3)
             return 'Markdown 3';
         }
-        else if (daysDiff <= 14) {
+        else if (daysDiff <= InventoryService.MARKDOWN_THRESHOLDS.markdown2) {
             // Within 2 weeks from expiry: cost price (Markdown 2)
             return 'Markdown 2';
         }
-        else if (daysDiff <= 30) {
+        else if (daysDiff <= InventoryService.MARKDOWN_THRESHOLDS.markdown1) {
             // Within 1 month from expiry: cost price + 20% (Markdown 1)
             return 'Markdown 1';
         }
@@ -235,33 +312,7 @@ class InventoryService {
         if (!item) {
             throw new Error('Inventory item not found or does not belong to this organization');
         }
-        const now = new Date();
-        const expiry = new Date(expiryDate);
-        const daysDiff = Math.ceil((expiry.getTime() - now.getTime()) / (1000 * 60 * 60 * 24));
-        let status = 'Normal';
-        if (daysDiff <= 0) {
-            status = 'Expired';
-        }
-        else {
-            // Apply markdown rules based on days difference (from feature requirements)
-            // Note: These are simple examples. Real logic might be more complex.
-            if (daysDiff <= 7) {
-                // Within 1 week from expiry: cost price - 20% (Markdown 3)
-                status = 'Markdown 3';
-            }
-            else if (daysDiff <= 14) {
-                // Within 2 weeks from expiry: cost price (Markdown 2)
-                status = 'Markdown 2';
-            }
-            else if (daysDiff <= 30) {
-                // Within 1 month from expiry: cost price + 20% (Markdown 1)
-                status = 'Markdown 1';
-            }
-            else {
-                // More than 1 month from expiry: Normal (no markdown)
-                status = 'Normal';
-            }
-        }
+        const status = this.calculateMarkdownStatusInternal(expiryDate);
         // Update the inventory item's status in the database
         await this.prisma.inventoryItem.update({
             where: { id: itemId },
@@ -272,40 +323,35 @@ class InventoryService {
      * Calculate markdown status based on expiry date without updating the database
      */
     async calculateMarkdownStatus(expiryDate) {
-        if (!expiryDate) {
-            return 'Normal';
-        }
-        const now = new Date();
-        const expiry = new Date(expiryDate);
-        const daysDiff = Math.ceil((expiry.getTime() - now.getTime()) / (1000 * 60 * 60 * 24));
-        if (daysDiff <= 0) {
-            return 'Expired';
-        }
-        // Apply markdown rules based on days difference (from feature requirements)
-        // Note: These are simple examples. Real logic might be more complex.
-        if (daysDiff <= 30) {
-            // Within 1 month from expiry: cost price - 20% (Markdown 3)
-            return 'Markdown 3';
-        }
-        else if (daysDiff <= 60) {
-            // Within 2 months from expiry: cost price (Markdown 2)
-            return 'Markdown 2';
-        }
-        else if (daysDiff <= 90) {
-            // Within 3 months from expiry: cost price + 20% (Markdown 1)
-            return 'Markdown 1';
-        }
-        else {
-            // More than 3 months from expiry: Normal (no markdown)
-            return 'Normal';
-        }
+        return this.calculateMarkdownStatusInternal(expiryDate);
     }
     /**
-     * Create an audit log entry
+     * Format change description for audit logs
      */
-    async createAuditLog(userId, inventoryItemId, changeDescription) {
+    formatChangeDescription(updates) {
+        const changes = [];
+        if (updates.productId !== undefined) {
+            changes.push(`product changed to ID ${updates.productId}`);
+        }
+        if (updates.expiryDate !== undefined) {
+            changes.push(`expiry date changed to ${updates.expiryDate}`);
+        }
+        if (updates.locationId !== undefined) {
+            changes.push(`location changed to ID ${updates.locationId}`);
+        }
+        if (updates.status !== undefined) {
+            changes.push(`status changed to ${updates.status}`);
+        }
+        return changes.length > 0
+            ? `Inventory item updated: ${changes.join(', ')}`
+            : 'Inventory item updated (no changes detected)';
+    }
+    /**
+     * Create an audit log entry (base method that works with any Prisma client)
+     */
+    async createAuditLogBase(client, userId, inventoryItemId, changeDescription) {
         // Validate that the user belongs to the organization
-        const user = await this.prisma.user.findFirst({
+        const user = await client.user.findFirst({
             where: {
                 id: userId,
                 organizationId: this.organizationId,
@@ -314,14 +360,27 @@ class InventoryService {
         if (!user) {
             throw new Error('User not found or does not belong to this organization');
         }
-        await this.prisma.auditLog.create({
+        await client.auditLog.create({
             data: {
+                organizationId: this.organizationId,
                 userId,
                 inventoryItemId,
                 action: 'inventory_changed',
                 changeDescription,
             },
         });
+    }
+    /**
+     * Create an audit log entry
+     */
+    async createAuditLog(userId, inventoryItemId, changeDescription) {
+        await this.createAuditLogBase(this.prisma, userId, inventoryItemId, changeDescription);
+    }
+    /**
+     * Create an audit log entry within a transaction
+     */
+    async createAuditLogInTransaction(tx, userId, inventoryItemId, changeDescription) {
+        await this.createAuditLogBase(tx, userId, inventoryItemId, changeDescription);
     }
     /**
      * Log an item transaction
@@ -345,6 +404,7 @@ class InventoryService {
         }
         const result = await this.prisma.itemTransaction.create({
             data: {
+                organizationId: this.organizationId,
                 inventoryItemId: inventory_item_id,
                 userId: user_id,
                 type,
@@ -369,5 +429,78 @@ class InventoryService {
             updatedAt: item.updatedAt.toISOString(),
         };
     }
+    /**
+     * Bulk update markdown statuses for multiple inventory items
+     * Optimized for scheduler performance - reduces database round trips
+     */
+    async bulkUpdateMarkdownStatuses(items) {
+        if (items.length === 0) {
+            return;
+        }
+        // Process in batches to avoid overwhelming the database
+        const batchSize = 100;
+        const batches = [];
+        for (let i = 0; i < items.length; i += batchSize) {
+            batches.push(items.slice(i, i + batchSize));
+        }
+        console.log(`Processing ${items.length} items in ${batches.length} batches...`);
+        for (const batch of batches) {
+            try {
+                // Prepare bulk update operations
+                const updateOperations = batch.map((item) => {
+                    const status = this.calculateMarkdownStatusInternal(item.expiryDate);
+                    return {
+                        where: {
+                            id: item.id,
+                            organizationId: this.organizationId, // Ensure tenant isolation
+                        },
+                        data: { status },
+                    };
+                });
+                // Execute all updates in a transaction for consistency
+                await this.prisma.$transaction(async (tx) => {
+                    // Verify all items belong to this organization before updating
+                    const itemIds = batch.map((item) => item.id);
+                    const existingItems = await tx.inventoryItem.findMany({
+                        where: {
+                            id: { in: itemIds },
+                            organizationId: this.organizationId,
+                        },
+                        select: { id: true },
+                    });
+                    const existingItemIds = new Set(existingItems.map((item) => item.id));
+                    // Filter out updates for items that don't exist or don't belong to org
+                    const validUpdates = updateOperations.filter((op) => existingItemIds.has(op.where.id));
+                    if (validUpdates.length === 0) {
+                        console.warn(`No valid items found in batch for organization ${this.organizationId}`);
+                        return;
+                    }
+                    // Execute bulk update using raw SQL for better performance
+                    const updateCases = validUpdates
+                        .map((op, index) => `WHEN ${op.where.id} THEN '${op.data.status}'`)
+                        .join(' ');
+                    const itemIdsToUpdate = validUpdates.map((op) => op.where.id);
+                    await tx.$executeRaw `
+            UPDATE inventory_items 
+            SET status = CASE id ${updateCases} END,
+                updated_at = CURRENT_TIMESTAMP
+            WHERE id IN (${itemIdsToUpdate})
+              AND organization_id = ${this.organizationId}
+          `;
+                });
+                console.log(`Batch completed: ${batch.length} items processed`);
+            }
+            catch (error) {
+                console.error(`Failed to update batch:`, error);
+                throw error;
+            }
+        }
+    }
 }
 exports.InventoryService = InventoryService;
+// Markdown thresholds in days
+InventoryService.MARKDOWN_THRESHOLDS = {
+    markdown3: 7, // Within 1 week: cost price - 20%
+    markdown2: 14, // Within 2 weeks: cost price
+    markdown1: 30, // Within 1 month: cost price + 20%
+};

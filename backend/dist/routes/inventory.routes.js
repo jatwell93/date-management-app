@@ -15,11 +15,16 @@ const inventory_controller_1 = require("../controllers/inventory.controller");
 const rateLimiter_1 = require("../middleware/rateLimiter");
 const feature_gate_middleware_1 = require("../middleware/feature-gate.middleware");
 const router = (0, express_1.Router)();
-const inventoryService = new inventory_service_1.InventoryService();
+// Helper function to get services with organization context
+function getServicesForRequest(req) {
+    const inventoryService = new inventory_service_1.InventoryService(req.organizationId);
+    const productService = new product_service_1.ProductService(undefined, req.organizationId);
+    return { inventoryService, productService };
+}
 // GET /inventory-items - Get all inventory items
 router.get('/', auth_middleware_1.authenticateToken, async (req, res) => {
     try {
-        // const items = await inventoryService.getAllInventoryItems();
+        const { inventoryService } = getServicesForRequest(req);
         const items = await inventoryService.getAllInventoryItems();
         // UBS: SAFE — returning JSON (res.json) with validated data from the service; no HTML rendering.
         res.json(items);
@@ -36,6 +41,7 @@ router.get('/:id', auth_middleware_1.authenticateToken, async (req, res) => {
         if (Number.isNaN(id)) {
             return res.status(400).json({ message: 'Invalid inventory item id' });
         }
+        const { inventoryService } = getServicesForRequest(req);
         const item = await inventoryService.getInventoryItemById(id);
         if (!item) {
             return res.status(404).json({ message: 'Inventory item not found' });
@@ -61,7 +67,7 @@ router.get('/product/:productId', auth_middleware_1.authenticateToken, async (re
         if (Number.isNaN(productId)) {
             return res.status(400).json({ message: 'Invalid product id' });
         }
-        // const items = await inventoryService.getInventoryItemsByProductId(productId);
+        const { inventoryService } = getServicesForRequest(req);
         const items = await inventoryService.getInventoryItemsByProductId(productId);
         // UBS: SAFE — returning JSON array of items; input validated above (productId) and data comes from DB/service.
         res.json(items);
@@ -82,14 +88,12 @@ router.get('/by-barcode/:barcode', auth_middleware_1.authenticateToken, async (r
             return res.status(400).json({ message: 'Invalid barcode format' });
         }
         // First, get the product by barcode to get its ID
-        const productService = new product_service_1.ProductService();
-        // const product = await productService.getProductByBarcode(barcode);
+        const { productService, inventoryService } = getServicesForRequest(req);
         const product = await productService.getProductByBarcode(barcode);
         if (!product) {
             return res.status(404).json({ message: 'Product not found' });
         }
         // Then get inventory items for that product
-        // const items = await inventoryService.getInventoryItemsByProductId(product.id, /* req.organizationId */);
         const items = await inventoryService.getInventoryItemsByProductId(product.id);
         // UBS: SAFE — returning JSON array of items; product lookup validated and sanitized above.
         res.json(items);
@@ -108,7 +112,7 @@ router.get('/recent/product/:productId', auth_middleware_1.authenticateToken, as
         }
         const limitParam = Number.parseInt(String(req.query.limit ?? ''), 10);
         const limit = Number.isNaN(limitParam) || limitParam <= 0 ? 5 : limitParam;
-        // const items = await inventoryService.getRecentInventoryItemsByProductId(productId, limit);
+        const { inventoryService } = getServicesForRequest(req);
         const items = await inventoryService.getRecentInventoryItemsByProductId(productId, limit);
         // UBS: SAFE — returning recent items as JSON; inputs were validated and limited above.
         res.json(items);
@@ -125,7 +129,7 @@ router.get('/location/:locationId', auth_middleware_1.authenticateToken, async (
         if (Number.isNaN(locationId)) {
             return res.status(400).json({ message: 'Invalid location id' });
         }
-        // const items = await inventoryService.getInventoryItemsByLocationId(locationId);
+        const { inventoryService } = getServicesForRequest(req);
         const items = await inventoryService.getInventoryItemsByLocationId(locationId);
         // UBS: SAFE — locationId validated and data returned as JSON from DB/service.
         res.json(items);
@@ -157,16 +161,7 @@ router.post('/', auth_middleware_1.authenticateToken, (0, feature_gate_middlewar
         if (!userId) {
             return res.status(401).json({ message: 'Access denied: No user ID found' });
         }
-        // const newInventoryItem = await inventoryService.createInventoryItem(
-        //   {
-        //     productId,
-        //     expiryDate,
-        //     locationId,
-        //     status,
-        //     organizationId: req.organizationId,
-        //   } as Omit<InventoryItem, 'id' | 'createdAt' | 'updatedAt'>,
-        //   userId,
-        // );
+        const { inventoryService } = getServicesForRequest(req);
         const newInventoryItem = await inventoryService.createInventoryItem({
             productId,
             expiryDate,
@@ -193,6 +188,7 @@ router.put('/:id', auth_middleware_1.authenticateToken, rateLimiter_1.standardLi
             return res.status(400).json({ message: 'Invalid inventory item id' });
         }
         // First, get the item to validate ownership
+        const { inventoryService } = getServicesForRequest(req);
         const existingItem = await inventoryService.getInventoryItemById(id);
         if (!existingItem) {
             return res.status(404).json({ message: 'Inventory item not found' });
@@ -238,6 +234,7 @@ router.delete('/:id', auth_middleware_1.authenticateToken, rateLimiter_1.standar
             return res.status(400).json({ message: 'Invalid inventory item id' });
         }
         // First, get the item to validate ownership
+        const { inventoryService } = getServicesForRequest(req);
         const existingItem = await inventoryService.getInventoryItemById(id);
         if (!existingItem) {
             return res.status(404).json({ message: 'Inventory item not found' });

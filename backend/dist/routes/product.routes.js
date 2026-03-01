@@ -47,7 +47,10 @@ const multer_1 = __importDefault(require("multer"));
 const rateLimiter_1 = require("../middleware/rateLimiter");
 const path = __importStar(require("path"));
 const router = (0, express_1.Router)();
-const productService = new product_service_1.ProductService();
+// Helper function to get services with organization context
+function getProductServiceForRequest(req) {
+    return new product_service_1.ProductService(undefined, req.organizationId);
+}
 // Configure multer for file uploads - accept CSV, XLSX, and XLS files
 const upload = (0, multer_1.default)({
     dest: 'uploads/',
@@ -69,8 +72,8 @@ const upload = (0, multer_1.default)({
 // GET /products - Get all products for the user's organization
 router.get('/', auth_middleware_1.authenticateToken, async (req, res) => {
     try {
-        // TODO: Phase 7 - Update service to accept organizationId parameter
-        const products = await productService.getAllProducts(); // req.organizationId!
+        const productService = getProductServiceForRequest(req);
+        const products = await productService.getAllProducts();
         res.json(products);
     }
     catch (_error) {
@@ -85,6 +88,7 @@ router.get('/:id', auth_middleware_1.authenticateToken, async (req, res) => {
         if (Number.isNaN(id)) {
             return res.status(400).json({ message: 'Invalid product id' });
         }
+        const productService = getProductServiceForRequest(req);
         const product = await productService.getProductById(id);
         if (!product) {
             return res.status(404).json({ message: 'Product not found' });
@@ -106,8 +110,8 @@ router.get('/:id', auth_middleware_1.authenticateToken, async (req, res) => {
 router.get('/by-barcode/:barcode', auth_middleware_1.authenticateToken, async (req, res) => {
     try {
         const barcode = req.params.barcode;
-        // TODO: Phase 7 - Update service to accept organizationId parameter
-        const product = await productService.getProductByBarcode(barcode); // , req.organizationId!
+        const productService = getProductServiceForRequest(req);
+        const product = await productService.getProductByBarcode(barcode);
         if (!product) {
             return res.status(404).json({ message: 'Product not found' });
         }
@@ -122,8 +126,8 @@ router.get('/by-barcode/:barcode', auth_middleware_1.authenticateToken, async (r
 router.get('/by-sku/:sku', auth_middleware_1.authenticateToken, async (req, res) => {
     try {
         const sku = req.params.sku;
-        // TODO: Phase 7 - Update service to accept organizationId parameter
-        const product = await productService.getProductBySku(sku); // , req.organizationId!
+        const productService = getProductServiceForRequest(req);
+        const product = await productService.getProductBySku(sku);
         if (!product) {
             return res.status(404).json({ message: 'Product not found' });
         }
@@ -141,6 +145,7 @@ router.post('/', auth_middleware_1.authenticateToken, rateLimiter_1.standardLimi
         return res.status(400).json({ message: 'Missing required product fields' });
     }
     try {
+        const productService = getProductServiceForRequest(req);
         const newProduct = await productService.createProduct({
             barcode,
             sku,
@@ -164,6 +169,7 @@ router.put('/:id', auth_middleware_1.authenticateToken, rateLimiter_1.standardLi
         }
         const { barcode, sku, name, costPrice } = req.body;
         // Check if product exists and belongs to user's organization
+        const productService = getProductServiceForRequest(req);
         const existingProduct = await productService.getProductById(id);
         if (!existingProduct) {
             return res.status(404).json({ message: 'Product not found' });
@@ -202,6 +208,7 @@ router.delete('/:id', auth_middleware_1.authenticateToken, rateLimiter_1.standar
             return res.status(400).json({ message: 'Invalid product id' });
         }
         // Check if product exists and belongs to user's organization
+        const productService = getProductServiceForRequest(req);
         const existingProduct = await productService.getProductById(id);
         if (!existingProduct) {
             return res.status(404).json({ message: 'Product not found' });
@@ -241,8 +248,8 @@ router.post('/upload-csv', auth_middleware_1.authenticateToken, rateLimiter_1.st
             });
         }
         // Process the uploaded file (passing original filename for type detection)
-        // TODO: Phase 7 - Update service to accept organizationId parameter
-        const result = await productService.processCSVUpload(safeFilePath, req.file.originalname); // , req.organizationId!
+        const productService = getProductServiceForRequest(req);
+        const result = await productService.processCSVUpload(safeFilePath, req.file.originalname);
         // Send response with processing results and any errors
         const responseObj = {
             success: result.errors.length === 0, // Add explicit success field

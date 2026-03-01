@@ -7,7 +7,6 @@ const jsonwebtoken_1 = __importDefault(require("jsonwebtoken"));
 const bcrypt_1 = __importDefault(require("bcrypt"));
 const auth_service_1 = require("../../services/auth.service");
 const errors_1 = require("../../errors");
-const subscription_1 = require("../../types/subscription");
 // Mock the jsonwebtoken module
 jest.mock('jsonwebtoken', () => ({
     sign: jest.fn(),
@@ -93,79 +92,15 @@ describe('AuthService', () => {
         });
     });
     describe('login', () => {
-        it('returns a LoginResponse with JWT token and organization context on successful login', async () => {
-            // Multi-tenant setup: User with organizationId (task 4.5)
+        it('always throws AuthenticationError since PIN auth is disabled (Clerk is used)', async () => {
+            // PIN auth removed — isValidPin is hardcoded to false in login()
             prisma.user.findMany.mockResolvedValue([
-                { id: 1, pin: 'hashed_pin', role: 'Manager', organizationId: 'org-1' },
-            ]);
-            // Query subscription tier for organization (task 4.6)
-            prisma.subscriptionTier.findFirst.mockResolvedValue({
-                id: 'sub-tier-1',
-                organizationId: 'org-1',
-                tierLevel: 'professional',
-                status: subscription_1.SubscriptionStatus.ACTIVE,
-                createdAt: new Date(),
-            });
-            const response = await authService.login('5624');
-            // Verify LoginResponse includes organizationId and tierLevel (task 4.8)
-            expect(response).toEqual({
-                token: 'mock_jwt_token',
-                userId: 1,
-                role: 'Manager',
-                organizationId: 'org-1',
-                tierLevel: 'professional',
-            });
-            // Verify JWT includes organization context (task 4.9)
-            expect(jsonwebtoken_1.default.sign).toHaveBeenCalledWith({ userId: 1, role: 'Manager', organizationId: 'org-1', tierLevel: 'professional' }, expect.any(String), { expiresIn: '1h' });
-            expect(prisma.user.findMany).toHaveBeenCalledWith({
-                select: { id: true, pin: true, role: true, organizationId: true },
-            });
-            expect(prisma.subscriptionTier.findFirst).toHaveBeenCalledWith({
-                where: { organizationId: 'org-1' },
-                orderBy: { createdAt: 'desc' },
-            });
-        });
-        it('throws AuthenticationError when user has no organizationId assigned', async () => {
-            prisma.user.findMany.mockResolvedValue([
-                { id: 1, pin: 'hashed_pin', role: 'Manager', organizationId: null },
+                { id: 1, role: 'Manager', organizationId: 'org-1' },
             ]);
             await expect(authService.login('5624')).rejects.toBeInstanceOf(errors_1.AuthenticationError);
             expect(jsonwebtoken_1.default.sign).not.toHaveBeenCalled();
         });
-        it('throws AuthenticationError when subscription tier not found for organization', async () => {
-            prisma.user.findMany.mockResolvedValue([
-                { id: 1, pin: 'hashed_pin', role: 'Manager', organizationId: 'org-1' },
-            ]);
-            // No subscription tier for organization
-            prisma.subscriptionTier.findFirst.mockResolvedValue(null);
-            await expect(authService.login('5624')).rejects.toBeInstanceOf(errors_1.AuthenticationError);
-            expect(jsonwebtoken_1.default.sign).not.toHaveBeenCalled();
-        });
-        it('throws AuthenticationError when organization subscription is canceled (task 4.7)', async () => {
-            prisma.user.findMany.mockResolvedValue([
-                { id: 1, pin: 'hashed_pin', role: 'Manager', organizationId: 'org-1' },
-            ]);
-            // Subscription is canceled
-            prisma.subscriptionTier.findFirst.mockResolvedValue({
-                id: 'sub-tier-1',
-                organizationId: 'org-1',
-                tierLevel: 'professional',
-                status: subscription_1.SubscriptionStatus.CANCELED,
-                createdAt: new Date(),
-            });
-            await expect(authService.login('5624')).rejects.toBeInstanceOf(errors_1.AuthenticationError);
-            expect((await authService.login('5624').catch((e) => e.message)).includes('canceled')).toBeDefined();
-            expect(jsonwebtoken_1.default.sign).not.toHaveBeenCalled();
-        });
-        it('throws AuthenticationError for invalid PIN (incorrect password)', async () => {
-            prisma.user.findMany.mockResolvedValue([
-                { id: 1, pin: 'hashed_pin', role: 'Manager', organizationId: 'org-1' },
-            ]);
-            bcrypt_1.default.compare.mockResolvedValue(false);
-            await expect(authService.login('wrong_pin')).rejects.toBeInstanceOf(errors_1.AuthenticationError);
-            expect(jsonwebtoken_1.default.sign).not.toHaveBeenCalled();
-        });
-        it('throws AuthenticationError when no users match', async () => {
+        it('throws AuthenticationError when no users exist', async () => {
             prisma.user.findMany.mockResolvedValue([]);
             await expect(authService.login('5624')).rejects.toBeInstanceOf(errors_1.AuthenticationError);
         });

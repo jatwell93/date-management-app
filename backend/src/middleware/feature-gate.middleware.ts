@@ -145,6 +145,30 @@ export const checkUsageLimit = (limitKey: LimitKey) => {
       const prisma = getDefaultDatabaseClient();
       const organizationUsage = await getOrCreateOrganizationUsage(prisma, req.organizationId);
 
+      // Check creation lock — applied by webhook handler on over-limit downgrade/cancellation
+      const org = await prisma.organization.findUnique({
+        where: { id: req.organizationId },
+        select: { isCreationLocked: true },
+      });
+
+      if (org?.isCreationLocked && ['POST', 'PUT', 'PATCH'].includes(req.method)) {
+        Logger.warn('Creation locked: org over limit, blocking write operation', {
+          organizationId: req.organizationId,
+          limitKey,
+          path: req.path,
+          method: req.method,
+        });
+
+        return res.status(403).json({
+          message:
+            'Your account is creation-locked because your current usage exceeds your subscription tier limits. Remove items or upgrade to re-enable creation.',
+          locked: true,
+          limitKey,
+          upgradeCTA: 'Upgrade your plan to unlock creation',
+          upgradeUrl: '/subscription/upgrade',
+        });
+      }
+
       // Determine the limit and usage based on limitKey
       const { currentUsage, limit } = await calculateUsageAndLimit(
         prisma,

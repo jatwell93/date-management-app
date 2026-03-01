@@ -296,7 +296,6 @@ describe('Multi-Tenant Cross-Tenant Isolation Tests', () => {
       const inventoryServiceB = new InventoryService(orgB.id, prisma);
       const inventoryItemB = await inventoryServiceB.createInventoryItem(
         {
-          organizationId: orgB.id,
           productId: productB.id,
           expiryDate: new Date('2025-12-31').toISOString(),
           locationId: storeAreaB.id,
