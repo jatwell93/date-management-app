@@ -159,7 +159,7 @@ router.get('/location/:locationId', authenticateToken, async (req: AuthRequest, 
 router.post(
   '/',
   authenticateToken,
-  checkUsageLimit('max_skus'),
+  checkUsageLimit('max_inventory_items'),
   standardLimiter,
   validateRequest(inventoryItemSchema),
   validateReferentialIntegrity,

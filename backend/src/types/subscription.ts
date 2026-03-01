@@ -38,18 +38,26 @@ export const TIER_LIMITS: Record<TierLevel, Record<string, number | null>> = {
   starter: {
     max_skus: 500,
     max_users: 1,
+    max_inventory_items: 5000,
+    storage_bytes: 1073741824, // 1GB
   },
   professional: {
     max_skus: 2000,
     max_users: 3,
+    max_inventory_items: 20000,
+    storage_bytes: 10737418240, // 10GB
   },
   premium: {
     max_skus: null, // unlimited
     max_users: 10,
+    max_inventory_items: null, // unlimited
+    storage_bytes: 107374182400, // 100GB
   },
   concierge: {
     max_skus: null, // unlimited
     max_users: 10,
+    max_inventory_items: null, // unlimited
+    storage_bytes: null, // unlimited
   },
 };
 

@@ -49,6 +49,10 @@ describe('SubscriptionService', () => {
         create: jest.fn(),
         update: jest.fn(),
       },
+      organizationUsage: {
+        create: jest.fn(),
+        findUnique: jest.fn(),
+      },
       trialEvent: {
         create: jest.fn(),
       },
@@ -304,6 +308,59 @@ describe('SubscriptionService', () => {
       await expect(service.createTrialSubscription('org-nonexistent', 14)).rejects.toThrow(
         NotFoundError,
       );
+    });
+
+    it('should create organizationUsage with Professional tier limits', async () => {
+      const organizationId = 'org-123';
+
+      // Mock organization exists
+      (mockPrisma.organization.findUnique as jest.Mock).mockResolvedValueOnce({
+        id: organizationId,
+        name: 'Test Pharmacy',
+        contactEmail: 'test@example.com',
+      });
+
+      // Mock Stripe customer creation
+      const stripeCustomer = { id: 'cus_test123' } as Stripe.Customer;
+      (mockStripe.customers.create as jest.Mock).mockResolvedValueOnce(stripeCustomer);
+
+      // Mock subscription_tiers create
+      (mockPrisma.subscriptionTier.create as jest.Mock).mockResolvedValueOnce({
+        id: 1,
+        organizationId,
+        tierLevel: 'professional',
+        status: SubscriptionStatus.TRIALING,
+        stripeCustomerId: 'cus_test123',
+        trialStartedAt: new Date(),
+        trialEndDate: new Date(),
+        billingCycle: BillingCycle.MONTHLY,
+      });
+
+      // Mock organizationUsage create
+      (mockPrisma.organizationUsage.create as jest.Mock).mockResolvedValueOnce({
+        id: 1,
+        organizationId,
+        activeUsers: 1,
+        maxUsers: 3,
+        totalSkus: 0,
+        maxSkus: 2000,
+        totalInventoryItems: 0,
+        maxInventoryItems: 5000,
+        storageUsedBytes: 0,
+      });
+
+      await service.createTrialSubscription(organizationId, 14);
+
+      // Verify organizationUsage was created with Professional limits
+      expect(mockPrisma.organizationUsage.create).toHaveBeenCalledWith({
+        data: expect.objectContaining({
+          organizationId,
+          activeUsers: 1,
+          maxUsers: 3,
+          totalSkus: 0,
+          maxSkus: 2000,
+        }),
+      });
     });
   });
 
@@ -573,6 +630,8 @@ describe('SubscriptionService', () => {
       expect(limits).toEqual({
         max_skus: 500,
         max_users: 1,
+        max_inventory_items: 5000,
+        storage_bytes: 1073741824, // 1GB
       });
     });
 
@@ -582,6 +641,8 @@ describe('SubscriptionService', () => {
       expect(limits).toEqual({
         max_skus: 2000,
         max_users: 3,
+        max_inventory_items: 20000,
+        storage_bytes: 10737418240, // 10GB
       });
     });
 
@@ -590,6 +651,8 @@ describe('SubscriptionService', () => {
 
       expect(limits.max_skus).toBeNull();
       expect(limits.max_users).toBe(10);
+      expect(limits.max_inventory_items).toBeNull(); // unlimited
+      expect(limits.storage_bytes).toBe(107374182400); // 100GB
     });
   });
 

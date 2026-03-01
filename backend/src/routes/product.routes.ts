@@ -2,6 +2,7 @@ import { Router, Request, Response } from 'express';
 import { ProductService } from '../services/product.service';
 import { Product } from '../models/product.model';
 import { authenticateToken, AuthRequest } from '../middleware/auth.middleware';
+import { checkUsageLimit } from '../middleware/feature-gate.middleware';
 import { validateDataIntegrity } from '../middleware/validation.middleware';
 import { validateRequest } from '../middleware/validateRequest';
 import { productSchema } from '../schemas';
@@ -117,6 +118,7 @@ router.get('/by-sku/:sku', authenticateToken, async (req: AuthRequest, res: Resp
 router.post(
   '/',
   authenticateToken,
+  checkUsageLimit('max_skus'),
   standardLimiter,
   validateRequest(productSchema),
   validateDataIntegrity,
@@ -235,6 +237,7 @@ router.delete(
 router.post(
   '/upload-csv',
   authenticateToken,
+  checkUsageLimit('max_skus'),
   standardLimiter,
   upload.single('file'),
   async (req: AuthRequest, res: Response) => {

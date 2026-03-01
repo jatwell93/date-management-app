@@ -7,7 +7,7 @@ describe('feature-gate middleware', () => {
   it('returns 403 with creation_locked message when org isCreationLocked=true', async () => {
     const mockPrisma = {
       organizationUsage: {
-        findUnique: jest.fn().mockResolvedValue({
+        upsert: jest.fn().mockResolvedValue({
           organizationId: 'org-123',
           activeUsers: 0,
           maxUsers: 1,
