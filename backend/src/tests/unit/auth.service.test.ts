@@ -130,17 +130,27 @@ describe('AuthService', () => {
   });
 
   describe('generateTokens', () => {
-    it('generates access and refresh tokens for a user', async () => {
-      (prisma.refreshToken.create as jest.Mock).mockResolvedValue({
-        id: 1,
-        userId: 1,
-        token: 'mock_refresh_token_hex',
-        expiresAt: expect.any(Date),
-      });
+    beforeEach(() => {
+      jest.useFakeTimers();
+      jest.setSystemTime(new Date('2026-03-01T00:00:00Z'));
+    });
 
-      const tokens = await authService.generateTokens(1, 'Manager');
+    afterEach(() => {
+      jest.useRealTimers();
+    });
+
+    it('successfully generates an access and refresh token pair', async () => {
+      (crypto.randomBytes as jest.Mock).mockReturnValue({
+        toString: () => 'mock_refresh_token_hex',
+      });
+      (jwt.sign as jest.Mock).mockReturnValue('mock_jwt_token');
+
+      const tokens = await authService.generateTokens(1, 'Manager', 'org_123');
 
       expect(tokens.accessToken).toBe('mock_jwt_token');
+      expect(jwt.sign).toHaveBeenCalledWith({ userId: 1, role: 'Manager', organizationId: 'org_123' }, 'test_secret', {
+        expiresIn: '1h',
+      });
       expect(tokens.refreshToken).toBe('mock_refresh_token_hex');
       expect(prisma.refreshToken.create).toHaveBeenCalledWith({
         data: {
@@ -154,7 +164,7 @@ describe('AuthService', () => {
     it('throws InternalError on database failure', async () => {
       (prisma.refreshToken.create as jest.Mock).mockRejectedValue(new Error('DB failure'));
 
-      await expect(authService.generateTokens(1, 'Manager')).rejects.toBeInstanceOf(InternalError);
+      await expect(authService.generateTokens(1, 'Manager', 'org_123')).rejects.toBeInstanceOf(InternalError);
     });
   });
 
@@ -199,13 +209,13 @@ describe('AuthService', () => {
         token: 'valid_refresh_token',
         expiresAt: futureDate,
         revokedAt: null,
-        user: { id: 5, role: 'Staff', pin: 'hashed', createdAt: new Date(), updatedAt: new Date() },
+        user: { id: 5, role: 'Staff', organizationId: 'org_123', pin: 'hashed', createdAt: new Date(), updatedAt: new Date() },
       });
 
       const newAccessToken = await authService.refreshAccessToken('valid_refresh_token');
 
       expect(newAccessToken).toBe('mock_jwt_token');
-      expect(jwt.sign).toHaveBeenCalledWith({ userId: 5, role: 'Staff' }, 'test_secret', {
+      expect(jwt.sign).toHaveBeenCalledWith({ userId: 5, role: 'Staff', organizationId: 'org_123' }, 'test_secret', {
         expiresIn: '1h',
       });
     });

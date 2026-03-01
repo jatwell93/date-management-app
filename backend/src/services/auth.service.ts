@@ -17,7 +17,7 @@ export interface TokenPayload {
   userId: number;
   role: string;
   organizationId: string;
-  tierLevel: TierLevel;
+  tierLevel?: TierLevel;
   iat?: number;
   exp?: number;
 }
@@ -237,12 +237,12 @@ export class AuthService {
   /**
    * Generate both access and refresh tokens for a user
    */
-  async generateTokens(userId: number, role: string): Promise<TokenPair> {
+  async generateTokens(userId: number, role: string, organizationId: string): Promise<TokenPair> {
     try {
       const secret = envConfig.JWT_SECRET;
 
       // Generate access token (short-lived)
-      const accessToken = jwt.sign({ userId, role }, secret, {
+      const accessToken = jwt.sign({ userId, role, organizationId }, secret, {
         expiresIn: this.ACCESS_TOKEN_EXPIRY,
       });
 
@@ -319,7 +319,11 @@ export class AuthService {
       // Generate new access token
       const secret = envConfig.JWT_SECRET;
       const accessToken = jwt.sign(
-        { userId: storedToken.userId, role: storedToken.user.role },
+        { 
+          userId: storedToken.userId, 
+          role: storedToken.user.role,
+          organizationId: storedToken.user.organizationId
+        },
         secret,
         { expiresIn: this.ACCESS_TOKEN_EXPIRY },
       );
