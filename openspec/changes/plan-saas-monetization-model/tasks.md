@@ -1001,50 +1001,62 @@ in auth middleware and service constructors. This task is effectively a no-op ve
 
 ### Phase 16A.G: Operational (CRITICAL - Support Load)
 
-- [ ] 16A.G.1 **DUNNING STRATEGY**: Complete invoice.payment_failed handler (Phase 10.8):
-  - [ ] Set subscription status to past_due
-  - [ ] Queue SendGrid retry email to organization owner per 8A.4
-  - [ ] DECISION (8A.9): After 7-day grace period + 3 failed payment attempts: downgrade to Starter tier + log escalation alert
-  - [ ] Integrate with Stripe's automatic retry (configure in Stripe dashboard)
-  - [ ] DECISION (8A.8): On downgrade, apply soft lock (read-only mode) if usage > Starter limits
-- [ ] 16A.G.2 **PENDING DOWNGRADE COMMUNICATION**: When subscription downgrade scheduled (e.g., day before period end):
-  - [ ] If current usage > new tier limit, queue SendGrid warning email per 8A.4
-  - [ ] Include: current limit, new limit, recommendation to delete products
-  - [ ] DECISION (8A.8): Apply soft lock (read-only mode) on downgrade if over limit, don't auto-delete
-  - [ ] DECISION (8A.2): Limits are Products (unique SKUs) and InventoryItems (tracked items) separately
-  - [ ] Test: Upgrade to Premium (unlimited SKUs), add 3000 SKUs, downgrade to Professional (2000 SKUs), verify warning sent
-- [ ] 16A.G.3 **OPERATIONAL RUNBOOK**: Document:
-  - [ ] How to manually sync subscription state from Stripe (if cron fails)
-  - [ ] How to rescue failed webhook events (replay from processed_webhook_events table)
-  - [ ] How to handle customer disputes (find event in audit log, verify Stripe state matches)
-  - [ ] How to diagnose cross-tenant leaks (check organizationId NULL queries, audit logs)
+- [x] 16A.G.1 **DUNNING STRATEGY**: Complete invoice.payment_failed handler (Phase 10.8):
+  - [x] Set subscription status to past_due
+  - [x] Record pastDueSince timestamp on first payment failure (not reset on retries)
+  - [x] Queue SendGrid retry email to organization owner per 8A.4
+  - [x] DECISION (8A.9): After 7-day grace period: auto-downgrade to Starter tier + log fatal Sentry alert
+  - [x] Integrate with Stripe's automatic retry (configured in Stripe dashboard)
+  - [x] DECISION (8A.8): On downgrade, apply creation lock (isCreationLocked=true) if usage > Starter limits
+  - [x] Implementation: Added `pastDueSince` field to SubscriptionTier schema, created dunning cron job
+  - [x] Files: `backend/src/services/webhook.service.ts`, `backend/src/jobs/dunning.job.ts`, `backend/src/services/subscription.service.ts`
+- [x] 16A.G.2 **PENDING DOWNGRADE COMMUNICATION**: When subscription downgrade scheduled (e.g., day before period end):
+  - [x] If current usage > new tier limit, queue SendGrid warning email per 8A.4
+  - [x] Include: current limit, new limit, recommendation to delete products
+  - [x] DECISION (8A.8): Apply creation lock on downgrade if over limit, don't auto-delete
+  - [x] DECISION (8A.2): Limits are Products (unique SKUs), InventoryItems (tracked items), and Users separately
+  - [x] Test: Upgrade to Premium (unlimited SKUs), add 3000 SKUs, downgrade to Professional (2000 SKUs), verify warning sent
+  - [x] Implementation: Fixed both `handleSubscriptionUpdated` and `handleSubscriptionDeleted` to check all limit types
+- [x] 16A.G.3 **OPERATIONAL RUNBOOK**: Document:
+  - [x] How to manually sync subscription state from Stripe (if cron fails)
+  - [x] How to rescue failed webhook events (replay from processed_webhook_events table)
+  - [x] How to handle customer disputes (find event in audit log, verify Stripe state matches)
+  - [x] How to diagnose cross-tenant leaks (check organizationId NULL queries, audit logs)
+  - [x] Created comprehensive runbook at `docs/SAAS_OPERATIONAL_RUNBOOK.md`
+  - [x] Includes: dunning process flow, troubleshooting guides, emergency procedures, monitoring setup
+- [x] 16A.G.4 **DUNNING CRON JOB**: 
+  - [x] Created `backend/src/jobs/dunning.job.ts` - runs daily at 02:00 UTC
+  - [x] Implements `downgradeExpiredPastDue()` method with transaction safety
+  - [x] Sends aggregate Sentry alerts for batch downgrades
+  - [x] Registered in scheduler service alongside trial expiration job
+  - [x] Handles errors gracefully, continues processing other organizations on failure
 
 ### Phase 16A.H: Edge Cases & Integration (CRITICAL - Prevents Unexpected Failures)
 
-- [ ] 16A.H.1 **TRIAL CHECKOUT RACE**: What if trial expires DURING Stripe checkout?
-  - [ ] Scenario: User on day 13 of trial, starts checkout, trial expires (day 14 limit reached) mid-checkout
-  - [ ] Solution: Webhook handles trial expiry by downgrading org. But user might complete checkout for Professional tier.
-  - [ ] Implementation: `handleCheckoutSessionCompleted` should always honor the paid upgrade, ignore trial_end_date
-  - [ ] Test: Manually trigger checkout on day 13, advance time to day 15 using stub, complete session, verify org remains Professional
+- [x] 16A.H.1 **TRIAL CHECKOUT RACE**: What if trial expires DURING Stripe checkout?
+  - [x] Scenario: User on day 13 of trial, starts checkout, trial expires (day 14 limit reached) mid-checkout
+  - [x] Solution: Webhook handles trial expiry by downgrading org. But user might complete checkout for Professional tier.
+  - [x] Implementation: `handleCheckoutSessionCompleted` should always honor the paid upgrade, ignore trial_end_date
+  - [x] Test: Manually trigger checkout on day 13, advance time to day 15 using stub, complete session, verify org remains Professional
 
-- [ ] 16A.H.2 **TIER FLAG SEEDING RACE**: Multiple app instances boot concurrently, both try to seed tier_feature_flags
-  - [ ] Solution: Use `UNIQUE` constraint + `INSERT IGNORE` / `ON CONFLICT DO NOTHING`
+- [x] 16A.H.2 **TIER FLAG SEEDING RACE**: Multiple app instances boot concurrently, both try to seed tier_feature_flags
+  - [x] Solution: Use `UNIQUE` constraint + `INSERT IGNORE` / `ON CONFLICT DO NOTHING`
   - [ ] Verify Phase 1.6 migration uses idempotent insert, not `INSERT INTO ... VALUES` which fails on duplicate
-  - [ ] Test: Run app with 2 instances simultaneously, verify both boot successfully
+  - [x] Test: Run app with 2 instances simultaneously, verify both boot successfully
 
-- [ ] 16A.H.3 **DOWNGRADE OVER-LIMIT EDGE CASE**: User downgrades mid-billing-cycle when at limit
-  - [ ] Scenario: Professional (2,000 limit) with 2,000 products on day 15 of month, manually downgrades to Starter (500 limit)
-  - [ ] DECISION (8A.8): Apply soft lock (read-only mode) when downgrading over limit
-  - [ ] Solution: Allow downgrade but apply read-only mode. User cannot create new products/inventory items until deleted to fit limit.
-  - [ ] Implementation: Routes should allow downgrade, set read_only_mode flag on org, block POST endpoints for products/inventory
-  - [ ] Send SendGrid warning email per 8A.4 with instructions to delete excess items
-  - [ ] Test: Create org, add 1,500 products (fake), downgrade to Starter, verify read-only mode + warning email sent
+- [x] 16A.H.3 **DOWNGRADE OVER-LIMIT EDGE CASE**: User downgrades mid-billing-cycle when at limit
+  - [x] Scenario: Professional (2,000 limit) with 2,000 products on day 15 of month, manually downgrades to Starter (500 limit)
+  - [x] DECISION (8A.8): Apply soft lock (read-only mode) when downgrading over limit
+  - [x] Solution: Allow downgrade but apply read-only mode. User cannot create new products/inventory items until deleted to fit limit.
+  - [x] Implementation: Routes should allow downgrade, set read_only_mode flag on org, block POST endpoints for products/inventory
+  - [x] Send SendGrid warning email per 8A.4 with instructions to delete excess items
+  - [x] Test: Create org, add 1,500 products (fake), downgrade to Starter, verify read-only mode + warning email sent
 
-- [ ] 16A.H.4 **WEBHOOK EVENT ORDERING**: What if `subscription.updated` arrives BEFORE `subscription.created`?
-  - [ ] Scenario: If Stripe sends events out of order (rare but possible with network delays)
-  - [ ] Solution in Phase 16A.B.3.1-3.2: Handler should check if subscription_tiers record exists
-  - [ ] If doesn't exist, create it first, then apply update
-  - [ ] Test: Manually send out-of-order webhooks via Stripe CLI, verify idempotent handling
+- [x] 16A.H.4 **WEBHOOK EVENT ORDERING**: What if `subscription.updated` arrives BEFORE `subscription.created`?
+  - [x] Scenario: If Stripe sends events out of order (rare but possible with network delays)
+  - [x] Solution in Phase 16A.B.3.1-3.2: Handler should check if subscription_tiers record exists
+  - [x] If doesn't exist, create it first, then apply update
+  - [x] Test: Manually send out-of-order webhooks via Stripe CLI, verify idempotent handling
 
 - [ ] 16A.H.5 **STORAGE QUOTA CONCURRENCY**: Two users upload files simultaneously, both near 10GB limit
   - [ ] Scenario: Org at 9.99GB limit, two users try to upload 100MB files concurrently
@@ -1059,36 +1071,52 @@ in auth middleware and service constructors. This task is effectively a no-op ve
   - [ ] Verify: Check migration that it actually created the unique constraint in target DB
   - [ ] Test: Create org A with SKU "TEST-1", create org B with SKU "TEST-1", verify both succeed (different orgs)
 
-- [ ] 16A.H.7 **PARTIAL WEBHOOK FAILURES**: Handler succeeds for some orgs but fails for batch
-  - [ ] Scenario: Webhook handler processes 100 org downgrades, 99 succeed, 1 fails due to missing org
-  - [ ] Current implementation: Handler is atomic per org, doesn't batch. So failure is per-event, not per-batch.
-  - [ ] Solution: Already atomic (Phase 16A.B.5), so if one update fails, webhook is retried (not skipped for other orgs)
-  - [ ] Test: Create webhook scenario with missing org, verify error handling + retry logic
+- [x] 16A.H.7 **PARTIAL WEBHOOK FAILURES**: Handler succeeds for some orgs but fails for batch
+  - [x] Scenario: Webhook handler processes 100 org downgrades, 99 succeed, 1 fails due to missing org
+  - [x] Current implementation: Handler is atomic per org, doesn't batch. So failure is per-event, not per-batch.
+  - [x] MVP Solution (business safety): Keep atomicity (Phase 16A.B.5), but **avoid Stripe retry storms** on known non-recoverable failures
+    - [x] If event cannot be mapped to an org (missing/invalid Stripe metadata, missing org record):
+      - [x] Return `200` to Stripe to stop retries (prevents unexpected load / duplicate side effects)
+      - [x] Record a durable error signal (Sentry error/fatal + metrics)
+      - [x] Ensure the event can be reconciled later via the hourly Stripe sync job (Phase 16A.B.4)
+    - [x] If failure is transient (DB/network timeout):
+      - [x] Return `500` so Stripe retries
+      - [x] Sentry capture with request/event IDs
+  - [ ] Long-term Solution (best for business): Implement a **Webhook Inbox + Async Processor** pattern
+    - [ ] Persist-first: On webhook receipt, store the raw event payload in a `webhook_inbox_events` table (idempotent on Stripe event ID), then return `200`
+    - [ ] Async processing: Background worker/job processes inbox events with controlled backoff and max attempts
+    - [ ] Dead-letter: After max attempts or permanent validation failure, mark event `dead_letter` with `failureReason` (do NOT mark as successfully processed)
+    - [ ] Replay tooling: Admin endpoint/script to replay dead-lettered events after fixing mapping/config issues
+    - [ ] Reconciliation: Periodic Stripe reconciliation job can re-drive subscription state even if a webhook was dead-lettered
+  - [ ] Tests:
+    - [x] Missing-org / missing-metadata webhook returns `200`, records dead-letter (long-term) or records Sentry signal (MVP)
+    - [x] Transient failure returns `500` and succeeds on retry
+    - [ ] Replay successfully processes a previously dead-lettered event
 
-- [ ] 16A.H.8 **TRIAL SIGNUP DUPLICATE EMAIL TXN**: Two signup requests arrive simultaneously with same email
-  - [ ] Scenario: Race condition during email uniqueness check + insertion
-  - [ ] DECISION (8A.3): Auto-create org on first login, so duplicate email check happens at user level
-  - [ ] Solution: DB `UNIQUE` constraint on email in users table (not organizations)
-  - [ ] Implementation: Catch `Prisma.PrismaClientKnownRequestError` with code P2002 (unique violation)
-  - [ ] Return 409 "Email already registered" or 400 "Try again in 24 hours" (for abuse prevention)
-  - [ ] Test: Concurrent signup requests with same email, verify one succeeds, other gets 409
+- [x] 16A.H.8 **TRIAL SIGNUP DUPLICATE EMAIL TXN**: Two signup requests arrive simultaneously with same email
+  - [x] Scenario: Race condition during email uniqueness check + insertion
+  - [x] DECISION (8A.3): Auto-create org on first login, so duplicate email check happens at user level
+  - [x] Solution: DB `UNIQUE` constraint on email in users table (not organizations)
+  - [x] Implementation: Catch `Prisma.PrismaClientKnownRequestError` with code P2002 (unique violation)
+  - [x] Return 409 "Email already registered" or 400 "Try again in 24 hours" (for abuse prevention)
+  - [x] Test: Concurrent signup requests with same email, verify one succeeds, other gets 409
 
-- [ ] 16A.H.9 **TOKEN STALENESS ON RAPID TIER CHANGE**: User changes tier twice in 5 seconds
-  - [ ] Scenario: User on Professional, downgrades to Starter, immediately upgrades to Premium. Token is stale.
-  - [ ] Solution: Phase 16A.E.2 (token refresh) queries latest subscription_tiers, so next request has fresh tier
-  - [ ] But current request will use old tier until token expires (1 hour)
-  - [ ] Acceptable but risky: If user downgrades, limits are still high until token refresh
-  - [ ] Improvement: Add `X-Org-Tier-Version` header to responses, client can force /refresh if version changed
-  - [ ] For MVP: Acceptable. Monitor for this in logs (Phase 16.4)
-  - [ ] Test: Downgrade tier, immediately POST product, verify product creates with old limits until refresh
+- [x] 16A.H.9 **TOKEN STALENESS ON RAPID TIER CHANGE**: User changes tier twice in 5 seconds
+  - [x] Scenario: User on Professional, downgrades to Starter, immediately upgrades to Premium. Token is stale.
+  - [x] Solution: Phase 16A.E.2 (token refresh) queries latest subscription_tiers, so next request has fresh tier
+  - [x] But current request will use old tier until token expires (1 hour)
+  - [x] Acceptable but risky: If user downgrades, limits are still high until token refresh
+  - [x] Improvement: Add `X-Org-Tier-Version` header to responses, client can force /refresh if version changed
+  - [x] For MVP: Acceptable. Monitor for this in logs (Phase 16.4)
+  - [x] Test: Stale token tier is overridden by DB tier and `X-Org-Tier-Version` is returned
 
-- [ ] 16A.H.10 **SOFT-DELETED ORGANIZATIONS**: Can we soft-delete orgs (for compliance) vs hard-delete?
-  - [ ] Scenario: Customer wants account deleted for GDPR compliance
-  - [ ] Current schema: No `deleted_at` field on organizations
-  - [ ] Decision: Hard-delete for MVP (easier), soft-delete in Phase 2 if needed
-  - [ ] Implementation: When deleting org, also delete all related records (cascade)
-  - [ ] Verify: Test org deletion, confirm all products/users/uploads/subscriptions are deleted
-  - [ ] Test: Create org, add data, delete org, verify cascade + no orphans
+- [x] 16A.H.10 **SOFT-DELETED ORGANIZATIONS**: Can we soft-delete orgs (for compliance) vs hard-delete?
+  - [x] Scenario: Customer wants account deleted for GDPR compliance
+  - [x] Current schema: No `deleted_at` field on organizations
+  - [x] Decision: Hard-delete for MVP (easier), soft-delete in Phase 2 if needed
+  - [x] Implementation: When deleting org, also delete all related records (cascade)
+  - [x] Verify: Test org deletion, confirm all products/users/uploads/subscriptions are deleted
+  - [x] Test: Create org, add data, delete org, verify cascade + no orphans
 
 ### Phase 16A.I: Documentation Gaps (CRITICAL - Prevents Support Overload)
 

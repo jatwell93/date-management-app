@@ -59,6 +59,15 @@ export interface ValidationResult {
   flagCounts: Record<string, number>;
 }
 
+function getDefaultTierFeatureConfig(
+  tier: (typeof REQUIRED_TIERS)[number],
+  feature: (typeof REQUIRED_FEATURES)[number],
+): { enabled: boolean; limitValue: number | null } {
+  const limitValue = EXPECTED_LIMITS[tier]?.[feature] ?? null;
+  const enabled = feature.startsWith('max_') || tier !== 'starter';
+  return { enabled, limitValue };
+}
+
 /**
  * Validates that all required tier feature flags exist in the database
  * This is a critical check that should run at application startup
@@ -66,9 +75,7 @@ export interface ValidationResult {
  * @param prisma - PrismaClient instance
  * @returns ValidationResult with detailed status
  */
-export async function validateTierFeatureFlags(
-  prisma: PrismaClient,
-): Promise<ValidationResult> {
+export async function validateTierFeatureFlags(prisma: PrismaClient): Promise<ValidationResult> {
   const errors: string[] = [];
   const warnings: string[] = [];
   const missingFeatures: string[] = [];
@@ -117,8 +124,7 @@ export async function validateTierFeatureFlags(
     tiers: REQUIRED_TIERS,
     flagCounts,
     totalRequired: REQUIRED_TIERS.length * REQUIRED_FEATURES.length,
-    totalFound:
-      REQUIRED_TIERS.length * REQUIRED_FEATURES.length - missingFeatures.length,
+    totalFound: REQUIRED_TIERS.length * REQUIRED_FEATURES.length - missingFeatures.length,
     missingCount: missingFeatures.length,
   });
 
@@ -224,22 +230,28 @@ export async function seedMissingTierFeatureFlags(
               featureKey: feature,
             },
           },
+          select: { id: true },
+        });
+
+        const { enabled, limitValue } = getDefaultTierFeatureConfig(tier, feature);
+
+        await prisma.tierFeatureFlag.upsert({
+          where: {
+            tierLevel_featureKey: {
+              tierLevel: tier,
+              featureKey: feature,
+            },
+          },
+          update: {},
+          create: {
+            tierLevel: tier,
+            featureKey: feature,
+            enabled,
+            limitValue,
+          },
         });
 
         if (!existing) {
-          // Determine default values based on feature and tier
-          const limitValue = EXPECTED_LIMITS[tier]?.[feature];
-          const enabled = feature.startsWith('max_') || tier !== 'starter';
-
-          await prisma.tierFeatureFlag.create({
-            data: {
-              tierLevel: tier,
-              featureKey: feature,
-              enabled,
-              limitValue: limitValue ?? null,
-            },
-          });
-
           seeded.push(`${tier}.${feature}`);
           Logger.info(`Seeded feature flag: ${tier}.${feature}`, { enabled, limitValue });
         }

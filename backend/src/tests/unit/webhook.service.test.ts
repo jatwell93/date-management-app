@@ -41,6 +41,7 @@ describe('WebhookService', () => {
       },
       subscriptionTier: {
         create: jest.fn(),
+        update: jest.fn(),
         updateMany: jest.fn(),
         findFirst: jest.fn(),
       },
@@ -67,6 +68,9 @@ describe('WebhookService', () => {
       customers: {
         retrieve: jest.fn(),
       },
+      subscriptions: {
+        retrieve: jest.fn(),
+      },
     } as unknown as jest.Mocked<Stripe>;
 
     (service as unknown as { stripe: Stripe }).stripe = mockStripe;
@@ -75,6 +79,21 @@ describe('WebhookService', () => {
       id: customerId,
       deleted: false,
       metadata: { organizationId },
+    });
+
+    (mockStripe.subscriptions.retrieve as jest.Mock).mockResolvedValue({
+      id: 'sub_test_123',
+      status: 'active',
+      items: {
+        data: [
+          {
+            price: {
+              metadata: { tier: 'professional' },
+              recurring: { interval: 'month' },
+            },
+          },
+        ],
+      },
     });
 
     prisma.organization.findUnique.mockResolvedValue({
@@ -154,6 +173,7 @@ describe('WebhookService', () => {
 
     it('handles subscription updated and sends downgrade warning', async () => {
       prisma.subscriptionTier.findFirst.mockResolvedValue({
+        id: 1,
         tierLevel: 'professional',
       });
       prisma.organizationUsage.findUnique.mockResolvedValue({
@@ -179,8 +199,8 @@ describe('WebhookService', () => {
 
       await (service as any).handleSubscriptionUpdated(subscription);
 
-      expect(prisma.subscriptionTier.updateMany).toHaveBeenCalled();
-      expect(prisma.organizationUsage.update).toHaveBeenCalled();
+      expect(prisma.subscriptionTier.update).toHaveBeenCalled();
+      expect(prisma.organizationUsage.upsert).toHaveBeenCalled();
       expect(emailService.sendDowngradeWarningEmail).toHaveBeenCalled();
       expect(prisma.auditLog.create).toHaveBeenCalledWith({
         data: expect.objectContaining({
@@ -191,7 +211,7 @@ describe('WebhookService', () => {
     });
 
     it('sets isCreationLocked=true on org when downgrading over SKU limit', async () => {
-      prisma.subscriptionTier.findFirst.mockResolvedValue({ tierLevel: 'professional' });
+      prisma.subscriptionTier.findFirst.mockResolvedValue({ id: 1, tierLevel: 'professional' });
       prisma.organizationUsage.findUnique.mockResolvedValue({ totalSkus: 9999 });
       prisma.organization.update = jest.fn().mockResolvedValue({
         id: organizationId,
@@ -266,7 +286,7 @@ describe('WebhookService', () => {
     });
 
     it('does NOT lock org when downgrade is within new SKU limit', async () => {
-      prisma.subscriptionTier.findFirst.mockResolvedValue({ tierLevel: 'professional' });
+      prisma.subscriptionTier.findFirst.mockResolvedValue({ id: 1, tierLevel: 'professional' });
       prisma.organizationUsage.findUnique.mockResolvedValue({ totalSkus: 100 });
       prisma.organization.update = jest.fn().mockResolvedValue({ id: organizationId });
 
@@ -290,6 +310,39 @@ describe('WebhookService', () => {
       expect(lockCalls).toHaveLength(0);
     });
 
+    it('creates subscription record when updated arrives before created', async () => {
+      prisma.subscriptionTier.findFirst
+        .mockResolvedValueOnce(null) // oldTier lookup
+        .mockResolvedValueOnce(null); // transactional existingTier lookup
+      prisma.organizationUsage.findUnique.mockResolvedValue({
+        totalSkus: 0,
+        totalInventoryItems: 0,
+      });
+
+      const subscription = {
+        id: 'sub_out_of_order',
+        customer: customerId,
+        status: 'active',
+        items: {
+          data: [
+            { price: { metadata: { tier: 'professional' }, recurring: { interval: 'month' } } },
+          ],
+        },
+        trial_end: null,
+      } as unknown as Stripe.Subscription;
+
+      await (service as any).handleSubscriptionUpdated(subscription);
+
+      expect(prisma.subscriptionTier.create).toHaveBeenCalledWith({
+        data: expect.objectContaining({
+          organizationId,
+          stripeSubscriptionId: 'sub_out_of_order',
+          tierLevel: 'professional',
+        }),
+      });
+      expect(prisma.organizationUsage.upsert).toHaveBeenCalled();
+    });
+
     it('handles checkout session completed', async () => {
       const session = {
         id: 'cs_test_123',
@@ -299,15 +352,22 @@ describe('WebhookService', () => {
 
       await (service as any).handleCheckoutSessionCompleted(session);
 
+      expect(mockStripe.subscriptions.retrieve).toHaveBeenCalledWith('sub_test_123');
       expect(prisma.subscriptionTier.updateMany).toHaveBeenCalledWith({
         where: {
           organizationId,
           stripeSubscriptionId: 'sub_test_123',
         },
         data: expect.objectContaining({
+          tierLevel: 'professional',
           trialEndDate: null,
           status: SubscriptionStatus.ACTIVE,
         }),
+      });
+      expect(prisma.organizationUsage.upsert).toHaveBeenCalled();
+      expect(prisma.organization.update).toHaveBeenCalledWith({
+        where: { id: organizationId },
+        data: { isCreationLocked: false },
       });
       expect(prisma.auditLog.create).toHaveBeenCalledWith({
         data: expect.objectContaining({
@@ -337,7 +397,10 @@ describe('WebhookService', () => {
           pastDueSince: expect.any(Date),
         }),
       });
-      expect(emailService.sendDunningEmail).toHaveBeenCalledWith(organizationId, invoice.hosted_invoice_url);
+      expect(emailService.sendDunningEmail).toHaveBeenCalledWith(
+        organizationId,
+        invoice.hosted_invoice_url,
+      );
     });
 
     it('handles invoice payment failed — does NOT reset pastDueSince on retry failures', async () => {

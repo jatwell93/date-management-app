@@ -1,6 +1,13 @@
 import { OrganizationService } from '../../services/organization.service';
 import { PrismaClient } from '@prisma/client';
 
+const invalidateSubscriptionCacheMock = jest.fn();
+
+jest.mock('../../middleware/auth.middleware', () => ({
+  invalidateSubscriptionCache: (organizationId: string) =>
+    invalidateSubscriptionCacheMock(organizationId),
+}));
+
 describe('OrganizationService', () => {
   let organizationService: OrganizationService;
   let mockPrisma: any;
@@ -10,8 +17,28 @@ describe('OrganizationService', () => {
       organization: {
         findUnique: jest.fn(),
         update: jest.fn(),
+        delete: jest.fn(),
       },
+      user: {
+        findMany: jest.fn().mockResolvedValue([]),
+        deleteMany: jest.fn().mockResolvedValue({ count: 0 }),
+      },
+      auditLog: { deleteMany: jest.fn().mockResolvedValue({ count: 0 }) },
+      itemTransaction: { deleteMany: jest.fn().mockResolvedValue({ count: 0 }) },
+      expiredItemTransaction: { deleteMany: jest.fn().mockResolvedValue({ count: 0 }) },
+      upload: { deleteMany: jest.fn().mockResolvedValue({ count: 0 }) },
+      organizationInvite: { deleteMany: jest.fn().mockResolvedValue({ count: 0 }) },
+      refreshToken: { deleteMany: jest.fn().mockResolvedValue({ count: 0 }) },
+      inventoryItem: { deleteMany: jest.fn().mockResolvedValue({ count: 0 }) },
+      storeArea: { deleteMany: jest.fn().mockResolvedValue({ count: 0 }) },
+      product: { deleteMany: jest.fn().mockResolvedValue({ count: 0 }) },
+      subscriptionTier: { deleteMany: jest.fn().mockResolvedValue({ count: 0 }) },
+      trialEvent: { deleteMany: jest.fn().mockResolvedValue({ count: 0 }) },
+      organizationUsage: { deleteMany: jest.fn().mockResolvedValue({ count: 0 }) },
     };
+    mockPrisma.$transaction = jest.fn(async (operation: (tx: typeof mockPrisma) => Promise<void>) =>
+      operation(mockPrisma),
+    );
     organizationService = new OrganizationService(mockPrisma as unknown as PrismaClient);
   });
 
@@ -146,6 +173,42 @@ describe('OrganizationService', () => {
       await expect(
         organizationService.updateOrganization('org-123', { name: 'New Name' }),
       ).rejects.toThrow('Database connection failed');
+    });
+  });
+
+  describe('deleteOrganization', () => {
+    it('should hard delete organization and invalidate subscription cache', async () => {
+      mockPrisma.organization.delete.mockResolvedValue({ id: 'org-123' });
+
+      const deleted = await organizationService.deleteOrganization('org-123');
+
+      expect(deleted).toBe(true);
+      expect(mockPrisma.organization.delete).toHaveBeenCalledWith({
+        where: { id: 'org-123' },
+      });
+      expect(invalidateSubscriptionCacheMock).toHaveBeenCalledWith('org-123');
+    });
+
+    it('should return false when organization does not exist', async () => {
+      const notFoundError = new Error('Record to delete does not exist') as Error & {
+        code: string;
+      };
+      notFoundError.code = 'P2025';
+      mockPrisma.organization.delete.mockRejectedValue(notFoundError);
+
+      const deleted = await organizationService.deleteOrganization('missing-org');
+
+      expect(deleted).toBe(false);
+      expect(invalidateSubscriptionCacheMock).not.toHaveBeenCalled();
+    });
+
+    it('should throw for unexpected deletion errors', async () => {
+      const dbError = new Error('Database unavailable');
+      mockPrisma.organization.delete.mockRejectedValue(dbError);
+
+      await expect(organizationService.deleteOrganization('org-123')).rejects.toThrow(
+        'Database unavailable',
+      );
     });
   });
 });

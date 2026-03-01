@@ -135,4 +135,25 @@ router.delete(
   },
 );
 
+router.delete('/', authenticateToken, requireManager, async (req: AuthRequest, res: Response) => {
+  try {
+    if (!req.organizationId) {
+      return res.status(401).json({ message: 'Access denied: Missing organization context' });
+    }
+
+    const deleted = await organizationService.deleteOrganization(req.organizationId);
+    if (!deleted) {
+      return res.status(404).json({ message: 'Organization not found' });
+    }
+
+    return res.status(200).json({ message: 'Organization deleted successfully' });
+  } catch (error) {
+    if (isBaseError(error)) {
+      return res.status(error.statusCode).json({ message: error.message, code: error.code });
+    }
+
+    return res.status(500).json({ message: 'Internal server error' });
+  }
+});
+
 export default router;

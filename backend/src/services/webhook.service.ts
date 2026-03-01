@@ -22,6 +22,7 @@ import { NotFoundError } from '../errors';
 import * as Sentry from '@sentry/node';
 import { ApplicationMonitoringService } from './application.monitoring.service';
 import { invalidateSubscriptionCache } from '../middleware/auth.middleware';
+import { DEFAULT_LIMITS } from '../constants/default-limits';
 
 // Simple logging utility
 const log = {
@@ -359,7 +360,10 @@ export class WebhookService {
       const duration = Date.now() - start;
       monitor.recordWebhookEvent('customer.subscription.created', duration, 'success');
 
-      log.info('Subscription handled successfully', { organizationId, subscriptionId: subscription.id });
+      log.info('Subscription handled successfully', {
+        organizationId,
+        subscriptionId: subscription.id,
+      });
     } catch (error: any) {
       const duration = Date.now() - start;
       monitor.recordWebhookEvent('customer.subscription.created', duration, 'error');
@@ -392,98 +396,18 @@ export class WebhookService {
         currentPeriodEnd: subscription.current_period_end,
       });
 
-      // Extract and validate organizationId
       const organizationId = await this.validateWebhookMetadata(subscription.customer as string);
-
-      // Get old subscription tier for downgrade detection
-      const oldTier = await this.prisma.subscriptionTier.findFirst({
-        where: { organizationId },
-      });
-
-      // Extract new tier
+      const oldTier = await this.getOldSubscriptionTier(organizationId);
       const newTierLevel = this.extractTierFromPrice(subscription);
+      const isDowngrade = this.isDowngrade(oldTier, newTierLevel);
 
-      // Check if this is a downgrade
-      const isDowngrade =
-        oldTier &&
-        TIER_LIMITS[newTierLevel].max_skus !== null &&
-        (TIER_LIMITS[oldTier.tierLevel as TierLevel].max_skus === null ||
-          (TIER_LIMITS[newTierLevel].max_skus as number) <
-            (TIER_LIMITS[oldTier.tierLevel as TierLevel].max_skus as number));
+      await this.updateSubscriptionAndLimits(
+        organizationId,
+        subscription,
+        newTierLevel,
+        isDowngrade,
+      );
 
-      // Update in transaction
-      await this.prisma.$transaction(async (tx) => {
-        // Sync subscription state
-        await tx.subscriptionTier.updateMany({
-          where: { organizationId },
-          data: {
-            tierLevel: newTierLevel,
-            status: subscription.status,
-            trialEndDate: subscription.trial_end ? new Date(subscription.trial_end * 1000) : null,
-          },
-        });
-
-        // Update usage limits
-        const limits = TIER_LIMITS[newTierLevel];
-        await tx.organizationUsage.update({
-          where: { organizationId },
-          data: {
-            maxSkus: limits.max_skus || 999999,
-            maxUsers: limits.max_users || 999999,
-            maxInventoryItems: limits.max_inventory_items || 999999,
-          },
-        });
-
-        // Check if usage exceeds new limit on downgrade
-        const usage = await tx.organizationUsage.findUnique({
-          where: { organizationId },
-        });
-
-        if (isDowngrade && usage) {
-          const isOverSkuLimit = limits.max_skus !== null && usage.totalSkus > limits.max_skus;
-          const isOverInventoryLimit = limits.max_inventory_items !== null && usage.totalInventoryItems > limits.max_inventory_items;
-          
-          if (isOverSkuLimit || isOverInventoryLimit) {
-            // Apply creation lock — blocks new product/inventory creation until usage drops
-            await tx.organization.update({
-              where: { id: organizationId },
-              data: { isCreationLocked: true },
-            });
-
-            log.warn('Creation lock applied on tier downgrade', {
-              organizationId,
-              currentSkus: usage.totalSkus,
-              currentInventoryItems: usage.totalInventoryItems,
-              newSkuLimit: limits.max_skus,
-              newInventoryLimit: limits.max_inventory_items,
-            });
-
-            // Queue warning email (non-blocking)
-            await this.emailService.sendDowngradeWarningEmail(
-              organizationId,
-              usage.totalSkus,
-              limits.max_skus,
-            );
-          }
-        } else if (!isDowngrade) {
-          // If not locking (e.g. upgrade), ensure creation lock is cleared
-          await tx.organization.update({
-            where: { id: organizationId },
-            data: { isCreationLocked: false },
-          });
-        }
-
-        // Log audit event
-        await tx.auditLog.create({
-          data: {
-            organizationId,
-            action: 'subscription_updated',
-            changeDescription: `Subscription updated to ${newTierLevel} tier`,
-          },
-        });
-      });
-
-      // Instantly invalidate auth cache to apply tier changes
       invalidateSubscriptionCache(organizationId);
 
       const duration = Date.now() - start;
@@ -491,15 +415,9 @@ export class WebhookService {
 
       log.info('Subscription updated successfully', { organizationId, newTierLevel });
     } catch (error: any) {
-      const duration = Date.now() - start;
-      monitor.recordWebhookEvent('customer.subscription.updated', duration, 'error');
-      Sentry.captureException(error, {
-        level: 'error',
-        extra: { subscriptionId: subscription.id, customerId: subscription.customer },
-      });
-      log.error('Failed to handle subscription updated', {
-        error: error instanceof Error ? error.message : 'Unknown error',
+      this.handleWebhookError('customer.subscription.updated', error, {
         subscriptionId: subscription.id,
+        customerId: subscription.customer,
       });
       throw error;
     }
@@ -553,8 +471,9 @@ export class WebhookService {
 
         if (usage) {
           const isOverSkuLimit = usage.totalSkus > (starterLimits.max_skus || 500);
-          const isOverInventoryLimit = usage.totalInventoryItems > (starterLimits.max_inventory_items || 5000);
-          
+          const isOverInventoryLimit =
+            usage.totalInventoryItems > (starterLimits.max_inventory_items || 5000);
+
           if (isOverSkuLimit || isOverInventoryLimit) {
             await tx.organization.update({
               where: { id: organizationId },
@@ -623,44 +542,18 @@ export class WebhookService {
         subscriptionId: session.subscription,
       });
 
-      // Extract and validate organizationId
       const organizationId = await this.validateWebhookMetadata(session.customer as string);
+      const checkoutData = await this.validateAndExtractCheckoutData(session);
 
-      // Update subscription to mark trial as complete
-      await this.prisma.$transaction(async (tx) => {
-        await tx.subscriptionTier.updateMany({
-          where: {
-            organizationId,
-            stripeSubscriptionId: session.subscription as string,
-          },
-          data: {
-            trialEndDate: null, // Clear trial end date
-            status: SubscriptionStatus.ACTIVE, // Set to active
-          },
-        });
+      await this.processCheckoutCompletion(organizationId, session, checkoutData);
 
-        // Log trial conversion event
-        await tx.auditLog.create({
-          data: {
-            organizationId,
-            action: 'trial_converted',
-            changeDescription: `Trial converted to paid subscription`,
-          },
-        });
-      });
-
-      // Instantly invalidate auth cache to apply tier changes
       invalidateSubscriptionCache(organizationId);
 
       log.info('Checkout completed successfully', { organizationId });
       const duration = Date.now() - start;
       monitor.recordWebhookEvent('checkout.session.completed', duration, 'success');
     } catch (error: any) {
-      const duration = Date.now() - start;
-      monitor.recordWebhookEvent('checkout.session.completed', duration, 'error');
-      Sentry.captureException(error, { level: 'error', extra: { sessionId: session.id } });
-      log.error('Failed to handle checkout completed', {
-        error: error instanceof Error ? error.message : 'Unknown error',
+      this.handleWebhookError('checkout.session.completed', error, {
         sessionId: session.id,
       });
       throw error;
@@ -1037,6 +930,315 @@ export class WebhookService {
         eventId: context.eventId,
         ...context.details,
         timestamp: new Date().toISOString(),
+      },
+    });
+  }
+
+  /**
+   * Get the old subscription tier for an organization
+   */
+  private async getOldSubscriptionTier(organizationId: string) {
+    return await this.prisma.subscriptionTier.findFirst({
+      where: { organizationId },
+    });
+  }
+
+  /**
+   * Check if a tier change is a downgrade
+   */
+  private isDowngrade(oldTier: any, newTierLevel: TierLevel): boolean {
+    if (!oldTier) return false;
+
+    return (
+      TIER_LIMITS[newTierLevel].max_skus !== null &&
+      (TIER_LIMITS[oldTier.tierLevel as TierLevel].max_skus === null ||
+        (TIER_LIMITS[newTierLevel].max_skus as number) <
+          (TIER_LIMITS[oldTier.tierLevel as TierLevel].max_skus as number))
+    );
+  }
+
+  /**
+   * Update subscription and usage limits in a transaction
+   */
+  private async updateSubscriptionAndLimits(
+    organizationId: string,
+    subscription: Stripe.Subscription,
+    newTierLevel: TierLevel,
+    isDowngrade: boolean,
+  ): Promise<void> {
+    await this.prisma.$transaction(async (tx) => {
+      const limits = TIER_LIMITS[newTierLevel];
+
+      // Sync subscription state
+      await this.syncSubscriptionTier(tx, organizationId, subscription, newTierLevel);
+
+      // Update usage limits
+      await this.updateUsageLimits(tx, organizationId, limits);
+
+      // Handle creation lock if downgrading
+      await this.handleCreationLock(tx, organizationId, limits, isDowngrade);
+
+      // Log audit event
+      await tx.auditLog.create({
+        data: {
+          organizationId,
+          action: 'subscription_updated',
+          changeDescription: `Subscription updated to ${newTierLevel} tier`,
+        },
+      });
+    });
+  }
+
+  /**
+   * Sync subscription tier (create or update)
+   */
+  private async syncSubscriptionTier(
+    tx: any,
+    organizationId: string,
+    subscription: Stripe.Subscription,
+    newTierLevel: TierLevel,
+  ): Promise<void> {
+    const existingTier = await tx.subscriptionTier.findFirst({
+      where: { organizationId },
+      select: { id: true },
+    });
+
+    const subscriptionData = {
+      tierLevel: newTierLevel,
+      stripeSubscriptionId: subscription.id,
+      status: subscription.status,
+      trialEndDate: subscription.trial_end ? new Date(subscription.trial_end * 1000) : null,
+      billingCycle:
+        subscription.items.data[0]?.price.recurring?.interval === 'year' ? 'annual' : 'monthly',
+    };
+
+    if (existingTier) {
+      await tx.subscriptionTier.update({
+        where: { id: existingTier.id },
+        data: subscriptionData,
+      });
+    } else {
+      await tx.subscriptionTier.create({
+        data: {
+          organizationId,
+          ...subscriptionData,
+        },
+      });
+    }
+  }
+
+  /**
+   * Update organization usage limits
+   */
+  private async updateUsageLimits(tx: any, organizationId: string, limits: any): Promise<void> {
+    await tx.organizationUsage.upsert({
+      where: { organizationId },
+      update: {
+        maxSkus: limits.max_skus ?? DEFAULT_LIMITS.UNLIMITED_SKUS,
+        maxUsers: limits.max_users ?? DEFAULT_LIMITS.UNLIMITED_USERS,
+        maxInventoryItems: limits.max_inventory_items ?? DEFAULT_LIMITS.UNLIMITED_INVENTORY_ITEMS,
+      },
+      create: {
+        organizationId,
+        activeUsers: 0,
+        totalSkus: 0,
+        totalInventoryItems: 0,
+        storageUsedBytes: 0,
+        maxSkus: limits.max_skus ?? DEFAULT_LIMITS.UNLIMITED_SKUS,
+        maxUsers: limits.max_users ?? DEFAULT_LIMITS.UNLIMITED_USERS,
+        maxInventoryItems: limits.max_inventory_items ?? DEFAULT_LIMITS.UNLIMITED_INVENTORY_ITEMS,
+      },
+    });
+  }
+
+  /**
+   * Handle creation lock for downgrades
+   */
+  private async handleCreationLock(
+    tx: any,
+    organizationId: string,
+    limits: any,
+    isDowngrade: boolean,
+  ): Promise<void> {
+    if (!isDowngrade) {
+      // Clear lock on upgrade
+      await tx.organization.update({
+        where: { id: organizationId },
+        data: { isCreationLocked: false },
+      });
+      return;
+    }
+
+    // Check usage on downgrade
+    const usage = await tx.organizationUsage.findUnique({
+      where: { organizationId },
+    });
+
+    if (!usage) return;
+
+    const isOverSkuLimit = limits.max_skus !== null && usage.totalSkus > limits.max_skus;
+    const isOverInventoryLimit =
+      limits.max_inventory_items !== null && usage.totalInventoryItems > limits.max_inventory_items;
+
+    if (isOverSkuLimit || isOverInventoryLimit) {
+      await tx.organization.update({
+        where: { id: organizationId },
+        data: { isCreationLocked: true },
+      });
+
+      log.warn('Creation lock applied on tier downgrade', {
+        organizationId,
+        currentSkus: usage.totalSkus,
+        currentInventoryItems: usage.totalInventoryItems,
+        newSkuLimit: limits.max_skus,
+        newInventoryLimit: limits.max_inventory_items,
+      });
+
+      // Send warning email (non-blocking)
+      await this.emailService.sendDowngradeWarningEmail(
+        organizationId,
+        usage.totalSkus,
+        limits.max_skus,
+      );
+    }
+  }
+
+  /**
+   * Handle webhook errors consistently
+   */
+  private handleWebhookError(
+    eventType: string,
+    error: any,
+    context: {
+      subscriptionId?: string;
+      customerId?: string;
+      sessionId?: string;
+    },
+  ): void {
+    const monitor = ApplicationMonitoringService.getInstance();
+    const duration = Date.now() - (monitor as any).lastStartTime || 0;
+
+    monitor.recordWebhookEvent(eventType, duration, 'error');
+
+    Sentry.captureException(error, {
+      level: 'error',
+      extra: context,
+    });
+
+    log.error(`Failed to handle ${eventType}`, {
+      error: error instanceof Error ? error.message : 'Unknown error',
+      ...context,
+    });
+  }
+
+  /**
+   * Validate and extract data from checkout session
+   */
+  private async validateAndExtractCheckoutData(session: Stripe.Checkout.Session) {
+    if (!session.subscription || typeof session.subscription !== 'string') {
+      throw new Error('checkout.session.completed missing subscription id');
+    }
+
+    const stripeSubscription = await this.stripe!.subscriptions.retrieve(session.subscription);
+    const tierLevel = this.extractTierFromPrice(stripeSubscription as Stripe.Subscription);
+    const limits = TIER_LIMITS[tierLevel];
+
+    return {
+      stripeSubscription,
+      tierLevel,
+      limits,
+    };
+  }
+
+  /**
+   * Process checkout completion in a transaction
+   */
+  private async processCheckoutCompletion(
+    organizationId: string,
+    session: Stripe.Checkout.Session,
+    checkoutData: {
+      stripeSubscription: Stripe.Subscription;
+      tierLevel: TierLevel;
+      limits: any;
+    },
+  ): Promise<void> {
+    await this.prisma.$transaction(async (tx) => {
+      // Update subscription tier
+      await this.updateSubscriptionFromCheckout(tx, organizationId, session, checkoutData);
+
+      // Update usage limits
+      await this.updateUsageLimitsFromCheckout(tx, organizationId, checkoutData.limits);
+
+      // Unlock creation
+      await tx.organization.update({
+        where: { id: organizationId },
+        data: { isCreationLocked: false },
+      });
+
+      // Log audit event
+      await tx.auditLog.create({
+        data: {
+          organizationId,
+          action: 'trial_converted',
+          changeDescription: `Trial converted to paid subscription (${checkoutData.tierLevel})`,
+        },
+      });
+    });
+  }
+
+  /**
+   * Update subscription tier from checkout
+   */
+  private async updateSubscriptionFromCheckout(
+    tx: any,
+    organizationId: string,
+    session: Stripe.Checkout.Session,
+    checkoutData: {
+      stripeSubscription: Stripe.Subscription;
+      tierLevel: TierLevel;
+    },
+  ): Promise<void> {
+    await tx.subscriptionTier.updateMany({
+      where: {
+        organizationId,
+        stripeSubscriptionId: session.subscription as string,
+      },
+      data: {
+        tierLevel: checkoutData.tierLevel,
+        trialEndDate: null, // Clear trial end date
+        status: SubscriptionStatus.ACTIVE, // Set to active
+        billingCycle:
+          checkoutData.stripeSubscription.items.data[0]?.price.recurring?.interval === 'year'
+            ? 'annual'
+            : 'monthly',
+      },
+    });
+  }
+
+  /**
+   * Update usage limits from checkout
+   */
+  private async updateUsageLimitsFromCheckout(
+    tx: any,
+    organizationId: string,
+    limits: any,
+  ): Promise<void> {
+    await tx.organizationUsage.upsert({
+      where: { organizationId },
+      update: {
+        maxSkus: limits.max_skus ?? DEFAULT_LIMITS.UNLIMITED_SKUS,
+        maxUsers: limits.max_users ?? DEFAULT_LIMITS.UNLIMITED_USERS,
+        maxInventoryItems: limits.max_inventory_items ?? DEFAULT_LIMITS.UNLIMITED_INVENTORY_ITEMS,
+      },
+      create: {
+        organizationId,
+        maxSkus: limits.max_skus ?? DEFAULT_LIMITS.UNLIMITED_SKUS,
+        maxUsers: limits.max_users ?? DEFAULT_LIMITS.UNLIMITED_USERS,
+        maxInventoryItems: limits.max_inventory_items ?? DEFAULT_LIMITS.UNLIMITED_INVENTORY_ITEMS,
+        activeUsers: 0,
+        totalSkus: 0,
+        totalInventoryItems: 0,
+        storageUsedBytes: 0,
       },
     });
   }

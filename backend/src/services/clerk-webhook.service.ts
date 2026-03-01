@@ -18,6 +18,8 @@ import { SubscriptionService } from './subscription.service';
 import { Webhook } from 'svix';
 import * as Sentry from '@sentry/node';
 import { ApplicationMonitoringService } from './application.monitoring.service';
+import { ConflictError } from '../errors';
+import { isPrismaErrorCode, PRISMA_ERROR_CODES } from '../utils/prisma-error';
 
 // Simple logging utility
 const log = {
@@ -197,6 +199,15 @@ export class ClerkWebhookService {
       // Create trial subscription for the organization
       await this.ensureTrialSubscription(organizationId, primaryEmail);
     } catch (error) {
+      if (isPrismaErrorCode(error, PRISMA_ERROR_CODES.UNIQUE_CONSTRAINT)) {
+        const conflictError = new ConflictError('Email already registered');
+        log.warn('Duplicate signup prevented by unique email constraint', {
+          userId: id,
+          code: PRISMA_ERROR_CODES.UNIQUE_CONSTRAINT,
+        });
+        throw conflictError;
+      }
+
       log.error('Error handling user.created event', { userId: id, error });
       Sentry.captureException(error, { extra: { userId: id, eventType: 'user.created' } });
       throw error;

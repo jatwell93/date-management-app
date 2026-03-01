@@ -4,7 +4,7 @@ import { getDefaultDatabaseClient } from '../../database/database-factory';
 jest.mock('../../database/database-factory');
 
 describe('feature-gate middleware', () => {
-  it('returns 403 with creation_locked message when org isCreationLocked=true', async () => {
+  it('returns 403 with creation_locked message for POST when org isCreationLocked=true', async () => {
     const mockPrisma = {
       organizationUsage: {
         upsert: jest.fn().mockResolvedValue({
@@ -53,5 +53,55 @@ describe('feature-gate middleware', () => {
     expect(res.status).toHaveBeenCalledWith(403);
     expect(res.json).toHaveBeenCalledWith(expect.objectContaining({ locked: true }));
     expect(next).not.toHaveBeenCalled();
+  });
+
+  it('allows PUT when org isCreationLocked=true so customers can reduce usage', async () => {
+    const mockPrisma = {
+      organizationUsage: {
+        upsert: jest.fn().mockResolvedValue({
+          organizationId: 'org-123',
+          activeUsers: 0,
+          maxUsers: 1,
+          totalSkus: 100,
+          maxSkus: 500,
+          storageUsedBytes: 0,
+        }),
+      },
+      organization: {
+        findUnique: jest.fn().mockResolvedValue({
+          id: 'org-123',
+          isCreationLocked: true,
+        }),
+      },
+      subscriptionTier: {
+        findFirst: jest.fn(),
+      },
+    } as any;
+
+    (getDefaultDatabaseClient as jest.Mock).mockReturnValue(mockPrisma);
+
+    const req = {
+      organizationId: 'org-123',
+      tierLevel: 'starter',
+      userId: 1,
+      ip: '127.0.0.1',
+      get: jest.fn(),
+      headers: {},
+      path: '/products/1',
+      method: 'PUT',
+    } as any;
+
+    const res = {
+      status: jest.fn().mockReturnThis(),
+      json: jest.fn(),
+      locals: {},
+    } as any;
+
+    const next = jest.fn();
+
+    await checkUsageLimit('max_skus')(req, res, next);
+
+    expect(next).toHaveBeenCalled();
+    expect(res.status).not.toHaveBeenCalledWith(403);
   });
 });

@@ -188,7 +188,9 @@ if (!isTestEnv) {
       await initializeTierFlagValidation();
     } catch (error) {
       console.error('FATAL: Tier feature flags validation failed at startup:', error);
-      console.error('Application may not function correctly. Check database tier_feature_flags table.');
+      console.error(
+        'Application may not function correctly. Check database tier_feature_flags table.',
+      );
     }
   })();
 }

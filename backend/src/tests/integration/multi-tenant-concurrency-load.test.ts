@@ -190,11 +190,11 @@ describe('Multi-Tenant Concurrency Load Tests - 16A.F.1', () => {
     it('should maintain SKU isolation between concurrent tenants', async () => {
       // Create two separate organizations
       const org1 = await prisma.organization.create({
-        data: { name: 'Tenant 1 - SKU Isolation' },
+        data: { name: 'Tenant 1 - SKU Isolation', slug: `tenant-1-${Date.now()}` },
       });
 
       const org2 = await prisma.organization.create({
-        data: { name: 'Tenant 2 - SKU Isolation' },
+        data: { name: 'Tenant 2 - SKU Isolation', slug: `tenant-2-${Date.now()}` },
       });
 
       // Setup both at starter tier near limit
@@ -307,11 +307,12 @@ describe('Multi-Tenant Concurrency Load Tests - 16A.F.1', () => {
       const org = await prisma.organization.create({
         data: {
           name: 'Test Org - Storage Race',
+          slug: `test-org-storage-${Date.now()}`,
         },
       });
 
       await prisma.subscriptionTier.create({
-      data: {
+        data: {
           organizationId: org.id,
           tierLevel: 'starter',
           status: 'active',
@@ -380,6 +381,7 @@ describe('Multi-Tenant Concurrency Load Tests - 16A.F.1', () => {
       const org = await prisma.organization.create({
         data: {
           name: 'Test Org - User Race',
+          slug: `test-org-user-${Date.now()}`,
         },
       });
 
@@ -449,6 +451,7 @@ describe('Multi-Tenant Concurrency Load Tests - 16A.F.1', () => {
       const org = await prisma.organization.create({
         data: {
           name: 'Test Org - ACID',
+          slug: `test-org-acid-${Date.now()}`,
         },
       });
 

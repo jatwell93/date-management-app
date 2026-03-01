@@ -237,7 +237,12 @@ export class AuthService {
   /**
    * Generate both access and refresh tokens for a user
    */
-  async generateTokens(userId: number, role: string, organizationId: string, tierLevel?: TierLevel): Promise<TokenPair> {
+  async generateTokens(
+    userId: number,
+    role: string,
+    organizationId: string,
+    tierLevel?: TierLevel,
+  ): Promise<TokenPair> {
     try {
       const secret = envConfig.JWT_SECRET;
 
@@ -318,20 +323,20 @@ export class AuthService {
 
       // Generate new access token with fresh tierLevel from database
       const secret = envConfig.JWT_SECRET;
-      
+
       // Fetch current tierLevel from subscription to ensure token has latest tier
       const subscription = await this.prisma.subscriptionTier.findFirst({
         where: { organizationId: storedToken.user.organizationId },
         orderBy: { createdAt: 'desc' },
       });
       const tierLevel = subscription?.tierLevel as TierLevel | undefined;
-      
+
       const accessToken = jwt.sign(
-        { 
-          userId: storedToken.userId, 
+        {
+          userId: storedToken.userId,
           role: storedToken.user.role,
           organizationId: storedToken.user.organizationId,
-          tierLevel
+          tierLevel,
         },
         secret,
         { expiresIn: this.ACCESS_TOKEN_EXPIRY },

@@ -27,7 +27,7 @@ describe('SubscriptionService.downgradeExpiredPastDue', () => {
 
   beforeEach(() => {
     jest.clearAllMocks();
-    
+
     prisma = {
       subscriptionTier: {
         findMany: jest.fn(),
@@ -145,7 +145,8 @@ describe('SubscriptionService.downgradeExpiredPastDue', () => {
       { id: 1, organizationId: 'org-alert', pastDueSince: sevenDaysAgo },
     ]);
     prisma.organizationUsage.findUnique.mockResolvedValue({
-      totalSkus: 10, totalInventoryItems: 10,
+      totalSkus: 10,
+      totalInventoryItems: 10,
     });
 
     const count = await service.downgradeExpiredPastDue();
@@ -168,10 +169,11 @@ describe('SubscriptionService.downgradeExpiredPastDue', () => {
       { id: 2, organizationId: 'org-ok2', pastDueSince: sevenDaysAgo },
     ]);
     prisma.$transaction
-      .mockRejectedValueOnce(new Error('DB error'))  // org-fail fails
-      .mockImplementation((cb) => cb(prisma));         // org-ok2 succeeds
+      .mockRejectedValueOnce(new Error('DB error')) // org-fail fails
+      .mockImplementation((cb) => cb(prisma)); // org-ok2 succeeds
     prisma.organizationUsage.findUnique.mockResolvedValue({
-      totalSkus: 10, totalInventoryItems: 10,
+      totalSkus: 10,
+      totalInventoryItems: 10,
     });
 
     const count = await service.downgradeExpiredPastDue();

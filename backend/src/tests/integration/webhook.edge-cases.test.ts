@@ -23,6 +23,9 @@ describe('Webhook Edge Cases', () => {
       customers: {
         retrieve: jest.fn(),
       },
+      subscriptions: {
+        retrieve: jest.fn(),
+      },
     } as any;
 
     // Inject mock into service
@@ -263,6 +266,99 @@ describe('Webhook Edge Cases', () => {
   });
 
   describe('Out-of-Order Events', () => {
+    it('should keep paid tier when checkout completes after trial expiry downgrade', async () => {
+      const customerId = `cus_${crypto.randomBytes(6).toString('hex')}`;
+      const subId = `sub_${crypto.randomBytes(6).toString('hex')}`;
+
+      const mockCustomer: Stripe.Customer = {
+        id: customerId,
+        object: 'customer',
+        metadata: { organizationId: testOrganizationId },
+      } as any;
+
+      (mockStripe.customers.retrieve as jest.Mock).mockResolvedValue(mockCustomer);
+      (mockStripe.subscriptions.retrieve as jest.Mock).mockResolvedValue({
+        id: subId,
+        object: 'subscription',
+        customer: customerId,
+        status: 'active',
+        items: {
+          object: 'list',
+          data: [
+            {
+              price: {
+                metadata: { tier: 'professional' },
+                recurring: { interval: 'month' },
+              },
+            } as any,
+          ],
+        },
+      } as Stripe.Subscription);
+
+      // Simulate trial already expired and downgraded before checkout completes
+      await prisma.subscriptionTier.create({
+        data: {
+          organizationId: testOrganizationId,
+          tierLevel: 'starter',
+          status: 'active',
+          stripeSubscriptionId: subId,
+          trialEndDate: new Date(Date.now() - 24 * 60 * 60 * 1000),
+        },
+      });
+
+      await prisma.organization.update({
+        where: { id: testOrganizationId },
+        data: { isCreationLocked: true },
+      });
+
+      await prisma.organizationUsage.upsert({
+        where: { organizationId: testOrganizationId },
+        update: {
+          maxSkus: 500,
+          maxUsers: 1,
+          maxInventoryItems: 5000,
+        },
+        create: {
+          organizationId: testOrganizationId,
+          totalSkus: 500,
+          activeUsers: 1,
+          maxSkus: 500,
+          maxUsers: 1,
+          totalInventoryItems: 100,
+          maxInventoryItems: 5000,
+          storageUsedBytes: 0,
+        },
+      });
+
+      const session: Stripe.Checkout.Session = {
+        id: `cs_${crypto.randomBytes(6).toString('hex')}`,
+        object: 'checkout.session',
+        customer: customerId,
+        subscription: subId,
+      } as any;
+
+      await expect(
+        (webhookService as any).handleCheckoutSessionCompleted(session),
+      ).resolves.not.toThrow();
+
+      const updatedTier = await prisma.subscriptionTier.findFirst({
+        where: { organizationId: testOrganizationId, stripeSubscriptionId: subId },
+      });
+      expect(updatedTier?.tierLevel).toBe('professional');
+      expect(updatedTier?.status).toBe('active');
+      expect(updatedTier?.trialEndDate).toBeNull();
+
+      const updatedOrg = await prisma.organization.findUnique({
+        where: { id: testOrganizationId },
+      });
+      expect(updatedOrg?.isCreationLocked).toBe(false);
+
+      const usage = await prisma.organizationUsage.findUnique({
+        where: { organizationId: testOrganizationId },
+      });
+      expect(usage?.maxSkus).toBe(2000);
+    });
+
     it('should handle subscription.updated arriving before subscription.created', async () => {
       const customerId = `cus_${crypto.randomBytes(6).toString('hex')}`;
       const subId = `sub_${crypto.randomBytes(6).toString('hex')}`;
@@ -275,17 +371,6 @@ describe('Webhook Edge Cases', () => {
 
       (mockStripe.customers.retrieve as jest.Mock).mockResolvedValue(mockCustomer);
 
-      // Create organization usage first
-      await prisma.organizationUsage.create({
-        data: {
-          organizationId: testOrganizationId,
-          totalSkus: 10,
-          activeUsers: 1,
-          maxSkus: 500,
-          maxUsers: 1,
-        },
-      });
-
       const subscription: Stripe.Subscription = {
         id: subId,
         object: 'subscription',
@@ -297,21 +382,23 @@ describe('Webhook Edge Cases', () => {
         },
       } as any;
 
-      // First: Process updated event (subscription doesn't exist yet)
-      // This should work without throwing - sync service handles missing subscription
+      // First: Process updated event without pre-existing tier or usage records
       await expect(
         (webhookService as any).handleSubscriptionUpdated(subscription),
       ).resolves.not.toThrow();
 
-      // Then: Process created event
-      await (webhookService as any).handleSubscriptionCreated(subscription);
-
-      // Verify subscription exists now
+      // Verify update event bootstrapped records
       const tier = await prisma.subscriptionTier.findFirst({
         where: { stripeSubscriptionId: subId },
       });
       expect(tier).toBeTruthy();
       expect(tier?.tierLevel).toBe('professional');
+
+      const usage = await prisma.organizationUsage.findUnique({
+        where: { organizationId: testOrganizationId },
+      });
+      expect(usage).toBeTruthy();
+      expect(usage?.maxSkus).toBe(2000);
     });
 
     it('should handle subscription.deleted for non-existent subscription', async () => {

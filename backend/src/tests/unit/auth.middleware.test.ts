@@ -35,6 +35,7 @@ const makeResponse = () => {
   const res = {
     status: jest.fn().mockReturnThis(),
     json: jest.fn().mockReturnThis(),
+    setHeader: jest.fn().mockReturnThis(),
   } as any;
 
   return res;
@@ -92,6 +93,16 @@ describe('auth middleware', () => {
   });
 
   describe('authenticateToken', () => {
+    let warnSpy: jest.SpyInstance;
+
+    beforeEach(() => {
+      warnSpy = jest.spyOn(console, 'warn').mockImplementation(() => {});
+    });
+
+    afterEach(() => {
+      warnSpy.mockRestore();
+    });
+
     it('rejects when no token is provided', () => {
       const req = makeRequest();
       const res = makeResponse();
@@ -162,6 +173,7 @@ describe('auth middleware', () => {
     it('accepts valid token and sets user fields', async () => {
       const req = makeRequest({ headers: { authorization: 'Bearer token' } });
       const res = makeResponse();
+      const updatedAt = new Date('2026-03-01T00:00:00.000Z');
 
       (jwt.verify as jest.Mock).mockReturnValue({
         userId: 7,
@@ -178,7 +190,7 @@ describe('auth middleware', () => {
         status: SubscriptionStatus.ACTIVE,
         billingCycle: 'monthly',
         createdAt: new Date(),
-        updatedAt: new Date(),
+        updatedAt,
       });
 
       mockIsAccessActive.mockResolvedValue(true);
@@ -193,8 +205,52 @@ describe('auth middleware', () => {
         organizationId: 'org-1',
         tierLevel: 'professional',
       });
+      expect(res.setHeader).toHaveBeenCalledWith(
+        'X-Org-Tier-Version',
+        `1:professional:${updatedAt.getTime()}`,
+      );
       expect(trackEvent).toHaveBeenCalledWith(
         expect.objectContaining({ eventAction: 'protected_route_access' }),
+      );
+      expect(next).toHaveBeenCalled();
+    });
+
+    it('logs stale token tier mismatches and enforces latest tier from DB', async () => {
+      const req = makeRequest({ headers: { authorization: 'Bearer token' } });
+      const res = makeResponse();
+      const updatedAt = new Date('2026-03-02T00:00:00.000Z');
+
+      (jwt.verify as jest.Mock).mockReturnValue({
+        userId: 7,
+        role: 'Manager',
+        organizationId: 'org-stale-tier',
+        tierLevel: 'premium',
+        exp: Math.floor(Date.now() / 1000) + 300,
+      });
+
+      (mockPrisma.subscriptionTier.findFirst as jest.Mock).mockResolvedValue({
+        id: 2,
+        organizationId: 'org-stale-tier',
+        tierLevel: 'starter',
+        status: SubscriptionStatus.ACTIVE,
+        billingCycle: 'monthly',
+        createdAt: new Date(),
+        updatedAt,
+      });
+
+      mockIsAccessActive.mockResolvedValue(true);
+
+      await authenticateToken(req, res, next);
+
+      expect(req.tierLevel).toBe('starter');
+      expect(req.user?.tierLevel).toBe('starter');
+      expect(res.setHeader).toHaveBeenCalledWith(
+        'X-Org-Tier-Version',
+        `2:starter:${updatedAt.getTime()}`,
+      );
+      expect(warnSpy).toHaveBeenCalledWith(
+        '[AUTH] Stale token tier detected; using latest DB tier',
+        expect.objectContaining({ tokenTierLevel: 'premium', dbTierLevel: 'starter' }),
       );
       expect(next).toHaveBeenCalled();
     });
@@ -267,8 +323,7 @@ describe('auth middleware', () => {
 
       expect(res.status).toHaveBeenCalledWith(403);
       expect(res.json).toHaveBeenCalledWith({
-        message:
-          'Access denied: Organization subscription has been canceled. Please contact support.',
+        message: 'Organization subscription has been canceled. Please contact support.',
       });
       expect(next).not.toHaveBeenCalled();
     });

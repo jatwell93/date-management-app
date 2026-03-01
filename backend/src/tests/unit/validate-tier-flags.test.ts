@@ -268,6 +268,24 @@ describe('validate-tier-flags', () => {
         expect(flag?.limitValue).toBe(EXPECTED_LIMITS[tier].max_inventory_items);
       }
     });
+
+    it('should be idempotent and race-safe when called concurrently', async () => {
+      await prisma.tierFeatureFlag.deleteMany({});
+
+      const [firstRun, secondRun] = await Promise.all([
+        seedMissingTierFeatureFlags(prisma),
+        seedMissingTierFeatureFlags(prisma),
+      ]);
+
+      expect(firstRun.errors).toHaveLength(0);
+      expect(secondRun.errors).toHaveLength(0);
+
+      const allFlags = await prisma.tierFeatureFlag.findMany();
+      expect(allFlags).toHaveLength(REQUIRED_TIERS.length * REQUIRED_FEATURES.length);
+
+      const validation = await validateTierFeatureFlags(prisma);
+      expect(validation.valid).toBe(true);
+    });
   });
 
   describe('EXPECTED_LIMITS', () => {

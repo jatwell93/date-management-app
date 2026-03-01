@@ -1,15 +1,21 @@
 import request from 'supertest';
 import express, { Response } from 'express';
 import jwt from 'jsonwebtoken';
-import { authenticateToken, invalidateSubscriptionCache, AuthRequest } from '../../middleware/auth.middleware';
+import {
+  authenticateToken,
+  invalidateSubscriptionCache,
+  AuthRequest,
+} from '../../middleware/auth.middleware';
 import { getDefaultDatabaseClient } from '../../database/database-factory';
 import { envConfig } from '../../config/environment';
 import { TierLevel } from '../../types/subscription';
+import { OrganizationService } from '../../services/organization.service';
 
 const prisma = getDefaultDatabaseClient();
 
 describe('Auth Middleware Tier Override', () => {
   let app: express.Application;
+  const organizationService = new OrganizationService(prisma);
 
   beforeAll(async () => {
     // Setup Express app with real auth middleware
@@ -17,16 +23,12 @@ describe('Auth Middleware Tier Override', () => {
     app.use(express.json());
 
     // Create a test endpoint that requires premium tier
-    app.get(
-      '/api/premium-only',
-      authenticateToken,
-      (req: AuthRequest, res: Response) => {
-        if (req.tierLevel !== 'premium') {
-          return res.status(403).json({ error: 'Premium required' });
-        }
-        return res.status(200).json({ message: 'Success' });
-      },
-    );
+    app.get('/api/premium-only', authenticateToken, (req: AuthRequest, res: Response) => {
+      if (req.tierLevel !== 'premium') {
+        return res.status(403).json({ error: 'Premium required' });
+      }
+      return res.status(200).json({ message: 'Success' });
+    });
   });
 
   async function createTestData(tier: TierLevel = 'starter') {
@@ -102,6 +104,7 @@ describe('Auth Middleware Tier Override', () => {
       expect(res.status).toBe(403);
       // Handler returns 'error'
       expect(res.body.error).toBe('Premium required');
+      expect(res.headers['x-org-tier-version']).toContain(':starter:');
     } finally {
       process.env.TEST_AUTH_BYPASS = oldBypass;
       await cleanupTestData(orgId);
@@ -148,9 +151,191 @@ describe('Auth Middleware Tier Override', () => {
 
       expect(res.status).toBe(200);
       expect(res.body.message).toBe('Success');
+      expect(res.headers['x-org-tier-version']).toContain(':premium:');
     } finally {
       process.env.TEST_AUTH_BYPASS = oldBypass;
       await cleanupTestData(orgId);
     }
+  });
+
+  it('hard deletes organization and cascades related records without orphans', async () => {
+    const nonce = `${Date.now()}-${Math.floor(Math.random() * 100000)}`;
+
+    const org = await prisma.organization.create({
+      data: {
+        name: `Cascade Org ${nonce}`,
+        slug: `cascade-org-${nonce}`,
+        contactEmail: `cascade-${nonce}@example.com`,
+      },
+    });
+
+    const user = await prisma.user.create({
+      data: {
+        organizationId: org.id,
+        clerkUserId: `clerk_${nonce}`,
+        email: `user-${nonce}@example.com`,
+        username: `user_${nonce}`,
+        role: 'Manager',
+      },
+    });
+
+    await prisma.organizationUsage.create({
+      data: {
+        organizationId: org.id,
+        activeUsers: 1,
+        maxUsers: 3,
+        totalSkus: 1,
+        maxSkus: 2000,
+        totalInventoryItems: 1,
+        maxInventoryItems: 20000,
+        storageUsedBytes: 1024,
+      },
+    });
+
+    await prisma.subscriptionTier.create({
+      data: {
+        organizationId: org.id,
+        tierLevel: 'professional',
+        status: 'active',
+        billingCycle: 'monthly',
+      },
+    });
+
+    const product = await prisma.product.create({
+      data: {
+        organizationId: org.id,
+        barcode: `barcode-${nonce}`,
+        sku: `sku-${nonce}`,
+        name: 'Cascade Product',
+        costPrice: 10.5,
+      },
+    });
+
+    const storeArea = await prisma.storeArea.create({
+      data: {
+        organizationId: org.id,
+        name: 'Main Shelf',
+      },
+    });
+
+    const inventoryItem = await prisma.inventoryItem.create({
+      data: {
+        organizationId: org.id,
+        productId: product.id,
+        locationId: storeArea.id,
+        expiryDate: new Date(Date.now() + 7 * 24 * 60 * 60 * 1000),
+      },
+    });
+
+    await prisma.auditLog.create({
+      data: {
+        organizationId: org.id,
+        userId: user.id,
+        inventoryItemId: inventoryItem.id,
+        action: 'inventory_created',
+        changeDescription: 'Created inventory item',
+      },
+    });
+
+    await prisma.itemTransaction.create({
+      data: {
+        organizationId: org.id,
+        inventoryItemId: inventoryItem.id,
+        userId: user.id,
+        type: 'stock-in',
+        quantityChange: 3,
+      },
+    });
+
+    await prisma.expiredItemTransaction.create({
+      data: {
+        organizationId: org.id,
+        inventoryItemId: inventoryItem.id,
+        userId: user.id,
+        action: 'discarded',
+        unitsDiscarded: 1,
+      },
+    });
+
+    await prisma.upload.create({
+      data: {
+        organizationId: org.id,
+        userId: user.id,
+        fileKey: `file-key-${nonce}`,
+        fileName: 'cascade.csv',
+        fileSizeBytes: 512,
+        contentType: 'text/csv',
+      },
+    });
+
+    await prisma.refreshToken.create({
+      data: {
+        userId: user.id,
+        token: `token-${nonce}`,
+        expiresAt: new Date(Date.now() + 24 * 60 * 60 * 1000),
+      },
+    });
+
+    await prisma.organizationInvite.create({
+      data: {
+        organizationId: org.id,
+        email: `invite-${nonce}@example.com`,
+        role: 'member',
+        token: `invite-token-${nonce}`,
+        expiresAt: new Date(Date.now() + 24 * 60 * 60 * 1000),
+        invitedByUserId: user.id,
+      },
+    });
+
+    await prisma.trialEvent.create({
+      data: {
+        organizationId: org.id,
+        eventType: 'trial_started',
+      },
+    });
+
+    const deleted = await organizationService.deleteOrganization(org.id);
+    expect(deleted).toBe(true);
+
+    const [
+      deletedOrg,
+      userCount,
+      productCount,
+      inventoryCount,
+      uploadCount,
+      subscriptionCount,
+      usageCount,
+      auditCount,
+      inviteCount,
+      trialCount,
+      itemTxCount,
+      expiredTxCount,
+    ] = await Promise.all([
+      prisma.organization.findUnique({ where: { id: org.id } }),
+      prisma.user.count({ where: { organizationId: org.id } }),
+      prisma.product.count({ where: { organizationId: org.id } }),
+      prisma.inventoryItem.count({ where: { organizationId: org.id } }),
+      prisma.upload.count({ where: { organizationId: org.id } }),
+      prisma.subscriptionTier.count({ where: { organizationId: org.id } }),
+      prisma.organizationUsage.count({ where: { organizationId: org.id } }),
+      prisma.auditLog.count({ where: { organizationId: org.id } }),
+      prisma.organizationInvite.count({ where: { organizationId: org.id } }),
+      prisma.trialEvent.count({ where: { organizationId: org.id } }),
+      prisma.itemTransaction.count({ where: { organizationId: org.id } }),
+      prisma.expiredItemTransaction.count({ where: { organizationId: org.id } }),
+    ]);
+
+    expect(deletedOrg).toBeNull();
+    expect(userCount).toBe(0);
+    expect(productCount).toBe(0);
+    expect(inventoryCount).toBe(0);
+    expect(uploadCount).toBe(0);
+    expect(subscriptionCount).toBe(0);
+    expect(usageCount).toBe(0);
+    expect(auditCount).toBe(0);
+    expect(inviteCount).toBe(0);
+    expect(trialCount).toBe(0);
+    expect(itemTxCount).toBe(0);
+    expect(expiredTxCount).toBe(0);
   });
 });

@@ -6,6 +6,7 @@
 import { PrismaClient } from '@prisma/client';
 import { ClerkWebhookService } from '../../services/clerk-webhook.service';
 import { SubscriptionService } from '../../services/subscription.service';
+import { ConflictError } from '../../errors';
 
 jest.mock('../../services/subscription.service');
 jest.mock('@sentry/node', () => ({
@@ -51,6 +52,47 @@ describe('Trial Abuse Prevention', () => {
   });
 
   describe('90-day trial abuse check', () => {
+    it('returns ConflictError when duplicate email is created concurrently during user.created', async () => {
+      const email = 'duplicate-race@example.com';
+
+      await prisma.organization.create({
+        data: {
+          name: 'Existing Org',
+          slug: `existing-org-${Date.now()}`,
+          contactEmail: email,
+        },
+      });
+
+      await prisma.user.create({
+        data: {
+          clerkUserId: `existing_user_${Date.now()}`,
+          email,
+          username: `existing_${Date.now()}`,
+          role: 'Manager',
+          organizationId: (
+            await prisma.organization.findFirstOrThrow({ where: { contactEmail: email } })
+          ).id,
+        },
+      });
+
+      const event = {
+        type: 'user.created',
+        data: {
+          id: `new_clerk_user_${Date.now()}`,
+          primary_email_address_id: 'em_1',
+          email_addresses: [{ id: 'em_1', email_address: email }],
+          username: `new_user_${Date.now()}`,
+          first_name: 'New',
+          last_name: 'User',
+          organization_memberships: [],
+        },
+      };
+
+      const result = service.handleEvent(event);
+      await expect(result).rejects.toBeInstanceOf(ConflictError);
+      await expect(result).rejects.toMatchObject({ message: 'Email already registered' });
+    });
+
     it('should block trial for email used in trial within last 90 days', async () => {
       const email = 'abuser@example.com';
 

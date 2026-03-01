@@ -16,8 +16,22 @@ import { Router, Request, Response } from 'express';
 import { webhookService } from '../services/webhook.service';
 import { clerkWebhookService } from '../services/clerk-webhook.service';
 import { ApplicationMonitoringService } from '../services/application.monitoring.service';
+import { ConflictError, NotFoundError } from '../errors';
 
 const router = Router();
+
+function isNonRecoverableStripeWebhookError(error: Error): boolean {
+  if (error instanceof NotFoundError) {
+    return true;
+  }
+
+  const message = error.message.toLowerCase();
+  return (
+    message.includes('missing organizationid in stripe customer metadata') ||
+    message.includes('customer has been deleted') ||
+    (message.includes('organization') && message.includes('not found'))
+  );
+}
 
 const handleStripeWebhook = async (req: Request, res: Response) => {
   try {
@@ -83,7 +97,19 @@ const handleStripeWebhook = async (req: Request, res: Response) => {
         error: error.message,
       });
 
-      // Return 500 for processing errors (Stripe will retry)
+      if (isNonRecoverableStripeWebhookError(error)) {
+        console.warn(
+          '[WEBHOOK] Non-recoverable Stripe webhook error, acknowledging event to stop retries',
+          {
+            eventId: event.id,
+            eventType: event.type,
+            error: error.message,
+          },
+        );
+        return webhookService.sendSuccess(res);
+      }
+
+      // Return 500 for transient processing errors (Stripe will retry)
       return webhookService.sendError(res, 'Error processing webhook event', 500);
     }
   } catch (error) {
@@ -190,6 +216,15 @@ const handleClerkWebhook = async (req: Request, res: Response) => {
         eventType,
         error: error.message,
       });
+
+      if (error instanceof ConflictError) {
+        console.warn('[CLERK_WEBHOOK] Non-retryable conflict while processing webhook event', {
+          eventId: svixEventId,
+          eventType,
+          error: error.message,
+        });
+        return clerkWebhookService.sendError(res, error.message, 409);
+      }
 
       // Return 500 for processing errors (Clerk will retry)
       return clerkWebhookService.sendError(res, 'Error processing webhook event', 500);

@@ -752,9 +752,7 @@ export class SubscriptionService {
           });
 
           const isOverSkuLimit =
-            starterLimits.max_skus !== null &&
-            usage &&
-            usage.totalSkus > starterLimits.max_skus;
+            starterLimits.max_skus !== null && usage && usage.totalSkus > starterLimits.max_skus;
 
           const isOverInventoryLimit =
             starterLimits.max_inventory_items !== null &&
@@ -808,9 +806,7 @@ export class SubscriptionService {
         downgradedCount++;
         Logger.warn(`Dunning downgrade completed for organization ${tier.organizationId}`);
       } catch (error) {
-        Logger.error(
-          `Dunning downgrade failed for org ${tier.organizationId}: ${String(error)}`,
-        );
+        Logger.error(`Dunning downgrade failed for org ${tier.organizationId}: ${String(error)}`);
         Sentry.captureException(error, {
           level: 'error',
           tags: { component: 'dunning', event: 'downgrade_failed' },

@@ -48,10 +48,10 @@ export async function runDunningJob(): Promise<void> {
   try {
     // Find and downgrade expired past_due subscriptions
     const downgradedCount = await subscriptionService.downgradeExpiredPastDue();
-    
+
     if (downgradedCount > 0) {
       Logger.warn(`Dunning job: Auto-downgraded ${downgradedCount} organizations to Starter tier`);
-      
+
       // Send aggregate alert to Sentry
       Sentry.captureMessage(
         `[DUNNING] Batch auto-downgrade completed: ${downgradedCount} organizations downgraded to Starter after 7-day grace period`,

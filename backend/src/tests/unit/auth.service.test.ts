@@ -148,9 +148,13 @@ describe('AuthService', () => {
       const tokens = await authService.generateTokens(1, 'Manager', 'org_123');
 
       expect(tokens.accessToken).toBe('mock_jwt_token');
-      expect(jwt.sign).toHaveBeenCalledWith({ userId: 1, role: 'Manager', organizationId: 'org_123' }, 'test_secret', {
-        expiresIn: '1h',
-      });
+      expect(jwt.sign).toHaveBeenCalledWith(
+        { userId: 1, role: 'Manager', organizationId: 'org_123' },
+        'test_secret',
+        {
+          expiresIn: '1h',
+        },
+      );
       expect(tokens.refreshToken).toBe('mock_refresh_token_hex');
       expect(prisma.refreshToken.create).toHaveBeenCalledWith({
         data: {
@@ -164,7 +168,9 @@ describe('AuthService', () => {
     it('throws InternalError on database failure', async () => {
       (prisma.refreshToken.create as jest.Mock).mockRejectedValue(new Error('DB failure'));
 
-      await expect(authService.generateTokens(1, 'Manager', 'org_123')).rejects.toBeInstanceOf(InternalError);
+      await expect(authService.generateTokens(1, 'Manager', 'org_123')).rejects.toBeInstanceOf(
+        InternalError,
+      );
     });
   });
 
@@ -209,15 +215,26 @@ describe('AuthService', () => {
         token: 'valid_refresh_token',
         expiresAt: futureDate,
         revokedAt: null,
-        user: { id: 5, role: 'Staff', organizationId: 'org_123', pin: 'hashed', createdAt: new Date(), updatedAt: new Date() },
+        user: {
+          id: 5,
+          role: 'Staff',
+          organizationId: 'org_123',
+          pin: 'hashed',
+          createdAt: new Date(),
+          updatedAt: new Date(),
+        },
       });
 
       const newAccessToken = await authService.refreshAccessToken('valid_refresh_token');
 
       expect(newAccessToken).toBe('mock_jwt_token');
-      expect(jwt.sign).toHaveBeenCalledWith({ userId: 5, role: 'Staff', organizationId: 'org_123' }, 'test_secret', {
-        expiresIn: '1h',
-      });
+      expect(jwt.sign).toHaveBeenCalledWith(
+        { userId: 5, role: 'Staff', organizationId: 'org_123' },
+        'test_secret',
+        {
+          expiresIn: '1h',
+        },
+      );
     });
 
     it('throws AuthenticationError for non-existent refresh token', async () => {

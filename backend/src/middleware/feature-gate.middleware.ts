@@ -152,7 +152,7 @@ export const checkUsageLimit = (limitKey: LimitKey) => {
         select: { isCreationLocked: true },
       });
 
-      if (org?.isCreationLocked && ['POST', 'PUT', 'PATCH'].includes(req.method)) {
+      if (org?.isCreationLocked && req.method === 'POST') {
         Logger.warn('Creation locked: org over limit, blocking write operation', {
           organizationId: req.organizationId,
           limitKey,

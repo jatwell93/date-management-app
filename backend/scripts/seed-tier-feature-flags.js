@@ -16,7 +16,12 @@ const TIER_FEATURES = [
   // Professional Tier
   { tierLevel: 'professional', featureKey: 'max_skus', limitValue: 2000, enabled: true },
   { tierLevel: 'professional', featureKey: 'max_users', limitValue: 3, enabled: true },
-  { tierLevel: 'professional', featureKey: 'max_inventory_items', limitValue: 20000, enabled: true },
+  {
+    tierLevel: 'professional',
+    featureKey: 'max_inventory_items',
+    limitValue: 20000,
+    enabled: true,
+  },
   { tierLevel: 'professional', featureKey: 'advanced_analytics', enabled: true },
   { tierLevel: 'professional', featureKey: 'api_access', enabled: false },
   { tierLevel: 'professional', featureKey: 'priority_support', enabled: false },
