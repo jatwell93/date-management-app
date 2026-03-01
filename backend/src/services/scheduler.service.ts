@@ -4,6 +4,7 @@ import { getDb } from '../database';
 import { DatabaseBackupService } from './database.backup.service';
 import { SubscriptionService } from './subscription.service';
 import { EmailService } from './email.service';
+import { startStripeSyncJob } from '../jobs/stripe-sync.job';
 
 export class SchedulerService {
   private static databaseBackupService = new DatabaseBackupService();
@@ -30,6 +31,15 @@ export class SchedulerService {
       console.log('Running trial expiration job...');
       this.runTrialExpirationJob();
     });
+
+    // Schedule hourly Stripe subscription sync (16A.B.4)
+    // Fetches all Stripe subscriptions and reconciles against local subscription_tiers
+    cron.schedule('0 * * * *', () => {
+      console.log('Running hourly Stripe subscription sync...');
+      // Actual sync logic handled by stripe-sync.job module
+    });
+
+    startStripeSyncJob();
   }
 
   // Trial expiration job: downgrade expired trials, send reminders
@@ -103,10 +113,14 @@ export class SchedulerService {
 
         try {
           const inventoryService = new InventoryService(org.id);
-          const inventoryItems = db
+          const rawInventoryItems = db
             .prepare('SELECT id, expiry_date FROM inventory_items WHERE organization_id = ?')
-            .bind(org.id)
-            .all() as Array<{ id: number; expiry_date: string }>;
+            .all(org.id) as Array<{ id: number; expiry_date: string }>;
+
+          const inventoryItems = rawInventoryItems.map((item) => ({
+            id: item.id,
+            expiryDate: item.expiry_date,
+          }));
 
           console.log(
             `Processing ${inventoryItems.length} inventory items for organization ${org.id}...`,
@@ -118,6 +132,7 @@ export class SchedulerService {
           try {
             await inventoryService.bulkUpdateMarkdownStatuses(inventoryItems);
           } catch (error) {
+            const errorMessage = error instanceof Error ? error.message : String(error);
             // If bulk update fails, fall back to individual updates with retry
             console.warn(
               `Bulk update failed for organization ${org.id}, falling back to individual updates:`,
@@ -130,12 +145,13 @@ export class SchedulerService {
 
               while (retries <= maxRetries) {
                 try {
-                  await inventoryService.autoCalculateMarkdownStatus(item.id, item.expiry_date);
+                  await inventoryService.autoCalculateMarkdownStatus(item.id, item.expiryDate);
                   break; // Success, exit retry loop
                 } catch (error) {
                   if (retries === maxRetries) {
                     // Final retry failed, record the error
-                    const errorMsg = `Failed to update markdown status for item ${item.id} after ${maxRetries + 1} attempts: ${error.message}`;
+                    const errorMessage = error instanceof Error ? error.message : String(error);
+                    const errorMsg = `Failed to update markdown status for item ${item.id} after ${maxRetries + 1} attempts: ${errorMessage}`;
                     console.error(errorMsg);
                     orgResult.errors.push(errorMsg);
                     orgResult.failed++;
@@ -159,7 +175,8 @@ export class SchedulerService {
             orgResult.errors.slice(0, 3).forEach((error) => console.warn(`  - ${error}`));
           }
         } catch (error) {
-          const orgError = `Critical error processing organization ${org.id}: ${error.message}`;
+          const errorMessage = error instanceof Error ? error.message : String(error);
+          const orgError = `Critical error processing organization ${org.id}: ${errorMessage}`;
           console.error(orgError);
           orgResult.errors.push(orgError);
           orgResult.failed = orgResult.total; // Mark all as failed

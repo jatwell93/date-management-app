@@ -465,9 +465,8 @@ export class EmailService {
     paymentIntentId: string;
     errorMessage: string;
   }): Promise<void> {
+    const { organizationId, paymentIntentId, errorMessage } = params;
     try {
-      const { organizationId, paymentIntentId, errorMessage } = params;
-
       if (!envConfig.SENDGRID_API_KEY) {
         Logger.warn('Cannot send payment failed email: SendGrid not configured', {
           organizationId,

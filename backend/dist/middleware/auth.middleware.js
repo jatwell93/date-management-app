@@ -3,7 +3,7 @@ var __importDefault = (this && this.__importDefault) || function (mod) {
     return (mod && mod.__esModule) ? mod : { "default": mod };
 };
 Object.defineProperty(exports, "__esModule", { value: true });
-exports.requireManager = exports.generateToken = exports.authenticateToken = void 0;
+exports.requireManager = exports.generateToken = exports.authenticateToken = exports.TEST_AUTH_BYPASS_ORG_ID = void 0;
 const jsonwebtoken_1 = __importDefault(require("jsonwebtoken"));
 const backend_1 = require("@clerk/backend");
 const analytics_service_1 = require("../services/analytics.service");
@@ -28,21 +28,25 @@ function getAuthorizedParties() {
 }
 const isTierLevel = (value) => ['starter', 'professional', 'premium', 'concierge'].includes(value);
 const isBillingCycle = (value) => Object.values(subscription_1.BillingCycle).includes(value);
+const hasRequiredTokenFields = (token) => {
+    return 'userId' in token && 'role' in token && 'organizationId' in token && 'tierLevel' in token;
+};
 // Simple memory cache for subscription status
 const subscriptionCache = new Map();
 const CACHE_TTL_MS = 5 * 60 * 1000; // 5 minutes
+exports.TEST_AUTH_BYPASS_ORG_ID = 'default-org';
 const authenticateToken = async (req, res, next) => {
     // Test environment bypass
     if (process.env.NODE_ENV === 'test' && process.env.TEST_AUTH_BYPASS === 'true') {
         req.user = {
             id: 1,
             role: 'Manager',
-            organizationId: 'default-org',
+            organizationId: exports.TEST_AUTH_BYPASS_ORG_ID,
             tierLevel: 'professional',
         };
         req.userId = 1;
         req.userRole = 'Manager';
-        req.organizationId = 'default-org';
+        req.organizationId = exports.TEST_AUTH_BYPASS_ORG_ID;
         req.tierLevel = 'professional';
         return next();
     }
@@ -75,14 +79,15 @@ const authenticateToken = async (req, res, next) => {
             }));
             const prisma = (0, database_factory_1.getDefaultDatabaseClient)();
             const user = await prisma.user.findUnique({
-                where: { clerkUserId: clerkDecoded.sub },
+                where: { clerkUserId: clerkDecoded.sub, deletedAt: null },
                 select: {
                     id: true,
                     role: true,
                     organizationId: true,
                 },
             });
-            if (!user?.organizationId) {
+            // Exclude soft-deleted users
+            if (!user || user.organizationId === null) {
                 return null;
             }
             const subscription = await prisma.subscriptionTier.findFirst({
@@ -155,10 +160,7 @@ const authenticateToken = async (req, res, next) => {
         return res.status(403).json({ message: 'Access denied: Invalid token payload' });
     }
     // Validate required fields exist in the token payload
-    if (!('userId' in decodedToken) ||
-        !('role' in decodedToken) ||
-        !('organizationId' in decodedToken) ||
-        !('tierLevel' in decodedToken)) {
+    if (!hasRequiredTokenFields(decodedToken)) {
         const analyticsService = analytics_service_1.AnalyticsService.getInstance();
         analyticsService.trackEvent({
             eventType: analytics_service_1.AnalyticsEventType.USER_LOGOUT,
@@ -216,7 +218,9 @@ const authenticateToken = async (req, res, next) => {
             });
             if (subscription && subscription.status === subscription_1.SubscriptionStatus.CANCELED) {
                 const tierLevel = isTierLevel(subscription.tierLevel) ? subscription.tierLevel : null;
-                const billingCycle = isBillingCycle(subscription.billingCycle) ? subscription.billingCycle : null;
+                const billingCycle = isBillingCycle(subscription.billingCycle)
+                    ? subscription.billingCycle
+                    : null;
                 if (tierLevel && billingCycle) {
                     const subscriptionService = new subscription_service_1.SubscriptionService(prisma);
                     hasActiveAccess = await subscriptionService.isAccessActive({

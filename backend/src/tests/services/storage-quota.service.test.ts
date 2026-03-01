@@ -2,7 +2,7 @@ import { StorageQuotaService, SUBSCRIPTION_TIERS } from '../../services/storage-
 
 // Mock Prisma
 jest.mock('../../database/database-factory', () => {
-  const mockPrisma = {
+  const mockPrisma: any = {
     upload: {
       aggregate: jest.fn(),
       create: jest.fn(),
@@ -13,7 +13,7 @@ jest.mock('../../database/database-factory', () => {
       upsert: jest.fn(),
       update: jest.fn(),
     },
-    $transaction: jest.fn((callback) => callback(mockPrisma)),
+    $transaction: jest.fn((callback: (client: any) => any) => callback(mockPrisma)),
     $executeRaw: jest.fn(),
   };
   return {

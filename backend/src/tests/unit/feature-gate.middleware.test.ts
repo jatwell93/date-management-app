@@ -65,11 +65,13 @@ describe('Feature Gating Middleware', () => {
         findUnique: jest.fn(),
       },
       organizationUsage: {
-        findUnique: jest.fn(),
-        create: jest.fn(),
+        upsert: jest.fn(),
       },
       subscriptionTier: {
         findFirst: jest.fn(),
+      },
+      organization: {
+        findUnique: jest.fn().mockResolvedValue({ isCreationLocked: false }),
       },
     } as any;
 
@@ -198,7 +200,7 @@ describe('Feature Gating Middleware', () => {
     it('allows request when under SKU limit', async () => {
       const limitKey: LimitKey = 'max_skus';
 
-      (prisma.organizationUsage!.findUnique as jest.Mock).mockResolvedValue({
+      (prisma.organizationUsage!.upsert as jest.Mock).mockResolvedValue({
         organizationId: 'org-1',
         activeUsers: 1,
         maxUsers: 3,
@@ -217,7 +219,7 @@ describe('Feature Gating Middleware', () => {
     it('denies request with 403 when SKU limit exceeded (Task 5.6)', async () => {
       const limitKey: LimitKey = 'max_skus';
 
-      (prisma.organizationUsage!.findUnique as jest.Mock).mockResolvedValue({
+      (prisma.organizationUsage!.upsert as jest.Mock).mockResolvedValue({
         organizationId: 'org-1',
         activeUsers: 1,
         maxUsers: 3,
@@ -247,7 +249,7 @@ describe('Feature Gating Middleware', () => {
     it('allows request when user limit under maximum', async () => {
       const limitKey: LimitKey = 'max_users';
 
-      (prisma.organizationUsage!.findUnique as jest.Mock).mockResolvedValue({
+      (prisma.organizationUsage!.upsert as jest.Mock).mockResolvedValue({
         organizationId: 'org-1',
         activeUsers: 2,
         maxUsers: 3,
@@ -265,7 +267,7 @@ describe('Feature Gating Middleware', () => {
     it('denies request when user limit exceeded (Task 5.5)', async () => {
       const limitKey: LimitKey = 'max_users';
 
-      (prisma.organizationUsage!.findUnique as jest.Mock).mockResolvedValue({
+      (prisma.organizationUsage!.upsert as jest.Mock).mockResolvedValue({
         organizationId: 'org-1',
         activeUsers: 3, // At limit
         maxUsers: 3,
@@ -289,7 +291,7 @@ describe('Feature Gating Middleware', () => {
     it('attaches warning to response when at 80% usage', async () => {
       const limitKey: LimitKey = 'max_skus';
 
-      (prisma.organizationUsage!.findUnique as jest.Mock).mockResolvedValue({
+      (prisma.organizationUsage!.upsert as jest.Mock).mockResolvedValue({
         organizationId: 'org-1',
         activeUsers: 1,
         maxUsers: 3,
@@ -313,11 +315,10 @@ describe('Feature Gating Middleware', () => {
       );
     });
 
-    it('creates organization_usage record if not found', async () => {
+    it('creates organization_usage record if not found (via upsert)', async () => {
       const limitKey: LimitKey = 'max_skus';
 
-      (prisma.organizationUsage!.findUnique as jest.Mock).mockResolvedValue(null);
-      (prisma.organizationUsage!.create as jest.Mock).mockResolvedValue({
+      (prisma.organizationUsage!.upsert as jest.Mock).mockResolvedValue({
         organizationId: 'org-1',
         activeUsers: 0,
         maxUsers: 1,
@@ -329,7 +330,7 @@ describe('Feature Gating Middleware', () => {
       const middleware = checkUsageLimit(limitKey);
       await middleware(req as AuthRequest, res as Response, next);
 
-      expect(prisma.organizationUsage!.create).toHaveBeenCalled();
+      expect(prisma.organizationUsage!.upsert).toHaveBeenCalled();
       expect(next).toHaveBeenCalled();
     });
 
@@ -349,7 +350,7 @@ describe('Feature Gating Middleware', () => {
     });
 
     it('handles database errors gracefully', async () => {
-      (prisma.organizationUsage!.findUnique as jest.Mock).mockRejectedValue(
+      (prisma.organizationUsage!.upsert as jest.Mock).mockRejectedValue(
         new Error('Database error'),
       );
 
@@ -507,7 +508,7 @@ describe('Feature Gating Middleware', () => {
 
   describe('Usage limit enforcement (Task 5.8)', () => {
     it('Starter tier has 500 SKU limit', async () => {
-      (prisma.organizationUsage!.findUnique as jest.Mock).mockResolvedValue({
+      (prisma.organizationUsage!.upsert as jest.Mock).mockResolvedValue({
         totalSkus: 500,
         maxSkus: 500,
         activeUsers: 1,
@@ -524,7 +525,7 @@ describe('Feature Gating Middleware', () => {
     it('Professional tier has 2000 SKU limit', async () => {
       req.tierLevel = 'professional';
 
-      (prisma.organizationUsage!.findUnique as jest.Mock).mockResolvedValue({
+      (prisma.organizationUsage!.upsert as jest.Mock).mockResolvedValue({
         totalSkus: 2000,
         maxSkus: 2000,
         activeUsers: 3,
@@ -541,7 +542,7 @@ describe('Feature Gating Middleware', () => {
     it('Premium tier has unlimited SKUs but enforcement still applies', async () => {
       req.tierLevel = 'premium';
 
-      (prisma.organizationUsage!.findUnique as jest.Mock).mockResolvedValue({
+      (prisma.organizationUsage!.upsert as jest.Mock).mockResolvedValue({
         totalSkus: 99999,
         maxSkus: 999999, // Very high limit for premium
         activeUsers: 10,
@@ -556,7 +557,7 @@ describe('Feature Gating Middleware', () => {
     });
 
     it('Starter tier has 1 user limit', async () => {
-      (prisma.organizationUsage!.findUnique as jest.Mock).mockResolvedValue({
+      (prisma.organizationUsage!.upsert as jest.Mock).mockResolvedValue({
         totalSkus: 100,
         maxSkus: 500,
         activeUsers: 0, // Below limit
@@ -573,7 +574,7 @@ describe('Feature Gating Middleware', () => {
     it('Professional tier has 3 user limit', async () => {
       req.tierLevel = 'professional';
 
-      (prisma.organizationUsage!.findUnique as jest.Mock).mockResolvedValue({
+      (prisma.organizationUsage!.upsert as jest.Mock).mockResolvedValue({
         totalSkus: 100,
         maxSkus: 2000,
         activeUsers: 2, // Below limit

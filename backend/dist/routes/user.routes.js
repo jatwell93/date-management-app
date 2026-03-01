@@ -10,12 +10,15 @@ const data_integrity_middleware_1 = require("../middleware/data-integrity.middle
 const rateLimiter_1 = require("../middleware/rateLimiter");
 const feature_gate_middleware_1 = require("../middleware/feature-gate.middleware");
 const router = (0, express_1.Router)();
-const userService = new user_service_1.UserService();
+// Helper function to get services with organization context
+function getUserServiceForRequest(req) {
+    return new user_service_1.UserService(req.organizationId);
+}
 // GET /users - Get all users (Manager only)
 router.get('/', auth_middleware_1.authenticateToken, auth_middleware_1.requireManager, async (req, res) => {
     try {
-        // const users = await userService.getUsers();
-        const users = await userService.getUsers( /* req.organizationId */);
+        const userService = getUserServiceForRequest(req);
+        const users = await userService.getUsers();
         res.json(users);
     }
     catch (_error) {
@@ -30,6 +33,7 @@ router.get('/:id', auth_middleware_1.authenticateToken, auth_middleware_1.requir
         if (Number.isNaN(id)) {
             return res.status(400).json({ message: 'Invalid user id' });
         }
+        const userService = getUserServiceForRequest(req);
         const user = await userService.getUserById(id);
         if (!user) {
             return res.status(404).json({ message: 'User not found' });
@@ -64,6 +68,7 @@ router.post('/', auth_middleware_1.authenticateToken, auth_middleware_1.requireM
             role,
             organizationId: req.organizationId, // Use req.organizationId from auth context
         };
+        const userService = getUserServiceForRequest(req);
         const createdUser = await userService.createUser(newUser);
         res.status(201).json(createdUser);
     }
@@ -80,6 +85,7 @@ router.put('/:id', auth_middleware_1.authenticateToken, auth_middleware_1.requir
             return res.status(400).json({ message: 'Invalid user id' });
         }
         // First, get the user to validate ownership
+        const userService = getUserServiceForRequest(req);
         const existingUser = await userService.getUserById(id);
         if (!existingUser) {
             return res.status(404).json({ message: 'User not found' });
@@ -116,6 +122,7 @@ router.delete('/:id', auth_middleware_1.authenticateToken, auth_middleware_1.req
             return res.status(400).json({ message: 'Invalid user id' });
         }
         // First, get the user to validate ownership
+        const userService = getUserServiceForRequest(req);
         const existingUser = await userService.getUserById(id);
         if (!existingUser) {
             return res.status(404).json({ message: 'User not found' });

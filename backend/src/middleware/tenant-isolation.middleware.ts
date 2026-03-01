@@ -2,7 +2,7 @@ import { Request, Response, NextFunction } from 'express';
 import { AuthRequest } from './auth.middleware';
 import { Logger } from '../utils/logger';
 import * as Sentry from '@sentry/node';
-import { AnalyticsService } from '../services/analytics.service';
+import { AnalyticsService, AnalyticsEventType } from '../services/analytics.service';
 
 /**
  * Middleware to detect and log cross-tenant access attempts

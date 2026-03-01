@@ -10,6 +10,7 @@ const database_1 = require("../database");
 const database_backup_service_1 = require("./database.backup.service");
 const subscription_service_1 = require("./subscription.service");
 const email_service_1 = require("./email.service");
+const stripe_sync_job_1 = require("../jobs/stripe-sync.job");
 class SchedulerService {
     // Initialize scheduled tasks
     static initialize() {
@@ -31,6 +32,13 @@ class SchedulerService {
             console.log('Running trial expiration job...');
             this.runTrialExpirationJob();
         });
+        // Schedule hourly Stripe subscription sync (16A.B.4)
+        // Fetches all Stripe subscriptions and reconciles against local subscription_tiers
+        node_cron_1.default.schedule('0 * * * *', () => {
+            console.log('Running hourly Stripe subscription sync...');
+            // Actual sync logic handled by stripe-sync.job module
+        });
+        (0, stripe_sync_job_1.startStripeSyncJob)();
     }
     // Trial expiration job: downgrade expired trials, send reminders
     static async runTrialExpirationJob() {
@@ -74,25 +82,98 @@ class SchedulerService {
             console.error('Trial expiration job failed:', String(error));
         }
     }
-    // Update markdown statuses for all inventory items
+    // Update markdown statuses for all inventory items across all organizations
     static async updateAllInventoryMarkdownStatuses() {
         try {
-            // Get all inventory items from the database
+            // Get all organizations
             const db = (0, database_1.getDb)();
-            const inventoryItems = db
-                .prepare('SELECT id, expiry_date FROM inventory_items')
-                .all();
-            console.log(`Processing ${inventoryItems.length} inventory items for markdown updates...`);
-            // Process each inventory item
-            for (const item of inventoryItems) {
+            const organizations = db.prepare('SELECT id FROM organizations').all();
+            console.log(`Processing markdown updates for ${organizations.length} organizations...`);
+            const orgResults = [];
+            // Process each organization
+            for (const org of organizations) {
+                const orgResult = { orgId: org.id, total: 0, failed: 0, errors: [] };
                 try {
-                    await this.inventoryService.autoCalculateMarkdownStatus(item.id, item.expiry_date);
+                    const inventoryService = new inventory_service_1.InventoryService(org.id);
+                    const rawInventoryItems = db
+                        .prepare('SELECT id, expiry_date FROM inventory_items WHERE organization_id = ?')
+                        .all(org.id);
+                    const inventoryItems = rawInventoryItems.map((item) => ({
+                        id: item.id,
+                        expiryDate: item.expiry_date,
+                    }));
+                    console.log(`Processing ${inventoryItems.length} inventory items for organization ${org.id}...`);
+                    orgResult.total = inventoryItems.length;
+                    // Process items in bulk for better performance
+                    try {
+                        await inventoryService.bulkUpdateMarkdownStatuses(inventoryItems);
+                    }
+                    catch (error) {
+                        const errorMessage = error instanceof Error ? error.message : String(error);
+                        // If bulk update fails, fall back to individual updates with retry
+                        console.warn(`Bulk update failed for organization ${org.id}, falling back to individual updates:`, error);
+                        for (const item of inventoryItems) {
+                            let retries = 0;
+                            const maxRetries = 2;
+                            while (retries <= maxRetries) {
+                                try {
+                                    await inventoryService.autoCalculateMarkdownStatus(item.id, item.expiryDate);
+                                    break; // Success, exit retry loop
+                                }
+                                catch (error) {
+                                    if (retries === maxRetries) {
+                                        // Final retry failed, record the error
+                                        const errorMessage = error instanceof Error ? error.message : String(error);
+                                        const errorMsg = `Failed to update markdown status for item ${item.id} after ${maxRetries + 1} attempts: ${errorMessage}`;
+                                        console.error(errorMsg);
+                                        orgResult.errors.push(errorMsg);
+                                        orgResult.failed++;
+                                    }
+                                    else {
+                                        // Wait before retry (exponential backoff)
+                                        const delayMs = Math.pow(2, retries) * 100; // 100ms, 200ms, 400ms
+                                        await new Promise((resolve) => setTimeout(resolve, delayMs));
+                                        retries++;
+                                    }
+                                }
+                            }
+                        }
+                    }
+                    // Log organization summary
+                    if (orgResult.failed > 0) {
+                        console.warn(`Organization ${org.id} completed with ${orgResult.failed}/${orgResult.total} failures`);
+                        // Log first few errors for debugging
+                        orgResult.errors.slice(0, 3).forEach((error) => console.warn(`  - ${error}`));
+                    }
                 }
                 catch (error) {
-                    console.error(`Error updating markdown status for item ${item.id}:`, error);
+                    const errorMessage = error instanceof Error ? error.message : String(error);
+                    const orgError = `Critical error processing organization ${org.id}: ${errorMessage}`;
+                    console.error(orgError);
+                    orgResult.errors.push(orgError);
+                    orgResult.failed = orgResult.total; // Mark all as failed
+                }
+                orgResults.push(orgResult);
+            }
+            // Summary report
+            const totalItems = orgResults.reduce((sum, r) => sum + r.total, 0);
+            const totalFailed = orgResults.reduce((sum, r) => sum + r.failed, 0);
+            const successRate = totalItems > 0 ? (((totalItems - totalFailed) / totalItems) * 100).toFixed(1) : '100';
+            console.log(`\nMarkdown update summary:`);
+            console.log(`- Total organizations: ${organizations.length}`);
+            console.log(`- Total items processed: ${totalItems}`);
+            console.log(`- Total failures: ${totalFailed}`);
+            console.log(`- Success rate: ${successRate}%`);
+            if (totalFailed > 0) {
+                console.warn(`\n${totalFailed} items failed to update. Check logs for details.`);
+                // Optionally send alert for high failure rates
+                const failureRate = totalFailed / totalItems;
+                if (failureRate > 0.1) {
+                    // More than 10% failure rate
+                    console.error(`High failure rate detected (${(failureRate * 100).toFixed(1)}%). Consider manual intervention.`);
                 }
             }
-            console.log('Completed scheduled markdown updates.');
+            console.log('Completed scheduled markdown updates for all organizations.');
         }
         catch (error) {
             console.error('Error in scheduled markdown update process:', error);
@@ -110,5 +191,4 @@ class SchedulerService {
     }
 }
 exports.SchedulerService = SchedulerService;
-SchedulerService.inventoryService = new inventory_service_1.InventoryService();
 SchedulerService.databaseBackupService = new database_backup_service_1.DatabaseBackupService();

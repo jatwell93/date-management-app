@@ -6,9 +6,11 @@ Object.defineProperty(exports, "__esModule", { value: true });
 // Mock auth middleware to bypass check
 jest.mock('../../middleware/auth.middleware', () => ({
     authenticateToken: (req, res, next) => {
-        req.user = { id: 1, role: 'Manager' };
+        req.user = { id: 1, role: 'Manager', organizationId: 'default-org', tierLevel: 'professional' };
         req.userId = 1;
         req.userRole = 'Manager';
+        req.organizationId = 'default-org';
+        req.tierLevel = 'professional';
         next();
     },
     requireManager: (_req, _res, next) => next(),
@@ -24,6 +26,22 @@ let locationId;
 beforeEach(async () => {
     const now = Date.now();
     const uniqueSuffix = Math.random().toString(36).slice(2, 10);
+    // Ensure default-org and test user exist
+    await prisma.organization.upsert({
+        where: { id: 'default-org' },
+        update: {},
+        create: {
+            id: 'default-org',
+            name: 'Default Test Org',
+            slug: `default-org-${uniqueSuffix}`,
+            contactEmail: 'test@default.org',
+        },
+    });
+    await prisma.user.upsert({
+        where: { id: 1 },
+        update: { organizationId: 'default-org' },
+        create: { id: 1, role: 'Manager', organizationId: 'default-org' },
+    });
     const product = await prisma.product.create({
         data: {
             barcode: `CONTRACT-BARCODE-${now}-${uniqueSuffix}`,
@@ -31,12 +49,14 @@ beforeEach(async () => {
             name: 'Contract Test Product',
             costPrice: 5,
             notes: '',
+            organizationId: 'default-org',
         },
     });
     const storeArea = await prisma.storeArea.create({
         data: {
             name: `Contract Area ${now}-${uniqueSuffix}`,
             subDepartment: 'Test',
+            organizationId: 'default-org',
         },
     });
     productId = product.id;

@@ -37,6 +37,7 @@ describe('WebhookService', () => {
       },
       organization: {
         findUnique: jest.fn(),
+        update: jest.fn(),
       },
       subscriptionTier: {
         create: jest.fn(),
@@ -189,6 +190,33 @@ describe('WebhookService', () => {
       });
     });
 
+    it('sets isCreationLocked=true on org when downgrading over SKU limit', async () => {
+      prisma.subscriptionTier.findFirst.mockResolvedValue({ tierLevel: 'professional' });
+      prisma.organizationUsage.findUnique.mockResolvedValue({ totalSkus: 9999 });
+      prisma.organization.update = jest.fn().mockResolvedValue({
+        id: organizationId,
+        isCreationLocked: true,
+      });
+
+      const subscription = {
+        id: 'sub_updated_lock',
+        customer: customerId,
+        status: 'active',
+        items: {
+          data: [{ price: { metadata: { tier: 'starter' } } }],
+        },
+        trial_end: null,
+        current_period_end: Math.floor(Date.now() / 1000) + 1000,
+      } as unknown as Stripe.Subscription;
+
+      await (service as any).handleSubscriptionUpdated(subscription);
+
+      expect(prisma.organization.update).toHaveBeenCalledWith({
+        where: { id: organizationId },
+        data: { isCreationLocked: true },
+      });
+    });
+
     it('handles subscription deleted and applies downgrade warning when over limit', async () => {
       prisma.organizationUsage.findUnique.mockResolvedValue({
         totalSkus: 9999,
@@ -215,6 +243,51 @@ describe('WebhookService', () => {
           action: 'subscription_canceled',
         }),
       });
+    });
+
+    it('sets isCreationLocked=true on org when subscription deleted and over Starter limit', async () => {
+      prisma.organizationUsage.findUnique.mockResolvedValue({ totalSkus: 9999 });
+      prisma.organization.update = jest.fn().mockResolvedValue({
+        id: organizationId,
+        isCreationLocked: true,
+      });
+
+      const subscription = {
+        id: 'sub_deleted_lock',
+        customer: customerId,
+      } as unknown as Stripe.Subscription;
+
+      await (service as any).handleSubscriptionDeleted(subscription);
+
+      expect(prisma.organization.update).toHaveBeenCalledWith({
+        where: { id: organizationId },
+        data: { isCreationLocked: true },
+      });
+    });
+
+    it('does NOT lock org when downgrade is within new SKU limit', async () => {
+      prisma.subscriptionTier.findFirst.mockResolvedValue({ tierLevel: 'professional' });
+      prisma.organizationUsage.findUnique.mockResolvedValue({ totalSkus: 100 });
+      prisma.organization.update = jest.fn().mockResolvedValue({ id: organizationId });
+
+      const subscription = {
+        id: 'sub_within_limit',
+        customer: customerId,
+        status: 'active',
+        items: {
+          data: [{ price: { metadata: { tier: 'starter' } } }],
+        },
+        trial_end: null,
+        current_period_end: Math.floor(Date.now() / 1000) + 1000,
+      } as unknown as Stripe.Subscription;
+
+      await (service as any).handleSubscriptionUpdated(subscription);
+
+      const lockCalls = (prisma.organization.update as jest.Mock).mock.calls.filter(
+        (c) => c[0].data?.isCreationLocked !== undefined,
+      );
+
+      expect(lockCalls).toHaveLength(0);
     });
 
     it('handles checkout session completed', async () => {

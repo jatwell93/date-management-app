@@ -2,29 +2,33 @@
 Object.defineProperty(exports, "__esModule", { value: true });
 exports.StoreAreaService = void 0;
 const database_factory_1 = require("../database/database-factory");
+const auth_bypass_1 = require("../utils/auth-bypass");
 class StoreAreaService {
     /**
      * Constructor with optional dependency injection
+     * @param organizationId - Organization ID for tenant filtering (optional in tests)
      * @param prismaClient - Optional PrismaClient for testing/custom configurations
      */
-    constructor(prismaClient) {
+    constructor(organizationId, prismaClient) {
+        this.organizationId = (0, auth_bypass_1.getOrganizationId)(organizationId);
         this.prisma = prismaClient ?? (0, database_factory_1.getDefaultDatabaseClient)();
     }
     async getAllStoreAreas() {
         const results = await this.prisma.storeArea.findMany({
+            where: { organizationId: this.organizationId },
             orderBy: { name: 'asc' },
         });
         return results.map(this.mapPrismaToModel);
     }
     async getStoreAreaById(id) {
-        const result = await this.prisma.storeArea.findUnique({
-            where: { id },
+        const result = await this.prisma.storeArea.findFirst({
+            where: { id, organizationId: this.organizationId },
         });
         return result ? this.mapPrismaToModel(result) : null;
     }
     async getStoreAreaByName(name) {
         const results = await this.prisma.storeArea.findMany({
-            where: { name },
+            where: { name, organizationId: this.organizationId },
         });
         return results.map(this.mapPrismaToModel);
     }
@@ -33,6 +37,7 @@ class StoreAreaService {
             where: {
                 name,
                 subDepartment: subDepartment ?? null,
+                organizationId: this.organizationId,
             },
         });
         return result ? this.mapPrismaToModel(result) : null;
@@ -45,6 +50,7 @@ class StoreAreaService {
         }
         const newArea = await this.prisma.storeArea.create({
             data: {
+                organizationId: this.organizationId,
                 name: area.name,
                 subDepartment: area.subDepartment || null,
                 lastChecked: area.lastChecked ? new Date(area.lastChecked) : null,
@@ -98,7 +104,7 @@ class StoreAreaService {
     mapPrismaToModel(area) {
         return {
             id: area.id,
-            organizationId: area.organizationId ?? 'default-org',
+            organizationId: area.organizationId,
             name: area.name,
             subDepartment: area.subDepartment ?? undefined,
             lastChecked: area.lastChecked?.toISOString() ?? undefined,

@@ -15,6 +15,7 @@ model Organization {
   contactEmail            String?                  @map("contact_email")
   createdAt               DateTime                 @default(now()) @map("created_at")
   updatedAt               DateTime                 @updatedAt @map("updated_at")
+  isCreationLocked        Boolean                  @default(false) @map("is_creation_locked")
   auditLogs               AuditLog[]
   expiredItemTransactions ExpiredItemTransaction[]
   inventoryItems          InventoryItem[]

@@ -161,6 +161,7 @@ router.delete(
       }
 
       // First, get the user to validate ownership
+      const userService = getUserServiceForRequest(req);
       const existingUser = await userService.getUserById(id);
       if (!existingUser) {
         return res.status(404).json({ message: 'User not found' });
@@ -173,7 +174,6 @@ router.delete(
           .json({ message: 'Access denied: User belongs to different organization' });
       }
 
-      const userService = getUserServiceForRequest(req);
       const deleted = await userService.deleteUser(id);
 
       if (!deleted) {

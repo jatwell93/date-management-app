@@ -1,7 +1,6 @@
 "use strict";
 Object.defineProperty(exports, "__esModule", { value: true });
 const user_service_1 = require("../../services/user.service");
-const errors_1 = require("../../errors");
 describe('UserService', () => {
     let prisma;
     let authService;
@@ -36,7 +35,6 @@ describe('UserService', () => {
             prisma.user.create.mockResolvedValue({
                 id: 1,
                 organizationId: testOrganizationId,
-                pin: 'hashed_pin',
                 role: 'Manager',
                 createdAt,
                 updatedAt,
@@ -51,13 +49,12 @@ describe('UserService', () => {
                 where: {
                     organizationId: testOrganizationId,
                 },
-                select: { id: true, pin: true },
+                select: { id: true },
             });
-            expect(authService.hashPin).toHaveBeenCalledWith('123456');
+            expect(authService.hashPin).not.toHaveBeenCalled();
             expect(prisma.user.create).toHaveBeenCalledWith({
                 data: {
                     organizationId: testOrganizationId,
-                    pin: 'hashed_pin',
                     role: 'Manager',
                 },
             });
@@ -67,20 +64,31 @@ describe('UserService', () => {
                 clerkUserId: null,
                 email: null,
                 username: null,
-                pin: 'hashed_pin',
                 role: 'Manager',
                 created_at: createdAt.toISOString(),
                 updated_at: updatedAt.toISOString(),
             });
         });
-        it('throws ConflictError when PIN is already in use within organization', async () => {
+        it('throws ValidationError when PIN is already in use within organization', async () => {
             authService.validatePin.mockReturnValue({ isValid: true });
-            authService.verifyPin.mockResolvedValue(true);
-            prisma.user.findMany.mockResolvedValue([
-                { id: 2, pin: 'existing_hashed_pin' },
-            ]);
-            await expect(service.createUser({ pin: '123456', role: 'Manager', organizationId: testOrganizationId })).rejects.toBeInstanceOf(errors_1.ConflictError);
-            expect(prisma.user.create).not.toHaveBeenCalled();
+            // PIN duplication check is disabled - Clerk auth is used instead
+            // Service no longer checks for PIN duplicates
+            prisma.user.findMany.mockResolvedValue([]);
+            prisma.user.create.mockResolvedValue({
+                id: 1,
+                organizationId: testOrganizationId,
+                role: 'Manager',
+                createdAt,
+                updatedAt,
+            });
+            // Should create user successfully since PIN check is disabled
+            const result = await service.createUser({
+                pin: '123456',
+                role: 'Manager',
+                organizationId: testOrganizationId,
+            });
+            expect(result.id).toBe(1);
+            expect(prisma.user.create).toHaveBeenCalled();
         });
     });
     describe('getUsers', () => {
@@ -89,7 +97,6 @@ describe('UserService', () => {
                 {
                     id: 1,
                     organizationId: testOrganizationId,
-                    pin: 'hashed_pin',
                     role: 'Manager',
                     createdAt,
                     updatedAt,
@@ -108,7 +115,6 @@ describe('UserService', () => {
                     clerkUserId: null,
                     email: null,
                     username: null,
-                    pin: 'hashed_pin',
                     role: 'Manager',
                     created_at: createdAt.toISOString(),
                     updated_at: updatedAt.toISOString(),
@@ -121,7 +127,6 @@ describe('UserService', () => {
             prisma.user.findFirst.mockResolvedValue({
                 id: 1,
                 organizationId: testOrganizationId,
-                pin: 'hashed_pin',
                 role: 'Manager',
                 createdAt,
                 updatedAt,
@@ -147,34 +152,30 @@ describe('UserService', () => {
                 {
                     id: 1,
                     organizationId: testOrganizationId,
-                    pin: 'hashed_pin',
                     role: 'Manager',
                     createdAt,
                     updatedAt,
                 },
             ]);
-            authService.verifyPin.mockResolvedValue(true);
             const result = await service.getUserByPin('123456');
             expect(prisma.user.findMany).toHaveBeenCalledWith({
                 where: {
                     organizationId: testOrganizationId,
                 },
             });
-            expect(authService.verifyPin).toHaveBeenCalledWith('123456', 'hashed_pin');
-            expect(result?.id).toBe(1);
+            // PIN auth removed - service always returns undefined now
+            expect(result).toBeUndefined();
         });
         it('returns undefined when no PIN matches in organization', async () => {
             prisma.user.findMany.mockResolvedValue([
                 {
                     id: 1,
                     organizationId: testOrganizationId,
-                    pin: 'hashed_pin',
                     role: 'Manager',
                     createdAt,
                     updatedAt,
                 },
             ]);
-            authService.verifyPin.mockResolvedValue(false);
             const result = await service.getUserByPin('9999');
             expect(result).toBeUndefined();
         });
@@ -184,7 +185,6 @@ describe('UserService', () => {
             prisma.user.update.mockResolvedValue({
                 id: 1,
                 organizationId: testOrganizationId,
-                pin: 'hashed_pin',
                 role: 'Team Member',
                 createdAt,
                 updatedAt,
@@ -196,29 +196,6 @@ describe('UserService', () => {
                     organizationId: testOrganizationId,
                 },
                 data: { role: 'Team Member' },
-            });
-            expect(result).toBe(true);
-        });
-        it('hashes PIN updates', async () => {
-            authService.validatePin.mockReturnValue({ isValid: true });
-            authService.hashPin.mockResolvedValue('hashed_pin');
-            prisma.user.update.mockResolvedValue({
-                id: 1,
-                organizationId: testOrganizationId,
-                pin: 'hashed_pin',
-                role: 'Manager',
-                createdAt,
-                updatedAt,
-            });
-            const result = await service.updateUser(1, { pin: '123456' });
-            expect(authService.validatePin).toHaveBeenCalledWith('123456');
-            expect(authService.hashPin).toHaveBeenCalledWith('123456');
-            expect(prisma.user.update).toHaveBeenCalledWith({
-                where: {
-                    id: 1,
-                    organizationId: testOrganizationId,
-                },
-                data: { pin: 'hashed_pin' },
             });
             expect(result).toBe(true);
         });
@@ -234,7 +211,6 @@ describe('UserService', () => {
             prisma.user.delete.mockResolvedValue({
                 id: 1,
                 organizationId: testOrganizationId,
-                pin: 'hashed_pin',
                 role: 'Manager',
                 createdAt,
                 updatedAt,

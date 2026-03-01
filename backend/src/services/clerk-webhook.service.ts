@@ -437,6 +437,7 @@ export class ClerkWebhookService {
 
   /**
    * Ensure trial subscription exists for organization
+   * Implements 90-day trial abuse prevention (16A.C.3)
    */
   private async ensureTrialSubscription(organizationId: string, email: string): Promise<void> {
     try {
@@ -447,6 +448,50 @@ export class ClerkWebhookService {
 
       if (existingSubscription) {
         log.info('Subscription already exists for organization', { organizationId });
+        return;
+      }
+
+      // Trial abuse prevention: Check if email was used for trial in last 90 days (16A.C.3)
+      // Only block if the previous trial is still active or expired less than 30 days ago
+      const ninetyDaysAgo = new Date(Date.now() - 90 * 24 * 60 * 60 * 1000);
+      const thirtyDaysAgo = new Date(Date.now() - 30 * 24 * 60 * 60 * 1000);
+
+      const recentTrialUser = await this.prisma.user.findFirst({
+        where: {
+          email,
+          createdAt: { gte: ninetyDaysAgo },
+          organization: {
+            subscriptionTiers: {
+              some: {
+                status: 'trialing',
+                // Allow if trial ended more than 30 days ago
+                OR: [
+                  { trialEndDate: { gte: new Date() } }, // Still trialing
+                  { trialEndDate: { gte: thirtyDaysAgo } }, // Trial ended recently
+                ],
+              },
+            },
+          },
+        },
+        include: { organization: { include: { subscriptionTiers: true } } },
+      });
+
+      if (recentTrialUser) {
+        log.warn('Trial abuse detected: email used for trial in last 90 days', {
+          email,
+          existingUserId: recentTrialUser.id,
+          organizationId: recentTrialUser.organizationId,
+        });
+        Sentry.captureMessage('Trial abuse attempt blocked', {
+          level: 'warning',
+          extra: {
+            email,
+            existingUserId: recentTrialUser.id,
+            existingOrgId: recentTrialUser.organizationId,
+            newOrgId: organizationId,
+          },
+        });
+        // Skip trial creation - user must pay for subscription
         return;
       }
 

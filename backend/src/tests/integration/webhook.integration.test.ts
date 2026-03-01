@@ -91,6 +91,28 @@ describe('WebhookService Database Integration', () => {
       expect(updated.status).toBe('past_due');
     });
 
+    it('should support isCreationLocked field on organization', async () => {
+      const org = await prisma.organization.findUniqueOrThrow({
+        where: { id: testOrganizationId },
+      });
+
+      expect(org).toHaveProperty('isCreationLocked');
+      expect(org.isCreationLocked).toBe(false);
+    });
+
+    it('should allow setting isCreationLocked to true', async () => {
+      await prisma.organization.update({
+        where: { id: testOrganizationId },
+        data: { isCreationLocked: true },
+      });
+
+      const updated = await prisma.organization.findUniqueOrThrow({
+        where: { id: testOrganizationId },
+      });
+
+      expect(updated.isCreationLocked).toBe(true);
+    });
+
     it('should handle tier downgrade with transaction', async () => {
       const subId = `sub_${crypto.randomBytes(6).toString('hex')}`;
 

@@ -115,6 +115,28 @@ export class SubscriptionService {
       },
     });
 
+    // Initialize organization usage with Professional tier limits (16A.C.1)
+    const professionalLimits = TIER_LIMITS['professional'];
+    await this.prisma.organizationUsage.create({
+      data: {
+        organizationId,
+        activeUsers: 1,
+        maxUsers: professionalLimits.max_users ?? 10,
+        totalSkus: 0,
+        maxSkus: professionalLimits.max_skus ?? 2000,
+        totalInventoryItems: 0,
+        maxInventoryItems: professionalLimits.max_inventory_items ?? 20000,
+        storageUsedBytes: 0,
+      },
+    });
+
+    // Log trial_started event (16A.C.5)
+    await this.logTrialEvent(organizationId, 'trial_started', {
+      trialDays,
+      tierLevel: 'professional',
+      trialEndDate: trialEndDate.toISOString(),
+    });
+
     Logger.info(
       `Trial subscription created for organization ${organizationId}, ends ${trialEndDate.toISOString()}`,
     );
