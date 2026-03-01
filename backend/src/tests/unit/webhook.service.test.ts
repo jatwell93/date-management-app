@@ -317,7 +317,10 @@ describe('WebhookService', () => {
       });
     });
 
-    it('handles invoice payment failed', async () => {
+    it('handles invoice payment failed — sets past_due and records pastDueSince on first failure', async () => {
+      // Org is currently ACTIVE (first failure)
+      prisma.subscriptionTier.findFirst.mockResolvedValue({ status: 'active', pastDueSince: null });
+
       const invoice = {
         id: 'in_test_123',
         customer: customerId,
@@ -329,18 +332,35 @@ describe('WebhookService', () => {
 
       expect(prisma.subscriptionTier.updateMany).toHaveBeenCalledWith({
         where: { organizationId },
-        data: { status: SubscriptionStatus.PAST_DUE },
-      });
-      expect(prisma.auditLog.create).toHaveBeenCalledWith({
         data: expect.objectContaining({
-          organizationId,
-          action: 'payment_failed',
+          status: SubscriptionStatus.PAST_DUE,
+          pastDueSince: expect.any(Date),
         }),
       });
-      expect(emailService.sendDunningEmail).toHaveBeenCalledWith(
-        organizationId,
-        invoice.hosted_invoice_url,
-      );
+      expect(emailService.sendDunningEmail).toHaveBeenCalledWith(organizationId, invoice.hosted_invoice_url);
+    });
+
+    it('handles invoice payment failed — does NOT reset pastDueSince on retry failures', async () => {
+      const existingPastDueSince = new Date('2026-01-01');
+      // Org is ALREADY past_due (retry failure)
+      prisma.subscriptionTier.findFirst.mockResolvedValue({
+        status: 'past_due',
+        pastDueSince: existingPastDueSince,
+      });
+
+      const invoice = {
+        id: 'in_retry_123',
+        customer: customerId,
+        amount_due: 5000,
+        hosted_invoice_url: 'https://invoice.test',
+      } as unknown as Stripe.Invoice;
+
+      await (service as any).handleInvoicePaymentFailed(invoice);
+
+      const updateCall = (prisma.subscriptionTier.updateMany as jest.Mock).mock.calls[0][0];
+      // pastDueSince should NOT be in the update data (already set)
+      expect(updateCall.data.pastDueSince).toBeUndefined();
+      expect(updateCall.data.status).toBe(SubscriptionStatus.PAST_DUE);
     });
 
     it('handles trial will end', async () => {

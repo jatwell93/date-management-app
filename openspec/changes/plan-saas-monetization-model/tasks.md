@@ -982,22 +982,22 @@ in auth middleware and service constructors. This task is effectively a no-op ve
 
 ### Phase 16A.F: Testing & Quality (CRITICAL - Regression Prevention)
 
-- [ ] 16A.F.1 **MULTI-TENANT CONCURRENCY**: Write load tests (Phase 13.11-13.12):
-  - [ ] Spawn 10 concurrent requests to POST /products from different organizations
-  - [ ] Verify each org's SKU counter incremented exactly once (no race condition)
-  - [ ] Spawn requests near limit (e.g., 495/500 SKUs): verify both can create if total <500, both fail if >500
-  - [ ] Use transaction isolation level testing
-- [ ] 16A.F.2 **TIER FEATURE FLAGS VALIDATION**: Create boot-time validation script:
-  - [ ] On app startup, query tier_feature_flags table
-  - [ ] Verify all 4 tiers (starter, professional, premium, concierge) have all required features including max_inventory_items
-  - [ ] Log ERROR + exit if any tier missing features
-  - [ ] Include in pre-flight health check endpoint (GET /health should 503 until flags verified)
-- [ ] 16A.F.3 **CROSS-TENANT ISOLATION TEST**: (Phase 13.1-13.3)
-  - [ ] Create orgs A + B with different users
-  - [ ] Verify Org A user cannot GET /products from Org B (even with valid token)
-  - [ ] Test PUT/DELETE cross-tenant denial
-  - [ ] Attempt parameter tampering: ?organizationId=other-org → denied
-  - [ ] Add to CI/CD automated tests
+- [x] 16A.F.1 **MULTI-TENANT CONCURRENCY**: Write load tests (Phase 13.11-13.12):
+  - [x] Spawn 10 concurrent requests to POST /products from different organizations
+  - [x] Verify each org's SKU counter incremented exactly once (no race condition)
+  - [x] Spawn requests near limit (e.g., 495/500 SKUs): verify both can create if total <500, both fail if >500
+  - [x] Use transaction isolation level testing
+- [x] 16A.F.2 **TIER FEATURE FLAGS VALIDATION**: Create boot-time validation script:
+  - [x] On app startup, query tier_feature_flags table
+  - [x] Verify all 4 tiers (starter, professional, premium, concierge) have all required features including max_inventory_items
+  - [x] Log ERROR + exit if any tier missing features
+  - [x] Include in pre-flight health check endpoint (GET /health should 503 until flags verified)
+- [x] 16A.F.3 **CROSS-TENANT ISOLATION TEST**: (Phase 13.1-13.3)
+  - [x] Create orgs A + B with different users
+  - [x] Verify Org A user cannot GET /products from Org B (even with valid token)
+  - [x] Test PUT/DELETE cross-tenant denial
+  - [x] Attempt parameter tampering: ?organizationId=other-org → denied
+  - [x] Add to CI/CD automated tests
 
 ### Phase 16A.G: Operational (CRITICAL - Support Load)
 
