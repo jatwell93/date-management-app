@@ -24,7 +24,7 @@ export interface TokenPayload extends jwt.JwtPayload {
   userId: number;
   role: string;
   organizationId: string;
-  tierLevel: TierLevel;
+  tierLevel?: TierLevel;
 }
 
 interface ClerkTokenPayload {
@@ -62,7 +62,12 @@ const isBillingCycle = (value: string): value is BillingCycle =>
   Object.values(BillingCycle).includes(value as BillingCycle);
 
 const hasRequiredTokenFields = (token: any): boolean => {
-  return 'userId' in token && 'role' in token && 'organizationId' in token && 'tierLevel' in token;
+  return 'userId' in token && 'role' in token && 'organizationId' in token;
+};
+
+// Export cache invalidation to allow webhooks to instantly apply tier changes
+export const invalidateSubscriptionCache = (organizationId: string): void => {
+  subscriptionCache.delete(organizationId);
 };
 
 // Simple memory cache for subscription status
@@ -135,25 +140,10 @@ export const authenticateToken = async (req: AuthRequest, res: Response, next: N
         return null;
       }
 
-      const subscription = await prisma.subscriptionTier.findFirst({
-        where: { organizationId: user.organizationId },
-        orderBy: { createdAt: 'desc' },
-      });
-
-      if (!subscription) {
-        return null;
-      }
-
-      const normalizedTier = subscription.tierLevel.toLowerCase();
-      if (!isTierLevel(normalizedTier)) {
-        return null;
-      }
-
       return {
         userId: user.id,
         role: user.role,
         organizationId: user.organizationId,
-        tierLevel: normalizedTier,
         exp: clerkDecoded.exp,
       };
     } catch {
