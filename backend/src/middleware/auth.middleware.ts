@@ -1,6 +1,7 @@
 import { Request, Response, NextFunction } from 'express';
 import jwt, { Secret } from 'jsonwebtoken';
 import { verifyToken as verifyClerkToken } from '@clerk/backend';
+import { SubscriptionTier } from '@prisma/client';
 import { AnalyticsService, AnalyticsEventType } from '../services/analytics.service';
 import { BillingCycle, TierLevel, SubscriptionStatus } from '../types/subscription';
 import { getDefaultDatabaseClient } from '../database/database-factory';
@@ -231,7 +232,7 @@ export const authenticateToken = async (req: AuthRequest, res: Response, next: N
   }
 
   // Validate required multi-tenant fields
-  if (!decodedToken.organizationId || !decodedToken.tierLevel) {
+  if (!decodedToken.organizationId) {
     const analyticsService = AnalyticsService.getInstance();
     analyticsService.trackEvent({
       eventType: AnalyticsEventType.USER_LOGOUT,
@@ -246,9 +247,10 @@ export const authenticateToken = async (req: AuthRequest, res: Response, next: N
   }
 
   // Validate organization exists and is active (task 4.4)
+  let subscription: SubscriptionTier | null = null;
+  let dbTierLevel: TierLevel | null = null;
   try {
     const orgId = decodedToken.organizationId;
-    let subscription: any = null;
     let hasActiveAccess = true;
 
     // Check cache first
@@ -369,6 +371,12 @@ export const authenticateToken = async (req: AuthRequest, res: Response, next: N
         });
       }
     }
+
+    // Override tierLevel from database (Source of Truth)
+    dbTierLevel = isTierLevel(subscription.tierLevel) ? subscription.tierLevel : null;
+    if (dbTierLevel) {
+      decodedToken.tierLevel = dbTierLevel;
+    }
   } catch (error) {
     const analyticsService = AnalyticsService.getInstance();
     analyticsService.trackEvent({
@@ -395,12 +403,12 @@ export const authenticateToken = async (req: AuthRequest, res: Response, next: N
   req.userId = decodedToken.userId;
   req.userRole = decodedToken.role;
   req.organizationId = decodedToken.organizationId;
-  req.tierLevel = decodedToken.tierLevel;
+  req.tierLevel = dbTierLevel ?? undefined;
   req.user = {
     id: decodedToken.userId,
     role: decodedToken.role,
     organizationId: decodedToken.organizationId,
-    tierLevel: decodedToken.tierLevel,
+    tierLevel: dbTierLevel ?? 'starter', // Default to starter if validation failed
   };
 
   // Track successful authenticated request

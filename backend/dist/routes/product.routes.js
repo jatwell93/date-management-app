@@ -39,6 +39,7 @@ Object.defineProperty(exports, "__esModule", { value: true });
 const express_1 = require("express");
 const product_service_1 = require("../services/product.service");
 const auth_middleware_1 = require("../middleware/auth.middleware");
+const feature_gate_middleware_1 = require("../middleware/feature-gate.middleware");
 const validation_middleware_1 = require("../middleware/validation.middleware");
 const validateRequest_1 = require("../middleware/validateRequest");
 const schemas_1 = require("../schemas");
@@ -139,7 +140,7 @@ router.get('/by-sku/:sku', auth_middleware_1.authenticateToken, async (req, res)
     }
 });
 // POST /products - Create a new product
-router.post('/', auth_middleware_1.authenticateToken, rateLimiter_1.standardLimiter, (0, validateRequest_1.validateRequest)(schemas_1.productSchema), validation_middleware_1.validateDataIntegrity, data_integrity_middleware_1.validateBusinessRules, async (req, res) => {
+router.post('/', auth_middleware_1.authenticateToken, (0, feature_gate_middleware_1.checkUsageLimit)('max_skus'), rateLimiter_1.standardLimiter, (0, validateRequest_1.validateRequest)(schemas_1.productSchema), validation_middleware_1.validateDataIntegrity, data_integrity_middleware_1.validateBusinessRules, async (req, res) => {
     const { barcode, sku, name, costPrice } = req.body;
     if (!barcode || !sku || !name || costPrice === undefined) {
         return res.status(400).json({ message: 'Missing required product fields' });
@@ -230,7 +231,7 @@ router.delete('/:id', auth_middleware_1.authenticateToken, rateLimiter_1.standar
     }
 });
 // POST /products/upload-csv - Upload and process a CSV, XLSX, or XLS file of products
-router.post('/upload-csv', auth_middleware_1.authenticateToken, rateLimiter_1.standardLimiter, upload.single('file'), async (req, res) => {
+router.post('/upload-csv', auth_middleware_1.authenticateToken, (0, feature_gate_middleware_1.checkUsageLimit)('max_skus'), rateLimiter_1.standardLimiter, upload.single('file'), async (req, res) => {
     try {
         if (!req.file) {
             return res.status(400).json({

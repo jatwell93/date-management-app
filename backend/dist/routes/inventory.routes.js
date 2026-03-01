@@ -140,7 +140,7 @@ router.get('/location/:locationId', auth_middleware_1.authenticateToken, async (
     }
 });
 // POST /inventory-items - Create a new inventory item
-router.post('/', auth_middleware_1.authenticateToken, (0, feature_gate_middleware_1.checkUsageLimit)('max_skus'), rateLimiter_1.standardLimiter, (0, validateRequest_1.validateRequest)(schemas_1.inventoryItemSchema), data_integrity_middleware_1.validateReferentialIntegrity, data_integrity_middleware_1.validateDataConsistency, data_integrity_middleware_1.validateBusinessRules, async (req, res) => {
+router.post('/', auth_middleware_1.authenticateToken, (0, feature_gate_middleware_1.checkUsageLimit)('max_inventory_items'), rateLimiter_1.standardLimiter, (0, validateRequest_1.validateRequest)(schemas_1.inventoryItemSchema), data_integrity_middleware_1.validateReferentialIntegrity, data_integrity_middleware_1.validateDataConsistency, data_integrity_middleware_1.validateBusinessRules, async (req, res) => {
     const { productId, expiryDate, locationId, status } = req.body;
     // Validate required fields
     if (productId === undefined ||
