@@ -21,6 +21,7 @@ import { TIER_LIMITS, TierLevel, SubscriptionStatus } from '../types/subscriptio
 import { NotFoundError } from '../errors';
 import * as Sentry from '@sentry/node';
 import { ApplicationMonitoringService } from './application.monitoring.service';
+import { invalidateSubscriptionCache } from '../middleware/auth.middleware';
 
 // Simple logging utility
 const log = {
@@ -352,10 +353,13 @@ export class WebhookService {
         });
       });
 
+      // Instantly invalidate auth cache to apply tier changes
+      invalidateSubscriptionCache(organizationId);
+
       const duration = Date.now() - start;
       monitor.recordWebhookEvent('customer.subscription.created', duration, 'success');
 
-      log.info('Subscription created successfully', { organizationId, tierLevel });
+      log.info('Subscription handled successfully', { organizationId, subscriptionId: subscription.id });
     } catch (error: any) {
       const duration = Date.now() - start;
       monitor.recordWebhookEvent('customer.subscription.created', duration, 'error');
@@ -470,6 +474,9 @@ export class WebhookService {
           },
         });
       });
+
+      // Instantly invalidate auth cache to apply tier changes
+      invalidateSubscriptionCache(organizationId);
 
       const duration = Date.now() - start;
       monitor.recordWebhookEvent('customer.subscription.updated', duration, 'success');
@@ -625,6 +632,9 @@ export class WebhookService {
           },
         });
       });
+
+      // Instantly invalidate auth cache to apply tier changes
+      invalidateSubscriptionCache(organizationId);
 
       log.info('Checkout completed successfully', { organizationId });
       const duration = Date.now() - start;
