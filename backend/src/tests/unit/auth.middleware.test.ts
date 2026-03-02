@@ -1,5 +1,5 @@
 import jwt from 'jsonwebtoken';
-import { authenticateToken, requireManager, AuthRequest } from '../../middleware/auth.middleware';
+import type { AuthRequest } from '../../middleware/auth.middleware';
 import { SubscriptionStatus } from '../../types/subscription';
 
 const trackEvent = jest.fn();
@@ -30,6 +30,20 @@ jest.mock('../../services/analytics.service', () => ({
     VIEW_DASHBOARD: 'VIEW_DASHBOARD',
   },
 }));
+
+jest.mock('../../middleware/clerk-auth.middleware', () => ({
+  verifyClerkToken: jest.fn().mockResolvedValue(null),
+  getAuthorizedParties: jest.fn().mockReturnValue(['localhost:3002']),
+  clerkAuth: jest.fn(),
+  clerkAuthOptional: jest.fn(),
+}));
+
+jest.mock('@clerk/backend', () => ({
+  verifyToken: jest.fn().mockResolvedValue(null),
+}));
+
+const { authenticateToken, requireManager } =
+  require('../../middleware/auth.middleware') as typeof import('../../middleware/auth.middleware');
 
 const makeResponse = () => {
   const res = {
@@ -90,6 +104,8 @@ describe('auth middleware', () => {
       },
     };
     mockIsAccessActive = jest.fn();
+    // Ensure jwt.verify mock is available
+    (jwt.verify as jest.Mock).mockReset();
   });
 
   describe('authenticateToken', () => {

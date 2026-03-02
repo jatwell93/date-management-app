@@ -119,7 +119,8 @@ export const authenticateToken = async (req: AuthRequest, res: Response, next: N
   }
 
   try {
-    const dbTierLevel = await validateOrganizationSubscription(decodedToken, req);
+    const { dbTierLevel, tierVersion } = await validateOrganizationSubscription(decodedToken, req);
+    res.setHeader(TIER_VERSION_HEADER, tierVersion);
     setRequestContext(req, decodedToken, dbTierLevel);
     trackSuccessfulAuth(decodedToken, req);
     next();
@@ -248,7 +249,7 @@ function handleAuthError(
 async function validateOrganizationSubscription(
   decodedToken: TokenPayload,
   req: AuthRequest,
-): Promise<TierLevel | null> {
+): Promise<{ dbTierLevel: TierLevel | null; tierVersion: string }> {
   const orgId = decodedToken.organizationId;
   let subscription: SubscriptionTier | null = null;
   let hasActiveAccess = true;
@@ -367,8 +368,7 @@ async function validateOrganizationSubscription(
 
   // Override tierLevel from database (Source of Truth)
   const dbTierLevel = isTierLevel(subscription.tierLevel) ? subscription.tierLevel : null;
-
-  res.setHeader(TIER_VERSION_HEADER, getTierVersion(subscription));
+  const tierVersion = getTierVersion(subscription);
 
   if (dbTierLevel && decodedToken.tierLevel && decodedToken.tierLevel !== dbTierLevel) {
     console.warn('[AUTH] Stale token tier detected; using latest DB tier', {
@@ -380,7 +380,7 @@ async function validateOrganizationSubscription(
     });
   }
 
-  return dbTierLevel;
+  return { dbTierLevel, tierVersion };
 }
 
 function setRequestContext(

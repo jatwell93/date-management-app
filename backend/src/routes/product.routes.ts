@@ -10,6 +10,9 @@ import { validateBusinessRules } from '../middleware/data-integrity.middleware';
 import multer, { FileFilterCallback } from 'multer';
 import { standardLimiter } from '../middleware/rateLimiter';
 import * as path from 'path';
+import { getDefaultDatabaseClient } from '../database/database-factory';
+import { TIER_LIMITS, TierLevel } from '../types/subscription';
+import { stringifyCSV, escapeCSVValue } from '../utils/csv';
 
 const router = Router();
 
@@ -306,5 +309,111 @@ router.post(
     }
   },
 );
+
+// GET /products/export-excess - Export products that exceed tier limit
+router.get('/export-excess', authenticateToken, async (req: AuthRequest, res: Response) => {
+  try {
+    const prisma = getDefaultDatabaseClient();
+    const organizationId = req.organizationId!;
+
+    // Get current subscription tier
+    const subscription = await prisma.subscriptionTier.findFirst({
+      where: { organizationId },
+      orderBy: { createdAt: 'desc' },
+    });
+
+    if (!subscription) {
+      return res.status(404).json({ message: 'Subscription not found' });
+    }
+
+    const tierLevel = subscription.tierLevel as TierLevel;
+    const maxSkus = TIER_LIMITS[tierLevel].max_skus;
+
+    // Unlimited tier - no excess products
+    if (maxSkus === null) {
+      return res.json({
+        message: 'Current tier has unlimited SKUs',
+        excessCount: 0,
+        products: [],
+      });
+    }
+
+    // Get current usage
+    const usage = await prisma.organizationUsage.findUnique({
+      where: { organizationId },
+      select: { totalSkus: true },
+    });
+
+    const currentCount = usage?.totalSkus || 0;
+    const excessCount = currentCount - maxSkus;
+
+    if (excessCount <= 0) {
+      return res.json({
+        message: 'Organization is within SKU limits',
+        tier: tierLevel,
+        maxSkus,
+        currentSkus: currentCount,
+        excessCount: 0,
+        products: [],
+      });
+    }
+
+    // Get excess products (oldest first for deletion priority)
+    const excessProducts = await prisma.product.findMany({
+      where: { organizationId },
+      orderBy: { createdAt: 'asc' },
+      skip: maxSkus,
+      include: {
+        _count: {
+          select: { inventoryItems: true },
+        },
+      },
+    });
+
+    // Format response
+    const products = excessProducts.map((p) => ({
+      id: p.id,
+      sku: p.sku,
+      name: p.name,
+      category: p.category,
+      barcode: p.barcode,
+      costPrice: p.costPrice,
+      createdAt: p.createdAt.toISOString(),
+      inventoryCount: p._count.inventoryItems,
+    }));
+
+    // Determine response format based on Accept header
+    const acceptHeader = req.get('Accept') || '';
+    if (acceptHeader.includes('text/csv') || req.query.format === 'csv') {
+      // CSV response
+      const headers = ['id', 'sku', 'name', 'category', 'barcode', 'costPrice', 'createdAt', 'inventoryCount'];
+      const csvRows = [
+        headers.join(','),
+        ...products.map((p) =>
+          headers.map((h) => escapeCSVValue(p[h as keyof typeof p])).join(','),
+        ),
+      ];
+
+      res.setHeader('Content-Type', 'text/csv');
+      res.setHeader('Content-Disposition', `attachment; filename="excess-products-${organizationId}.csv"`);
+      return res.send(csvRows.join('\n'));
+    }
+
+    // JSON response
+    res.json({
+      metadata: {
+        organizationId,
+        tier: tierLevel,
+        maxSkus,
+        currentSkus: currentCount,
+        excessCount,
+      },
+      products,
+    });
+  } catch (error) {
+    console.error('Export excess products error:', error);
+    res.status(500).json({ message: 'Internal server error' });
+  }
+});
 
 export default router;

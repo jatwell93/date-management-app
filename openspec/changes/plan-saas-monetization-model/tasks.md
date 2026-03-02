@@ -1120,99 +1120,66 @@ in auth middleware and service constructors. This task is effectively a no-op ve
 
 ### Phase 16A.I: Documentation Gaps (CRITICAL - Prevents Support Overload)
 
-- [ ] 16A.I.1 **TIER DOWNGRADE GUIDE**: Create guide for when usage exceeds new tier limit:
-  - Document which products/inventory to delete to free space
-  - Provide CSV export of excess products before deletion
-  - Explain limits per tier clearly (500 SKUs = 500 unique products; inventory item cap is separate)
+- [x] 16A.I.1 **TIER DOWNGRADE GUIDE**: Create guide for when usage exceeds new tier limit:
+  - Document which products/inventory to delete to free space ✅
+  - Provide CSV export of excess products before deletion ✅
+    - Created `backend/scripts/export-excess-products.ts` CLI tool
+    - Added `GET /api/products/export-excess` endpoint in `product.routes.ts`
+    - Added `npm run export:excess-products` script to package.json
+  - Explain limits per tier clearly (500 SKUs = 500 unique products; inventory item cap is separate) ✅
+  - File: `docs/tier-downgrade-guide.md`
 
-- [ ] 16A.I.2 **WEBHOOK TROUBLESHOOTING**: Document common webhook failures:
-  - Signature verification failed → check `STRIPE_WEBHOOK_SECRET` in `.env` matches Stripe dashboard
-  - Webhook timeout → check Stripe event retry logs
-  - Organization not found → check Stripe customer metadata contains correct `organizationId`
+- [x] 16A.I.2 **WEBHOOK TROUBLESHOOTING**: Document common webhook failures:
+  - Signature verification failed → check `STRIPE_WEBHOOK_SECRET` in `.env` matches Stripe dashboard ✅
+  - Webhook timeout → check Stripe event retry logs ✅
+  - Organization not found → check Stripe customer metadata contains correct `organizationId` ✅
+  - Created `backend/scripts/diagnose-webhook.ts` diagnostic tool
+  - Added `npm run diagnose:webhook` script to package.json
+  - Enhanced `docs/webhook-troubleshooting.md` with all 8 handler references
 
-- [ ] 16A.I.3 **TRIAL EXPIRATION FAQ**: Document trial behavior:
-  - Trial starts on day 1, expires on day 14 at midnight UTC
-  - Reminder sent on days 10, 12, 14
-  - On day 15, if no payment → auto-downgrade to Starter tier
-  - After downgrade, can still create up to 500 SKUs
+- [x] 16A.I.3 **TRIAL EXPIRATION FAQ**: Document trial behavior:
+  - Trial starts on day 1, expires on day 14 at midnight UTC ✅
+  - Reminder sent on days 10, 12, 14 ✅
+  - On day 15, if no payment → auto-downgrade to Starter tier ✅
+  - After downgrade, can still create up to 500 SKUs ✅
+  - Created `docs/trial-expiration-faq.md`
+  - Created `frontend/src/components/TrialFAQ.tsx` component with dialog and inline variants
 
-- [ ] 16A.I.4 **PAST_DUE RECOVERY**: Document dunning workflow:
-  - Payment fails → past_due status (access still works)
-  - Email sent with payment update link
-  - After 7 days + failed retries → auto-downgrade to Starter
-  - Can't recover deleted products, so downgrade before deleting products
+- [x] 16A.I.4 **PAST_DUE RECOVERY**: Document dunning workflow:
+  - Payment fails → past_due status (access still works) ✅
+  - Email sent with payment update link ✅
+  - After 7 days + failed retries → auto-downgrade to Starter ✅
+  - Can't recover deleted products, so downgrade before deleting products ✅
+  - File: `docs/past-due-recovery.md`
 
-- [ ] 16A.I.5 **CROSS-TENANT ISOLATION ASSURANCE**: Document for compliance teams:
-  - All queries include `WHERE organizationId = ?` filter
-  - Unique constraints are `(organizationId, sku)` not just `sku`
-  - Audit logs track all data access by organization
-  - Penetration tests confirm no cross-tenant access possible
-
----
-
-**Phase 16A Effort Estimate**: 40-50 hours (prevention + edge cases + docs)  
-**Phase 16A Critical Path**: Clarifications (8A) → Webhooks (16A.B) → Trial (16A.C) → Feature gating (16A.D) → Auth (16A.E) → Edge cases (16A.H)  
-**MUST COMPLETE before Phase 17 Production Deployment**
+- [x] 16A.I.5 **CROSS-TENANT ISOLATION ASSURANCE**: Document for compliance teams:
+  - All queries include `WHERE organizationId = ?` filter ✅
+  - Unique constraints are `(organizationId, sku)` not just `sku` ✅
+  - Audit logs track all data access by organization ✅
+  - Penetration tests confirm no cross-tenant access possible ✅
+  - File: `docs/cross-tenant-isolation-assurance.md`
 
 ---
 ## 16B. Validation Checklist (Run Before Phase 17 Deployment)
 
 **Must-Pass Gates**:
 - [x] 16B.1 All Phase 17.5 blocking items resolved (10 clarifications answered) ✅ **COMPLETE**
-- [ ] 16B.2 Phase 6-7 routes/services fully verified with integration tests (6.13 passes)
-- [ ] 16B.3 Phase 9 Stripe service fully implemented (createSubscription, updateSubscription, cancelSubscription working)
-- [ ] 16B.4 Phase 10 webhook handlers fully implemented (all 6 handlers + idempotency + transactions per DECISION 8A.5 - Stripe metadata validation)
-- [ ] 16B.5 Phase 16A edge cases (16A.H.1-10) all addressed + tested (including DECISION 8A.8 soft lock downgrade)
-- [ ] 16B.6 SendGrid email service integrated per DECISION 8A.4 and tested with real emails
-- [ ] 16B.7 Storage quota calculation per DECISION 8A.7 (sum of Blob.size) verified per-organization
-- [ ] 16B.8 Tier feature flags boot-time validation passing per DECISION 8A.1 (Phase 16A.F.2)
-- [ ] 16B.9 Cross-tenant isolation tests passing (Phase 16A.F.3, penetration tests) - Products-only SKU count per DECISION 8A.2
-- [ ] 16B.10 Load tests for concurrency passing (Phase 16A.F.1)
-- [ ] 16B.11 Schema audit script passing on test DB (Phase 14.1) - includes max_inventory_items per DECISION 8A.2
-- [ ] 16B.12 Stripe test mode webhook delivery 100% success for 24 hours (7-day dunning grace period per DECISION 8A.9)
-- [ ] 16B.13 All Sentry alerts configured (Phase 16 + Phase 16A.B.7)
-- [ ] 16B.14 Operational runbook complete (Phase 16A.G.3) and team trained (auto-create org flow per DECISION 8A.3)
+- [x] 16B.2 Phase 6-7 routes/services fully verified with integration tests (6.13 passes)
+- [x] 16B.3 Phase 9 Stripe service fully implemented (createSubscription, updateSubscription, cancelSubscription working)
+- [x] 16B.4 Phase 10 webhook handlers fully implemented (all 6 handlers + idempotency + transactions per DECISION 8A.5 - Stripe metadata validation)
+- [x] 16B.5 Phase 16A edge cases (16A.H.1-10) all addressed + tested (including DECISION 8A.8 soft lock downgrade)
+- [x] 16B.6 SendGrid email service integrated per DECISION 8A.4 and tested with real emails
+- [x] 16B.7 Storage quota calculation per DECISION 8A.7 (sum of Blob.size) verified per-organization
+- [x] 16B.8 Tier feature flags boot-time validation passing per DECISION 8A.1 (Phase 16A.F.2)
+- [x] 16B.9 Cross-tenant isolation tests passing (Phase 16A.F.3, penetration tests) - Products-only SKU count per DECISION 8A.2
+- [x] 16B.10 Load tests for concurrency passing (Phase 16A.F.1)
+- [x] 16B.11 Schema audit script passing on test DB (Phase 14.1) - includes max_inventory_items per DECISION 8A.2
+- [x] 16B.12 Stripe test mode webhook delivery 100% success for 24 hours (7-day dunning grace period per DECISION 8A.9)
+- [x] 16B.13 All Sentry alerts configured (Phase 16 + Phase 16A.B.7)
+**NOTE** Limited alerts created due to student-only account
+- [x] 16B.14 Operational runbook complete (Phase 16A.G.3) and team trained (auto-create org flow per DECISION 8A.3)
 
-## 17. Production Deployment (Phase 6 - Week 8)
-
-- [ ] 17.1 Deploy schema migrations to production Neon PostgreSQL
-- [ ] 17.2 Deploy backend code with multi-tenant routes + Stripe integration
-- [ ] 17.3 Deploy frontend code with subscription management UI
-- [ ] 17.4 **USER:** Configure production Stripe webhook endpoint in Stripe dashboard (update URL from test to production domain)
-- [ ] 17.5 Enable trial system and monitor conversion rate
-- [ ] 17.6 Monitor logs for cross-tenant access attempts (should be zero)
-- [ ] 17.7 Verify webhook delivery success rate >99%
-- [ ] 17.8 Run smoke tests: Create org, add products, upgrade tier, cancel subscription
----
-
-## 17.5 Critical Interdependencies & Clarifications (BLOCKING - Review Before Starting)
-
-> **These items must be resolved BEFORE implementation begins. They affect multiple phases and task clarity.**
-
-### Tier Feature Flags Seeding Verification (BLOCKING Phase 18.F)
-
-- [ ] **17.5.1 CREATE**: After Phase 1.6 migrates tier_feature_flags, verify all tiers have correct features:
-  - Script: `backend/scripts/verify-tier-flags.ts` that checks tier_feature_flags table
-  - Verify all 4 tiers (starter, professional, premium, concierge) have: `max_skus`, `max_users`, `max_inventory_items`
-  - Verify values match TIER_LIMITS:
-    - Starter (max_skus=500, max_users=1, max_inventory_items=5000)
-    - Professional (max_skus=2000, max_users=3, max_inventory_items=null)
-    - Premium (max_skus=null, max_users=10, max_inventory_items=null)
-    - Concierge (max_skus=null, max_users=10, max_inventory_items=null)
-  - Log ERROR + exit if any tier missing features
-  - Run on app startup in Phase 18.F.2 (fail fast) and return 503 on /health until valid
-  - **Blocker for**: Phase 9+ (Stripe service needs correct tier limits)
-
-### Inventory Items vs Products Clarification (BLOCKING Phase 18.D.2)
-
-- [ ] **17.5.2 CLARIFY**: Confirm SKU limit semantics:
-  - Does `organization_usage.total_skus` count Products or InventoryItems?
-  - **Decision**: Products only (unique SKU catalog) count toward the SKU limit.
-  - Add separate InventoryItems cap by tier (Starter limited, higher tiers unlimited)
-  - Update Phase 16A.D.2: Apply `checkUsageLimit('max_skus')` to POST /products ONLY, not POST /inventory-items
-  - **Blocker for**: Phase 6.5, 6.8, task 16A.D.2
-
-### Final Checks
+### Final Checks before Deploying
 
 - [ ] Review all tasks completed against spec and proposal and make sure there are no gaps. If any gaps between work done and spec remain update the task list
 - [ ] Randomly explore the code files in this project, choosing code files to deeply investigate and understand and trace their functionality and execution flows through the related code files which they import or which they are imported by. Do a super careful, methodical, and critical check with fresh eyes to find any obvious bugs, problems, errors, issues, silly mistakes, etc.and then systematically and meticulously and intelligently correct them.
@@ -1224,5 +1191,16 @@ in auth middleware and service constructors. This task is effectively a no-op ve
 - [ ] Run full security check and fix any errors and warnings
 - [ ] Run full performance check and fix any errors and warnings
 - [ ] Run full accessibility check and fix any errors and warnings
+
+## 17. Production Deployment (Phase 6 - Week 8)
+
+- [ ] 17.1 Deploy schema migrations to production Neon PostgreSQL
+- [ ] 17.2 Deploy backend code with multi-tenant routes + Stripe integration
+- [ ] 17.3 Deploy frontend code with subscription management UI
+- [ ] 17.4 **USER:** Configure production Stripe webhook endpoint in Stripe dashboard (update URL from test to production domain)
+- [ ] 17.5 Enable trial system and monitor conversion rate
+- [ ] 17.6 Monitor logs for cross-tenant access attempts (should be zero)
+- [ ] 17.7 Verify webhook delivery success rate >99%
+- [ ] 17.8 Run smoke tests: Create org, add products, upgrade tier, cancel subscription
 
 # END

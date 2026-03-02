@@ -19,6 +19,8 @@
     "seed": "node scripts/seed-users.js",
     "seed:tier-flags": "node scripts/seed-tier-feature-flags.js",
     "audit:org-ids": "npx ts-node scripts/audit-org-ids.ts",
+    "export:excess-products": "npx ts-node scripts/export-excess-products.ts",
+    "diagnose:webhook": "npx ts-node scripts/diagnose-webhook.ts",
     "secrets-scan": "git secrets --scan || echo 'git-secrets not installed. Install from: https://github.com/awslabs/git-secrets'",
     "lint": "eslint .",
     "lint:fix": "eslint . --fix"
