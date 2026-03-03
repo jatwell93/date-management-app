@@ -158,7 +158,18 @@ function setTestAuthContext(req: AuthRequest, next: NextFunction): void {
 
 function extractTokenFromRequest(req: AuthRequest): string | null {
   const authHeader = req.headers['authorization'];
-  return authHeader && authHeader.split(' ')[1];
+  if (!authHeader) return null;
+  
+  // Handle both string and array headers
+  const headers = Array.isArray(authHeader) ? authHeader : [authHeader];
+  
+  // Extract the first valid bearer token
+  for (const header of headers) {
+    const token = header.split(' ')[1];
+    if (token) return token;
+  }
+  
+  return null;
 }
 
 async function verifyToken(token: string): Promise<TokenPayload | null> {

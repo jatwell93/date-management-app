@@ -50,5 +50,10 @@ export function resolveUnlimitedLimit(
   value: number | null,
   fallback: keyof typeof DEFAULT_LIMITS,
 ): number {
-  return value ?? DEFAULT_LIMITS[fallback];
+  const fallbackValue = DEFAULT_LIMITS[fallback];
+  // Allow null values for unlimited tiers (Premium, Concierge)
+  if (fallbackValue === null && !fallback.includes('UNLIMITED')) {
+    throw new Error(`Fallback default ${fallback} cannot be null`);
+  }
+  return value ?? fallbackValue;
 }
