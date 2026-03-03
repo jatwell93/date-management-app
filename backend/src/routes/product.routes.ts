@@ -375,7 +375,6 @@ router.get('/export-excess', authenticateToken, async (req: AuthRequest, res: Re
       id: p.id,
       sku: p.sku,
       name: p.name,
-      category: p.category,
       barcode: p.barcode,
       costPrice: p.costPrice,
       createdAt: p.createdAt.toISOString(),
@@ -386,7 +385,7 @@ router.get('/export-excess', authenticateToken, async (req: AuthRequest, res: Re
     const acceptHeader = req.get('Accept') || '';
     if (acceptHeader.includes('text/csv') || req.query.format === 'csv') {
       // CSV response
-      const headers = ['id', 'sku', 'name', 'category', 'barcode', 'costPrice', 'createdAt', 'inventoryCount'];
+      const headers = ['id', 'sku', 'name', 'barcode', 'costPrice', 'createdAt', 'inventoryCount'];
       const csvRows = [
         headers.join(','),
         ...products.map((p) =>

@@ -417,7 +417,7 @@ export class WebhookService {
     } catch (error: any) {
       this.handleWebhookError('customer.subscription.updated', error, {
         subscriptionId: subscription.id,
-        customerId: subscription.customer,
+        customerId: subscription.customer as string | undefined,
       });
       throw error;
     }

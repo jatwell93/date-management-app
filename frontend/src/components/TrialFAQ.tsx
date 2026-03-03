@@ -8,12 +8,6 @@ import {
   DialogTitle,
   DialogTrigger,
 } from './ui/dialog';
-import {
-  Accordion,
-  AccordionContent,
-  AccordionItem,
-  AccordionTrigger,
-} from './ui/accordion';
 import { HelpCircle, Clock, Lock, CreditCard, Mail, AlertTriangle } from 'lucide-react';
 
 interface TrialFAQProps {
@@ -144,21 +138,17 @@ export function TrialFAQ({ daysRemaining, isExpired, trigger = 'button' }: Trial
         </DialogHeader>
 
         <div className="mt-4">
-          <Accordion type="single" collapsible className="w-full">
+          <div className="w-full divide-y rounded-md border">
             {faqData.map((item) => (
-              <AccordionItem key={item.id} value={item.id}>
-                <AccordionTrigger className="text-left hover:no-underline">
-                  <div className="flex items-center gap-3">
-                    <span className="text-muted-foreground">{item.icon}</span>
-                    <span className="text-sm font-medium">{item.question}</span>
-                  </div>
-                </AccordionTrigger>
-                <AccordionContent className="text-sm text-muted-foreground pl-7">
-                  {item.answer}
-                </AccordionContent>
-              </AccordionItem>
+              <details key={item.id} className="group px-4 py-3">
+                <summary className="flex cursor-pointer list-none items-center gap-3 text-left text-sm font-medium">
+                  <span className="text-muted-foreground">{item.icon}</span>
+                  <span>{item.question}</span>
+                </summary>
+                <p className="text-muted-foreground pl-7 pt-3 text-sm">{item.answer}</p>
+              </details>
             ))}
-          </Accordion>
+          </div>
         </div>
 
         <div className="mt-4 pt-4 border-t">
@@ -187,21 +177,17 @@ export function TrialFAQInline() {
         Frequently Asked Questions
       </h3>
 
-      <Accordion type="single" collapsible className="w-full">
+      <div className="w-full divide-y rounded-md border">
         {faqData.map((item) => (
-          <AccordionItem key={item.id} value={item.id}>
-            <AccordionTrigger className="text-left hover:no-underline">
-              <div className="flex items-center gap-3">
-                <span className="text-muted-foreground">{item.icon}</span>
-                <span className="text-sm font-medium">{item.question}</span>
-              </div>
-            </AccordionTrigger>
-            <AccordionContent className="text-sm text-muted-foreground pl-7">
-              {item.answer}
-            </AccordionContent>
-          </AccordionItem>
+          <details key={item.id} className="group px-4 py-3">
+            <summary className="flex cursor-pointer list-none items-center gap-3 text-left text-sm font-medium">
+              <span className="text-muted-foreground">{item.icon}</span>
+              <span>{item.question}</span>
+            </summary>
+            <p className="text-muted-foreground pl-7 pt-3 text-sm">{item.answer}</p>
+          </details>
         ))}
-      </Accordion>
+      </div>
     </div>
   );
 }

@@ -1,5 +1,5 @@
 import { chromium, FullConfig } from '@playwright/test';
-import { signUpAsManager, AUTH_STATE_PATH } from './helpers/auth';
+import { signInAsManager, signUpAsManager, AUTH_STATE_PATH } from './helpers/auth';
 import fs from 'fs';
 import path from 'path';
 
@@ -16,8 +16,13 @@ async function globalSetup(config: FullConfig) {
   const context = await browser.newContext({ baseURL });
   const page = await context.newPage();
 
-  // Create a fresh test user via sign-up
-  await signUpAsManager(page);
+  // Prefer existing manager sign-in to avoid OTP dependencies.
+  // Fallback to sign-up if the account does not exist or sign-in fails.
+  try {
+    await signInAsManager(page);
+  } catch {
+    await signUpAsManager(page);
+  }
 
   // Save signed-in storage state (cookies + localStorage)
   await context.storageState({ path: AUTH_STATE_PATH });
