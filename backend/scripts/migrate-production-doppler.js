@@ -130,7 +130,10 @@ async function main() {
     schema = schema.replace('provider = "sqlite"', 'provider = "postgresql"');
     // Add URL line for PostgreSQL migration
     if (!schema.includes('url')) {
-      schema = schema.replace('}', '  url      = env("NEON_CONNECTION_STRING")\n}');
+      schema = schema.replace(
+        /(datasource\s+db\s*\{[\s\S]*?)(\})/,
+        '$1  url      = env("NEON_CONNECTION_STRING")\n$2',
+      );
     } else {
       schema = schema.replace(
         /url\s*=\s*env\("([^"]+)"\)/,
