@@ -14,20 +14,19 @@
  *   - Neon database must be created and accessible
  */
 
-const { PrismaClient } = require('@prisma/client');
-const { execSync } = require('child_process');
-const path = require('path');
-
-// Import readline properly for Node.js
-const readline = require('readline');
-
-const rl = readline.createInterface({
+import { PrismaClient } from '@prisma/client';
+import { execSync } from 'child_process';
+import * as path from 'path';
+import { createInterface } from 'readline';
+const rl = createInterface({
   input: process.stdin,
   output: process.stdout
-);
+});
 
-async function question(query) {
-  return new Promise(resolve => rl.question(query, resolve));
+async function question(query: string): Promise<string> {
+  return new Promise<string>((resolve) => {
+    rl.question(query, resolve);
+  });
 }
 
 async function main() {
@@ -92,15 +91,15 @@ async function main() {
     await prisma.$disconnect();
     console.log('\n🎉 Production database migration completed successfully!');
 
-  } catch (error) {
-    console.error('\n❌ Migration failed:', error.message);
+  } catch (error: unknown) {
+    console.error('\n❌ Migration failed:', (error as Error).message);
     process.exit(1);
   } finally {
     rl.close();
   }
 }
 
-async function seedTierFlags(prisma) {
+async function seedTierFlags(prisma: PrismaClient) {
   const tierFlags = [
     // Starter tier
     { tierLevel: 'starter', featureKey: 'max_skus', enabled: true, limitValue: 500 },
@@ -145,7 +144,7 @@ async function seedTierFlags(prisma) {
   }
 }
 
-async function verifyMigration(prisma) {
+async function verifyMigration(prisma: PrismaClient) {
   // Check all tables exist
   const tables = [
     'organizations', 'subscription_tiers', 'trial_events', 'tier_feature_flags',
@@ -156,7 +155,15 @@ async function verifyMigration(prisma) {
 
   for (const table of tables) {
     try {
-      await prisma.$queryRaw`SELECT 1 FROM ${table} LIMIT 1`;
+      const result = await prisma.$queryRaw<
+        { exists: number }[]
+      >`SELECT 1 AS "exists"
+        FROM information_schema.tables
+        WHERE table_schema = 'public' AND table_name = ${table}
+        LIMIT 1`;
+      if (result.length === 0) {
+        throw new Error(`Table ${table} not found or not accessible`);
+      }
     } catch (error) {
       throw new Error(`Table ${table} not found or not accessible`);
     }
