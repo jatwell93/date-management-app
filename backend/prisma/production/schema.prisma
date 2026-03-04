@@ -1,0 +1,5 @@
+// Production schema configuration for PostgreSQL
+// This extends the base schema with PostgreSQL-specific settings
+
+// The base schema models are inherited from schema.prisma
+// This file only overrides the datasource for production
