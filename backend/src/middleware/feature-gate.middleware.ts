@@ -5,6 +5,7 @@ import { AnalyticsService, AnalyticsEventType } from '../services/analytics.serv
 import { Logger } from '../utils/logger';
 import * as Sentry from '@sentry/node';
 import { TIER_LIMITS, TierLevel } from '../types/subscription';
+import { resolveUnlimitedLimit } from '../constants/default-limits';
 
 // Feature keys from tier_feature_flags table
 export type FeatureKey =
@@ -268,14 +269,14 @@ async function calculateTierBasedLimit(
   if (limitKey === 'max_inventory_items') {
     return {
       currentUsage: usage.totalInventoryItems,
-      limit: tierLimit ?? Number.MAX_SAFE_INTEGER,
+      limit: resolveUnlimitedLimit(tierLimit, 'UNLIMITED_INVENTORY_ITEMS'),
     };
   }
 
   if (limitKey === 'storage_bytes') {
     return {
       currentUsage: usage.storageUsedBytes,
-      limit: tierLimit ?? Number.MAX_SAFE_INTEGER,
+      limit: resolveUnlimitedLimit(tierLimit, 'UNLIMITED_STORAGE_BYTES'),
     };
   }
 

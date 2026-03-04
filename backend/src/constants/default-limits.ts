@@ -3,6 +3,8 @@
  * Used when no specific limit is set or as fallback values
  */
 
+import { Logger } from '../utils/logger';
+
 export const DEFAULT_LIMITS = {
   // When a tier has unlimited (null) limit, use these large numbers
   UNLIMITED_SKUS: 999999,
@@ -50,10 +52,32 @@ export function resolveUnlimitedLimit(
   value: number | null,
   fallback: keyof typeof DEFAULT_LIMITS,
 ): number {
-  const fallbackValue = DEFAULT_LIMITS[fallback];
-  // Allow null values for unlimited tiers (Premium, Concierge)
-  if (fallbackValue === null && !fallback.includes('UNLIMITED')) {
-    throw new Error(`Fallback default ${fallback} cannot be null`);
+  // UNLIMITED_* keys are always numbers - use them directly as fallback
+  if (fallback.includes('UNLIMITED')) {
+    const fallbackValue = DEFAULT_LIMITS[fallback];
+    // Type assertion: UNLIMITED_* values are guaranteed to be numbers
+    return value ?? (fallbackValue as number);
   }
-  return value ?? fallbackValue;
+
+  // For tier defaults (*_MAX_*), null is valid (represents unlimited)
+  // If value is provided, use it; otherwise use appropriate unlimited fallback
+  if (value !== null) {
+    return value;
+  }
+
+  // value is null and fallback is a tier default (unlimited tier)
+  // Map to appropriate UNLIMITED_* fallback instead of throwing
+  const limitType = fallback.split('_MAX_')[1]; // e.g., "SKUS" from "STARTER_MAX_SKUS"
+  if (limitType) {
+    const unlimitedKey = `UNLIMITED_${limitType}` as keyof typeof DEFAULT_LIMITS;
+    const unlimitedValue = DEFAULT_LIMITS[unlimitedKey];
+    if (typeof unlimitedValue === 'number') {
+      Logger.warn(`Unlimited limit detected for ${fallback}, using ${unlimitedKey} fallback`);
+      return unlimitedValue;
+    }
+  }
+
+  // Final fallback - should never reach here with proper configuration
+  Logger.error(`Cannot resolve unlimited limit: no fallback available for ${fallback}`);
+  return Number.MAX_SAFE_INTEGER;
 }

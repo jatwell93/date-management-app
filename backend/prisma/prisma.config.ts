@@ -1,8 +1,11 @@
-import type { PrismaClientOptions } from '@prisma/client';
+// Prisma configuration for client generation
+// This file is used by Prisma CLI for client configuration
 
-export const config: PrismaClientOptions = {
+export const config = {
   // Configuration for Prisma Client
 };
 
 // For migrations, we still need the datasource URL
-export const datasourceUrl = process.env.DATABASE_URL || 'file:./database.sqlite';
+// This will be used by prisma migrate commands
+export const datasourceUrl =
+  process.env.DATABASE_URL || process.env.NEON_CONNECTION_STRING || 'file:./database.sqlite';

@@ -69,3 +69,4 @@ workers/.wrangler/
 e2e/.auth/
 test-results/
 playwright-report/
+.playwright-mcp/
