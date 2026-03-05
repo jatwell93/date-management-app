@@ -211,7 +211,12 @@ function createJWTAuthMiddleware(env: Env): ExpressMiddleware {
 
     // Task 7.3: Verify JWT signature using secret from environment
     // Task 7.4: Return 401 if token is missing, invalid, or expired
-    const authResult = await authenticateRequest(req, env.JWT_SECRET);
+    // Extract Authorization header from ExpressRequest headers (normalize to standard header format)
+    const authHeader = req.headers['authorization'] as string | undefined;
+    const mockRequest = new Request('http://localhost', {
+      headers: authHeader ? { Authorization: authHeader } : {}
+    });
+    const authResult = await authenticateRequest(mockRequest as unknown as Request, env.JWT_SECRET);
 
     if (!authResult.authenticated) {
       // Send 401 Unauthorized response
@@ -278,6 +283,22 @@ function writeMetrics(env: Env, metrics: any): void {
     try {
       const analyticsData = formatMetricsForAnalytics(metrics);
       env.ANALYTICS.writeDataPoint(analyticsData);
+
+      // Track upload-specific events (if upload detected)
+      if (metrics.endpoint?.includes('/upload') && metrics.status === 200) {
+        env.ANALYTICS.writeDataPoint({
+          blobs: ['upload-success'],
+          doubles: [metrics.responseSize || 0],
+          indexes: [metrics.organizationId || 'unknown']
+        });
+      }
+
+      // Track API latency
+      env.ANALYTICS.writeDataPoint({
+        blobs: ['api-latency'],
+        doubles: [metrics.responseTime || 0],
+        indexes: [metrics.endpoint || 'unknown']
+      });
     } catch (error) {
       // Silently fail if Analytics writing fails - don't block requests
       console.error('Failed to write metrics to Analytics Engine:', error);
@@ -299,7 +320,7 @@ export default Sentry.withSentry(
       const startTime = Date.now();
       
       // Fast-path health check (bypass full routing)
-      if (url.pathname === '/health') {
+      if (url.pathname === '/health' && (request.method === 'GET' || request.method === 'OPTIONS')) {
         return handleHealthCheck(request, env);
       }
 

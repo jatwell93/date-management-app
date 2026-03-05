@@ -111,6 +111,8 @@ export function createProductionCors(env: Env): ExpressMiddleware {
       'http://127.0.0.1:3000',
       'http://127.0.0.1:3001',
       'http://127.0.0.1:3002',
+      'https://d412d559.date-management-status.pages.dev',
+      'https://date-management-status.pages.dev',
       ...(env.FRONTEND_URL ? [env.FRONTEND_URL] : []),
     ],
     credentials: !allowAll, // Only send credentials if not allowing all origins

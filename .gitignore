@@ -17,6 +17,7 @@ out/
 # SQLite temporary files
 *.sqlite-shm
 *.sqlite-wal
+*.sqlite
 
 # Cache directories
 .cache/

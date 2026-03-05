@@ -1,0 +1,423 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Date Management API Status</title>
+    <style>
+      :root {
+        color-scheme: light dark;
+        --bg: #0b1020;
+        --panel: #121a2f;
+        --text: #e9eefc;
+        --muted: #aeb8d6;
+        --ok: #19c37d;
+        --warn: #f5a524;
+        --down: #ef4444;
+        --unknown: #7c8aad;
+        --border: #2a3558;
+      }
+
+      @media (prefers-color-scheme: light) {
+        :root {
+          --bg: #f6f8ff;
+          --panel: #ffffff;
+          --text: #13203f;
+          --muted: #4f5f84;
+          --border: #d9e1f4;
+        }
+      }
+
+      * {
+        box-sizing: border-box;
+      }
+
+      body {
+        margin: 0;
+        background: var(--bg);
+        color: var(--text);
+        font-family: Inter, system-ui, -apple-system, Segoe UI, Roboto, Helvetica, Arial, sans-serif;
+      }
+
+      .wrap {
+        max-width: 900px;
+        margin: 0 auto;
+        padding: 24px;
+      }
+
+      .card {
+        background: var(--panel);
+        border: 1px solid var(--border);
+        border-radius: 12px;
+      }
+
+      .header {
+        padding: 20px;
+        margin-bottom: 16px;
+      }
+
+      h1 {
+        margin: 0 0 8px;
+        font-size: 1.6rem;
+      }
+
+      .sub {
+        color: var(--muted);
+        font-size: 0.95rem;
+      }
+
+      .controls {
+        display: grid;
+        grid-template-columns: 1fr auto auto;
+        gap: 8px;
+        margin-top: 14px;
+      }
+
+      input, button {
+        border-radius: 8px;
+        border: 1px solid var(--border);
+        background: transparent;
+        color: inherit;
+        padding: 10px 12px;
+        font: inherit;
+      }
+
+      button {
+        cursor: pointer;
+      }
+
+      .overall {
+        display: flex;
+        align-items: center;
+        gap: 10px;
+        margin-top: 12px;
+      }
+
+      .dot {
+        width: 10px;
+        height: 10px;
+        border-radius: 50%;
+        background: var(--unknown);
+      }
+
+      .dot.ok { background: var(--ok); }
+      .dot.warn { background: var(--warn); }
+      .dot.down { background: var(--down); }
+
+      .services {
+        display: grid;
+        grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+        gap: 12px;
+      }
+
+      .service {
+        padding: 16px;
+      }
+
+      .service h3 {
+        margin: 0 0 8px;
+        font-size: 1rem;
+      }
+
+      .status {
+        display: inline-flex;
+        align-items: center;
+        gap: 8px;
+        font-weight: 600;
+        margin-bottom: 8px;
+      }
+
+      .meta {
+        color: var(--muted);
+        font-size: 0.9rem;
+      }
+
+      .footer {
+        margin-top: 12px;
+        color: var(--muted);
+        font-size: 0.9rem;
+      }
+
+      .incident-banner {
+        margin-bottom: 16px;
+        padding: 14px 16px;
+        border-radius: 12px;
+        border: 1px solid var(--border);
+        background: var(--panel);
+        display: none;
+      }
+
+      .incident-banner.show {
+        display: block;
+      }
+
+      .incident-banner.operational {
+        border-color: color-mix(in srgb, var(--ok) 40%, var(--border));
+      }
+
+      .incident-banner.degraded {
+        border-color: color-mix(in srgb, var(--warn) 45%, var(--border));
+      }
+
+      .incident-banner.outage {
+        border-color: color-mix(in srgb, var(--down) 45%, var(--border));
+      }
+
+      .incident-controls {
+        margin-top: 12px;
+        display: grid;
+        grid-template-columns: 220px 1fr auto;
+        gap: 8px;
+      }
+
+      @media (max-width: 720px) {
+        .incident-controls,
+        .controls {
+          grid-template-columns: 1fr;
+        }
+      }
+
+      .error {
+        color: var(--down);
+      }
+    </style>
+  </head>
+  <body>
+    <main class="wrap">
+      <section id="incidentBanner" class="incident-banner operational">
+        <strong id="incidentTitle">All Systems Operational</strong>
+        <div id="incidentMessage" class="sub" style="margin-top: 6px;">No active incident.</div>
+      </section>
+
+      <section class="card header">
+        <h1>Date Management Service Status</h1>
+        <div class="sub">Live status from your Cloudflare Worker health endpoint.</div>
+
+        <div class="controls">
+          <input id="healthUrl" type="text" placeholder="https://api.yourdomain.com/health?deep=true" />
+          <button id="refreshBtn" type="button">Refresh</button>
+          <button id="saveBtn" type="button">Save URL</button>
+        </div>
+
+        <div class="overall">
+          <span id="overallDot" class="dot"></span>
+          <strong id="overallText">Unknown</strong>
+        </div>
+
+        <div class="incident-controls">
+          <select id="incidentLevel" aria-label="Incident level">
+            <option value="operational">Operational</option>
+            <option value="degraded">Degraded</option>
+            <option value="outage">Outage</option>
+          </select>
+          <input id="incidentInput" type="text" placeholder="Optional incident message (e.g. Elevated API latency)" />
+          <button id="incidentBtn" type="button">Set Banner</button>
+        </div>
+      </section>
+
+      <section class="services">
+        <article class="card service">
+          <h3>Workers API</h3>
+          <div id="workersStatus" class="status"><span class="dot"></span>Unknown</div>
+          <div id="workersMeta" class="meta">No data yet</div>
+        </article>
+
+        <article class="card service">
+          <h3>R2 Storage</h3>
+          <div id="r2Status" class="status"><span class="dot"></span>Unknown</div>
+          <div id="r2Meta" class="meta">Requires deep health check</div>
+        </article>
+
+        <article class="card service">
+          <h3>Database</h3>
+          <div id="dbStatus" class="status"><span class="dot"></span>Unknown</div>
+          <div id="dbMeta" class="meta">Requires deep health check</div>
+        </article>
+      </section>
+
+      <div class="footer" id="footer">Last updated: never</div>
+      <div class="footer error" id="error"></div>
+    </main>
+
+    <script>
+      const KEY = 'statusPageHealthUrl';
+      const DEFAULT_URL = 'https://api.yourdomain.com/health?deep=true';
+      const INCIDENT_KEY = 'statusPageIncident';
+
+      const healthInput = document.getElementById('healthUrl');
+      const refreshBtn = document.getElementById('refreshBtn');
+      const saveBtn = document.getElementById('saveBtn');
+      const overallDot = document.getElementById('overallDot');
+      const overallText = document.getElementById('overallText');
+      const footer = document.getElementById('footer');
+      const errorEl = document.getElementById('error');
+      const incidentBanner = document.getElementById('incidentBanner');
+      const incidentTitle = document.getElementById('incidentTitle');
+      const incidentMessage = document.getElementById('incidentMessage');
+      const incidentLevel = document.getElementById('incidentLevel');
+      const incidentInput = document.getElementById('incidentInput');
+      const incidentBtn = document.getElementById('incidentBtn');
+
+      const workersStatus = document.getElementById('workersStatus');
+      const workersMeta = document.getElementById('workersMeta');
+      const r2Status = document.getElementById('r2Status');
+      const r2Meta = document.getElementById('r2Meta');
+      const dbStatus = document.getElementById('dbStatus');
+      const dbMeta = document.getElementById('dbMeta');
+
+      function applyIncident(level, message) {
+        incidentBanner.className = `incident-banner show ${level}`;
+
+        if (level === 'operational') {
+          incidentTitle.textContent = 'All Systems Operational';
+          incidentMessage.textContent = message || 'No active incident.';
+          return;
+        }
+
+        if (level === 'degraded') {
+          incidentTitle.textContent = 'Partial Service Degradation';
+          incidentMessage.textContent = message || 'Some services are experiencing issues.';
+          return;
+        }
+
+        incidentTitle.textContent = 'Major Service Outage';
+        incidentMessage.textContent = message || 'We are investigating a service outage.';
+      }
+
+      function saveIncident(level, message) {
+        localStorage.setItem(INCIDENT_KEY, JSON.stringify({ level, message }));
+      }
+
+      function loadIncident() {
+        const raw = localStorage.getItem(INCIDENT_KEY);
+        if (!raw) {
+          applyIncident('operational', 'No active incident.');
+          return;
+        }
+
+        try {
+          const { level, message } = JSON.parse(raw);
+          incidentLevel.value = level || 'operational';
+          incidentInput.value = message || '';
+          applyIncident(level || 'operational', message || '');
+        } catch {
+          applyIncident('operational', 'No active incident.');
+        }
+      }
+
+      function setStatus(element, label, kind) {
+        element.innerHTML = `<span class="dot ${kind}"></span>${label}`;
+      }
+
+      function toKind(status) {
+        if (status === 'pass' || status === 'healthy') return 'ok';
+        if (status === 'degraded') return 'warn';
+        if (status === 'fail' || status === 'unhealthy') return 'down';
+        return 'unknown';
+      }
+
+      async function refresh() {
+        const url = healthInput.value.trim();
+        if (!url) return;
+
+        // SSRF protection: validate URL before fetching
+        let parsedUrl;
+        try {
+          parsedUrl = new URL(url);
+        } catch {
+          errorEl.textContent = 'Invalid URL format';
+          return;
+        }
+
+        // Block dangerous protocols (file:, data:, etc.)
+        if (!['http:', 'https:'].includes(parsedUrl.protocol)) {
+          errorEl.textContent = 'Only HTTP and HTTPS URLs are allowed';
+          return;
+        }
+
+        // Get current page origin for same-origin check
+        const pageOrigin = window.location.origin;
+        const requestOrigin = parsedUrl.origin;
+
+        // Allow same-origin requests
+        const isSameOrigin = requestOrigin === pageOrigin;
+
+        // Allow known safe origins (localhost, status page domains)
+        const safeOrigins = [
+          'http://localhost:3000',
+          'http://localhost:3001',
+          'http://127.0.0.1:3000',
+          'http://127.0.0.1:3001',
+          'http://127.0.0.1:3002',
+          'https://d412d559.date-management-status.pages.dev',
+          'https://date-management-status.pages.dev',
+        ];
+
+        const isSafeOrigin = safeOrigins.includes(requestOrigin);
+
+        if (!isSameOrigin && !isSafeOrigin) {
+          errorEl.textContent = 'URL must be from allowed origins (localhost, 127.0.0.1, or *.pages.dev)';
+          return;
+        }
+
+        errorEl.textContent = '';
+
+        try {
+          const response = await fetch(url, { headers: { 'Accept': 'application/json' } });
+          const data = await response.json();
+
+          const overallKind = toKind(data.status);
+          overallDot.className = `dot ${overallKind}`;
+          overallText.textContent = `${(data.status || 'unknown').toUpperCase()} (${response.status})`;
+
+          const workers = data.checks?.workers || { status: data.status === 'healthy' ? 'pass' : 'unknown' };
+          const r2 = data.checks?.r2 || { status: 'unknown' };
+          const database = data.checks?.database || { status: 'unknown' };
+
+          setStatus(workersStatus, (workers.status || 'unknown').toUpperCase(), toKind(workers.status));
+          workersMeta.textContent = workers.responseTime != null
+            ? `Response: ${workers.responseTime}ms`
+            : 'No response time reported';
+
+          setStatus(r2Status, (r2.status || 'unknown').toUpperCase(), toKind(r2.status));
+          r2Meta.textContent = r2.error
+            ? `Error: ${r2.error}`
+            : r2.responseTime != null
+              ? `Response: ${r2.responseTime}ms`
+              : 'No deep check data';
+
+          setStatus(dbStatus, (database.status || 'unknown').toUpperCase(), toKind(database.status));
+          dbMeta.textContent = database.error
+            ? `Error: ${database.error}`
+            : database.responseTime != null
+              ? `Response: ${database.responseTime}ms`
+              : 'No deep check data';
+
+          footer.textContent = `Last updated: ${new Date().toLocaleString()}`;
+        } catch (err) {
+          overallDot.className = 'dot down';
+          overallText.textContent = 'UNREACHABLE';
+          errorEl.textContent = `Failed to fetch health endpoint: ${err.message}`;
+          footer.textContent = `Last updated: ${new Date().toLocaleString()}`;
+        }
+      }
+
+      refreshBtn.addEventListener('click', refresh);
+      saveBtn.addEventListener('click', () => {
+        localStorage.setItem(KEY, healthInput.value.trim());
+      });
+
+      incidentBtn.addEventListener('click', () => {
+        const level = incidentLevel.value;
+        const message = incidentInput.value.trim();
+        applyIncident(level, message);
+        saveIncident(level, message);
+      });
+
+      healthInput.value = localStorage.getItem(KEY) || DEFAULT_URL;
+      loadIncident();
+      refresh();
+      setInterval(refresh, 60000);
+    </script>
+  </body>
+</html>
