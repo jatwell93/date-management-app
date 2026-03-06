@@ -1,6 +1,7 @@
 import { Response } from 'express';
 import { AuthRequest } from '../middleware/auth.middleware';
 import { UploadService } from '../services/upload.service';
+import { getDefaultDatabaseClient } from '../database/database-factory';
 
 export class UploadController {
   constructor(private uploadService: UploadService) {}
@@ -87,6 +88,69 @@ export class UploadController {
       res.json({ message: 'Upload completed and processing started' });
     } catch (error) {
       console.error('Complete upload error:', error);
+      res.status(500).json({ error: error instanceof Error ? error.message : 'Unknown error' });
+    }
+  }
+
+  /**
+   * Get upload status (for progress tracking)
+   */
+  async status(req: AuthRequest, res: Response): Promise<void> {
+    try {
+      if (!req.userId || !req.organizationId) {
+        res.status(401).json({ error: 'User authentication required' });
+        return;
+      }
+
+      const { key } = req.params;
+
+      if (!key) {
+        res.status(400).json({ error: 'Missing required parameter: key' });
+        return;
+      }
+
+      // Query upload status from database
+      const prisma = getDefaultDatabaseClient();
+      const upload = await prisma.upload.findUnique({
+        where: { fileKey: key },
+        select: {
+          status: true,
+          uploadProgress: true,
+          processingMessage: true,
+          errorMessage: true,
+          rowsProcessed: true,
+          rowsTotal: true,
+          organizationId: true,
+        },
+      });
+
+      if (!upload) {
+        res.status(404).json({ error: 'Upload not found' });
+        return;
+      }
+
+      // Security: Verify upload belongs to  user's organization
+      if (upload.organizationId !== req.organizationId) {
+        res.status(403).json({ error: 'Access denied' });
+        return;
+      }
+
+      // Calculate progress percentage
+      let progress = upload.uploadProgress;
+      if (upload.rowsTotal && upload.rowsTotal > 0) {
+        progress = Math.min(100, Math.floor((upload.rowsProcessed / upload.rowsTotal) * 100));
+      }
+
+      res.json({
+        status: upload.status,
+        progress,
+        message: upload.processingMessage,
+        error: upload.errorMessage,
+        rowsProcessed: upload.rowsProcessed,
+        rowsTotal: upload.rowsTotal,
+      });
+    } catch (error) {
+      console.error('Upload status error:', error);
       res.status(500).json({ error: error instanceof Error ? error.message : 'Unknown error' });
     }
   }

@@ -306,18 +306,23 @@ model ExpiredItemTransaction {
 }
 
 model Upload {
-  id             Int          @id @default(autoincrement())
-  organizationId String       @map("organization_id")
-  userId         Int          @map("user_id")
-  fileKey        String       @unique @map("file_key")
-  fileName       String       @map("file_name")
-  fileSizeBytes  Int          @map("file_size_bytes")
-  contentType    String?      @map("content_type")
-  status         String       @default("completed")
-  createdAt      DateTime     @default(now()) @map("created_at")
-  updatedAt      DateTime     @updatedAt @map("updated_at")
-  user           User         @relation(fields: [userId], references: [id], onDelete: Cascade)
-  organization   Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  id                Int          @id @default(autoincrement())
+  organizationId    String       @map("organization_id")
+  userId            Int          @map("user_id")
+  fileKey           String       @unique @map("file_key")
+  fileName          String       @map("file_name")
+  fileSizeBytes     Int          @map("file_size_bytes")
+  contentType       String?      @map("content_type")
+  status            String       @default("pending") // pending, uploading, processing, complete, failed
+  uploadProgress    Int          @default(0) @map("upload_progress") // 0-100
+  processingMessage String?      @map("processing_message") // Current processing step
+  errorMessage      String?      @map("error_message") // Error details if failed
+  rowsProcessed     Int          @default(0) @map("rows_processed") // CSV rows processed
+  rowsTotal         Int?         @map("rows_total") // Total rows in CSV
+  createdAt         DateTime     @default(now()) @map("created_at")
+  updatedAt         DateTime     @updatedAt @map("updated_at")
+  user              User         @relation(fields: [userId], references: [id], onDelete: Cascade)
+  organization      Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
 
   @@index([organizationId, createdAt])
   @@index([userId, createdAt])
@@ -335,17 +340,17 @@ model Migration {
 }
 
 model MetricsSnapshot {
-  id                   Int      @id @default(autoincrement())
-  date                 DateTime @unique
-  trialConversionRate  Float?   @map("trial_conversion_rate")
-  avgRevenuePerUser    Float?   @map("avg_revenue_per_user")
-  churnRate            Float?   @map("churn_rate")
-  totalTrials          Int      @default(0) @map("total_trials")
-  totalConversions     Int      @default(0) @map("total_conversions")
-  totalChurn           Int      @default(0) @map("total_churn")
-  totalRevenueCents    Int      @default(0) @map("total_revenue_cents")
-  tierDistribution     String?  @map("tier_distribution") // JSON string
-  createdAt            DateTime @default(now()) @map("created_at")
+  id                  Int      @id @default(autoincrement())
+  date                DateTime @unique
+  trialConversionRate Float?   @map("trial_conversion_rate")
+  avgRevenuePerUser   Float?   @map("avg_revenue_per_user")
+  churnRate           Float?   @map("churn_rate")
+  totalTrials         Int      @default(0) @map("total_trials")
+  totalConversions    Int      @default(0) @map("total_conversions")
+  totalChurn          Int      @default(0) @map("total_churn")
+  totalRevenueCents   Int      @default(0) @map("total_revenue_cents")
+  tierDistribution    String?  @map("tier_distribution") // JSON string
+  createdAt           DateTime @default(now()) @map("created_at")
 
   @@index([date])
   @@map("metrics_snapshots")

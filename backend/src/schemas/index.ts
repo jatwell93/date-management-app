@@ -263,7 +263,10 @@ export const uploadCompleteSchema = z.object({
     key: z
       .string()
       .min(1, 'Upload key is required')
-      .regex(/^uploads\/\d+-[a-zA-Z0-9_\-. ]+$/, 'Invalid upload key format'),
+      .regex(
+        /^uploads\/[a-zA-Z0-9_-]+\/\d+-[a-zA-Z0-9_\-. ]+$/,
+        'Invalid upload key format (expected: uploads/{orgId}/{timestamp}-{filename})',
+      ),
   }),
 });
 

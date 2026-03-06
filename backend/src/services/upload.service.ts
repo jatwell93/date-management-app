@@ -37,7 +37,8 @@ export class UploadService {
     }
 
     const timestamp = Date.now();
-    const key = `uploads/${timestamp}-${path.basename(filename)}`;
+    // MULTI-TENANT FIX: Scope key to organization for isolation
+    const key = `uploads/${this.organizationId}/${timestamp}-${path.basename(filename)}`;
 
     // 2. Determine strategy
     // Use DIRECT if:
@@ -161,7 +162,8 @@ export class UploadService {
   ): Promise<string> {
     const startTime = Date.now();
     const timestamp = Date.now();
-    const key = `uploads/${timestamp}-${path.basename(filename)}`;
+    // MULTI-TENANT FIX: Scope key to organization for isolation
+    const key = `uploads/${this.organizationId}/${timestamp}-${path.basename(filename)}`;
 
     // 1. Upload to storage (this works for both Local and R2)
     // If we want to skip R2 for direct uploads and just use temp file, we can.
