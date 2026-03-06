@@ -137,31 +137,33 @@ export function createRequestLogger(env: Env) {
   return (req: ExpressRequest, res: ExpressResponse, next: () => void) => {
     const startTime = Date.now();
 
-    // Log request
-    logger.info('Incoming request', {
-      method: req.method,
+    // Log incoming request
+    console.log(JSON.stringify({
+      timestamp: new Date().toISOString(),
+      level: 'info',
+      message: 'Incoming request',
+      organizationId: req.organizationId,
       path: req.path,
-      ip: req.ip,
-      userAgent: req.get('User-Agent'),
+      method: req.method,
       correlationId: req.correlationId,
       userId: req.user?.id ?? req.userId,
-      query: sanitizeForLogging(req.query),
-      headers: sanitizeForLogging(req.headers),
-      body: sanitizeForLogging(req.body),
-    });
+    }));
 
     // Wrap response to log completion
     const originalJson = res.json.bind(res);
     res.json = function(data: any) {
       const duration = Date.now() - startTime;
-      logger.info('Request completed', {
-        method: req.method,
+      console.log(JSON.stringify({
+        timestamp: new Date().toISOString(),
+        level: 'info',
+        message: 'Request processed',
+        organizationId: req.organizationId,
         path: req.path,
-        duration,
+        duration: duration,
         statusCode: res['statusCode'] || 200,
         correlationId: req.correlationId,
         userId: req.user?.id ?? req.userId,
-      });
+      }));
       return originalJson(data);
     };
 

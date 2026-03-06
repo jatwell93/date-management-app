@@ -13,6 +13,7 @@ import { jwtVerify, SignJWT, JWTPayload } from 'jose';
  */
 export interface JWTPayloadData extends JWTPayload {
   userId: number;
+  organizationId: string;
   email?: string;
   role?: string;
 }
@@ -122,6 +123,7 @@ export async function authenticateRequest(
 ): Promise<{
   authenticated: boolean;
   userId?: number;
+  organizationId?: string;
   error?: string;
 }> {
   const authHeader = request.headers.get('Authorization');
@@ -149,10 +151,18 @@ export async function authenticateRequest(
       error: 'Invalid token: missing userId',
     };
   }
+
+  if (!payload.organizationId) {
+    return {
+      authenticated: false,
+      error: 'Invalid token: missing organizationId',
+    };
+  }
   
   return {
     authenticated: true,
     userId: payload.userId,
+    organizationId: payload.organizationId,
   };
 }
 
@@ -173,6 +183,7 @@ export function createAuthMiddleware(jwtSecret: string) {
   ): Promise<{
     authenticated: boolean;
     userId?: number;
+    organizationId?: string;
     shouldBypass: boolean;
   }> => {
     const { pathname } = context;
@@ -188,6 +199,7 @@ export function createAuthMiddleware(jwtSecret: string) {
     return {
       authenticated: result.authenticated,
       userId: result.userId,
+      organizationId: result.organizationId,
       shouldBypass: false,
     };
   };

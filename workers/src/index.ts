@@ -237,6 +237,10 @@ function createJWTAuthMiddleware(env: Env): ExpressMiddleware {
       req.userId = authResult.userId;
     }
 
+    if (authResult.organizationId) {
+      req.organizationId = authResult.organizationId;
+    }
+
     return next(); // Continue to next middleware
   };
 }
@@ -248,7 +252,7 @@ function createRouter(env: Env): WorkersRouter {
   const router = new WorkersRouter();
 
   // Global middleware execution order (important!)
-  router.use(createMetricsInitializer()); // Initialize metrics tracking first
+  router.use(createMetricsInitializer(env)); // Initialize metrics tracking first
   router.use(createProductionCors(env));
   router.use(createRequestLogger(env));
   router.use(createRateLimiter(env));

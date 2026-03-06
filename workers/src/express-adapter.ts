@@ -27,6 +27,7 @@ export interface ExpressRequest {
     id: number;
     role: string;
   };
+  organizationId?: string;
 }
 
 /**

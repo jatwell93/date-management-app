@@ -32,6 +32,15 @@ module.exports = {
   ],
   coverageReporters: ['text', 'text-summary', 'lcov', 'html'],
   coverageDirectory: 'coverage',
+  // Coverage thresholds enforcement
+  coverageThreshold: {
+    global: {
+      statements: 75,
+      branches: 70,
+      functions: 75,
+      lines: 75,
+    },
+  },
 
   // Performance optimization
   maxWorkers: 1,
