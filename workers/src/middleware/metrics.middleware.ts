@@ -205,7 +205,7 @@ export function writeCustomMetrics(env: Env, metrics: Partial<RequestMetrics>): 
   }
 
   try {
-    const analyticsData = formatMetricsForAnalytics(metrics as RequestMetrics);
+    const analyticsData = formatMetricsForAnalytics(metrics);
     env.ANALYTICS.writeDataPoint(analyticsData);
   } catch (error) {
     console.error('Failed to write custom metrics to Analytics Engine:', error);
@@ -220,16 +220,20 @@ export function writeCustomMetrics(env: Env, metrics: Partial<RequestMetrics>): 
  * - blobs: []  - not used for metrics
  * - doubles: [responseTime, uploadSize, processingTime]
  */
-export function formatMetricsForAnalytics(metrics: RequestMetrics) {
+export function formatMetricsForAnalytics(metrics: Partial<RequestMetrics>) {
+  const endpoint = metrics.endpoint || '/unknown';
+  const method = metrics.method || 'UNKNOWN';
+  const status = metrics.status ?? 0;
+
   return {
     indexes: [
-      metrics.routeGroup || metrics.endpoint,
-      metrics.method,
-      metrics.statusClass || `status_${metrics.status}`,
+      metrics.routeGroup || endpoint,
+      method,
+      metrics.statusClass || `status_${status}`,
     ],
     blobs: [],
     doubles: [
-      metrics.responseTime,
+      metrics.responseTime ?? 0,
       metrics.uploadSize || 0,
       metrics.csvProcessingTime || 0,
       metrics.rowCount || 0,
