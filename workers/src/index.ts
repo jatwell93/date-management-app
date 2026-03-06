@@ -27,7 +27,7 @@ import {
   getRequestMetrics,
   formatMetricsForAnalytics,
 } from './middleware/metrics.middleware';
-import { authenticateRequest, addUserIdHeader, unauthorized, getPublicEndpoints } from './middleware/auth';
+import { authenticateRequest, addUserIdHeader, unauthorized, isPublicEndpoint } from './middleware/auth';
 import { handleHealthCheck } from './health';
 import { createDatabaseClient } from '../../backend/src/database/database-factory';
 
@@ -201,8 +201,7 @@ function registerExpressRouter(
 function createJWTAuthMiddleware(env: Env): ExpressMiddleware {
   return async (req: ExpressRequest, res: ExpressResponse, next: () => void) => {
     // Task 7.6: Skip validation for public endpoints
-    const publicEndpoints = getPublicEndpoints();
-    const isPublic = publicEndpoints.some(endpoint => req.path.startsWith(endpoint));
+    const isPublic = isPublicEndpoint(req.path);
     
     // Allow public endpoints without authentication
     if (isPublic) {
@@ -237,6 +236,10 @@ function createJWTAuthMiddleware(env: Env): ExpressMiddleware {
       req.userId = authResult.userId;
     }
 
+    if (authResult.organizationId) {
+      req.organizationId = authResult.organizationId;
+    }
+
     return next(); // Continue to next middleware
   };
 }
@@ -248,11 +251,11 @@ function createRouter(env: Env): WorkersRouter {
   const router = new WorkersRouter();
 
   // Global middleware execution order (important!)
-  router.use(createMetricsInitializer()); // Initialize metrics tracking first
+  router.use(createMetricsInitializer(env)); // Initialize metrics tracking first
   router.use(createProductionCors(env));
-  router.use(createRequestLogger(env));
   router.use(createRateLimiter(env));
   router.use(createJWTAuthMiddleware(env)); // Task 7: JWT validation (after rate limiting)
+  router.use(createRequestLogger(env)); // After auth so organizationId is available
 
   // Register imported Express routes
   // Each route is prefixed with /api to match backend URL structure

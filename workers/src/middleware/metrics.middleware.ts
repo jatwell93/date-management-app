@@ -9,6 +9,7 @@
  */
 
 import { ExpressRequest, ExpressResponse } from '../express-adapter';
+import { Env } from '../types/env';
 
 /**
  * Metrics collected during request processing
@@ -37,6 +38,7 @@ declare global {
     metricsContext?: {
       startTime: number;
       metrics: Partial<RequestMetrics>;
+      env?: Env;
     };
   }
 }
@@ -45,7 +47,7 @@ declare global {
  * Middleware to initialize metrics tracking for the request
  * Should be called at the beginning of the middleware chain
  */
-export function createMetricsInitializer() {
+export function createMetricsInitializer(env: Env) {
   return async (req: ExpressRequest, res: ExpressResponse, next: () => void): Promise<void> => {
     const correlationId =
       req.get('x-request-id') ||
@@ -64,6 +66,7 @@ export function createMetricsInitializer() {
         method: req.method,
         correlationId,
       },
+      env,
     };
 
     request.correlationId = correlationId;
@@ -96,6 +99,18 @@ export function trackCsvUpload(
   req.metricsContext.metrics.uploadSize = options.fileSize;
   req.metricsContext.metrics.rowCount = options.rowCount;
   req.metricsContext.metrics.batchCount = options.batchCount;
+
+  // Write upload size metric to Analytics Engine
+  if (req.metricsContext.env) {
+    writeCustomMetrics(req.metricsContext.env, {
+      timestamp: Date.now(),
+      endpoint: req.metricsContext.metrics.endpoint || '/upload',
+      method: 'POST',
+      status: 200,
+      uploadSize: options.fileSize,
+      rowCount: options.rowCount,
+    });
+  }
 }
 
 /**
@@ -126,6 +141,18 @@ export function trackCsvProcessing(
   }
   if (options?.batchCount) {
     req.metricsContext.metrics.batchCount = options.batchCount;
+  }
+
+  // Write processing time metric to Analytics Engine
+  if (req.metricsContext.env) {
+    writeCustomMetrics(req.metricsContext.env, {
+      timestamp: Date.now(),
+      endpoint: req.metricsContext.metrics.endpoint || '/upload',
+      method: 'POST',
+      status: 200,
+      csvProcessingTime: processingDuration,
+      rowCount: options?.rowCount,
+    });
   }
 }
 
@@ -170,6 +197,22 @@ export function getRequestMetrics(
 }
 
 /**
+ * Write custom metrics to Cloudflare Analytics Engine
+ */
+export function writeCustomMetrics(env: Env, metrics: Partial<RequestMetrics>): void {
+  if (env.NODE_ENV !== 'production' || !env.ANALYTICS) {
+    return;
+  }
+
+  try {
+    const analyticsData = formatMetricsForAnalytics(metrics);
+    env.ANALYTICS.writeDataPoint(analyticsData);
+  } catch (error) {
+    console.error('Failed to write custom metrics to Analytics Engine:', error);
+  }
+}
+
+/**
  * Format metrics for Cloudflare Analytics Engine
  * 
  * Analytics Engine dataset schema:
@@ -177,16 +220,20 @@ export function getRequestMetrics(
  * - blobs: []  - not used for metrics
  * - doubles: [responseTime, uploadSize, processingTime]
  */
-export function formatMetricsForAnalytics(metrics: RequestMetrics) {
+export function formatMetricsForAnalytics(metrics: Partial<RequestMetrics>) {
+  const endpoint = metrics.endpoint || '/unknown';
+  const method = metrics.method || 'UNKNOWN';
+  const status = metrics.status ?? 0;
+
   return {
     indexes: [
-      metrics.routeGroup || metrics.endpoint,
-      metrics.method,
-      metrics.statusClass || `status_${metrics.status}`,
+      metrics.routeGroup || endpoint,
+      method,
+      metrics.statusClass || `status_${status}`,
     ],
     blobs: [],
     doubles: [
-      metrics.responseTime,
+      metrics.responseTime ?? 0,
       metrics.uploadSize || 0,
       metrics.csvProcessingTime || 0,
       metrics.rowCount || 0,

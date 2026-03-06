@@ -13,6 +13,7 @@ import { jwtVerify, SignJWT, JWTPayload } from 'jose';
  */
 export interface JWTPayloadData extends JWTPayload {
   userId: number;
+  organizationId: string;
   email?: string;
   role?: string;
 }
@@ -31,10 +32,16 @@ const PUBLIC_ENDPOINTS = [
 /**
  * Check if endpoint is public (doesn't require authentication)
  */
-function isPublicEndpoint(pathname: string): boolean {
-  return PUBLIC_ENDPOINTS.some(
-    endpoint => pathname.startsWith(endpoint) || pathname === endpoint
-  );
+export function isPublicEndpoint(pathname: string): boolean {
+  return PUBLIC_ENDPOINTS.some(endpoint => {
+    const apiPrefixed = endpoint.startsWith('/api') ? endpoint : `/api${endpoint}`;
+    return (
+      pathname === endpoint ||
+      pathname.startsWith(endpoint) ||
+      pathname === apiPrefixed ||
+      pathname.startsWith(apiPrefixed)
+    );
+  });
 }
 
 /**
@@ -68,7 +75,10 @@ export async function verifyJWT(
     const encoder = new TextEncoder();
     const secretKey = encoder.encode(secret);
     
-    const { payload } = await jwtVerify(token, secretKey);
+    // Add 5-minute clock skew tolerance for exp validation
+    const { payload } = await jwtVerify(token, secretKey, {
+      clockTolerance: 5 * 60, // 5 minutes in seconds
+    });
     
     return payload as JWTPayloadData;
   } catch (error) {
@@ -88,19 +98,21 @@ export async function verifyJWT(
  * Used for login/register endpoints to issue tokens
  * 
  * @param userId - User ID to encode in token
+ * @param organizationId - Organization ID for multi-tenant security
  * @param secret - JWT secret for signing
  * @param expiresIn - Expiration time (default: 24h)
  * @returns Signed JWT token
  */
 export async function createJWT(
   userId: number,
+  organizationId: string,
   secret: string,
   expiresIn: string = '24h'
 ): Promise<string> {
   const encoder = new TextEncoder();
   const secretKey = encoder.encode(secret);
   
-  return await new SignJWT({ userId })
+  return await new SignJWT({ userId, organizationId })
     .setProtectedHeader({ alg: 'HS256' })
     .setExpirationTime(expiresIn)
     .setIssuedAt()
@@ -122,6 +134,7 @@ export async function authenticateRequest(
 ): Promise<{
   authenticated: boolean;
   userId?: number;
+  organizationId?: string;
   error?: string;
 }> {
   const authHeader = request.headers.get('Authorization');
@@ -149,10 +162,18 @@ export async function authenticateRequest(
       error: 'Invalid token: missing userId',
     };
   }
+
+  if (!payload.organizationId) {
+    return {
+      authenticated: false,
+      error: 'Invalid token: missing organizationId',
+    };
+  }
   
   return {
     authenticated: true,
     userId: payload.userId,
+    organizationId: payload.organizationId,
   };
 }
 
@@ -173,6 +194,7 @@ export function createAuthMiddleware(jwtSecret: string) {
   ): Promise<{
     authenticated: boolean;
     userId?: number;
+    organizationId?: string;
     shouldBypass: boolean;
   }> => {
     const { pathname } = context;
@@ -188,6 +210,7 @@ export function createAuthMiddleware(jwtSecret: string) {
     return {
       authenticated: result.authenticated,
       userId: result.userId,
+      organizationId: result.organizationId,
       shouldBypass: false,
     };
   };

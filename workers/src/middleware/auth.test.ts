@@ -17,11 +17,12 @@ import {
 describe('Workers JWT Authentication (Task 7)', () => {
   const testSecret = 'test-jwt-secret-key-for-testing';
   const testUserId = 42;
+  const testOrganizationId = 'org_test123';
 
   describe('Task 7.3: JWT Signature Verification', () => {
     it('should create and verify valid JWT', async () => {
       // Create token
-      const token = await createJWT(testUserId, testSecret);
+      const token = await createJWT(testUserId, testOrganizationId, testSecret);
       expect(token).toBeTruthy();
       expect(typeof token).toBe('string');
 
@@ -29,10 +30,11 @@ describe('Workers JWT Authentication (Task 7)', () => {
       const payload = await verifyJWT(token, testSecret);
       expect(payload).toBeTruthy();
       expect(payload?.userId).toBe(testUserId);
+      expect(payload?.organizationId).toBe(testOrganizationId);
     });
 
     it('should reject invalid token signature', async () => {
-      const token = await createJWT(testUserId, testSecret);
+      const token = await createJWT(testUserId, testOrganizationId, testSecret);
       const wrongSecret = 'wrong-secret-key';
 
       const payload = await verifyJWT(token, wrongSecret);
@@ -46,7 +48,7 @@ describe('Workers JWT Authentication (Task 7)', () => {
     });
 
     it('should include userId in payload', async () => {
-      const token = await createJWT(123, testSecret);
+      const token = await createJWT(123, testOrganizationId, testSecret);
       const payload = await verifyJWT(token, testSecret);
       
       expect(payload?.userId).toBe(123);
@@ -55,7 +57,7 @@ describe('Workers JWT Authentication (Task 7)', () => {
 
   describe('Task 7.2: Extract JWT from Authorization Header', () => {
     it('should authenticate valid request with Bearer token', async () => {
-      const token = await createJWT(testUserId, testSecret);
+      const token = await createJWT(testUserId, testOrganizationId, testSecret);
       
       // Create mock request
       const mockRequest = new Request('https://example.com', {
@@ -67,6 +69,7 @@ describe('Workers JWT Authentication (Task 7)', () => {
       const result = await authenticateRequest(mockRequest, testSecret);
       expect(result.authenticated).toBe(true);
       expect(result.userId).toBe(testUserId);
+      expect(result.organizationId).toBe(testOrganizationId);
     });
 
     it('should reject request without Authorization header', async () => {
@@ -181,6 +184,18 @@ describe('Workers JWT Authentication (Task 7)', () => {
       expect(result.shouldBypass).toBe(true);
     });
 
+    it('should bypass authentication for /api-prefixed public endpoints', async () => {
+      const middleware = createAuthMiddleware(testSecret);
+
+      const result = await middleware(
+        new Request('https://example.com'),
+        { pathname: '/api/auth/login' }
+      );
+
+      expect(result.authenticated).toBe(true);
+      expect(result.shouldBypass).toBe(true);
+    });
+
     it('should require authentication for protected endpoints', async () => {
       const middleware = createAuthMiddleware(testSecret);
       
@@ -195,7 +210,7 @@ describe('Workers JWT Authentication (Task 7)', () => {
 
     it('should authenticate valid token on protected endpoint', async () => {
       const middleware = createAuthMiddleware(testSecret);
-      const token = await createJWT(testUserId, testSecret);
+      const token = await createJWT(testUserId, testOrganizationId, testSecret);
 
       const request = new Request('https://example.com/api/users', {
         headers: {
@@ -206,13 +221,14 @@ describe('Workers JWT Authentication (Task 7)', () => {
       const result = await middleware(request, { pathname: '/api/users' });
       expect(result.authenticated).toBe(true);
       expect(result.userId).toBe(testUserId);
+      expect(result.organizationId).toBe(testOrganizationId);
       expect(result.shouldBypass).toBe(false);
     });
   });
 
   describe('JWT Expiration', () => {
     it('should include expiration time in token', async () => {
-      const token = await createJWT(testUserId, testSecret, '24h');
+      const token = await createJWT(testUserId, testOrganizationId, testSecret, '24h');
       const payload = await verifyJWT(token, testSecret);
       
       expect(payload?.exp).toBeTruthy();
@@ -223,7 +239,7 @@ describe('Workers JWT Authentication (Task 7)', () => {
   describe('Integration: Request Flow', () => {
     it('should complete full auth flow', async () => {
       // 1. Create token
-      const token = await createJWT(testUserId, testSecret, '24h');
+      const token = await createJWT(testUserId, testOrganizationId, testSecret, '24h');
       
       // 2. Create request with token
       let request = new Request('https://example.com/api/users', {
