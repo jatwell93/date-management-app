@@ -69,7 +69,10 @@ export async function verifyJWT(
     const encoder = new TextEncoder();
     const secretKey = encoder.encode(secret);
     
-    const { payload } = await jwtVerify(token, secretKey);
+    // Add 5-minute clock skew tolerance for exp validation
+    const { payload } = await jwtVerify(token, secretKey, {
+      clockTolerance: 5 * 60, // 5 minutes in seconds
+    });
     
     return payload as JWTPayloadData;
   } catch (error) {

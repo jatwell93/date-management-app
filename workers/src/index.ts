@@ -254,9 +254,9 @@ function createRouter(env: Env): WorkersRouter {
   // Global middleware execution order (important!)
   router.use(createMetricsInitializer(env)); // Initialize metrics tracking first
   router.use(createProductionCors(env));
-  router.use(createRequestLogger(env));
   router.use(createRateLimiter(env));
   router.use(createJWTAuthMiddleware(env)); // Task 7: JWT validation (after rate limiting)
+  router.use(createRequestLogger(env)); // After auth so organizationId is available
 
   // Register imported Express routes
   // Each route is prefixed with /api to match backend URL structure
