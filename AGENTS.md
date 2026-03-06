@@ -417,9 +417,9 @@ Before starting work, clarify:
 
 ## 5. State Machine
 
-`PLAN → BUILD → DIFF → QA → APPROVAL → APPLY → DOCS → END  ↓       ↓                   ↓ (fail/changes/major changes needed)`
+`PLAN → BUILD → QA → APPROVAL → APPLY → DOCS → END  ↓       ↓                   ↓ (fail/changes/major changes needed)`
 
-### States: PLAN → BUILD → DIFF → QA → APPROVAL → APPLY → DOCS
+### States: PLAN → BUILD → QA → APPROVAL → APPLY → DOCS
 
 ----------
 
@@ -514,42 +514,9 @@ export const usersService = {
 
 ----------
 
-### DIFF State
-
-**In:** BUILD complete **Out:** Diff, Test Coverage % for Diff, No Typescript errors
-
-**Present:**
-
-```markdown
-## Proposed Changes   
-**Change ID:**  `add-user-validation` 
-**Tasks:** All items in `tasks.md` complete.   
-**Files:** 
--  `src/services/usersService.ts`: +5 
--  `src/__tests__/users.test.ts`: +20 
--  `openspec/changes/add-user-validation/tasks.md`: Updated   
-
-### Diff [git diff output]   
-### Checks 
-
-```bash
-npm run test:backend:diff
-```
-
-- ✅ Tests: 145 passing 
-- ✅ =============================== Coverage summary ===============================
-Statements   : 57.71% ( 2054/3559 )
-Branches     : 69.61% ( 252/362 )
-Functions    : 58.25% ( 60/103 )
-Lines        : 57.71% ( 2054/3559 )
-================================================================================
-
-
-----------
-
 ### QA State
 
-**In:** DIFF presented **Out:** Test results, UBS reults, Linter **Exit:** Tests pass OR user waiver
+**In:** BUILD presented **Out:** Test results, UBS reults, Linter **Exit:** Tests pass OR user waiver
 
 **Execute:**
 #### UBS (Ultimate Bug Scanner)
@@ -759,9 +726,6 @@ npm run test:coverage                     # Expected: high level of quality cove
 # Run linter with auto-fix  
 npm run lint                              # Expected: exit code 0 or only minor 
   
-# Scan for bugs [CRITICAL]  
-ubs $(git diff --name-only)               # Expected: exit code 0 (no critical/important issues)  
-  
 # Check TypeScript compilation  
 npm run build                             # Expected: exit code 0  
 # OR  
@@ -917,12 +881,11 @@ Must pass before merge:
 
 1.  ✅ Tests passing (`npm test`)
 2.  ✅ Linter clean (`npm run lint`)
-3.  ✅ UBS passed (`ubs <changed-files>` exit 0)
-4.  ✅ Security checklist passed
-5.  ✅ No hardcoded secrets
-6.  ✅ Follows Express/TypeScript conventions
-7.  ✅ Comments explain why, not what
-8.  ✅ OpenSpec validation passed (`openspec validate --all`)
+3.  ✅ Security checklist passed
+4.  ✅ No hardcoded secrets
+5.  ✅ Follows Express/TypeScript conventions
+6.  ✅ Comments explain why, not what
+7.  ✅ OpenSpec validation passed (`openspec validate --all`)
 
 ----------
 
@@ -968,7 +931,6 @@ Must pass before merge:
 -   ✅ Validate input, sanitize output
 -   ✅ Comment why, not what
 -   ✅ Cite code in plans (`src/controllers/users.ts:42`)
--   ✅ Scan with UBS before commit (catches bugs early)
 -   ✅ Use OpenSpec for change tracking (not markdown TODOs)
 -   ✅ Request approval before merge
 -   ✅ Document architectural decisions
