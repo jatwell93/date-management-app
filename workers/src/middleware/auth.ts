@@ -89,19 +89,21 @@ export async function verifyJWT(
  * Used for login/register endpoints to issue tokens
  * 
  * @param userId - User ID to encode in token
+ * @param organizationId - Organization ID for multi-tenant security
  * @param secret - JWT secret for signing
  * @param expiresIn - Expiration time (default: 24h)
  * @returns Signed JWT token
  */
 export async function createJWT(
   userId: number,
+  organizationId: string,
   secret: string,
   expiresIn: string = '24h'
 ): Promise<string> {
   const encoder = new TextEncoder();
   const secretKey = encoder.encode(secret);
   
-  return await new SignJWT({ userId })
+  return await new SignJWT({ userId, organizationId })
     .setProtectedHeader({ alg: 'HS256' })
     .setExpirationTime(expiresIn)
     .setIssuedAt()
