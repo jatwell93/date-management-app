@@ -32,10 +32,16 @@ const PUBLIC_ENDPOINTS = [
 /**
  * Check if endpoint is public (doesn't require authentication)
  */
-function isPublicEndpoint(pathname: string): boolean {
-  return PUBLIC_ENDPOINTS.some(
-    endpoint => pathname.startsWith(endpoint) || pathname === endpoint
-  );
+export function isPublicEndpoint(pathname: string): boolean {
+  return PUBLIC_ENDPOINTS.some(endpoint => {
+    const apiPrefixed = endpoint.startsWith('/api') ? endpoint : `/api${endpoint}`;
+    return (
+      pathname === endpoint ||
+      pathname.startsWith(endpoint) ||
+      pathname === apiPrefixed ||
+      pathname.startsWith(apiPrefixed)
+    );
+  });
 }
 
 /**

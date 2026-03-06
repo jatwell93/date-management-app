@@ -184,6 +184,18 @@ describe('Workers JWT Authentication (Task 7)', () => {
       expect(result.shouldBypass).toBe(true);
     });
 
+    it('should bypass authentication for /api-prefixed public endpoints', async () => {
+      const middleware = createAuthMiddleware(testSecret);
+
+      const result = await middleware(
+        new Request('https://example.com'),
+        { pathname: '/api/auth/login' }
+      );
+
+      expect(result.authenticated).toBe(true);
+      expect(result.shouldBypass).toBe(true);
+    });
+
     it('should require authentication for protected endpoints', async () => {
       const middleware = createAuthMiddleware(testSecret);
       
