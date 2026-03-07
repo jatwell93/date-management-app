@@ -19,6 +19,10 @@ out/
 *.sqlite-wal
 *.sqlite
 
+# Database backups/backend/backups/
+*.manifest.json
+*.pgdump.sql
+
 # Cache directories
 .cache/
 node_modules/.cache/

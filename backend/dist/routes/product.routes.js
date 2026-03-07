@@ -47,6 +47,9 @@ const data_integrity_middleware_1 = require("../middleware/data-integrity.middle
 const multer_1 = __importDefault(require("multer"));
 const rateLimiter_1 = require("../middleware/rateLimiter");
 const path = __importStar(require("path"));
+const database_factory_1 = require("../database/database-factory");
+const subscription_1 = require("../types/subscription");
+const csv_1 = require("../utils/csv");
 const router = (0, express_1.Router)();
 // Helper function to get services with organization context
 function getProductServiceForRequest(req) {
@@ -289,6 +292,97 @@ router.post('/upload-csv', auth_middleware_1.authenticateToken, (0, feature_gate
                 console.error('Skipping deletion of file with invalid path:', req.file.path);
             }
         }
+    }
+});
+// GET /products/export-excess - Export products that exceed tier limit
+router.get('/export-excess', auth_middleware_1.authenticateToken, async (req, res) => {
+    try {
+        const prisma = (0, database_factory_1.getDefaultDatabaseClient)();
+        const organizationId = req.organizationId;
+        // Get current subscription tier
+        const subscription = await prisma.subscriptionTier.findFirst({
+            where: { organizationId },
+            orderBy: { createdAt: 'desc' },
+        });
+        if (!subscription) {
+            return res.status(404).json({ message: 'Subscription not found' });
+        }
+        const tierLevel = subscription.tierLevel;
+        const maxSkus = subscription_1.TIER_LIMITS[tierLevel].max_skus;
+        // Unlimited tier - no excess products
+        if (maxSkus === null) {
+            return res.json({
+                message: 'Current tier has unlimited SKUs',
+                excessCount: 0,
+                products: [],
+            });
+        }
+        // Get current usage
+        const usage = await prisma.organizationUsage.findUnique({
+            where: { organizationId },
+            select: { totalSkus: true },
+        });
+        const currentCount = usage?.totalSkus || 0;
+        const excessCount = currentCount - maxSkus;
+        if (excessCount <= 0) {
+            return res.json({
+                message: 'Organization is within SKU limits',
+                tier: tierLevel,
+                maxSkus,
+                currentSkus: currentCount,
+                excessCount: 0,
+                products: [],
+            });
+        }
+        // Get excess products (oldest first for deletion priority)
+        const excessProducts = await prisma.product.findMany({
+            where: { organizationId },
+            orderBy: { createdAt: 'asc' },
+            skip: maxSkus,
+            include: {
+                _count: {
+                    select: { inventoryItems: true },
+                },
+            },
+        });
+        // Format response
+        const products = excessProducts.map((p) => ({
+            id: p.id,
+            sku: p.sku,
+            name: p.name,
+            barcode: p.barcode,
+            costPrice: p.costPrice,
+            createdAt: p.createdAt.toISOString(),
+            inventoryCount: p._count.inventoryItems,
+        }));
+        // Determine response format based on Accept header
+        const acceptHeader = req.get('Accept') || '';
+        if (acceptHeader.includes('text/csv') || req.query.format === 'csv') {
+            // CSV response
+            const headers = ['id', 'sku', 'name', 'barcode', 'costPrice', 'createdAt', 'inventoryCount'];
+            const csvRows = [
+                headers.join(','),
+                ...products.map((p) => headers.map((h) => (0, csv_1.escapeCSVValue)(p[h])).join(',')),
+            ];
+            res.setHeader('Content-Type', 'text/csv');
+            res.setHeader('Content-Disposition', `attachment; filename="excess-products-${organizationId}.csv"`);
+            return res.send(csvRows.join('\n'));
+        }
+        // JSON response
+        res.json({
+            metadata: {
+                organizationId,
+                tier: tierLevel,
+                maxSkus,
+                currentSkus: currentCount,
+                excessCount,
+            },
+            products,
+        });
+    }
+    catch (error) {
+        console.error('Export excess products error:', error);
+        res.status(500).json({ message: 'Internal server error' });
     }
 });
 exports.default = router;

@@ -14,4 +14,4 @@ export {
   TIER_PRICES,
   ALERT_THRESHOLDS,
   validateAlertThresholds,
-} from '../../shared/types/subscription';
+} from '../../../shared/types/subscription';

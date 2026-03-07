@@ -199,6 +199,17 @@ if (!isTestEnv) {
     });
     // Initialize scheduled tasks
     scheduler_service_1.SchedulerService.initialize();
+    // Initialize tier feature flags validation (16A.F.2)
+    (async () => {
+        try {
+            const { initializeTierFlagValidation } = await Promise.resolve().then(() => __importStar(require('./routes/health.routes')));
+            await initializeTierFlagValidation();
+        }
+        catch (error) {
+            console.error('FATAL: Tier feature flags validation failed at startup:', error);
+            console.error('Application may not function correctly. Check database tier_feature_flags table.');
+        }
+    })();
 }
 // Public routes
 app.use('/auth', auth_routes_1.default);
