@@ -1,0 +1,77 @@
+name: Workers Bundle Size Check
+
+on:
+  pull_request:
+    paths:
+      - 'workers/**'
+      - '.github/workflows/workers-bundle-size-check.yml'
+  push:
+    branches:
+      - main
+      - master
+    paths:
+      - 'workers/**'
+
+permissions:
+  contents: read
+
+jobs:
+  bundle-size:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: ./workers
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: 'npm'
+          cache-dependency-path: workers/package-lock.json
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Build worker bundle
+        run: npm run build
+
+      - name: Measure bundle size
+        id: measure
+        run: |
+          node <<'NODE'
+          const fs = require('fs');
+          const zlib = require('zlib');
+
+          const bundle = fs.readFileSync('dist/index.js');
+          const gzip = zlib.gzipSync(bundle);
+
+          const rawBytes = bundle.length;
+          const gzipBytes = gzip.length;
+
+          const output = process.env.GITHUB_OUTPUT;
+          fs.appendFileSync(output, `raw_bytes=${rawBytes}\n`);
+          fs.appendFileSync(output, `raw_kib=${(rawBytes / 1024).toFixed(2)}\n`);
+          fs.appendFileSync(output, `gzip_bytes=${gzipBytes}\n`);
+          fs.appendFileSync(output, `gzip_kib=${(gzipBytes / 1024).toFixed(2)}\n`);
+          NODE
+
+      - name: Publish bundle summary
+        run: |
+          echo "## Workers Bundle Size" >> "$GITHUB_STEP_SUMMARY"
+          echo "- Raw: ${{ steps.measure.outputs.raw_kib }} KiB" >> "$GITHUB_STEP_SUMMARY"
+          echo "- Gzip: ${{ steps.measure.outputs.gzip_kib }} KiB" >> "$GITHUB_STEP_SUMMARY"
+          echo "- Limit: 500.00 KiB (raw)" >> "$GITHUB_STEP_SUMMARY"
+
+      - name: Enforce bundle size limit
+        env:
+          RAW_BYTES: ${{ steps.measure.outputs.raw_bytes }}
+        run: |
+          LIMIT_BYTES=512000
+          if [ "$RAW_BYTES" -gt "$LIMIT_BYTES" ]; then
+            echo "::error::Workers bundle is ${RAW_BYTES} bytes (limit ${LIMIT_BYTES} bytes / 500 KiB)."
+            exit 1
+          fi
+          echo "Bundle size check passed: ${RAW_BYTES} bytes <= ${LIMIT_BYTES} bytes"
