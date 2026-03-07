@@ -53,7 +53,148 @@ router.get('/', authenticateToken, async (req: AuthRequest, res: Response) => {
   }
 });
 
-// GET /products/:id - Get a specific product by ID
+// GET /products/by-barcode/:barcode - Get a specific product by barcode [MOVED BEFORE :id CATCH-ALL]
+router.get('/by-barcode/:barcode', authenticateToken, async (req: AuthRequest, res: Response) => {
+  try {
+    const barcode = req.params.barcode;
+    const productService = getProductServiceForRequest(req);
+    const product = await productService.getProductByBarcode(barcode);
+
+    if (!product) {
+      return res.status(404).json({ message: 'Product not found' });
+    }
+
+    res.json(product);
+  } catch (_error) {
+    // console.error("Get product by barcode error:", _error);
+    res.status(500).json({ message: 'Internal server error' });
+  }
+});
+
+// GET /products/by-sku/:sku - Get a specific product by SKU [MOVED BEFORE :id CATCH-ALL]
+router.get('/by-sku/:sku', authenticateToken, async (req: AuthRequest, res: Response) => {
+  try {
+    const sku = req.params.sku;
+    const productService = getProductServiceForRequest(req);
+    const product = await productService.getProductBySku(sku);
+
+    if (!product) {
+      return res.status(404).json({ message: 'Product not found' });
+    }
+
+    res.json(product);
+  } catch (_error) {
+    // console.error("Get product by SKU error:", _error);
+    res.status(500).json({ message: 'Internal server error' });
+  }
+});
+
+// GET /products/export-excess - Export products that exceed tier limit [MOVED BEFORE :id CATCH-ALL]
+router.get('/export-excess', authenticateToken, async (req: AuthRequest, res: Response) => {
+  try {
+    const prisma = getDefaultDatabaseClient();
+    const organizationId = req.organizationId!;
+
+    // Get current subscription tier
+    const subscription = await prisma.subscriptionTier.findFirst({
+      where: { organizationId },
+      orderBy: { createdAt: 'desc' },
+    });
+
+    if (!subscription) {
+      return res.status(404).json({ message: 'Subscription not found' });
+    }
+
+    const tierLevel = subscription.tierLevel as TierLevel;
+    const maxSkus = TIER_LIMITS[tierLevel].max_skus;
+
+    // Unlimited tier - no excess products
+    if (maxSkus === null) {
+      return res.json({
+        message: 'Current tier has unlimited SKUs',
+        excessCount: 0,
+        products: [],
+      });
+    }
+
+    // Get current usage
+    const usage = await prisma.organizationUsage.findUnique({
+      where: { organizationId },
+      select: { totalSkus: true },
+    });
+
+    const currentCount = usage?.totalSkus || 0;
+    const excessCount = currentCount - maxSkus;
+
+    if (excessCount <= 0) {
+      return res.json({
+        message: 'Organization is within SKU limits',
+        tier: tierLevel,
+        maxSkus,
+        currentSkus: currentCount,
+        excessCount: 0,
+        products: [],
+      });
+    }
+
+    // Get excess products (oldest first for deletion priority)
+    const excessProducts = await prisma.product.findMany({
+      where: { organizationId },
+      orderBy: { createdAt: 'asc' },
+      skip: maxSkus,
+      include: {
+        _count: {
+          select: { inventoryItems: true },
+        },
+      },
+    });
+
+    // Format response
+    const products = excessProducts.map((p) => ({
+      id: p.id,
+      sku: p.sku,
+      name: p.name,
+      barcode: p.barcode,
+      costPrice: p.costPrice,
+      createdAt: p.createdAt.toISOString(),
+      inventoryCount: p._count.inventoryItems,
+    }));
+
+    // Determine response format based on Accept header
+    const acceptHeader = req.get('Accept') || '';
+    if (acceptHeader.includes('text/csv') || req.query.format === 'csv') {
+      // CSV response
+      const headers = ['id', 'sku', 'name', 'barcode', 'costPrice', 'createdAt', 'inventoryCount'];
+      const csvRows = [
+        headers.join(','),
+        ...products.map((p) =>
+          headers.map((h) => escapeCSVValue(p[h as keyof typeof p])).join(','),
+        ),
+      ];
+
+      res.setHeader('Content-Type', 'text/csv');
+      res.setHeader('Content-Disposition', `attachment; filename="excess-products-${organizationId}.csv"`);
+      return res.send(csvRows.join('\n'));
+    }
+
+    // JSON response
+    res.json({
+      metadata: {
+        organizationId,
+        tier: tierLevel,
+        maxSkus,
+        currentSkus: currentCount,
+        excessCount,
+      },
+      products,
+    });
+  } catch (error) {
+    console.error('Export excess products error:', error);
+    res.status(500).json({ message: 'Internal server error' });
+  }
+});
+
+// GET /products/:id - Get a specific product by ID [MOVED AFTER SPECIFIC ROUTES]
 router.get('/:id', authenticateToken, async (req: AuthRequest, res: Response) => {
   try {
     const id = Number.parseInt(req.params.id, 10);
@@ -77,42 +218,6 @@ router.get('/:id', authenticateToken, async (req: AuthRequest, res: Response) =>
     res.json(product);
   } catch (_error) {
     // console.error("Get product error:", _error);
-    res.status(500).json({ message: 'Internal server error' });
-  }
-});
-
-// GET /products/by-barcode/:barcode - Get a specific product by barcode
-router.get('/by-barcode/:barcode', authenticateToken, async (req: AuthRequest, res: Response) => {
-  try {
-    const barcode = req.params.barcode;
-    const productService = getProductServiceForRequest(req);
-    const product = await productService.getProductByBarcode(barcode);
-
-    if (!product) {
-      return res.status(404).json({ message: 'Product not found' });
-    }
-
-    res.json(product);
-  } catch (_error) {
-    // console.error("Get product by barcode error:", _error);
-    res.status(500).json({ message: 'Internal server error' });
-  }
-});
-
-// GET /products/by-sku/:sku - Get a specific product by SKU
-router.get('/by-sku/:sku', authenticateToken, async (req: AuthRequest, res: Response) => {
-  try {
-    const sku = req.params.sku;
-    const productService = getProductServiceForRequest(req);
-    const product = await productService.getProductBySku(sku);
-
-    if (!product) {
-      return res.status(404).json({ message: 'Product not found' });
-    }
-
-    res.json(product);
-  } catch (_error) {
-    // console.error("Get product by SKU error:", _error);
     res.status(500).json({ message: 'Internal server error' });
   }
 });
@@ -309,110 +414,5 @@ router.post(
     }
   },
 );
-
-// GET /products/export-excess - Export products that exceed tier limit
-router.get('/export-excess', authenticateToken, async (req: AuthRequest, res: Response) => {
-  try {
-    const prisma = getDefaultDatabaseClient();
-    const organizationId = req.organizationId!;
-
-    // Get current subscription tier
-    const subscription = await prisma.subscriptionTier.findFirst({
-      where: { organizationId },
-      orderBy: { createdAt: 'desc' },
-    });
-
-    if (!subscription) {
-      return res.status(404).json({ message: 'Subscription not found' });
-    }
-
-    const tierLevel = subscription.tierLevel as TierLevel;
-    const maxSkus = TIER_LIMITS[tierLevel].max_skus;
-
-    // Unlimited tier - no excess products
-    if (maxSkus === null) {
-      return res.json({
-        message: 'Current tier has unlimited SKUs',
-        excessCount: 0,
-        products: [],
-      });
-    }
-
-    // Get current usage
-    const usage = await prisma.organizationUsage.findUnique({
-      where: { organizationId },
-      select: { totalSkus: true },
-    });
-
-    const currentCount = usage?.totalSkus || 0;
-    const excessCount = currentCount - maxSkus;
-
-    if (excessCount <= 0) {
-      return res.json({
-        message: 'Organization is within SKU limits',
-        tier: tierLevel,
-        maxSkus,
-        currentSkus: currentCount,
-        excessCount: 0,
-        products: [],
-      });
-    }
-
-    // Get excess products (oldest first for deletion priority)
-    const excessProducts = await prisma.product.findMany({
-      where: { organizationId },
-      orderBy: { createdAt: 'asc' },
-      skip: maxSkus,
-      include: {
-        _count: {
-          select: { inventoryItems: true },
-        },
-      },
-    });
-
-    // Format response
-    const products = excessProducts.map((p) => ({
-      id: p.id,
-      sku: p.sku,
-      name: p.name,
-      barcode: p.barcode,
-      costPrice: p.costPrice,
-      createdAt: p.createdAt.toISOString(),
-      inventoryCount: p._count.inventoryItems,
-    }));
-
-    // Determine response format based on Accept header
-    const acceptHeader = req.get('Accept') || '';
-    if (acceptHeader.includes('text/csv') || req.query.format === 'csv') {
-      // CSV response
-      const headers = ['id', 'sku', 'name', 'barcode', 'costPrice', 'createdAt', 'inventoryCount'];
-      const csvRows = [
-        headers.join(','),
-        ...products.map((p) =>
-          headers.map((h) => escapeCSVValue(p[h as keyof typeof p])).join(','),
-        ),
-      ];
-
-      res.setHeader('Content-Type', 'text/csv');
-      res.setHeader('Content-Disposition', `attachment; filename="excess-products-${organizationId}.csv"`);
-      return res.send(csvRows.join('\n'));
-    }
-
-    // JSON response
-    res.json({
-      metadata: {
-        organizationId,
-        tier: tierLevel,
-        maxSkus,
-        currentSkus: currentCount,
-        excessCount,
-      },
-      products,
-    });
-  } catch (error) {
-    console.error('Export excess products error:', error);
-    res.status(500).json({ message: 'Internal server error' });
-  }
-});
 
 export default router;
