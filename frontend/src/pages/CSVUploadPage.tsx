@@ -9,6 +9,13 @@ import {
   TableHeader,
   TableRow,
 } from '../components/ui/table';
+import {
+  validateCSVColumns,
+  estimateRowCount,
+  formatColumnValidationError,
+  type ColumnValidationResult,
+  type RowEstimate,
+} from '../utils/csvValidator';
 
 interface UploadResponse {
   success: boolean;
@@ -17,6 +24,8 @@ interface UploadResponse {
   updatedCount?: number;
   errorCount?: number;
   errors?: string[];
+  columnsUsed?: string[];
+  columnsIgnored?: number;
 }
 
 export const CSVUploadPage: React.FC<{ token: string | null }> = ({ token }) => {
@@ -27,6 +36,8 @@ export const CSVUploadPage: React.FC<{ token: string | null }> = ({ token }) => 
   const [filePreview, setFilePreview] = useState<string[][]>([]);
   const [uploadProgress, setUploadProgress] = useState<number>(0);
   const [progressMessage, setProgressMessage] = useState<string>('');
+  const [columnValidation, setColumnValidation] = useState<ColumnValidationResult | null>(null);
+  const [rowEstimate, setRowEstimate] = useState<RowEstimate | null>(null);
 
   const logUploadMetric = (event: string, data: Record<string, unknown>) => {
     if (process.env.NODE_ENV === 'test') {
@@ -153,15 +164,30 @@ export const CSVUploadPage: React.FC<{ token: string | null }> = ({ token }) => 
     throw new Error('Upload failed after multiple attempts');
   };
 
-  const handleFileChange = (event: React.ChangeEvent<HTMLInputElement>) => {
+  const handleFileChange = async (event: React.ChangeEvent<HTMLInputElement>) => {
     if (event.target.files && event.target.files[0]) {
       const file = event.target.files[0];
       setSelectedFile(file);
       setFileName(file.name);
       setUploadResult(null); // Reset any previous results
+      setColumnValidation(null);
+      setRowEstimate(null);
 
       // Generate preview of the first 5 rows
       previewFile(file);
+
+      // Validate columns (async)
+      try {
+        const validation = await validateCSVColumns(file);
+        setColumnValidation(validation);
+      } catch (error) {
+        console.error('Column validation failed:', error);
+        // Non-blocking - will be caught during upload
+      }
+
+      // Estimate row count
+      const estimate = estimateRowCount(file);
+      setRowEstimate(estimate);
     }
   };
 
@@ -210,6 +236,15 @@ export const CSVUploadPage: React.FC<{ token: string | null }> = ({ token }) => 
       setUploadResult({
         success: false,
         message: validationError,
+      });
+      return;
+    }
+
+    // Check column validation
+    if (columnValidation && !columnValidation.isValid) {
+      setUploadResult({
+        success: false,
+        message: formatColumnValidationError(columnValidation),
       });
       return;
     }
@@ -368,6 +403,8 @@ export const CSVUploadPage: React.FC<{ token: string | null }> = ({ token }) => 
     setUploadResult(null);
     setUploadProgress(0);
     setProgressMessage('');
+    setColumnValidation(null);
+    setRowEstimate(null);
   };
 
   return (
@@ -472,6 +509,39 @@ export const CSVUploadPage: React.FC<{ token: string | null }> = ({ token }) => 
             </div>
           )}
 
+          {/* Column Validation Warning */}
+          {columnValidation && !columnValidation.isValid && (
+            <div className="mb-4 p-4 bg-yellow-50 border border-yellow-200 rounded-md">
+              <h4 className="font-semibold text-yellow-800 mb-2">⚠️ Column Validation Warning</h4>
+              <div className="text-sm text-yellow-700 whitespace-pre-line">
+                {formatColumnValidationError(columnValidation)}
+              </div>
+              <p className="text-xs text-yellow-600 mt-2">
+                Upload will be blocked until column names are corrected.
+              </p>
+            </div>
+          )}
+
+          {/* Column Validation Success */}
+          {columnValidation && columnValidation.isValid && selectedFile && (
+            <div className="mb-4 p-3 bg-green-50 border border-green-200 rounded-md">
+              <p className="text-sm text-green-800">
+                ✓ All required columns found: {Object.values(columnValidation.foundColumns).join(', ')}
+              </p>
+            </div>
+          )}
+
+          {/* Row Estimate Warning */}
+          {rowEstimate && rowEstimate.showWarning && (
+            <div className="mb-4 p-4 bg-blue-50 border border-blue-200 rounded-md">
+              <h4 className="font-semibold text-blue-800 mb-1">ℹ️ Large File Detected</h4>
+              <p className="text-sm text-blue-700">{rowEstimate.warningMessage}</p>
+              <p className="text-xs text-blue-600 mt-1">
+                The upload will proceed normally, but please be patient during processing.
+              </p>
+            </div>
+          )}
+
           {isUploading && (
             <div className="mb-4">
               <div className="flex items-center justify-between mb-1">
@@ -491,11 +561,10 @@ export const CSVUploadPage: React.FC<{ token: string | null }> = ({ token }) => 
             <button
               type="submit"
               disabled={isUploading || !selectedFile}
-              className={`px-4 py-2 rounded-md text-white font-medium ${
-                isUploading || !selectedFile
+              className={`px-4 py-2 rounded-md text-white font-medium ${isUploading || !selectedFile
                   ? 'bg-gray-400 cursor-not-allowed'
                   : 'bg-inventory-primary-600 hover:bg-inventory-primary-700'
-              }`}
+                }`}
             >
               {isUploading ? 'Uploading...' : 'Upload CSV/XLSX/XLS'}
             </button>
@@ -525,6 +594,21 @@ export const CSVUploadPage: React.FC<{ token: string | null }> = ({ token }) => 
                 <p>Products imported: {uploadResult.importedCount}</p>
                 <p>Products updated: {uploadResult.updatedCount}</p>
                 <p>Errors: {uploadResult.errorCount}</p>
+              </div>
+            )}
+
+            {/* Column Usage Summary */}
+            {uploadResult.columnsUsed && uploadResult.columnsUsed.length > 0 && (
+              <div className="mt-3 p-3 bg-white bg-opacity-50 rounded border border-inventory-success-200">
+                <p className="text-sm font-medium">Column Summary:</p>
+                <p className="text-sm">
+                  ✓ Used: <span className="font-mono">{uploadResult.columnsUsed.join(', ')}</span>
+                </p>
+                {uploadResult.columnsIgnored !== undefined && uploadResult.columnsIgnored > 0 && (
+                  <p className="text-sm text-inventory-success-700">
+                    ℹ️ Ignored {uploadResult.columnsIgnored} extra column{uploadResult.columnsIgnored > 1 ? 's' : ''}
+                  </p>
+                )}
               </div>
             )}
 

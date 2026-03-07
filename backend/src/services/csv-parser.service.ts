@@ -69,6 +69,10 @@ export interface CSVParseResult {
   errors: RowError[];
   /** Processing time in milliseconds */
   durationMs: number;
+  /** Columns used from CSV */
+  columnsUsed?: string[];
+  /** Number of columns ignored */
+  columnsIgnored?: number;
 }
 
 export interface CSVMetricsContext {
@@ -178,6 +182,10 @@ export class CSVParserService extends EventEmitter {
     // Validate file exists and check size
     await this.validateFile(filePath);
 
+    // Track column usage
+    let totalColumnsInFile = 0;
+    const usedColumns: string[] = [];
+
     const result: CSVParseResult = {
       imported: 0,
       updated: 0,
@@ -215,7 +223,16 @@ export class CSVParserService extends EventEmitter {
 
         // Initialize header mapping on first record
         if (!headerMap) {
-          headerMap = this.buildHeaderMap(Object.keys(record));
+          const csvHeaders = Object.keys(record);
+          totalColumnsInFile = csvHeaders.length;
+          headerMap = this.buildHeaderMap(csvHeaders);
+
+          // Track which columns we're actually using
+          headerMap.forEach((actualHeader) => {
+            if (!usedColumns.includes(actualHeader)) {
+              usedColumns.push(actualHeader);
+            }
+          });
 
           // Validate required headers exist
           const headerValidation = this.validateHeaders(headerMap);
@@ -289,6 +306,12 @@ export class CSVParserService extends EventEmitter {
 
     result.durationMs = Date.now() - startTime;
 
+    // Add column usage information
+    if (usedColumns.length > 0) {
+      result.columnsUsed = usedColumns;
+      result.columnsIgnored = Math.max(0, totalColumnsInFile - usedColumns.length);
+    }
+
     // Emit final progress
     this.emitProgress(result);
     this.emit('complete', result);
@@ -302,6 +325,8 @@ export class CSVParserService extends EventEmitter {
       skipped: result.skipped,
       errorCount: result.errors.length,
       durationMs: result.durationMs,
+      columnsUsed: result.columnsUsed?.length,
+      columnsIgnored: result.columnsIgnored,
     });
 
     return result;
