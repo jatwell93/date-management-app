@@ -12,6 +12,8 @@ const TIER_FEATURES = [
   { tierLevel: 'starter', featureKey: 'advanced_analytics', enabled: false },
   { tierLevel: 'starter', featureKey: 'api_access', enabled: false },
   { tierLevel: 'starter', featureKey: 'priority_support', enabled: false },
+  { tierLevel: 'starter', featureKey: 'dedicated_support', enabled: false },
+  { tierLevel: 'starter', featureKey: 'custom_integrations', enabled: false },
 
   // Professional Tier
   { tierLevel: 'professional', featureKey: 'max_skus', limitValue: 2000, enabled: true },
@@ -25,6 +27,8 @@ const TIER_FEATURES = [
   { tierLevel: 'professional', featureKey: 'advanced_analytics', enabled: true },
   { tierLevel: 'professional', featureKey: 'api_access', enabled: false },
   { tierLevel: 'professional', featureKey: 'priority_support', enabled: false },
+  { tierLevel: 'professional', featureKey: 'dedicated_support', enabled: false },
+  { tierLevel: 'professional', featureKey: 'custom_integrations', enabled: false },
 
   // Premium Tier
   { tierLevel: 'premium', featureKey: 'max_skus', limitValue: null, enabled: true },
@@ -33,6 +37,8 @@ const TIER_FEATURES = [
   { tierLevel: 'premium', featureKey: 'advanced_analytics', enabled: true },
   { tierLevel: 'premium', featureKey: 'api_access', enabled: true },
   { tierLevel: 'premium', featureKey: 'priority_support', enabled: true },
+  { tierLevel: 'premium', featureKey: 'dedicated_support', enabled: false },
+  { tierLevel: 'premium', featureKey: 'custom_integrations', enabled: false },
 
   // Concierge Tier
   { tierLevel: 'concierge', featureKey: 'max_skus', limitValue: null, enabled: true },

@@ -176,7 +176,14 @@ describe('AuthService', () => {
                 token: 'valid_refresh_token',
                 expiresAt: futureDate,
                 revokedAt: null,
-                user: { id: 5, role: 'Staff', organizationId: 'org_123', pin: 'hashed', createdAt: new Date(), updatedAt: new Date() },
+                user: {
+                    id: 5,
+                    role: 'Staff',
+                    organizationId: 'org_123',
+                    pin: 'hashed',
+                    createdAt: new Date(),
+                    updatedAt: new Date(),
+                },
             });
             const newAccessToken = await authService.refreshAccessToken('valid_refresh_token');
             expect(newAccessToken).toBe('mock_jwt_token');
