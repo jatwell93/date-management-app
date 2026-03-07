@@ -228,6 +228,63 @@ export const CSVUploadPage: React.FC<{ token: string | null }> = ({ token }) => 
     }
   };
 
+  const pollUploadStatus = async (key: string) => {
+    const apiUrl = process.env.REACT_APP_API_URL || '';
+    const maxAttempts = 30; // 30 seconds max
+    const pollInterval = 1000; // 1 second
+
+    for (let attempt = 0; attempt < maxAttempts; attempt++) {
+      try {
+        const statusRes = await fetch(`${apiUrl}/upload/status/${key}`, {
+          headers: {
+            Authorization: `Bearer ${token}`,
+          },
+        });
+
+        if (!statusRes.ok) {
+          throw new Error('Failed to get upload status');
+        }
+
+        const statusData = await statusRes.json();
+
+        if (statusData.status === 'complete') {
+          setUploadResult({
+            success: true,
+            message: 'File uploaded and processed successfully',
+            importedCount: statusData.rowsProcessed,
+            updatedCount: 0, // TODO: calculate if needed
+            errorCount: 0, // TODO: calculate if needed
+            columnsUsed: statusData.columnsUsed,
+            columnsIgnored: statusData.columnsIgnored,
+          });
+          return;
+        } else if (statusData.status === 'failed') {
+          setUploadResult({
+            success: false,
+            message: statusData.error || 'Processing failed',
+          });
+          return;
+        }
+
+        // Still processing, update progress
+        setUploadProgress(statusData.progress || 0);
+        setProgressMessage(statusData.message || 'Processing...');
+
+        // Wait before next poll
+        await new Promise(resolve => setTimeout(resolve, pollInterval));
+      } catch (error) {
+        console.error('Status poll error:', error);
+        // Continue polling on error
+      }
+    }
+
+    // Timeout
+    setUploadResult({
+      success: false,
+      message: 'Processing timed out. Please check your uploads.',
+    });
+  };
+
   const handleSubmit = async (event: React.FormEvent) => {
     event.preventDefault();
 
@@ -300,6 +357,8 @@ export const CSVUploadPage: React.FC<{ token: string | null }> = ({ token }) => 
         });
       }, 500);
 
+      let uploadKey = key; // From initiate
+
       try {
         if (strategy === 'direct') {
           const formData = new FormData();
@@ -307,13 +366,20 @@ export const CSVUploadPage: React.FC<{ token: string | null }> = ({ token }) => 
 
           const directUrl = uploadUrl.startsWith('http') ? uploadUrl : `${apiUrl}/upload/direct`;
 
-          await uploadWithRetry(directUrl, {
+          const directRes = await uploadWithRetry(directUrl, {
             method: 'POST',
             headers: {
               Authorization: `Bearer ${token}`,
             },
             body: formData,
           });
+
+          if (!directRes.ok) {
+            throw new Error('Direct upload failed');
+          }
+
+          const directData = await directRes.json();
+          uploadKey = directData.key || key; // Use key from response if available
         } else {
           // Presigned PUT
           await uploadWithRetry(uploadUrl, {
@@ -331,16 +397,6 @@ export const CSVUploadPage: React.FC<{ token: string | null }> = ({ token }) => 
       setUploadProgress(100);
 
       // 3. Complete (Trigger Processing)
-      // For direct upload, the server might trigger processing automatically, but our API design
-      // in UploadController for 'direct' finishes with json response.
-      // AND 'direct' endpoint calls handleDirectUpload which calls completeUpload.
-      // So detailed processing happens. But for consistency, 'presigned' NEEDS explicit complete call.
-      // 'direct' does NOT need it if the controller handles it.
-
-      // Strategy check:
-      // If presigned, we MUST call complete.
-      // If direct, the request is already done.
-
       if (strategy === 'presigned') {
         setProgressMessage('Processing file...');
         const completeRes = await fetch(`${apiUrl}/upload/complete`, {
@@ -349,17 +405,15 @@ export const CSVUploadPage: React.FC<{ token: string | null }> = ({ token }) => 
             'Content-Type': 'application/json',
             Authorization: `Bearer ${token}`,
           },
-          body: JSON.stringify({ key }),
+          body: JSON.stringify({ key: uploadKey }),
         });
 
         if (!completeRes.ok) throw new Error('Processing failed');
       }
 
-      // Success
-      setUploadResult({
-        success: true,
-        message: 'File uploaded and processed successfully',
-      });
+      // Poll for processing completion
+      await pollUploadStatus(uploadKey);
+
       logUploadMetric('upload_complete', {
         fileSize: fileToUpload.size,
         durationMs: Date.now() - uploadStartTime,
@@ -562,8 +616,8 @@ export const CSVUploadPage: React.FC<{ token: string | null }> = ({ token }) => 
               type="submit"
               disabled={isUploading || !selectedFile}
               className={`px-4 py-2 rounded-md text-white font-medium ${isUploading || !selectedFile
-                  ? 'bg-gray-400 cursor-not-allowed'
-                  : 'bg-inventory-primary-600 hover:bg-inventory-primary-700'
+                ? 'bg-gray-400 cursor-not-allowed'
+                : 'bg-inventory-primary-600 hover:bg-inventory-primary-700'
                 }`}
             >
               {isUploading ? 'Uploading...' : 'Upload CSV/XLSX/XLS'}

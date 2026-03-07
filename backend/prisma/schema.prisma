@@ -319,6 +319,8 @@ model Upload {
   errorMessage      String?      @map("error_message") // Error details if failed
   rowsProcessed     Int          @default(0) @map("rows_processed") // CSV rows processed
   rowsTotal         Int?         @map("rows_total") // Total rows in CSV
+  columnsUsed       String?     @map("columns_used") // JSON array of column names that were used
+  columnsIgnored    Int          @default(0) @map("columns_ignored") // Number of columns ignored
   createdAt         DateTime     @default(now()) @map("created_at")
   updatedAt         DateTime     @updatedAt @map("updated_at")
   user              User         @relation(fields: [userId], references: [id], onDelete: Cascade)

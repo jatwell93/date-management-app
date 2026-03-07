@@ -6,6 +6,7 @@ import { CSVParserService } from './csv-parser.service';
 import { envConfig } from '../config/environment';
 import { StorageQuotaService } from './storage-quota.service';
 import { Logger } from '../utils/logger';
+import { getDefaultDatabaseClient } from '../database/database-factory';
 
 export interface InitiateUploadResponse {
   strategy: 'direct' | 'presigned';
@@ -117,7 +118,20 @@ export class UploadService {
       );
 
       // 3. Process file
-      await this.csvParser.processFile(tempPath, { uploadKey: key, userId });
+      const parseResult = await this.csvParser.processFile(tempPath, { uploadKey: key, userId });
+
+      // Update database with final results
+      const prisma = getDefaultDatabaseClient();
+      await prisma.upload.update({
+        where: { fileKey: key },
+        data: {
+          status: 'complete',
+          rowsProcessed: parseResult.imported + parseResult.updated + parseResult.skipped,
+          rowsTotal: parseResult.total,
+          columnsUsed: JSON.stringify(parseResult.columnsUsed || []),
+          columnsIgnored: parseResult.columnsIgnored || 0,
+        },
+      });
 
       Logger.info('Upload processing metrics', {
         uploadKey: key,
@@ -126,6 +140,8 @@ export class UploadService {
         contentType: metadata?.contentType,
         processingDurationMs: Date.now() - startTime,
         status: 'success',
+        columnsUsed: parseResult.columnsUsed,
+        columnsIgnored: parseResult.columnsIgnored,
       });
     } catch (error) {
       Logger.warn('Upload processing metrics', {

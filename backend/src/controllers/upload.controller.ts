@@ -58,9 +58,9 @@ export class UploadController {
         return;
       }
 
-      await this.uploadService.handleDirectUpload(buffer, originalname, mimetype, req.userId);
+      const key = await this.uploadService.handleDirectUpload(buffer, originalname, mimetype, req.userId);
 
-      res.json({ message: 'File uploaded and processing started' });
+      res.json({ message: 'File uploaded and processing started', key });
     } catch (error) {
       console.error('Direct upload error:', error);
       res.status(500).json({ error: error instanceof Error ? error.message : 'Unknown error' });
@@ -120,6 +120,8 @@ export class UploadController {
           errorMessage: true,
           rowsProcessed: true,
           rowsTotal: true,
+          columnsUsed: true,
+          columnsIgnored: true,
           organizationId: true,
         },
       });
@@ -148,6 +150,8 @@ export class UploadController {
         error: upload.errorMessage,
         rowsProcessed: upload.rowsProcessed,
         rowsTotal: upload.rowsTotal,
+        columnsUsed: upload.columnsUsed ? JSON.parse(upload.columnsUsed) : undefined,
+        columnsIgnored: upload.columnsIgnored,
       });
     } catch (error) {
       console.error('Upload status error:', error);
