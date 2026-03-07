@@ -109,10 +109,13 @@ export class UploadController {
         return;
       }
 
+      // Decode URL-encoded key (handles keys with slashes)
+      const decodedKey = decodeURIComponent(key);
+
       // Query upload status from database
       const prisma = getDefaultDatabaseClient();
       const upload = await prisma.upload.findUnique({
-        where: { fileKey: key },
+        where: { fileKey: decodedKey },
         select: {
           status: true,
           uploadProgress: true,

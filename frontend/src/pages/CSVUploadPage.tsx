@@ -235,7 +235,9 @@ export const CSVUploadPage: React.FC<{ token: string | null }> = ({ token }) => 
 
     for (let attempt = 0; attempt < maxAttempts; attempt++) {
       try {
-        const statusRes = await fetch(`${apiUrl}/upload/status/${key}`, {
+        // URL encode the key to handle slashes in the path
+        const encodedKey = encodeURIComponent(key);
+        const statusRes = await fetch(`${apiUrl}/upload/status/${encodedKey}`, {
           headers: {
             Authorization: `Bearer ${token}`,
           },

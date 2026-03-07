@@ -72,7 +72,11 @@ async function readCSVHeaders(file: File): Promise<string[]> {
     
     reader.onload = (e) => {
       const text = e.target?.result as string;
+      // Get first line (or entire text if no newline found)
       const firstLine = text.split('\n')[0];
+      
+      // If first line is still at max buffer size and doesn't end with newline,
+      // it might be truncated, but we proceed anyway as 8KB is very generous
       const headers = firstLine
         .split(',')
         .map((h) => h.trim().replace(/^"|"$/g, '')) // Remove quotes
@@ -82,8 +86,9 @@ async function readCSVHeaders(file: File): Promise<string[]> {
     
     reader.onerror = () => reject(new Error('Failed to read file headers'));
     
-    // Read only first 1KB to get headers quickly
-    const blob = file.slice(0, 1024);
+    // Read first 8KB to get headers (handles long header rows)
+    // Most CSV files have headers well under this size
+    const blob = file.slice(0, 8192);
     reader.readAsText(blob);
   });
 }
