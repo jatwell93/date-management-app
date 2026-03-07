@@ -16,7 +16,20 @@ const loadDotenv = () => {
 
   // eslint-disable-next-line @typescript-eslint/no-var-requires
   const dotenv = require('dotenv') as typeof import('dotenv');
+  // eslint-disable-next-line @typescript-eslint/no-var-requires
+  const fs = require('fs') as typeof import('fs');
+  // eslint-disable-next-line @typescript-eslint/no-var-requires
+  const path = require('path') as typeof import('path');
+
   const nodeEnv = (process.env.NODE_ENV || 'development').toLowerCase();
+
+  // Check if .env file exists
+  const envPath = path.resolve(process.cwd(), '.env');
+  if (!fs.existsSync(envPath)) {
+    console.warn(`\n⚠️  No .env file found at ${envPath}`);
+    console.warn(`ℹ️  Copy .env.example to .env and configure for ${nodeEnv} environment`);
+    console.warn(`   Command: cp .env.example .env\n`);
+  }
 
   dotenv.config({ path: `.env.${nodeEnv}` });
   dotenv.config(); // Load default .env file
@@ -65,9 +78,13 @@ export interface EnvironmentConfig {
   // Add other required environment variables as needed
 }
 
-function fail(message: string): never {
+function fail(message: string, remedy?: string): never {
   if (isNodeRuntime) {
-    console.error(message);
+    console.error(`\n❌ ${message}`);
+    if (remedy) {
+      console.error(`ℹ️  ${remedy}`);
+    }
+    console.error(`📖 See docs/environment-setup.md for detailed help\n`);
     process.exit(1);
   }
   throw new Error(message);
@@ -78,13 +95,17 @@ function parseNumber(value: string | undefined, defaultValue?: number, fieldName
     if (defaultValue !== undefined) {
       return defaultValue;
     }
-    return fail(`Missing required environment variable${fieldName ? `: ${fieldName}` : ''}`);
+    return fail(
+      `Missing required environment variable${fieldName ? `: ${fieldName}` : ''}`,
+      `Add ${fieldName} to your .env file (see .env.example for the template)`,
+    );
   }
 
   const parsed = Number(value);
   if (Number.isNaN(parsed) || parsed <= 0) {
     return fail(
       `Invalid ${fieldName ?? 'number'} environment variable: ${value}. Must be a positive number.`,
+      `Set ${fieldName} to a positive integer in your .env file`,
     );
   }
 
@@ -96,7 +117,10 @@ function normalizeNodeEnv(rawEnv: string | undefined): string {
   const validEnvironments = ['development', 'staging', 'production', 'test'];
 
   if (!validEnvironments.includes(normalized)) {
-    return fail(`NODE_ENV must be one of: ${validEnvironments.join(', ')}`);
+    return fail(
+      `NODE_ENV must be one of: ${validEnvironments.join(', ')}. Got: "${rawEnv}"`,
+      `Set NODE_ENV=${validEnvironments[0]} in your .env file for local development`,
+    );
   }
 
   return normalized;
@@ -107,7 +131,12 @@ function resolveJwtSecret(nodeEnv: string, rawSecret: string | undefined): strin
     return rawSecret;
   }
 
-  return fail('JWT_SECRET environment variable is empty');
+  const isDevOrTest = nodeEnv === 'development' || nodeEnv === 'test';
+  const remedy = isDevOrTest
+    ? 'For local development, add JWT_SECRET=dev-secret-change-in-production to your .env file'
+    : 'Generate a secure secret with: openssl rand -base64 32';
+
+  return fail('JWT_SECRET environment variable is missing or empty', remedy);
 }
 
 function resolveFrontendUrl(env: RawEnv): string {

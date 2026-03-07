@@ -10,6 +10,10 @@ For developers, see the **Backend README** for comprehensive setup:
 
 👉 **[backend/README.md](backend/README.md)** ← Start here for development & testing instructions
 
+**For new developers:**
+- 🚀 **Quick setup**: Run `cd backend && npm run setup` (< 30 minutes)
+- 📖 **Developer guide**: See [docs/developer-guide.md](docs/developer-guide.md) for daily workflow, debugging, and troubleshooting
+
 **Highlights:**
 - **Rapid Development**: `npm run dev` (SQLite, < 5s test cycles)
 - **Production Testing**: `npm run test:prod` (PostgreSQL via Neon)
