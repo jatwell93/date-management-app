@@ -144,6 +144,25 @@ export class UploadService {
         columnsIgnored: parseResult.columnsIgnored,
       });
     } catch (error) {
+      const errorMessage = error instanceof Error ? error.message : 'Unknown error';
+      
+      // Update database status to 'failed' so frontend polling can detect the error
+      try {
+        const prisma = getDefaultDatabaseClient();
+        await prisma.upload.update({
+          where: { fileKey: key },
+          data: {
+            status: 'failed',
+            errorMessage: errorMessage,
+          },
+        });
+      } catch (updateError) {
+        Logger.error('Failed to update upload status to failed', {
+          uploadKey: key,
+          updateError: updateError instanceof Error ? updateError.message : 'Unknown error',
+        });
+      }
+      
       Logger.warn('Upload processing metrics', {
         uploadKey: key,
         userId,
@@ -151,7 +170,7 @@ export class UploadService {
         contentType: metadata?.contentType,
         processingDurationMs: Date.now() - startTime,
         status: 'failure',
-        error: error instanceof Error ? error.message : 'Unknown error',
+        error: errorMessage,
       });
       throw error;
     } finally {
