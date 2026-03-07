@@ -94,7 +94,7 @@ function appendVaryHeader(headers: Headers, value: string): void {
   headers.set('Vary', values.join(', '));
 }
 
-async function maybeCompressJsonResponse(request: Request, response: Response): Promise<Response> {
+export async function maybeCompressJsonResponse(request: Request, response: Response): Promise<Response> {
   if (!requestSupportsGzip(request)) {
     return response;
   }
@@ -132,6 +132,7 @@ async function maybeCompressJsonResponse(request: Request, response: Response): 
   appendVaryHeader(headers, 'Accept-Encoding');
 
   return new Response(stream, {
+    encodeBody: 'manual',
     status: response.status,
     statusText: response.statusText,
     headers,

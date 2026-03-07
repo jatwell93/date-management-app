@@ -1,7 +1,7 @@
 import { env, SELF } from 'cloudflare:test';
 import { describe, it, expect, vi } from 'vitest';
 import { healthCheck } from './health';
-import { handleLogin, handleRegister } from './index-minimal';
+import { handleLogin, handleRegister, maybeCompressJsonResponse } from './index-minimal';
 import type { Database } from './database';
 import type { Env } from './types/env';
 
@@ -21,6 +21,42 @@ describe('Health Check API', () => {
     
     const data = await response.json() as any;
     expect(data.status).toBe('healthy');
+  });
+
+  it('serves manually gzipped JSON responses that decode correctly', async () => {
+    const payload = JSON.stringify({
+      status: 'healthy',
+      items: Array.from({ length: 600 }, (_, idx) => `item-${idx}`),
+    });
+
+    const request = new Request('https://example.com/api/health', {
+      method: 'GET',
+      headers: {
+        'Accept-Encoding': 'gzip',
+      },
+    });
+
+    const baseResponse = new Response(payload, {
+      status: 200,
+      headers: {
+        'Content-Type': 'application/json',
+      },
+    });
+
+    const response = await maybeCompressJsonResponse(request, baseResponse);
+
+    expect(response.status).toBe(200);
+    expect(response.headers.get('Content-Encoding')).toBe('gzip');
+
+    const compressedBuffer = await response.arrayBuffer();
+    const compressedStream = new Blob([compressedBuffer]).stream();
+    const decompressedStream = compressedStream.pipeThrough(new DecompressionStream('gzip'));
+    const decompressedText = await new Response(decompressedStream).text();
+    const data = JSON.parse(decompressedText) as any;
+
+    expect(data.status).toBe('healthy');
+    expect(Array.isArray(data.items)).toBe(true);
+    expect(data.items.length).toBe(600);
   });
 });
 

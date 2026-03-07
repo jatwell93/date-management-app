@@ -1,5 +1,4 @@
 name: Workers Bundle Size Check
-
 on:
   pull_request:
     paths:
