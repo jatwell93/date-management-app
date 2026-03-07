@@ -23,6 +23,9 @@ interface UploadResponse {
   importedCount?: number;
   updatedCount?: number;
   errorCount?: number;
+  skippedCount?: number;
+  processedCount?: number;
+  totalCount?: number;
   errors?: string[];
   columnsUsed?: string[];
   columnsIgnored?: number;
@@ -253,9 +256,12 @@ export const CSVUploadPage: React.FC<{ token: string | null }> = ({ token }) => 
           setUploadResult({
             success: true,
             message: 'File uploaded and processed successfully',
-            importedCount: statusData.rowsProcessed,
-            updatedCount: 0, // TODO: calculate if needed
-            errorCount: 0, // TODO: calculate if needed
+            importedCount: statusData.importedCount,
+            updatedCount: statusData.updatedCount,
+            errorCount: statusData.errorCount,
+            skippedCount: statusData.skippedCount,
+            processedCount: statusData.rowsProcessed,
+            totalCount: statusData.rowsTotal,
             columnsUsed: statusData.columnsUsed,
             columnsIgnored: statusData.columnsIgnored,
           });
@@ -645,11 +651,24 @@ export const CSVUploadPage: React.FC<{ token: string | null }> = ({ token }) => 
 
             <p>{uploadResult.message}</p>
 
-            {uploadResult.importedCount !== undefined && (
+            {(uploadResult.importedCount !== undefined || uploadResult.processedCount !== undefined) && (
               <div className="mt-2">
-                <p>Products imported: {uploadResult.importedCount}</p>
-                <p>Products updated: {uploadResult.updatedCount}</p>
-                <p>Errors: {uploadResult.errorCount}</p>
+                {uploadResult.importedCount !== undefined && (
+                  <p>Products imported: {uploadResult.importedCount}</p>
+                )}
+                {uploadResult.updatedCount !== undefined && (
+                  <p>Products updated: {uploadResult.updatedCount}</p>
+                )}
+                {uploadResult.errorCount !== undefined && <p>Errors: {uploadResult.errorCount}</p>}
+                {uploadResult.skippedCount !== undefined && (
+                  <p>Rows skipped: {uploadResult.skippedCount}</p>
+                )}
+                {uploadResult.processedCount !== undefined && (
+                  <p>
+                    Rows processed: {uploadResult.processedCount}
+                    {uploadResult.totalCount !== undefined ? ` / ${uploadResult.totalCount}` : ''}
+                  </p>
+                )}
               </div>
             )}
 

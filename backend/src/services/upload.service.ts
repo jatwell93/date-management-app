@@ -128,6 +128,10 @@ export class UploadService {
           status: 'complete',
           rowsProcessed: parseResult.imported + parseResult.updated + parseResult.skipped,
           rowsTotal: parseResult.total,
+          rowsImported: parseResult.imported,
+          rowsUpdated: parseResult.updated,
+          rowsSkipped: parseResult.skipped,
+          rowErrorCount: parseResult.errors.length,
           columnsUsed: JSON.stringify(parseResult.columnsUsed || []),
           columnsIgnored: parseResult.columnsIgnored || 0,
         },
@@ -154,6 +158,10 @@ export class UploadService {
           data: {
             status: 'failed',
             errorMessage: errorMessage,
+            rowsImported: 0,
+            rowsUpdated: 0,
+            rowsSkipped: 0,
+            rowErrorCount: 0,
           },
         });
       } catch (updateError) {
