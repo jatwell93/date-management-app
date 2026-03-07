@@ -1,7 +1,7 @@
 {
-  "name": "",
+  "name": "date-management-workspace",
   "version": "0.0.0",
-  "description": "",
+  "description": "Monorepo for date management application with backend, frontend, and workers",
   "main": "build/src/index.js",
   "types": "build/src/index.d.ts",
   "files": [

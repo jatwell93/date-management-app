@@ -6,6 +6,7 @@ import { CSVParserService } from './csv-parser.service';
 import { envConfig } from '../config/environment';
 import { StorageQuotaService } from './storage-quota.service';
 import { Logger } from '../utils/logger';
+import { getDefaultDatabaseClient } from '../database/database-factory';
 
 export interface InitiateUploadResponse {
   strategy: 'direct' | 'presigned';
@@ -117,7 +118,24 @@ export class UploadService {
       );
 
       // 3. Process file
-      await this.csvParser.processFile(tempPath, { uploadKey: key, userId });
+      const parseResult = await this.csvParser.processFile(tempPath, { uploadKey: key, userId });
+
+      // Update database with final results
+      const prisma = getDefaultDatabaseClient();
+      await prisma.upload.update({
+        where: { fileKey: key },
+        data: {
+          status: 'complete',
+          rowsProcessed: parseResult.imported + parseResult.updated + parseResult.skipped,
+          rowsTotal: parseResult.total,
+          rowsImported: parseResult.imported,
+          rowsUpdated: parseResult.updated,
+          rowsSkipped: parseResult.skipped,
+          rowErrorCount: parseResult.errors.length,
+          columnsUsed: JSON.stringify(parseResult.columnsUsed || []),
+          columnsIgnored: parseResult.columnsIgnored || 0,
+        },
+      });
 
       Logger.info('Upload processing metrics', {
         uploadKey: key,
@@ -126,8 +144,33 @@ export class UploadService {
         contentType: metadata?.contentType,
         processingDurationMs: Date.now() - startTime,
         status: 'success',
+        columnsUsed: parseResult.columnsUsed,
+        columnsIgnored: parseResult.columnsIgnored,
       });
     } catch (error) {
+      const errorMessage = error instanceof Error ? error.message : 'Unknown error';
+      
+      // Update database status to 'failed' so frontend polling can detect the error
+      try {
+        const prisma = getDefaultDatabaseClient();
+        await prisma.upload.update({
+          where: { fileKey: key },
+          data: {
+            status: 'failed',
+            errorMessage: errorMessage,
+            rowsImported: 0,
+            rowsUpdated: 0,
+            rowsSkipped: 0,
+            rowErrorCount: 0,
+          },
+        });
+      } catch (updateError) {
+        Logger.error('Failed to update upload status to failed', {
+          uploadKey: key,
+          updateError: updateError instanceof Error ? updateError.message : 'Unknown error',
+        });
+      }
+      
       Logger.warn('Upload processing metrics', {
         uploadKey: key,
         userId,
@@ -135,7 +178,7 @@ export class UploadService {
         contentType: metadata?.contentType,
         processingDurationMs: Date.now() - startTime,
         status: 'failure',
-        error: error instanceof Error ? error.message : 'Unknown error',
+        error: errorMessage,
       });
       throw error;
     } finally {

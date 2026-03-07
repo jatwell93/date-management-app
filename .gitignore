@@ -58,6 +58,9 @@ agents/
 other/
 .agentlens/
 
+# Real pharmacy data with sensitive pricing
+backend/src/tests/fixtures/real-pharmacy-products.csv
+
 # Coverage
 coverage/
 backend/coverage/

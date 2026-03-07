@@ -9,6 +9,13 @@ import {
   TableHeader,
   TableRow,
 } from '../components/ui/table';
+import {
+  validateCSVColumns,
+  estimateRowCount,
+  formatColumnValidationError,
+  type ColumnValidationResult,
+  type RowEstimate,
+} from '../utils/csvValidator';
 
 interface UploadResponse {
   success: boolean;
@@ -16,7 +23,12 @@ interface UploadResponse {
   importedCount?: number;
   updatedCount?: number;
   errorCount?: number;
+  skippedCount?: number;
+  processedCount?: number;
+  totalCount?: number;
   errors?: string[];
+  columnsUsed?: string[];
+  columnsIgnored?: number;
 }
 
 export const CSVUploadPage: React.FC<{ token: string | null }> = ({ token }) => {
@@ -27,6 +39,8 @@ export const CSVUploadPage: React.FC<{ token: string | null }> = ({ token }) => 
   const [filePreview, setFilePreview] = useState<string[][]>([]);
   const [uploadProgress, setUploadProgress] = useState<number>(0);
   const [progressMessage, setProgressMessage] = useState<string>('');
+  const [columnValidation, setColumnValidation] = useState<ColumnValidationResult | null>(null);
+  const [rowEstimate, setRowEstimate] = useState<RowEstimate | null>(null);
 
   const logUploadMetric = (event: string, data: Record<string, unknown>) => {
     if (process.env.NODE_ENV === 'test') {
@@ -153,15 +167,30 @@ export const CSVUploadPage: React.FC<{ token: string | null }> = ({ token }) => 
     throw new Error('Upload failed after multiple attempts');
   };
 
-  const handleFileChange = (event: React.ChangeEvent<HTMLInputElement>) => {
+  const handleFileChange = async (event: React.ChangeEvent<HTMLInputElement>) => {
     if (event.target.files && event.target.files[0]) {
       const file = event.target.files[0];
       setSelectedFile(file);
       setFileName(file.name);
       setUploadResult(null); // Reset any previous results
+      setColumnValidation(null);
+      setRowEstimate(null);
 
       // Generate preview of the first 5 rows
       previewFile(file);
+
+      // Validate columns (async)
+      try {
+        const validation = await validateCSVColumns(file);
+        setColumnValidation(validation);
+      } catch (error) {
+        console.error('Column validation failed:', error);
+        // Non-blocking - will be caught during upload
+      }
+
+      // Estimate row count
+      const estimate = estimateRowCount(file);
+      setRowEstimate(estimate);
     }
   };
 
@@ -202,6 +231,68 @@ export const CSVUploadPage: React.FC<{ token: string | null }> = ({ token }) => 
     }
   };
 
+  const pollUploadStatus = async (key: string) => {
+    const apiUrl = process.env.REACT_APP_API_URL || '';
+    const maxAttempts = 30; // 30 seconds max
+    const pollInterval = 1000; // 1 second
+
+    for (let attempt = 0; attempt < maxAttempts; attempt++) {
+      try {
+        // URL encode the key to handle slashes in the path
+        const encodedKey = encodeURIComponent(key);
+        const statusRes = await fetch(`${apiUrl}/upload/status/${encodedKey}`, {
+          headers: {
+            Authorization: `Bearer ${token}`,
+          },
+        });
+
+        if (!statusRes.ok) {
+          throw new Error('Failed to get upload status');
+        }
+
+        const statusData = await statusRes.json();
+
+        if (statusData.status === 'complete') {
+          setUploadResult({
+            success: true,
+            message: 'File uploaded and processed successfully',
+            importedCount: statusData.importedCount,
+            updatedCount: statusData.updatedCount,
+            errorCount: statusData.errorCount,
+            skippedCount: statusData.skippedCount,
+            processedCount: statusData.rowsProcessed,
+            totalCount: statusData.rowsTotal,
+            columnsUsed: statusData.columnsUsed,
+            columnsIgnored: statusData.columnsIgnored,
+          });
+          return;
+        } else if (statusData.status === 'failed') {
+          setUploadResult({
+            success: false,
+            message: statusData.error || 'Processing failed',
+          });
+          return;
+        }
+
+        // Still processing, update progress
+        setUploadProgress(statusData.progress || 0);
+        setProgressMessage(statusData.message || 'Processing...');
+
+        // Wait before next poll
+        await new Promise(resolve => setTimeout(resolve, pollInterval));
+      } catch (error) {
+        console.error('Status poll error:', error);
+        // Continue polling on error
+      }
+    }
+
+    // Timeout
+    setUploadResult({
+      success: false,
+      message: 'Processing timed out. Please check your uploads.',
+    });
+  };
+
   const handleSubmit = async (event: React.FormEvent) => {
     event.preventDefault();
 
@@ -210,6 +301,15 @@ export const CSVUploadPage: React.FC<{ token: string | null }> = ({ token }) => 
       setUploadResult({
         success: false,
         message: validationError,
+      });
+      return;
+    }
+
+    // Check column validation
+    if (columnValidation && !columnValidation.isValid) {
+      setUploadResult({
+        success: false,
+        message: formatColumnValidationError(columnValidation),
       });
       return;
     }
@@ -265,6 +365,8 @@ export const CSVUploadPage: React.FC<{ token: string | null }> = ({ token }) => 
         });
       }, 500);
 
+      let uploadKey = key; // From initiate
+
       try {
         if (strategy === 'direct') {
           const formData = new FormData();
@@ -272,13 +374,20 @@ export const CSVUploadPage: React.FC<{ token: string | null }> = ({ token }) => 
 
           const directUrl = uploadUrl.startsWith('http') ? uploadUrl : `${apiUrl}/upload/direct`;
 
-          await uploadWithRetry(directUrl, {
+          const directRes = await uploadWithRetry(directUrl, {
             method: 'POST',
             headers: {
               Authorization: `Bearer ${token}`,
             },
             body: formData,
           });
+
+          if (!directRes.ok) {
+            throw new Error('Direct upload failed');
+          }
+
+          const directData = await directRes.json();
+          uploadKey = directData.key || key; // Use key from response if available
         } else {
           // Presigned PUT
           await uploadWithRetry(uploadUrl, {
@@ -296,16 +405,6 @@ export const CSVUploadPage: React.FC<{ token: string | null }> = ({ token }) => 
       setUploadProgress(100);
 
       // 3. Complete (Trigger Processing)
-      // For direct upload, the server might trigger processing automatically, but our API design
-      // in UploadController for 'direct' finishes with json response.
-      // AND 'direct' endpoint calls handleDirectUpload which calls completeUpload.
-      // So detailed processing happens. But for consistency, 'presigned' NEEDS explicit complete call.
-      // 'direct' does NOT need it if the controller handles it.
-
-      // Strategy check:
-      // If presigned, we MUST call complete.
-      // If direct, the request is already done.
-
       if (strategy === 'presigned') {
         setProgressMessage('Processing file...');
         const completeRes = await fetch(`${apiUrl}/upload/complete`, {
@@ -314,17 +413,15 @@ export const CSVUploadPage: React.FC<{ token: string | null }> = ({ token }) => 
             'Content-Type': 'application/json',
             Authorization: `Bearer ${token}`,
           },
-          body: JSON.stringify({ key }),
+          body: JSON.stringify({ key: uploadKey }),
         });
 
         if (!completeRes.ok) throw new Error('Processing failed');
       }
 
-      // Success
-      setUploadResult({
-        success: true,
-        message: 'File uploaded and processed successfully',
-      });
+      // Poll for processing completion
+      await pollUploadStatus(uploadKey);
+
       logUploadMetric('upload_complete', {
         fileSize: fileToUpload.size,
         durationMs: Date.now() - uploadStartTime,
@@ -368,6 +465,8 @@ export const CSVUploadPage: React.FC<{ token: string | null }> = ({ token }) => 
     setUploadResult(null);
     setUploadProgress(0);
     setProgressMessage('');
+    setColumnValidation(null);
+    setRowEstimate(null);
   };
 
   return (
@@ -472,6 +571,39 @@ export const CSVUploadPage: React.FC<{ token: string | null }> = ({ token }) => 
             </div>
           )}
 
+          {/* Column Validation Warning */}
+          {columnValidation && !columnValidation.isValid && (
+            <div className="mb-4 p-4 bg-yellow-50 border border-yellow-200 rounded-md">
+              <h4 className="font-semibold text-yellow-800 mb-2">⚠️ Column Validation Warning</h4>
+              <div className="text-sm text-yellow-700 whitespace-pre-line">
+                {formatColumnValidationError(columnValidation)}
+              </div>
+              <p className="text-xs text-yellow-600 mt-2">
+                Upload will be blocked until column names are corrected.
+              </p>
+            </div>
+          )}
+
+          {/* Column Validation Success */}
+          {columnValidation && columnValidation.isValid && selectedFile && (
+            <div className="mb-4 p-3 bg-green-50 border border-green-200 rounded-md">
+              <p className="text-sm text-green-800">
+                ✓ All required columns found: {Object.values(columnValidation.foundColumns).join(', ')}
+              </p>
+            </div>
+          )}
+
+          {/* Row Estimate Warning */}
+          {rowEstimate && rowEstimate.showWarning && (
+            <div className="mb-4 p-4 bg-blue-50 border border-blue-200 rounded-md">
+              <h4 className="font-semibold text-blue-800 mb-1">ℹ️ Large File Detected</h4>
+              <p className="text-sm text-blue-700">{rowEstimate.warningMessage}</p>
+              <p className="text-xs text-blue-600 mt-1">
+                The upload will proceed normally, but please be patient during processing.
+              </p>
+            </div>
+          )}
+
           {isUploading && (
             <div className="mb-4">
               <div className="flex items-center justify-between mb-1">
@@ -491,11 +623,10 @@ export const CSVUploadPage: React.FC<{ token: string | null }> = ({ token }) => 
             <button
               type="submit"
               disabled={isUploading || !selectedFile}
-              className={`px-4 py-2 rounded-md text-white font-medium ${
-                isUploading || !selectedFile
-                  ? 'bg-gray-400 cursor-not-allowed'
-                  : 'bg-inventory-primary-600 hover:bg-inventory-primary-700'
-              }`}
+              className={`px-4 py-2 rounded-md text-white font-medium ${isUploading || !selectedFile
+                ? 'bg-gray-400 cursor-not-allowed'
+                : 'bg-inventory-primary-600 hover:bg-inventory-primary-700'
+                }`}
             >
               {isUploading ? 'Uploading...' : 'Upload CSV/XLSX/XLS'}
             </button>
@@ -520,11 +651,39 @@ export const CSVUploadPage: React.FC<{ token: string | null }> = ({ token }) => 
 
             <p>{uploadResult.message}</p>
 
-            {uploadResult.importedCount !== undefined && (
+            {(uploadResult.importedCount !== undefined || uploadResult.processedCount !== undefined) && (
               <div className="mt-2">
-                <p>Products imported: {uploadResult.importedCount}</p>
-                <p>Products updated: {uploadResult.updatedCount}</p>
-                <p>Errors: {uploadResult.errorCount}</p>
+                {uploadResult.importedCount !== undefined && (
+                  <p>Products imported: {uploadResult.importedCount}</p>
+                )}
+                {uploadResult.updatedCount !== undefined && (
+                  <p>Products updated: {uploadResult.updatedCount}</p>
+                )}
+                {uploadResult.errorCount !== undefined && <p>Errors: {uploadResult.errorCount}</p>}
+                {uploadResult.skippedCount !== undefined && (
+                  <p>Rows skipped: {uploadResult.skippedCount}</p>
+                )}
+                {uploadResult.processedCount !== undefined && (
+                  <p>
+                    Rows processed: {uploadResult.processedCount}
+                    {uploadResult.totalCount !== undefined ? ` / ${uploadResult.totalCount}` : ''}
+                  </p>
+                )}
+              </div>
+            )}
+
+            {/* Column Usage Summary */}
+            {uploadResult.columnsUsed && uploadResult.columnsUsed.length > 0 && (
+              <div className="mt-3 p-3 bg-white bg-opacity-50 rounded border border-inventory-success-200">
+                <p className="text-sm font-medium">Column Summary:</p>
+                <p className="text-sm">
+                  ✓ Used: <span className="font-mono">{uploadResult.columnsUsed.join(', ')}</span>
+                </p>
+                {uploadResult.columnsIgnored !== undefined && uploadResult.columnsIgnored > 0 && (
+                  <p className="text-sm text-inventory-success-700">
+                    ℹ️ Ignored {uploadResult.columnsIgnored} extra column{uploadResult.columnsIgnored > 1 ? 's' : ''}
+                  </p>
+                )}
               </div>
             )}
 

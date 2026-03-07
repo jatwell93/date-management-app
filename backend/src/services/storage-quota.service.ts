@@ -164,7 +164,7 @@ export class StorageQuotaService {
             fileName,
             fileSizeBytes,
             contentType,
-            status: 'completed',
+            status: 'processing',
           },
         });
 

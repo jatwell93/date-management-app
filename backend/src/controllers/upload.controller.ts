@@ -58,9 +58,9 @@ export class UploadController {
         return;
       }
 
-      await this.uploadService.handleDirectUpload(buffer, originalname, mimetype, req.userId);
+      const key = await this.uploadService.handleDirectUpload(buffer, originalname, mimetype, req.userId);
 
-      res.json({ message: 'File uploaded and processing started' });
+      res.json({ message: 'File uploaded and processing started', key });
     } catch (error) {
       console.error('Direct upload error:', error);
       res.status(500).json({ error: error instanceof Error ? error.message : 'Unknown error' });
@@ -109,10 +109,13 @@ export class UploadController {
         return;
       }
 
+      // Decode URL-encoded key (handles keys with slashes)
+      const decodedKey = decodeURIComponent(key);
+
       // Query upload status from database
       const prisma = getDefaultDatabaseClient();
       const upload = await prisma.upload.findUnique({
-        where: { fileKey: key },
+        where: { fileKey: decodedKey },
         select: {
           status: true,
           uploadProgress: true,
@@ -120,6 +123,12 @@ export class UploadController {
           errorMessage: true,
           rowsProcessed: true,
           rowsTotal: true,
+          rowsImported: true,
+          rowsUpdated: true,
+          rowsSkipped: true,
+          rowErrorCount: true,
+          columnsUsed: true,
+          columnsIgnored: true,
           organizationId: true,
         },
       });
@@ -148,6 +157,12 @@ export class UploadController {
         error: upload.errorMessage,
         rowsProcessed: upload.rowsProcessed,
         rowsTotal: upload.rowsTotal,
+        importedCount: upload.rowsImported,
+        updatedCount: upload.rowsUpdated,
+        skippedCount: upload.rowsSkipped,
+        errorCount: upload.rowErrorCount,
+        columnsUsed: upload.columnsUsed ? JSON.parse(upload.columnsUsed) : undefined,
+        columnsIgnored: upload.columnsIgnored,
       });
     } catch (error) {
       console.error('Upload status error:', error);
