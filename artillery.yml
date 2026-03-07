@@ -1,0 +1,137 @@
+config:
+  target: "https://date-management-api-dev.date-management-app.workers.dev"
+  phases:
+    # Warm-up phase
+    - duration: 30
+      arrivalRate: 5
+      name: "Warm-up"
+    # Ramp-up phase
+    - duration: 60
+      arrivalRate: 10
+      rampTo: 50
+      name: "Ramp-up"
+    # Sustained load phase - 100 concurrent users
+    - duration: 120
+      arrivalRate: 100
+      name: "Sustained load"
+    # Peak load phase - test p95 under stress
+    - duration: 60
+      arrivalRate: 150
+      name: "Peak load"
+  payload:
+    path: "./artillery-users.csv"
+    fields:
+      - "email"
+      - "password"
+    skipHeader: true
+    order: sequence
+  processor: "./artillery-processor.js"
+  http:
+    timeout: 10
+  plugins:
+    expect: {}
+  ensure:
+    maxErrorRate: 0.01  # Allow max 1% errors
+    p95: 200            # p95 latency must be <200ms
+    p99: 500            # p99 latency must be <500ms
+
+scenarios:
+  # Health check endpoint (no auth)
+  - name: "Health Check"
+    weight: 20
+    flow:
+      - get:
+          url: "/health"
+          expect:
+            - statusCode: 200
+            - contentType: json
+            - hasProperty: status
+
+  # Health check with compression
+  - name: "Health Check (Gzip)"
+    weight: 10
+    flow:
+      - get:
+          url: "/health"
+          headers:
+            Accept-Encoding: "gzip"
+          expect:
+            - statusCode: 200
+            - hasHeader: "content-encoding"
+
+  # Auth flow - Login
+  - name: "User Login"
+    weight: 30
+    flow:
+      - post:
+          url: "/api/auth/login"
+          json:
+            email: "{{ email }}"
+            password: "{{ password }}"
+          expect:
+            - statusCode: 200
+            - contentType: json
+            - hasProperty: token
+          capture:
+            - json: "$.token"
+              as: "authToken"
+
+  # Get current user (requires auth)
+  - name: "Get Current User"
+    weight: 20
+    flow:
+      - post:
+          url: "/api/auth/login"
+          json:
+            email: "loadtest@example.com"
+            password: "{{ $processEnvironment.TEST_PASSWORD }}"
+          capture:
+            - json: "$.token"
+              as: "authToken"
+      - get:
+          url: "/api/users/me"
+          headers:
+            Authorization: "Bearer {{ authToken }}"
+          expect:
+            - statusCode: [200, 401]
+            - contentType: json
+
+  # Get products (requires auth)
+  - name: "Get Products"
+    weight: 15
+    flow:
+      - post:
+          url: "/api/auth/login"
+          json:
+            email: "loadtest@example.com"
+            password: "{{ $processEnvironment.TEST_PASSWORD }}"
+          capture:
+            - json: "$.token"
+              as: "authToken"
+      - get:
+          url: "/api/products?limit=10&offset=0"
+          headers:
+            Authorization: "Bearer {{ authToken }}"
+          expect:
+            - statusCode: [200, 401]
+            - contentType: json
+
+  # Get dashboard (complex query)
+  - name: "Get Dashboard"
+    weight: 5
+    flow:
+      - post:
+          url: "/api/auth/login"
+          json:
+            email: "loadtest@example.com"
+            password: "{{ $processEnvironment.TEST_PASSWORD }}"
+          capture:
+            - json: "$.token"
+              as: "authToken"
+      - get:
+          url: "/api/dashboard"
+          headers:
+            Authorization: "Bearer {{ authToken }}"
+          expect:
+            - statusCode: [200, 401]
+            - contentType: json

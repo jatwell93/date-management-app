@@ -14,6 +14,8 @@ import { handleHealthCheck } from './health';
 import { createWorkersDatabase } from './database';
 import * as Sentry from '@sentry/cloudflare';
 
+const COMPRESSION_MIN_BYTES = 1024;
+
 /**
  * CORS headers for production
  */
@@ -65,6 +67,77 @@ function errorResponse(message: string, status = 500, env?: Env, requestOrigin?:
   return jsonResponse({ error: message }, status, env, requestOrigin);
 }
 
+function requestSupportsGzip(request: Request): boolean {
+  const acceptEncoding = request.headers.get('Accept-Encoding') || '';
+  return acceptEncoding.toLowerCase().includes('gzip');
+}
+
+function appendVaryHeader(headers: Headers, value: string): void {
+  const existing = headers.get('Vary');
+
+  if (!existing) {
+    headers.set('Vary', value.toLowerCase());
+    return;
+  }
+
+  const values = existing
+    .split(',')
+    .map(v => v.trim().toLowerCase())
+    .filter(v => v.length > 0);
+
+  const newValue = value.toLowerCase();
+
+  if (!values.includes(newValue)) {
+    values.push(newValue);
+  }
+
+  headers.set('Vary', values.join(', '));
+}
+
+async function maybeCompressJsonResponse(request: Request, response: Response): Promise<Response> {
+  if (!requestSupportsGzip(request)) {
+    return response;
+  }
+
+  if (request.method === 'HEAD') {
+    return response;
+  }
+
+  if (!response.body) {
+    return response;
+  }
+
+  if (response.headers.has('Content-Encoding')) {
+    return response;
+  }
+
+  const contentType = response.headers.get('Content-Type') || '';
+  if (!contentType.toLowerCase().includes('application/json')) {
+    return response;
+  }
+
+  const rawBody = await response.arrayBuffer();
+  if (rawBody.byteLength < COMPRESSION_MIN_BYTES) {
+    return new Response(rawBody, {
+      status: response.status,
+      statusText: response.statusText,
+      headers: response.headers,
+    });
+  }
+
+  const stream = new Blob([rawBody]).stream().pipeThrough(new CompressionStream('gzip'));
+  const headers = new Headers(response.headers);
+  headers.set('Content-Encoding', 'gzip');
+  headers.delete('Content-Length');
+  appendVaryHeader(headers, 'Accept-Encoding');
+
+  return new Response(stream, {
+    status: response.status,
+    statusText: response.statusText,
+    headers,
+  });
+}
+
 /**
  * Main Workers fetch handler
  */
@@ -95,11 +168,13 @@ export default Sentry.withSentry(
 
       // Health check endpoint (no auth required)
       if (pathname === '/health' || pathname === '/api/health') {
-        return handleHealthCheck(request, env);
+        const healthResponse = await handleHealthCheck(request, env);
+        return maybeCompressJsonResponse(request, healthResponse);
       }
 
       if (pathname.startsWith('/api/') && !env.JWT_SECRET?.trim()) {
-        return errorResponse('JWT_SECRET is required', 500, env, requestOrigin);
+        const jwtErrorResponse = errorResponse('JWT_SECRET is required', 500, env, requestOrigin);
+        return maybeCompressJsonResponse(request, jwtErrorResponse);
       }
 
       // API routes
@@ -111,46 +186,46 @@ export default Sentry.withSentry(
         switch (true) {
           // Auth endpoints
           case pathname === '/api/auth/login' && method === 'POST':
-            return await handleLogin(request, db, env);
+            return maybeCompressJsonResponse(request, await handleLogin(request, db, env));
 
           case pathname === '/api/auth/register' && method === 'POST':
-            return await handleRegister(request, db, env);
+            return maybeCompressJsonResponse(request, await handleRegister(request, db, env));
 
           // User endpoints (require auth)
           case pathname === '/api/users/me' && method === 'GET':
-            return await handleGetCurrentUser(request, db, env);
+            return maybeCompressJsonResponse(request, await handleGetCurrentUser(request, db, env));
 
           // Products endpoints
           case pathname === '/api/products' && method === 'GET':
-            return await handleGetProducts(request, db, env);
+            return maybeCompressJsonResponse(request, await handleGetProducts(request, db, env));
 
           case pathname.match(/^\/api\/products\/\d+$/) && method === 'GET':
-            return await handleGetProduct(request, db, env, pathname);
+            return maybeCompressJsonResponse(request, await handleGetProduct(request, db, env, pathname));
 
           // Inventory endpoints
           case pathname === '/api/inventory-items' && method === 'GET':
-            return await handleGetInventory(request, db, env);
+            return maybeCompressJsonResponse(request, await handleGetInventory(request, db, env));
 
           // Store areas endpoints
           case pathname === '/api/store-areas' && method === 'GET':
-            return await handleGetStoreAreas(request, db, env);
+            return maybeCompressJsonResponse(request, await handleGetStoreAreas(request, db, env));
 
           // Dashboard endpoints
           case pathname === '/api/dashboard' && method === 'GET':
-            return await handleGetDashboard(request, db, env);
+            return maybeCompressJsonResponse(request, await handleGetDashboard(request, db, env));
 
           default:
-            return errorResponse('Not Found', 404, env);
+            return maybeCompressJsonResponse(request, errorResponse('Not Found', 404, env));
         }
       }
 
-      return errorResponse('Not Found', 404, env);
+      return maybeCompressJsonResponse(request, errorResponse('Not Found', 404, env));
     } catch (error) {
       console.error('Unhandled error:', error);
       const message = env.NODE_ENV === 'development' 
         ? (error instanceof Error ? error.message : 'Unknown error')
         : 'Internal Server Error';
-      return errorResponse(message, 500, env, requestOrigin);
+      return maybeCompressJsonResponse(request, errorResponse(message, 500, env, requestOrigin));
     }
   },
 });

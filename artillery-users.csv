@@ -1,0 +1,6 @@
+email,password
+loadtest@example.com,"{{ $processEnvironment.TEST_PASSWORD }}"
+testuser1@example.com,"{{ $processEnvironment.TEST_PASSWORD }}"
+testuser2@example.com,"{{ $processEnvironment.TEST_PASSWORD }}"
+testuser3@example.com,"{{ $processEnvironment.TEST_PASSWORD }}"
+testuser4@example.com,"{{ $processEnvironment.TEST_PASSWORD }}"
