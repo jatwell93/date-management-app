@@ -1,4 +1,4 @@
-import { Router, Request, Response } from 'express';
+import { Router, Request, Response, NextFunction } from 'express';
 import { UserService } from '../services/user.service';
 import { User } from '../models/user.model';
 import { authenticateToken, requireManager, AuthRequest } from '../middleware/auth.middleware';
@@ -17,19 +17,18 @@ function getUserServiceForRequest(req: AuthRequest) {
 }
 
 // GET /users - Get all users (Manager only)
-router.get('/', authenticateToken, requireManager, async (req: AuthRequest, res: Response) => {
+router.get('/', authenticateToken, requireManager, async (req: AuthRequest, res: Response, next: NextFunction) => {
   try {
     const userService = getUserServiceForRequest(req);
     const users = await userService.getUsers();
     res.json(users);
-  } catch (_error) {
-    // console.error("Error getting users:", _error);
-    res.status(500).json({ message: 'Internal server error' });
+  } catch (error) {
+    next(error);
   }
 });
 
 // GET /users/:id - Get a specific user by ID (Manager only)
-router.get('/:id', authenticateToken, requireManager, async (req: AuthRequest, res: Response) => {
+router.get('/:id', authenticateToken, requireManager, async (req: AuthRequest, res: Response, next: NextFunction) => {
   try {
     const id = Number.parseInt(req.params.id, 10);
     if (Number.isNaN(id)) {
@@ -50,9 +49,8 @@ router.get('/:id', authenticateToken, requireManager, async (req: AuthRequest, r
     }
 
     res.json(user);
-  } catch (_error) {
-    // console.error("Error getting user:", _error);
-    res.status(500).json({ message: 'Internal server error' });
+  } catch (error) {
+    next(error);
   }
 });
 
@@ -66,7 +64,7 @@ router.post(
   validateRequest(userSchema),
   validateDataIntegrity,
   validateBusinessRules,
-  async (req: AuthRequest, res: Response) => {
+  async (req: AuthRequest, res: Response, next: NextFunction) => {
     try {
       const { pin, role } = req.body;
 
@@ -89,9 +87,8 @@ router.post(
       const userService = getUserServiceForRequest(req);
       const createdUser = await userService.createUser(newUser);
       res.status(201).json(createdUser);
-    } catch (_error) {
-      // console.error("Error creating user:", _error);
-      res.status(500).json({ message: 'Internal server error' });
+    } catch (error) {
+      next(error);
     }
   },
 );
@@ -105,7 +102,7 @@ router.put(
   validateRequest(userSchema),
   validateDataIntegrity,
   validateBusinessRules,
-  async (req: AuthRequest, res: Response) => {
+  async (req: AuthRequest, res: Response, next: NextFunction) => {
     try {
       const id = Number.parseInt(req.params.id, 10);
       if (Number.isNaN(id)) {
@@ -140,9 +137,8 @@ router.put(
 
       const updatedUser = await userService.getUserById(id);
       res.json(updatedUser);
-    } catch (_error) {
-      // console.error("Error updating user:", _error);
-      res.status(500).json({ message: 'Internal server error' });
+    } catch (error) {
+      next(error);
     }
   },
 );
@@ -153,7 +149,7 @@ router.delete(
   authenticateToken,
   requireManager,
   standardLimiter,
-  async (req: AuthRequest, res: Response) => {
+  async (req: AuthRequest, res: Response, next: NextFunction) => {
     try {
       const id = Number.parseInt(req.params.id, 10);
       if (Number.isNaN(id)) {
@@ -181,9 +177,8 @@ router.delete(
       }
 
       res.json({ message: 'User deleted successfully' });
-    } catch (_error) {
-      // console.error("Error deleting user:", _error);
-      res.status(500).json({ message: 'Internal server error' });
+    } catch (error) {
+      next(error);
     }
   },
 );

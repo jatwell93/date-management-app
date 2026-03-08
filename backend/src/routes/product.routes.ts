@@ -1,4 +1,4 @@
-import { Router, Request, Response } from 'express';
+import { Router, Request, Response, NextFunction } from 'express';
 import { ProductService } from '../services/product.service';
 import { Product } from '../models/product.model';
 import { authenticateToken, AuthRequest } from '../middleware/auth.middleware';
@@ -42,19 +42,18 @@ const upload = multer({
 });
 
 // GET /products - Get all products for the user's organization
-router.get('/', authenticateToken, async (req: AuthRequest, res: Response) => {
+router.get('/', authenticateToken, async (req: AuthRequest, res: Response, next: NextFunction) => {
   try {
     const productService = getProductServiceForRequest(req);
     const products = await productService.getAllProducts();
     res.json(products);
-  } catch (_error) {
-    // console.error("Get products error:", _error);
-    res.status(500).json({ message: 'Internal server error' });
+  } catch (error) {
+    next(error);
   }
 });
 
 // GET /products/by-barcode/:barcode - Get a specific product by barcode [MOVED BEFORE :id CATCH-ALL]
-router.get('/by-barcode/:barcode', authenticateToken, async (req: AuthRequest, res: Response) => {
+router.get('/by-barcode/:barcode', authenticateToken, async (req: AuthRequest, res: Response, next: NextFunction) => {
   try {
     const barcode = req.params.barcode;
     const productService = getProductServiceForRequest(req);
@@ -65,14 +64,13 @@ router.get('/by-barcode/:barcode', authenticateToken, async (req: AuthRequest, r
     }
 
     res.json(product);
-  } catch (_error) {
-    // console.error("Get product by barcode error:", _error);
-    res.status(500).json({ message: 'Internal server error' });
+  } catch (error) {
+    next(error);
   }
 });
 
 // GET /products/by-sku/:sku - Get a specific product by SKU [MOVED BEFORE :id CATCH-ALL]
-router.get('/by-sku/:sku', authenticateToken, async (req: AuthRequest, res: Response) => {
+router.get('/by-sku/:sku', authenticateToken, async (req: AuthRequest, res: Response, next: NextFunction) => {
   try {
     const sku = req.params.sku;
     const productService = getProductServiceForRequest(req);
@@ -83,14 +81,13 @@ router.get('/by-sku/:sku', authenticateToken, async (req: AuthRequest, res: Resp
     }
 
     res.json(product);
-  } catch (_error) {
-    // console.error("Get product by SKU error:", _error);
-    res.status(500).json({ message: 'Internal server error' });
+  } catch (error) {
+    next(error);
   }
 });
 
 // GET /products/export-excess - Export products that exceed tier limit [MOVED BEFORE :id CATCH-ALL]
-router.get('/export-excess', authenticateToken, async (req: AuthRequest, res: Response) => {
+router.get('/export-excess', authenticateToken, async (req: AuthRequest, res: Response, next: NextFunction) => {
   try {
     const prisma = getDefaultDatabaseClient();
     const organizationId = req.organizationId!;
@@ -189,13 +186,12 @@ router.get('/export-excess', authenticateToken, async (req: AuthRequest, res: Re
       products,
     });
   } catch (error) {
-    console.error('Export excess products error:', error);
-    res.status(500).json({ message: 'Internal server error' });
+    next(error);
   }
 });
 
 // GET /products/:id - Get a specific product by ID [MOVED AFTER SPECIFIC ROUTES]
-router.get('/:id', authenticateToken, async (req: AuthRequest, res: Response) => {
+router.get('/:id', authenticateToken, async (req: AuthRequest, res: Response, next: NextFunction) => {
   try {
     const id = Number.parseInt(req.params.id, 10);
     if (Number.isNaN(id)) {
@@ -216,9 +212,8 @@ router.get('/:id', authenticateToken, async (req: AuthRequest, res: Response) =>
     }
 
     res.json(product);
-  } catch (_error) {
-    // console.error("Get product error:", _error);
-    res.status(500).json({ message: 'Internal server error' });
+  } catch (error) {
+    next(error);
   }
 });
 
@@ -231,7 +226,7 @@ router.post(
   validateRequest(productSchema),
   validateDataIntegrity,
   validateBusinessRules,
-  async (req: AuthRequest, res: Response) => {
+  async (req: AuthRequest, res: Response, next: NextFunction) => {
     const { barcode, sku, name, costPrice } = req.body;
     if (!barcode || !sku || !name || costPrice === undefined) {
       return res.status(400).json({ message: 'Missing required product fields' });
@@ -247,9 +242,8 @@ router.post(
         organizationId: req.organizationId!,
       } as Omit<Product, 'id' | 'createdAt' | 'updatedAt'>);
       res.status(201).json(newProduct);
-    } catch (_error) {
-      // console.error("Create product error:", _error);
-      res.status(500).json({ message: 'Internal server error' });
+    } catch (error) {
+      next(error);
     }
   },
 );
@@ -262,7 +256,7 @@ router.put(
   validateRequest(productSchema),
   validateDataIntegrity,
   validateBusinessRules,
-  async (req: AuthRequest, res: Response) => {
+  async (req: AuthRequest, res: Response, next: NextFunction) => {
     try {
       const id = Number.parseInt(req.params.id, 10);
       if (Number.isNaN(id)) {
@@ -296,9 +290,8 @@ router.put(
       }
 
       res.json(updatedProduct);
-    } catch (_error) {
-      // console.error("Update product error:", _error);
-      res.status(500).json({ message: 'Internal server error' });
+    } catch (error) {
+      next(error);
     }
   },
 );
@@ -308,7 +301,7 @@ router.delete(
   '/:id',
   authenticateToken,
   standardLimiter,
-  async (req: AuthRequest, res: Response) => {
+  async (req: AuthRequest, res: Response, next: NextFunction) => {
     try {
       const id = Number.parseInt(req.params.id, 10);
       if (Number.isNaN(id)) {
@@ -334,9 +327,8 @@ router.delete(
       }
 
       res.json({ message: 'Product deleted successfully' });
-    } catch (_error) {
-      // console.error("Delete product error:", _error);
-      res.status(500).json({ message: 'Internal server error' });
+    } catch (error) {
+      next(error);
     }
   },
 );
@@ -348,7 +340,7 @@ router.post(
   checkUsageLimit('max_skus'),
   standardLimiter,
   upload.single('file'),
-  async (req: AuthRequest, res: Response) => {
+  async (req: AuthRequest, res: Response, next: NextFunction) => {
     try {
       if (!req.file) {
         return res.status(400).json({
@@ -389,12 +381,7 @@ router.post(
 
       res.json(responseObj);
     } catch (error: any) {
-      console.error('CSV upload error:', error);
-      res.status(500).json({
-        message: 'Internal server error during file processing',
-        details:
-          'An unexpected error occurred while processing the CSV, XLSX, or XLS file. Please check the file format and try again.',
-      });
+      next(error);
     } finally {
       // Clean up the uploaded file after processing
       if (req.file) {
