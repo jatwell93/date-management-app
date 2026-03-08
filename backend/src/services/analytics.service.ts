@@ -1,9 +1,6 @@
-import Database from 'better-sqlite3';
 import { Logger } from '../utils/logger';
-import { AnalyticsRepository } from '../repositories/analytics.repository';
+import { IAnalyticsAdapter } from '../adapters/analytics/IAnalyticsAdapter';
 import { randomBytes } from 'crypto';
-
-type DB = InstanceType<typeof Database>;
 
 // Define analytics event types
 export enum AnalyticsEventType {
@@ -82,26 +79,22 @@ export interface AnalyticsConfig {
 }
 
 /**
- * Analytics Service with Dependency Injection
+ * Analytics Service with Adapter Pattern
  * Provides tracking and analytics for application usage and user adoption
  *
- * Task 8.1 & 8.3: Refactored from singleton to DI pattern with repository
+ * P0-2: Refactored to use IAnalyticsAdapter for database-agnostic operations
  */
 export class AnalyticsService {
   private config: AnalyticsConfig;
-  private repository: AnalyticsRepository;
   private eventQueue: AnalyticsEvent[] = [];
   private batchProcessing: boolean = false;
   private batchInterval?: NodeJS.Timeout;
 
   /**
-   * Constructor with dependency injection
-   * @param db Database instance (injected)
+   * Constructor with adapter injection
+   * @param adapter Analytics adapter (SQLite, Prisma, etc.)
    */
-  constructor(private db: DB) {
-    // Create repository with injected database
-    this.repository = new AnalyticsRepository(db);
-
+  constructor(private adapter: IAnalyticsAdapter) {
     // Set default configuration
     this.config = {
       enableTracking: true,
@@ -123,8 +116,18 @@ export class AnalyticsService {
       };
     }
 
-    // Initialize tables via repository
-    this.repository.initializeTables();
+    // Boot-time capability check: Is adapter available?
+    if (!this.adapter.isAvailable()) {
+      Logger.warn('Analytics disabled: adapter not available', {
+        adapterType: this.adapter.constructor.name,
+      });
+      this.config.enableTracking = false;
+      this.config.enableSessionTracking = false;
+      return;
+    }
+
+    // Initialize storage via adapter
+    this.adapter.initialize();
 
     // Start periodic batch processing of events
     if (this.config.enableTracking) {
@@ -168,8 +171,8 @@ export class AnalyticsService {
     try {
       const sessionId = session.sessionId || this.generateSessionId();
 
-      // Use repository to start session
-      this.repository.startSession(session, sessionId);
+      // Use adapter to start session
+      this.adapter.startSession(session, sessionId);
 
       return sessionId;
     } catch (error) {
@@ -190,7 +193,7 @@ export class AnalyticsService {
     }
 
     try {
-      this.repository.endSession(sessionId);
+      this.adapter.endSession(sessionId);
     } catch (error) {
       Logger.error('Failed to end user session', {
         error: error instanceof Error ? error.message : 'Unknown error',
@@ -222,8 +225,8 @@ export class AnalyticsService {
       const eventsToProcess = this.eventQueue.splice(0, this.config.batchSize);
 
       if (eventsToProcess.length > 0) {
-        // Use repository to store events
-        this.repository.storeEventsBatch(eventsToProcess);
+        // Use adapter to store events
+        this.adapter.storeEventsBatch(eventsToProcess);
       }
     } catch (error) {
       Logger.error('Failed to process analytics event queue', {
@@ -263,8 +266,10 @@ export class AnalyticsService {
   /**
    * Get analytics metrics
    */
-  public async getMetrics(): Promise<AnalyticsMetrics> {
-    return this.repository.getMetrics();
+  public async getMetrics(startDate?: Date, endDate?: Date): Promise<AnalyticsMetrics> {
+    const start = startDate || new Date(Date.now() - 30 * 24 * 60 * 60 * 1000); // Default: 30 days ago
+    const end = endDate || new Date(); // Default: now
+    return this.adapter.getMetrics(start, end);
   }
 
   /**
@@ -272,7 +277,7 @@ export class AnalyticsService {
    */
   public async cleanOldData(): Promise<void> {
     try {
-      this.repository.cleanOldData(this.config.retentionPeriod);
+      await this.adapter.cleanupOldData(this.config.retentionPeriod);
     } catch (error) {
       Logger.error('Failed to clean old analytics data', {
         error: error instanceof Error ? error.message : 'Unknown error',
@@ -281,10 +286,25 @@ export class AnalyticsService {
   }
 
   /**
+   * Get event count by type
+   */
+  public async getEventCountByType(
+    eventType: AnalyticsEventType,
+    startDate?: Date,
+    endDate?: Date
+  ): Promise<number> {
+    const start = startDate || new Date(Date.now() - 30 * 24 * 60 * 60 * 1000);
+    const end = endDate || new Date();
+    return this.adapter.getEventCountByType(eventType, start, end);
+  }
+
+  /**
    * Export analytics data for further analysis
+   * @deprecated Use getMetrics() instead for analytics data retrieval. This method returns empty data and will be removed in a future version.
    */
   public async exportData(startDate: Date, endDate: Date): Promise<AnalyticsEvent[]> {
-    return this.repository.exportData(startDate, endDate);
+    Logger.warn('exportData is deprecated - use getMetrics() instead');
+    return [];
   }
 
   // ============================================================================
@@ -295,12 +315,14 @@ export class AnalyticsService {
 
   /**
    * Get or create singleton instance (for middleware compatibility)
-   * Uses the database from ServiceProvider
+   * Uses SQLite adapter with database from ServiceProvider
    */
   public static getInstance(): AnalyticsService {
     if (!AnalyticsService.instance) {
       const db = require('../database/database-factory').getDefaultDatabaseClient();
-      AnalyticsService.instance = new AnalyticsService(db);
+      const { SQLiteAnalyticsAdapter } = require('../adapters/analytics/SQLiteAnalyticsAdapter');
+      const adapter = new SQLiteAnalyticsAdapter(db);
+      AnalyticsService.instance = new AnalyticsService(adapter);
       AnalyticsService.instance.initialize();
     }
     return AnalyticsService.instance;

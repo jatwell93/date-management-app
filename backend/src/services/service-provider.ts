@@ -4,6 +4,7 @@ import { getDefaultStorageProvider } from '../storage/storage-factory';
 import { StorageProvider } from '../storage/storage-provider.interface';
 import { getDb, type DB } from '../database';
 import { AnalyticsService } from './analytics.service';
+import { SQLiteAnalyticsAdapter } from '../adapters/analytics/SQLiteAnalyticsAdapter';
 import { ReportService } from './report.service';
 import { AuthService } from './auth.service';
 import { CSVParserService } from './csv-parser.service';
@@ -102,7 +103,8 @@ export class ServiceProvider {
 
   getAnalyticsService(): AnalyticsService {
     if (!this.analyticsService) {
-      this.analyticsService = new AnalyticsService(this.db);
+      const adapter = new SQLiteAnalyticsAdapter(this.db);
+      this.analyticsService = new AnalyticsService(adapter);
     }
     return this.analyticsService;
   }

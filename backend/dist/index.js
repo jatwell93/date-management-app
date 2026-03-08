@@ -74,8 +74,10 @@ const scheduler_service_1 = require("./services/scheduler.service");
 const database_monitoring_service_1 = require("./services/database.monitoring.service");
 const application_monitoring_service_1 = require("./services/application.monitoring.service");
 const analytics_service_1 = require("./services/analytics.service");
+const SQLiteAnalyticsAdapter_1 = require("./adapters/analytics/SQLiteAnalyticsAdapter");
 const database_1 = require("./database");
 const environment_1 = require("./config/environment");
+const logger_1 = require("./utils/logger");
 const app = (0, express_1.default)();
 const port = environment_1.envConfig.PORT;
 // Required when running behind reverse proxies/tunnels (ngrok, nginx, cloud load balancers)
@@ -121,9 +123,12 @@ app.use(cors_1.corsMiddleware);
     // await initDatabase();
 })();
 const isTestEnv = environment_1.envConfig.NODE_ENV === 'test';
+// Declare monitoring services at module level for process handler access
+let dbMonitoringService = null;
+let appMonitoringService = null;
 if (!isTestEnv) {
     // Initialize database monitoring
-    const dbMonitoringService = database_monitoring_service_1.DatabaseMonitoringService.getInstance();
+    dbMonitoringService = database_monitoring_service_1.DatabaseMonitoringService.getInstance();
     dbMonitoringService.initialize({
         slowQueryThreshold: 100, // 100ms
         alertThresholds: {
@@ -145,7 +150,7 @@ if (!isTestEnv) {
         });
     });
     // Initialize application monitoring
-    const appMonitoringService = application_monitoring_service_1.ApplicationMonitoringService.getInstance();
+    appMonitoringService = application_monitoring_service_1.ApplicationMonitoringService.getInstance();
     appMonitoringService.initialize({
         slowEndpointThreshold: 500, // 500ms
         alertThresholds: {
@@ -188,8 +193,9 @@ if (!isTestEnv) {
     });
     // Apply application monitoring middleware
     app.use(appMonitoringService.requestTrackingMiddleware());
-    // Initialize analytics service (Task 8.7)
-    const analyticsService = new analytics_service_1.AnalyticsService((0, database_1.getDb)());
+    // Initialize analytics service with SQLite adapter (P0-2)
+    const analyticsAdapter = new SQLiteAnalyticsAdapter_1.SQLiteAnalyticsAdapter((0, database_1.getDb)());
+    const analyticsService = new analytics_service_1.AnalyticsService(analyticsAdapter);
     analyticsService.initialize({
         enableTracking: true,
         enableSessionTracking: true,
@@ -210,6 +216,73 @@ if (!isTestEnv) {
             console.error('Application may not function correctly. Check database tier_feature_flags table.');
         }
     })();
+    // ============================================================================
+    // Process Lifecycle Handlers
+    // ============================================================================
+    // Handle graceful shutdown and critical errors at the application level
+    // (moved from ApplicationMonitoringService for proper separation of concerns)
+    let isShuttingDown = false;
+    const shutdown = async (signal) => {
+        if (isShuttingDown) {
+            logger_1.Logger.info(`Already shutting down, ignoring ${signal}`);
+            return;
+        }
+        isShuttingDown = true;
+        logger_1.Logger.info(`Received ${signal}, shutting down gracefully...`);
+        // Stop monitoring services if they were initialized
+        if (appMonitoringService) {
+            appMonitoringService.stopMonitoring(true);
+        }
+        if (dbMonitoringService) {
+            dbMonitoringService.stopMonitoring(true);
+        }
+        // Close server if it exists
+        if (typeof server !== 'undefined' && server) {
+            server.close(() => {
+                logger_1.Logger.info('Server closed');
+                process.exit(0);
+            });
+            // Force close after 10 seconds
+            setTimeout(() => {
+                logger_1.Logger.error('Forced shutdown after timeout');
+                process.exit(1);
+            }, 10000);
+        }
+        else {
+            process.exit(0);
+        }
+    };
+    // Handle shutdown signals
+    process.on('SIGTERM', () => {
+        void shutdown('SIGTERM').catch((err) => {
+            logger_1.Logger.error('SIGTERM shutdown error', { error: err instanceof Error ? err.message : String(err) });
+        });
+    });
+    process.on('SIGINT', () => {
+        void shutdown('SIGINT').catch((err) => {
+            logger_1.Logger.error('SIGINT shutdown error', { error: err instanceof Error ? err.message : String(err) });
+        });
+    });
+    // Handle uncaught exceptions
+    process.on('uncaughtException', (error) => {
+        logger_1.Logger.error('Uncaught exception:', {
+            message: error.message,
+            stack: error.stack,
+        });
+        // Report to Sentry
+        Sentry.captureException(error);
+        // Attempt graceful shutdown
+        void shutdown('uncaughtException');
+    });
+    // Handle unhandled promise rejections
+    process.on('unhandledRejection', (reason, promise) => {
+        logger_1.Logger.error('Unhandled promise rejection:', {
+            reason: reason instanceof Error ? reason.message : reason,
+            promise: promise.toString(),
+        });
+        // Report to Sentry
+        Sentry.captureException(reason instanceof Error ? reason : new Error(String(reason)));
+    });
 }
 // Public routes
 app.use('/auth', auth_routes_1.default);
