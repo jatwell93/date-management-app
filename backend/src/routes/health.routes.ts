@@ -141,7 +141,7 @@ router.get('/ready', async (req, res) => {
         timestamp: new Date().toISOString(),
       });
     }
-  } catch (_error) {
+  } catch (error) {
     res.status(503).json({
       status: 'not ready',
       timestamp: new Date().toISOString(),

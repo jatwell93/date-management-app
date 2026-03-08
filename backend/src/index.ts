@@ -91,11 +91,6 @@ app.use(express.urlencoded({ extended: true, limit: '10mb' }));
 // Apply CORS middleware with environment-based origin whitelist
 app.use(corsMiddleware);
 
-// Initialize database
-(async () => {
-  // await initDatabase();
-})();
-
 const isTestEnv = envConfig.NODE_ENV === 'test';
 
 // Declare monitoring services at module level for process handler access

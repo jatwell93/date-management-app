@@ -1,4 +1,4 @@
-import { Router, Request, Response } from 'express';
+import { Router, Request, Response, NextFunction } from 'express';
 import { DashboardService } from '../services/dashboard.service';
 import { authenticateToken, AuthRequest } from '../middleware/auth.middleware';
 
@@ -11,14 +11,13 @@ function getDashboardServiceForRequest(req: AuthRequest) {
   return new DashboardService();
 }
 
-router.get('/', authenticateToken, async (req: AuthRequest, res: Response) => {
+router.get('/', authenticateToken, async (req: AuthRequest, res: Response, next: NextFunction) => {
   try {
     const dashboardService = getDashboardServiceForRequest(req);
     const dashboardData = await dashboardService.getDashboardData();
     res.json(dashboardData);
-  } catch (_error) {
-    // console.error("Get dashboard data error:", _error);
-    res.status(500).json({ message: 'Internal server error' });
+  } catch (error) {
+    next(error);
   }
 });
 
