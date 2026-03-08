@@ -158,8 +158,9 @@ export class ApplicationMonitoringService extends EventEmitter {
     // Initialize SaaS metrics service
     this.saasMetricsService = new SaasMetricsService();
 
-    // Set up graceful shutdown handlers
-    this.setupGracefulShutdown();
+    // Note: Graceful shutdown handlers moved to application bootstrap (src/index.ts)
+    // to ensure proper separation of concerns and prevent monitoring from controlling
+    // process lifecycle
   }
 
   public static getInstance(): ApplicationMonitoringService {
@@ -240,38 +241,6 @@ export class ApplicationMonitoringService extends EventEmitter {
 
     this.isMonitoring = false;
     Logger.info('Application monitoring stopped');
-  }
-
-  /**
-   * Set up graceful shutdown handlers
-   */
-  private setupGracefulShutdown(): void {
-    const shutdown = (signal: string) => {
-      Logger.info(`Received ${signal}, shutting down monitoring service gracefully`);
-      this.stopMonitoring();
-    };
-
-    // Handle common shutdown signals
-    process.on('SIGTERM', () => shutdown('SIGTERM'));
-    process.on('SIGINT', () => shutdown('SIGINT'));
-
-    // Handle uncaught exceptions
-    process.on('uncaughtException', (error) => {
-      Logger.error('Uncaught exception, shutting down monitoring', {
-        error: error.message,
-        stack: error.stack,
-      });
-      this.stopMonitoring();
-      process.exit(1);
-    });
-
-    // Handle unhandled promise rejections
-    process.on('unhandledRejection', (reason, promise) => {
-      Logger.error('Unhandled promise rejection', {
-        reason: reason instanceof Error ? reason.message : reason,
-        promise: promise.toString(),
-      });
-    });
   }
 
   /**

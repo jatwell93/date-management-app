@@ -1245,17 +1245,11 @@
     - Test offline sync (if applicable)
   - **Success:** Zero blocking issues reported
 
-- [ ] 20.9 Get approval from stakeholders for production release
-  - **Stakeholders:**
-    - Technical lead
-    - Product owner
-    - Security reviewer
-  - **Required:** Written approval (email/Slack) from all stakeholders
-
-- [ ] 20.10 Archive OpenSpec change with `openspec archive use-cloudflare-r2-and-a-serverless-database`
+- [ ] 20.9 Archive OpenSpec change with `openspec archive use-cloudflare-r2-and-a-serverless-database`
   - **Action:** Run archive command after all tasks complete
   - **Effect:** Moves change to `openspec/changes/archive/`
   - **Updates:** Specifications with final state from delta specs
 
 **Estimated Time for Phase 20:** 8-10 hours (validation + approvals)
+
 

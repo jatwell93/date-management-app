@@ -313,7 +313,7 @@ model Upload {
   fileName          String       @map("file_name")
   fileSizeBytes     Int          @map("file_size_bytes")
   contentType       String?      @map("content_type")
-  status            String       @default("pending") // pending, uploading, processing, complete, failed
+  status            String       @default("pending") // pending, uploading, processing, completed, failed
   uploadProgress    Int          @default(0) @map("upload_progress") // 0-100
   processingMessage String?      @map("processing_message") // Current processing step
   errorMessage      String?      @map("error_message") // Error details if failed

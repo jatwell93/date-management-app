@@ -37,8 +37,10 @@ import { SchedulerService } from './services/scheduler.service';
 import { DatabaseMonitoringService } from './services/database.monitoring.service';
 import { ApplicationMonitoringService } from './services/application.monitoring.service';
 import { AnalyticsService } from './services/analytics.service';
+import { SQLiteAnalyticsAdapter } from './adapters/analytics/SQLiteAnalyticsAdapter';
 import { getDb } from './database';
 import { envConfig } from './config/environment';
+import { Logger } from './utils/logger';
 
 const app = express();
 const port = envConfig.PORT;
@@ -96,9 +98,13 @@ app.use(corsMiddleware);
 
 const isTestEnv = envConfig.NODE_ENV === 'test';
 
+// Declare monitoring services at module level for process handler access
+let dbMonitoringService: DatabaseMonitoringService | null = null;
+let appMonitoringService: ApplicationMonitoringService | null = null;
+
 if (!isTestEnv) {
   // Initialize database monitoring
-  const dbMonitoringService = DatabaseMonitoringService.getInstance();
+  dbMonitoringService = DatabaseMonitoringService.getInstance();
   dbMonitoringService.initialize({
     slowQueryThreshold: 100, // 100ms
     alertThresholds: {
@@ -122,7 +128,7 @@ if (!isTestEnv) {
   });
 
   // Initialize application monitoring
-  const appMonitoringService = ApplicationMonitoringService.getInstance();
+  appMonitoringService = ApplicationMonitoringService.getInstance();
   appMonitoringService.initialize({
     slowEndpointThreshold: 500, // 500ms
     alertThresholds: {
@@ -168,8 +174,9 @@ if (!isTestEnv) {
   // Apply application monitoring middleware
   app.use(appMonitoringService.requestTrackingMiddleware());
 
-  // Initialize analytics service (Task 8.7)
-  const analyticsService = new AnalyticsService(getDb());
+  // Initialize analytics service with SQLite adapter (P0-2)
+  const analyticsAdapter = new SQLiteAnalyticsAdapter(getDb());
+  const analyticsService = new AnalyticsService(analyticsAdapter);
   analyticsService.initialize({
     enableTracking: true,
     enableSessionTracking: true,
@@ -193,6 +200,87 @@ if (!isTestEnv) {
       );
     }
   })();
+
+  // ============================================================================
+  // Process Lifecycle Handlers
+  // ============================================================================
+  // Handle graceful shutdown and critical errors at the application level
+  // (moved from ApplicationMonitoringService for proper separation of concerns)
+
+  let isShuttingDown = false;
+
+  const shutdown = async (signal: string) => {
+    if (isShuttingDown) {
+      Logger.info(`Already shutting down, ignoring ${signal}`);
+      return;
+    }
+    isShuttingDown = true;
+
+    Logger.info(`Received ${signal}, shutting down gracefully...`);
+
+    // Stop monitoring services if they were initialized
+    if (appMonitoringService) {
+      appMonitoringService.stopMonitoring(true);
+    }
+    if (dbMonitoringService) {
+      dbMonitoringService.stopMonitoring(true);
+    }
+
+    // Close server if it exists
+    if (typeof server !== 'undefined' && server) {
+      server.close(() => {
+        Logger.info('Server closed');
+        process.exit(0);
+      });
+
+      // Force close after 10 seconds
+      setTimeout(() => {
+        Logger.error('Forced shutdown after timeout');
+        process.exit(1);
+      }, 10000);
+    } else {
+      process.exit(0);
+    }
+  };
+
+  // Handle shutdown signals
+  process.on('SIGTERM', () => {
+    void shutdown('SIGTERM').catch((err) => {
+      Logger.error('SIGTERM shutdown error', { error: err instanceof Error ? err.message : String(err) });
+    });
+  });
+  process.on('SIGINT', () => {
+    void shutdown('SIGINT').catch((err) => {
+      Logger.error('SIGINT shutdown error', { error: err instanceof Error ? err.message : String(err) });
+    });
+  });
+
+  // Handle uncaught exceptions
+  process.on('uncaughtException', (error) => {
+    Logger.error('Uncaught exception:', {
+      message: error.message,
+      stack: error.stack,
+    });
+    
+    // Report to Sentry
+    Sentry.captureException(error);
+
+    // Attempt graceful shutdown
+    void shutdown('uncaughtException');
+  });
+
+  // Handle unhandled promise rejections
+  process.on('unhandledRejection', (reason, promise) => {
+    Logger.error('Unhandled promise rejection:', {
+      reason: reason instanceof Error ? reason.message : reason,
+      promise: promise.toString(),
+    });
+
+    // Report to Sentry
+    Sentry.captureException(
+      reason instanceof Error ? reason : new Error(String(reason))
+    );
+  });
 }
 
 // Public routes

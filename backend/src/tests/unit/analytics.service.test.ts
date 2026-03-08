@@ -1,28 +1,19 @@
 import { AnalyticsService, AnalyticsEventType } from '../../services/analytics.service';
-import { AnalyticsRepository } from '../../repositories/analytics.repository';
-import Database from 'better-sqlite3';
-
-// Mock the AnalyticsRepository
-jest.mock('../../repositories/analytics.repository');
+import { IAnalyticsAdapter } from '../../adapters/analytics/IAnalyticsAdapter';
 
 describe('AnalyticsService', () => {
   let analyticsService: AnalyticsService;
-  let mockRepository: jest.Mocked<AnalyticsRepository>;
-  let mockDb: Partial<Database>;
+  let mockAdapter: jest.Mocked<IAnalyticsAdapter>;
 
   beforeEach(() => {
-    // Create a mock database instance
-    mockDb = {} as Database;
-
-    // Create service with mock database
-    analyticsService = new AnalyticsService(mockDb as unknown as Database);
-
-    // Create mock repository with proper typing
-    mockRepository = {
-      initializeTables: jest.fn().mockReturnValue(undefined),
-      storeEventsBatch: jest.fn().mockResolvedValue(undefined),
-      startSession: jest.fn().mockResolvedValue('session-123'),
-      endSession: jest.fn().mockResolvedValue(undefined),
+    // Create mock adapter
+    mockAdapter = {
+      isAvailable: jest.fn().mockReturnValue(true),
+      initialize: jest.fn(),
+      storeEventsBatch: jest.fn(),
+      startSession: jest.fn().mockReturnValue('session-123'),
+      endSession: jest.fn(),
+      updateSession: jest.fn(),
       getMetrics: jest.fn().mockResolvedValue({
         dailyActiveUsers: 0,
         weeklyActiveUsers: 0,
@@ -34,12 +25,13 @@ describe('AnalyticsService', () => {
         pwaInstallationRate: 0,
         offlineUsageRate: 0,
       }),
-      cleanOldData: jest.fn().mockResolvedValue({ deletedCount: 0 }),
-      exportData: jest.fn().mockResolvedValue([]),
+      getEventCountByType: jest.fn().mockResolvedValue(0),
+      cleanupOldData: jest.fn().mockResolvedValue(0),
+      getActiveUserCount: jest.fn().mockResolvedValue(0),
     } as any;
 
-    // Inject the mock repository into the service
-    (analyticsService as any).repository = mockRepository;
+    // Create service with mock adapter
+    analyticsService = new AnalyticsService(mockAdapter);
   });
 
   afterEach(() => {
@@ -47,9 +39,7 @@ describe('AnalyticsService', () => {
   });
 
   describe('initialize', () => {
-    it('should initialize tables via repository', () => {
-      mockRepository.initializeTables.mockReturnValue(undefined);
-
+    it('should initialize via adapter', () => {
       analyticsService.initialize({
         enableTracking: true,
         enableSessionTracking: true,
@@ -58,12 +48,10 @@ describe('AnalyticsService', () => {
         enablePWAAnalytics: true,
       });
 
-      expect(mockRepository.initializeTables).toHaveBeenCalledTimes(1);
+      expect(mockAdapter.initialize).toHaveBeenCalledTimes(1);
     });
 
     it('should merge provided config with defaults', () => {
-      mockRepository.initializeTables.mockReturnValue(undefined);
-
       analyticsService.initialize({
         enableTracking: false,
       });
@@ -138,7 +126,7 @@ describe('AnalyticsService', () => {
     beforeEach(() => {
       analyticsService.initialize({ enableSessionTracking: true });
       // @ts-expect-error - Mock setup, TypeScript can't infer jest.Mock type
-      mockRepository.startSession.mockResolvedValue('session-123');
+      mockAdapter.startSession.mockResolvedValue('session-123');
     });
 
     it('should start session via repository with generated ID', () => {
@@ -154,7 +142,7 @@ describe('AnalyticsService', () => {
       expect(sessionId).toBeTruthy();
       expect(typeof sessionId).toBe('string');
       expect(sessionId.length).toBeGreaterThan(0);
-      expect(mockRepository.startSession).toHaveBeenCalled();
+      expect(mockAdapter.startSession).toHaveBeenCalled();
     });
 
     it('should not start session when tracking disabled', () => {
@@ -170,7 +158,7 @@ describe('AnalyticsService', () => {
 
       // Service returns empty string when disabled, not null
       expect(sessionId).toBe('');
-      expect(mockRepository.startSession).not.toHaveBeenCalled();
+      expect(mockAdapter.startSession).not.toHaveBeenCalled();
     });
   });
 
@@ -181,11 +169,11 @@ describe('AnalyticsService', () => {
 
     it('should end session via repository', async () => {
       // @ts-expect-error - Mock setup, TypeScript can't infer jest.Mock type
-      mockRepository.endSession.mockResolvedValue(undefined);
+      mockAdapter.endSession.mockResolvedValue(undefined);
 
       await analyticsService.endSession('session-123');
 
-      expect(mockRepository.endSession).toHaveBeenCalled();
+      expect(mockAdapter.endSession).toHaveBeenCalled();
     });
 
     it('should not end session when tracking disabled', async () => {
@@ -193,7 +181,7 @@ describe('AnalyticsService', () => {
 
       await analyticsService.endSession('session-123');
 
-      expect(mockRepository.endSession).not.toHaveBeenCalled();
+      expect(mockAdapter.endSession).not.toHaveBeenCalled();
     });
   });
 
@@ -214,12 +202,12 @@ describe('AnalyticsService', () => {
         offlineUsageRate: 0.15,
       };
       // @ts-expect-error - Mock setup, TypeScript can't infer jest.Mock type
-      mockRepository.getMetrics.mockResolvedValue(mockMetrics);
+      mockAdapter.getMetrics.mockResolvedValue(mockMetrics);
 
       const metrics = await analyticsService.getMetrics();
 
       expect(metrics).toBeDefined();
-      expect(mockRepository.getMetrics).toHaveBeenCalledTimes(1);
+      expect(mockAdapter.getMetrics).toHaveBeenCalledTimes(1);
     });
   });
 
@@ -248,45 +236,32 @@ describe('AnalyticsService', () => {
   describe('cleanOldData', () => {
     it('should clean old data via repository', async () => {
       // @ts-expect-error - Mock setup, TypeScript can't infer jest.Mock type
-      mockRepository.cleanOldData.mockResolvedValue({ deletedCount: 150 });
+      mockAdapter.cleanupOldData.mockResolvedValue(150);
 
       await analyticsService.cleanOldData();
 
-      expect(mockRepository.cleanOldData).toHaveBeenCalled();
+      expect(mockAdapter.cleanupOldData).toHaveBeenCalled();
     });
 
     it('should use configured retention period', async () => {
       analyticsService.initialize({ retentionPeriod: 30 });
       // @ts-expect-error - Mock setup, TypeScript can't infer jest.Mock type
-      mockRepository.cleanOldData.mockResolvedValue({ deletedCount: 50 });
+      mockAdapter.cleanupOldData.mockResolvedValue(50);
 
       await analyticsService.cleanOldData();
 
-      expect(mockRepository.cleanOldData).toHaveBeenCalled();
+      expect(mockAdapter.cleanupOldData).toHaveBeenCalledWith(30);
     });
   });
 
   describe('exportData', () => {
-    it('should export data via repository', async () => {
-      const mockData = [
-        {
-          id: 1,
-          userId: 1,
-          eventType: AnalyticsEventType.USER_LOGIN,
-          eventCategory: 'auth',
-          eventAction: 'login',
-          timestamp: new Date(),
-        },
-      ];
-      // @ts-expect-error - Mock setup, TypeScript can't infer jest.Mock type
-      mockRepository.exportData.mockResolvedValue(mockData);
-
+    it('should return empty array (deprecated)', async () => {
       const startDate = new Date('2025-01-01');
       const endDate = new Date('2025-01-31');
       const data = await analyticsService.exportData(startDate, endDate);
 
-      expect(data).toBeDefined();
-      expect(mockRepository.exportData).toHaveBeenCalled();
+      expect(data).toEqual([]);
+      // Method is deprecated and doesn't use adapter
     });
   });
 });

@@ -7,6 +7,7 @@ import { envConfig } from '../config/environment';
 import { StorageQuotaService } from './storage-quota.service';
 import { Logger } from '../utils/logger';
 import { getDefaultDatabaseClient } from '../database/database-factory';
+import { UploadStatus } from '../types/upload.types';
 
 export interface InitiateUploadResponse {
   strategy: 'direct' | 'presigned';
@@ -125,7 +126,7 @@ export class UploadService {
       await prisma.upload.update({
         where: { fileKey: key },
         data: {
-          status: 'complete',
+          status: UploadStatus.COMPLETED,
           rowsProcessed: parseResult.imported + parseResult.updated + parseResult.skipped,
           rowsTotal: parseResult.total,
           rowsImported: parseResult.imported,
@@ -156,7 +157,7 @@ export class UploadService {
         await prisma.upload.update({
           where: { fileKey: key },
           data: {
-            status: 'failed',
+            status: UploadStatus.FAILED,
             errorMessage: errorMessage,
             rowsImported: 0,
             rowsUpdated: 0,

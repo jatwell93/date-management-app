@@ -55,7 +55,7 @@ prompts/
 skills/
 instructions/
 agents/
-other/
+go-to-market-docs/
 .agentlens/
 
 # Real pharmacy data with sensitive pricing
