@@ -6,9 +6,10 @@ This runbook covers common operational procedures for the SaaS multi-tenant appl
 ## Table of Contents
 1. [Health Checks](#health-checks)
 2. [Common Incidents](#common-incidents)
-3. [Monitoring & Alerts](#monitoring--alerts)
-4. [Maintenance Procedures](#maintenance-procedures)
-5. [Escalation Contacts](#escalation-contacts)
+3. [Cloudflare Workers Operations](#cloudflare-workers-operations)
+4. [Monitoring & Alerts](#monitoring--alerts)
+5. [Maintenance Procedures](#maintenance-procedures)
+6. [Escalation Contacts](#escalation-contacts)
 
 ---
 
@@ -160,6 +161,191 @@ ORDER BY created_at DESC LIMIT 1;
 **Resolution**:
 - If legitimate overage: Guide user to upgrade
 - If count incorrect: Run usage recalculation (contact dev team)
+
+---
+
+## Cloudflare Workers Operations
+
+### Deployment Status
+
+**Check Workers health:**
+```bash
+# Check if Workers service is running
+curl https://api.yourdomain.com/health
+
+# Expected response (Workers):
+{
+  "status": "healthy",
+  "database": "connected",
+  "timestamp": "2026-03-09T12:00:00Z"
+}
+
+# Get detailed metrics
+curl https://api.yourdomain.com/metrics
+```
+
+### Workers Incident: Service Unavailable (502/503)
+
+**Symptoms:**
+- Workers returns 502 Bad Gateway
+- `https://api.yourdomain.com` unreachable
+- Cloudflare dashboard shows critical alerts
+
+**Quick Resolution (< 5 minutes):**
+
+```bash
+# 1. Check Workers deployment status
+wrangler deployments list --env production
+
+# 2. View recent logs
+wrangler tail --env production | head -20
+
+# If recent deployment looks bad:
+
+# 3. Rollback to previous version
+wrangler rollback --env production
+
+# 4. Verify health check returns 200
+curl https://api.yourdomain.com/health --write-out '\n%{http_code}\n'
+```
+
+**Verification:**
+- Health endpoint returns 200 OK
+- Database connectivity confirmed
+- No errors in Sentry from Workers
+
+### Workers Incident: Slow Responses (p95 > 500ms)
+
+**Symptoms:**
+- API requests taking > 1 second
+- Users report timeouts
+- Cloudflare Analytics show high TTFB
+
+**Investigation:**
+
+```bash
+# 1. Check database query performance
+# In Neon dashboard: Monitoring → Query Performance
+# Look for queries > 200ms
+
+# 2. Check Workers logs for slow requests
+wrangler tail --env production --format json | \
+  jq 'select(.outcome != "ok") | .'
+
+# 3. Monitor Hyperdrive connection pool
+# Cloudflare Dashboard → Workers → Hyperdrive
+# Check "Active Connections" and "Pool Utilization"
+```
+
+**Common Causes & Fixes:**
+
+| Cause | Indicator | Fix |
+|-------|-----------|-----|
+| Slow DB query | Query time >200ms in Neon | Add index (see performance.md) |
+| Connection pool exhausted | High pool utilization | Increase Hyperdrive pool size |
+| N+1 query problem | Multiple queries for single request | Use Prisma `include` for batch |
+| Large payload | Response size >1MB | Compress with gzip (already enabled) |
+| Cold start | First request slow | Normal for Workers, <300ms acceptable |
+
+**Fix Example: Add Missing Index**
+
+```sql
+-- In Neon dashboard or via psql:
+CREATE INDEX CONCURRENTLY idx_products_orgid_expiry 
+ON products(organization_id, expiry_date DESC);
+
+-- Verify Workers cached config is cleared:
+wrangler secret put DATABASE_URL --env production
+```
+
+### Workers Incident: Secret/Configuration Issues
+
+**Symptoms:**
+- `401 Unauthorized` on all requests
+- `Error: DATABASE_URL undefined`
+- JWT validation failures
+
+**Resolution:**
+
+```bash
+# 1. Verify all required secrets are set
+wrangler secret list --env production
+
+# Expected output should include:
+# DATABASE_URL
+# JWT_SECRET
+# NEON_CONNECTION_STRING
+# R2_ACCOUNT_ID
+# R2_ACCESS_KEY_ID
+
+# 2. If secret missing, add it
+wrangler secret put JWT_SECRET --env production
+# (Prompts for value)
+
+# 3. Verify secret value (will be masked)
+wrangler secret list --env production
+
+# 4. Redeploy to pick up new secret
+wrangler publish --env production
+```
+
+### Workers Incident: Memory or CPU Limit Errors
+
+**Symptoms:**
+- Errors: "Worker exceeded CPU time limit"
+- Response: "503 - Gateway Timeout"
+- Large file uploads fail (>50MB CSV)
+
+**Investigation:**
+
+```bash
+# 1. Check what operations are slow
+wrangler tail --env production | grep -i "cpu\|timeout\|exceeded"
+
+# 2. Profile upload performance
+curl -X POST https://api.yourdomain.com/api/upload/initiate \
+  -H "Authorization: Bearer $TOKEN" \
+  -H "Content-Type: application/json" \
+  -d '{"filename":"large.csv","fileSize":104857600}' \
+  -w "Time: %{time_total}s\n"
+```
+
+**Fixes:**
+
+```typescript
+// Optimize large file processing
+// Instead of processing whole file in memory:
+// ❌ const data = await request.arrayBuffer(); // All in RAM
+// ✅ Use streaming with csv-parse
+
+const stream = Readable.from(await request.text());
+const csvStream = stream.pipe(parse());
+
+for await (const row of csvStream) {
+  await processBatch([row]); // Process incrementally
+}
+```
+
+**Workaround for MVP:**
+- Current limit: 30 seconds CPU per request
+- CSV processing: ~1MB per second throughput
+- Max file: ~30MB safely processable
+- Users uploading >30MB: Add to roadmap for Phase 20 (batch processing)
+
+### Workers Deployment Checklist
+
+Before pushing to production:
+
+- [ ] Local tests pass: `npm run test:workers`
+- [ ] Bundle size acceptable: `npm run build:workers` (< 500KB)
+- [ ] No console.errors in Dev build
+- [ ] Secrets set in Wrangler: `wrangler secret list --env production`
+- [ ] Deploy to preview first: `wrangler publish --env preview`
+- [ ] Test in preview: `curl https://preview.yourdomain.com/health`
+- [ ] Review deployment diff: `wrangler deployments list --env production`
+- [ ] Deploy to production: `wrangler publish --env production`
+- [ ] Verify health endpoint: `curl https://api.yourdomain.com/health`
+- [ ] Monitor Sentry for 5 minutes post-deploy
 
 ---
 

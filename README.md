@@ -426,23 +426,33 @@ See [AGENTS.md](AGENTS.md) for detailed development standards and patterns.
 
 **Getting Started**:
 - 👉 [backend/README.md](backend/README.md) — Backend setup, testing, deployment
+- [docs/dual-environment-guide.md](docs/dual-environment-guide.md) — Complete development vs. production environment guide
 - [docs/environment-setup.md](docs/environment-setup.md) — Environment configuration guide
 - [docs/testing-both-environments.md](docs/testing-both-environments.md) — Dual database testing
 
 **Architecture & Patterns**:
 - [backend/docs/database-patterns.md](backend/docs/database-patterns.md) — Prisma patterns, queries, optimization
 - [backend/docs/storage-patterns.md](backend/docs/storage-patterns.md) — Local vs. R2 storage, presigned URLs
+- [docs/neon-workflow.md](docs/neon-workflow.md) — Neon database branching strategy and migrations
 - [AGENTS.md](AGENTS.md) — Express/TypeScript development standards
 
-**Operations & Monitoring**:
+**Operations & Deployment**:
+- [docs/operational-runbook.md](docs/operational-runbook.md) — Production operations including Cloudflare Workers
+- [docs/cloudflare-setup.md](docs/cloudflare-setup.md) — R2, Workers, Hyperdrive configuration
 - [backend/docs/deployment.md](backend/docs/deployment.md) — Production deployment, CI/CD
 - [backend/docs/monitoring-alerting.md](backend/docs/monitoring-alerting.md) — Observability setup, Sentry
 - [backend/docs/operational-runbooks.md](backend/docs/operational-runbooks.md) — Production procedures
+
+**Troubleshooting & Cost**:
+- [docs/troubleshooting.md](docs/troubleshooting.md) — Common issues and solutions
+- [docs/cost-optimization.md](docs/cost-optimization.md) — Cloud cost management strategies
+- [docs/rollback-procedure.md](docs/rollback-procedure.md) — Emergency rollback procedures
 
 **Advanced Topics**:
 - [docs/workers-deployment.md](docs/workers-deployment.md) — Cloudflare Workers edge compute
 - [docs/csv-upload-format.md](docs/csv-upload-format.md) — CSV/XLSX upload specifications
 - [backend/docs/backup-recovery.md](backend/docs/backup-recovery.md) — Backup strategies
+- [docs/security.md](docs/security.md) — Security hardening and best practices
 - [tech-debt.md](tech-debt.md) — Technical debt remediation plan (Phases 12-20)
 
 ## License
