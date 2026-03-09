@@ -12,13 +12,25 @@ import { standardLimiter } from '../middleware/rateLimiter';
 import * as path from 'path';
 import { getDefaultDatabaseClient } from '../database/database-factory';
 import { TIER_LIMITS, TierLevel } from '../types/subscription';
-import { stringifyCSV, escapeCSVValue } from '../utils/csv';
+import { escapeCSVValue } from '../utils/csv';
+import { AuthenticationError } from '../errors';
 
 const router = Router();
 
 // Helper function to get services with organization context
 function getProductServiceForRequest(req: AuthRequest) {
   return new ProductService(undefined, req.organizationId);
+}
+
+/**
+ * Middleware-style guard that throws error rather than manipulating response.
+ * This pattern is cleaner and integrates with Express error-handling middleware.
+ */
+function requireOrganizationId(req: AuthRequest): string {
+  if (!req.organizationId) {
+    throw new AuthenticationError('Organization context missing');
+  }
+  return req.organizationId;
 }
 
 // Configure multer for file uploads - accept CSV, XLSX, and XLS files
@@ -53,169 +65,196 @@ router.get('/', authenticateToken, async (req: AuthRequest, res: Response, next:
 });
 
 // GET /products/by-barcode/:barcode - Get a specific product by barcode [MOVED BEFORE :id CATCH-ALL]
-router.get('/by-barcode/:barcode', authenticateToken, async (req: AuthRequest, res: Response, next: NextFunction) => {
-  try {
-    const barcode = req.params.barcode;
-    const productService = getProductServiceForRequest(req);
-    const product = await productService.getProductByBarcode(barcode);
+router.get(
+  '/by-barcode/:barcode',
+  authenticateToken,
+  async (req: AuthRequest, res: Response, next: NextFunction) => {
+    try {
+      const barcode = req.params.barcode;
+      const productService = getProductServiceForRequest(req);
+      const product = await productService.getProductByBarcode(barcode);
 
-    if (!product) {
-      return res.status(404).json({ message: 'Product not found' });
+      if (!product) {
+        return res.status(404).json({ message: 'Product not found' });
+      }
+
+      res.json(product);
+    } catch (error) {
+      next(error);
     }
-
-    res.json(product);
-  } catch (error) {
-    next(error);
-  }
-});
+  },
+);
 
 // GET /products/by-sku/:sku - Get a specific product by SKU [MOVED BEFORE :id CATCH-ALL]
-router.get('/by-sku/:sku', authenticateToken, async (req: AuthRequest, res: Response, next: NextFunction) => {
-  try {
-    const sku = req.params.sku;
-    const productService = getProductServiceForRequest(req);
-    const product = await productService.getProductBySku(sku);
+router.get(
+  '/by-sku/:sku',
+  authenticateToken,
+  async (req: AuthRequest, res: Response, next: NextFunction) => {
+    try {
+      const sku = req.params.sku;
+      const productService = getProductServiceForRequest(req);
+      const product = await productService.getProductBySku(sku);
 
-    if (!product) {
-      return res.status(404).json({ message: 'Product not found' });
+      if (!product) {
+        return res.status(404).json({ message: 'Product not found' });
+      }
+
+      res.json(product);
+    } catch (error) {
+      next(error);
     }
-
-    res.json(product);
-  } catch (error) {
-    next(error);
-  }
-});
+  },
+);
 
 // GET /products/export-excess - Export products that exceed tier limit [MOVED BEFORE :id CATCH-ALL]
-router.get('/export-excess', authenticateToken, async (req: AuthRequest, res: Response, next: NextFunction) => {
-  try {
-    const prisma = getDefaultDatabaseClient();
-    const organizationId = req.organizationId!;
+router.get(
+  '/export-excess',
+  authenticateToken,
+  async (req: AuthRequest, res: Response, next: NextFunction) => {
+    try {
+      const prisma = getDefaultDatabaseClient();
+      const organizationId = requireOrganizationId(req);
 
-    // Get current subscription tier
-    const subscription = await prisma.subscriptionTier.findFirst({
-      where: { organizationId },
-      orderBy: { createdAt: 'desc' },
-    });
-
-    if (!subscription) {
-      return res.status(404).json({ message: 'Subscription not found' });
-    }
-
-    const tierLevel = subscription.tierLevel as TierLevel;
-    const maxSkus = TIER_LIMITS[tierLevel].max_skus;
-
-    // Unlimited tier - no excess products
-    if (maxSkus === null) {
-      return res.json({
-        message: 'Current tier has unlimited SKUs',
-        excessCount: 0,
-        products: [],
+      // Get current subscription tier
+      const subscription = await prisma.subscriptionTier.findFirst({
+        where: { organizationId },
+        orderBy: { createdAt: 'desc' },
       });
-    }
 
-    // Get current usage
-    const usage = await prisma.organizationUsage.findUnique({
-      where: { organizationId },
-      select: { totalSkus: true },
-    });
+      if (!subscription) {
+        return res.status(404).json({ message: 'Subscription not found' });
+      }
 
-    const currentCount = usage?.totalSkus || 0;
-    const excessCount = currentCount - maxSkus;
+      const tierLevel = subscription.tierLevel as TierLevel;
+      const maxSkus = TIER_LIMITS[tierLevel].max_skus;
 
-    if (excessCount <= 0) {
-      return res.json({
-        message: 'Organization is within SKU limits',
-        tier: tierLevel,
-        maxSkus,
-        currentSkus: currentCount,
-        excessCount: 0,
-        products: [],
+      // Unlimited tier - no excess products
+      if (maxSkus === null) {
+        return res.json({
+          message: 'Current tier has unlimited SKUs',
+          excessCount: 0,
+          products: [],
+        });
+      }
+
+      // Get current usage
+      const usage = await prisma.organizationUsage.findUnique({
+        where: { organizationId },
+        select: { totalSkus: true },
       });
-    }
 
-    // Get excess products (oldest first for deletion priority)
-    const excessProducts = await prisma.product.findMany({
-      where: { organizationId },
-      orderBy: { createdAt: 'asc' },
-      skip: maxSkus,
-      include: {
-        _count: {
-          select: { inventoryItems: true },
+      const currentCount = usage?.totalSkus || 0;
+      const excessCount = currentCount - maxSkus;
+
+      if (excessCount <= 0) {
+        return res.json({
+          message: 'Organization is within SKU limits',
+          tier: tierLevel,
+          maxSkus,
+          currentSkus: currentCount,
+          excessCount: 0,
+          products: [],
+        });
+      }
+
+      // Get excess products (oldest first for deletion priority)
+      const excessProducts = await prisma.product.findMany({
+        where: { organizationId },
+        orderBy: { createdAt: 'asc' },
+        skip: maxSkus,
+        include: {
+          _count: {
+            select: { inventoryItems: true },
+          },
         },
-      },
-    });
+      });
 
-    // Format response
-    const products = excessProducts.map((p) => ({
-      id: p.id,
-      sku: p.sku,
-      name: p.name,
-      barcode: p.barcode,
-      costPrice: p.costPrice,
-      createdAt: p.createdAt.toISOString(),
-      inventoryCount: p._count.inventoryItems,
-    }));
+      // Format response
+      const products = excessProducts.map((p) => ({
+        id: p.id,
+        sku: p.sku,
+        name: p.name,
+        barcode: p.barcode,
+        costPrice: p.costPrice,
+        createdAt: p.createdAt.toISOString(),
+        inventoryCount: p._count.inventoryItems,
+      }));
 
-    // Determine response format based on Accept header
-    const acceptHeader = req.get('Accept') || '';
-    if (acceptHeader.includes('text/csv') || req.query.format === 'csv') {
-      // CSV response
-      const headers = ['id', 'sku', 'name', 'barcode', 'costPrice', 'createdAt', 'inventoryCount'];
-      const csvRows = [
-        headers.join(','),
-        ...products.map((p) =>
-          headers.map((h) => escapeCSVValue(p[h as keyof typeof p])).join(','),
-        ),
-      ];
+      // Determine response format based on Accept header
+      const acceptHeader = req.get('Accept') || '';
+      if (acceptHeader.includes('text/csv') || req.query.format === 'csv') {
+        // CSV response
+        const headers = [
+          'id',
+          'sku',
+          'name',
+          'barcode',
+          'costPrice',
+          'createdAt',
+          'inventoryCount',
+        ];
+        const csvRows = [
+          headers.join(','),
+          ...products.map((p) =>
+            headers.map((h) => escapeCSVValue(p[h as keyof typeof p])).join(','),
+          ),
+        ];
 
-      res.setHeader('Content-Type', 'text/csv');
-      res.setHeader('Content-Disposition', `attachment; filename="excess-products-${organizationId}.csv"`);
-      return res.send(csvRows.join('\n'));
+        res.setHeader('Content-Type', 'text/csv');
+        res.setHeader(
+          'Content-Disposition',
+          `attachment; filename="excess-products-${organizationId}.csv"`,
+        );
+        return res.send(csvRows.join('\n'));
+      }
+
+      // JSON response
+      res.json({
+        metadata: {
+          organizationId,
+          tier: tierLevel,
+          maxSkus,
+          currentSkus: currentCount,
+          excessCount,
+        },
+        products,
+      });
+    } catch (error) {
+      next(error);
     }
-
-    // JSON response
-    res.json({
-      metadata: {
-        organizationId,
-        tier: tierLevel,
-        maxSkus,
-        currentSkus: currentCount,
-        excessCount,
-      },
-      products,
-    });
-  } catch (error) {
-    next(error);
-  }
-});
+  },
+);
 
 // GET /products/:id - Get a specific product by ID [MOVED AFTER SPECIFIC ROUTES]
-router.get('/:id', authenticateToken, async (req: AuthRequest, res: Response, next: NextFunction) => {
-  try {
-    const id = Number.parseInt(req.params.id, 10);
-    if (Number.isNaN(id)) {
-      return res.status(400).json({ message: 'Invalid product id' });
-    }
-    const productService = getProductServiceForRequest(req);
-    const product = await productService.getProductById(id);
+router.get(
+  '/:id',
+  authenticateToken,
+  async (req: AuthRequest, res: Response, next: NextFunction) => {
+    try {
+      const id = Number.parseInt(req.params.id, 10);
+      if (Number.isNaN(id)) {
+        return res.status(400).json({ message: 'Invalid product id' });
+      }
+      const productService = getProductServiceForRequest(req);
+      const product = await productService.getProductById(id);
 
-    if (!product) {
-      return res.status(404).json({ message: 'Product not found' });
-    }
+      if (!product) {
+        return res.status(404).json({ message: 'Product not found' });
+      }
 
-    // Validate product belongs to user's organization
-    if (product.organizationId !== req.organizationId) {
-      return res
-        .status(403)
-        .json({ message: 'Access denied: Product belongs to different organization' });
-    }
+      // Validate product belongs to user's organization
+      if (product.organizationId !== req.organizationId) {
+        return res
+          .status(403)
+          .json({ message: 'Access denied: Product belongs to different organization' });
+      }
 
-    res.json(product);
-  } catch (error) {
-    next(error);
-  }
-});
+      res.json(product);
+    } catch (error) {
+      next(error);
+    }
+  },
+);
 
 // POST /products - Create a new product
 router.post(
@@ -233,13 +272,14 @@ router.post(
     }
 
     try {
+      const organizationId = requireOrganizationId(req);
       const productService = getProductServiceForRequest(req);
       const newProduct = await productService.createProduct({
         barcode,
         sku,
         name,
         costPrice,
-        organizationId: req.organizationId!,
+        organizationId,
       } as Omit<Product, 'id' | 'createdAt' | 'updatedAt'>);
       res.status(201).json(newProduct);
     } catch (error) {

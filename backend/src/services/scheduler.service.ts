@@ -9,6 +9,32 @@ import { startDunningJob } from '../jobs/dunning.job';
 export class SchedulerService {
   private static databaseBackupService = new DatabaseBackupService();
 
+  private static async retryMarkdownUpdateForItem(
+    inventoryService: InventoryService,
+    item: { id: number; expiryDate: string },
+    maxRetries = 2,
+  ): Promise<string | null> {
+    let retries = 0;
+
+    while (retries <= maxRetries) {
+      try {
+        await inventoryService.autoCalculateMarkdownStatus(item.id, item.expiryDate);
+        return null;
+      } catch (error) {
+        if (retries === maxRetries) {
+          const errorMessage = error instanceof Error ? error.message : String(error);
+          return `Failed to update markdown status for item ${item.id} after ${maxRetries + 1} attempts: ${errorMessage}`;
+        }
+
+        const delayMs = Math.pow(2, retries) * 100;
+        await new Promise((resolve) => setTimeout(resolve, delayMs));
+        retries++;
+      }
+    }
+
+    return null;
+  }
+
   // Initialize scheduled tasks
   static initialize() {
     // Schedule the markdown update to run daily at 2:00 AM
@@ -76,7 +102,6 @@ export class SchedulerService {
           try {
             await inventoryService.bulkUpdateMarkdownStatuses(inventoryItems);
           } catch (error) {
-            const errorMessage = error instanceof Error ? error.message : String(error);
             // If bulk update fails, fall back to individual updates with retry
             console.warn(
               `Bulk update failed for organization ${org.id}, falling back to individual updates:`,
@@ -84,28 +109,11 @@ export class SchedulerService {
             );
 
             for (const item of inventoryItems) {
-              let retries = 0;
-              const maxRetries = 2;
-
-              while (retries <= maxRetries) {
-                try {
-                  await inventoryService.autoCalculateMarkdownStatus(item.id, item.expiryDate);
-                  break; // Success, exit retry loop
-                } catch (error) {
-                  if (retries === maxRetries) {
-                    // Final retry failed, record the error
-                    const errorMessage = error instanceof Error ? error.message : String(error);
-                    const errorMsg = `Failed to update markdown status for item ${item.id} after ${maxRetries + 1} attempts: ${errorMessage}`;
-                    console.error(errorMsg);
-                    orgResult.errors.push(errorMsg);
-                    orgResult.failed++;
-                  } else {
-                    // Wait before retry (exponential backoff)
-                    const delayMs = Math.pow(2, retries) * 100; // 100ms, 200ms, 400ms
-                    await new Promise((resolve) => setTimeout(resolve, delayMs));
-                    retries++;
-                  }
-                }
+              const itemError = await this.retryMarkdownUpdateForItem(inventoryService, item);
+              if (itemError) {
+                console.error(itemError);
+                orgResult.errors.push(itemError);
+                orgResult.failed++;
               }
             }
           }

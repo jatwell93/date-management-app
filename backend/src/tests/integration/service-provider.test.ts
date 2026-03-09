@@ -124,6 +124,35 @@ describe('ServiceProvider Integration Tests', () => {
       const service2 = serviceProvider.getUploadService();
       expect(service1).toBe(service2);
     });
+
+    it('should keep service instances isolated across providers', () => {
+      const providerA = ServiceProvider.withClients(mockPrisma, mockStorage, {
+        organizationId: 'org-a',
+      });
+      const providerB = ServiceProvider.withClients(mockPrisma, mockStorage, {
+        organizationId: 'org-b',
+      });
+
+      expect(providerA.getAuthService()).not.toBe(providerB.getAuthService());
+      expect(providerA.getUserService()).not.toBe(providerB.getUserService());
+      expect(providerA.getUploadService()).not.toBe(providerB.getUploadService());
+    });
+
+    it('should lazily initialize services only when requested', () => {
+      const provider = ServiceProvider.withClients(mockPrisma, mockStorage, {
+        organizationId: 'org-lazy',
+      });
+      const internal = provider as any;
+
+      expect(internal.authService).toBeUndefined();
+      expect(internal.userService).toBeUndefined();
+      expect(internal.uploadService).toBeUndefined();
+
+      provider.getAuthService();
+      expect(internal.authService).toBeDefined();
+      expect(internal.userService).toBeUndefined();
+      expect(internal.uploadService).toBeUndefined();
+    });
   });
 
   describe('Dependency Wiring', () => {
@@ -157,6 +186,23 @@ describe('ServiceProvider Integration Tests', () => {
       expect(uploadService).toBeDefined();
       expect(csvParser).toBeDefined();
       expect(storageQuota).toBeDefined();
+    });
+
+    it('should propagate organization context into UserService queries', async () => {
+      (mockPrisma.user.findMany as jest.Mock).mockResolvedValue([]);
+
+      const provider = ServiceProvider.forOrganization('org-ctx', {
+        prisma: mockPrisma,
+        storageProvider: mockStorage,
+      });
+
+      await provider.getUserService().getUsers();
+
+      expect(mockPrisma.user.findMany).toHaveBeenCalledWith(
+        expect.objectContaining({
+          where: expect.objectContaining({ organizationId: 'org-ctx' }),
+        }),
+      );
     });
   });
 

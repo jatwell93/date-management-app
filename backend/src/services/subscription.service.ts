@@ -23,11 +23,30 @@ export class SubscriptionService {
 
   constructor(prismaClient?: PrismaClient, stripeClient?: Stripe) {
     this.prisma = prismaClient ?? getDefaultDatabaseClient();
-    this.stripe =
-      stripeClient ??
-      new Stripe(envConfig.STRIPE_SECRET_KEY!, {
-        apiVersion: '2023-08-16',
-      });
+
+    if (stripeClient) {
+      this.stripe = stripeClient;
+      return;
+    }
+
+    const stripeSecretKey = envConfig.STRIPE_SECRET_KEY;
+
+    // Validate Stripe key is properly configured (never use placeholder fallback)
+    if (!stripeSecretKey) {
+      const nodeEnv = process.env.NODE_ENV || 'development';
+      if (nodeEnv === 'production') {
+        throw new Error(
+          'STRIPE_SECRET_KEY is required in production. ' +
+            'Set a valid Stripe secret key before starting the application.',
+        );
+      }
+      Logger.warn('STRIPE_SECRET_KEY not configured; Stripe operations will fail. Set the key to enable billing.');
+    }
+
+    // Always use the actual key (or empty string if missing in dev—Stripe will validate)
+    this.stripe = new Stripe(stripeSecretKey || '', {
+      apiVersion: '2023-08-16',
+    });
   }
 
   /**
@@ -569,8 +588,15 @@ export class SubscriptionService {
     }> = [];
 
     for (const trial of expiringTrials) {
+      if (!trial.trialEndDate) {
+        Logger.warn('Skipping trial reminder check: trialEndDate is null', {
+          organizationId: trial.organizationId,
+        });
+        continue;
+      }
+
       const daysRemaining = Math.ceil(
-        (trial.trialEndDate!.getTime() - now.getTime()) / (1000 * 60 * 60 * 24),
+        (trial.trialEndDate.getTime() - now.getTime()) / (1000 * 60 * 60 * 24),
       );
 
       // Only send for specific day thresholds
@@ -594,7 +620,7 @@ export class SubscriptionService {
         organizationName: trial.organization.name,
         contactEmail: trial.organization.contactEmail,
         daysRemaining,
-        trialEndDate: trial.trialEndDate!,
+        trialEndDate: trial.trialEndDate,
       });
     }
 
