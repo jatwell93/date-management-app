@@ -272,7 +272,16 @@ router.post(
     }
 
     try {
-        const organizationId = requireOrganizationId(req);
+      const organizationId = requireOrganizationId(req);
+      const productService = getProductServiceForRequest(req);
+      const newProduct = await productService.createProduct({
+        barcode,
+        sku,
+        name,
+        costPrice,
+        organizationId,
+      } as Omit<Product, 'id' | 'createdAt' | 'updatedAt'>);
+      res.status(201).json(newProduct);
     } catch (error) {
       next(error);
     }
