@@ -29,12 +29,22 @@ export class SubscriptionService {
       return;
     }
 
-    const stripeSecretKey = envConfig.STRIPE_SECRET_KEY ?? 'sk_test_placeholder';
-    if (!envConfig.STRIPE_SECRET_KEY) {
-      Logger.warn('STRIPE_SECRET_KEY missing, using placeholder key for non-billing contexts');
+    const stripeSecretKey = envConfig.STRIPE_SECRET_KEY;
+
+    // Validate Stripe key is properly configured (never use placeholder fallback)
+    if (!stripeSecretKey) {
+      const nodeEnv = process.env.NODE_ENV || 'development';
+      if (nodeEnv === 'production') {
+        throw new Error(
+          'STRIPE_SECRET_KEY is required in production. ' +
+            'Set a valid Stripe secret key before starting the application.',
+        );
+      }
+      Logger.warn('STRIPE_SECRET_KEY not configured; Stripe operations will fail. Set the key to enable billing.');
     }
 
-    this.stripe = new Stripe(stripeSecretKey, {
+    // Always use the actual key (or empty string if missing in dev—Stripe will validate)
+    this.stripe = new Stripe(stripeSecretKey || '', {
       apiVersion: '2023-08-16',
     });
   }

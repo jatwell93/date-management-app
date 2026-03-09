@@ -36,7 +36,9 @@ export function getStripeClient(): Stripe {
 
     const stripeSecretKey = envConfig.STRIPE_SECRET_KEY;
     if (!stripeSecretKey) {
-      throw new Error('STRIPE_SECRET_KEY is not configured. Please set it in your environment variables.');
+      throw new Error(
+        'STRIPE_SECRET_KEY is not configured. Please set it in your environment variables.',
+      );
     }
 
     stripeInstance = new Stripe(stripeSecretKey, {

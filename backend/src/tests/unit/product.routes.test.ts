@@ -58,11 +58,20 @@ jest.mock('../../database/database-factory', () => ({
 }));
 
 import productRouter from '../../routes/product.routes';
+import { BaseError } from '../../errors';
 
 describe('product.routes organization guards', () => {
   const app = express();
   app.use(express.json());
   app.use('/products', productRouter);
+
+  // Error handling middleware to convert thrown errors to HTTP responses
+  app.use((err: any, _req: express.Request, res: express.Response, _next: express.NextFunction) => {
+    if (err instanceof BaseError) {
+      return res.status(err.statusCode).json({ message: err.message });
+    }
+    return res.status(500).json({ message: 'Internal server error' });
+  });
 
   beforeEach(() => {
     jest.clearAllMocks();
@@ -72,7 +81,7 @@ describe('product.routes organization guards', () => {
     const response = await request(app).get('/products/export-excess');
 
     expect(response.status).toBe(401);
-    expect(response.body).toEqual({ message: 'Unauthorized: organization context missing' });
+    expect(response.body).toEqual({ message: 'Organization context missing' });
     expect(mockPrisma.subscriptionTier.findFirst).not.toHaveBeenCalled();
   });
 
@@ -85,6 +94,6 @@ describe('product.routes organization guards', () => {
     });
 
     expect(response.status).toBe(401);
-    expect(response.body).toEqual({ message: 'Unauthorized: organization context missing' });
+    expect(response.body).toEqual({ message: 'Organization context missing' });
   });
 });
