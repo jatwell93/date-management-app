@@ -23,11 +23,20 @@ export class SubscriptionService {
 
   constructor(prismaClient?: PrismaClient, stripeClient?: Stripe) {
     this.prisma = prismaClient ?? getDefaultDatabaseClient();
-    this.stripe =
-      stripeClient ??
-      new Stripe(envConfig.STRIPE_SECRET_KEY!, {
-        apiVersion: '2023-08-16',
-      });
+
+    if (stripeClient) {
+      this.stripe = stripeClient;
+      return;
+    }
+
+    const stripeSecretKey = envConfig.STRIPE_SECRET_KEY ?? 'sk_test_placeholder';
+    if (!envConfig.STRIPE_SECRET_KEY) {
+      Logger.warn('STRIPE_SECRET_KEY missing, using placeholder key for non-billing contexts');
+    }
+
+    this.stripe = new Stripe(stripeSecretKey, {
+      apiVersion: '2023-08-16',
+    });
   }
 
   /**
@@ -569,8 +578,15 @@ export class SubscriptionService {
     }> = [];
 
     for (const trial of expiringTrials) {
+      if (!trial.trialEndDate) {
+        Logger.warn('Skipping trial reminder check: trialEndDate is null', {
+          organizationId: trial.organizationId,
+        });
+        continue;
+      }
+
       const daysRemaining = Math.ceil(
-        (trial.trialEndDate!.getTime() - now.getTime()) / (1000 * 60 * 60 * 24),
+        (trial.trialEndDate.getTime() - now.getTime()) / (1000 * 60 * 60 * 24),
       );
 
       // Only send for specific day thresholds
@@ -594,7 +610,7 @@ export class SubscriptionService {
         organizationName: trial.organization.name,
         contactEmail: trial.organization.contactEmail,
         daysRemaining,
-        trialEndDate: trial.trialEndDate!,
+        trialEndDate: trial.trialEndDate,
       });
     }
 

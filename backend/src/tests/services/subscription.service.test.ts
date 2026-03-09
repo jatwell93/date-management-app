@@ -55,6 +55,7 @@ describe('SubscriptionService', () => {
       },
       trialEvent: {
         create: jest.fn(),
+        findFirst: jest.fn(),
       },
       $transaction: jest.fn((callback) => callback(mockPrisma)),
     } as any;
@@ -739,6 +740,25 @@ describe('SubscriptionService', () => {
       const result = await service.isAccessActive(subscriptionTier);
 
       expect(result).toBe(false);
+    });
+  });
+
+  describe('findTrialsNeedingReminders', () => {
+    it('skips records with null trialEndDate without throwing', async () => {
+      (mockPrisma.subscriptionTier.findMany as jest.Mock).mockResolvedValueOnce([
+        {
+          organizationId: 'org-123',
+          trialEndDate: null,
+          organization: {
+            id: 'org-123',
+            name: 'Test Org',
+            contactEmail: 'test@example.com',
+          },
+        },
+      ]);
+      (mockPrisma.trialEvent.findFirst as jest.Mock).mockResolvedValueOnce(null);
+
+      await expect(service.findTrialsNeedingReminders()).resolves.toEqual([]);
     });
   });
 });

@@ -101,7 +101,15 @@ export async function runStripeSyncJob(prisma: PrismaClient, stripeClient: Strip
     let divergenceCount = 0;
 
     for (const local of localSubscriptions) {
-      const stripeId = local.stripeSubscriptionId!;
+      const stripeId = local.stripeSubscriptionId;
+      if (!stripeId) {
+        Logger.warn('Skipping local subscription with missing Stripe subscription id', {
+          organizationId: local.organizationId,
+          localStatus: local.status,
+        });
+        continue;
+      }
+
       const stripeSub = stripeSubscriptionMap.get(stripeId);
 
       if (!stripeSub) {

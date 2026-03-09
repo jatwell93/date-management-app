@@ -814,32 +814,51 @@
 
 ### Tech Debt Deployment Tasks (15.11-15.15) - REMAINING WORK
 
-- [ ] 15.11 Complete non-null assertion fixes
-  - **Status:** Significant progress via SaaS work, final cleanup needed
-  - **See:** Task 14.13 for details
+- [x] 15.11 Complete non-null assertion fixes
+  - **Completed:** Removed high-risk non-null assertions and added explicit guards in production paths.
+  - **Changes:**
+    - `backend/src/routes/product.routes.ts`: added `requireOrganizationId()` guard, removed `req.organizationId!` usage in export and create flows
+    - `backend/src/jobs/stripe-sync.job.ts`: removed `local.stripeSubscriptionId!`, added skip+warn for missing IDs
+    - `backend/src/services/subscription.service.ts`: removed constructor `STRIPE_SECRET_KEY!` assertion and trial reminder `trialEndDate!` assertions
+    - `backend/src/utils/stripe.ts`: replaced `STRIPE_SECRET_KEY!` with validated local variable
+  - **Tests added/updated:**
+    - `backend/src/tests/unit/product.routes.test.ts`
+    - `backend/src/tests/unit/stripe-sync.job.test.ts`
+    - `backend/src/tests/services/subscription.service.test.ts`
 
-- [ ] 15.12 DI container tests
-  - **Gap:** ServiceProvider DI container lacks comprehensive tests
-  - **Action:** Write tests for dependency injection container
-  - **Target:** 100% coverage for DI container
+- [x] 15.12 DI container tests
+  - **Completed:** Expanded ServiceProvider coverage for lazy initialization, provider isolation, and organization context propagation.
+  - **Changes:** `backend/src/tests/integration/service-provider.test.ts`
+  - **Added coverage:**
+    - isolated service instances across different providers
+    - lazy init verification of internal service cache
+    - org-scoped Prisma query assertion (`organizationId` in `UserService.getUsers`)
 
-- [ ] 15.13 Helper service extraction
-  - **Gap:** Some utility logic mixed into service methods
-  - **Action:** Extract helpers into separate utility modules
-  - **Example:** Date formatting, validation helpers
+- [x] 15.13 Helper service extraction
+  - **Completed:** Extracted scheduler per-item retry fallback into dedicated helper method.
+  - **Changes:** `backend/src/services/scheduler.service.ts`
+  - **Refactor:** Added `retryMarkdownUpdateForItem()` and removed inline retry loop complexity from `updateAllInventoryMarkdownStatuses()`.
 
-- [ ] 15.14 Scheduler + Monitoring coverage >80%
-  - **Status:** Schedulerservice and monitoring have gaps in test coverage
-  - **Action:** Add tests for cron jobs, background tasks, monitoring alerts
-  - **Target:** >80% coverage
+- [x] 15.14 Scheduler + Monitoring coverage >80%
+  - **Completed:** Added dedicated test suites for scheduler and both monitoring services.
+  - **Changes:**
+    - `backend/src/tests/unit/scheduler.service.test.ts`
+    - `backend/src/tests/unit/application-monitoring.service.test.ts`
+    - `backend/src/tests/unit/database-monitoring.service.test.ts`
+  - **Test focus:**
+    - cron registration and job initialization
+    - scheduler fallback behavior when bulk updates fail
+    - monitoring metrics collection and alert emission paths
+    - monitoring lifecycle start/stop behavior
 
-- [ ] 15.15 Documentation: architecture, error handling, DI patterns
-  - **Gap:** High-level architecture documentation incomplete
-  - **Action:** Document:
-    - System architecture diagram (backend, Workers, Neon, R2)
-    - Error handling patterns and custom errors
-    - Dependency injection patterns
+- [x] 15.15 Documentation: architecture, error handling, DI patterns
+  - **Completed:** Expanded architecture documentation with topology diagram, enforcement boundaries, retry/recovery matrix, and DI lifecycle patterns.
   - **Location:** `docs/architecture.md`
+  - **Added:**
+    - component diagram (frontend -> workers -> backend -> Neon/R2)
+    - security and tenant isolation enforcement points
+    - error response and recovery policy
+    - ServiceProvider lifecycle and DI verification checklist
 
 ## 16. Documentation
 

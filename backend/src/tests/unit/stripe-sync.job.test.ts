@@ -128,6 +128,28 @@ describe('StripeSyncJob', () => {
     ).resolves.not.toThrow();
   });
 
+  it('skips local records missing stripeSubscriptionId without throwing', async () => {
+    mockPrisma.subscriptionTier.findMany.mockResolvedValue([
+      {
+        id: 1,
+        organizationId: 'org-123',
+        stripeSubscriptionId: null,
+        tierLevel: 'starter',
+        status: 'active',
+      },
+    ]);
+
+    mockStripe.subscriptions.list.mockResolvedValue({
+      data: [],
+      has_more: false,
+    });
+
+    await expect(
+      runStripeSyncJob(mockPrisma as unknown as PrismaClient, mockStripe as unknown as Stripe),
+    ).resolves.not.toThrow();
+    expect(mockPrisma.subscriptionTier.updateMany).not.toHaveBeenCalled();
+  });
+
   it('handles paginated Stripe response with has_more=true', async () => {
     // Ensure there is at least one local subscription so the sync runs
     mockPrisma.subscriptionTier.findMany.mockResolvedValue([

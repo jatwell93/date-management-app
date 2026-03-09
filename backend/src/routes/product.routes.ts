@@ -21,6 +21,15 @@ function getProductServiceForRequest(req: AuthRequest) {
   return new ProductService(undefined, req.organizationId);
 }
 
+function requireOrganizationId(req: AuthRequest, res: Response): string | null {
+  if (!req.organizationId) {
+    res.status(401).json({ message: 'Unauthorized: organization context missing' });
+    return null;
+  }
+
+  return req.organizationId;
+}
+
 // Configure multer for file uploads - accept CSV, XLSX, and XLS files
 const upload = multer({
   dest: 'uploads/',
@@ -90,7 +99,10 @@ router.get('/by-sku/:sku', authenticateToken, async (req: AuthRequest, res: Resp
 router.get('/export-excess', authenticateToken, async (req: AuthRequest, res: Response, next: NextFunction) => {
   try {
     const prisma = getDefaultDatabaseClient();
-    const organizationId = req.organizationId!;
+    const organizationId = requireOrganizationId(req, res);
+    if (!organizationId) {
+      return;
+    }
 
     // Get current subscription tier
     const subscription = await prisma.subscriptionTier.findFirst({
@@ -233,13 +245,18 @@ router.post(
     }
 
     try {
+      const organizationId = requireOrganizationId(req, res);
+      if (!organizationId) {
+        return;
+      }
+
       const productService = getProductServiceForRequest(req);
       const newProduct = await productService.createProduct({
         barcode,
         sku,
         name,
         costPrice,
-        organizationId: req.organizationId!,
+        organizationId,
       } as Omit<Product, 'id' | 'createdAt' | 'updatedAt'>);
       res.status(201).json(newProduct);
     } catch (error) {

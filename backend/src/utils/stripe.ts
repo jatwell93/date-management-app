@@ -34,7 +34,12 @@ export function getStripeClient(): Stripe {
   if (!stripeInstance) {
     validateStripeConfig();
 
-    stripeInstance = new Stripe(envConfig.STRIPE_SECRET_KEY!, {
+    const stripeSecretKey = envConfig.STRIPE_SECRET_KEY;
+    if (!stripeSecretKey) {
+      throw new Error('STRIPE_SECRET_KEY is not configured. Please set it in your environment variables.');
+    }
+
+    stripeInstance = new Stripe(stripeSecretKey, {
       apiVersion: '2023-08-16',
       typescript: true,
     });
