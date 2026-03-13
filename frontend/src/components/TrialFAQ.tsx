@@ -158,7 +158,12 @@ export function TrialFAQ({ daysRemaining, isExpired, trigger = 'button' }: Trial
               support@yourdomain.com
             </a>{' '}
             or visit our{' '}
-            <a href="/docs/trial-expiration-faq" className="underline" target="_blank" rel="noopener noreferrer">
+            <a
+              href="/docs/trial-expiration-faq"
+              className="underline"
+              target="_blank"
+              rel="noopener noreferrer"
+            >
               full documentation
             </a>
             .

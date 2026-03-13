@@ -50,7 +50,7 @@ export class PrismaAnalyticsAdapter implements IAnalyticsAdapter {
 
   async startSession(
     session: Omit<UserSession, 'id' | 'startTime'>,
-    sessionId: string
+    sessionId: string,
   ): Promise<string> {
     this.logPendingModels('Session not started - Prisma models pending', {
       userId: session.userId,
@@ -65,7 +65,7 @@ export class PrismaAnalyticsAdapter implements IAnalyticsAdapter {
 
   async updateSession(
     sessionId: string,
-    updates: { pagesViewed?: number; actionsTaken?: number }
+    updates: { pagesViewed?: number; actionsTaken?: number },
   ): Promise<void> {
     this.logPendingModels('Session not updated - Prisma models pending', { sessionId, updates });
   }
@@ -77,7 +77,7 @@ export class PrismaAnalyticsAdapter implements IAnalyticsAdapter {
   async getEventCountByType(
     _eventType: AnalyticsEventType,
     _startDate: Date,
-    _endDate: Date
+    _endDate: Date,
   ): Promise<number> {
     return 0;
   }

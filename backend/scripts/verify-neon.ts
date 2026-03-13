@@ -2,7 +2,7 @@
 
 /**
  * Pre-Migration Verification Script
- * 
+ *
  * This script verifies that the Neon database is ready for migration
  * before running the production migration.
  */
@@ -11,12 +11,14 @@ const { PrismaClient } = require('@prisma/client');
 
 async function main() {
   console.log('🔍 Pre-Migration Verification\n');
-  
+
   // Check environment
   if (!process.env.NEON_CONNECTION_STRING) {
     console.error('❌ NEON_CONNECTION_STRING environment variable is not set');
     console.log('\nPlease set it with:');
-    console.log('export NEON_CONNECTION_STRING="postgresql://user:password@host/database?sslmode=require"');
+    console.log(
+      'export NEON_CONNECTION_STRING="postgresql://user:password@host/database?sslmode=require"',
+    );
     process.exit(1);
   }
 
@@ -26,9 +28,9 @@ async function main() {
     const prisma = new PrismaClient({
       datasources: {
         db: {
-          url: process.env.NEON_CONNECTION_STRING
-        }
-      }
+          url: process.env.NEON_CONNECTION_STRING,
+        },
+      },
     });
 
     await prisma.$connect();
@@ -46,13 +48,13 @@ async function main() {
       WHERE table_schema = 'public'
       ORDER BY table_name
     `;
-    
+
     if (tables.length === 0) {
       console.log('✅ Database is empty - ready for fresh migration');
     } else {
       console.log(`⚠️  Database has ${tables.length} existing tables:`);
       tables.forEach((table: any) => console.log(`   - ${table.table_name}`));
-      
+
       console.log('\n⚠️  WARNING: This migration will modify existing tables!');
       console.log('   Ensure you have a backup before proceeding.');
     }
@@ -66,17 +68,16 @@ async function main() {
     await prisma.$disconnect();
     console.log('\n✅ Pre-migration verification passed!');
     console.log('You can now run: npm run migrate:prod');
-
   } catch (error: any) {
     console.error('\n❌ Verification failed:', error.message);
-    
+
     if (error?.code === 'ECONNREFUSED') {
       console.log('\nTroubleshooting:');
       console.log('- Check if NEON_CONNECTION_STRING is correct');
       console.log('- Ensure Neon database is running');
       console.log('- Verify network connectivity');
     }
-    
+
     process.exit(1);
   }
 }

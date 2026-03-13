@@ -6,6 +6,10 @@
  */
 
 // Define the mock store in module scope for access in tests
+// Import after mocking
+import { offlineStorage } from '../lib/offline-storage';
+import localforage from 'localforage';
+
 let mockStore: Record<string, any> = {};
 
 // The mock factory must be completely self-contained due to Jest hoisting
@@ -29,10 +33,6 @@ jest.mock('localforage', () => {
 
 // We need to export mockStore for the circular reference to work
 export { mockStore };
-
-// Import after mocking
-import { offlineStorage } from '../lib/offline-storage';
-import localforage from 'localforage';
 
 describe('offlineStorage', () => {
   beforeEach(() => {

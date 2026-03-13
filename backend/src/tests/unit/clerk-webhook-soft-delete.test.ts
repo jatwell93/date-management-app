@@ -17,8 +17,10 @@ describe('ClerkWebhookService - Soft Delete', () => {
       },
     });
 
-    // Enable foreign keys for this test to ensure onDelete: SetNull works
-    await prisma.$executeRawUnsafe('PRAGMA foreign_keys = ON;');
+    // SQLite only: enable foreign keys for onDelete: SetNull behavior.
+    if (process.env.DATABASE_DRIVER !== 'postgresql') {
+      await prisma.$executeRawUnsafe('PRAGMA foreign_keys = ON;');
+    }
 
     service = new ClerkWebhookService(prisma);
 
@@ -35,9 +37,11 @@ describe('ClerkWebhookService - Soft Delete', () => {
     orgId = org.id;
     clerkOrgId = org.clerkOrganizationId!; // Store clerk org ID
 
-    // Create test user
+    // Create test user with explicit high ID to avoid collisions with global test bootstrap users (ids 1 and 2)
+    const uniqueUserId = Number(Date.now().toString().slice(-9));
     const user = await prisma.user.create({
       data: {
+        id: uniqueUserId,
         clerkUserId: `user_${Date.now()}`,
         email: 'test@example.com',
         username: 'testuser',

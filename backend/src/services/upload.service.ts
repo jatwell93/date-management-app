@@ -119,24 +119,46 @@ export class UploadService {
       );
 
       // 3. Process file
-      const parseResult = await this.csvParser.processFile(tempPath, { uploadKey: key, userId });
+      const parseResultRaw = await this.csvParser.processFile(tempPath, { uploadKey: key, userId });
+      if (!parseResultRaw) {
+        throw new Error(`CSV parsing failed: no result returned for upload key ${key}`);
+      }
+      const parseResult = {
+        imported: parseResultRaw.imported ?? 0,
+        updated: parseResultRaw.updated ?? 0,
+        skipped: parseResultRaw.skipped ?? 0,
+        total: parseResultRaw.total ?? 0,
+        errors: parseResultRaw.errors ?? [],
+        columnsUsed: parseResultRaw.columnsUsed,
+        columnsIgnored: parseResultRaw.columnsIgnored,
+      };
 
-      // Update database with final results
-      const prisma = getDefaultDatabaseClient();
-      await prisma.upload.update({
-        where: { fileKey: key },
-        data: {
-          status: UploadStatus.COMPLETED,
-          rowsProcessed: parseResult.imported + parseResult.updated + parseResult.skipped,
-          rowsTotal: parseResult.total,
-          rowsImported: parseResult.imported,
-          rowsUpdated: parseResult.updated,
-          rowsSkipped: parseResult.skipped,
-          rowErrorCount: parseResult.errors.length,
-          columnsUsed: JSON.stringify(parseResult.columnsUsed || []),
-          columnsIgnored: parseResult.columnsIgnored || 0,
-        },
-      });
+      // Best-effort status update: parsing success should not fail if status row is missing.
+      try {
+        const prisma = getDefaultDatabaseClient();
+        await prisma.upload.update({
+          where: { fileKey: key },
+          data: {
+            status: UploadStatus.COMPLETED,
+            rowsProcessed: parseResult.imported + parseResult.updated + parseResult.skipped,
+            rowsTotal: parseResult.total,
+            rowsImported: parseResult.imported,
+            rowsUpdated: parseResult.updated,
+            rowsSkipped: parseResult.skipped,
+            rowErrorCount: parseResult.errors.length,
+            columnsUsed: JSON.stringify(parseResult.columnsUsed || []),
+            columnsIgnored: parseResult.columnsIgnored || 0,
+          },
+        });
+      } catch (statusUpdateError) {
+        Logger.warn('Failed to update upload status after successful parsing', {
+          uploadKey: key,
+          error:
+            statusUpdateError instanceof Error
+              ? statusUpdateError.message
+              : 'Unknown status update error',
+        });
+      }
 
       Logger.info('Upload processing metrics', {
         uploadKey: key,
@@ -150,7 +172,7 @@ export class UploadService {
       });
     } catch (error) {
       const errorMessage = error instanceof Error ? error.message : 'Unknown error';
-      
+
       // Update database status to 'failed' so frontend polling can detect the error
       try {
         const prisma = getDefaultDatabaseClient();
@@ -171,7 +193,7 @@ export class UploadService {
           updateError: updateError instanceof Error ? updateError.message : 'Unknown error',
         });
       }
-      
+
       Logger.warn('Upload processing metrics', {
         uploadKey: key,
         userId,

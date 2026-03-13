@@ -1,33 +1,9 @@
-// Production schema configuration for PostgreSQL (Neon).
-//
-// NOTE ON DUPLICATION / ARCHITECTURE:
-// This schema intentionally duplicates the data model from `backend/prisma/schema.prisma`
-// so that production can use a different datasource configuration (PostgreSQL / Neon)
-// while keeping the same Prisma client API and database schema shape as the base schema.
-//
-// Because Prisma does not currently support importing/extending models across schema
-// files in a way that fits our environment separation, we accept the trade‑off of
-// maintaining two schema files with identical models and mappings:
-//   - `backend/prisma/schema.prisma`        → base / default configuration
-//   - `backend/prisma/production/schema.prisma` → production PostgreSQL configuration
-//
-// Any change to a model, enum, or mapping in the base schema MUST be mirrored here to
-// prevent schema drift between environments. When updating schemas, always:
-//   1. Apply the change in `backend/prisma/schema.prisma`.
-//   2. Copy the relevant change into this file and verify diffs are limited to the
-//      `datasource` and `generator` configuration (and any other intentional
-//      environment‑specific settings).
-//
-// If the Prisma ecosystem later provides a more ergonomic way to share model
-// definitions across multiple environment‑specific schemas (e.g., schema extension
-// or code‑generated schemas), consider refactoring to remove this duplication.
-
 generator client {
   provider = "prisma-client-js"
 }
 
 datasource db {
-  provider = "postgresql"
+  provider = "sqlite"
   url      = env("DATABASE_URL")
 }
 
@@ -347,7 +323,7 @@ model Upload {
   rowsUpdated       Int          @default(0) @map("rows_updated") // Rows applied as updates
   rowsSkipped       Int          @default(0) @map("rows_skipped") // Rows skipped due to validation/business errors
   rowErrorCount     Int          @default(0) @map("row_error_count") // Total row-level errors
-  columnsUsed       String?      @map("columns_used") // JSON array of column names that were used
+  columnsUsed       String?     @map("columns_used") // JSON array of column names that were used
   columnsIgnored    Int          @default(0) @map("columns_ignored") // Number of columns ignored
   createdAt         DateTime     @default(now()) @map("created_at")
   updatedAt         DateTime     @updatedAt @map("updated_at")

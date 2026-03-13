@@ -73,7 +73,11 @@ function logStatus(status: 'ok' | 'warning' | 'error', message: string): void {
   console.log(`${icons[status]} ${message}`);
 }
 
-async function checkWebhookEvent(prisma: PrismaClient, eventId: string, verbose: boolean): Promise<void> {
+async function checkWebhookEvent(
+  prisma: PrismaClient,
+  eventId: string,
+  verbose: boolean,
+): Promise<void> {
   logSection(`Webhook Event: ${eventId}`);
 
   const event = await prisma.processedWebhookEvent.findUnique({
@@ -190,7 +194,8 @@ async function checkOrganizationWebhooks(
 
     try {
       const stripeSub = await stripe.subscriptions.retrieve(subscription.stripeSubscriptionId);
-      const customerId = typeof stripeSub.customer === 'string' ? stripeSub.customer : stripeSub.customer.id;
+      const customerId =
+        typeof stripeSub.customer === 'string' ? stripeSub.customer : stripeSub.customer.id;
       const customer = await stripe.customers.retrieve(customerId);
 
       if (customer.deleted) {
@@ -201,7 +206,9 @@ async function checkOrganizationWebhooks(
           logStatus('error', 'Missing organizationId in Stripe customer metadata');
           console.log('\nThis is CRITICAL - webhook handlers require this metadata');
           console.log('Update Stripe customer:');
-          console.log(`  stripe customers update ${customerId} -d "metadata[organizationId]=${orgId}"`);
+          console.log(
+            `  stripe customers update ${customerId} -d "metadata[organizationId]=${orgId}"`,
+          );
         } else if (metadataOrgId !== orgId) {
           logStatus('error', `Metadata mismatch: Stripe has ${metadataOrgId}, expected ${orgId}`);
         } else {
@@ -231,7 +238,10 @@ async function checkRecentWebhookHealth(prisma: PrismaClient, verbose: boolean):
     return;
   }
 
-  logStatus('ok', `Webhook events processed: ${eventsByType.reduce((sum, e) => sum + e._count.id, 0)}`);
+  logStatus(
+    'ok',
+    `Webhook events processed: ${eventsByType.reduce((sum, e) => sum + e._count.id, 0)}`,
+  );
 
   console.log('\nEvents by type:');
   eventsByType.forEach((evt) => {
@@ -276,7 +286,9 @@ async function printTroubleshootingGuide(): Promise<void> {
 
   console.log('\n2. Missing organizationId in Metadata');
   console.log('   Cause: Stripe customer.metadata.organizationId not set');
-  console.log('   Fix: stripe customers update <customer_id> -d "metadata[organizationId]=<org_id>"');
+  console.log(
+    '   Fix: stripe customers update <customer_id> -d "metadata[organizationId]=<org_id>"',
+  );
 
   console.log('\n3. Organization Not Found');
   console.log('   Cause: Metadata has wrong organizationId or org was deleted');
@@ -336,7 +348,6 @@ async function runDiagnostics(): Promise<void> {
 
     // Always print guide at end
     await printTroubleshootingGuide();
-
   } catch (error) {
     console.error('\n❌ Diagnostic failed:', (error as Error).message);
     process.exit(1);

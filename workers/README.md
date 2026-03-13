@@ -47,6 +47,16 @@ npm run dev
 
 This starts a local development server at `http://localhost:8787`.
 
+### Test Commands
+
+```bash
+# Deterministic local suite (excludes external preview deployment smoke test)
+npm test
+
+# Explicit preview deployment smoke test against WORKERS_PREVIEW_URL
+npm run test:preview
+```
+
 ### Testing Health Check
 
 ```bash

@@ -19,8 +19,7 @@ export function stringifyCSV(
 ): string {
   if (rows.length === 0) return headers.join(',');
 
-  const escapeValue = (value: string | number | Date | null | undefined) =>
-    escapeCSVValue(value);
+  const escapeValue = (value: string | number | Date | null | undefined) => escapeCSVValue(value);
 
   const lines = [
     headers.join(','),

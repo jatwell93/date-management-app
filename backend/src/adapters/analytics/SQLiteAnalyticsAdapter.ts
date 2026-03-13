@@ -1,9 +1,9 @@
 /**
  * SQLite Analytics Adapter
- * 
+ *
  * Implements analytics storage using better-sqlite3.
  * Wraps existing AnalyticsRepository logic.
- * 
+ *
  * P0-2: SQLite implementation of IAnalyticsAdapter
  */
 
@@ -160,10 +160,7 @@ export class SQLiteAnalyticsAdapter implements IAnalyticsAdapter {
     }
   }
 
-  updateSession(
-    sessionId: string,
-    updates: { pagesViewed?: number; actionsTaken?: number }
-  ): void {
+  updateSession(sessionId: string, updates: { pagesViewed?: number; actionsTaken?: number }): void {
     const setParts: string[] = [];
     const values: any[] = [];
 
@@ -323,9 +320,7 @@ export class SQLiteAnalyticsAdapter implements IAnalyticsAdapter {
         AND timestamp <= ?
     `,
       )
-      .get(startDate.toISOString(), endDate.toISOString()) as
-      | { offline_count: number }
-      | undefined;
+      .get(startDate.toISOString(), endDate.toISOString()) as { offline_count: number } | undefined;
 
     return {
       dailyActiveUsers: dauResult?.dau || 0,
@@ -347,11 +342,7 @@ export class SQLiteAnalyticsAdapter implements IAnalyticsAdapter {
     };
   }
 
-  getEventCountByType(
-    eventType: AnalyticsEventType,
-    startDate: Date,
-    endDate: Date
-  ): number {
+  getEventCountByType(eventType: AnalyticsEventType, startDate: Date, endDate: Date): number {
     const result = this.db
       .prepare(
         `

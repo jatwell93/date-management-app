@@ -1,4 +1,5 @@
 const { execSync } = require('child_process');
+const path = require('path');
 
 module.exports = async () => {
   // Load environment variables from .env file
@@ -18,6 +19,21 @@ module.exports = async () => {
 
   console.log('\nSetting up Neon test database...');
   try {
+    // Copy production schema to default location for Prisma
+    const fs = require('fs');
+    const prodSchema = path.join(__dirname, 'prisma', 'production', 'schema.prisma');
+    const defaultSchema = path.join(__dirname, 'prisma', 'schema.prisma');
+
+    // Keep backup of original SQLite schema
+    if (!fs.existsSync(defaultSchema + '.sqlite.bak')) {
+      fs.copyFileSync(defaultSchema, defaultSchema + '.sqlite.bak');
+      console.log('✓ Backed up SQLite schema');
+    }
+
+    // Copy PostgreSQL schema into place
+    fs.copyFileSync(prodSchema, defaultSchema);
+    console.log('✓ Loaded PostgreSQL schema for Neon tests');
+
     // Apply migrations to Neon
     execSync('npx prisma db push --schema=./prisma/schema.prisma --accept-data-loss', {
       stdio: 'pipe', // Capture output

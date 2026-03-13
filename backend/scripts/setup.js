@@ -2,7 +2,7 @@
 
 /**
  * Developer Onboarding Setup Script
- * 
+ *
  * Goals:
  * - New developer productive in <30 minutes
  * - Idempotent (can run multiple times safely)
@@ -46,9 +46,9 @@ function step(number, total, message) {
 
 function exec(command, options = {}) {
   try {
-    return execSync(command, { 
+    return execSync(command, {
       stdio: options.silent ? 'pipe' : 'inherit',
-      ...options 
+      ...options,
     });
   } catch (err) {
     if (options.ignoreErrors) {
@@ -75,7 +75,7 @@ async function main() {
   try {
     const nodeVersion = process.version;
     const majorVersion = parseInt(nodeVersion.slice(1).split('.')[0]);
-    
+
     if (majorVersion >= 18) {
       success(`Node.js ${nodeVersion} (✓ meets requirement ≥18)`);
     } else {
@@ -145,7 +145,7 @@ async function main() {
     } else {
       info('Creating new database...');
     }
-    
+
     exec('npm run migrate');
     success('Database migrations completed');
   } catch (err) {
@@ -201,7 +201,7 @@ async function main() {
 }
 
 // Run setup
-main().catch(err => {
+main().catch((err) => {
   console.error('\n');
   error('Setup failed with error:');
   console.error(err.message);

@@ -17,6 +17,7 @@ module.exports = {
     ],
   },
   globalSetup: '<rootDir>/test-setup-neon.js', // Use Neon setup
+  globalTeardown: '<rootDir>/test-teardown-neon.js', // Restore SQLite schema
   setupFiles: ['<rootDir>/src/tests/setup-neon-env.ts'], // Use Neon env setup
   setupFilesAfterEnv: ['<rootDir>/src/tests/setup-after-env.ts'],
   // Coverage configuration

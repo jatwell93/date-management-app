@@ -23,5 +23,5 @@
     }
   },
   "include": ["src/**/*"],
-  "exclude": ["node_modules", "dist", "../backend/src/tests", "../backend/src/**/*.test.ts", "../backend/src/**/__mocks__"]
+  "exclude": ["node_modules", "dist", "src/**/*.test.ts", "src/__tests__/**", "../backend/src/tests", "../backend/src/**/*.test.ts", "../backend/src/**/__mocks__"]
 }

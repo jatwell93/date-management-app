@@ -25,6 +25,9 @@ export interface Env {
   
   // Neon PostgreSQL connection string
   NEON_CONNECTION_STRING: string;
+
+  // Fallback database connection string (used when Hyperdrive unavailable)
+  DATABASE_URL?: string;
   
   // JWT authentication secret
   JWT_SECRET: string;

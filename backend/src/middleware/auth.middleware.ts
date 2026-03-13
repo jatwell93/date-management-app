@@ -103,19 +103,43 @@ export const authenticateToken = async (req: AuthRequest, res: Response, next: N
   }
 
   if (!isValidTokenStructure(decodedToken)) {
-    return handleAuthError(res, 'Access denied: Invalid token payload', 'invalid_token_payload', req, 403);
+    return handleAuthError(
+      res,
+      'Access denied: Invalid token payload',
+      'invalid_token_payload',
+      req,
+      403,
+    );
   }
 
   if (!hasRequiredTokenFields(decodedToken)) {
-    return handleAuthError(res, 'Access denied: Malformed token payload', 'missing_token_fields', req, 403);
+    return handleAuthError(
+      res,
+      'Access denied: Malformed token payload',
+      'missing_token_fields',
+      req,
+      403,
+    );
   }
 
   if (isTokenExpired(decodedToken)) {
-    return handleAuthError(res, 'Access denied: Token has expired', 'expired_token_attempt', req, 403);
+    return handleAuthError(
+      res,
+      'Access denied: Token has expired',
+      'expired_token_attempt',
+      req,
+      403,
+    );
   }
 
   if (!decodedToken.organizationId) {
-    return handleAuthError(res, 'Access denied: Missing tenant context in token', 'missing_tenant_context', req, 403);
+    return handleAuthError(
+      res,
+      'Access denied: Missing tenant context in token',
+      'missing_tenant_context',
+      req,
+      403,
+    );
   }
 
   try {
@@ -126,13 +150,15 @@ export const authenticateToken = async (req: AuthRequest, res: Response, next: N
     next();
   } catch (error) {
     // Check if it's a subscription validation error
-    if (error instanceof Error && 
-        (error.message.includes('Organization subscription not configured') ||
-         error.message.includes('Organization subscription is invalid') ||
-         error.message.includes('Organization subscription has been canceled'))) {
+    if (
+      error instanceof Error &&
+      (error.message.includes('Organization subscription not configured') ||
+        error.message.includes('Organization subscription is invalid') ||
+        error.message.includes('Organization subscription has been canceled'))
+    ) {
       return handleAuthError(res, error.message, 'organization_subscription_invalid', req, 403);
     }
-    
+
     trackAuthError(decodedToken, 'organization_validation_error', error, req);
     return res.status(500).json({ message: 'Error validating organization access' });
   }
@@ -159,16 +185,16 @@ function setTestAuthContext(req: AuthRequest, next: NextFunction): void {
 function extractTokenFromRequest(req: AuthRequest): string | null {
   const authHeader = req.headers['authorization'];
   if (!authHeader) return null;
-  
+
   // Handle both string and array headers
   const headers = Array.isArray(authHeader) ? authHeader : [authHeader];
-  
+
   // Extract the first valid bearer token
   for (const header of headers) {
     const token = header.split(' ')[1];
     if (token) return token;
   }
-  
+
   return null;
 }
 

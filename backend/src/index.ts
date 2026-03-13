@@ -241,12 +241,16 @@ if (!isTestEnv) {
   // Handle shutdown signals
   process.on('SIGTERM', () => {
     void shutdown('SIGTERM').catch((err) => {
-      Logger.error('SIGTERM shutdown error', { error: err instanceof Error ? err.message : String(err) });
+      Logger.error('SIGTERM shutdown error', {
+        error: err instanceof Error ? err.message : String(err),
+      });
     });
   });
   process.on('SIGINT', () => {
     void shutdown('SIGINT').catch((err) => {
-      Logger.error('SIGINT shutdown error', { error: err instanceof Error ? err.message : String(err) });
+      Logger.error('SIGINT shutdown error', {
+        error: err instanceof Error ? err.message : String(err),
+      });
     });
   });
 
@@ -256,7 +260,7 @@ if (!isTestEnv) {
       message: error.message,
       stack: error.stack,
     });
-    
+
     // Report to Sentry
     Sentry.captureException(error);
 
@@ -272,9 +276,7 @@ if (!isTestEnv) {
     });
 
     // Report to Sentry
-    Sentry.captureException(
-      reason instanceof Error ? reason : new Error(String(reason))
-    );
+    Sentry.captureException(reason instanceof Error ? reason : new Error(String(reason)));
   });
 }
 

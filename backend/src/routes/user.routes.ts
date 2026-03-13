@@ -17,42 +17,52 @@ function getUserServiceForRequest(req: AuthRequest) {
 }
 
 // GET /users - Get all users (Manager only)
-router.get('/', authenticateToken, requireManager, async (req: AuthRequest, res: Response, next: NextFunction) => {
-  try {
-    const userService = getUserServiceForRequest(req);
-    const users = await userService.getUsers();
-    res.json(users);
-  } catch (error) {
-    next(error);
-  }
-});
+router.get(
+  '/',
+  authenticateToken,
+  requireManager,
+  async (req: AuthRequest, res: Response, next: NextFunction) => {
+    try {
+      const userService = getUserServiceForRequest(req);
+      const users = await userService.getUsers();
+      res.json(users);
+    } catch (error) {
+      next(error);
+    }
+  },
+);
 
 // GET /users/:id - Get a specific user by ID (Manager only)
-router.get('/:id', authenticateToken, requireManager, async (req: AuthRequest, res: Response, next: NextFunction) => {
-  try {
-    const id = Number.parseInt(req.params.id, 10);
-    if (Number.isNaN(id)) {
-      return res.status(400).json({ message: 'Invalid user id' });
-    }
-    const userService = getUserServiceForRequest(req);
-    const user = await userService.getUserById(id);
+router.get(
+  '/:id',
+  authenticateToken,
+  requireManager,
+  async (req: AuthRequest, res: Response, next: NextFunction) => {
+    try {
+      const id = Number.parseInt(req.params.id, 10);
+      if (Number.isNaN(id)) {
+        return res.status(400).json({ message: 'Invalid user id' });
+      }
+      const userService = getUserServiceForRequest(req);
+      const user = await userService.getUserById(id);
 
-    if (!user) {
-      return res.status(404).json({ message: 'User not found' });
-    }
+      if (!user) {
+        return res.status(404).json({ message: 'User not found' });
+      }
 
-    // Validate ownership: user.organization_id must match req.organizationId
-    if (user.organizationId !== req.organizationId) {
-      return res
-        .status(403)
-        .json({ message: 'Access denied: User belongs to different organization' });
-    }
+      // Validate ownership: user.organization_id must match req.organizationId
+      if (user.organizationId !== req.organizationId) {
+        return res
+          .status(403)
+          .json({ message: 'Access denied: User belongs to different organization' });
+      }
 
-    res.json(user);
-  } catch (error) {
-    next(error);
-  }
-});
+      res.json(user);
+    } catch (error) {
+      next(error);
+    }
+  },
+);
 
 // POST /users - Create a new user (Manager only)
 router.post(

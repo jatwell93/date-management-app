@@ -3,6 +3,12 @@ import { render, screen, fireEvent, act } from '@testing-library/react';
 import { Scanner } from '../components/Scanner';
 import '@testing-library/jest-dom';
 
+// Import the mocked hook
+import { useHardwareScan } from '../hooks/useHardwareScan';
+
+// Import Quagga for mocking
+import Quagga from 'quagga';
+
 // Add the CameraScanner mock here
 jest.mock('../components/CameraScanner', () => ({
   CameraScanner: ({ onDetected }: { onDetected: (barcode: string) => void }) => (
@@ -36,12 +42,6 @@ Object.defineProperty(global.navigator, 'mediaDevices', {
 jest.mock('../hooks/useHardwareScan', () => ({
   useHardwareScan: jest.fn(),
 }));
-
-// Import the mocked hook
-import { useHardwareScan } from '../hooks/useHardwareScan';
-
-// Import Quagga for mocking
-import Quagga from 'quagga';
 
 const mockUseHardwareScan = useHardwareScan as jest.MockedFunction<typeof useHardwareScan>;
 

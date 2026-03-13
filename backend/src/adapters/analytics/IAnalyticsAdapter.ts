@@ -1,9 +1,9 @@
 /**
  * Analytics Adapter Interface
- * 
+ *
  * Abstracts database operations for analytics tracking.
  * Allows different implementations (SQLite, Prisma) without changing service logic.
- * 
+ *
  * P0-2: Analytics adapter architecture
  */
 
@@ -34,7 +34,10 @@ export interface IAnalyticsAdapter {
    * Start a new user session
    * @returns sessionId
    */
-  startSession(session: Omit<UserSession, 'id' | 'startTime'>, sessionId: string): Promise<string> | string;
+  startSession(
+    session: Omit<UserSession, 'id' | 'startTime'>,
+    sessionId: string,
+  ): Promise<string> | string;
 
   /**
    * End a user session
@@ -46,7 +49,7 @@ export interface IAnalyticsAdapter {
    */
   updateSession(
     sessionId: string,
-    updates: { pagesViewed?: number; actionsTaken?: number }
+    updates: { pagesViewed?: number; actionsTaken?: number },
   ): Promise<void> | void;
 
   /**
@@ -60,7 +63,7 @@ export interface IAnalyticsAdapter {
   getEventCountByType(
     eventType: AnalyticsEventType,
     startDate: Date,
-    endDate: Date
+    endDate: Date,
   ): Promise<number> | number;
 
   /**

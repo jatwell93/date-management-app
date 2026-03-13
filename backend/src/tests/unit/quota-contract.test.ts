@@ -1,6 +1,6 @@
 /**
  * Contract Tests: Storage Quota and Upload Status Consistency
- * 
+ *
  * Verifies that storage quota calculations match actual completed upload totals
  */
 
@@ -17,16 +17,16 @@ describe('Storage Quota Contract Tests', () => {
 
   beforeEach(async () => {
     await prisma.upload.deleteMany({
-      where: { organizationId: testOrgId }
+      where: { organizationId: testOrgId },
     });
     await prisma.user.deleteMany({
-      where: { organizationId: testOrgId }
+      where: { organizationId: testOrgId },
     });
     await prisma.organizationUsage.deleteMany({
-      where: { organizationId: testOrgId }
+      where: { organizationId: testOrgId },
     });
     await prisma.organization.deleteMany({
-      where: { id: testOrgId }
+      where: { id: testOrgId },
     });
 
     // Create test organization
@@ -36,8 +36,8 @@ describe('Storage Quota Contract Tests', () => {
         name: 'Test Org',
         slug: `test-quota-${Date.now()}`,
         contactEmail: 'test@example.com',
-        clerkOrganizationId: `org_quota_${Date.now()}`
-      }
+        clerkOrganizationId: `org_quota_${Date.now()}`,
+      },
     });
 
     // Create test user
@@ -47,24 +47,24 @@ describe('Storage Quota Contract Tests', () => {
         email: 'test@example.com',
         username: 'testuser',
         role: 'user',
-        organizationId: testOrgId
-      }
+        organizationId: testOrgId,
+      },
     });
     testUserId = user.id;
   });
 
   afterEach(async () => {
     await prisma.upload.deleteMany({
-      where: { organizationId: testOrgId }
+      where: { organizationId: testOrgId },
     });
     await prisma.user.deleteMany({
-      where: { organizationId: testOrgId }
+      where: { organizationId: testOrgId },
     });
     await prisma.organizationUsage.deleteMany({
-      where: { organizationId: testOrgId }
+      where: { organizationId: testOrgId },
     });
     await prisma.organization.deleteMany({
-      where: { id: testOrgId }
+      where: { id: testOrgId },
     });
   });
 
@@ -73,24 +73,45 @@ describe('Storage Quota Contract Tests', () => {
       const quotaService = new StorageQuotaService(testOrgId);
 
       // Record multiple uploads
-      await quotaService.recordUpload(testOrgId, testUserId, 'file1.csv', 'file1.csv', 1024, 'text/csv');
-      await quotaService.recordUpload(testOrgId, testUserId, 'file2.csv', 'file2.csv', 2048, 'text/csv');
-      await quotaService.recordUpload(testOrgId, testUserId, 'file3.csv', 'file3.csv', 4096, 'text/csv');
+      await quotaService.recordUpload(
+        testOrgId,
+        testUserId,
+        'file1.csv',
+        'file1.csv',
+        1024,
+        'text/csv',
+      );
+      await quotaService.recordUpload(
+        testOrgId,
+        testUserId,
+        'file2.csv',
+        'file2.csv',
+        2048,
+        'text/csv',
+      );
+      await quotaService.recordUpload(
+        testOrgId,
+        testUserId,
+        'file3.csv',
+        'file3.csv',
+        4096,
+        'text/csv',
+      );
 
       // Get organization usage
       const usage = await prisma.organizationUsage.findUnique({
-        where: { organizationId: testOrgId }
+        where: { organizationId: testOrgId },
       });
 
       // Calculate actual completed upload sizes
       const uploadSum = await prisma.upload.aggregate({
         where: {
           organizationId: testOrgId,
-          status: UploadStatus.COMPLETED
+          status: UploadStatus.COMPLETED,
         },
         _sum: {
-          fileSizeBytes: true
-        }
+          fileSizeBytes: true,
+        },
       });
 
       const expectedTotal = 1024 + 2048 + 4096; // 7168 bytes
@@ -109,8 +130,8 @@ describe('Storage Quota Contract Tests', () => {
           fileName: 'pending.csv',
           fileSizeBytes: 1000,
           contentType: 'text/csv',
-          status: UploadStatus.PENDING
-        }
+          status: UploadStatus.PENDING,
+        },
       });
 
       await prisma.upload.create({
@@ -121,8 +142,8 @@ describe('Storage Quota Contract Tests', () => {
           fileName: 'processing.csv',
           fileSizeBytes: 2000,
           contentType: 'text/csv',
-          status: UploadStatus.PROCESSING
-        }
+          status: UploadStatus.PROCESSING,
+        },
       });
 
       await prisma.upload.create({
@@ -134,22 +155,29 @@ describe('Storage Quota Contract Tests', () => {
           fileSizeBytes: 3000,
           contentType: 'text/csv',
           status: UploadStatus.FAILED,
-          errorMessage: 'Test error'
-        }
+          errorMessage: 'Test error',
+        },
       });
 
       const quotaService = new StorageQuotaService(testOrgId);
-      await quotaService.recordUpload(testOrgId, testUserId, 'completed.csv', 'completed.csv', 4000, 'text/csv');
+      await quotaService.recordUpload(
+        testOrgId,
+        testUserId,
+        'completed.csv',
+        'completed.csv',
+        4000,
+        'text/csv',
+      );
 
       // Calculate aggregate - should only count completed
       const result = await prisma.upload.aggregate({
         where: {
           organizationId: testOrgId,
-          status: UploadStatus.COMPLETED
+          status: UploadStatus.COMPLETED,
         },
         _sum: {
-          fileSizeBytes: true
-        }
+          fileSizeBytes: true,
+        },
       });
 
       // Only the completed upload should be counted
@@ -160,11 +188,18 @@ describe('Storage Quota Contract Tests', () => {
       const quotaService = new StorageQuotaService(testOrgId);
 
       // Record upload
-      await quotaService.recordUpload(testOrgId, testUserId, 'delete-me.csv', 'delete-me.csv', 5120, 'text/csv');
+      await quotaService.recordUpload(
+        testOrgId,
+        testUserId,
+        'delete-me.csv',
+        'delete-me.csv',
+        5120,
+        'text/csv',
+      );
 
       // Verify it's counted
       let usage = await prisma.organizationUsage.findUnique({
-        where: { organizationId: testOrgId }
+        where: { organizationId: testOrgId },
       });
       expect(usage?.storageUsedBytes).toBe(5120);
 
@@ -173,7 +208,7 @@ describe('Storage Quota Contract Tests', () => {
 
       // Verify storage decremented
       usage = await prisma.organizationUsage.findUnique({
-        where: { organizationId: testOrgId }
+        where: { organizationId: testOrgId },
       });
       expect(usage?.storageUsedBytes).toBe(0);
     });
@@ -182,13 +217,20 @@ describe('Storage Quota Contract Tests', () => {
   describe('Status Filter Consistency', () => {
     it('should use same status value in quota aggregation and service writes', async () => {
       const quotaService = new StorageQuotaService(testOrgId);
-      
+
       // Record upload (service writes status)
-      await quotaService.recordUpload(testOrgId, testUserId, 'consistency.csv', 'consistency.csv', 2048, 'text/csv');
+      await quotaService.recordUpload(
+        testOrgId,
+        testUserId,
+        'consistency.csv',
+        'consistency.csv',
+        2048,
+        'text/csv',
+      );
 
       // Get the upload
       const upload = await prisma.upload.findUnique({
-        where: { fileKey: 'consistency.csv' }
+        where: { fileKey: 'consistency.csv' },
       });
 
       // Verify status is COMPLETED
@@ -198,11 +240,11 @@ describe('Storage Quota Contract Tests', () => {
       const calculatedStorage = await prisma.upload.aggregate({
         where: {
           organizationId: testOrgId,
-          status: UploadStatus.COMPLETED // Same value service writes
+          status: UploadStatus.COMPLETED, // Same value service writes
         },
         _sum: {
-          fileSizeBytes: true
-        }
+          fileSizeBytes: true,
+        },
       });
 
       expect(calculatedStorage._sum.fileSizeBytes).toBe(2048);
@@ -214,11 +256,11 @@ describe('Storage Quota Contract Tests', () => {
       const result = await prisma.upload.aggregate({
         where: {
           organizationId: testOrgId,
-          status: UploadStatus.COMPLETED
+          status: UploadStatus.COMPLETED,
         },
         _sum: {
-          fileSizeBytes: true
-        }
+          fileSizeBytes: true,
+        },
       });
 
       expect(result._sum.fileSizeBytes).toBeNull();
@@ -234,11 +276,11 @@ describe('Storage Quota Contract Tests', () => {
         'large-file.csv',
         'large-file.csv',
         largeFileSize,
-        'text/csv'
+        'text/csv',
       );
 
       const usage = await prisma.organizationUsage.findUnique({
-        where: { organizationId: testOrgId }
+        where: { organizationId: testOrgId },
       });
 
       expect(usage?.storageUsedBytes).toBe(largeFileSize);

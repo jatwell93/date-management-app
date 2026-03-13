@@ -1,9 +1,9 @@
 /**
  * Migration Script: Normalize Upload Status Values
- * 
- * Converts legacy 'complete' status to canonical 'completed' 
+ *
+ * Converts legacy 'complete' status to canonical 'completed'
  * and ensures all uploads have valid status values.
- * 
+ *
  * Run with: npx ts-node scripts/migrate-upload-status.ts
  */
 
@@ -14,13 +14,13 @@ const prisma = new PrismaClient();
 
 async function migrateUploadStatus() {
   console.log('Starting upload status migration...');
-  
+
   try {
     // Count records that need migration
     const legacyCompleteCount = await prisma.upload.count({
       where: {
-        status: 'complete' // Legacy value
-      }
+        status: 'complete', // Legacy value
+      },
     });
 
     console.log(`Found ${legacyCompleteCount} uploads with legacy 'complete' status`);
@@ -29,11 +29,11 @@ async function migrateUploadStatus() {
       // Update legacy 'complete' to canonical 'completed'
       const updateResult = await prisma.upload.updateMany({
         where: {
-          status: 'complete'
+          status: 'complete',
         },
         data: {
-          status: UploadStatus.COMPLETED
-        }
+          status: UploadStatus.COMPLETED,
+        },
       });
 
       console.log(`✓ Migrated ${updateResult.count} uploads to '${UploadStatus.COMPLETED}'`);
@@ -44,14 +44,14 @@ async function migrateUploadStatus() {
     // Verify no invalid statuses remain
     const validStatuses = Object.values(UploadStatus);
     const allUploads = await prisma.upload.findMany({
-      select: { id: true, status: true }
+      select: { id: true, status: true },
     });
 
-    const invalidUploads = allUploads.filter(u => !validStatuses.includes(u.status as any));
-    
+    const invalidUploads = allUploads.filter((u) => !validStatuses.includes(u.status as any));
+
     if (invalidUploads.length > 0) {
       console.warn(`⚠ Warning: ${invalidUploads.length} uploads have invalid statuses:`);
-      invalidUploads.forEach(u => {
+      invalidUploads.forEach((u) => {
         console.warn(`  - Upload ID ${u.id}: status="${u.status}"`);
       });
       console.warn('Valid statuses:', validStatuses);
@@ -60,7 +60,9 @@ async function migrateUploadStatus() {
     }
 
     // Verify storage quota consistency
-    const inconsistentOrgs = await prisma.$queryRaw<Array<{ organizationId: string; quotaBytes: bigint; actualBytes: bigint }>>`
+    const inconsistentOrgs = await prisma.$queryRaw<
+      Array<{ organizationId: string; quotaBytes: bigint; actualBytes: bigint }>
+    >`
       SELECT 
         u.organization_id as "organizationId",
         COALESCE(MAX(ou.storage_used_bytes), 0) as "quotaBytes",
@@ -73,9 +75,13 @@ async function migrateUploadStatus() {
     `;
 
     if (inconsistentOrgs.length > 0) {
-      console.warn(`⚠ Warning: ${inconsistentOrgs.length} organizations have quota/upload size mismatches:`);
+      console.warn(
+        `⚠ Warning: ${inconsistentOrgs.length} organizations have quota/upload size mismatches:`,
+      );
       for (const org of inconsistentOrgs) {
-        console.warn(`  - Org ${org.organizationId}: quota=${org.quotaBytes}, actual=${org.actualBytes}`);
+        console.warn(
+          `  - Org ${org.organizationId}: quota=${org.quotaBytes}, actual=${org.actualBytes}`,
+        );
       }
       console.warn('Run storage quota recalculation to fix.');
     } else {
@@ -83,7 +89,6 @@ async function migrateUploadStatus() {
     }
 
     console.log('\n✓ Migration completed successfully');
-    
   } catch (error) {
     console.error('Migration failed:', error);
     throw error;

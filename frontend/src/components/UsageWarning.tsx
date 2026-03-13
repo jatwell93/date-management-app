@@ -21,14 +21,6 @@ export function UsageWarning({
 }: UsageWarningProps) {
   const [dismissed, setDismissed] = useState(false);
 
-  // Guard against invalid limit values
-  if (limit <= 0 || !Number.isFinite(limit)) {
-    return null;
-  }
-
-  const percentage = (current / limit) * 100;
-  const isWarning = percentage >= threshold;
-
   useEffect(() => {
     const dismissedKey = `usage-warning-dismissed-${resourceType}`;
     const lastDismissed = localStorage.getItem(dismissedKey);
@@ -43,6 +35,14 @@ export function UsageWarning({
       }
     }
   }, [resourceType]);
+
+  // Guard against invalid limit values
+  if (limit <= 0 || !Number.isFinite(limit)) {
+    return null;
+  }
+
+  const percentage = (current / limit) * 100;
+  const isWarning = percentage >= threshold;
 
   const handleDismiss = () => {
     const dismissedKey = `usage-warning-dismissed-${resourceType}`;

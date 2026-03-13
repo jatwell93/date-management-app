@@ -13,7 +13,7 @@ describe('CORS middleware', () => {
       allowedHeaders: ['Content-Type'],
     });
 
-    const headers = { origin: 'http://localhost:3000' };
+    const headers: Record<string, string> = { origin: 'http://localhost:3000' };
     const req: ExpressRequest = {
       body: null,
       params: {},
@@ -44,7 +44,7 @@ describe('CORS middleware', () => {
       methods: ['GET', 'OPTIONS'],
     });
 
-    const headers = { origin: 'http://localhost:3000' };
+    const headers: Record<string, string> = { origin: 'http://localhost:3000' };
     const req: ExpressRequest = {
       body: null,
       params: {},
@@ -108,7 +108,7 @@ describe('Rate limiter middleware', () => {
     const response = res3.toResponse();
     expect(response.status).toBe(429);
     expect(response.headers.get('Retry-After')).toBeTruthy();
-    const body = await response.json();
+    const body = (await response.json()) as { error: string };
     expect(body.error).toBe('Too Many Requests');
   });
 });

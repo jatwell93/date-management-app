@@ -59,7 +59,9 @@ describe('EnvironmentConfig', () => {
     delete process.env.JWT_SECRET;
 
     expect(() => loadEnvModule()).toThrow('process.exit called');
-    expect(mockConsoleError).toHaveBeenCalledWith('JWT_SECRET environment variable is empty');
+    expect(mockConsoleError).toHaveBeenCalledWith(
+      expect.stringContaining('JWT_SECRET environment variable is missing or empty'),
+    );
   });
 
   it('throws when production is missing JWT_SECRET', () => {
@@ -68,7 +70,9 @@ describe('EnvironmentConfig', () => {
     delete process.env.JWT_SECRET;
 
     expect(() => loadEnvModule()).toThrow('process.exit called');
-    expect(mockConsoleError).toHaveBeenCalledWith('JWT_SECRET environment variable is empty');
+    expect(mockConsoleError).toHaveBeenCalledWith(
+      expect.stringContaining('JWT_SECRET environment variable is missing or empty'),
+    );
   });
 
   it('allows worker config injection', () => {

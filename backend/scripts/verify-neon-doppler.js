@@ -8,7 +8,7 @@ const { execSync } = require('child_process');
 
 async function main() {
   console.log('🔍 Pre-Migration Verification (using Doppler)\n');
-  
+
   try {
     // Check if Doppler CLI is installed
     execSync('doppler --version', { stdio: 'pipe' });
@@ -32,7 +32,6 @@ async function main() {
 
     console.log('\n✅ Pre-migration verification passed!');
     console.log('You can now run: npm run migrate:prod');
-
   } catch (error) {
     console.error('\n❌ Verification failed');
     console.log('Make sure you have access to the Doppler "prd" project');

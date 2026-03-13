@@ -55,7 +55,9 @@ function parseArguments(): ExportOptions {
 
   const tier = values.tier as TierLevel | undefined;
   if (tier && !['starter', 'professional', 'premium', 'concierge'].includes(tier)) {
-    console.error(`Error: Invalid tier "${tier}". Must be one of: starter, professional, premium, concierge`);
+    console.error(
+      `Error: Invalid tier "${tier}". Must be one of: starter, professional, premium, concierge`,
+    );
     process.exit(1);
   }
 
@@ -73,7 +75,11 @@ function parseArguments(): ExportOptions {
   };
 }
 
-async function getMaxSkus(prisma: PrismaClient, orgId: string, tierOverride?: TierLevel): Promise<number> {
+async function getMaxSkus(
+  prisma: PrismaClient,
+  orgId: string,
+  tierOverride?: TierLevel,
+): Promise<number> {
   // If tier override specified, use that tier's limit
   if (tierOverride) {
     const limit = TIER_LIMITS[tierOverride].max_skus;
@@ -119,16 +125,18 @@ async function getExcessProducts(
   prisma: PrismaClient,
   orgId: string,
   maxSkus: number,
-): Promise<Array<{
-  id: number;
-  sku: string;
-  name: string;
-  category: string | null;
-  barcode: string;
-  costPrice: number;
-  createdAt: Date;
-  inventoryCount: number;
-}>> {
+): Promise<
+  Array<{
+    id: number;
+    sku: string;
+    name: string;
+    category: string | null;
+    barcode: string;
+    costPrice: number;
+    createdAt: Date;
+    inventoryCount: number;
+  }>
+> {
   // Get products beyond the limit, oldest first (for deletion priority)
   const products = await prisma.product.findMany({
     where: { organizationId: orgId },
@@ -225,7 +233,16 @@ async function exportExcessProducts(options: ExportOptions): Promise<void> {
       fs.writeFileSync(outputPath, JSON.stringify(data, null, 2));
     } else {
       // CSV format
-      const headers = ['id', 'sku', 'name', 'category', 'barcode', 'costPrice', 'createdAt', 'inventoryCount'];
+      const headers = [
+        'id',
+        'sku',
+        'name',
+        'category',
+        'barcode',
+        'costPrice',
+        'createdAt',
+        'inventoryCount',
+      ];
       const csvRows = excessProducts.map((p) => ({
         id: p.id,
         sku: p.sku,
@@ -248,7 +265,6 @@ async function exportExcessProducts(options: ExportOptions): Promise<void> {
     console.log(`   1. Review the exported file to confirm products for deletion`);
     console.log(`   2. Use the UI or API to delete excess products`);
     console.log(`   3. Once totalSkus <= maxSkus (${maxSkus}), creation lock will be removed`);
-
   } catch (error) {
     console.error('Export failed:', error);
     process.exit(1);

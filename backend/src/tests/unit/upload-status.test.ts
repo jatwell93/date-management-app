@@ -1,6 +1,6 @@
 /**
  * Unit Tests: Upload Status State Machine
- * 
+ *
  * Verifies upload status transitions follow the canonical lifecycle:
  * pending → uploading → processing → completed/failed
  */
@@ -20,16 +20,16 @@ describe('Upload Status State Machine', () => {
   beforeEach(async () => {
     // Clean up any test data
     await prisma.upload.deleteMany({
-      where: { organizationId: testOrgId }
+      where: { organizationId: testOrgId },
     });
     await prisma.user.deleteMany({
-      where: { organizationId: testOrgId }
+      where: { organizationId: testOrgId },
     });
     await prisma.organizationUsage.deleteMany({
-      where: { organizationId: testOrgId }
+      where: { organizationId: testOrgId },
     });
     await prisma.organization.deleteMany({
-      where: { id: testOrgId }
+      where: { id: testOrgId },
     });
 
     // Create test organization
@@ -39,8 +39,8 @@ describe('Upload Status State Machine', () => {
         name: 'Test Org',
         slug: `test-upload-status-${Date.now()}`,
         contactEmail: 'test@example.com',
-        clerkOrganizationId: `org_status_${Date.now()}`
-      }
+        clerkOrganizationId: `org_status_${Date.now()}`,
+      },
     });
 
     // Create test user
@@ -50,24 +50,24 @@ describe('Upload Status State Machine', () => {
         email: 'test@example.com',
         username: 'testuser',
         role: 'user',
-        organizationId: testOrgId
-      }
+        organizationId: testOrgId,
+      },
     });
     testUserId = user.id;
   });
 
   afterEach(async () => {
     await prisma.upload.deleteMany({
-      where: { organizationId: testOrgId }
+      where: { organizationId: testOrgId },
     });
     await prisma.user.deleteMany({
-      where: { organizationId: testOrgId }
+      where: { organizationId: testOrgId },
     });
     await prisma.organizationUsage.deleteMany({
-      where: { organizationId: testOrgId }
+      where: { organizationId: testOrgId },
     });
     await prisma.organization.deleteMany({
-      where: { id: testOrgId }
+      where: { id: testOrgId },
     });
   });
 
@@ -80,8 +80,8 @@ describe('Upload Status State Machine', () => {
           fileKey: 'test-upload-1.csv',
           fileName: 'test-upload-1.csv',
           fileSizeBytes: 1024,
-          contentType: 'text/csv'
-        }
+          contentType: 'text/csv',
+        },
       });
 
       expect(upload.status).toBe(UploadStatus.PENDING);
@@ -89,18 +89,18 @@ describe('Upload Status State Machine', () => {
 
     it('should transition from pending → processing via recordUpload', async () => {
       const quotaService = new StorageQuotaService(testOrgId);
-      
+
       await quotaService.recordUpload(
         testOrgId,
         testUserId,
         'test-upload-2.csv',
         'test-upload-2.csv',
         2048,
-        'text/csv'
+        'text/csv',
       );
 
       const upload = await prisma.upload.findUnique({
-        where: { fileKey: 'test-upload-2.csv' }
+        where: { fileKey: 'test-upload-2.csv' },
       });
 
       // recordUpload creates directly in COMPLETED state since storage is counted immediately
@@ -117,8 +117,8 @@ describe('Upload Status State Machine', () => {
           fileName: 'test-upload-3.csv',
           fileSizeBytes: 4096,
           contentType: 'text/csv',
-          status: UploadStatus.PROCESSING
-        }
+          status: UploadStatus.PROCESSING,
+        },
       });
 
       // Simulate completion
@@ -128,12 +128,12 @@ describe('Upload Status State Machine', () => {
           status: UploadStatus.COMPLETED,
           rowsProcessed: 100,
           rowsImported: 90,
-          rowsUpdated: 10
-        }
+          rowsUpdated: 10,
+        },
       });
 
       const updated = await prisma.upload.findUnique({
-        where: { fileKey: 'test-upload-3.csv' }
+        where: { fileKey: 'test-upload-3.csv' },
       });
 
       expect(updated?.status).toBe(UploadStatus.COMPLETED);
@@ -151,8 +151,8 @@ describe('Upload Status State Machine', () => {
           fileName: 'test-upload-4.csv',
           fileSizeBytes: 2048,
           contentType: 'text/csv',
-          status: UploadStatus.PROCESSING
-        }
+          status: UploadStatus.PROCESSING,
+        },
       });
 
       // Simulate failure
@@ -164,12 +164,12 @@ describe('Upload Status State Machine', () => {
           rowsImported: 0,
           rowsUpdated: 0,
           rowsSkipped: 0,
-          rowErrorCount: 0
-        }
+          rowErrorCount: 0,
+        },
       });
 
       const updated = await prisma.upload.findUnique({
-        where: { fileKey: 'test-upload-4.csv' }
+        where: { fileKey: 'test-upload-4.csv' },
       });
 
       expect(updated?.status).toBe(UploadStatus.FAILED);
@@ -186,19 +186,19 @@ describe('Upload Status State Machine', () => {
           fileSizeBytes: 5120,
           contentType: 'text/csv',
           status: UploadStatus.FAILED,
-          errorMessage: 'Test error'
-        }
+          errorMessage: 'Test error',
+        },
       });
 
       // Calculate storage usage (should only count completed uploads)
       const result = await prisma.upload.aggregate({
         where: {
           organizationId: testOrgId,
-          status: UploadStatus.COMPLETED
+          status: UploadStatus.COMPLETED,
         },
         _sum: {
-          fileSizeBytes: true
-        }
+          fileSizeBytes: true,
+        },
       });
 
       // When no completed uploads exist, _sum returns null
@@ -209,13 +209,13 @@ describe('Upload Status State Machine', () => {
   describe('Status Validation', () => {
     it('should only allow valid status values', () => {
       const validStatuses = Object.values(UploadStatus);
-      
+
       expect(validStatuses).toContain('pending');
       expect(validStatuses).toContain('uploading');
       expect(validStatuses).toContain('processing');
       expect(validStatuses).toContain('completed');
       expect(validStatuses).toContain('failed');
-      
+
       // Should NOT contain legacy 'complete'
       expect(validStatuses).not.toContain('complete');
     });
@@ -239,14 +239,14 @@ describe('Upload Status State Machine', () => {
           fileName: 'test-upload-6.csv',
           fileSizeBytes: 1024,
           contentType: 'text/csv',
-          status: UploadStatus.COMPLETED
-        }
+          status: UploadStatus.COMPLETED,
+        },
       });
 
       // Attempt to change completed upload should be prevented by business logic
       // (in production, services should validate this)
       expect(upload.status).toBe(UploadStatus.COMPLETED);
-      
+
       // This test documents the expectation - services should not allow
       // updates to terminal states unless explicitly deleting
     });
@@ -261,13 +261,13 @@ describe('Upload Status State Machine', () => {
           fileSizeBytes: 1024,
           contentType: 'text/csv',
           status: UploadStatus.FAILED,
-          errorMessage: 'Test error'
-        }
+          errorMessage: 'Test error',
+        },
       });
 
       expect(upload.status).toBe(UploadStatus.FAILED);
       expect(upload.errorMessage).toBeTruthy();
-      
+
       // Failed uploads can be retried (new upload record) but not transitioned in place
     });
   });

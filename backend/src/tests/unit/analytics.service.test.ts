@@ -125,7 +125,6 @@ describe('AnalyticsService', () => {
   describe('startSession', () => {
     beforeEach(() => {
       analyticsService.initialize({ enableSessionTracking: true });
-      // @ts-expect-error - Mock setup, TypeScript can't infer jest.Mock type
       mockAdapter.startSession.mockResolvedValue('session-123');
     });
 
@@ -168,7 +167,6 @@ describe('AnalyticsService', () => {
     });
 
     it('should end session via repository', async () => {
-      // @ts-expect-error - Mock setup, TypeScript can't infer jest.Mock type
       mockAdapter.endSession.mockResolvedValue(undefined);
 
       await analyticsService.endSession('session-123');
@@ -201,7 +199,6 @@ describe('AnalyticsService', () => {
         pwaInstallationRate: 0.3,
         offlineUsageRate: 0.15,
       };
-      // @ts-expect-error - Mock setup, TypeScript can't infer jest.Mock type
       mockAdapter.getMetrics.mockResolvedValue(mockMetrics);
 
       const metrics = await analyticsService.getMetrics();
@@ -235,7 +232,6 @@ describe('AnalyticsService', () => {
 
   describe('cleanOldData', () => {
     it('should clean old data via repository', async () => {
-      // @ts-expect-error - Mock setup, TypeScript can't infer jest.Mock type
       mockAdapter.cleanupOldData.mockResolvedValue(150);
 
       await analyticsService.cleanOldData();
@@ -245,7 +241,6 @@ describe('AnalyticsService', () => {
 
     it('should use configured retention period', async () => {
       analyticsService.initialize({ retentionPeriod: 30 });
-      // @ts-expect-error - Mock setup, TypeScript can't infer jest.Mock type
       mockAdapter.cleanupOldData.mockResolvedValue(50);
 
       await analyticsService.cleanOldData();

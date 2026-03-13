@@ -1,6 +1,5 @@
 import { PrismaClient } from '@prisma/client';
 import jwt from 'jsonwebtoken';
-import { createTestUser } from './utils/test-helpers';
 import { generateSKU } from '../../utils/sku-generator';
 
 describe('Multi-Tenant Concurrency Load Tests - 16A.F.1', () => {
@@ -77,7 +76,7 @@ describe('Multi-Tenant Concurrency Load Tests - 16A.F.1', () => {
           organizationId: org.id,
           name: `Product ${i}`,
           barcode: `SKU-RACE-BARCODE-${i}`,
-          sku: generateSKU(org.id, i),
+          sku: `${generateSKU(`ORG${org.id.slice(0, 4)}`)}-${i}`,
           costPrice: 10,
           notes: `Test product ${i}`,
         });
@@ -94,7 +93,7 @@ describe('Multi-Tenant Concurrency Load Tests - 16A.F.1', () => {
               organizationId: org.id,
               name: `Concurrent Product ${i}`,
               barcode: `SKU-RACE-CONCURRENT-BARCODE-${i}`,
-              sku: generateSKU(org.id, i + 1000), // Ensure unique SKUs
+              sku: `${generateSKU(`ORG${org.id.slice(0, 4)}`)}-${i + 1000}`, // Ensure unique SKUs
               costPrice: 10,
               notes: `Concurrent test product ${i}`,
             },
@@ -156,7 +155,7 @@ describe('Multi-Tenant Concurrency Load Tests - 16A.F.1', () => {
           organizationId: org.id,
           name: `Product ${i}`,
           barcode: `EXTREME-BARCODE-${i}`,
-          sku: generateSKU(org.id, i),
+          sku: `${generateSKU(`ORG${org.id.slice(0, 4)}`)}-${i}`,
           costPrice: 10,
           notes: `Test product ${i}`,
         }));
@@ -173,7 +172,7 @@ describe('Multi-Tenant Concurrency Load Tests - 16A.F.1', () => {
                 organizationId: org.id,
                 name: `Extreme Concurrent ${i}`,
                 barcode: `EXTREME-CONCURRENT-BARCODE-${i}`,
-                sku: generateSKU(org.id, i + 2000),
+                sku: `${generateSKU(`ORG${org.id.slice(0, 4)}`)}-${i + 2000}`,
                 costPrice: 10,
                 notes: `Extreme test ${i}`,
               },
@@ -234,7 +233,7 @@ describe('Multi-Tenant Concurrency Load Tests - 16A.F.1', () => {
             organizationId: orgId,
             name: `Product ${i}`,
             barcode: `TENANT-${orgNum}-BARCODE-${i}`,
-            sku: generateSKU(orgId, i + orgNum * 10000), // Ensure unique SKUs across orgs
+            sku: `${generateSKU(`ORG${orgId.slice(0, 4)}`)}-${i + orgNum * 10000}`, // Ensure unique SKUs across orgs
             costPrice: 10,
             notes: `Test product ${i}`,
           }));
@@ -253,7 +252,7 @@ describe('Multi-Tenant Concurrency Load Tests - 16A.F.1', () => {
                 organizationId: org1.id,
                 name: `Org1 Product ${i}`,
                 barcode: `ORG1-CONCURRENT-BARCODE-${i}`,
-                sku: generateSKU(org1.id, i + 3000),
+                sku: `${generateSKU(`ORG${org1.id.slice(0, 4)}`)}-${i + 3000}`,
                 costPrice: 10,
                 notes: `Test org1 ${i}`,
               },
@@ -268,7 +267,7 @@ describe('Multi-Tenant Concurrency Load Tests - 16A.F.1', () => {
                 organizationId: org2.id,
                 name: `Org2 Product ${i}`,
                 barcode: `ORG2-CONCURRENT-BARCODE-${i}`,
-                sku: generateSKU(org2.id, i + 4000),
+                sku: `${generateSKU(`ORG${org2.id.slice(0, 4)}`)}-${i + 4000}`,
                 costPrice: 10,
                 notes: `Test org2 ${i}`,
               },
@@ -487,7 +486,7 @@ describe('Multi-Tenant Concurrency Load Tests - 16A.F.1', () => {
                 organizationId: org.id,
                 name: `Product ${i}`,
                 barcode: `ACID-BARCODE-${i}`,
-                sku: generateSKU(org.id, i + 5000),
+                sku: `${generateSKU(`ORG${org.id.slice(0, 4)}`)}-${i + 5000}`,
                 costPrice: 10,
                 notes: `ACID test ${i}`,
               },

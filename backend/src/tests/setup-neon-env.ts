@@ -11,3 +11,8 @@ if (!process.env.DATABASE_URL && process.env.NEON_CONNECTION_STRING) {
 
 // Don't use SQLite in production mode
 delete process.env.DATABASE_PATH;
+
+// Provide dummy Stripe key for production mode tests (required for SubscriptionService)
+if (!process.env.STRIPE_SECRET_KEY) {
+  process.env.STRIPE_SECRET_KEY = 'sk_test_dummy_key_for_neon_tests_' + Date.now();
+}

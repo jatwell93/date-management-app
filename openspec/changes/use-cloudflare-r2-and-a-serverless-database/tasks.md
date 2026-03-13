@@ -1185,7 +1185,7 @@
 
 ## 20. Final Validation & Handoff
 
-> **❌ PHASE NOT STARTED (0/10 tasks, 0%)** - FINAL GATE BEFORE PRODUCTION
+> **⚠️ PHASE IN PROGRESS (4/12 tasks complete, validation underway)** - FINAL GATE BEFORE PRODUCTION
 
 **NOTE:** This phase gates production release. All tasks must pass before deploying.
 
@@ -1193,11 +1193,18 @@
   - **Development (SQLite):** All tests should pass
   - **Production (Neon):** All tests should pass
   - **Target:** 100% test pass rate
+  - **Progress (Mar 13, 2026):**
+    - ✅ Backend dev suite: 87/89 suites passing (2 intentionally skipped), 931 tests passed, 9 skipped
+    - ✅ Frontend suite: 29/29 suites passing, 268 tests passed, 1 todo
+    - ✅ Workers suite: 12/12 files passing, 194 tests passed, 1 skipped
+    - ⏳ Backend prod (Neon) local validation is still blocked by harness instability: interrupted runs can leave `backend/prisma/schema.prisma` in PostgreSQL mode, and in-band Neon runs produced scheduler-related post-test logging plus Prisma connection reset noise instead of a clean deterministic gate
 
 - [ ] 20.2 Verify all specs requirements have corresponding tests
   - **Action:** Cross-reference OpenSpec requirements with test coverage
   - **Tool:** Coverage report + manual audit
   - **Target:** Every spec requirement has at least one test
+  - **Audit (Mar 13, 2026):** manual spec-to-test mapping completed across backend and Workers suites
+  - **Current Result:** target not yet met; notable gaps remain in Workers API adapter/error/timeout coverage, CSV cleanup and quota edge cases, database abstraction pooling/migration compatibility, and streaming parser encoding/memory/performance cases
 
 - [ ] 20.3 Run load tests and verify performance targets met
   - **Targets:**
@@ -1248,6 +1255,42 @@
     - Test offline sync (if applicable)
   - **Success:** Zero blocking issues reported
 
-**Estimated Time for Phase 20:** 8-10 hours (validation + approvals)
+- [x] 20.9 Run lint gates across backend/frontend/workers and ensure each package has explicit lint scripts
+  - **Why:** Phase 20 must enforce code quality gates consistently across all deployable packages
+  - **Target:** `npm run lint` (or equivalent) available and green in each package
+  - **Completed (Mar 13, 2026):**
+    - ✅ Backend `npm run lint`: 0 errors, warnings only
+    - ✅ Frontend `npm run lint`: 0 errors, warnings only
+    - ✅ Workers `npm run lint`: passes (`tsc --noEmit`)
+    - ✅ Explicit lint scripts present in all three packages
+
+- [x] 20.10 Run strict type-check gates across backend/frontend/workers
+  - **Why:** Prevent runtime regressions from type drift, especially in edge handlers and integration tests
+  - **Target:** Type-check passes with zero errors in all packages
+  - **Completed (Mar 13, 2026):**
+    - ✅ Backend: `npm run type-check` (`tsc --noEmit`)
+    - ✅ Frontend: `npx tsc --noEmit`
+    - ✅ Workers: `npm run lint` (`tsc --noEmit`)
+
+- [x] 20.11 Stabilize flaky tests and hook timeouts in long-running suites
+  - **Why:** Final handoff requires repeatable green runs, not one-off passes
+  - **Target:** No intermittent failures across two consecutive full-suite runs
+  - **Completed (Mar 13, 2026):**
+    - ✅ Two consecutive full deterministic runs completed successfully with artifacts saved under `test-results/stability/fullrepro-*.log`
+    - ✅ Frontend run 1 and 2: 29/29 suites passing, 268 tests passed, 1 todo
+    - ✅ Backend run 1 and 2: 87/89 suites passing (2 skipped), 931 tests passed, 9 skipped
+    - ✅ Workers run 1 and 2: 12/12 files passing, 194 tests passed, 1 skipped
+    - ℹ️ Non-fatal Windows Miniflare temp-directory cleanup warnings (`EBUSY` during shutdown) were still observed, but they did not affect pass/fail status in the clean two-run validation
+
+- [x] 20.12 Gate external-dependency tests behind explicit env flags
+  - **Why:** Deployment-preview tests should not fail local CI when external Workers endpoints are unavailable
+  - **Target:** Local validation stays deterministic; external smoke tests still runnable on demand
+  - **Completed (Mar 13, 2026):**
+    - ✅ `workers/vitest.config.ts` excludes `workers-deployment.test.ts` by default
+    - ✅ `workers/package.json` adds opt-in `npm run test:preview` command
+    - ✅ `workers/src/workers-deployment.test.ts` remains runnable on demand
+    - ✅ Default `npm test` is deterministic and not coupled to external preview endpoints
+
+**Estimated Time for Phase 20:** 10-14 hours (expanded validation + approvals)
 
 

@@ -58,7 +58,12 @@ export class UploadController {
         return;
       }
 
-      const key = await this.uploadService.handleDirectUpload(buffer, originalname, mimetype, req.userId);
+      const key = await this.uploadService.handleDirectUpload(
+        buffer,
+        originalname,
+        mimetype,
+        req.userId,
+      );
 
       res.json({ message: 'File uploaded and processing started', key });
     } catch (error) {

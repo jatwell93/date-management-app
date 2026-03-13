@@ -114,7 +114,10 @@ describe('UploadRoutes', () => {
         );
 
       expect(res.status).toBe(200);
-      expect(res.body).toEqual({ message: 'File uploaded and processing started', key: 'uploads/key' });
+      expect(res.body).toEqual({
+        message: 'File uploaded and processing started',
+        key: 'uploads/key',
+      });
       expect(mockUploadService.handleDirectUpload).toHaveBeenCalledWith(
         expect.any(Buffer),
         'direct.csv',

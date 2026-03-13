@@ -291,7 +291,7 @@ export class AnalyticsService {
   public async getEventCountByType(
     eventType: AnalyticsEventType,
     startDate?: Date,
-    endDate?: Date
+    endDate?: Date,
   ): Promise<number> {
     const start = startDate || new Date(Date.now() - 30 * 24 * 60 * 60 * 1000);
     const end = endDate || new Date();

@@ -34,7 +34,7 @@ describe('UsageReportPage', () => {
           },
         ]);
       }
-      if (url === '/reports/items-by-user') {
+      if (url.startsWith('/reports/items-by-user')) {
         return Promise.resolve([{ userId: 1, userName: 'Manager 1', itemCount: 150 }]);
       }
       if (url === '/reports/items-by-date') {

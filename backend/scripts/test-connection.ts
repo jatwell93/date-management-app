@@ -4,20 +4,20 @@ import { PrismaClient } from '@prisma/client';
 const prisma = new PrismaClient({
   datasources: {
     db: {
-      url: process.env.NEON_CONNECTION_STRING
-    }
-  }
+      url: process.env.NEON_CONNECTION_STRING,
+    },
+  },
 });
 
 async function main() {
   try {
     await prisma.$connect();
     console.log('✅ Connection successful');
-    
+
     // Test a simple query that works on PostgreSQL
     const result = await prisma.$queryRaw`SELECT 1 as test`;
     console.log('✅ Database query test passed');
-    
+
     // Try to get PostgreSQL version
     try {
       const version = await prisma.$queryRaw<any[]>`SELECT version() as version`;
@@ -25,7 +25,7 @@ async function main() {
     } catch {
       console.log('📊 Could not retrieve version');
     }
-    
+
     await prisma.$disconnect();
   } catch (error) {
     console.error('❌ Connection failed:', error);

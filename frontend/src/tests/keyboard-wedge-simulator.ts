@@ -96,10 +96,7 @@ export const simulateHumanTyping = async (
  * @param count - Number of Enter keys to press
  * @param delay - Delay between Enter keys in ms
  */
-export const simulateRapidEnterPresses = async (
-  count: number = 2,
-  delay: number = 10,
-): Promise<void> => {
+export const simulateRapidEnterPresses = async (count = 2, delay = 10): Promise<void> => {
   for (let i = 0; i < count; i++) {
     const enterEvent = new KeyboardEvent('keydown', {
       key: 'Enter',
@@ -122,7 +119,7 @@ export const simulateRapidEnterPresses = async (
  */
 export const waitForScanResult = (
   onScan: (result: HardwareScanResult) => void,
-  timeout: number = 1000,
+  timeout = 1000,
 ): Promise<HardwareScanResult | null> => {
   return new Promise((resolve) => {
     const timeoutId = setTimeout(() => {

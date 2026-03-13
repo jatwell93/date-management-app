@@ -256,6 +256,16 @@ export async function seedMissingTierFeatureFlags(
           Logger.info(`Seeded feature flag: ${tier}.${feature}`, { enabled, limitValue });
         }
       } catch (error) {
+        // Concurrent runs may race on the same unique (tierLevel, featureKey) key.
+        // If another transaction inserted first, treat that as a successful no-op.
+        const prismaError = error as { code?: string; message?: string };
+        if (
+          prismaError.code === 'P2002' ||
+          prismaError.message?.includes('Unique constraint failed')
+        ) {
+          continue;
+        }
+
         const errorMsg = `Failed to seed ${tier}.${feature}: ${error instanceof Error ? error.message : 'Unknown error'}`;
         errors.push(errorMsg);
         Logger.error(errorMsg);

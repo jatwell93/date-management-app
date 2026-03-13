@@ -279,7 +279,7 @@ export const CSVUploadPage: React.FC<{ token: string | null }> = ({ token }) => 
         setProgressMessage(statusData.message || 'Processing...');
 
         // Wait before next poll
-        await new Promise(resolve => setTimeout(resolve, pollInterval));
+        await new Promise((resolve) => setTimeout(resolve, pollInterval));
       } catch (error) {
         console.error('Status poll error:', error);
         // Continue polling on error
@@ -588,7 +588,8 @@ export const CSVUploadPage: React.FC<{ token: string | null }> = ({ token }) => 
           {columnValidation && columnValidation.isValid && selectedFile && (
             <div className="mb-4 p-3 bg-green-50 border border-green-200 rounded-md">
               <p className="text-sm text-green-800">
-                ✓ All required columns found: {Object.values(columnValidation.foundColumns).join(', ')}
+                ✓ All required columns found:{' '}
+                {Object.values(columnValidation.foundColumns).join(', ')}
               </p>
             </div>
           )}
@@ -623,10 +624,11 @@ export const CSVUploadPage: React.FC<{ token: string | null }> = ({ token }) => 
             <button
               type="submit"
               disabled={isUploading || !selectedFile}
-              className={`px-4 py-2 rounded-md text-white font-medium ${isUploading || !selectedFile
-                ? 'bg-gray-400 cursor-not-allowed'
-                : 'bg-inventory-primary-600 hover:bg-inventory-primary-700'
-                }`}
+              className={`px-4 py-2 rounded-md text-white font-medium ${
+                isUploading || !selectedFile
+                  ? 'bg-gray-400 cursor-not-allowed'
+                  : 'bg-inventory-primary-600 hover:bg-inventory-primary-700'
+              }`}
             >
               {isUploading ? 'Uploading...' : 'Upload CSV/XLSX/XLS'}
             </button>
@@ -651,7 +653,8 @@ export const CSVUploadPage: React.FC<{ token: string | null }> = ({ token }) => 
 
             <p>{uploadResult.message}</p>
 
-            {(uploadResult.importedCount !== undefined || uploadResult.processedCount !== undefined) && (
+            {(uploadResult.importedCount !== undefined ||
+              uploadResult.processedCount !== undefined) && (
               <div className="mt-2">
                 {uploadResult.importedCount !== undefined && (
                   <p>Products imported: {uploadResult.importedCount}</p>
@@ -681,7 +684,8 @@ export const CSVUploadPage: React.FC<{ token: string | null }> = ({ token }) => 
                 </p>
                 {uploadResult.columnsIgnored !== undefined && uploadResult.columnsIgnored > 0 && (
                   <p className="text-sm text-inventory-success-700">
-                    ℹ️ Ignored {uploadResult.columnsIgnored} extra column{uploadResult.columnsIgnored > 1 ? 's' : ''}
+                    ℹ️ Ignored {uploadResult.columnsIgnored} extra column
+                    {uploadResult.columnsIgnored > 1 ? 's' : ''}
                   </p>
                 )}
               </div>

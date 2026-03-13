@@ -207,10 +207,7 @@ function mapPostgresTypeToSqliteAffinity(dataType: string, udtName: string): str
     return 'REAL';
   }
 
-  if (
-    normalized.includes('bytea') ||
-    normalized.includes('blob')
-  ) {
+  if (normalized.includes('bytea') || normalized.includes('blob')) {
     return 'BLOB';
   }
 

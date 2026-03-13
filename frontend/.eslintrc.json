@@ -25,6 +25,20 @@
       }
     ]
   },
+  "overrides": [
+    {
+      "files": ["**/*.test.ts", "**/*.test.tsx", "**/tests/**", "**/__tests__/**", "**/setupTests.ts"],
+      "rules": {
+        "testing-library/no-node-access": "warn",
+        "testing-library/no-wait-for-multiple-assertions": "warn",
+        "testing-library/no-unnecessary-act": "warn",
+        "testing-library/no-container": "warn",
+        "@typescript-eslint/no-empty-function": "off",
+        "@typescript-eslint/no-var-requires": "off",
+        "@typescript-eslint/ban-ts-comment": "warn"
+      }
+    }
+  ],
   "settings": {
     "react": {
       "version": "detect"

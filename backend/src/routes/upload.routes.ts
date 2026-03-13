@@ -78,14 +78,9 @@ router.post(
  * GET /api/upload/status/:key
  * Get upload status for progress tracking
  */
-router.get(
-  '/status/:key',
-  authenticateToken,
-  uploadLimiter,
-  (req: AuthRequest, res) => {
-    const { uploadController } = getServicesForRequest(req);
-    return uploadController.status(req, res);
-  },
-);
+router.get('/status/:key', authenticateToken, uploadLimiter, (req: AuthRequest, res) => {
+  const { uploadController } = getServicesForRequest(req);
+  return uploadController.status(req, res);
+});
 
 export default router;

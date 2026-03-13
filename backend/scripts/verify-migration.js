@@ -5,7 +5,8 @@ const prisma = new PrismaClient();
 async function main() {
   try {
     // Count tables
-    const tableCount = await prisma.$queryRaw`SELECT COUNT(*) as count FROM information_schema.tables WHERE table_schema = 'public'`;
+    const tableCount =
+      await prisma.$queryRaw`SELECT COUNT(*) as count FROM information_schema.tables WHERE table_schema = 'public'`;
     console.log(`✅ Found ${tableCount[0].count} tables`);
 
     // Count tier flags
@@ -19,9 +20,9 @@ async function main() {
       WHERE table_schema = 'public'
       ORDER BY table_name
     `;
-    
+
     console.log('\n📊 Tables created:');
-    tables.forEach(table => console.log(`   - ${table.table_name}`));
+    tables.forEach((table) => console.log(`   - ${table.table_name}`));
 
     console.log('\n✅ Migration verification completed successfully!');
   } catch (error) {

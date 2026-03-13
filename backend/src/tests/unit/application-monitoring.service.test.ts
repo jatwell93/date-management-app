@@ -1,4 +1,7 @@
-import { ApplicationMonitoringService, ApplicationAlertType } from '../../services/application.monitoring.service';
+import {
+  ApplicationMonitoringService,
+  ApplicationAlertType,
+} from '../../services/application.monitoring.service';
 
 jest.mock('../../services/saas-metrics.service', () => ({
   SaasMetricsService: jest.fn().mockImplementation(() => ({
@@ -21,8 +24,18 @@ describe('ApplicationMonitoringService', () => {
   });
 
   it('records request metrics and computes error rate', () => {
-    service.recordRequest({ endpoint: 'GET /api/products', duration: 80, statusCode: 200, url: '/api/products' });
-    service.recordRequest({ endpoint: 'POST /api/products', duration: 90, statusCode: 500, url: '/api/products' });
+    service.recordRequest({
+      endpoint: 'GET /api/products',
+      duration: 80,
+      statusCode: 200,
+      url: '/api/products',
+    });
+    service.recordRequest({
+      endpoint: 'POST /api/products',
+      duration: 90,
+      statusCode: 500,
+      url: '/api/products',
+    });
 
     const metrics = service.getMetrics();
     expect(metrics.performance.totalRequests).toBe(2);
@@ -44,7 +57,12 @@ describe('ApplicationMonitoringService', () => {
       }
     });
 
-    service.recordRequest({ endpoint: 'GET /api/reports/usage', duration: 50, statusCode: 200, url: '/api/reports/usage' });
+    service.recordRequest({
+      endpoint: 'GET /api/reports/usage',
+      duration: 50,
+      statusCode: 200,
+      url: '/api/reports/usage',
+    });
   });
 
   it('request tracking middleware records request and cleans up request map', () => {
@@ -84,7 +102,12 @@ describe('ApplicationMonitoringService', () => {
       },
     });
 
-    service.recordRequest({ endpoint: 'GET /api/products', duration: 5, statusCode: 500, url: '/api/products' });
+    service.recordRequest({
+      endpoint: 'GET /api/products',
+      duration: 5,
+      statusCode: 500,
+      url: '/api/products',
+    });
     await service.collectMetrics();
 
     expect(alerts).toContain(ApplicationAlertType.HIGH_ERROR_RATE);

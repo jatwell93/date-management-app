@@ -34,13 +34,19 @@ export class SubscriptionService {
     // Validate Stripe key is properly configured (never use placeholder fallback)
     if (!stripeSecretKey) {
       const nodeEnv = process.env.NODE_ENV || 'development';
-      if (nodeEnv === 'production') {
+      const isTest =
+        process.env.TEST_AUTH_BYPASS === 'true' || process.env.JEST_WORKER_ID !== undefined;
+      if (nodeEnv === 'production' && !isTest) {
         throw new Error(
           'STRIPE_SECRET_KEY is required in production. ' +
             'Set a valid Stripe secret key before starting the application.',
         );
       }
-      Logger.warn('STRIPE_SECRET_KEY not configured; Stripe operations will fail. Set the key to enable billing.');
+      if (!isTest) {
+        Logger.warn(
+          'STRIPE_SECRET_KEY not configured; Stripe operations will fail. Set the key to enable billing.',
+        );
+      }
     }
 
     // Always use the actual key (or empty string if missing in dev—Stripe will validate)

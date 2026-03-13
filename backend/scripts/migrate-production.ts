@@ -2,13 +2,13 @@
 
 /**
  * Production Database Migration Script
- * 
+ *
  * This script handles the migration of the Neon PostgreSQL database
  * for production deployment.
- * 
+ *
  * Usage:
  *   npm run migrate:prod
- * 
+ *
  * Prerequisites:
  *   - NEON_CONNECTION_STRING must be set in environment
  *   - Neon database must be created and accessible
@@ -20,7 +20,7 @@ import * as path from 'path';
 import { createInterface } from 'readline';
 const rl = createInterface({
   input: process.stdin,
-  output: process.stdout
+  output: process.stdout,
 });
 
 async function question(query: string): Promise<string> {
@@ -31,12 +31,14 @@ async function question(query: string): Promise<string> {
 
 async function main() {
   console.log('🚀 Production Database Migration\n');
-  
+
   // Check environment
   if (!process.env.NEON_CONNECTION_STRING) {
     console.error('❌ NEON_CONNECTION_STRING environment variable is not set');
     console.log('\nPlease set it with:');
-    console.log('export NEON_CONNECTION_STRING="postgresql://user:password@host/database?sslmode=require"');
+    console.log(
+      'export NEON_CONNECTION_STRING="postgresql://user:password@host/database?sslmode=require"',
+    );
     process.exit(1);
   }
 
@@ -48,7 +50,9 @@ async function main() {
   console.log('5. Verify migration success\n');
 
   // Confirm before proceeding
-  const answer = await question('⚠️  This will modify the production database. Continue? (yes/no): ');
+  const answer = await question(
+    '⚠️  This will modify the production database. Continue? (yes/no): ',
+  );
   if (answer.toLowerCase() !== 'yes') {
     console.log('❌ Migration cancelled');
     process.exit(0);
@@ -60,9 +64,9 @@ async function main() {
     const prisma = new PrismaClient({
       datasources: {
         db: {
-          url: process.env.NEON_CONNECTION_STRING
-        }
-      }
+          url: process.env.NEON_CONNECTION_STRING,
+        },
+      },
     });
 
     await prisma.$connect();
@@ -70,7 +74,9 @@ async function main() {
 
     // Generate Prisma client
     console.log('\n2️⃣  Generating Prisma client for PostgreSQL...');
-    execSync('npx prisma generate --schema=./prisma/production/schema.prisma', { stdio: 'inherit' });
+    execSync('npx prisma generate --schema=./prisma/production/schema.prisma', {
+      stdio: 'inherit',
+    });
     console.log('✅ Prisma client generated');
 
     // Push schema
@@ -90,7 +96,6 @@ async function main() {
 
     await prisma.$disconnect();
     console.log('\n🎉 Production database migration completed successfully!');
-
   } catch (error: unknown) {
     console.error('\n❌ Migration failed:', (error as Error).message);
     process.exit(1);
@@ -107,27 +112,37 @@ async function seedTierFlags(prisma: PrismaClient) {
     { tierLevel: 'starter', featureKey: 'max_inventory_items', enabled: true, limitValue: 5000 },
     { tierLevel: 'starter', featureKey: 'storage_bytes', enabled: true, limitValue: 1073741824 },
     { tierLevel: 'starter', featureKey: 'advanced_analytics', enabled: false },
-    
+
     // Professional tier
     { tierLevel: 'professional', featureKey: 'max_skus', enabled: true, limitValue: 2000 },
     { tierLevel: 'professional', featureKey: 'max_users', enabled: true, limitValue: 3 },
-    { tierLevel: 'professional', featureKey: 'max_inventory_items', enabled: true, limitValue: 20000 },
-    { tierLevel: 'professional', featureKey: 'storage_bytes', enabled: true, limitValue: 10737418240 },
+    {
+      tierLevel: 'professional',
+      featureKey: 'max_inventory_items',
+      enabled: true,
+      limitValue: 20000,
+    },
+    {
+      tierLevel: 'professional',
+      featureKey: 'storage_bytes',
+      enabled: true,
+      limitValue: 10737418240,
+    },
     { tierLevel: 'professional', featureKey: 'advanced_analytics', enabled: true },
-    
+
     // Premium tier
     { tierLevel: 'premium', featureKey: 'max_skus', enabled: true, limitValue: null },
     { tierLevel: 'premium', featureKey: 'max_users', enabled: true, limitValue: 10 },
     { tierLevel: 'premium', featureKey: 'max_inventory_items', enabled: true, limitValue: null },
     { tierLevel: 'premium', featureKey: 'storage_bytes', enabled: true, limitValue: 107374182400 },
     { tierLevel: 'premium', featureKey: 'advanced_analytics', enabled: true },
-    
+
     // Concierge tier
     { tierLevel: 'concierge', featureKey: 'max_skus', enabled: true, limitValue: null },
     { tierLevel: 'concierge', featureKey: 'max_users', enabled: true, limitValue: 10 },
     { tierLevel: 'concierge', featureKey: 'max_inventory_items', enabled: true, limitValue: null },
     { tierLevel: 'concierge', featureKey: 'storage_bytes', enabled: true, limitValue: null },
-    { tierLevel: 'concierge', featureKey: 'advanced_analytics', enabled: true }
+    { tierLevel: 'concierge', featureKey: 'advanced_analytics', enabled: true },
   ];
 
   for (const flag of tierFlags) {
@@ -135,11 +150,11 @@ async function seedTierFlags(prisma: PrismaClient) {
       where: {
         tierLevel_featureKey: {
           tierLevel: flag.tierLevel,
-          featureKey: flag.featureKey
-        }
+          featureKey: flag.featureKey,
+        },
       },
       update: flag,
-      create: flag
+      create: flag,
     });
   }
 }
@@ -147,17 +162,26 @@ async function seedTierFlags(prisma: PrismaClient) {
 async function verifyMigration(prisma: PrismaClient) {
   // Check all tables exist
   const tables = [
-    'organizations', 'subscription_tiers', 'trial_events', 'tier_feature_flags',
-    'organization_usage', 'users', 'products', 'inventory_items', 'store_areas',
-    'uploads', 'audit_logs', 'item_transactions', 'expired_item_transactions',
-    'organization_invites', 'processed_webhook_events'
+    'organizations',
+    'subscription_tiers',
+    'trial_events',
+    'tier_feature_flags',
+    'organization_usage',
+    'users',
+    'products',
+    'inventory_items',
+    'store_areas',
+    'uploads',
+    'audit_logs',
+    'item_transactions',
+    'expired_item_transactions',
+    'organization_invites',
+    'processed_webhook_events',
   ];
 
   for (const table of tables) {
     try {
-      const result = await prisma.$queryRaw<
-        { exists: number }[]
-      >`SELECT 1 AS "exists"
+      const result = await prisma.$queryRaw<{ exists: number }[]>`SELECT 1 AS "exists"
         FROM information_schema.tables
         WHERE table_schema = 'public' AND table_name = ${table}
         LIMIT 1`;

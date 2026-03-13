@@ -117,7 +117,7 @@ describe('UploadService', () => {
     it('should upload file to storage and trigger processing', async () => {
       const buffer = Buffer.from('data');
       const filename = 'direct.csv';
-      const key = `uploads/123-${filename}`;
+      const key = `uploads/${organizationId}/123-${filename}`;
       // mock Date.now
       jest.spyOn(Date, 'now').mockReturnValue(123);
 

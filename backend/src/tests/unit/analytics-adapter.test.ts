@@ -1,8 +1,8 @@
 /**
  * Analytics Adapter Contract Tests
- * 
+ *
  * Verifies that both SQLite and Prisma adapters implement IAnalyticsAdapter correctly.
- * 
+ *
  * P0-2: Adapter contract tests
  */
 
@@ -70,7 +70,7 @@ describe('Analytics Adapter Contract', () => {
           sessionId: 'test-session-123',
           isPWA: false,
         },
-        'test-session-123'
+        'test-session-123',
       );
 
       expect(sessionId).toBe('test-session-123');
@@ -85,19 +85,19 @@ describe('Analytics Adapter Contract', () => {
           sessionId: 'test-session-456',
           isPWA: false,
         },
-        'test-session-456'
+        'test-session-456',
       );
 
       expect(() => sqliteAdapter.endSession('test-session-456')).not.toThrow();
     });
 
-    it('should return metrics for date range', () => {
+    it('should return metrics for date range', async () => {
       sqliteAdapter.initialize();
 
       const startDate = new Date('2026-01-01');
       const endDate = new Date('2026-03-08');
 
-      const metrics = sqliteAdapter.getMetrics(startDate, endDate);
+      const metrics = await sqliteAdapter.getMetrics(startDate, endDate);
 
       expect(metrics).toHaveProperty('dailyActiveUsers');
       expect(metrics).toHaveProperty('weeklyActiveUsers');
@@ -112,7 +112,7 @@ describe('Analytics Adapter Contract', () => {
       const count = sqliteAdapter.getEventCountByType(
         AnalyticsEventType.USER_LOGIN,
         new Date('2026-01-01'),
-        new Date('2026-03-08')
+        new Date('2026-03-08'),
       );
 
       expect(typeof count).toBe('number');
@@ -133,7 +133,7 @@ describe('Analytics Adapter Contract', () => {
 
       const count = sqliteAdapter.getActiveUserCount(
         new Date('2026-01-01'),
-        new Date('2026-03-08')
+        new Date('2026-03-08'),
       );
 
       expect(typeof count).toBe('number');
@@ -172,7 +172,7 @@ describe('Analytics Adapter Contract', () => {
           sessionId: 'prisma-session',
           isPWA: true,
         },
-        'prisma-session'
+        'prisma-session',
       );
 
       expect(sessionId).toBe('prisma-session');
@@ -181,7 +181,7 @@ describe('Analytics Adapter Contract', () => {
     it('should return zero metrics (graceful degradation)', async () => {
       const metrics = await prismaAdapter.getMetrics(
         new Date('2026-01-01'),
-        new Date('2026-03-08')
+        new Date('2026-03-08'),
       );
 
       expect(metrics.dailyActiveUsers).toBe(0);
@@ -194,7 +194,7 @@ describe('Analytics Adapter Contract', () => {
       const count = await prismaAdapter.getEventCountByType(
         AnalyticsEventType.SCAN_BARCODE,
         new Date('2026-01-01'),
-        new Date('2026-03-08')
+        new Date('2026-03-08'),
       );
 
       expect(count).toBe(0);

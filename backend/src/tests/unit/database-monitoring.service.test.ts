@@ -1,4 +1,7 @@
-import { DatabaseMonitoringService, DatabaseAlertType } from '../../services/database.monitoring.service';
+import {
+  DatabaseMonitoringService,
+  DatabaseAlertType,
+} from '../../services/database.monitoring.service';
 
 describe('DatabaseMonitoringService', () => {
   let service: DatabaseMonitoringService;

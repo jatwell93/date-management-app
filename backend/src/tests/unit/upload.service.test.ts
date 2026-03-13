@@ -49,7 +49,7 @@ describe('UploadService', () => {
       expect(result.strategy).toBe('direct');
       expect(result.uploadUrl).toBe('/api/upload/direct');
       expect(result.method).toBe('POST');
-      expect(result.key).toMatch(/^uploads\/\d+-test\.csv$/);
+      expect(result.key).toMatch(/^uploads\/org-123\/\d+-test\.csv$/);
     });
 
     it('should return presigned upload strategy for large files in production', async () => {
@@ -70,7 +70,7 @@ describe('UploadService', () => {
       expect(result.strategy).toBe('presigned');
       expect(result.uploadUrl).toBe('https://presigned-url.com');
       expect(result.method).toBe('PUT');
-      expect(result.key).toMatch(/^uploads\/\d+-large\.csv$/);
+      expect(result.key).toMatch(/^uploads\/org-123\/\d+-large\.csv$/);
 
       // Restore original values
       (envConfig as any).NODE_ENV = originalNodeEnv;
@@ -96,7 +96,14 @@ describe('UploadService', () => {
       mockStorage.exists.mockResolvedValue(true);
       (mockStorage.getMetadata as jest.Mock).mockResolvedValue(metadata);
       mockStorage.download.mockResolvedValue(fileBuffer);
-      (mockCsvParser.processFile as jest.Mock).mockResolvedValue(undefined);
+      (mockCsvParser.processFile as jest.Mock).mockResolvedValue({
+        imported: 3,
+        updated: 0,
+        skipped: 0,
+        total: 3,
+        errors: [],
+        durationMs: 50,
+      });
 
       await uploadService.completeUpload(key, userId);
 
@@ -136,16 +143,27 @@ describe('UploadService', () => {
       mockStorage.upload.mockResolvedValue('uploads/123-test.csv');
       mockStorage.exists.mockResolvedValue(true);
       mockStorage.download.mockResolvedValue(buffer);
-      (mockCsvParser.processFile as jest.Mock).mockResolvedValue(undefined);
+      (mockStorage.getMetadata as jest.Mock).mockResolvedValue({
+        size: buffer.length,
+        contentType: 'text/csv',
+      });
+      (mockCsvParser.processFile as jest.Mock).mockResolvedValue({
+        imported: 3,
+        updated: 0,
+        skipped: 0,
+        total: 3,
+        errors: [],
+        durationMs: 50,
+      });
 
       const key = await uploadService.handleDirectUpload(buffer, filename, contentType, userId);
 
       expect(mockStorage.upload).toHaveBeenCalledWith(
-        expect.stringMatching(/^uploads\/\d+-test\.csv$/),
+        expect.stringMatching(/^uploads\/org-123\/\d+-test\.csv$/),
         buffer,
         contentType,
       );
-      expect(key).toMatch(/^uploads\/\d+-test\.csv$/);
+      expect(key).toMatch(/^uploads\/org-123\/\d+-test\.csv$/);
     });
   });
 

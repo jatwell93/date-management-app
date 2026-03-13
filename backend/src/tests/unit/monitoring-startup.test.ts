@@ -1,6 +1,6 @@
 /**
  * Monitoring Startup Tests (P0-3)
- * 
+ *
  * Validates that monitoring system initializes correctly and handles
  * exceptions gracefully without crashing the application.
  */
@@ -79,7 +79,7 @@ describe('Monitoring Startup', () => {
     it('should reset metrics when stopMonitoring is called with reset=true', () => {
       appMonitoringService.startMonitoring();
       appMonitoringService.stopMonitoring(true);
-      
+
       const metrics = appMonitoringService.getMetrics();
       expect(metrics.performance.totalRequests).toBe(0);
     });
@@ -140,7 +140,8 @@ describe('Monitoring Startup', () => {
       appMonitoringService.startMonitoring();
 
       // Simulate exception in metrics collection
-      const mockGetMetrics = jest.spyOn(appMonitoringService, 'getMetrics')
+      const mockGetMetrics = jest
+        .spyOn(appMonitoringService, 'getMetrics')
         .mockImplementation(() => {
           throw new Error('Metrics collection error');
         });
@@ -160,12 +161,12 @@ describe('Monitoring Startup', () => {
 
     it('should continue functioning after middleware exception', () => {
       const middleware = appMonitoringService.requestTrackingMiddleware();
-      
+
       const createMockResponse = () => ({
         statusCode: 200,
         on: jest.fn(),
       });
-      
+
       const mockReq = { method: 'GET', path: '/test' } as any;
       const mockRes = createMockResponse() as any;
       const mockNext = jest.fn();
@@ -193,7 +194,8 @@ describe('Monitoring Startup', () => {
       }).not.toThrow();
 
       // Simulating a failure during metrics collection
-      const mockGetMetrics = jest.spyOn(dbMonitoringService, 'getMetrics')
+      const mockGetMetrics = jest
+        .spyOn(dbMonitoringService, 'getMetrics')
         .mockImplementation(() => {
           throw new Error('Database query failed');
         });
@@ -216,44 +218,44 @@ describe('Monitoring Startup', () => {
     it('should allow process handlers to be registered without conflicts', () => {
       // Verify we can register handlers (simulating bootstrap behavior)
       const mockHandler = jest.fn();
-      
+
       expect(() => {
         process.once('SIGTERM', mockHandler);
       }).not.toThrow();
-      
+
       // Clean up
       process.removeListener('SIGTERM', mockHandler);
     });
 
     it('should support uncaughtException handler registration', () => {
       const mockHandler = jest.fn();
-      
+
       expect(() => {
         process.once('uncaughtException', mockHandler);
       }).not.toThrow();
-      
+
       // Clean up
       process.removeListener('uncaughtException', mockHandler);
     });
 
     it('should support unhandledRejection handler registration', () => {
       const mockHandler = jest.fn();
-      
+
       expect(() => {
         process.once('unhandledRejection', mockHandler);
       }).not.toThrow();
-      
+
       // Clean up
       process.removeListener('unhandledRejection', mockHandler);
     });
 
     it('should support SIGINT handler registration', () => {
       const mockHandler = jest.fn();
-      
+
       expect(() => {
         process.once('SIGINT', mockHandler);
       }).not.toThrow();
-      
+
       // Clean up
       process.removeListener('SIGINT', mockHandler);
     });
@@ -262,16 +264,16 @@ describe('Monitoring Startup', () => {
       const faultyHandler = jest.fn(() => {
         throw new Error('Handler error');
       });
-      
+
       // Register faulty handler
       process.once('uncaughtException', faultyHandler);
-      
+
       // Should not crash when registering
       expect(() => {
         const listeners = process.listeners('uncaughtException');
         expect(listeners.length).toBeGreaterThanOrEqual(0);
       }).not.toThrow();
-      
+
       // Clean up
       process.removeListener('uncaughtException', faultyHandler);
     });
@@ -303,16 +305,16 @@ describe('Monitoring Startup', () => {
 
       // Mock response with EventEmitter behavior
       const createMockResponse = () => {
-        const listeners: Record<string, Function[]> = {};
+        const listeners: Record<string, Array<() => void>> = {};
         return {
           statusCode: 200,
-          on: jest.fn((event: string, handler: Function) => {
+          on: jest.fn((event: string, handler: () => void) => {
             if (!listeners[event]) listeners[event] = [];
             listeners[event].push(handler);
           }),
           emit: (event: string) => {
             if (listeners[event]) {
-              listeners[event].forEach(handler => handler());
+              listeners[event].forEach((handler) => handler());
             }
           },
         };
@@ -368,7 +370,7 @@ describe('Monitoring Startup', () => {
 
       // Alert system should still work
       appMonitoringService.startMonitoring();
-      
+
       // Manually emit alert
       (appMonitoringService as any).emitAlert({
         type: 'HIGH_ERROR_RATE',
@@ -389,10 +391,10 @@ describe('Monitoring Startup', () => {
 
       // Mock response with EventEmitter
       const createMockResponse = () => {
-        const listeners: Record<string, Function[]> = {};
+        const listeners: Record<string, Array<() => void>> = {};
         return {
           statusCode: 200,
-          on: jest.fn((event: string, handler: Function) => {
+          on: jest.fn((event: string, handler: () => void) => {
             if (!listeners[event]) listeners[event] = [];
             listeners[event].push(handler);
             // Immediately trigger finish for test speed
