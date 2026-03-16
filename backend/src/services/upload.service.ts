@@ -26,6 +26,11 @@ export class UploadService {
 
   /**
    * Determine upload strategy and generate necessary credentials/URLs
+   * 
+   * SECURITY NOTES:
+   * - Presigned URLs expire after PRESIGNED_URL_EXPIRY_SECONDS (default 6 hours)
+   * - For files taking longer, client should request URL refresh (not implemented yet)
+   * - URLs are scoped to organization for multi-tenant isolation
    */
   async initiateUpload(
     filename: string,
@@ -69,7 +74,13 @@ export class UploadService {
       throw new Error('Storage provider does not support presigned URLs');
     }
 
-    const uploadUrl = await this.storage.getPresignedUploadUrl(key, 3600); // 1 hour expiry
+    // Use configurable expiry (default 6 hours = 21600 seconds)
+    // This allows time for file uploads without expiring mid-transfer
+    // NOTE: Future enhancement - implement refresh token mechanism for very large files
+    const PRESIGNED_URL_EXPIRY_SECONDS = 
+      (envConfig.PRESIGNED_URL_EXPIRY_SECONDS as number) || 6 * 60 * 60; // 6 hours
+
+    const uploadUrl = await this.storage.getPresignedUploadUrl(key, PRESIGNED_URL_EXPIRY_SECONDS);
 
     return {
       strategy: 'presigned',
@@ -158,6 +169,20 @@ export class UploadService {
               ? statusUpdateError.message
               : 'Unknown status update error',
         });
+        // Set status to FAILED to avoid inconsistent COMPLETED status without metrics
+        try {
+          const prisma = getDefaultDatabaseClient();
+          await prisma.upload.update({
+            where: { fileKey: key },
+            data: { status: UploadStatus.FAILED },
+          });
+        } catch (failedUpdateError) {
+          Logger.error('Failed to set upload status to FAILED after status update error', {
+            uploadKey: key,
+            originalError: statusUpdateError instanceof Error ? statusUpdateError.message : 'Unknown',
+            failedUpdateError: failedUpdateError instanceof Error ? failedUpdateError.message : 'Unknown',
+          });
+        }
       }
 
       Logger.info('Upload processing metrics', {

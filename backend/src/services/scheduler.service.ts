@@ -37,6 +37,11 @@ export class SchedulerService {
 
   // Initialize scheduled tasks
   static initialize() {
+    if (process.env.DISABLE_SCHEDULER_JOBS === 'true') {
+      console.log('Scheduler jobs are disabled by DISABLE_SCHEDULER_JOBS');
+      return;
+    }
+
     // Schedule the markdown update to run daily at 2:00 AM
     // This is a good time when system load is typically low
     cron.schedule('0 2 * * *', () => {

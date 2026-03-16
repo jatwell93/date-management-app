@@ -128,7 +128,9 @@ export class StorageQuotaService {
       const result = await this.prisma.upload.aggregate({
         where: {
           organizationId: this.organizationId,
-          status: UploadStatus.COMPLETED,
+          status: {
+            in: [UploadStatus.PROCESSING, UploadStatus.COMPLETED],
+          },
         },
         _sum: {
           fileSizeBytes: true,
@@ -156,10 +158,10 @@ export class StorageQuotaService {
     try {
       // Use transaction to ensure both operations succeed or fail together
       await this.prisma.$transaction(async (tx) => {
-        // Record the upload metadata with COMPLETED status.
-        // Note: Status is COMPLETED (not PENDING/UPLOADING) because this records uploads
-        // for quota tracking purposes, where storage is immediately counted against the org limit.
-        // This differs from CSV processing workflows which may use different status transitions.
+        // Record the upload metadata with PROCESSING status.
+        // Note: Status is PROCESSING initially because processing hasn't completed yet.
+        // This differs from quota tracking where storage is immediately counted.
+        // Status will be updated to COMPLETED after successful processing.
         // See: src/types/upload.types.ts for the full upload lifecycle documentation.
         await tx.upload.create({
           data: {
@@ -169,7 +171,7 @@ export class StorageQuotaService {
             fileName,
             fileSizeBytes,
             contentType,
-            status: UploadStatus.COMPLETED,
+            status: UploadStatus.PROCESSING,
           },
         });
 

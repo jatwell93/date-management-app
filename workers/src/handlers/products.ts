@@ -2,11 +2,14 @@
  * Products Handler - Multi-Tenant Safe
  * 
  * All queries filter by organizationId using parameterized template literals
- * to prevent SQL injection and ensure multi-tenant data isolation
+ * to prevent SQL injection and ensure multi-tenant data isolation.
+ * 
+ * All database operations include automatic retry logic for transient failures.
  */
 
 import { neon } from '@neondatabase/serverless';
 import type { Env } from '../types/env';
+import { withNeonRetry } from '../utils/db-retry';
 
 export interface Product {
   id: number;
@@ -23,15 +26,17 @@ export async function getProducts(
   env: Env,
   organizationId: string
 ): Promise<Product[]> {
-  const sql = neon(getConnectionString(env));
-  const results = await sql`
-    SELECT id, name, barcode, description, category, organization_id, 
-           created_at, updated_at
-    FROM products
-    WHERE organization_id = ${organizationId}
-    ORDER BY name ASC
-  `;
-  return results as Product[];
+  return withNeonRetry(async () => {
+    const sql = neon(getConnectionString(env));
+    const results = await sql`
+      SELECT id, name, barcode, description, category, organization_id, 
+             created_at, updated_at
+      FROM products
+      WHERE organization_id = ${organizationId}
+      ORDER BY name ASC
+    `;
+    return results as Product[];
+  });
 }
 
 export async function getProductById(
@@ -39,14 +44,16 @@ export async function getProductById(
   organizationId: string,
   productId: number
 ): Promise<Product | null> {
-  const sql = neon(getConnectionString(env));
-  const results = await sql`
-    SELECT id, name, barcode, description, category, organization_id,
-           created_at, updated_at
-    FROM products
-    WHERE id = ${productId} AND organization_id = ${organizationId}
-  `;
-  return (results[0] as Product) || null;
+  return withNeonRetry(async () => {
+    const sql = neon(getConnectionString(env));
+    const results = await sql`
+      SELECT id, name, barcode, description, category, organization_id,
+             created_at, updated_at
+      FROM products
+      WHERE id = ${productId} AND organization_id = ${organizationId}
+    `;
+    return (results[0] as Product) || null;
+  });
 }
 
 export async function getProductByBarcode(
@@ -54,26 +61,30 @@ export async function getProductByBarcode(
   organizationId: string,
   barcode: string
 ): Promise<Product | null> {
-  const sql = neon(getConnectionString(env));
-  const results = await sql`
-    SELECT id, name, barcode, description, category, organization_id,
-           created_at, updated_at
-    FROM products
-    WHERE barcode = ${barcode} AND organization_id = ${organizationId}
-  `;
-  return (results[0] as Product) || null;
+  return withNeonRetry(async () => {
+    const sql = neon(getConnectionString(env));
+    const results = await sql`
+      SELECT id, name, barcode, description, category, organization_id,
+             created_at, updated_at
+      FROM products
+      WHERE barcode = ${barcode} AND organization_id = ${organizationId}
+    `;
+    return (results[0] as Product) || null;
+  });
 }
 
 export async function countProducts(
   env: Env,
   organizationId: string
 ): Promise<number> {
-  const sql = neon(getConnectionString(env));
-  const results = await sql`
-    SELECT COUNT(*) as count FROM products
-    WHERE organization_id = ${organizationId}
-  `;
-  return ((results[0] as any).count as number) ?? 0;
+  return withNeonRetry(async () => {
+    const sql = neon(getConnectionString(env));
+    const results = await sql`
+      SELECT COUNT(*) as count FROM products
+      WHERE organization_id = ${organizationId}
+    `;
+    return ((results[0] as any).count as number) ?? 0;
+  });
 }
 
 export async function createProduct(
@@ -86,25 +97,27 @@ export async function createProduct(
     category?: string;
   }
 ): Promise<Product> {
-  const sql = neon(getConnectionString(env));
-  const results = await sql`
-    INSERT INTO products (
-      name, barcode, description, category, organization_id, created_at, updated_at
-    ) VALUES (
-      ${productData.name},
-      ${productData.barcode || null},
-      ${productData.description || null},
-      ${productData.category || null},
-      ${organizationId},
-      NOW(),
-      NOW()
-    )
-    RETURNING id, name, barcode, description, category, organization_id,
-              created_at, updated_at
-  ` as Product[];
-  
-  if (!results[0]) throw new Error('Failed to create product');
-  return results[0];
+  return withNeonRetry(async () => {
+    const sql = neon(getConnectionString(env));
+    const results = await sql`
+      INSERT INTO products (
+        name, barcode, description, category, organization_id, created_at, updated_at
+      ) VALUES (
+        ${productData.name},
+        ${productData.barcode || null},
+        ${productData.description || null},
+        ${productData.category || null},
+        ${organizationId},
+        NOW(),
+        NOW()
+      )
+      RETURNING id, name, barcode, description, category, organization_id,
+                created_at, updated_at
+    ` as Product[];
+    
+    if (!results[0]) throw new Error('Failed to create product');
+    return results[0];
+  });
 }
 
 export async function deleteProduct(
@@ -112,17 +125,19 @@ export async function deleteProduct(
   organizationId: string,
   productId: number
 ): Promise<boolean> {
-  const sql = neon(getConnectionString(env));
-  // Verify ownership first
-  const existing = await getProductById(env, organizationId, productId);
-  if (!existing) return false;
-  
-  const results = await sql`
-    DELETE FROM products
-    WHERE id = ${productId} AND organization_id = ${organizationId}
-    RETURNING id
-  `;
-  return results.length > 0;
+  return withNeonRetry(async () => {
+    // Verify ownership first
+    const existing = await getProductById(env, organizationId, productId);
+    if (!existing) return false;
+    
+    const sql = neon(getConnectionString(env));
+    const results = await sql`
+      DELETE FROM products
+      WHERE id = ${productId} AND organization_id = ${organizationId}
+      RETURNING id
+    `;
+    return (results as any[]).length > 0;
+  });
 }
 
 function getConnectionString(env: Env): string {

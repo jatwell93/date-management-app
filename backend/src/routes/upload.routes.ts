@@ -6,7 +6,7 @@ import { UploadController } from '../controllers/upload.controller';
 import { ServiceProvider } from '../services/service-provider';
 import { validateRequest } from '../middleware/validateRequest';
 import { uploadInitiateSchema, uploadCompleteSchema } from '../schemas';
-import { uploadLimiter } from '../middleware/rateLimiter';
+import { uploadLimiter, presignedUrlLimiter } from '../middleware/rateLimiter';
 
 const router = express.Router();
 
@@ -29,12 +29,16 @@ const upload = multer({
 /**
  * POST /api/upload/initiate
  * Initiate upload process - returns strategy (direct vs presigned)
+ * 
+ * Rate Limited: 50 presigned URLs per hour per authenticated user
+ * Security: Uses presignedUrlLimiter to prevent abuse of presigned URL generation
+ * Reference: docs/security-audit.md, PHASE-20-SESSION-2-SUMMARY.md Task 9
  */
 router.post(
   '/initiate',
   authenticateToken,
   checkUsageLimit('storage_bytes'),
-  uploadLimiter,
+  presignedUrlLimiter, // Rate limit presigned URL generation at authenticated user level
   validateRequest(uploadInitiateSchema),
   (req: AuthRequest, res) => {
     const { uploadController } = getServicesForRequest(req);

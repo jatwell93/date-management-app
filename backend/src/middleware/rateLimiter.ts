@@ -14,6 +14,14 @@ import { Request, Response } from 'express';
 import { envConfig } from '../config/environment';
 import { Logger } from '../utils/logger';
 
+interface AuthenticatedRateLimitRequest extends Request {
+  organizationId?: string;
+  userId?: number;
+  rateLimit?: {
+    resetTime?: number | Date;
+  };
+}
+
 /**
  * Standard rate limiter: 100 requests per 15 minutes
  * Used for general API endpoints
@@ -142,6 +150,63 @@ export const skipRateLimitForPaths = (allowedPaths: string[]) => {
     return allowedPaths.some((path) => req.path.startsWith(path));
   };
 };
+
+/**
+ * Presigned URL rate limiter: 50 requests per hour per AUTHENTICATED USER
+ * 
+ * SECURITY CRITICAL (Phase 20 - Security Audit Finding):
+ * - Rates limits by organizationId + userId, NOT by IP
+ * - Prevents malicious users from generating excessive presigned URLs
+ * - Presigned URLs can be shared, but per-user limit prevents abuse
+ * - Monitoring: logs organizationId for security team analysis
+ * 
+ * Reference: docs/security-audit.md section 3 "Presigned URL Security"
+ * Reference: docs/PHASE-20-SESSION-2-SUMMARY.md - Task 9
+ */
+export const presignedUrlLimiter = rateLimit({
+  windowMs: 60 * 60 * 1000, // 1 hour
+  max: 50, // 50 presigned URLs per hour per authenticated user
+  message: 'Too many presigned URL requests. Limit is 50 per hour.',
+  statusCode: 429,
+  skipSuccessfulRequests: false,
+  skipFailedRequests: false,
+  // Key generator: use organizationId + userId for authenticated users, IP for unauthenticated
+  keyGenerator: (req: Request) => {
+    const authReq = req as AuthenticatedRateLimitRequest;
+    if (authReq.organizationId && authReq.userId) {
+      // Authenticated request: rate limit by user
+      return `presigned-url:${authReq.organizationId}:${authReq.userId}`;
+    }
+    // Fallback to IP if not authenticated (shouldn't happen on this endpoint)
+    return `presigned-url:ip:${(req.headers['x-forwarded-for'] as string) || req.ip}`;
+  },
+  handler: (req: Request, res: Response) => {
+    const authReq = req as AuthenticatedRateLimitRequest;
+    Logger.warn('Presigned URL rate limit exceeded', {
+      organizationId: authReq.organizationId || 'unknown',
+      userId: authReq.userId || 'unauthenticated',
+      ip: (req.headers['x-forwarded-for'] as string) || req.ip,
+      endpoint: req.path,
+      method: req.method,
+      timestamp: new Date().toISOString(),
+    });
+    const resetTime = authReq.rateLimit?.resetTime;
+    const resetTimeMs =
+      resetTime instanceof Date ? resetTime.getTime() : typeof resetTime === 'number' ? resetTime : undefined;
+    const retryAfter = resetTimeMs ? Math.ceil((resetTimeMs - Date.now()) / 1000) : 3600;
+    res.setHeader('Retry-After', retryAfter.toString());
+    res.status(429).json({
+      code: 'ERR_RATE_LIMIT_EXCEEDED',
+      message: 'Too many presigned URL requests. Limit is 50 per hour.',
+      retryAfter,
+      details: {
+        limit: 50,
+        window: '1 hour',
+        type: 'presigned_url_generation',
+      },
+    });
+  },
+});
 
 /**
  * Trial conversion rate limiter: 5 requests per hour

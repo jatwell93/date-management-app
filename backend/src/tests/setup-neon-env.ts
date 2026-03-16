@@ -3,6 +3,7 @@
 process.env.DATABASE_DRIVER = 'postgresql';
 process.env.NODE_ENV = 'production';
 process.env.TEST_AUTH_BYPASS = 'true';
+process.env.DISABLE_SCHEDULER_JOBS = 'true';
 
 // Use NEON_CONNECTION_STRING from .env if available, fallback to DATABASE_URL
 if (!process.env.DATABASE_URL && process.env.NEON_CONNECTION_STRING) {

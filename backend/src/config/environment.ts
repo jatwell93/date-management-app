@@ -58,6 +58,8 @@ export interface EnvironmentConfig {
   NEON_CONNECTION_STRING?: string;
   MAX_UPLOAD_SIZE_BYTES: number;
   DIRECT_UPLOAD_THRESHOLD_BYTES: number;
+  CSV_TRANSACTION_MAX_WAIT_MS: number;
+  CSV_TRANSACTION_TIMEOUT_MS: number;
   SENTRY_DSN?: string;
   SENTRY_FRONTEND_DSN?: string;
   // Stripe Configuration (for SaaS monetization)
@@ -159,6 +161,8 @@ function validateEnvironment(env: RawEnv, allowMissingRequired: boolean): Enviro
   const directThreshold = Number(
     env.DIRECT_UPLOAD_THRESHOLD_BYTES || env.DIRECT_UPLOAD_THRESHOLD || 2 * 1024 * 1024,
   );
+  const csvTransactionMaxWaitMs = Number(env.CSV_TRANSACTION_MAX_WAIT_MS || 10000);
+  const csvTransactionTimeoutMs = Number(env.CSV_TRANSACTION_TIMEOUT_MS || 60000);
 
   return {
     NODE_ENV: nodeEnv,
@@ -183,6 +187,12 @@ function validateEnvironment(env: RawEnv, allowMissingRequired: boolean): Enviro
     DIRECT_UPLOAD_THRESHOLD_BYTES: Number.isNaN(directThreshold)
       ? 2 * 1024 * 1024
       : directThreshold,
+    CSV_TRANSACTION_MAX_WAIT_MS: Number.isNaN(csvTransactionMaxWaitMs)
+      ? 10000
+      : csvTransactionMaxWaitMs,
+    CSV_TRANSACTION_TIMEOUT_MS: Number.isNaN(csvTransactionTimeoutMs)
+      ? 60000
+      : csvTransactionTimeoutMs,
     SENTRY_DSN: env.SENTRY_DSN,
     SENTRY_FRONTEND_DSN: env.SENTRY_FRONTEND_DSN,
     // Stripe Configuration (for SaaS monetization)

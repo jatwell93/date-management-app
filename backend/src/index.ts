@@ -180,7 +180,7 @@ if (!isTestEnv) {
     enablePWAAnalytics: true,
   });
 
-  // Initialize scheduled tasks
+  // Initialize scheduled tasks unless explicitly disabled for test harness runs.
   SchedulerService.initialize();
 
   // Initialize tier feature flags validation (16A.F.2)

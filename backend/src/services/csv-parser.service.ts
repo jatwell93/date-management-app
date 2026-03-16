@@ -20,6 +20,7 @@ import { EventEmitter } from 'events';
 import { parse } from 'csv-parse';
 import * as fs from 'fs';
 import { getDefaultDatabaseClient } from '../database/database-factory';
+import { envConfig } from '../config/environment';
 import { Logger } from '../utils/logger';
 import { getOrganizationId } from '../utils/auth-bypass';
 
@@ -240,7 +241,11 @@ export class CSVParserService extends EventEmitter {
             headerValidation.errors.forEach((err) => result.errors.push(err));
             if (!this.options.skipInvalidRows) {
               fileStream.destroy();
+              parser.destroy();
               result.durationMs = Date.now() - startTime;
+              // Emit final progress before returning
+              this.emitProgress(result);
+              this.emit('complete', result);
               return result;
             }
           }
@@ -271,6 +276,7 @@ export class CSVParserService extends EventEmitter {
               value: '',
               message: `Batch insert failed: ${(error as Error).message}`,
             });
+            // Continue processing other batches on insert error
           }
         }
 
@@ -302,6 +308,14 @@ export class CSVParserService extends EventEmitter {
         value: '',
         message: `CSV parsing error: ${(error as Error).message}`,
       });
+    } finally {
+      // Ensure streams are properly cleaned up in all paths
+      try {
+        fileStream.destroy();
+        parser.destroy();
+      } catch (cleanupError) {
+        Logger.error('Error during stream cleanup:', { error: cleanupError });
+      }
     }
 
     result.durationMs = Date.now() - startTime;
@@ -624,8 +638,9 @@ export class CSVParserService extends EventEmitter {
     let imported = 0;
     let updated = 0;
 
-    await this.prisma.$transaction(async (tx) => {
-      for (const row of batch) {
+    await this.prisma.$transaction(
+      async (tx) => {
+        for (const row of batch) {
         // Check if product exists by SKU or barcode
         const existing = await tx.product.findFirst({
           where: {
@@ -660,7 +675,14 @@ export class CSVParserService extends EventEmitter {
           imported++;
         }
       }
-    });
+      },
+      {
+        // Neon can exceed Prisma's default 5s interactive transaction timeout
+        // for 100-row CSV batches in integration tests and higher-latency environments.
+        maxWait: envConfig.CSV_TRANSACTION_MAX_WAIT_MS,
+        timeout: envConfig.CSV_TRANSACTION_TIMEOUT_MS,
+      },
+    );
 
     return { imported, updated };
   }

@@ -22,6 +22,7 @@ import {
 import { createProductionCors } from './middleware/cors.middleware';
 import { createRateLimiter } from './middleware/rate-limit.middleware';
 import { createRequestLogger, createErrorHandler, WorkersLogger } from './middleware/error-handler.middleware';
+import { createSecurityHeadersMiddleware } from './middleware/security-headers.middleware';
 import {
   createMetricsInitializer,
   getRequestMetrics,
@@ -251,11 +252,24 @@ function createRouter(env: Env): WorkersRouter {
   const router = new WorkersRouter();
 
   // Global middleware execution order (important!)
-  router.use(createMetricsInitializer(env)); // Initialize metrics tracking first
+  // 1. Metrics initialization (first, to track all requests)
+  router.use(createMetricsInitializer(env));
+  
+  // 2. Security headers (early to apply to all responses)
+  // Phase 20 Security Audit: CSP headers prevent XSS attacks
+  router.use(createSecurityHeadersMiddleware(env));
+  
+  // 3. CORS handling
   router.use(createProductionCors(env));
+  
+  // 4. Rate limiting
   router.use(createRateLimiter(env));
-  router.use(createJWTAuthMiddleware(env)); // Task 7: JWT validation (after rate limiting)
-  router.use(createRequestLogger(env)); // After auth so organizationId is available
+  
+  // 5. JWT validation (after rate limiting to save resources)
+  router.use(createJWTAuthMiddleware(env)); // Task 7: JWT validation
+  
+  // 6. Request logging (after auth so organizationId is available)
+  router.use(createRequestLogger(env));
 
   // Register imported Express routes
   // Each route is prefixed with /api to match backend URL structure
