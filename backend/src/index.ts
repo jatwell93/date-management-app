@@ -282,18 +282,28 @@ if (!isTestEnv) {
 
 // Public routes
 app.use('/auth', authRoutes);
-app.use('/health', healthRoutes); // Health check routes (public)
+app.use('/api/auth', authRoutes);
+app.use('/', healthRoutes); // Health check routes (public)
+app.use('/api', healthRoutes);
 
 // Protected routes
 app.use('/products', authenticateToken, productRoutes);
+app.use('/api/products', authenticateToken, productRoutes);
 app.use('/inventory-items', authenticateToken, inventoryRoutes);
+app.use('/api/inventory-items', authenticateToken, inventoryRoutes);
 app.use('/store-areas', authenticateToken, storeAreaRoutes);
+app.use('/api/store-areas', authenticateToken, storeAreaRoutes);
 app.use('/reports', authenticateToken, reportRoutes);
+app.use('/api/reports', authenticateToken, reportRoutes);
 app.use('/dashboard', authenticateToken, dashboardRoutes);
+app.use('/api/dashboard', authenticateToken, dashboardRoutes);
 app.use('/users', authenticateToken, userRoutes);
+app.use('/api/users', authenticateToken, userRoutes);
 app.use('/api/organizations', organizationInviteRoutes);
 app.use('/database', authenticateToken, databaseBackupRoutes);
+app.use('/api/database', authenticateToken, databaseBackupRoutes);
 app.use('/expired-items', authenticateToken, expiredItemRoutes);
+app.use('/api/expired-items', authenticateToken, expiredItemRoutes);
 app.use('/api/upload', authenticateToken, uploadRoutes);
 app.use('/api/storage-quota', authenticateToken, storageQuotaRoutes);
 app.use('/api/subscription', subscriptionRoutes);
@@ -307,17 +317,53 @@ app.get('/', (req, res) => {
 });
 
 // Serve static files from frontend build directory
-app.use(express.static(join(__dirname, '../../../frontend/build')));
+const frontendBuildDir = join(__dirname, '../../frontend/build');
+const frontendIndexPath = join(frontendBuildDir, 'index.html');
+const FRONTEND_INDEX_CHECK_TTL_MS = 30000;
+let frontendIndexAvailability: { exists: boolean; checkedAt: number } | null = null;
+
+async function isFrontendIndexAvailable(): Promise<boolean> {
+  const now = Date.now();
+  if (frontendIndexAvailability && now - frontendIndexAvailability.checkedAt < FRONTEND_INDEX_CHECK_TTL_MS) {
+    return frontendIndexAvailability.exists;
+  }
+
+  try {
+    await fs.access(frontendIndexPath);
+    frontendIndexAvailability = { exists: true, checkedAt: now };
+    return true;
+  } catch {
+    frontendIndexAvailability = { exists: false, checkedAt: now };
+    return false;
+  }
+}
+
+app.use(express.static(frontendBuildDir));
 
 // Catch-all route for SPA fallback (this should come after API routes)
 // This handles client-side routing in production
-app.get('*', (req, res) => {
+app.get('*', async (req, res) => {
+  if (req.path.startsWith('/api/')) {
+    return res.status(404).json({
+      code: 'NOT_FOUND',
+      message: 'Endpoint not found',
+    });
+  }
+
   // Check if the request accepts HTML and doesn't have an extension (like .js, .css, .json)
   if (req.accepts('html') && !req.url.match(/\./)) {
-    res.sendFile(join(__dirname, '../../../frontend/build/index.html'));
+    const indexAvailable = await isFrontendIndexAvailable();
+    if (indexAvailable) {
+      return res.sendFile(frontendIndexPath);
+    }
+
+    return res.status(404).json({
+      code: 'FRONTEND_BUILD_NOT_FOUND',
+      message: 'Frontend build is not available on this server.',
+    });
   } else {
     // If it's a file request, return 404 since it's not in the static directory
-    res.status(404).send('File not found');
+    return res.status(404).send('File not found');
   }
 });
 
@@ -362,11 +408,8 @@ const startServer = async (): Promise<void> => {
           console.log(`HTTPS Server is running on https://localhost:${port}`);
         });
       } catch (error) {
-        console.error('Failed to start HTTPS server:', error);
-        console.log('Falling back to HTTP server');
-        server = app.listen(port, () => {
-          console.log(`HTTP Server is running on http://localhost:${port}`);
-        });
+        console.error('FATAL: Failed to start HTTPS server in production:', error);
+        process.exit(1);
       }
     } else {
       // Use regular HTTP server for development or if HTTPS is disabled

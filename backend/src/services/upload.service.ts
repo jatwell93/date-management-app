@@ -94,6 +94,8 @@ export class UploadService {
    * Finalize upload and trigger parsing
    */
   async completeUpload(key: string, userId: number): Promise<void> {
+    this.assertOrganizationScopedKey(key);
+
     const startTime = Date.now();
     // 1. Verify file exists in storage
     const exists = await this.storage.exists(key);
@@ -301,6 +303,22 @@ export class UploadService {
     } catch (error) {
       console.error(`Failed to delete upload ${key}:`, error);
       throw error;
+    }
+  }
+
+  private assertOrganizationScopedKey(key: string): void {
+    const expectedPrefix = `uploads/${this.organizationId}/`;
+    const normalizedKey = path.posix.normalize(key);
+    const pathSegments = key.split('/');
+    const hasUnsafeSegments = pathSegments.some((segment) => segment === '' || segment === '.' || segment === '..');
+
+    if (
+      !key.startsWith(expectedPrefix) ||
+      key.includes('\\') ||
+      hasUnsafeSegments ||
+      normalizedKey !== key
+    ) {
+      throw new Error('Access denied: Upload key does not belong to this organization');
     }
   }
 }

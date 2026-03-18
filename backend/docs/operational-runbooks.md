@@ -238,6 +238,175 @@ Updates will be provided every [time interval] or as status changes.
 - **Monthly**: Security updates, dependency updates, database maintenance
 - **Quarterly**: System resource review, scaling assessment
 
+## Scraping and Billing Abuse Runbook (Cloudflare + Neon)
+
+### Purpose
+Apply manual dashboard controls that reduce scraping-driven cost spikes before and during trial launch.
+
+### Preconditions
+- Production Cloudflare account access (WAF, Workers, Billing Alerts)
+- Neon project owner/editor access (Billing + Connection settings)
+- On-call email and SMS destinations confirmed
+
+### Part A: Cloudflare Dashboard Setup
+
+1. Enable Bot protection
+   - Navigate to `Cloudflare Dashboard -> Security -> Bots`.
+   - Enable bot protection mode applicable to your plan.
+   - Record the exact setting and timestamp in incident notes.
+
+2. Configure WAF rate limits for API endpoints
+   - Navigate to `Security -> WAF -> Rate limiting rules`.
+   - Add rule for `api/*` paths.
+   - Start with threshold `100 requests / 60 seconds` per IP (tune during trial).
+   - Action: `Block` or `Managed Challenge` depending on false-positive tolerance.
+
+3. Configure WAF rate limit for health endpoints
+   - Add rule for `health*` paths.
+   - Start with threshold `30 requests / 60 seconds` per IP.
+   - Action: `Block`.
+
+4. Add custom threat-score rule
+   - Navigate to `Security -> WAF -> Custom rules`.
+   - Create rule where threat score exceeds baseline threshold (for example, >10).
+   - Action: `JS Challenge`.
+
+5. Enable Workers Analytics Engine dataset usage
+   - Navigate to `Workers -> Analytics Engine` and ensure feature is enabled.
+   - Confirm dataset binding is configured in `workers/wrangler.toml` and deployment is current.
+
+### Part B: Cloudflare Billing Alerts
+
+1. Navigate to `Account -> Billing -> Alerts`.
+2. Configure minimum baseline alerts:
+   - Daily spend > $10
+   - Weekly spend > $50
+   - Monthly spend > $200
+   - Spend spike > 200% baseline
+3. Delivery channels:
+   - Email required
+   - SMS recommended for daily and spike alerts
+
+### Part C: Neon Protection and Alerts
+
+1. Navigate to `Neon Console -> Project -> Billing`.
+2. Set monthly budget threshold and enable email alerting.
+3. Navigate to project connection settings and review max connection posture.
+4. Enable connection-pool warning alerts where available.
+
+### Part D: Analytics Engine Anomaly Queries
+
+Use Workers Analytics Engine SQL API against the `analytics_events` dataset.
+These queries align with the current Worker metrics schema:
+- `index1`: route group / endpoint
+- `index2`: method
+- `index3`: status class (for example `2xx`, `4xx`, `5xx`)
+- `double1`: response time (ms)
+
+1. Request volume by minute (all API)
+```sql
+SELECT
+   intDiv(toUInt32(timestamp), 60) * 60 AS minute_bucket,
+   SUM(_sample_interval) AS request_count
+FROM analytics_events
+WHERE timestamp >= NOW() - INTERVAL '60' MINUTE
+   AND index1 LIKE '/api/%'
+GROUP BY minute_bucket
+ORDER BY minute_bucket DESC
+LIMIT 120;
+```
+
+2. Request volume by route + method by minute
+```sql
+SELECT
+   intDiv(toUInt32(timestamp), 60) * 60 AS minute_bucket,
+   index1 AS route_group,
+   index2 AS method,
+   SUM(_sample_interval) AS request_count
+FROM analytics_events
+WHERE timestamp >= NOW() - INTERVAL '60' MINUTE
+   AND index1 LIKE '/api/%'
+GROUP BY minute_bucket, route_group, method
+ORDER BY minute_bucket DESC, request_count DESC
+LIMIT 500;
+```
+
+3. 5xx surge detection by minute
+```sql
+SELECT
+   intDiv(toUInt32(timestamp), 60) * 60 AS minute_bucket,
+   SUM(_sample_interval) AS server_error_count
+FROM analytics_events
+WHERE timestamp >= NOW() - INTERVAL '60' MINUTE
+   AND index3 = '5xx'
+GROUP BY minute_bucket
+HAVING server_error_count > 50
+ORDER BY minute_bucket DESC
+LIMIT 120;
+```
+
+4. High latency by route over trailing 15 minutes
+```sql
+SELECT
+   index1 AS route_group,
+   SUM(_sample_interval * double1) / SUM(_sample_interval) AS avg_latency_ms,
+   SUM(_sample_interval) AS request_count
+FROM analytics_events
+WHERE timestamp >= NOW() - INTERVAL '15' MINUTE
+   AND index1 LIKE '/api/%'
+GROUP BY route_group
+HAVING request_count >= 30
+ORDER BY avg_latency_ms DESC
+LIMIT 50;
+```
+
+5. Top noisy routes (latest 10 minutes)
+```sql
+SELECT
+   index1 AS route_group,
+   SUM(_sample_interval) AS request_count
+FROM analytics_events
+WHERE timestamp >= NOW() - INTERVAL '10' MINUTE
+   AND index1 LIKE '/api/%'
+GROUP BY route_group
+ORDER BY request_count DESC
+LIMIT 20;
+```
+
+### Part E: Alert Thresholds (Option 2 Trial Tuning)
+
+Start with these thresholds and tune weekly during trial:
+
+| Metric | Source | Warning | Alert | Notes |
+|---|---|---:|---:|---|
+| Requests/min (all API) | Analytics Engine Query #1 | >500 | >2,000 | Matches launch checklist target |
+| 5xx/min | Analytics Engine Query #3 | >25 | >100 | Indicates instability or abusive traffic |
+| Average route latency (15m) | Analytics Engine Query #4 | >500ms | >1,500ms | Use only routes with `request_count >= 30` |
+| DB active connections | Neon Monitoring | >50 | >100 | Compare against branch connection posture |
+| Unique IPs/min | Cloudflare Security Analytics | >200 | >1,000 | Use Cloudflare dashboard/logs (not in WAE dataset schema) |
+
+Operational note:
+- Unique IP thresholds are intentionally sourced from Cloudflare Security Analytics because current `analytics_events` schema does not include client IP dimensions.
+- If needed later, add anonymized IP cardinality dimensions via Worker metrics and update queries.
+
+### Verification Checklist
+
+1. Trigger test traffic against `/api` and verify Cloudflare rule counters increase.
+2. Trigger controlled threshold breach in non-production and verify block/challenge action.
+3. Verify billing test alerts deliver to configured recipients.
+4. Verify anomaly visibility in Workers Analytics dashboards.
+5. Capture screenshots or audit exports for launch evidence.
+
+### Escalation During Trial
+
+1. If request spikes exceed expected baseline:
+   - Tighten WAF thresholds incrementally.
+   - Switch challenge to block for abusive signatures.
+2. If spend alert triggers:
+   - Confirm source paths and IP profiles.
+   - Apply temporary stricter limits and notify stakeholders.
+3. Document every threshold change and reason in incident log.
+
 ## Escalation Contacts
 - Primary: [Contact Information]
 - Secondary: [Contact Information]

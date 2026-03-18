@@ -58,6 +58,7 @@ export interface EnvironmentConfig {
   NEON_CONNECTION_STRING?: string;
   MAX_UPLOAD_SIZE_BYTES: number;
   DIRECT_UPLOAD_THRESHOLD_BYTES: number;
+  PRESIGNED_URL_EXPIRY_SECONDS: number;
   CSV_TRANSACTION_MAX_WAIT_MS: number;
   CSV_TRANSACTION_TIMEOUT_MS: number;
   SENTRY_DSN?: string;
@@ -77,6 +78,7 @@ export interface EnvironmentConfig {
   ERROR_LOG_LEVEL: string;
   // CORS Configuration
   CORS_ORIGINS?: string;
+  ALLOW_NO_ORIGIN_IN_PRODUCTION: boolean;
   // Add other required environment variables as needed
 }
 
@@ -161,6 +163,7 @@ function validateEnvironment(env: RawEnv, allowMissingRequired: boolean): Enviro
   const directThreshold = Number(
     env.DIRECT_UPLOAD_THRESHOLD_BYTES || env.DIRECT_UPLOAD_THRESHOLD || 2 * 1024 * 1024,
   );
+  const presignedUrlExpirySeconds = Number(env.PRESIGNED_URL_EXPIRY_SECONDS || 6 * 60 * 60);
   const csvTransactionMaxWaitMs = Number(env.CSV_TRANSACTION_MAX_WAIT_MS || 10000);
   const csvTransactionTimeoutMs = Number(env.CSV_TRANSACTION_TIMEOUT_MS || 60000);
 
@@ -187,6 +190,9 @@ function validateEnvironment(env: RawEnv, allowMissingRequired: boolean): Enviro
     DIRECT_UPLOAD_THRESHOLD_BYTES: Number.isNaN(directThreshold)
       ? 2 * 1024 * 1024
       : directThreshold,
+    PRESIGNED_URL_EXPIRY_SECONDS: Number.isNaN(presignedUrlExpirySeconds)
+      ? 6 * 60 * 60
+      : presignedUrlExpirySeconds,
     CSV_TRANSACTION_MAX_WAIT_MS: Number.isNaN(csvTransactionMaxWaitMs)
       ? 10000
       : csvTransactionMaxWaitMs,
@@ -210,6 +216,7 @@ function validateEnvironment(env: RawEnv, allowMissingRequired: boolean): Enviro
     ERROR_LOG_LEVEL: env.ERROR_LOG_LEVEL || 'error',
     // CORS Configuration
     CORS_ORIGINS: env.CORS_ORIGINS,
+    ALLOW_NO_ORIGIN_IN_PRODUCTION: env.ALLOW_NO_ORIGIN_IN_PRODUCTION === 'true',
   };
 }
 

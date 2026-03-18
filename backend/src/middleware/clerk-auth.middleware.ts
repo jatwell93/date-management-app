@@ -127,7 +127,6 @@ export const clerkAuth = async (req: ClerkAuthRequest, res: Response, next: Next
     }
     return res.status(401).json({
       error: 'Invalid or expired token',
-      details: error instanceof Error ? error.message : String(error),
     });
   }
 };

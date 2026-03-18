@@ -134,7 +134,6 @@ describe('Clerk Auth Middleware', () => {
       expect(mockRes.status).toHaveBeenCalledWith(401);
       expect(mockRes.json).toHaveBeenCalledWith({
         error: 'Invalid or expired token',
-        details: 'Token verification failed',
       });
       expect(mockNext).not.toHaveBeenCalled();
     });

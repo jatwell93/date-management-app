@@ -28,6 +28,8 @@ export interface ExpressRequest {
     role: string;
   };
   organizationId?: string;
+  requestTimeoutMs?: number;
+  releaseConnection?: () => void;
 }
 
 /**

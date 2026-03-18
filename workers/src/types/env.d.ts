@@ -17,6 +17,9 @@ export interface Env {
   RATE_LIMIT_WINDOW: string; // milliseconds
   RATE_LIMIT_MAX_REQUESTS: string;
   RATE_LIMIT_MAX_AUTHENTICATED: string;
+  MAX_CONCURRENT_CONNECTIONS?: string; // default: 50
+  QUERY_MAX_RESULTS?: string; // default: 100
+  QUERY_TIMEOUT_MS?: string; // default: 10000
   FRONTEND_URL?: string; // Frontend URL for CORS configuration
 
   // ============================================================================

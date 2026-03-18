@@ -17,6 +17,7 @@ jest.mock('../../middleware/auth.middleware', () => ({
   authenticateToken: (req: any, res: any, next: any) => {
     req.user = { id: 1, email: 'test@example.com' };
     req.userId = 1;
+    req.organizationId = 'org-123';
     next();
   },
 }));
@@ -87,17 +88,32 @@ describe('UploadRoutes', () => {
     it('should call service completeUpload', async () => {
       (mockUploadService.completeUpload as jest.Mock).mockResolvedValue(undefined);
 
-      const res = await request(app).post('/api/upload/complete').send({ key: 'uploads/file.csv' });
+      const res = await request(app)
+        .post('/api/upload/complete')
+        .send({ key: 'uploads/org-123/file.csv' });
 
       expect(res.status).toBe(200);
       expect(res.body).toEqual({ message: 'Upload completed and processing started' });
-      expect(mockUploadService.completeUpload).toHaveBeenCalledWith('uploads/file.csv', 1);
+      expect(mockUploadService.completeUpload).toHaveBeenCalledWith('uploads/org-123/file.csv', 1);
     });
 
     it('should return 400 if key is missing', async () => {
       const res = await request(app).post('/api/upload/complete').send({});
 
       expect(res.status).toBe(400);
+    });
+
+    it('should return 403 when service rejects cross-organization upload key', async () => {
+      (mockUploadService.completeUpload as jest.Mock).mockRejectedValue(
+        new Error('Access denied: Upload key does not belong to this organization'),
+      );
+
+      const res = await request(app)
+        .post('/api/upload/complete')
+        .send({ key: 'uploads/org-other/file.csv' });
+
+      expect(res.status).toBe(403);
+      expect(res.body).toEqual({ error: 'Access denied: Upload key does not belong to this organization' });
     });
   });
 

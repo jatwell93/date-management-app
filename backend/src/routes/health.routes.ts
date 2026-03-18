@@ -7,6 +7,7 @@ import {
   ValidationResult,
 } from '../utils/validate-tier-flags';
 import { getDefaultDatabaseClient } from '../database/database-factory';
+import { authenticateToken, requireManager, AuthRequest } from '../middleware/auth.middleware';
 
 const router = Router();
 
@@ -48,9 +49,6 @@ router.get('/health', async (req, res) => {
         tierFeatureFlags: 'unconfigured',
       },
       error: 'Tier feature flags not properly configured',
-      details: tierFlagsValidationResult?.errors || ['Validation not performed'],
-      missingFeatures: tierFlagsValidationResult?.missingFeatures || [],
-      warnings: tierFlagsValidationResult?.warnings || [],
     });
   }
 
@@ -96,7 +94,7 @@ router.get('/health', async (req, res) => {
         api: 'healthy',
         tierFeatureFlags: 'configured',
       },
-      error: 'Database connectivity error: ' + (error as Error).message,
+      error: 'Database connectivity error',
     });
   } finally {
     if (db) {
@@ -155,7 +153,7 @@ router.get('/ready', async (req, res) => {
 });
 
 // Metrics endpoint for basic server info
-router.get('/metrics', (req, res) => {
+router.get('/metrics', authenticateToken, requireManager, (req: AuthRequest, res) => {
   const uptime = process.uptime();
   const memoryUsage = process.memoryUsage();
   const cpuUsage = process.cpuUsage ? process.cpuUsage() : null;
@@ -180,7 +178,7 @@ router.get('/metrics', (req, res) => {
 });
 
 // Database metrics endpoint
-router.get('/database-metrics', (req, res) => {
+router.get('/database-metrics', authenticateToken, requireManager, (req: AuthRequest, res) => {
   try {
     const dbMetrics = DatabaseMonitoringService.getInstance().getMetrics();
 
@@ -199,7 +197,7 @@ router.get('/database-metrics', (req, res) => {
 });
 
 // Database health check endpoint
-router.get('/database-health', (req, res) => {
+router.get('/database-health', authenticateToken, requireManager, (req: AuthRequest, res) => {
   let db;
   try {
     // Check database connectivity
@@ -243,7 +241,7 @@ router.get('/database-health', (req, res) => {
 });
 
 // Recent alerts endpoint
-router.get('/recent-alerts', (req, res) => {
+router.get('/recent-alerts', authenticateToken, requireManager, (req: AuthRequest, res) => {
   // In a real implementation, this would return alerts from the last N minutes
   // For now, we'll return an empty list
   res.status(200).json({

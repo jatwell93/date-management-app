@@ -31,8 +31,11 @@ STORAGE_PROVIDER = "r2"
 MAX_FILE_SIZE = "10485760"
 CSV_BATCH_SIZE = "100"
 RATE_LIMIT_WINDOW = "60000"
-RATE_LIMIT_MAX_REQUESTS = "10"
-RATE_LIMIT_MAX_AUTHENTICATED = "100"
+RATE_LIMIT_MAX_REQUESTS = "5"
+RATE_LIMIT_MAX_AUTHENTICATED = "30"
+MAX_CONCURRENT_CONNECTIONS = "50"
+QUERY_MAX_RESULTS = "100"
+QUERY_TIMEOUT_MS = "10000"
 
 # R2 Bucket Bindings (Production)
 [[env.production.r2_buckets]]
@@ -43,6 +46,12 @@ bucket_name = "csv-uploads-prod"
 [[env.production.hyperdrive]]
 binding = "HYPERDRIVE"
 id = "4fac081391784eb7bb2db2269c1fa870"
+
+# KV namespace binding for distributed rate limiting
+# Create via: npx wrangler kv namespace create RATE_LIMITER --env production
+[[env.production.kv_namespaces]]
+binding = "RATE_LIMITER"
+id = "a0b277b9636144cba1bacdcb247a2d40"
 
 # Analytics Engine Configuration (Production)
 # IMPORTANT: Uncomment this section AFTER enabling Analytics Engine in Cloudflare Dashboard
@@ -73,6 +82,18 @@ name = "date-management-api-dev"
 [env.development.vars]
 NODE_ENV = "development"
 STORAGE_PROVIDER = "local"
+RATE_LIMIT_WINDOW = "60000"
+RATE_LIMIT_MAX_REQUESTS = "5"
+RATE_LIMIT_MAX_AUTHENTICATED = "30"
+MAX_CONCURRENT_CONNECTIONS = "50"
+QUERY_MAX_RESULTS = "100"
+QUERY_TIMEOUT_MS = "10000"
+
+# KV namespace binding for distributed rate limiting in development/preview
+# Create via: npx wrangler kv namespace create RATE_LIMITER --env development
+[[env.development.kv_namespaces]]
+binding = "RATE_LIMITER"
+id = "bc5312ed84fa4ff1bf59d3dc067309be"
 
 # Build Configuration
 [build]

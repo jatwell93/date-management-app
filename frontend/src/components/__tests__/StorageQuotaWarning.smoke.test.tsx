@@ -15,7 +15,8 @@ import { StorageQuotaWarning } from '../StorageQuotaWarning';
 const MockAppWithStorageWarning: React.FC<{
   userId: number;
   tier: 'free' | 'pro' | 'enterprise';
-}> = ({ userId, tier }) => {
+  token?: string | null;
+}> = ({ userId, tier, token = 'mock-token' }) => {
   const [showWarning, setShowWarning] = React.useState(true);
 
   if (!showWarning) {
@@ -27,6 +28,7 @@ const MockAppWithStorageWarning: React.FC<{
       <h1>Main App Content</h1>
       <StorageQuotaWarning
         userId={userId}
+        token={token}
         subscriptionTier={tier}
         onDismiss={() => setShowWarning(false)}
         onUpgrade={() => undefined}
@@ -44,7 +46,6 @@ describe('StorageQuotaWarning - Smoke Tests', () => {
 
   describe('Integration with App', () => {
     it('should show warning overlay when storage exceeds 80% on free tier', async () => {
-      localStorage.setItem('authToken', 'mock-token');
       fetchMock.mockResponseOnce(
         JSON.stringify({
           used: 858993459, // ~81.9%
@@ -70,7 +71,6 @@ describe('StorageQuotaWarning - Smoke Tests', () => {
     });
 
     it('should not interfere with app when storage is below 80%', async () => {
-      localStorage.setItem('authToken', 'mock-token');
       fetchMock.mockResponseOnce(
         JSON.stringify({
           used: 536870912, // ~50%
@@ -95,7 +95,6 @@ describe('StorageQuotaWarning - Smoke Tests', () => {
     });
 
     it('should allow app interaction after dismissing warning', async () => {
-      localStorage.setItem('authToken', 'mock-token');
       fetchMock.mockResponseOnce(
         JSON.stringify({
           used: 858993459, // ~81.9%
@@ -129,7 +128,6 @@ describe('StorageQuotaWarning - Smoke Tests', () => {
 
   describe('Real-world Scenarios', () => {
     it('should warn free tier user at 85% usage', async () => {
-      localStorage.setItem('authToken', 'test-token');
       const freeLimit = 1 * 1024 * 1024 * 1024; // 1 GB
       const usage = Math.floor(freeLimit * 0.85); // 85%
 
@@ -145,7 +143,7 @@ describe('StorageQuotaWarning - Smoke Tests', () => {
         }),
       );
 
-      render(<MockAppWithStorageWarning userId={1} tier="free" />);
+      render(<MockAppWithStorageWarning userId={1} tier="free" token="test-token" />);
 
       await waitFor(() => {
         expect(screen.getByText(/85%/)).toBeInTheDocument();
@@ -154,7 +152,6 @@ describe('StorageQuotaWarning - Smoke Tests', () => {
     });
 
     it('should warn pro tier user at 90% usage (9GB of 10GB)', async () => {
-      localStorage.setItem('authToken', 'test-token');
       const proLimit = 10 * 1024 * 1024 * 1024; // 10 GB
       const usage = Math.floor(proLimit * 0.9); // 90%
 
@@ -170,7 +167,7 @@ describe('StorageQuotaWarning - Smoke Tests', () => {
         }),
       );
 
-      render(<MockAppWithStorageWarning userId={2} tier="pro" />);
+      render(<MockAppWithStorageWarning userId={2} tier="pro" token="test-token" />);
 
       await waitFor(() => {
         expect(screen.getByText(/90%/)).toBeInTheDocument();
@@ -180,7 +177,6 @@ describe('StorageQuotaWarning - Smoke Tests', () => {
     });
 
     it('should warn at exactly 100% usage', async () => {
-      localStorage.setItem('authToken', 'test-token');
       const limit = 1 * 1024 * 1024 * 1024;
 
       fetchMock.mockResponseOnce(
@@ -195,7 +191,7 @@ describe('StorageQuotaWarning - Smoke Tests', () => {
         }),
       );
 
-      render(<MockAppWithStorageWarning userId={1} tier="free" />);
+      render(<MockAppWithStorageWarning userId={1} tier="free" token="test-token" />);
 
       await waitFor(() => {
         expect(screen.getByText(/100%/)).toBeInTheDocument();
@@ -204,10 +200,11 @@ describe('StorageQuotaWarning - Smoke Tests', () => {
     });
 
     it('should handle network errors gracefully without crashing app', async () => {
-      localStorage.setItem('authToken', 'test-token');
       fetchMock.mockRejectOnce(new Error('Network failure'));
 
-      const { container } = render(<MockAppWithStorageWarning userId={1} tier="free" />);
+      const { container } = render(
+        <MockAppWithStorageWarning userId={1} tier="free" token="test-token" />,
+      );
 
       // App should still render
       expect(screen.getByText('Main App Content')).toBeInTheDocument();
@@ -222,7 +219,6 @@ describe('StorageQuotaWarning - Smoke Tests', () => {
     });
 
     it('should persist dismissal across component remounts', async () => {
-      localStorage.setItem('authToken', 'test-token');
       const quotaData = {
         used: 858993459,
         limit: 1073741824,
@@ -235,7 +231,9 @@ describe('StorageQuotaWarning - Smoke Tests', () => {
 
       // First render and dismiss
       fetchMock.mockResponseOnce(JSON.stringify(quotaData));
-      const { unmount } = render(<MockAppWithStorageWarning userId={1} tier="free" />);
+      const { unmount } = render(
+        <MockAppWithStorageWarning userId={1} tier="free" token="test-token" />,
+      );
 
       await waitFor(() => {
         expect(screen.getByText(/Storage Quota Warning/i)).toBeInTheDocument();
@@ -251,7 +249,7 @@ describe('StorageQuotaWarning - Smoke Tests', () => {
 
       // Remount component
       fetchMock.mockResponseOnce(JSON.stringify(quotaData));
-      render(<MockAppWithStorageWarning userId={1} tier="free" />);
+      render(<MockAppWithStorageWarning userId={1} tier="free" token="test-token" />);
 
       // Should not show warning again (dismissed recently)
       await waitFor(() => {
@@ -262,7 +260,6 @@ describe('StorageQuotaWarning - Smoke Tests', () => {
 
   describe('Performance and UX', () => {
     it('should render without blocking main UI', async () => {
-      localStorage.setItem('authToken', 'test-token');
       fetchMock.mockResponseOnce(
         JSON.stringify({
           used: 858993459,
@@ -276,7 +273,7 @@ describe('StorageQuotaWarning - Smoke Tests', () => {
       );
 
       const startTime = performance.now();
-      render(<MockAppWithStorageWarning userId={1} tier="free" />);
+      render(<MockAppWithStorageWarning userId={1} tier="free" token="test-token" />);
       const renderTime = performance.now() - startTime;
 
       // Should render quickly (< 100ms)
@@ -287,8 +284,6 @@ describe('StorageQuotaWarning - Smoke Tests', () => {
     });
 
     it('should show loading state without blocking', async () => {
-      localStorage.setItem('authToken', 'test-token');
-
       // Delay the response to simulate loading
       fetchMock.mockResponseOnce(
         () =>
@@ -311,7 +306,7 @@ describe('StorageQuotaWarning - Smoke Tests', () => {
           ),
       );
 
-      render(<MockAppWithStorageWarning userId={1} tier="free" />);
+      render(<MockAppWithStorageWarning userId={1} tier="free" token="test-token" />);
 
       // Main app should be visible immediately
       expect(screen.getByText('Main App Content')).toBeInTheDocument();
@@ -328,7 +323,6 @@ describe('StorageQuotaWarning - Smoke Tests', () => {
 
   describe('Accessibility', () => {
     it('should have proper ARIA labels for screen readers', async () => {
-      localStorage.setItem('authToken', 'test-token');
       fetchMock.mockResponseOnce(
         JSON.stringify({
           used: 858993459,
@@ -341,7 +335,7 @@ describe('StorageQuotaWarning - Smoke Tests', () => {
         }),
       );
 
-      render(<MockAppWithStorageWarning userId={1} tier="free" />);
+      render(<MockAppWithStorageWarning userId={1} tier="free" token="test-token" />);
 
       await waitFor(() => {
         const closeButton = screen.getByLabelText('Close warning');
@@ -351,7 +345,6 @@ describe('StorageQuotaWarning - Smoke Tests', () => {
     });
 
     it('should be keyboard navigable', async () => {
-      localStorage.setItem('authToken', 'test-token');
       fetchMock.mockResponseOnce(
         JSON.stringify({
           used: 858993459,
@@ -364,7 +357,7 @@ describe('StorageQuotaWarning - Smoke Tests', () => {
         }),
       );
 
-      render(<MockAppWithStorageWarning userId={1} tier="free" />);
+      render(<MockAppWithStorageWarning userId={1} tier="free" token="test-token" />);
 
       await waitFor(() => {
         expect(screen.getByText(/Storage Quota Warning/i)).toBeInTheDocument();

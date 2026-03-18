@@ -163,6 +163,10 @@ Handle Stripe webhook events for payment processing.
 
 ## Rate Limiting
 
+Current production edge defaults (Cloudflare Workers):
+- Anonymous requests: 5 requests per minute
+- Authenticated requests: 30 requests per minute
+
 | Endpoint | Limit | Time Window |
 |----------|-------|-------------|
 | Login/Register | 5 requests | 15 minutes |
@@ -199,6 +203,7 @@ GET /api/resources?page=1&limit=20
 
 - **Development**: `http://localhost:3000`, `http://localhost:3002`
 - **Production**: Configured via `CORS_ORIGINS` environment variable
+- **No-Origin Requests**: Rejected in production by default; set `ALLOW_NO_ORIGIN_IN_PRODUCTION=true` only for trusted server-to-server clients
 - **Methods**: GET, POST, PUT, PATCH, DELETE, OPTIONS
 - **Headers**: Content-Type, Authorization
 

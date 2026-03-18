@@ -191,7 +191,9 @@ function AppContent({
 
   return (
     <div className="min-h-screen bg-background text-foreground">
-      {isLoggedIn && userId && <StorageQuotaWarning userId={userId} subscriptionTier="free" />}
+      {isLoggedIn && userId && (
+        <StorageQuotaWarning userId={userId} token={token} subscriptionTier="free" />
+      )}
       {isLoggedIn && token && <TrialBanner token={token} />}
       {isLoggedIn && !isHandheld && (
         <nav className="bg-primary text-primary-foreground p-4 shadow-md">

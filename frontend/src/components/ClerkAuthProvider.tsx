@@ -2,24 +2,12 @@ import React, { useState, useEffect } from 'react';
 import { useUser, useAuth, useOrganization, ClerkProvider } from '@clerk/clerk-react';
 import { jwtDecode, JwtPayload } from 'jwt-decode';
 import * as Sentry from '@sentry/react';
+import { offlineSyncService } from '../lib/offline-sync';
 
 interface ClerkAuthProviderProps {
   children: React.ReactNode;
   publishableKey: string;
 }
-
-// Helper functions for JWT handling
-const verifyToken = (token: string | null): boolean => {
-  if (!token) return false;
-  try {
-    const decodedToken = jwtDecode<JwtPayload>(token);
-    const currentTime = Date.now() / 1000;
-    return decodedToken.exp ? decodedToken.exp > currentTime : false;
-  } catch (error) {
-    Sentry.captureException(error, { tags: { feature: 'auth' } });
-    return false;
-  }
-};
 
 const decodeTokenAndGetRole = (token: string | null): 'Manager' | 'Team Member' | null => {
   if (!token) return null;
@@ -95,18 +83,19 @@ function ClerkAuthInner({ children }: { children: React.ReactNode }) {
   const [userName, setUserName] = useState<string | null>(null);
   const [userRole, setUserRole] = useState<'Manager' | 'Team Member' | null>(null);
 
-  // Check for existing session on mount
   useEffect(() => {
-    const storedToken = localStorage.getItem('session');
-    if (storedToken && verifyToken(storedToken)) {
-      setToken(storedToken);
-      setIsLoggedIn(true);
-      setIsFullySignedIn(true);
-      setUserId(decodeTokenAndGetUserId(storedToken));
-      setUserName(decodeTokenAndGetUserName(storedToken));
-      setUserRole(decodeTokenAndGetRole(storedToken));
-    }
+    // Clear any legacy persisted bearer tokens. Auth state remains Clerk-managed.
+    localStorage.removeItem('session');
+    localStorage.removeItem('authToken');
   }, []);
+
+  useEffect(() => {
+    offlineSyncService.setAuthTokenProvider(() => token);
+
+    return () => {
+      offlineSyncService.setAuthTokenProvider(() => null);
+    };
+  }, [token]);
 
   // Handle Clerk authentication state changes
   useEffect(() => {
@@ -125,12 +114,11 @@ function ClerkAuthInner({ children }: { children: React.ReactNode }) {
             setUserId(decodeTokenAndGetUserId(clerkToken));
             setUserName(
               decodeTokenAndGetUserName(clerkToken) ||
-                user.fullName ||
-                user.primaryEmailAddress?.emailAddress ||
-                null,
+              user.fullName ||
+              user.primaryEmailAddress?.emailAddress ||
+              null,
             );
             setUserRole(decodeTokenAndGetRole(clerkToken));
-            localStorage.setItem('session', clerkToken);
           }
         })
         .catch((error) => {
@@ -147,6 +135,7 @@ function ClerkAuthInner({ children }: { children: React.ReactNode }) {
       setUserName(null);
       setUserRole(null);
       localStorage.removeItem('session');
+      localStorage.removeItem('authToken');
     }
 
     return () => {
@@ -157,10 +146,10 @@ function ClerkAuthInner({ children }: { children: React.ReactNode }) {
   const handleLogin = (newToken: string) => {
     setToken(newToken);
     setIsLoggedIn(true);
+    setIsFullySignedIn(true);
     setUserId(decodeTokenAndGetUserId(newToken));
     setUserName(decodeTokenAndGetUserName(newToken));
     setUserRole(decodeTokenAndGetRole(newToken));
-    localStorage.setItem('session', newToken);
   };
 
   const clearClientAuthState = () => {
@@ -171,6 +160,7 @@ function ClerkAuthInner({ children }: { children: React.ReactNode }) {
     setUserName(null);
     setUserRole(null);
     localStorage.removeItem('session');
+    localStorage.removeItem('authToken');
   };
 
   const handleLogout = async () => {

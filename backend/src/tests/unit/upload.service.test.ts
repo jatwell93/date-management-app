@@ -88,7 +88,7 @@ describe('UploadService', () => {
 
   describe('completeUpload', () => {
     it('should complete upload and process file successfully', async () => {
-      const key = 'uploads/123-test.csv';
+      const key = 'uploads/org-123/123-test.csv';
       const userId = 1;
       const fileBuffer = Buffer.from('test,csv,data');
       const metadata = { size: fileBuffer.length, contentType: 'text/csv' };
@@ -127,9 +127,18 @@ describe('UploadService', () => {
     it('should throw error if file does not exist in storage', async () => {
       mockStorage.exists.mockResolvedValue(false);
 
-      await expect(uploadService.completeUpload('uploads/123-test.csv', 1)).rejects.toThrow(
+      await expect(uploadService.completeUpload('uploads/org-123/123-test.csv', 1)).rejects.toThrow(
         'File upload verification failed: File not found in storage',
       );
+    });
+
+    it('should reject upload keys outside the current organization scope', async () => {
+      await expect(uploadService.completeUpload('uploads/org-other/123-test.csv', 1)).rejects.toThrow(
+        'Access denied: Upload key does not belong to this organization',
+      );
+
+      expect(mockStorage.exists).not.toHaveBeenCalled();
+      expect(mockStorage.download).not.toHaveBeenCalled();
     });
   });
 

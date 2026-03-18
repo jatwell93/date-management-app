@@ -77,7 +77,7 @@ export class UploadController {
    */
   async complete(req: AuthRequest, res: Response): Promise<void> {
     try {
-      if (!req.userId) {
+      if (!req.userId || !req.organizationId) {
         res.status(401).json({ error: 'User authentication required' });
         return;
       }
@@ -93,6 +93,10 @@ export class UploadController {
       res.json({ message: 'Upload completed and processing started' });
     } catch (error) {
       console.error('Complete upload error:', error);
+      if (error instanceof Error && error.message.startsWith('Access denied:')) {
+        res.status(403).json({ error: error.message });
+        return;
+      }
       res.status(500).json({ error: error instanceof Error ? error.message : 'Unknown error' });
     }
   }

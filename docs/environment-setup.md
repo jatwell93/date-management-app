@@ -28,8 +28,16 @@ Development does **not** require Neon or R2 credentials.
 - `DATABASE_PROVIDER`: `sqlite` (dev) or `postgresql` (prod)
 - `STORAGE_PROVIDER`: `local` (dev) or `r2` (prod)
 - `FRONTEND_URL` / `CORS_ORIGIN`: allowed frontend origins
+- `CORS_ORIGINS`: comma-separated production origin allowlist for backend CORS checks
+- `ALLOW_NO_ORIGIN_IN_PRODUCTION`: set to `true` only for trusted server-to-server clients that do not send an `Origin` header (default is `false`)
 - `MAX_UPLOAD_SIZE_BYTES`: max upload size
 - `DIRECT_UPLOAD_THRESHOLD_BYTES`: switch between direct vs presigned uploads
+- `PRESIGNED_URL_EXPIRY_SECONDS`: how long presigned URLs remain valid before expiring (default is 6 hours = 21600 seconds); used for R2 direct uploads
+
+## Production CORS Notes
+- Requests without an `Origin` header are rejected in production by default.
+- If you must support trusted non-browser clients that omit `Origin`, explicitly set `ALLOW_NO_ORIGIN_IN_PRODUCTION=true`.
+- Keep `CORS_ORIGINS` restricted to known frontend domains.
 
 ## Workers Secrets
 Production secrets must be added via Wrangler (do **not** store them in Git).

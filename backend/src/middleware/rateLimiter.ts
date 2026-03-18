@@ -9,7 +9,7 @@
  * Uses express-rate-limit for flexible, in-memory rate limiting.
  */
 
-import rateLimit from 'express-rate-limit';
+import rateLimit, { ipKeyGenerator } from 'express-rate-limit';
 import { Request, Response } from 'express';
 import { envConfig } from '../config/environment';
 import { Logger } from '../utils/logger';
@@ -177,8 +177,11 @@ export const presignedUrlLimiter = rateLimit({
       // Authenticated request: rate limit by user
       return `presigned-url:${authReq.organizationId}:${authReq.userId}`;
     }
-    // Fallback to IP if not authenticated (shouldn't happen on this endpoint)
-    return `presigned-url:ip:${(req.headers['x-forwarded-for'] as string) || req.ip}`;
+    // Fallback to IP if not authenticated (shouldn't happen on this endpoint).
+    // Use ipKeyGenerator to normalize IPv6 addresses and prevent bypass.
+    const forwardedFor = (req.headers['x-forwarded-for'] as string | undefined)?.split(',')[0]?.trim();
+    const ip = forwardedFor || req.ip || '';
+    return `presigned-url:ip:${ipKeyGenerator(ip)}`;
   },
   handler: (req: Request, res: Response) => {
     const authReq = req as AuthenticatedRateLimitRequest;

@@ -13,6 +13,14 @@ const loadEnvModule = () => {
   return require('../../config/environment') as typeof import('../../config/environment');
 };
 
+const loadCorsModule = () => {
+  jest.resetModules();
+  jest.doMock('dotenv', () => ({
+    config: jest.fn(),
+  }));
+  return require('../../middleware/cors') as typeof import('../../middleware/cors');
+};
+
 describe('EnvironmentConfig', () => {
   beforeEach(() => {
     process.env = { ...originalEnv };
@@ -87,5 +95,30 @@ describe('EnvironmentConfig', () => {
     expect(envModule.envConfig.NODE_ENV).toBe('production');
     expect(envModule.envConfig.PORT).toBe(8080);
     expect(envModule.envConfig.JWT_SECRET).toBe('worker-secret');
+  });
+
+  it('blocks requests without an Origin header in production by default', () => {
+    process.env.NODE_ENV = 'production';
+    process.env.PORT = '3001';
+    process.env.JWT_SECRET = 'prod-secret';
+    process.env.CORS_ORIGINS = 'https://app.example.com';
+    delete process.env.ALLOW_NO_ORIGIN_IN_PRODUCTION;
+
+    const corsModule = loadCorsModule();
+
+    expect(corsModule.isOriginAllowed()).toBe(false);
+    expect(corsModule.isOriginAllowed('https://app.example.com')).toBe(true);
+  });
+
+  it('allows requests without an Origin header in production when explicitly enabled', () => {
+    process.env.NODE_ENV = 'production';
+    process.env.PORT = '3001';
+    process.env.JWT_SECRET = 'prod-secret';
+    process.env.CORS_ORIGINS = 'https://app.example.com';
+    process.env.ALLOW_NO_ORIGIN_IN_PRODUCTION = 'true';
+
+    const corsModule = loadCorsModule();
+
+    expect(corsModule.isOriginAllowed()).toBe(true);
   });
 });

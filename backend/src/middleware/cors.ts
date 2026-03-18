@@ -38,6 +38,8 @@ const parseAllowedOrigins = (): string[] => {
 };
 
 const allowedOrigins = parseAllowedOrigins();
+const allowNoOriginRequests =
+  envConfig.NODE_ENV !== 'production' || envConfig.ALLOW_NO_ORIGIN_IN_PRODUCTION;
 
 /**
  * CORS options configuration
@@ -45,9 +47,16 @@ const allowedOrigins = parseAllowedOrigins();
 const corsOptions: CorsOptions = {
   // Only allow requests from whitelisted origins
   origin: (origin, callback) => {
-    // Allow requests with no origin (like mobile apps or curl requests)
     if (!origin) {
-      callback(null, true);
+      if (allowNoOriginRequests) {
+        callback(null, true);
+      } else {
+        Logger.warn('CORS request rejected', {
+          origin: 'undefined',
+          reason: 'Missing Origin header in production',
+        });
+        callback(new Error('Not allowed by CORS'));
+      }
       return;
     }
 
@@ -94,7 +103,7 @@ export const getAllowedOrigins = (): string[] => allowedOrigins;
  * Check if an origin is allowed
  * Useful for custom logic
  */
-export const isOriginAllowed = (origin: string): boolean => {
-  if (!origin) return true; // Allow requests with no origin
+export const isOriginAllowed = (origin?: string): boolean => {
+  if (!origin) return allowNoOriginRequests;
   return allowedOrigins.includes(origin);
 };

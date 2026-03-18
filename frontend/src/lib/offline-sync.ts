@@ -12,6 +12,8 @@ type OfflineOperation = {
   timestamp: number;
 };
 
+type AuthTokenProvider = () => string | null;
+
 // Define sync strategy types
 export type SyncStrategy = 'real-time' | 'batch' | 'manual';
 
@@ -40,6 +42,7 @@ class OfflineSyncService {
   private syncInterval: NodeJS.Timeout | null = null;
   private syncInProgress = false;
   private currentStrategy: SyncStrategy;
+  private authTokenProvider: AuthTokenProvider = () => null;
 
   constructor() {
     // Initialize online/offline status
@@ -77,6 +80,10 @@ class OfflineSyncService {
   // Get current sync strategy
   getSyncStrategy(): SyncStrategy {
     return this.currentStrategy;
+  }
+
+  setAuthTokenProvider(provider: AuthTokenProvider) {
+    this.authTokenProvider = provider;
   }
 
   // Reschedule sync based on current strategy
@@ -372,7 +379,7 @@ class OfflineSyncService {
 
   // Get authentication headers
   private getAuthHeaders() {
-    const token = localStorage.getItem('session'); // ✓ Fixed: app stores token as 'session', not 'token'
+    const token = this.authTokenProvider();
     if (token) {
       return {
         Authorization: `Bearer ${token}`,
@@ -383,7 +390,7 @@ class OfflineSyncService {
 
   // Get properly typed headers for fetch requests
   private getHeaders(): { 'Content-Type': string; Authorization?: string } {
-    const token = localStorage.getItem('session'); // ✓ Fixed: app stores token as 'session', not 'token'
+    const token = this.authTokenProvider();
     const headers: { 'Content-Type': string; Authorization?: string } = {
       'Content-Type': 'application/json',
     };

@@ -1,12 +1,12 @@
-# Proposal: Secure Billing Protection from Scraping Attacks
+# Proposal: Secure Billing and Session Protection from Scraping Attacks
 
 ## Why
 
-**Current State:** The architecture uses Cloudflare Workers as the API gateway with Neon serverless Postgres (via Cloudflare Hyperdrive) as the database. A security assessment revealed that the current rate limiter is in-memory only (per-worker instance), making it trivially bypassable by distributed botnets. No Cloudflare-managed rate limiting or budget alerts are currently configured.
+**Current State:** The architecture uses Cloudflare Workers as the API gateway with Neon serverless Postgres (via Cloudflare Hyperdrive) as the database. A security assessment revealed that the current rate limiter is in-memory only (per-worker instance), making it trivially bypassable by distributed botnets. No Cloudflare-managed rate limiting or budget alerts are currently configured. Separately, frontend auth has been improved from persistent browser token storage to in-memory token handling, but browser-session transport is not yet at `httpOnly` cookie isolation.
 
-**Opportunity:** Implement defense-in-depth protections against scraping attacks that could cause unexpected billing spikes. The risk ranges from $50/day (low attack) to $10,000+/day (severe attack) in unexpected charges.
+**Opportunity:** Implement defense-in-depth protections against scraping attacks that could cause unexpected billing spikes, while defining a clear path for stronger browser session transport security.
 
-**Why Now:** Before launching to production, this security hardening must be in place to prevent bill shock from automated attacks.
+**Why Now:** Before and during trial launch, this security hardening must be in place to prevent bill shock from automated attacks and reduce auth/session residual risk in a phased way.
 
 ## What Changes
 
@@ -16,8 +16,12 @@ We will implement:
 - **Database Connection Protection:** Add connection pooling limits and query complexity controls
 - **Budget Alerts:** Configure Cloudflare and Neon spending alerts
 - **Monitoring & Detection:** Anomaly detection thresholds and alerting rules
+- **Session Transport Hardening Plan:** Add post-trial migration path from JS-managed bearer transport to cookie-based `httpOnly` transport
 
-**Outcome:** Production-ready security configuration that prevents billing attacks while allowing legitimate traffic.
+**Outcome:** A single combined security program with clear sequencing:
+1. Pre-trial controls for immediate billing-abuse protection
+2. In-trial tuning and DB cost protection
+3. Post-trial session transport architecture hardening
 
 ## Capabilities
 
@@ -29,12 +33,14 @@ We will implement:
 - `connection-pool-limits`: Middleware to limit concurrent database connections
 - `billing-alerts`: Budget alerts at $10/day, $50/week, $200/month thresholds
 - `anomaly-detection`: Analytics Engine queries to detect scraping patterns
+- `session-transport-migration`: planned migration to `httpOnly` cookie transport with CSRF protection
 
 ### Modified Capabilities
 
 - `rate-limit-middleware`: Currently in-memory; will migrate to KV-backed storage
 - `health-endpoints`: Currently unprotected; will add rate limiting
 - `upload-endpoints`: Currently no query limits; will add complexity controls
+- `browser-auth-transport`: currently in-memory bearer tokens; target architecture is `httpOnly` cookie transport
 
 ## Impact
 
@@ -42,12 +48,15 @@ We will implement:
 - `workers/src/middleware/rate-limit.middleware.ts`: Migrate to KV storage
 - `workers/wrangler.toml`: Add KV namespace binding, update rate limit config
 - `workers/src/middleware/connection-limiter.middleware.ts`: New middleware
+- `frontend/src/components/ClerkAuthProvider.tsx`: Existing in-memory token handling baseline
+- backend auth middleware and frontend API clients (future option 3): cookie transport migration
 - Cloudflare Dashboard: WAF rules, Bot Fight Mode, budget alerts
 
 **External Dependencies:**
 - Cloudflare KV namespace for rate limiting
 - Cloudflare Analytics Engine (enabled in dashboard)
 - Neon project budget alerts
+- No Redis/Upstash required for initial distributed rate limiting path
 
 **Cost Impact:**
 - Cloudflare KV: ~$0.50/10M writes (minimal)
@@ -74,13 +83,9 @@ We will implement:
 
 ## Implementation Steps
 
-1. Create KV namespace for rate limiting
-2. Migrate rate limiter to KV-backed storage
-3. Configure Cloudflare WAF rate limiting rules
-4. Enable Bot Fight Mode
-5. Add connection limiter middleware
-6. Configure budget alerts in Cloudflare
-7. Configure budget alerts in Neon
-8. Add anomaly detection queries
-9. Document thresholds and runbook
-10. Validate all protections work correctly
+1. Option 1 (now): implement Cloudflare edge controls + KV-backed distributed rate limiting + billing alerts
+2. Option 1 (now): validate abuse protection and verify alerting paths
+3. Option 2 (during trial): implement DB connection/query protections and tune thresholds from observed traffic
+4. Option 2 (during trial): complete anomaly runbooks and incident detection workflows
+5. Option 3 (post-trial): migrate browser auth transport to `httpOnly` cookie architecture with CSRF protections
+6. Option 3 (post-trial): complete auth/session security validation and rollout runbook

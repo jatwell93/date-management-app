@@ -21,6 +21,8 @@ import {
 } from './express-adapter';
 import { createProductionCors } from './middleware/cors.middleware';
 import { createRateLimiter } from './middleware/rate-limit.middleware';
+import { createConnectionLimiter } from './middleware/connection-limiter.middleware';
+import { createQueryLimiter } from './middleware/query-limiter.middleware';
 import { createRequestLogger, createErrorHandler, WorkersLogger } from './middleware/error-handler.middleware';
 import { createSecurityHeadersMiddleware } from './middleware/security-headers.middleware';
 import {
@@ -144,7 +146,33 @@ class WorkersRouter {
         }
 
         // Execute handler
-        await route.handler(req, res);
+        if (req.requestTimeoutMs && req.requestTimeoutMs > 0) {
+          const timeoutMs = req.requestTimeoutMs;
+          let timeoutId: ReturnType<typeof setTimeout> | undefined;
+          const timeoutPromise = new Promise<never>((_, reject) => {
+            timeoutId = setTimeout(() => reject(new Error(`Query timeout exceeded (${timeoutMs}ms)`)), timeoutMs);
+          });
+
+          try {
+            await Promise.race([route.handler(req, res), timeoutPromise]);
+          } catch (error) {
+            if (error instanceof Error && error.message.includes('Query timeout exceeded')) {
+              res.status(504).json({
+                error: 'Gateway Timeout',
+                message: 'Request exceeded query timeout limit',
+              });
+              return true;
+            }
+            throw error;
+          } finally {
+            if (timeoutId) {
+              clearTimeout(timeoutId);
+            }
+          }
+        } else {
+          await route.handler(req, res);
+        }
+
         return true;
       }
     }
@@ -267,8 +295,14 @@ function createRouter(env: Env): WorkersRouter {
   
   // 5. JWT validation (after rate limiting to save resources)
   router.use(createJWTAuthMiddleware(env)); // Task 7: JWT validation
+
+  // 6. Query complexity controls (list limits + timeout budget)
+  router.use(createQueryLimiter(env));
+
+  // 7. Database connection pressure protection
+  router.use(createConnectionLimiter(env));
   
-  // 6. Request logging (after auth so organizationId is available)
+  // 8. Request logging (after auth so organizationId is available)
   router.use(createRequestLogger(env));
 
   // Register imported Express routes
@@ -350,9 +384,10 @@ export default Sentry.withSentry(
       const logger = new WorkersLogger(env);
       const errorHandler = createErrorHandler(env);
 
+      let req: ExpressRequest | null = null;
       try {
         // Create Express-compatible request
-        const req = await createExpressRequest(request, {}, env);
+        req = await createExpressRequest(request, {}, env);
         const res = new ExpressResponse();
 
         // Route request
@@ -411,6 +446,10 @@ export default Sentry.withSentry(
             headers: { 'Content-Type': 'application/json' },
           }
         );
+      } finally {
+        if (req?.releaseConnection) {
+          req.releaseConnection();
+        }
       }
     }
   }

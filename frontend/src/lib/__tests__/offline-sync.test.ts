@@ -48,6 +48,7 @@ describe('OfflineSyncService', () => {
     (offlineSyncService as any).isOnline = true;
     (offlineSyncService as any).syncInProgress = false;
     offlineSyncService.setSyncStrategy('real-time');
+    offlineSyncService.setAuthTokenProvider(() => null);
   });
 
   describe('Queue Management', () => {
@@ -109,6 +110,22 @@ describe('OfflineSyncService', () => {
 
       expect(global.fetch).toHaveBeenCalledTimes(1);
       expect(offlineSyncService.getPendingOperationCount()).toBe(0);
+    });
+
+    it('uses the registered auth token provider for sync requests', async () => {
+      offlineSyncService.setAuthTokenProvider(() => 'provider-token');
+
+      await offlineSyncService.addOperation('create', 'product', { name: 'Sync Me' });
+      await offlineSyncService.performSync();
+
+      expect(global.fetch).toHaveBeenCalledWith(
+        expect.any(String),
+        expect.objectContaining({
+          headers: expect.objectContaining({
+            Authorization: 'Bearer provider-token',
+          }),
+        }),
+      );
     });
 
     it('should not sync when queue is empty', async () => {

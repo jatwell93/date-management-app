@@ -24,12 +24,18 @@ describe('StorageQuotaWarning', () => {
     jest.clearAllMocks();
   });
 
+  const renderWarning = (props: Partial<React.ComponentProps<typeof StorageQuotaWarning>> = {}) =>
+    render(<StorageQuotaWarning userId={mockUserId} token={mockAuthToken} {...props} />);
+
+  const renderWarningWithoutToken = (
+    props: Partial<React.ComponentProps<typeof StorageQuotaWarning>> = {},
+  ) => render(<StorageQuotaWarning userId={mockUserId} {...props} />);
+
   describe('API Integration', () => {
     it('fetches quota data on mount with correct URL and headers', async () => {
-      localStorage.setItem('authToken', mockAuthToken);
       fetchMock.mockResponseOnce(JSON.stringify(mockQuotaData));
 
-      render(<StorageQuotaWarning userId={mockUserId} subscriptionTier="free" />);
+      renderWarning({ subscriptionTier: 'free' });
 
       await waitFor(() => {
         expect(fetchMock).toHaveBeenCalledWith(
@@ -44,10 +50,9 @@ describe('StorageQuotaWarning', () => {
     });
 
     it('includes subscription tier in query params', async () => {
-      localStorage.setItem('authToken', mockAuthToken);
       fetchMock.mockResponseOnce(JSON.stringify({ ...mockQuotaData, tier: 'pro' }));
 
-      render(<StorageQuotaWarning userId={mockUserId} subscriptionTier="pro" />);
+      renderWarning({ subscriptionTier: 'pro' });
 
       await waitFor(() => {
         expect(fetchMock).toHaveBeenCalledWith('/api/storage-quota/1?tier=pro', expect.anything());
@@ -55,10 +60,9 @@ describe('StorageQuotaWarning', () => {
     });
 
     it('handles API error gracefully', async () => {
-      localStorage.setItem('authToken', mockAuthToken);
       fetchMock.mockRejectOnce(new Error('Network error'));
 
-      const { container } = render(<StorageQuotaWarning userId={mockUserId} />);
+      const { container } = renderWarning();
 
       await waitFor(() => {
         expect(container.firstChild).toBeNull(); // Modal should not render
@@ -66,10 +70,9 @@ describe('StorageQuotaWarning', () => {
     });
 
     it('handles non-OK response status', async () => {
-      localStorage.setItem('authToken', mockAuthToken);
       fetchMock.mockResponseOnce('Unauthorized', { status: 401 });
 
-      const { container } = render(<StorageQuotaWarning userId={mockUserId} />);
+      const { container } = renderWarning();
 
       await waitFor(() => {
         expect(container.firstChild).toBeNull(); // Modal should not render
@@ -77,7 +80,7 @@ describe('StorageQuotaWarning', () => {
     });
 
     it('does not fetch when no auth token exists', async () => {
-      const { container } = render(<StorageQuotaWarning userId={mockUserId} />);
+      const { container } = renderWarningWithoutToken();
 
       await waitFor(() => {
         expect(fetchMock).not.toHaveBeenCalled();
@@ -88,10 +91,9 @@ describe('StorageQuotaWarning', () => {
 
   describe('Visibility Logic', () => {
     it('shows warning when quota is at warning threshold (80%)', async () => {
-      localStorage.setItem('authToken', mockAuthToken);
       fetchMock.mockResponseOnce(JSON.stringify(mockQuotaData));
 
-      render(<StorageQuotaWarning userId={mockUserId} />);
+      renderWarning();
 
       await waitFor(() => {
         expect(screen.getByText(/Storage Quota Warning/i)).toBeInTheDocument();
@@ -99,7 +101,6 @@ describe('StorageQuotaWarning', () => {
     });
 
     it('shows warning when quota is above threshold (90%)', async () => {
-      localStorage.setItem('authToken', mockAuthToken);
       const highUsage = {
         ...mockQuotaData,
         used: 966367642, // ~922 MB (90%)
@@ -107,7 +108,7 @@ describe('StorageQuotaWarning', () => {
       };
       fetchMock.mockResponseOnce(JSON.stringify(highUsage));
 
-      render(<StorageQuotaWarning userId={mockUserId} />);
+      renderWarning();
 
       await waitFor(() => {
         expect(screen.getByText(/Storage Quota Warning/i)).toBeInTheDocument();
@@ -115,7 +116,6 @@ describe('StorageQuotaWarning', () => {
     });
 
     it('does not show when quota is below threshold (70%)', async () => {
-      localStorage.setItem('authToken', mockAuthToken);
       const lowUsage = {
         ...mockQuotaData,
         used: 751619277, // ~717 MB (70%)
@@ -124,7 +124,7 @@ describe('StorageQuotaWarning', () => {
       };
       fetchMock.mockResponseOnce(JSON.stringify(lowUsage));
 
-      const { container } = render(<StorageQuotaWarning userId={mockUserId} />);
+      const { container } = renderWarning();
 
       await waitFor(() => {
         expect(container.firstChild).toBeNull();
@@ -132,14 +132,13 @@ describe('StorageQuotaWarning', () => {
     });
 
     it('does not show when isWarning is false', async () => {
-      localStorage.setItem('authToken', mockAuthToken);
       const noWarning = {
         ...mockQuotaData,
         isWarning: false,
       };
       fetchMock.mockResponseOnce(JSON.stringify(noWarning));
 
-      const { container } = render(<StorageQuotaWarning userId={mockUserId} />);
+      const { container } = renderWarning();
 
       await waitFor(() => {
         expect(container.firstChild).toBeNull();
@@ -149,12 +148,11 @@ describe('StorageQuotaWarning', () => {
 
   describe('Data Display', () => {
     beforeEach(async () => {
-      localStorage.setItem('authToken', mockAuthToken);
       fetchMock.mockResponseOnce(JSON.stringify(mockQuotaData));
     });
 
     it('displays percentage correctly', async () => {
-      render(<StorageQuotaWarning userId={mockUserId} />);
+      renderWarning();
 
       await waitFor(() => {
         expect(screen.getByText(/81\.9%/)).toBeInTheDocument();
@@ -162,7 +160,7 @@ describe('StorageQuotaWarning', () => {
     });
 
     it('displays used storage amount', async () => {
-      render(<StorageQuotaWarning userId={mockUserId} />);
+      renderWarning();
 
       await waitFor(() => {
         expect(screen.getByText(/819\.2 MB/)).toBeInTheDocument();
@@ -170,7 +168,7 @@ describe('StorageQuotaWarning', () => {
     });
 
     it('displays total storage limit', async () => {
-      render(<StorageQuotaWarning userId={mockUserId} />);
+      renderWarning();
 
       await waitFor(() => {
         expect(screen.getByText('1 GB')).toBeInTheDocument();
@@ -178,7 +176,7 @@ describe('StorageQuotaWarning', () => {
     });
 
     it('displays remaining storage when not at limit', async () => {
-      render(<StorageQuotaWarning userId={mockUserId} />);
+      renderWarning();
 
       await waitFor(() => {
         expect(screen.getByText(/You have.*remaining/i)).toBeInTheDocument();
@@ -194,7 +192,7 @@ describe('StorageQuotaWarning', () => {
       };
       fetchMock.mockResponseOnce(JSON.stringify(fullStorage));
 
-      render(<StorageQuotaWarning userId={mockUserId} />);
+      renderWarning();
 
       await waitFor(() => {
         expect(screen.getByText(/You have reached your storage limit/i)).toBeInTheDocument();
@@ -202,7 +200,7 @@ describe('StorageQuotaWarning', () => {
     });
 
     it('displays current subscription tier', async () => {
-      render(<StorageQuotaWarning userId={mockUserId} subscriptionTier="free" />);
+      renderWarning({ subscriptionTier: 'free' });
 
       await waitFor(() => {
         expect(screen.getByText('Current Plan:')).toBeInTheDocument();
@@ -220,7 +218,7 @@ describe('StorageQuotaWarning', () => {
       };
       fetchMock.mockResponseOnce(JSON.stringify(proQuota));
 
-      render(<StorageQuotaWarning userId={mockUserId} subscriptionTier="pro" />);
+      renderWarning({ subscriptionTier: 'pro' });
 
       await waitFor(() => {
         expect(screen.getByText('Current Plan:')).toBeInTheDocument();
@@ -229,7 +227,7 @@ describe('StorageQuotaWarning', () => {
     });
 
     it('renders progress bar with correct width', async () => {
-      render(<StorageQuotaWarning userId={mockUserId} />);
+      renderWarning();
 
       await waitFor(() => {
         const progressFill = document.querySelector('.storage-quota-warning__progress-fill');
@@ -246,7 +244,7 @@ describe('StorageQuotaWarning', () => {
       };
       fetchMock.mockResponseOnce(JSON.stringify(overQuota));
 
-      render(<StorageQuotaWarning userId={mockUserId} />);
+      renderWarning();
 
       await waitFor(() => {
         const progressFill = document.querySelector('.storage-quota-warning__progress-fill');
@@ -257,13 +255,12 @@ describe('StorageQuotaWarning', () => {
 
   describe('Dismiss Functionality', () => {
     beforeEach(async () => {
-      localStorage.setItem('authToken', mockAuthToken);
       fetchMock.mockResponseOnce(JSON.stringify(mockQuotaData));
     });
 
     it('dismisses when close button is clicked', async () => {
       const onDismiss = jest.fn();
-      render(<StorageQuotaWarning userId={mockUserId} onDismiss={onDismiss} />);
+      renderWarning({ onDismiss });
 
       await waitFor(() => {
         expect(screen.getByLabelText('Close warning')).toBeInTheDocument();
@@ -280,7 +277,7 @@ describe('StorageQuotaWarning', () => {
 
     it('dismisses when "Remind Me Later" button is clicked', async () => {
       const onDismiss = jest.fn();
-      render(<StorageQuotaWarning userId={mockUserId} onDismiss={onDismiss} />);
+      renderWarning({ onDismiss });
 
       await waitFor(() => {
         expect(screen.getByText('Remind Me Later')).toBeInTheDocument();
@@ -297,7 +294,7 @@ describe('StorageQuotaWarning', () => {
 
     it('dismisses when overlay is clicked', async () => {
       const onDismiss = jest.fn();
-      render(<StorageQuotaWarning userId={mockUserId} onDismiss={onDismiss} />);
+      renderWarning({ onDismiss });
 
       await waitFor(() => {
         expect(screen.getByText(/Storage Quota Warning/i)).toBeInTheDocument();
@@ -314,7 +311,7 @@ describe('StorageQuotaWarning', () => {
     });
 
     it('stores dismiss timestamp in localStorage', async () => {
-      render(<StorageQuotaWarning userId={mockUserId} />);
+      renderWarning();
 
       await waitFor(() => {
         expect(screen.getByText('Remind Me Later')).toBeInTheDocument();
@@ -344,7 +341,7 @@ describe('StorageQuotaWarning', () => {
       threeDaysAgo.setDate(threeDaysAgo.getDate() - 3);
       localStorage.setItem(`storage-quota-dismissed-${mockUserId}`, threeDaysAgo.toISOString());
 
-      const { container } = render(<StorageQuotaWarning userId={mockUserId} autoHideDays={7} />);
+      const { container } = renderWarning({ autoHideDays: 7 });
 
       await waitFor(() => {
         expect(container.firstChild).toBeNull(); // Should not render
@@ -357,7 +354,7 @@ describe('StorageQuotaWarning', () => {
       eightDaysAgo.setDate(eightDaysAgo.getDate() - 8);
       localStorage.setItem(`storage-quota-dismissed-${mockUserId}`, eightDaysAgo.toISOString());
 
-      render(<StorageQuotaWarning userId={mockUserId} autoHideDays={7} />);
+      renderWarning({ autoHideDays: 7 });
 
       await waitFor(() => {
         expect(screen.getByText(/Storage Quota Warning/i)).toBeInTheDocument();
@@ -370,7 +367,7 @@ describe('StorageQuotaWarning', () => {
       twoDaysAgo.setDate(twoDaysAgo.getDate() - 2);
       localStorage.setItem(`storage-quota-dismissed-${mockUserId}`, twoDaysAgo.toISOString());
 
-      const { container } = render(<StorageQuotaWarning userId={mockUserId} autoHideDays={3} />);
+      const { container } = renderWarning({ autoHideDays: 3 });
 
       await waitFor(() => {
         expect(container.firstChild).toBeNull(); // Should not render (within 3 days)
@@ -380,13 +377,12 @@ describe('StorageQuotaWarning', () => {
 
   describe('Upgrade Button', () => {
     beforeEach(async () => {
-      localStorage.setItem('authToken', mockAuthToken);
       fetchMock.mockResponseOnce(JSON.stringify(mockQuotaData));
     });
 
     it('calls onUpgrade when Upgrade Plan button is clicked', async () => {
       const onUpgrade = jest.fn();
-      render(<StorageQuotaWarning userId={mockUserId} onUpgrade={onUpgrade} />);
+      renderWarning({ onUpgrade });
 
       await waitFor(() => {
         expect(screen.getByText('Upgrade Plan')).toBeInTheDocument();
@@ -401,7 +397,7 @@ describe('StorageQuotaWarning', () => {
     });
 
     it('does not render Upgrade Plan button when onUpgrade is not provided', async () => {
-      render(<StorageQuotaWarning userId={mockUserId} />);
+      renderWarning();
 
       await waitFor(() => {
         expect(screen.getByText(/Storage Quota Warning/i)).toBeInTheDocument();
@@ -423,7 +419,6 @@ describe('StorageQuotaWarning', () => {
 
       for (const testCase of testCases) {
         fetchMock.resetMocks();
-        localStorage.setItem('authToken', mockAuthToken);
 
         const quota = {
           ...mockQuotaData,
@@ -432,7 +427,7 @@ describe('StorageQuotaWarning', () => {
         };
         fetchMock.mockResponseOnce(JSON.stringify(quota));
 
-        const { unmount } = render(<StorageQuotaWarning userId={mockUserId} />);
+        const { unmount } = renderWarning();
 
         await waitFor(() => {
           // Check that the expected text appears somewhere in the progress text area
@@ -447,12 +442,11 @@ describe('StorageQuotaWarning', () => {
 
   describe('Footer Message', () => {
     beforeEach(async () => {
-      localStorage.setItem('authToken', mockAuthToken);
       fetchMock.mockResponseOnce(JSON.stringify(mockQuotaData));
     });
 
     it('displays autoHideDays in footer message', async () => {
-      render(<StorageQuotaWarning userId={mockUserId} autoHideDays={7} />);
+      renderWarning({ autoHideDays: 7 });
 
       await waitFor(() => {
         expect(screen.getByText(/remind you again in 7 days/i)).toBeInTheDocument();
@@ -463,7 +457,7 @@ describe('StorageQuotaWarning', () => {
       fetchMock.resetMocks();
       fetchMock.mockResponseOnce(JSON.stringify(mockQuotaData));
 
-      render(<StorageQuotaWarning userId={mockUserId} autoHideDays={14} />);
+      renderWarning({ autoHideDays: 14 });
 
       await waitFor(() => {
         expect(screen.getByText(/remind you again in 14 days/i)).toBeInTheDocument();
@@ -473,7 +467,6 @@ describe('StorageQuotaWarning', () => {
 
   describe('Edge Cases', () => {
     it('handles 0 bytes used', async () => {
-      localStorage.setItem('authToken', mockAuthToken);
       const zeroUsage = {
         ...mockQuotaData,
         used: 0,
@@ -482,7 +475,7 @@ describe('StorageQuotaWarning', () => {
       };
       fetchMock.mockResponseOnce(JSON.stringify(zeroUsage));
 
-      const { container } = render(<StorageQuotaWarning userId={mockUserId} />);
+      const { container } = renderWarning();
 
       await waitFor(() => {
         expect(container.firstChild).toBeNull(); // Should not show
@@ -490,7 +483,6 @@ describe('StorageQuotaWarning', () => {
     });
 
     it('handles exactly 80% usage', async () => {
-      localStorage.setItem('authToken', mockAuthToken);
       const exactly80 = {
         ...mockQuotaData,
         used: 858993459, // Exactly 80%
@@ -499,7 +491,7 @@ describe('StorageQuotaWarning', () => {
       };
       fetchMock.mockResponseOnce(JSON.stringify(exactly80));
 
-      render(<StorageQuotaWarning userId={mockUserId} />);
+      renderWarning();
 
       await waitFor(() => {
         expect(screen.getByText(/Storage Quota Warning/i)).toBeInTheDocument();
@@ -507,7 +499,6 @@ describe('StorageQuotaWarning', () => {
     });
 
     it('handles over 100% usage', async () => {
-      localStorage.setItem('authToken', mockAuthToken);
       const overLimit = {
         ...mockQuotaData,
         used: 1181116007, // 110%
@@ -516,7 +507,7 @@ describe('StorageQuotaWarning', () => {
       };
       fetchMock.mockResponseOnce(JSON.stringify(overLimit));
 
-      render(<StorageQuotaWarning userId={mockUserId} />);
+      renderWarning();
 
       await waitFor(() => {
         expect(screen.getByText(/110%/)).toBeInTheDocument();

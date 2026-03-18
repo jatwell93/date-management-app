@@ -26,6 +26,7 @@ interface StorageQuotaInfo {
 
 interface StorageQuotaWarningProps {
   userId: number;
+  token?: string | null;
   subscriptionTier?: 'free' | 'pro' | 'enterprise';
   onUpgrade?: () => void;
   onDismiss?: () => void;
@@ -34,6 +35,7 @@ interface StorageQuotaWarningProps {
 
 export const StorageQuotaWarning: React.FC<StorageQuotaWarningProps> = ({
   userId,
+  token,
   subscriptionTier = 'free',
   onUpgrade,
   onDismiss,
@@ -48,15 +50,14 @@ export const StorageQuotaWarning: React.FC<StorageQuotaWarningProps> = ({
   useEffect(() => {
     const fetchQuota = async () => {
       try {
-        const authToken = localStorage.getItem('authToken');
-        if (!authToken) {
+        if (!token) {
           setDismissed(true);
           return;
         }
 
         const response = await fetch(`/api/storage-quota/${userId}?tier=${subscriptionTier}`, {
           headers: {
-            Authorization: `Bearer ${authToken}`,
+            Authorization: `Bearer ${token}`,
           },
         });
 
@@ -93,7 +94,7 @@ export const StorageQuotaWarning: React.FC<StorageQuotaWarningProps> = ({
     };
 
     fetchQuota();
-  }, [userId, subscriptionTier, autoHideDays]);
+  }, [userId, subscriptionTier, autoHideDays, token]);
 
   // Handle dismiss
   const handleDismiss = () => {

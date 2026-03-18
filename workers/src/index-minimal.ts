@@ -15,6 +15,14 @@ import { createWorkersDatabase } from './database';
 import * as Sentry from '@sentry/cloudflare';
 
 const COMPRESSION_MIN_BYTES = 1024;
+const inMemoryRateLimitStore = new Map<string, { count: number; resetTime: number }>();
+
+interface RateLimitDecision {
+  allowed: boolean;
+  limit: number;
+  remaining: number;
+  resetTime: number;
+}
 
 /**
  * CORS headers for production
@@ -139,6 +147,121 @@ export async function maybeCompressJsonResponse(request: Request, response: Resp
   });
 }
 
+function getClientIp(request: Request): string {
+  return (
+    request.headers.get('CF-Connecting-IP') ||
+    request.headers.get('X-Forwarded-For')?.split(',')[0].trim() ||
+    'unknown'
+  );
+}
+
+function applyRateLimitHeaders(
+  response: Response,
+  decision: RateLimitDecision,
+  retryAfterSeconds?: number
+): Response {
+  const headers = new Headers(response.headers);
+  headers.set('X-RateLimit-Limit', String(decision.limit));
+  headers.set('X-RateLimit-Remaining', String(decision.remaining));
+  headers.set('X-RateLimit-Reset', new Date(decision.resetTime).toISOString());
+
+  if (retryAfterSeconds !== undefined) {
+    headers.set('Retry-After', String(retryAfterSeconds));
+  }
+
+  return new Response(response.body, {
+    status: response.status,
+    statusText: response.statusText,
+    headers,
+  });
+}
+
+async function checkRateLimit(request: Request, env: Env): Promise<RateLimitDecision> {
+  const windowMs = parseInt(env.RATE_LIMIT_WINDOW || '60000', 10);
+  const maxAnonymous = parseInt(env.RATE_LIMIT_MAX_REQUESTS || '5', 10);
+  const maxAuthenticated = parseInt(env.RATE_LIMIT_MAX_AUTHENTICATED || '30', 10);
+
+  const isAuthenticated = Boolean(request.headers.get('Authorization'));
+  const limit = isAuthenticated ? maxAuthenticated : maxAnonymous;
+
+  const ip = getClientIp(request);
+  const keyBase = `${isAuthenticated ? 'auth' : 'anon'}:${ip}`;
+
+  const now = Date.now();
+  const currentWindow = Math.floor(now / windowMs);
+  const previousWindow = currentWindow - 1;
+  const currentKey = `ratelimit:${keyBase}:${currentWindow}`;
+  const previousKey = `ratelimit:${keyBase}:${previousWindow}`;
+  const resetTime = (currentWindow + 1) * windowMs;
+
+  if (env.RATE_LIMITER) {
+    const [currentRaw, previousRaw] = await Promise.all([
+      env.RATE_LIMITER.get(currentKey),
+      env.RATE_LIMITER.get(previousKey),
+    ]);
+
+    const currentCount = Number.parseInt(currentRaw || '0', 10) || 0;
+    const previousCount = Number.parseInt(previousRaw || '0', 10) || 0;
+
+    const elapsedInWindow = now - currentWindow * windowMs;
+    const previousWeight = (windowMs - elapsedInWindow) / windowMs;
+    const effectiveCount = currentCount + previousCount * previousWeight;
+
+    if (effectiveCount + 1 > limit) {
+      return {
+        allowed: false,
+        limit,
+        remaining: 0,
+        resetTime,
+      };
+    }
+
+    const nextCurrentCount = currentCount + 1;
+    await env.RATE_LIMITER.put(currentKey, String(nextCurrentCount), {
+      expirationTtl: Math.ceil((windowMs * 2) / 1000),
+    });
+
+    return {
+      allowed: true,
+      limit,
+      remaining: Math.max(0, Math.floor(limit - (effectiveCount + 1))),
+      resetTime,
+    };
+  }
+
+  const existing = inMemoryRateLimitStore.get(keyBase);
+  if (!existing || now > existing.resetTime) {
+    inMemoryRateLimitStore.set(keyBase, {
+      count: 1,
+      resetTime: now + windowMs,
+    });
+
+    return {
+      allowed: true,
+      limit,
+      remaining: limit - 1,
+      resetTime: now + windowMs,
+    };
+  }
+
+  if (existing.count >= limit) {
+    return {
+      allowed: false,
+      limit,
+      remaining: 0,
+      resetTime: existing.resetTime,
+    };
+  }
+
+  existing.count += 1;
+  return {
+    allowed: true,
+    limit,
+    remaining: limit - existing.count,
+    resetTime: existing.resetTime,
+  };
+}
+
 /**
  * Main Workers fetch handler
  */
@@ -173,13 +296,33 @@ export default Sentry.withSentry(
         return maybeCompressJsonResponse(request, healthResponse);
       }
 
-      if (pathname.startsWith('/api/') && !env.JWT_SECRET?.trim()) {
-        const jwtErrorResponse = errorResponse('JWT_SECRET is required', 500, env, requestOrigin);
-        return maybeCompressJsonResponse(request, jwtErrorResponse);
-      }
-
       // API routes
       if (pathname.startsWith('/api/')) {
+        const rateLimitDecision = await checkRateLimit(request, env);
+        const finalizeApiResponse = async (responseLike: Response | Promise<Response>) => {
+          const response = await responseLike;
+          return maybeCompressJsonResponse(request, applyRateLimitHeaders(response, rateLimitDecision));
+        };
+
+        if (!rateLimitDecision.allowed) {
+          const retryAfter = Math.max(1, Math.ceil((rateLimitDecision.resetTime - Date.now()) / 1000));
+          const blockedResponse = errorResponse(
+            `Rate limit exceeded. Please try again in ${retryAfter} seconds.`,
+            429,
+            env,
+            requestOrigin
+          );
+          return maybeCompressJsonResponse(
+            request,
+            applyRateLimitHeaders(blockedResponse, rateLimitDecision, retryAfter)
+          );
+        }
+
+        if (!env.JWT_SECRET?.trim()) {
+          const jwtErrorResponse = errorResponse('JWT_SECRET is required', 500, env, requestOrigin);
+          return finalizeApiResponse(jwtErrorResponse);
+        }
+
         // Initialize database connection
         const db = createWorkersDatabase(env);
 
@@ -187,36 +330,36 @@ export default Sentry.withSentry(
         switch (true) {
           // Auth endpoints
           case pathname === '/api/auth/login' && method === 'POST':
-            return maybeCompressJsonResponse(request, await handleLogin(request, db, env));
+            return finalizeApiResponse(handleLogin(request, db, env));
 
           case pathname === '/api/auth/register' && method === 'POST':
-            return maybeCompressJsonResponse(request, await handleRegister(request, db, env));
+            return finalizeApiResponse(handleRegister(request, db, env));
 
           // User endpoints (require auth)
           case pathname === '/api/users/me' && method === 'GET':
-            return maybeCompressJsonResponse(request, await handleGetCurrentUser(request, db, env));
+            return finalizeApiResponse(handleGetCurrentUser(request, db, env));
 
           // Products endpoints
           case pathname === '/api/products' && method === 'GET':
-            return maybeCompressJsonResponse(request, await handleGetProducts(request, db, env));
+            return finalizeApiResponse(handleGetProducts(request, db, env));
 
           case pathname.match(/^\/api\/products\/\d+$/) && method === 'GET':
-            return maybeCompressJsonResponse(request, await handleGetProduct(request, db, env, pathname));
+            return finalizeApiResponse(handleGetProduct(request, db, env, pathname));
 
           // Inventory endpoints
           case pathname === '/api/inventory-items' && method === 'GET':
-            return maybeCompressJsonResponse(request, await handleGetInventory(request, db, env));
+            return finalizeApiResponse(handleGetInventory(request, db, env));
 
           // Store areas endpoints
           case pathname === '/api/store-areas' && method === 'GET':
-            return maybeCompressJsonResponse(request, await handleGetStoreAreas(request, db, env));
+            return finalizeApiResponse(handleGetStoreAreas(request, db, env));
 
           // Dashboard endpoints
           case pathname === '/api/dashboard' && method === 'GET':
-            return maybeCompressJsonResponse(request, await handleGetDashboard(request, db, env));
+            return finalizeApiResponse(handleGetDashboard(request, db, env));
 
           default:
-            return maybeCompressJsonResponse(request, errorResponse('Not Found', 404, env));
+            return finalizeApiResponse(errorResponse('Not Found', 404, env));
         }
       }
 
