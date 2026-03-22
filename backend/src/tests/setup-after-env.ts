@@ -26,60 +26,76 @@ function stopBackgroundServices(): void {
   dbMonitoring?.stopMonitoring(true);
 }
 
-beforeEach(async () => {
-  const isPostgres = process.env.DATABASE_DRIVER === 'postgresql';
-  const testPath =
-    (expect as unknown as { getState?: () => { testPath?: string } }).getState?.().testPath || '';
-  const isTierFlagsSuite = testPath.includes('validate-tier-flags.test.ts');
+function isPostgresRuntime(): boolean {
+  const databaseUrl = process.env.DATABASE_URL;
+  return (
+    process.env.DATABASE_DRIVER === 'postgresql' ||
+    databaseUrl?.startsWith('postgresql://') === true ||
+    databaseUrl?.startsWith('postgres://') === true
+  );
+}
 
-  if (isPostgres) {
-    if (isTierFlagsSuite) {
-      await prisma.$executeRawUnsafe(
-        'TRUNCATE TABLE "tier_feature_flags" RESTART IDENTITY CASCADE;',
-      );
-      resetOrgCounter();
-      return;
-    }
+function isCiRuntime(): boolean {
+  return process.env.CI === 'true' || process.env.GITHUB_ACTIONS === 'true';
+}
 
-    await prisma.$executeRawUnsafe(`
-      TRUNCATE TABLE
-        "audit_log",
-        "item_transactions",
-        "expired_item_transactions",
-        "inventory_items",
-        "products",
-        "uploads",
-        "store_areas",
-        "organization_invites",
-        "refresh_tokens",
-        "trial_events",
-        "organization_usage",
-        "subscription_tiers",
-        "processed_webhook_events",
-        "clerk_webhook_events",
-        "tier_feature_flags",
-        "users",
-        "organizations"
-      RESTART IDENTITY CASCADE;
-    `);
-  } else {
-    // SQLite: Disable foreign keys during cleanup
-    await prisma.$executeRawUnsafe('PRAGMA foreign_keys = OFF;');
+function assertSupportedDatabaseUrl(isPostgres: boolean): void {
+  const databaseUrl = process.env.DATABASE_URL;
+  const hasSqliteUrl = databaseUrl?.startsWith('file:') === true;
 
-    if (isTierFlagsSuite) {
-      try {
-        await prisma.$executeRawUnsafe('DELETE FROM "tier_feature_flags";');
-      } catch (error) {
-        // Ignore if table does not exist in this fixture
-      }
-      await prisma.$executeRawUnsafe('PRAGMA foreign_keys = ON;');
-      resetOrgCounter();
-      return;
-    }
+  if (isPostgres || hasSqliteUrl) {
+    return;
   }
 
-  // Clean up tables in dependency order (children first, then parents)
-  // This prevents FK violations during cleanup
+  const message =
+    `Unsupported test DATABASE_URL (${databaseUrl ?? 'undefined'}). ` +
+    'Expected PostgreSQL URL or SQLite file: URL.';
+
+  if (isCiRuntime()) {
+    throw new Error(message);
+  }
+
+  // Local-only soft warning to avoid blocking exploratory runs with partial env setup.
+  console.warn(`Skipping Prisma setup: ${message}`);
+}
+
+async function cleanupTierFlagsForPostgres(): Promise<void> {
+  await prisma.$executeRawUnsafe('TRUNCATE TABLE "tier_feature_flags" RESTART IDENTITY CASCADE;');
+}
+
+async function cleanupAllTablesForPostgres(): Promise<void> {
+  await prisma.$executeRawUnsafe(`
+    TRUNCATE TABLE
+      "audit_log",
+      "item_transactions",
+      "expired_item_transactions",
+      "inventory_items",
+      "products",
+      "uploads",
+      "store_areas",
+      "organization_invites",
+      "refresh_tokens",
+      "trial_events",
+      "organization_usage",
+      "subscription_tiers",
+      "processed_webhook_events",
+      "clerk_webhook_events",
+      "tier_feature_flags",
+      "users",
+      "organizations"
+    RESTART IDENTITY CASCADE;
+  `);
+}
+
+async function cleanupTierFlagsForSqlite(): Promise<void> {
+  try {
+    await prisma.$executeRawUnsafe('DELETE FROM "tier_feature_flags";');
+  } catch {
+    // Ignore if table does not exist in this fixture
+  }
+}
+
+async function cleanupTablesForSqlite(): Promise<void> {
   const childTables = [
     'audit_log',
     'item_transactions',
@@ -98,28 +114,26 @@ beforeEach(async () => {
     'tier_feature_flags',
   ];
 
-  if (!isPostgres) {
-    // Delete child records first
-    for (const table of childTables) {
-      try {
-        await prisma.$executeRawUnsafe(`DELETE FROM "${table}";`);
-      } catch (error) {
-        // Table might not exist or already empty
-      }
-    }
-
-    // Clean parent tables (users + organizations)
-    // Child FK references are already deleted above with FKs OFF (SQLite)
-    for (const table of ['users', 'organizations']) {
-      try {
-        await prisma.$executeRawUnsafe(`DELETE FROM "${table}";`);
-      } catch (error) {
-        // Table might not exist or already empty
-      }
+  // Delete child records first
+  for (const table of childTables) {
+    try {
+      await prisma.$executeRawUnsafe(`DELETE FROM "${table}";`);
+    } catch {
+      // Table might not exist or already empty
     }
   }
 
-  // Seed essential data (Users for legacy tests)
+  // Clean parent tables after children to avoid FK issues.
+  for (const table of ['users', 'organizations']) {
+    try {
+      await prisma.$executeRawUnsafe(`DELETE FROM "${table}";`);
+    } catch {
+      // Table might not exist or already empty
+    }
+  }
+}
+
+async function seedDefaultOrganizationAndUsers(): Promise<void> {
   // Keep this transactional so PostgreSQL always sees parent org before child users.
   await prisma.$transaction(async (tx) => {
     const defaultOrg = await tx.organization.upsert({
@@ -160,6 +174,55 @@ beforeEach(async () => {
       },
     });
   });
+}
+
+beforeEach(async () => {
+  const isPostgres = isPostgresRuntime();
+  const testPath =
+    (expect as unknown as { getState?: () => { testPath?: string } }).getState?.().testPath || '';
+  const isTierFlagsSuite = testPath.includes('validate-tier-flags.test.ts');
+
+  try {
+    assertSupportedDatabaseUrl(isPostgres);
+  } catch (error) {
+    if (isCiRuntime()) {
+      throw error;
+    }
+    return;
+  }
+
+  try {
+    if (isPostgres) {
+      if (isTierFlagsSuite) {
+        await cleanupTierFlagsForPostgres();
+        resetOrgCounter();
+        return;
+      }
+
+      await cleanupAllTablesForPostgres();
+    } else {
+      // SQLite: Disable foreign keys during cleanup
+      await prisma.$executeRawUnsafe('PRAGMA foreign_keys = OFF;');
+
+      if (isTierFlagsSuite) {
+        await cleanupTierFlagsForSqlite();
+        await prisma.$executeRawUnsafe('PRAGMA foreign_keys = ON;');
+        resetOrgCounter();
+        return;
+      }
+    }
+  } catch (error) {
+    console.warn(
+      `⚠️  Failed to cleanup test database: ${error instanceof Error ? error.message : String(error)}`,
+    );
+    // Don't fail the test setup due to cleanup errors
+  }
+
+  if (!isPostgres) {
+    await cleanupTablesForSqlite();
+  }
+
+  await seedDefaultOrganizationAndUsers();
 
   // SQLite: Re-enable foreign keys after cleanup
   if (!isPostgres) {

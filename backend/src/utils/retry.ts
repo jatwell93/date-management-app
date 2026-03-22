@@ -1,6 +1,6 @@
 /**
  * Exponential Backoff Retry Utility
- * 
+ *
  * Provides utilities for retrying operations with exponential backoff and jitter.
  * Useful for handling transient failures in serverless environments.
  */
@@ -22,12 +22,12 @@ export interface RetryOptions {
 
 /**
  * Retry an async operation with exponential backoff
- * 
+ *
  * @param operation - Async function to retry
  * @param options - Retry configuration
  * @returns Result of the operation
  * @throws Last error if all retries exhausted
- * 
+ *
  * @example
  * ```typescript
  * const result = await retryWithBackoff(
@@ -61,7 +61,7 @@ export async function retryWithBackoff<T>(
 
       // Check if the error is retryable
       const isRetryable = retryableErrorPattern.test(errorMessage);
-      
+
       // Don't retry non-retryable errors
       if (!isRetryable) {
         throw lastError;
@@ -82,11 +82,11 @@ export async function retryWithBackoff<T>(
 
       console.warn(
         `[Retry] Attempt ${attempt}/${maxAttempts} failed: ${errorMessage}. ` +
-        `Retrying in ${currentDelayMs.toFixed(0)}ms...`
+          `Retrying in ${currentDelayMs.toFixed(0)}ms...`,
       );
 
       // Wait before next attempt
-      await new Promise(resolve => setTimeout(resolve, currentDelayMs));
+      await new Promise((resolve) => setTimeout(resolve, currentDelayMs));
 
       // Increase delay for next attempt
       delayMs *= backoffMultiplier;
@@ -99,10 +99,10 @@ export async function retryWithBackoff<T>(
 
 /**
  * Wrapper for database operations with automatic retry on connection errors
- * 
+ *
  * @param operation - Database operation to execute
  * @returns Result of the operation
- * 
+ *
  * @example
  * ```typescript
  * const user = await withDatabaseRetry(
@@ -110,9 +110,7 @@ export async function retryWithBackoff<T>(
  * );
  * ```
  */
-export async function withDatabaseRetry<T>(
-  operation: () => Promise<T>,
-): Promise<T> {
+export async function withDatabaseRetry<T>(operation: () => Promise<T>): Promise<T> {
   return retryWithBackoff(operation, {
     maxAttempts: 3,
     initialDelayMs: 100,
@@ -120,16 +118,17 @@ export async function withDatabaseRetry<T>(
     backoffMultiplier: 2,
     useJitter: true,
     // Match database connection errors
-    retryableErrorPattern: /(?:connection|timeout|ECONNREFUSED|ECONNRESET|ETIMEDOUT|pool|Hyperdrive)/i,
+    retryableErrorPattern:
+      /(?:connection|timeout|ECONNREFUSED|ECONNRESET|ETIMEDOUT|pool|Hyperdrive)/i,
   });
 }
 
 /**
  * Wrapper for API requests with automatic retry on transient errors
- * 
+ *
  * @param operation - HTTP request to execute
  * @returns Result of the request
- * 
+ *
  * @example
  * ```typescript
  * const response = await withApiRetry(
@@ -137,9 +136,7 @@ export async function withDatabaseRetry<T>(
  * );
  * ```
  */
-export async function withApiRetry<T>(
-  operation: () => Promise<T>,
-): Promise<T> {
+export async function withApiRetry<T>(operation: () => Promise<T>): Promise<T> {
   return retryWithBackoff(operation, {
     maxAttempts: 3,
     initialDelayMs: 200,

@@ -20,7 +20,8 @@ import app from '../..';
 jest.mock('../../middleware/auth.middleware', () => ({
   authenticateToken: (req: any, _res: any, next: any) => {
     req.userId = 1;
-    req.user = { id: 1, role: 'Manager' };
+    req.organizationId = 'default-org';
+    req.user = { id: 1, role: 'Manager', organizationId: 'default-org' };
     next();
   },
 }));
@@ -138,7 +139,8 @@ describe('Upload Routes with ServiceProvider Integration', () => {
     // Mock auth middleware
     app.use((req: any, _res, next) => {
       req.userId = 1;
-      req.user = { id: 1, role: 'Manager' };
+      req.organizationId = 'default-org';
+      req.user = { id: 1, role: 'Manager', organizationId: 'default-org' };
       next();
     });
 
@@ -286,13 +288,13 @@ describe('Upload Routes with ServiceProvider Integration', () => {
       // In a real scenario, we'd verify through the database or a separate query
     });
 
-    it('should fail if file not found in storage', async () => {
+    it('should reject keys outside organization scope', async () => {
       const response = await request(app)
         .post('/api/upload/complete')
         .send({
           key: 'missing-file.csv',
         })
-        .expect(500);
+        .expect(403);
 
       expect(response.body.error).toBeDefined();
     });
@@ -327,12 +329,11 @@ describe('Upload Routes with ServiceProvider Integration', () => {
       expect(response.body.message).toContain('processing started');
     });
 
-    it('should handle errors from ServiceProvider gracefully', async () => {
-      // Test error handling by trying to complete upload for non-existent file
+    it('should return forbidden for invalid scoped keys', async () => {
       const response = await request(app)
         .post('/api/upload/complete')
         .send({ key: 'non-existent-file.csv' })
-        .expect(500);
+        .expect(403);
 
       expect(response.body.error).toBeDefined();
     });

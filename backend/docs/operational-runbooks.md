@@ -275,17 +275,22 @@ Apply manual dashboard controls that reduce scraping-driven cost spikes before a
    - Navigate to `Workers -> Analytics Engine` and ensure feature is enabled.
    - Confirm dataset binding is configured in `workers/wrangler.toml` and deployment is current.
 
-### Part B: Cloudflare Billing Alerts
+### Part B: Cloudflare Usage/Billing Alerts (Current Plan + Fallback)
 
-1. Navigate to `Account -> Billing -> Alerts`.
-2. Configure minimum baseline alerts:
-   - Daily spend > $10
-   - Weekly spend > $50
-   - Monthly spend > $200
-   - Spend spike > 200% baseline
-3. Delivery channels:
-   - Email required
-   - SMS recommended for daily and spike alerts
+1. Navigate to `Cloudflare Dashboard -> Notifications -> Usage Based Billing`.
+2. Configure all native alerts available on current plan.
+   - Confirmed available baseline: R2 storage threshold notifications.
+3. Configure launch baseline for available native notifications:
+   - R2 storage warning at 8 GB
+   - R2 storage alert at 10 GB
+4. Document unsupported native thresholds (current account):
+   - R2 API calls (target: warn 2M/month, alert 3M/month)
+   - Workers requests (target: warn 500k/day, alert 1M/day)
+   - Workers execution duration budget (target: warn 80%, alert 95%)
+5. Use fallback scheduled monitor design for unsupported metrics.
+   - Run cadence: hourly (monthly counters), every 5 minutes (daily counters)
+   - Dedupe state: KV cooldown keys per metric/severity
+   - Routing: warning to digest email, alert/critical to immediate email + SMS
 
 ### Part C: Neon Protection and Alerts
 
@@ -393,6 +398,9 @@ Operational note:
 
 1. Trigger test traffic against `/api` and verify Cloudflare rule counters increase.
 2. Trigger controlled threshold breach in non-production and verify block/challenge action.
+   - Use temporary low-threshold WAF rule (for example, 3 req/60s).
+   - Ensure requests are blocked/challenged at edge before origin execution.
+   - Capture security event evidence (rule match + action outcome).
 3. Verify billing test alerts deliver to configured recipients.
 4. Verify anomaly visibility in Workers Analytics dashboards.
 5. Capture screenshots or audit exports for launch evidence.

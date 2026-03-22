@@ -22,7 +22,8 @@ jest.mock('../../config/environment', () => ({
 jest.mock('../../middleware/auth.middleware', () => ({
   authenticateToken: (req: any, _res: any, next: any) => {
     req.userId = 1;
-    req.user = { id: 1, role: 'Manager' };
+    req.organizationId = 'org-test-upload';
+    req.user = { id: 1, role: 'Manager', organizationId: 'org-test-upload' };
     next();
   },
 }));
@@ -68,6 +69,8 @@ const createTestApp = (
   app.use(express.json());
   app.use((req: any, _res, next) => {
     req.userId = 1;
+    req.organizationId = 'org-test-upload';
+    req.user = { id: 1, role: 'Manager', organizationId: 'org-test-upload' };
     next();
   });
 

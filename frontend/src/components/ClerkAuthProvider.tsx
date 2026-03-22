@@ -114,9 +114,9 @@ function ClerkAuthInner({ children }: { children: React.ReactNode }) {
             setUserId(decodeTokenAndGetUserId(clerkToken));
             setUserName(
               decodeTokenAndGetUserName(clerkToken) ||
-              user.fullName ||
-              user.primaryEmailAddress?.emailAddress ||
-              null,
+                user.fullName ||
+                user.primaryEmailAddress?.emailAddress ||
+                null,
             );
             setUserRole(decodeTokenAndGetRole(clerkToken));
           }

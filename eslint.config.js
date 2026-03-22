@@ -71,6 +71,20 @@ module.exports = [
     rules: baseTsRules,
   },
   {
+    files: ['e2e/**/*.{ts,tsx}', 'shared/**/*.{ts,tsx}'],
+    languageOptions: {
+      parser: tsParser,
+      ecmaVersion: 'latest',
+      sourceType: 'module',
+      globals: globals.node,
+    },
+    plugins: {
+      '@typescript-eslint': tsPlugin,
+      prettier: prettierPlugin,
+    },
+    rules: baseTsRules,
+  },
+  {
     files: ['frontend/src/**/*.{ts,tsx}'],
     languageOptions: {
       parser: tsParser,
@@ -115,6 +129,34 @@ module.exports = [
       ecmaVersion: 'latest',
       sourceType: 'script',
       globals: globals.node,
+    },
+    plugins: { prettier: prettierPlugin },
+    rules: baseJsRules,
+  },
+  {
+    files: ['shared/**/*.js'],
+    languageOptions: {
+      ecmaVersion: 'latest',
+      sourceType: 'script',
+      globals: {
+        ...globals.node,
+        module: 'readonly',
+        exports: 'readonly',
+      },
+    },
+    plugins: { prettier: prettierPlugin },
+    rules: baseJsRules,
+  },
+  {
+    files: ['frontend/src/__mocks__/**/*.{js,jsx}'],
+    languageOptions: {
+      ecmaVersion: 'latest',
+      sourceType: 'script',
+      globals: {
+        ...globals.node,
+        ...globals.jest,
+        module: 'readonly',
+      },
     },
     plugins: { prettier: prettierPlugin },
     rules: baseJsRules,

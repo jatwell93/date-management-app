@@ -14,4 +14,7 @@ module.exports = [
   '**/*.sqlite-*',
   '**/prisma/*.db',
   '**/workers/**', // Workers has its own separate config
+  '**/.agents/**', // Skill assets/examples are not part of app runtime lint scope
+  '**/.github/skills/**', // Skill examples are reference content, not app source
+  '**/shared/types/*.js', // Generated JS artifacts from TS sources
 ];

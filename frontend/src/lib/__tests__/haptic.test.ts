@@ -41,7 +41,7 @@ describe('haptic', () => {
 
     it('should handle missing navigator.vibrate gracefully (no error thrown)', () => {
       const originalVibrate = navigator.vibrate;
-      // @ts-ignore - Intentionally removing vibrate method for testing
+      // @ts-expect-error - Intentionally removing vibrate method for testing
       delete navigator.vibrate;
 
       // This should not throw an error

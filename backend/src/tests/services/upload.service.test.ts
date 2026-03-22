@@ -81,7 +81,7 @@ describe('UploadService', () => {
   describe('completeUpload', () => {
     it('should parse file if it exists', async () => {
       const filename = 'test.csv';
-      const key = `uploads/${filename}`;
+      const key = `uploads/${organizationId}/${filename}`;
       const mockBuffer = Buffer.from('header1,header2\nval1,val2');
       mockStorageProvider.exists.mockResolvedValue(true);
       mockStorageProvider.download.mockResolvedValue(mockBuffer);
@@ -104,7 +104,7 @@ describe('UploadService', () => {
     });
 
     it('should throw error if file does not exist', async () => {
-      const key = 'uploads/missing.csv';
+      const key = `uploads/${organizationId}/missing.csv`;
       mockStorageProvider.exists.mockResolvedValue(false);
 
       await expect(uploadService.completeUpload(key, 1)).rejects.toThrow(

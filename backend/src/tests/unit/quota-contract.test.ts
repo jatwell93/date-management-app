@@ -107,7 +107,9 @@ describe('Storage Quota Contract Tests', () => {
       const uploadSum = await prisma.upload.aggregate({
         where: {
           organizationId: testOrgId,
-          status: UploadStatus.COMPLETED,
+          status: {
+            in: [UploadStatus.PROCESSING, UploadStatus.COMPLETED],
+          },
         },
         _sum: {
           fileSizeBytes: true,
@@ -173,15 +175,18 @@ describe('Storage Quota Contract Tests', () => {
       const result = await prisma.upload.aggregate({
         where: {
           organizationId: testOrgId,
-          status: UploadStatus.COMPLETED,
+          status: {
+            in: [UploadStatus.PROCESSING, UploadStatus.COMPLETED],
+          },
         },
         _sum: {
           fileSizeBytes: true,
         },
       });
 
-      // Only the completed upload should be counted
-      expect(result._sum.fileSizeBytes).toBe(4000);
+      // Processing and completed uploads are both counted for quota.
+      // processing.csv (2000) + completed.csv (4000) = 6000
+      expect(result._sum.fileSizeBytes).toBe(6000);
     });
 
     it('should decrement storage when completed upload is deleted', async () => {
@@ -233,14 +238,16 @@ describe('Storage Quota Contract Tests', () => {
         where: { fileKey: 'consistency.csv' },
       });
 
-      // Verify status is COMPLETED
-      expect(upload?.status).toBe(UploadStatus.COMPLETED);
+      // Verify status is PROCESSING at write time
+      expect(upload?.status).toBe(UploadStatus.PROCESSING);
 
       // Verify this status is what quota service filters on
       const calculatedStorage = await prisma.upload.aggregate({
         where: {
           organizationId: testOrgId,
-          status: UploadStatus.COMPLETED, // Same value service writes
+          status: {
+            in: [UploadStatus.PROCESSING, UploadStatus.COMPLETED], // Same statuses service counts
+          },
         },
         _sum: {
           fileSizeBytes: true,

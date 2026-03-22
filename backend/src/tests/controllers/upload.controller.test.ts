@@ -113,7 +113,9 @@ describe('UploadRoutes', () => {
         .send({ key: 'uploads/org-other/file.csv' });
 
       expect(res.status).toBe(403);
-      expect(res.body).toEqual({ error: 'Access denied: Upload key does not belong to this organization' });
+      expect(res.body).toEqual({
+        error: 'Access denied: Upload key does not belong to this organization',
+      });
     });
   });
 

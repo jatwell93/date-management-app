@@ -21,5 +21,5 @@ module.exports = {
       events.emit('counter', 'errors.client', 1);
     }
     return done();
-  }
+  },
 };

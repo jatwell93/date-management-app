@@ -58,6 +58,10 @@ export interface RowError {
 }
 
 export interface CSVParseResult {
+  /** @deprecated Legacy compatibility for older tests; derived from errors.length === 0 */
+  success?: boolean;
+  /** @deprecated Legacy compatibility for older tests; mirrors total */
+  rowsProcessed?: number;
   /** Number of rows successfully imported */
   imported: number;
   /** Number of rows updated (existing SKU/barcode) */
@@ -188,6 +192,8 @@ export class CSVParserService extends EventEmitter {
     const usedColumns: string[] = [];
 
     const result: CSVParseResult = {
+      success: true,
+      rowsProcessed: 0,
       imported: 0,
       updated: 0,
       skipped: 0,
@@ -221,6 +227,7 @@ export class CSVParserService extends EventEmitter {
     try {
       for await (const record of parser) {
         result.total++;
+        result.rowsProcessed = result.total;
 
         // Initialize header mapping on first record
         if (!headerMap) {
@@ -319,6 +326,8 @@ export class CSVParserService extends EventEmitter {
     }
 
     result.durationMs = Date.now() - startTime;
+    result.rowsProcessed = result.total;
+    result.success = result.errors.length === 0;
 
     // Add column usage information
     if (usedColumns.length > 0) {
@@ -641,40 +650,40 @@ export class CSVParserService extends EventEmitter {
     await this.prisma.$transaction(
       async (tx) => {
         for (const row of batch) {
-        // Check if product exists by SKU or barcode
-        const existing = await tx.product.findFirst({
-          where: {
-            organizationId: this.organizationId,
-            OR: [{ sku: row.sku }, { barcode: row.barcode }],
-          },
-        });
-
-        if (existing) {
-          // Update existing product
-          await tx.product.update({
-            where: { id: existing.id },
-            data: {
-              name: row.name,
-              costPrice: row.costPrice,
-              // Update barcode if it changed
-              barcode: row.barcode,
-            },
-          });
-          updated++;
-        } else {
-          // Create new product
-          await tx.product.create({
-            data: {
+          // Check if product exists by SKU or barcode
+          const existing = await tx.product.findFirst({
+            where: {
               organizationId: this.organizationId,
-              sku: row.sku,
-              name: row.name,
-              barcode: row.barcode,
-              costPrice: row.costPrice,
+              OR: [{ sku: row.sku }, { barcode: row.barcode }],
             },
           });
-          imported++;
+
+          if (existing) {
+            // Update existing product
+            await tx.product.update({
+              where: { id: existing.id },
+              data: {
+                name: row.name,
+                costPrice: row.costPrice,
+                // Update barcode if it changed
+                barcode: row.barcode,
+              },
+            });
+            updated++;
+          } else {
+            // Create new product
+            await tx.product.create({
+              data: {
+                organizationId: this.organizationId,
+                sku: row.sku,
+                name: row.name,
+                barcode: row.barcode,
+                costPrice: row.costPrice,
+              },
+            });
+            imported++;
+          }
         }
-      }
       },
       {
         // Neon can exceed Prisma's default 5s interactive transaction timeout

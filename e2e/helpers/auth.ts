@@ -37,7 +37,10 @@ export async function signUpAsManager(page: Page): Promise<void> {
   await page.getByRole('textbox', { name: /username/i }).fill(testUsername);
   await page.getByRole('textbox', { name: /email address/i }).fill(testEmail);
   await page.getByRole('textbox', { name: /password/i }).fill(testPassword);
-  await page.getByRole('button', { name: /continue|sign up/i }).first().click();
+  await page
+    .getByRole('button', { name: /continue|sign up/i })
+    .first()
+    .click();
 
   // Clerk may either require email verification or redirect directly after sign-up.
   await page.waitForTimeout(1500);
@@ -53,7 +56,9 @@ export async function signUpAsManager(page: Page): Promise<void> {
 
     if (!hasVerificationText) {
       const bodyText = await page.locator('body').innerText();
-      throw new Error(`Sign-up did not reach verification step. URL: ${page.url()} Body: ${bodyText.slice(0, 400)}`);
+      throw new Error(
+        `Sign-up did not reach verification step. URL: ${page.url()} Body: ${bodyText.slice(0, 400)}`,
+      );
     }
   }
 
@@ -74,7 +79,10 @@ export async function signUpAsManager(page: Page): Promise<void> {
 export async function signInAsManager(page: Page): Promise<void> {
   await page.goto('/login');
 
-  await page.getByLabel(/email|username/i).first().fill(MANAGER_EMAIL);
+  await page
+    .getByLabel(/email|username/i)
+    .first()
+    .fill(MANAGER_EMAIL);
   await page.locator('input[name="password"], input[id="password-field"]').fill(MANAGER_PASSWORD);
   await page.locator('button[data-localization-key="formButtonPrimary"]').click();
 
@@ -83,7 +91,10 @@ export async function signInAsManager(page: Page): Promise<void> {
   if (/\/login\/factor-two/.test(page.url())) {
     const otp = await getOtpFromMailinator(page, MANAGER_EMAIL);
     await enterOtpCode(page, otp);
-    await page.getByRole('button', { name: /continue/i }).first().click();
+    await page
+      .getByRole('button', { name: /continue/i })
+      .first()
+      .click();
   }
 
   // Wait until we land on /scan or /onboarding — auth is complete

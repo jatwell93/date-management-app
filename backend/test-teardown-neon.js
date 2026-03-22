@@ -9,7 +9,9 @@ module.exports = async () => {
 
   try {
     // Stop application monitoring service to prevent background logging
-    const { ApplicationMonitoringService } = require('./src/services/application.monitoring.service');
+    const {
+      ApplicationMonitoringService,
+    } = require('./src/services/application.monitoring.service');
     const monitoringService = ApplicationMonitoringService.getInstance();
     monitoringService.stopMonitoring(true); // silent if not running
     console.log('\n✓ Stopped application monitoring service');
@@ -43,7 +45,9 @@ module.exports = async () => {
       console.log('✓ Restored SQLite schema after Neon tests');
     } else {
       console.warn('\n⚠️  SQLite schema backup missing during Neon teardown.');
-      console.warn('   Restore manually: copy prisma/schema.prisma.sqlite.bak to prisma/schema.prisma');
+      console.warn(
+        '   Restore manually: copy prisma/schema.prisma.sqlite.bak to prisma/schema.prisma',
+      );
     }
   } catch (error) {
     console.warn('⚠️  Failed to restore SQLite schema:', error.message);

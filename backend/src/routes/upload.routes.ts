@@ -29,7 +29,7 @@ const upload = multer({
 /**
  * POST /api/upload/initiate
  * Initiate upload process - returns strategy (direct vs presigned)
- * 
+ *
  * Rate Limited: 50 presigned URLs per hour per authenticated user
  * Security: Uses presignedUrlLimiter to prevent abuse of presigned URL generation
  * Reference: docs/security-audit.md, PHASE-20-SESSION-2-SUMMARY.md Task 9

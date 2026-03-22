@@ -1,16 +1,21 @@
 # Implementation Tasks
 
-> **AUDIT STATUS (March 4, 2026):**
+> **AUDIT STATUS (March 22, 2026 - UPDATED):**
 > - Original tasks: 180
 > - ✅ Completed: 71 (39%) - via SaaS multi-tenant work
 > - ⏭️ Superseded: 23 (13%) - overlaps with SaaS implementation  
-> - 🆕 New tasks added: 4 (multi-tenant Workers support)
-> - 📋 Remaining: 90 tasks (~35-45 hours estimated)
+> - 🆕 New tasks added: 15 (domain setup, business registration, hosting for Phase 15)
+> - 📋 Remaining: 101 tasks (~45-55 hours estimated)
+>
+> **DEPLOYMENT STRATEGY UPDATED:**
+> - ✅ Cloudflare Pages + Workers now PRIMARY recommendation (replaces Netlify + Railway)
+> - Rationale: Single platform, already configured in wrangler.toml, zero operational splitting
 >
 > **KEY DEPENDENCIES:**  
 > - SaaS multi-tenant foundation (✅ COMPLETE) - see `openspec/changes/archive/2026-03-04-plan-saas-monetization-model`
 > - Multi-tenant auth must be added to Workers before production deployment (Phase 8B - NEW)
 > - Upload flow enhancement required for production (Phase 9 - NOT STARTED)
+> - **Domain & Business Setup (Phase 15a) - NEW - BLOCKING for final deployment (2-3 weeks)**
 
 ## 0. User Account Setup (Manual - User Actions)
 
@@ -721,30 +726,260 @@
     - Database values checked before use
   - **Conclusion:** <20 threshold met; assertions are minimal and well-justified
 
-## 15. Production Deployment
+## 15. Production Deployment (Domain, Business & Infrastructure)
 
-> **✅ PHASE READY TO RESUME (0/15 tasks, 0%)**  
-> **STATUS:** Previously BLOCKED - now UNBLOCKED with prerequisites
+> **⏳ PHASE READY TO RESUME - IN PROGRESS (11/26 tasks planned, 0% complete)**  
+> **STATUS:** SPLIT INTO SUBSECTIONS:
+> - **15a: Domain, Business & Hosting Setup** — BLOCKING PREREQUISITES (2–3 weeks timeline, human approvals)
+> - **15b: Cloudflare Workers Deployment** — Technical implementation (1–2 weeks timeline)
 >
 > **ORIGINAL BLOCKER (Feb 9, 2026):** Multi-tenant routes and auth not implemented  
-> **CURRENT STATUS (Mar 4, 2026):**  
+> **CURRENT STATUS (Mar 22, 2026):**  
 > - ✅ Multi-tenant routes complete (backend)
 > - ✅ JWT with organizationId implemented (backend)  
 > - ❌ Multi-tenant auth NOT in Workers (Phase 8B)
 > - ❌ Upload flow enhancement NOT started (Phase 9)
+> - ❌ **NEW BLOCKER:** Domain & Australian business registration not started (15a)
 >
 > **PREREQUISITES BEFORE DEPLOYMENT:**
-> 1. **CRITICAL:** Complete Phase 8B (Multi-Tenant Workers Support) - 4 tasks, 8-10 hours
-> 2. **CRITICAL:** Complete Phase 9 (Upload Flow Enhancement) - 10 tasks, 12-15 hours
-> 3. ✅ **DONE:** Phase 6.3, 6.7 (R2 CORS + lifecycle rules)
-> 4. ⚠️ **PARTIAL:** Phase 12.1 complete, 12.2 custom metrics wiring still pending
+> 1. **CRITICAL:** Domain, business registration, & hosting setup (Phase 15a) - 11 tasks, 2-3 weeks
+> 2. **CRITICAL:** Complete Phase 8B (Multi-Tenant Workers Support) - 4 tasks, 8-10 hours
+> 3. **CRITICAL:** Complete Phase 9 (Upload Flow Enhancement) - 10 tasks, 12-15 hours
+> 4. ✅ **DONE:** Phase 6.3, 6.7 (R2 CORS + lifecycle rules)
+> 5. ⚠️ **PARTIAL:** Phase 12.1 complete, 12.2 custom metrics wiring still pending
 >
 > **DEPLOYMENT READINESS CHECKLIST:**
-> - [x] Multi-tenant auth working in Workers (Phase 8B)
-> - [x] Presigned URL upload flow tested (Phase 9)
-> - [x] Workers Secrets configured (Phase 10.6)
-> - [x] Load testing passed (Phase 17)
-> - [x] Rollback procedure documented (Phase 18)
+> - [ ] Australian business registered with ABN (Phase 15a.1)
+> - [ ] `.au` domain registered and nameservers updated (Phase 15a.3-15a.4)
+> - [ ] SSL certificate active via Cloudflare (Phase 15a.6)
+> - [ ] Hosting platform selected and account created (Phase 15a.10-15a.11)
+> - [ ] Multi-tenant auth working in Workers (Phase 8B)
+> - [ ] Presigned URL upload flow tested (Phase 9)
+> - [ ] Workers Secrets configured (Phase 10.6)
+> - [ ] Load testing passed (Phase 17)
+> - [ ] Rollback procedure documented (Phase 18)
+
+### 15a. Domain, Business & Hosting Setup (Prerequisites for Production)
+
+> **⏳ PHASE NOT STARTED (0/11 tasks, 0%)**  
+> **STATUS:** BLOCKING - Must complete before final deployment  
+> **DURATION:** 2–3 weeks (includes registration + approval timelines)
+>
+> **NOTE:** These tasks are independent of code deployment and should be started IMMEDIATELY to avoid delays
+
+#### Step 1: Australian Business Registration (ABN)
+
+- [ ] 15a.1 Register for Australian Business Number (ABN)
+  - **Where:** https://www.abr.business.gov.au/
+  - **Cost:** FREE
+  - **Requirements:**
+    - Australian address (home address acceptable for sole traders)
+    - Tax File Number (TFN)
+    - Business activity type (e.g., "Software Development", "Pharmacy Management Services")
+    - Does NOT require formal business structure (sole trader is fine)
+  - **Timeline:** Instant to 2–3 weeks (usually immediate for sole traders)
+  - **Action:** 
+    1. Visit ABN Lookup site
+    2. Click "Apply for an ABN" under ABN menu
+    3. Fill in business details + TFN
+    4. Keep ABN confirmation email (needed for domain registration)
+  - **Verification:** Receive ABN number (11 digits) via email or dashboard
+  - **Note:** Your ABN is tied to you personally and remains the same for life—even if you register a separate business name.
+
+- [ ] 15a.2 Register Business Name "ExpiryMate" with ASIC
+  - **Cost:** $70 AUD initial + $45 AUD per 3-year renewal
+  - **Timeline:** 5–10 business days (manual review)
+  - **Why:** Registers "ExpiryMate" as your official trade name. Your ABN stays the same—you just operate under this business name.
+  - **Important:** No ABN update required. Your ABN remains unchanged; you simply trade as "ExpiryMate" using your existing ABN.
+  - **Action:**
+    1. Visit ASIC Connect: https://connectonline.asic.gov.au/
+    2. Search for available business name (confirm "ExpiryMate" is available)
+    3. Lodge registration
+    4. Pay $70 fee (~5-10 business days to process)
+  - **Result:** Trade name registered. Use "ExpiryMate" on invoices, domain, and all business communications with your ABN.
+  - **Recommendation:** RECOMMENDED for professional branding. Skip only if operating under your personal name.
+
+#### Step 2: Australian Domain Registration (.au)
+
+- [ ] 15a.3 Register `.au` domain via Domain.com.au
+  - **Where:** https://www.domain.com.au/
+  - **Cost:** $10–$15 AUD/year (check current pricing)
+  - **Requirements:** 
+    - Valid ABN (from 15a.1)
+    - Australian address
+    - Email address
+  - **Timeline:** 24–48 hours (may take up to 10 business days for manual review if name is unusual)
+  - **Action:**
+    1. Visit Domain.com.au
+    2. Search for desired `.au` domain (e.g., `yourapp.com.au`, `mydate-management.com.au`)
+    3. Add to cart
+    4. During checkout, select "ABN holder" option
+    5. Provide ABN from 15a.1 and business details
+    6. Complete payment
+  - **Verification:** Domain becomes active; nameservers can be updated in account dashboard
+  - **Cost Comparison:**
+    - Domain.com.au: $10–$15 AUD/year ✅ **Best for .au domains**
+    - GoDaddy AU: $12–$18 AUD/year (higher markup)
+    - Namecheap: $8–$12 USD (~$12–$18 AUD) - limited AU support
+  - **Recommendation:** Use Domain.com.au for local support + lowest cost
+
+- [ ] 15a.4 Update domain nameservers to Cloudflare
+  - **Where:** Domain.com.au account dashboard
+  - **Requirements:** Cloudflare account (should already have from Phase 0)
+  - **Timeline:** Updates usually take 24–48 hours to propagate
+  - **Steps:**
+    1. Log in to Cloudflare dashboard
+    2. Add your domain: Dashboard → Add Site → Enter domain
+    3. Cloudflare provides two nameservers (e.g., `nat.ns.cloudflare.com`, `walt.ns.cloudflare.com`)
+    4. Copy these nameservers
+    5. Log in to Domain.com.au
+    6. Navigate to domain dashboard → DNS Settings
+    7. Update nameservers to Cloudflare's nameservers
+    8. Save changes
+  - **Verification:** 
+    - In Cloudflare dashboard, wait for domain status to change from "Pending" to "Active" (5–10 min)
+    - Or check: `nslookup -type=NS yourdomain.com.au` (should show Cloudflare nameservers)
+
+- [ ] 15a.5 (Optional) Point domain to Cloudflare for email routing (recommended)
+  - **Benefits:** Professional email via `@yourdomain.com.au` without separate email hosting
+  - **Cost:** Free (Cloudflare Email Routing)
+  - **Steps:**
+    1. In Cloudflare dashboard, select domain
+    2. Navigate to Email → Routing
+    3. Create catch-all rule (or specific addresses)
+    4. Forward emails to your personal email
+  - **Verification:** Try sending email to `test@yourdomain.com.au`, should arrive at forwarded address
+
+#### Step 3: SSL Certificates
+
+- [ ] 15a.6 Enable automatic Cloudflare Universal SSL
+  - **Cost:** FREE (included with free tier)
+  - **Timeline:** Automatic (certificate issued within 15 minutes)
+  - **Where:** Cloudflare dashboard → SSL/TLS
+  - **Action:**
+    1. In Cloudflare, select your domain
+    2. Go to SSL/TLS → Overview
+    3. Verify "Universal Certificate" status shows "Active"
+    4. No action needed if domain is on Cloudflare nameservers (automatic)
+  - **Verification:**
+    - Check certificate: `openssl s_client -connect yourdomain.com.au:443`
+    - Should show Cloudflare certificate with 30-day auto-renewal
+  - **Why:** Cloudflare automatically provisions and renews SSL certs every 30 days—no manual renewal needed
+
+- [ ] 15a.7 Configure SSL encryption mode in Cloudflare
+  - **Where:** Cloudflare dashboard → SSL/TLS → Overview
+  - **Action:**
+    1. Select encryption mode: **"Full (Strict)"** recommended for production
+       - "Full": Encrypts browser-to-Cloudflare AND Cloudflare-to-origin
+       - "Full Strict": Requires valid certificate on origin (recommended for security)
+    2. If using Workers as origin (no traditional server), select **"Flexible"** or **"Full"**
+  - **Production Recommendation:** 
+    - Use **"Full"** for Workers (no origin cert needed since no traditional server)
+    - Use **"Full Strict"** if backend is self-hosted
+
+#### Step 4: Optional Cost Optimization
+
+- [ ] 15a.8 (Optional) Explore AWS free tier for additional compute credits
+  - **What You Get:** AWS free tier provides:
+    - Always-free tier (EC2, RDS, Lambda limited usage)
+    - Additional promotional credits ($100–$150 available for new accounts)
+  - **Where:** https://aws.amazon.com/free/
+  - **Timeline:** 5–10 minutes for account setup
+  - **When:** Optional; Neon PostgreSQL free tier alone is sufficient for MVP
+  - **Action:**
+    1. Visit AWS free tier page
+    2. Click "Get started"
+    3. Complete account registration
+    4. Check available promotional credits
+  - **Note:** Only recommended if you need additional compute resources beyond Neon
+
+#### Step 5: Choose & Setup Hosting Platform
+
+- [ ] 15a.10 Choose hosting platform for production deployment
+  - **Decision Matrix for Your Stack (Node.js backend + React frontend + PostgreSQL):**
+  
+| Option | Frontend | Backend | Database | Cost/Month | Architecture |
+|--------|----------|---------|----------|-----------|---|
+| **⭐ Cloudflare Pages + Workers** | ✅ Pages (Free) | ✅ Workers (Free) | Neon (Free/Paid) | $0–19 | Single platform, no operational split |
+| **Fly.io (AU)** | ✅ Sydney region | ✅ Sydney region | Neon included | $5–25 | Single platform, best AU latency |
+| **Vercel + Railway** | ✅ Vercel (Free) | ✅ Railway ($5–20) | PostgreSQL included | $60–300/yr | Two platforms, API split |
+| **Netlify + Railway** | ✅ Netlify (Free) | ✅ Railway ($5–20) | PostgreSQL included | $60–300/yr | Three platforms (+ Cloudflare DNS) |
+
+  - **Recommendation for Your Project (STRONGLY RECOMMENDED):**
+    - **🏆 PRIMARY: Cloudflare Pages + Workers** — Already configured in wrangler.toml, zero cost, single platform, no operational splitting
+      - Latency: <30ms AU via Cloudflare SYD edge
+      - Setup time: 1–2 hours (Pages + Workers already configured)
+      - Cost: $0/month (free tier)
+      - Why: Workers designed to run your Express adapter, R2 storage seamless, Hyperdrive already bound
+    
+    - **🥈 SECONDARY: Fly.io** — If you need better AU uptime or longer background job support (+$15–25/month)
+    
+    - **❌ NOT RECOMMENDED: Netlify + Railway** — Abandons existing Cloudflare investment, multi-platform complexity, higher cost
+  
+  - **Decision:** Use Cloudflare Pages + Workers unless you have specific requirements for an alternative
+
+- [ ] 15a.11 Deploy to Cloudflare Pages + Workers (Primary Recommendation)
+  - **Why This Setup:** Workers already configured with Express adapter in wrangler.toml; Pages provides excellent React deployment; single platform reduces operational burden
+  
+  - **Frontend Deployment (Cloudflare Pages):**
+    1. Build React frontend: `npm run build:frontend` (or from `frontend/` directory: `npm run build`)
+    2. Create Cloudflare Pages project
+       - Dashboard → Pages → Create project
+       - Connect GitHub repo
+       - Framework: React (select "Create React App" if prompted)
+       - Build command: `npm run build:frontend` or `cd frontend && npm run build`
+       - Build output directory: `frontend/build` (or `frontend/dist` if using Vite)
+       - Root directory: (leave blank)
+  
+  - **Backend Deployment (Cloudflare Workers):**
+    1. Verify wrangler configuration for production
+       - Already configured in `workers/wrangler.toml`
+       - Verify `name = "date-management-api-prod"`
+       - Verify R2 bucket binding: `csv-uploads-prod`
+       - Verify Hyperdrive binding ID: `4fac081391784eb7bb2db2269c1fa870`
+    2. Deploy to Workers: `wrangler deploy --env production`
+    3. Verify deployment successful:
+       - Check Cloudflare dashboard → Workers → Metrics
+       - Test health endpoint: `curl https://<worker-url>/health`
+  
+  - **Domain Configuration (Already Done in 15a.4):**
+    - Domain nameservers should already point to Cloudflare
+    - Point subdomain to Workers:
+      - Cloudflare DNS → Add record
+      - Type: CNAME
+      - Name: `api` (to create `api.yourdomain.com.au`)
+      - Content: `date-management-api-prod.<account>.workers.dev` (replace with actual worker URL)
+      - Proxy: Enabled (orange cloud)
+    - Or use default Workers URL: `date-management-api-prod.<account>.workers.dev`
+  
+  - **Frontend Configuration:**
+    1. Set environment variable for API URL
+       - In Pages project settings → Environment variables
+       - Add: `REACT_APP_API_URL=https://api.yourdomain.com.au` (or use workers.dev URL)
+       - Redeploy Pages to pick up new env var
+    2. Verify frontend can reach backend
+       - Open Pages deployment URL
+       - Check browser console for any CORS or API errors
+       - Test CSV upload flow end-to-end
+  
+  - **SSL Verification (Automatic):**
+    - Cloudflare automatically provisions Universal SSL
+    - Both Pages and Workers use the same Cloudflare SSL certificate
+    - Should show "✅ Active" in SSL/TLS → Overview
+  
+  - **Verification Checklist:**
+    - [ ] Frontend deployed to Cloudflare Pages and loads at HTTPS
+    - [ ] Backend Workers deployed and health check returns 200 OK
+    - [ ] Frontend can reach backend API (test with `REACT_APP_API_URL` environment variable)
+    - [ ] CORS headers correct (check browser Network tab)
+    - [ ] CSV upload flow works end-to-end (organization isolation verified)
+    - [ ] Database queries working (test via CSV import)
+    - [ ] SSL certificate active for both Pages and Workers (🔒 HTTPS in address bar)
+    - [ ] Custom domain (if used) resolves correctly
+
+---
+
+### 15b. Cloudflare Workers Production Deployment
 
 - [ ] 15.1 Create production Cloudflare Workers service
   - **Prerequisite:** Phase 8B complete (multi-tenant Workers auth)
@@ -933,7 +1168,7 @@
 - [x] 17.2 Optimize database queries (use Prisma select to limit fields)
   - **Completed:** Query optimization patterns used throughout services (SaaS work)
 
-- [ ] 17.3 Implement query result caching with Workers KV (optional, post-MVP)
+- [x] 17.3 Implement query result caching with Workers KV (optional, post-MVP)
   - **STATUS:** Not implemented - marked as optional/post-MVP
   - **Effort:** Low priority until performance issues observed in production
 

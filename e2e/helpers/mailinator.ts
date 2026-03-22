@@ -14,14 +14,14 @@ export async function getOtpFromMailinator(
   const [inbox, domain] = email.split('@');
   const mailinatorDomain = domain || 'mailinator.com';
   const apiToken = process.env.MAILINATOR_API_TOKEN;
-  
+
   // Validate API token before making requests
   if (!apiToken) {
     throw new Error(
       'MAILINATOR_API_TOKEN environment variable is required for OTP retrieval. Set this in your .env file or environment variables.',
     );
   }
-  
+
   const headers = {
     Authorization: `Bearer ${apiToken}`,
     'X-API-Token': apiToken,
@@ -47,16 +47,20 @@ export async function getOtpFromMailinator(
     }
 
     if (!response.ok()) {
-      console.log(`[Mailinator] Attempt ${attempt + 1}/${maxAttempts}: API returned ${response.status()}`);
+      console.log(
+        `[Mailinator] Attempt ${attempt + 1}/${maxAttempts}: API returned ${response.status()}`,
+      );
       continue;
     }
 
     const data = await response.json();
     const allMessages: Array<{ id: string; subject?: string; to?: string }> = data.msgs ?? [];
-    
+
     // Filter messages for this specific inbox
-    const messages = allMessages.filter(msg => msg.to === inbox);
-    console.log(`[Mailinator] Attempt ${attempt + 1}/${maxAttempts}: Found ${messages.length} messages for ${inbox}`);
+    const messages = allMessages.filter((msg) => msg.to === inbox);
+    console.log(
+      `[Mailinator] Attempt ${attempt + 1}/${maxAttempts}: Found ${messages.length} messages for ${inbox}`,
+    );
 
     if (messages.length === 0) continue;
 

@@ -324,7 +324,10 @@ let frontendIndexAvailability: { exists: boolean; checkedAt: number } | null = n
 
 async function isFrontendIndexAvailable(): Promise<boolean> {
   const now = Date.now();
-  if (frontendIndexAvailability && now - frontendIndexAvailability.checkedAt < FRONTEND_INDEX_CHECK_TTL_MS) {
+  if (
+    frontendIndexAvailability &&
+    now - frontendIndexAvailability.checkedAt < FRONTEND_INDEX_CHECK_TTL_MS
+  ) {
     return frontendIndexAvailability.exists;
   }
 

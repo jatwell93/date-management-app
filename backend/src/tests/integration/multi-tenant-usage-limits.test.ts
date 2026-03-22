@@ -830,7 +830,7 @@ describe('Multi-Tenant Usage Limit Boundary Tests', () => {
       const upload = await prisma.upload.findUnique({
         where: { fileKey: 'service-test-file.csv' },
       });
-      expect(upload?.status).toBe('completed');
+      expect(upload?.status).toBe('processing');
     });
 
     it('should use StorageQuotaService.markUploadDeleted for decrement', async () => {

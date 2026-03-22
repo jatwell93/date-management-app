@@ -26,7 +26,7 @@ export class UploadService {
 
   /**
    * Determine upload strategy and generate necessary credentials/URLs
-   * 
+   *
    * SECURITY NOTES:
    * - Presigned URLs expire after PRESIGNED_URL_EXPIRY_SECONDS (default 6 hours)
    * - For files taking longer, client should request URL refresh (not implemented yet)
@@ -77,7 +77,7 @@ export class UploadService {
     // Use configurable expiry (default 6 hours = 21600 seconds)
     // This allows time for file uploads without expiring mid-transfer
     // NOTE: Future enhancement - implement refresh token mechanism for very large files
-    const PRESIGNED_URL_EXPIRY_SECONDS = 
+    const PRESIGNED_URL_EXPIRY_SECONDS =
       (envConfig.PRESIGNED_URL_EXPIRY_SECONDS as number) || 6 * 60 * 60; // 6 hours
 
     const uploadUrl = await this.storage.getPresignedUploadUrl(key, PRESIGNED_URL_EXPIRY_SECONDS);
@@ -181,8 +181,10 @@ export class UploadService {
         } catch (failedUpdateError) {
           Logger.error('Failed to set upload status to FAILED after status update error', {
             uploadKey: key,
-            originalError: statusUpdateError instanceof Error ? statusUpdateError.message : 'Unknown',
-            failedUpdateError: failedUpdateError instanceof Error ? failedUpdateError.message : 'Unknown',
+            originalError:
+              statusUpdateError instanceof Error ? statusUpdateError.message : 'Unknown',
+            failedUpdateError:
+              failedUpdateError instanceof Error ? failedUpdateError.message : 'Unknown',
           });
         }
       }
@@ -310,7 +312,9 @@ export class UploadService {
     const expectedPrefix = `uploads/${this.organizationId}/`;
     const normalizedKey = path.posix.normalize(key);
     const pathSegments = key.split('/');
-    const hasUnsafeSegments = pathSegments.some((segment) => segment === '' || segment === '.' || segment === '..');
+    const hasUnsafeSegments = pathSegments.some(
+      (segment) => segment === '' || segment === '.' || segment === '..',
+    );
 
     if (
       !key.startsWith(expectedPrefix) ||

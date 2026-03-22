@@ -133,9 +133,9 @@ describe('UploadService', () => {
     });
 
     it('should reject upload keys outside the current organization scope', async () => {
-      await expect(uploadService.completeUpload('uploads/org-other/123-test.csv', 1)).rejects.toThrow(
-        'Access denied: Upload key does not belong to this organization',
-      );
+      await expect(
+        uploadService.completeUpload('uploads/org-other/123-test.csv', 1),
+      ).rejects.toThrow('Access denied: Upload key does not belong to this organization');
 
       expect(mockStorage.exists).not.toHaveBeenCalled();
       expect(mockStorage.download).not.toHaveBeenCalled();

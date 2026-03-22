@@ -103,8 +103,8 @@ describe('Upload Status State Machine', () => {
         where: { fileKey: 'test-upload-2.csv' },
       });
 
-      // recordUpload creates directly in COMPLETED state since storage is counted immediately
-      expect(upload?.status).toBe(UploadStatus.COMPLETED);
+      // recordUpload creates in PROCESSING state and is marked completed after parsing.
+      expect(upload?.status).toBe(UploadStatus.PROCESSING);
     });
 
     it('should mark upload as completed after successful processing', async () => {

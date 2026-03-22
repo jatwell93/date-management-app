@@ -138,15 +138,45 @@ This change now combines two security concerns into one plan:
   - Set max connections per branch
   - Enable connection pooling warning alerts
 
-### Phase 4 (Option 1/2): Budget Alerts
+### Phase 4 (Option 1/2): Budget and Usage Alerts
 
-- [ ] **4.1** Configure Cloudflare Budget Alerts
-  - Go to Cloudflare Dashboard → Account → Billing → Alerts
-  - Create alerts:
-    - Daily spend > $10: Email + SMS
-    - Weekly spend > $50: Email + SMS
-    - Monthly spend > $200: Email + SMS
-    - Spike > 200% baseline: Immediate alert
+- [x] **4.1** Configure Cloudflare Usage/Billing Alerts (and fallback monitor if needed)
+  - Go to Cloudflare Dashboard → Notifications → Usage Based Billing
+  - Configure available product thresholds for Workers/R2 on current plan
+  - If required thresholds are unavailable (for example, R2 storage GB or Workers execution duration), implement scheduled custom monitoring via Cloudflare Analytics/GraphQL and send notifications
+  - Target thresholds for launch:
+    - R2 storage: Warning 8 GB, Alert 10 GB
+    - R2 API calls: Warning 2M/month, Alert 3M/month
+    - Workers requests: Warning 500k/day, Alert 1M/day
+    - Workers execution duration budget: Warning 80%, Alert 95%
+  - Notification routing:
+    - Alert/Critical: Immediate Email + SMS
+    - Warning: Email (daily digest)
+  - Current account/billing support status:
+    - Supported and configured: R2 storage notifications at 8 GB (warning) and 10 GB (alert)
+    - Unsupported for now (native Notifications): R2 API calls thresholds (2M/3M), Workers requests thresholds (500k/1M), Workers execution budget thresholds (80%/95%)
+    - Deferred: implement fallback scheduled monitor for unsupported metrics in next implementation step
+
+- [x] **4.4** Design fallback scheduled monitor for unsupported usage metrics
+  - Scope (unsupported native notifications on current account):
+    - R2 API calls thresholding (Warn 2M/month, Alert 3M/month)
+    - Workers requests thresholding (Warn 500k/day, Alert 1M/day)
+    - Workers execution duration budget thresholding (Warn 80%, Alert 95%)
+  - Data sources:
+    - Workers Analytics/Observability for request and execution usage trends
+    - R2 usage/billing views available in Cloudflare dashboard/APIs for Class A/B operation counts
+  - Scheduler and state model:
+    - Scheduled Worker (cron trigger) runs hourly for monthly counters and every 5 minutes for daily counters
+    - KV-backed alert state for deduplication and cooldown windows per metric/severity (avoid alert storms)
+    - State key format: `<metric>:<window>:<threshold>:<severity>`
+  - Alert routing and severity:
+    - Warning: Email digest channel (once per 24h per metric)
+    - Alert/Critical: Immediate Email + SMS path (once per cooldown window, default 60m)
+  - Failure handling:
+    - If data source is unavailable, emit monitor health alert and retry on next schedule
+    - Persist last-success timestamp and include in monitor-health notifications
+  - Implementation boundary:
+    - Design approved for next implementation pass; no production cron monitor code deployed in this step
 
 - [x] **4.2** Configure Neon Budget Alerts
   - Go to Neon Console → Project → Billing
@@ -206,8 +236,18 @@ This change now combines two security concerns into one plan:
   - Verify 503 response when limit exceeded
 
 - [ ] **6.4** Test Cloudflare rate limiting
-  - Configure test rule with low threshold
-  - Verify requests are blocked at edge
+  - Verification method (edge, not app middleware):
+    - Configure temporary WAF rate-limit test rule with low threshold (for example, 3 requests/60s)
+    - Send controlled burst traffic to a protected API path from a single source IP
+    - Verify edge action is triggered (Managed Challenge/Block) and requests are blocked before origin execution
+    - Confirm corresponding Cloudflare security event entries and rule counter increments
+  - Evidence required:
+    - Rule expression + threshold capture
+    - Sample blocked response metadata (status/challenge page) from test run
+    - Security events screenshot/export showing matched requests
+  - Current execution status:
+    - CLI account authentication verified (`wrangler whoami`) and environment is ready
+    - Awaiting dashboard/API rule execution evidence to mark complete
 
 - [ ] **6.5** Verify budget alerts
   - Trigger test alert (use sandbox mode if available)
@@ -250,9 +290,10 @@ This change now combines two security concerns into one plan:
 | Concurrent DB connections | Unlimited | 50 |
 | Query result limit | Unlimited | 100 |
 | Query timeout | 30s | 10s |
-| Daily budget alert | None | $10 |
-| Weekly budget alert | None | $50 |
-| Monthly budget alert | None | $200 |
+| R2 storage alert | None | Warn 8 GB, Alert 10 GB |
+| R2 API calls alert | None | Unsupported on current account (target: Warn 2M/month, Alert 3M/month) |
+| Workers requests alert | None | Unsupported on current account (target: Warn 500k/day, Alert 1M/day) |
+| Workers execution duration alert | None | Unsupported on current account (target: Warn 80%, Alert 95%) |
 | Browser token persistence | Removed | In-memory only (current) |
 | Browser auth transport target | Bearer in JS runtime | httpOnly cookie transport (Phase 7) |
 

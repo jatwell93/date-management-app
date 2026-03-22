@@ -36,10 +36,12 @@ test.describe('Sign-up flow', () => {
 
     // Wait for button to be enabled
     await page.waitForTimeout(500);
-    
+
     // Click the button via JS to ensure it fires
     await page.evaluate(() => {
-      const button = document.querySelector('button[data-localization-key="formButtonPrimary"]') as HTMLButtonElement;
+      const button = document.querySelector(
+        'button[data-localization-key="formButtonPrimary"]',
+      ) as HTMLButtonElement;
       if (button) button.click();
     });
 

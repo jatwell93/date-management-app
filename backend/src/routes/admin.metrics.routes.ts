@@ -277,17 +277,28 @@ router.get('/historical', requireManager, async (req: AuthRequest, res: Response
     });
 
     // Transform data for frontend consumption
-    const historical = snapshots.map((snapshot) => ({
-      date: snapshot.date,
-      trialConversionRate: snapshot.trialConversionRate,
-      avgRevenuePerUser: snapshot.avgRevenuePerUser,
-      churnRate: snapshot.churnRate,
-      totalRevenue: snapshot.totalRevenueCents / 100,
-      tierDistribution: JSON.parse(snapshot.tierDistribution || '{}'),
-      totalTrials: snapshot.totalTrials,
-      totalConversions: snapshot.totalConversions,
-      totalChurn: snapshot.totalChurn,
-    }));
+    const historical = snapshots.map((snapshot) => {
+      // Parse tier distribution safely (handle malformed JSON in DB)
+      let tierDistributionData: Record<string, unknown>;
+      try {
+        tierDistributionData = JSON.parse(snapshot.tierDistribution || '{}');
+      } catch (parseError) {
+        console.warn('Failed to parse snapshot.tierDistribution:', parseError);
+        tierDistributionData = {};
+      }
+
+      return {
+        date: snapshot.date,
+        trialConversionRate: snapshot.trialConversionRate,
+        avgRevenuePerUser: snapshot.avgRevenuePerUser,
+        churnRate: snapshot.churnRate,
+        totalRevenue: snapshot.totalRevenueCents / 100,
+        tierDistribution: tierDistributionData,
+        totalTrials: snapshot.totalTrials,
+        totalConversions: snapshot.totalConversions,
+        totalChurn: snapshot.totalChurn,
+      };
+    });
 
     res.json({
       data: historical,

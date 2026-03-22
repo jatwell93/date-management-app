@@ -336,7 +336,7 @@ describe('StorageQuotaService', () => {
         fileName,
         fileSizeBytes,
         contentType,
-        status: 'completed',
+        status: 'processing',
       });
 
       await service.recordUpload(
@@ -356,7 +356,7 @@ describe('StorageQuotaService', () => {
           fileName,
           fileSizeBytes,
           contentType,
-          status: 'completed',
+          status: 'processing',
         },
       });
 

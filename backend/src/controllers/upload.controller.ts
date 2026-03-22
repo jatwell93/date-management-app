@@ -159,6 +159,18 @@ export class UploadController {
         progress = Math.min(100, Math.floor((upload.rowsProcessed / upload.rowsTotal) * 100));
       }
 
+      // Parse column data safely (handle malformed JSON in DB)
+      let columnsUsedData: unknown;
+      if (upload.columnsUsed) {
+        try {
+          columnsUsedData = JSON.parse(upload.columnsUsed);
+        } catch (parseError) {
+          console.warn('Failed to parse upload.columnsUsed:', parseError);
+          // Return empty array as fallback for malformed JSON
+          columnsUsedData = undefined;
+        }
+      }
+
       res.json({
         status: upload.status,
         progress,
@@ -170,7 +182,7 @@ export class UploadController {
         updatedCount: upload.rowsUpdated,
         skippedCount: upload.rowsSkipped,
         errorCount: upload.rowErrorCount,
-        columnsUsed: upload.columnsUsed ? JSON.parse(upload.columnsUsed) : undefined,
+        columnsUsed: columnsUsedData,
         columnsIgnored: upload.columnsIgnored,
       });
     } catch (error) {

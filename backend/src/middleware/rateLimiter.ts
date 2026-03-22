@@ -153,13 +153,13 @@ export const skipRateLimitForPaths = (allowedPaths: string[]) => {
 
 /**
  * Presigned URL rate limiter: 50 requests per hour per AUTHENTICATED USER
- * 
+ *
  * SECURITY CRITICAL (Phase 20 - Security Audit Finding):
  * - Rates limits by organizationId + userId, NOT by IP
  * - Prevents malicious users from generating excessive presigned URLs
  * - Presigned URLs can be shared, but per-user limit prevents abuse
  * - Monitoring: logs organizationId for security team analysis
- * 
+ *
  * Reference: docs/security-audit.md section 3 "Presigned URL Security"
  * Reference: docs/PHASE-20-SESSION-2-SUMMARY.md - Task 9
  */
@@ -179,7 +179,9 @@ export const presignedUrlLimiter = rateLimit({
     }
     // Fallback to IP if not authenticated (shouldn't happen on this endpoint).
     // Use ipKeyGenerator to normalize IPv6 addresses and prevent bypass.
-    const forwardedFor = (req.headers['x-forwarded-for'] as string | undefined)?.split(',')[0]?.trim();
+    const forwardedFor = (req.headers['x-forwarded-for'] as string | undefined)
+      ?.split(',')[0]
+      ?.trim();
     const ip = forwardedFor || req.ip || '';
     return `presigned-url:ip:${ipKeyGenerator(ip)}`;
   },
@@ -195,7 +197,11 @@ export const presignedUrlLimiter = rateLimit({
     });
     const resetTime = authReq.rateLimit?.resetTime;
     const resetTimeMs =
-      resetTime instanceof Date ? resetTime.getTime() : typeof resetTime === 'number' ? resetTime : undefined;
+      resetTime instanceof Date
+        ? resetTime.getTime()
+        : typeof resetTime === 'number'
+          ? resetTime
+          : undefined;
     const retryAfter = resetTimeMs ? Math.ceil((resetTimeMs - Date.now()) / 1000) : 3600;
     res.setHeader('Retry-After', retryAfter.toString());
     res.status(429).json({

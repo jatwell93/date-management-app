@@ -90,7 +90,8 @@ export class WebhookService {
       const err = error as Error;
       log.error('Stripe signature verification failed', {
         error: err.message,
-        signature,
+        // CWE-532: Do not log raw signature - it's a secret credential
+        signatureStatus: 'verification_failed',
       });
       throw new Error(`Webhook Error: ${err.message}`);
     }

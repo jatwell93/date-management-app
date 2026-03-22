@@ -54,17 +54,12 @@ function ensureMemvidAvailable(env) {
 
 // Helper to safely execute memvid with proper path resolution
 function runMemvid(args, env) {
-  try {
-    const output = execSync(`memvid ${args.map((arg) => `"${escapeForShell(arg)}"`).join(' ')}`, {
-      encoding: 'utf8',
-      stdio: ['pipe', 'pipe', 'pipe'],
-      env,
-      shell: true,
-    });
-    return output;
-  } catch (error) {
-    throw error;
-  }
+  return execSync(`memvid ${args.map((arg) => `"${escapeForShell(arg)}"`).join(' ')}`, {
+    encoding: 'utf8',
+    stdio: ['pipe', 'pipe', 'pipe'],
+    env,
+    shell: true,
+  });
 }
 
 function retrieveContext(query) {
