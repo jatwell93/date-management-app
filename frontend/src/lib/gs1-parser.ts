@@ -58,6 +58,7 @@ export function parseGS1Barcode(barcode: string): GS1ParseResult {
   try {
     // GS1-128 may include FNC1 prefixes/group separators or bracketed AIs.
     // Support both bracketed (e.g., (01)...) and raw AI (e.g., 01...10...21...).
+    // eslint-disable-next-line no-control-regex
     const normalizedBarcode = barcode.replace(/^\]C1/, '').replace(/\u001d/g, GS_SEPARATOR);
     let remaining = normalizedBarcode;
 

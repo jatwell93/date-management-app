@@ -58,7 +58,6 @@ export function TrialUpgradeFlow({ token }: TrialUpgradeFlowProps) {
         const data = await response.json();
         setTrialStatus(data);
       } catch (err) {
-        console.error('Error fetching trial status:', err);
         setError(err instanceof Error ? err.message : 'Unknown error');
       } finally {
         setLoading(false);
@@ -98,7 +97,6 @@ export function TrialUpgradeFlow({ token }: TrialUpgradeFlowProps) {
         navigate('/settings?upgraded=true');
       }
     } catch (err) {
-      console.error('Error converting trial:', err);
       setError(err instanceof Error ? err.message : 'Failed to upgrade');
     } finally {
       setConverting(false);

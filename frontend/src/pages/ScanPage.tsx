@@ -20,7 +20,6 @@ import { parseGS1Barcode } from '../lib/gs1-parser';
 import { synchronizeOfflineData } from '../lib/sync-manager';
 import { useHandheldDetectionContext } from '../contexts/HandheldContext';
 import { HardwareScanResult } from '../types/handheld';
-import { offlineSyncService } from '../lib/offline-sync';
 import {
   AlertDialog,
   AlertDialogAction,
@@ -380,7 +379,7 @@ export function ScanPage({ token }: ScanPageProps) {
     }
   };
 
-  const handleSyncNow = async () => {
+  const _handleSyncNow = async () => {
     if (!token) {
       setError('Authentication token is missing.');
       return;

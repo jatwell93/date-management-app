@@ -114,9 +114,9 @@ function ClerkAuthInner({ children }: { children: React.ReactNode }) {
             setUserId(decodeTokenAndGetUserId(clerkToken));
             setUserName(
               decodeTokenAndGetUserName(clerkToken) ||
-                user.fullName ||
-                user.primaryEmailAddress?.emailAddress ||
-                null,
+              user.fullName ||
+              user.primaryEmailAddress?.emailAddress ||
+              null,
             );
             setUserRole(decodeTokenAndGetRole(clerkToken));
           }
@@ -124,7 +124,6 @@ function ClerkAuthInner({ children }: { children: React.ReactNode }) {
         .catch((error) => {
           if (!isMounted) return;
           Sentry.captureException(error, { tags: { feature: 'auth', action: 'getToken' } });
-          console.error('Failed to get Clerk token:', error);
         });
     } else if (isLoaded && !isSignedIn) {
       // User signed out

@@ -57,7 +57,6 @@ export function TrialBanner({ token }: TrialBannerProps) {
         const data = await response.json();
         setTrialStatus(data);
       } catch (err) {
-        console.error('Error fetching trial status:', err);
         setError(err instanceof Error ? err.message : 'Unknown error');
       } finally {
         setLoading(false);
@@ -100,22 +99,20 @@ export function TrialBanner({ token }: TrialBannerProps) {
                 />
                 <div>
                   <p
-                    className={`text-sm font-medium ${
-                      isUrgent
+                    className={`text-sm font-medium ${isUrgent
                         ? 'text-amber-800 dark:text-amber-200'
                         : 'text-blue-800 dark:text-blue-200'
-                    }`}
+                      }`}
                   >
                     {isUrgent
                       ? `Only ${daysRemaining} day${daysRemaining === 1 ? '' : 's'} left in your trial!`
                       : `You have ${daysRemaining} day${daysRemaining === 1 ? '' : 's'} left in your Professional trial`}
                   </p>
                   <p
-                    className={`text-xs ${
-                      isUrgent
+                    className={`text-xs ${isUrgent
                         ? 'text-amber-600 dark:text-amber-300'
                         : 'text-blue-600 dark:text-blue-300'
-                    }`}
+                      }`}
                   >
                     Upgrade now to keep all {tierLimits.maxProducts} products and{' '}
                     {tierLimits.maxUsers} users
