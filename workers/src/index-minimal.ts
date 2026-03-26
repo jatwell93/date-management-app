@@ -297,7 +297,7 @@ export default Sentry.withSentry(
       }
 
       // API routes
-      if (pathname.startsWith('/api/')) {
+      if (pathname.startsWith('/api/') || pathname.startsWith('/upload/')) {
         const rateLimitDecision = await checkRateLimit(request, env);
         const finalizeApiResponse = async (responseLike: Response | Promise<Response>) => {
           const response = await responseLike;
@@ -323,7 +323,32 @@ export default Sentry.withSentry(
           return finalizeApiResponse(jwtErrorResponse);
         }
 
-        // Initialize database connection
+        const uploadRouteBase = pathname.startsWith('/api/upload') ? '/api/upload' : '/upload';
+
+        // Workers-native upload endpoints
+        if (method === 'POST' && pathname === `${uploadRouteBase}/initiate`) {
+          return finalizeApiResponse(handleUploadInitiate(request, env, uploadRouteBase));
+        }
+
+        if (method === 'POST' && pathname.startsWith(`${uploadRouteBase}/direct/`)) {
+          const encodedKey = pathname.slice(`${uploadRouteBase}/direct/`.length);
+          if (!encodedKey) {
+            return finalizeApiResponse(errorResponse('Missing key in URL', 400, env, requestOrigin));
+          }
+          let key: string;
+          try {
+            key = decodeURIComponent(encodedKey);
+          } catch (error) {
+            return finalizeApiResponse(errorResponse('Invalid key encoding', 400, env, requestOrigin));
+          }
+          return finalizeApiResponse(handleUploadDirect(request, env, key));
+        }
+
+        if (method === 'POST' && pathname === `${uploadRouteBase}/complete`) {
+          return finalizeApiResponse(handleUploadComplete(request, env));
+        }
+
+        // Initialize database connection for remaining API endpoints
         const db = createWorkersDatabase(env);
 
         // Route handling
@@ -713,6 +738,120 @@ async function handleGetDashboard(request: Request, db: Database, env: Env): Pro
   const stats = await db.getDashboardStats();
 
   return jsonResponse({ stats }, 200, env);
+}
+
+/**
+ * POST /upload/initiate and /api/upload/initiate
+ */
+async function handleUploadInitiate(
+  request: Request,
+  env: Env,
+  uploadRouteBase: '/upload' | '/api/upload'
+): Promise<Response> {
+  const auth = await authenticateRequest(request, env);
+  if (!auth) {
+    return errorResponse('Unauthorized', 401, env);
+  }
+
+  const body = await request.json() as {
+    filename?: string;
+    fileSize?: number;
+    contentType?: string;
+  };
+
+  if (!body.filename || typeof body.fileSize !== 'number' || !body.contentType) {
+    return errorResponse('Missing required fields: filename, fileSize, contentType', 400, env);
+  }
+
+  const maxFileSize = parseInt(env.MAX_FILE_SIZE || '10485760', 10);
+  if (body.fileSize > maxFileSize) {
+    return errorResponse(`File size exceeds maximum limit of ${maxFileSize} bytes`, 400, env);
+  }
+
+  const key = `uploads/user-${auth.userId}/${Date.now()}-${body.filename}`;
+
+  // Workers-native path currently uses direct upload for all file sizes.
+  return jsonResponse(
+    {
+      strategy: 'direct',
+      uploadUrl: `${uploadRouteBase}/direct/${encodeURIComponent(key)}`,
+      method: 'POST',
+      key,
+    },
+    200,
+    env
+  );
+}
+
+/**
+ * POST /upload/direct/:key and /api/upload/direct/:key
+ */
+async function handleUploadDirect(request: Request, env: Env, key: string): Promise<Response> {
+  const auth = await authenticateRequest(request, env);
+  if (!auth) {
+    return errorResponse('Unauthorized', 401, env);
+  }
+
+  // Verify the key belongs to the authenticated user
+  if (!key.startsWith(`uploads/user-${auth.userId}/`)) {
+    return errorResponse('Access denied: Upload key does not belong to this user', 403, env);
+  }
+
+  const formData = await request.formData();
+  const fileValue = formData.get('file') as unknown;
+
+  if (!(fileValue instanceof File)) {
+    return errorResponse('No file uploaded', 400, env);
+  }
+
+  // Re-validate file size and content type
+  const maxFileSize = parseInt(env.MAX_FILE_SIZE || '10485760', 10);
+  if (fileValue.size > maxFileSize) {
+    return errorResponse(`File size exceeds maximum limit of ${maxFileSize} bytes`, 400, env);
+  }
+
+  // Validate content type (assuming CSV files)
+  if (!fileValue.type || (!fileValue.type.includes('csv') && !fileValue.type.includes('text'))) {
+    return errorResponse('Invalid file type. Only CSV files are allowed.', 400, env);
+  }
+
+  const data = await fileValue.arrayBuffer();
+
+  await env.CSV_UPLOADS.put(key, data, {
+    httpMetadata: {
+      contentType: fileValue.type || 'text/csv',
+    },
+  });
+
+  return jsonResponse(
+    {
+      message: 'File uploaded and processing started',
+      key,
+    },
+    200,
+    env
+  );
+}
+
+/**
+ * POST /upload/complete and /api/upload/complete
+ */
+async function handleUploadComplete(request: Request, env: Env): Promise<Response> {
+  const auth = await authenticateRequest(request, env);
+  if (!auth) {
+    return errorResponse('Unauthorized', 401, env);
+  }
+
+  const body = await request.json() as { key?: string };
+  if (!body.key) {
+    return errorResponse('Missing required field: key', 400, env);
+  }
+
+  if (!body.key.startsWith(`uploads/user-${auth.userId}/`)) {
+    return errorResponse('Access denied: Upload key does not belong to this user', 403, env);
+  }
+
+  return jsonResponse({ message: 'Upload completed and processing started' }, 200, env);
 }
 
 export {

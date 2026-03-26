@@ -127,6 +127,30 @@ describe('API config guard', () => {
     const body = await response.json() as any;
     expect(body.error).toBeTruthy();
   });
+
+  it('routes /upload/initiate and returns 401 when unauthenticated', async () => {
+    const response = await SELF.fetch('https://example.com/upload/initiate', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ filename: 'test.csv', fileSize: 128, contentType: 'text/csv' }),
+    });
+
+    expect(response.status).toBe(401);
+    const body = await response.json() as any;
+    expect(body.error).toBeTruthy();
+  });
+
+  it('routes /api/upload/initiate and returns 401 when unauthenticated', async () => {
+    const response = await SELF.fetch('https://example.com/api/upload/initiate', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ filename: 'test.csv', fileSize: 128, contentType: 'text/csv' }),
+    });
+
+    expect(response.status).toBe(401);
+    const body = await response.json() as any;
+    expect(body.error).toBeTruthy();
+  });
 });
 
 describe('Auth input validation', () => {
