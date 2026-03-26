@@ -1,5 +1,5 @@
 import { Request, Response, NextFunction } from 'express';
-import jwt, { Secret } from 'jsonwebtoken';
+import jwt, { type Secret } from 'jsonwebtoken';
 import { verifyToken as verifyClerkToken } from '@clerk/backend';
 import { SubscriptionTier } from '@prisma/client';
 import { AnalyticsService, AnalyticsEventType } from '../services/analytics.service';

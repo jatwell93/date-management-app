@@ -11,6 +11,8 @@
   "keywords": [],
   "scripts": {
     "test": "echo \"Error: specify frontend or backend (npm run test:backend or npm run test:frontend)\" && exit 1",
+    "build:frontend": "npm run build --prefix frontend",
+    "build:workers": "npm run build --prefix workers",
     "test:e2e": "playwright test",
     "test:e2e:ui": "playwright test --ui",
     "test:e2e:headed": "playwright test --headed",

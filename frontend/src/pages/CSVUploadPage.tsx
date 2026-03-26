@@ -372,7 +372,10 @@ export const CSVUploadPage: React.FC<{ token: string | null }> = ({ token }) => 
           const formData = new FormData();
           formData.append('file', fileToUpload);
 
-          const directUrl = uploadUrl.startsWith('http') ? uploadUrl : `${apiUrl}/upload/direct`;
+          // Use key in the URL path: /upload/direct/:key
+          const directUrl = uploadUrl.startsWith('http')
+            ? `${uploadUrl}/${encodeURIComponent(key)}`
+            : `${apiUrl}/upload/direct/${encodeURIComponent(key)}`;
 
           const directRes = await uploadWithRetry(directUrl, {
             method: 'POST',
