@@ -1582,7 +1582,7 @@
     - ✅ Frontend run 1 and 2: 29/29 suites passing, 268 tests passed, 1 todo
     - ✅ Backend run 1 and 2: 87/89 suites passing (2 skipped), 931 tests passed, 9 skipped
     - ✅ Workers run 1 and 2: 12/12 files passing, 194 tests passed, 1 skipped
-    - ℹ️ Non-fatal Windows Miniflare temp-directory cleanup warnings (`EBUSY` during shutdown) were still observed, but they did not affect pass/fail status in the clean two-run validation
+    - ℹ️ Non-fatal Windows Miniflare temp-directory cleanup warnings (`EBUSY` during shutdown) were still observed, but they did not affect pass/fail status in the clean two-run validation.
 
 - [x] 20.12 Gate external-dependency tests behind explicit env flags
   - **Why:** Deployment-preview tests should not fail local CI when external Workers endpoints are unavailable
