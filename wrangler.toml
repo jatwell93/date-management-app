@@ -1,0 +1,14 @@
+name = "date-management-app-frontend"
+type = "javascript"
+account_id = ""
+workers_dev = false
+route = ""
+zone_id = ""
+
+[build]
+command = "npm run build"
+cwd = "./frontend"
+watch_paths = ["frontend/src/**/*.ts", "frontend/src/**/*.tsx"]
+
+[build.upload]
+format = "service-worker"
