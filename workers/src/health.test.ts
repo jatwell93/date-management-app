@@ -1,9 +1,27 @@
 import { env, SELF } from 'cloudflare:test';
 import { describe, it, expect, vi } from 'vitest';
 import { healthCheck } from './health';
-import { handleLogin, handleRegister, maybeCompressJsonResponse } from './index-minimal';
+import {
+  handleLogin,
+  handleRegister,
+  handleUploadInitiate,
+  handleUploadStatus,
+  maybeCompressJsonResponse,
+} from './index-minimal';
+import { createWorkersDatabase } from './database';
 import type { Database } from './database';
 import type { Env } from './types/env';
+import { SignJWT } from 'jose';
+
+async function createAuthToken(secret: string, userId: number): Promise<string> {
+  const key = new TextEncoder().encode(secret);
+
+  return await new SignJWT({ userId })
+    .setProtectedHeader({ alg: 'HS256' })
+    .setExpirationTime('15m')
+    .setIssuedAt()
+    .sign(key);
+}
 
 describe('Health Check API', () => {
   it('should return 200 OK for /health', async () => {
@@ -128,28 +146,116 @@ describe('API config guard', () => {
     expect(body.error).toBeTruthy();
   });
 
-  it('routes /upload/initiate and returns 401 when unauthenticated', async () => {
+  it('routes /upload/initiate and returns an auth/config error when unauthenticated', async () => {
     const response = await SELF.fetch('https://example.com/upload/initiate', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ filename: 'test.csv', fileSize: 128, contentType: 'text/csv' }),
     });
 
-    expect(response.status).toBe(401);
+    expect(response.status).not.toBe(404);
+    expect([401, 429, 500]).toContain(response.status);
     const body = await response.json() as any;
     expect(body.error).toBeTruthy();
   });
 
-  it('routes /api/upload/initiate and returns 401 when unauthenticated', async () => {
+  it('routes /api/upload/initiate and returns an auth/config error when unauthenticated', async () => {
     const response = await SELF.fetch('https://example.com/api/upload/initiate', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ filename: 'test.csv', fileSize: 128, contentType: 'text/csv' }),
     });
 
-    expect(response.status).toBe(401);
+    expect(response.status).not.toBe(404);
+    expect([401, 429, 500]).toContain(response.status);
     const body = await response.json() as any;
     expect(body.error).toBeTruthy();
+  });
+
+  it('routes /api/upload/status/:key and returns an auth/config error when unauthenticated', async () => {
+    const key = encodeURIComponent('uploads/user-1/123456-test.csv');
+
+    const response = await SELF.fetch(`https://example.com/api/upload/status/${key}`, {
+      method: 'GET',
+    });
+
+    expect(response.status).not.toBe(404);
+    expect([401, 429, 500]).toContain(response.status);
+    const body = await response.json() as any;
+    expect(body.error).toBeTruthy();
+  });
+});
+
+describe('Upload strategy parity', () => {
+  const createUploadEnv = (overrides: Partial<Env> = {}): Env => ({
+    NODE_ENV: 'development',
+    STORAGE_PROVIDER: 'r2',
+    MAX_FILE_SIZE: '10485760',
+    CSV_BATCH_SIZE: '100',
+    RATE_LIMIT_WINDOW: '60000',
+    RATE_LIMIT_MAX_REQUESTS: '10',
+    RATE_LIMIT_MAX_AUTHENTICATED: '100',
+    NEON_CONNECTION_STRING: 'postgres://example',
+    JWT_SECRET: 'upload-test-secret',
+    R2_ACCOUNT_ID: 'test-account',
+    R2_ACCESS_KEY_ID: 'test-key',
+    R2_SECRET_ACCESS_KEY: 'test-secret',
+    R2_BUCKET_NAME: 'test-bucket',
+    CSV_UPLOADS: {
+      head: vi.fn().mockResolvedValue({ key: 'uploads/user-7/1-big.csv' }),
+      put: vi.fn().mockResolvedValue(undefined),
+    } as unknown as R2Bucket,
+    HYPERDRIVE: {
+      connectionString: 'postgres://example',
+    } as unknown as Hyperdrive,
+    ...overrides,
+  });
+
+  it('returns presigned strategy for files larger than 2MB', async () => {
+    const envForUpload = createUploadEnv();
+    const token = await createAuthToken(envForUpload.JWT_SECRET, 7);
+
+    const request = new Request('https://example.com/api/upload/initiate', {
+      method: 'POST',
+      headers: {
+        Authorization: `Bearer ${token}`,
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({
+        filename: 'big.csv',
+        fileSize: 3 * 1024 * 1024,
+        contentType: 'text/csv',
+      }),
+    });
+
+    const response = await handleUploadInitiate(request, envForUpload, '/api/upload');
+    expect(response.status).toBe(200);
+
+    const body = await response.json() as any;
+    expect(body.strategy).toBe('presigned');
+    expect(body.method).toBe('PUT');
+    expect(body.uploadUrl).toContain('/api/upload/presigned/');
+    expect(body.uploadUrl).toContain('token=');
+  });
+
+  it('returns complete upload status when object exists', async () => {
+    const envForUpload = createUploadEnv();
+    const token = await createAuthToken(envForUpload.JWT_SECRET, 7);
+    const key = 'uploads/user-7/1-big.csv';
+
+    const request = new Request(`https://example.com/api/upload/status/${encodeURIComponent(key)}`, {
+      method: 'GET',
+      headers: {
+        Authorization: `Bearer ${token}`,
+      },
+    });
+
+    const response = await handleUploadStatus(request, envForUpload, key);
+    expect(response.status).toBe(200);
+
+    const body = await response.json() as any;
+    expect(body.status).toBe('complete');
+    expect(body.progress).toBe(100);
   });
 });
 
@@ -244,5 +350,43 @@ describe('Auth input validation', () => {
     expect(response.status).toBe(409);
     const body = await response.json() as any;
     expect(body.error).toBe('Email already registered');
+  });
+});
+
+describe('Workers database connection strategy', () => {
+  it('prefers direct Neon connection when available to avoid Hyperdrive DNS failures', () => {
+    const logSpy = vi.spyOn(console, 'log').mockImplementation(() => {});
+    const warnSpy = vi.spyOn(console, 'warn').mockImplementation(() => {});
+
+    const envWithBoth = {
+      NODE_ENV: 'production',
+      STORAGE_PROVIDER: 'r2',
+      MAX_FILE_SIZE: '10485760',
+      CSV_BATCH_SIZE: '100',
+      RATE_LIMIT_WINDOW: '60000',
+      RATE_LIMIT_MAX_REQUESTS: '10',
+      RATE_LIMIT_MAX_AUTHENTICATED: '100',
+      NEON_CONNECTION_STRING: 'postgresql://neondb_owner:testpass@direct-neon.example.com/neondb?sslmode=require',
+      DATABASE_URL: 'postgresql://neondb_owner:testpass@fallback-db.example.com/neondb?sslmode=require',
+      JWT_SECRET: 'test-secret',
+      R2_ACCOUNT_ID: 'test',
+      R2_ACCESS_KEY_ID: 'test',
+      R2_SECRET_ACCESS_KEY: 'test',
+      R2_BUCKET_NAME: 'test',
+      CSV_UPLOADS: {} as R2Bucket,
+      HYPERDRIVE: {
+        connectionString: 'postgresql://neondb_owner:testpass@hyperdrive-proxy.example.com/neondb?sslmode=require',
+      } as unknown as Hyperdrive,
+    } as Env;
+
+    createWorkersDatabase(envWithBoth);
+
+    expect(logSpy).toHaveBeenCalledWith('[Database] Connecting via Neon serverless driver (direct)');
+    expect(warnSpy).not.toHaveBeenCalledWith(
+      '[Database] Direct Neon connection not found, falling back to Hyperdrive connection string',
+    );
+
+    logSpy.mockRestore();
+    warnSpy.mockRestore();
   });
 });

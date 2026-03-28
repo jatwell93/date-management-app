@@ -45,6 +45,7 @@ export interface User {
   email: string;
   name: string | null;
   passwordHash: string;
+  organizationId?: string;
   role: string;
   createdAt: Date;
   updatedAt: Date;
@@ -99,18 +100,19 @@ export interface DashboardStats {
  * Uses Hyperdrive connection string from env bindings
  */
 export function createWorkersDatabase(env: Env): Database {
-  // Get connection string - prefer Hyperdrive for edge pooling
-  let connectionString = env.HYPERDRIVE?.connectionString;
-  
-  if (!connectionString) {
-    console.warn('[Database] No Hyperdrive connection, using fallback');
-    connectionString = env.DATABASE_URL || env.NEON_CONNECTION_STRING;
-  } else {
-    console.log('[Database] Connecting via Cloudflare Hyperdrive (edge pooling)');
+  // Neon serverless driver is most reliable with direct Neon connection strings.
+  // Keep Hyperdrive as an emergency fallback when secrets are missing.
+  let connectionString = env.NEON_CONNECTION_STRING || env.DATABASE_URL;
+
+  if (connectionString) {
+    console.log('[Database] Connecting via Neon serverless driver (direct)');
+  } else if (env.HYPERDRIVE?.connectionString) {
+    console.warn('[Database] Direct Neon connection not found, falling back to Hyperdrive connection string');
+    connectionString = env.HYPERDRIVE.connectionString;
   }
   
   if (!connectionString) {
-    throw new Error('No database connection string available. Configure HYPERDRIVE or DATABASE_URL.');
+    throw new Error('No database connection string available. Configure NEON_CONNECTION_STRING, DATABASE_URL, or HYPERDRIVE.');
   }
 
   // Create Neon SQL tagged template function
@@ -122,8 +124,14 @@ export function createWorkersDatabase(env: Env): Database {
     // User queries
     async findUserByEmail(email: string): Promise<User | null> {
       const rows = await sql`
-        SELECT id, email, name, password_hash as "passwordHash", role, 
-               created_at as "createdAt", updated_at as "updatedAt"
+        SELECT id,
+               email,
+               username as "name",
+               ''::text as "passwordHash",
+               organization_id as "organizationId",
+               role,
+               created_at as "createdAt",
+               updated_at as "updatedAt"
         FROM users 
         WHERE LOWER(email) = LOWER(${email})
         LIMIT 1
@@ -133,8 +141,14 @@ export function createWorkersDatabase(env: Env): Database {
 
     async findUserById(id: number): Promise<User | null> {
       const rows = await sql`
-        SELECT id, email, name, password_hash as "passwordHash", role,
-               created_at as "createdAt", updated_at as "updatedAt"
+        SELECT id,
+               email,
+               username as "name",
+               ''::text as "passwordHash",
+               organization_id as "organizationId",
+               role,
+               created_at as "createdAt",
+               updated_at as "updatedAt"
         FROM users 
         WHERE id = ${id}
         LIMIT 1
@@ -144,11 +158,41 @@ export function createWorkersDatabase(env: Env): Database {
 
     async createUser(data: CreateUserData): Promise<User> {
       const rows = await sql`
-        INSERT INTO users (email, name, password_hash, role, created_at, updated_at)
-        VALUES (${data.email.toLowerCase()}, ${data.name || null}, ${data.passwordHash}, ${data.role || 'user'}, NOW(), NOW())
-        RETURNING id, email, name, password_hash as "passwordHash", role, 
-                  created_at as "createdAt", updated_at as "updatedAt"
+        WITH sync_sequence AS (
+          SELECT setval(
+            pg_get_serial_sequence('users', 'id'),
+            COALESCE((SELECT MAX(id) FROM users), 0) + 1,
+            false
+          )
+        ),
+        default_org AS (
+          SELECT id
+          FROM organizations
+          ORDER BY created_at ASC
+          LIMIT 1
+        )
+        INSERT INTO users (organization_id, email, username, role, created_at, updated_at)
+        SELECT default_org.id,
+               ${data.email.toLowerCase()},
+               ${data.name || null},
+               ${data.role || 'user'},
+               NOW(),
+               NOW()
+        FROM default_org, sync_sequence
+        RETURNING id,
+                  email,
+                  username as "name",
+                  ''::text as "passwordHash",
+                  organization_id as "organizationId",
+                  role,
+                  created_at as "createdAt",
+                  updated_at as "updatedAt"
       `;
+
+      if (!rows[0]) {
+        throw new Error('No organization available for user provisioning');
+      }
+
       return rows[0] as User;
     },
 

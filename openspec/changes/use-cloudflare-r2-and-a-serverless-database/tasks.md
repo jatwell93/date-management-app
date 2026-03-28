@@ -749,7 +749,7 @@
 > 5. ⚠️ **PARTIAL:** Phase 12.1 complete, 12.2 custom metrics wiring still pending
 >
 > **DEPLOYMENT READINESS CHECKLIST:**
-> - [ ] Australian business registered with ABN (Phase 15a.1)
+> - [x] Australian business registered with ABN (Phase 15a.1)
 > - [ ] `.au` domain registered and nameservers updated (Phase 15a.3-15a.4)
 > - [ ] SSL certificate active via Cloudflare (Phase 15a.6)
 > - [ ] Hosting platform selected and account created (Phase 15a.10-15a.11)
@@ -902,7 +902,7 @@
   
   - **Decision:** Use Cloudflare Pages + Workers unless you have specific requirements for an alternative
 
-- [ ] 15a.11 Deploy to Cloudflare Pages + Workers (Primary Recommendation)
+- [x] 15a.11 Deploy to Cloudflare Pages + Workers (Primary Recommendation)
   - **Why This Setup:** Workers already configured with Express adapter in wrangler.toml; Pages provides excellent React deployment; single platform reduces operational burden
   - **Status (Mar 24, 2026):** In progress - preflight started
     - ✅ Added root script `npm run build:frontend`
@@ -1055,7 +1055,7 @@
     - `https://api.expirymate.com.au/health` → HTTP 200
     - `https://date-management-api-prod.date-management-app.workers.dev/health` → HTTP 200
 
-- [ ] 15.6 Test CSV upload flow end-to-end in production (with organizationId)
+- [x] 15.6 Test CSV upload flow end-to-end in production (with organizationId)
   - **Test Cases:**
     - Small file upload (<2MB) via direct path
     - Large file upload (>2MB) via presigned URL
@@ -1075,12 +1075,25 @@
     - `POST /api/auth/register` for two unique smoke users -> HTTP 500 (no token issued)
     - Follow-on upload calls without token remain unauthenticated (`/upload/*` -> HTTP 401)
     - Cross-user check could not be completed due missing authenticated token pair
-  - **Remaining to close 15.6:**
-    - Use a valid production auth token path (Clerk session token or known production test user credentials), then run authenticated E2E for:
-      - small upload direct path
-      - large upload path behavior verification
-      - processing completion verification
-      - tenant/org isolation verification
+  - **Smoke Update (Mar 28, 2026):** ✅ Auth + direct upload path now works; ⚠️ remaining parity gaps
+    - Workers deploy with DB/auth compatibility fixes: `681496b5-a27b-40ba-95fa-e4cafd59adf2`
+    - `POST /api/auth/register` now returns HTTP 201 with JWT token (was HTTP 500)
+    - `POST /api/upload/initiate` with bearer token -> HTTP 200
+    - `POST /api/upload/direct/:key` as owner -> HTTP 200
+    - `POST /api/upload/complete` as owner -> HTTP 200
+    - Re-ran complete register→initiate→direct→complete sequence after latest deploy: all HTTP 2xx
+    - Cross-user direct upload attempt with different token -> HTTP 403 (isolation check passed)
+    - Large-file initiate (`fileSize=3145728`) still returns `strategy: "direct"` (presigned path not active)
+    - `GET /api/upload/status/:key` returns HTTP 404 (status polling endpoint not exposed in current Workers handler)
+  - **Smoke Update (Mar 28, 2026 - parity closure):** ✅ 15.6 complete
+    - Workers deploy with upload parity fixes: `bacbe882-c088-4de5-b3b6-c173622cda82`
+    - `POST /api/auth/register` for two smoke users -> HTTP 201 / 201
+    - `POST /api/upload/initiate` (small file, `fileSize=1024`) -> `strategy: "direct"`, `method: "POST"`
+    - `POST /api/upload/initiate` (large file, `fileSize=3145728`) -> `strategy: "presigned"`, `method: "PUT"`
+    - Presigned upload `PUT /api/upload/presigned/:key?token=...` -> HTTP 200
+    - `POST /api/upload/complete` (owner token) -> HTTP 200
+    - `GET /api/upload/status/:key` (owner token) -> HTTP 200 with `status: "complete"` and `progress: 100`
+    - `GET /api/upload/status/:key` (different user token) -> HTTP 403 (isolation enforced)
 
 - [ ] 15.7 Monitor initial production traffic (first 24 hours)
   - **Metrics to watch:**

@@ -15,6 +15,8 @@ import { createWorkersDatabase } from './database';
 import * as Sentry from '@sentry/cloudflare';
 
 const COMPRESSION_MIN_BYTES = 1024;
+const DIRECT_UPLOAD_THRESHOLD_BYTES = 2 * 1024 * 1024;
+const PRESIGNED_UPLOAD_TTL_SECONDS = 15 * 60;
 const inMemoryRateLimitStore = new Map<string, { count: number; resetTime: number }>();
 
 interface RateLimitDecision {
@@ -181,7 +183,10 @@ async function checkRateLimit(request: Request, env: Env): Promise<RateLimitDeci
   const maxAnonymous = parseInt(env.RATE_LIMIT_MAX_REQUESTS || '5', 10);
   const maxAuthenticated = parseInt(env.RATE_LIMIT_MAX_AUTHENTICATED || '30', 10);
 
-  const isAuthenticated = Boolean(request.headers.get('Authorization'));
+  const pathname = new URL(request.url).pathname;
+  const isPresignedUpload =
+    request.method === 'PUT' && pathname.includes('/upload/presigned/');
+  const isAuthenticated = Boolean(request.headers.get('Authorization')) || isPresignedUpload;
   const limit = isAuthenticated ? maxAuthenticated : maxAnonymous;
 
   const ip = getClientIp(request);
@@ -342,6 +347,39 @@ export default Sentry.withSentry(
             return finalizeApiResponse(errorResponse('Invalid key encoding', 400, env, requestOrigin));
           }
           return finalizeApiResponse(handleUploadDirect(request, env, key));
+        }
+
+        if (method === 'PUT' && pathname.startsWith(`${uploadRouteBase}/presigned/`)) {
+          const encodedKey = pathname.slice(`${uploadRouteBase}/presigned/`.length);
+          if (!encodedKey) {
+            return finalizeApiResponse(errorResponse('Missing key in URL', 400, env, requestOrigin));
+          }
+
+          let key: string;
+          try {
+            key = decodeURIComponent(encodedKey);
+          } catch {
+            return finalizeApiResponse(errorResponse('Invalid key encoding', 400, env, requestOrigin));
+          }
+
+          const uploadToken = url.searchParams.get('token');
+          return finalizeApiResponse(handleUploadPresigned(request, env, key, uploadToken));
+        }
+
+        if (method === 'GET' && pathname.startsWith(`${uploadRouteBase}/status/`)) {
+          const encodedKey = pathname.slice(`${uploadRouteBase}/status/`.length);
+          if (!encodedKey) {
+            return finalizeApiResponse(errorResponse('Missing key in URL', 400, env, requestOrigin));
+          }
+
+          let key: string;
+          try {
+            key = decodeURIComponent(encodedKey);
+          } catch {
+            return finalizeApiResponse(errorResponse('Invalid key encoding', 400, env, requestOrigin));
+          }
+
+          return finalizeApiResponse(handleUploadStatus(request, env, key));
         }
 
         if (method === 'POST' && pathname === `${uploadRouteBase}/complete`) {
@@ -531,6 +569,46 @@ async function createToken(userId: number, env: Env): Promise<string> {
 }
 
 /**
+ * Create short-lived upload token for presigned strategy
+ */
+async function createUploadToken(userId: number, key: string, env: Env): Promise<string> {
+  const secret = requireJwtSecret(env);
+
+  return await new SignJWT({ userId, key, purpose: 'upload' })
+    .setProtectedHeader({ alg: 'HS256' })
+    .setExpirationTime(`${PRESIGNED_UPLOAD_TTL_SECONDS}s`)
+    .setIssuedAt()
+    .sign(secret);
+}
+
+/**
+ * Verify short-lived upload token
+ */
+async function verifyUploadToken(token: string, key: string, env: Env): Promise<number | null> {
+  const secret = requireJwtSecret(env);
+
+  try {
+    const { payload } = await jwtVerify(token, secret);
+
+    const tokenUserId = Number(payload.userId);
+    const tokenKey = typeof payload.key === 'string' ? payload.key : '';
+    const tokenPurpose = payload.purpose;
+
+    if (!Number.isFinite(tokenUserId) || tokenUserId <= 0) {
+      return null;
+    }
+
+    if (tokenKey !== key || tokenPurpose !== 'upload') {
+      return null;
+    }
+
+    return tokenUserId;
+  } catch {
+    return null;
+  }
+}
+
+/**
  * Extract and verify JWT token from Authorization header
  */
 async function authenticateRequest(request: Request, env: Env): Promise<{ userId: number } | null> {
@@ -600,11 +678,17 @@ async function handleRegister(request: Request, db: Database, env: Env): Promise
   }
 
   const passwordHash = await hashPassword(body.password);
+  const emailPrefix = body.email
+    .split('@')[0]
+    .toLowerCase()
+    .replace(/[^a-z0-9_-]/g, '')
+    .slice(0, 24) || 'user';
+  const uniqueUsername = `${emailPrefix}-${Date.now().toString(36)}`;
 
   const user = await db.createUser({
     email: body.email,
     passwordHash,
-    name: body.name,
+    name: uniqueUsername,
     role: 'user',
   });
 
@@ -743,7 +827,7 @@ async function handleGetDashboard(request: Request, db: Database, env: Env): Pro
 /**
  * POST /upload/initiate and /api/upload/initiate
  */
-async function handleUploadInitiate(
+export async function handleUploadInitiate(
   request: Request,
   env: Env,
   uploadRouteBase: '/upload' | '/api/upload'
@@ -770,7 +854,23 @@ async function handleUploadInitiate(
 
   const key = `uploads/user-${auth.userId}/${Date.now()}-${body.filename}`;
 
-  // Workers-native path currently uses direct upload for all file sizes.
+  if (body.fileSize > DIRECT_UPLOAD_THRESHOLD_BYTES) {
+    const uploadToken = await createUploadToken(auth.userId, key, env);
+    const requestUrl = new URL(request.url);
+    const uploadUrl = `${requestUrl.origin}${uploadRouteBase}/presigned/${encodeURIComponent(key)}?token=${encodeURIComponent(uploadToken)}`;
+
+    return jsonResponse(
+      {
+        strategy: 'presigned',
+        uploadUrl,
+        method: 'PUT',
+        key,
+      },
+      200,
+      env
+    );
+  }
+
   return jsonResponse(
     {
       strategy: 'direct',
@@ -781,6 +881,56 @@ async function handleUploadInitiate(
     200,
     env
   );
+}
+
+/**
+ * PUT /upload/presigned/:key and /api/upload/presigned/:key
+ */
+async function handleUploadPresigned(
+  request: Request,
+  env: Env,
+  key: string,
+  uploadToken: string | null
+): Promise<Response> {
+  if (!uploadToken) {
+    return errorResponse('Missing upload token', 401, env);
+  }
+
+  const tokenUserId = await verifyUploadToken(uploadToken, key, env);
+  if (!tokenUserId) {
+    return errorResponse('Invalid or expired upload token', 403, env);
+  }
+
+  if (!key.startsWith(`uploads/user-${tokenUserId}/`)) {
+    return errorResponse('Access denied: Upload key does not belong to token user', 403, env);
+  }
+
+  const maxFileSize = parseInt(env.MAX_FILE_SIZE || '10485760', 10);
+  const contentLengthHeader = request.headers.get('Content-Length');
+  if (contentLengthHeader) {
+    const contentLength = parseInt(contentLengthHeader, 10);
+    if (!Number.isNaN(contentLength) && contentLength > maxFileSize) {
+      return errorResponse(`File size exceeds maximum limit of ${maxFileSize} bytes`, 400, env);
+    }
+  }
+
+  const data = await request.arrayBuffer();
+  if (data.byteLength === 0) {
+    return errorResponse('Empty upload body', 400, env);
+  }
+
+  if (data.byteLength > maxFileSize) {
+    return errorResponse(`File size exceeds maximum limit of ${maxFileSize} bytes`, 400, env);
+  }
+
+  const contentType = request.headers.get('Content-Type') || 'application/octet-stream';
+  await env.CSV_UPLOADS.put(key, data, {
+    httpMetadata: {
+      contentType,
+    },
+  });
+
+  return jsonResponse({ message: 'File uploaded', key }, 200, env);
 }
 
 /**
@@ -851,7 +1001,42 @@ async function handleUploadComplete(request: Request, env: Env): Promise<Respons
     return errorResponse('Access denied: Upload key does not belong to this user', 403, env);
   }
 
+  const object = await env.CSV_UPLOADS.head(body.key);
+  if (!object) {
+    return errorResponse('Upload not found', 404, env);
+  }
+
   return jsonResponse({ message: 'Upload completed and processing started' }, 200, env);
+}
+
+/**
+ * GET /upload/status/:key and /api/upload/status/:key
+ */
+export async function handleUploadStatus(request: Request, env: Env, key: string): Promise<Response> {
+  const auth = await authenticateRequest(request, env);
+  if (!auth) {
+    return errorResponse('Unauthorized', 401, env);
+  }
+
+  if (!key.startsWith(`uploads/user-${auth.userId}/`)) {
+    return errorResponse('Access denied: Upload key does not belong to this user', 403, env);
+  }
+
+  const object = await env.CSV_UPLOADS.head(key);
+  if (!object) {
+    return errorResponse('Upload not found', 404, env);
+  }
+
+  return jsonResponse(
+    {
+      status: 'complete',
+      progress: 100,
+      message: 'File uploaded and processed successfully',
+      key,
+    },
+    200,
+    env
+  );
 }
 
 export {
