@@ -301,6 +301,24 @@ export default Sentry.withSentry(
         return maybeCompressJsonResponse(request, healthResponse);
       }
 
+      // Root metadata endpoint for human-friendly API discovery
+      if (pathname === '/') {
+        return maybeCompressJsonResponse(
+          request,
+          jsonResponse(
+            {
+              service: 'ExpiryMate API',
+              status: 'ok',
+              health: '/health',
+              docs: '/api',
+            },
+            200,
+            env,
+            requestOrigin
+          )
+        );
+      }
+
       // API routes
       if (pathname.startsWith('/api/') || pathname.startsWith('/upload/')) {
         const rateLimitDecision = await checkRateLimit(request, env);

@@ -24,6 +24,16 @@ async function createAuthToken(secret: string, userId: number): Promise<string> 
 }
 
 describe('Health Check API', () => {
+  it('should return API metadata for root path', async () => {
+    const response = await SELF.fetch('https://example.com/');
+    expect(response.status).toBe(200);
+
+    const data = await response.json() as any;
+    expect(data.service).toBe('ExpiryMate API');
+    expect(data.health).toBe('/health');
+    expect(data.docs).toBe('/api');
+  });
+
   it('should return 200 OK for /health', async () => {
     const response = await SELF.fetch('https://example.com/health');
     expect(response.status).toBe(200);
