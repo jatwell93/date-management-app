@@ -15,6 +15,10 @@ if (sentryDsn && process.env.NODE_ENV !== 'test') {
         maskAllText: true,
         blockAllMedia: true,
       }),
+      // Adds the in-app issue reporting widget for users.
+      Sentry.feedbackIntegration({
+        colorScheme: 'system',
+      }),
     ],
 
     // Adds user context to errors (IP address, etc.)

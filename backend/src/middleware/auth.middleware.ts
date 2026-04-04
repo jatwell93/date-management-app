@@ -1,5 +1,5 @@
 import { Request, Response, NextFunction } from 'express';
-import jwt, { type Secret } from 'jsonwebtoken';
+import jwt from 'jsonwebtoken';
 import { verifyToken as verifyClerkToken } from '@clerk/backend';
 import { SubscriptionTier } from '@prisma/client';
 import { AnalyticsService, AnalyticsEventType } from '../services/analytics.service';
@@ -63,8 +63,14 @@ const isTierLevel = (value: string): value is TierLevel =>
 const isBillingCycle = (value: string): value is BillingCycle =>
   Object.values(BillingCycle).includes(value as BillingCycle);
 
-const hasRequiredTokenFields = (token: any): boolean => {
-  return 'userId' in token && 'role' in token && 'organizationId' in token;
+const hasRequiredTokenFields = (token: TokenPayload | unknown): boolean => {
+  return (
+    typeof token === 'object' &&
+    token !== null &&
+    'userId' in token &&
+    'role' in token &&
+    'organizationId' in token
+  );
 };
 
 function getTierVersion(subscription: SubscriptionTier): string {
@@ -77,7 +83,14 @@ export const invalidateSubscriptionCache = (organizationId: string): void => {
 };
 
 // Simple memory cache for subscription status
-const subscriptionCache = new Map<string, { subscription: any; timestamp: number }>();
+interface CachedSubscription {
+  data: SubscriptionTier | null;
+  hasActiveAccess: boolean;
+}
+const subscriptionCache = new Map<
+  string,
+  { subscription: CachedSubscription; timestamp: number }
+>();
 const CACHE_TTL_MS = 5 * 60 * 1000; // 5 minutes
 export const TEST_AUTH_BYPASS_ORG_ID = 'default-org';
 
@@ -255,8 +268,8 @@ async function resolveFromClerkToken(token: string): Promise<TokenPayload | null
   }
 }
 
-function isValidTokenStructure(decodedToken: any): decodedToken is TokenPayload {
-  return decodedToken && typeof decodedToken === 'object';
+function isValidTokenStructure(decodedToken: unknown): decodedToken is TokenPayload {
+  return decodedToken !== null && typeof decodedToken === 'object';
 }
 
 function isTokenExpired(decodedToken: TokenPayload): boolean {
@@ -458,7 +471,7 @@ function trackSuccessfulAuth(decodedToken: TokenPayload, req: AuthRequest): void
 function trackAuthError(
   decodedToken: TokenPayload,
   action: string,
-  error: any,
+  error: Error | unknown,
   req: AuthRequest,
 ): void {
   const analyticsService = AnalyticsService.getInstance();
@@ -486,9 +499,11 @@ export const generateToken = (
   tierLevel: TierLevel,
   expiresIn: string | number = '24h',
 ): string => {
-  return jwt.sign({ userId, role, organizationId, tierLevel }, envConfig.JWT_SECRET, {
-    expiresIn: expiresIn as any,
-  });
+  return jwt.sign(
+    { userId, role, organizationId, tierLevel },
+    envConfig.JWT_SECRET as string,
+    { expiresIn } as any,
+  );
 };
 
 export const requireManager = (req: AuthRequest, res: Response, next: NextFunction) => {

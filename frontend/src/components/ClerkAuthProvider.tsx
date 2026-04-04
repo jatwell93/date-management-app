@@ -48,6 +48,17 @@ const decodeTokenAndGetUserName = (token: string | null): string | null => {
   }
 };
 
+const decodeTokenAndGetUserEmail = (token: string | null): string | null => {
+  if (!token) return null;
+  try {
+    const decodedToken = jwtDecode<JwtPayload & { email?: string }>(token);
+    return typeof decodedToken.email === 'string' ? decodedToken.email : null;
+  } catch (error) {
+    Sentry.captureException(error, { tags: { feature: 'auth' } });
+    return null;
+  }
+};
+
 // Auth context to share auth state
 interface AuthContextType {
   isLoggedIn: boolean;
@@ -108,17 +119,27 @@ function ClerkAuthInner({ children }: { children: React.ReactNode }) {
           if (!isMounted) return;
 
           if (clerkToken) {
+            const resolvedUserId = decodeTokenAndGetUserId(clerkToken);
+            const resolvedUserName =
+              decodeTokenAndGetUserName(clerkToken) ||
+              user.fullName ||
+              user.primaryEmailAddress?.emailAddress ||
+              null;
+            const resolvedUserEmail =
+              user.primaryEmailAddress?.emailAddress || decodeTokenAndGetUserEmail(clerkToken);
+
             setToken(clerkToken);
             setIsLoggedIn(true);
             setIsFullySignedIn(true);
-            setUserId(decodeTokenAndGetUserId(clerkToken));
-            setUserName(
-              decodeTokenAndGetUserName(clerkToken) ||
-                user.fullName ||
-                user.primaryEmailAddress?.emailAddress ||
-                null,
-            );
+            setUserId(resolvedUserId);
+            setUserName(resolvedUserName);
             setUserRole(decodeTokenAndGetRole(clerkToken));
+
+            Sentry.setUser({
+              id: resolvedUserId ? String(resolvedUserId) : undefined,
+              username: resolvedUserName || undefined,
+              email: resolvedUserEmail || undefined,
+            });
           }
         })
         .catch((error) => {
@@ -133,6 +154,7 @@ function ClerkAuthInner({ children }: { children: React.ReactNode }) {
       setUserId(null);
       setUserName(null);
       setUserRole(null);
+      Sentry.setUser(null);
       localStorage.removeItem('session');
       localStorage.removeItem('authToken');
     }
@@ -143,12 +165,21 @@ function ClerkAuthInner({ children }: { children: React.ReactNode }) {
   }, [isSignedIn, isLoaded, user, getToken]);
 
   const handleLogin = (newToken: string) => {
+    const resolvedUserId = decodeTokenAndGetUserId(newToken);
+    const resolvedUserName = decodeTokenAndGetUserName(newToken);
+
     setToken(newToken);
     setIsLoggedIn(true);
     setIsFullySignedIn(true);
-    setUserId(decodeTokenAndGetUserId(newToken));
-    setUserName(decodeTokenAndGetUserName(newToken));
+    setUserId(resolvedUserId);
+    setUserName(resolvedUserName);
     setUserRole(decodeTokenAndGetRole(newToken));
+
+    Sentry.setUser({
+      id: resolvedUserId ? String(resolvedUserId) : undefined,
+      username: resolvedUserName || undefined,
+      email: decodeTokenAndGetUserEmail(newToken) || undefined,
+    });
   };
 
   const clearClientAuthState = () => {
@@ -158,6 +189,7 @@ function ClerkAuthInner({ children }: { children: React.ReactNode }) {
     setUserId(null);
     setUserName(null);
     setUserRole(null);
+    Sentry.setUser(null);
     localStorage.removeItem('session');
     localStorage.removeItem('authToken');
   };
