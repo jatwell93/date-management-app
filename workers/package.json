@@ -6,8 +6,8 @@
   "scripts": {
     "dev": "wrangler dev",
     "build": "node build.js",
-    "build:types": "tsc --noEmit",
-    "lint": "tsc --noEmit",
+    "build:types": "tsc --noEmit -p tsconfig.deploy.json",
+    "lint": "tsc --noEmit -p tsconfig.deploy.json",
     "deploy": "npm run build && wrangler deploy",
     "deploy:prod": "npm run build && wrangler deploy --env production",
     "deploy:dev": "npm run build && wrangler deploy --env development",
