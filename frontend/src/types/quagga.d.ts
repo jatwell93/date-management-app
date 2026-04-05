@@ -1,11 +1,11 @@
 declare module 'quagga' {
   interface QuaggaStatic {
-    init(config: any, callback: (err: any) => void): void;
+    init(config: unknown, callback: (err: unknown) => void): void;
     start(): void;
     stop(): void;
-    onDetected(callback: (data: any) => void): void;
-    onProcessed(callback: (data: any) => void): void;
-    Result: any;
+    onDetected(callback: (data: unknown) => void): void;
+    onProcessed(callback: (data: unknown) => void): void;
+    Result: unknown;
   }
 
   const Quagga: QuaggaStatic;

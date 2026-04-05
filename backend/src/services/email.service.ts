@@ -20,6 +20,26 @@ const TEMPLATE_IDS = {
   downgradeWarning: 'd-a4639fceab7747d798b1931b955163e2',
 };
 
+interface BulkEmailPersonalization {
+  to: Array<{ email: string }>;
+  dynamicTemplateData?: Record<string, unknown>;
+}
+
+interface BulkEmailPayload {
+  from: string;
+  subject: string;
+  personalizations: BulkEmailPersonalization[];
+  templateId?: string;
+  content?: Array<{ type: 'text/html' | 'text/plain'; value: string }>;
+}
+
+function toTemplateRecord(value: unknown): Record<string, unknown> | undefined {
+  if (value && typeof value === 'object' && !Array.isArray(value)) {
+    return value as Record<string, unknown>;
+  }
+  return undefined;
+}
+
 export class EmailService {
   private prisma: PrismaClient;
 
@@ -356,7 +376,7 @@ export class EmailService {
     html?: string;
     text?: string;
     templateName?: string;
-    templateData?: Record<string, any>;
+    templateData?: unknown;
   }): Promise<void> {
     try {
       if (!envConfig.SENDGRID_API_KEY) {
@@ -365,7 +385,7 @@ export class EmailService {
       }
 
       const fromEmail = envConfig.SENDGRID_FROM_EMAIL || 'noreply@yourdomain.com';
-      const msg: any = {
+      const msg: Parameters<typeof sgMail.send>[0] = {
         to: params.to,
         from: fromEmail,
         subject: params.subject,
@@ -401,7 +421,7 @@ export class EmailService {
     html?: string;
     text?: string;
     templateId?: string;
-    templateData?: Record<string, any>;
+    templateData?: unknown;
   }): Promise<void> {
     try {
       if (!envConfig.SENDGRID_API_KEY) {
@@ -413,15 +433,17 @@ export class EmailService {
 
       const fromEmail = envConfig.SENDGRID_FROM_EMAIL || 'noreply@yourdomain.com';
 
+      const dynamicTemplateData = toTemplateRecord(params.templateData);
+
       // Create personalizations for each recipient
       const personalizations = params.to.map((email) => ({
         to: [{ email }],
-        ...(params.templateData && {
-          dynamicTemplateData: params.templateData,
+        ...(dynamicTemplateData && {
+          dynamicTemplateData,
         }),
       }));
 
-      const msg: any = {
+      const msg: BulkEmailPayload = {
         from: fromEmail,
         subject: params.subject,
         personalizations,
@@ -440,7 +462,7 @@ export class EmailService {
         }
       }
 
-      await sgMail.send(msg);
+      await sgMail.send(msg as unknown as Parameters<typeof sgMail.send>[0]);
 
       Logger.info('Bulk email sent successfully', {
         recipientCount: params.to.length,

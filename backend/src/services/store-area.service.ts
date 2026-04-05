@@ -2,6 +2,7 @@ import { PrismaClient } from '@prisma/client';
 import { getDefaultDatabaseClient } from '../database/database-factory';
 import { StoreArea } from '../models/store-area.model';
 import { getOrganizationId } from '../utils/auth-bypass';
+import { isPrismaNotFound } from '../utils/prisma-error';
 
 export class StoreAreaService {
   private prisma: PrismaClient;
@@ -98,9 +99,9 @@ export class StoreAreaService {
       });
 
       return this.mapPrismaToModel(updatedArea);
-    } catch (error: any) {
+    } catch (error: unknown) {
       // Prisma throws P2025 when record not found
-      if (error.code === 'P2025') {
+      if (isPrismaNotFound(error)) {
         return null;
       }
       throw error;
@@ -113,9 +114,9 @@ export class StoreAreaService {
         where: { id },
       });
       return true;
-    } catch (error: any) {
+    } catch (error: unknown) {
       // Prisma throws P2025 when record not found
-      if (error.code === 'P2025') {
+      if (isPrismaNotFound(error)) {
         return false;
       }
       throw error;

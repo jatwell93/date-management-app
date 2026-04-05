@@ -31,6 +31,10 @@ interface TierLimits {
   max_inventory_items: number | null;
 }
 
+interface ErrorWithCode {
+  code?: string;
+}
+
 const getTierLimits = (tierLevel: TierLevel): TierLimits => {
   const limits = TIER_LIMITS[tierLevel];
 
@@ -139,9 +143,14 @@ export class WebhookService {
           processedAt: new Date(),
         },
       });
-    } catch (error: any) {
+    } catch (error: unknown) {
+      const prismaErrorCode =
+        error && typeof error === 'object' && 'code' in error
+          ? (error as ErrorWithCode).code
+          : undefined;
+
       // P2002 = unique constraint violation (already processed)
-      if (error.code === 'P2002') {
+      if (prismaErrorCode === 'P2002') {
         log.info('Event already marked as processed (idempotency)', { eventId });
         return;
       }
@@ -266,7 +275,7 @@ export class WebhookService {
             details: {
               customerId,
               organizationId,
-              customerEmail: (customer as any).email,
+              customerEmail: customer.email,
             },
           },
         );
@@ -382,7 +391,7 @@ export class WebhookService {
         organizationId,
         subscriptionId: subscription.id,
       });
-    } catch (error: any) {
+    } catch (error: unknown) {
       const duration = Date.now() - start;
       monitor.recordWebhookEvent('customer.subscription.created', duration, 'error');
       Sentry.captureException(error, {
@@ -432,7 +441,7 @@ export class WebhookService {
       monitor.recordWebhookEvent('customer.subscription.updated', duration, 'success');
 
       log.info('Subscription updated successfully', { organizationId, newTierLevel });
-    } catch (error: any) {
+    } catch (error: unknown) {
       this.handleWebhookError('customer.subscription.updated', error, {
         subscriptionId: subscription.id,
         customerId: subscription.customer as string | undefined,
@@ -528,7 +537,7 @@ export class WebhookService {
       monitor.recordWebhookEvent('customer.subscription.deleted', duration, 'success');
 
       log.info('Subscription deleted successfully', { organizationId });
-    } catch (error: any) {
+    } catch (error: unknown) {
       const duration = Date.now() - start;
       monitor.recordWebhookEvent('customer.subscription.deleted', duration, 'error');
       Sentry.captureException(error, {
@@ -570,7 +579,7 @@ export class WebhookService {
       log.info('Checkout completed successfully', { organizationId });
       const duration = Date.now() - start;
       monitor.recordWebhookEvent('checkout.session.completed', duration, 'success');
-    } catch (error: any) {
+    } catch (error: unknown) {
       this.handleWebhookError('checkout.session.completed', error, {
         sessionId: session.id,
       });
@@ -636,7 +645,7 @@ export class WebhookService {
       log.info('Payment failure handled', { organizationId, invoiceId: invoice.id });
       const duration = Date.now() - start;
       monitor.recordWebhookEvent('invoice.payment_failed', duration, 'success');
-    } catch (error: any) {
+    } catch (error: unknown) {
       const duration = Date.now() - start;
       monitor.recordWebhookEvent('invoice.payment_failed', duration, 'error');
       Sentry.captureException(error, { level: 'error', extra: { invoiceId: invoice.id } });
@@ -677,7 +686,7 @@ export class WebhookService {
       log.info('Trial reminder sent', { organizationId, daysRemaining });
       const duration = Date.now() - start;
       monitor.recordWebhookEvent('customer.subscription.trial_will_end', duration, 'success');
-    } catch (error: any) {
+    } catch (error: unknown) {
       const duration = Date.now() - start;
       monitor.recordWebhookEvent('customer.subscription.trial_will_end', duration, 'error');
       Sentry.captureException(error, {
@@ -771,7 +780,7 @@ export class WebhookService {
         organizationId,
         paymentIntentId: paymentIntent.id,
       });
-    } catch (error: any) {
+    } catch (error: unknown) {
       const duration = Date.now() - start;
       monitor.recordWebhookEvent('payment_intent.succeeded', duration, 'error');
       Sentry.captureException(error, {
@@ -831,7 +840,7 @@ export class WebhookService {
       monitor.recordWebhookEvent('payment_intent.payment_failed', duration, 'success');
 
       log.info('Payment failure handled', { organizationId, paymentIntentId: paymentIntent.id });
-    } catch (error: any) {
+    } catch (error: unknown) {
       const duration = Date.now() - start;
       monitor.recordWebhookEvent('payment_intent.payment_failed', duration, 'error');
       Sentry.captureException(error, {
@@ -934,7 +943,7 @@ export class WebhookService {
     context: {
       eventType: string;
       eventId?: string;
-      details?: Record<string, any>;
+      details?: Record<string, unknown>;
     },
   ): void {
     Sentry.captureMessage(message, {
@@ -1138,7 +1147,11 @@ export class WebhookService {
     },
   ): void {
     const monitor = ApplicationMonitoringService.getInstance();
-    const duration = Date.now() - (monitor as any).lastStartTime || 0;
+    const monitorWithStartTime = monitor as { lastStartTime?: number };
+    const duration =
+      typeof monitorWithStartTime.lastStartTime === 'number'
+        ? Date.now() - monitorWithStartTime.lastStartTime
+        : 0;
 
     monitor.recordWebhookEvent(eventType, duration, 'error');
 
@@ -1156,9 +1169,7 @@ export class WebhookService {
   /**
    * Validate and extract data from checkout session
    */
-  private async validateAndExtractCheckoutData(
-    session: Stripe.Checkout.Session,
-  ): Promise<{
+  private async validateAndExtractCheckoutData(session: Stripe.Checkout.Session): Promise<{
     stripeSubscription: Stripe.Subscription;
     tierLevel: TierLevel;
     limits: TierLimits;

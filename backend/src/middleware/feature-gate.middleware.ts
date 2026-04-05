@@ -33,6 +33,17 @@ export interface UsageLimitResult {
   percentageUsed: number;
 }
 
+type DbClient = ReturnType<typeof getDefaultDatabaseClient>;
+
+interface OrganizationUsageSnapshot {
+  totalSkus: number;
+  maxSkus: number | null;
+  activeUsers: number;
+  maxUsers: number | null;
+  totalInventoryItems: number;
+  storageUsedBytes: number;
+}
+
 /**
  * Middleware to check if a feature is enabled for the user's tier
  * Returns 403 Forbidden with upgrade CTA if not enabled
@@ -215,7 +226,7 @@ export const checkUsageLimit = (limitKey: LimitKey) => {
   };
 };
 
-async function getOrCreateOrganizationUsage(prisma: any, organizationId: string) {
+async function getOrCreateOrganizationUsage(prisma: DbClient, organizationId: string) {
   // Use upsert to avoid race condition (16A.D.4)
   return await prisma.organizationUsage.upsert({
     where: { organizationId },
@@ -234,18 +245,24 @@ async function getOrCreateOrganizationUsage(prisma: any, organizationId: string)
 }
 
 async function calculateUsageAndLimit(
-  prisma: any,
+  prisma: DbClient,
   limitKey: LimitKey,
-  usage: any,
+  usage: OrganizationUsageSnapshot,
   organizationId: string,
 ): Promise<{ currentUsage: number; limit: number }> {
   // Handle direct usage fields
   if (limitKey === 'max_skus') {
-    return { currentUsage: usage.totalSkus, limit: usage.maxSkus };
+    return {
+      currentUsage: usage.totalSkus,
+      limit: resolveUnlimitedLimit(usage.maxSkus, 'UNLIMITED_SKUS'),
+    };
   }
 
   if (limitKey === 'max_users') {
-    return { currentUsage: usage.activeUsers, limit: usage.maxUsers };
+    return {
+      currentUsage: usage.activeUsers,
+      limit: resolveUnlimitedLimit(usage.maxUsers, 'UNLIMITED_USERS'),
+    };
   }
 
   // Handle tier-based limits
@@ -253,9 +270,9 @@ async function calculateUsageAndLimit(
 }
 
 async function calculateTierBasedLimit(
-  prisma: any,
+  prisma: DbClient,
   limitKey: LimitKey,
-  usage: any,
+  usage: OrganizationUsageSnapshot,
   organizationId: string,
 ): Promise<{ currentUsage: number; limit: number }> {
   const subscriptionTier = await prisma.subscriptionTier.findFirst({

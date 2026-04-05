@@ -202,9 +202,9 @@ router.post(
       );
       // UBS: SAFE — created resource returned as JSON; inputs validated by middleware and business rules.
       res.status(201).json(newInventoryItem);
-    } catch (error: any) {
+    } catch (error: unknown) {
       // Check if the error is about location not existing
-      if (error.message === 'Location does not exist') {
+      if (error instanceof Error && error.message === 'Location does not exist') {
         return res.status(400).json({ message: 'Location does not exist' });
       }
       console.error('Create inventory item error:', error);

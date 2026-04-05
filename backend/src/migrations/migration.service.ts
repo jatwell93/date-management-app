@@ -5,6 +5,11 @@ import { Logger } from '../utils/logger';
 
 // Define the Database type for better-sqlite3
 type DB = InstanceType<typeof Database>;
+type TransactionCapableDB = DB & { transaction<T>(callback: () => T): () => T };
+
+interface PragmaTableInfoRow {
+  name: string;
+}
 
 export interface Migration {
   id: number;
@@ -45,7 +50,7 @@ export class MigrationService {
 
           try {
             // Run the migration in a transaction to ensure atomicity
-            const transaction = (db as any).transaction(() => {
+            const transaction = (db as TransactionCapableDB).transaction(() => {
               migration.up(db);
             });
 
@@ -157,9 +162,11 @@ export class MigrationService {
         name: '002-add-sub-department-column',
         up: (db: DB) => {
           // Check if the column already exists to avoid errors
-          const tableInfo = db.prepare('PRAGMA table_info(store_areas)').all();
+          const tableInfo = db
+            .prepare('PRAGMA table_info(store_areas)')
+            .all() as PragmaTableInfoRow[];
           const hasSubDepartmentColumn = tableInfo.some(
-            (column: any) => column.name === 'sub_department',
+            (column) => column.name === 'sub_department',
           );
 
           if (!hasSubDepartmentColumn) {
@@ -412,7 +419,7 @@ export class MigrationService {
       Logger.info(`Rolling back migration: ${lastMigration.name}`);
 
       // Run the rollback in a transaction to ensure atomicity
-      const transaction = (db as any).transaction(() => {
+      const transaction = (db as TransactionCapableDB).transaction(() => {
         migrationToRollback.down!(db);
       });
 

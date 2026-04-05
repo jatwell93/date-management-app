@@ -42,8 +42,10 @@ export class StoreAreaModel {
         for (const index of indexes) {
           if (index.unique === 1) {
             // If it's a unique index
-            const indexInfo = await this.db.all(`SELECT * FROM pragma_index_info('${index.name}')`);
-            if (indexInfo.some((col: any) => col.name === 'name')) {
+            const indexInfo = (await this.db.all(
+              `SELECT * FROM pragma_index_info('${index.name}')`,
+            )) as Array<{ name: string }>;
+            if (indexInfo.some((col) => col.name === 'name')) {
               hasUniqueNameConstraint = true;
               break;
             }

@@ -502,7 +502,7 @@ export const generateToken = (
   return jwt.sign(
     { userId, role, organizationId, tierLevel },
     envConfig.JWT_SECRET as string,
-    { expiresIn } as any,
+    { expiresIn } as jwt.SignOptions,
   );
 };
 

@@ -7,7 +7,7 @@
  * - Syncing Stripe state to local database
  */
 
-import { PrismaClient } from '@prisma/client';
+import { PrismaClient, SubscriptionTier as PrismaSubscriptionTier } from '@prisma/client';
 import Stripe from 'stripe';
 import { getDefaultDatabaseClient } from '../database/database-factory';
 import { envConfig } from '../config/environment';
@@ -16,6 +16,10 @@ import { SubscriptionTier } from '../models/subscription-tier.model';
 import { BillingCycle, SubscriptionStatus, TierLevel, TIER_LIMITS } from '../types/subscription';
 import { InternalError, NotFoundError } from '../errors';
 import * as Sentry from '@sentry/node';
+
+function getErrorMessage(error: unknown): string {
+  return error instanceof Error ? error.message : String(error);
+}
 
 export class SubscriptionService {
   private prisma: PrismaClient;
@@ -236,8 +240,8 @@ export class SubscriptionService {
       );
 
       return this.mapPrismaToModel(subscriptionTier);
-    } catch (error: any) {
-      Logger.error(`Failed to create subscription: ${error}`);
+    } catch (error: unknown) {
+      Logger.error(`Failed to create subscription: ${getErrorMessage(error)}`);
 
       // Capture Stripe errors with request ID for debugging
       if (error instanceof Stripe.errors.StripeError) {
@@ -639,7 +643,7 @@ export class SubscriptionService {
   async logTrialEvent(
     organizationId: string,
     eventType: string,
-    metadata: Record<string, any> = {},
+    metadata: Record<string, unknown> = {},
   ): Promise<void> {
     await this.prisma.trialEvent.create({
       data: {
@@ -924,8 +928,10 @@ export class SubscriptionService {
 
       Logger.info(`Converted trial to paid for organization ${organizationId}`);
       return this.mapPrismaToModel(updated);
-    } catch (error: any) {
-      Logger.error(`Failed to convert trial for org ${organizationId}:`, error);
+    } catch (error: unknown) {
+      Logger.error(`Failed to convert trial for org ${organizationId}:`, {
+        error: getErrorMessage(error),
+      });
 
       // Capture Stripe errors with request ID for debugging
       if (error instanceof Stripe.errors.StripeError) {
@@ -946,7 +952,7 @@ export class SubscriptionService {
         });
       }
 
-      throw new InternalError(`Payment failed: ${error.message}`);
+      throw new InternalError(`Payment failed: ${getErrorMessage(error)}`);
     }
   }
 
@@ -1024,13 +1030,13 @@ export class SubscriptionService {
   /**
    * Map Prisma SubscriptionTier to business model
    */
-  private mapPrismaToModel(prismaRecord: any): SubscriptionTier {
+  private mapPrismaToModel(prismaRecord: PrismaSubscriptionTier): SubscriptionTier {
     return {
       id: prismaRecord.id,
       organizationId: prismaRecord.organizationId,
       tierLevel: prismaRecord.tierLevel as TierLevel,
-      stripeSubscriptionId: prismaRecord.stripeSubscriptionId,
-      trialEndDate: prismaRecord.trialEndDate,
+      stripeSubscriptionId: prismaRecord.stripeSubscriptionId ?? undefined,
+      trialEndDate: prismaRecord.trialEndDate ?? undefined,
       status: prismaRecord.status as SubscriptionStatus,
       billingCycle: prismaRecord.billingCycle as BillingCycle,
       createdAt: prismaRecord.createdAt,

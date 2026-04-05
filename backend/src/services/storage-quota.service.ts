@@ -1,6 +1,5 @@
 import { PrismaClient } from '@prisma/client';
 import { getDefaultDatabaseClient } from '../database/database-factory';
-import { getOrganizationId } from '../utils/auth-bypass';
 import { UploadStatus } from '../types/upload.types';
 
 /**

@@ -10,6 +10,15 @@ const router = Router();
 const monitoringService = ApplicationMonitoringService.getInstance();
 const saasMetricsService = new SaasMetricsService();
 
+interface TierMetricsSummary {
+  tier: string;
+  total: number;
+  active: number;
+  trial: number;
+  canceled: number;
+  monthlyRevenue: number;
+}
+
 /**
  * GET /api/admin/metrics/dashboard
  * Get comprehensive dashboard metrics
@@ -133,22 +142,22 @@ router.get('/subscription-tiers', requireManager, async (req: AuthRequest, res: 
 
         return acc;
       },
-      {} as Record<string, any>,
+      {} as Record<string, TierMetricsSummary>,
     );
 
     // Convert revenue to dollars
-    Object.values(tierMetrics).forEach((tier: any) => {
+    Object.values(tierMetrics).forEach((tier) => {
       tier.monthlyRevenue = tier.monthlyRevenue / 100;
     });
 
     res.json({
       tiers: tierMetrics,
       totalRevenue: Object.values(tierMetrics).reduce(
-        (sum: number, tier: any) => sum + tier.monthlyRevenue,
+        (sum: number, tier) => sum + tier.monthlyRevenue,
         0,
       ),
       totalSubscriptions: Object.values(tierMetrics).reduce(
-        (sum: number, tier: any) => sum + tier.total,
+        (sum: number, tier) => sum + tier.total,
         0,
       ),
       lastUpdated: new Date(),

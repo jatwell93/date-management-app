@@ -7,11 +7,23 @@ import { trialConversionLimiter } from '../middleware/rateLimiter';
 import { getStripeClient } from '../utils/stripe';
 import { validateRedirectUrl, validateStripePriceId } from '../utils/url-validator';
 
-type SubscriptionStatusType = 'ACTIVE' | 'TRIALING' | 'EXPIRED' | 'CANCELED';
-
 const prisma = getDefaultDatabaseClient();
 
 const router = Router();
+
+function getErrorMessage(error: unknown, fallback: string): string {
+  return error instanceof Error ? error.message : fallback;
+}
+
+function getStatusCode(error: unknown, fallback = 500): number {
+  if (error && typeof error === 'object' && 'statusCode' in error) {
+    const statusCode = (error as { statusCode?: unknown }).statusCode;
+    if (typeof statusCode === 'number') {
+      return statusCode;
+    }
+  }
+  return fallback;
+}
 
 interface SubscriptionTierResponse {
   status: 'ACTIVE' | 'TRIALING' | 'EXPIRED' | 'CANCELED';
@@ -191,10 +203,10 @@ router.post(
           trialConvertedAt: converted.trialConvertedAt,
         },
       });
-    } catch (error: any) {
+    } catch (error: unknown) {
       console.error('Error converting trial:', error);
-      const statusCode = error.statusCode || 500;
-      res.status(statusCode).json({ error: error.message || 'Failed to convert trial' });
+      const statusCode = getStatusCode(error, 500);
+      res.status(statusCode).json({ error: getErrorMessage(error, 'Failed to convert trial') });
     }
   },
 );
@@ -219,8 +231,10 @@ router.post(
         validateStripePriceId(priceId);
         validateRedirectUrl(successUrl, 'successUrl');
         validateRedirectUrl(cancelUrl, 'cancelUrl');
-      } catch (validationError: any) {
-        res.status(400).json({ error: validationError.message });
+      } catch (validationError: unknown) {
+        res
+          .status(400)
+          .json({ error: getErrorMessage(validationError, 'Invalid request payload') });
         return;
       }
 
@@ -267,9 +281,9 @@ router.post(
       });
 
       res.json({ sessionId: session.id, url: session.url });
-    } catch (error: any) {
+    } catch (error: unknown) {
       console.error('Error creating checkout session:', error);
-      res.status(500).json({ error: error.message || 'Failed to create checkout session' });
+      res.status(500).json({ error: getErrorMessage(error, 'Failed to create checkout session') });
     }
   },
 );
@@ -287,8 +301,8 @@ router.post(
       if (returnUrl) {
         try {
           validateRedirectUrl(returnUrl, 'returnUrl');
-        } catch (validationError: any) {
-          res.status(400).json({ error: validationError.message });
+        } catch (validationError: unknown) {
+          res.status(400).json({ error: getErrorMessage(validationError, 'Invalid returnUrl') });
           return;
         }
       }
@@ -316,9 +330,9 @@ router.post(
       });
 
       res.json({ url: session.url });
-    } catch (error: any) {
+    } catch (error: unknown) {
       console.error('Error creating portal session:', error);
-      res.status(500).json({ error: error.message || 'Failed to create portal session' });
+      res.status(500).json({ error: getErrorMessage(error, 'Failed to create portal session') });
     }
   },
 );

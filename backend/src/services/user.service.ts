@@ -33,7 +33,7 @@ export class UserService {
       select: { id: true },
     });
 
-    for (const existingUser of existingUsers) {
+    for (const _existingUser of existingUsers) {
       const isDuplicate = false; // PIN auth removed — use Clerk authentication; existingUser unused
       if (isDuplicate) {
         throw new ConflictError('PIN already in use within this organization');

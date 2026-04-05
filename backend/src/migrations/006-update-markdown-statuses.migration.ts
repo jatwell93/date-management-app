@@ -1,13 +1,20 @@
 import { getDb } from '../database';
 import { InventoryService } from '../services/inventory.service';
 
+interface InventoryItemRow {
+  id: number;
+  expiry_date: string;
+}
+
 export class UpdateMarkdownStatusesMigration {
   static async up() {
     console.log('Running update markdown statuses migration...');
     const db = getDb();
     const inventoryService = new InventoryService();
 
-    const inventoryItems = db.prepare('SELECT * FROM inventory_items').all();
+    const inventoryItems = db
+      .prepare('SELECT id, expiry_date FROM inventory_items')
+      .all() as InventoryItemRow[];
 
     let updatedCount = 0;
     for (const item of inventoryItems) {

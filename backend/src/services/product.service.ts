@@ -6,7 +6,7 @@ import { parse } from 'csv-parse';
 import * as XLSX from 'xlsx';
 import fs from 'fs';
 import * as path from 'path';
-import { isPrismaNotFound, isPrismaErrorCode } from '../utils/prisma-error';
+import { isPrismaNotFound } from '../utils/prisma-error';
 
 // Helper function to detect file type by content
 async function detectFileType(
@@ -717,9 +717,11 @@ export class ProductService {
             }
 
             resolve({ imported, updated, errors });
-          } catch (finalError: any) {
+          } catch (finalError: unknown) {
             console.error('Error in final processing:', finalError);
-            errors.push(`Final processing error: ${finalError.message}`);
+            const finalErrorMessage =
+              finalError instanceof Error ? finalError.message : 'Unknown error';
+            errors.push(`Final processing error: ${finalErrorMessage}`);
             reject({ imported, updated, errors });
           }
         });
@@ -860,7 +862,7 @@ export class ProductService {
 
       // Process each row (starting from index 1, since 0 is headers)
       for (let i = 1; i < jsonData.length; i++) {
-        const row: any[] = jsonData[i] as any[]; // Type assertion for XLSX row
+        const row: unknown[] = jsonData[i] as unknown[];
         const recordCount = i; // Row number for error reporting
 
         try {
@@ -1087,7 +1089,7 @@ export class ProductService {
           isValid = false;
           resolve({ isValid, errors });
         })
-        .on('data', (row: any, idx: any) => {
+        .on('data', (row: Record<string, unknown>, idx: number) => {
           // Check headers on the first row (idx is the row index, starting from 0)
           if (typeof idx === 'number' && idx === 0) {
             // Find the required columns using alternative names
@@ -1160,7 +1162,10 @@ export class ProductService {
   }
 
   // Helper function to find the actual column name in the CSV header
-  private findColumnByAlternatives(row: any, alternatives: string[]): string | null {
+  private findColumnByAlternatives(
+    row: Record<string, unknown>,
+    alternatives: string[],
+  ): string | null {
     const headers = Object.keys(row);
 
     for (const alt of alternatives) {

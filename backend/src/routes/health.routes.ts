@@ -1,11 +1,7 @@
 import { Router } from 'express';
 import { getDb, releaseDb } from '../database';
 import { DatabaseMonitoringService } from '../services/database.monitoring.service';
-import {
-  validateTierFeatureFlags,
-  quickValidateTierFeatureFlags,
-  ValidationResult,
-} from '../utils/validate-tier-flags';
+import { validateTierFeatureFlags, ValidationResult } from '../utils/validate-tier-flags';
 import { getDefaultDatabaseClient } from '../database/database-factory';
 import { authenticateToken, requireManager, AuthRequest } from '../middleware/auth.middleware';
 
@@ -14,6 +10,10 @@ const router = Router();
 // Tier feature flags validation state (16A.F.2)
 let tierFlagsValidationResult: ValidationResult | null = null;
 let tierFlagsValidationTime: Date | null = null;
+
+function getErrorMessage(error: unknown, fallback: string): string {
+  return error instanceof Error ? error.message : fallback;
+}
 
 /**
  * Initialize tier feature flags validation at boot time
@@ -56,7 +56,7 @@ router.get('/health', async (req, res) => {
   try {
     // Check database connectivity
     db = getDb();
-    const result: any = db.prepare('SELECT 1 as alive').get();
+    const result = db.prepare('SELECT 1 as alive').get() as { alive?: number } | undefined;
 
     if (result && result.alive === 1) {
       res.status(200).json({
@@ -85,7 +85,7 @@ router.get('/health', async (req, res) => {
         error: 'Database connectivity test failed',
       });
     }
-  } catch (error) {
+  } catch (_error) {
     res.status(503).json({
       status: 'unhealthy',
       timestamp: new Date().toISOString(),
@@ -126,7 +126,7 @@ router.get('/ready', async (req, res) => {
   try {
     // Check if database is available
     db = getDb();
-    const result: any = db.prepare('SELECT 1 as ready').get();
+    const result = db.prepare('SELECT 1 as ready').get() as { ready?: number } | undefined;
 
     if (result && result.ready === 1) {
       res.status(200).json({
@@ -139,7 +139,7 @@ router.get('/ready', async (req, res) => {
         timestamp: new Date().toISOString(),
       });
     }
-  } catch (error) {
+  } catch (_error) {
     res.status(503).json({
       status: 'not ready',
       timestamp: new Date().toISOString(),
@@ -187,11 +187,11 @@ router.get('/database-metrics', authenticateToken, requireManager, (req: AuthReq
       timestamp: new Date().toISOString(),
       metrics: dbMetrics,
     });
-  } catch (error) {
+  } catch (error: unknown) {
     res.status(500).json({
       status: 'error',
       timestamp: new Date().toISOString(),
-      error: 'Failed to retrieve database metrics: ' + (error as Error).message,
+      error: `Failed to retrieve database metrics: ${getErrorMessage(error, 'Unknown error')}`,
     });
   }
 });
@@ -202,7 +202,7 @@ router.get('/database-health', authenticateToken, requireManager, (req: AuthRequ
   try {
     // Check database connectivity
     db = getDb();
-    const result: any = db.prepare('SELECT 1 as alive').get();
+    const result = db.prepare('SELECT 1 as alive').get() as { alive?: number } | undefined;
 
     if (result && result.alive === 1) {
       res.status(200).json({
@@ -224,13 +224,13 @@ router.get('/database-health', authenticateToken, requireManager, (req: AuthRequ
         },
       });
     }
-  } catch (error) {
+  } catch (error: unknown) {
     res.status(503).json({
       status: 'unhealthy',
       timestamp: new Date().toISOString(),
       database: {
         connected: false,
-        error: 'Database connectivity error: ' + (error as Error).message,
+        error: `Database connectivity error: ${getErrorMessage(error, 'Unknown error')}`,
       },
     });
   } finally {

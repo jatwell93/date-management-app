@@ -11,7 +11,6 @@
 
 import rateLimit, { ipKeyGenerator } from 'express-rate-limit';
 import { Request, Response } from 'express';
-import { envConfig } from '../config/environment';
 import { Logger } from '../utils/logger';
 
 interface AuthenticatedRateLimitRequest extends Request {
@@ -20,6 +19,16 @@ interface AuthenticatedRateLimitRequest extends Request {
   rateLimit?: {
     resetTime?: number | Date;
   };
+}
+
+function getRetryAfterIso(req: Request): string | undefined {
+  const resetTime = (req as AuthenticatedRateLimitRequest).rateLimit?.resetTime;
+  if (!resetTime) {
+    return undefined;
+  }
+
+  const resetDate = resetTime instanceof Date ? resetTime : new Date(resetTime);
+  return resetDate.toISOString();
 }
 
 /**
@@ -42,9 +51,7 @@ export const standardLimiter = rateLimit({
     res.status(429).json({
       code: 'RATE_LIMIT_EXCEEDED',
       message: 'Too many requests from this IP, please try again later.',
-      retryAfter: (req as any).rateLimit?.resetTime
-        ? new Date((req as any).rateLimit.resetTime).toISOString()
-        : undefined,
+      retryAfter: getRetryAfterIso(req),
     });
   },
   store: undefined, // Uses default memory store (fine for single-instance, use Redis for distributed)
@@ -70,9 +77,7 @@ export const strictLimiter = rateLimit({
     res.status(429).json({
       code: 'RATE_LIMIT_EXCEEDED',
       message: 'Too many login attempts, please try again later.',
-      retryAfter: (req as any).rateLimit?.resetTime
-        ? new Date((req as any).rateLimit.resetTime).toISOString()
-        : undefined,
+      retryAfter: getRetryAfterIso(req),
     });
   },
 });
@@ -97,9 +102,7 @@ export const uploadLimiter = rateLimit({
     res.status(429).json({
       code: 'RATE_LIMIT_EXCEEDED',
       message: 'Too many uploads from this IP, please try again later.',
-      retryAfter: (req as any).rateLimit?.resetTime
-        ? new Date((req as any).rateLimit.resetTime).toISOString()
-        : undefined,
+      retryAfter: getRetryAfterIso(req),
     });
   },
 });
@@ -237,9 +240,7 @@ export const trialConversionLimiter = rateLimit({
     res.status(429).json({
       code: 'RATE_LIMIT_EXCEEDED',
       message: 'Too many trial conversion attempts, please try again later.',
-      retryAfter: (req as any).rateLimit?.resetTime
-        ? new Date((req as any).rateLimit.resetTime).toISOString()
-        : undefined,
+      retryAfter: getRetryAfterIso(req),
     });
   },
 });

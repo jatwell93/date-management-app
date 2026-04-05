@@ -11,7 +11,7 @@ export const addNotesToProductsMigration: Migration = {
   name: '005-add-notes-field-to-products',
   up: (db: DatabaseType) => {
     // Add a notes column to the products table
-    const tableInfo = (db as any).pragma('table_info(products)') as Array<{
+    const tableInfo = (db.pragma?.('table_info(products)') ?? []) as Array<{
       cid: number;
       name: string;
       type: string;

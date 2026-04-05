@@ -68,7 +68,11 @@ export class ExpiredItemService {
     const db = getDb();
     try {
       // Start a transaction
-      const transaction = (db as any).transaction(() => {
+      const transactionCapableDb = db as typeof db & {
+        transaction<T>(callback: () => T): () => T;
+      };
+
+      const transaction = transactionCapableDb.transaction(() => {
         // Get the inventory item to validate and get cost price
         const itemStmt = db.prepare(`
           SELECT ii.*, p.cost_price as costPrice
@@ -113,7 +117,9 @@ export class ExpiredItemService {
           action,
           action === 'expired' ? unitsDiscarded : null,
           financialLoss,
-        );
+        ) as {
+          lastInsertRowid: number | bigint;
+        };
 
         // Create audit log entry
         const changeDescription =
@@ -136,7 +142,7 @@ export class ExpiredItemService {
 
         // Return the created transaction record
         return {
-          id: result.lastInsertRowid as number,
+          id: Number(result.lastInsertRowid),
           inventoryItemId,
           userId,
           action,
