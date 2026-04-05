@@ -1125,12 +1125,15 @@ export class WebhookService {
         newInventoryLimit: limits.max_inventory_items,
       });
 
-      // Send warning email (non-blocking)
-      await this.emailService.sendDowngradeWarningEmail(
-        organizationId,
-        usage.totalSkus,
-        limits.max_skus!,
-      );
+      // Send SKU warning email only when the SKU limit is the one exceeded
+      // (limits.max_skus may be null when only isOverInventoryLimit triggered this block)
+      if (isOverSkuLimit && limits.max_skus !== null) {
+        await this.emailService.sendDowngradeWarningEmail(
+          organizationId,
+          usage.totalSkus,
+          limits.max_skus,
+        );
+      }
     }
   }
 
