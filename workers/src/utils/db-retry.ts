@@ -15,7 +15,7 @@
 type SqlTaggedTemplate<TResult> = (
   strings: TemplateStringsArray,
   ...values: unknown[]
-) => Promise<TResult>;
+) => PromiseLike<TResult>;
 
 export interface WorkersDbRetryOptions {
   maxAttempts?: number;
@@ -113,13 +113,13 @@ export async function withNeonRetry<T>(
  * const results = await sqlWithRetry`SELECT * FROM products WHERE id = ${id}`;
  * ```
  */
-export function createRetryableSql(
-  sqlFn: SqlTaggedTemplate<unknown>,
+export function createRetryableSql<TResult>(
+  sqlFn: SqlTaggedTemplate<TResult>,
   options: WorkersDbRetryOptions = {}
 ) {
-  return (strings: TemplateStringsArray, ...values: unknown[]) => {
+  return (strings: TemplateStringsArray, ...values: unknown[]): Promise<TResult> => {
     return withNeonRetry(
-      () => sqlFn(strings, ...values),
+      () => Promise.resolve(sqlFn(strings, ...values)),
       options
     );
   };
