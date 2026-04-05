@@ -5,7 +5,17 @@
  * for handling transient connection failures in Cloudflare Workers.
  */
 
-import { sql as neonSql, QueryResult } from '@neondatabase/serverless';
+/**
+ * Minimal tagged-template signature used by `createRetryableSql`.
+ *
+ * We keep this local instead of importing a concrete Neon type so this helper
+ * can wrap any SQL-style template function and return-type without coupling to
+ * a specific driver export surface.
+ */
+type SqlTaggedTemplate<TResult> = (
+  strings: TemplateStringsArray,
+  ...values: unknown[]
+) => Promise<TResult>;
 
 export interface WorkersDbRetryOptions {
   maxAttempts?: number;
@@ -32,7 +42,7 @@ export interface WorkersDbRetryOptions {
  * );
  * ```
  */
-export async function withNeonRetry<T extends QueryResult<any>>(
+export async function withNeonRetry<T>(
   sqlOperation: () => Promise<T>,
   options: WorkersDbRetryOptions = {},
 ): Promise<T> {
@@ -104,10 +114,10 @@ export async function withNeonRetry<T extends QueryResult<any>>(
  * ```
  */
 export function createRetryableSql(
-  sqlFn: typeof neonSql,
+  sqlFn: SqlTaggedTemplate<unknown>,
   options: WorkersDbRetryOptions = {}
 ) {
-  return (strings: TemplateStringsArray, ...values: any[]) => {
+  return (strings: TemplateStringsArray, ...values: unknown[]) => {
     return withNeonRetry(
       () => sqlFn(strings, ...values),
       options
