@@ -1,4 +1,5 @@
 import { PrismaClient } from '@prisma/client';
+import type { Prisma } from '@prisma/client';
 import { getDefaultDatabaseClient } from '../database/database-factory';
 import { InventoryItem } from '../models/inventory-item.model';
 import { ItemTransaction } from '../models/item-transaction.model';
@@ -10,6 +11,8 @@ export interface CreateInventoryItemInput {
   locationId: number;
   status?: InventoryItem['status'];
 }
+
+type DbClient = PrismaClient | Prisma.TransactionClient;
 
 export class InventoryService {
   private prisma: PrismaClient;
@@ -168,14 +171,23 @@ export class InventoryService {
   private async validateResourceOwnership(
     resourceType: 'product' | 'storeArea',
     resourceId: number,
-    client: PrismaClient | any,
+    client: DbClient,
   ): Promise<void> {
-    const resource = await client[resourceType].findFirst({
-      where: {
-        id: resourceId,
-        organizationId: this.organizationId,
-      },
-    });
+    const resource =
+      resourceType === 'product'
+        ? await client.product.findFirst({
+            where: {
+              id: resourceId,
+              organizationId: this.organizationId,
+            },
+          })
+        : await client.storeArea.findFirst({
+            where: {
+              id: resourceId,
+              organizationId: this.organizationId,
+            },
+          });
+
     if (!resource) {
       const resourceTypeName = resourceType === 'storeArea' ? 'Location' : 'Product';
       throw new Error(`${resourceTypeName} not found or does not belong to this organization`);
@@ -185,20 +197,14 @@ export class InventoryService {
   /**
    * Validate product belongs to organization
    */
-  private async validateProductOwnership(
-    productId: number,
-    client: PrismaClient | any,
-  ): Promise<void> {
+  private async validateProductOwnership(productId: number, client: DbClient): Promise<void> {
     await this.validateResourceOwnership('product', productId, client);
   }
 
   /**
    * Validate location belongs to organization
    */
-  private async validateLocationOwnership(
-    locationId: number,
-    client: PrismaClient | any,
-  ): Promise<void> {
+  private async validateLocationOwnership(locationId: number, client: DbClient): Promise<void> {
     await this.validateResourceOwnership('storeArea', locationId, client);
   }
 
@@ -206,7 +212,12 @@ export class InventoryService {
    * Handle Prisma errors consistently
    */
   private handlePrismaError(error: unknown): null {
-    if (error && typeof error === 'object' && (error as any).code === 'P2025') {
+    if (
+      error &&
+      typeof error === 'object' &&
+      'code' in error &&
+      (error as { code?: string }).code === 'P2025'
+    ) {
       return null;
     }
     throw error;
@@ -318,7 +329,7 @@ export class InventoryService {
   /**
    * Decrement inventory count with validation
    */
-  private async decrementInventoryCount(client: PrismaClient | any): Promise<void> {
+  private async decrementInventoryCount(client: DbClient): Promise<void> {
     const currentUsage = await client.organizationUsage.findUnique({
       where: { organizationId: this.organizationId },
       select: { totalInventoryItems: true },
@@ -442,7 +453,7 @@ export class InventoryService {
    * Create an audit log entry (base method that works with any Prisma client)
    */
   private async createAuditLogBase(
-    client: PrismaClient | any,
+    client: DbClient,
     userId: number,
     inventoryItemId: number,
     changeDescription: string,
@@ -484,7 +495,7 @@ export class InventoryService {
    * Create an audit log entry within a transaction
    */
   private async createAuditLogInTransaction(
-    tx: any,
+    tx: Prisma.TransactionClient,
     userId: number,
     inventoryItemId: number,
     changeDescription: string,
@@ -615,7 +626,7 @@ export class InventoryService {
 
           // Execute bulk update using raw SQL for better performance
           const updateCases = validUpdates
-            .map((op, index) => `WHEN ${op.where.id} THEN '${op.data.status}'`)
+            .map((op) => `WHEN ${op.where.id} THEN '${op.data.status}'`)
             .join(' ');
 
           const itemIdsToUpdate = validUpdates.map((op) => op.where.id);

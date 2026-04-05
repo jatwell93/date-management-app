@@ -1,4 +1,4 @@
-import { Router, Request, Response } from 'express';
+import { Router, Response } from 'express';
 import { StoreAreaService } from '../services/store-area.service';
 import { StoreArea } from '../models/store-area.model';
 import { authenticateToken, AuthRequest } from '../middleware/auth.middleware';
@@ -15,16 +15,19 @@ function getStoreAreaServiceForRequest(req: AuthRequest) {
   return new StoreAreaService(req.organizationId);
 }
 
+function getErrorMessage(error: unknown): string {
+  return error instanceof Error ? error.message : 'Internal server error';
+}
+
 // GET /store-areas - Get all store areas
 router.get('/', authenticateToken, async (req: AuthRequest, res: Response) => {
   try {
     const storeAreaService = getStoreAreaServiceForRequest(req);
     const areas = await storeAreaService.getAllStoreAreas();
     res.json(areas);
-  } catch (error: any) {
+  } catch (error: unknown) {
     console.error('Get store areas error:', error);
-    const errorMessage = error.message || 'Internal server error';
-    res.status(500).json({ message: errorMessage });
+    res.status(500).json({ message: getErrorMessage(error) });
   }
 });
 
@@ -43,10 +46,9 @@ router.get('/:id', authenticateToken, async (req: AuthRequest, res: Response) =>
     }
 
     res.json(area);
-  } catch (error: any) {
+  } catch (error: unknown) {
     console.error('Get store area error:', error);
-    const errorMessage = error.message || 'Internal server error';
-    res.status(500).json({ message: errorMessage });
+    res.status(500).json({ message: getErrorMessage(error) });
   }
 });
 
@@ -62,10 +64,9 @@ router.get('/name/:name', authenticateToken, async (req: AuthRequest, res: Respo
     }
 
     res.json(areas);
-  } catch (error: any) {
+  } catch (error: unknown) {
     console.error('Get store areas by name error:', error);
-    const errorMessage = error.message || 'Internal server error';
-    res.status(500).json({ message: errorMessage });
+    res.status(500).json({ message: getErrorMessage(error) });
   }
 });
 
@@ -91,10 +92,9 @@ router.post(
         lastChecked,
       } as Omit<StoreArea, 'id' | 'createdAt' | 'updatedAt'>);
       res.status(201).json(newArea);
-    } catch (error: any) {
+    } catch (error: unknown) {
       console.error('Create store area error:', error);
-      const errorMessage = error.message || 'Internal server error';
-      res.status(500).json({ message: errorMessage });
+      res.status(500).json({ message: getErrorMessage(error) });
     }
   },
 );
@@ -129,10 +129,9 @@ router.put(
       }
 
       res.json(updatedArea);
-    } catch (error: any) {
+    } catch (error: unknown) {
       console.error('Update store area error:', error);
-      const errorMessage = error.message || 'Internal server error';
-      res.status(500).json({ message: errorMessage });
+      res.status(500).json({ message: getErrorMessage(error) });
     }
   },
 );
@@ -156,10 +155,9 @@ router.delete(
       }
 
       res.json({ message: 'Store area deleted successfully' });
-    } catch (error: any) {
+    } catch (error: unknown) {
       console.error('Delete store area error:', error);
-      const errorMessage = error.message || 'Internal server error';
-      res.status(500).json({ message: errorMessage });
+      res.status(500).json({ message: getErrorMessage(error) });
     }
   },
 );

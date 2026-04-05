@@ -152,7 +152,7 @@ function isAccessAllowed(resourceOrgId: string, userOrgId: string): boolean {
 function handleTenantAccessViolation(
   resourceOrgId: string,
   userOrgId: string,
-  context: Record<string, any>,
+  context: Record<string, unknown>,
 ) {
   const violationContext = {
     ...context,

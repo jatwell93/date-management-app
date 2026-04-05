@@ -25,7 +25,7 @@ export class SQLiteAnalyticsAdapter implements IAnalyticsAdapter {
   isAvailable(): boolean {
     try {
       // Check if db has exec method (better-sqlite3 signature)
-      return this.db && typeof (this.db as any).exec === 'function';
+      return Boolean(this.db) && typeof this.db.exec === 'function';
     } catch {
       return false;
     }
@@ -162,7 +162,7 @@ export class SQLiteAnalyticsAdapter implements IAnalyticsAdapter {
 
   updateSession(sessionId: string, updates: { pagesViewed?: number; actionsTaken?: number }): void {
     const setParts: string[] = [];
-    const values: any[] = [];
+    const values: unknown[] = [];
 
     if (updates.pagesViewed !== undefined) {
       setParts.push('pages_viewed = ?');
@@ -371,15 +371,17 @@ export class SQLiteAnalyticsAdapter implements IAnalyticsAdapter {
       WHERE timestamp < ?
     `,
       )
-      .run(retentionDate.toISOString());
+      .run(retentionDate.toISOString()) as { changes?: number };
+
+    const deletedRows = deleteResult.changes ?? 0;
 
     Logger.info('Old analytics data cleaned', {
       retentionDays,
       cleanupDate: retentionDate.toISOString(),
-      deletedRows: deleteResult.changes,
+      deletedRows,
     });
 
-    return deleteResult.changes || 0;
+    return deletedRows;
   }
 
   getActiveUserCount(startDate: Date, endDate: Date): number {

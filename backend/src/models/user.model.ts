@@ -1,5 +1,3 @@
-import { TierLevel } from '../types/subscription';
-
 export interface User {
   id: number;
   organizationId: string;

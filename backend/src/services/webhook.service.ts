@@ -13,6 +13,7 @@
 import Stripe from 'stripe';
 import { Response } from 'express';
 import { PrismaClient } from '@prisma/client';
+import type { Prisma, SubscriptionTier } from '@prisma/client';
 import { envConfig } from '../config/environment';
 import { getDefaultDatabaseClient } from '../database/database-factory';
 import { SubscriptionService } from './subscription.service';
@@ -23,6 +24,26 @@ import * as Sentry from '@sentry/node';
 import { ApplicationMonitoringService } from './application.monitoring.service';
 import { invalidateSubscriptionCache } from '../middleware/auth.middleware';
 import { DEFAULT_LIMITS } from '../constants/default-limits';
+
+interface TierLimits {
+  max_skus: number | null;
+  max_users: number | null;
+  max_inventory_items: number | null;
+}
+
+interface ErrorWithCode {
+  code?: string;
+}
+
+const getTierLimits = (tierLevel: TierLevel): TierLimits => {
+  const limits = TIER_LIMITS[tierLevel];
+
+  return {
+    max_skus: limits.max_skus ?? null,
+    max_users: limits.max_users ?? null,
+    max_inventory_items: limits.max_inventory_items ?? null,
+  };
+};
 
 // Simple logging utility
 const log = {
@@ -122,9 +143,14 @@ export class WebhookService {
           processedAt: new Date(),
         },
       });
-    } catch (error: any) {
+    } catch (error: unknown) {
+      const prismaErrorCode =
+        error && typeof error === 'object' && 'code' in error
+          ? (error as ErrorWithCode).code
+          : undefined;
+
       // P2002 = unique constraint violation (already processed)
-      if (error.code === 'P2002') {
+      if (prismaErrorCode === 'P2002') {
         log.info('Event already marked as processed (idempotency)', { eventId });
         return;
       }
@@ -249,7 +275,7 @@ export class WebhookService {
             details: {
               customerId,
               organizationId,
-              customerEmail: (customer as any).email,
+              customerEmail: customer.email,
             },
           },
         );
@@ -365,7 +391,7 @@ export class WebhookService {
         organizationId,
         subscriptionId: subscription.id,
       });
-    } catch (error: any) {
+    } catch (error: unknown) {
       const duration = Date.now() - start;
       monitor.recordWebhookEvent('customer.subscription.created', duration, 'error');
       Sentry.captureException(error, {
@@ -415,7 +441,7 @@ export class WebhookService {
       monitor.recordWebhookEvent('customer.subscription.updated', duration, 'success');
 
       log.info('Subscription updated successfully', { organizationId, newTierLevel });
-    } catch (error: any) {
+    } catch (error: unknown) {
       this.handleWebhookError('customer.subscription.updated', error, {
         subscriptionId: subscription.id,
         customerId: subscription.customer as string | undefined,
@@ -511,7 +537,7 @@ export class WebhookService {
       monitor.recordWebhookEvent('customer.subscription.deleted', duration, 'success');
 
       log.info('Subscription deleted successfully', { organizationId });
-    } catch (error: any) {
+    } catch (error: unknown) {
       const duration = Date.now() - start;
       monitor.recordWebhookEvent('customer.subscription.deleted', duration, 'error');
       Sentry.captureException(error, {
@@ -553,7 +579,7 @@ export class WebhookService {
       log.info('Checkout completed successfully', { organizationId });
       const duration = Date.now() - start;
       monitor.recordWebhookEvent('checkout.session.completed', duration, 'success');
-    } catch (error: any) {
+    } catch (error: unknown) {
       this.handleWebhookError('checkout.session.completed', error, {
         sessionId: session.id,
       });
@@ -619,7 +645,7 @@ export class WebhookService {
       log.info('Payment failure handled', { organizationId, invoiceId: invoice.id });
       const duration = Date.now() - start;
       monitor.recordWebhookEvent('invoice.payment_failed', duration, 'success');
-    } catch (error: any) {
+    } catch (error: unknown) {
       const duration = Date.now() - start;
       monitor.recordWebhookEvent('invoice.payment_failed', duration, 'error');
       Sentry.captureException(error, { level: 'error', extra: { invoiceId: invoice.id } });
@@ -660,7 +686,7 @@ export class WebhookService {
       log.info('Trial reminder sent', { organizationId, daysRemaining });
       const duration = Date.now() - start;
       monitor.recordWebhookEvent('customer.subscription.trial_will_end', duration, 'success');
-    } catch (error: any) {
+    } catch (error: unknown) {
       const duration = Date.now() - start;
       monitor.recordWebhookEvent('customer.subscription.trial_will_end', duration, 'error');
       Sentry.captureException(error, {
@@ -754,7 +780,7 @@ export class WebhookService {
         organizationId,
         paymentIntentId: paymentIntent.id,
       });
-    } catch (error: any) {
+    } catch (error: unknown) {
       const duration = Date.now() - start;
       monitor.recordWebhookEvent('payment_intent.succeeded', duration, 'error');
       Sentry.captureException(error, {
@@ -814,7 +840,7 @@ export class WebhookService {
       monitor.recordWebhookEvent('payment_intent.payment_failed', duration, 'success');
 
       log.info('Payment failure handled', { organizationId, paymentIntentId: paymentIntent.id });
-    } catch (error: any) {
+    } catch (error: unknown) {
       const duration = Date.now() - start;
       monitor.recordWebhookEvent('payment_intent.payment_failed', duration, 'error');
       Sentry.captureException(error, {
@@ -917,7 +943,7 @@ export class WebhookService {
     context: {
       eventType: string;
       eventId?: string;
-      details?: Record<string, any>;
+      details?: Record<string, unknown>;
     },
   ): void {
     Sentry.captureMessage(message, {
@@ -947,7 +973,7 @@ export class WebhookService {
   /**
    * Check if a tier change is a downgrade
    */
-  private isDowngrade(oldTier: any, newTierLevel: TierLevel): boolean {
+  private isDowngrade(oldTier: SubscriptionTier | null, newTierLevel: TierLevel): boolean {
     if (!oldTier) return false;
 
     return (
@@ -968,7 +994,7 @@ export class WebhookService {
     isDowngrade: boolean,
   ): Promise<void> {
     await this.prisma.$transaction(async (tx) => {
-      const limits = TIER_LIMITS[newTierLevel];
+      const limits = getTierLimits(newTierLevel);
 
       // Sync subscription state
       await this.syncSubscriptionTier(tx, organizationId, subscription, newTierLevel);
@@ -994,7 +1020,7 @@ export class WebhookService {
    * Sync subscription tier (create or update)
    */
   private async syncSubscriptionTier(
-    tx: any,
+    tx: Prisma.TransactionClient,
     organizationId: string,
     subscription: Stripe.Subscription,
     newTierLevel: TierLevel,
@@ -1031,7 +1057,11 @@ export class WebhookService {
   /**
    * Update organization usage limits
    */
-  private async updateUsageLimits(tx: any, organizationId: string, limits: any): Promise<void> {
+  private async updateUsageLimits(
+    tx: Prisma.TransactionClient,
+    organizationId: string,
+    limits: TierLimits,
+  ): Promise<void> {
     await tx.organizationUsage.upsert({
       where: { organizationId },
       update: {
@@ -1056,9 +1086,9 @@ export class WebhookService {
    * Handle creation lock for downgrades
    */
   private async handleCreationLock(
-    tx: any,
+    tx: Prisma.TransactionClient,
     organizationId: string,
-    limits: any,
+    limits: TierLimits,
     isDowngrade: boolean,
   ): Promise<void> {
     if (!isDowngrade) {
@@ -1095,12 +1125,15 @@ export class WebhookService {
         newInventoryLimit: limits.max_inventory_items,
       });
 
-      // Send warning email (non-blocking)
-      await this.emailService.sendDowngradeWarningEmail(
-        organizationId,
-        usage.totalSkus,
-        limits.max_skus,
-      );
+      // Send SKU warning email only when the SKU limit is the one exceeded
+      // (limits.max_skus may be null when only isOverInventoryLimit triggered this block)
+      if (isOverSkuLimit && limits.max_skus !== null) {
+        await this.emailService.sendDowngradeWarningEmail(
+          organizationId,
+          usage.totalSkus,
+          limits.max_skus,
+        );
+      }
     }
   }
 
@@ -1109,7 +1142,7 @@ export class WebhookService {
    */
   private handleWebhookError(
     eventType: string,
-    error: any,
+    error: Error | unknown,
     context: {
       subscriptionId?: string;
       customerId?: string;
@@ -1117,7 +1150,11 @@ export class WebhookService {
     },
   ): void {
     const monitor = ApplicationMonitoringService.getInstance();
-    const duration = Date.now() - (monitor as any).lastStartTime || 0;
+    const monitorWithStartTime = monitor as { lastStartTime?: number };
+    const duration =
+      typeof monitorWithStartTime.lastStartTime === 'number'
+        ? Date.now() - monitorWithStartTime.lastStartTime
+        : 0;
 
     monitor.recordWebhookEvent(eventType, duration, 'error');
 
@@ -1135,14 +1172,21 @@ export class WebhookService {
   /**
    * Validate and extract data from checkout session
    */
-  private async validateAndExtractCheckoutData(session: Stripe.Checkout.Session) {
+  private async validateAndExtractCheckoutData(session: Stripe.Checkout.Session): Promise<{
+    stripeSubscription: Stripe.Subscription;
+    tierLevel: TierLevel;
+    limits: TierLimits;
+  }> {
     if (!session.subscription || typeof session.subscription !== 'string') {
       throw new Error('checkout.session.completed missing subscription id');
     }
 
-    const stripeSubscription = await this.stripe!.subscriptions.retrieve(session.subscription);
-    const tierLevel = this.extractTierFromPrice(stripeSubscription as Stripe.Subscription);
-    const limits = TIER_LIMITS[tierLevel];
+    const stripeSubscriptionResponse = await this.stripe!.subscriptions.retrieve(
+      session.subscription,
+    );
+    const stripeSubscription = stripeSubscriptionResponse as Stripe.Subscription;
+    const tierLevel = this.extractTierFromPrice(stripeSubscription);
+    const limits = getTierLimits(tierLevel);
 
     return {
       stripeSubscription,
@@ -1160,7 +1204,7 @@ export class WebhookService {
     checkoutData: {
       stripeSubscription: Stripe.Subscription;
       tierLevel: TierLevel;
-      limits: any;
+      limits: TierLimits;
     },
   ): Promise<void> {
     await this.prisma.$transaction(async (tx) => {
@@ -1191,7 +1235,7 @@ export class WebhookService {
    * Update subscription tier from checkout
    */
   private async updateSubscriptionFromCheckout(
-    tx: any,
+    tx: Prisma.TransactionClient,
     organizationId: string,
     session: Stripe.Checkout.Session,
     checkoutData: {
@@ -1220,9 +1264,9 @@ export class WebhookService {
    * Update usage limits from checkout
    */
   private async updateUsageLimitsFromCheckout(
-    tx: any,
+    tx: Prisma.TransactionClient,
     organizationId: string,
-    limits: any,
+    limits: TierLimits,
   ): Promise<void> {
     await tx.organizationUsage.upsert({
       where: { organizationId },

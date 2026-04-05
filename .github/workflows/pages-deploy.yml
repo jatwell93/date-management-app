@@ -1,0 +1,140 @@
+name: Deploy Frontend to Cloudflare Pages
+
+on:
+  workflow_dispatch:
+  pull_request:
+    branches:
+      - main
+    paths:
+      - 'frontend/**'
+      - '.github/workflows/pages-deploy.yml'
+  push:
+    branches:
+      - main
+    paths:
+      - 'frontend/**'
+      - '.github/workflows/pages-deploy.yml'
+
+permissions:
+  contents: read
+
+concurrency:
+  group: pages-deploy-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  deploy-preview:
+    if: github.event_name == 'pull_request' && github.event.pull_request.head.repo.fork == false
+    runs-on: ubuntu-latest
+    environment:
+      name: preview
+      url: https://pr-${{ github.event.number }}.date-management-frontend.pages.dev
+    env:
+      DOPPLER_TOKEN: ${{ secrets.DOPPLER_TOKEN }}
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: 'npm'
+          cache-dependency-path: frontend/package-lock.json
+
+      - name: Install Doppler CLI
+        uses: dopplerhq/cli-action@v3
+
+      - name: Install frontend dependencies
+        run: npm ci
+        working-directory: ./frontend
+
+      - name: Validate required Doppler secrets
+        run: |
+          required_vars=(
+            REACT_APP_API_URL
+            REACT_APP_API_BASE_URL
+            REACT_APP_CLERK_PUBLISHABLE_KEY
+            CLOUDFLARE_API_TOKEN
+            CLOUDFLARE_ACCOUNT_ID
+          )
+
+          for var_name in "${required_vars[@]}"; do
+            if ! doppler run -- bash -lc "[ -n \"\${$var_name}\" ]"; then
+              echo "::error::Missing required Doppler secret: ${var_name}"
+              exit 1
+            fi
+          done
+
+      - name: Build frontend
+        run: doppler run -- npm run build
+        working-directory: ./frontend
+
+      - name: Deploy preview to Cloudflare Pages
+        run: |
+          doppler run -- npx wrangler pages deploy frontend/build \
+            --project-name date-management-frontend \
+            --branch "pr-${{ github.event.number }}" \
+            --commit-hash "${{ github.sha }}" \
+            --commit-message "PR #${{ github.event.number }} - ${{ github.event.pull_request.title }}"
+
+      - name: Publish preview URL summary
+        run: |
+          echo "## Frontend Preview Deployment" >> "$GITHUB_STEP_SUMMARY"
+          echo "Preview alias URL: https://pr-${{ github.event.number }}.date-management-frontend.pages.dev" >> "$GITHUB_STEP_SUMMARY"
+          echo "Production URL remains: https://www.expirymate.com.au" >> "$GITHUB_STEP_SUMMARY"
+
+  deploy-production:
+    if: github.event_name == 'push'
+    runs-on: ubuntu-latest
+    environment:
+      name: production
+      url: https://www.expirymate.com.au
+    env:
+      DOPPLER_TOKEN: ${{ secrets.DOPPLER_TOKEN }}
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: 'npm'
+          cache-dependency-path: frontend/package-lock.json
+
+      - name: Install Doppler CLI
+        uses: dopplerhq/cli-action@v3
+
+      - name: Install frontend dependencies
+        run: npm ci
+        working-directory: ./frontend
+
+      - name: Validate required Doppler secrets
+        run: |
+          required_vars=(
+            REACT_APP_API_URL
+            REACT_APP_API_BASE_URL
+            REACT_APP_CLERK_PUBLISHABLE_KEY
+            CLOUDFLARE_API_TOKEN
+            CLOUDFLARE_ACCOUNT_ID
+          )
+
+          for var_name in "${required_vars[@]}"; do
+            if ! doppler run -- bash -lc "[ -n \"\${$var_name}\" ]"; then
+              echo "::error::Missing required Doppler secret: ${var_name}"
+              exit 1
+            fi
+          done
+
+      - name: Build frontend
+        run: doppler run -- npm run build
+        working-directory: ./frontend
+
+      - name: Deploy production to Cloudflare Pages
+        run: |
+          doppler run -- npx wrangler pages deploy frontend/build \
+            --project-name date-management-frontend \
+            --branch main \
+            --commit-hash "${{ github.sha }}" \
+            --commit-message "${{ github.event.head_commit.message }}"

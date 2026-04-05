@@ -42,6 +42,8 @@ export const createItemTransaction = (transaction: ItemTransaction) => {
   const stmt = getDb().prepare(
     'INSERT INTO item_transactions (inventory_item_id, user_id, type, quantity_change, notes) VALUES (?, ?, ?, ?, ?)',
   );
-  const info = stmt.run(inventory_item_id, user_id, type, quantity_change, notes);
-  return info.lastInsertRowid;
+  const info = stmt.run(inventory_item_id, user_id, type, quantity_change, notes) as {
+    lastInsertRowid: number | bigint;
+  };
+  return Number(info.lastInsertRowid);
 };

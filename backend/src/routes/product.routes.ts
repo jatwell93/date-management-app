@@ -10,6 +10,7 @@ import { validateBusinessRules } from '../middleware/data-integrity.middleware';
 import multer, { FileFilterCallback } from 'multer';
 import { standardLimiter } from '../middleware/rateLimiter';
 import * as path from 'path';
+import fs from 'fs';
 import { getDefaultDatabaseClient } from '../database/database-factory';
 import { TIER_LIMITS, TierLevel } from '../types/subscription';
 import { escapeCSVValue } from '../utils/csv';
@@ -405,7 +406,13 @@ router.post(
       const result = await productService.processCSVUpload(safeFilePath, req.file.originalname);
 
       // Send response with processing results and any errors
-      const responseObj: any = {
+      const responseObj: {
+        success: boolean;
+        message: string;
+        imported: number;
+        updated: number;
+        errors?: string[];
+      } = {
         success: result.errors.length === 0, // Add explicit success field
         message:
           result.errors.length > 0
@@ -420,16 +427,15 @@ router.post(
       }
 
       res.json(responseObj);
-    } catch (error: any) {
+    } catch (error: unknown) {
       next(error);
     } finally {
       // Clean up the uploaded file after processing
       if (req.file) {
-        const fs = require('fs');
         const uploadDir = path.dirname(req.file.path);
         const safeFilePath = path.resolve(uploadDir, path.basename(req.file.path));
         if (safeFilePath.startsWith(uploadDir + path.sep)) {
-          fs.unlink(safeFilePath, (err: any) => {
+          fs.unlink(safeFilePath, (err: NodeJS.ErrnoException | null) => {
             if (err) {
               console.error('Error deleting uploaded file:', err);
             }

@@ -140,7 +140,7 @@ export class AuthService {
     return await bcrypt.compare(pin, hashedPin);
   }
 
-  async login(pin: string): Promise<LoginResponse> {
+  async login(_pin: string): Promise<LoginResponse> {
     try {
       // Get all users and iterate through them to find a match
       const users = await this.prisma.user.findMany({

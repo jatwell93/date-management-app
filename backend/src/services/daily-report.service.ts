@@ -1,7 +1,7 @@
 import { PrismaClient } from '@prisma/client';
 import { Logger } from '../utils/logger';
 import { getDefaultDatabaseClient } from '../database/database-factory';
-import { SaasMetricsService } from './saas-metrics.service';
+import { SaasMetricsService, SaasMetrics } from './saas-metrics.service';
 import { EmailService } from './email.service';
 import { ALERT_THRESHOLDS } from '../types/subscription';
 
@@ -387,7 +387,7 @@ export class DailyReportService {
   /**
    * Check for alerts based on metrics
    */
-  private async checkAlerts(metrics: any): Promise<
+  private async checkAlerts(metrics: SaasMetrics): Promise<
     Array<{
       type: string;
       severity: 'low' | 'medium' | 'high' | 'critical';
@@ -395,6 +395,7 @@ export class DailyReportService {
     }>
   > {
     const alerts = [];
+    const paymentFailureRate = metrics.paymentFailureRate ?? 0;
 
     if (metrics.trialConversionRate < ALERT_THRESHOLDS.trialConversionRateMin) {
       alerts.push({
@@ -420,11 +421,11 @@ export class DailyReportService {
       });
     }
 
-    if (metrics.paymentFailureRate > ALERT_THRESHOLDS.paymentFailureRateMax) {
+    if (paymentFailureRate > ALERT_THRESHOLDS.paymentFailureRateMax) {
       alerts.push({
         type: 'HIGH_PAYMENT_FAILURE',
         severity: 'medium' as const,
-        message: `Payment failure rate is ${metrics.paymentFailureRate.toFixed(2)}% (above ${ALERT_THRESHOLDS.paymentFailureRateMax}% threshold)`,
+        message: `Payment failure rate is ${paymentFailureRate.toFixed(2)}% (above ${ALERT_THRESHOLDS.paymentFailureRateMax}% threshold)`,
       });
     }
 

@@ -8,7 +8,7 @@ import { standardLimiter } from '../middleware/rateLimiter';
 const router = Router();
 
 // Helper function to get services with organization context
-function getExpiredItemServiceForRequest(req: AuthRequest) {
+function getExpiredItemServiceForRequest(_req: AuthRequest) {
   // Note: ExpiredItemService needs to be refactored to accept organizationId
   // For now, we'll instantiate it without organizationId
   return new ExpiredItemService();
@@ -82,11 +82,11 @@ router.post(
       );
 
       res.status(201).json(transaction);
-    } catch (error: any) {
+    } catch (error: unknown) {
       console.error('Process expired item error:', error);
 
       // Handle specific error cases
-      if (error.message.includes('not found')) {
+      if (error instanceof Error && error.message.includes('not found')) {
         return res.status(404).json({ message: error.message });
       }
 

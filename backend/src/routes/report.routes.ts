@@ -1,4 +1,4 @@
-import { Router, Request, Response, NextFunction } from 'express';
+import { Router, Response, NextFunction } from 'express';
 import validator from 'validator';
 import { ServiceProvider } from '../services/service-provider';
 import { authenticateToken, AuthRequest } from '../middleware/auth.middleware';

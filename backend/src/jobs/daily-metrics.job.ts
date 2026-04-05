@@ -5,6 +5,10 @@ import { getDefaultDatabaseClient } from '../database/database-factory';
 import * as Sentry from '@sentry/node';
 import { ALERT_THRESHOLDS } from '../types/subscription';
 
+interface ErrorWithCode {
+  code?: string;
+}
+
 /**
  * Daily Metrics Job
  * Runs at 23:59 UTC to store daily SaaS metrics snapshots
@@ -103,9 +107,14 @@ export class DailyMetricsJob {
 
       Logger.debug('Lock acquired', { lockKey, expiresAt });
       return true;
-    } catch (error: any) {
+    } catch (error: unknown) {
       // Check if lock exists and is expired
-      if (error.code === 'SQLITE_CONSTRAINT') {
+      const errorCode =
+        error && typeof error === 'object' && 'code' in error
+          ? (error as ErrorWithCode).code
+          : undefined;
+
+      if (errorCode === 'SQLITE_CONSTRAINT') {
         const existingLock = (await this.prisma.$queryRaw`
           SELECT appliedAt FROM migrations WHERE name = ${lockKey}
         `) as Array<{ appliedAt: Date }>;
@@ -117,7 +126,10 @@ export class DailyMetricsJob {
         }
       }
 
-      Logger.debug('Failed to acquire lock', { lockKey, error: error.message });
+      Logger.debug('Failed to acquire lock', {
+        lockKey,
+        error: error instanceof Error ? error.message : 'Unknown error',
+      });
       return false;
     }
   }

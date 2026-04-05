@@ -34,6 +34,9 @@ export interface Env {
   
   // JWT authentication secret
   JWT_SECRET: string;
+
+  // Clerk Svix webhook signing secret (whsec_...)
+  CLERK_WEBHOOK_SECRET: string;
   
   // Cloudflare R2 credentials
   R2_ACCOUNT_ID: string;

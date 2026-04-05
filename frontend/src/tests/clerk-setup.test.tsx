@@ -6,6 +6,13 @@ import { ClerkAuthProvider, useAuthContext } from '../components/ClerkAuthProvid
 const mockUseUser = jest.fn();
 const mockUseAuth = jest.fn();
 const mockUseOrganization = jest.fn();
+const mockSentryCaptureException = jest.fn();
+const mockSentrySetUser = jest.fn();
+
+jest.mock('@sentry/react', () => ({
+  captureException: (...args: unknown[]) => mockSentryCaptureException(...args),
+  setUser: (...args: unknown[]) => mockSentrySetUser(...args),
+}));
 
 jest.mock('@clerk/clerk-react', () => ({
   ClerkProvider: ({ children }: { children: React.ReactNode }) => <>{children}</>,
@@ -93,5 +100,23 @@ describe('Clerk Integration Setup', () => {
     expect(setItemSpy).not.toHaveBeenCalledWith('authToken', expect.any(String));
 
     setItemSpy.mockRestore();
+  });
+
+  it('sets Sentry user context when a Clerk session token is loaded', async () => {
+    render(
+      <ClerkAuthProvider publishableKey="pk_test_example">
+        <AuthConsumer />
+      </ClerkAuthProvider>,
+    );
+
+    await waitFor(() => {
+      expect(screen.getByText('clerk-token')).toBeInTheDocument();
+    });
+
+    expect(mockSentrySetUser).toHaveBeenCalledWith(
+      expect.objectContaining({
+        email: 'test@example.com',
+      }),
+    );
   });
 });

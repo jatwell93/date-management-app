@@ -389,8 +389,7 @@ describe('CSV Parser Edge Cases', () => {
        */
 
       const csvFile = path.join(tempDir, 'quoted-newline.csv');
-      const content =
-        'sku,name,barcode,cost\nSKU-QN-1,"Widget\nDeluxe","BAR-001",12.00\n';
+      const content = 'sku,name,barcode,cost\nSKU-QN-1,"Widget\nDeluxe","BAR-001",12.00\n';
       fs.writeFileSync(csvFile, content);
 
       const result: CSVParseResult = await parser.processFile(csvFile, 'org_123');
@@ -406,8 +405,7 @@ describe('CSV Parser Edge Cases', () => {
        */
 
       const csvFile = path.join(tempDir, 'escaped-quote.csv');
-      const content =
-        'sku,name,barcode,cost\nSKU-EQ-1,"Widget ""Premium""","BAR-001",12.00\n';
+      const content = 'sku,name,barcode,cost\nSKU-EQ-1,"Widget ""Premium""","BAR-001",12.00\n';
       fs.writeFileSync(csvFile, content);
 
       const result: CSVParseResult = await parser.processFile(csvFile, 'org_123');
@@ -422,8 +420,7 @@ describe('CSV Parser Edge Cases', () => {
        */
 
       const csvFile = path.join(tempDir, 'special-chars.csv');
-      const content =
-        'sku,name,barcode,cost\nSKU-SP-1,"Widget @#$%","BAR-001&*",12.00\n';
+      const content = 'sku,name,barcode,cost\nSKU-SP-1,"Widget @#$%","BAR-001&*",12.00\n';
       fs.writeFileSync(csvFile, content);
 
       const result: CSVParseResult = await parser.processFile(csvFile, 'org_123');

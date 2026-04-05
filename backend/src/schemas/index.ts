@@ -285,7 +285,7 @@ export const backupRestoreSchema = z.object({
       )
       .refine((val) => {
         const path = require('path');
-        const normalized = path.normalize(val);
+        path.normalize(val);
         const baseDir = path.resolve('backups');
         const resolved = path.resolve(val);
         return resolved.startsWith(baseDir + path.sep);

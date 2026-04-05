@@ -24,7 +24,7 @@ export function validateRedirectUrl(url: string, fieldName: string = 'URL'): voi
   let parsedUrl: URL;
   try {
     parsedUrl = new URL(url);
-  } catch (error) {
+  } catch (_error) {
     throw new Error(`${fieldName} is not a valid URL: ${url}`);
   }
 
@@ -40,7 +40,7 @@ export function validateRedirectUrl(url: string, fieldName: string = 'URL'): voi
   try {
     const frontendUrl = new URL(envConfig.FRONTEND_URL);
     allowedDomains.add(frontendUrl.hostname);
-  } catch (error) {
+  } catch (_error) {
     // Ignore if FRONTEND_URL is not a valid URL
   }
 
@@ -48,7 +48,7 @@ export function validateRedirectUrl(url: string, fieldName: string = 'URL'): voi
   try {
     const corsOrigin = new URL(envConfig.CORS_ORIGIN);
     allowedDomains.add(corsOrigin.hostname);
-  } catch (error) {
+  } catch (_error) {
     // Ignore if CORS_ORIGIN is not a valid URL
   }
 

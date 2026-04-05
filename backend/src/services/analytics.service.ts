@@ -302,7 +302,7 @@ export class AnalyticsService {
    * Export analytics data for further analysis
    * @deprecated Use getMetrics() instead for analytics data retrieval. This method returns empty data and will be removed in a future version.
    */
-  public async exportData(startDate: Date, endDate: Date): Promise<AnalyticsEvent[]> {
+  public async exportData(_startDate: Date, _endDate: Date): Promise<AnalyticsEvent[]> {
     Logger.warn('exportData is deprecated - use getMetrics() instead');
     return [];
   }

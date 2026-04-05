@@ -1,6 +1,6 @@
 import { Request, Response, NextFunction } from 'express';
 import { Logger } from '../utils/logger';
-import { BaseError, isBaseError, ValidationError, InternalError } from '../errors';
+import { isBaseError, ValidationError } from '../errors';
 
 /**
  * Type-safe error payload structure
@@ -11,6 +11,10 @@ interface ErrorPayload {
   statusCode: number;
   errors?: Record<string, unknown>[];
   stack?: string;
+}
+
+interface RequestWithUserId extends Request {
+  userId?: number | string;
 }
 
 /**
@@ -66,7 +70,7 @@ export const errorHandler = (err: Error, req: Request, res: Response, _next: Nex
     method: req.method,
     ip: req.ip,
     userAgent: req.get('User-Agent'),
-    userId: (req as any).userId,
+    userId: (req as RequestWithUserId).userId,
     stack: err.stack,
   });
 

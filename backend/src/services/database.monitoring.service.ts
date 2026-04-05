@@ -446,7 +446,9 @@ export class DatabaseMonitoringService extends EventEmitter {
       // Get size and row count for each table
       for (const tableName of tableNames) {
         // Get row count
-        const countResult: any = db.prepare(`SELECT COUNT(*) as count FROM ${tableName}`).get();
+        const countResult = db.prepare(`SELECT COUNT(*) as count FROM ${tableName}`).get() as {
+          count: number;
+        };
         rowCount[tableName] = countResult.count;
 
         // For SQLite, getting exact file size for each table is complex

@@ -42,6 +42,19 @@ module.exports = [
     },
   },
   {
+    files: [
+      'backend/src/tests/**/*.{js,jsx,ts,tsx}',
+      'backend/src/**/*.test.{js,jsx,ts,tsx}',
+      'backend/scripts/**/*.{js,jsx,ts,tsx}',
+      'backend/test-setup-neon.js',
+    ],
+    rules: {
+      '@typescript-eslint/no-explicit-any': 'off',
+      '@typescript-eslint/no-unused-vars': 'off',
+      'no-unused-vars': 'off',
+    },
+  },
+  {
     files: ['src/**/*.{ts,tsx}'],
     languageOptions: {
       parser: tsParser,
@@ -215,6 +228,19 @@ module.exports = [
     rules: {
       ...baseJsRules,
       'no-case-declarations': 'off',
+    },
+  },
+  {
+    files: [
+      'backend/src/tests/**/*.{js,jsx,ts,tsx}',
+      'backend/src/**/*.test.{js,jsx,ts,tsx}',
+      'backend/scripts/**/*.{js,jsx,ts,tsx}',
+      'backend/test-setup-neon.js',
+    ],
+    rules: {
+      '@typescript-eslint/no-explicit-any': 'off',
+      '@typescript-eslint/no-unused-vars': 'off',
+      'no-unused-vars': 'off',
     },
   },
   {

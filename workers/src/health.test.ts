@@ -194,6 +194,22 @@ describe('API config guard', () => {
     const body = await response.json() as any;
     expect(body.error).toBeTruthy();
   });
+
+  it('routes /api/webhooks/clerk and rejects requests without Svix headers', async () => {
+    const response = await SELF.fetch('https://example.com/api/webhooks/clerk', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'CF-Connecting-IP': '198.51.100.45',
+      },
+      body: JSON.stringify({ type: 'user.created', data: {} }),
+    });
+
+    expect(response.status).toBe(400);
+
+    const body = await response.json() as any;
+    expect(body.error).toContain('Svix');
+  });
 });
 
 describe('Upload strategy parity', () => {

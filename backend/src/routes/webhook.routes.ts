@@ -20,6 +20,15 @@ import { ConflictError, NotFoundError } from '../errors';
 
 const router = Router();
 
+type ClerkWebhookEventPayload = {
+  type?: string;
+  data?: unknown;
+};
+
+function isClerkWebhookEventPayload(value: unknown): value is ClerkWebhookEventPayload {
+  return typeof value === 'object' && value !== null;
+}
+
 function isNonRecoverableStripeWebhookError(error: Error): boolean {
   if (error instanceof NotFoundError) {
     return true;
@@ -157,10 +166,14 @@ const handleClerkWebhook = async (req: Request, res: Response) => {
       return clerkWebhookService.sendError(res, 'Missing required Svix headers', 400);
     }
 
-    let event;
+    let event: ClerkWebhookEventPayload;
     try {
       const rawBody = req.body; // Body is raw Buffer when using express.raw()
-      event = clerkWebhookService.verifySignature(rawBody as Buffer, headers);
+      const verifiedEvent = clerkWebhookService.verifySignature(rawBody as Buffer, headers);
+      if (!isClerkWebhookEventPayload(verifiedEvent)) {
+        return clerkWebhookService.sendError(res, 'Invalid webhook payload', 400);
+      }
+      event = verifiedEvent;
     } catch (verifyError) {
       const error = verifyError as Error;
       console.error('[CLERK_WEBHOOK] Webhook signature verification failed', {
@@ -173,7 +186,7 @@ const handleClerkWebhook = async (req: Request, res: Response) => {
     // Step 2: Check idempotency (duplicate detection)
     // svix-id is the unique message ID from Clerk — use it as the idempotency key
     const svixEventId = headers['svix-id'];
-    const eventType = (event as any).type;
+    const eventType = event.type ?? 'unknown';
     const isNew = await clerkWebhookService.isNewEvent(svixEventId);
     const monitor = ApplicationMonitoringService.getInstance();
     const startTs = Date.now();

@@ -5,6 +5,7 @@ import {
   MonthlyMarkdownReport,
   UsageReport,
   DailyUsageReportItem,
+  DetailedExpiryReportItem,
   LossBySkuReportItem,
   LossByDepartmentReportItem,
   ItemsByUserReportItem,
@@ -37,7 +38,7 @@ export class ReportService {
     return this.repository.getOverallExpiryReport();
   }
 
-  async getDetailedExpiryReport(): Promise<any[]> {
+  async getDetailedExpiryReport(): Promise<DetailedExpiryReportItem[]> {
     return this.repository.getDetailedExpiryReport();
   }
 

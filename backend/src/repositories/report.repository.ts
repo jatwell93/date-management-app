@@ -27,6 +27,19 @@ export interface MonthlyMarkdownReport {
   itemCount: number;
 }
 
+export interface DetailedExpiryReportItem {
+  inventoryId: number;
+  expiryDate: string;
+  status: string;
+  productId: number;
+  productName: string;
+  sku: string;
+  costPrice: number;
+  locationId: number;
+  locationName: string;
+  subDepartment: string | null;
+}
+
 export interface UsageReport {
   role: string;
   total_activities: number;
@@ -126,7 +139,7 @@ export class ReportRepository {
   /**
    * Get detailed expiry report (next 90 days)
    */
-  getDetailedExpiryReport(): any[] {
+  getDetailedExpiryReport(): DetailedExpiryReportItem[] {
     const stmt = this.db.prepare(
       `SELECT 
         ii.id as inventoryId,
@@ -146,7 +159,7 @@ export class ReportRepository {
         AND ii.expiry_date <= date('now', '+90 days')
       ORDER BY ii.expiry_date ASC`,
     );
-    return stmt.all();
+    return stmt.all() as DetailedExpiryReportItem[];
   }
 
   /**
@@ -289,7 +302,7 @@ export class ReportRepository {
    */
   getItemsByUserReport(timeFrameDays?: string): ItemsByUserReportItem[] {
     let whereClause = "WHERE al.change_description LIKE '%created%'";
-    const params: any[] = [];
+    const params: string[] = [];
 
     if (timeFrameDays && timeFrameDays !== 'all-time') {
       whereClause += ` AND al.created_at >= date('now', '-' || ? || ' days')`;

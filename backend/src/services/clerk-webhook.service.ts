@@ -34,6 +34,51 @@ const log = {
   },
 };
 
+interface ClerkWebhookEvent {
+  type?: string;
+  data?: unknown;
+}
+
+interface ClerkEmailAddress {
+  id?: string;
+  email_address?: string;
+}
+
+interface ClerkOrganizationPayload {
+  id: string;
+  name?: string;
+  slug?: string;
+  created_by?: string;
+}
+
+interface ClerkOrganizationMembershipPayload {
+  organization?: ClerkOrganizationPayload;
+  role?: string;
+}
+
+interface ClerkUserPayload {
+  id?: string;
+  email_addresses?: ClerkEmailAddress[];
+  username?: string | null;
+  primary_email_address_id?: string;
+  organization_memberships?: ClerkOrganizationMembershipPayload[];
+}
+
+interface ClerkOrganizationCreatedPayload {
+  id?: string;
+  name?: string;
+  created_by?: string;
+  slug?: string;
+}
+
+interface ClerkMembershipPayload {
+  public_user_data?: {
+    user_id?: string;
+  };
+  organization?: ClerkOrganizationPayload;
+  role?: string;
+}
+
 export class ClerkWebhookService {
   private prisma: PrismaClient;
   private subscriptionService: SubscriptionService;
@@ -109,8 +154,13 @@ export class ClerkWebhookService {
   /**
    * Handle the webhook event
    */
-  async handleEvent(event: any): Promise<void> {
+  async handleEvent(event: ClerkWebhookEvent): Promise<void> {
     const { type, data } = event;
+
+    if (!type) {
+      log.warn('Webhook event missing type', { event });
+      return;
+    }
 
     switch (type) {
       case 'user.created':
@@ -138,13 +188,24 @@ export class ClerkWebhookService {
    * Handle user.created event
    * Creates a user record and organization if needed
    */
-  private async handleUserCreated(data: any): Promise<void> {
-    const { id, email_addresses, username, first_name, last_name, organization_memberships } = data;
+  private async handleUserCreated(data: unknown): Promise<void> {
+    const {
+      id,
+      email_addresses = [],
+      username,
+      primary_email_address_id,
+      organization_memberships = [],
+    } = data as ClerkUserPayload;
+
+    if (!id) {
+      log.error('User created event missing user id', { data });
+      return;
+    }
 
     try {
       // Get primary email
       const primaryEmail = email_addresses.find(
-        (email: any) => email.id === data.primary_email_address_id,
+        (email) => email.id === primary_email_address_id,
       )?.email_address;
 
       if (!primaryEmail) {
@@ -217,13 +278,23 @@ export class ClerkWebhookService {
   /**
    * Handle user.updated event
    */
-  private async handleUserUpdated(data: any): Promise<void> {
-    const { id, email_addresses, username, first_name, last_name } = data;
+  private async handleUserUpdated(data: unknown): Promise<void> {
+    const {
+      id,
+      email_addresses = [],
+      username,
+      primary_email_address_id,
+    } = data as ClerkUserPayload;
+
+    if (!id) {
+      log.error('User updated event missing user id', { data });
+      return;
+    }
 
     try {
       // Get primary email
       const primaryEmail = email_addresses.find(
-        (email: any) => email.id === data.primary_email_address_id,
+        (email) => email.id === primary_email_address_id,
       )?.email_address;
 
       // Update user record
@@ -247,14 +318,20 @@ export class ClerkWebhookService {
   /**
    * Handle organization.created event
    */
-  private async handleOrganizationCreated(data: any): Promise<void> {
-    const { id, name, created_by } = data;
+  private async handleOrganizationCreated(data: unknown): Promise<void> {
+    const { id, name, created_by, slug } = data as ClerkOrganizationCreatedPayload;
+
+    if (!id) {
+      log.error('Organization created event missing organization id', { data });
+      return;
+    }
 
     try {
       // Find or create organization
       const org = await this.findOrCreateOrganization({
         id,
         name,
+        slug,
         created_by,
       });
 
@@ -276,8 +353,8 @@ export class ClerkWebhookService {
    * Handle organizationMembership.created event
    * Links an existing user to an organization when they join
    */
-  private async handleOrganizationMembershipCreated(data: any): Promise<void> {
-    const { public_user_data, organization, role } = data;
+  private async handleOrganizationMembershipCreated(data: unknown): Promise<void> {
+    const { public_user_data, organization, role } = data as ClerkMembershipPayload;
     const clerkUserId = public_user_data?.user_id;
     const clerkOrgId = organization?.id;
 
@@ -336,8 +413,8 @@ export class ClerkWebhookService {
    * Handle organizationMembership.deleted event
    * Unlinks a user from an organization when they leave/are removed
    */
-  private async handleOrganizationMembershipDeleted(data: any): Promise<void> {
-    const { public_user_data, organization } = data;
+  private async handleOrganizationMembershipDeleted(data: unknown): Promise<void> {
+    const { public_user_data, organization } = data as ClerkMembershipPayload;
     const clerkUserId = public_user_data?.user_id;
     const clerkOrgId = organization?.id;
 
@@ -393,7 +470,9 @@ export class ClerkWebhookService {
   /**
    * Find or create organization based on Clerk data
    */
-  private async findOrCreateOrganization(clerkOrg: any): Promise<{ id: string }> {
+  private async findOrCreateOrganization(
+    clerkOrg: ClerkOrganizationPayload,
+  ): Promise<{ id: string }> {
     // Check if organization already exists
     let org = await this.prisma.organization.findUnique({
       where: { clerkOrganizationId: clerkOrg.id },
