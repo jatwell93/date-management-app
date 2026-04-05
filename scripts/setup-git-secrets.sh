@@ -61,15 +61,14 @@ echo ""
 # Add custom patterns
 echo -e "${YELLOW}Adding custom secret patterns...${NC}"
 
-# API Keys & Tokens
-git secrets --add 'password\s*[:=]\s*["\047]?.{8,}["\047]?'
-git secrets --add 'api[_-]?key\s*[:=]\s*["\047]?.{16,}["\047]?'
-git secrets --add 'secret[_-]?key\s*[:=]\s*["\047]?.{16,}["\047]?'
-git secrets --add 'token\s*[:=]\s*["\047]?.{16,}["\047]?'
-git secrets --add 'jwt[_-]?secret\s*[:=]\s*["\047]?.{16,}["\047]?'
+# API keys and tokens (high-confidence literals only)
+git secrets --add 'password[[:space:]]*[:=][[:space:]]*["\047][A-Za-z0-9._+/=-]{20,}["\047]'
+git secrets --add 'api[_-]?key[[:space:]]*[:=][[:space:]]*["\047][A-Za-z0-9._+/=-]{20,}["\047]'
+git secrets --add '(access[_-]?token|refresh[_-]?token|api[_-]?token|bearer[_-]?token)[[:space:]]*[:=][[:space:]]*["\047][A-Za-z0-9._+/=-]{32,}["\047]'
+git secrets --add 'jwt[_-]?secret[[:space:]]*[:=][[:space:]]*["\047][A-Za-z0-9._+/=-]{24,}["\047]'
 
 # Database connection strings with credentials
-git secrets --add 'database[_-]?url\s*[:=]\s*["\047]?.*\:\/\/.*\:.*\@'
+git secrets --add 'database[_-]?url[[:space:]]*[:=][[:space:]]*["\047]?.*\:\/\/.*\:.*\@'
 
 # Service-specific patterns
 git secrets --add 'AKIA[0-9A-Z]{16}'  # AWS Access Key ID
@@ -79,14 +78,14 @@ git secrets --add 'gho_[a-zA-Z0-9]{36,}'  # GitHub OAuth Token
 git secrets --add 'github_pat_[a-zA-Z0-9_]{82}'  # GitHub Fine-grained PAT
 
 # Private keys
-git secrets --add '-----BEGIN\s+(RSA|DSA|EC|OPENSSH)\s+PRIVATE\s+KEY-----'
+git secrets --add '^-----BEGIN [A-Z0-9 ]+PRIVATE KEY-----$'
 
 # Cloudflare R2 patterns
-git secrets --add 'r2[_-]?access[_-]?key[_-]?id\s*[:=]\s*["\047]?[a-f0-9]{32}["\047]?'
-git secrets --add 'r2[_-]?secret[_-]?access[_-]?key\s*[:=]\s*["\047]?.{40,}["\047]?'
+git secrets --add 'r2[_-]?access[_-]?key[_-]?id[[:space:]]*[:=][[:space:]]*["\047]?[a-f0-9]{32}["\047]?'
+git secrets --add 'r2[_-]?secret[_-]?access[_-]?key[[:space:]]*[:=][[:space:]]*["\047]?.{40,}["\047]?'
 
 # Neon Database patterns
-git secrets --add 'neon[_-]?api[_-]?key\s*[:=]\s*["\047]?[a-zA-Z0-9_-]{32,}["\047]?'
+git secrets --add 'neon[_-]?api[_-]?key[[:space:]]*[:=][[:space:]]*["\047]?[a-zA-Z0-9_-]{32,}["\047]?'
 
 echo -e "${GREEN}✓ Custom patterns added${NC}"
 echo ""
