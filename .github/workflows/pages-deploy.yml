@@ -31,6 +31,7 @@ jobs:
       url: https://pr-${{ github.event.number }}.date-management-frontend.pages.dev
     env:
       DOPPLER_TOKEN: ${{ secrets.DOPPLER_TOKEN }}
+      CLOUDFLARE_ACCOUNT_ID: 0d7fd66d4292d901c684b723f66be69f
 
     steps:
       - uses: actions/checkout@v4
@@ -105,6 +106,7 @@ jobs:
       url: https://www.expirymate.com.au
     env:
       DOPPLER_TOKEN: ${{ secrets.DOPPLER_TOKEN }}
+      CLOUDFLARE_ACCOUNT_ID: 0d7fd66d4292d901c684b723f66be69f
 
     steps:
       - uses: actions/checkout@v4
