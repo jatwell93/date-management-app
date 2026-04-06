@@ -24,7 +24,7 @@ concurrency:
 
 jobs:
   deploy-preview:
-    if: github.event_name == 'pull_request' && github.event.pull_request.head.repo.fork == false && github.actor != 'dependabot[bot]'
+    if: github.event_name == 'pull_request' && github.event.pull_request.head.repo.fork == false && github.event.pull_request.user.login != 'dependabot[bot]'
     runs-on: ubuntu-latest
     environment:
       name: preview
@@ -52,22 +52,24 @@ jobs:
 
       - name: Validate required Doppler secrets
         run: |
-          required_vars=(
-            REACT_APP_CLERK_PUBLISHABLE_KEY
-            CLOUDFLARE_API_TOKEN
-          )
+          doppler run -- bash -lc '
+            required_vars=(
+              REACT_APP_CLERK_PUBLISHABLE_KEY
+              CLOUDFLARE_API_TOKEN
+            )
 
-          for var_name in "${required_vars[@]}"; do
-            if ! doppler run -- bash -lc "[ -n \"\${$var_name}\" ]"; then
-              echo "::error::Missing required Doppler secret: ${var_name}"
+            for var_name in "${required_vars[@]}"; do
+              if [ -z "${!var_name:-}" ]; then
+                echo "::error::Missing required Doppler secret: ${var_name}"
+                exit 1
+              fi
+            done
+
+            if [ -z "${REACT_APP_API_URL:-}" ] && [ -z "${REACT_APP_API_BASE_URL:-}" ]; then
+              echo "::error::Missing required Doppler secret: set REACT_APP_API_URL or REACT_APP_API_BASE_URL"
               exit 1
             fi
-          done
-
-          if ! doppler run -- bash -lc "[ -n \"\${REACT_APP_API_URL:-}\" ] || [ -n \"\${REACT_APP_API_BASE_URL:-}\" ]"; then
-            echo "::error::Missing required Doppler secret: set REACT_APP_API_URL or REACT_APP_API_BASE_URL"
-            exit 1
-          fi
+          '
 
       - name: Build frontend
         run: |
@@ -127,22 +129,24 @@ jobs:
 
       - name: Validate required Doppler secrets
         run: |
-          required_vars=(
-            REACT_APP_CLERK_PUBLISHABLE_KEY
-            CLOUDFLARE_API_TOKEN
-          )
+          doppler run -- bash -lc '
+            required_vars=(
+              REACT_APP_CLERK_PUBLISHABLE_KEY
+              CLOUDFLARE_API_TOKEN
+            )
 
-          for var_name in "${required_vars[@]}"; do
-            if ! doppler run -- bash -lc "[ -n \"\${$var_name}\" ]"; then
-              echo "::error::Missing required Doppler secret: ${var_name}"
+            for var_name in "${required_vars[@]}"; do
+              if [ -z "${!var_name:-}" ]; then
+                echo "::error::Missing required Doppler secret: ${var_name}"
+                exit 1
+              fi
+            done
+
+            if [ -z "${REACT_APP_API_URL:-}" ] && [ -z "${REACT_APP_API_BASE_URL:-}" ]; then
+              echo "::error::Missing required Doppler secret: set REACT_APP_API_URL or REACT_APP_API_BASE_URL"
               exit 1
             fi
-          done
-
-          if ! doppler run -- bash -lc "[ -n \"\${REACT_APP_API_URL:-}\" ] || [ -n \"\${REACT_APP_API_BASE_URL:-}\" ]"; then
-            echo "::error::Missing required Doppler secret: set REACT_APP_API_URL or REACT_APP_API_BASE_URL"
-            exit 1
-          fi
+          '
 
       - name: Build frontend
         run: |
