@@ -728,44 +728,46 @@
 
 ## 15. Production Deployment (Domain, Business & Infrastructure)
 
-> **⏳ PHASE READY TO RESUME - IN PROGRESS (11/26 tasks planned, 0% complete)**  
+> **⏳ PHASE IN PROGRESS - FINAL POST-DEPLOY VALIDATION REMAINING**  
 > **STATUS:** SPLIT INTO SUBSECTIONS:
-> - **15a: Domain, Business & Hosting Setup** — BLOCKING PREREQUISITES (2–3 weeks timeline, human approvals)
+> - **15a: Domain, Business & Hosting Setup** — PREREQUISITES COMPLETE (tracked for audit history)
 > - **15b: Cloudflare Workers Deployment** — Technical implementation (1–2 weeks timeline)
 >
 > **ORIGINAL BLOCKER (Feb 9, 2026):** Multi-tenant routes and auth not implemented  
-> **CURRENT STATUS (Mar 22, 2026):**  
+> **CURRENT STATUS (Apr 6, 2026):**  
 > - ✅ Multi-tenant routes complete (backend)
-> - ✅ JWT with organizationId implemented (backend)  
-> - ❌ Multi-tenant auth NOT in Workers (Phase 8B)
-> - ❌ Upload flow enhancement NOT started (Phase 9)
-> - ❌ **NEW BLOCKER:** Domain & Australian business registration not started (15a)
+> - ✅ JWT with organizationId implemented (backend)
+> - ✅ Multi-tenant auth implemented in Workers (Phase 8B complete)
+> - ✅ Upload flow enhancement complete and parity closed (Phase 9 complete)
+> - ✅ Domain, SSL, and hosting prerequisites completed (Phase 15a complete)
+> - ✅ Cloudflare Pages CI/CD hardening merged to `main` (PR #94)
+> - ⏳ Remaining post-deploy tasks: 15.7 (24h traffic monitoring), 15.8 (cost verification)
 >
-> **PREREQUISITES BEFORE DEPLOYMENT:**
-> 1. **CRITICAL:** Domain, business registration, & hosting setup (Phase 15a) - 11 tasks, 2-3 weeks
-> 2. **CRITICAL:** Complete Phase 8B (Multi-Tenant Workers Support) - 4 tasks, 8-10 hours
-> 3. **CRITICAL:** Complete Phase 9 (Upload Flow Enhancement) - 10 tasks, 12-15 hours
-> 4. ✅ **DONE:** Phase 6.3, 6.7 (R2 CORS + lifecycle rules)
-> 5. ⚠️ **PARTIAL:** Phase 12.1 complete, 12.2 custom metrics wiring still pending
+> **PREREQUISITES BEFORE DEPLOYMENT (STATUS):**
+> 1. ✅ Domain, business registration, & hosting setup (Phase 15a)
+> 2. ✅ Phase 8B complete (Multi-Tenant Workers Support)
+> 3. ✅ Phase 9 complete (Upload Flow Enhancement)
+> 4. ✅ Phase 6.3 and 6.7 complete (R2 CORS + lifecycle rules)
+> 5. ✅ Phase 12.2 complete (custom metrics wiring)
 >
 > **DEPLOYMENT READINESS CHECKLIST:**
 > - [x] Australian business registered with ABN (Phase 15a.1)
-> - [ ] `.au` domain registered and nameservers updated (Phase 15a.3-15a.4)
-> - [ ] SSL certificate active via Cloudflare (Phase 15a.6)
-> - [ ] Hosting platform selected and account created (Phase 15a.10-15a.11)
-> - [ ] Multi-tenant auth working in Workers (Phase 8B)
-> - [ ] Presigned URL upload flow tested (Phase 9)
-> - [ ] Workers Secrets configured (Phase 10.6)
-> - [ ] Load testing passed (Phase 17)
-> - [ ] Rollback procedure documented (Phase 18)
+> - [x] `.au` domain registered and nameservers updated (Phase 15a.3-15a.4)
+> - [x] SSL certificate active via Cloudflare (Phase 15a.6)
+> - [x] Hosting platform selected and account created (Phase 15a.10-15a.11)
+> - [x] Multi-tenant auth working in Workers (Phase 8B)
+> - [x] Presigned URL upload flow tested (Phase 9)
+> - [x] Workers Secrets configured (Phase 10.6)
+> - [x] Load testing passed (Phase 17)
+> - [x] Rollback procedure documented (Phase 18)
 
 ### 15a. Domain, Business & Hosting Setup (Prerequisites for Production)
 
-> **⏳ PHASE NOT STARTED (0/11 tasks, 0%)**  
-> **STATUS:** BLOCKING - Must complete before final deployment  
-> **DURATION:** 2–3 weeks (includes registration + approval timelines)
+> **✅ PHASE COMPLETE (all listed prerequisite tasks complete)**  
+> **STATUS:** Domain, SSL, and hosting prerequisites completed  
+> **DURATION:** Completed; revisit only for renewals or registrar/provider changes
 >
-> **NOTE:** These tasks are independent of code deployment and should be started IMMEDIATELY to avoid delays
+> **NOTE:** These tasks are retained as completed records for audit/history.
 
 #### Step 1: Australian Business Registration (ABN)
 
@@ -904,7 +906,7 @@
 
 - [x] 15a.11 Deploy to Cloudflare Pages + Workers (Primary Recommendation)
   - **Why This Setup:** Workers already configured with Express adapter in wrangler.toml; Pages provides excellent React deployment; single platform reduces operational burden
-  - **Status (Mar 24, 2026):** In progress - preflight started
+  - **Status (Apr 6, 2026):** ✅ Complete - production deployment and CI/CD hardening verified on `main`
     - ✅ Added root script `npm run build:frontend`
     - ✅ Frontend production build passes (`npm run build:frontend`)
     - ✅ Workers build passes (`npm run build --prefix workers`)
@@ -943,6 +945,12 @@
       - `npm run test --prefix backend -- src/tests/integration/csv-parser.test.ts --testNamePattern="should process a small CSV file and insert into database"` (passed)
       - Confirms CSV rows are inserted and queryable (`imported=10`, `errors=0` in test output)
     - ✅ 15a.11 verification checklist complete
+    - ✅ CI/CD deployment pipeline hardening completed (Apr 6, 2026)
+      - PR `#94` merged to `main` with Pages workflow fixes and deployment policy hardening
+      - Deploy Frontend to Cloudflare Pages workflow runs for PR branch completed successfully
+      - Cloudflare Pages production deployment updated from merge commit
+      - Runtime checks confirmed: `https://www.expirymate.com.au` HTTP 200 and `https://api.expirymate.com.au/health` healthy
+      - Latest production deployment record: `7251e9c9` (`https://7251e9c9.date-management-frontend.pages.dev`) from merge commit `04bc195073d23cf51e2f50bef9f1249d96de1258`
   - **Environment Source:** Use Doppler for local `.env`-style runtime values (`doppler run -- ...`). Cloudflare Pages/Workers still require platform environment configuration for deployed runtime.
   
   - **Frontend Deployment (Cloudflare Pages):**
@@ -1002,6 +1010,7 @@
     - [x] Database queries working (test via CSV import)
     - [x] SSL certificate active for both Pages and Workers (🔒 HTTPS in address bar)
     - [x] Custom domain (if used) resolves correctly
+    - [x] Post-merge CI gates green and production deploy confirmed on `main` (Apr 6, 2026)
 
 ---
 
@@ -1127,7 +1136,7 @@
   - **Completed (Mar 24, 2026):** Rollback documentation verified
     - `docs/rollback-procedure.md` and `docs/rollback-drill-2026-03-07.md` include rollback workflow guidance
 
-### Tech Debt Deployment Tasks (15.11-15.15) - REMAINING WORK
+### Tech Debt Deployment Tasks (15.11-15.15) - COMPLETE
 
 - [x] 15.11 Complete non-null assertion fixes
   - **Completed:** Removed high-risk non-null assertions and added explicit guards in production paths.

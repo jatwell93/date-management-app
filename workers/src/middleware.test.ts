@@ -3,6 +3,7 @@ import { createCorsMiddleware } from './middleware/cors.middleware';
 import { createRateLimiter } from './middleware/rate-limit.middleware';
 import { createConnectionLimiter } from './middleware/connection-limiter.middleware';
 import { createQueryLimiter } from './middleware/query-limiter.middleware';
+import { formatMetricsForAnalytics } from './middleware/metrics.middleware';
 import { ExpressResponse, ExpressRequest } from './express-adapter';
 import type { Env } from './types/env';
 
@@ -121,7 +122,7 @@ describe('Rate limiter middleware', () => {
       put: vi.fn(async (key: string, value: string) => {
         store.set(key, value);
       }),
-    } as unknown as KVNamespace;
+    } as unknown as NonNullable<Env['RATE_LIMITER']>;
 
     const kvEnv = {
       RATE_LIMIT_WINDOW: '60000',
@@ -254,5 +255,23 @@ describe('Query limiter middleware', () => {
 
     expect(req.query.limit).toBe('500');
     expect(req.requestTimeoutMs).toBeUndefined();
+  });
+});
+
+describe('Metrics middleware', () => {
+  it('formats analytics datapoints with a single sampling index', () => {
+    const payload = formatMetricsForAnalytics({
+      endpoint: '/api/health',
+      routeGroup: '/api/health',
+      method: 'GET',
+      status: 200,
+      statusClass: '2xx',
+      responseTime: 25,
+    });
+
+    expect(payload.indexes).toHaveLength(1);
+    expect(payload.indexes[0]).toBe('/api/health');
+    expect(payload.blobs).toHaveLength(2);
+    expect(payload.blobs).toEqual(['GET', '2xx']);
   });
 });

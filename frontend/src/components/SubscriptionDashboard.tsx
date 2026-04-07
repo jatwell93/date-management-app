@@ -1,7 +1,7 @@
 import { useState, useEffect } from 'react';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from './ui/card';
 import { Button } from './ui/button';
-import { API_BASE_URL } from '../lib/api.service';
+import { buildApiUrl } from '../lib/api.service';
 import type { SubscriptionData, UsageData } from '../types/subscription';
 
 interface SubscriptionDashboardProps {
@@ -39,9 +39,8 @@ function ProgressBar({ label, current, limit, formatValue }: ProgressBarProps) {
       </div>
       <div className="w-full bg-gray-200 rounded-full h-2.5 dark:bg-gray-700">
         <div
-          className={`h-2.5 rounded-full transition-all ${
-            isDanger ? 'bg-red-600' : isWarning ? 'bg-amber-500' : 'bg-blue-600'
-          }`}
+          className={`h-2.5 rounded-full transition-all ${isDanger ? 'bg-red-600' : isWarning ? 'bg-amber-500' : 'bg-blue-600'
+            }`}
           style={{ width: `${isUnlimited ? 0 : percentage}%` }}
           role="progressbar"
           aria-valuenow={current}
@@ -76,10 +75,10 @@ export function SubscriptionDashboard({ token, onUpgrade }: SubscriptionDashboar
     const fetchData = async () => {
       try {
         const [subscriptionRes, usageRes] = await Promise.all([
-          fetch(`${API_BASE_URL}/api/subscription/current`, {
+          fetch(buildApiUrl('/subscription/current'), {
             headers: { Authorization: `Bearer ${token}` },
           }),
-          fetch(`${API_BASE_URL}/api/organization/usage`, {
+          fetch(buildApiUrl('/organization/usage'), {
             headers: { Authorization: `Bearer ${token}` },
           }),
         ]);

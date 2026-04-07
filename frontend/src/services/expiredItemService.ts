@@ -2,6 +2,7 @@
 
 import * as Sentry from '@sentry/react';
 import { ExpiredItem, ProcessExpiredItemRequest, ExpiredItemTransaction } from '../types/inventory';
+import { buildApiUrl } from '../lib/api.service';
 
 // Get all expired items
 export const getExpiredItems = async (token: string | null): Promise<ExpiredItem[]> => {
@@ -10,16 +11,13 @@ export const getExpiredItems = async (token: string | null): Promise<ExpiredItem
       throw new Error('Authentication token not found');
     }
 
-    const response = await fetch(
-      `${process.env.REACT_APP_API_BASE_URL || 'http://localhost:3001'}/expired-items`,
-      {
-        method: 'GET',
-        headers: {
-          'Content-Type': 'application/json',
-          Authorization: `Bearer ${token}`,
-        },
+    const response = await fetch(buildApiUrl('/expired-items'), {
+      method: 'GET',
+      headers: {
+        'Content-Type': 'application/json',
+        Authorization: `Bearer ${token}`,
       },
-    );
+    });
 
     if (!response.ok) {
       throw new Error(`Failed to fetch expired items: ${response.status} ${response.statusText}`);
@@ -52,17 +50,14 @@ export const processExpiredItem = async (
       throw new Error('Authentication token not found');
     }
 
-    const response = await fetch(
-      `${process.env.REACT_APP_API_BASE_URL || 'http://localhost:3001'}/expired-items/process`,
-      {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          Authorization: `Bearer ${token}`,
-        },
-        body: JSON.stringify(request),
+    const response = await fetch(buildApiUrl('/expired-items/process'), {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        Authorization: `Bearer ${token}`,
       },
-    );
+      body: JSON.stringify(request),
+    });
 
     if (!response.ok) {
       throw new Error(`Failed to process expired item: ${response.status} ${response.statusText}`);
@@ -97,16 +92,13 @@ export const getExpiredLossesReport = async (
       throw new Error('Authentication token not found');
     }
 
-    const response = await fetch(
-      `${process.env.REACT_APP_API_BASE_URL || 'http://localhost:3001'}/expired-items/reports/expired-losses`,
-      {
-        method: 'GET',
-        headers: {
-          'Content-Type': 'application/json',
-          Authorization: `Bearer ${token}`,
-        },
+    const response = await fetch(buildApiUrl('/expired-items/reports/expired-losses'), {
+      method: 'GET',
+      headers: {
+        'Content-Type': 'application/json',
+        Authorization: `Bearer ${token}`,
       },
-    );
+    });
 
     if (!response.ok) {
       throw new Error(

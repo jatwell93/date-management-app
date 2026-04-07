@@ -62,6 +62,7 @@ instructions/
 agents/
 go-to-market-docs/
 .agentlens/
+brand-identity-pharma-apps/
 
 # Real pharmacy data with sensitive pricing
 backend/src/tests/fixtures/real-pharmacy-products.csv

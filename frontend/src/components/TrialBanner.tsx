@@ -2,7 +2,7 @@ import { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { Button } from './ui/button';
 import { Card, CardContent } from './ui/card';
-import { API_BASE_URL } from '../lib/api.service';
+import { buildApiUrl } from '../lib/api.service';
 
 interface SubscriptionTierResponse {
   status: 'ACTIVE' | 'TRIALING' | 'EXPIRED' | 'CANCELED';
@@ -44,7 +44,7 @@ export function TrialBanner({ token }: TrialBannerProps) {
 
     const fetchTrialStatus = async () => {
       try {
-        const response = await fetch(`${API_BASE_URL}/api/subscription/trial-status`, {
+        const response = await fetch(buildApiUrl('/subscription/trial-status'), {
           headers: {
             Authorization: `Bearer ${token}`,
           },

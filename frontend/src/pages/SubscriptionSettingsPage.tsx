@@ -5,7 +5,7 @@ import { ManageSubscriptionButton } from '../components/ManageSubscriptionButton
 import { UsageWarning } from '../components/UsageWarning';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '../components/ui/card';
 import { Button } from '../components/ui/button';
-import { API_BASE_URL } from '../lib/api.service';
+import { buildApiUrl } from '../lib/api.service';
 import type { TierLevel, SubscriptionData, UsageData } from '../types/subscription';
 
 interface SubscriptionSettingsPageProps {
@@ -52,7 +52,7 @@ export function SubscriptionSettingsPage({ token }: SubscriptionSettingsPageProp
         return;
       }
 
-      const response = await fetch(`${API_BASE_URL}/api/subscription/create-checkout-session`, {
+      const response = await fetch(buildApiUrl('/subscription/create-checkout-session'), {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
@@ -88,7 +88,7 @@ export function SubscriptionSettingsPage({ token }: SubscriptionSettingsPageProp
 
     setCancelLoading(true);
     try {
-      const response = await fetch(`${API_BASE_URL}/api/subscription/cancel`, {
+      const response = await fetch(buildApiUrl('/subscription/cancel'), {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',

@@ -2,6 +2,7 @@
 import * as Sentry from '@sentry/react';
 import { v4 as uuidv4 } from 'uuid';
 import { STORAGE_KEYS } from '../config/handheld';
+import { buildApiUrl } from './api.service';
 
 // Define types for offline operations
 type OfflineOperation = {
@@ -325,16 +326,16 @@ class OfflineSyncService {
     let endpoint = '';
     switch (entityType) {
       case 'product':
-        endpoint = `${process.env.REACT_APP_API_BASE_URL}/products`;
+        endpoint = buildApiUrl('/products');
         break;
       case 'inventory-item':
-        endpoint = `${process.env.REACT_APP_API_BASE_URL}/inventory-items`;
+        endpoint = buildApiUrl('/inventory-items');
         break;
       case 'store-area':
-        endpoint = `${process.env.REACT_APP_API_BASE_URL}/store-areas`;
+        endpoint = buildApiUrl('/store-areas');
         break;
       case 'user':
-        endpoint = `${process.env.REACT_APP_API_BASE_URL}/users`;
+        endpoint = buildApiUrl('/users');
         break;
       default:
         throw new Error(`Unknown entity type: ${entityType}`);

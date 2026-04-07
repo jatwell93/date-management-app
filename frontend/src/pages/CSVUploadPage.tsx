@@ -16,6 +16,7 @@ import {
   type ColumnValidationResult,
   type RowEstimate,
 } from '../utils/csvValidator';
+import { buildApiUrl } from '../lib/api.service';
 
 interface UploadResponse {
   success: boolean;
@@ -231,7 +232,6 @@ export const CSVUploadPage: React.FC<{ token: string | null }> = ({ token }) => 
   };
 
   const pollUploadStatus = async (key: string) => {
-    const apiUrl = process.env.REACT_APP_API_URL || '';
     const maxAttempts = 30; // 30 seconds max
     const pollInterval = 1000; // 1 second
 
@@ -239,7 +239,7 @@ export const CSVUploadPage: React.FC<{ token: string | null }> = ({ token }) => 
       try {
         // URL encode the key to handle slashes in the path
         const encodedKey = encodeURIComponent(key);
-        const statusRes = await fetch(`${apiUrl}/upload/status/${encodedKey}`, {
+        const statusRes = await fetch(buildApiUrl(`/upload/status/${encodedKey}`), {
           headers: {
             Authorization: `Bearer ${token}`,
           },
@@ -329,9 +329,9 @@ export const CSVUploadPage: React.FC<{ token: string | null }> = ({ token }) => 
 
       // 1. Initiate Upload
       setProgressMessage('Initiating upload...');
-      const apiUrl = process.env.REACT_APP_API_URL || '';
+      const uploadBaseUrl = buildApiUrl('/upload');
 
-      const initiateRes = await fetch(`${apiUrl}/upload/initiate`, {
+      const initiateRes = await fetch(`${uploadBaseUrl}/initiate`, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
@@ -373,7 +373,7 @@ export const CSVUploadPage: React.FC<{ token: string | null }> = ({ token }) => 
           // Use key in the URL path: /upload/direct/:key
           const directUrl = uploadUrl.startsWith('http')
             ? `${uploadUrl}/${encodeURIComponent(key)}`
-            : `${apiUrl}/upload/direct/${encodeURIComponent(key)}`;
+            : `${uploadBaseUrl}/direct/${encodeURIComponent(key)}`;
 
           const directRes = await uploadWithRetry(directUrl, {
             method: 'POST',
@@ -408,7 +408,7 @@ export const CSVUploadPage: React.FC<{ token: string | null }> = ({ token }) => 
       // 3. Complete (Trigger Processing)
       if (strategy === 'presigned') {
         setProgressMessage('Processing file...');
-        const completeRes = await fetch(`${apiUrl}/upload/complete`, {
+        const completeRes = await fetch(`${uploadBaseUrl}/complete`, {
           method: 'POST',
           headers: {
             'Content-Type': 'application/json',
