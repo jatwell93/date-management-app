@@ -446,6 +446,10 @@ export default Sentry.withSentry(
           case pathname === '/api/dashboard' && method === 'GET':
             return finalizeApiResponse(handleGetDashboard(request, db, env));
 
+          // Subscription endpoints
+          case pathname === '/api/subscription/trial-status' && method === 'GET':
+            return finalizeApiResponse(handleGetTrialStatus(request, db, env));
+
           default:
             return finalizeApiResponse(errorResponse('Not Found', 404, env));
         }
@@ -1453,6 +1457,155 @@ async function handleGetDashboard(request: Request, db: Database, env: Env): Pro
   const stats = await db.getDashboardStats();
 
   return jsonResponse({ stats }, 200, env);
+}
+
+type TrialStatusResponse = {
+  isInTrial: boolean;
+  isTrialExpired: boolean;
+  subscription: {
+    status: 'ACTIVE' | 'TRIALING' | 'EXPIRED' | 'CANCELED';
+    tierLevel: string;
+    trialEndDate: string | null;
+    trialStartedAt: string | null;
+    trialConvertedAt: string | null;
+    daysRemaining: number | null;
+    billingCycle: string | null;
+  } | null;
+  tierLimits: {
+    maxUsers: number;
+    maxProducts: number;
+    maxStoreAreas: number;
+    features: string[];
+  };
+};
+
+const MILLISECONDS_PER_DAY = 24 * 60 * 60 * 1000;
+
+const SUBSCRIPTION_TIER_LIMITS: Record<
+  string,
+  { maxUsers: number; maxProducts: number; maxStoreAreas: number; features: string[] }
+> = {
+  starter: {
+    maxUsers: 1,
+    maxProducts: 500,
+    maxStoreAreas: 3,
+    features: ['Basic scanning', 'Expiry tracking', 'Basic reports'],
+  },
+  professional: {
+    maxUsers: 10,
+    maxProducts: 5000,
+    maxStoreAreas: 20,
+    features: [
+      'Advanced scanning',
+      'Expiry tracking',
+      'All reports',
+      'CSV uploads',
+      'Team management',
+      'Organization invites',
+    ],
+  },
+  premium: {
+    maxUsers: 50,
+    maxProducts: 25000,
+    maxStoreAreas: 100,
+    features: ['All professional features', 'Priority support', 'Custom integrations', 'API access'],
+  },
+  concierge: {
+    maxUsers: -1,
+    maxProducts: -1,
+    maxStoreAreas: -1,
+    features: ['Unlimited everything', 'Dedicated support', 'Custom development'],
+  },
+};
+
+/**
+ * GET /api/subscription/trial-status
+ */
+async function handleGetTrialStatus(request: Request, db: Database, env: Env): Promise<Response> {
+  const auth = await authenticateRequest(request, env);
+  if (!auth) {
+    return errorResponse('Unauthorized', 401, env);
+  }
+
+  const userRows = await db.sql`
+    SELECT organization_id
+    FROM users
+    WHERE id = ${auth.userId}
+    LIMIT 1
+  `;
+
+  const organizationId = userRows[0]?.organization_id as string | undefined;
+  if (!organizationId) {
+    return errorResponse('User or organization not found', 404, env);
+  }
+
+  const subscriptionRows = await db.sql`
+    SELECT
+      status,
+      tier_level,
+      trial_end_date,
+      trial_started_at,
+      trial_converted_at,
+      billing_cycle
+    FROM subscription_tiers
+    WHERE organization_id = ${organizationId}
+    ORDER BY created_at DESC
+    LIMIT 1
+  `;
+
+  const subscription = subscriptionRows[0] as
+    | {
+        status?: string;
+        tier_level?: string;
+        trial_end_date?: string | null;
+        trial_started_at?: string | null;
+        trial_converted_at?: string | null;
+        billing_cycle?: string | null;
+      }
+    | undefined;
+
+  let daysRemaining: number | null = null;
+  let isTrialExpired = false;
+
+  if (subscription?.status === 'TRIALING' && subscription.trial_end_date) {
+    const trialEnd = new Date(subscription.trial_end_date);
+    const diffTime = trialEnd.getTime() - Date.now();
+    daysRemaining = Math.ceil(diffTime / MILLISECONDS_PER_DAY);
+    isTrialExpired = daysRemaining < 0;
+  }
+
+  const normalizedTierKey = subscription?.tier_level?.trim().toLowerCase() || 'starter';
+  const tierKey = Object.prototype.hasOwnProperty.call(SUBSCRIPTION_TIER_LIMITS, normalizedTierKey)
+    ? normalizedTierKey
+    : 'starter';
+  const tierLimits = SUBSCRIPTION_TIER_LIMITS[tierKey];
+
+  const subscriptionStatusRaw = (subscription?.status || 'EXPIRED').toUpperCase();
+  const normalizedStatus: 'ACTIVE' | 'TRIALING' | 'EXPIRED' | 'CANCELED' =
+    subscriptionStatusRaw === 'ACTIVE' ||
+    subscriptionStatusRaw === 'TRIALING' ||
+    subscriptionStatusRaw === 'CANCELED'
+      ? subscriptionStatusRaw
+      : 'EXPIRED';
+
+  const response: TrialStatusResponse = {
+    isInTrial: subscription?.status === 'TRIALING' && !isTrialExpired,
+    isTrialExpired: subscription?.status === 'TRIALING' && isTrialExpired,
+    subscription: subscription
+      ? {
+          status: normalizedStatus,
+          tierLevel: subscription.tier_level || 'starter',
+          trialEndDate: subscription.trial_end_date || null,
+          trialStartedAt: subscription.trial_started_at || null,
+          trialConvertedAt: subscription.trial_converted_at || null,
+          daysRemaining,
+          billingCycle: subscription.billing_cycle || null,
+        }
+      : null,
+    tierLimits,
+  };
+
+  return jsonResponse(response, 200, env);
 }
 
 /**

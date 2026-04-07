@@ -216,22 +216,20 @@ export function writeCustomMetrics(env: Env, metrics: Partial<RequestMetrics>): 
  * Format metrics for Cloudflare Analytics Engine
  * 
  * Analytics Engine dataset schema:
- * - indexes: [endpoint, method] - for grouping/filtering
- * - blobs: []  - not used for metrics
+ * - indexes: [routeGroup] - single sampling key
+ * - blobs: [method, statusClass] - dimensions for grouping/filtering
  * - doubles: [responseTime, uploadSize, processingTime]
  */
 export function formatMetricsForAnalytics(metrics: Partial<RequestMetrics>) {
   const endpoint = metrics.endpoint || '/unknown';
   const method = metrics.method || 'UNKNOWN';
   const status = metrics.status ?? 0;
+  const statusClass = metrics.statusClass || `status_${status}`;
 
   return {
-    indexes: [
-      metrics.routeGroup || endpoint,
-      method,
-      metrics.statusClass || `status_${status}`,
-    ],
-    blobs: [],
+    // Analytics Engine currently records one sampling index per datapoint.
+    indexes: [metrics.routeGroup || endpoint],
+    blobs: [method, statusClass],
     doubles: [
       metrics.responseTime ?? 0,
       metrics.uploadSize || 0,

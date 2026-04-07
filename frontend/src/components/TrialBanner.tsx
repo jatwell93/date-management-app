@@ -2,7 +2,7 @@ import { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { Button } from './ui/button';
 import { Card, CardContent } from './ui/card';
-import { API_BASE_URL } from '../lib/api.service';
+import { buildApiUrl } from '../lib/api.service';
 
 interface SubscriptionTierResponse {
   status: 'ACTIVE' | 'TRIALING' | 'EXPIRED' | 'CANCELED';
@@ -44,7 +44,7 @@ export function TrialBanner({ token }: TrialBannerProps) {
 
     const fetchTrialStatus = async () => {
       try {
-        const response = await fetch(`${API_BASE_URL}/api/subscription/trial-status`, {
+        const response = await fetch(buildApiUrl('/subscription/trial-status'), {
           headers: {
             Authorization: `Bearer ${token}`,
           },
@@ -99,22 +99,20 @@ export function TrialBanner({ token }: TrialBannerProps) {
                 />
                 <div>
                   <p
-                    className={`text-sm font-medium ${
-                      isUrgent
+                    className={`text-sm font-medium ${isUrgent
                         ? 'text-amber-800 dark:text-amber-200'
                         : 'text-blue-800 dark:text-blue-200'
-                    }`}
+                      }`}
                   >
                     {isUrgent
                       ? `Only ${daysRemaining} day${daysRemaining === 1 ? '' : 's'} left in your trial!`
                       : `You have ${daysRemaining} day${daysRemaining === 1 ? '' : 's'} left in your Professional trial`}
                   </p>
                   <p
-                    className={`text-xs ${
-                      isUrgent
+                    className={`text-xs ${isUrgent
                         ? 'text-amber-600 dark:text-amber-300'
                         : 'text-blue-600 dark:text-blue-300'
-                    }`}
+                      }`}
                   >
                     Upgrade now to keep all {tierLimits.maxProducts} products and{' '}
                     {tierLimits.maxUsers} users
