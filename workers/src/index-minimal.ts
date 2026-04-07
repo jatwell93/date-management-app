@@ -1567,19 +1567,6 @@ async function handleGetTrialStatus(request: Request, db: Database, env: Env): P
   let daysRemaining: number | null = null;
   let isTrialExpired = false;
 
-  if (subscription?.status === 'TRIALING' && subscription.trial_end_date) {
-    const trialEnd = new Date(subscription.trial_end_date);
-    const diffTime = trialEnd.getTime() - Date.now();
-    daysRemaining = Math.ceil(diffTime / MILLISECONDS_PER_DAY);
-    isTrialExpired = daysRemaining < 0;
-  }
-
-  const normalizedTierKey = subscription?.tier_level?.trim().toLowerCase() || 'starter';
-  const tierKey = Object.prototype.hasOwnProperty.call(SUBSCRIPTION_TIER_LIMITS, normalizedTierKey)
-    ? normalizedTierKey
-    : 'starter';
-  const tierLimits = SUBSCRIPTION_TIER_LIMITS[tierKey];
-
   const subscriptionStatusRaw = (subscription?.status || 'EXPIRED').toUpperCase();
   const normalizedStatus: 'ACTIVE' | 'TRIALING' | 'EXPIRED' | 'CANCELED' =
     subscriptionStatusRaw === 'ACTIVE' ||
@@ -1588,9 +1575,22 @@ async function handleGetTrialStatus(request: Request, db: Database, env: Env): P
       ? subscriptionStatusRaw
       : 'EXPIRED';
 
+  if (normalizedStatus === 'TRIALING' && subscription?.trial_end_date) {
+    const trialEnd = new Date(subscription.trial_end_date);
+    const diffTime = trialEnd.getTime() - Date.now();
+    isTrialExpired = diffTime <= 0;
+    daysRemaining = Math.max(0, Math.ceil(diffTime / MILLISECONDS_PER_DAY));
+  }
+
+  const normalizedTierKey = subscription?.tier_level?.trim().toLowerCase() || 'starter';
+  const tierKey = Object.prototype.hasOwnProperty.call(SUBSCRIPTION_TIER_LIMITS, normalizedTierKey)
+    ? normalizedTierKey
+    : 'starter';
+  const tierLimits = SUBSCRIPTION_TIER_LIMITS[tierKey];
+
   const response: TrialStatusResponse = {
-    isInTrial: subscription?.status === 'TRIALING' && !isTrialExpired,
-    isTrialExpired: subscription?.status === 'TRIALING' && isTrialExpired,
+    isInTrial: normalizedStatus === 'TRIALING' && !isTrialExpired,
+    isTrialExpired: normalizedStatus === 'TRIALING' && isTrialExpired,
     subscription: subscription
       ? {
           status: normalizedStatus,

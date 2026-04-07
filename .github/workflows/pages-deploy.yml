@@ -153,7 +153,7 @@ jobs:
               exit 1
             fi
 
-            if [[ "${REACT_APP_CLERK_PUBLISHABLE_KEY}" == pk_test_* ]]; then
+            if [[ "${REACT_APP_CLERK_PUBLISHABLE_KEY}" != pk_live_* ]]; then
               echo "::error::Production deployment requires a Clerk live publishable key (pk_live_*)"
               exit 1
             fi

@@ -55,7 +55,7 @@ This change now combines two security concerns into one plan:
   - Enable for production environment
   - Reference: [Cloudflare Bot Management](https://developers.cloudflare.com/bots/)
 
-- [-] **1.2** Configure Cloudflare WAF Rate Limiting Rules
+- [ ] **1.2** Configure Cloudflare WAF Rate Limiting Rules (blocked)
   - Go to Security → WAF → Rate Limiting Rules
   - Create rule for `/api/*` endpoints:
     - Match: `http.request.uri.path` matches `/api/*`
@@ -67,14 +67,14 @@ This change now combines two security concerns into one plan:
     - Action: Block
     - Threshold: 30 requests/minute
     - Period: 60 seconds
-  -**NOTE:** Would need to upgrade to enterprise
+  - **NOTE:** Would need to upgrade to enterprise
 
-- [-] **1.3** Add Custom Firewall Rules
+- [ ] **1.3** Add Custom Firewall Rules (blocked)
   - Go to Security → WAF → Custom Rules
   - Create rule: Block Known Scrapers
     - Expression: `(cf.threat_score > 10)`
     - Action: JS Challenge
-  -**NOTE**: Would need to upgrade to enterprise
+  - **NOTE**: Would need to upgrade to enterprise
 
 - [x] **1.4** Enable Cloudflare Analytics Engine
   - Go to Cloudflare Dashboard → Workers → Analytics Engine
