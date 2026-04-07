@@ -625,10 +625,11 @@ export const CSVUploadPage: React.FC<{ token: string | null }> = ({ token }) => 
             <button
               type="submit"
               disabled={isUploading || !selectedFile}
-              className={`px-4 py-2 rounded-md text-white font-medium ${isUploading || !selectedFile
-                ? 'bg-gray-400 cursor-not-allowed'
-                : 'bg-inventory-primary-600 hover:bg-inventory-primary-700'
-                }`}
+              className={`px-4 py-2 rounded-md text-white font-medium ${
+                isUploading || !selectedFile
+                  ? 'bg-gray-400 cursor-not-allowed'
+                  : 'bg-inventory-primary-600 hover:bg-inventory-primary-700'
+              }`}
             >
               {isUploading ? 'Uploading...' : 'Upload CSV/XLSX/XLS'}
             </button>
@@ -655,25 +656,25 @@ export const CSVUploadPage: React.FC<{ token: string | null }> = ({ token }) => 
 
             {(uploadResult.importedCount !== undefined ||
               uploadResult.processedCount !== undefined) && (
-                <div className="mt-2">
-                  {uploadResult.importedCount !== undefined && (
-                    <p>Products imported: {uploadResult.importedCount}</p>
-                  )}
-                  {uploadResult.updatedCount !== undefined && (
-                    <p>Products updated: {uploadResult.updatedCount}</p>
-                  )}
-                  {uploadResult.errorCount !== undefined && <p>Errors: {uploadResult.errorCount}</p>}
-                  {uploadResult.skippedCount !== undefined && (
-                    <p>Rows skipped: {uploadResult.skippedCount}</p>
-                  )}
-                  {uploadResult.processedCount !== undefined && (
-                    <p>
-                      Rows processed: {uploadResult.processedCount}
-                      {uploadResult.totalCount !== undefined ? ` / ${uploadResult.totalCount}` : ''}
-                    </p>
-                  )}
-                </div>
-              )}
+              <div className="mt-2">
+                {uploadResult.importedCount !== undefined && (
+                  <p>Products imported: {uploadResult.importedCount}</p>
+                )}
+                {uploadResult.updatedCount !== undefined && (
+                  <p>Products updated: {uploadResult.updatedCount}</p>
+                )}
+                {uploadResult.errorCount !== undefined && <p>Errors: {uploadResult.errorCount}</p>}
+                {uploadResult.skippedCount !== undefined && (
+                  <p>Rows skipped: {uploadResult.skippedCount}</p>
+                )}
+                {uploadResult.processedCount !== undefined && (
+                  <p>
+                    Rows processed: {uploadResult.processedCount}
+                    {uploadResult.totalCount !== undefined ? ` / ${uploadResult.totalCount}` : ''}
+                  </p>
+                )}
+              </div>
+            )}
 
             {/* Column Usage Summary */}
             {uploadResult.columnsUsed && uploadResult.columnsUsed.length > 0 && (
