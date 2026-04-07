@@ -626,8 +626,8 @@ export const CSVUploadPage: React.FC<{ token: string | null }> = ({ token }) => 
               type="submit"
               disabled={isUploading || !selectedFile}
               className={`px-4 py-2 rounded-md text-white font-medium ${isUploading || !selectedFile
-                  ? 'bg-gray-400 cursor-not-allowed'
-                  : 'bg-inventory-primary-600 hover:bg-inventory-primary-700'
+                ? 'bg-gray-400 cursor-not-allowed'
+                : 'bg-inventory-primary-600 hover:bg-inventory-primary-700'
                 }`}
             >
               {isUploading ? 'Uploading...' : 'Upload CSV/XLSX/XLS'}
