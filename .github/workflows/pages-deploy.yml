@@ -70,6 +70,12 @@ jobs:
               exit 1
             fi
 
+            if [[ "${REACT_APP_CLERK_PUBLISHABLE_KEY}" != pk_test_* ]]; then
+              echo "::error::Preview deployment requires a Clerk test publishable key (pk_test_*)."
+              echo "::error::Use a preview Doppler config/token so pages.dev previews can render Clerk auth correctly."
+              exit 1
+            fi
+
           '
 
       - name: Build frontend
@@ -155,6 +161,7 @@ jobs:
 
             if [[ "${REACT_APP_CLERK_PUBLISHABLE_KEY}" != pk_live_* ]]; then
               echo "::error::Production deployment requires a Clerk live publishable key (pk_live_*)"
+              echo "::error::Deployment blocked to prevent serving Clerk test keys in production."
               exit 1
             fi
           '

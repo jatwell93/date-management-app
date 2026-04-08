@@ -519,6 +519,70 @@ wrangler secret put DATABASE_URL
 wrangler secret put JWT_SECRET
 ```
 
+### Frontend Pages Deployment Flow (Current Setup)
+
+Frontend deploys are managed by [pages-deploy.yml](../.github/workflows/pages-deploy.yml).
+
+### Branch Workflow (Keep This)
+
+1. Create a feature branch from main.
+2. Open a PR into main.
+3. Preview deploy runs automatically from the PR.
+4. Test the preview URL: `https://pr-<number>.date-management-frontend.pages.dev`.
+5. Merge PR to main only after preview validation.
+6. Production deploy runs from main.
+
+Note: You do not need a separate long-lived preview branch for this workflow.
+
+### Preview vs Production Rules
+
+- Preview deploy:
+  - Trigger: pull requests targeting main
+  - Clerk key requirement: `REACT_APP_CLERK_PUBLISHABLE_KEY` must be `pk_test_*`
+- Production deploy:
+  - Trigger: push to main (or workflow_dispatch on main)
+  - Clerk key requirement: `REACT_APP_CLERK_PUBLISHABLE_KEY` must be `pk_live_*`
+
+### Required GitHub Secrets
+
+Set `DOPPLER_TOKEN` as an environment secret in both GitHub Environments:
+
+1. `preview` environment:
+  - Secret name: `DOPPLER_TOKEN`
+  - Doppler config must return `pk_test_*` for `REACT_APP_CLERK_PUBLISHABLE_KEY`
+2. `production` environment:
+  - Secret name: `DOPPLER_TOKEN`
+  - Doppler config must return `pk_live_*` for `REACT_APP_CLERK_PUBLISHABLE_KEY`
+
+If only a repository-level `DOPPLER_TOKEN` is set, both jobs may use the same Doppler config.
+
+### Common Mistakes and Symptoms
+
+1. Preview uses `pk_live_*`:
+  - Symptom: Clerk sign-in panel fails or Clerk API origin errors on `pages.dev`.
+  - Fix: Ensure preview environment `DOPPLER_TOKEN` points to preview Doppler config with `pk_test_*`.
+2. Production uses `pk_test_*`:
+  - Symptom: Production deployment fails during validation.
+  - Fix: Ensure production environment `DOPPLER_TOKEN` points to production Doppler config with `pk_live_*`.
+3. Preview updated but production did not:
+  - Symptom: Different JS bundle hashes between preview and production.
+  - Fix: Check the main workflow run status (queued/failed) and rerun after resolving the blocking error.
+4. Changes merged but no frontend deploy:
+  - Symptom: No new Pages deployment run.
+  - Fix: Confirm changed files matched workflow paths (`frontend/**` or `.github/workflows/pages-deploy.yml`).
+
+### Quick Verification Commands
+
+```bash
+# Production key mode
+prod_asset=$(curl -sS https://www.expirymate.com.au/login | tr '"' '\n' | grep '/static/js/main\.' | head -n1)
+curl -sS "https://www.expirymate.com.au${prod_asset}" | rg -o 'pk_(test|live)_[A-Za-z0-9_]+' -N | sort -u
+
+# Preview key mode (replace 96 with your PR number)
+pre_asset=$(curl -sS https://pr-96.date-management-frontend.pages.dev/login | tr '"' '\n' | grep '/static/js/main\.' | head -n1)
+curl -sS "https://pr-96.date-management-frontend.pages.dev${pre_asset}" | rg -o 'pk_(test|live)_[A-Za-z0-9_]+' -N | sort -u
+```
+
 ### Post-Deployment
 
 1. **Smoke test:** Verify critical paths work
