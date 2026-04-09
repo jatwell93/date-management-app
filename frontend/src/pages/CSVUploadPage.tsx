@@ -156,8 +156,8 @@ export const CSVUploadPage: React.FC<{
   const downloadExpiryTemplate = (format: 'csv' | 'xlsx' | 'xls') => {
     const templateRows = [
       ['SKU', 'Item Description', 'Used-By Date', 'Department'],
-      ['1001', 'Sample Milk 1L', '12/12/26', 'Vitamins'],
-      ['1002', 'Sample Yogurt 500g', '12/2026', 'Skincare'],
+      ['1001', 'Sample Vitamin C 500mg', '12/12/26', 'Vitamins'],
+      ['1002', 'Sample Moisturiser 200ml', '12/2026', 'Skincare'],
     ];
 
     const guidanceRows = [

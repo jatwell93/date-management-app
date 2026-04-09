@@ -799,7 +799,7 @@ export class CSVParserService extends EventEmitter {
       await this.prisma.$transaction(
         async (tx) => {
           // Cache store area IDs within the transaction to avoid repeated DB lookups
-          const storeAreaCache = new Map<string, number>();
+          const departmentIdCache = new Map<string, number>();
 
           // First-wins merge inside the current batch
           const dedupedRows = new Map<string, ExpiryParsedRow>();
@@ -836,10 +836,10 @@ export class CSVParserService extends EventEmitter {
 
             const departmentName =
               row.department ?? CSVParserService.UNALLOCATED_DEPARTMENT_NAME;
-            let locationId = storeAreaCache.get(departmentName);
+            let locationId = departmentIdCache.get(departmentName);
             if (locationId === undefined) {
               locationId = await this.getOrCreateStoreAreaByName(tx, departmentName);
-              storeAreaCache.set(departmentName, locationId);
+              departmentIdCache.set(departmentName, locationId);
             }
 
             await tx.inventoryItem.create({
