@@ -57,6 +57,8 @@ export interface ExpiryParsedRow {
   sku: string;
   itemDescription?: string;
   usedByDate: string;
+  /** Department name from the Department column; undefined when not provided */
+  department?: string;
   /** Original row number in CSV (1-indexed, excluding header) */
   rowNumber: number;
 }
@@ -175,6 +177,18 @@ const EXPIRY_COLUMN_ALTERNATIVES = {
     'used_by_date',
     'usedbydate',
     'expiry_date',
+  ],
+  department: [
+    'Department',
+    'Dept',
+    'Location',
+    'Store Area',
+    'Area',
+    'Section',
+    'department',
+    'dept',
+    'location',
+    'store_area',
   ],
 } as const;
 
@@ -588,10 +602,12 @@ export class CSVParserService extends EventEmitter {
     const rawSku = this.extractField(record, headerMap, 'sku');
     const rawItemDescription = this.extractField(record, headerMap, 'itemDescription');
     const rawUsedByDate = this.extractField(record, headerMap, 'usedByDate');
+    const rawDepartment = this.extractField(record, headerMap, 'department');
     const rawValues = {
       sku: rawSku?.trim() || '',
       itemDescription: rawItemDescription?.trim() || '',
       usedByDate: rawUsedByDate?.trim() || '',
+      department: rawDepartment?.trim() || '',
     };
 
     const requiredFields = [
@@ -631,11 +647,18 @@ export class CSVParserService extends EventEmitter {
       return { row: null, errors };
     }
 
+    const departmentRaw = rawDepartment?.trim();
+    const department =
+      departmentRaw && departmentRaw !== ''
+        ? this.sanitizeValue(departmentRaw)
+        : undefined;
+
     return {
       row: {
         sku,
         itemDescription,
         usedByDate: parsedDate.isoDate,
+        department,
         rowNumber,
       },
       errors,
@@ -775,7 +798,8 @@ export class CSVParserService extends EventEmitter {
 
       await this.prisma.$transaction(
         async (tx) => {
-          const unallocatedStoreAreaId = await this.getOrCreateUnallocatedStoreAreaId(tx);
+          // Cache store area IDs within the transaction to avoid repeated DB lookups
+          const storeAreaCache = new Map<string, number>();
 
           // First-wins merge inside the current batch
           const dedupedRows = new Map<string, ExpiryParsedRow>();
@@ -810,12 +834,20 @@ export class CSVParserService extends EventEmitter {
               continue;
             }
 
+            const departmentName =
+              row.department ?? CSVParserService.UNALLOCATED_DEPARTMENT_NAME;
+            let locationId = storeAreaCache.get(departmentName);
+            if (locationId === undefined) {
+              locationId = await this.getOrCreateStoreAreaByName(tx, departmentName);
+              storeAreaCache.set(departmentName, locationId);
+            }
+
             await tx.inventoryItem.create({
               data: {
                 organizationId: this.organizationId,
                 productId: product.id,
                 expiryDate: dayStart,
-                locationId: unallocatedStoreAreaId,
+                locationId,
                 status: this.calculateInventoryStatus(dayStart),
               },
             });
@@ -895,11 +927,14 @@ export class CSVParserService extends EventEmitter {
     return { imported, updated };
   }
 
-  private async getOrCreateUnallocatedStoreAreaId(tx: Prisma.TransactionClient): Promise<number> {
+  private async getOrCreateStoreAreaByName(
+    tx: Prisma.TransactionClient,
+    name: string,
+  ): Promise<number> {
     const existing = await tx.storeArea.findFirst({
       where: {
         organizationId: this.organizationId,
-        name: CSVParserService.UNALLOCATED_DEPARTMENT_NAME,
+        name,
       },
       orderBy: { id: 'asc' },
       select: { id: true },
@@ -912,7 +947,7 @@ export class CSVParserService extends EventEmitter {
     const created = await tx.storeArea.create({
       data: {
         organizationId: this.organizationId,
-        name: CSVParserService.UNALLOCATED_DEPARTMENT_NAME,
+        name,
         subDepartment: null,
       },
       select: { id: true },

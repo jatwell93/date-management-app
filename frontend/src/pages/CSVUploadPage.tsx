@@ -156,8 +156,8 @@ export const CSVUploadPage: React.FC<{
   const downloadExpiryTemplate = (format: 'csv' | 'xlsx' | 'xls') => {
     const templateRows = [
       ['SKU', 'Item Description', 'Used-By Date', 'Department'],
-      ['SKU-1001', 'Sample Milk 1L', '12/12/26', 'Unallocated'],
-      ['SKU-1002', 'Sample Yogurt 500g', '12/2026', 'Unallocated'],
+      ['1001', 'Sample Milk 1L', '12/12/26', 'Vitamins'],
+      ['1002', 'Sample Yogurt 500g', '12/2026', 'Skincare'],
     ];
 
     const guidanceRows = [
@@ -783,7 +783,7 @@ export const CSVUploadPage: React.FC<{
             </div>
             <p className="mt-2 text-sm text-gray-500">
               {isExpiryImport
-                ? 'The file should include SKU and Used-By Date columns. Department defaults to Unallocated when omitted.'
+                ? 'The file should include SKU and Used-By Date columns. When the Department column is omitted, items are assigned to Unallocated.'
                 : 'The CSV/XLSX/XLS file should contain columns: SKU, Name, Cost, and Barcode (in that order).'}
             </p>
           </div>
