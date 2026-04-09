@@ -98,7 +98,7 @@ describe('UploadService', () => {
       expect(fs.writeFile).toHaveBeenCalledWith(expect.stringContaining(filename), mockBuffer);
       expect(mockCsvParserService.processFile).toHaveBeenCalledWith(
         expect.stringContaining(filename),
-        { uploadKey: key, userId: 1 },
+        { uploadKey: key, userId: 1, importType: 'product-catalog' },
       );
       expect(fs.unlink).toHaveBeenCalledWith(expect.stringContaining(filename));
     });
@@ -126,12 +126,15 @@ describe('UploadService', () => {
       mockStorageProvider.exists.mockResolvedValue(true);
       mockStorageProvider.download.mockResolvedValue(buffer);
 
-      const resultKey = await uploadService.handleDirectUpload(buffer, filename, 'text/csv', 1);
+      const result = await uploadService.handleDirectUpload(buffer, filename, 'text/csv', 1);
 
       expect(mockStorageProvider.upload).toHaveBeenCalledWith(key, buffer, 'text/csv');
       // Verify completeUpload logic was executed (we can spy on completeUpload if we want, or just verify effects)
       expect(mockCsvParserService.processFile).toHaveBeenCalled();
-      expect(resultKey).toBe(key);
+      expect(result.key).toBe(key);
+      expect(result.processingResult).toMatchObject({
+        importType: 'product-catalog',
+      });
     });
   });
 });

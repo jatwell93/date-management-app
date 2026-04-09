@@ -77,7 +77,9 @@ export class ServiceProvider {
 
   getCSVParserService(): CSVParserService {
     if (!this.csvParserService) {
-      this.csvParserService = new CSVParserService(this.prisma);
+      this.csvParserService = new CSVParserService(this.prisma, {
+        organizationId: this.organizationId,
+      });
     }
     return this.csvParserService;
   }

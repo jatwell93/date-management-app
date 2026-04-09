@@ -330,6 +330,11 @@ function AppContent({
                         </Link>
                       </li>
                       <li>
+                        <Link to="/expiry-import" className="hover:opacity-90 transition-opacity">
+                          Expiry Import
+                        </Link>
+                      </li>
+                      <li>
                         <Link to="/settings" className="hover:opacity-90 transition-opacity">
                           Settings
                         </Link>
@@ -462,6 +467,15 @@ function AppContent({
                           onClick={() => setIsMobileMenuOpen(false)}
                         >
                           CSV Upload
+                        </Link>
+                      </li>
+                      <li>
+                        <Link
+                          to="/expiry-import"
+                          className="block hover:opacity-90 transition-opacity"
+                          onClick={() => setIsMobileMenuOpen(false)}
+                        >
+                          Expiry Import
                         </Link>
                       </li>
                       <li>
@@ -651,6 +665,16 @@ function AppContent({
                         isLoggedIn ? <CSVUploadPage token={token} /> : <Navigate to="/login" />
                       }
                     />
+                    <Route
+                      path="/expiry-import"
+                      element={
+                        isLoggedIn ? (
+                          <CSVUploadPage token={token} defaultImportType="expiry-list" />
+                        ) : (
+                          <Navigate to="/login" />
+                        )
+                      }
+                    />
                   </>
                 )}
                 <Route path="*" element={<Navigate to="/login" />} />
@@ -792,6 +816,16 @@ function AppContent({
                     path="/csv-upload"
                     element={
                       isLoggedIn ? <CSVUploadPage token={token} /> : <Navigate to="/login" />
+                    }
+                  />
+                  <Route
+                    path="/expiry-import"
+                    element={
+                      isLoggedIn ? (
+                        <CSVUploadPage token={token} defaultImportType="expiry-list" />
+                      ) : (
+                        <Navigate to="/login" />
+                      )
                     }
                   />
                 </>

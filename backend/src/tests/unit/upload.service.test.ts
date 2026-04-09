@@ -121,7 +121,40 @@ describe('UploadService', () => {
       expect(mockCsvParser.processFile).toHaveBeenCalledWith(expect.stringContaining('test.csv'), {
         uploadKey: key,
         userId,
+        importType: 'product-catalog',
       });
+    });
+
+    it('should pass explicit import type to parser context', async () => {
+      const key = 'uploads/org-123/123-expiry.csv';
+      const userId = 1;
+      const fileBuffer = Buffer.from('sku,used-by date\nSKU1,12/12/26');
+
+      mockStorage.exists.mockResolvedValue(true);
+      (mockStorage.getMetadata as jest.Mock).mockResolvedValue({
+        size: fileBuffer.length,
+        contentType: 'text/csv',
+      });
+      mockStorage.download.mockResolvedValue(fileBuffer);
+      (mockCsvParser.processFile as jest.Mock).mockResolvedValue({
+        imported: 1,
+        updated: 0,
+        skipped: 0,
+        total: 1,
+        errors: [],
+        durationMs: 20,
+      });
+
+      await uploadService.completeUpload(key, userId, 'expiry-list');
+
+      expect(mockCsvParser.processFile).toHaveBeenCalledWith(
+        expect.stringContaining('expiry.csv'),
+        {
+          uploadKey: key,
+          userId,
+          importType: 'expiry-list',
+        },
+      );
     });
 
     it('should throw error if file does not exist in storage', async () => {
@@ -165,14 +198,21 @@ describe('UploadService', () => {
         durationMs: 50,
       });
 
-      const key = await uploadService.handleDirectUpload(buffer, filename, contentType, userId);
+      const result = await uploadService.handleDirectUpload(buffer, filename, contentType, userId);
 
       expect(mockStorage.upload).toHaveBeenCalledWith(
         expect.stringMatching(/^uploads\/org-123\/\d+-test\.csv$/),
         buffer,
         contentType,
       );
-      expect(key).toMatch(/^uploads\/org-123\/\d+-test\.csv$/);
+      expect(result.key).toMatch(/^uploads\/org-123\/\d+-test\.csv$/);
+      expect(result.processingResult).toMatchObject({
+        importType: 'product-catalog',
+        importedCount: 3,
+        updatedCount: 0,
+        skippedCount: 0,
+        errorCount: 0,
+      });
     });
   });
 

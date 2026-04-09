@@ -1,4 +1,5 @@
 import { useState, useEffect } from 'react';
+import * as Sentry from '@sentry/react';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from './ui/card';
 import { Button } from './ui/button';
 import { buildApiUrl } from '../lib/api.service';
@@ -21,6 +22,11 @@ function ProgressBar({ label, current, limit, formatValue }: ProgressBarProps) {
   const isUnlimited = limit === null;
   const isWarning = percentage >= 80 && percentage < 95;
   const isDanger = percentage >= 95;
+  const progressBarColorClass = isDanger
+    ? 'bg-red-600'
+    : isWarning
+      ? 'bg-amber-500'
+      : 'bg-blue-600';
 
   const displayCurrent = formatValue ? formatValue(current) : current.toLocaleString();
   const displayLimit = isUnlimited
@@ -39,8 +45,7 @@ function ProgressBar({ label, current, limit, formatValue }: ProgressBarProps) {
       </div>
       <div className="w-full bg-gray-200 rounded-full h-2.5 dark:bg-gray-700">
         <div
-          className={`h-2.5 rounded-full transition-all ${isDanger ? 'bg-red-600' : isWarning ? 'bg-amber-500' : 'bg-blue-600'
-            }`}
+          className={`h-2.5 rounded-full transition-all ${progressBarColorClass}`}
           style={{ width: `${isUnlimited ? 0 : percentage}%` }}
           role="progressbar"
           aria-valuenow={current}
@@ -93,7 +98,9 @@ export function SubscriptionDashboard({ token, onUpgrade }: SubscriptionDashboar
         setSubscription(subscriptionData);
         setUsage(usageData);
       } catch (err) {
-        console.error('Error fetching subscription data:', err);
+        Sentry.captureException(err, {
+          tags: { feature: 'subscription-dashboard' },
+        });
         setError(err instanceof Error ? err.message : 'Unknown error');
       } finally {
         setLoading(false);

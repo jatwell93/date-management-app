@@ -36,6 +36,39 @@ function generateLargeCSVSync(lineCount: number): string {
   return filePath;
 }
 
+function generateExpiryCSVSync(filenamePrefix: string, rows: string[]): string {
+  const tempDir = os.tmpdir();
+  const filePath = path.join(tempDir, `${filenamePrefix}-${Date.now()}.csv`);
+  const header = 'SKU,Item Description,Used-By Date\n';
+  fs.writeFileSync(filePath, `${header}${rows.join('\n')}\n`);
+  return filePath;
+}
+
+async function createOrganizationWithUsage(
+  prisma: PrismaClient,
+  slugPrefix: string,
+): Promise<{ id: string }> {
+  const suffix = `${Date.now()}-${Math.floor(Math.random() * 100000)}`;
+  const organization = await prisma.organization.create({
+    data: {
+      name: `Test ${slugPrefix} ${suffix}`,
+      slug: `${slugPrefix}-${suffix}`,
+    },
+    select: { id: true },
+  });
+
+  await prisma.organizationUsage.create({
+    data: {
+      organizationId: organization.id,
+      maxUsers: 50,
+      maxSkus: 5000,
+      totalInventoryItems: 0,
+    },
+  });
+
+  return organization;
+}
+
 describe('CSV Parser Integration', () => {
   let prisma: PrismaClient;
   let tempFiles: string[] = [];
@@ -171,6 +204,117 @@ describe('CSV Parser Integration', () => {
       const product = await prisma.product.findFirst({ where: { sku: 'DUPE001' } });
       expect(product?.name).toBe('Updated Product');
       expect(product?.costPrice).toBe(20.0);
+    });
+  });
+
+  describe('Expiry Import Integration', () => {
+    it('should support partial acceptance with in-file dedupe and first-wins descriptions', async () => {
+      if (!databaseAvailable) {
+        console.log('Skipping: database not available');
+        return;
+      }
+
+      const org = await createOrganizationWithUsage(prisma, 'expiry-partial');
+      const filePath = generateExpiryCSVSync('expiry-partial', [
+        'SKU001,First Description,12/12/26',
+        'SKU001,Conflicting Description,12/12/26',
+        'SKU002,Invalid Date,12/12',
+        'SKU003,Month Year,12/2026',
+      ]);
+      tempFiles.push(filePath);
+
+      const parser = new CSVParserService(prisma, { organizationId: org.id });
+      const result = await parser.processFile(filePath, { importType: 'expiry-list' });
+
+      expect(result.imported).toBe(2);
+      expect(result.updated).toBe(1);
+      expect(result.skipped).toBe(1);
+      expect(
+        result.errors.some((error) => error.message.includes('year-missing-or-ambiguous')),
+      ).toBe(true);
+
+      const sku001 = await prisma.product.findFirst({
+        where: {
+          organizationId: org.id,
+          sku: 'SKU001',
+        },
+      });
+      expect(sku001?.name).toBe('First Description');
+
+      const inventoryItems = await prisma.inventoryItem.findMany({
+        where: { organizationId: org.id },
+        include: {
+          product: {
+            select: { sku: true },
+          },
+          storeArea: {
+            select: { name: true },
+          },
+        },
+        orderBy: { id: 'asc' },
+      });
+
+      expect(inventoryItems).toHaveLength(2);
+      expect(inventoryItems.every((item) => item.storeArea.name === 'Unallocated')).toBe(true);
+
+      const sku003Inventory = inventoryItems.find((item) => item.product.sku === 'SKU003');
+      expect(sku003Inventory).toBeDefined();
+      expect(sku003Inventory?.expiryDate.toISOString().startsWith('2026-12-31')).toBe(true);
+
+      const usage = await prisma.organizationUsage.findUnique({
+        where: { organizationId: org.id },
+      });
+      expect(usage?.totalInventoryItems).toBe(2);
+    });
+
+    it('should enforce tenant isolation for dedupe and merge behavior', async () => {
+      if (!databaseAvailable) {
+        console.log('Skipping: database not available');
+        return;
+      }
+
+      const orgA = await createOrganizationWithUsage(prisma, 'expiry-org-a');
+      const orgB = await createOrganizationWithUsage(prisma, 'expiry-org-b');
+
+      const orgAFile = generateExpiryCSVSync('expiry-org-a', ['SKU900,Org A Original,12/12/26']);
+      const orgBFile = generateExpiryCSVSync('expiry-org-b', ['SKU900,Org B Original,12/12/26']);
+      const orgARepeatFile = generateExpiryCSVSync('expiry-org-a-repeat', [
+        'SKU900,Org A Changed,12/12/26',
+      ]);
+      tempFiles.push(orgAFile, orgBFile, orgARepeatFile);
+
+      const parserA = new CSVParserService(prisma, { organizationId: orgA.id });
+      const parserB = new CSVParserService(prisma, { organizationId: orgB.id });
+
+      const firstA = await parserA.processFile(orgAFile, { importType: 'expiry-list' });
+      const firstB = await parserB.processFile(orgBFile, { importType: 'expiry-list' });
+      const secondA = await parserA.processFile(orgARepeatFile, { importType: 'expiry-list' });
+
+      expect(firstA.imported).toBe(1);
+      expect(firstA.updated).toBe(0);
+      expect(firstB.imported).toBe(1);
+      expect(firstB.updated).toBe(0);
+      expect(secondA.imported).toBe(0);
+      expect(secondA.updated).toBe(1);
+
+      const orgAInventoryCount = await prisma.inventoryItem.count({
+        where: { organizationId: orgA.id },
+      });
+      const orgBInventoryCount = await prisma.inventoryItem.count({
+        where: { organizationId: orgB.id },
+      });
+      expect(orgAInventoryCount).toBe(1);
+      expect(orgBInventoryCount).toBe(1);
+
+      const orgAProduct = await prisma.product.findFirst({
+        where: { organizationId: orgA.id, sku: 'SKU900' },
+      });
+      const orgBProduct = await prisma.product.findFirst({
+        where: { organizationId: orgB.id, sku: 'SKU900' },
+      });
+
+      expect(orgAProduct?.name).toBe('Org A Original');
+      expect(orgBProduct?.name).toBe('Org B Original');
     });
   });
 
