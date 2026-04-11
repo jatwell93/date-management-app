@@ -524,16 +524,8 @@ function AppContent({
             <ErrorBoundary>
               <Routes>
                 <Route
-                  path="/login"
-                  element={isLoggedIn ? <Navigate to="/scan" /> : <ClerkSignInPage />}
-                />
-                <Route
                   path="/login/*"
                   element={isLoggedIn ? <Navigate to="/scan" /> : <ClerkSignInPage />}
-                />
-                <Route
-                  path="/sign-up"
-                  element={isLoggedIn ? <Navigate to="/scan" /> : <ClerkSignUpPage />}
                 />
                 <Route
                   path="/sign-up/*"
@@ -687,16 +679,8 @@ function AppContent({
           <ErrorBoundary>
             <Routes>
               <Route
-                path="/login"
-                element={isLoggedIn ? <Navigate to="/scan" /> : <ClerkSignInPage />}
-              />
-              <Route
                 path="/login/*"
                 element={isLoggedIn ? <Navigate to="/scan" /> : <ClerkSignInPage />}
-              />
-              <Route
-                path="/sign-up"
-                element={isLoggedIn ? <Navigate to="/scan" /> : <ClerkSignUpPage />}
               />
               <Route
                 path="/sign-up/*"

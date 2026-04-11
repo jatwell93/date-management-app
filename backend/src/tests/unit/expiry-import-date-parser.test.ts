@@ -1,6 +1,15 @@
 import { parseExpiryImportDate } from '../../services/expiry-import-date-parser';
 
 describe('parseExpiryImportDate', () => {
+  it('trims surrounding whitespace before parsing', () => {
+    const result = parseExpiryImportDate(' 12/12/2026 ');
+
+    expect(result).toEqual({
+      ok: true,
+      isoDate: '2026-12-12',
+    });
+  });
+
   it('parses dd/mm/yy', () => {
     const result = parseExpiryImportDate('12/12/26');
 
@@ -82,6 +91,74 @@ describe('parseExpiryImportDate', () => {
       ok: false,
       errorCode: 'invalid-date',
       errorMessage: 'Date is not a valid calendar date',
+    });
+  });
+
+  it('maps d/yy to month/year format when second token is greater than 12', () => {
+    const result = parseExpiryImportDate('3/26');
+
+    expect(result).toEqual({
+      ok: true,
+      isoDate: '2026-03-31',
+    });
+  });
+
+  it('rejects d/yy when month token is invalid', () => {
+    const result = parseExpiryImportDate('13/26');
+
+    expect(result).toEqual({
+      ok: false,
+      errorCode: 'invalid-date',
+      errorMessage: 'Date is not a valid calendar date',
+    });
+  });
+
+  it('accepts leap day for leap years', () => {
+    const result = parseExpiryImportDate('29/02/2024');
+
+    expect(result).toEqual({
+      ok: true,
+      isoDate: '2024-02-29',
+    });
+  });
+
+  it('rejects leap day for non-leap years', () => {
+    const result = parseExpiryImportDate('29/02/2023');
+
+    expect(result).toEqual({
+      ok: false,
+      errorCode: 'invalid-date',
+      errorMessage: 'Date is not a valid calendar date',
+    });
+  });
+
+  it('rejects month-year format when month is out of range', () => {
+    const result = parseExpiryImportDate('13/2026');
+
+    expect(result).toEqual({
+      ok: false,
+      errorCode: 'invalid-date',
+      errorMessage: 'Date is not a valid calendar date',
+    });
+  });
+
+  it('rejects unsupported numeric formats', () => {
+    const result = parseExpiryImportDate('2026-12-31');
+
+    expect(result).toEqual({
+      ok: false,
+      errorCode: 'unsupported-date-format',
+      errorMessage: 'Only numeric date formats are supported',
+    });
+  });
+
+  it('rejects blank strings after trimming', () => {
+    const result = parseExpiryImportDate('   ');
+
+    expect(result).toEqual({
+      ok: false,
+      errorCode: 'unsupported-date-format',
+      errorMessage: 'Only numeric date formats are supported',
     });
   });
 });

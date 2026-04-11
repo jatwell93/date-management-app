@@ -10,7 +10,7 @@
     "build": "tsc",
     "test": "jest",
     "test:coverage": "jest --coverage",
-    "test:diff": "jest --coverage --changedSince=origin/main",
+    "test:diff": "jest --changedSince=origin/main",
     "test:dev": "jest --config jest.config.js",
     "test:prod": "jest --config jest.config.neon.js",
     "test:both": "npm run test:dev && npm run test:prod",

@@ -197,7 +197,7 @@ export class UploadService {
       // Best-effort status update: parsing success should not fail if status row is missing.
       try {
         const prisma = getDefaultDatabaseClient();
-        await prisma.upload.update({
+        await prisma.upload.updateMany({
           where: { fileKey: key },
           data: {
             status: UploadStatus.COMPLETED,
@@ -222,7 +222,7 @@ export class UploadService {
         // Set status to FAILED to avoid inconsistent COMPLETED status without metrics
         try {
           const prisma = getDefaultDatabaseClient();
-          await prisma.upload.update({
+          await prisma.upload.updateMany({
             where: { fileKey: key },
             data: { status: UploadStatus.FAILED },
           });
@@ -255,7 +255,7 @@ export class UploadService {
       // Update database status to 'failed' so frontend polling can detect the error
       try {
         const prisma = getDefaultDatabaseClient();
-        await prisma.upload.update({
+        await prisma.upload.updateMany({
           where: { fileKey: key },
           data: {
             status: UploadStatus.FAILED,
