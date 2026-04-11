@@ -2,6 +2,7 @@ import { Response } from 'express';
 import { AuthRequest } from '../middleware/auth.middleware';
 import { UploadService } from '../services/upload.service';
 import { getDefaultDatabaseClient } from '../database/database-factory';
+import { UploadImportType } from '../types/upload.types';
 
 export class UploadController {
   constructor(private uploadService: UploadService) {}
@@ -11,18 +12,21 @@ export class UploadController {
    */
   async initiate(req: AuthRequest, res: Response): Promise<void> {
     try {
-      const { filename, fileSize, contentType } = req.body;
+      const { filename, fileSize, contentType, importType } = req.body;
 
       if (!filename || !fileSize || !contentType) {
         res.status(400).json({ error: 'Missing required fields: filename, fileSize, contentType' });
         return;
       }
 
-      const result = await this.uploadService.initiateUpload(
-        filename,
-        Number(fileSize),
-        contentType,
-      );
+      const result = importType
+        ? await this.uploadService.initiateUpload(
+            filename,
+            Number(fileSize),
+            contentType,
+            importType,
+          )
+        : await this.uploadService.initiateUpload(filename, Number(fileSize), contentType);
       res.json(result);
     } catch (error) {
       console.error('Initiate upload error:', error);
@@ -51,6 +55,7 @@ export class UploadController {
 
       // We assume route middleware (Multer memory storage) puts file buffer in req.file.buffer
       const { originalname, mimetype, buffer } = req.file;
+      const importType = req.body?.importType;
 
       if (!buffer) {
         // Fallback if disk storage is used by mistake or misconfiguration
@@ -58,14 +63,37 @@ export class UploadController {
         return;
       }
 
-      const key = await this.uploadService.handleDirectUpload(
-        buffer,
-        originalname,
-        mimetype,
-        req.userId,
-      );
+      const uploadResult = importType
+        ? await this.uploadService.handleDirectUpload(
+            buffer,
+            originalname,
+            mimetype,
+            req.userId,
+            importType,
+          )
+        : await this.uploadService.handleDirectUpload(buffer, originalname, mimetype, req.userId);
 
-      res.json({ message: 'File uploaded and processing started', key });
+      const normalizedResult =
+        typeof uploadResult === 'string'
+          ? { key: uploadResult, processingResult: undefined }
+          : uploadResult;
+
+      if (importType === UploadImportType.EXPIRY_LIST && normalizedResult.processingResult) {
+        const { processingResult } = normalizedResult;
+        res.json({
+          message: 'File uploaded and processing started',
+          key: normalizedResult.key,
+          importedCount: processingResult.importedCount,
+          mergedCount: processingResult.updatedCount,
+          rejectedCount: processingResult.skippedCount,
+          ...(processingResult.rejectedRows
+            ? { rejectedRows: processingResult.rejectedRows }
+            : { rejectedRows: [] }),
+        });
+        return;
+      }
+
+      res.json({ message: 'File uploaded and processing started', key: normalizedResult.key });
     } catch (error) {
       console.error('Direct upload error:', error);
       res.status(500).json({ error: error instanceof Error ? error.message : 'Unknown error' });
@@ -82,14 +110,30 @@ export class UploadController {
         return;
       }
 
-      const { key } = req.body;
+      const { key, importType } = req.body;
 
       if (!key) {
         res.status(400).json({ error: 'Missing required field: key' });
         return;
       }
 
-      await this.uploadService.completeUpload(key, req.userId);
+      const processingResult = importType
+        ? await this.uploadService.completeUpload(key, req.userId, importType)
+        : await this.uploadService.completeUpload(key, req.userId);
+
+      if (importType === UploadImportType.EXPIRY_LIST && processingResult) {
+        res.json({
+          message: 'Upload completed and processing started',
+          importedCount: processingResult.importedCount,
+          mergedCount: processingResult.updatedCount,
+          rejectedCount: processingResult.skippedCount,
+          ...(processingResult.rejectedRows
+            ? { rejectedRows: processingResult.rejectedRows }
+            : { rejectedRows: [] }),
+        });
+        return;
+      }
+
       res.json({ message: 'Upload completed and processing started' });
     } catch (error) {
       console.error('Complete upload error:', error);
@@ -179,7 +223,9 @@ export class UploadController {
         rowsProcessed: upload.rowsProcessed,
         rowsTotal: upload.rowsTotal,
         importedCount: upload.rowsImported,
+        mergedCount: upload.rowsUpdated,
         updatedCount: upload.rowsUpdated,
+        rejectedCount: upload.rowsSkipped,
         skippedCount: upload.rowsSkipped,
         errorCount: upload.rowErrorCount,
         columnsUsed: columnsUsedData,

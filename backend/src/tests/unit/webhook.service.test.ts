@@ -53,6 +53,9 @@ describe('WebhookService', () => {
       auditLog: {
         create: jest.fn(),
       },
+      trialEvent: {
+        create: jest.fn(),
+      },
       $transaction: jest.fn((callback) => callback(prisma)),
     };
 
@@ -60,6 +63,7 @@ describe('WebhookService', () => {
       sendTrialReminderEmail: jest.fn(),
       sendDunningEmail: jest.fn(),
       sendDowngradeWarningEmail: jest.fn(),
+      sendPaymentFailedEmail: jest.fn(),
     } as unknown as jest.Mocked<EmailService>;
 
     service = new WebhookService(prisma as unknown as PrismaClient, undefined, emailService);
@@ -134,9 +138,30 @@ describe('WebhookService', () => {
         undefined,
       );
     });
+
+    it('rethrows non-unique errors when marking processed', async () => {
+      const dbError = new Error('database down');
+      prisma.processedWebhookEvent.create.mockRejectedValue(dbError);
+
+      await expect(
+        service.markEventProcessed('evt_fail', 'invoice.payment_failed'),
+      ).rejects.toThrow('database down');
+    });
   });
 
   describe('handler behaviors', () => {
+    it('ignores unhandled event types without throwing', async () => {
+      const reportSpy = jest.spyOn(service as any, 'reportWebhookError');
+      const event = {
+        id: 'evt_unhandled',
+        type: 'customer.created',
+        data: { object: {} },
+      } as unknown as Stripe.Event;
+
+      await expect(service.handleEvent(event)).resolves.toBeUndefined();
+      expect(reportSpy).not.toHaveBeenCalled();
+    });
+
     it('handles subscription created', async () => {
       prisma.subscriptionTier.create.mockResolvedValue({ id: 1 });
       prisma.organizationUsage.upsert.mockResolvedValue({ id: 1 });
@@ -442,6 +467,48 @@ describe('WebhookService', () => {
       );
     });
 
+    it('skips payment intent success processing when no trialing subscription exists', async () => {
+      prisma.subscriptionTier.findFirst.mockResolvedValue(null);
+
+      const paymentIntent = {
+        id: 'pi_no_trial',
+        customer: customerId,
+        amount: 2500,
+      } as unknown as Stripe.PaymentIntent;
+
+      await (service as any).handlePaymentIntentSucceeded(paymentIntent);
+
+      expect(prisma.subscriptionTier.update).not.toHaveBeenCalled();
+      expect(prisma.trialEvent.create).not.toHaveBeenCalled();
+      expect(prisma.auditLog.create).not.toHaveBeenCalled();
+    });
+
+    it('handles payment intent failure by logging trial event and sending email', async () => {
+      const paymentIntent = {
+        id: 'pi_failed_123',
+        customer: customerId,
+        amount: 4900,
+        last_payment_error: {
+          message: 'Card declined',
+          code: 'card_declined',
+        },
+      } as unknown as Stripe.PaymentIntent;
+
+      await (service as any).handlePaymentIntentFailed(paymentIntent);
+
+      expect(prisma.trialEvent.create).toHaveBeenCalledWith({
+        data: expect.objectContaining({
+          organizationId,
+          eventType: 'payment_failed',
+        }),
+      });
+      expect((emailService as any).sendPaymentFailedEmail).toHaveBeenCalledWith({
+        organizationId,
+        paymentIntentId: 'pi_failed_123',
+        errorMessage: 'Card declined',
+      });
+    });
+
     it('records webhook metrics on successful subscription created', async () => {
       const monitor =
         require('../../services/application.monitoring.service').ApplicationMonitoringService.getInstance();
@@ -516,6 +583,29 @@ describe('WebhookService', () => {
   });
 
   describe('metadata validation', () => {
+    it('throws NotFoundError when customer has been deleted', async () => {
+      (mockStripe.customers.retrieve as jest.Mock).mockResolvedValue({
+        id: customerId,
+        deleted: true,
+        metadata: { organizationId },
+      });
+
+      const Sentry = require('@sentry/node');
+      const sentrySpy = jest.spyOn(Sentry, 'captureException').mockImplementation(() => undefined);
+
+      const subscription = {
+        id: 'sub_deleted_customer',
+        customer: customerId,
+        status: 'active',
+        items: { data: [] },
+      } as unknown as Stripe.Subscription;
+
+      await expect((service as any).handleSubscriptionCreated(subscription)).rejects.toThrow(
+        NotFoundError,
+      );
+      expect(sentrySpy).toHaveBeenCalled();
+    });
+
     it('throws error when metadata is missing', async () => {
       (mockStripe.customers.retrieve as jest.Mock).mockResolvedValue({
         id: customerId,
@@ -547,6 +637,43 @@ describe('WebhookService', () => {
 
       await expect((service as any).handleSubscriptionCreated(subscription)).rejects.toThrow(
         NotFoundError,
+      );
+    });
+
+    it('reports critical failure when organization is missing from metadata lookup', async () => {
+      prisma.organization.findUnique.mockResolvedValue(null);
+      (mockStripe.customers.retrieve as jest.Mock).mockResolvedValue({
+        id: customerId,
+        email: 'owner@test.com',
+        deleted: false,
+        metadata: { organizationId },
+      });
+
+      const criticalSpy = jest
+        .spyOn(service as any, 'reportCriticalWebhookFailure')
+        .mockImplementation(() => undefined);
+
+      const subscription = {
+        id: 'sub_missing_org_critical',
+        customer: customerId,
+        status: 'active',
+        items: { data: [] },
+      } as unknown as Stripe.Subscription;
+
+      await expect((service as any).handleSubscriptionCreated(subscription)).rejects.toThrow(
+        NotFoundError,
+      );
+
+      expect(criticalSpy).toHaveBeenCalledWith(
+        expect.stringContaining(`Organization ${organizationId} not found`),
+        expect.objectContaining({
+          eventType: 'validate_metadata',
+          details: expect.objectContaining({
+            customerId,
+            organizationId,
+            customerEmail: 'owner@test.com',
+          }),
+        }),
       );
     });
   });

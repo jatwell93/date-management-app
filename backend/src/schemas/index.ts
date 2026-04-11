@@ -230,6 +230,8 @@ export const storeAreaSchema = z.object({
 // Upload Schema
 // ============================================================================
 
+const uploadImportTypeSchema = z.enum(['product-catalog', 'expiry-list']);
+
 export const uploadInitiateSchema = z.object({
   body: z.object({
     filename: z
@@ -255,6 +257,7 @@ export const uploadInitiateSchema = z.object({
         (val) => ['text/csv', 'application/csv', 'text/plain'].includes(val),
         'Content type must be CSV',
       ),
+    importType: uploadImportTypeSchema.optional(),
   }),
 });
 
@@ -267,6 +270,7 @@ export const uploadCompleteSchema = z.object({
         /^uploads\/[a-zA-Z0-9_-]+\/\d+-[a-zA-Z0-9_\-. ]+$/,
         'Invalid upload key format (expected: uploads/{orgId}/{timestamp}-{filename})',
       ),
+    importType: uploadImportTypeSchema.optional(),
   }),
 });
 

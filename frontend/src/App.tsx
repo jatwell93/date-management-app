@@ -330,6 +330,11 @@ function AppContent({
                         </Link>
                       </li>
                       <li>
+                        <Link to="/expiry-import" className="hover:opacity-90 transition-opacity">
+                          Expiry Import
+                        </Link>
+                      </li>
+                      <li>
                         <Link to="/settings" className="hover:opacity-90 transition-opacity">
                           Settings
                         </Link>
@@ -466,6 +471,15 @@ function AppContent({
                       </li>
                       <li>
                         <Link
+                          to="/expiry-import"
+                          className="block hover:opacity-90 transition-opacity"
+                          onClick={() => setIsMobileMenuOpen(false)}
+                        >
+                          Expiry Import
+                        </Link>
+                      </li>
+                      <li>
+                        <Link
                           to="/settings"
                           className="block hover:opacity-90 transition-opacity"
                           onClick={() => setIsMobileMenuOpen(false)}
@@ -510,16 +524,8 @@ function AppContent({
             <ErrorBoundary>
               <Routes>
                 <Route
-                  path="/login"
-                  element={isLoggedIn ? <Navigate to="/scan" /> : <ClerkSignInPage />}
-                />
-                <Route
                   path="/login/*"
                   element={isLoggedIn ? <Navigate to="/scan" /> : <ClerkSignInPage />}
-                />
-                <Route
-                  path="/sign-up"
-                  element={isLoggedIn ? <Navigate to="/scan" /> : <ClerkSignUpPage />}
                 />
                 <Route
                   path="/sign-up/*"
@@ -651,6 +657,16 @@ function AppContent({
                         isLoggedIn ? <CSVUploadPage token={token} /> : <Navigate to="/login" />
                       }
                     />
+                    <Route
+                      path="/expiry-import"
+                      element={
+                        isLoggedIn ? (
+                          <CSVUploadPage token={token} defaultImportType="expiry-list" />
+                        ) : (
+                          <Navigate to="/login" />
+                        )
+                      }
+                    />
                   </>
                 )}
                 <Route path="*" element={<Navigate to="/login" />} />
@@ -663,16 +679,8 @@ function AppContent({
           <ErrorBoundary>
             <Routes>
               <Route
-                path="/login"
-                element={isLoggedIn ? <Navigate to="/scan" /> : <ClerkSignInPage />}
-              />
-              <Route
                 path="/login/*"
                 element={isLoggedIn ? <Navigate to="/scan" /> : <ClerkSignInPage />}
-              />
-              <Route
-                path="/sign-up"
-                element={isLoggedIn ? <Navigate to="/scan" /> : <ClerkSignUpPage />}
               />
               <Route
                 path="/sign-up/*"
@@ -792,6 +800,16 @@ function AppContent({
                     path="/csv-upload"
                     element={
                       isLoggedIn ? <CSVUploadPage token={token} /> : <Navigate to="/login" />
+                    }
+                  />
+                  <Route
+                    path="/expiry-import"
+                    element={
+                      isLoggedIn ? (
+                        <CSVUploadPage token={token} defaultImportType="expiry-list" />
+                      ) : (
+                        <Navigate to="/login" />
+                      )
                     }
                   />
                 </>

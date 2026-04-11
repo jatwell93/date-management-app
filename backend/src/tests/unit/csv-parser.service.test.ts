@@ -17,16 +17,32 @@ import * as os from 'os';
 
 // Mock PrismaClient
 const mockTransaction = jest.fn();
-const mockFindFirst = jest.fn();
-const mockCreate = jest.fn();
-const mockUpdate = jest.fn();
+const mockProductFindFirst = jest.fn();
+const mockProductCreate = jest.fn();
+const mockProductUpdate = jest.fn();
+const mockInventoryFindFirst = jest.fn();
+const mockInventoryCreate = jest.fn();
+const mockStoreAreaFindFirst = jest.fn();
+const mockStoreAreaCreate = jest.fn();
+const mockOrganizationUsageUpdateMany = jest.fn();
 
 const mockPrisma = {
   $transaction: mockTransaction,
   product: {
-    findFirst: mockFindFirst,
-    create: mockCreate,
-    update: mockUpdate,
+    findFirst: mockProductFindFirst,
+    create: mockProductCreate,
+    update: mockProductUpdate,
+  },
+  inventoryItem: {
+    findFirst: mockInventoryFindFirst,
+    create: mockInventoryCreate,
+  },
+  storeArea: {
+    findFirst: mockStoreAreaFindFirst,
+    create: mockStoreAreaCreate,
+  },
+  organizationUsage: {
+    updateMany: mockOrganizationUsageUpdateMany,
   },
 } as unknown as PrismaClient;
 
@@ -54,15 +70,31 @@ describe('CSVParserService', () => {
     mockTransaction.mockImplementation(async (callback) => {
       await callback({
         product: {
-          findFirst: mockFindFirst,
-          create: mockCreate,
-          update: mockUpdate,
+          findFirst: mockProductFindFirst,
+          create: mockProductCreate,
+          update: mockProductUpdate,
+        },
+        inventoryItem: {
+          findFirst: mockInventoryFindFirst,
+          create: mockInventoryCreate,
+        },
+        storeArea: {
+          findFirst: mockStoreAreaFindFirst,
+          create: mockStoreAreaCreate,
+        },
+        organizationUsage: {
+          updateMany: mockOrganizationUsageUpdateMany,
         },
       });
     });
-    mockFindFirst.mockResolvedValue(null); // No existing products by default
-    mockCreate.mockResolvedValue({ id: 1 });
-    mockUpdate.mockResolvedValue({ id: 1 });
+    mockProductFindFirst.mockResolvedValue(null); // No existing products by default
+    mockProductCreate.mockResolvedValue({ id: 1 });
+    mockProductUpdate.mockResolvedValue({ id: 1 });
+    mockInventoryFindFirst.mockResolvedValue(null);
+    mockInventoryCreate.mockResolvedValue({ id: 1 });
+    mockStoreAreaFindFirst.mockResolvedValue({ id: 10 });
+    mockStoreAreaCreate.mockResolvedValue({ id: 10 });
+    mockOrganizationUsageUpdateMany.mockResolvedValue({ count: 1 });
   });
 
   /**
@@ -141,6 +173,106 @@ describe('CSVParserService', () => {
 
       expect(result.errors.filter((e) => e.field === 'header')).toHaveLength(0);
       expect(result.imported).toBe(1);
+    });
+  });
+
+  describe('Expiry Import Mode Validation', () => {
+    it('should accept SKU and Used-By Date as required headers for expiry mode', async () => {
+      const filePath = createTestCSV(
+        'expiry-headers-valid.csv',
+        'SKU,Used-By Date\n' + 'SKU001,12/12/26\n',
+      );
+
+      const result = await parser.processFile(filePath, { importType: 'expiry-list' });
+
+      expect(result.errors.filter((e) => e.field === 'header')).toHaveLength(0);
+      expect(result.imported).toBe(1);
+    });
+
+    it('should treat Item Description as optional in expiry mode', async () => {
+      const filePath = createTestCSV(
+        'expiry-description-optional.csv',
+        'SKU,Item Description,Used-By Date\n' + 'SKU001,,12/12/26\n',
+      );
+
+      const result = await parser.processFile(filePath, { importType: 'expiry-list' });
+
+      expect(result.errors.filter((e) => e.field === 'header')).toHaveLength(0);
+      expect(result.imported).toBe(1);
+    });
+
+    it('should reject ambiguous dd/mm values in expiry mode', async () => {
+      const filePath = createTestCSV(
+        'expiry-ambiguous-date.csv',
+        'SKU,Used-By Date\n' + 'SKU001,12/12\n',
+      );
+
+      const result = await parser.processFile(filePath, { importType: 'expiry-list' });
+
+      expect(result.imported).toBe(0);
+      expect(result.skipped).toBe(1);
+      expect(
+        result.errors.some(
+          (e) => e.field === 'usedByDate' && e.message.includes('year-missing-or-ambiguous'),
+        ),
+      ).toBe(true);
+    });
+
+    it('should reject month-name date formats in expiry mode', async () => {
+      const filePath = createTestCSV(
+        'expiry-month-name-date.csv',
+        'SKU,Used-By Date\n' + 'SKU001,Dec/2026\n',
+      );
+
+      const result = await parser.processFile(filePath, { importType: 'expiry-list' });
+
+      expect(result.imported).toBe(0);
+      expect(result.skipped).toBe(1);
+      expect(
+        result.errors.some(
+          (e) => e.field === 'usedByDate' && e.message.includes('unsupported-date-format'),
+        ),
+      ).toBe(true);
+    });
+
+    it('should merge duplicate SKU + used-by rows within the same file', async () => {
+      const filePath = createTestCSV(
+        'expiry-duplicate-rows.csv',
+        'SKU,Item Description,Used-By Date\n' +
+          'SKU001,First Description,12/12/26\n' +
+          'SKU001,Conflicting Description,12/12/26\n',
+      );
+
+      const result = await parser.processFile(filePath, { importType: 'expiry-list' });
+
+      expect(result.imported).toBe(1);
+      expect(result.updated).toBe(1);
+      expect(result.skipped).toBe(0);
+      expect(mockInventoryCreate).toHaveBeenCalledTimes(1);
+      expect(mockProductCreate).toHaveBeenCalledWith(
+        expect.objectContaining({
+          data: expect.objectContaining({
+            name: 'First Description',
+          }),
+        }),
+      );
+    });
+
+    it('should merge into existing tenant record on matching SKU and used-by date', async () => {
+      mockProductFindFirst.mockResolvedValueOnce({ id: 42 });
+      mockInventoryFindFirst.mockResolvedValueOnce({ id: 999 });
+
+      const filePath = createTestCSV(
+        'expiry-existing-merge.csv',
+        'SKU,Used-By Date\n' + 'SKU001,12/12/26\n',
+      );
+
+      const result = await parser.processFile(filePath, { importType: 'expiry-list' });
+
+      expect(result.imported).toBe(0);
+      expect(result.updated).toBe(1);
+      expect(result.skipped).toBe(0);
+      expect(mockInventoryCreate).not.toHaveBeenCalled();
     });
   });
 
@@ -227,7 +359,7 @@ describe('CSVParserService', () => {
       expect(result.imported).toBe(4);
 
       // Verify create was called with sanitized values
-      const createCalls = mockCreate.mock.calls;
+      const createCalls = mockProductCreate.mock.calls;
       expect(createCalls[0][0].data.sku).toBe("'=CMD|calc");
       expect(createCalls[1][0].data.sku).toBe("'+SUM(A1:A10)");
       expect(createCalls[2][0].data.sku).toBe("'-1+1");
@@ -289,8 +421,8 @@ describe('CSVParserService', () => {
 
     it('should handle updates for existing products', async () => {
       // Mock findFirst to return existing product for first row
-      mockFindFirst.mockResolvedValueOnce({ id: 1, sku: 'SKU001' });
-      mockFindFirst.mockResolvedValue(null);
+      mockProductFindFirst.mockResolvedValueOnce({ id: 1, sku: 'SKU001' });
+      mockProductFindFirst.mockResolvedValue(null);
 
       const filePath = createTestCSV(
         'update-test.csv',

@@ -16,6 +16,7 @@
  */
 
 import { PrismaClient } from '@prisma/client';
+import type { Prisma } from '@prisma/client';
 import { EventEmitter } from 'events';
 import { parse } from 'csv-parse';
 import * as fs from 'fs';
@@ -23,6 +24,8 @@ import { getDefaultDatabaseClient } from '../database/database-factory';
 import { envConfig } from '../config/environment';
 import { Logger } from '../utils/logger';
 import { getOrganizationId } from '../utils/auth-bypass';
+import { UploadImportType, UploadImportTypeValue } from '../types/upload.types';
+import { parseExpiryImportDate } from './expiry-import-date-parser';
 
 // ============================================================================
 // Types & Interfaces
@@ -50,11 +53,23 @@ export interface ParsedRow {
   rowNumber: number;
 }
 
+export interface ExpiryParsedRow {
+  sku: string;
+  itemDescription?: string;
+  usedByDate: string;
+  /** Department name from the Department column; undefined when not provided */
+  department?: string;
+  /** Original row number in CSV (1-indexed, excluding header) */
+  rowNumber: number;
+}
+
 export interface RowError {
   rowNumber: number;
   field: string;
   value: string;
   message: string;
+  reasonCode?: string;
+  rawValues?: Record<string, string>;
 }
 
 export interface CSVParseResult {
@@ -83,6 +98,7 @@ export interface CSVParseResult {
 export interface CSVMetricsContext {
   uploadKey?: string;
   userId?: number;
+  importType?: UploadImportTypeValue;
 }
 
 export interface ProgressEvent {
@@ -97,7 +113,7 @@ export interface ProgressEvent {
 }
 
 // Column name alternatives for flexible header matching
-const COLUMN_ALTERNATIVES = {
+const PRODUCT_COLUMN_ALTERNATIVES = {
   sku: [
     'SKU',
     'Item Code',
@@ -146,6 +162,36 @@ const COLUMN_ALTERNATIVES = {
   ],
 };
 
+const EXPIRY_COLUMN_ALTERNATIVES = {
+  sku: PRODUCT_COLUMN_ALTERNATIVES.sku,
+  itemDescription: PRODUCT_COLUMN_ALTERNATIVES.name,
+  usedByDate: [
+    'Used-By Date',
+    'Used By Date',
+    'Used By',
+    'Use By Date',
+    'Use By',
+    'Expiry Date',
+    'Expiry',
+    'Best Before',
+    'used_by_date',
+    'usedbydate',
+    'expiry_date',
+  ],
+  department: [
+    'Department',
+    'Dept',
+    'Location',
+    'Store Area',
+    'Area',
+    'Section',
+    'department',
+    'dept',
+    'location',
+    'store_area',
+  ],
+} as const;
+
 // Characters that could indicate CSV injection attempts
 const CSV_INJECTION_PREFIXES = ['=', '+', '-', '@', '\t', '\r'];
 
@@ -154,6 +200,8 @@ const CSV_INJECTION_PREFIXES = ['=', '+', '-', '@', '\t', '\r'];
 // ============================================================================
 
 export class CSVParserService extends EventEmitter {
+  private static readonly UNALLOCATED_DEPARTMENT_NAME = 'Unallocated';
+
   private prisma: PrismaClient;
   private options: Required<CSVParserOptions>;
   private organizationId: string;
@@ -183,6 +231,7 @@ export class CSVParserService extends EventEmitter {
    */
   async processFile(filePath: string, context: CSVMetricsContext = {}): Promise<CSVParseResult> {
     const startTime = Date.now();
+    const importType = context.importType ?? UploadImportType.PRODUCT_CATALOG;
 
     // Validate file exists and check size
     await this.validateFile(filePath);
@@ -202,11 +251,11 @@ export class CSVParserService extends EventEmitter {
       durationMs: 0,
     };
 
-    // Track seen SKUs for duplicate detection within this file
+    // Track seen identities for duplicate detection within this file
     const seenSkus = new Set<string>();
 
     // Batch accumulator
-    let batch: ParsedRow[] = [];
+    let batch: Array<ParsedRow | ExpiryParsedRow> = [];
     let headerMap: Map<string, string> | null = null;
 
     const parser = parse({
@@ -233,7 +282,7 @@ export class CSVParserService extends EventEmitter {
         if (!headerMap) {
           const csvHeaders = Object.keys(record);
           totalColumnsInFile = csvHeaders.length;
-          headerMap = this.buildHeaderMap(csvHeaders);
+          headerMap = this.buildHeaderMap(csvHeaders, importType);
 
           // Track which columns we're actually using
           headerMap.forEach((actualHeader) => {
@@ -243,7 +292,7 @@ export class CSVParserService extends EventEmitter {
           });
 
           // Validate required headers exist
-          const headerValidation = this.validateHeaders(headerMap);
+          const headerValidation = this.validateHeaders(headerMap, importType);
           if (!headerValidation.isValid) {
             headerValidation.errors.forEach((err) => result.errors.push(err));
             if (!this.options.skipInvalidRows) {
@@ -259,20 +308,25 @@ export class CSVParserService extends EventEmitter {
         }
 
         // Parse and validate row
-        const parseResult = this.parseRow(record, result.total, headerMap, seenSkus);
+        const parseResult =
+          importType === UploadImportType.EXPIRY_LIST
+            ? this.parseExpiryRow(record, result.total, headerMap)
+            : this.parseProductRow(record, result.total, headerMap, seenSkus);
 
         if (parseResult.errors.length > 0) {
           result.errors.push(...parseResult.errors);
           result.skipped++;
         } else if (parseResult.row) {
           batch.push(parseResult.row);
-          seenSkus.add(parseResult.row.sku.toLowerCase());
+          if (importType !== UploadImportType.EXPIRY_LIST) {
+            seenSkus.add(parseResult.row.sku.toLowerCase());
+          }
         }
 
         // Process batch when full
         if (batch.length >= this.options.batchSize) {
           try {
-            const batchResult = await this.processBatch(batch);
+            const batchResult = await this.processBatch(batch, importType);
             result.imported += batchResult.imported;
             result.updated += batchResult.updated;
             batch = [];
@@ -296,7 +350,7 @@ export class CSVParserService extends EventEmitter {
       // Process remaining batch
       if (batch.length > 0) {
         try {
-          const batchResult = await this.processBatch(batch);
+          const batchResult = await this.processBatch(batch, importType);
           result.imported += batchResult.imported;
           result.updated += batchResult.updated;
         } catch (error) {
@@ -342,6 +396,7 @@ export class CSVParserService extends EventEmitter {
     Logger.info('CSV processing metrics', {
       uploadKey: context.uploadKey,
       userId: context.userId,
+      importType,
       totalRows: result.total,
       imported: result.imported,
       updated: result.updated,
@@ -378,10 +433,17 @@ export class CSVParserService extends EventEmitter {
   /**
    * Build a mapping from standard field names to actual CSV header names
    */
-  private buildHeaderMap(headers: string[]): Map<string, string> {
+  private buildHeaderMap(
+    headers: string[],
+    importType: UploadImportTypeValue,
+  ): Map<string, string> {
     const map = new Map<string, string>();
+    const alternativesByField =
+      importType === UploadImportType.EXPIRY_LIST
+        ? EXPIRY_COLUMN_ALTERNATIVES
+        : PRODUCT_COLUMN_ALTERNATIVES;
 
-    for (const [field, alternatives] of Object.entries(COLUMN_ALTERNATIVES)) {
+    for (const [field, alternatives] of Object.entries(alternativesByField)) {
       for (const alt of alternatives) {
         const found = headers.find((h) => h.toLowerCase().trim() === alt.toLowerCase());
         if (found) {
@@ -397,12 +459,22 @@ export class CSVParserService extends EventEmitter {
   /**
    * Validate that all required headers are present
    */
-  private validateHeaders(headerMap: Map<string, string>): {
+  private validateHeaders(
+    headerMap: Map<string, string>,
+    importType: UploadImportTypeValue,
+  ): {
     isValid: boolean;
     errors: RowError[];
   } {
     const errors: RowError[] = [];
-    const requiredFields = ['sku', 'name', 'barcode', 'cost'];
+    const requiredFields =
+      importType === UploadImportType.EXPIRY_LIST
+        ? ['sku', 'usedByDate']
+        : ['sku', 'name', 'barcode', 'cost'];
+    const alternativesByField =
+      importType === UploadImportType.EXPIRY_LIST
+        ? EXPIRY_COLUMN_ALTERNATIVES
+        : PRODUCT_COLUMN_ALTERNATIVES;
 
     for (const field of requiredFields) {
       if (!headerMap.has(field)) {
@@ -410,7 +482,7 @@ export class CSVParserService extends EventEmitter {
           rowNumber: 0,
           field: 'header',
           value: field,
-          message: `Missing required column: ${field}. Expected one of: ${COLUMN_ALTERNATIVES[field as keyof typeof COLUMN_ALTERNATIVES].join(', ')}`,
+          message: `Missing required column: ${field}. Expected one of: ${alternativesByField[field as keyof typeof alternativesByField].join(', ')}`,
         });
       }
     }
@@ -452,7 +524,7 @@ export class CSVParserService extends EventEmitter {
   /**
    * Parse and validate a single row
    */
-  private parseRow(
+  private parseProductRow(
     record: Record<string, string>,
     rowNumber: number,
     headerMap: Map<string, string>,
@@ -516,6 +588,79 @@ export class CSVParserService extends EventEmitter {
 
     return {
       row: { sku, name, barcode, costPrice, rowNumber },
+      errors,
+    };
+  }
+
+  private parseExpiryRow(
+    record: Record<string, string>,
+    rowNumber: number,
+    headerMap: Map<string, string>,
+  ): { row: ExpiryParsedRow | null; errors: RowError[] } {
+    const errors: RowError[] = [];
+
+    const rawSku = this.extractField(record, headerMap, 'sku');
+    const rawItemDescription = this.extractField(record, headerMap, 'itemDescription');
+    const rawUsedByDate = this.extractField(record, headerMap, 'usedByDate');
+    const rawDepartment = this.extractField(record, headerMap, 'department');
+    const rawValues = {
+      sku: rawSku?.trim() || '',
+      itemDescription: rawItemDescription?.trim() || '',
+      usedByDate: rawUsedByDate?.trim() || '',
+      department: rawDepartment?.trim() || '',
+    };
+
+    const requiredFields = [
+      { value: rawSku, name: 'sku' },
+      { value: rawUsedByDate, name: 'usedByDate' },
+    ];
+
+    for (const field of requiredFields) {
+      const error = this.validateRequiredField(field.value, field.name, rowNumber);
+      if (error) {
+        errors.push({
+          ...error,
+          reasonCode: 'missing-required-field',
+          rawValues,
+        });
+      }
+    }
+
+    if (errors.length > 0) {
+      return { row: null, errors };
+    }
+
+    const sku = this.sanitizeValue(rawSku?.trim() || '');
+    const itemDescription = rawItemDescription ? this.sanitizeValue(rawItemDescription.trim()) : '';
+    const usedByInput = rawUsedByDate?.trim() || '';
+    const parsedDate = parseExpiryImportDate(usedByInput);
+
+    if (!parsedDate.ok || !parsedDate.isoDate) {
+      errors.push({
+        rowNumber,
+        field: 'usedByDate',
+        value: usedByInput,
+        message: `${parsedDate.errorCode}: ${parsedDate.errorMessage}`,
+        reasonCode: parsedDate.errorCode,
+        rawValues,
+      });
+      return { row: null, errors };
+    }
+
+    const departmentRaw = rawDepartment?.trim();
+    const department =
+      departmentRaw && departmentRaw !== ''
+        ? this.sanitizeValue(departmentRaw)
+        : undefined;
+
+    return {
+      row: {
+        sku,
+        itemDescription,
+        usedByDate: parsedDate.isoDate,
+        department,
+        rowNumber,
+      },
       errors,
     };
   }
@@ -643,13 +788,99 @@ export class CSVParserService extends EventEmitter {
   /**
    * Process a batch of rows using Prisma transaction
    */
-  private async processBatch(batch: ParsedRow[]): Promise<{ imported: number; updated: number }> {
+  private async processBatch(
+    batch: Array<ParsedRow | ExpiryParsedRow>,
+    importType: UploadImportTypeValue,
+  ): Promise<{ imported: number; updated: number }> {
+    if (importType === UploadImportType.EXPIRY_LIST) {
+      let imported = 0;
+      let merged = 0;
+
+      await this.prisma.$transaction(
+        async (tx) => {
+          // Cache store area IDs within the transaction to avoid repeated DB lookups
+          const departmentIdCache = new Map<string, number>();
+
+          // First-wins merge inside the current batch
+          const dedupedRows = new Map<string, ExpiryParsedRow>();
+          for (const row of batch as ExpiryParsedRow[]) {
+            const dedupeKey = `${row.sku.toLowerCase()}|${row.usedByDate}`;
+            if (dedupedRows.has(dedupeKey)) {
+              merged++;
+              continue;
+            }
+
+            dedupedRows.set(dedupeKey, row);
+          }
+
+          for (const row of dedupedRows.values()) {
+            const product = await this.getOrCreateExpiryProduct(tx, row);
+            const [dayStart, dayEnd] = this.getUtcDayRange(row.usedByDate);
+
+            const existingInventory = await tx.inventoryItem.findFirst({
+              where: {
+                organizationId: this.organizationId,
+                productId: product.id,
+                expiryDate: {
+                  gte: dayStart,
+                  lte: dayEnd,
+                },
+              },
+              select: { id: true },
+            });
+
+            if (existingInventory) {
+              merged++;
+              continue;
+            }
+
+            const departmentName =
+              row.department ?? CSVParserService.UNALLOCATED_DEPARTMENT_NAME;
+            let locationId = departmentIdCache.get(departmentName);
+            if (locationId === undefined) {
+              locationId = await this.getOrCreateStoreAreaByName(tx, departmentName);
+              departmentIdCache.set(departmentName, locationId);
+            }
+
+            await tx.inventoryItem.create({
+              data: {
+                organizationId: this.organizationId,
+                productId: product.id,
+                expiryDate: dayStart,
+                locationId,
+                status: this.calculateInventoryStatus(dayStart),
+              },
+            });
+            imported++;
+          }
+
+          if (imported > 0) {
+            await tx.organizationUsage.updateMany({
+              where: { organizationId: this.organizationId },
+              data: {
+                totalInventoryItems: { increment: imported },
+              },
+            });
+          }
+        },
+        {
+          maxWait: envConfig.CSV_TRANSACTION_MAX_WAIT_MS,
+          timeout: envConfig.CSV_TRANSACTION_TIMEOUT_MS,
+        },
+      );
+
+      return {
+        imported,
+        updated: merged,
+      };
+    }
+
     let imported = 0;
     let updated = 0;
 
     await this.prisma.$transaction(
       async (tx) => {
-        for (const row of batch) {
+        for (const row of batch as ParsedRow[]) {
           // Check if product exists by SKU or barcode
           const existing = await tx.product.findFirst({
             where: {
@@ -694,6 +925,124 @@ export class CSVParserService extends EventEmitter {
     );
 
     return { imported, updated };
+  }
+
+  private async getOrCreateStoreAreaByName(
+    tx: Prisma.TransactionClient,
+    name: string,
+  ): Promise<number> {
+    const existing = await tx.storeArea.findFirst({
+      where: {
+        organizationId: this.organizationId,
+        name,
+      },
+      orderBy: { id: 'asc' },
+      select: { id: true },
+    });
+
+    if (existing) {
+      return existing.id;
+    }
+
+    const created = await tx.storeArea.create({
+      data: {
+        organizationId: this.organizationId,
+        name,
+        subDepartment: null,
+      },
+      select: { id: true },
+    });
+
+    return created.id;
+  }
+
+  private async getOrCreateExpiryProduct(
+    tx: Prisma.TransactionClient,
+    row: ExpiryParsedRow,
+  ): Promise<{ id: number }> {
+    const existing = await tx.product.findFirst({
+      where: {
+        organizationId: this.organizationId,
+        sku: row.sku,
+      },
+      select: { id: true },
+    });
+
+    if (existing) {
+      return existing;
+    }
+
+    const barcode = await this.createUniqueImportBarcode(tx, row.sku);
+    const productName = row.itemDescription?.trim() ? row.itemDescription.trim() : row.sku;
+
+    return tx.product.create({
+      data: {
+        organizationId: this.organizationId,
+        sku: row.sku,
+        name: productName,
+        barcode,
+        costPrice: 0,
+      },
+      select: { id: true },
+    });
+  }
+
+  private async createUniqueImportBarcode(
+    tx: Prisma.TransactionClient,
+    sku: string,
+  ): Promise<string> {
+    const sanitizedSku = sku.replace(/\s+/g, '-');
+    const base = `EXP-IMPORT-${sanitizedSku}`;
+    let candidate = base;
+    let suffix = 1;
+
+    while (true) {
+      const exists = await tx.product.findFirst({
+        where: {
+          organizationId: this.organizationId,
+          barcode: candidate,
+        },
+        select: { id: true },
+      });
+
+      if (!exists) {
+        return candidate;
+      }
+
+      candidate = `${base}-${suffix}`;
+      suffix++;
+    }
+  }
+
+  private getUtcDayRange(isoDate: string): [Date, Date] {
+    const start = new Date(`${isoDate}T00:00:00.000Z`);
+    const end = new Date(`${isoDate}T23:59:59.999Z`);
+    return [start, end];
+  }
+
+  private calculateInventoryStatus(
+    expiryDate: Date,
+  ): 'Normal' | 'Markdown 1' | 'Markdown 2' | 'Markdown 3' | 'Expired' {
+    const now = new Date();
+    const daysDiff = Math.ceil((expiryDate.getTime() - now.getTime()) / (1000 * 60 * 60 * 24));
+
+    if (daysDiff <= 0) {
+      return 'Expired';
+    }
+
+    if (daysDiff <= 7) {
+      return 'Markdown 3';
+    }
+
+    if (daysDiff <= 14) {
+      return 'Markdown 2';
+    }
+
+    if (daysDiff <= 30) {
+      return 'Markdown 1';
+    }
+
+    return 'Normal';
   }
 
   /**

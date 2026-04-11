@@ -128,6 +128,7 @@ export function UpgradeModal({ isOpen, onClose, onSelectPlan, currentTier }: Upg
             const monthlyPrice = pricing
               ? pricing[billingCycle] / (billingCycle === 'annual' ? 12 : 1)
               : null;
+            const annualBilledAmount = pricing?.annual;
 
             return (
               <Card
@@ -154,9 +155,9 @@ export function UpgradeModal({ isOpen, onClose, onSelectPlan, currentTier }: Upg
                       <>
                         <span className="text-3xl font-bold">${monthlyPrice}</span>
                         <span className="text-sm text-muted-foreground">/month</span>
-                        {billingCycle === 'annual' && (
+                        {billingCycle === 'annual' && annualBilledAmount !== undefined && (
                           <div className="text-xs text-muted-foreground mt-1">
-                            Billed ${pricing![billingCycle]} annually
+                            Billed ${annualBilledAmount} annually
                           </div>
                         )}
                       </>

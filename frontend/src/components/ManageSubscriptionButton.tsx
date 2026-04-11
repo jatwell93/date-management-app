@@ -1,4 +1,5 @@
 import { useState } from 'react';
+import * as Sentry from '@sentry/react';
 import { Button } from './ui/button';
 import { buildApiUrl } from '../lib/api.service';
 
@@ -40,7 +41,9 @@ export function ManageSubscriptionButton({
       const { url } = await response.json();
       window.location.href = url;
     } catch (error) {
-      console.error('Error opening billing portal:', error);
+      Sentry.captureException(error, {
+        tags: { feature: 'billing-portal' },
+      });
       alert('Failed to open billing portal. Please try again.');
     } finally {
       setLoading(false);
