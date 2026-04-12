@@ -17,6 +17,8 @@ permissions:
 jobs:
   test:
     runs-on: ubuntu-latest
+    env:
+      LOG_SILENT: 'true'
     defaults:
       run:
         working-directory: ./backend
@@ -64,6 +66,8 @@ jobs:
   # Multi-Tenant Tests - Dedicated job for SaaS monetization validation (16A.F.3.2)
   multi-tenant-tests:
     runs-on: ubuntu-latest
+    env:
+      LOG_SILENT: 'true'
     defaults:
       run:
         working-directory: ./backend

@@ -16,9 +16,9 @@ export class Logger {
 
   private static shouldLog(level: 'info' | 'warn' | 'error' | 'debug'): boolean {
     const logLevels = ['error', 'warn', 'info', 'debug'];
-    // Always log in test mode for testability
+    // In tests, allow silencing noisy output via LOG_SILENT=true.
     if (envConfig.NODE_ENV === 'test') {
-      return true;
+      return process.env.LOG_SILENT !== 'true';
     }
     const currentLogLevelIndex = logLevels.indexOf(
       envConfig.NODE_ENV === 'production' ? 'warn' : 'debug',

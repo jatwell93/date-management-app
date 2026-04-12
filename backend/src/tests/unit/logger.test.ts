@@ -9,6 +9,7 @@ describe('Logger', () => {
 
   beforeEach(() => {
     mockLogs = [];
+    delete process.env.LOG_SILENT;
 
     console.log = jest.fn((message: string) => {
       mockLogs.push({ level: 'log', message });
@@ -169,6 +170,17 @@ describe('Logger', () => {
 
       expect(mockLogs).toHaveLength(1);
       expect(mockLogs[0].message).toContain('Auth event');
+    });
+  });
+
+  describe('silent logging mode', () => {
+    it('suppresses logger output when LOG_SILENT is true', () => {
+      process.env.LOG_SILENT = 'true';
+
+      Logger.error('This should not log');
+      Logger.warn('This should also not log');
+
+      expect(mockLogs).toHaveLength(0);
     });
   });
 });
