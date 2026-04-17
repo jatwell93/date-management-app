@@ -49,19 +49,19 @@ All storage providers implement this interface:
 interface StorageProvider {
   // Upload a file
   upload(key: string, data: Buffer, contentType: string): Promise<string>;
-  
+
   // Download a file
   download(key: string): Promise<Buffer>;
-  
+
   // Delete a file
   delete(key: string): Promise<void>;
-  
+
   // Check if file exists
   exists(key: string): Promise<boolean>;
-  
+
   // Generate presigned URL (R2 only)
   getPresignedUploadUrl?(key: string, expiresIn: number): Promise<string>;
-  
+
   // Get file metadata
   getMetadata?(key: string): Promise<FileMetadata>;
 }
@@ -137,11 +137,7 @@ const r2Storage = createStorageProvider({
 The storage layer provides typed errors for common scenarios:
 
 ```typescript
-import { 
-  FileNotFoundError, 
-  FileSizeLimitError, 
-  StorageProviderError 
-} from './storage';
+import { FileNotFoundError, FileSizeLimitError, StorageProviderError } from './storage';
 
 try {
   const data = await storage.download('missing-file.csv');
@@ -205,9 +201,9 @@ import { R2StorageProvider } from './storage';
 if (storage instanceof R2StorageProvider) {
   const presignedUrl = await storage.getPresignedUploadUrl(
     'uploads/large-file.csv',
-    3600 // expires in 1 hour
+    3600, // expires in 1 hour
   );
-  
+
   // Return URL to client for direct upload
   return res.json({ uploadUrl: presignedUrl });
 }

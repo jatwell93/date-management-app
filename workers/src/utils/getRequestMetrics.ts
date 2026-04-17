@@ -39,7 +39,7 @@ export interface RequestMetrics {
 export function getRequestMetrics(
   req: ExpressRequest,
   res: ExpressResponse,
-  status: number
+  status: number,
 ): RequestMetrics {
   const now = Date.now();
   const startTime = req.startTime || now;

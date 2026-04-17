@@ -18,10 +18,12 @@ New users often already maintain expiry-date records outside the app, but curren
 ## Capabilities
 
 ### New Capabilities
+
 - `expiry-list-import`: Import existing expiry-date records from CSV/XLS/XLSX into normal app records with date normalization, partial acceptance, duplicate merge, and tenant-safe persistence.
 - `expiry-import-template-download`: Provide user-facing CSV/XLS/XLSX templates that standardize import columns and date expectations.
 
 ### Modified Capabilities
+
 - `csv-upload-processing`: Extend shared upload validation/reporting behavior to support this new import type while preserving current product-upload behavior.
 
 ## Impact

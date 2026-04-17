@@ -17,6 +17,7 @@ model Organization {
   updatedAt               DateTime                 @updatedAt @map("updated_at")
   isCreationLocked        Boolean                  @default(false) @map("is_creation_locked")
   auditLogs               AuditLog[]
+  orgAuditLogs            OrgAuditLog[]
   expiredItemTransactions ExpiredItemTransaction[]
   inventoryItems          InventoryItem[]
   itemTransactions        ItemTransaction[]
@@ -187,7 +188,7 @@ model User {
   clerkUserId             String?                  @unique @map("clerk_user_id")
   email                   String?                  @unique
   username                String?                  @unique
-  role                    String
+  role                    String                   @default("team_member")
   deletedAt               DateTime?                @map("deleted_at")
   createdAt               DateTime                 @default(now()) @map("created_at")
   updatedAt               DateTime                 @updatedAt @map("updated_at")
@@ -209,14 +210,15 @@ model User {
 model OrganizationInvite {
   id              String       @id @default(uuid())
   organizationId  String       @map("organization_id")
-  email           String
-  role            String
-  token           String       @unique
-  status          String       @default("PENDING")
-  expiresAt       DateTime     @map("expires_at")
-  acceptedAt      DateTime?    @map("accepted_at")
-  invitedByUserId Int          @map("invited_by_user_id")
-  createdAt       DateTime     @default(now()) @map("created_at")
+  email               String
+  role                String
+  inviteTokenHash     String?      @map("invite_token_hash")
+  inviteTokenExpiresAt DateTime?   @map("invite_token_expires_at")
+  status              String       @default("PENDING")
+  expiresAt           DateTime     @map("expires_at")
+  acceptedAt          DateTime?    @map("accepted_at")
+  invitedByUserId     Int          @map("invited_by_user_id")
+  createdAt           DateTime     @default(now()) @map("created_at")
   invitedByUser   User         @relation("InvitedBy", fields: [invitedByUserId], references: [id], onDelete: Cascade)
   organization    Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
 
@@ -259,6 +261,31 @@ model AuditLog {
   @@index([inventoryItemId])
   @@index([action])
   @@map("audit_log")
+}
+
+model OrgAuditLog {
+  id                     Int          @id @default(autoincrement())
+  organizationId         String       @map("organization_id")
+  eventType              String       @map("event_type")
+  actorUserId            Int?         @map("actor_user_id")
+  actorOrganizationId    String?      @map("actor_organization_id")
+  targetUserId           Int?         @map("target_user_id")
+  targetOrganizationId   String?      @map("target_organization_id")
+  oldRole                String?      @map("old_role")
+  newRole                String?      @map("new_role")
+  inviteId               String?      @map("invite_id")
+  ipAddress              String?      @map("ip_address")
+  metadata               String?
+  createdAt              DateTime     @default(now()) @map("created_at")
+  organization           Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+
+  @@index([organizationId])
+  @@index([eventType])
+  @@index([actorUserId])
+  @@index([targetUserId])
+  @@index([inviteId])
+  @@index([createdAt])
+  @@map("org_audit_log")
 }
 
 model ItemTransaction {

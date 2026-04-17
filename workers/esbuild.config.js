@@ -22,7 +22,7 @@ module.exports = {
     'url',
     // Test-only dependencies
     'mock-fs',
-    '@types/mock-fs'
+    '@types/mock-fs',
   ],
   platform: 'browser',
   target: 'es2021',

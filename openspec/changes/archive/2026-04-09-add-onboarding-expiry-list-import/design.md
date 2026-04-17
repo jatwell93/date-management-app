@@ -5,11 +5,13 @@ The application currently supports product master upload through a shared upload
 This change adds a second import flow for expiry records so users can bring existing used-by data into the same reporting surfaces as scanner-created records. The flow must stay permanently available (not onboarding-only) and must preserve strict tenant isolation throughout parse, match, dedupe, and persistence stages.
 
 Stakeholders:
+
 - Pharmacy end users who need faster initial data adoption
 - Operations/support teams handling import errors and recovery
 - Engineering teams maintaining the existing upload pipeline
 
 Constraints:
+
 - Reuse existing upload architecture where practical
 - Support CSV, XLS, XLSX from day one
 - Avoid introducing behavior that changes current product upload semantics
@@ -18,6 +20,7 @@ Constraints:
 ## Goals / Non-Goals
 
 **Goals:**
+
 - Provide a permanent expiry-list import path using CSV/XLS/XLSX files.
 - Accept template columns: SKU (required), Item Description (optional), Used-By Date (required).
 - Parse date formats `dd/mm/yy` and `dd/mm/yyyy`, with `yy` mapped to `20yy`.
@@ -29,6 +32,7 @@ Constraints:
 - Return user-facing rejected-row feedback for correction and re-upload.
 
 **Non-Goals:**
+
 - Building an onboarding wizard or onboarding-triggered flow in this change.
 - Alias/barcode-based matching in import identity.
 - Adding source tagging or provenance filters in reports for v1.
@@ -38,6 +42,7 @@ Constraints:
 ## Decisions
 
 ### 1) Reuse the existing upload pipeline with an explicit import mode
+
 - Decision: Add an import mode/type for expiry-list processing inside the existing upload lifecycle rather than introducing a parallel upload subsystem.
 - Rationale: Reuses proven progress, status, and storage flow while minimizing architectural drift.
 - Alternatives considered:
@@ -45,6 +50,7 @@ Constraints:
   - Implicit inference by column shape only: brittle and increases accidental misrouting risk.
 
 ### 2) Canonical processing format remains CSV
+
 - Decision: Support CSV/XLS/XLSX at user boundary, then normalize to canonical CSV before backend row ingestion.
 - Rationale: Existing upload stack and validators are already CSV-centric, reducing backend parser complexity.
 - Alternatives considered:
@@ -52,6 +58,7 @@ Constraints:
   - CSV-only acceptance: simpler, but violates agreed product requirement for upfront XLS/XLSX support.
 
 ### 3) Date parsing and normalization policy
+
 - Decision:
   - Accept `dd/mm/yy`, `dd/mm/yyyy`, with `yy -> 20yy`.
   - Accept month/year shorthand (`12/26`, `12-2026`) and normalize to month-end day.
@@ -62,6 +69,7 @@ Constraints:
   - Locale-flex parsing: higher acceptance but unacceptable ambiguity in production data.
 
 ### 4) Deduplication and conflict strategy
+
 - Decision:
   - Use `(organizationId, sku, usedByDate)` as dedupe identity.
   - Treat exact duplicates as one logical record.
@@ -72,24 +80,28 @@ Constraints:
   - Include description in identity key: allows duplicate expiry records for same SKU/date when description text differs.
 
 ### 5) Partial-acceptance import with rejected-row reporting
+
 - Decision: Import all valid rows and emit a rejected-row list containing row number, input value(s), and rejection reason.
 - Rationale: Users can realize immediate value and correct only failed rows.
 - Alternatives considered:
   - All-or-nothing transaction: simpler consistency model, but poor UX for large files with minor errors.
 
 ### 6) Department fallback policy
+
 - Decision: Imported rows are assigned to `Unallocated` by default for each tenant.
 - Rationale: Keeps import template minimal while preserving in-app organization workflows.
 - Alternatives considered:
   - Require department column: increases friction during onboarding/migration.
 
 ### 7) No source tagging in v1
+
 - Decision: Persist imported data as normal records with no visible source distinction.
 - Rationale: Matches agreed product behavior and avoids scope expansion into reporting dimensions.
 - Alternatives considered:
   - Add source metadata now: improves future analytics but adds schema/reporting complexity not required for v1.
 
 ### 8) Tenant isolation as a hard invariant
+
 - Decision: Scope upload ownership checks, row matching, dedupe, and writes by tenant context on every operation.
 - Rationale: Prevents cross-tenant leakage and preserves multi-tenant guarantees.
 - Alternatives considered:
@@ -113,6 +125,7 @@ Constraints:
 6. Run integration tests for tenant isolation, date normalization, partial acceptance, and regression coverage for current product upload flow.
 
 Rollback strategy:
+
 - Disable expiry-list mode through route/feature flag configuration while leaving existing product upload path intact.
 - Revert import-mode specific parser and match logic without touching base upload lifecycle.
 - Preserve imported records already created unless a separate data rollback is explicitly approved.

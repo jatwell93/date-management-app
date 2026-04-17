@@ -14,20 +14,20 @@
 
 After exhaustive code review, here is the honest status of each task:
 
-| Task | Status | Evidence |
-|---|---|---|
-| 16A.B.1 CREATE TABLE | ✅ DONE | `ProcessedWebhookEvent` model in `schema.prisma:100-107`; migration `20260215052314_add_processed_webhook_events` |
-| 16A.B.2 IDEMPOTENCY | ✅ DONE | `isNewEvent()` at line 100, `markEventProcessed()` at line 113 in `webhook.service.ts`; P2002 handled |
-| 16A.B.3.1 handleSubscriptionCreated | ✅ DONE | Lines 288-366 `webhook.service.ts`; metadata validation, transaction, audit log |
-| 16A.B.3.2 handleSubscriptionUpdated | ⚠️ PARTIAL | Lines 374-479; handler works but **soft lock NOT set** — comment at line 439: "readOnlyMode field doesn't exist in current schema" |
-| 16A.B.3.3 handleSubscriptionDeleted | ⚠️ PARTIAL | Lines 487-568; handler works but **soft lock NOT set** |
-| 16A.B.3.4 handleCheckoutSessionCompleted | ✅ DONE | Lines 576-626 |
-| 16A.B.3.5 handleInvoicePaymentFailed | ✅ DONE | Lines 634-686; dunning email queued |
-| 16A.B.3.6 handleTrialWillEnd | ✅ DONE | Lines 694-730; trial reminder email sent |
-| 16A.B.4 CRON JOB (Stripe sync) | ❌ NOT DONE | `HourlyWebhookCheckJob` only checks failure rates; NO job fetches Stripe subscriptions list |
-| 16A.B.5 TRANSACTION | ✅ DONE | Every handler uses `this.prisma.$transaction()` |
-| 16A.B.6 VALIDATION (org exists) | ✅ DONE | `validateWebhookMetadata()` lines 211-262 checks org in every handler |
-| 16A.B.7 MONITORING | ⚠️ PARTIAL | Error reporting exists; missing: raw count >1/day alert + replay attack detection |
+| Task                                     | Status      | Evidence                                                                                                                           |
+| ---------------------------------------- | ----------- | ---------------------------------------------------------------------------------------------------------------------------------- |
+| 16A.B.1 CREATE TABLE                     | ✅ DONE     | `ProcessedWebhookEvent` model in `schema.prisma:100-107`; migration `20260215052314_add_processed_webhook_events`                  |
+| 16A.B.2 IDEMPOTENCY                      | ✅ DONE     | `isNewEvent()` at line 100, `markEventProcessed()` at line 113 in `webhook.service.ts`; P2002 handled                              |
+| 16A.B.3.1 handleSubscriptionCreated      | ✅ DONE     | Lines 288-366 `webhook.service.ts`; metadata validation, transaction, audit log                                                    |
+| 16A.B.3.2 handleSubscriptionUpdated      | ⚠️ PARTIAL  | Lines 374-479; handler works but **soft lock NOT set** — comment at line 439: "readOnlyMode field doesn't exist in current schema" |
+| 16A.B.3.3 handleSubscriptionDeleted      | ⚠️ PARTIAL  | Lines 487-568; handler works but **soft lock NOT set**                                                                             |
+| 16A.B.3.4 handleCheckoutSessionCompleted | ✅ DONE     | Lines 576-626                                                                                                                      |
+| 16A.B.3.5 handleInvoicePaymentFailed     | ✅ DONE     | Lines 634-686; dunning email queued                                                                                                |
+| 16A.B.3.6 handleTrialWillEnd             | ✅ DONE     | Lines 694-730; trial reminder email sent                                                                                           |
+| 16A.B.4 CRON JOB (Stripe sync)           | ❌ NOT DONE | `HourlyWebhookCheckJob` only checks failure rates; NO job fetches Stripe subscriptions list                                        |
+| 16A.B.5 TRANSACTION                      | ✅ DONE     | Every handler uses `this.prisma.$transaction()`                                                                                    |
+| 16A.B.6 VALIDATION (org exists)          | ✅ DONE     | `validateWebhookMetadata()` lines 211-262 checks org in every handler                                                              |
+| 16A.B.7 MONITORING                       | ⚠️ PARTIAL  | Error reporting exists; missing: raw count >1/day alert + replay attack detection                                                  |
 
 **Net remaining work: Tasks 16A.B.3.2/3.3 (soft lock), 16A.B.4 (Stripe sync), 16A.B.7 (monitoring gaps).**
 
@@ -38,6 +38,7 @@ After exhaustive code review, here is the honest status of each task:
 Implements the "creation_locked" state from Decision 8A.8 that 16A.B.3.2 and 16A.B.3.3 require.
 
 **Files:**
+
 - Modify: `backend/prisma/schema.prisma`
 - Create migration via: `npx prisma migrate dev --name add_creation_locked_to_org`
 - Test: `backend/src/tests/integration/webhook.integration.test.ts`
@@ -72,6 +73,7 @@ it('should allow setting isCreationLocked to true', async () => {
 ```bash
 cd backend && npx jest webhook.integration.test.ts --testNamePattern="isCreationLocked" --no-coverage
 ```
+
 Expected: FAIL — `Property 'isCreationLocked' not found on type`
 
 ### Step 3: Add field to Prisma schema
@@ -102,6 +104,7 @@ model Organization {
 ```bash
 cd backend && npx prisma migrate dev --name add_creation_locked_to_org
 ```
+
 Expected: Creates `backend/prisma/migrations/<timestamp>_add_creation_locked_to_org/migration.sql`
 
 ### Step 5: Run test to confirm it passes
@@ -109,6 +112,7 @@ Expected: Creates `backend/prisma/migrations/<timestamp>_add_creation_locked_to_
 ```bash
 cd backend && npx jest webhook.integration.test.ts --testNamePattern="isCreationLocked" --no-coverage
 ```
+
 Expected: PASS
 
 ### Step 6: TypeScript check
@@ -116,6 +120,7 @@ Expected: PASS
 ```bash
 cd backend && npx tsc --noEmit
 ```
+
 Expected: 0 errors
 
 ### Step 7: Commit
@@ -132,6 +137,7 @@ git commit -m "feat(schema): add isCreationLocked field to Organization for soft
 Closes the gap in 16A.B.3.2 and 16A.B.3.3.
 
 **Files:**
+
 - Modify: `backend/src/services/webhook.service.ts`
 - Modify: `backend/src/tests/unit/webhook.service.test.ts`
 
@@ -143,7 +149,9 @@ In `backend/src/tests/unit/webhook.service.test.ts`, add inside `describe('handl
 it('sets isCreationLocked=true on org when downgrading over SKU limit', async () => {
   prisma.subscriptionTier.findFirst.mockResolvedValue({ tierLevel: 'professional' });
   prisma.organizationUsage.findUnique.mockResolvedValue({ totalSkus: 9999 });
-  prisma.organization.update = jest.fn().mockResolvedValue({ id: organizationId, isCreationLocked: true });
+  prisma.organization.update = jest
+    .fn()
+    .mockResolvedValue({ id: organizationId, isCreationLocked: true });
 
   const subscription = {
     id: 'sub_updated',
@@ -165,7 +173,9 @@ it('sets isCreationLocked=true on org when downgrading over SKU limit', async ()
 
 it('sets isCreationLocked=true on org when subscription deleted and over Starter limit', async () => {
   prisma.organizationUsage.findUnique.mockResolvedValue({ totalSkus: 9999 });
-  prisma.organization.update = jest.fn().mockResolvedValue({ id: organizationId, isCreationLocked: true });
+  prisma.organization.update = jest
+    .fn()
+    .mockResolvedValue({ id: organizationId, isCreationLocked: true });
 
   const subscription = {
     id: 'sub_deleted',
@@ -211,6 +221,7 @@ it('does NOT lock org when downgrade is within new SKU limit', async () => {
 ```bash
 cd backend && npx jest webhook.service.test.ts --testNamePattern="isCreationLocked|locked" --no-coverage
 ```
+
 Expected: FAIL — `prisma.organization.update is not a function` / assertion failures
 
 ### Step 3: Add `organization.update` to mock prisma in test beforeEach
@@ -234,11 +245,7 @@ In `backend/src/services/webhook.service.ts`, inside `handleSubscriptionUpdated`
 // For now, just send the warning email
 
 // Queue warning email
-await this.emailService.sendDowngradeWarningEmail(
-  organizationId,
-  usage.totalSkus,
-  limits.max_skus,
-);
+await this.emailService.sendDowngradeWarningEmail(organizationId, usage.totalSkus, limits.max_skus);
 ```
 
 With:
@@ -257,11 +264,7 @@ log.warn('Creation lock applied on tier downgrade', {
 });
 
 // Queue warning email (outside transaction — non-blocking)
-await this.emailService.sendDowngradeWarningEmail(
-  organizationId,
-  usage.totalSkus,
-  limits.max_skus,
-);
+await this.emailService.sendDowngradeWarningEmail(organizationId, usage.totalSkus, limits.max_skus);
 ```
 
 ### Step 5: Implement soft lock in `handleSubscriptionDeleted`
@@ -325,6 +328,7 @@ if (!(isDowngrade && limits.max_skus !== null && usage && usage.totalSkus > limi
 ```bash
 cd backend && npx jest webhook.service.test.ts --no-coverage
 ```
+
 Expected: All tests PASS
 
 ### Step 8: TypeScript check
@@ -332,6 +336,7 @@ Expected: All tests PASS
 ```bash
 cd backend && npx tsc --noEmit
 ```
+
 Expected: 0 errors
 
 ### Step 9: Commit
@@ -348,6 +353,7 @@ git commit -m "feat(webhook): apply isCreationLocked on tier downgrade/cancellat
 The soft lock is useless unless `checkUsageLimit` and/or the product creation route respects it.
 
 **Files:**
+
 - Modify: `backend/src/middleware/feature-gate.middleware.ts`
 - Modify: `backend/src/tests/unit/feature-gate.test.ts` (or integration test)
 
@@ -363,7 +369,7 @@ it('returns 403 with creation_locked message when org isCreationLocked=true', as
         organizationId: 'org-123',
         activeUsers: 0,
         maxUsers: 1,
-        totalSkus: 600,    // Over limit
+        totalSkus: 600, // Over limit
         maxSkus: 500,
         storageUsedBytes: 0,
       }),
@@ -402,9 +408,7 @@ it('returns 403 with creation_locked message when org isCreationLocked=true', as
   await checkUsageLimit('max_skus')(req, res, next);
 
   expect(res.status).toHaveBeenCalledWith(403);
-  expect(res.json).toHaveBeenCalledWith(
-    expect.objectContaining({ locked: true }),
-  );
+  expect(res.json).toHaveBeenCalledWith(expect.objectContaining({ locked: true }));
   expect(next).not.toHaveBeenCalled();
 });
 ```
@@ -414,6 +418,7 @@ it('returns 403 with creation_locked message when org isCreationLocked=true', as
 ```bash
 cd backend && npx jest feature-gate --no-coverage
 ```
+
 Expected: FAIL
 
 ### Step 3: Implement creation lock check in `checkUsageLimit`
@@ -446,6 +451,7 @@ if (org?.isCreationLocked) {
 ```
 
 > **Note**: Only apply this check on write operations (POST/PUT methods). Add a guard:
+
 ```typescript
 if (org?.isCreationLocked && ['POST', 'PUT', 'PATCH'].includes(req.method)) {
 ```
@@ -455,6 +461,7 @@ if (org?.isCreationLocked && ['POST', 'PUT', 'PATCH'].includes(req.method)) {
 ```bash
 cd backend && npx jest feature-gate --no-coverage
 ```
+
 Expected: PASS
 
 ### Step 5: Full unit test suite
@@ -462,6 +469,7 @@ Expected: PASS
 ```bash
 cd backend && npm test -- --forceExit --no-coverage
 ```
+
 Expected: All existing 678+ tests pass (0 new failures)
 
 ### Step 6: Commit
@@ -478,6 +486,7 @@ git commit -m "feat(middleware): enforce isCreationLocked in checkUsageLimit —
 Creates a new job that reconciles local `subscription_tiers` against Stripe's API state hourly.
 
 **Files:**
+
 - Create: `backend/src/jobs/stripe-sync.job.ts`
 - Modify: `backend/src/services/scheduler.service.ts`
 - Create: `backend/src/tests/unit/stripe-sync.job.test.ts`
@@ -618,11 +627,23 @@ describe('StripeSyncJob', () => {
     // First page returns has_more=true, second page has_more=false
     mockStripe.subscriptions.list
       .mockResolvedValueOnce({
-        data: [{ id: 'sub_page1', status: 'active', items: { data: [{ price: { metadata: { tier: 'starter' } } }] } }],
+        data: [
+          {
+            id: 'sub_page1',
+            status: 'active',
+            items: { data: [{ price: { metadata: { tier: 'starter' } } }] },
+          },
+        ],
         has_more: true,
       })
       .mockResolvedValueOnce({
-        data: [{ id: 'sub_page2', status: 'active', items: { data: [{ price: { metadata: { tier: 'starter' } } }] } }],
+        data: [
+          {
+            id: 'sub_page2',
+            status: 'active',
+            items: { data: [{ price: { metadata: { tier: 'starter' } } }] },
+          },
+        ],
         has_more: false,
       });
 
@@ -639,6 +660,7 @@ describe('StripeSyncJob', () => {
 ```bash
 cd backend && npx jest stripe-sync.job.test.ts --no-coverage
 ```
+
 Expected: FAIL — module not found
 
 ### Step 3: Create `backend/src/jobs/stripe-sync.job.ts`
@@ -678,21 +700,23 @@ function extractTierFromStripeSubscription(subscription: Stripe.Subscription): s
 // Normalize Stripe status to local status string
 function normalizeStatus(stripeStatus: Stripe.Subscription.Status): string {
   switch (stripeStatus) {
-    case 'active': return 'active';
-    case 'canceled': return 'canceled';
-    case 'past_due': return 'past_due';
-    case 'trialing': return 'trialing';
-    default: return 'active';
+    case 'active':
+      return 'active';
+    case 'canceled':
+      return 'canceled';
+    case 'past_due':
+      return 'past_due';
+    case 'trialing':
+      return 'trialing';
+    default:
+      return 'active';
   }
 }
 
 /**
  * Core sync logic — exported for testability with injected dependencies.
  */
-export async function runStripeSyncJob(
-  prisma: PrismaClient,
-  stripeClient: Stripe,
-): Promise<void> {
+export async function runStripeSyncJob(prisma: PrismaClient, stripeClient: Stripe): Promise<void> {
   Logger.info('Starting hourly Stripe subscription sync job');
 
   try {
@@ -761,9 +785,7 @@ export async function runStripeSyncJob(
 
       const stripeTier = extractTierFromStripeSubscription(stripeSub);
       const stripeStatus = normalizeStatus(stripeSub.status);
-      const stripeTrialEnd = stripeSub.trial_end
-        ? new Date(stripeSub.trial_end * 1000)
-        : null;
+      const stripeTrialEnd = stripeSub.trial_end ? new Date(stripeSub.trial_end * 1000) : null;
 
       const tierMismatch = local.tierLevel !== stripeTier;
       const statusMismatch = local.status !== stripeStatus;
@@ -877,6 +899,7 @@ startStripeSyncJob();
 ```bash
 cd backend && npx jest stripe-sync.job.test.ts --no-coverage
 ```
+
 Expected: All 5 tests PASS
 
 ### Step 6: TypeScript check
@@ -884,6 +907,7 @@ Expected: All 5 tests PASS
 ```bash
 cd backend && npx tsc --noEmit
 ```
+
 Expected: 0 errors
 
 ### Step 7: Full test suite
@@ -891,6 +915,7 @@ Expected: 0 errors
 ```bash
 cd backend && npm test -- --forceExit --no-coverage
 ```
+
 Expected: All existing tests pass + 5 new tests pass
 
 ### Step 8: Commit
@@ -905,10 +930,12 @@ git commit -m "feat(jobs): add hourly Stripe subscription sync job (16A.B.4)"
 ## Task 5: Webhook Monitoring Enhancements (16A.B.7)
 
 Closes the two remaining monitoring gaps:
+
 1. Raw error count alert (`webhook_handler_error > 1/day`)
 2. Replay attack detection via `processed_webhook_events` growth rate
 
 **Files:**
+
 - Modify: `backend/src/jobs/daily-metrics.job.ts`
 - Modify: `backend/src/services/saas-metrics.service.ts`
 - Create: `backend/src/tests/unit/webhook-monitoring.test.ts`
@@ -961,8 +988,8 @@ describe('Webhook Monitoring', () => {
 
     await job.execute();
 
-    const rawCountAlerts = (Sentry.captureMessage as jest.Mock).mock.calls.filter(
-      ([msg]) => msg.includes('webhook handler errors today'),
+    const rawCountAlerts = (Sentry.captureMessage as jest.Mock).mock.calls.filter(([msg]) =>
+      msg.includes('webhook handler errors today'),
     );
     expect(rawCountAlerts).toHaveLength(0);
   });
@@ -989,8 +1016,8 @@ describe('Webhook Monitoring', () => {
 
     await job.execute();
 
-    const replayAlerts = (Sentry.captureMessage as jest.Mock).mock.calls.filter(
-      ([msg]) => msg.includes('replay attack'),
+    const replayAlerts = (Sentry.captureMessage as jest.Mock).mock.calls.filter(([msg]) =>
+      msg.includes('replay attack'),
     );
     expect(replayAlerts).toHaveLength(0);
   });
@@ -1002,6 +1029,7 @@ describe('Webhook Monitoring', () => {
 ```bash
 cd backend && npx jest webhook-monitoring.test.ts --no-coverage
 ```
+
 Expected: FAIL — methods not found on SaasMetricsService
 
 ### Step 3: Add `getDailyWebhookErrorCount` to `SaasMetricsService`
@@ -1146,6 +1174,7 @@ async execute(): Promise<void> {
 ```bash
 cd backend && npx jest webhook-monitoring.test.ts --no-coverage
 ```
+
 Expected: All 4 tests PASS
 
 ### Step 6: TypeScript check
@@ -1153,6 +1182,7 @@ Expected: All 4 tests PASS
 ```bash
 cd backend && npx tsc --noEmit
 ```
+
 Expected: 0 errors
 
 ### Step 7: Full test suite
@@ -1160,6 +1190,7 @@ Expected: 0 errors
 ```bash
 cd backend && npm test -- --forceExit --no-coverage
 ```
+
 Expected: All 678+ tests pass + 4 new tests pass
 
 ### Step 8: Commit
@@ -1191,6 +1222,7 @@ git commit -m "chore(tasks): mark Phase 16A.B Webhook & State Sync as complete"
 ```bash
 cd backend && npm test -- --forceExit
 ```
+
 Expected: All suites pass, 0 failures
 
 ### Step 2: TypeScript compilation
@@ -1198,6 +1230,7 @@ Expected: All suites pass, 0 failures
 ```bash
 cd backend && npx tsc --noEmit
 ```
+
 Expected: 0 errors
 
 ### Step 3: Lint check
@@ -1205,6 +1238,7 @@ Expected: 0 errors
 ```bash
 cd backend && npm run lint
 ```
+
 Expected: 0 errors (warnings acceptable)
 
 ### Step 4: Smoke test webhook endpoint manually
@@ -1221,13 +1255,13 @@ curl -X POST http://localhost:3001/api/webhooks/stripe \
 
 ## Risk Register
 
-| Risk | Impact | Mitigation |
-|---|---|---|
-| `isCreationLocked` migration breaks existing org queries | High | Default is `false`, all existing code still works |
-| Stripe API rate limits during sync job | Medium | `limit: 100` per page + pagination is conservative; Stripe allows 100 req/s |
-| Replay attack alert false-positives at launch | Low | Threshold is 5x hourly baseline; new installs with 0 baseline capped to avoid noise |
-| `handleSubscriptionUpdated` transaction size increase | Low | Adding `organization.update` is one extra SQL; within SQLite transaction safe limits |
-| `checkUsageLimit` extra DB query for org lock check | Low | One `findUnique` per write request; indexed on PK, negligible overhead |
+| Risk                                                     | Impact | Mitigation                                                                           |
+| -------------------------------------------------------- | ------ | ------------------------------------------------------------------------------------ |
+| `isCreationLocked` migration breaks existing org queries | High   | Default is `false`, all existing code still works                                    |
+| Stripe API rate limits during sync job                   | Medium | `limit: 100` per page + pagination is conservative; Stripe allows 100 req/s          |
+| Replay attack alert false-positives at launch            | Low    | Threshold is 5x hourly baseline; new installs with 0 baseline capped to avoid noise  |
+| `handleSubscriptionUpdated` transaction size increase    | Low    | Adding `organization.update` is one extra SQL; within SQLite transaction safe limits |
+| `checkUsageLimit` extra DB query for org lock check      | Low    | One `findUnique` per write request; indexed on PK, negligible overhead               |
 
 ---
 

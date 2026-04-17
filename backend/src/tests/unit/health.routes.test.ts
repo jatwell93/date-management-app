@@ -30,7 +30,13 @@ jest.mock('../../database/database-factory', () => ({
 
 jest.mock('../../middleware/auth.middleware', () => ({
   authenticateToken: (_req: unknown, _res: unknown, next: () => void) => next(),
-  requireManager: (_req: unknown, _res: unknown, next: () => void) => next(),
+}));
+
+jest.mock('../../middleware/requireOrgRole', () => ({
+  requireOrgRole:
+    (...allowedRoles: string[]) =>
+    (_req: unknown, _res: unknown, next: () => void) =>
+      next(),
 }));
 
 import healthRouter, {

@@ -1,9 +1,9 @@
 /**
  * Dashboard Handler - Multi-Tenant Safe
- * 
- * Aggregates organization-scoped metrics 
+ *
+ * Aggregates organization-scoped metrics
  * All queries filter by organizationId to ensure data isolation.
- * 
+ *
  * All database operations include automatic retry logic for transient failures.
  */
 
@@ -18,13 +18,10 @@ export interface DashboardData {
   expiredItems: number;
 }
 
-export async function getDashboardData(
-  env: Env,
-  organizationId: string
-): Promise<DashboardData> {
+export async function getDashboardData(env: Env, organizationId: string): Promise<DashboardData> {
   return withNeonRetry(async () => {
     const sql = neon(getConnectionString(env));
-    
+
     // All queries include organizationId filter for isolation
     const [productsRes, inventoryRes, expiringRes, expiredRes] = await Promise.all([
       sql`SELECT COUNT(*) as count FROM products WHERE organization_id = ${organizationId}`,
@@ -47,14 +44,14 @@ export async function getDashboardData(
         WHERE p.organization_id = ${organizationId}
           AND i.expiry_date IS NOT NULL
           AND i.expiry_date <= CURRENT_DATE
-      `
+      `,
     ]);
-    
+
     return {
       totalProducts: ((productsRes[0] as any).count as number) ?? 0,
       totalInventoryItems: ((inventoryRes[0] as any).count as number) ?? 0,
       expiringItems: ((expiringRes[0] as any).count as number) ?? 0,
-      expiredItems: ((expiredRes[0] as any).count as number) ?? 0
+      expiredItems: ((expiredRes[0] as any).count as number) ?? 0,
     };
   });
 }

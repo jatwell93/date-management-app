@@ -18,10 +18,10 @@ This guide covers database migrations for the Date Management App, supporting bo
 
 The application uses a dual-database strategy:
 
-| Environment | Database | Schema File | Connection |
-|-------------|----------|-------------|------------|
-| Development | SQLite | `schema.prisma` | File-based |
-| Production | Neon PostgreSQL | `production/schema.prisma` | Connection URL |
+| Environment | Database        | Schema File                | Connection     |
+| ----------- | --------------- | -------------------------- | -------------- |
+| Development | SQLite          | `schema.prisma`            | File-based     |
+| Production  | Neon PostgreSQL | `production/schema.prisma` | Connection URL |
 
 Both schemas define identical models - only the datasource provider differs.
 
@@ -126,6 +126,7 @@ main (production)
 ### Creating a Branch
 
 **Via Neon Dashboard:**
+
 1. Go to your Neon project
 2. Click **Branches** → **Create Branch**
 3. Name: `dev/feature-name`
@@ -133,6 +134,7 @@ main (production)
 5. Click **Create**
 
 **Via Neon CLI:**
+
 ```bash
 neonctl branches create --name dev/feature-xyz --project-id your-project-id
 ```
@@ -164,6 +166,7 @@ After successful promotion, delete the development branch:
 **Via Dashboard:** Branches → Select branch → Delete
 
 **Via CLI:**
+
 ```bash
 neonctl branches delete dev/feature-xyz --project-id your-project-id
 ```
@@ -175,6 +178,7 @@ neonctl branches delete dev/feature-xyz --project-id your-project-id
 ### Adding a New Field
 
 1. **Update Prisma Schema**
+
    ```prisma
    // schema.prisma AND production/schema.prisma
    model Product {
@@ -184,6 +188,7 @@ neonctl branches delete dev/feature-xyz --project-id your-project-id
    ```
 
 2. **Test Locally (SQLite)**
+
    ```bash
    npx prisma migrate dev --name add-new-field
    npm test
@@ -193,12 +198,14 @@ neonctl branches delete dev/feature-xyz --project-id your-project-id
    - Create `dev/add-new-field` branch in Neon dashboard
 
 4. **Test on Branch**
+
    ```bash
    DATABASE_URL="branch-url" npx prisma db push --schema=./prisma/production/schema.prisma
    DATABASE_URL="branch-url" npm test
    ```
 
 5. **Apply to Production**
+
    ```bash
    DATABASE_URL="production-url" npx prisma db push --schema=./prisma/production/schema.prisma
    ```
@@ -237,14 +244,17 @@ cp database.sqlite.backup database.sqlite
 ### Neon (Production)
 
 **Option 1: Point-in-Time Recovery (PITR)**
+
 - Neon supports PITR within retention window
 - Dashboard → Project → Restore → Select timestamp
 
 **Option 2: Branch Rollback**
+
 - If using branches, simply delete the problematic branch
 - Production remains unaffected
 
 **Option 3: Manual Rollback**
+
 ```sql
 -- Generate rollback SQL
 -- Reverse the migration manually
@@ -328,6 +338,7 @@ Branches:
 ### "Schema drift"
 
 If production schema differs from Prisma schema:
+
 ```bash
 # Generate diff to see what's different
 npx prisma migrate diff --from-url "$DATABASE_URL" --to-schema-datamodel ./prisma/production/schema.prisma --script

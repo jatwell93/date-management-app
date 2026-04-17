@@ -3,6 +3,7 @@
 ## Context
 
 **Current State**: The application is architected as a single-tenant system with:
+
 - Zero tenant isolation at database layer (no `organizationId` on any model)
 - JWT tokens containing only `{userId, role}` (no tenant context)
 - All routes returning global data with no tenant filtering
@@ -10,6 +11,7 @@
 - No subscription or billing model
 
 **Target State**: Multi-tenant SaaS platform with:
+
 - Pharmacy-level tenant isolation (one pharmacy = one organization)
 - Four subscription tiers: Starter ($99/mo), Professional ($249/mo), Premium ($499/mo), Concierge ($1,099/mo)
 - Stripe-based billing with subscription lifecycle management
@@ -17,12 +19,14 @@
 - Storage and user limits enforced per organization
 
 **Stakeholders**:
+
 - Development team (implementation)
 - Pharmacy customers (end users)
 - Finance/billing (revenue tracking, churn management)
 - Support team (tier-appropriate support workflows)
 
 **Constraints**:
+
 - Single concurrent user per pharmacy location expected (UI/UX optimized for this)
 - Must support trial system (14 days, auto-downgrade to Starter if not converted)
 - Stripe as billing provider (already decided)
@@ -31,6 +35,7 @@
 ## Goals / Non-Goals
 
 **Goals:**
+
 1. **Define monetization model**: Lock down pricing tiers, features per tier, revenue projections
 2. **Design multi-tenant data model**: Schema changes to support organization-level tenant isolation
 3. **Stripe integration architecture**: Products, prices, webhooks, subscription lifecycle
@@ -39,6 +44,7 @@
 6. **Migration planning**: Path from single-tenant to multi-tenant without data loss
 
 **Non-Goals:**
+
 - Full implementation (this is planning/design phase)
 - UI/UX design for subscription management screens (implementation concern)
 - Add-on features (AI pricing, compliance reporting) — deferred to Phase 2
@@ -51,14 +57,15 @@
 
 **Decision**: Adopt 4-tier subscription model with service-based differentiation
 
-| Tier | Price (Monthly) | SKUs | Users | Support | Key Features |
-|------|----------------|------|-------|---------|--------------|
-| Starter | $99 | 500 | 1 | Email (48h) | Manual tracking, weekly reports |
-| Professional | $249 | 2,000 | 3 | Email (24h) | Daily alerts, basic automation |
-| Premium | $499 | Unlimited | 10 | Phone (24h) | Real-time alerts, API access, POS integration |
-| Concierge | $1,099 | Unlimited | 10 | Dedicated (2-4h) | Premium + CSM, 5h onboarding, quarterly reviews |
+| Tier         | Price (Monthly) | SKUs      | Users | Support          | Key Features                                    |
+| ------------ | --------------- | --------- | ----- | ---------------- | ----------------------------------------------- |
+| Starter      | $99             | 500       | 1     | Email (48h)      | Manual tracking, weekly reports                 |
+| Professional | $249            | 2,000     | 3     | Email (24h)      | Daily alerts, basic automation                  |
+| Premium      | $499            | Unlimited | 10    | Phone (24h)      | Real-time alerts, API access, POS integration   |
+| Concierge    | $1,099          | Unlimited | 10    | Dedicated (2-4h) | Premium + CSM, 5h onboarding, quarterly reviews |
 
 **Rationale**:
+
 - **Predictable revenue**: Generates $285K ARR at 100 customers vs freemium models which are harder to forecast
 - **Clear upgrade path**: Feature-gating creates natural progression (SKU limits → user limits → automation → service)
 - **Service defensibility**: Concierge tier (dedicated CSM, onboarding) is hard for competitors to replicate
@@ -66,11 +73,13 @@
 - **Market validation**: Mirrors successful B2B SaaS models like Deputy
 
 **Alternatives Considered**:
+
 - **Freemium with storage overages**: Rejected due to unpredictable revenue and storage cost correlation risk
 - **Flat $X/pharmacy pricing**: Rejected due to lack of upsell path for growing customers
 - **Usage-based pricing**: Rejected due to complexity in billing and customer preference for predictable costs
 
 **Financial Model**:
+
 - Break-even: ~40 customers
 - Target ARR at 100 customers: $285K
 - Gross margin: 63%
@@ -134,17 +143,20 @@ CREATE TABLE organization_usage (
 ```
 
 **Schema Changes for Existing Models**:
+
 - Add `organization_id UUID NOT NULL REFERENCES organizations(id)` to: Product, InventoryItem, StoreArea, User, Upload, AuditLog, ItemTransaction, ExpiredItemTransaction
 - Add composite indexes: `(organization_id, created_at)`, `(organization_id, sku)`, `(organization_id, barcode)`
 - Add unique constraints that include organizationId: `UNIQUE(organization_id, sku)` on Product
 
 **Rationale**:
+
 - One pharmacy location = one organization (single concurrent user expected)
 - Organization is primary tenant boundary (all data scoped to org)
 - Subscription state stored with organization (not user)
 - Feature limits enforced at organization level (not user level)
 
 **Alternatives Considered**:
+
 - **Multi-location organizations**: Rejected for MVP (adds complexity, can add later as Enterprise feature)
 - **User-level subscriptions**: Rejected (doesn't match pharmacy business model where location subscribes, not individual staff)
 - **Workspace model**: Rejected (semantically unclear; "pharmacy" or "organization" is clearer)
@@ -154,6 +166,7 @@ CREATE TABLE organization_usage (
 **Decision**: Extend JWT payload to include `organizationId` and validate tenant context on all requests
 
 **Current TokenPayload** (Single-Tenant):
+
 ```typescript
 interface TokenPayload {
   userId: number;
@@ -162,6 +175,7 @@ interface TokenPayload {
 ```
 
 **New TokenPayload** (Multi-Tenant):
+
 ```typescript
 interface TokenPayload {
   userId: number;
@@ -172,17 +186,20 @@ interface TokenPayload {
 ```
 
 **Auth Flow Changes**:
+
 1. **Login**: User provides PIN → System looks up user → validates organizationId → issues JWT with org context
 2. **Middleware**: Extract `organizationId` from token → validate org exists and is active → store in `req.organizationId`
 3. **Routes**: All queries filter by `req.organizationId`
 4. **Services**: Accept `organizationId` as parameter, enforce in all database queries
 
 **Rationale**:
+
 - Prevents cross-tenant data access at middleware level
 - Enables feature gating based on tier in token (reduces DB lookups)
 - Simplifies route logic (organizationId always available in request)
 
 **Security Considerations**:
+
 - Token tampering prevented by JWT signature verification
 - Organization existence validated on every request (not just during login)
 - Role enforcement scoped to organization (Manager in Org A cannot manage Org B)
@@ -192,6 +209,7 @@ interface TokenPayload {
 **Decision**: Use Stripe Subscriptions with webhook-driven state synchronization
 
 **Stripe Product Structure**:
+
 ```
 Product: Pharmacy Expiry Management SaaS
 ├─ Price: starter_monthly ($99/month)
@@ -214,12 +232,14 @@ Product: Pharmacy Expiry Management SaaS
 | `invoice.payment_failed` | Mark subscription past_due, retry dunning | status=past_due |
 
 **Webhook Reliability Requirements**:
+
 - Idempotent handlers (check `event.id` before processing)
 - Exponential backoff retry logic (up to 72 hours)
 - Dead letter queue for failed events
 - Alert on webhook failure rate >5% in 1-hour window
 
 **Trial System**:
+
 - 14-day trial on Professional tier features
 - No payment method required to start trial
 - Automatic downgrade to Starter on day 15 if not converted
@@ -227,12 +247,14 @@ Product: Pharmacy Expiry Management SaaS
 - One trial per unique email/phone (prevent abuse)
 
 **Rationale**:
+
 - Stripe handles payment complexity (PCI compliance, dunning, invoices)
 - Webhook-driven architecture ensures eventual consistency
 - Trial on Professional tier (not Starter) increases perceived value
 - Automatic downgrade reduces manual support burden
 
 **Alternatives Considered**:
+
 - **Poll Stripe API for subscription status**: Rejected (inefficient, introduces lag, misses real-time events)
 - **Trial on Starter tier**: Rejected (low perceived value, users don't see automation benefits)
 - **Require payment method for trial**: Rejected (higher friction, reduces trial sign-ups)
@@ -242,61 +264,74 @@ Product: Pharmacy Expiry Management SaaS
 **Decision**: Implement feature gates as middleware validators before controller logic
 
 **Feature Gate Implementation Pattern**:
+
 ```typescript
 // Middleware: Check feature access
 export const requireFeature = (featureKey: string) => {
   return async (req: AuthRequest, res: Response, next: NextFunction) => {
     const { organizationId, tierLevel } = req; // From JWT
-    
+
     // Lookup feature flag for this tier
     const feature = await prisma.tierFeatureFlag.findUnique({
-      where: { tier_level_feature_key: { tier_level: tierLevel, feature_key: featureKey } }
+      where: { tier_level_feature_key: { tier_level: tierLevel, feature_key: featureKey } },
     });
-    
+
     if (!feature || !feature.enabled) {
-      return res.status(403).json({ 
+      return res.status(403).json({
         error: 'Feature not available on your plan',
-        upgradeUrl: '/subscription/upgrade'
+        upgradeUrl: '/subscription/upgrade',
       });
     }
-    
+
     next();
   };
 };
 
 // Usage in routes
-router.get('/api/analytics', authenticateToken, requireFeature('advanced_analytics'), analyticsController);
+router.get(
+  '/api/analytics',
+  authenticateToken,
+  requireFeature('advanced_analytics'),
+  analyticsController,
+);
 ```
 
 **Usage Limit Enforcement** (e.g., SKU limit):
+
 ```typescript
 // Service layer: Check before insert
 export const createProduct = async (organizationId: string, productData: CreateProductDTO) => {
   // Check current usage
-  const usage = await prisma.organizationUsage.findUnique({ where: { organization_id: organizationId } });
-  
+  const usage = await prisma.organizationUsage.findUnique({
+    where: { organization_id: organizationId },
+  });
+
   if (usage.total_skus >= usage.max_skus) {
-    throw new FeatureLimitError(`SKU limit reached (${usage.max_skus}). Upgrade to add more products.`);
+    throw new FeatureLimitError(
+      `SKU limit reached (${usage.max_skus}). Upgrade to add more products.`,
+    );
   }
-  
+
   // Create product and increment counter (transaction)
   return await prisma.$transaction([
     prisma.product.create({ data: { ...productData, organizationId } }),
-    prisma.organizationUsage.update({ 
+    prisma.organizationUsage.update({
       where: { organization_id: organizationId },
-      data: { total_skus: { increment: 1 } }
-    })
+      data: { total_skus: { increment: 1 } },
+    }),
   ]);
 };
 ```
 
 **Rationale**:
+
 - Middleware approach centralizes feature enforcement (DRY)
 - Clear error messages with upgrade CTA improve conversion
 - Usage counters updated atomically (prevents race conditions)
 - Feature flags in database allow dynamic tier changes without code deploy
 
 **Alternatives Considered**:
+
 - **Service-layer checks only**: Rejected (easy to forget, inconsistent enforcement)
 - **Frontend-only feature hiding**: Rejected (insecure, users can bypass)
 - **Hard-coded tier checks in controllers**: Rejected (not DRY, hard to maintain)
@@ -306,6 +341,7 @@ export const createProduct = async (organizationId: string, productData: CreateP
 **Decision**: Phased migration with feature flags and parallel schema migration
 
 **Phase 1: Schema Preparation** (No Breaking Changes)
+
 1. Add `organizations` table
 2. Add `subscription_tiers` table
 3. Add `organization_id` column to all shared models as **NULLABLE** (allows existing data)
@@ -314,34 +350,40 @@ export const createProduct = async (organizationId: string, productData: CreateP
 6. Add indexes on `(organization_id, ...)`
 
 **Phase 2: Auth Layer** (Breaking Change - Coordinate with Users)
+
 1. Update JWT payload to include `organizationId`
 2. Update login flow to validate org membership
 3. Update middleware to extract and validate `organizationId`
 4. **Coordinate downtime**: All users must re-login after deployment
 
 **Phase 3: Route & Service Refactor** (Gradual Rollout)
+
 1. Update all routes to filter by `req.organizationId`
 2. Update all services to accept `organizationId` parameter
 3. Deploy with feature flag (e.g., `MULTI_TENANT_ENABLED=true`)
 4. Monitor for cross-tenant data leaks
 
 **Phase 4: Stripe Integration** (New Feature - No Breaking Changes)
+
 1. Create Stripe products and prices
 2. Implement webhook handlers
 3. Deploy subscription management UI
 4. Enable trial system
 
 **Phase 5: Enforcement** (Make organizationId NOT NULL)
+
 1. Validate all records have `organization_id`
 2. Alter table to set `NOT NULL` constraint
 3. Remove feature flag (multi-tenant now mandatory)
 
 **Rollback Strategy**:
+
 - Each phase can be rolled back independently
 - Database migrations are reversible (down migrations)
 - Feature flags allow disabling multi-tenant mode if critical issues found
 
 **Rationale**:
+
 - Phased approach reduces risk of catastrophic failure
 - NULLABLE organizationId allows data backfill before enforcement
 - Feature flags enable testing in production before full rollout
@@ -349,20 +391,21 @@ export const createProduct = async (organizationId: string, productData: CreateP
 
 ## Risks / Trade-offs
 
-| Risk | Mitigation |
-|------|-----------|
-| **Stripe webhook delivery failures** | Implement idempotent handlers, exponential backoff retry, dead letter queue, alert on >5% failure rate |
-| **Trial abuse** (users creating multiple accounts) | Track by email + phone, implement CAPTCHA on signup, manual review for suspicious patterns |
-| **Feature limit bypass** (users circumventing SKU/user limits) | Enforce limits in service layer with database transactions, audit usage counters daily |
-| **Migration data loss** (existing records not assigned to org) | Pre-migration audit script, verify all records have organizationId before setting NOT NULL |
-| **Cross-tenant data leak** (bug in filtering logic) | Comprehensive multi-tenant tests, audit all queries for organizationId filter, penetration testing |
+| Risk                                                                 | Mitigation                                                                                                          |
+| -------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------- |
+| **Stripe webhook delivery failures**                                 | Implement idempotent handlers, exponential backoff retry, dead letter queue, alert on >5% failure rate              |
+| **Trial abuse** (users creating multiple accounts)                   | Track by email + phone, implement CAPTCHA on signup, manual review for suspicious patterns                          |
+| **Feature limit bypass** (users circumventing SKU/user limits)       | Enforce limits in service layer with database transactions, audit usage counters daily                              |
+| **Migration data loss** (existing records not assigned to org)       | Pre-migration audit script, verify all records have organizationId before setting NOT NULL                          |
+| **Cross-tenant data leak** (bug in filtering logic)                  | Comprehensive multi-tenant tests, audit all queries for organizationId filter, penetration testing                  |
 | **Support overload at launch** (tier-inappropriate support requests) | Tiered support routing (Starter → chatbot/docs, Concierge → dedicated queue), clear tier expectations in onboarding |
-| **Revenue leakage** (trial users not converting) | Monitor conversion funnel daily, automated reminder emails, upgrade discount on day 14 |
-| **Payment failure churn** | Stripe dunning management, automated retry logic, proactive email before card expiry |
+| **Revenue leakage** (trial users not converting)                     | Monitor conversion funnel daily, automated reminder emails, upgrade discount on day 14                              |
+| **Payment failure churn**                                            | Stripe dunning management, automated retry logic, proactive email before card expiry                                |
 
 ## Migration Plan
 
 ### Pre-Deployment (MVP Launch Prep)
+
 - [ ] Set up Stripe account (test mode + production mode)
 - [ ] Create products and prices in Stripe
 - [ ] Configure webhook endpoints (expose `/api/webhooks/stripe`)
@@ -370,6 +413,7 @@ export const createProduct = async (organizationId: string, productData: CreateP
 - [ ] Security audit: payment data handling, PII protection, webhook signature validation
 
 ### Deployment Sequence
+
 1. **Week 1**: Deploy schema changes (organizations, subscription_tiers, organizationId as NULLABLE)
 2. **Week 2**: Backfill organizationId for existing data, verify integrity
 3. **Week 3**: Deploy auth layer changes (JWT with organizationId) - **COORDINATE DOWNTIME**
@@ -379,11 +423,13 @@ export const createProduct = async (organizationId: string, productData: CreateP
 7. **Week 7+**: Remove feature flag, declare multi-tenant GA
 
 ### Rollback Strategy
+
 - Phase 1-2: Revert database migrations
 - Phase 3-4: Disable feature flag (`MULTI_TENANT_ENABLED=false`)
 - Phase 5: Cannot rollback after NOT NULL constraint (point of no return)
 
 ### Success Criteria
+
 - [ ] Zero cross-tenant data access incidents in 30 days post-launch
 - [ ] Trial conversion rate >15%
 - [ ] Webhook delivery success rate >99%

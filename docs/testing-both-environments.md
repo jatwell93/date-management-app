@@ -5,6 +5,7 @@ This document describes how to run tests in both SQLite (development) and Postgr
 ## Overview
 
 The test suite supports two modes:
+
 - **Development Mode (SQLite)**: Uses local SQLite database for fast testing without cloud dependencies
 - **Production Mode (PostgreSQL/Neon)**: Tests against Neon PostgreSQL to verify production compatibility
 
@@ -31,6 +32,7 @@ npm run test:prod
 This runs all tests against Neon PostgreSQL (requires `NEON_CONNECTION_STRING` in `.env`).
 
 **Prerequisites**:
+
 - Valid `NEON_CONNECTION_STRING` in `.env` file
 - Network access to Neon database
 - Database already created and accessible
@@ -51,6 +53,7 @@ This runs the full test suite first in development mode, then in production mode
 ### Environment Variables
 
 **Development** (automatic via `setup-env.ts`):
+
 ```
 DATABASE_URL=file:./test.db
 DATABASE_PATH=./test.db
@@ -59,6 +62,7 @@ TEST_AUTH_BYPASS=true
 ```
 
 **Production** (via `setup-neon-env.ts`):
+
 ```
 DATABASE_URL=<NEON_CONNECTION_STRING>
 NODE_ENV=production
@@ -74,12 +78,16 @@ TEST_AUTH_BYPASS=true
 ## Test Database Migration
 
 ### Development
+
 SQLite migrations are automatically applied to `test.db` via:
+
 - `global.setup`: `test-setup.js` (runs `npx prisma db push`)
 - Database path: `./test.db`
 
 ### Production
+
 PostgreSQL migrations are applied to Neon via:
+
 - `global.setup`: `test-setup-neon.js` (runs `npx prisma db push`)
 - Connection: `NEON_CONNECTION_STRING`
 - Graceful fallback if network unavailable
@@ -87,18 +95,22 @@ PostgreSQL migrations are applied to Neon via:
 ## Troubleshooting
 
 ### Production Tests Fail with Network Error
+
 **Issue**: `Failed to migrate Neon test database`
 
-**Solution**: 
+**Solution**:
+
 1. Verify `NEON_CONNECTION_STRING` is set in `.env`
 2. Check network connectivity to Neon
 3. Verify database exists and is accessible
 4. Tests will gracefully fall back to development mode
 
 ### Connection Refused
+
 **Issue**: Tests timeout or connection denied
 
 **Solution**:
+
 1. Verify Neon connection string is valid
 2. Check if Neon database is running
 3. Verify IP whitelisting if applicable
@@ -125,6 +137,7 @@ For GitHub Actions or other CI/CD systems:
 - **Production**: ~38 seconds for full suite (Neon PostgreSQL with 50ms round-trip latency)
 
 Both environments perform similarly due to:
+
 - Serialized test execution (`maxWorkers: 1`)
 - 30 second timeout per test
 - Database seed/cleanup between tests

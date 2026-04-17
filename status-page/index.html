@@ -36,7 +36,15 @@
         margin: 0;
         background: var(--bg);
         color: var(--text);
-        font-family: Inter, system-ui, -apple-system, Segoe UI, Roboto, Helvetica, Arial, sans-serif;
+        font-family:
+          Inter,
+          system-ui,
+          -apple-system,
+          Segoe UI,
+          Roboto,
+          Helvetica,
+          Arial,
+          sans-serif;
       }
 
       .wrap {
@@ -73,7 +81,8 @@
         margin-top: 14px;
       }
 
-      input, button {
+      input,
+      button {
         border-radius: 8px;
         border: 1px solid var(--border);
         background: transparent;
@@ -100,9 +109,15 @@
         background: var(--unknown);
       }
 
-      .dot.ok { background: var(--ok); }
-      .dot.warn { background: var(--warn); }
-      .dot.down { background: var(--down); }
+      .dot.ok {
+        background: var(--ok);
+      }
+      .dot.warn {
+        background: var(--warn);
+      }
+      .dot.down {
+        background: var(--down);
+      }
 
       .services {
         display: grid;
@@ -186,7 +201,7 @@
     <main class="wrap">
       <section id="incidentBanner" class="incident-banner operational">
         <strong id="incidentTitle">All Systems Operational</strong>
-        <div id="incidentMessage" class="sub" style="margin-top: 6px;">No active incident.</div>
+        <div id="incidentMessage" class="sub" style="margin-top: 6px">No active incident.</div>
       </section>
 
       <section class="card header">
@@ -194,7 +209,11 @@
         <div class="sub">Live status from your Cloudflare Worker health endpoint.</div>
 
         <div class="controls">
-          <input id="healthUrl" type="text" placeholder="https://api.yourdomain.com/health?deep=true" />
+          <input
+            id="healthUrl"
+            type="text"
+            placeholder="https://api.yourdomain.com/health?deep=true"
+          />
           <button id="refreshBtn" type="button">Refresh</button>
           <button id="saveBtn" type="button">Save URL</button>
         </div>
@@ -210,7 +229,11 @@
             <option value="degraded">Degraded</option>
             <option value="outage">Outage</option>
           </select>
-          <input id="incidentInput" type="text" placeholder="Optional incident message (e.g. Elevated API latency)" />
+          <input
+            id="incidentInput"
+            type="text"
+            placeholder="Optional incident message (e.g. Elevated API latency)"
+          />
           <button id="incidentBtn" type="button">Set Banner</button>
         </div>
       </section>
@@ -356,28 +379,36 @@
         const isSafeOrigin = safeOrigins.includes(requestOrigin);
 
         if (!isSameOrigin && !isSafeOrigin) {
-          errorEl.textContent = 'URL must be from allowed origins (localhost, 127.0.0.1, or *.pages.dev)';
+          errorEl.textContent =
+            'URL must be from allowed origins (localhost, 127.0.0.1, or *.pages.dev)';
           return;
         }
 
         errorEl.textContent = '';
 
         try {
-          const response = await fetch(url, { headers: { 'Accept': 'application/json' } });
+          const response = await fetch(url, { headers: { Accept: 'application/json' } });
           const data = await response.json();
 
           const overallKind = toKind(data.status);
           overallDot.className = `dot ${overallKind}`;
           overallText.textContent = `${(data.status || 'unknown').toUpperCase()} (${response.status})`;
 
-          const workers = data.checks?.workers || { status: data.status === 'healthy' ? 'pass' : 'unknown' };
+          const workers = data.checks?.workers || {
+            status: data.status === 'healthy' ? 'pass' : 'unknown',
+          };
           const r2 = data.checks?.r2 || { status: 'unknown' };
           const database = data.checks?.database || { status: 'unknown' };
 
-          setStatus(workersStatus, (workers.status || 'unknown').toUpperCase(), toKind(workers.status));
-          workersMeta.textContent = workers.responseTime != null
-            ? `Response: ${workers.responseTime}ms`
-            : 'No response time reported';
+          setStatus(
+            workersStatus,
+            (workers.status || 'unknown').toUpperCase(),
+            toKind(workers.status),
+          );
+          workersMeta.textContent =
+            workers.responseTime != null
+              ? `Response: ${workers.responseTime}ms`
+              : 'No response time reported';
 
           setStatus(r2Status, (r2.status || 'unknown').toUpperCase(), toKind(r2.status));
           r2Meta.textContent = r2.error
@@ -386,7 +417,11 @@
               ? `Response: ${r2.responseTime}ms`
               : 'No deep check data';
 
-          setStatus(dbStatus, (database.status || 'unknown').toUpperCase(), toKind(database.status));
+          setStatus(
+            dbStatus,
+            (database.status || 'unknown').toUpperCase(),
+            toKind(database.status),
+          );
           dbMeta.textContent = database.error
             ? `Error: ${database.error}`
             : database.responseTime != null

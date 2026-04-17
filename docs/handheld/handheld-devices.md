@@ -3,6 +3,7 @@
 This document provides step-by-step configuration instructions for integrating pharmacy PDT (Portable Data Terminal) devices with the date-management app.
 
 The app supports three major vendor platforms via keyboard wedge barcode input:
+
 - **Zebra TC21-HC / TC26-HC** (most common in pharmacy chains)
 - **Honeywell CT45 XP** (alternative enterprise option)
 - **CipherLab RS36** (compact, budget-friendly)
@@ -12,13 +13,16 @@ The app supports three major vendor platforms via keyboard wedge barcode input:
 ## General Concepts
 
 ### Keyboard Wedge Mode
+
 All three vendors emit barcode scans as rapid keyboard inputs (keystrokes) that simulate a physical keyboard. The app detects hardware scans by:
+
 1. Capturing `keydown` events on the document
 2. Timing rapid keystroke sequences (multiple keystrokes within 50ms)
 3. Recognizing an `Enter` key press as the barcode end marker
 4. Distinguishing hardware input from human typing based on timing thresholds
 
 **Key Parameters:**
+
 - **Timing threshold:** 50ms (hardware scans are much faster than human typing)
 - **Deduplication window:** 2 seconds (prevents duplicate submissions on rapid Enter presses)
 - **End marker:** Enter/Return key
@@ -73,28 +77,33 @@ If they're unsure, they can check:
 If your pharmacy IT hasn't explicitly locked down ALL navigation:
 
 **In FRED Mobility itself:**
+
 1. Look for a **Logout** or **Exit** button in FRED's menu
 2. [Check FRED webhelp for logout steps](https://webhelp.fred.com.au/fredoffice/MOB/new-mobility-login-logout.htm)
 3. After logout, see if an **"Exit to Android" or "Back to Home"** option appears
 4. If successful, you'll see the Android home screen
 
 **Authorized admin exit (EHS/SOTI only, if IT provides access):**
+
 1. If the kiosk launcher shows a menu (often three dots), open **Tools** or **Admin Login**
 2. Enter the admin PIN provided by pharmacy IT
 3. Once in admin mode, open **Settings** and switch the default home app to **Quickstep**
 4. Press Home to return to the native Android launcher
 
 **If the admin menu is hidden (model-dependent):**
+
 - Some Zebra configs allow an admin prompt using hardware keys (examples reported in the field: `Shift` + `Blue` + `0`, `Shift` + `Blue` + `Up`, `Shift` + `Blue` + `Space`)
 - These sequences are often disabled in strict kiosk mode and require an admin PIN
 - Do not attempt without authorization from the device owner
 
 **SOTI MobiControl (if in use):**
+
 - Long-press **Back** for 3-5 seconds to reveal an admin login prompt
 - Some builds allow a swipe-up gesture to show the Android nav bar
 - These require admin credentials and may be disabled by policy
 
 **Physical/soft keys (if partially accessible):**
+
 1. If you can see the **navigation bar** (triangle/circle/square) at the bottom:
    - Long-press **Home** (circle) or **Back** (triangle) to bring up recent apps
    - If recent apps opens, you may be able to exit FRED
@@ -114,6 +123,7 @@ If Steps 1 and 2 don't work, you need **pharmacy IT or device admin assistance**
 #### Request Option A: Disable Kiosk Profile Temporarily
 
 **If using Zebra EHS:**
+
 ```
 Can you please:
 1. Disable the EHS profile temporarily so the standard Android launcher is visible, OR
@@ -126,6 +136,7 @@ Reference: https://techdocs.zebra.com/ehs/4-0/guide/features/
 ```
 
 **If using another MDM (Miradore, SOTI, MobileIron, etc.):**
+
 ```
 Can you please:
 1. Use your MDM console to temporarily "exit kiosk mode" on one device, OR
@@ -137,6 +148,7 @@ Reference: https://www.miradore.com/knowledge/android/temporarily-exiting-the-ho
 ```
 
 **If using FRED Mobility:**
+
 ```
 Can you please:
 1. Give us temporary access to the standard Android home screen on one device, so we can install a web app (or access Chrome)?
@@ -205,6 +217,7 @@ sendBroadcast(intent);
 ```
 
 **EHS config file override (device owner / MDM only):**
+
 - If you manage `enterprisehomescreen.xml` under `/enterprise/usr/`, set `<kiosk_mode_enabled>` to `0`
 - Redeploy the config via your MDM and reboot the device
 
@@ -213,12 +226,15 @@ sendBroadcast(intent);
 ## Zebra TC21-HC / TC26-HC (DataWedge)
 
 ### Overview
+
 Zebra devices use **DataWedge**, a native Android keyboard emulation engine that can be configured via:
+
 - **DataWedge UI** (built-in Settings app)
 - **Profile configuration files** (MDM deployment)
 - **Keystroke output** (default for browser apps)
 
 ### Hardware Setup
+
 1. **Enable barcode scanner:**
    - Power on the device
    - Long-press the **Scan button** (physical button on device grip) to enable the barcode scanner module
@@ -266,22 +282,24 @@ Zebra devices use **DataWedge**, a native Android keyboard emulation engine that
 
 ### Troubleshooting: Zebra TC21-HC
 
-| Issue | Symptom | Solution |
-|-------|---------|----------|
-| **No barcode input** | Scan button doesn't respond or app doesn't receive keystrokes | 1. Verify DataWedge profile is **Active** (radio button selected)<br>2. Restart DataWedge app (`Settings > Apps > DataWedge > Force Stop` then reopen)<br>3. Re-scan test barcode after reboot<br>4. Check Zebra MDM logs if device is enterprise-managed |
-| **Partial barcode** | Only first few characters received | Increase keyboard output delay in DataWedge settings (try 100ms intervals) |
-| **Duplicate scans** | Same barcode submitted twice on one scan | Normal behavior—app deduplicates within 2-second window |
-| **Wrong characters** | Barcode has symbols or special chars instead of numbers/letters | Disable barcode transformation in DataWedge; set output to "Raw" or "Standard" (not "Formatted") |
-| **GS1 separators lost** | FNC1 characters stripped (118 in ASCII) | DataWedge may strip control chars; ensure profile outputs raw bytes without interpretation |
+| Issue                   | Symptom                                                         | Solution                                                                                                                                                                                                                                                  |
+| ----------------------- | --------------------------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| **No barcode input**    | Scan button doesn't respond or app doesn't receive keystrokes   | 1. Verify DataWedge profile is **Active** (radio button selected)<br>2. Restart DataWedge app (`Settings > Apps > DataWedge > Force Stop` then reopen)<br>3. Re-scan test barcode after reboot<br>4. Check Zebra MDM logs if device is enterprise-managed |
+| **Partial barcode**     | Only first few characters received                              | Increase keyboard output delay in DataWedge settings (try 100ms intervals)                                                                                                                                                                                |
+| **Duplicate scans**     | Same barcode submitted twice on one scan                        | Normal behavior—app deduplicates within 2-second window                                                                                                                                                                                                   |
+| **Wrong characters**    | Barcode has symbols or special chars instead of numbers/letters | Disable barcode transformation in DataWedge; set output to "Raw" or "Standard" (not "Formatted")                                                                                                                                                          |
+| **GS1 separators lost** | FNC1 characters stripped (118 in ASCII)                         | DataWedge may strip control chars; ensure profile outputs raw bytes without interpretation                                                                                                                                                                |
 
 ---
 
 ## Honeywell CT45 XP (Enterprise Mobility)
 
 ### Overview
+
 Honeywell devices use the **Honeywell Settings** app to configure keyboard output. The configuration is similar to Zebra but accessed through a different UI.
 
 ### Hardware Setup
+
 1. **Enable barcode scanner:**
    - Power on the device
    - Press the **Scan button** (physical button) once to enable barcode mode
@@ -319,19 +337,21 @@ Honeywell devices use the **Honeywell Settings** app to configure keyboard outpu
 
 ### Troubleshooting: Honeywell CT45 XP
 
-| Issue | Symptom | Solution |
-|-------|---------|----------|
-| **Settings locked** | Cannot access Honeywell Settings app | Default password is often `1234` or printed on back of device; contact Honeywell MDM team if locked out |
-| **No keyboard output** | Scan button works (device beeps) but app doesn't receive input | 1. Verify **Keyboard Output** is **Enabled** in settings<br>2. Restart the device (`Settings > About > Power Off` then power on)<br>3. Re-run Honeywell Settings after restart |
-| **Barcode incomplete** | Missing trailing characters | Ensure **Message Terminator** is set to **Enter** and delay is adequate (try 50ms) |
-| **App doesn't detect scan** | Barcode appears in app but doesn't trigger submit | This may be expected—handheld detection waits for Enter key to confirm barcode end |
+| Issue                       | Symptom                                                        | Solution                                                                                                                                                                       |
+| --------------------------- | -------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| **Settings locked**         | Cannot access Honeywell Settings app                           | Default password is often `1234` or printed on back of device; contact Honeywell MDM team if locked out                                                                        |
+| **No keyboard output**      | Scan button works (device beeps) but app doesn't receive input | 1. Verify **Keyboard Output** is **Enabled** in settings<br>2. Restart the device (`Settings > About > Power Off` then power on)<br>3. Re-run Honeywell Settings after restart |
+| **Barcode incomplete**      | Missing trailing characters                                    | Ensure **Message Terminator** is set to **Enter** and delay is adequate (try 50ms)                                                                                             |
+| **App doesn't detect scan** | Barcode appears in app but doesn't trigger submit              | This may be expected—handheld detection waits for Enter key to confirm barcode end                                                                                             |
 
 ---
 
 ## CipherLab RS36 (Reader Config)
 
 ### Overview: Launcher Restrictions
+
 CipherLab devices may run **custom launcher software** or **kiosk mode** that restricts home screen access. Unlike standard Android, RS36 devices in enterprise deployments may have:
+
 - Custom launcher replacing Android home screen
 - Reader Config app pinned as the only accessible application
 - Settings locked with a PIN
@@ -387,6 +407,7 @@ Can you provide the PIN to temporarily access home screen settings?
 ### Installing App on CipherLab (Kiosk vs Unlocked)
 
 **Option 1: Via Home Screen (If Unlocked or PIN Available)**
+
 1. Unlock home screen or use PIN to access settings
 2. Open Play Store or Chrome
 3. Navigate to your app URL
@@ -394,6 +415,7 @@ Can you provide the PIN to temporarily access home screen settings?
 5. Re-lock the device after testing
 
 **Option 2: IT-Managed Installation (Recommended)**
+
 - Ask your CipherLab admin to:
   1. Add your app domain to the whitelist, OR
   2. Create a web launcher / browser shortcut pointing to your app
@@ -421,6 +443,7 @@ Can you provide the PIN to temporarily access home screen settings?
 ---
 
 ### Hardware Setup
+
 1. **Enable barcode scanner:**
    - Power on the device
    - Tap the **Menu** button > **Scanner** to enable the built-in barcode scanner
@@ -469,12 +492,12 @@ Can you provide the PIN to temporarily access home screen settings?
 
 ### Troubleshooting: CipherLab RS36
 
-| Issue | Symptom | Solution |
-|-------|---------|----------|
-| **Reader Config locked** | Cannot open or modify settings | Default PIN is `0000`; if changed, contact CipherLab support or use factory reset |
-| **Keyboard output disabled** | Scan works (device confirms) but app doesn't receive keystrokes | 1. Verify **Keyboard Output** is **Enabled**<br>2. Check **Data format** is set to `Raw` (not `Formatted`)<br>3. Restart device and Reader Config app |
-| **Barcode truncated** | Missing the last few characters | Increase **Message Terminator Delay** (try 100ms) in Reader Config |
-| **App doesn't register scan** | Keystrokes arrive but timing is off | Verify Enter key is set as terminator; the app waits for Enter to confirm barcode end (50ms threshold) |
+| Issue                         | Symptom                                                         | Solution                                                                                                                                              |
+| ----------------------------- | --------------------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------- |
+| **Reader Config locked**      | Cannot open or modify settings                                  | Default PIN is `0000`; if changed, contact CipherLab support or use factory reset                                                                     |
+| **Keyboard output disabled**  | Scan works (device confirms) but app doesn't receive keystrokes | 1. Verify **Keyboard Output** is **Enabled**<br>2. Check **Data format** is set to `Raw` (not `Formatted`)<br>3. Restart device and Reader Config app |
+| **Barcode truncated**         | Missing the last few characters                                 | Increase **Message Terminator Delay** (try 100ms) in Reader Config                                                                                    |
+| **App doesn't register scan** | Keystrokes arrive but timing is off                             | Verify Enter key is set as terminator; the app waits for Enter to confirm barcode end (50ms threshold)                                                |
 
 ---
 
@@ -483,13 +506,16 @@ Can you provide the PIN to temporarily access home screen settings?
 If your pharmacy uses **GS1-128 barcodes** (pharmaceutical industry standard with expiry dates, lot numbers, etc.):
 
 ### What is GS1-128?
+
 GS1-128 is a structured barcode format using **Application Identifiers (AIs)** to encode multiple fields in one scan:
+
 - **(01)** — GTIN-14 (product number)
 - **(10)** — Batch/lot number
 - **(17)** — Expiry date (YYMMDD format)
 - **(21)** — Serial number
 
 Example: `0193939393141710B256092121B256` decodes to:
+
 - GTIN: `937939393141`
 - Batch: `256`
 - Expiry: `2021-09-21`
@@ -498,15 +524,18 @@ Example: `0193939393141710B256092121B256` decodes to:
 ### Device Configuration for GS1-128
 
 **Zebra DataWedge:**
+
 - Set **Symbology** to `Code128` (GS1-128 is a variant)
 - Enable **GS1 Parsing** (if available) to auto-extract AIs
 - Leave **FNC1 character** as default (device outputs ASCII 29 or custom char)
 
 **Honeywell:**
+
 - Set **Barcode type** to `GS1-128` or `Code128` with GS1 mode enabled
 - Configure **AID Mode** if available
 
 **CipherLab:**
+
 - In **Symbology**, select `GS-128` specifically
 - The app's GS1 parser will extract individual fields
 
@@ -544,6 +573,7 @@ Example: `0193939393141710B256092121B256` decodes to:
 ## Support and Contact
 
 If you encounter issues not covered here:
+
 1. **Check the Debug Guide:** [handheld-debug-guide.md](handheld-debug-guide.md)
 2. **Vendor Support:**
    - Zebra: `https://support.zebra.com/` (DataWedge docs)
@@ -557,11 +587,11 @@ If you encounter issues not covered here:
 
 ## Summary Table
 
-| Vendor | Device | Input Method | Config Tool | Keyboard Output | Status |
-|--------|--------|--------------|-------------|-----------------|--------|
-| Zebra | TC21-HC / TC26-HC | Scan button | DataWedge UI | Keyboard HID | ✅ Supported |
-| Honeywell | CT45 XP | Scan button | Honeywell Settings | Keyboard ASCII | ✅ Supported |
-| CipherLab | RS36 | Scan button | Reader Config app | Keyboard USB | ✅ Supported |
+| Vendor    | Device            | Input Method | Config Tool        | Keyboard Output | Status       |
+| --------- | ----------------- | ------------ | ------------------ | --------------- | ------------ |
+| Zebra     | TC21-HC / TC26-HC | Scan button  | DataWedge UI       | Keyboard HID    | ✅ Supported |
+| Honeywell | CT45 XP           | Scan button  | Honeywell Settings | Keyboard ASCII  | ✅ Supported |
+| CipherLab | RS36              | Scan button  | Reader Config app  | Keyboard USB    | ✅ Supported |
 
 ---
 

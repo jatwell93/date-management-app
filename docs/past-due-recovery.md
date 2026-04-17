@@ -20,6 +20,7 @@ When a payment fails, your subscription enters a `past_due` status. This guide e
 ### What Triggers Past Due Status?
 
 Your subscription becomes `past_due` when:
+
 - Automatic renewal payment fails
 - Card on file is declined
 - Card has expired
@@ -29,6 +30,7 @@ Your subscription becomes `past_due` when:
 ### What You'll Receive
 
 When payment fails:
+
 1. **Immediate**: Email notification with payment update link
 2. **Dashboard**: Warning banner appears
 3. **Within 24 hours**: Dunning email with invoice link
@@ -37,6 +39,7 @@ When payment fails:
 ### What Access Do I Keep?
 
 During the 7-day grace period:
+
 - ✅ Full access to all features
 - ✅ Can create new products/inventory
 - ✅ All users remain active
@@ -58,12 +61,14 @@ Day 0   Payment attempt fails
 ```
 
 **System Actions**:
+
 - `invoice.payment_failed` webhook received
 - Subscription status set to `past_due`
 - `pastDueSince` timestamp recorded (first failure only)
 - Dunning email queued via SendGrid
 
 **Your Actions**:
+
 - Check email for payment failure notification
 - Update payment method if card expired
 - Ensure sufficient funds available
@@ -78,18 +83,21 @@ Days 1-7  Stripe auto-retries payment
 ```
 
 **During this period**:
+
 - Your account functions normally
 - Users can continue working
 - All features remain available
 - Stripe automatically retries the payment
 
 **Check Status**:
+
 ```bash
 curl -H "Authorization: Bearer YOUR_TOKEN" \
   https://api.yourdomain.com/api/subscription/status
 ```
 
 Response:
+
 ```json
 {
   "status": "past_due",
@@ -109,6 +117,7 @@ Day 8+    Auto-downgrade to Starter
 ```
 
 **System Actions**:
+
 - Dunning job runs daily at 01:00 UTC
 - Finds subscriptions with `past_due` > 7 days
 - Downgrades to Starter tier
@@ -117,6 +126,7 @@ Day 8+    Auto-downgrade to Starter
 - Logs audit event
 
 **Impact**:
+
 - Tier limits reduced to Starter (500 SKUs, 1 user)
 - If over limits: creation lock applied
 - All data retained
@@ -148,6 +158,7 @@ Day 8+    Auto-downgrade to Starter
 ### Option 3: Contact Support
 
 If you believe the charge was incorrect:
+
 1. Email support@yourdomain.com
 2. Include your organization ID
 3. Describe the payment issue
@@ -158,6 +169,7 @@ If you believe the charge was incorrect:
 ### Option 4: Bank/Card Issues
 
 If your bank is blocking the charge:
+
 1. Contact your bank to authorize charges from "[Your Company Name]"
 2. Update payment method with new card if needed
 3. Request manual retry from support
@@ -169,6 +181,7 @@ If your bank is blocking the charge:
 ### Immediate Effects
 
 If payment wasn't resolved by day 8:
+
 - Account downgraded to Starter tier
 - Limits: 500 SKUs, 1 user, 5,000 inventory items
 - If over any limit: creation lock applied
@@ -176,6 +189,7 @@ If payment wasn't resolved by day 8:
 ### Recovery Steps
 
 **Step 1: Check Current Status**
+
 ```sql
 -- As admin or via API
 SELECT status, tier_level, past_due_since
@@ -187,6 +201,7 @@ WHERE organization_id = 'YOUR_ORG_ID';
 Even if downgraded, update your payment method to prevent future issues.
 
 **Step 3: Upgrade to Restore Access**
+
 1. Go to **Settings → Billing**
 2. Select your previous tier (or new tier)
 3. Complete payment
@@ -197,11 +212,11 @@ Even if downgraded, update your payment method to prevent future issues.
 
 If you were downgraded and are over Starter limits:
 
-| Scenario | Action |
-|----------|--------|
-| Have 501-2000 products | Upgrade to Professional to restore access |
-| Have 2000+ products | Upgrade to Premium or delete excess products |
-| Have 2+ users | Remove extra users OR upgrade to allow multiple users |
+| Scenario               | Action                                                |
+| ---------------------- | ----------------------------------------------------- |
+| Have 501-2000 products | Upgrade to Professional to restore access             |
+| Have 2000+ products    | Upgrade to Premium or delete excess products          |
+| Have 2+ users          | Remove extra users OR upgrade to allow multiple users |
 
 See [Tier Downgrade Guide](./tier-downgrade-guide.md) for detailed resolution steps.
 
@@ -218,6 +233,7 @@ See [Tier Downgrade Guide](./tier-downgrade-guide.md) for detailed resolution st
 ### Monitor Subscription Status
 
 **Set up alerts**:
+
 ```bash
 # Check subscription health weekly
 curl -H "Authorization: Bearer TOKEN" \
@@ -225,6 +241,7 @@ curl -H "Authorization: Bearer TOKEN" \
 ```
 
 **Dashboard metrics** to watch:
+
 - Subscription status (should be "active")
 - Current period end date
 - Payment method expiration
@@ -232,8 +249,9 @@ curl -H "Authorization: Bearer TOKEN" \
 ### Enable Automatic Recovery
 
 Stripe automatically retries failed payments:
+
 - Retry 1: 1 day after failure
-- Retry 2: 3 days after failure  
+- Retry 2: 3 days after failure
 - Retry 3: 5 days after failure
 
 No action needed if funds become available.
@@ -245,15 +263,16 @@ If you need more time (e.g., waiting for funds to clear):
 **Contact support** to request extension.
 
 **Admin can extend** (emergency only):
+
 ```sql
 -- Extend grace period by 3 days
-UPDATE subscription_tiers 
+UPDATE subscription_tiers
 SET past_due_since = datetime('now', '-3 days')
 WHERE organization_id = 'YOUR_ORG_ID';
 
 -- Log the extension
 INSERT INTO audit_logs (organization_id, action, change_description)
-VALUES ('YOUR_ORG_ID', 'grace_period_extended', 
+VALUES ('YOUR_ORG_ID', 'grace_period_extended',
         'Grace period manually extended by support');
 ```
 
@@ -276,6 +295,7 @@ VALUES ('YOUR_ORG_ID', 'grace_period_extended',
 ### Q: Can I prevent auto-downgrade?
 
 **A**: Yes, by resolving the payment issue within 7 days:
+
 - Update payment method
 - Pay open invoice
 - Contact support for extension
@@ -307,6 +327,7 @@ VALUES ('YOUR_ORG_ID', 'grace_period_extended',
 ### Q: What if my bank is blocking the charge?
 
 **A**: Contact your bank to authorize charges from us. You can also:
+
 - Try a different card
 - Use a bank transfer (contact support)
 - Request an invoice for manual payment
@@ -326,8 +347,9 @@ VALUES ('YOUR_ORG_ID', 'grace_period_extended',
 ### Database Schema
 
 **subscription_tiers table**:
+
 ```sql
-SELECT 
+SELECT
   status,              -- 'active', 'past_due', 'canceled', 'trialing'
   past_due_since,      -- timestamp of first failure
   tier_level,          -- 'starter', 'professional', 'premium', 'concierge'
@@ -338,8 +360,9 @@ WHERE organization_id = 'YOUR_ORG_ID';
 ```
 
 **organizations table**:
+
 ```sql
-SELECT 
+SELECT
   is_creation_locked   -- true if over limits after downgrade
 FROM organizations
 WHERE id = 'YOUR_ORG_ID';
@@ -348,18 +371,21 @@ WHERE id = 'YOUR_ORG_ID';
 ### API Endpoints
 
 **Check subscription status**:
+
 ```bash
 GET /api/subscription/status
 Authorization: Bearer TOKEN
 ```
 
 **Update payment method** (via Stripe Checkout):
+
 ```bash
 POST /api/billing/update-payment-method
 Authorization: Bearer TOKEN
 ```
 
 **Get invoices**:
+
 ```bash
 GET /api/billing/invoices
 Authorization: Bearer TOKEN
@@ -369,11 +395,11 @@ Authorization: Bearer TOKEN
 
 The following Stripe webhooks relate to past due:
 
-| Event | Handler | Action |
-|-------|---------|--------|
-| `invoice.payment_failed` | `handleInvoicePaymentFailed` | Sets past_due, sends email |
-| `invoice.payment_succeeded` | (Automatic) | Clears past_due, restores active |
-| `customer.subscription.updated` | `handleSubscriptionUpdated` | Syncs status changes |
+| Event                           | Handler                      | Action                           |
+| ------------------------------- | ---------------------------- | -------------------------------- |
+| `invoice.payment_failed`        | `handleInvoicePaymentFailed` | Sets past_due, sends email       |
+| `invoice.payment_succeeded`     | (Automatic)                  | Clears past_due, restores active |
+| `customer.subscription.updated` | `handleSubscriptionUpdated`  | Syncs status changes             |
 
 ### Dunning Job
 
@@ -382,13 +408,14 @@ The following Stripe webhooks relate to past due:
 **Location**: `backend/src/jobs/dunning.job.ts`
 
 **Logic**:
+
 ```typescript
 // Find subscriptions past due > 7 days
 const expiredPastDue = await prisma.subscriptionTier.findMany({
   where: {
     status: 'past_due',
-    pastDueSince: { lt: new Date(Date.now() - 7 * 24 * 60 * 60 * 1000) }
-  }
+    pastDueSince: { lt: new Date(Date.now() - 7 * 24 * 60 * 60 * 1000) },
+  },
 });
 
 // Auto-downgrade each
@@ -408,4 +435,4 @@ for (const sub of expiredPastDue) {
 
 ---
 
-*Last updated: March 2026*
+_Last updated: March 2026_

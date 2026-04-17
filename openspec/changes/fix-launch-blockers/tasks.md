@@ -66,7 +66,7 @@
 
 ---
 
-## Priority Notes  
+## Priority Notes
 
 **HIGHEST (must complete):** T1 (backend tests) ✅ PARTIALLY DONE - org context fixed, needs test run to verify + T4 (lint) - both gate deployment
 **HIGH (must complete):** T3 (security) ✅ DONE - webhook + JSON.parse fixes applied
@@ -75,10 +75,9 @@
 
 ## Estimated Remaining Time
 
-- T4: 2-3 hours (E2E config fixes)  
+- T4: 2-3 hours (E2E config fixes)
 - T1.7 + T5: 1 hour (run test suite)
 - T2.5: 1.5 hours (if attempting root fix)
 - T3.4 + T3.9: 30 min (add regression test + UBS scan)
 - T6: 30 min (documentation)
 - **Remaining Total: 5-7 hours**
-

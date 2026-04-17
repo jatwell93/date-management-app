@@ -18,11 +18,12 @@ import {
   SelectValue,
 } from '../components/ui/select';
 import { apiService } from '../lib/api.service';
+import { RoleValue, ROLES, ROLE_LABELS, PRODUCTION_ROLES } from '../constants/roles';
 
 interface User {
   id: number;
   pin: string; // In a real app, this would not be exposed
-  role: 'Manager' | 'Team Member';
+  role: RoleValue;
 }
 
 interface UserManagementPageProps {
@@ -32,13 +33,13 @@ interface UserManagementPageProps {
 export function UserManagementPage({ token }: UserManagementPageProps) {
   const form = useForm<{
     pin: string;
-    role: 'Manager' | 'Team Member';
+    role: RoleValue;
     selectedUserForEdit: string;
     selectedUserForDelete: string;
   }>({
     defaultValues: {
       pin: '',
-      role: 'Team Member',
+      role: ROLES.TEAM_MEMBER,
       selectedUserForEdit: '',
       selectedUserForDelete: '',
     },
@@ -68,7 +69,7 @@ export function UserManagementPage({ token }: UserManagementPageProps) {
   }, [fetchUsers]); // Re-fetch users if token changes
 
   const onCreateSubmit = useCallback(
-    async (data: { pin: string; role: 'Manager' | 'Team Member' }) => {
+    async (data: { pin: string; role: RoleValue }) => {
       setError(null);
       setSuccess(null);
       if (!token) {
@@ -93,7 +94,7 @@ export function UserManagementPage({ token }: UserManagementPageProps) {
   );
 
   const onEditSubmit = useCallback(
-    async (data: { role: 'Manager' | 'Team Member' }) => {
+    async (data: { role: RoleValue }) => {
       setError(null);
       setSuccess(null);
       if (!token || selectedUserId === null) {
@@ -181,7 +182,7 @@ export function UserManagementPage({ token }: UserManagementPageProps) {
           <ul className="text-center">
             {users.map((user) => (
               <li key={user.id} className="mb-1">
-                ID: {user.id}, Role: {user.role}
+                ID: {user.id}, Role: {ROLE_LABELS[user.role] ?? user.role}
               </li>
             ))}
           </ul>
@@ -218,8 +219,11 @@ export function UserManagementPage({ token }: UserManagementPageProps) {
                       </SelectTrigger>
                     </FormControl>
                     <SelectContent>
-                      <SelectItem value="Manager">Manager</SelectItem>
-                      <SelectItem value="Team Member">Team Member</SelectItem>
+                      {PRODUCTION_ROLES.map((r) => (
+                        <SelectItem key={r} value={r}>
+                          {ROLE_LABELS[r]}
+                        </SelectItem>
+                      ))}
                     </SelectContent>
                   </Select>
                   <FormMessage />
@@ -264,7 +268,7 @@ export function UserManagementPage({ token }: UserManagementPageProps) {
                     <SelectContent>
                       {users.map((user) => (
                         <SelectItem key={user.id} value={String(user.id)}>
-                          ID: {user.id}, Role: {user.role}
+                          ID: {user.id}, Role: {ROLE_LABELS[user.role] ?? user.role}
                         </SelectItem>
                       ))}
                     </SelectContent>
@@ -287,8 +291,11 @@ export function UserManagementPage({ token }: UserManagementPageProps) {
                         </SelectTrigger>
                       </FormControl>
                       <SelectContent>
-                        <SelectItem value="Manager">Manager</SelectItem>
-                        <SelectItem value="Team Member">Team Member</SelectItem>
+                        {PRODUCTION_ROLES.map((r) => (
+                          <SelectItem key={r} value={r}>
+                            {ROLE_LABELS[r]}
+                          </SelectItem>
+                        ))}
                       </SelectContent>
                     </Select>
                     <FormMessage />
@@ -329,7 +336,7 @@ export function UserManagementPage({ token }: UserManagementPageProps) {
                     <SelectContent>
                       {users.map((user) => (
                         <SelectItem key={user.id} value={String(user.id)}>
-                          ID: {user.id}, Role: {user.role}
+                          ID: {user.id}, Role: {ROLE_LABELS[user.role] ?? user.role}
                         </SelectItem>
                       ))}
                     </SelectContent>

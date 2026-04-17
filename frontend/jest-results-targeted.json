@@ -1,1 +1,866 @@
-{"numFailedTestSuites":4,"numFailedTests":7,"numPassedTestSuites":5,"numPassedTests":84,"numPendingTestSuites":0,"numPendingTests":0,"numRuntimeErrorTestSuites":0,"numTodoTests":0,"numTotalTestSuites":9,"numTotalTests":91,"openHandles":[],"snapshot":{"added":0,"didUpdate":false,"failure":false,"filesAdded":0,"filesRemoved":0,"filesRemovedList":[],"filesUnmatched":0,"filesUpdated":0,"matched":0,"total":0,"unchecked":0,"uncheckedKeysByFile":[],"unmatched":0,"updated":0},"startTime":1772243226517,"success":false,"testResults":[{"assertionResults":[{"ancestorTitles":["Clerk Integration Setup"],"failureMessages":[],"fullName":"Clerk Integration Setup should render ClerkProvider without crashing","location":null,"status":"passed","title":"should render ClerkProvider without crashing"},{"ancestorTitles":["Clerk Integration Setup"],"failureMessages":[],"fullName":"Clerk Integration Setup should throw error if REACT_APP_CLERK_PUBLISHABLE_KEY is missing","location":null,"status":"passed","title":"should throw error if REACT_APP_CLERK_PUBLISHABLE_KEY is missing"}],"endTime":1772243231995,"message":"","name":"C:\\Users\\josha\\date-management-app\\frontend\\src\\tests\\clerk-setup.test.tsx","startTime":1772243229222,"status":"passed","summary":""},{"assertionResults":[{"ancestorTitles":["useHandheldDetection","localStorage override"],"failureMessages":[],"fullName":"useHandheldDetection localStorage override should detect handheld when forceHandheld is set to true","location":null,"status":"passed","title":"should detect handheld when forceHandheld is set to true"},{"ancestorTitles":["useHandheldDetection","localStorage override"],"failureMessages":[],"fullName":"useHandheldDetection localStorage override should not detect handheld when forceHandheld is not set","location":null,"status":"passed","title":"should not detect handheld when forceHandheld is not set"},{"ancestorTitles":["useHandheldDetection","user agent detection"],"failureMessages":[],"fullName":"useHandheldDetection user agent detection should detect Zebra device","location":null,"status":"passed","title":"should detect Zebra device"},{"ancestorTitles":["useHandheldDetection","user agent detection"],"failureMessages":[],"fullName":"useHandheldDetection user agent detection should detect Honeywell device","location":null,"status":"passed","title":"should detect Honeywell device"},{"ancestorTitles":["useHandheldDetection","user agent detection"],"failureMessages":[],"fullName":"useHandheldDetection user agent detection should detect CipherLab device","location":null,"status":"passed","title":"should detect CipherLab device"},{"ancestorTitles":["useHandheldDetection","screen dimension detection"],"failureMessages":[],"fullName":"useHandheldDetection screen dimension detection should detect handheld for small screens","location":null,"status":"passed","title":"should detect handheld for small screens"},{"ancestorTitles":["useHandheldDetection","screen dimension detection"],"failureMessages":[],"fullName":"useHandheldDetection screen dimension detection should not detect handheld for large screens","location":null,"status":"passed","title":"should not detect handheld for large screens"},{"ancestorTitles":["useHandheldDetection","screen dimension detection"],"failureMessages":[],"fullName":"useHandheldDetection screen dimension detection should detect handheld at threshold dimensions","location":null,"status":"passed","title":"should detect handheld at threshold dimensions"},{"ancestorTitles":["useHandheldDetection","refresh function"],"failureMessages":[],"fullName":"useHandheldDetection refresh function should re-run detection when refresh is called","location":null,"status":"passed","title":"should re-run detection when refresh is called"},{"ancestorTitles":["useHandheldDetection","refresh function"],"failureMessages":[],"fullName":"useHandheldDetection refresh function should update screen dimensions when refresh is called","location":null,"status":"passed","title":"should update screen dimensions when refresh is called"},{"ancestorTitles":["useHandheldDetection","initial state"],"failureMessages":[],"fullName":"useHandheldDetection initial state should return false for isHandheld initially when no detection criteria met","location":null,"status":"passed","title":"should return false for isHandheld initially when no detection criteria met"},{"ancestorTitles":["useHandheldDetection","initial state"],"failureMessages":[],"fullName":"useHandheldDetection initial state should initialize with correct screen dimensions","location":null,"status":"passed","title":"should initialize with correct screen dimensions"},{"ancestorTitles":["useHandheldDetection","detection priority"],"failureMessages":[],"fullName":"useHandheldDetection detection priority should prioritize localStorage override over user agent","location":null,"status":"passed","title":"should prioritize localStorage override over user agent"},{"ancestorTitles":["useHandheldDetection","detection priority"],"failureMessages":[],"fullName":"useHandheldDetection detection priority should prioritize user agent over screen dimensions","location":null,"status":"passed","title":"should prioritize user agent over screen dimensions"}],"endTime":1772243232093,"message":"","name":"C:\\Users\\josha\\date-management-app\\frontend\\src\\hooks\\__tests__\\useHandheldDetection.test.ts","startTime":1772243229213,"status":"passed","summary":""},{"assertionResults":[{"ancestorTitles":["OfflineSyncService - Sync Strategy Tests"],"failureMessages":[],"fullName":"OfflineSyncService - Sync Strategy Tests should initialize with real-time strategy as default","location":null,"status":"passed","title":"should initialize with real-time strategy as default"},{"ancestorTitles":["OfflineSyncService - Sync Strategy Tests"],"failureMessages":[],"fullName":"OfflineSyncService - Sync Strategy Tests should allow changing sync strategy and persist to localStorage","location":null,"status":"passed","title":"should allow changing sync strategy and persist to localStorage"},{"ancestorTitles":["OfflineSyncService - Sync Strategy Tests"],"failureMessages":["Error: \u001b[2mexpect(\u001b[22m\u001b[31mreceived\u001b[39m\u001b[2m).\u001b[22mtoBe\u001b[2m(\u001b[22m\u001b[32mexpected\u001b[39m\u001b[2m) // Object.is equality\u001b[22m\n\nExpected: \u001b[32m\"batch\"\u001b[39m\nReceived: \u001b[31m\"manual\"\u001b[39m\n    at Object.<anonymous> (C:\\Users\\josha\\date-management-app\\frontend\\src\\lib\\__tests__\\offline-sync-strategy.test.tsx:92:42)\n    at Promise.then.completed (C:\\Users\\josha\\date-management-app\\frontend\\node_modules\\jest-circus\\build\\utils.js:391:28)\n    at new Promise (<anonymous>)\n    at callAsyncCircusFn (C:\\Users\\josha\\date-management-app\\frontend\\node_modules\\jest-circus\\build\\utils.js:316:10)\n    at _callCircusTest (C:\\Users\\josha\\date-management-app\\frontend\\node_modules\\jest-circus\\build\\run.js:218:40)\n    at processTicksAndRejections (node:internal/process/task_queues:105:5)\n    at _runTest (C:\\Users\\josha\\date-management-app\\frontend\\node_modules\\jest-circus\\build\\run.js:155:3)\n    at _runTestsForDescribeBlock (C:\\Users\\josha\\date-management-app\\frontend\\node_modules\\jest-circus\\build\\run.js:66:9)\n    at _runTestsForDescribeBlock (C:\\Users\\josha\\date-management-app\\frontend\\node_modules\\jest-circus\\build\\run.js:60:9)\n    at run (C:\\Users\\josha\\date-management-app\\frontend\\node_modules\\jest-circus\\build\\run.js:25:3)\n    at runAndTransformResultsToJestFormat (C:\\Users\\josha\\date-management-app\\frontend\\node_modules\\jest-circus\\build\\legacy-code-todo-rewrite\\jestAdapterInit.js:170:21)\n    at jestAdapter (C:\\Users\\josha\\date-management-app\\frontend\\node_modules\\jest-circus\\build\\legacy-code-todo-rewrite\\jestAdapter.js:82:19)\n    at runTestInternal (C:\\Users\\josha\\date-management-app\\frontend\\node_modules\\jest-runner\\build\\runTest.js:389:16)\n    at runTest (C:\\Users\\josha\\date-management-app\\frontend\\node_modules\\jest-runner\\build\\runTest.js:475:34)\n    at Object.worker (C:\\Users\\josha\\date-management-app\\frontend\\node_modules\\jest-runner\\build\\testWorker.js:133:12)"],"fullName":"OfflineSyncService - Sync Strategy Tests should load sync strategy from localStorage on initialization","location":null,"status":"failed","title":"should load sync strategy from localStorage on initialization"},{"ancestorTitles":["OfflineSyncService - Sync Strategy Tests"],"failureMessages":[],"fullName":"OfflineSyncService - Sync Strategy Tests should handle real-time strategy with immediate sync on addOperation","location":null,"status":"passed","title":"should handle real-time strategy with immediate sync on addOperation"},{"ancestorTitles":["OfflineSyncService - Sync Strategy Tests"],"failureMessages":[],"fullName":"OfflineSyncService - Sync Strategy Tests should not trigger immediate sync in batch strategy on addOperation","location":null,"status":"passed","title":"should not trigger immediate sync in batch strategy on addOperation"},{"ancestorTitles":["OfflineSyncService - Sync Strategy Tests"],"failureMessages":[],"fullName":"OfflineSyncService - Sync Strategy Tests should not schedule automatic syncs in manual strategy","location":null,"status":"passed","title":"should not schedule automatic syncs in manual strategy"},{"ancestorTitles":["OfflineSyncService - Sync Strategy Tests"],"failureMessages":[],"fullName":"OfflineSyncService - Sync Strategy Tests should schedule 10-minute intervals for batch strategy","location":null,"status":"passed","title":"should schedule 10-minute intervals for batch strategy"},{"ancestorTitles":["OfflineSyncService - Sync Strategy Tests"],"failureMessages":[],"fullName":"OfflineSyncService - Sync Strategy Tests should schedule 30-second intervals for real-time strategy","location":null,"status":"passed","title":"should schedule 30-second intervals for real-time strategy"},{"ancestorTitles":["OfflineSyncService - Sync Strategy Tests"],"failureMessages":["Error: \u001b[2mexpect(\u001b[22m\u001b[31mjest.fn()\u001b[39m\u001b[2m).\u001b[22mtoHaveBeenCalledWith\u001b[2m(\u001b[22m\u001b[32m...expected\u001b[39m\u001b[2m)\u001b[22m\n\nExpected: \u001b[32m5000\u001b[39m\n\nNumber of calls: \u001b[31m0\u001b[39m\n    at Object.<anonymous> (C:\\Users\\josha\\date-management-app\\frontend\\src\\lib\\__tests__\\offline-sync-strategy.test.tsx:196:22)\n    at processTicksAndRejections (node:internal/process/task_queues:105:5)"],"fullName":"OfflineSyncService - Sync Strategy Tests should retry sync with exponential backoff on failure","location":null,"status":"failed","title":"should retry sync with exponential backoff on failure"}],"endTime":1772243232439,"message":"\u001b[1m\u001b[31m  \u001b[1m● \u001b[22m\u001b[1mOfflineSyncService - Sync Strategy Tests › should load sync strategy from localStorage on initialization\u001b[39m\u001b[22m\n\n    \u001b[2mexpect(\u001b[22m\u001b[31mreceived\u001b[39m\u001b[2m).\u001b[22mtoBe\u001b[2m(\u001b[22m\u001b[32mexpected\u001b[39m\u001b[2m) // Object.is equality\u001b[22m\n\n    Expected: \u001b[32m\"batch\"\u001b[39m\n    Received: \u001b[31m\"manual\"\u001b[39m\n\u001b[2m\u001b[22m\n\u001b[2m    \u001b[0m \u001b[90m 90 |\u001b[39m     \u001b[36mconst\u001b[39m newService \u001b[33m=\u001b[39m require(\u001b[32m'../../lib/offline-sync'\u001b[39m)\u001b[33m.\u001b[39mofflineSyncService\u001b[33m;\u001b[39m\u001b[22m\n\u001b[2m     \u001b[90m 91 |\u001b[39m\u001b[22m\n\u001b[2m    \u001b[31m\u001b[1m>\u001b[22m\u001b[2m\u001b[39m\u001b[90m 92 |\u001b[39m     expect(newService\u001b[33m.\u001b[39mgetSyncStrategy())\u001b[33m.\u001b[39mtoBe(\u001b[32m'batch'\u001b[39m)\u001b[33m;\u001b[39m\u001b[22m\n\u001b[2m     \u001b[90m    |\u001b[39m                                          \u001b[31m\u001b[1m^\u001b[22m\u001b[2m\u001b[39m\u001b[22m\n\u001b[2m     \u001b[90m 93 |\u001b[39m   })\u001b[33m;\u001b[39m\u001b[22m\n\u001b[2m     \u001b[90m 94 |\u001b[39m\u001b[22m\n\u001b[2m     \u001b[90m 95 |\u001b[39m   test(\u001b[32m'should handle real-time strategy with immediate sync on addOperation'\u001b[39m\u001b[33m,\u001b[39m \u001b[36masync\u001b[39m () \u001b[33m=>\u001b[39m {\u001b[0m\u001b[22m\n\u001b[2m\u001b[22m\n\u001b[2m      \u001b[2mat Object.<anonymous> (\u001b[22m\u001b[2m\u001b[0m\u001b[36msrc/lib/__tests__/offline-sync-strategy.test.tsx\u001b[39m\u001b[0m\u001b[2m:92:42)\u001b[22m\u001b[2m\u001b[22m\n\n\u001b[1m\u001b[31m  \u001b[1m● \u001b[22m\u001b[1mOfflineSyncService - Sync Strategy Tests › should retry sync with exponential backoff on failure\u001b[39m\u001b[22m\n\n    \u001b[2mexpect(\u001b[22m\u001b[31mjest.fn()\u001b[39m\u001b[2m).\u001b[22mtoHaveBeenCalledWith\u001b[2m(\u001b[22m\u001b[32m...expected\u001b[39m\u001b[2m)\u001b[22m\n\n    Expected: \u001b[32m5000\u001b[39m\n\n    Number of calls: \u001b[31m0\u001b[39m\n\u001b[2m\u001b[22m\n\u001b[2m    \u001b[0m \u001b[90m 194 |\u001b[39m     \u001b[90m// Verify that delay was called with increasing values (5000ms, then 10000ms)\u001b[39m\u001b[22m\n\u001b[2m     \u001b[90m 195 |\u001b[39m     \u001b[90m// The first call should be 5000ms, the second 10000ms (doubled)\u001b[39m\u001b[22m\n\u001b[2m    \u001b[31m\u001b[1m>\u001b[22m\u001b[2m\u001b[39m\u001b[90m 196 |\u001b[39m     expect(delaySpy)\u001b[33m.\u001b[39mtoHaveBeenCalledWith(\u001b[35m5000\u001b[39m)\u001b[33m;\u001b[39m\u001b[22m\n\u001b[2m     \u001b[90m     |\u001b[39m                      \u001b[31m\u001b[1m^\u001b[22m\u001b[2m\u001b[39m\u001b[22m\n\u001b[2m     \u001b[90m 197 |\u001b[39m\u001b[22m\n\u001b[2m     \u001b[90m 198 |\u001b[39m     delaySpy\u001b[33m.\u001b[39mmockRestore()\u001b[33m;\u001b[39m\u001b[22m\n\u001b[2m     \u001b[90m 199 |\u001b[39m   })\u001b[33m;\u001b[39m\u001b[0m\u001b[22m\n\u001b[2m\u001b[22m\n\u001b[2m      \u001b[2mat Object.<anonymous> (\u001b[22m\u001b[2m\u001b[0m\u001b[36msrc/lib/__tests__/offline-sync-strategy.test.tsx\u001b[39m\u001b[0m\u001b[2m:196:22)\u001b[22m\u001b[2m\u001b[22m\n","name":"C:\\Users\\josha\\date-management-app\\frontend\\src\\lib\\__tests__\\offline-sync-strategy.test.tsx","startTime":1772243229136,"status":"failed","summary":""},{"assertionResults":[{"ancestorTitles":["OfflineSyncService - Sync Strategies","Sync Strategy Management"],"failureMessages":[],"fullName":"OfflineSyncService - Sync Strategies Sync Strategy Management should load default sync strategy from localStorage","location":null,"status":"passed","title":"should load default sync strategy from localStorage"},{"ancestorTitles":["OfflineSyncService - Sync Strategies","Sync Strategy Management"],"failureMessages":[],"fullName":"OfflineSyncService - Sync Strategies Sync Strategy Management should set and persist sync strategy","location":null,"status":"passed","title":"should set and persist sync strategy"},{"ancestorTitles":["OfflineSyncService - Sync Strategies","Sync Strategy Management"],"failureMessages":[],"fullName":"OfflineSyncService - Sync Strategies Sync Strategy Management should get current sync strategy","location":null,"status":"passed","title":"should get current sync strategy"},{"ancestorTitles":["OfflineSyncService - Sync Strategies","Real-time Strategy"],"failureMessages":[],"fullName":"OfflineSyncService - Sync Strategies Real-time Strategy should trigger sync immediately after adding operation in real-time mode","location":null,"status":"passed","title":"should trigger sync immediately after adding operation in real-time mode"},{"ancestorTitles":["OfflineSyncService - Sync Strategies","Real-time Strategy"],"failureMessages":[],"fullName":"OfflineSyncService - Sync Strategies Real-time Strategy should not schedule automatic intervals in real-time mode","location":null,"status":"passed","title":"should not schedule automatic intervals in real-time mode"},{"ancestorTitles":["OfflineSyncService - Sync Strategies","Batch Strategy"],"failureMessages":[],"fullName":"OfflineSyncService - Sync Strategies Batch Strategy should not trigger immediate sync after adding operation in batch mode","location":null,"status":"passed","title":"should not trigger immediate sync after adding operation in batch mode"},{"ancestorTitles":["OfflineSyncService - Sync Strategies","Batch Strategy"],"failureMessages":[],"fullName":"OfflineSyncService - Sync Strategies Batch Strategy should schedule sync every 10 minutes in batch mode","location":null,"status":"passed","title":"should schedule sync every 10 minutes in batch mode"},{"ancestorTitles":["OfflineSyncService - Sync Strategies","Manual Strategy"],"failureMessages":[],"fullName":"OfflineSyncService - Sync Strategies Manual Strategy should not trigger immediate sync after adding operation in manual mode","location":null,"status":"passed","title":"should not trigger immediate sync after adding operation in manual mode"},{"ancestorTitles":["OfflineSyncService - Sync Strategies","Manual Strategy"],"failureMessages":[],"fullName":"OfflineSyncService - Sync Strategies Manual Strategy should not schedule automatic intervals in manual mode","location":null,"status":"passed","title":"should not schedule automatic intervals in manual mode"},{"ancestorTitles":["OfflineSyncService - Sync Strategies","Manual Strategy"],"failureMessages":[],"fullName":"OfflineSyncService - Sync Strategies Manual Strategy should allow manual sync trigger","location":null,"status":"passed","title":"should allow manual sync trigger"},{"ancestorTitles":["OfflineSyncService - Sync Strategies","Strategy Changes"],"failureMessages":[],"fullName":"OfflineSyncService - Sync Strategies Strategy Changes should reschedule sync when strategy changes from batch to manual","location":null,"status":"passed","title":"should reschedule sync when strategy changes from batch to manual"},{"ancestorTitles":["OfflineSyncService - Sync Strategies","Strategy Changes"],"failureMessages":[],"fullName":"OfflineSyncService - Sync Strategies Strategy Changes should reschedule sync when strategy changes from manual to real-time","location":null,"status":"passed","title":"should reschedule sync when strategy changes from manual to real-time"},{"ancestorTitles":["OfflineSyncService - Sync Strategies","Exponential Backoff Retry"],"failureMessages":["Error: \u001b[2mexpect(\u001b[22m\u001b[31mjest.fn()\u001b[39m\u001b[2m).\u001b[22mtoHaveBeenCalledTimes\u001b[2m(\u001b[22m\u001b[32mexpected\u001b[39m\u001b[2m)\u001b[22m\n\nExpected number of calls: \u001b[32m3\u001b[39m\nReceived number of calls: \u001b[31m0\u001b[39m\n    at Object.<anonymous> (C:\\Users\\josha\\date-management-app\\frontend\\src\\tests\\offline-sync.test.ts:232:28)\n    at processTicksAndRejections (node:internal/process/task_queues:105:5)"],"fullName":"OfflineSyncService - Sync Strategies Exponential Backoff Retry should retry failed sync with exponential backoff","location":null,"status":"failed","title":"should retry failed sync with exponential backoff"},{"ancestorTitles":["OfflineSyncService - Sync Strategies","Exponential Backoff Retry"],"failureMessages":[],"fullName":"OfflineSyncService - Sync Strategies Exponential Backoff Retry should stop retrying after max attempts and keep items in queue","location":null,"status":"passed","title":"should stop retrying after max attempts and keep items in queue"}],"endTime":1772243232442,"message":"\u001b[1m\u001b[31m  \u001b[1m● \u001b[22m\u001b[1mOfflineSyncService - Sync Strategies › Exponential Backoff Retry › should retry failed sync with exponential backoff\u001b[39m\u001b[22m\n\n    \u001b[2mexpect(\u001b[22m\u001b[31mjest.fn()\u001b[39m\u001b[2m).\u001b[22mtoHaveBeenCalledTimes\u001b[2m(\u001b[22m\u001b[32mexpected\u001b[39m\u001b[2m)\u001b[22m\n\n    Expected number of calls: \u001b[32m3\u001b[39m\n    Received number of calls: \u001b[31m0\u001b[39m\n\u001b[2m\u001b[22m\n\u001b[2m    \u001b[0m \u001b[90m 230 |\u001b[39m       \u001b[36mawait\u001b[39m syncPromise\u001b[33m;\u001b[39m\u001b[22m\n\u001b[2m     \u001b[90m 231 |\u001b[39m\u001b[22m\n\u001b[2m    \u001b[31m\u001b[1m>\u001b[22m\u001b[2m\u001b[39m\u001b[90m 232 |\u001b[39m       expect(global\u001b[33m.\u001b[39mfetch)\u001b[33m.\u001b[39mtoHaveBeenCalledTimes(\u001b[35m3\u001b[39m)\u001b[33m;\u001b[39m\u001b[22m\n\u001b[2m     \u001b[90m     |\u001b[39m                            \u001b[31m\u001b[1m^\u001b[22m\u001b[2m\u001b[39m\u001b[22m\n\u001b[2m     \u001b[90m 233 |\u001b[39m     })\u001b[33m;\u001b[39m\u001b[22m\n\u001b[2m     \u001b[90m 234 |\u001b[39m\u001b[22m\n\u001b[2m     \u001b[90m 235 |\u001b[39m     it(\u001b[32m'should stop retrying after max attempts and keep items in queue'\u001b[39m\u001b[33m,\u001b[39m \u001b[36masync\u001b[39m () \u001b[33m=>\u001b[39m {\u001b[0m\u001b[22m\n\u001b[2m\u001b[22m\n\u001b[2m      \u001b[2mat Object.<anonymous> (\u001b[22m\u001b[2m\u001b[0m\u001b[36msrc/tests/offline-sync.test.ts\u001b[39m\u001b[0m\u001b[2m:232:28)\u001b[22m\u001b[2m\u001b[22m\n","name":"C:\\Users\\josha\\date-management-app\\frontend\\src\\tests\\offline-sync.test.ts","startTime":1772243229219,"status":"failed","summary":""},{"assertionResults":[{"ancestorTitles":["OfflineSyncService","Queue Management"],"failureMessages":[],"fullName":"OfflineSyncService Queue Management should add operations to the queue","location":null,"status":"passed","title":"should add operations to the queue"},{"ancestorTitles":["OfflineSyncService","Queue Management"],"failureMessages":[],"fullName":"OfflineSyncService Queue Management should retrieve pending operations by entity type","location":null,"status":"passed","title":"should retrieve pending operations by entity type"},{"ancestorTitles":["OfflineSyncService","Queue Management"],"failureMessages":[],"fullName":"OfflineSyncService Queue Management should count pending operations correctly","location":null,"status":"passed","title":"should count pending operations correctly"},{"ancestorTitles":["OfflineSyncService","Queue Management"],"failureMessages":[],"fullName":"OfflineSyncService Queue Management should clear the queue","location":null,"status":"passed","title":"should clear the queue"},{"ancestorTitles":["OfflineSyncService","Synchronization Logic"],"failureMessages":["Error: \u001b[2mexpect(\u001b[22m\u001b[31mreceived\u001b[39m\u001b[2m).\u001b[22mtoBe\u001b[2m(\u001b[22m\u001b[32mexpected\u001b[39m\u001b[2m) // Object.is equality\u001b[22m\n\nExpected: \u001b[32m0\u001b[39m\nReceived: \u001b[31m1\u001b[39m\n    at Object.<anonymous> (C:\\Users\\josha\\date-management-app\\frontend\\src\\lib\\__tests__\\offline-sync.test.ts:106:61)\n    at processTicksAndRejections (node:internal/process/task_queues:105:5)"],"fullName":"OfflineSyncService Synchronization Logic should sync operations when online","location":null,"status":"failed","title":"should sync operations when online"},{"ancestorTitles":["OfflineSyncService","Synchronization Logic"],"failureMessages":[],"fullName":"OfflineSyncService Synchronization Logic should not sync when queue is empty","location":null,"status":"passed","title":"should not sync when queue is empty"},{"ancestorTitles":["OfflineSyncService","Synchronization Logic"],"failureMessages":["Error: \u001b[2mexpect(\u001b[22m\u001b[31mjest.fn()\u001b[39m\u001b[2m).\u001b[22mtoHaveBeenCalledTimes\u001b[2m(\u001b[22m\u001b[32mexpected\u001b[39m\u001b[2m)\u001b[22m\n\nExpected number of calls: \u001b[32m2\u001b[39m\nReceived number of calls: \u001b[31m1\u001b[39m\n    at Object.<anonymous> (C:\\Users\\josha\\date-management-app\\frontend\\src\\lib\\__tests__\\offline-sync.test.ts:128:28)\n    at processTicksAndRejections (node:internal/process/task_queues:105:5)"],"fullName":"OfflineSyncService Synchronization Logic should stop syncing if an operation fails","location":null,"status":"failed","title":"should stop syncing if an operation fails"},{"ancestorTitles":["OfflineSyncService","Synchronization Logic"],"failureMessages":["Error: \u001b[2mexpect(\u001b[22m\u001b[31mreceived\u001b[39m\u001b[2m).\u001b[22mtoBe\u001b[2m(\u001b[22m\u001b[32mexpected\u001b[39m\u001b[2m) // Object.is equality\u001b[22m\n\nExpected: \u001b[32m0\u001b[39m\nReceived: \u001b[31m1\u001b[39m\n    at Object.<anonymous> (C:\\Users\\josha\\date-management-app\\frontend\\src\\lib\\__tests__\\offline-sync.test.ts:149:61)\n    at processTicksAndRejections (node:internal/process/task_queues:105:5)"],"fullName":"OfflineSyncService Synchronization Logic should retry failed operations on next sync","location":null,"status":"failed","title":"should retry failed operations on next sync"},{"ancestorTitles":["OfflineSyncService","Online/Offline Handling"],"failureMessages":[],"fullName":"OfflineSyncService Online/Offline Handling should report correct offline status","location":null,"status":"passed","title":"should report correct offline status"},{"ancestorTitles":["OfflineSyncService","Online/Offline Handling"],"failureMessages":[],"fullName":"OfflineSyncService Online/Offline Handling should trigger sync when coming online","location":null,"status":"passed","title":"should trigger sync when coming online"},{"ancestorTitles":["OfflineSyncService","API Endpoint & Method Mapping"],"failureMessages":[],"fullName":"OfflineSyncService API Endpoint & Method Mapping should send POST request for create","location":null,"status":"passed","title":"should send POST request for create"},{"ancestorTitles":["OfflineSyncService","API Endpoint & Method Mapping"],"failureMessages":[],"fullName":"OfflineSyncService API Endpoint & Method Mapping should send PUT request for update","location":null,"status":"passed","title":"should send PUT request for update"},{"ancestorTitles":["OfflineSyncService","API Endpoint & Method Mapping"],"failureMessages":[],"fullName":"OfflineSyncService API Endpoint & Method Mapping should send DELETE request for delete","location":null,"status":"passed","title":"should send DELETE request for delete"},{"ancestorTitles":["OfflineSyncService","Sync Strategies"],"failureMessages":[],"fullName":"OfflineSyncService Sync Strategies should set and get sync strategy","location":null,"status":"passed","title":"should set and get sync strategy"},{"ancestorTitles":["OfflineSyncService","Sync Strategies"],"failureMessages":[],"fullName":"OfflineSyncService Sync Strategies should trigger sync immediately in real-time mode","location":null,"status":"passed","title":"should trigger sync immediately in real-time mode"},{"ancestorTitles":["OfflineSyncService","Sync Strategies"],"failureMessages":[],"fullName":"OfflineSyncService Sync Strategies should not trigger sync immediately in batch mode","location":null,"status":"passed","title":"should not trigger sync immediately in batch mode"},{"ancestorTitles":["OfflineSyncService","Sync Strategies"],"failureMessages":[],"fullName":"OfflineSyncService Sync Strategies should not trigger sync immediately in manual mode","location":null,"status":"passed","title":"should not trigger sync immediately in manual mode"}],"endTime":1772243232508,"message":"\u001b[1m\u001b[31m  \u001b[1m● \u001b[22m\u001b[1mOfflineSyncService › Synchronization Logic › should sync operations when online\u001b[39m\u001b[22m\n\n    \u001b[2mexpect(\u001b[22m\u001b[31mreceived\u001b[39m\u001b[2m).\u001b[22mtoBe\u001b[2m(\u001b[22m\u001b[32mexpected\u001b[39m\u001b[2m) // Object.is equality\u001b[22m\n\n    Expected: \u001b[32m0\u001b[39m\n    Received: \u001b[31m1\u001b[39m\n\u001b[2m\u001b[22m\n\u001b[2m    \u001b[0m \u001b[90m 104 |\u001b[39m\u001b[22m\n\u001b[2m     \u001b[90m 105 |\u001b[39m       expect(global\u001b[33m.\u001b[39mfetch)\u001b[33m.\u001b[39mtoHaveBeenCalledTimes(\u001b[35m1\u001b[39m)\u001b[33m;\u001b[39m\u001b[22m\n\u001b[2m    \u001b[31m\u001b[1m>\u001b[22m\u001b[2m\u001b[39m\u001b[90m 106 |\u001b[39m       expect(offlineSyncService\u001b[33m.\u001b[39mgetPendingOperationCount())\u001b[33m.\u001b[39mtoBe(\u001b[35m0\u001b[39m)\u001b[33m;\u001b[39m\u001b[22m\n\u001b[2m     \u001b[90m     |\u001b[39m                                                             \u001b[31m\u001b[1m^\u001b[22m\u001b[2m\u001b[39m\u001b[22m\n\u001b[2m     \u001b[90m 107 |\u001b[39m     })\u001b[33m;\u001b[39m\u001b[22m\n\u001b[2m     \u001b[90m 108 |\u001b[39m\u001b[22m\n\u001b[2m     \u001b[90m 109 |\u001b[39m     it(\u001b[32m'should not sync when queue is empty'\u001b[39m\u001b[33m,\u001b[39m \u001b[36masync\u001b[39m () \u001b[33m=>\u001b[39m {\u001b[0m\u001b[22m\n\u001b[2m\u001b[22m\n\u001b[2m      \u001b[2mat Object.<anonymous> (\u001b[22m\u001b[2m\u001b[0m\u001b[36msrc/lib/__tests__/offline-sync.test.ts\u001b[39m\u001b[0m\u001b[2m:106:61)\u001b[22m\u001b[2m\u001b[22m\n\n\u001b[1m\u001b[31m  \u001b[1m● \u001b[22m\u001b[1mOfflineSyncService › Synchronization Logic › should stop syncing if an operation fails\u001b[39m\u001b[22m\n\n    \u001b[2mexpect(\u001b[22m\u001b[31mjest.fn()\u001b[39m\u001b[2m).\u001b[22mtoHaveBeenCalledTimes\u001b[2m(\u001b[22m\u001b[32mexpected\u001b[39m\u001b[2m)\u001b[22m\n\n    Expected number of calls: \u001b[32m2\u001b[39m\n    Received number of calls: \u001b[31m1\u001b[39m\n\u001b[2m\u001b[22m\n\u001b[2m    \u001b[0m \u001b[90m 126 |\u001b[39m       \u001b[36mawait\u001b[39m offlineSyncService\u001b[33m.\u001b[39mperformSync()\u001b[33m;\u001b[39m\u001b[22m\n\u001b[2m     \u001b[90m 127 |\u001b[39m\u001b[22m\n\u001b[2m    \u001b[31m\u001b[1m>\u001b[22m\u001b[2m\u001b[39m\u001b[90m 128 |\u001b[39m       expect(global\u001b[33m.\u001b[39mfetch)\u001b[33m.\u001b[39mtoHaveBeenCalledTimes(\u001b[35m2\u001b[39m)\u001b[33m;\u001b[39m\u001b[22m\n\u001b[2m     \u001b[90m     |\u001b[39m                            \u001b[31m\u001b[1m^\u001b[22m\u001b[2m\u001b[39m\u001b[22m\n\u001b[2m     \u001b[90m 129 |\u001b[39m       expect(offlineSyncService\u001b[33m.\u001b[39mgetPendingOperationCount())\u001b[33m.\u001b[39mtoBe(\u001b[35m2\u001b[39m)\u001b[33m;\u001b[39m \u001b[90m// 2 and 3 remain\u001b[39m\u001b[22m\n\u001b[2m     \u001b[90m 130 |\u001b[39m     })\u001b[33m;\u001b[39m\u001b[22m\n\u001b[2m     \u001b[90m 131 |\u001b[39m\u001b[0m\u001b[22m\n\u001b[2m\u001b[22m\n\u001b[2m      \u001b[2mat Object.<anonymous> (\u001b[22m\u001b[2m\u001b[0m\u001b[36msrc/lib/__tests__/offline-sync.test.ts\u001b[39m\u001b[0m\u001b[2m:128:28)\u001b[22m\u001b[2m\u001b[22m\n\n\u001b[1m\u001b[31m  \u001b[1m● \u001b[22m\u001b[1mOfflineSyncService › Synchronization Logic › should retry failed operations on next sync\u001b[39m\u001b[22m\n\n    \u001b[2mexpect(\u001b[22m\u001b[31mreceived\u001b[39m\u001b[2m).\u001b[22mtoBe\u001b[2m(\u001b[22m\u001b[32mexpected\u001b[39m\u001b[2m) // Object.is equality\u001b[22m\n\n    Expected: \u001b[32m0\u001b[39m\n    Received: \u001b[31m1\u001b[39m\n\u001b[2m\u001b[22m\n\u001b[2m    \u001b[0m \u001b[90m 147 |\u001b[39m       \u001b[36mawait\u001b[39m offlineSyncService\u001b[33m.\u001b[39mperformSync()\u001b[33m;\u001b[39m\u001b[22m\n\u001b[2m     \u001b[90m 148 |\u001b[39m\u001b[22m\n\u001b[2m    \u001b[31m\u001b[1m>\u001b[22m\u001b[2m\u001b[39m\u001b[90m 149 |\u001b[39m       expect(offlineSyncService\u001b[33m.\u001b[39mgetPendingOperationCount())\u001b[33m.\u001b[39mtoBe(\u001b[35m0\u001b[39m)\u001b[33m;\u001b[39m\u001b[22m\n\u001b[2m     \u001b[90m     |\u001b[39m                                                             \u001b[31m\u001b[1m^\u001b[22m\u001b[2m\u001b[39m\u001b[22m\n\u001b[2m     \u001b[90m 150 |\u001b[39m       expect(global\u001b[33m.\u001b[39mfetch)\u001b[33m.\u001b[39mtoHaveBeenCalledTimes(\u001b[35m2\u001b[39m)\u001b[33m;\u001b[39m\u001b[22m\n\u001b[2m     \u001b[90m 151 |\u001b[39m     })\u001b[33m;\u001b[39m\u001b[22m\n\u001b[2m     \u001b[90m 152 |\u001b[39m   })\u001b[33m;\u001b[39m\u001b[0m\u001b[22m\n\u001b[2m\u001b[22m\n\u001b[2m      \u001b[2mat Object.<anonymous> (\u001b[22m\u001b[2m\u001b[0m\u001b[36msrc/lib/__tests__/offline-sync.test.ts\u001b[39m\u001b[0m\u001b[2m:149:61)\u001b[22m\u001b[2m\u001b[22m\n","name":"C:\\Users\\josha\\date-management-app\\frontend\\src\\lib\\__tests__\\offline-sync.test.ts","startTime":1772243229214,"status":"failed","summary":""},{"assertionResults":[{"ancestorTitles":["Scanner"],"failureMessages":[],"fullName":"Scanner renders the scanner input and button","location":null,"status":"passed","title":"renders the scanner input and button"},{"ancestorTitles":["Scanner"],"failureMessages":[],"fullName":"Scanner calls onScan with the entered barcode when button is clicked","location":null,"status":"passed","title":"calls onScan with the entered barcode when button is clicked"},{"ancestorTitles":["Scanner"],"failureMessages":[],"fullName":"Scanner calls onScan with the entered barcode when form is submitted","location":null,"status":"passed","title":"calls onScan with the entered barcode when form is submitted"},{"ancestorTitles":["Scanner"],"failureMessages":[],"fullName":"Scanner does not call onScan if barcode is empty","location":null,"status":"passed","title":"does not call onScan if barcode is empty"},{"ancestorTitles":["Scanner","defaultMode prop"],"failureMessages":[],"fullName":"Scanner defaultMode prop starts in text mode by default","location":null,"status":"passed","title":"starts in text mode by default"},{"ancestorTitles":["Scanner","defaultMode prop"],"failureMessages":[],"fullName":"Scanner defaultMode prop starts in camera mode when defaultMode=\"camera\"","location":null,"status":"passed","title":"starts in camera mode when defaultMode=\"camera\""},{"ancestorTitles":["Scanner","hardware scan integration"],"failureMessages":[],"fullName":"Scanner hardware scan integration initializes useHardwareScan hook","location":null,"status":"passed","title":"initializes useHardwareScan hook"},{"ancestorTitles":["Scanner","hardware scan integration"],"failureMessages":[],"fullName":"Scanner hardware scan integration routes hardware scan through onScan callback as HardwareScanResult","location":null,"status":"passed","title":"routes hardware scan through onScan callback as HardwareScanResult"},{"ancestorTitles":["Scanner","camera mode switching"],"failureMessages":[],"fullName":"Scanner camera mode switching switches to camera mode when Use Camera button is clicked","location":null,"status":"passed","title":"switches to camera mode when Use Camera button is clicked"},{"ancestorTitles":["Scanner","camera mode switching"],"failureMessages":[],"fullName":"Scanner camera mode switching switches back to text mode when Use Text Input button is clicked","location":null,"status":"passed","title":"switches back to text mode when Use Text Input button is clicked"}],"endTime":1772243232531,"message":"","name":"C:\\Users\\josha\\date-management-app\\frontend\\src\\tests\\Scanner.test.tsx","startTime":1772243229220,"status":"passed","summary":""},{"assertionResults":[{"ancestorTitles":["SubscriptionDashboard"],"failureMessages":[],"fullName":"SubscriptionDashboard renders tier badge with correct tier level","location":null,"status":"passed","title":"renders tier badge with correct tier level"},{"ancestorTitles":["SubscriptionDashboard"],"failureMessages":[],"fullName":"SubscriptionDashboard displays usage progress bars for all resources","location":null,"status":"passed","title":"displays usage progress bars for all resources"},{"ancestorTitles":["SubscriptionDashboard"],"failureMessages":[],"fullName":"SubscriptionDashboard shows upgrade CTA for non-premium tiers","location":null,"status":"passed","title":"shows upgrade CTA for non-premium tiers"},{"ancestorTitles":["SubscriptionDashboard"],"failureMessages":[],"fullName":"SubscriptionDashboard displays unlimited for null limits","location":null,"status":"passed","title":"displays unlimited for null limits"},{"ancestorTitles":["SubscriptionDashboard"],"failureMessages":[],"fullName":"SubscriptionDashboard handles API errors gracefully","location":null,"status":"passed","title":"handles API errors gracefully"},{"ancestorTitles":["SubscriptionDashboard"],"failureMessages":[],"fullName":"SubscriptionDashboard shows loading state initially","location":null,"status":"passed","title":"shows loading state initially"},{"ancestorTitles":["SubscriptionDashboard"],"failureMessages":[],"fullName":"SubscriptionDashboard calculates percentage correctly for progress bars","location":null,"status":"passed","title":"calculates percentage correctly for progress bars"}],"endTime":1772243232777,"message":"","name":"C:\\Users\\josha\\date-management-app\\frontend\\src\\components\\__tests__\\SubscriptionDashboard.test.tsx","startTime":1772243229142,"status":"passed","summary":""},{"assertionResults":[{"ancestorTitles":["HandheldScanner"],"failureMessages":[],"fullName":"HandheldScanner renders Scanner with defaultMode=\"camera\" when isHandheld=true","location":null,"status":"passed","title":"renders Scanner with defaultMode=\"camera\" when isHandheld=true"},{"ancestorTitles":["HandheldScanner"],"failureMessages":[],"fullName":"HandheldScanner renders Scanner with defaultMode=\"text\" when isHandheld=false","location":null,"status":"passed","title":"renders Scanner with defaultMode=\"text\" when isHandheld=false"},{"ancestorTitles":["HandheldScanner"],"failureMessages":[],"fullName":"HandheldScanner applies handheld-specific styling classes","location":null,"status":"passed","title":"applies handheld-specific styling classes"},{"ancestorTitles":["HandheldScanner"],"failureMessages":[],"fullName":"HandheldScanner passes onScan prop to Scanner component","location":null,"status":"passed","title":"passes onScan prop to Scanner component"},{"ancestorTitles":["HandheldScanner"],"failureMessages":[],"fullName":"HandheldScanner throws error when used outside HandheldProvider","location":null,"status":"passed","title":"throws error when used outside HandheldProvider"}],"endTime":1772243232820,"message":"","name":"C:\\Users\\josha\\date-management-app\\frontend\\src\\components\\__tests__\\HandheldScanner.test.tsx","startTime":1772243229146,"status":"passed","summary":""},{"assertionResults":[{"ancestorTitles":["CameraScanner"],"failureMessages":[],"fullName":"CameraScanner initializes Quagga on mount","location":null,"status":"passed","title":"initializes Quagga on mount"},{"ancestorTitles":["CameraScanner"],"failureMessages":[],"fullName":"CameraScanner starts scanner when initialization succeeds","location":null,"status":"passed","title":"starts scanner when initialization succeeds"},{"ancestorTitles":["CameraScanner"],"failureMessages":[],"fullName":"CameraScanner handles initialization error","location":null,"status":"passed","title":"handles initialization error"},{"ancestorTitles":["CameraScanner"],"failureMessages":[],"fullName":"CameraScanner calls onDetected when code is scanned","location":null,"status":"passed","title":"calls onDetected when code is scanned"},{"ancestorTitles":["CameraScanner"],"failureMessages":[],"fullName":"CameraScanner stops scanner after detection (after delay)","location":null,"status":"passed","title":"stops scanner after detection (after delay)"},{"ancestorTitles":["CameraScanner"],"failureMessages":[],"fullName":"CameraScanner stops scanner on unmount","location":null,"status":"passed","title":"stops scanner on unmount"},{"ancestorTitles":["CameraScanner"],"failureMessages":["Error: \u001b[2mexpect(\u001b[22m\u001b[31mjest.fn()\u001b[39m\u001b[2m).\u001b[22mtoHaveBeenCalled\u001b[2m()\u001b[22m\n\nExpected number of calls: >= \u001b[32m1\u001b[39m\nReceived number of calls:    \u001b[31m0\u001b[39m\n    at Object.<anonymous> (C:\\Users\\josha\\date-management-app\\frontend\\src\\components\\__tests__\\CameraScanner.test.tsx:156:26)\n    at Promise.then.completed (C:\\Users\\josha\\date-management-app\\frontend\\node_modules\\jest-circus\\build\\utils.js:391:28)\n    at new Promise (<anonymous>)\n    at callAsyncCircusFn (C:\\Users\\josha\\date-management-app\\frontend\\node_modules\\jest-circus\\build\\utils.js:316:10)\n    at _callCircusTest (C:\\Users\\josha\\date-management-app\\frontend\\node_modules\\jest-circus\\build\\run.js:218:40)\n    at processTicksAndRejections (node:internal/process/task_queues:105:5)\n    at _runTest (C:\\Users\\josha\\date-management-app\\frontend\\node_modules\\jest-circus\\build\\run.js:155:3)\n    at _runTestsForDescribeBlock (C:\\Users\\josha\\date-management-app\\frontend\\node_modules\\jest-circus\\build\\run.js:66:9)\n    at _runTestsForDescribeBlock (C:\\Users\\josha\\date-management-app\\frontend\\node_modules\\jest-circus\\build\\run.js:60:9)\n    at run (C:\\Users\\josha\\date-management-app\\frontend\\node_modules\\jest-circus\\build\\run.js:25:3)\n    at runAndTransformResultsToJestFormat (C:\\Users\\josha\\date-management-app\\frontend\\node_modules\\jest-circus\\build\\legacy-code-todo-rewrite\\jestAdapterInit.js:170:21)\n    at jestAdapter (C:\\Users\\josha\\date-management-app\\frontend\\node_modules\\jest-circus\\build\\legacy-code-todo-rewrite\\jestAdapter.js:82:19)\n    at runTestInternal (C:\\Users\\josha\\date-management-app\\frontend\\node_modules\\jest-runner\\build\\runTest.js:389:16)\n    at runTest (C:\\Users\\josha\\date-management-app\\frontend\\node_modules\\jest-runner\\build\\runTest.js:475:34)\n    at Object.worker (C:\\Users\\josha\\date-management-app\\frontend\\node_modules\\jest-runner\\build\\testWorker.js:133:12)"],"fullName":"CameraScanner resets scanner when retry button is clicked","location":null,"status":"failed","title":"resets scanner when retry button is clicked"},{"ancestorTitles":["CameraScanner","continuous mode"],"failureMessages":[],"fullName":"CameraScanner continuous mode does not stop scanner after detection when continuous=true","location":null,"status":"passed","title":"does not stop scanner after detection when continuous=true"},{"ancestorTitles":["CameraScanner","continuous mode"],"failureMessages":[],"fullName":"CameraScanner continuous mode stops scanner after detection when continuous=false (default)","location":null,"status":"passed","title":"stops scanner after detection when continuous=false (default)"},{"ancestorTitles":["CameraScanner","continuous mode"],"failureMessages":[],"fullName":"CameraScanner continuous mode prevents duplicate barcode scans within 2-second window","location":null,"status":"passed","title":"prevents duplicate barcode scans within 2-second window"},{"ancestorTitles":["CameraScanner","continuous mode"],"failureMessages":[],"fullName":"CameraScanner continuous mode allows different barcodes to be scanned immediately","location":null,"status":"passed","title":"allows different barcodes to be scanned immediately"},{"ancestorTitles":["CameraScanner","continuous mode"],"failureMessages":[],"fullName":"CameraScanner continuous mode shows continuous scan mode indicator","location":null,"status":"passed","title":"shows continuous scan mode indicator"},{"ancestorTitles":["CameraScanner","continuous mode"],"failureMessages":[],"fullName":"CameraScanner continuous mode does not show continuous mode indicator when continuous=false","location":null,"status":"passed","title":"does not show continuous mode indicator when continuous=false"}],"endTime":1772243232868,"message":"\u001b[1m\u001b[31m  \u001b[1m● \u001b[22m\u001b[1mCameraScanner › resets scanner when retry button is clicked\u001b[39m\u001b[22m\n\n    \u001b[2mexpect(\u001b[22m\u001b[31mjest.fn()\u001b[39m\u001b[2m).\u001b[22mtoHaveBeenCalled\u001b[2m()\u001b[22m\n\n    Expected number of calls: >= \u001b[32m1\u001b[39m\n    Received number of calls:    \u001b[31m0\u001b[39m\n\u001b[2m\u001b[22m\n\u001b[2m    \u001b[0m \u001b[90m 154 |\u001b[39m\u001b[22m\n\u001b[2m     \u001b[90m 155 |\u001b[39m     \u001b[90m// 4. Verify start called\u001b[39m\u001b[22m\n\u001b[2m    \u001b[31m\u001b[1m>\u001b[22m\u001b[2m\u001b[39m\u001b[90m 156 |\u001b[39m     expect(\u001b[33mQuagga\u001b[39m\u001b[33m.\u001b[39mstart)\u001b[33m.\u001b[39mtoHaveBeenCalled()\u001b[33m;\u001b[39m\u001b[22m\n\u001b[2m     \u001b[90m     |\u001b[39m                          \u001b[31m\u001b[1m^\u001b[22m\u001b[2m\u001b[39m\u001b[22m\n\u001b[2m     \u001b[90m 157 |\u001b[39m\u001b[22m\n\u001b[2m     \u001b[90m 158 |\u001b[39m     jest\u001b[33m.\u001b[39museRealTimers()\u001b[33m;\u001b[39m\u001b[22m\n\u001b[2m     \u001b[90m 159 |\u001b[39m   })\u001b[33m;\u001b[39m\u001b[0m\u001b[22m\n\u001b[2m\u001b[22m\n\u001b[2m      \u001b[2mat Object.<anonymous> (\u001b[22m\u001b[2m\u001b[0m\u001b[36msrc/components/__tests__/CameraScanner.test.tsx\u001b[39m\u001b[0m\u001b[2m:156:26)\u001b[22m\u001b[2m\u001b[22m\n","name":"C:\\Users\\josha\\date-management-app\\frontend\\src\\components\\__tests__\\CameraScanner.test.tsx","startTime":1772243229130,"status":"failed","summary":""}],"wasInterrupted":false}
+{
+  "numFailedTestSuites": 4,
+  "numFailedTests": 7,
+  "numPassedTestSuites": 5,
+  "numPassedTests": 84,
+  "numPendingTestSuites": 0,
+  "numPendingTests": 0,
+  "numRuntimeErrorTestSuites": 0,
+  "numTodoTests": 0,
+  "numTotalTestSuites": 9,
+  "numTotalTests": 91,
+  "openHandles": [],
+  "snapshot": {
+    "added": 0,
+    "didUpdate": false,
+    "failure": false,
+    "filesAdded": 0,
+    "filesRemoved": 0,
+    "filesRemovedList": [],
+    "filesUnmatched": 0,
+    "filesUpdated": 0,
+    "matched": 0,
+    "total": 0,
+    "unchecked": 0,
+    "uncheckedKeysByFile": [],
+    "unmatched": 0,
+    "updated": 0
+  },
+  "startTime": 1772243226517,
+  "success": false,
+  "testResults": [
+    {
+      "assertionResults": [
+        {
+          "ancestorTitles": ["Clerk Integration Setup"],
+          "failureMessages": [],
+          "fullName": "Clerk Integration Setup should render ClerkProvider without crashing",
+          "location": null,
+          "status": "passed",
+          "title": "should render ClerkProvider without crashing"
+        },
+        {
+          "ancestorTitles": ["Clerk Integration Setup"],
+          "failureMessages": [],
+          "fullName": "Clerk Integration Setup should throw error if REACT_APP_CLERK_PUBLISHABLE_KEY is missing",
+          "location": null,
+          "status": "passed",
+          "title": "should throw error if REACT_APP_CLERK_PUBLISHABLE_KEY is missing"
+        }
+      ],
+      "endTime": 1772243231995,
+      "message": "",
+      "name": "C:\\Users\\josha\\date-management-app\\frontend\\src\\tests\\clerk-setup.test.tsx",
+      "startTime": 1772243229222,
+      "status": "passed",
+      "summary": ""
+    },
+    {
+      "assertionResults": [
+        {
+          "ancestorTitles": ["useHandheldDetection", "localStorage override"],
+          "failureMessages": [],
+          "fullName": "useHandheldDetection localStorage override should detect handheld when forceHandheld is set to true",
+          "location": null,
+          "status": "passed",
+          "title": "should detect handheld when forceHandheld is set to true"
+        },
+        {
+          "ancestorTitles": ["useHandheldDetection", "localStorage override"],
+          "failureMessages": [],
+          "fullName": "useHandheldDetection localStorage override should not detect handheld when forceHandheld is not set",
+          "location": null,
+          "status": "passed",
+          "title": "should not detect handheld when forceHandheld is not set"
+        },
+        {
+          "ancestorTitles": ["useHandheldDetection", "user agent detection"],
+          "failureMessages": [],
+          "fullName": "useHandheldDetection user agent detection should detect Zebra device",
+          "location": null,
+          "status": "passed",
+          "title": "should detect Zebra device"
+        },
+        {
+          "ancestorTitles": ["useHandheldDetection", "user agent detection"],
+          "failureMessages": [],
+          "fullName": "useHandheldDetection user agent detection should detect Honeywell device",
+          "location": null,
+          "status": "passed",
+          "title": "should detect Honeywell device"
+        },
+        {
+          "ancestorTitles": ["useHandheldDetection", "user agent detection"],
+          "failureMessages": [],
+          "fullName": "useHandheldDetection user agent detection should detect CipherLab device",
+          "location": null,
+          "status": "passed",
+          "title": "should detect CipherLab device"
+        },
+        {
+          "ancestorTitles": ["useHandheldDetection", "screen dimension detection"],
+          "failureMessages": [],
+          "fullName": "useHandheldDetection screen dimension detection should detect handheld for small screens",
+          "location": null,
+          "status": "passed",
+          "title": "should detect handheld for small screens"
+        },
+        {
+          "ancestorTitles": ["useHandheldDetection", "screen dimension detection"],
+          "failureMessages": [],
+          "fullName": "useHandheldDetection screen dimension detection should not detect handheld for large screens",
+          "location": null,
+          "status": "passed",
+          "title": "should not detect handheld for large screens"
+        },
+        {
+          "ancestorTitles": ["useHandheldDetection", "screen dimension detection"],
+          "failureMessages": [],
+          "fullName": "useHandheldDetection screen dimension detection should detect handheld at threshold dimensions",
+          "location": null,
+          "status": "passed",
+          "title": "should detect handheld at threshold dimensions"
+        },
+        {
+          "ancestorTitles": ["useHandheldDetection", "refresh function"],
+          "failureMessages": [],
+          "fullName": "useHandheldDetection refresh function should re-run detection when refresh is called",
+          "location": null,
+          "status": "passed",
+          "title": "should re-run detection when refresh is called"
+        },
+        {
+          "ancestorTitles": ["useHandheldDetection", "refresh function"],
+          "failureMessages": [],
+          "fullName": "useHandheldDetection refresh function should update screen dimensions when refresh is called",
+          "location": null,
+          "status": "passed",
+          "title": "should update screen dimensions when refresh is called"
+        },
+        {
+          "ancestorTitles": ["useHandheldDetection", "initial state"],
+          "failureMessages": [],
+          "fullName": "useHandheldDetection initial state should return false for isHandheld initially when no detection criteria met",
+          "location": null,
+          "status": "passed",
+          "title": "should return false for isHandheld initially when no detection criteria met"
+        },
+        {
+          "ancestorTitles": ["useHandheldDetection", "initial state"],
+          "failureMessages": [],
+          "fullName": "useHandheldDetection initial state should initialize with correct screen dimensions",
+          "location": null,
+          "status": "passed",
+          "title": "should initialize with correct screen dimensions"
+        },
+        {
+          "ancestorTitles": ["useHandheldDetection", "detection priority"],
+          "failureMessages": [],
+          "fullName": "useHandheldDetection detection priority should prioritize localStorage override over user agent",
+          "location": null,
+          "status": "passed",
+          "title": "should prioritize localStorage override over user agent"
+        },
+        {
+          "ancestorTitles": ["useHandheldDetection", "detection priority"],
+          "failureMessages": [],
+          "fullName": "useHandheldDetection detection priority should prioritize user agent over screen dimensions",
+          "location": null,
+          "status": "passed",
+          "title": "should prioritize user agent over screen dimensions"
+        }
+      ],
+      "endTime": 1772243232093,
+      "message": "",
+      "name": "C:\\Users\\josha\\date-management-app\\frontend\\src\\hooks\\__tests__\\useHandheldDetection.test.ts",
+      "startTime": 1772243229213,
+      "status": "passed",
+      "summary": ""
+    },
+    {
+      "assertionResults": [
+        {
+          "ancestorTitles": ["OfflineSyncService - Sync Strategy Tests"],
+          "failureMessages": [],
+          "fullName": "OfflineSyncService - Sync Strategy Tests should initialize with real-time strategy as default",
+          "location": null,
+          "status": "passed",
+          "title": "should initialize with real-time strategy as default"
+        },
+        {
+          "ancestorTitles": ["OfflineSyncService - Sync Strategy Tests"],
+          "failureMessages": [],
+          "fullName": "OfflineSyncService - Sync Strategy Tests should allow changing sync strategy and persist to localStorage",
+          "location": null,
+          "status": "passed",
+          "title": "should allow changing sync strategy and persist to localStorage"
+        },
+        {
+          "ancestorTitles": ["OfflineSyncService - Sync Strategy Tests"],
+          "failureMessages": [
+            "Error: \u001b[2mexpect(\u001b[22m\u001b[31mreceived\u001b[39m\u001b[2m).\u001b[22mtoBe\u001b[2m(\u001b[22m\u001b[32mexpected\u001b[39m\u001b[2m) // Object.is equality\u001b[22m\n\nExpected: \u001b[32m\"batch\"\u001b[39m\nReceived: \u001b[31m\"manual\"\u001b[39m\n    at Object.<anonymous> (C:\\Users\\josha\\date-management-app\\frontend\\src\\lib\\__tests__\\offline-sync-strategy.test.tsx:92:42)\n    at Promise.then.completed (C:\\Users\\josha\\date-management-app\\frontend\\node_modules\\jest-circus\\build\\utils.js:391:28)\n    at new Promise (<anonymous>)\n    at callAsyncCircusFn (C:\\Users\\josha\\date-management-app\\frontend\\node_modules\\jest-circus\\build\\utils.js:316:10)\n    at _callCircusTest (C:\\Users\\josha\\date-management-app\\frontend\\node_modules\\jest-circus\\build\\run.js:218:40)\n    at processTicksAndRejections (node:internal/process/task_queues:105:5)\n    at _runTest (C:\\Users\\josha\\date-management-app\\frontend\\node_modules\\jest-circus\\build\\run.js:155:3)\n    at _runTestsForDescribeBlock (C:\\Users\\josha\\date-management-app\\frontend\\node_modules\\jest-circus\\build\\run.js:66:9)\n    at _runTestsForDescribeBlock (C:\\Users\\josha\\date-management-app\\frontend\\node_modules\\jest-circus\\build\\run.js:60:9)\n    at run (C:\\Users\\josha\\date-management-app\\frontend\\node_modules\\jest-circus\\build\\run.js:25:3)\n    at runAndTransformResultsToJestFormat (C:\\Users\\josha\\date-management-app\\frontend\\node_modules\\jest-circus\\build\\legacy-code-todo-rewrite\\jestAdapterInit.js:170:21)\n    at jestAdapter (C:\\Users\\josha\\date-management-app\\frontend\\node_modules\\jest-circus\\build\\legacy-code-todo-rewrite\\jestAdapter.js:82:19)\n    at runTestInternal (C:\\Users\\josha\\date-management-app\\frontend\\node_modules\\jest-runner\\build\\runTest.js:389:16)\n    at runTest (C:\\Users\\josha\\date-management-app\\frontend\\node_modules\\jest-runner\\build\\runTest.js:475:34)\n    at Object.worker (C:\\Users\\josha\\date-management-app\\frontend\\node_modules\\jest-runner\\build\\testWorker.js:133:12)"
+          ],
+          "fullName": "OfflineSyncService - Sync Strategy Tests should load sync strategy from localStorage on initialization",
+          "location": null,
+          "status": "failed",
+          "title": "should load sync strategy from localStorage on initialization"
+        },
+        {
+          "ancestorTitles": ["OfflineSyncService - Sync Strategy Tests"],
+          "failureMessages": [],
+          "fullName": "OfflineSyncService - Sync Strategy Tests should handle real-time strategy with immediate sync on addOperation",
+          "location": null,
+          "status": "passed",
+          "title": "should handle real-time strategy with immediate sync on addOperation"
+        },
+        {
+          "ancestorTitles": ["OfflineSyncService - Sync Strategy Tests"],
+          "failureMessages": [],
+          "fullName": "OfflineSyncService - Sync Strategy Tests should not trigger immediate sync in batch strategy on addOperation",
+          "location": null,
+          "status": "passed",
+          "title": "should not trigger immediate sync in batch strategy on addOperation"
+        },
+        {
+          "ancestorTitles": ["OfflineSyncService - Sync Strategy Tests"],
+          "failureMessages": [],
+          "fullName": "OfflineSyncService - Sync Strategy Tests should not schedule automatic syncs in manual strategy",
+          "location": null,
+          "status": "passed",
+          "title": "should not schedule automatic syncs in manual strategy"
+        },
+        {
+          "ancestorTitles": ["OfflineSyncService - Sync Strategy Tests"],
+          "failureMessages": [],
+          "fullName": "OfflineSyncService - Sync Strategy Tests should schedule 10-minute intervals for batch strategy",
+          "location": null,
+          "status": "passed",
+          "title": "should schedule 10-minute intervals for batch strategy"
+        },
+        {
+          "ancestorTitles": ["OfflineSyncService - Sync Strategy Tests"],
+          "failureMessages": [],
+          "fullName": "OfflineSyncService - Sync Strategy Tests should schedule 30-second intervals for real-time strategy",
+          "location": null,
+          "status": "passed",
+          "title": "should schedule 30-second intervals for real-time strategy"
+        },
+        {
+          "ancestorTitles": ["OfflineSyncService - Sync Strategy Tests"],
+          "failureMessages": [
+            "Error: \u001b[2mexpect(\u001b[22m\u001b[31mjest.fn()\u001b[39m\u001b[2m).\u001b[22mtoHaveBeenCalledWith\u001b[2m(\u001b[22m\u001b[32m...expected\u001b[39m\u001b[2m)\u001b[22m\n\nExpected: \u001b[32m5000\u001b[39m\n\nNumber of calls: \u001b[31m0\u001b[39m\n    at Object.<anonymous> (C:\\Users\\josha\\date-management-app\\frontend\\src\\lib\\__tests__\\offline-sync-strategy.test.tsx:196:22)\n    at processTicksAndRejections (node:internal/process/task_queues:105:5)"
+          ],
+          "fullName": "OfflineSyncService - Sync Strategy Tests should retry sync with exponential backoff on failure",
+          "location": null,
+          "status": "failed",
+          "title": "should retry sync with exponential backoff on failure"
+        }
+      ],
+      "endTime": 1772243232439,
+      "message": "\u001b[1m\u001b[31m  \u001b[1m● \u001b[22m\u001b[1mOfflineSyncService - Sync Strategy Tests › should load sync strategy from localStorage on initialization\u001b[39m\u001b[22m\n\n    \u001b[2mexpect(\u001b[22m\u001b[31mreceived\u001b[39m\u001b[2m).\u001b[22mtoBe\u001b[2m(\u001b[22m\u001b[32mexpected\u001b[39m\u001b[2m) // Object.is equality\u001b[22m\n\n    Expected: \u001b[32m\"batch\"\u001b[39m\n    Received: \u001b[31m\"manual\"\u001b[39m\n\u001b[2m\u001b[22m\n\u001b[2m    \u001b[0m \u001b[90m 90 |\u001b[39m     \u001b[36mconst\u001b[39m newService \u001b[33m=\u001b[39m require(\u001b[32m'../../lib/offline-sync'\u001b[39m)\u001b[33m.\u001b[39mofflineSyncService\u001b[33m;\u001b[39m\u001b[22m\n\u001b[2m     \u001b[90m 91 |\u001b[39m\u001b[22m\n\u001b[2m    \u001b[31m\u001b[1m>\u001b[22m\u001b[2m\u001b[39m\u001b[90m 92 |\u001b[39m     expect(newService\u001b[33m.\u001b[39mgetSyncStrategy())\u001b[33m.\u001b[39mtoBe(\u001b[32m'batch'\u001b[39m)\u001b[33m;\u001b[39m\u001b[22m\n\u001b[2m     \u001b[90m    |\u001b[39m                                          \u001b[31m\u001b[1m^\u001b[22m\u001b[2m\u001b[39m\u001b[22m\n\u001b[2m     \u001b[90m 93 |\u001b[39m   })\u001b[33m;\u001b[39m\u001b[22m\n\u001b[2m     \u001b[90m 94 |\u001b[39m\u001b[22m\n\u001b[2m     \u001b[90m 95 |\u001b[39m   test(\u001b[32m'should handle real-time strategy with immediate sync on addOperation'\u001b[39m\u001b[33m,\u001b[39m \u001b[36masync\u001b[39m () \u001b[33m=>\u001b[39m {\u001b[0m\u001b[22m\n\u001b[2m\u001b[22m\n\u001b[2m      \u001b[2mat Object.<anonymous> (\u001b[22m\u001b[2m\u001b[0m\u001b[36msrc/lib/__tests__/offline-sync-strategy.test.tsx\u001b[39m\u001b[0m\u001b[2m:92:42)\u001b[22m\u001b[2m\u001b[22m\n\n\u001b[1m\u001b[31m  \u001b[1m● \u001b[22m\u001b[1mOfflineSyncService - Sync Strategy Tests › should retry sync with exponential backoff on failure\u001b[39m\u001b[22m\n\n    \u001b[2mexpect(\u001b[22m\u001b[31mjest.fn()\u001b[39m\u001b[2m).\u001b[22mtoHaveBeenCalledWith\u001b[2m(\u001b[22m\u001b[32m...expected\u001b[39m\u001b[2m)\u001b[22m\n\n    Expected: \u001b[32m5000\u001b[39m\n\n    Number of calls: \u001b[31m0\u001b[39m\n\u001b[2m\u001b[22m\n\u001b[2m    \u001b[0m \u001b[90m 194 |\u001b[39m     \u001b[90m// Verify that delay was called with increasing values (5000ms, then 10000ms)\u001b[39m\u001b[22m\n\u001b[2m     \u001b[90m 195 |\u001b[39m     \u001b[90m// The first call should be 5000ms, the second 10000ms (doubled)\u001b[39m\u001b[22m\n\u001b[2m    \u001b[31m\u001b[1m>\u001b[22m\u001b[2m\u001b[39m\u001b[90m 196 |\u001b[39m     expect(delaySpy)\u001b[33m.\u001b[39mtoHaveBeenCalledWith(\u001b[35m5000\u001b[39m)\u001b[33m;\u001b[39m\u001b[22m\n\u001b[2m     \u001b[90m     |\u001b[39m                      \u001b[31m\u001b[1m^\u001b[22m\u001b[2m\u001b[39m\u001b[22m\n\u001b[2m     \u001b[90m 197 |\u001b[39m\u001b[22m\n\u001b[2m     \u001b[90m 198 |\u001b[39m     delaySpy\u001b[33m.\u001b[39mmockRestore()\u001b[33m;\u001b[39m\u001b[22m\n\u001b[2m     \u001b[90m 199 |\u001b[39m   })\u001b[33m;\u001b[39m\u001b[0m\u001b[22m\n\u001b[2m\u001b[22m\n\u001b[2m      \u001b[2mat Object.<anonymous> (\u001b[22m\u001b[2m\u001b[0m\u001b[36msrc/lib/__tests__/offline-sync-strategy.test.tsx\u001b[39m\u001b[0m\u001b[2m:196:22)\u001b[22m\u001b[2m\u001b[22m\n",
+      "name": "C:\\Users\\josha\\date-management-app\\frontend\\src\\lib\\__tests__\\offline-sync-strategy.test.tsx",
+      "startTime": 1772243229136,
+      "status": "failed",
+      "summary": ""
+    },
+    {
+      "assertionResults": [
+        {
+          "ancestorTitles": ["OfflineSyncService - Sync Strategies", "Sync Strategy Management"],
+          "failureMessages": [],
+          "fullName": "OfflineSyncService - Sync Strategies Sync Strategy Management should load default sync strategy from localStorage",
+          "location": null,
+          "status": "passed",
+          "title": "should load default sync strategy from localStorage"
+        },
+        {
+          "ancestorTitles": ["OfflineSyncService - Sync Strategies", "Sync Strategy Management"],
+          "failureMessages": [],
+          "fullName": "OfflineSyncService - Sync Strategies Sync Strategy Management should set and persist sync strategy",
+          "location": null,
+          "status": "passed",
+          "title": "should set and persist sync strategy"
+        },
+        {
+          "ancestorTitles": ["OfflineSyncService - Sync Strategies", "Sync Strategy Management"],
+          "failureMessages": [],
+          "fullName": "OfflineSyncService - Sync Strategies Sync Strategy Management should get current sync strategy",
+          "location": null,
+          "status": "passed",
+          "title": "should get current sync strategy"
+        },
+        {
+          "ancestorTitles": ["OfflineSyncService - Sync Strategies", "Real-time Strategy"],
+          "failureMessages": [],
+          "fullName": "OfflineSyncService - Sync Strategies Real-time Strategy should trigger sync immediately after adding operation in real-time mode",
+          "location": null,
+          "status": "passed",
+          "title": "should trigger sync immediately after adding operation in real-time mode"
+        },
+        {
+          "ancestorTitles": ["OfflineSyncService - Sync Strategies", "Real-time Strategy"],
+          "failureMessages": [],
+          "fullName": "OfflineSyncService - Sync Strategies Real-time Strategy should not schedule automatic intervals in real-time mode",
+          "location": null,
+          "status": "passed",
+          "title": "should not schedule automatic intervals in real-time mode"
+        },
+        {
+          "ancestorTitles": ["OfflineSyncService - Sync Strategies", "Batch Strategy"],
+          "failureMessages": [],
+          "fullName": "OfflineSyncService - Sync Strategies Batch Strategy should not trigger immediate sync after adding operation in batch mode",
+          "location": null,
+          "status": "passed",
+          "title": "should not trigger immediate sync after adding operation in batch mode"
+        },
+        {
+          "ancestorTitles": ["OfflineSyncService - Sync Strategies", "Batch Strategy"],
+          "failureMessages": [],
+          "fullName": "OfflineSyncService - Sync Strategies Batch Strategy should schedule sync every 10 minutes in batch mode",
+          "location": null,
+          "status": "passed",
+          "title": "should schedule sync every 10 minutes in batch mode"
+        },
+        {
+          "ancestorTitles": ["OfflineSyncService - Sync Strategies", "Manual Strategy"],
+          "failureMessages": [],
+          "fullName": "OfflineSyncService - Sync Strategies Manual Strategy should not trigger immediate sync after adding operation in manual mode",
+          "location": null,
+          "status": "passed",
+          "title": "should not trigger immediate sync after adding operation in manual mode"
+        },
+        {
+          "ancestorTitles": ["OfflineSyncService - Sync Strategies", "Manual Strategy"],
+          "failureMessages": [],
+          "fullName": "OfflineSyncService - Sync Strategies Manual Strategy should not schedule automatic intervals in manual mode",
+          "location": null,
+          "status": "passed",
+          "title": "should not schedule automatic intervals in manual mode"
+        },
+        {
+          "ancestorTitles": ["OfflineSyncService - Sync Strategies", "Manual Strategy"],
+          "failureMessages": [],
+          "fullName": "OfflineSyncService - Sync Strategies Manual Strategy should allow manual sync trigger",
+          "location": null,
+          "status": "passed",
+          "title": "should allow manual sync trigger"
+        },
+        {
+          "ancestorTitles": ["OfflineSyncService - Sync Strategies", "Strategy Changes"],
+          "failureMessages": [],
+          "fullName": "OfflineSyncService - Sync Strategies Strategy Changes should reschedule sync when strategy changes from batch to manual",
+          "location": null,
+          "status": "passed",
+          "title": "should reschedule sync when strategy changes from batch to manual"
+        },
+        {
+          "ancestorTitles": ["OfflineSyncService - Sync Strategies", "Strategy Changes"],
+          "failureMessages": [],
+          "fullName": "OfflineSyncService - Sync Strategies Strategy Changes should reschedule sync when strategy changes from manual to real-time",
+          "location": null,
+          "status": "passed",
+          "title": "should reschedule sync when strategy changes from manual to real-time"
+        },
+        {
+          "ancestorTitles": ["OfflineSyncService - Sync Strategies", "Exponential Backoff Retry"],
+          "failureMessages": [
+            "Error: \u001b[2mexpect(\u001b[22m\u001b[31mjest.fn()\u001b[39m\u001b[2m).\u001b[22mtoHaveBeenCalledTimes\u001b[2m(\u001b[22m\u001b[32mexpected\u001b[39m\u001b[2m)\u001b[22m\n\nExpected number of calls: \u001b[32m3\u001b[39m\nReceived number of calls: \u001b[31m0\u001b[39m\n    at Object.<anonymous> (C:\\Users\\josha\\date-management-app\\frontend\\src\\tests\\offline-sync.test.ts:232:28)\n    at processTicksAndRejections (node:internal/process/task_queues:105:5)"
+          ],
+          "fullName": "OfflineSyncService - Sync Strategies Exponential Backoff Retry should retry failed sync with exponential backoff",
+          "location": null,
+          "status": "failed",
+          "title": "should retry failed sync with exponential backoff"
+        },
+        {
+          "ancestorTitles": ["OfflineSyncService - Sync Strategies", "Exponential Backoff Retry"],
+          "failureMessages": [],
+          "fullName": "OfflineSyncService - Sync Strategies Exponential Backoff Retry should stop retrying after max attempts and keep items in queue",
+          "location": null,
+          "status": "passed",
+          "title": "should stop retrying after max attempts and keep items in queue"
+        }
+      ],
+      "endTime": 1772243232442,
+      "message": "\u001b[1m\u001b[31m  \u001b[1m● \u001b[22m\u001b[1mOfflineSyncService - Sync Strategies › Exponential Backoff Retry › should retry failed sync with exponential backoff\u001b[39m\u001b[22m\n\n    \u001b[2mexpect(\u001b[22m\u001b[31mjest.fn()\u001b[39m\u001b[2m).\u001b[22mtoHaveBeenCalledTimes\u001b[2m(\u001b[22m\u001b[32mexpected\u001b[39m\u001b[2m)\u001b[22m\n\n    Expected number of calls: \u001b[32m3\u001b[39m\n    Received number of calls: \u001b[31m0\u001b[39m\n\u001b[2m\u001b[22m\n\u001b[2m    \u001b[0m \u001b[90m 230 |\u001b[39m       \u001b[36mawait\u001b[39m syncPromise\u001b[33m;\u001b[39m\u001b[22m\n\u001b[2m     \u001b[90m 231 |\u001b[39m\u001b[22m\n\u001b[2m    \u001b[31m\u001b[1m>\u001b[22m\u001b[2m\u001b[39m\u001b[90m 232 |\u001b[39m       expect(global\u001b[33m.\u001b[39mfetch)\u001b[33m.\u001b[39mtoHaveBeenCalledTimes(\u001b[35m3\u001b[39m)\u001b[33m;\u001b[39m\u001b[22m\n\u001b[2m     \u001b[90m     |\u001b[39m                            \u001b[31m\u001b[1m^\u001b[22m\u001b[2m\u001b[39m\u001b[22m\n\u001b[2m     \u001b[90m 233 |\u001b[39m     })\u001b[33m;\u001b[39m\u001b[22m\n\u001b[2m     \u001b[90m 234 |\u001b[39m\u001b[22m\n\u001b[2m     \u001b[90m 235 |\u001b[39m     it(\u001b[32m'should stop retrying after max attempts and keep items in queue'\u001b[39m\u001b[33m,\u001b[39m \u001b[36masync\u001b[39m () \u001b[33m=>\u001b[39m {\u001b[0m\u001b[22m\n\u001b[2m\u001b[22m\n\u001b[2m      \u001b[2mat Object.<anonymous> (\u001b[22m\u001b[2m\u001b[0m\u001b[36msrc/tests/offline-sync.test.ts\u001b[39m\u001b[0m\u001b[2m:232:28)\u001b[22m\u001b[2m\u001b[22m\n",
+      "name": "C:\\Users\\josha\\date-management-app\\frontend\\src\\tests\\offline-sync.test.ts",
+      "startTime": 1772243229219,
+      "status": "failed",
+      "summary": ""
+    },
+    {
+      "assertionResults": [
+        {
+          "ancestorTitles": ["OfflineSyncService", "Queue Management"],
+          "failureMessages": [],
+          "fullName": "OfflineSyncService Queue Management should add operations to the queue",
+          "location": null,
+          "status": "passed",
+          "title": "should add operations to the queue"
+        },
+        {
+          "ancestorTitles": ["OfflineSyncService", "Queue Management"],
+          "failureMessages": [],
+          "fullName": "OfflineSyncService Queue Management should retrieve pending operations by entity type",
+          "location": null,
+          "status": "passed",
+          "title": "should retrieve pending operations by entity type"
+        },
+        {
+          "ancestorTitles": ["OfflineSyncService", "Queue Management"],
+          "failureMessages": [],
+          "fullName": "OfflineSyncService Queue Management should count pending operations correctly",
+          "location": null,
+          "status": "passed",
+          "title": "should count pending operations correctly"
+        },
+        {
+          "ancestorTitles": ["OfflineSyncService", "Queue Management"],
+          "failureMessages": [],
+          "fullName": "OfflineSyncService Queue Management should clear the queue",
+          "location": null,
+          "status": "passed",
+          "title": "should clear the queue"
+        },
+        {
+          "ancestorTitles": ["OfflineSyncService", "Synchronization Logic"],
+          "failureMessages": [
+            "Error: \u001b[2mexpect(\u001b[22m\u001b[31mreceived\u001b[39m\u001b[2m).\u001b[22mtoBe\u001b[2m(\u001b[22m\u001b[32mexpected\u001b[39m\u001b[2m) // Object.is equality\u001b[22m\n\nExpected: \u001b[32m0\u001b[39m\nReceived: \u001b[31m1\u001b[39m\n    at Object.<anonymous> (C:\\Users\\josha\\date-management-app\\frontend\\src\\lib\\__tests__\\offline-sync.test.ts:106:61)\n    at processTicksAndRejections (node:internal/process/task_queues:105:5)"
+          ],
+          "fullName": "OfflineSyncService Synchronization Logic should sync operations when online",
+          "location": null,
+          "status": "failed",
+          "title": "should sync operations when online"
+        },
+        {
+          "ancestorTitles": ["OfflineSyncService", "Synchronization Logic"],
+          "failureMessages": [],
+          "fullName": "OfflineSyncService Synchronization Logic should not sync when queue is empty",
+          "location": null,
+          "status": "passed",
+          "title": "should not sync when queue is empty"
+        },
+        {
+          "ancestorTitles": ["OfflineSyncService", "Synchronization Logic"],
+          "failureMessages": [
+            "Error: \u001b[2mexpect(\u001b[22m\u001b[31mjest.fn()\u001b[39m\u001b[2m).\u001b[22mtoHaveBeenCalledTimes\u001b[2m(\u001b[22m\u001b[32mexpected\u001b[39m\u001b[2m)\u001b[22m\n\nExpected number of calls: \u001b[32m2\u001b[39m\nReceived number of calls: \u001b[31m1\u001b[39m\n    at Object.<anonymous> (C:\\Users\\josha\\date-management-app\\frontend\\src\\lib\\__tests__\\offline-sync.test.ts:128:28)\n    at processTicksAndRejections (node:internal/process/task_queues:105:5)"
+          ],
+          "fullName": "OfflineSyncService Synchronization Logic should stop syncing if an operation fails",
+          "location": null,
+          "status": "failed",
+          "title": "should stop syncing if an operation fails"
+        },
+        {
+          "ancestorTitles": ["OfflineSyncService", "Synchronization Logic"],
+          "failureMessages": [
+            "Error: \u001b[2mexpect(\u001b[22m\u001b[31mreceived\u001b[39m\u001b[2m).\u001b[22mtoBe\u001b[2m(\u001b[22m\u001b[32mexpected\u001b[39m\u001b[2m) // Object.is equality\u001b[22m\n\nExpected: \u001b[32m0\u001b[39m\nReceived: \u001b[31m1\u001b[39m\n    at Object.<anonymous> (C:\\Users\\josha\\date-management-app\\frontend\\src\\lib\\__tests__\\offline-sync.test.ts:149:61)\n    at processTicksAndRejections (node:internal/process/task_queues:105:5)"
+          ],
+          "fullName": "OfflineSyncService Synchronization Logic should retry failed operations on next sync",
+          "location": null,
+          "status": "failed",
+          "title": "should retry failed operations on next sync"
+        },
+        {
+          "ancestorTitles": ["OfflineSyncService", "Online/Offline Handling"],
+          "failureMessages": [],
+          "fullName": "OfflineSyncService Online/Offline Handling should report correct offline status",
+          "location": null,
+          "status": "passed",
+          "title": "should report correct offline status"
+        },
+        {
+          "ancestorTitles": ["OfflineSyncService", "Online/Offline Handling"],
+          "failureMessages": [],
+          "fullName": "OfflineSyncService Online/Offline Handling should trigger sync when coming online",
+          "location": null,
+          "status": "passed",
+          "title": "should trigger sync when coming online"
+        },
+        {
+          "ancestorTitles": ["OfflineSyncService", "API Endpoint & Method Mapping"],
+          "failureMessages": [],
+          "fullName": "OfflineSyncService API Endpoint & Method Mapping should send POST request for create",
+          "location": null,
+          "status": "passed",
+          "title": "should send POST request for create"
+        },
+        {
+          "ancestorTitles": ["OfflineSyncService", "API Endpoint & Method Mapping"],
+          "failureMessages": [],
+          "fullName": "OfflineSyncService API Endpoint & Method Mapping should send PUT request for update",
+          "location": null,
+          "status": "passed",
+          "title": "should send PUT request for update"
+        },
+        {
+          "ancestorTitles": ["OfflineSyncService", "API Endpoint & Method Mapping"],
+          "failureMessages": [],
+          "fullName": "OfflineSyncService API Endpoint & Method Mapping should send DELETE request for delete",
+          "location": null,
+          "status": "passed",
+          "title": "should send DELETE request for delete"
+        },
+        {
+          "ancestorTitles": ["OfflineSyncService", "Sync Strategies"],
+          "failureMessages": [],
+          "fullName": "OfflineSyncService Sync Strategies should set and get sync strategy",
+          "location": null,
+          "status": "passed",
+          "title": "should set and get sync strategy"
+        },
+        {
+          "ancestorTitles": ["OfflineSyncService", "Sync Strategies"],
+          "failureMessages": [],
+          "fullName": "OfflineSyncService Sync Strategies should trigger sync immediately in real-time mode",
+          "location": null,
+          "status": "passed",
+          "title": "should trigger sync immediately in real-time mode"
+        },
+        {
+          "ancestorTitles": ["OfflineSyncService", "Sync Strategies"],
+          "failureMessages": [],
+          "fullName": "OfflineSyncService Sync Strategies should not trigger sync immediately in batch mode",
+          "location": null,
+          "status": "passed",
+          "title": "should not trigger sync immediately in batch mode"
+        },
+        {
+          "ancestorTitles": ["OfflineSyncService", "Sync Strategies"],
+          "failureMessages": [],
+          "fullName": "OfflineSyncService Sync Strategies should not trigger sync immediately in manual mode",
+          "location": null,
+          "status": "passed",
+          "title": "should not trigger sync immediately in manual mode"
+        }
+      ],
+      "endTime": 1772243232508,
+      "message": "\u001b[1m\u001b[31m  \u001b[1m● \u001b[22m\u001b[1mOfflineSyncService › Synchronization Logic › should sync operations when online\u001b[39m\u001b[22m\n\n    \u001b[2mexpect(\u001b[22m\u001b[31mreceived\u001b[39m\u001b[2m).\u001b[22mtoBe\u001b[2m(\u001b[22m\u001b[32mexpected\u001b[39m\u001b[2m) // Object.is equality\u001b[22m\n\n    Expected: \u001b[32m0\u001b[39m\n    Received: \u001b[31m1\u001b[39m\n\u001b[2m\u001b[22m\n\u001b[2m    \u001b[0m \u001b[90m 104 |\u001b[39m\u001b[22m\n\u001b[2m     \u001b[90m 105 |\u001b[39m       expect(global\u001b[33m.\u001b[39mfetch)\u001b[33m.\u001b[39mtoHaveBeenCalledTimes(\u001b[35m1\u001b[39m)\u001b[33m;\u001b[39m\u001b[22m\n\u001b[2m    \u001b[31m\u001b[1m>\u001b[22m\u001b[2m\u001b[39m\u001b[90m 106 |\u001b[39m       expect(offlineSyncService\u001b[33m.\u001b[39mgetPendingOperationCount())\u001b[33m.\u001b[39mtoBe(\u001b[35m0\u001b[39m)\u001b[33m;\u001b[39m\u001b[22m\n\u001b[2m     \u001b[90m     |\u001b[39m                                                             \u001b[31m\u001b[1m^\u001b[22m\u001b[2m\u001b[39m\u001b[22m\n\u001b[2m     \u001b[90m 107 |\u001b[39m     })\u001b[33m;\u001b[39m\u001b[22m\n\u001b[2m     \u001b[90m 108 |\u001b[39m\u001b[22m\n\u001b[2m     \u001b[90m 109 |\u001b[39m     it(\u001b[32m'should not sync when queue is empty'\u001b[39m\u001b[33m,\u001b[39m \u001b[36masync\u001b[39m () \u001b[33m=>\u001b[39m {\u001b[0m\u001b[22m\n\u001b[2m\u001b[22m\n\u001b[2m      \u001b[2mat Object.<anonymous> (\u001b[22m\u001b[2m\u001b[0m\u001b[36msrc/lib/__tests__/offline-sync.test.ts\u001b[39m\u001b[0m\u001b[2m:106:61)\u001b[22m\u001b[2m\u001b[22m\n\n\u001b[1m\u001b[31m  \u001b[1m● \u001b[22m\u001b[1mOfflineSyncService › Synchronization Logic › should stop syncing if an operation fails\u001b[39m\u001b[22m\n\n    \u001b[2mexpect(\u001b[22m\u001b[31mjest.fn()\u001b[39m\u001b[2m).\u001b[22mtoHaveBeenCalledTimes\u001b[2m(\u001b[22m\u001b[32mexpected\u001b[39m\u001b[2m)\u001b[22m\n\n    Expected number of calls: \u001b[32m2\u001b[39m\n    Received number of calls: \u001b[31m1\u001b[39m\n\u001b[2m\u001b[22m\n\u001b[2m    \u001b[0m \u001b[90m 126 |\u001b[39m       \u001b[36mawait\u001b[39m offlineSyncService\u001b[33m.\u001b[39mperformSync()\u001b[33m;\u001b[39m\u001b[22m\n\u001b[2m     \u001b[90m 127 |\u001b[39m\u001b[22m\n\u001b[2m    \u001b[31m\u001b[1m>\u001b[22m\u001b[2m\u001b[39m\u001b[90m 128 |\u001b[39m       expect(global\u001b[33m.\u001b[39mfetch)\u001b[33m.\u001b[39mtoHaveBeenCalledTimes(\u001b[35m2\u001b[39m)\u001b[33m;\u001b[39m\u001b[22m\n\u001b[2m     \u001b[90m     |\u001b[39m                            \u001b[31m\u001b[1m^\u001b[22m\u001b[2m\u001b[39m\u001b[22m\n\u001b[2m     \u001b[90m 129 |\u001b[39m       expect(offlineSyncService\u001b[33m.\u001b[39mgetPendingOperationCount())\u001b[33m.\u001b[39mtoBe(\u001b[35m2\u001b[39m)\u001b[33m;\u001b[39m \u001b[90m// 2 and 3 remain\u001b[39m\u001b[22m\n\u001b[2m     \u001b[90m 130 |\u001b[39m     })\u001b[33m;\u001b[39m\u001b[22m\n\u001b[2m     \u001b[90m 131 |\u001b[39m\u001b[0m\u001b[22m\n\u001b[2m\u001b[22m\n\u001b[2m      \u001b[2mat Object.<anonymous> (\u001b[22m\u001b[2m\u001b[0m\u001b[36msrc/lib/__tests__/offline-sync.test.ts\u001b[39m\u001b[0m\u001b[2m:128:28)\u001b[22m\u001b[2m\u001b[22m\n\n\u001b[1m\u001b[31m  \u001b[1m● \u001b[22m\u001b[1mOfflineSyncService › Synchronization Logic › should retry failed operations on next sync\u001b[39m\u001b[22m\n\n    \u001b[2mexpect(\u001b[22m\u001b[31mreceived\u001b[39m\u001b[2m).\u001b[22mtoBe\u001b[2m(\u001b[22m\u001b[32mexpected\u001b[39m\u001b[2m) // Object.is equality\u001b[22m\n\n    Expected: \u001b[32m0\u001b[39m\n    Received: \u001b[31m1\u001b[39m\n\u001b[2m\u001b[22m\n\u001b[2m    \u001b[0m \u001b[90m 147 |\u001b[39m       \u001b[36mawait\u001b[39m offlineSyncService\u001b[33m.\u001b[39mperformSync()\u001b[33m;\u001b[39m\u001b[22m\n\u001b[2m     \u001b[90m 148 |\u001b[39m\u001b[22m\n\u001b[2m    \u001b[31m\u001b[1m>\u001b[22m\u001b[2m\u001b[39m\u001b[90m 149 |\u001b[39m       expect(offlineSyncService\u001b[33m.\u001b[39mgetPendingOperationCount())\u001b[33m.\u001b[39mtoBe(\u001b[35m0\u001b[39m)\u001b[33m;\u001b[39m\u001b[22m\n\u001b[2m     \u001b[90m     |\u001b[39m                                                             \u001b[31m\u001b[1m^\u001b[22m\u001b[2m\u001b[39m\u001b[22m\n\u001b[2m     \u001b[90m 150 |\u001b[39m       expect(global\u001b[33m.\u001b[39mfetch)\u001b[33m.\u001b[39mtoHaveBeenCalledTimes(\u001b[35m2\u001b[39m)\u001b[33m;\u001b[39m\u001b[22m\n\u001b[2m     \u001b[90m 151 |\u001b[39m     })\u001b[33m;\u001b[39m\u001b[22m\n\u001b[2m     \u001b[90m 152 |\u001b[39m   })\u001b[33m;\u001b[39m\u001b[0m\u001b[22m\n\u001b[2m\u001b[22m\n\u001b[2m      \u001b[2mat Object.<anonymous> (\u001b[22m\u001b[2m\u001b[0m\u001b[36msrc/lib/__tests__/offline-sync.test.ts\u001b[39m\u001b[0m\u001b[2m:149:61)\u001b[22m\u001b[2m\u001b[22m\n",
+      "name": "C:\\Users\\josha\\date-management-app\\frontend\\src\\lib\\__tests__\\offline-sync.test.ts",
+      "startTime": 1772243229214,
+      "status": "failed",
+      "summary": ""
+    },
+    {
+      "assertionResults": [
+        {
+          "ancestorTitles": ["Scanner"],
+          "failureMessages": [],
+          "fullName": "Scanner renders the scanner input and button",
+          "location": null,
+          "status": "passed",
+          "title": "renders the scanner input and button"
+        },
+        {
+          "ancestorTitles": ["Scanner"],
+          "failureMessages": [],
+          "fullName": "Scanner calls onScan with the entered barcode when button is clicked",
+          "location": null,
+          "status": "passed",
+          "title": "calls onScan with the entered barcode when button is clicked"
+        },
+        {
+          "ancestorTitles": ["Scanner"],
+          "failureMessages": [],
+          "fullName": "Scanner calls onScan with the entered barcode when form is submitted",
+          "location": null,
+          "status": "passed",
+          "title": "calls onScan with the entered barcode when form is submitted"
+        },
+        {
+          "ancestorTitles": ["Scanner"],
+          "failureMessages": [],
+          "fullName": "Scanner does not call onScan if barcode is empty",
+          "location": null,
+          "status": "passed",
+          "title": "does not call onScan if barcode is empty"
+        },
+        {
+          "ancestorTitles": ["Scanner", "defaultMode prop"],
+          "failureMessages": [],
+          "fullName": "Scanner defaultMode prop starts in text mode by default",
+          "location": null,
+          "status": "passed",
+          "title": "starts in text mode by default"
+        },
+        {
+          "ancestorTitles": ["Scanner", "defaultMode prop"],
+          "failureMessages": [],
+          "fullName": "Scanner defaultMode prop starts in camera mode when defaultMode=\"camera\"",
+          "location": null,
+          "status": "passed",
+          "title": "starts in camera mode when defaultMode=\"camera\""
+        },
+        {
+          "ancestorTitles": ["Scanner", "hardware scan integration"],
+          "failureMessages": [],
+          "fullName": "Scanner hardware scan integration initializes useHardwareScan hook",
+          "location": null,
+          "status": "passed",
+          "title": "initializes useHardwareScan hook"
+        },
+        {
+          "ancestorTitles": ["Scanner", "hardware scan integration"],
+          "failureMessages": [],
+          "fullName": "Scanner hardware scan integration routes hardware scan through onScan callback as HardwareScanResult",
+          "location": null,
+          "status": "passed",
+          "title": "routes hardware scan through onScan callback as HardwareScanResult"
+        },
+        {
+          "ancestorTitles": ["Scanner", "camera mode switching"],
+          "failureMessages": [],
+          "fullName": "Scanner camera mode switching switches to camera mode when Use Camera button is clicked",
+          "location": null,
+          "status": "passed",
+          "title": "switches to camera mode when Use Camera button is clicked"
+        },
+        {
+          "ancestorTitles": ["Scanner", "camera mode switching"],
+          "failureMessages": [],
+          "fullName": "Scanner camera mode switching switches back to text mode when Use Text Input button is clicked",
+          "location": null,
+          "status": "passed",
+          "title": "switches back to text mode when Use Text Input button is clicked"
+        }
+      ],
+      "endTime": 1772243232531,
+      "message": "",
+      "name": "C:\\Users\\josha\\date-management-app\\frontend\\src\\tests\\Scanner.test.tsx",
+      "startTime": 1772243229220,
+      "status": "passed",
+      "summary": ""
+    },
+    {
+      "assertionResults": [
+        {
+          "ancestorTitles": ["SubscriptionDashboard"],
+          "failureMessages": [],
+          "fullName": "SubscriptionDashboard renders tier badge with correct tier level",
+          "location": null,
+          "status": "passed",
+          "title": "renders tier badge with correct tier level"
+        },
+        {
+          "ancestorTitles": ["SubscriptionDashboard"],
+          "failureMessages": [],
+          "fullName": "SubscriptionDashboard displays usage progress bars for all resources",
+          "location": null,
+          "status": "passed",
+          "title": "displays usage progress bars for all resources"
+        },
+        {
+          "ancestorTitles": ["SubscriptionDashboard"],
+          "failureMessages": [],
+          "fullName": "SubscriptionDashboard shows upgrade CTA for non-premium tiers",
+          "location": null,
+          "status": "passed",
+          "title": "shows upgrade CTA for non-premium tiers"
+        },
+        {
+          "ancestorTitles": ["SubscriptionDashboard"],
+          "failureMessages": [],
+          "fullName": "SubscriptionDashboard displays unlimited for null limits",
+          "location": null,
+          "status": "passed",
+          "title": "displays unlimited for null limits"
+        },
+        {
+          "ancestorTitles": ["SubscriptionDashboard"],
+          "failureMessages": [],
+          "fullName": "SubscriptionDashboard handles API errors gracefully",
+          "location": null,
+          "status": "passed",
+          "title": "handles API errors gracefully"
+        },
+        {
+          "ancestorTitles": ["SubscriptionDashboard"],
+          "failureMessages": [],
+          "fullName": "SubscriptionDashboard shows loading state initially",
+          "location": null,
+          "status": "passed",
+          "title": "shows loading state initially"
+        },
+        {
+          "ancestorTitles": ["SubscriptionDashboard"],
+          "failureMessages": [],
+          "fullName": "SubscriptionDashboard calculates percentage correctly for progress bars",
+          "location": null,
+          "status": "passed",
+          "title": "calculates percentage correctly for progress bars"
+        }
+      ],
+      "endTime": 1772243232777,
+      "message": "",
+      "name": "C:\\Users\\josha\\date-management-app\\frontend\\src\\components\\__tests__\\SubscriptionDashboard.test.tsx",
+      "startTime": 1772243229142,
+      "status": "passed",
+      "summary": ""
+    },
+    {
+      "assertionResults": [
+        {
+          "ancestorTitles": ["HandheldScanner"],
+          "failureMessages": [],
+          "fullName": "HandheldScanner renders Scanner with defaultMode=\"camera\" when isHandheld=true",
+          "location": null,
+          "status": "passed",
+          "title": "renders Scanner with defaultMode=\"camera\" when isHandheld=true"
+        },
+        {
+          "ancestorTitles": ["HandheldScanner"],
+          "failureMessages": [],
+          "fullName": "HandheldScanner renders Scanner with defaultMode=\"text\" when isHandheld=false",
+          "location": null,
+          "status": "passed",
+          "title": "renders Scanner with defaultMode=\"text\" when isHandheld=false"
+        },
+        {
+          "ancestorTitles": ["HandheldScanner"],
+          "failureMessages": [],
+          "fullName": "HandheldScanner applies handheld-specific styling classes",
+          "location": null,
+          "status": "passed",
+          "title": "applies handheld-specific styling classes"
+        },
+        {
+          "ancestorTitles": ["HandheldScanner"],
+          "failureMessages": [],
+          "fullName": "HandheldScanner passes onScan prop to Scanner component",
+          "location": null,
+          "status": "passed",
+          "title": "passes onScan prop to Scanner component"
+        },
+        {
+          "ancestorTitles": ["HandheldScanner"],
+          "failureMessages": [],
+          "fullName": "HandheldScanner throws error when used outside HandheldProvider",
+          "location": null,
+          "status": "passed",
+          "title": "throws error when used outside HandheldProvider"
+        }
+      ],
+      "endTime": 1772243232820,
+      "message": "",
+      "name": "C:\\Users\\josha\\date-management-app\\frontend\\src\\components\\__tests__\\HandheldScanner.test.tsx",
+      "startTime": 1772243229146,
+      "status": "passed",
+      "summary": ""
+    },
+    {
+      "assertionResults": [
+        {
+          "ancestorTitles": ["CameraScanner"],
+          "failureMessages": [],
+          "fullName": "CameraScanner initializes Quagga on mount",
+          "location": null,
+          "status": "passed",
+          "title": "initializes Quagga on mount"
+        },
+        {
+          "ancestorTitles": ["CameraScanner"],
+          "failureMessages": [],
+          "fullName": "CameraScanner starts scanner when initialization succeeds",
+          "location": null,
+          "status": "passed",
+          "title": "starts scanner when initialization succeeds"
+        },
+        {
+          "ancestorTitles": ["CameraScanner"],
+          "failureMessages": [],
+          "fullName": "CameraScanner handles initialization error",
+          "location": null,
+          "status": "passed",
+          "title": "handles initialization error"
+        },
+        {
+          "ancestorTitles": ["CameraScanner"],
+          "failureMessages": [],
+          "fullName": "CameraScanner calls onDetected when code is scanned",
+          "location": null,
+          "status": "passed",
+          "title": "calls onDetected when code is scanned"
+        },
+        {
+          "ancestorTitles": ["CameraScanner"],
+          "failureMessages": [],
+          "fullName": "CameraScanner stops scanner after detection (after delay)",
+          "location": null,
+          "status": "passed",
+          "title": "stops scanner after detection (after delay)"
+        },
+        {
+          "ancestorTitles": ["CameraScanner"],
+          "failureMessages": [],
+          "fullName": "CameraScanner stops scanner on unmount",
+          "location": null,
+          "status": "passed",
+          "title": "stops scanner on unmount"
+        },
+        {
+          "ancestorTitles": ["CameraScanner"],
+          "failureMessages": [
+            "Error: \u001b[2mexpect(\u001b[22m\u001b[31mjest.fn()\u001b[39m\u001b[2m).\u001b[22mtoHaveBeenCalled\u001b[2m()\u001b[22m\n\nExpected number of calls: >= \u001b[32m1\u001b[39m\nReceived number of calls:    \u001b[31m0\u001b[39m\n    at Object.<anonymous> (C:\\Users\\josha\\date-management-app\\frontend\\src\\components\\__tests__\\CameraScanner.test.tsx:156:26)\n    at Promise.then.completed (C:\\Users\\josha\\date-management-app\\frontend\\node_modules\\jest-circus\\build\\utils.js:391:28)\n    at new Promise (<anonymous>)\n    at callAsyncCircusFn (C:\\Users\\josha\\date-management-app\\frontend\\node_modules\\jest-circus\\build\\utils.js:316:10)\n    at _callCircusTest (C:\\Users\\josha\\date-management-app\\frontend\\node_modules\\jest-circus\\build\\run.js:218:40)\n    at processTicksAndRejections (node:internal/process/task_queues:105:5)\n    at _runTest (C:\\Users\\josha\\date-management-app\\frontend\\node_modules\\jest-circus\\build\\run.js:155:3)\n    at _runTestsForDescribeBlock (C:\\Users\\josha\\date-management-app\\frontend\\node_modules\\jest-circus\\build\\run.js:66:9)\n    at _runTestsForDescribeBlock (C:\\Users\\josha\\date-management-app\\frontend\\node_modules\\jest-circus\\build\\run.js:60:9)\n    at run (C:\\Users\\josha\\date-management-app\\frontend\\node_modules\\jest-circus\\build\\run.js:25:3)\n    at runAndTransformResultsToJestFormat (C:\\Users\\josha\\date-management-app\\frontend\\node_modules\\jest-circus\\build\\legacy-code-todo-rewrite\\jestAdapterInit.js:170:21)\n    at jestAdapter (C:\\Users\\josha\\date-management-app\\frontend\\node_modules\\jest-circus\\build\\legacy-code-todo-rewrite\\jestAdapter.js:82:19)\n    at runTestInternal (C:\\Users\\josha\\date-management-app\\frontend\\node_modules\\jest-runner\\build\\runTest.js:389:16)\n    at runTest (C:\\Users\\josha\\date-management-app\\frontend\\node_modules\\jest-runner\\build\\runTest.js:475:34)\n    at Object.worker (C:\\Users\\josha\\date-management-app\\frontend\\node_modules\\jest-runner\\build\\testWorker.js:133:12)"
+          ],
+          "fullName": "CameraScanner resets scanner when retry button is clicked",
+          "location": null,
+          "status": "failed",
+          "title": "resets scanner when retry button is clicked"
+        },
+        {
+          "ancestorTitles": ["CameraScanner", "continuous mode"],
+          "failureMessages": [],
+          "fullName": "CameraScanner continuous mode does not stop scanner after detection when continuous=true",
+          "location": null,
+          "status": "passed",
+          "title": "does not stop scanner after detection when continuous=true"
+        },
+        {
+          "ancestorTitles": ["CameraScanner", "continuous mode"],
+          "failureMessages": [],
+          "fullName": "CameraScanner continuous mode stops scanner after detection when continuous=false (default)",
+          "location": null,
+          "status": "passed",
+          "title": "stops scanner after detection when continuous=false (default)"
+        },
+        {
+          "ancestorTitles": ["CameraScanner", "continuous mode"],
+          "failureMessages": [],
+          "fullName": "CameraScanner continuous mode prevents duplicate barcode scans within 2-second window",
+          "location": null,
+          "status": "passed",
+          "title": "prevents duplicate barcode scans within 2-second window"
+        },
+        {
+          "ancestorTitles": ["CameraScanner", "continuous mode"],
+          "failureMessages": [],
+          "fullName": "CameraScanner continuous mode allows different barcodes to be scanned immediately",
+          "location": null,
+          "status": "passed",
+          "title": "allows different barcodes to be scanned immediately"
+        },
+        {
+          "ancestorTitles": ["CameraScanner", "continuous mode"],
+          "failureMessages": [],
+          "fullName": "CameraScanner continuous mode shows continuous scan mode indicator",
+          "location": null,
+          "status": "passed",
+          "title": "shows continuous scan mode indicator"
+        },
+        {
+          "ancestorTitles": ["CameraScanner", "continuous mode"],
+          "failureMessages": [],
+          "fullName": "CameraScanner continuous mode does not show continuous mode indicator when continuous=false",
+          "location": null,
+          "status": "passed",
+          "title": "does not show continuous mode indicator when continuous=false"
+        }
+      ],
+      "endTime": 1772243232868,
+      "message": "\u001b[1m\u001b[31m  \u001b[1m● \u001b[22m\u001b[1mCameraScanner › resets scanner when retry button is clicked\u001b[39m\u001b[22m\n\n    \u001b[2mexpect(\u001b[22m\u001b[31mjest.fn()\u001b[39m\u001b[2m).\u001b[22mtoHaveBeenCalled\u001b[2m()\u001b[22m\n\n    Expected number of calls: >= \u001b[32m1\u001b[39m\n    Received number of calls:    \u001b[31m0\u001b[39m\n\u001b[2m\u001b[22m\n\u001b[2m    \u001b[0m \u001b[90m 154 |\u001b[39m\u001b[22m\n\u001b[2m     \u001b[90m 155 |\u001b[39m     \u001b[90m// 4. Verify start called\u001b[39m\u001b[22m\n\u001b[2m    \u001b[31m\u001b[1m>\u001b[22m\u001b[2m\u001b[39m\u001b[90m 156 |\u001b[39m     expect(\u001b[33mQuagga\u001b[39m\u001b[33m.\u001b[39mstart)\u001b[33m.\u001b[39mtoHaveBeenCalled()\u001b[33m;\u001b[39m\u001b[22m\n\u001b[2m     \u001b[90m     |\u001b[39m                          \u001b[31m\u001b[1m^\u001b[22m\u001b[2m\u001b[39m\u001b[22m\n\u001b[2m     \u001b[90m 157 |\u001b[39m\u001b[22m\n\u001b[2m     \u001b[90m 158 |\u001b[39m     jest\u001b[33m.\u001b[39museRealTimers()\u001b[33m;\u001b[39m\u001b[22m\n\u001b[2m     \u001b[90m 159 |\u001b[39m   })\u001b[33m;\u001b[39m\u001b[0m\u001b[22m\n\u001b[2m\u001b[22m\n\u001b[2m      \u001b[2mat Object.<anonymous> (\u001b[22m\u001b[2m\u001b[0m\u001b[36msrc/components/__tests__/CameraScanner.test.tsx\u001b[39m\u001b[0m\u001b[2m:156:26)\u001b[22m\u001b[2m\u001b[22m\n",
+      "name": "C:\\Users\\josha\\date-management-app\\frontend\\src\\components\\__tests__\\CameraScanner.test.tsx",
+      "startTime": 1772243229130,
+      "status": "failed",
+      "summary": ""
+    }
+  ],
+  "wasInterrupted": false
+}

@@ -43,8 +43,8 @@ describe('UserManagementPage', () => {
 
   test('renders user management page and fetches users', async () => {
     (apiService.get as jest.Mock).mockResolvedValue([
-      { id: 1, role: 'Manager' },
-      { id: 2, role: 'Team Member' },
+      { id: 1, role: 'admin' },
+      { id: 2, role: 'team_member' },
     ]);
 
     render(<UserManagementPage token={mockToken} />);
@@ -53,7 +53,7 @@ describe('UserManagementPage', () => {
 
     // Wait for list to appear
     const list = await screen.findByRole('list');
-    expect(within(list).getByText(/ID: 1, Role: Manager/i)).toBeInTheDocument();
+    expect(within(list).getByText(/ID: 1, Role: Admin/i)).toBeInTheDocument();
     expect(within(list).getByText(/ID: 2, Role: Team Member/i)).toBeInTheDocument();
 
     expect(apiService.get).toHaveBeenCalledTimes(1);
@@ -63,14 +63,14 @@ describe('UserManagementPage', () => {
   test('creates a new user', async () => {
     (apiService.get as jest.Mock)
       .mockResolvedValueOnce([
-        { id: 1, role: 'Manager' },
-        { id: 2, role: 'Team Member' },
+        { id: 1, role: 'admin' },
+        { id: 2, role: 'team_member' },
       ])
       .mockResolvedValueOnce([
         // After create
-        { id: 1, role: 'Manager' },
-        { id: 2, role: 'Team Member' },
-        { id: 3, role: 'Team Member' },
+        { id: 1, role: 'admin' },
+        { id: 2, role: 'team_member' },
+        { id: 3, role: 'team_member' },
       ]);
 
     (apiService.post as jest.Mock).mockResolvedValue({ message: 'User created successfully!' });
@@ -87,7 +87,7 @@ describe('UserManagementPage', () => {
 
     // Select Role in Create Form (First Select)
     const createRoleSelect = screen.getAllByRole('combobox')[0];
-    fireEvent.change(createRoleSelect, { target: { value: 'Team Member' } });
+    fireEvent.change(createRoleSelect, { target: { value: 'team_member' } });
 
     fireEvent.click(screen.getByRole('button', { name: /Create User/i }));
 
@@ -101,15 +101,15 @@ describe('UserManagementPage', () => {
 
     expect(apiService.post).toHaveBeenCalledWith(
       '/users',
-      { pin: '5678', role: 'Team Member' },
+      { pin: '5678', role: 'team_member' },
       mockToken,
     );
   });
 
   test('updates an existing user role', async () => {
     (apiService.get as jest.Mock).mockResolvedValue([
-      { id: 1, role: 'Manager' },
-      { id: 2, role: 'Team Member' },
+      { id: 1, role: 'admin' },
+      { id: 2, role: 'team_member' },
     ]);
     (apiService.put as jest.Mock).mockResolvedValue({ message: 'User updated successfully!' });
 
@@ -124,7 +124,7 @@ describe('UserManagementPage', () => {
     fireEvent.change(editUserSelect, { target: { value: '2' } });
 
     const editRoleSelect = selects[2];
-    fireEvent.change(editRoleSelect, { target: { value: 'Manager' } });
+    fireEvent.change(editRoleSelect, { target: { value: 'admin' } });
 
     fireEvent.click(screen.getByRole('button', { name: /Update User/i }));
 
@@ -132,13 +132,13 @@ describe('UserManagementPage', () => {
       expect(screen.getAllByText(/User updated successfully!/i).length).toBeGreaterThan(0);
     });
 
-    expect(apiService.put).toHaveBeenCalledWith('/users/2', { role: 'Manager' }, mockToken);
+    expect(apiService.put).toHaveBeenCalledWith('/users/2', { role: 'admin' }, mockToken);
   });
 
   test('deletes a user', async () => {
     (apiService.get as jest.Mock).mockResolvedValue([
-      { id: 1, role: 'Manager' },
-      { id: 2, role: 'Team Member' },
+      { id: 1, role: 'admin' },
+      { id: 2, role: 'team_member' },
     ]);
     (apiService.delete as jest.Mock).mockResolvedValue({ message: 'User deleted successfully!' });
 

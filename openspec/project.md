@@ -18,11 +18,11 @@ Define canonical conventions for **tenant-scoped development** across backend, w
 
 ## Backend Patterns
 
-| Pattern | Implementation |
-|---------|----------------|
-| **OrganizationContextMiddleware** | Sets `req.organizationId` from Clerk claim → used downstream |
-| **tenant(orgId)** helper | Prisma extension adding `{ where: { organizationId: orgId } }` automatically |
-| **LimitError** | Thrown when usage exceeds tier limits; caught by `errorHandler` → 409 |
+| Pattern                           | Implementation                                                               |
+| --------------------------------- | ---------------------------------------------------------------------------- |
+| **OrganizationContextMiddleware** | Sets `req.organizationId` from Clerk claim → used downstream                 |
+| **tenant(orgId)** helper          | Prisma extension adding `{ where: { organizationId: orgId } }` automatically |
+| **LimitError**                    | Thrown when usage exceeds tier limits; caught by `errorHandler` → 409        |
 
 Example:
 

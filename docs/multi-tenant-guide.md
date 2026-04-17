@@ -23,30 +23,31 @@ POST /api/organizations
   "name": "Acme Widgets"
 }
 ```
-Returns `201 { id, name, subscriptionTier }`.  The creator is auto-assigned `role: OWNER` and is billed immediately via Stripe Checkout.
+
+Returns `201 { id, name, subscriptionTier }`. The creator is auto-assigned `role: OWNER` and is billed immediately via Stripe Checkout.
 
 ## Switching Organizations (Multi-Org Users)
 
 1. Frontend fetches `/api/organizations` → list user-accessible orgs.
 2. Selecting an org stores `orgId` in Clerk Session custom claim.
-3. Next request hits `organizationContext` middleware → sets `req.organizationId`.  All downstream services rely on this value.
+3. Next request hits `organizationContext` middleware → sets `req.organizationId`. All downstream services rely on this value.
 
 ## Data Access Rules
 
-| Layer            | Rule                                                            |
-|------------------|-----------------------------------------------------------------|
-| **Routes**       | Never accept `organizationId` from client params/body           |
-| **Services**     | Always call `getActiveOrgId()` helper (throws if missing)       |
-| **Prisma**       | Use `where: { organizationId: activeOrgId }` or `$transaction()` |
+| Layer        | Rule                                                             |
+| ------------ | ---------------------------------------------------------------- |
+| **Routes**   | Never accept `organizationId` from client params/body            |
+| **Services** | Always call `getActiveOrgId()` helper (throws if missing)        |
+| **Prisma**   | Use `where: { organizationId: activeOrgId }` or `$transaction()` |
 
 ## User Roles per Org
 
-| Role   | Abilities                                              |
-|--------|--------------------------------------------------------|
-| OWNER  | Full admin + billing                                   |
-| ADMIN  | Manage resources & users                               |
-| MEMBER | CRUD inventory, view reports                           |
-| VIEWER | Read-only access                                       |
+| Role   | Abilities                    |
+| ------ | ---------------------------- |
+| OWNER  | Full admin + billing         |
+| ADMIN  | Manage resources & users     |
+| MEMBER | CRUD inventory, view reports |
+| VIEWER | Read-only access             |
 
 Role is scoped per organization; same email may hold different roles across orgs.
 
@@ -83,4 +84,4 @@ export ORG_ID=acme-org-uuid && ts-node scripts/my-script.ts
 
 ---
 
-_Updated Feb 2026.  Feedback → #docs channel._
+_Updated Feb 2026. Feedback → #docs channel._

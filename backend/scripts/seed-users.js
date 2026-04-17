@@ -1,7 +1,6 @@
 #!/usr/bin/env node
 
 const { PrismaClient } = require('@prisma/client');
-const bcrypt = require('bcrypt');
 
 const prisma = new PrismaClient();
 
@@ -52,37 +51,29 @@ async function seedUsers() {
       );
     }
 
-    // Step 3: Hash the default PINs
-    const managerPinHash = await bcrypt.hash('5624', 10);
-    const staffPinHash = await bcrypt.hash('1234', 10);
-
-    // Step 4: Create or update default users with organization assigned
-    const managerUser = await prisma.user.upsert({
+    // Step 3: Create or update default users with canonical roles
+    const adminUser = await prisma.user.upsert({
       where: { id: 1 },
       update: {
-        role: 'Manager',
-        pin: managerPinHash,
+        role: 'admin',
         organizationId: organization.id,
       },
       create: {
         id: 1,
-        role: 'Manager',
-        pin: managerPinHash,
+        role: 'admin',
         organizationId: organization.id,
       },
     });
 
-    const staffUser = await prisma.user.upsert({
+    const teamMemberUser = await prisma.user.upsert({
       where: { id: 2 },
       update: {
-        role: 'Staff',
-        pin: staffPinHash,
+        role: 'team_member',
         organizationId: organization.id,
       },
       create: {
         id: 2,
-        role: 'Staff',
-        pin: staffPinHash,
+        role: 'team_member',
         organizationId: organization.id,
       },
     });
@@ -91,9 +82,9 @@ async function seedUsers() {
 
     console.log('\n✅ Default organization and users created:');
     console.log('   Organization: Default Organization');
-    console.log('   Manager: PIN 5624 (Role: Manager)');
-    console.log('   Staff:   PIN 1234 (Role: Staff)');
-    console.log('\nYou can now log in with either PIN.');
+    console.log('   Admin user (id: 1, role: admin)');
+    console.log('   Team member (id: 2, role: team_member)');
+    console.log('\nSign in via Clerk to authenticate.');
   } catch (error) {
     console.error('User seeding failed:', error.message);
     process.exit(1);

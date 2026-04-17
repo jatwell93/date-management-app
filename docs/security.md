@@ -103,12 +103,11 @@ All user input that will be exported to CSV format is sanitized by escaping lead
 const FORMULA_CHARS = ['=', '+', '-', '@', '\t', '\r'];
 
 // Before exporting to CSV, escape these characters
-const sanitized = FORMULA_CHARS.includes(value[0]) 
-  ? `'${value}` 
-  : value;
+const sanitized = FORMULA_CHARS.includes(value[0]) ? `'${value}` : value;
 ```
 
 **What This Does**:
+
 - If a cell value starts with `=`, `+`, `-`, `@`, tab, or carriage return, we prepend a single quote (`'`)
 - Spreadsheet applications treat quoted cells as text, not formulas
 - The data is preserved exactly as entered by the user
@@ -116,32 +115,35 @@ const sanitized = FORMULA_CHARS.includes(value[0])
 ### Implementation Details
 
 **Scope**: All CSV exports via `GET /reports/*` endpoints
+
 - Monthly expiry reports
-- Markdown reports  
+- Markdown reports
 - Usage reports
 - Daily usage data
 
-**Testing**: 
+**Testing**:
+
 - Unit tests verify escaping of all leading special characters
 - Edge cases: empty cells, already-quoted cells, multiple special characters
 - Example test cases:
   ```typescript
-  expect(sanitize("=SUM(A1:A10)")).toBe("'=SUM(A1:A10)");
-  expect(sanitize("+1+1")).toBe("'+1+1");
-  expect(sanitize("Normal text")).toBe("Normal text");
-  expect(sanitize("")).toBe("");
+  expect(sanitize('=SUM(A1:A10)')).toBe("'=SUM(A1:A10)");
+  expect(sanitize('+1+1')).toBe("'+1+1");
+  expect(sanitize('Normal text')).toBe('Normal text');
+  expect(sanitize('')).toBe('');
   ```
 
 ### For Developers
 
 When exporting user data to CSV:
+
 ```typescript
 import { sanitizeCsvValue } from '../utils/csv-sanitizer';
 
-const rows = products.map(p => ({
-  name: sanitizeCsvValue(p.name),        // ← Always sanitize
+const rows = products.map((p) => ({
+  name: sanitizeCsvValue(p.name), // ← Always sanitize
   barcode: sanitizeCsvValue(p.barcode),
-  expiry: p.expiry_date.toISOString(),   // ← Date is safe
+  expiry: p.expiry_date.toISOString(), // ← Date is safe
 }));
 ```
 
@@ -159,6 +161,7 @@ const user = await authService.login({ pin: '5624' });
 ```
 
 **PIN Storage**:
+
 - Pins are hashed using bcrypt (10 salt rounds)
 - Database stores only the hash: `$2b$10$...`
 - Raw PIN never stored or logged
@@ -178,6 +181,7 @@ JWT token valid for **1 hour**:
 ```
 
 **When to Use**:
+
 - Include in `Authorization: Bearer <token>` header for API requests
 - Automatically sent by frontend in httpOnly cookie (when configured)
 - Short expiry minimizes risk if token is compromised
@@ -196,11 +200,13 @@ JWT token valid for **7 days**:
 ```
 
 **When to Use**:
+
 - Only sent during login (`POST /auth/login`)
 - Store securely (httpOnly, Secure, SameSite cookies recommended)
 - Only used to request new access tokens
 
 **Token Refresh Flow**:
+
 ```
 1. User logs in → Get access + refresh tokens
 2. Access token expires (1 hour)
@@ -227,6 +233,7 @@ RefreshToken table:
 ```
 
 **Logout Process**:
+
 ```typescript
 await authService.revokeRefreshToken(refreshToken);
 // Sets revokedAt = NOW()
@@ -234,6 +241,7 @@ await authService.revokeRefreshToken(refreshToken);
 ```
 
 **Token Cleanup**:
+
 ```typescript
 // Scheduled daily (or on-demand)
 await authService.cleanupExpiredTokens();
@@ -245,7 +253,7 @@ await authService.cleanupExpiredTokens();
 ✅ **Prevents Token Exhaustion**: Expiry dates ensure tokens eventually become invalid  
 ✅ **Supports Logout**: Revocation tracking allows immediate token invalidation  
 ✅ **Minimizes Damage**: Expired access tokens limit window of exposure  
-✅ **Enables Token Rotation**: Refresh tokens can be rotated without user friction  
+✅ **Enables Token Rotation**: Refresh tokens can be rotated without user friction
 
 ---
 
@@ -254,6 +262,7 @@ await authService.cleanupExpiredTokens();
 ### Purpose
 
 Rate limiting prevents:
+
 - **Brute-force attacks**: Login attempts with multiple PINs
 - **Denial of Service (DoS)**: Flooding endpoints with requests
 - **API abuse**: Scraping, data harvesting, resource exhaustion
@@ -262,16 +271,17 @@ Rate limiting prevents:
 
 **Three Tiers of Rate Limiting**:
 
-| Tier | Endpoints | Limit | Window | Purpose |
-|------|-----------|-------|--------|---------|
-| **Strict** | `POST /auth/login` | 5 requests | 15 minutes | Prevent PIN brute-force |
-| **Strict** | `POST /users` (register) | 5 requests | 15 minutes | Prevent account spam |
-| **Upload** | `POST /upload` | 10 requests | 1 hour | Prevent CSV processing abuse |
-| **Standard** | All other endpoints | 100 requests | 15 minutes | General DoS prevention |
+| Tier         | Endpoints                | Limit        | Window     | Purpose                      |
+| ------------ | ------------------------ | ------------ | ---------- | ---------------------------- |
+| **Strict**   | `POST /auth/login`       | 5 requests   | 15 minutes | Prevent PIN brute-force      |
+| **Strict**   | `POST /users` (register) | 5 requests   | 15 minutes | Prevent account spam         |
+| **Upload**   | `POST /upload`           | 10 requests  | 1 hour     | Prevent CSV processing abuse |
+| **Standard** | All other endpoints      | 100 requests | 15 minutes | General DoS prevention       |
 
 ### Configuration
 
 Set in `.env.example`:
+
 ```bash
 # Rate Limiting
 RATE_LIMIT_WINDOW=60000              # Time window in milliseconds (1 minute)
@@ -282,6 +292,7 @@ RATE_LIMIT_MAX_AUTHENTICATED=100     # For authenticated users
 ### When Rate Limit is Hit
 
 **Response**:
+
 ```
 HTTP 429 Too Many Requests
 
@@ -292,6 +303,7 @@ HTTP 429 Too Many Requests
 ```
 
 **Headers**:
+
 ```
 Retry-After: 720     ← Seconds until user can retry
 RateLimit-Limit: 5
@@ -300,6 +312,7 @@ RateLimit-Reset: <unix-timestamp>
 ```
 
 **Behavior**:
+
 - Requests are rejected immediately at middleware level
 - No database queries executed
 - Minimal server resources consumed
@@ -308,10 +321,11 @@ RateLimit-Reset: <unix-timestamp>
 ### For Developers
 
 **Applying Rate Limiting**:
+
 ```typescript
 import { createRateLimiter } from '../middleware/rateLimiter';
 
-const strictLimiter = createRateLimiter('strict');  // 5/15min
+const strictLimiter = createRateLimiter('strict'); // 5/15min
 
 router.post('/auth/login', strictLimiter, authController.login);
 ```
@@ -337,27 +351,32 @@ The backend explicitly allows only trusted frontend origins:
 ```typescript
 const cors = require('cors');
 
-app.use(cors({
-  origin: ['https://app.example.com', 'https://staging.example.com'],
-  credentials: true,              // Include cookies
-  methods: ['GET', 'POST', 'PUT', 'DELETE'],
-  allowedHeaders: ['Content-Type', 'Authorization'],
-}));
+app.use(
+  cors({
+    origin: ['https://app.example.com', 'https://staging.example.com'],
+    credentials: true, // Include cookies
+    methods: ['GET', 'POST', 'PUT', 'DELETE'],
+    allowedHeaders: ['Content-Type', 'Authorization'],
+  }),
+);
 ```
 
 ### Configuration
 
 **Development** (`.env.example`):
+
 ```bash
 CORS_ORIGINS=http://localhost:3000,http://localhost:3001
 ```
 
 **Production** (`.env`):
+
 ```bash
 CORS_ORIGINS=https://app.example.com,https://staging.example.com
 ```
 
 **Never use**:
+
 ```bash
 CORS_ORIGINS=*  # ← SECURITY RISK! Allows all origins
 ```
@@ -365,6 +384,7 @@ CORS_ORIGINS=*  # ← SECURITY RISK! Allows all origins
 ### How CORS Works
 
 **Step 1: Preflight Check** (browser sends automatically):
+
 ```
 OPTIONS /api/users HTTP/1.1
 Origin: https://app.example.com
@@ -372,12 +392,14 @@ Access-Control-Request-Method: DELETE
 ```
 
 **Step 2: Server Validates**:
+
 ```
 If origin NOT in whitelist → Return 403
 If origin IS in whitelist → Return 200 with headers
 ```
 
 **Step 3: Actual Request**:
+
 ```
 DELETE /api/users/123 HTTP/1.1
 Origin: https://app.example.com
@@ -388,7 +410,7 @@ Authorization: Bearer <token>
 
 ✅ Requests from whitelisted origins: **Allowed**  
 ❌ Requests from other origins: **Blocked by browser**  
-✅ Even if attacker tries: **Browser enforces CORS**  
+✅ Even if attacker tries: **Browser enforces CORS**
 
 ---
 
@@ -397,24 +419,28 @@ Authorization: Bearer <token>
 ### TLS/SSL Encryption
 
 **Development** (SQLite):
+
 ```bash
 DATABASE_URL=file:./database.sqlite
 # Local file, no network encryption needed
 ```
 
 **Production** (Neon PostgreSQL):
+
 ```bash
 DATABASE_URL=postgresql://user:password@host/db?sslmode=require
 #                                                  ↑ TLS required
 ```
 
 **What `sslmode=require` Does**:
+
 - 🔒 Encrypts all database traffic with TLS
 - 🔒 Prevents password transmission in plain text
 - 🔒 Prevents data interception over network
 - 🔒 Verifies server certificate authenticity
 
 **For Developers**:
+
 ```typescript
 // backend/src/database.ts
 const connectionUrl = process.env.DATABASE_URL;
@@ -427,17 +453,17 @@ if (process.env.NODE_ENV === 'production' && !connectionUrl.includes('sslmode=re
 ### Parameterized Queries (SQL Injection Prevention)
 
 **Vulnerable** ❌:
+
 ```typescript
-const user = await db.$queryRaw(
-  `SELECT * FROM users WHERE pin = '${userInput}'`
-);
+const user = await db.$queryRaw(`SELECT * FROM users WHERE pin = '${userInput}'`);
 // If userInput = "' OR '1'='1" → Injection!
 ```
 
 **Safe** ✅:
+
 ```typescript
 const user = await prisma.user.findUnique({
-  where: { pin: bcryptHash(userInput) }
+  where: { pin: bcryptHash(userInput) },
 });
 // Parameter is escaped automatically
 // User input cannot break SQL structure
@@ -449,8 +475,8 @@ Users have roles that restrict operations:
 
 ```typescript
 const ROLES = {
-  MANAGER: 'Manager',      // Create/edit/delete users
-  TEAM_MEMBER: 'Team Member'  // View and update inventory
+  MANAGER: 'Manager', // Create/edit/delete users
+  TEAM_MEMBER: 'Team Member', // View and update inventory
 };
 
 // Controller checks role before operation
@@ -466,12 +492,14 @@ if (req.user.role !== 'Manager') {
 ### Request Size Limits
 
 **Configuration**:
+
 ```typescript
 app.use(express.json({ limit: '10mb' }));
 app.use(express.urlencoded({ limit: '10mb' }));
 ```
 
 **File Upload Limits**:
+
 ```bash
 MAX_FILE_SIZE=10485760        # 10 MB
 MAX_UPLOAD_SIZE_BYTES=10485760
@@ -479,6 +507,7 @@ DIRECT_UPLOAD_THRESHOLD_BYTES=2097152  # 2 MB for direct uploads
 ```
 
 **Why Limits Matter**:
+
 - Prevents memory exhaustion attacks
 - Prevents disk space DoS
 - Limits processing time for large files
@@ -492,7 +521,7 @@ File uploads are validated against expected types:
 // Multer configuration
 multer({
   limits: {
-    fileSize: 10 * 1024 * 1024  // 10 MB
+    fileSize: 10 * 1024 * 1024, // 10 MB
   },
   fileFilter: (req, file, cb) => {
     const allowed = ['text/csv', 'application/vnd.ms-excel', '...'];
@@ -501,7 +530,7 @@ multer({
     } else {
       cb(new ValidationError('Invalid file type'));
     }
-  }
+  },
 });
 ```
 
@@ -512,6 +541,7 @@ multer({
 ### Principle: Generic Error Messages
 
 **Development**:
+
 ```json
 {
   "error": "Unexpected error during database operation",
@@ -521,6 +551,7 @@ multer({
 ```
 
 **Production**:
+
 ```json
 {
   "error": "An error occurred. Please try again or contact support.",
@@ -537,18 +568,19 @@ multer({
 
 ### Error Categories
 
-| Type | Handled As | Message | Example |
-|------|-----------|---------|---------|
-| **Validation Error** | 400 | Field-specific error | "field: 'email', message: 'Invalid email format'" |
-| **Authentication Error** | 401 | Generic message | "Invalid PIN" |
-| **Authorization Error** | 403 | Generic message | "Access denied" |
-| **Not Found** | 404 | Generic message | "Resource not found" |
-| **Conflict** | 409 | Specific message | "User already exists" |
-| **Server Error** | 500 | Generic message | "An error occurred" |
+| Type                     | Handled As | Message              | Example                                           |
+| ------------------------ | ---------- | -------------------- | ------------------------------------------------- |
+| **Validation Error**     | 400        | Field-specific error | "field: 'email', message: 'Invalid email format'" |
+| **Authentication Error** | 401        | Generic message      | "Invalid PIN"                                     |
+| **Authorization Error**  | 403        | Generic message      | "Access denied"                                   |
+| **Not Found**            | 404        | Generic message      | "Resource not found"                              |
+| **Conflict**             | 409        | Specific message     | "User already exists"                             |
+| **Server Error**         | 500        | Generic message      | "An error occurred"                               |
 
 ### Stack Traces
 
 **Development**:
+
 ```
 ✅ Full stack trace in error response
 ✅ Helps developers debug quickly
@@ -556,6 +588,7 @@ multer({
 ```
 
 **Production**:
+
 ```
 ❌ Stack traces removed from response
 ✅ Stack traces logged to Sentry (internal only)
@@ -569,6 +602,7 @@ multer({
 ### What Are Secrets?
 
 Credentials that should **never** be committed to git:
+
 - Database passwords
 - API keys (AWS, OpenAI, etc.)
 - JWT secrets
@@ -578,6 +612,7 @@ Credentials that should **never** be committed to git:
 ### Prevention: git-secrets
 
 **Installation** (one-time):
+
 ```bash
 # macOS
 brew install git-secrets
@@ -591,12 +626,14 @@ cd git-secrets && sudo make install
 ```
 
 **Setup for This Project** (one-time):
+
 ```bash
 bash scripts/setup-git-secrets.sh
 # Creates pre-commit hook and configures patterns
 ```
 
 **Patterns Scanned**:
+
 - AWS access keys: `AKIA*`
 - Private keys: `BEGIN PRIVATE KEY`, `BEGIN RSA PRIVATE KEY`
 - Common secrets: `password`, `api_key`, `secret`
@@ -621,11 +658,13 @@ git commit -m "Fix: handle expired tokens"
 ### What Secrets Are Allowed?
 
 **✅ Safe to Commit**:
+
 - `.env.example` (template with placeholder values)
 - Test fixtures: `fake_key_xxxx`, `test_secret`
 - Documentation examples with sanitized values
 
 **❌ Never Commit**:
+
 - Real database passwords
 - Real API keys
 - Real JWT secrets
@@ -655,18 +694,15 @@ Cloudflare Workers validate tokens before requests reach backend:
 // workers/src/middleware/auth.ts
 export async function validateJWT(request) {
   const authHeader = request.headers.get('Authorization');
-  
+
   if (!authHeader?.startsWith('Bearer ')) {
     return new Response('Unauthorized', { status: 401 });
   }
-  
+
   const token = authHeader.slice(7);
-  
+
   try {
-    const verified = await jose.jwtVerify(
-      token,
-      new TextEncoder().encode(JWT_SECRET)
-    );
+    const verified = await jose.jwtVerify(token, new TextEncoder().encode(JWT_SECRET));
     return { success: true, userId: verified.payload.sub };
   } catch (error) {
     return new Response('Invalid token', { status: 401 });
@@ -684,14 +720,10 @@ export async function validateJWT(request) {
 ### Public Endpoints (No Auth Required)
 
 ```typescript
-const PUBLIC_ENDPOINTS = [
-  '/auth/login',
-  '/auth/register',
-  '/health',
-];
+const PUBLIC_ENDPOINTS = ['/auth/login', '/auth/register', '/health'];
 
 if (PUBLIC_ENDPOINTS.includes(url.pathname)) {
-  return next();  // Skip JWT validation
+  return next(); // Skip JWT validation
 }
 ```
 
@@ -713,7 +745,7 @@ npm run secrets-scan
 import { createValidator } from '../middleware/validateRequest';
 
 const loginSchema = z.object({
-  pin: z.string().length(4, 'PIN must be 4 digits')
+  pin: z.string().length(4, 'PIN must be 4 digits'),
 });
 
 router.post('/login', validateRequest(loginSchema), controller.login);
@@ -726,13 +758,13 @@ router.post('/login', validateRequest(loginSchema), controller.login);
 export class UserService {
   constructor(
     private prisma = prismaClient,
-    private emailService = emailService
+    private emailService = emailService,
   ) {}
 }
 
 // ❌ Avoid - Hard-coded dependencies
 export class UserService {
-  private prisma = require('./prisma');  // ← Hard to test
+  private prisma = require('./prisma'); // ← Hard to test
 }
 ```
 
@@ -741,8 +773,8 @@ export class UserService {
 ```typescript
 import { sanitizeCsvValue } from '../utils/csv-sanitizer';
 
-const rows = data.map(item => ({
-  name: sanitizeCsvValue(item.name),  // ← Always sanitize
+const rows = data.map((item) => ({
+  name: sanitizeCsvValue(item.name), // ← Always sanitize
 }));
 ```
 
@@ -759,7 +791,7 @@ throw new Error('Invalid PIN');
 ### 6. Apply Rate Limiting to Sensitive Endpoints
 
 ```typescript
-const loginLimiter = createRateLimiter('strict');  // 5/15min
+const loginLimiter = createRateLimiter('strict'); // 5/15min
 
 router.post('/auth/login', loginLimiter, controller.login);
 ```
@@ -808,6 +840,7 @@ If you discover a security vulnerability:
 3. **Email**: security@example.com (or contact project maintainers privately)
 
 Include:
+
 - Vulnerability description
 - Affected component/endpoint
 - Steps to reproduce (if safe to share)
@@ -836,11 +869,13 @@ Include:
 ### Regular Audits
 
 **Monthly**:
+
 - `npm audit` to check dependency vulnerabilities
 - Review error logs for suspicious patterns
 - Verify rate limiter effectiveness
 
 **Quarterly**:
+
 - Security code review
 - Penetration testing (if budget allows)
 - Update security documentation
@@ -869,6 +904,7 @@ SENTRY_TRACES_SAMPLE_RATE=0.1
 ```
 
 Sentry alerts on:
+
 - 5xx server errors
 - Authentication failures
 - Validation errors (potential attacks)

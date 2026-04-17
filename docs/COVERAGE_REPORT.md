@@ -12,18 +12,19 @@ Based on my analysis of your codebase, **Jest is already integrated and operatio
 
 Your project already has a solid testing foundation:
 
-| Component | Status | Location |
-|-----------|--------|----------|
-| **Jest** | ✅ Installed & Configured | [`backend/jest.config.js`](backend/jest.config.js:1) |
-| **ts-jest** | ✅ Installed | [`backend/package.json`](backend/package.json:66) |
-| **Test Scripts** | ✅ Defined | [`backend/package.json`](backend/package.json:10) |
-| **Unit Tests** | ✅ 20+ test files | [`backend/src/tests/unit/*.test.ts`](backend/src/tests/unit/product.service.test.ts:1) |
-| **Integration Tests** | ✅ Prisma service tests | [`backend/src/tests/integration/prisma-services.test.ts`](backend/src/tests/integration/prisma-services.test.ts:1) |
-| **Mock Infrastructure** | ✅ Database mocks | [`backend/src/__mocks__/database.ts`](backend/src/__mocks__/database.ts:1) |
+| Component               | Status                    | Location                                                                                                           |
+| ----------------------- | ------------------------- | ------------------------------------------------------------------------------------------------------------------ |
+| **Jest**                | ✅ Installed & Configured | [`backend/jest.config.js`](backend/jest.config.js:1)                                                               |
+| **ts-jest**             | ✅ Installed              | [`backend/package.json`](backend/package.json:66)                                                                  |
+| **Test Scripts**        | ✅ Defined                | [`backend/package.json`](backend/package.json:10)                                                                  |
+| **Unit Tests**          | ✅ 20+ test files         | [`backend/src/tests/unit/*.test.ts`](backend/src/tests/unit/product.service.test.ts:1)                             |
+| **Integration Tests**   | ✅ Prisma service tests   | [`backend/src/tests/integration/prisma-services.test.ts`](backend/src/tests/integration/prisma-services.test.ts:1) |
+| **Mock Infrastructure** | ✅ Database mocks         | [`backend/src/__mocks__/database.ts`](backend/src/__mocks__/database.ts:1)                                         |
 
 ### Key Architectural Strengths
 
 1. **Dependency Injection Pattern**: Services like [`ProductService`](backend/src/services/product.service.ts:209) accept optional `PrismaClient` injection, enabling testability:
+
    ```typescript
    constructor(prismaClient?: PrismaClient) {
      this.prisma = prismaClient ?? getDefaultDatabaseClient();
@@ -72,6 +73,7 @@ module.exports = {
 #### Prisma-Specific Considerations
 
 Your project uses a hybrid approach (better-sqlite3 for legacy, Prisma for new code). Coverage configuration should exclude:
+
 - Generated Prisma client code
 - Migration files
 - Legacy database adapter code (if not tested)
@@ -107,25 +109,25 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
-      
+
       - name: Setup Node.js
         uses: actions/setup-node@v4
         with:
           node-version: '20'
           cache: 'npm'
-      
+
       - name: Install dependencies
         run: cd backend && npm ci
-      
+
       - name: Run tests with coverage
         run: cd backend && npm run test:coverage
-      
+
       - name: Upload coverage to Codecov
         uses: codecov/codecov-action@v3
         with:
           files: ./backend/coverage/lcov.info
           fail_ci_if_error: false
-      
+
       - name: Comment coverage on PR
         uses: romeovs/lcov-reporter-action@v0.3.1
         with:
@@ -145,6 +147,7 @@ jobs:
 #### SQLite-Specific CI Considerations
 
 Your tests use file-based SQLite databases. In CI:
+
 1. Ensure test database files are created in writable locations
 2. Consider using `:memory:` SQLite for faster unit tests
 3. Integration tests may need persistent file-based DB for Prisma compatibility
@@ -155,21 +158,21 @@ Your tests use file-based SQLite databases. In CI:
 
 #### Positive Impacts
 
-| Benefit | Description |
-|---------|-------------|
-| **Visibility** | Coverage reports highlight untested code in PRs |
-| **Quality Gate** | Prevents merging code that significantly reduces coverage |
-| **Documentation** | Coverage reports serve as implicit testing documentation |
-| **Refactoring Safety** | High coverage enables safer refactoring |
+| Benefit                | Description                                               |
+| ---------------------- | --------------------------------------------------------- |
+| **Visibility**         | Coverage reports highlight untested code in PRs           |
+| **Quality Gate**       | Prevents merging code that significantly reduces coverage |
+| **Documentation**      | Coverage reports serve as implicit testing documentation  |
+| **Refactoring Safety** | High coverage enables safer refactoring                   |
 
 #### Potential Friction Points
 
-| Concern | Mitigation |
-|---------|------------|
-| **Coverage obsession** | Focus on meaningful coverage, not just percentages |
-| **False confidence** | 100% coverage ≠ bug-free; emphasize assertion quality |
-| **Slower PR feedback** | Parallel test execution; optimize test suite |
-| **Legacy code coverage** | Exclude or grandfather in existing low-coverage code |
+| Concern                  | Mitigation                                            |
+| ------------------------ | ----------------------------------------------------- |
+| **Coverage obsession**   | Focus on meaningful coverage, not just percentages    |
+| **False confidence**     | 100% coverage ≠ bug-free; emphasize assertion quality |
+| **Slower PR feedback**   | Parallel test execution; optimize test suite          |
+| **Legacy code coverage** | Exclude or grandfather in existing low-coverage code  |
 
 #### Recommended PR Review Workflow
 
@@ -191,21 +194,23 @@ flowchart TD
 
 #### Test Execution Times
 
-| Scenario | Estimated Time | Notes |
-|----------|----------------|-------|
-| Current unit tests only | ~5-10s | Fast, in-memory SQLite |
-| With coverage (unit only) | ~10-20s | 2x overhead typical |
-| Integration tests | ~30-60s | Database setup/teardown |
-| Full suite with coverage | ~45-90s | Acceptable for CI |
+| Scenario                  | Estimated Time | Notes                   |
+| ------------------------- | -------------- | ----------------------- |
+| Current unit tests only   | ~5-10s         | Fast, in-memory SQLite  |
+| With coverage (unit only) | ~10-20s        | 2x overhead typical     |
+| Integration tests         | ~30-60s        | Database setup/teardown |
+| Full suite with coverage  | ~45-90s        | Acceptable for CI       |
 
 #### Build Time Impact
 
 Coverage collection adds overhead during test execution:
+
 - **Istanbul instrumentation**: ~20-40% slower test execution
 - **Source map processing**: Minimal impact with ts-jest
 - **Report generation**: ~2-5s for HTML/LCOV reports
 
 **Optimization Strategies:**
+
 1. **Parallel execution**: Use `jest --maxWorkers=2` in CI
 2. **Selective coverage**: Only collect coverage on changed files for PRs
 3. **Caching**: Cache `node_modules` and Jest cache between runs
@@ -229,6 +234,7 @@ module.exports = {
 Your project already has effective mocking patterns:
 
 **Unit Test Mocking** ([`product.service.test.ts`](backend/src/tests/unit/product.service.test.ts:1)):
+
 ```typescript
 jest.mock('../../database');
 
@@ -239,18 +245,19 @@ const mockDb = {
 ```
 
 **Integration Test DI** ([`prisma-services.test.ts`](backend/src/tests/integration/prisma-services.test.ts:42)):
+
 ```typescript
 const service = new ProductService(prisma);
 ```
 
 #### Coverage-Specific Considerations
 
-| Challenge | Solution |
-|-----------|----------|
-| Prisma client singleton | Use `jest.resetModules()` between tests |
-| Database connection in tests | Ensure proper cleanup in `afterAll` |
-| Type generation coverage | Exclude `node_modules/@prisma/client` |
-| Migration code coverage | Exclude or mark as ignored |
+| Challenge                    | Solution                                |
+| ---------------------------- | --------------------------------------- |
+| Prisma client singleton      | Use `jest.resetModules()` between tests |
+| Database connection in tests | Ensure proper cleanup in `afterAll`     |
+| Type generation coverage     | Exclude `node_modules/@prisma/client`   |
+| Migration code coverage      | Exclude or mark as ignored              |
 
 #### Recommended Coverage Configuration
 
@@ -263,7 +270,7 @@ module.exports = {
   moduleNameMapper: {
     '^@/(.*)': '<rootDir>/src/$1',
   },
-  
+
   // Coverage configuration
   collectCoverageFrom: [
     'src/**/*.ts',
@@ -277,7 +284,7 @@ module.exports = {
   coverageReporters: ['text', 'text-summary', 'lcov', 'html'],
   coverageDirectory: 'coverage',
   coverageProvider: 'v8',
-  
+
   // Thresholds (start low, increase over time)
   coverageThreshold: {
     global: {
@@ -318,12 +325,12 @@ gantt
 
 #### Threshold Strategy
 
-| Phase | Global Threshold | Enforcement | Duration |
-|-------|------------------|-------------|----------|
-| **1. Baseline** | N/A (report only) | Informational | 2 weeks |
-| **2. Soft** | 30% branches, 40% lines | Warning only | 2-4 weeks |
-| **3. Moderate** | 50% all metrics | PR blocking | Ongoing |
-| **4. Strict** | 70-80% all metrics | PR blocking | Long-term |
+| Phase           | Global Threshold        | Enforcement   | Duration  |
+| --------------- | ----------------------- | ------------- | --------- |
+| **1. Baseline** | N/A (report only)       | Informational | 2 weeks   |
+| **2. Soft**     | 30% branches, 40% lines | Warning only  | 2-4 weeks |
+| **3. Moderate** | 50% all metrics         | PR blocking   | Ongoing   |
+| **4. Strict**   | 70-80% all metrics      | PR blocking   | Long-term |
 
 #### Per-Module Thresholds (Future)
 
@@ -365,11 +372,11 @@ coverageThreshold: {
 
 Your project uses a custom migration system ([`backend/src/migrations/`](backend/src/migrations/migration.service.ts:1)) alongside Prisma. This creates some complexity:
 
-| Aspect | Impact | Mitigation |
-|--------|--------|------------|
-| Schema changes | May require test updates | Automated migration testing |
-| Prisma client regeneration | Requires test restart | Pre-commit hooks |
-| Test database reset | Add to test setup | Utility function |
+| Aspect                     | Impact                   | Mitigation                  |
+| -------------------------- | ------------------------ | --------------------------- |
+| Schema changes             | May require test updates | Automated migration testing |
+| Prisma client regeneration | Requires test restart    | Pre-commit hooks            |
+| Test database reset        | Add to test setup        | Utility function            |
 
 #### Recommended Test Database Utility
 
@@ -415,18 +422,21 @@ Based on your project's current state:
 ### Implementation Plan
 
 #### Week 1: Setup & Baseline
+
 - [ ] Update [`jest.config.js`](backend/jest.config.js:1) with coverage configuration
 - [ ] Add `test:coverage` script to [`package.json`](backend/package.json:10)
 - [ ] Run baseline coverage report
 - [ ] Document current coverage percentages
 
 #### Week 2-3: CI Integration
+
 - [ ] Create GitHub Actions workflow
 - [ ] Configure PR coverage comments
 - [ ] Set up Codecov or similar dashboard
 - [ ] Enable report-only mode (no blocking)
 
 #### Week 4+: Gradual Enforcement
+
 - [ ] Set initial thresholds at current levels
 - [ ] Enable soft warnings on PRs
 - [ ] Gradually increase thresholds by 5-10% monthly

@@ -25,11 +25,11 @@ Signup → org starter (trial=true, trialEnd=+14d) → email welcome_trial
 
 ## Conversion Tracking
 
-Metric | Source
--------|--------
-`trial_started` | On org creation
-`trial_converted` | `checkout.session.completed` webhook sets `isTrial=false`
-`trial_expired` | Daily cron marks expired trials
+| Metric            | Source                                                    |
+| ----------------- | --------------------------------------------------------- |
+| `trial_started`   | On org creation                                           |
+| `trial_converted` | `checkout.session.completed` webhook sets `isTrial=false` |
+| `trial_expired`   | Daily cron marks expired trials                           |
 
 Metrics sent to `UsageAnalyticsService` → exposed in Grafana dashboard.
 
@@ -47,17 +47,18 @@ If payment method added within 48 h after expiry, conversion proceeds without da
 ## Read-Only Mode
 
 When trial expires without conversion:
+
 - `readOnlyMode=true` on org
 - Mutating routes throw `TrialExpiredError`
 - UI shows upgrade modal
 
 ## Configuration Flags
 
-Env Var | Default | Description
---------|---------|------------
-`TRIAL_LENGTH_DAYS` | `14` | Duration of free trial
-`TRIAL_GRACE_HOURS` | `48` | Post-expiry grace period
-`TRIAL_EMAIL_TEMPLATE_ID` | — | SendGrid template ID
+| Env Var                   | Default | Description              |
+| ------------------------- | ------- | ------------------------ |
+| `TRIAL_LENGTH_DAYS`       | `14`    | Duration of free trial   |
+| `TRIAL_GRACE_HOURS`       | `48`    | Post-expiry grace period |
+| `TRIAL_EMAIL_TEMPLATE_ID` | —       | SendGrid template ID     |
 
 ## Local Testing
 

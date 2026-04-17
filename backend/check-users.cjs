@@ -7,19 +7,19 @@ async function main() {
     include: {
       organization: {
         include: {
-          subscriptionTiers: true
-        }
-      }
-    }
+          subscriptionTiers: true,
+        },
+      },
+    },
   });
-  
+
   console.log(`Found ${users.length} users in database:`);
-  
-  users.forEach(user => {
+
+  users.forEach((user) => {
     console.log(`\n- User: ${user.email || user.username || 'No email'}`);
     console.log(`  Clerk ID: ${user.clerkUserId}`);
     console.log(`  Organization: ${user.organization?.name || 'None'}`);
-    
+
     if (user.organization?.subscriptionTiers?.length > 0) {
       const sub = user.organization.subscriptionTiers[0];
       console.log(`  Subscription: ${sub.status} - ${sub.tierLevel}`);

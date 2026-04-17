@@ -119,22 +119,24 @@ main                    # Production database, never modify directly
 
 **Naming Pattern:** `{type}-{description}`
 
-| Type | Use Case | Example |
-|------|----------|---------|
-| `feature` | New features or improvements | `feature-multi-tenant` |
-| `bugfix` | Bug fixes | `bugfix-csv-import` |
-| `hotfix` | Production emergency fixes | `hotfix-security-patch` |
-| `experimental` | Trying approaches | `experimental-new-ui` |
+| Type           | Use Case                     | Example                 |
+| -------------- | ---------------------------- | ----------------------- |
+| `feature`      | New features or improvements | `feature-multi-tenant`  |
+| `bugfix`       | Bug fixes                    | `bugfix-csv-import`     |
+| `hotfix`       | Production emergency fixes   | `hotfix-security-patch` |
+| `experimental` | Trying approaches            | `experimental-new-ui`   |
 
 ### Branch Scope
 
 **Each branch should:**
+
 - Address ONE feature or bugfix
 - Include related tests
 - Be mergeable within 1 week
 - Not accumulate 100+ commits
 
 **Example: Good branch scope**
+
 ```
 feature-subscription-tiers
 ├── Migrations: Add subscription table
@@ -391,6 +393,7 @@ psql $(neon connection-string main --project-id demo-prod) < backup-20260309.sql
 **Symptoms:** `merge conflicts` or `schema conflict`
 
 **Causes:**
+
 - Another branch modified the same table
 - Migration was applied to main separately
 
@@ -531,4 +534,3 @@ neon roles list --project-id <id>
 - ❌ Share branch with multiple features
 - ❌ Skip testing before merge
 - ❌ Merge without backup
-

@@ -3,23 +3,25 @@
 ## Analysis
 
 **Current State:**
+
 - Error monitoring deployed (Workstream A: Sentry on backend, frontend, Workers)
 - Logger utility type-safe and tested
 - Production secrets configured (SENTRY_DSN, database, R2, JWT)
 
 **Affected Layers:**
+
 - Workers (Cloudflare Analytics integration)
 - Neon PostgreSQL (Monitoring dashboard, alerts)
 - Frontend (Display metrics/alerts dashboard)
 
 **Scope (Parallel Tasks):**
 
-| Task ID | Area | Description | Type |
-|---------|------|-------------|------|
-| 12.1 | Workers | Enable Cloudflare Analytics for Workers | Infrastructure |
-| 12.2 | Workers | Configure custom metrics (CSV processing time, upload size) | Instrumentation |
-| 12.3 | Neon | Set up Neon monitoring dashboard alerts | Infrastructure |
-| 12.5 | Frontend | Create dashboard for key metrics (response times, error rates, upload counts) | UI Feature |
+| Task ID | Area     | Description                                                                   | Type            |
+| ------- | -------- | ----------------------------------------------------------------------------- | --------------- |
+| 12.1    | Workers  | Enable Cloudflare Analytics for Workers                                       | Infrastructure  |
+| 12.2    | Workers  | Configure custom metrics (CSV processing time, upload size)                   | Instrumentation |
+| 12.3    | Neon     | Set up Neon monitoring dashboard alerts                                       | Infrastructure  |
+| 12.5    | Frontend | Create dashboard for key metrics (response times, error rates, upload counts) | UI Feature      |
 
 ## Reuse Strategy
 

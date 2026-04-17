@@ -128,9 +128,9 @@ Use custom errors for predictable API behavior:
 - Provider instances must not be shared across requests.
 - Services are cached per provider instance only.
 - Test factories:
-	- `forOrganization` for org-scoped behavior
-	- `forTesting` for controlled auth bypass
-	- `withClients` for full dependency injection
+  - `forOrganization` for org-scoped behavior
+  - `forTesting` for controlled auth bypass
+  - `withClients` for full dependency injection
 
 ## Service Construction Rules
 

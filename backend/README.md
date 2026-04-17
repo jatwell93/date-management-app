@@ -5,6 +5,7 @@ Complete Node.js/Express backend with support for SQLite (development) and Neon 
 ## Quick Start
 
 ### Prerequisites
+
 - **Node.js** ≥18.x
 - **npm** ≥9.x
 - **SQLite3** (optional, for local development)
@@ -27,6 +28,7 @@ npm run dev
 ```
 
 #### First Time Setup: Database Migrations
+
 ```bash
 # Run all pending migrations
 npm run migrate
@@ -43,11 +45,11 @@ npm run migrate:status
 
 This project supports testing against **two databases** to ensure compatibility across environments:
 
-| Environment | Database | Use Case | Command |
-|------------|----------|----------|---------|
-| **Development** | SQLite | Local development, fast tests | `npm run test:dev` |
-| **Production** | Neon PostgreSQL | Production-like testing | `npm run test:prod` |
-| **Both** | SQLite → PostgreSQL | Verify compatibility | `npm run test:both` |
+| Environment     | Database            | Use Case                      | Command             |
+| --------------- | ------------------- | ----------------------------- | ------------------- |
+| **Development** | SQLite              | Local development, fast tests | `npm run test:dev`  |
+| **Production**  | Neon PostgreSQL     | Production-like testing       | `npm run test:prod` |
+| **Both**        | SQLite → PostgreSQL | Verify compatibility          | `npm run test:both` |
 
 ### Running Tests
 
@@ -85,6 +87,7 @@ npm run test:prod
 ```
 
 **Why two test environments?**
+
 - **SQLite**: Fast iteration during development (< 5s per test run)
 - **PostgreSQL**: Catch database-specific issues before production (e.g., transaction semantics, index behavior)
 
@@ -114,12 +117,15 @@ JWT_SECRET=your-secret-key-here
 ```
 
 ### Development
+
 Copy `.env.development` as a template:
+
 ```bash
 cp .env.development .env
 ```
 
 ### Production
+
 See [.env.production](./.env.production) and [docs/deployment.md](./docs/deployment.md)
 
 Detailed guide: [docs/environment-setup.md](../docs/environment-setup.md)
@@ -152,6 +158,7 @@ R2_BUCKET_NAME=csv-uploads-prod
 ```
 
 **Setup Steps:**
+
 1. Create R2 bucket at https://dash.cloudflare.com/
 2. Generate API token with R2 permissions
 3. Add credentials to `.env.production`
@@ -200,6 +207,7 @@ npm run migrate:rollback
 ### Database Patterns
 
 Migrations use Prisma. For details and patterns, see:
+
 - [backend/docs/database-patterns.md](./docs/database-patterns.md)
 - [docs/database-migrations.md](../docs/database-migrations.md)
 
@@ -207,20 +215,20 @@ Migrations use Prisma. For details and patterns, see:
 
 ## NPM Scripts Reference
 
-| Script | Purpose | Output |
-|--------|---------|--------|
-| `npm start` | Run production server | Server on port 3001 |
-| `npm run dev` | Run dev server (auto-reload) | Server with hot-reload |
-| `npm run build` | Compile TypeScript | `dist/` folder |
-| `npm run test` | Run all tests (SQLite by default) | Test results |
-| `npm run test:dev` | Run tests (SQLite) | Test results |
-| `npm run test:prod` | Run tests (PostgreSQL) | Test results (requires Neon) |
-| `npm run test:both` | Run tests (both databases) | Test results x2 |
-| `npm run test:coverage` | Generate coverage report | HTML report in `coverage/` |
-| `npm run test:diff` | Run changed tests only | Diff-based test results |
-| `npm run migrate` | Run pending migrations | Migration log |
-| `npm run migrate:status` | Check migration status | Status summary |
-| `npm run migrate:rollback` | Undo last migration | Rollback confirmation |
+| Script                     | Purpose                           | Output                       |
+| -------------------------- | --------------------------------- | ---------------------------- |
+| `npm start`                | Run production server             | Server on port 3001          |
+| `npm run dev`              | Run dev server (auto-reload)      | Server with hot-reload       |
+| `npm run build`            | Compile TypeScript                | `dist/` folder               |
+| `npm run test`             | Run all tests (SQLite by default) | Test results                 |
+| `npm run test:dev`         | Run tests (SQLite)                | Test results                 |
+| `npm run test:prod`        | Run tests (PostgreSQL)            | Test results (requires Neon) |
+| `npm run test:both`        | Run tests (both databases)        | Test results x2              |
+| `npm run test:coverage`    | Generate coverage report          | HTML report in `coverage/`   |
+| `npm run test:diff`        | Run changed tests only            | Diff-based test results      |
+| `npm run migrate`          | Run pending migrations            | Migration log                |
+| `npm run migrate:status`   | Check migration status            | Status summary               |
+| `npm run migrate:rollback` | Undo last migration               | Rollback confirmation        |
 
 ---
 
@@ -280,6 +288,7 @@ npm run test:coverage && npm run lint && ubs .
 > Note: add or update `.ubsignore` at the repository root to silence scanner noise from generated files (coverage/, dist/, build/) and `.env` examples. A sample `.ubsignore` and `ubs.config.json` are included in the repo.
 
 **Expected Results:**
+
 - ✅ **Tests**: All suites passing (37+ backend suites, 297+ tests)
 - ✅ **Linter**: 0 critical errors
 - ✅ **Security (UBS)**: 0 critical issues
@@ -296,6 +305,7 @@ npm run test:coverage && npm run lint && ubs .
 ### Production Deployment
 
 For complete deployment guide, see:
+
 - [docs/deployment.md](./docs/deployment.md) - CI/CD pipelines, environment setup
 - [docs/monitoring-alerting.md](./docs/monitoring-alerting.md) - Production observability
 
@@ -334,6 +344,7 @@ npm run deploy:prod
 ### Local Testing
 
 See [docs/workers-deployment.md](../docs/workers-deployment.md) for:
+
 - Local Miniflare testing
 - Test suite running (`npm run test`)
 - Deployment verification
@@ -344,14 +355,14 @@ See [docs/workers-deployment.md](../docs/workers-deployment.md) for:
 
 ### Common Issues
 
-| Problem | Symptom | Solution |
-|---------|---------|----------|
-| **Tests Failing (SQLite)** | `npm run test:dev` fails | Check `.env` has `DATABASE_PATH=./database.sqlite`; run migrations |
-| **Tests Failing (PostgreSQL)** | `npm run test:prod` fails | Verify `NEON_CONNECTION_STRING` in `.env`; ensure database exists |
-| **Build Errors** | `npm run build` fails | Run `npm install`; check Node.js version ≥18.x |
-| **Port Already In Use** | Server won't start | Change `PORT` in `.env` or kill existing process |
-| **Database Locked** | SQLite errors | Close other connections; restart server |
-| **R2 Upload Fails** | Storage provider error | Check R2 credentials and bucket name in `.env` |
+| Problem                        | Symptom                   | Solution                                                           |
+| ------------------------------ | ------------------------- | ------------------------------------------------------------------ |
+| **Tests Failing (SQLite)**     | `npm run test:dev` fails  | Check `.env` has `DATABASE_PATH=./database.sqlite`; run migrations |
+| **Tests Failing (PostgreSQL)** | `npm run test:prod` fails | Verify `NEON_CONNECTION_STRING` in `.env`; ensure database exists  |
+| **Build Errors**               | `npm run build` fails     | Run `npm install`; check Node.js version ≥18.x                     |
+| **Port Already In Use**        | Server won't start        | Change `PORT` in `.env` or kill existing process                   |
+| **Database Locked**            | SQLite errors             | Close other connections; restart server                            |
+| **R2 Upload Fails**            | Storage provider error    | Check R2 credentials and bucket name in `.env`                     |
 
 For operational runbooks, see [docs/operational-runbooks.md](./docs/operational-runbooks.md)
 
@@ -359,16 +370,16 @@ For operational runbooks, see [docs/operational-runbooks.md](./docs/operational-
 
 ## Documentation
 
-| Document | Purpose |
-|----------|---------|
-| [docs/database-patterns.md](./docs/database-patterns.md) | Database architecture, Prisma patterns, query optimization |
-| [docs/storage-patterns.md](./docs/storage-patterns.md) | Local vs. R2 storage, presigned URLs, multipart uploads |
-| [docs/deployment.md](./docs/deployment.md) | CI/CD, environment setup, production config |
-| [docs/monitoring-alerting.md](./docs/monitoring-alerting.md) | Sentry, error tracking, observability |
-| [docs/operational-runbooks.md](./docs/operational-runbooks.md) | Production procedures, incident response |
-| [../docs/testing-both-environments.md](../docs/testing-both-environments.md) | Dual DB testing, strategies |
-| [../docs/workers-deployment.md](../docs/workers-deployment.md) | Cloudflare Workers, edge compute |
-| [tech-debt.md](../tech-debt.md) | Technical debt remediation plan (Phases 12-20) |
+| Document                                                                     | Purpose                                                    |
+| ---------------------------------------------------------------------------- | ---------------------------------------------------------- |
+| [docs/database-patterns.md](./docs/database-patterns.md)                     | Database architecture, Prisma patterns, query optimization |
+| [docs/storage-patterns.md](./docs/storage-patterns.md)                       | Local vs. R2 storage, presigned URLs, multipart uploads    |
+| [docs/deployment.md](./docs/deployment.md)                                   | CI/CD, environment setup, production config                |
+| [docs/monitoring-alerting.md](./docs/monitoring-alerting.md)                 | Sentry, error tracking, observability                      |
+| [docs/operational-runbooks.md](./docs/operational-runbooks.md)               | Production procedures, incident response                   |
+| [../docs/testing-both-environments.md](../docs/testing-both-environments.md) | Dual DB testing, strategies                                |
+| [../docs/workers-deployment.md](../docs/workers-deployment.md)               | Cloudflare Workers, edge compute                           |
+| [tech-debt.md](../tech-debt.md)                                              | Technical debt remediation plan (Phases 12-20)             |
 
 ---
 
@@ -411,21 +422,25 @@ For operational runbooks, see [docs/operational-runbooks.md](./docs/operational-
 **What's New in Phase 11:**
 
 ✅ **Dual Environment Testing**
+
 - SQLite for fast development iteration
 - PostgreSQL (Neon) for production-like testing
 - `npm run test:both` runs comprehensive suite
 
 ✅ **Cloudflare R2 Storage**
+
 - Local filesystem development
 - Production-ready R2 integration
 - Presigned URL support
 
 ✅ **Workers Deployment**
+
 - Edge compute for performance
 - Local Miniflare testing
 - Production deployment pipeline
 
 ✅ **Quality Assurance**
+
 - 37 test suites, 297 tests passing (SQLite)
 - 0 critical security issues (UBS scan)
 - 125 linting errors fixed
@@ -463,6 +478,7 @@ Detailed roadmap: See [tech-debt.md](../tech-debt.md) (comprehensive remediation
 ## Contributing
 
 When adding new features or services, follow:
+
 - ✅ TDD: Write tests first
 - ✅ Use Prisma for data access (never raw SQL)
 - ✅ Inject dependencies (no hardcoded `new Service()`)

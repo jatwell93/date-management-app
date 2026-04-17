@@ -5,9 +5,11 @@ Basic HTML email templates for SendGrid integration testing.
 ## Templates
 
 ### 1. Trial Ending Soon (`trial-ending-soon.html`)
+
 Sent when a trial period is about to expire.
 
 **Variables:**
+
 - `{{organizationName}}` - Name of the organization
 - `{{daysRemaining}}` - Number of days until trial expires
 
@@ -16,9 +18,11 @@ Sent when a trial period is about to expire.
 ---
 
 ### 2. Payment Failed (`payment-failed.html`)
+
 Sent when a subscription payment fails.
 
 **Variables:**
+
 - `{{organizationName}}` - Name of the organization
 - `{{invoiceUrl}}` - Stripe hosted invoice URL for payment
 
@@ -27,9 +31,11 @@ Sent when a subscription payment fails.
 ---
 
 ### 3. Downgrade Warning (`downgrade-warning.html`)
+
 Sent when a subscription is downgraded and usage exceeds new limits.
 
 **Variables:**
+
 - `{{organizationName}}` - Name of the organization
 - `{{currentUsage}}` - Current number of items/SKUs
 - `{{newLimit}}` - New tier limit
@@ -53,6 +59,7 @@ These templates are for **testing purposes** during development. For production 
 ## Customization
 
 To customize these templates:
+
 - Update colors, fonts, and styling in the `<style>` section
 - Replace "yourdomain.com" with your actual domain
 - Add your logo/branding
