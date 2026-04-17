@@ -29,7 +29,7 @@ function createMockRes(): { res: ExpressResponse; getStatus: () => number; getBo
     json(data: any) {
       body = data;
     },
-    setHeader() { },
+    setHeader() {},
     isSent: () => body !== null,
   } as unknown as ExpressResponse;
 
@@ -152,10 +152,7 @@ describe('createUploadRoleMiddleware', () => {
 });
 
 describe('createRequireRoleMiddleware', () => {
-  const middleware = createRequireRoleMiddleware(
-    [ROLES.ADMIN],
-    ['/api/admin'],
-  );
+  const middleware = createRequireRoleMiddleware([ROLES.ADMIN], ['/api/admin']);
 
   it('allows admin to admin-only path', () => {
     const req = createMockReq({ userRole: 'admin', path: '/api/admin/dashboard', method: 'POST' });
@@ -169,7 +166,11 @@ describe('createRequireRoleMiddleware', () => {
   });
 
   it('blocks team_member from admin-only path', () => {
-    const req = createMockReq({ userRole: 'team_member', path: '/api/admin/dashboard', method: 'POST' });
+    const req = createMockReq({
+      userRole: 'team_member',
+      path: '/api/admin/dashboard',
+      method: 'POST',
+    });
     const { res, getStatus, getBody } = createMockRes();
     const next = vi.fn();
 
@@ -181,7 +182,11 @@ describe('createRequireRoleMiddleware', () => {
   });
 
   it('passes through non-protected paths', () => {
-    const req = createMockReq({ userRole: 'team_member', path: '/api/inventory-items', method: 'POST' });
+    const req = createMockReq({
+      userRole: 'team_member',
+      path: '/api/inventory-items',
+      method: 'POST',
+    });
     const { res, getBody } = createMockRes();
     const next = vi.fn();
 
@@ -192,7 +197,11 @@ describe('createRequireRoleMiddleware', () => {
   });
 
   it('allows GET requests on protected paths (read-only)', () => {
-    const req = createMockReq({ userRole: 'team_member', path: '/api/admin/dashboard', method: 'GET' });
+    const req = createMockReq({
+      userRole: 'team_member',
+      path: '/api/admin/dashboard',
+      method: 'GET',
+    });
     const { res, getBody } = createMockRes();
     const next = vi.fn();
 

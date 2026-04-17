@@ -32,12 +32,18 @@ describe('Feature Gates & Usage Limits (Phase 8B.2)', () => {
       expect(starterResult.isEnabled).toBe(false);
       expect(starterResult.error).toContain('not available');
 
-      const professionalResult = checkFeatureAccess('professional', AVAILABLE_FEATURES.ADVANCED_ANALYTICS);
+      const professionalResult = checkFeatureAccess(
+        'professional',
+        AVAILABLE_FEATURES.ADVANCED_ANALYTICS,
+      );
       expect(professionalResult.isEnabled).toBe(true);
     });
 
     it('enables DEDICATED_SUPPORT only for premium+', () => {
-      const professionalResult = checkFeatureAccess('professional', AVAILABLE_FEATURES.DEDICATED_SUPPORT);
+      const professionalResult = checkFeatureAccess(
+        'professional',
+        AVAILABLE_FEATURES.DEDICATED_SUPPORT,
+      );
       expect(professionalResult.isEnabled).toBe(false);
 
       const premiumResult = checkFeatureAccess('premium', AVAILABLE_FEATURES.DEDICATED_SUPPORT);
@@ -317,7 +323,10 @@ describe('Feature Gates & Usage Limits (Phase 8B.2)', () => {
     it('allows action when feature enabled and usage within limit', async () => {
       mockDbClient.mockResolvedValueOnce([{ count: 50 }]);
 
-      const featureCheck = checkFeatureAccess('professional', AVAILABLE_FEATURES.ADVANCED_ANALYTICS);
+      const featureCheck = checkFeatureAccess(
+        'professional',
+        AVAILABLE_FEATURES.ADVANCED_ANALYTICS,
+      );
       const usageCheck = await checkUsageLimit('org-1', 'max_skus', 'professional', mockDbClient);
 
       expect(featureCheck.isEnabled).toBe(true);

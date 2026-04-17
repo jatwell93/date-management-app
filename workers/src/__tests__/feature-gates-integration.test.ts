@@ -1,6 +1,6 @@
 /**
  * Integration Test: Feature Gate Enforcement (4.2)
- * 
+ *
  * Verifies that subscription tier controls access to features
  */
 
@@ -22,10 +22,10 @@ describe('Phase 4.2: Feature Gate Enforcement', () => {
        * 4. Assert: Response includes upgrade CTA
        * 5. Assert: Message: "Upgrade to Professional to access Advanced Analytics"
        */
-      
+
       const starterFeatures = tierLimits.starter.features;
       const hasAdvancedAnalytics = starterFeatures.includes('advanced_analytics');
-      
+
       expect(hasAdvancedAnalytics).toBe(false); // Starter doesn't have feature
     });
 
@@ -37,10 +37,10 @@ describe('Phase 4.2: Feature Gate Enforcement', () => {
        * 3. Assert: 403 Forbidden
        * 4. Assert: Correct upgrade message
        */
-      
+
       const starterFeatures = tierLimits.starter.features;
       const hasBulkExport = starterFeatures.includes('bulk_export');
-      
+
       expect(hasBulkExport).toBe(false);
     });
   });
@@ -54,10 +54,10 @@ describe('Phase 4.2: Feature Gate Enforcement', () => {
        * 3. Assert: 200 OK
        * 4. Assert: Returns analytics data
        */
-      
+
       const proFeatures = tierLimits.professional.features;
       const hasAdvancedAnalytics = proFeatures.includes('advanced_analytics');
-      
+
       expect(hasAdvancedAnalytics).toBe(true);
     });
 
@@ -69,10 +69,10 @@ describe('Phase 4.2: Feature Gate Enforcement', () => {
        * 3. Assert: 200 OK
        * 4. Assert: Returns export file
        */
-      
+
       const proFeatures = tierLimits.professional.features;
       const hasBulkExport = proFeatures.includes('bulk_export');
-      
+
       expect(hasBulkExport).toBe(true);
     });
 
@@ -83,10 +83,10 @@ describe('Phase 4.2: Feature Gate Enforcement', () => {
        * 2. Request /api/integrations/custom-setup
        * 3. Assert: 403 Forbidden (requires Concierge)
        */
-      
+
       const proFeatures = tierLimits.professional.features;
       const hasCustomIntegrations = proFeatures.includes('custom_integrations');
-      
+
       expect(hasCustomIntegrations).toBe(false); // Only Concierge
     });
   });
@@ -99,7 +99,7 @@ describe('Phase 4.2: Feature Gate Enforcement', () => {
        * 2. Request all premium endpoints
        * 3. Assert: All return 200 OK
        */
-      
+
       const conciergeFeatures = tierLimits.concierge.features;
       const hasAll = [
         'basic_inventory',
@@ -107,9 +107,9 @@ describe('Phase 4.2: Feature Gate Enforcement', () => {
         'advanced_analytics',
         'bulk_export',
         'api_access',
-        'custom_integrations'
-      ].every(f => conciergeFeatures.includes(f));
-      
+        'custom_integrations',
+      ].every((f) => conciergeFeatures.includes(f));
+
       expect(hasAll).toBe(true);
     });
   });
@@ -124,7 +124,7 @@ describe('Phase 4.2: Feature Gate Enforcement', () => {
        * 3. Return 403 if feature not available
        * 4. Include upgrade CTA in response
        */
-      
+
       const expected = true; // Middleware enforces feature gates
       expect(expected).toBe(true);
     });
@@ -136,7 +136,7 @@ describe('Phase 4.2: Feature Gate Enforcement', () => {
        * - No client-side skip possible
        * - organizationId + tierLevel combo determines access
        */
-      
+
       const expected = true; // Enforced server-side only
       expect(expected).toBe(true);
     });

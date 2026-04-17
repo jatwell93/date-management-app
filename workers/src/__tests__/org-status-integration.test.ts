@@ -1,6 +1,6 @@
 /**
  * Integration Test: Organization Status (4.6)
- * 
+ *
  * Verifies that organization active/inactive status controls access
  */
 
@@ -26,12 +26,12 @@ describe('Phase 4.6: Organization Status Validation', () => {
        * 8. Request DELETE /api/products/:id
        * 9. Assert: 200 OK
        */
-      
-      const activeOrg = testData.organization({ 
+
+      const activeOrg = testData.organization({
         organization_id: activeOrgId,
-        status: 'active'
+        status: 'active',
       });
-      
+
       expect(activeOrg.status).toBe('active');
     });
 
@@ -43,7 +43,7 @@ describe('Phase 4.6: Organization Status Validation', () => {
        * 3. Write operations allowed
        * 4. All features available (subject to subscription tier)
        */
-      
+
       const expected = true; // Status: active = full access
       expect(expected).toBe(true);
     });
@@ -60,12 +60,12 @@ describe('Phase 4.6: Organization Status Validation', () => {
        * 5. Request POST /api/products/create
        * 6. Assert: 403 Forbidden (same message)
        */
-      
+
       const inactiveOrg = testData.organization({
         organization_id: inactiveOrgId,
-        status: 'inactive'
+        status: 'inactive',
       });
-      
+
       expect(inactiveOrg.status).toBe('inactive');
     });
 
@@ -85,7 +85,7 @@ describe('Phase 4.6: Organization Status Validation', () => {
        * - Security hold
        * - Account compliance)
        */
-      
+
       const expected = true; // Generic access denied message
       expect(expected).toBe(true);
     });
@@ -102,12 +102,12 @@ describe('Phase 4.6: Organization Status Validation', () => {
        * 5. Assert: 403 Forbidden
        * 6. Assert: Message: "Organization is suspended. Reads only."
        */
-      
+
       const suspendedOrg = testData.organization({
         organization_id: suspendedOrgId,
-        status: 'suspended'
+        status: 'suspended',
       });
-      
+
       expect(suspendedOrg.status).toBe('suspended');
     });
 
@@ -123,7 +123,7 @@ describe('Phase 4.6: Organization Status Validation', () => {
        *
        * Allows graceful shutdown / data recovery
        */
-      
+
       const expected = true; // Reads allowed, writes blocked
       expect(expected).toBe(true);
     });
@@ -139,7 +139,7 @@ describe('Phase 4.6: Organization Status Validation', () => {
        * 4. If valid: Call next handler
        * 5. If invalid: Return 403
        */
-      
+
       const expected = true; // DB query checks status
       expect(expected).toBe(true);
     });
@@ -154,7 +154,7 @@ describe('Phase 4.6: Organization Status Validation', () => {
        *
        * Each request must check current status from DB
        */
-      
+
       const expected = true; // Per-request status verification
       expect(expected).toBe(true);
     });
@@ -173,7 +173,7 @@ describe('Phase 4.6: Organization Status Validation', () => {
        * - Auth endpoints: /auth/verify
        * - CORS preflight
        */
-      
+
       const expected = true; // Consistent across all API routes
       expect(expected).toBe(true);
     });
@@ -190,7 +190,7 @@ describe('Phase 4.6: Organization Status Validation', () => {
        *
        * Status change effective immediately
        */
-      
+
       const expected = true; // DB status checked per-request
       expect(expected).toBe(true);
     });
@@ -202,7 +202,7 @@ describe('Phase 4.6: Organization Status Validation', () => {
        * 2. Admin changes to 'active'
        * 3. Next request to write endpoint returns 200
        */
-      
+
       const expected = true; // Status re-checked on next request
       expect(expected).toBe(true);
     });
@@ -216,7 +216,7 @@ describe('Phase 4.6: Organization Status Validation', () => {
        * - Verify compliance/payment
        * - Manually reactivate via admin panel
        */
-      
+
       const expected = true; // Admin-only operation
       expect(expected).toBe(true);
     });
@@ -238,7 +238,7 @@ describe('Phase 4.6: Organization Status Validation', () => {
        * - Org inactive + subscription active → 403 (org gate)
        * - Org suspended + subscription active → 200 read, 403 write
        */
-      
+
       const expected = true; // Both validated independently
       expect(expected).toBe(true);
     });
@@ -253,7 +253,7 @@ describe('Phase 4.6: Organization Status Validation', () => {
        *
        * Org status is higher priority (fundamental access)
        */
-      
+
       const expected = true; // Org status checked first
       expect(expected).toBe(true);
     });
@@ -272,7 +272,7 @@ describe('Phase 4.6: Organization Status Validation', () => {
        * - Reason for inactivity (if applicable)
        * - Last status change timestamp
        */
-      
+
       const expected = true; // Admin visibility into org status
       expect(expected).toBe(true);
     });
@@ -281,15 +281,15 @@ describe('Phase 4.6: Organization Status Validation', () => {
       /**
        * ADMIN ENDPOINT:
        * PUT /admin/organizations/:id/deactivate
-       * 
+       *
        * Request: { reason: 'compliance_hold' | 'payment_fraud' | ... }
-       * 
+       *
        * Result:
        * - org.status = 'inactive'
        * - Requires admin authentication + audit log
        * - All API access blocked immediately
        */
-      
+
       const expected = true; // Admin-only action
       expect(expected).toBe(true);
     });
@@ -307,7 +307,7 @@ describe('Phase 4.6: Organization Status Validation', () => {
        * - org.status = 'active'
        * - Full API access restored
        */
-      
+
       const expected = true; // Admin approval required
       expect(expected).toBe(true);
     });
@@ -325,7 +325,7 @@ describe('Phase 4.6: Organization Status Validation', () => {
        *   supportUrl: "https://support.example.com"
        * }
        */
-      
+
       const expected = true; // Clear support path
       expect(expected).toBe(true);
     });
@@ -340,7 +340,7 @@ describe('Phase 4.6: Organization Status Validation', () => {
        *   supportUrl: "..."
        * }
        */
-      
+
       const expected = true; // Explains read-only mode
       expect(expected).toBe(true);
     });

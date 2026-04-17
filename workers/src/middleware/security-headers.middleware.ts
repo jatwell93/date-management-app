@@ -1,9 +1,9 @@
 /**
  * Security Headers Middleware for Cloudflare Workers
- * 
+ *
  * Implements Content Security Policy (CSP) and other critical security headers
  * Phase 20 Security Hardening - addresses security audit findings
- * 
+ *
  * Reference: docs/security-audit.md section 7.2 "CORS & CSP"
  * Reference: PHASE-20-SESSION-2-SUMMARY.md - CSP implementation
  */
@@ -13,13 +13,13 @@ import { ExpressRequest, ExpressResponse, ExpressMiddleware } from '../express-a
 
 /**
  * Content Security Policy (CSP) configuration
- * 
+ *
  * SECURITY CRITICAL (Phase 20 - Security Audit Finding):
  * - Prevents XSS attacks by restricting script and style sources
  * - Restricts form submissions to same origin
  * - Restricts frame embedding of content
  * - Disallows eval() and inline scripts
- * 
+ *
  * Finding: CSP headers not configured (MEDIUM PRIORITY)
  * Impact: XSS attacks possible on frontend
  * Solution: Add CSP headers with restrictive directives
@@ -34,7 +34,7 @@ export const CSP_DIRECTIVES = {
     // Allow Cloudflare's own scripts
     'https://cdn.jsdelivr.net',
     // Allow for analytics/monitoring if configured
-    'https://cdn.segment.com'
+    'https://cdn.segment.com',
   ],
 
   // CSS source restrictions
@@ -42,21 +42,21 @@ export const CSP_DIRECTIVES = {
     "'self'",
     "'unsafe-inline'", // Required for styled-components
     'https://fonts.googleapis.com',
-    'https://cdn.jsdelivr.net'
+    'https://cdn.jsdelivr.net',
   ],
 
   // Font source restrictions
   'font-src': [
     "'self'",
     'https://fonts.gstatic.com',
-    'data:' // Allow base64 encoded fonts
+    'data:', // Allow base64 encoded fonts
   ],
 
   // Image source restrictions
   'img-src': [
     "'self'",
     'https:',
-    'data:' // Allow inline data images
+    'data:', // Allow inline data images
   ],
 
   // Form submission restrictions
@@ -90,7 +90,7 @@ export const CSP_DIRECTIVES = {
     // Sentry for error tracking
     'https://sentry.io',
     // Analytics
-    'https://cdn.segment.com'
+    'https://cdn.segment.com',
   ],
 
   // Restricts media (audio/video) sources
@@ -106,7 +106,7 @@ export const CSP_DIRECTIVES = {
   'worker-src': ["'self'"],
 
   // Upgrade insecure requests to HTTPS (in production)
-  'upgrade-insecure-requests': []
+  'upgrade-insecure-requests': [],
 };
 
 /**
@@ -182,18 +182,10 @@ export const PRODUCTION_CSP_DIRECTIVES = {
   'default-src': ["'self'"],
 
   // JavaScript source restrictions - NO inline scripts in production
-  'script-src': [
-    "'self'",
-    'https://cdn.jsdelivr.net',
-    'https://cdn.segment.com'
-  ],
+  'script-src': ["'self'", 'https://cdn.jsdelivr.net', 'https://cdn.segment.com'],
 
   // CSS source restrictions
-  'style-src': [
-    "'self'",
-    'https://fonts.googleapis.com',
-    'https://cdn.jsdelivr.net'
-  ],
+  'style-src': ["'self'", 'https://fonts.googleapis.com', 'https://cdn.jsdelivr.net'],
 
   // Rest same as development
   'font-src': ["'self'", 'https://fonts.gstatic.com', 'data:'],
@@ -211,13 +203,13 @@ export const PRODUCTION_CSP_DIRECTIVES = {
     'https://*.cloudflare.com',
     'wss:',
     'https://sentry.io',
-    'https://cdn.segment.com'
+    'https://cdn.segment.com',
   ],
   'media-src': ["'self'", 'https:'],
   'child-src': ["'self'"],
   'manifest-src': ["'self'"],
   'worker-src': ["'self'"],
-  'upgrade-insecure-requests': []
+  'upgrade-insecure-requests': [],
 };
 
 /**

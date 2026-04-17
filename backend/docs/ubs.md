@@ -29,12 +29,15 @@ How to Run
 Basic Usage
 
 # From project root
+
 ubs .
 
 # Verbose mode (show more examples)
+
 ubs -v .
 
 # Strict mode (fail on warnings)
+
 ubs . --fail-on-warning
 
 Integration Pattern
@@ -63,17 +66,17 @@ Exit Codes
 
 Severity Levels
 
-🔥 CRITICAL  → Fix IMMEDIATELY (crashes, security, data corruption)
-⚠  Warning   → Fix before commit (bugs, performance, maintenance)
-ℹ  Info      → Consider improvements (code quality, best practices)
+🔥 CRITICAL → Fix IMMEDIATELY (crashes, security, data corruption)
+⚠ Warning → Fix before commit (bugs, performance, maintenance)
+ℹ Info → Consider improvements (code quality, best practices)
 
 Output Format
 
 Summary Statistics:
-  Files scanned:    61
-  Critical issues:  12     ← BLOCK commits if > 0
-  Warning issues:   156    ← Should fix before commit
-  Info items:       423    ← Optional improvements
+Files scanned: 61
+Critical issues: 12 ← BLOCK commits if > 0
+Warning issues: 156 ← Should fix before commit
+Info items: 423 ← Optional improvements
 
 Required Actions
 
@@ -104,6 +107,7 @@ If Only Warnings Found (Exit Code 0)
 Example:
 
 Implementation complete! The scanner found 23 warnings (no critical issues):
+
 - 15 opportunities for optional chaining (?.)
 - 8 potential division-by-zero edge cases
 

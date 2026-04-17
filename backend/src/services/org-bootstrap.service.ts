@@ -106,26 +106,29 @@ export class OrgBootstrapService {
     }
 
     // Step 5: Create user record within transaction
-    const result = await this.prisma.$transaction(async (tx) => {
-      const newUser = await tx.user.create({
-        data: {
-          organizationId: org.id,
-          clerkUserId: params.clerkUserId,
-          email: params.email.trim().toLowerCase(),
-          username: params.username ?? null,
-          role: assignedRole,
-        },
-      });
+    const result = await this.prisma.$transaction(
+      async (tx) => {
+        const newUser = await tx.user.create({
+          data: {
+            organizationId: org.id,
+            clerkUserId: params.clerkUserId,
+            email: params.email.trim().toLowerCase(),
+            username: params.username ?? null,
+            role: assignedRole,
+          },
+        });
 
-      return {
-        userId: newUser.id,
-        organizationId: org.id,
-        role: assignedRole,
-        isNewOrg,
-        isNewUser: true,
-        isFirstAdmin,
-      };
-    }, { timeout: 15000 });
+        return {
+          userId: newUser.id,
+          organizationId: org.id,
+          role: assignedRole,
+          isNewOrg,
+          isNewUser: true,
+          isFirstAdmin,
+        };
+      },
+      { timeout: 15000 },
+    );
 
     // Step 6: Audit log (outside transaction to avoid SQLite deadlock)
     try {

@@ -20,11 +20,13 @@ jest.mock('../../middleware/auth.middleware', () => ({
 }));
 
 jest.mock('../../middleware/requireOrgRole', () => ({
-  requireOrgRole: (...allowedRoles: string[]) => (req: any, _res: any, next: any) => {
-    // Mock the role check - always pass for tests
-    req.userRole = allowedRoles[0] || 'admin';
-    next();
-  },
+  requireOrgRole:
+    (...allowedRoles: string[]) =>
+    (req: any, _res: any, next: any) => {
+      // Mock the role check - always pass for tests
+      req.userRole = allowedRoles[0] || 'admin';
+      next();
+    },
 }));
 
 jest.mock('../../middleware/clerk-auth.middleware', () => ({

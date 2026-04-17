@@ -98,22 +98,27 @@ router.post(
   },
 );
 
-router.get('/invites', authenticateToken, requireOrgRole('admin', 'manager'), async (req: AuthRequest, res) => {
-  try {
-    if (!req.organizationId) {
-      return res.status(401).json({ message: 'Access denied: Missing organization context' });
-    }
+router.get(
+  '/invites',
+  authenticateToken,
+  requireOrgRole('admin', 'manager'),
+  async (req: AuthRequest, res) => {
+    try {
+      if (!req.organizationId) {
+        return res.status(401).json({ message: 'Access denied: Missing organization context' });
+      }
 
-    const invites = await inviteService.listPendingInvites(req.organizationId);
-    return res.json(invites);
-  } catch (error) {
-    if (isBaseError(error)) {
-      return res.status(error.statusCode).json({ message: error.message, code: error.code });
-    }
+      const invites = await inviteService.listPendingInvites(req.organizationId);
+      return res.json(invites);
+    } catch (error) {
+      if (isBaseError(error)) {
+        return res.status(error.statusCode).json({ message: error.message, code: error.code });
+      }
 
-    return res.status(500).json({ message: 'Internal server error' });
-  }
-});
+      return res.status(500).json({ message: 'Internal server error' });
+    }
+  },
+);
 
 router.delete(
   '/invites/:inviteId',
@@ -125,7 +130,11 @@ router.delete(
         return res.status(401).json({ message: 'Access denied: Missing organization context' });
       }
 
-      const invite = await inviteService.revokeInvite(req.organizationId, req.params.inviteId, req.userId);
+      const invite = await inviteService.revokeInvite(
+        req.organizationId,
+        req.params.inviteId,
+        req.userId,
+      );
       return res.json(invite);
     } catch (error) {
       if (isBaseError(error)) {
@@ -148,7 +157,11 @@ router.post(
         return res.status(401).json({ message: 'Access denied: Missing organization context' });
       }
 
-      const updated = await inviteService.resendInvite(req.organizationId, req.params.inviteId, req.userId);
+      const updated = await inviteService.resendInvite(
+        req.organizationId,
+        req.params.inviteId,
+        req.userId,
+      );
 
       const organization = await organizationService.getOrganization(req.organizationId);
       if (!organization) {
@@ -177,25 +190,30 @@ router.post(
   },
 );
 
-router.delete('/', authenticateToken, requireOrgRole('admin'), async (req: AuthRequest, res: Response) => {
-  try {
-    if (!req.organizationId) {
-      return res.status(401).json({ message: 'Access denied: Missing organization context' });
-    }
+router.delete(
+  '/',
+  authenticateToken,
+  requireOrgRole('admin'),
+  async (req: AuthRequest, res: Response) => {
+    try {
+      if (!req.organizationId) {
+        return res.status(401).json({ message: 'Access denied: Missing organization context' });
+      }
 
-    const deleted = await organizationService.deleteOrganization(req.organizationId);
-    if (!deleted) {
-      return res.status(404).json({ message: 'Organization not found' });
-    }
+      const deleted = await organizationService.deleteOrganization(req.organizationId);
+      if (!deleted) {
+        return res.status(404).json({ message: 'Organization not found' });
+      }
 
-    return res.status(200).json({ message: 'Organization deleted successfully' });
-  } catch (error) {
-    if (isBaseError(error)) {
-      return res.status(error.statusCode).json({ message: error.message, code: error.code });
-    }
+      return res.status(200).json({ message: 'Organization deleted successfully' });
+    } catch (error) {
+      if (isBaseError(error)) {
+        return res.status(error.statusCode).json({ message: error.message, code: error.code });
+      }
 
-    return res.status(500).json({ message: 'Internal server error' });
-  }
-});
+      return res.status(500).json({ message: 'Internal server error' });
+    }
+  },
+);
 
 export default router;

@@ -7,21 +7,25 @@ The application currently handles sensitive user data (product inventory, storag
 ## What Changes
 
 ### Input & Data Security
+
 - [ ] Implement CSV injection sanitization in the CSV parser to prevent malicious formula injection
 - [ ] Add comprehensive input validation for all API endpoints (type checking, length limits, format validation)
 - [ ] Implement request size limits (10MB max) to prevent resource exhaustion attacks
 - [ ] Verify no secrets are committed to codebase using automated scanning
 
 ### API Security
+
 - [ ] Configure CORS to whitelist production domain only (prevent unauthorized cross-origin requests)
 - [ ] Configure rate limiting on upload/sensitive endpoints to prevent brute force and DoS attacks
 - [ ] Implement JWT token validation in Workers to verify request authenticity at the edge
 
 ### Data Protection
+
 - [ ] Enable TLS-only connections to Neon with sslmode=require verification
 - [ ] Run security audit with `npm audit` to identify and patch known vulnerabilities
 
 ### Error Handling & Service Refactoring (Tech Debt)
+
 - [ ] Implement global error handler with custom error types for consistent error responses
 - [ ] Refactor AnalyticsService and ReportService to use Prisma ORM
 - [ ] Create AnalyticsRepository and ReportRepository for data access layer separation
@@ -29,11 +33,13 @@ The application currently handles sensitive user data (product inventory, storag
 - [ ] Improve AuthService test coverage to >80%
 
 ### Documentation
+
 - [ ] Create comprehensive `docs/security.md` documenting all security measures and best practices
 
 ## Capabilities
 
 ### New Capabilities
+
 - `csv-injection-prevention`: Sanitize CSV cell values to prevent formula injection attacks (e.g., =, +, -, @)
 - `api-input-validation`: Comprehensive input validation middleware for all endpoints with type checking, length limits, and format validation
 - `rate-limiting`: Rate limit configuration on sensitive endpoints to prevent brute force, DoS, and abuse
@@ -45,18 +51,21 @@ The application currently handles sensitive user data (product inventory, storag
 - `security-audit-compliance`: Regularly run `npm audit` to identify and patch known vulnerabilities in dependencies
 
 ### Modified Capabilities
+
 - `error-handling`: Implement consistent, global error handling with custom error types across all services and layers
 - `authentication-service`: Improve AuthService test coverage and robustness to >80% coverage threshold
 
 ## Impact
 
 **Code Changes:**
+
 - Backend: New middleware (validation, rate-limiting), updated services (Analytics, Report, Auth), error handling layer
 - Frontend: Input validation on client-side forms, enhanced error display
 - Workers: JWT validation logic, request inspection for security headers
 - Configuration: Environment variables for CORS, rate limits, TLS settings
 
 **Dependencies:**
+
 - May add: `joi` or `zod` for schema validation, `express-rate-limit` for rate limiting, `npm-audit` tooling
 - Verify: Neon PostgreSQL connection options for SSL configuration
 
@@ -65,6 +74,7 @@ The application currently handles sensitive user data (product inventory, storag
 **Timeline:** Phase 13 tasks are independent and can be parallelized. Estimated 2-3 days for complete implementation and validation.
 
 **Success Criteria:**
+
 - All 16 tasks completed and marked `[x]` in tasks.md
 - Security audit (`npm audit --audit-level=moderate`) passes with no vulnerabilities
 - No secrets detected in codebase

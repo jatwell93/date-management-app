@@ -1,9 +1,11 @@
 # Deployment Guide for Date Management Application
 
 ## Overview
+
 This document outlines the deployment process for the Date Management Application, including production setup, configuration, and rollback procedures.
 
 ## Prerequisites
+
 - Node.js v16 or higher
 - PM2 process manager (`npm install -g pm2`)
 - Nginx or Apache web server
@@ -13,13 +15,16 @@ This document outlines the deployment process for the Date Management Applicatio
 ## Deployment Process
 
 ### 1. Prepare the Environment
+
 1. Clone the repository to the production server:
+
    ```bash
    git clone <repository-url>
    cd date-management-app
    ```
 
 2. Install backend dependencies:
+
    ```bash
    cd backend
    npm install --production
@@ -33,34 +38,38 @@ This document outlines the deployment process for the Date Management Applicatio
    ```
 
 ### 2. Configure Environment Variables
+
 1. Copy the `.env.example` to `.env`:
+
    ```bash
    cd ../backend
    cp .env.example .env
    ```
 
 2. Update the `.env` file with production values:
+
    ```bash
    # Server configuration
    PORT=3001
    NODE_ENV=production
    FRONTEND_URL=https://yourdomain.com
-   
+
    # Security
    JWT_SECRET=your_long_secure_random_secret_here
    ENABLE_HTTPS=true
    SSL_PRIVATE_KEY_PATH=/path/to/ssl/private.key
    SSL_CERT_PATH=/path/to/ssl/certificate.crt
-   
+
    # Database
    DATABASE_PATH=/path/to/database.sqlite
-   
+
    # Backup configuration
    BACKUP_PATH=/path/to/backups/
    BACKUP_RETENTION_DAYS=30
    ```
 
 ### 3. Set Up Database
+
 1. Ensure the database file is accessible and has proper permissions
 2. Run initial migrations:
    ```bash
@@ -68,6 +77,7 @@ This document outlines the deployment process for the Date Management Applicatio
    ```
 
 ### 4. Configure Reverse Proxy (Nginx Example)
+
 ```nginx
 server {
     listen 80;
@@ -114,28 +124,34 @@ server {
 ```
 
 ### 5. Start the Application with PM2
+
 1. Create a PM2 ecosystem file (`ecosystem.config.js`):
+
    ```javascript
    module.exports = {
-     apps: [{
-       name: 'date-management-app',
-       script: './dist/index.js',
-       instances: 'max',
-       exec_mode: 'cluster',
-       env: {
-         NODE_ENV: 'production',
-         PORT: 3001
-       }
-     }]
+     apps: [
+       {
+         name: 'date-management-app',
+         script: './dist/index.js',
+         instances: 'max',
+         exec_mode: 'cluster',
+         env: {
+           NODE_ENV: 'production',
+           PORT: 3001,
+         },
+       },
+     ],
    };
    ```
 
 2. Build the backend:
+
    ```bash
    npm run build
    ```
 
 3. Start the application:
+
    ```bash
    pm2 start ecosystem.config.js
    ```
@@ -147,7 +163,9 @@ server {
    ```
 
 ### 6. Verify Deployment
+
 1. Check application status:
+
    ```bash
    pm2 status
    ```
@@ -162,26 +180,31 @@ server {
 ## Rollback Procedures
 
 ### Automated Rollback with Git and PM2
+
 1. Create a backup of the current state:
+
    ```bash
    # Create DB backup
    cp /path/to/database.sqlite /path/to/backups/database-rollback-$(date +%Y%m%d-%H%M%S).sqlite
-   
+
    # Create code backup
    tar -czf backup-$(date +%Y%m%d-%H%M%S).tar.gz .
    ```
 
 2. Identify the last known working commit:
+
    ```bash
    git log --oneline
    ```
 
 3. Revert to the known working commit:
+
    ```bash
    git reset --hard <commit-hash>
    ```
 
 4. Update dependencies if needed:
+
    ```bash
    cd backend
    npm install --production
@@ -198,29 +221,33 @@ server {
    ```
 
 ### Manual Rollback
+
 If the automated process fails:
 
 1. Stop the current application:
+
    ```bash
    pm2 stop date-management-app
    ```
 
 2. Restore the database from a known good backup:
+
    ```bash
    cp /path/to/backups/database-good-backup.sqlite /path/to/database.sqlite
    ```
 
 3. Restore the application files from backup:
+
    ```bash
    # Stop current app
    pm2 stop date-management-app
-   
+
    # Remove current files
    rm -rf *
-   
+
    # Extract the backup
    tar -xzf backup-<timestamp>.tar.gz
-   
+
    # Restart
    pm2 start ecosystem.config.js
    ```
@@ -231,6 +258,7 @@ If the automated process fails:
    - Run health checks
 
 ## Post-Deployment Verification Checklist
+
 - [ ] Application is accessible via configured domain
 - [ ] Health check endpoints return healthy status
 - [ ] Database connection is working
@@ -242,6 +270,7 @@ If the automated process fails:
 - [ ] Backup jobs are scheduled and working
 
 ## Troubleshooting Common Issues
+
 1. **Application not starting**:
    - Check logs with `pm2 logs date-management-app`
    - Verify environment variables are set correctly
@@ -260,11 +289,13 @@ If the automated process fails:
 ## Maintenance Tasks
 
 ### Regular Database Maintenance
+
 - Run periodic backups
 - Monitor database size growth
 - Implement data archival for old records if needed
 
 ### Security Updates
+
 - Regularly update dependencies with `npm audit` and `npm audit fix`
 - Update Node.js runtime when security patches are available
 - Renew SSL certificates before expiration

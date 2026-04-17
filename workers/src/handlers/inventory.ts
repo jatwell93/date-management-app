@@ -1,6 +1,6 @@
 /**
  * Inventory Handler - Multi-Tenant Safe
- * 
+ *
  * All queries filter by organizationId through product relationship
  * to prevent SQL injection and ensure multi-tenant data isolation
  */
@@ -22,7 +22,7 @@ export interface InventoryItem {
 
 export async function getInventoryItems(
   env: Env,
-  organizationId: string
+  organizationId: string,
 ): Promise<InventoryItem[]> {
   const sql = neon(getConnectionString(env));
   const results = await sql`
@@ -39,7 +39,7 @@ export async function getInventoryItems(
 export async function getInventoryItemById(
   env: Env,
   organizationId: string,
-  itemId: number
+  itemId: number,
 ): Promise<InventoryItem | null> {
   const sql = neon(getConnectionString(env));
   const results = await sql`
@@ -55,7 +55,7 @@ export async function getInventoryItemById(
 export async function getExpiringItems(
   env: Env,
   organizationId: string,
-  daysUntilExpiry: number = 90
+  daysUntilExpiry: number = 90,
 ): Promise<InventoryItem[]> {
   const sql = neon(getConnectionString(env));
   const results = await sql`
@@ -72,10 +72,7 @@ export async function getExpiringItems(
   return results as InventoryItem[];
 }
 
-export async function countInventoryItems(
-  env: Env,
-  organizationId: string
-): Promise<number> {
+export async function countInventoryItems(env: Env, organizationId: string): Promise<number> {
   const sql = neon(getConnectionString(env));
   const results = await sql`
     SELECT COUNT(*) as count
@@ -94,7 +91,7 @@ export async function createInventoryItem(
     quantity: number;
     expiryDate?: string;
     storeAreaId?: number;
-  }
+  },
 ): Promise<InventoryItem> {
   // First verify product belongs to organization
   const sql = neon(getConnectionString(env));
@@ -102,8 +99,8 @@ export async function createInventoryItem(
     SELECT id FROM products WHERE id = ${itemData.productId} AND organization_id = ${organizationId}
   `;
   if (!prodCheck[0]) throw new Error('Product not found or does not belong to organization');
-  
-  const results = await sql`
+
+  const results = (await sql`
     INSERT INTO inventory_items (
       product_id, quantity, expiry_date, store_area_id, status, created_at, updated_at
     ) VALUES (
@@ -117,23 +114,23 @@ export async function createInventoryItem(
     )
     RETURNING id, product_id, quantity, expiry_date, store_area_id, status,
               created_at, updated_at
-  ` as any[];
-  
+  `) as any[];
+
   if (!results[0]) throw new Error('Failed to create inventory item');
   return {
     ...results[0],
-    organization_id: organizationId
+    organization_id: organizationId,
   } as InventoryItem;
 }
 
 export async function deleteInventoryItem(
   env: Env,
   organizationId: string,
-  itemId: number
+  itemId: number,
 ): Promise<boolean> {
   const existing = await getInventoryItemById(env, organizationId, itemId);
   if (!existing) return false;
-  
+
   const sql = neon(getConnectionString(env));
   const results = await sql`
     DELETE FROM inventory_items WHERE id = ${itemId} RETURNING id

@@ -28,7 +28,7 @@ describe('Health Check API', () => {
     const response = await SELF.fetch('https://example.com/');
     expect(response.status).toBe(200);
 
-    const data = await response.json() as any;
+    const data = (await response.json()) as any;
     expect(data.service).toBe('ExpiryMate API');
     expect(data.health).toBe('/health');
     expect(data.docs).toBe('/api');
@@ -37,8 +37,8 @@ describe('Health Check API', () => {
   it('should return 200 OK for /health', async () => {
     const response = await SELF.fetch('https://example.com/health');
     expect(response.status).toBe(200);
-    
-    const data = await response.json() as any;
+
+    const data = (await response.json()) as any;
     expect(data.status).toBe('healthy');
     expect(data.checks.workers.status).toBe('pass');
   });
@@ -46,8 +46,8 @@ describe('Health Check API', () => {
   it('should return 200 OK for /api/health', async () => {
     const response = await SELF.fetch('https://example.com/api/health');
     expect(response.status).toBe(200);
-    
-    const data = await response.json() as any;
+
+    const data = (await response.json()) as any;
     expect(data.status).toBe('healthy');
   });
 
@@ -138,21 +138,21 @@ describe('API config guard', () => {
   it('returns 500 when database config is missing for /api/products', async () => {
     const response = await SELF.fetch('https://example.com/api/products');
     expect(response.status).toBe(500);
-    const body = await response.json() as any;
+    const body = (await response.json()) as any;
     expect(body.error).toBeTruthy();
   });
 
   it('returns 500 when database config is missing for /api/users/me', async () => {
     const response = await SELF.fetch('https://example.com/api/users/me');
     expect(response.status).toBe(500);
-    const body = await response.json() as any;
+    const body = (await response.json()) as any;
     expect(body.error).toBeTruthy();
   });
 
   it('returns 500 when database config is missing for /api/dashboard', async () => {
     const response = await SELF.fetch('https://example.com/api/dashboard');
     expect(response.status).toBe(500);
-    const body = await response.json() as any;
+    const body = (await response.json()) as any;
     expect(body.error).toBeTruthy();
   });
 
@@ -165,7 +165,7 @@ describe('API config guard', () => {
 
     expect(response.status).not.toBe(404);
     expect([401, 429, 500]).toContain(response.status);
-    const body = await response.json() as any;
+    const body = (await response.json()) as any;
     expect(body.error).toBeTruthy();
   });
 
@@ -178,7 +178,7 @@ describe('API config guard', () => {
 
     expect(response.status).not.toBe(404);
     expect([401, 429, 500]).toContain(response.status);
-    const body = await response.json() as any;
+    const body = (await response.json()) as any;
     expect(body.error).toBeTruthy();
   });
 
@@ -191,7 +191,7 @@ describe('API config guard', () => {
 
     expect(response.status).not.toBe(404);
     expect([401, 429, 500]).toContain(response.status);
-    const body = await response.json() as any;
+    const body = (await response.json()) as any;
     expect(body.error).toBeTruthy();
   });
 
@@ -207,7 +207,7 @@ describe('API config guard', () => {
 
     expect(response.status).toBe(400);
 
-    const body = await response.json() as any;
+    const body = (await response.json()) as any;
     expect(body.error).toContain('Svix');
   });
 });
@@ -257,7 +257,7 @@ describe('Upload strategy parity', () => {
     const response = await handleUploadInitiate(request, envForUpload, '/api/upload');
     expect(response.status).toBe(200);
 
-    const body = await response.json() as any;
+    const body = (await response.json()) as any;
     expect(body.strategy).toBe('presigned');
     expect(body.method).toBe('PUT');
     expect(body.uploadUrl).toContain('/api/upload/presigned/');
@@ -269,17 +269,20 @@ describe('Upload strategy parity', () => {
     const token = await createAuthToken(envForUpload.JWT_SECRET, 7);
     const key = 'uploads/user-7/1-big.csv';
 
-    const request = new Request(`https://example.com/api/upload/status/${encodeURIComponent(key)}`, {
-      method: 'GET',
-      headers: {
-        Authorization: `Bearer ${token}`,
+    const request = new Request(
+      `https://example.com/api/upload/status/${encodeURIComponent(key)}`,
+      {
+        method: 'GET',
+        headers: {
+          Authorization: `Bearer ${token}`,
+        },
       },
-    });
+    );
 
     const response = await handleUploadStatus(request, envForUpload, key);
     expect(response.status).toBe(200);
 
-    const body = await response.json() as any;
+    const body = (await response.json()) as any;
     expect(body.status).toBe('complete');
     expect(body.progress).toBe(100);
   });
@@ -336,7 +339,7 @@ describe('Auth input validation', () => {
 
     const response = await handleLogin(request, createDb(), envForAuth);
     expect(response.status).toBe(400);
-    const body = await response.json() as any;
+    const body = (await response.json()) as any;
     expect(body.error).toBe('Email and password are required');
   });
 
@@ -349,7 +352,7 @@ describe('Auth input validation', () => {
 
     const response = await handleRegister(request, createDb(), envForAuth);
     expect(response.status).toBe(400);
-    const body = await response.json() as any;
+    const body = (await response.json()) as any;
     expect(body.error).toBe('Email, password, and name are required');
   });
 
@@ -374,7 +377,7 @@ describe('Auth input validation', () => {
 
     const response = await handleRegister(request, db, envForAuth);
     expect(response.status).toBe(409);
-    const body = await response.json() as any;
+    const body = (await response.json()) as any;
     expect(body.error).toBe('Email already registered');
   });
 });
@@ -392,8 +395,10 @@ describe('Workers database connection strategy', () => {
       RATE_LIMIT_WINDOW: '60000',
       RATE_LIMIT_MAX_REQUESTS: '10',
       RATE_LIMIT_MAX_AUTHENTICATED: '100',
-      NEON_CONNECTION_STRING: 'postgresql://neondb_owner:testpass@direct-neon.example.com/neondb?sslmode=require',
-      DATABASE_URL: 'postgresql://neondb_owner:testpass@fallback-db.example.com/neondb?sslmode=require',
+      NEON_CONNECTION_STRING:
+        'postgresql://neondb_owner:testpass@direct-neon.example.com/neondb?sslmode=require',
+      DATABASE_URL:
+        'postgresql://neondb_owner:testpass@fallback-db.example.com/neondb?sslmode=require',
       JWT_SECRET: 'test-secret',
       R2_ACCOUNT_ID: 'test',
       R2_ACCESS_KEY_ID: 'test',
@@ -401,13 +406,16 @@ describe('Workers database connection strategy', () => {
       R2_BUCKET_NAME: 'test',
       CSV_UPLOADS: {} as R2Bucket,
       HYPERDRIVE: {
-        connectionString: 'postgresql://neondb_owner:testpass@hyperdrive-proxy.example.com/neondb?sslmode=require',
+        connectionString:
+          'postgresql://neondb_owner:testpass@hyperdrive-proxy.example.com/neondb?sslmode=require',
       } as unknown as Hyperdrive,
     } as Env;
 
     createWorkersDatabase(envWithBoth);
 
-    expect(logSpy).toHaveBeenCalledWith('[Database] Connecting via Neon serverless driver (direct)');
+    expect(logSpy).toHaveBeenCalledWith(
+      '[Database] Connecting via Neon serverless driver (direct)',
+    );
     expect(warnSpy).not.toHaveBeenCalledWith(
       '[Database] Direct Neon connection not found, falling back to Hyperdrive connection string',
     );

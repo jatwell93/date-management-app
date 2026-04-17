@@ -14,12 +14,14 @@ The current Clerk-backed organization flow is only partially implemented and use
 ## Capabilities
 
 ### New Capabilities
+
 - `clerk-org-first-login-bootstrap`: First-time login workflow that ensures organization creation/selection and assigns `admin` to the initial organization user.
 - `organization-rbac-admin-manager-team-member`: Canonical role model and permission matrix applied to organization management, member administration, and settings. `manager` is optional until Clerk plan upgrade.
 - `organization-invite-role-assignment`: End-to-end invite workflow with role selection, acceptance flow, and membership provisioning.
 - `organization-security-controls`: Security requirements for invite tokens, email verification, rate limiting, and auditability of org/role/invite actions.
 
 ### Modified Capabilities
+
 - `cloudflare-workers-api`: Add role-aware authorization requirements and consistent org-context enforcement for org and membership endpoints served at the edge.
 - `csv-upload-processing`: Add role-based authorization requirements so upload initiation and processing are limited to `admin` (and `manager` if enabled) roles.
 

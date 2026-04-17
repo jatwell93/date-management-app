@@ -50,7 +50,7 @@ describe('Workers JWT Authentication (Task 7)', () => {
     it('should include userId in payload', async () => {
       const token = await createJWT(123, testOrganizationId, testSecret);
       const payload = await verifyJWT(token, testSecret);
-      
+
       expect(payload?.userId).toBe(123);
     });
   });
@@ -58,11 +58,11 @@ describe('Workers JWT Authentication (Task 7)', () => {
   describe('Task 7.2: Extract JWT from Authorization Header', () => {
     it('should authenticate valid request with Bearer token', async () => {
       const token = await createJWT(testUserId, testOrganizationId, testSecret);
-      
+
       // Create mock request
       const mockRequest = new Request('https://example.com', {
         headers: {
-          'Authorization': `Bearer ${token}`,
+          Authorization: `Bearer ${token}`,
         },
       });
 
@@ -85,7 +85,7 @@ describe('Workers JWT Authentication (Task 7)', () => {
     it('should reject request with malformed Authorization header', async () => {
       const mockRequest = new Request('https://example.com', {
         headers: {
-          'Authorization': 'NotBearer token',
+          Authorization: 'NotBearer token',
         },
       });
 
@@ -96,7 +96,7 @@ describe('Workers JWT Authentication (Task 7)', () => {
     it('should reject request with invalid token', async () => {
       const mockRequest = new Request('https://example.com', {
         headers: {
-          'Authorization': 'Bearer invalid.token.here',
+          Authorization: 'Bearer invalid.token.here',
         },
       });
 
@@ -120,7 +120,7 @@ describe('Workers JWT Authentication (Task 7)', () => {
       const request = new Request('https://example.com', {
         headers: {
           'Content-Type': 'application/json',
-          'Authorization': 'Bearer token',
+          Authorization: 'Bearer token',
         },
       });
 
@@ -144,8 +144,8 @@ describe('Workers JWT Authentication (Task 7)', () => {
 
     it('should return JSON error format', async () => {
       const response = unauthorized('Custom message');
-      const body = await response.json() as any;
-      
+      const body = (await response.json()) as any;
+
       expect(body.code).toBe('UNAUTHORIZED');
       expect(body.message).toBe('Custom message');
       expect(body.timestamp).toBeTruthy();
@@ -174,11 +174,10 @@ describe('Workers JWT Authentication (Task 7)', () => {
 
     it('should bypass authentication for public endpoints', async () => {
       const middleware = createAuthMiddleware(testSecret);
-      
-      const result = await middleware(
-        new Request('https://example.com'),
-        { pathname: '/auth/login' }
-      );
+
+      const result = await middleware(new Request('https://example.com'), {
+        pathname: '/auth/login',
+      });
 
       expect(result.authenticated).toBe(true);
       expect(result.shouldBypass).toBe(true);
@@ -187,10 +186,9 @@ describe('Workers JWT Authentication (Task 7)', () => {
     it('should bypass authentication for /api-prefixed public endpoints', async () => {
       const middleware = createAuthMiddleware(testSecret);
 
-      const result = await middleware(
-        new Request('https://example.com'),
-        { pathname: '/api/auth/login' }
-      );
+      const result = await middleware(new Request('https://example.com'), {
+        pathname: '/api/auth/login',
+      });
 
       expect(result.authenticated).toBe(true);
       expect(result.shouldBypass).toBe(true);
@@ -198,7 +196,7 @@ describe('Workers JWT Authentication (Task 7)', () => {
 
     it('should require authentication for protected endpoints', async () => {
       const middleware = createAuthMiddleware(testSecret);
-      
+
       const request = new Request('https://example.com/api/users', {
         headers: {},
       });
@@ -214,7 +212,7 @@ describe('Workers JWT Authentication (Task 7)', () => {
 
       const request = new Request('https://example.com/api/users', {
         headers: {
-          'Authorization': `Bearer ${token}`,
+          Authorization: `Bearer ${token}`,
         },
       });
 
@@ -230,7 +228,7 @@ describe('Workers JWT Authentication (Task 7)', () => {
     it('should include expiration time in token', async () => {
       const token = await createJWT(testUserId, testOrganizationId, testSecret, '24h');
       const payload = await verifyJWT(token, testSecret);
-      
+
       expect(payload?.exp).toBeTruthy();
       expect(payload?.iat).toBeTruthy();
     });
@@ -240,18 +238,18 @@ describe('Workers JWT Authentication (Task 7)', () => {
     it('should complete full auth flow', async () => {
       // 1. Create token
       const token = await createJWT(testUserId, testOrganizationId, testSecret, '24h');
-      
+
       // 2. Create request with token
       let request = new Request('https://example.com/api/users', {
         headers: {
-          'Authorization': `Bearer ${token}`,
+          Authorization: `Bearer ${token}`,
         },
       });
-      
+
       // 3. Authenticate
       const result = await authenticateRequest(request, testSecret);
       expect(result.authenticated).toBe(true);
-      
+
       // 4. Add user ID to headers
       request = addUserIdHeader(request, result.userId!);
       expect(request.headers.get('x-user-id')).toBe(String(testUserId));

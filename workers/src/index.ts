@@ -1,9 +1,9 @@
 /**
  * Cloudflare Workers Entry Point
- * 
+ *
  * Production deployment entry point that wraps existing Express routes
  * for Cloudflare Workers environment.
- * 
+ *
  * Database Connection:
  * - Uses Cloudflare Hyperdrive for edge connection pooling to Neon PostgreSQL
  * - Hyperdrive provides lowest latency by pooling connections at Cloudflare's edge
@@ -23,21 +23,30 @@ import { createProductionCors } from './middleware/cors.middleware';
 import { createRateLimiter } from './middleware/rate-limit.middleware';
 import { createConnectionLimiter } from './middleware/connection-limiter.middleware';
 import { createQueryLimiter } from './middleware/query-limiter.middleware';
-import { createRequestLogger, createErrorHandler, WorkersLogger } from './middleware/error-handler.middleware';
+import {
+  createRequestLogger,
+  createErrorHandler,
+  WorkersLogger,
+} from './middleware/error-handler.middleware';
 import { createSecurityHeadersMiddleware } from './middleware/security-headers.middleware';
 import {
   createMetricsInitializer,
   getRequestMetrics,
   formatMetricsForAnalytics,
 } from './middleware/metrics.middleware';
-import { authenticateRequest, addUserIdHeader, unauthorized, isPublicEndpoint } from './middleware/auth';
+import {
+  authenticateRequest,
+  addUserIdHeader,
+  unauthorized,
+  isPublicEndpoint,
+} from './middleware/auth';
 import { createUploadRoleMiddleware } from './middleware/require-role.middleware';
 import { handleHealthCheck } from './health';
 import { createDatabaseClient } from '../../backend/src/database/database-factory';
 
 /**
  * Initialize Sentry for Workers error tracking (when DSN is configured)
- * 
+ *
  * Note: Sentry for Cloudflare Workers requires ES modules, which is fully
  * supported in the Workers environment.
  */
@@ -76,7 +85,7 @@ import userRoutes from '../../backend/src/routes/user.routes';
 // Skipped: product.routes.ts (uses multer - filesystem dependency)
 // Skipped: database.backup.routes.ts (uses filesystem for backups)
 
-import * as Sentry from "@sentry/cloudflare";
+import * as Sentry from '@sentry/cloudflare';
 
 /**
  * Route definition
@@ -151,7 +160,10 @@ class WorkersRouter {
           const timeoutMs = req.requestTimeoutMs;
           let timeoutId: ReturnType<typeof setTimeout> | undefined;
           const timeoutPromise = new Promise<never>((_, reject) => {
-            timeoutId = setTimeout(() => reject(new Error(`Query timeout exceeded (${timeoutMs}ms)`)), timeoutMs);
+            timeoutId = setTimeout(
+              () => reject(new Error(`Query timeout exceeded (${timeoutMs}ms)`)),
+              timeoutMs,
+            );
           });
 
           try {
@@ -190,7 +202,7 @@ function registerExpressRouter(
   workersRouter: WorkersRouter,
   expressRouter: any,
   basePath: string,
-  env: Env
+  env: Env,
 ) {
   // Express router stores routes in router.stack
   const stack = expressRouter.stack || [];
@@ -243,7 +255,7 @@ function createJWTAuthMiddleware(env: Env): ExpressMiddleware {
     // Extract Authorization header from ExpressRequest headers (normalize to standard header format)
     const authHeader = req.headers['authorization'] as string | undefined;
     const mockRequest = new Request('http://localhost', {
-      headers: authHeader ? { Authorization: authHeader } : {}
+      headers: authHeader ? { Authorization: authHeader } : {},
     });
     const authResult = await authenticateRequest(mockRequest as unknown as Request, env.JWT_SECRET);
 
@@ -353,7 +365,7 @@ function writeMetrics(env: Env, metrics: any): void {
         env.ANALYTICS.writeDataPoint({
           blobs: ['upload-success'],
           doubles: [metrics.responseSize || 0],
-          indexes: [metrics.organizationId || 'unknown']
+          indexes: [metrics.organizationId || 'unknown'],
         });
       }
 
@@ -361,7 +373,7 @@ function writeMetrics(env: Env, metrics: any): void {
       env.ANALYTICS.writeDataPoint({
         blobs: ['api-latency'],
         doubles: [metrics.responseTime || 0],
-        indexes: [metrics.endpoint || 'unknown']
+        indexes: [metrics.endpoint || 'unknown'],
       });
     } catch (error) {
       // Silently fail if Analytics writing fails - don't block requests
@@ -384,7 +396,10 @@ export default Sentry.withSentry(
       const startTime = Date.now();
 
       // Fast-path health check (bypass full routing)
-      if (url.pathname === '/health' && (request.method === 'GET' || request.method === 'OPTIONS')) {
+      if (
+        url.pathname === '/health' &&
+        (request.method === 'GET' || request.method === 'OPTIONS')
+      ) {
         return handleHealthCheck(request, env);
       }
 
@@ -450,20 +465,23 @@ export default Sentry.withSentry(
         return new Response(
           JSON.stringify({
             error: 'Internal Server Error',
-            message: env.NODE_ENV === 'development'
-              ? (error instanceof Error ? error.message : 'Unknown error')
-              : 'An unexpected error occurred',
+            message:
+              env.NODE_ENV === 'development'
+                ? error instanceof Error
+                  ? error.message
+                  : 'Unknown error'
+                : 'An unexpected error occurred',
           }),
           {
             status: 500,
             headers: { 'Content-Type': 'application/json' },
-          }
+          },
         );
       } finally {
         if (req?.releaseConnection) {
           req.releaseConnection();
         }
       }
-    }
-  }
+    },
+  },
 );

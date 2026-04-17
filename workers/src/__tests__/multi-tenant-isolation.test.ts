@@ -1,16 +1,11 @@
 /**
  * Integration Test: Cross-Tenant Data Isolation (4.1)
- * 
+ *
  * Verifies that Organization A cannot see, access, or modify Organization B's data
  */
 
 import { describe, it, expect } from 'vitest';
-import { 
-  getProducts, 
-  getProductById, 
-  createProduct, 
-  deleteProduct 
-} from '../handlers/products';
+import { getProducts, getProductById, createProduct, deleteProduct } from '../handlers/products';
 import { testEnv, createTestOrgId, testData, testAssertions } from './fixtures';
 
 describe('Phase 4.1: Cross-Tenant Data Isolation', () => {
@@ -28,7 +23,7 @@ describe('Phase 4.1: Cross-Tenant Data Isolation', () => {
        * 5. Query products as Org B
        * 6. Assert: Only see 5 products (Org B's data)
        */
-      
+
       // In a real integration test with live DB, would:
       // - Create products for orgA: await createProduct(testEnv, orgA, {...})
       // - Create products for orgB: await createProduct(testEnv, orgB, {...})
@@ -36,7 +31,7 @@ describe('Phase 4.1: Cross-Tenant Data Isolation', () => {
       // - Assert: expect(productsA).toHaveLength(10)
       // - Query: const productsB = await getProducts(testEnv, orgB)
       // - Assert: expect(productsB).toHaveLength(5)
-      
+
       const expected = true; // Data isolation enforced at SQL layer
       expect(expected).toBe(true);
     });
@@ -51,7 +46,7 @@ describe('Phase 4.1: Cross-Tenant Data Isolation', () => {
        * This verifies that even with a known product ID,
        * cross-tenant access is impossible
        */
-      
+
       const expected = true; // FK + organizationId filter prevents access
       expect(expected).toBe(true);
     });
@@ -65,7 +60,7 @@ describe('Phase 4.1: Cross-Tenant Data Isolation', () => {
        *
        * Even with write permissions, cross-tenant modifications impossible
        */
-      
+
       const expected = true; // organizationId validation prevents deletion
       expect(expected).toBe(true);
     });
@@ -84,7 +79,7 @@ describe('Phase 4.1: Cross-Tenant Data Isolation', () => {
        *
        * Inventory isolation enforced via product.organization_id FK
        */
-      
+
       const expected = true; // JOIN products enforces isolation
       expect(expected).toBe(true);
     });
@@ -103,7 +98,7 @@ describe('Phase 4.1: Cross-Tenant Data Isolation', () => {
        *
        * Even with identical names, orgs see only their own data
        */
-      
+
       const expected = true; // organization_id filter at DB level
       expect(expected).toBe(true);
     });
@@ -122,7 +117,7 @@ describe('Phase 4.1: Cross-Tenant Data Isolation', () => {
        *
        * Aggregate queries properly scoped by organizationId
        */
-      
+
       const expected = true; // All dashboard queries filter by org
       expect(expected).toBe(true);
     });
@@ -140,7 +135,7 @@ describe('Phase 4.1: Cross-Tenant Data Isolation', () => {
        *
        * No application-level filtering fallback
        */
-      
+
       const expected = true; // All queries parameterized at DB
       expect(expected).toBe(true);
     });
@@ -154,7 +149,7 @@ describe('Phase 4.1: Cross-Tenant Data Isolation', () => {
        *
        * Neon's sql\`\` automatically parameterizes
        */
-      
+
       const expected = true; // All handlers use Neon sql\`\`
       expect(expected).toBe(true);
     });

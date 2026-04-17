@@ -11,6 +11,7 @@
 ## What Changes
 
 We will research and document:
+
 - **Freemium model** (free storage tier, paid cloud storage overages) vs **Tiered subscription model** (free/pro/enterprise with plan-based feature sets)
 - **Pricing tiers** (storage limits, max users, features per tier)
 - **Stripe integration approach** (products, prices, webhooks, subscription lifecycle)
@@ -38,6 +39,7 @@ We will research and document:
 ## Impact
 
 **Code Areas**:
+
 - Schema: Add `Organization`, `Subscription`, `Plan` models; add `organizationId` FK to all shared resources
 - Auth: Extend JWT to include `organizationId`; validate tenant context on all protected routes
 - Services: All services must filter by `organizationId`
@@ -45,6 +47,7 @@ We will research and document:
 - Workers/Edge: May need rate-limiting or feature gates per subscription tier
 
 **External Dependencies**:
+
 - Stripe account setup (products, prices, webhooks)
 - Stripe Node.js SDK configuration
 - Payment method storage (PCI considerations)
@@ -58,12 +61,14 @@ We will research and document:
 ### 1. Monetization Model (Freemium vs Tiered)
 
 **Freemium Model**
+
 - ✅ Free tier: 1 GB cloud storage (or 5 user imports/month)
 - ✅ Paid: $X/month per additional GB (or $X flat for unlimited)
 - **Pros**: Low barrier to entry, users grow into paid plan
 - **Cons**: Hard to predict revenue, storage-cost correlation may flip at scale
 
 **Tiered Subscription Model**
+
 - ✅ Free: 1 GB storage, 1 location, email support
 - ✅ Pro: 10 GB storage, 5 locations, priority support
 - ✅ Enterprise: 1 TB storage, unlimited locations, custom support
@@ -75,6 +80,7 @@ We will research and document:
 ### 2. Stripe Configuration
 
 **Questions**:
+
 - One Stripe customer per Organization or per User?
 - Automatic subscription renewal (monthly/annual)?
 - Test mode vs live mode transition?
@@ -84,6 +90,7 @@ We will research and document:
 ### 3. Plan Tiers & Pricing
 
 **Open Questions**:
+
 - Exact storage limits per tier?
 - Max concurrent users per location (expected: 1, but edge case if team grows)?
 - Feature gates (e.g., audit logs, API access, custom reports on Pro+)?
@@ -105,4 +112,3 @@ We will research and document:
 2. **Design document**: Create detailed specification with exact pricing, Stripe config, schema
 3. **Specification**: Lock down requirements for phase-14 implementation
 4. **Implementation** (phase-14): Schema, auth, routes, services, subscription lifecycle, Stripe webhooks
-

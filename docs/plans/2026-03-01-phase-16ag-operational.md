@@ -14,26 +14,27 @@
 
 > Read these before starting any task. They summarise every concrete gap found in the codebase.
 
-| # | File | Gap |
-|---|------|-----|
-| G1a | `backend/prisma/schema.prisma` | `SubscriptionTier` missing `pastDueSince DateTime?` field — no way to measure 7-day grace period |
-| G1b | `webhook.service.ts:674-691` | `handleInvoicePaymentFailed` doesn't set `pastDueSince` when first transitioning to `past_due` |
-| G1c | `subscription.service.ts` | Missing `downgradeExpiredPastDue()` method |
-| G1d | `scheduler.service.ts` | No dunning cron job registered |
-| G1e | *(new file)* | `backend/src/jobs/dunning.job.ts` does not exist |
-| G1f | Dunning downgrade path | `organizationUsage.maxSkus/maxUsers/maxInventoryItems` not reset to Starter limits on dunning downgrade |
-| G1g | Dunning downgrade path | `isCreationLocked` not applied when dunning downgrade puts org over Starter limits |
-| G1h | Dunning downgrade path | No Sentry `fatal` escalation alert fired after dunning downgrade |
-| G2a | `webhook.service.ts:437-465` | `handleSubscriptionUpdated` only checks `totalSkus > limits.max_skus` — ignores `totalInventoryItems` (DECISION 8A.2) |
-| G2b | `webhook.service.ts:540-562` | `handleSubscriptionDeleted` same inventory-item gap |
-| G2c | *(missing test)* | No integration test for: upgrade → 3000 SKUs → downgrade to Professional → warning email verified |
-| G3a | `backend/docs/operational-runbooks.md` | Entire file is pre-SaaS generic content — all four required SaaS sections absent |
+| #   | File                                   | Gap                                                                                                                   |
+| --- | -------------------------------------- | --------------------------------------------------------------------------------------------------------------------- |
+| G1a | `backend/prisma/schema.prisma`         | `SubscriptionTier` missing `pastDueSince DateTime?` field — no way to measure 7-day grace period                      |
+| G1b | `webhook.service.ts:674-691`           | `handleInvoicePaymentFailed` doesn't set `pastDueSince` when first transitioning to `past_due`                        |
+| G1c | `subscription.service.ts`              | Missing `downgradeExpiredPastDue()` method                                                                            |
+| G1d | `scheduler.service.ts`                 | No dunning cron job registered                                                                                        |
+| G1e | _(new file)_                           | `backend/src/jobs/dunning.job.ts` does not exist                                                                      |
+| G1f | Dunning downgrade path                 | `organizationUsage.maxSkus/maxUsers/maxInventoryItems` not reset to Starter limits on dunning downgrade               |
+| G1g | Dunning downgrade path                 | `isCreationLocked` not applied when dunning downgrade puts org over Starter limits                                    |
+| G1h | Dunning downgrade path                 | No Sentry `fatal` escalation alert fired after dunning downgrade                                                      |
+| G2a | `webhook.service.ts:437-465`           | `handleSubscriptionUpdated` only checks `totalSkus > limits.max_skus` — ignores `totalInventoryItems` (DECISION 8A.2) |
+| G2b | `webhook.service.ts:540-562`           | `handleSubscriptionDeleted` same inventory-item gap                                                                   |
+| G2c | _(missing test)_                       | No integration test for: upgrade → 3000 SKUs → downgrade to Professional → warning email verified                     |
+| G3a | `backend/docs/operational-runbooks.md` | Entire file is pre-SaaS generic content — all four required SaaS sections absent                                      |
 
 ---
 
 ## Task 1: Schema — Add `pastDueSince` to `SubscriptionTier`
 
 **Files:**
+
 - Modify: `backend/prisma/schema.prisma` (~line 43)
 - Modify: `backend/prisma/production/schema.prisma` (same section)
 
@@ -130,6 +131,7 @@ git commit -m "feat(schema): add pastDueSince field to SubscriptionTier for 7-da
 ## Task 2: Update `handleInvoicePaymentFailed` — Record `pastDueSince`
 
 **Files:**
+
 - Modify: `backend/src/services/webhook.service.ts` (lines 660–712)
 - Modify: `backend/src/tests/unit/webhook.service.test.ts` (lines 320–344)
 
@@ -160,7 +162,10 @@ it('handles invoice payment failed — sets past_due and records pastDueSince on
       pastDueSince: expect.any(Date),
     }),
   });
-  expect(emailService.sendDunningEmail).toHaveBeenCalledWith(organizationId, invoice.hosted_invoice_url);
+  expect(emailService.sendDunningEmail).toHaveBeenCalledWith(
+    organizationId,
+    invoice.hosted_invoice_url,
+  );
 });
 
 it('handles invoice payment failed — does NOT reset pastDueSince on retry failures', async () => {
@@ -253,6 +258,7 @@ git commit -m "feat(dunning): track pastDueSince on first invoice.payment_failed
 ## Task 3: Add `downgradeExpiredPastDue()` to `SubscriptionService`
 
 **Files:**
+
 - Modify: `backend/src/services/subscription.service.ts` (after the `downgradeExpiredTrials` method, ~line 686)
 
 ---
@@ -404,7 +410,8 @@ describe('SubscriptionService.downgradeExpiredPastDue', () => {
       { id: 1, organizationId: 'org-alert', pastDueSince: sevenDaysAgo },
     ]);
     prisma.organizationUsage.findUnique.mockResolvedValue({
-      totalSkus: 10, totalInventoryItems: 10,
+      totalSkus: 10,
+      totalInventoryItems: 10,
     });
 
     await service.downgradeExpiredPastDue();
@@ -421,10 +428,11 @@ describe('SubscriptionService.downgradeExpiredPastDue', () => {
       { id: 2, organizationId: 'org-ok2', pastDueSince: sevenDaysAgo },
     ]);
     prisma.$transaction
-      .mockRejectedValueOnce(new Error('DB error'))  // org-fail fails
-      .mockImplementation((cb) => cb(prisma));         // org-ok2 succeeds
+      .mockRejectedValueOnce(new Error('DB error')) // org-fail fails
+      .mockImplementation((cb) => cb(prisma)); // org-ok2 succeeds
     prisma.organizationUsage.findUnique.mockResolvedValue({
-      totalSkus: 10, totalInventoryItems: 10,
+      totalSkus: 10,
+      totalInventoryItems: 10,
     });
 
     const count = await service.downgradeExpiredPastDue();
@@ -617,6 +625,7 @@ git commit -m "feat(dunning): add downgradeExpiredPastDue() to SubscriptionServi
 ## Task 4: Create Dunning Cron Job
 
 **Files:**
+
 - Create: `backend/src/jobs/dunning.job.ts`
 
 ---
@@ -894,6 +903,7 @@ git commit -m "feat(dunning): create dunning cron job with email warnings and ge
 ## Task 5: Register Dunning Job in Scheduler
 
 **Files:**
+
 - Modify: `backend/src/services/scheduler.service.ts` (lines 1–43)
 
 ---
@@ -955,6 +965,7 @@ git commit -m "feat(dunning): register dunning cron job in SchedulerService.init
 ## Task 6: Fix `handleSubscriptionUpdated` — Add Inventory Item Limit Check (Gap G2a)
 
 **Files:**
+
 - Modify: `backend/src/services/webhook.service.ts` (lines 384–498, specifically lines 436–465)
 - Modify: `backend/src/tests/unit/webhook.service.test.ts`
 
@@ -1062,7 +1073,7 @@ if (isOverSkuLimit || isOverInventoryLimit) {
 }
 ```
 
-> **Note:** `sendDowngradeWarningEmail` receives the *primary* exceeded metric. For SKU violations it reports SKU count; for inventory-only violations it reports inventory count. This is acceptable for MVP — a future improvement could add both metrics.
+> **Note:** `sendDowngradeWarningEmail` receives the _primary_ exceeded metric. For SKU violations it reports SKU count; for inventory-only violations it reports inventory count. This is acceptable for MVP — a future improvement could add both metrics.
 
 **Step 4: Apply the same fix to `handleSubscriptionDeleted`**
 
@@ -1098,9 +1109,7 @@ if (isOverSkuLimit || isOverInventoryLimit) {
   await this.emailService.sendDowngradeWarningEmail(
     organizationId,
     isOverSkuLimit ? (usage?.totalSkus ?? 0) : (usage?.totalInventoryItems ?? 0),
-    isOverSkuLimit
-      ? (starterLimits.max_skus ?? 500)
-      : (starterLimits.max_inventory_items ?? 5000),
+    isOverSkuLimit ? (starterLimits.max_skus ?? 500) : (starterLimits.max_inventory_items ?? 5000),
   );
 }
 ```
@@ -1125,6 +1134,7 @@ git commit -m "fix(downgrade): check totalInventoryItems as well as totalSkus on
 ## Task 7: Write Integration Test for Downgrade Communication (Gap G2c)
 
 **Files:**
+
 - Create: `backend/src/tests/integration/dunning-downgrade-communication.test.ts`
 
 > **Pattern:** Real Prisma client, mocked Stripe and EmailService. Follows `webhook.edge-cases.test.ts` pattern.
@@ -1388,6 +1398,7 @@ git commit -m "test(downgrade): add integration tests for 16A.G.2 SKU and invent
 ## Task 8: Write SaaS Operational Runbook (Gap G3)
 
 **Files:**
+
 - Modify: `backend/docs/operational-runbooks.md` (append new section at end)
 
 ---
@@ -1407,7 +1418,6 @@ Expected: 244 lines (all pre-SaaS generic content, ends at `## Escalation Contac
 Append the following to `backend/docs/operational-runbooks.md`:
 
 ````markdown
-
 ---
 
 ## SaaS Operations (Stripe / Subscriptions / Multi-Tenant)
@@ -1746,6 +1756,7 @@ runStripeSyncJob(prisma, stripe).then(() => { console.log('Full sync complete');
 **Step 3: Manually replay critical missed webhooks**
 
 In Stripe Dashboard → Webhooks:
+
 1. Filter by date range of outage
 2. Look for events with status `Failed` or `Not Delivered`
 3. Bulk replay: select events → "Resend selected"
@@ -1775,6 +1786,7 @@ pm2 restart date-management-app
 **Step 6: Send proactive communication to affected customers**
 
 If any customers were incorrectly downgraded or locked during the outage:
+
 1. Identify them via audit logs during outage window
 2. Send apology email with explanation
 3. Offer service credit if appropriate (document in Stripe as discount)
@@ -1796,7 +1808,7 @@ sqlite3 backend/prisma/database.sqlite \
 
 # 2. Count past_due orgs and how long they've been past_due
 sqlite3 backend/prisma/database.sqlite \
-  "SELECT 
+  "SELECT
      COUNT(*) as past_due_count,
      COUNT(CASE WHEN past_due_since < datetime('now', '-7 days') THEN 1 END) as over_7_days,
      COUNT(CASE WHEN past_due_since < datetime('now', '-14 days') THEN 1 END) as over_14_days
@@ -1818,6 +1830,7 @@ sqlite3 backend/prisma/database.sqlite \
 ```
 
 **Set up alerts for:**
+
 - More than 5 orgs past_due over 7 days (possible dunning job failure)
 - More than 10 orgs with creation locks (possible mass downgrade issue)
 - Any webhook processing failures (monitor Sentry for webhook errors)
@@ -1826,13 +1839,13 @@ sqlite3 backend/prisma/database.sqlite \
 
 ## Escalation Contacts (SaaS)
 
-| Issue | Primary | Backup |
-|-------|---------|--------|
-| Stripe webhook failures | DevOps | Engineering Lead |
-| Dunning job failures | Engineering Lead | CTO |
-| Customer payment disputes | Support Lead | Engineering Lead |
-| Cross-tenant data leak | CTO | Security Team |
-| Service outage > 1 hour | DevOps | Engineering Lead |
+| Issue                     | Primary          | Backup           |
+| ------------------------- | ---------------- | ---------------- |
+| Stripe webhook failures   | DevOps           | Engineering Lead |
+| Dunning job failures      | Engineering Lead | CTO              |
+| Customer payment disputes | Support Lead     | Engineering Lead |
+| Cross-tenant data leak    | CTO              | Security Team    |
+| Service outage > 1 hour   | DevOps           | Engineering Lead |
 
 ---
 
@@ -1891,6 +1904,7 @@ Expected: 0 errors (warnings acceptable)
 **Step 4: Verify all new cron jobs are registered**
 
 Check `backend/src/services/scheduler.service.ts` contains both:
+
 - `startDunningJob()` call
 - Existing `runTrialExpirationJob()` and `runStripeSyncJob()`
 
@@ -1943,6 +1957,7 @@ Both approaches will result in the same implementation. The subagent-driven appr
 ---
 
 **Files Modified (Summary):**
+
 - `backend/prisma/schema.prisma` + `backend/prisma/production/schema.prisma` — add `pastDueSince` field
 - `backend/src/services/webhook.service.ts` — record `pastDueSince`, check inventory limits on downgrade
 - `backend/src/services/subscription.service.ts` — add `downgradeExpiredPastDue()` and `getRecentlyDunningDowngraded()`

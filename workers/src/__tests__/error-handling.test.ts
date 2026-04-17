@@ -6,26 +6,26 @@
  */
 
 import { describe, it, expect, beforeEach, vi } from 'vitest';
-import { 
+import {
   getProducts,
   createProduct,
   getProductById,
   deleteProduct,
-  Product
+  Product,
 } from '../handlers/products';
-import { 
+import {
   getStoreAreas,
   createStoreArea,
   getStoreAreaById,
   deleteStoreArea,
-  StoreArea
+  StoreArea,
 } from '../handlers/store-areas';
 import { getDashboardData } from '../handlers/dashboard';
 import { testEnv, createTestOrgId } from './fixtures';
 
 describe('Workers Error Handling', () => {
   const testOrgId = createTestOrgId('test-org-error');
-  
+
   describe('Database Connection Failures', () => {
     it('should handle database connection timeout gracefully', async () => {
       /**
@@ -33,12 +33,12 @@ describe('Workers Error Handling', () => {
        * EXPECTED: Retry logic attempts 3 times, then returns 502/504
        * VERIFIES: withNeonRetry is active and properly configured
        */
-      
+
       // Mock neon to simulate slow connection
       const originalEnv = testEnv;
       const slowEnv = {
         ...originalEnv,
-        NEON_CONNECTION_STRING: 'postgres://invalid-slow-host:5432/db'
+        NEON_CONNECTION_STRING: 'postgres://invalid-slow-host:5432/db',
       };
 
       // In real integration test: would timeout and retry
@@ -53,7 +53,7 @@ describe('Workers Error Handling', () => {
        * EXPECTED: Final call succeeds after 2 retries
        * VERIFIES: Exponential backoff working
        */
-      
+
       let attemptCount = 0;
       vi.mock('@neondatabase/serverless', () => ({
         neon: vi.fn(() => {
@@ -63,23 +63,23 @@ describe('Workers Error Handling', () => {
           }
           return async (sql) => {
             return [
-              { 
-                id: 1, 
-                name: 'Test', 
+              {
+                id: 1,
+                name: 'Test',
                 barcode: 'TEST-001',
                 description: null,
                 category: null,
                 organization_id: testOrgId,
                 created_at: new Date(),
-                updated_at: new Date()
-              }
+                updated_at: new Date(),
+              },
             ];
           };
-        })
+        }),
       }));
 
       const result = await getProducts(testEnv, testOrgId);
-      
+
       // Verify retry happened
       expect(attemptCount).toBeGreaterThanOrEqual(1);
       if (Array.isArray(result)) {
@@ -93,12 +93,12 @@ describe('Workers Error Handling', () => {
        * EXPECTED: Error thrown/returned, no infinite retries
        * VERIFIES: Retry limit is enforced
        */
-      
+
       // Mock persistent failure
       vi.mock('@neondatabase/serverless', () => ({
         neon: vi.fn(() => {
           throw new Error('connection refused');
-        })
+        }),
       }));
 
       try {
@@ -119,10 +119,10 @@ describe('Workers Error Handling', () => {
        * EXPECTED: Return empty result or error, not SQL injection
        * VERIFIES: Parameterized queries prevent injection
        */
-      
+
       const invalidOrgId = '';
       const result = await getProducts(testEnv, invalidOrgId);
-      
+
       // Should return empty array or throw validation error
       expect(Array.isArray(result) || result instanceof Error).toBe(true);
     });
@@ -135,7 +135,7 @@ describe('Workers Error Handling', () => {
        *
        * NOTE: This is primarily tested in middleware, but documenting here
        */
-      
+
       // In Express/middleware level, malformed JSON caught here
       // Handler assumes valid JSON already
       expect(true).toBe(true);
@@ -147,13 +147,13 @@ describe('Workers Error Handling', () => {
        * EXPECTED: Validation error returned
        * VERIFIES: Field validation in place
        */
-      
+
       try {
         const invalidData: any = {
-          description: 'Test product'
+          description: 'Test product',
           // missing 'name'
         };
-        
+
         await createProduct(testEnv, testOrgId, invalidData);
         expect(true).toBe(false); // Should have thrown
       } catch (error) {
@@ -167,14 +167,14 @@ describe('Workers Error Handling', () => {
        * EXPECTED: Validation error
        * VERIFIES: Type checking works
        */
-      
+
       try {
         const invalidData: any = {
           name: 'Test',
           quantity: 'not-a-number', // Should be number
-          barcode: 'TEST-001'
+          barcode: 'TEST-001',
         };
-        
+
         await createProduct(testEnv, testOrgId, invalidData);
         // May succeed if not validated at this layer
         expect(true).toBe(true);
@@ -193,7 +193,7 @@ describe('Workers Error Handling', () => {
        *
        * NOTE: This is middleware-level, tested at route level not handler level
        */
-      
+
       expect(true).toBe(true);
     });
 
@@ -205,7 +205,7 @@ describe('Workers Error Handling', () => {
        *
        * NOTE: Express handles this automatically
        */
-      
+
       expect(true).toBe(true);
     });
   });
@@ -217,9 +217,9 @@ describe('Workers Error Handling', () => {
        * EXPECTED: Automatic retry with backoff
        * VERIFIES: Retry middleware active
        */
-      
+
       let attemptCount = 0;
-      
+
       const mockSql = async () => {
         attemptCount++;
         if (attemptCount === 1) {
@@ -238,7 +238,7 @@ describe('Workers Error Handling', () => {
        * EXPECTED: Retry and eventually success or graceful failure
        * VERIFIES: Storage provider handles transient failures
        */
-      
+
       // This would be tested at upload service level
       expect(true).toBe(true);
     });
@@ -251,16 +251,14 @@ describe('Workers Error Handling', () => {
        * EXPECTED: All succeed without connection pool overflow
        * VERIFIES: Connection pooling works correctly
        */
-      
-      const promises = Array.from({ length: 10 }, () => 
-        getProducts(testEnv, testOrgId)
-      );
+
+      const promises = Array.from({ length: 10 }, () => getProducts(testEnv, testOrgId));
 
       const results = await Promise.all(promises);
-      
+
       // All should complete
       expect(results).toHaveLength(10);
-      expect(results.every(r => Array.isArray(r) || r instanceof Error)).toBe(true);
+      expect(results.every((r) => Array.isArray(r) || r instanceof Error)).toBe(true);
     });
 
     it('should handle concurrent creates without race conditions', async () => {
@@ -269,18 +267,18 @@ describe('Workers Error Handling', () => {
        * EXPECTED: All succeed, no duplicates or data corruption
        * VERIFIES: Database transactions working
        */
-      
+
       const promises = Array.from({ length: 5 }, (_, i) =>
         createProduct(testEnv, testOrgId, {
           name: `Product ${i}`,
           barcode: `BARCODE-${i}`,
-          description: `Test product ${i}`
-        })
+          description: `Test product ${i}`,
+        }),
       );
 
       try {
         const results = await Promise.all(promises);
-        
+
         // All should succeed or handle duplicate gracefully
         expect(results.length).toBeGreaterThan(0);
       } catch (error) {
@@ -302,7 +300,7 @@ describe('Workers Error Handling', () => {
        * - All streams destroyed on error
        * - Pool connections released
        */
-      
+
       // This is verified by code review of retry.ts
       // Ensure finally block exists in withNeonRetry
       expect(true).toBe(true);
@@ -314,7 +312,7 @@ describe('Workers Error Handling', () => {
        * EXPECTED: Only 1 error logged (not 3)
        * VERIFIES: Logging doesn't accumulate
        */
-      
+
       // Verify through log aggregation (Sentry/QA)
       expect(true).toBe(true);
     });
@@ -334,7 +332,7 @@ describe('Workers Error Handling', () => {
        *   }
        * }
        */
-      
+
       expect(true).toBe(true);
     });
 
@@ -344,7 +342,7 @@ describe('Workers Error Handling', () => {
        * EXPECTED: Response includes requestId for tracing
        * VERIFIES: Request tracing enabled
        */
-      
+
       expect(true).toBe(true);
     });
   });
@@ -356,7 +354,7 @@ describe('Workers Error Handling', () => {
        * EXPECTED: 504 Gateway Timeout after 30s
        * VERIFIES: Timeout configured at Neon level
        */
-      
+
       // Timeout is configured at database level
       // Verify getDashboardData handles timeout gracefully
       try {
@@ -374,7 +372,7 @@ describe('Workers Error Handling', () => {
        * EXPECTED: Timeout after 10s
        * VERIFIES: Upload service has timeout
        */
-      
+
       expect(true).toBe(true);
     });
   });
@@ -383,12 +381,12 @@ describe('Workers Error Handling', () => {
     it('should stop attempting requests if service down', async () => {
       /**
        * FUTURE: Implement circuit breaker
-       * 
+       *
        * SCENARIO: Neon completely down (not transient)
        * EXPECTED: After 5 failed attempts, stop retrying
        * BENEFITS: Reduce error logs, fail fast
        */
-      
+
       // To implement: Wrap withNeonRetry with circuit breaker
       // Track consecutive failures, trip circuit if > threshold
       expect(true).toBe(true);

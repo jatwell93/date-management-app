@@ -18,23 +18,23 @@ Strategies to minimize cloud costs on Cloudflare, Neon, and Stripe while maintai
 
 ### Expected Monthly Costs (MVP - Low Traffic)
 
-| Service | Free Tier | Cost | Notes |
-|---------|-----------|------|-------|
-| **Cloudflare Workers** | 100,000 req/day | $0 | Sufficient for launch |
-| **Cloudflare R2** | 10GB + 1M API calls | $0 | Sufficient for launch |
-| **Neon PostgreSQL** | 3 branches, 256MB | $0 | Free tier adequate for MVP |
-| **Stripe** | No free tier | 2.9% + $0.30 | Per-transaction cost |
-| **Total** | With free tiers | ~$0 | (excluding Stripe) |
+| Service                | Free Tier           | Cost         | Notes                      |
+| ---------------------- | ------------------- | ------------ | -------------------------- |
+| **Cloudflare Workers** | 100,000 req/day     | $0           | Sufficient for launch      |
+| **Cloudflare R2**      | 10GB + 1M API calls | $0           | Sufficient for launch      |
+| **Neon PostgreSQL**    | 3 branches, 256MB   | $0           | Free tier adequate for MVP |
+| **Stripe**             | No free tier        | 2.9% + $0.30 | Per-transaction cost       |
+| **Total**              | With free tiers     | ~$0          | (excluding Stripe)         |
 
 ### Expected Monthly Costs (Growth - Medium Traffic)
 
-| Service | Estimated Usage | Monthly Cost |
-|---------|-----------------|--------------|
-| **Cloudflare Workers** | 10M requests | $5.00 |
-| **Cloudflare R2** | 100GB storage + 50M API calls | $23.00 |
-| **Neon PostgreSQL** | 2 projects, 10GB storage, CPU | $39.00 |
-| **Stripe** | $10,000 transactions | $290 |
-| **Total** | - | $357 |
+| Service                | Estimated Usage               | Monthly Cost |
+| ---------------------- | ----------------------------- | ------------ |
+| **Cloudflare Workers** | 10M requests                  | $5.00        |
+| **Cloudflare R2**      | 100GB storage + 50M API calls | $23.00       |
+| **Neon PostgreSQL**    | 2 projects, 10GB storage, CPU | $39.00       |
+| **Stripe**             | $10,000 transactions          | $290         |
+| **Total**              | -                             | $357         |
 
 ---
 
@@ -59,10 +59,10 @@ async function getUserProfile(userId: string) {
 // Good: Batch in single query
 async function getUserProfile(userId: string) {
   const [user, subscription, analytics] = await Promise.all([
-    db.user.findUnique({ 
+    db.user.findUnique({
       where: { id: userId },
-      include: { subscription: true, analytics: true }
-    })
+      include: { subscription: true, analytics: true },
+    }),
   ]);
   return { user, subscription, analytics };
 }
@@ -91,10 +91,10 @@ async function getTierLimits(tier: string) {
   // First request: store in KV
   const cached = await KV.get(`tier:${tier}`);
   if (cached) return JSON.parse(cached);
-  
+
   const limits = await db.tierLimit.findUnique({ where: { tier } });
-  await KV.put(`tier:${tier}`, JSON.stringify(limits), { 
-    expirationTtl: 86400  // 24 hours
+  await KV.put(`tier:${tier}`, JSON.stringify(limits), {
+    expirationTtl: 86400, // 24 hours
   });
   return limits;
 }
@@ -122,6 +122,7 @@ ls -lh workers/dist/
 Already configured in [docs/cloudflare-setup.md](#lifecycle-rules).
 
 **Auto-delete uploads after 90 days:**
+
 ```json
 {
   "Rules": [
@@ -144,15 +145,11 @@ import { gzip } from 'zlib';
 
 async function uploadCompressed(filename: string, data: Buffer) {
   const compressed = await new Promise((resolve, reject) => {
-    gzip(data, (err, result) => err ? reject(err) : resolve(result));
+    gzip(data, (err, result) => (err ? reject(err) : resolve(result)));
   });
-  
-  await storage.upload(
-    `${filename}.gz`,
-    compressed,
-    'application/gzip'
-  );
-  
+
+  await storage.upload(`${filename}.gz`, compressed, 'application/gzip');
+
   // Typical savings: 60-80% for CSV files
 }
 ```
@@ -162,8 +159,8 @@ async function uploadCompressed(filename: string, data: Buffer) {
 ```typescript
 // Cache frequently accessed files
 await storage.upload('key', data, 'text/csv', {
-  'Cache-Control': 'public, max-age=86400',  // 1 day
-  'Content-Encoding': 'gzip'
+  'Cache-Control': 'public, max-age=86400', // 1 day
+  'Content-Encoding': 'gzip',
 });
 ```
 
@@ -172,11 +169,11 @@ await storage.upload('key', data, 'text/csv', {
 ```typescript
 // Bad: Individual API calls
 for (const file of files) {
-  await r2.delete(file.key);  // 1 API call per file × 1000 files = 1000 calls
+  await r2.delete(file.key); // 1 API call per file × 1000 files = 1000 calls
 }
 
 // Good: Batch operations (if supported) or batch delete
-const keys = files.map(f => f.key);
+const keys = files.map((f) => f.key);
 // Most delete operations are per-object, so unavoidable
 // Instead: set lifecycle rules to auto-delete old files
 ```
@@ -211,6 +208,7 @@ Neon charges for compute hours (CPU time).
 ```
 
 Estimates:
+
 - **Free tier (1 CPU):** Perfect for MVP, supports ~100 concurrent users
 - **Standard (2 CPU):** $19/month, supports ~500 concurrent users
 - **Professional (4 CPU):** $49/month, supports ~1000 concurrent users
@@ -228,6 +226,7 @@ CREATE INDEX idx_inventory_area ON inventory(store_area_id);
 ```
 
 **Cost Savings:** Prevent full table scans
+
 - Each missing index causes ~10x more database work
 - Storage cost: ~0.1MB per index (negligible)
 
@@ -236,11 +235,13 @@ CREATE INDEX idx_inventory_area ON inventory(store_area_id);
 **Already configured!** Hyperdrive reduces connection overhead.
 
 Without pooling:
+
 - Each Worker cold start = new Neon connection
 - Connection overhead: 50-100ms per connection
 - Cost: More compute for connection management
 
 With Hyperdrive:
+
 - Connections pooled at edge (50+ concurrent reuse)
 - Connection overhead: <5ms (cached)
 - Cost: Dramatically reduced
@@ -256,21 +257,21 @@ For historical data, implement archiving:
 async function archiveOldData() {
   const thirtyDaysAgo = new Date();
   thirtyDaysAgo.setDate(thirtyDaysAgo.getDate() - 30);
-  
+
   // Move to archive
   const oldRecords = await db.inventory.findMany({
-    where: { createdAt: { lt: thirtyDaysAgo } }
+    where: { createdAt: { lt: thirtyDaysAgo } },
   });
-  
+
   await db.inventoryArchive.createMany({
-    data: oldRecords
+    data: oldRecords,
   });
-  
+
   // Delete from main table
   await db.inventory.deleteMany({
-    where: { createdAt: { lt: thirtyDaysAgo } }
+    where: { createdAt: { lt: thirtyDaysAgo } },
   });
-  
+
   // Savings: Queries on active data are faster, smaller index size
 }
 ```
@@ -285,9 +286,9 @@ async function archiveOldData() {
 # Target queries: >100ms × 1000 calls = 100s total
 
 # Commands to check slow queries:
-SELECT query, calls, mean_exec_time 
-FROM pg_stat_statements 
-ORDER BY mean_exec_time * calls DESC 
+SELECT query, calls, mean_exec_time
+FROM pg_stat_statements
+ORDER BY mean_exec_time * calls DESC
 LIMIT 10;
 ```
 
@@ -311,13 +312,13 @@ For heavy read workloads (analytics queries):
 // Instead of hitting main database
 // Create read replica for analytics
 const analyticsDb = new PrismaClient({
-  datasourceUrl: ANALYTICS_DATABASE_URL  // Read-only replica
+  datasourceUrl: ANALYTICS_DATABASE_URL, // Read-only replica
 });
 
 // Metrics queries go to replica
 const dailyStats = await analyticsDb.analytics.groupBy({
   by: ['organizationId'],
-  _count: true
+  _count: true,
 });
 // Frees main database for transactional workload
 ```
@@ -336,7 +337,7 @@ Cost: Read replicas are cheaper ($5/month) than increasing main compute
 // Bad: Invoice immediately on every subscription change
 await stripe.invoices.create({
   customer: customerId,
-  auto_advance: true  // Cost: immediate payment attempt
+  auto_advance: true, // Cost: immediate payment attempt
 });
 
 // Good: Batch invoices daily
@@ -375,10 +376,8 @@ Reduce failed payment retries:
 await stripe.customers.update(customerId, {
   invoice_settings: {
     default_payment_method: paymentMethodId,
-    custom_fields: [
-      { name: 'Organization ID', value: orgId }
-    ]
-  }
+    custom_fields: [{ name: 'Organization ID', value: orgId }],
+  },
 });
 
 // Savings: Reduces retry attempts, customer support tickets
@@ -394,7 +393,7 @@ if (invoice.attempt_count >= 3) {
   notify.sendCustomerAlert({
     customerId,
     message: 'Automatic payment failed. Please update payment method.',
-    link: '/account/billing'
+    link: '/account/billing',
   });
   // Reduce unnecessary retry attempts
 }
@@ -408,7 +407,7 @@ const discount = await stripe.coupons.create({
   percent_off: 10,
   duration: 'repeating',
   duration_in_months: 3,
-  max_redemptions: 100
+  max_redemptions: 100,
 });
 
 // vs. creating individual credits/invoices per customer
@@ -465,11 +464,11 @@ npm run report:costs
 
 Choose closest region to users:
 
-| Region | Latency | Best For |
-|--------|---------|----------|
-| US East (N. Virginia) | <20ms from US East | Default, most users |
-| US West (N. California) | <20ms from US West | West Coast users |
-| EU (Frankfurt) | <20ms from Europe | EU-based users |
+| Region                  | Latency            | Best For            |
+| ----------------------- | ------------------ | ------------------- |
+| US East (N. Virginia)   | <20ms from US East | Default, most users |
+| US West (N. California) | <20ms from US West | West Coast users    |
+| EU (Frankfurt)          | <20ms from Europe  | EU-based users      |
 
 **Cost:** Same regardless of region
 
@@ -478,6 +477,7 @@ Choose closest region to users:
 Workers are automatically deployed globally at no extra cost.
 
 **Response times:**
+
 - Within edge location: <10ms
 - Within region: 20-50ms
 - Cross-region: 50-150ms
@@ -493,16 +493,19 @@ Workers are automatically deployed globally at no extra cost.
 Once traffic patterns stabilize (after 3+ months):
 
 **Neon Commitments:**
+
 - Not available for free tier
 - Consider after usage exceeds free tier limits
 
 **Cloudflare:**
+
 - Pre-pay discounts not available for Workers/R2
 - Buy in bulk for enterprise accounts only (10M+ requests/month)
 
 ### Current Recommendation
 
 For MVP (< 1 year):
+
 - ✅ Use free tiers exclusively
 - ✅ No long-term commitments
 - ✅ Switch to paid tiers as usage grows
@@ -526,4 +529,3 @@ Before production launch:
 - [ ] Query performance profiling baseline collected
 
 **Result:** Expected cost < $50/month at MVP scale, scaling linearly with traffic.
-

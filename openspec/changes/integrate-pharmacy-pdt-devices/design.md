@@ -36,9 +36,10 @@ Two parallel changes are active: `plan-saas-monetization-model` (multi-tenant au
 **Choice:** Use keyboard wedge (DOM `keydown` events) as the sole hardware scan input method for MVP.
 
 **Alternatives considered:**
-- *WebSocket bridge*: Higher performance (real-time bidirectional control), but requires installing a native app on each device, introduces CSWSH security vulnerabilities, and adds ongoing maintenance burden.
-- *Vendor SDKs (Zebra Enterprise Browser JS, Honeywell Mobility SDK for Web)*: Gives direct hardware control (aimer, illumination, symbology config), but locks to a specific vendor, requires paid licenses or custom firmware, and fragments the codebase.
-- *Android Intent-based communication*: Highest performance on Android, but inaccessible from a standard browser — requires Enterprise Browser or native bridge.
+
+- _WebSocket bridge_: Higher performance (real-time bidirectional control), but requires installing a native app on each device, introduces CSWSH security vulnerabilities, and adds ongoing maintenance burden.
+- _Vendor SDKs (Zebra Enterprise Browser JS, Honeywell Mobility SDK for Web)_: Gives direct hardware control (aimer, illumination, symbology config), but locks to a specific vendor, requires paid licenses or custom firmware, and fragments the codebase.
+- _Android Intent-based communication_: Highest performance on Android, but inaccessible from a standard browser — requires Enterprise Browser or native bridge.
 
 **Rationale:** Keyboard wedge is universally supported across all three target vendors, works in standard Chrome on Android, requires zero installation, and is the recommended approach for web-app-first integrations. All target devices (Zebra DataWedge, Honeywell Settings, CipherLab Reader Config) support configuring their scan engines to output as keyboard wedge with Enter suffix. The tradeoff is no programmatic scanner control (trigger, aimer) — acceptable for MVP where the physical trigger button on the device initiates scans.
 
@@ -49,9 +50,10 @@ Two parallel changes are active: `plan-saas-monetization-model` (multi-tenant au
 **Choice:** Use a `useHandheldDetection` hook plus CSS media queries to conditionally render handheld UI — not a separate build target, route tree, or subdomain.
 
 **Alternatives considered:**
-- *Separate `/handheld` route tree*: Clean separation, but duplicates route logic, requires maintaining two parallel UIs, and complicates shared state (auth, sync).
-- *Separate build target*: Maximum optimization, but doubles CI/CD complexity and diverges codebases over time.
-- *User agent detection only*: Simple, but unreliable as UA strings vary across Android versions and device firmware updates.
+
+- _Separate `/handheld` route tree_: Clean separation, but duplicates route logic, requires maintaining two parallel UIs, and complicates shared state (auth, sync).
+- _Separate build target_: Maximum optimization, but doubles CI/CD complexity and diverges codebases over time.
+- _User agent detection only_: Simple, but unreliable as UA strings vary across Android versions and device firmware updates.
 
 **Rationale:** A hook combining three signals — user agent patterns (Zebra/TC, Honeywell/CT, CipherLab), screen dimensions (width ≤600px, height ≤800px), and a `localStorage` override flag — provides reliable detection without build complexity. Components conditionally render handheld variants (larger buttons, full-screen scan area, simplified nav). CSS media queries handle the styling layer. The `isHandheld` flag is a React context value consumed throughout the component tree.
 
@@ -62,8 +64,9 @@ Two parallel changes are active: `plan-saas-monetization-model` (multi-tenant au
 **Choice:** Implement GS1-128 Application Identifier parsing as a standalone pure function (`parseGS1Barcode`), not a class or external library.
 
 **Alternatives considered:**
-- *External library (gs1-barcode-parser-ts)*: Less code to maintain, but adds a dependency for a small, stable specification. GS1 AI parsing is a string-splitting algorithm.
-- *Integrated into Scanner component*: Reduces import overhead, but violates SRP and makes the parser untestable in isolation.
+
+- _External library (gs1-barcode-parser-ts)_: Less code to maintain, but adds a dependency for a small, stable specification. GS1 AI parsing is a string-splitting algorithm.
+- _Integrated into Scanner component_: Reduces import overhead, but violates SRP and makes the parser untestable in isolation.
 
 **Rationale:** GS1-128 encoding uses well-defined Application Identifiers (AIs) with fixed or variable-length fields separated by FNC1/GS characters. The parsing logic is ~50 lines of code covering the pharmacy-relevant AIs: `(01)` GTIN-14, `(10)` batch/lot, `(17)` expiry date (YYMMDD), `(21)` serial number. A pure function is trivially unit-testable, has no dependencies, and can be reused anywhere in the codebase.
 
@@ -74,8 +77,9 @@ Two parallel changes are active: `plan-saas-monetization-model` (multi-tenant au
 **Choice:** Extend `OfflineSyncService` with a `SyncStrategy` configuration that selects between real-time, batch (10-minute), and manual modes. The strategy is stored in `localStorage` and defaults to real-time for handheld sessions.
 
 **Alternatives considered:**
-- *New SyncService class for PDT*: Clean separation, but duplicates queue management, retry logic, and IndexedDB persistence that already exist in `OfflineSyncService`.
-- *Fixed 10-minute interval for handheld*: Simpler, but doesn't serve the single-scan-at-a-time use case where immediate feedback is expected.
+
+- _New SyncService class for PDT_: Clean separation, but duplicates queue management, retry logic, and IndexedDB persistence that already exist in `OfflineSyncService`.
+- _Fixed 10-minute interval for handheld_: Simpler, but doesn't serve the single-scan-at-a-time use case where immediate feedback is expected.
 
 **Rationale:** The existing `OfflineSyncService` already has queue management, online/offline detection, and retry logic. Adding a strategy pattern avoids reimplementation. Real-time mode triggers `performSync()` directly after each scan. Batch mode changes the interval from 30s to 600s (10 minutes). Manual mode disables the interval timer and only syncs when the user taps "Sync Now". Strategy is switchable at runtime via a settings toggle in `HandheldScanToolbar`.
 
@@ -86,8 +90,9 @@ Two parallel changes are active: `plan-saas-monetization-model` (multi-tenant au
 **Choice:** Add a `continuous` boolean prop to `CameraScanner` and extend the `useHardwareScan` hook to support continuous listening. In continuous mode, the scanner does not stop after detection — it continues scanning and debounces duplicate barcodes within a 2-second window.
 
 **Alternatives considered:**
-- *Separate ContinuousScanner component*: Avoids modifying existing component, but duplicates 90% of `CameraScanner` code.
-- *Always continuous on handheld*: Simpler, but confuses single-item workflows where the user expects the scanner to pause after each scan for data entry.
+
+- _Separate ContinuousScanner component_: Avoids modifying existing component, but duplicates 90% of `CameraScanner` code.
+- _Always continuous on handheld_: Simpler, but confuses single-item workflows where the user expects the scanner to pause after each scan for data entry.
 
 **Rationale:** Adding a prop keeps the component DRY and lets the existing ScanPage and HandheldScanner control the mode. Debounce prevents duplicate submissions when the same barcode is in the scan field. A 2-second window is sufficient — pharmacy barcodes are physically moved between scans, and hardware decoders typically won't re-fire on a stationary barcode.
 
@@ -96,10 +101,17 @@ Two parallel changes are active: `plan-saas-monetization-model` (multi-tenant au
 **Choice:** `HandheldLayout` wraps the existing route content when `isHandheld` is true, applied at the `App.tsx` level. It replaces the standard nav with a minimal header (current user, sync status, "Manual Entry" toggle) and sets full-height layout.
 
 **Implementation in `App.tsx`:**
+
 ```js
 const { isHandheld } = useHandheldDetection();
 // Wraps <main> content — routes remain the same
-{isHandheld ? <HandheldLayout>{children}</HandheldLayout> : <StandardLayout>{children}</StandardLayout>}
+{
+  isHandheld ? (
+    <HandheldLayout>{children}</HandheldLayout>
+  ) : (
+    <StandardLayout>{children}</StandardLayout>
+  );
+}
 ```
 
 The nav is simplified to: scan page as primary, settings accessible via a gear icon, other pages reachable but not prominently linked. On PDTs, `/scan` is the 95%+ use case.

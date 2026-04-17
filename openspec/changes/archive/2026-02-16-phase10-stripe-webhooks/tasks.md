@@ -1,6 +1,7 @@
 # Tasks: Phase 10 - Stripe Webhook Handlers
 
 ## Overview
+
 Implement complete Stripe webhook handling with persistent idempotency, email notifications, and comprehensive testing. Follows stripe-webhooks and webhook-handler-patterns skills.
 
 ## Task Checklist
@@ -24,7 +25,7 @@ Implement complete Stripe webhook handling with persistent idempotency, email no
   - [x] Replace `markEventProcessed()` with Prisma insert:
     ```typescript
     await prisma.processedWebhookEvent.create({
-      data: { id: eventId, eventType, processedAt: new Date() }
+      data: { id: eventId, eventType, processedAt: new Date() },
     });
     ```
   - [x] Handle unique constraint error gracefully (already processed)
@@ -77,7 +78,7 @@ Implement complete Stripe webhook handling with persistent idempotency, email no
           trialEndDate: subscription.trial_end ? new Date(subscription.trial_end * 1000) : null,
         },
       });
-      
+
       // Update organization_usage limits based on tier
       await tx.organizationUsage.update({
         where: { organizationId },
@@ -109,7 +110,11 @@ Implement complete Stripe webhook handling with persistent idempotency, email no
         data: { readOnlyMode: true },
       });
       // Queue warning email
-      await emailService.sendDowngradeWarningEmail(organizationId, usage.totalSkus, TIER_LIMITS[newTier].max_skus);
+      await emailService.sendDowngradeWarningEmail(
+        organizationId,
+        usage.totalSkus,
+        TIER_LIMITS[newTier].max_skus,
+      );
     }
     ```
   - [x] Wrap all in Prisma transaction
@@ -127,7 +132,7 @@ Implement complete Stripe webhook handling with persistent idempotency, email no
         where: { organizationId },
         data: { status: 'canceled', tierLevel: 'starter' },
       });
-      
+
       const usage = await tx.organizationUsage.findUnique({ where: { organizationId } });
       if (usage.totalSkus > TIER_LIMITS.starter.max_skus) {
         await tx.organization.update({
@@ -135,7 +140,7 @@ Implement complete Stripe webhook handling with persistent idempotency, email no
           data: { readOnlyMode: true },
         });
       }
-      
+
       await tx.auditLog.create({
         data: {
           organizationId,
@@ -165,13 +170,14 @@ Implement complete Stripe webhook handling with persistent idempotency, email no
   - [x] Queue SendGrid retry email via `emailService.sendDunningEmail()`
   - [x] Log to dunning queue (for 7-day grace period tracking, DECISION 17.5.9)
   - [x] Wrap in transaction:
+
     ```typescript
     await prisma.$transaction(async (tx) => {
       await tx.subscriptionTier.update({
         where: { organizationId },
         data: { status: 'past_due' },
       });
-      
+
       await tx.auditLog.create({
         data: {
           organizationId,
@@ -180,7 +186,7 @@ Implement complete Stripe webhook handling with persistent idempotency, email no
         },
       });
     });
-    
+
     // Queue email (non-blocking)
     await emailService.sendDunningEmail(organizationId, invoice.hosted_invoice_url);
     ```
@@ -188,12 +194,15 @@ Implement complete Stripe webhook handling with persistent idempotency, email no
     - [x] 3.6 Implement `handleTrialWillEnd` (Phase 18.B.3.6)
       - [x] Query `subscription_tiers` by `stripeSubscriptionId`
       - [x] Calculate days until trial end:
+
     ```typescript
     const trialEnd = new Date(subscription.trial_end * 1000);
     const daysRemaining = Math.ceil((trialEnd.getTime() - Date.now()) / (1000 * 60 * 60 * 24));
     ```
-      - [x] Queue SendGrid reminder email via `emailService.sendTrialReminderEmail()`
-      - [x] Log `trial_reminder_sent` event:
+
+    - [x] Queue SendGrid reminder email via `emailService.sendTrialReminderEmail()`
+    - [x] Log `trial_reminder_sent` event:
+
     ```typescript
     await prisma.auditLog.create({
       data: {
@@ -203,6 +212,7 @@ Implement complete Stripe webhook handling with persistent idempotency, email no
       },
     });
     ```
+
   - [x] No subscription state changes (informational only)
 
 ### 4. Webhook Metadata Validation (Phase 18.E.3)
@@ -268,6 +278,7 @@ Implement complete Stripe webhook handling with persistent idempotency, email no
   - [x] Idempotency skip rate (replays)
 
 Notes:
+
 - Implemented Sentry capture calls in `webhook.service.ts` and route-level metric recording in `webhook.routes.ts`.
 - Added webhook metrics and alerting hooks to `ApplicationMonitoringService` (`recordWebhookEvent`, `getWebhookMetrics`).
 - Unit tests added to validate Sentry capture and webhook metric increments.
@@ -290,6 +301,7 @@ Notes:
   - [x] Run: `node scripts/mem-log.js FEATURE "Stripe Webhooks Phase 10" "Implemented 6 webhook handlers with database idempotency, SendGrid email integration, comprehensive testing. Follows stripe-webhooks and webhook-handler-patterns skills. All handlers validated with Stripe customer metadata as source of truth (DECISION 17.5.5)."`
 
 Notes:
+
 - Documentation and runbook added to `docs/`.
 - Memory entry recorded.
 

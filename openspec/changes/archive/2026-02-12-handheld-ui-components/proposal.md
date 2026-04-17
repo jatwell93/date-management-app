@@ -13,12 +13,14 @@ The pharmacy PDT integration requires specialized UI components optimized for ha
 ## Capabilities
 
 ### New Capabilities
+
 - `handheld-scanner-component`: Touch-optimized scanner component with camera-first mode for handheld devices
 - `handheld-scan-toolbar`: Floating toolbar component with sync status, user display, and navigation controls
 - `handheld-layout`: Layout component that replaces desktop navigation with handheld-optimized UI
 - `handheld-conditional-rendering`: Logic for detecting handheld devices and rendering appropriate UI components
 
 ### Modified Capabilities
+
 - No existing capabilities are modified - this introduces new handheld-specific UI components
 
 ## Impact
@@ -28,4 +30,4 @@ The pharmacy PDT integration requires specialized UI components optimized for ha
 - **Styling**: New CSS classes for handheld optimization (48px touch targets, full-screen layouts)
 - **Device Detection**: Enhanced use of existing `useHandheldDetection` hook for UI rendering decisions
 - **Testing**: New component tests for handheld-specific components and conditional rendering</content>
-<parameter name="filePath">c:\Users\josha\date-management-app\openspec\changes\handheld-ui-components\proposal.md
+  <parameter name="filePath">c:\Users\josha\date-management-app\openspec\changes\handheld-ui-components\proposal.md

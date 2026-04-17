@@ -1,9 +1,11 @@
 # SaaS Operations Runbook
 
 ## Overview
+
 This runbook covers common operational procedures for the SaaS multi-tenant application, including incident response, monitoring, and maintenance tasks.
 
 ## Table of Contents
+
 1. [Health Checks](#health-checks)
 2. [Common Incidents](#common-incidents)
 3. [Cloudflare Workers Operations](#cloudflare-workers-operations)
@@ -16,6 +18,7 @@ This runbook covers common operational procedures for the SaaS multi-tenant appl
 ## Health Checks
 
 ### Endpoint Status
+
 - **Health Check**: `GET /health` - Overall system health including database and tier flags
 - **Liveness**: `GET /live` - Basic service availability
 - **Readiness**: `GET /ready` - Database connectivity check
@@ -24,6 +27,7 @@ This runbook covers common operational procedures for the SaaS multi-tenant appl
 - **Database Health**: `GET /database-health` - Database connectivity and integrity
 
 ### Healthy Response Example
+
 ```json
 {
   "status": "healthy",
@@ -51,17 +55,20 @@ This runbook covers common operational procedures for the SaaS multi-tenant appl
 
 ### 1. Tier Feature Flags Not Configured (503 Error)
 
-**Symptoms**: 
+**Symptoms**:
+
 - `/health` returns 503 with `tierFeatureFlags: 'unconfigured'`
 - Missing features error in response
 
 **Resolution**:
+
 ```bash
 # Run the tier flag seeding script
 npm run seed:tier-flags
 ```
 
 **Verification**:
+
 ```bash
 curl http://localhost:3001/health | jq .
 ```
@@ -71,16 +78,19 @@ curl http://localhost:3001/health | jq .
 ### 2. Database Connectivity Issues
 
 **Symptoms**:
+
 - `/health` returns 503 with `database: 'unhealthy'`
 - `/database-health` shows `connected: false`
 
 **Resolution**:
+
 1. Check database file exists and is accessible
 2. Verify database permissions
 3. Restart application to re-establish connection
 4. Check disk space for database file
 
 **Verification**:
+
 ```bash
 curl http://localhost:3001/database-health | jq .
 ```
@@ -90,28 +100,32 @@ curl http://localhost:3001/database-health | jq .
 ### 3. High Webhook Failure Rate
 
 **Symptoms**:
+
 - Sentry alerts for webhook failures
 - `webhookFailureRate > 5%` in metrics
 
 **Investigation**:
+
 ```bash
 # Check webhook logs
 npm run diagnose:webhook
 
 # View processed webhook events in database
-SELECT event_type, COUNT(*) as count, 
+SELECT event_type, COUNT(*) as count,
        SUM(CASE WHEN processed_at IS NOT NULL THEN 1 ELSE 0 END) as processed
-FROM processed_webhook_events 
+FROM processed_webhook_events
 WHERE created_at > datetime('now', '-1 hour')
 GROUP BY event_type;
 ```
 
 **Common Causes**:
+
 - Stripe webhook secret mismatch
 - Endpoint not publicly accessible
 - SSL certificate issues
 
 **Resolution**:
+
 1. Verify `STRIPE_WEBHOOK_SECRET` environment variable
 2. Check webhook endpoint is accessible: `curl -I https://your-domain.com/api/webhooks/stripe`
 3. Update webhook endpoint in Stripe Dashboard if needed
@@ -121,10 +135,12 @@ GROUP BY event_type;
 ### 4. Trial Abuse Detection
 
 **Symptoms**:
+
 - Multiple trial signups from same email
 - Sentry alerts for `ConflictError: Trial abuse detected`
 
 **Investigation**:
+
 ```sql
 -- Check trial history for suspicious email
 SELECT organization_id, email, trial_started_at, trial_end_date, status
@@ -135,6 +151,7 @@ ORDER BY trial_started_at DESC;
 ```
 
 **Resolution**:
+
 - System automatically blocks trials within 90 days
 - Manual override: Update `trial_blocked_until` in organization record if needed
 
@@ -143,22 +160,25 @@ ORDER BY trial_started_at DESC;
 ### 5. Usage Limit Violations
 
 **Symptoms**:
+
 - Users report unable to create products/users
 - `checkUsageLimit` middleware returning 403
 
 **Investigation**:
+
 ```sql
 -- Check organization usage
-SELECT * FROM organization_usage 
+SELECT * FROM organization_usage
 WHERE organization_id = 'org-uuid-here';
 
 -- Check subscription tier
-SELECT * FROM subscription_tiers 
-WHERE organization_id = 'org-uuid-here' 
+SELECT * FROM subscription_tiers
+WHERE organization_id = 'org-uuid-here'
 ORDER BY created_at DESC LIMIT 1;
 ```
 
 **Resolution**:
+
 - If legitimate overage: Guide user to upgrade
 - If count incorrect: Run usage recalculation (contact dev team)
 
@@ -169,6 +189,7 @@ ORDER BY created_at DESC LIMIT 1;
 ### Deployment Status
 
 **Check Workers health:**
+
 ```bash
 # Check if Workers service is running
 curl https://api.yourdomain.com/health
@@ -187,6 +208,7 @@ curl https://api.yourdomain.com/metrics
 ### Workers Incident: Service Unavailable (502/503)
 
 **Symptoms:**
+
 - Workers returns 502 Bad Gateway
 - `https://api.yourdomain.com` unreachable
 - Cloudflare dashboard shows critical alerts
@@ -210,6 +232,7 @@ curl https://api.yourdomain.com/health --write-out '\n%{http_code}\n'
 ```
 
 **Verification:**
+
 - Health endpoint returns 200 OK
 - Database connectivity confirmed
 - No errors in Sentry from Workers
@@ -217,6 +240,7 @@ curl https://api.yourdomain.com/health --write-out '\n%{http_code}\n'
 ### Workers Incident: Slow Responses (p95 > 500ms)
 
 **Symptoms:**
+
 - API requests taking > 1 second
 - Users report timeouts
 - Cloudflare Analytics show high TTFB
@@ -239,19 +263,19 @@ wrangler tail --env production --format json | \
 
 **Common Causes & Fixes:**
 
-| Cause | Indicator | Fix |
-|-------|-----------|-----|
-| Slow DB query | Query time >200ms in Neon | Add index (see performance.md) |
-| Connection pool exhausted | High pool utilization | Increase Hyperdrive pool size |
-| N+1 query problem | Multiple queries for single request | Use Prisma `include` for batch |
-| Large payload | Response size >1MB | Compress with gzip (already enabled) |
-| Cold start | First request slow | Normal for Workers, <300ms acceptable |
+| Cause                     | Indicator                           | Fix                                   |
+| ------------------------- | ----------------------------------- | ------------------------------------- |
+| Slow DB query             | Query time >200ms in Neon           | Add index (see performance.md)        |
+| Connection pool exhausted | High pool utilization               | Increase Hyperdrive pool size         |
+| N+1 query problem         | Multiple queries for single request | Use Prisma `include` for batch        |
+| Large payload             | Response size >1MB                  | Compress with gzip (already enabled)  |
+| Cold start                | First request slow                  | Normal for Workers, <300ms acceptable |
 
 **Fix Example: Add Missing Index**
 
 ```sql
 -- In Neon dashboard or via psql:
-CREATE INDEX CONCURRENTLY idx_products_orgid_expiry 
+CREATE INDEX CONCURRENTLY idx_products_orgid_expiry
 ON products(organization_id, expiry_date DESC);
 
 -- Verify Workers cached config is cleared:
@@ -261,6 +285,7 @@ wrangler secret put DATABASE_URL --env production
 ### Workers Incident: Secret/Configuration Issues
 
 **Symptoms:**
+
 - `401 Unauthorized` on all requests
 - `Error: DATABASE_URL undefined`
 - JWT validation failures
@@ -292,6 +317,7 @@ wrangler publish --env production
 ### Workers Incident: Memory or CPU Limit Errors
 
 **Symptoms:**
+
 - Errors: "Worker exceeded CPU time limit"
 - Response: "503 - Gateway Timeout"
 - Large file uploads fail (>50MB CSV)
@@ -327,6 +353,7 @@ for await (const row of csvStream) {
 ```
 
 **Workaround for MVP:**
+
 - Current limit: 30 seconds CPU per request
 - CSV processing: ~1MB per second throughput
 - Max file: ~30MB safely processable
@@ -352,6 +379,7 @@ Before pushing to production:
 ## Monitoring & Alerts
 
 ### Sentry Configuration
+
 - **DSN**: Set via `SENTRY_DSN` environment variable
 - **Frontend DSN**: Set via `SENTRY_FRONTEND_DSN` for client-side errors
 - **Alerts**: Configured for:
@@ -361,6 +389,7 @@ Before pushing to production:
   - High error rates
 
 ### Daily Metrics Job
+
 - **Schedule**: Runs at 23:59 UTC daily
 - **Purpose**: Stores metrics snapshot, checks alert conditions
 - **Lock**: Distributed locking prevents duplicate runs
@@ -368,16 +397,17 @@ Before pushing to production:
 
 ### Key Metrics to Monitor
 
-| Metric | Threshold | Alert Level |
-|--------|-------------|-------------|
-| Webhook Failure Rate | > 5% | High |
-| Idempotency Skip Rate | > 10% | Medium |
-| Trial Conversion Rate | < 10% | Medium |
-| Churn Rate | > 5% | High |
-| Database Response Time | > 500ms | Critical |
-| Error Rate | > 1% | Critical |
+| Metric                 | Threshold | Alert Level |
+| ---------------------- | --------- | ----------- |
+| Webhook Failure Rate   | > 5%      | High        |
+| Idempotency Skip Rate  | > 10%     | Medium      |
+| Trial Conversion Rate  | < 10%     | Medium      |
+| Churn Rate             | > 5%      | High        |
+| Database Response Time | > 500ms   | Critical    |
+| Error Rate             | > 1%      | Critical    |
 
 ### SaaS Business Metrics
+
 - **MRR**: Monthly Recurring Revenue
 - **ARPU**: Average Revenue Per User
 - **Trial Conversion Rate**: % of trials converting to paid
@@ -388,16 +418,19 @@ Before pushing to production:
 ## Maintenance Procedures
 
 ### Daily
+
 1. Review Sentry for new errors
 2. Check `/health` endpoint status
 3. Review daily metrics email (if configured)
 
 ### Weekly
+
 1. Review webhook processing stats
 2. Check for trial abuse patterns
 3. Verify backup completion
 
 ### Monthly
+
 1. Review tier distribution metrics
 2. Analyze conversion funnel
 3. Update feature flags if needed
@@ -407,6 +440,7 @@ Before pushing to production:
 ## Environment Variables
 
 ### Required for Production
+
 ```bash
 # Database
 DATABASE_URL="file:./production.db"
@@ -436,13 +470,13 @@ NODE_ENV="production"
 
 ## Escalation Contacts
 
-| Issue Type | Contact | Response Time |
-|------------|---------|---------------|
-| Critical Outage | DevOps Team | 15 minutes |
-| Payment/Stripe Issues | Backend Team | 1 hour |
-| Auth/Clerk Issues | Backend Team | 1 hour |
-| Database Issues | Database Admin | 2 hours |
-| Feature Questions | Product Team | 24 hours |
+| Issue Type            | Contact        | Response Time |
+| --------------------- | -------------- | ------------- |
+| Critical Outage       | DevOps Team    | 15 minutes    |
+| Payment/Stripe Issues | Backend Team   | 1 hour        |
+| Auth/Clerk Issues     | Backend Team   | 1 hour        |
+| Database Issues       | Database Admin | 2 hours       |
+| Feature Questions     | Product Team   | 24 hours      |
 
 ---
 
@@ -477,6 +511,7 @@ npm test -- --testPathPattern="integration"
 ---
 
 ## Related Documentation
+
 - [Architecture Decision Records](../docs/adr/)
 - [API Documentation](../docs/api/)
 - [Feature Flags](../docs/feature-flags.md)
@@ -484,5 +519,5 @@ npm test -- --testPathPattern="integration"
 
 ---
 
-*Last Updated: March 2, 2026*
-*Version: 1.0.0*
+_Last Updated: March 2, 2026_
+_Version: 1.0.0_

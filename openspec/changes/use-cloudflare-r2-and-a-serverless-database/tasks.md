@@ -1,17 +1,20 @@
 # Implementation Tasks
 
 > **AUDIT STATUS (March 22, 2026 - UPDATED):**
+>
 > - Original tasks: 180
 > - ✅ Completed: 71 (39%) - via SaaS multi-tenant work
-> - ⏭️ Superseded: 23 (13%) - overlaps with SaaS implementation  
+> - ⏭️ Superseded: 23 (13%) - overlaps with SaaS implementation
 > - 🆕 New tasks added: 15 (domain setup, business registration, hosting for Phase 15)
 > - 📋 Remaining: 101 tasks (~45-55 hours estimated)
 >
 > **DEPLOYMENT STRATEGY UPDATED:**
+>
 > - ✅ Cloudflare Pages + Workers now PRIMARY recommendation (replaces Netlify + Railway)
 > - Rationale: Single platform, already configured in wrangler.toml, zero operational splitting
 >
-> **KEY DEPENDENCIES:**  
+> **KEY DEPENDENCIES:**
+>
 > - SaaS multi-tenant foundation (✅ COMPLETE) - see `openspec/changes/archive/2026-03-04-plan-saas-monetization-model`
 > - Multi-tenant auth must be added to Workers before production deployment (Phase 8B - NEW)
 > - Upload flow enhancement required for production (Phase 9 - NOT STARTED)
@@ -33,7 +36,7 @@
 - [x] 0.10 **Create Neon database**: Databases → New Project → name: `date-management-prod` → region: (choose closest)
 - [x] 0.11 **Copy Neon connection string**: Connection Details → Connection String → copy value
 - [x] 0.12 **Save Neon connection string** securely (format: `postgresql://user:pass@host/db?sslmode=require`)
-- [x] 0.13 **Choose production domain** for Workers (e.g., `api.yourdomain.com` or use workers.dev subdomain)  
+- [x] 0.13 **Choose production domain** for Workers (e.g., `api.yourdomain.com` or use workers.dev subdomain)
   - **Note:** Using workers.dev subdomain for production
 - [x] 0.14 **Provide credentials to developer** via secure method (never commit to git)
 - [x] 0.15 **Install Neon MCP** set up VSCode MCP for Neon
@@ -86,7 +89,7 @@
 ## 3. Database Abstraction Layer
 
 > **✅ PHASE COMPLETE (100%)** - Database abstraction fully implemented via SaaS multi-tenant work
-> 
+>
 > **NOTE:** All tasks completed as part of SaaS multi-tenant foundation. Prisma schema includes Organization, SubscriptionTier, and organization_id on all models.
 
 - [x] 3.1 Create `backend/prisma/schema.prisma` with Product model
@@ -197,7 +200,7 @@
 
 ## 7. Neon Database Setup
 
-> **✅ PHASE COMPLETE (16/16 tasks, 100%)** - Neon PostgreSQL configured with Hyperdrive  
+> **✅ PHASE COMPLETE (16/16 tasks, 100%)** - Neon PostgreSQL configured with Hyperdrive
 >
 > **NOTE:** Tasks 7.1-7.11 completed via SaaS multi-tenant work. Hyperdrive configuration (7b) verified working.
 
@@ -287,6 +290,7 @@
 > **🆕 NEW PHASE - BLOCKING PRODUCTION DEPLOYMENT**
 >
 > **WHY NEEDED:** Original Cloudflare spec pre-dated SaaS multi-tenant work. Workers handlers DO NOT include:
+>
 > - Organization context extraction from JWT
 > - Subscription tier validation
 > - Feature gate enforcement
@@ -336,7 +340,8 @@
 
 > **✅ PHASE COMPLETE (10/10 tasks, 100%)** - Production-ready upload infrastructure with progress tracking
 >
-> **IMPLEMENTATION COMPLETE:** 
+> **IMPLEMENTATION COMPLETE:**
+>
 > - Multi-tenant upload key scoping (`uploads/{orgId}/{timestamp}-{filename}`)
 > - Progress tracking via Upload table with database-backed status endpoint
 > - Presigned URL generation for large files (>2MB)
@@ -503,7 +508,7 @@
 - [x] 11.13 All tests for frontend/backend dev/prod pass
   - **Completed:** Full test suite passing in development mode
   - **Production mode:** Documented and ready for CI/CD
-- [x] 11.14 Use tech-debt-remediation-plan agent to create detailed plan  at half-way point
+- [x] 11.14 Use tech-debt-remediation-plan agent to create detailed plan at half-way point
   - **Completed:** Tech debt documented in `docs/tech-debt.md`
 - [x] 11.15 Update README.md to reflect current state
   - **Completed:** README documents local dev, R2/Neon setup
@@ -586,7 +591,7 @@
 
 ## 13. Security Hardening
 
-> **✅ PHASE COMPLETE (16/16 tasks, 100%)** - All security requirements met including multi-tenant JWT validation  
+> **✅ PHASE COMPLETE (16/16 tasks, 100%)** - All security requirements met including multi-tenant JWT validation
 >
 > **NOTE:** Security hardening completed as part of SaaS multi-tenant implementation and tech debt remediation.
 > **COMPLETED TODAY:** Task 13.8 - Multi-tenant JWT validation for Workers
@@ -730,11 +735,13 @@
 
 > **⏳ PHASE IN PROGRESS - FINAL POST-DEPLOY VALIDATION REMAINING**  
 > **STATUS:** SPLIT INTO SUBSECTIONS:
+>
 > - **15a: Domain, Business & Hosting Setup** — PREREQUISITES COMPLETE (tracked for audit history)
 > - **15b: Cloudflare Workers Deployment** — Technical implementation (1–2 weeks timeline)
 >
 > **ORIGINAL BLOCKER (Feb 9, 2026):** Multi-tenant routes and auth not implemented  
-> **CURRENT STATUS (Apr 6, 2026):**  
+> **CURRENT STATUS (Apr 6, 2026):**
+>
 > - ✅ Multi-tenant routes complete (backend)
 > - ✅ JWT with organizationId implemented (backend)
 > - ✅ Multi-tenant auth implemented in Workers (Phase 8B complete)
@@ -744,6 +751,7 @@
 > - ⏳ Remaining post-deploy tasks: 15.7 (24h traffic monitoring), 15.8 (cost verification)
 >
 > **PREREQUISITES BEFORE DEPLOYMENT (STATUS):**
+>
 > 1. ✅ Domain, business registration, & hosting setup (Phase 15a)
 > 2. ✅ Phase 8B complete (Multi-Tenant Workers Support)
 > 3. ✅ Phase 9 complete (Upload Flow Enhancement)
@@ -751,6 +759,7 @@
 > 5. ✅ Phase 12.2 complete (custom metrics wiring)
 >
 > **DEPLOYMENT READINESS CHECKLIST:**
+>
 > - [x] Australian business registered with ABN (Phase 15a.1)
 > - [x] `.au` domain registered and nameservers updated (Phase 15a.3-15a.4)
 > - [x] SSL certificate active via Cloudflare (Phase 15a.6)
@@ -780,7 +789,7 @@
     - Business activity type (e.g., "Software Development", "Pharmacy Management Services")
     - Does NOT require formal business structure (sole trader is fine)
   - **Timeline:** Instant to 2–3 weeks (usually immediate for sole traders)
-  - **Action:** 
+  - **Action:**
     1. Visit ABN Lookup site
     2. Click "Apply for an ABN" under ABN menu
     3. Fill in business details + TFN
@@ -808,7 +817,7 @@
     - auDA provider page: https://www.auda.org.au/au-domain-names/get-a-domain-name/au-domain-name-providers/
     - auDA accredited registrars list: https://www.auda.org.au/registrar-resources/list-of-au-accredited-registrars/
   - **Cost:** Typically $10–$25 AUD/year depending on provider and promo pricing
-  - **Requirements:** 
+  - **Requirements:**
     - Valid ABN (from 15a.1)
     - Australian address
     - Email address
@@ -838,7 +847,7 @@
     6. Navigate to domain dashboard → DNS Settings
     7. Update nameservers to Cloudflare's nameservers
     8. Save changes
-  - **Verification:** 
+  - **Verification:**
     - In Cloudflare dashboard, wait for domain status to change from "Pending" to "Active" (5–10 min)
     - Or check: `nslookup -type=NS yourdomain.com.au` (should show Cloudflare nameservers)
 
@@ -875,7 +884,7 @@
        - "Full": Encrypts browser-to-Cloudflare AND Cloudflare-to-origin
        - "Full Strict": Requires valid certificate on origin (recommended for security)
     2. If using Workers as origin (no traditional server), select **"Flexible"** or **"Full"**
-  - **Production Recommendation:** 
+  - **Production Recommendation:**
     - Use **"Full"** for Workers (no origin cert needed since no traditional server)
     - Use **"Full Strict"** if backend is self-hosted
 
@@ -883,26 +892,24 @@
 
 - [x] 15a.10 Choose hosting platform for production deployment
   - **Decision Matrix for Your Stack (Node.js backend + React frontend + PostgreSQL):**
-  
-| Option | Frontend | Backend | Database | Cost/Month | Architecture |
-|--------|----------|---------|----------|-----------|---|
-| **⭐ Cloudflare Pages + Workers** | ✅ Pages (Free) | ✅ Workers (Free) | Neon (Free/Paid) | $0–19 | Single platform, no operational split |
-| **Fly.io (AU)** | ✅ Sydney region | ✅ Sydney region | Neon included | $5–25 | Single platform, best AU latency |
-| **Vercel + Railway** | ✅ Vercel (Free) | ✅ Railway ($5–20) | PostgreSQL included | $60–300/yr | Two platforms, API split |
-| **Netlify + Railway** | ✅ Netlify (Free) | ✅ Railway ($5–20) | PostgreSQL included | $60–300/yr | Three platforms (+ Cloudflare DNS) |
 
-  - **Recommendation for Your Project (STRONGLY RECOMMENDED):**
-    - **🏆 PRIMARY: Cloudflare Pages + Workers** — Already configured in wrangler.toml, zero cost, single platform, no operational splitting
-      - Latency: <30ms AU via Cloudflare SYD edge
-      - Setup time: 1–2 hours (Pages + Workers already configured)
-      - Cost: $0/month (free tier)
-      - Why: Workers designed to run your Express adapter, R2 storage seamless, Hyperdrive already bound
-    
-    - **🥈 SECONDARY: Fly.io** — If you need better AU uptime or longer background job support (+$15–25/month)
-    
-    - **❌ NOT RECOMMENDED: Netlify + Railway** — Abandons existing Cloudflare investment, multi-platform complexity, higher cost
-  
-  - **Decision:** Use Cloudflare Pages + Workers unless you have specific requirements for an alternative
+| Option                            | Frontend          | Backend            | Database            | Cost/Month | Architecture                          |
+| --------------------------------- | ----------------- | ------------------ | ------------------- | ---------- | ------------------------------------- |
+| **⭐ Cloudflare Pages + Workers** | ✅ Pages (Free)   | ✅ Workers (Free)  | Neon (Free/Paid)    | $0–19      | Single platform, no operational split |
+| **Fly.io (AU)**                   | ✅ Sydney region  | ✅ Sydney region   | Neon included       | $5–25      | Single platform, best AU latency      |
+| **Vercel + Railway**              | ✅ Vercel (Free)  | ✅ Railway ($5–20) | PostgreSQL included | $60–300/yr | Two platforms, API split              |
+| **Netlify + Railway**             | ✅ Netlify (Free) | ✅ Railway ($5–20) | PostgreSQL included | $60–300/yr | Three platforms (+ Cloudflare DNS)    |
+
+- **Recommendation for Your Project (STRONGLY RECOMMENDED):**
+  - **🏆 PRIMARY: Cloudflare Pages + Workers** — Already configured in wrangler.toml, zero cost, single platform, no operational splitting
+    - Latency: <30ms AU via Cloudflare SYD edge
+    - Setup time: 1–2 hours (Pages + Workers already configured)
+    - Cost: $0/month (free tier)
+    - Why: Workers designed to run your Express adapter, R2 storage seamless, Hyperdrive already bound
+  - **🥈 SECONDARY: Fly.io** — If you need better AU uptime or longer background job support (+$15–25/month)
+  - **❌ NOT RECOMMENDED: Netlify + Railway** — Abandons existing Cloudflare investment, multi-platform complexity, higher cost
+
+- **Decision:** Use Cloudflare Pages + Workers unless you have specific requirements for an alternative
 
 - [x] 15a.11 Deploy to Cloudflare Pages + Workers (Primary Recommendation)
   - **Why This Setup:** Workers already configured with Express adapter in wrangler.toml; Pages provides excellent React deployment; single platform reduces operational burden
@@ -952,7 +959,6 @@
       - Runtime checks confirmed: `https://www.expirymate.com.au` HTTP 200 and `https://api.expirymate.com.au/health` healthy
       - Latest production deployment record: `7251e9c9` (`https://7251e9c9.date-management-frontend.pages.dev`) from merge commit `04bc195073d23cf51e2f50bef9f1249d96de1258`
   - **Environment Source:** Use Doppler for local `.env`-style runtime values (`doppler run -- ...`). Cloudflare Pages/Workers still require platform environment configuration for deployed runtime.
-  
   - **Frontend Deployment (Cloudflare Pages):**
     1. Build React frontend: `npm run build:frontend` (or from `frontend/` directory: `npm run build`)
     2. Create Cloudflare Pages project
@@ -960,21 +966,19 @@
        - Connect GitHub repo
        - Framework: React (select "Create React App" if prompted)
        - Build command: `npm run build:frontend` or `cd frontend && npm run build`
-       - Build output directory: `frontend/build` 
+       - Build output directory: `frontend/build`
        - Root directory: (leave blank)
-  
   - **Backend Deployment (Cloudflare Workers):**
     1. Verify wrangler configuration for production
        - Already configured in `workers/wrangler.toml`
        - Verify `[env.production].name = "date-management-api-prod"`
        - Verify R2 bucket binding: `csv-uploads-prod`
        - Verify Hyperdrive binding ID: `4fac081391784eb7bb2db2269c1fa870`
-     2. Deploy to Workers (Doppler-first local shell): `doppler run -- wrangler deploy --env production`
-       - Alternative (if already authenticated and secrets are set in Workers): `wrangler deploy --env production`
+    2. Deploy to Workers (Doppler-first local shell): `doppler run -- wrangler deploy --env production`
+    - Alternative (if already authenticated and secrets are set in Workers): `wrangler deploy --env production`
     3. Verify deployment successful:
        - Check Cloudflare dashboard → Workers → Metrics
        - Test health endpoint: `curl https://<worker-url>/health`
-  
   - **Domain Configuration (Already Done in 15a.4):**
     - Domain nameservers should already point to Cloudflare
     - Point subdomain to Workers:
@@ -984,7 +988,6 @@
       - Content: `date-management-api-prod.<account>.workers.dev` (replace with actual worker URL)
       - Proxy: Enabled (orange cloud)
     - Or use default Workers URL: `date-management-api-prod.<account>.workers.dev`
-  
   - **Frontend Configuration:**
     1. Set environment variable for API URL
        - In Pages project settings → Environment variables
@@ -995,12 +998,10 @@
        - Open Pages deployment URL
        - Check browser console for any CORS or API errors
        - Test CSV upload flow end-to-end
-  
   - **SSL Verification (Automatic):**
     - Cloudflare automatically provisions Universal SSL
     - Both Pages and Workers use the same Cloudflare SSL certificate
     - Should show "✅ Active" in SSL/TLS → Overview
-  
   - **Verification Checklist:**
     - [x] Frontend deployed to Cloudflare Pages and loads at HTTPS
     - [x] Backend Workers deployed and health check returns 200 OK
@@ -1191,24 +1192,20 @@
 - [x] 16.1 Create `docs/dual-environment-guide.md` for developers
   - **Completed:** Complete guide with setup instructions, environment switching, testing strategies, and database/storage environment differences
   - **Coverage:** SQLite dev → Neon PostgreSQL prod transition patterns
-  
 - [x] 16.2 Document storage abstraction patterns
   - **Status:** Comprehensive documentation exists in backend/docs/storage-patterns.md
   - **Coverage:** Architecture, interface definitions, DI patterns, error handling, R2 presigned URLs
   - **Linked in README:** Yes, with full path reference
-  
 - [x] 16.3 Document database abstraction patterns
   - **Status:** Comprehensive documentation exists in backend/docs/database-patterns.md
   - **Coverage:** Prisma patterns, schema files, transactions, models, environment configuration
   - **Linked in README:** Yes, with full path reference
-  
 - [x] 16.4 Create `docs/cloudflare-setup.md` for infrastructure setup
   - **Completed:** Already exists - comprehensive R2, Workers, Hyperdrive, and Wrangler configuration
 
 - [x] 16.5 Create `docs/neon-workflow.md` for database branching
   - **Completed:** Complete guide with branching strategy, testing migrations, merge procedures, backup/recovery
   - **Coverage:** Neon CLI reference, best practices, troubleshooting Neon-specific issues
-  
 - [x] 16.6 Update main README with production setup instructions
   - **Completed:** README updated with comprehensive setup instructions and links to all documentation
 
@@ -1233,7 +1230,7 @@
 
 - [x] 16.10 Create runbook for production operations
   - **Completed:** Enhanced docs/operational-runbook.md with new Cloudflare Workers section
-  - **Coverage:** 
+  - **Coverage:**
     - Workers deployment status checks
     - Incident response for Workers (502/503, slow responses, secret issues)
     - Memory/CPU limit handling
@@ -1243,7 +1240,8 @@
 
 > **⚠️ PHASE PARTIAL (10/11 tasks, 90%)** - Performance optimization complete, only PgHero deferred
 
-**COMPLETED TODAY (Mar 7, 2026):** 
+**COMPLETED TODAY (Mar 7, 2026):**
+
 - Task 17.9 (CSV profiling) ✅ - Real pharmacy data validated at 1.82s for 7,649 rows
 - **CSV UX Improvements** ✅ (pre-17.4 enhancements):
   - Pre-upload column name validator (frontend check before API call)
@@ -1362,13 +1360,13 @@
 
 - [ ] 17.11 Add PgHero for Neon query performance, slow queries, index suggestions
   - **STATUS:** DEFERRED until post-launch
-  - **Rationale:** 
+  - **Rationale:**
     - Neon monitoring already enabled (Task 7.9 complete)
     - Neon Query Performance tab provides basic slow query detection
     - Sentry alerts configured for queries >200ms
     - PgHero requires constant uptime (VPS $5-10/mo) for live monitoring
     - MVP should validate with real production data first before investing in additional monitoring
-  - **Post-Launch Action:** 
+  - **Post-Launch Action:**
     - Evaluate Neon monitoring sufficiency after 2-4 weeks production usage
     - If slow queries become frequent, deploy PgHero on small VPS
     - Alternative: Upgrade to Neon Pro tier for advanced monitoring ($19/mo)
@@ -1449,7 +1447,7 @@
 
 - [x] 19.3 Create setup script for new developers (`npm run setup`)
   - **Completed:** Created `backend/scripts/setup.js` with automated onboarding
-  - **Features:** 
+  - **Features:**
     - Node.js version check (≥18.x required)
     - Automatic dependency installation
     - .env file creation from .env.example
@@ -1467,7 +1465,7 @@
     - NODE_ENV validation with valid options
     - JWT_SECRET missing detection with dev/prod-specific guidance
     - All errors include links to docs/environment-setup.md
-  - **Example:** "❌ JWT_SECRET environment variable is missing or empty" → "ℹ️  For local development, add JWT_SECRET=dev-secret-change-in-production to your .env file"
+  - **Example:** "❌ JWT_SECRET environment variable is missing or empty" → "ℹ️ For local development, add JWT_SECRET=dev-secret-change-in-production to your .env file"
 
 - [x] 19.5 Document local development workflow
   - **Completed:** Created comprehensive `docs/developer-guide.md`
@@ -1616,5 +1614,3 @@
     - ✅ Default `npm test` is deterministic and not coupled to external preview endpoints
 
 **Estimated Time for Phase 20:** 10-14 hours (expanded validation + approvals)
-
-

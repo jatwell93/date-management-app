@@ -25,15 +25,16 @@ The multi-tenant SaaS foundation (`plan-saas-monetization-model`) is **architect
 
 ### Active Changes
 
-| Change | Progress | Status | Next Phase |
-|--------|----------|--------|-----------|
-| `use-cloudflare-r2-and-a-serverless-database` | 164/253 | **PAUSE** | Phase 14 (migrations) + Phase 15 (deployment) |
-| `phase-13-security-hardening` | 9/83+ | **PAUSE** | Validation, JWT security, API hardening |
-| `plan-saas-monetization-model` | 0/161 | **START** | Week 1: Schema preparation |
+| Change                                        | Progress | Status    | Next Phase                                    |
+| --------------------------------------------- | -------- | --------- | --------------------------------------------- |
+| `use-cloudflare-r2-and-a-serverless-database` | 164/253  | **PAUSE** | Phase 14 (migrations) + Phase 15 (deployment) |
+| `phase-13-security-hardening`                 | 9/83+    | **PAUSE** | Validation, JWT security, API hardening       |
+| `plan-saas-monetization-model`                | 0/161    | **START** | Week 1: Schema preparation                    |
 
 ### What's Complete (R2/Serverless Change)
 
 ✅ **Phases 1-13 (Core Infrastructure)**:
+
 - Storage abstraction (LocalStorage + R2Storage providers)
 - Database abstraction (Prisma with SQLite dev + PostgreSQL prod)
 - Service refactoring (DI pattern, Prisma adoption)
@@ -45,16 +46,19 @@ The multi-tenant SaaS foundation (`plan-saas-monetization-model`) is **architect
 ### What's Incomplete (R2/Serverless Change)
 
 ❌ **Phase 14: Database Migrations** (NOT STARTED)
+
 - Neon branch creation
 - Migration deployment workflow
 - SQLite → PostgreSQL migration testing
 
 ❌ **Phase 15: Production Deployment** (NOT STARTED)
+
 - Workers production service
 - Custom domain setup
 - End-to-end production testing
 
 ❌ **Phase 13: Security Hardening** (MINIMAL PROGRESS)
+
 - Most security tasks still pending
 - Only basic setup complete
 
@@ -65,6 +69,7 @@ The multi-tenant SaaS foundation (`plan-saas-monetization-model`) is **architect
 ### If You Complete Phase 14 (Migrations) Before Multi-Tenant:
 
 **Problem**: You'll deploy **single-tenant schema** to production, then need to:
+
 1. Create additional migrations for multi-tenant (add organizationId to 8+ models)
 2. Backfill organizationId for all existing production data
 3. Redeploy with schema changes (**breaking change**, requires downtime)
@@ -74,6 +79,7 @@ The multi-tenant SaaS foundation (`plan-saas-monetization-model`) is **architect
 ### If You Complete Phase 15 (Production Deployment) Before Multi-Tenant:
 
 **Problem**: You'll have **live production users on single-tenant architecture**, then need to:
+
 1. Coordinate maintenance window for schema changes
 2. Migrate live user data to multi-tenant structure
 3. Handle auth breaking changes (all users must re-login)
@@ -93,6 +99,7 @@ The multi-tenant SaaS foundation (`plan-saas-monetization-model`) is **architect
 ### Immediate Action (This Week)
 
 1. **Archive Phase 13 (security) temporarily**
+
    ```bash
    openspec archive phase-13-security-hardening
    # Reason: JWT work conflicts with multi-tenant auth
@@ -119,10 +126,12 @@ The multi-tenant SaaS foundation (`plan-saas-monetization-model`) is **architect
 - Verify migration on test database
 
 **Parallel Work Allowed**:
+
 - R2 lifecycle rules (task 6.7) — doesn't touch code
 - Cloudflare Analytics (tasks 12.1-12.2) — monitoring only
 
 **Blocked Work**:
+
 - Phase 14 migrations (conflicts with multi-tenant schema)
 - Phase 15 deployment (would deploy single-tenant to production)
 - Phase 13 JWT work (conflicts with multi-tenant auth)
@@ -136,11 +145,13 @@ The multi-tenant SaaS foundation (`plan-saas-monetization-model`) is **architect
 - Create feature gating middleware
 
 **Why This Completes Phase 13 Security Work**:
+
 - Multi-tenant auth includes JWT security improvements
 - Feature gating is more comprehensive than simple validation
 - Once complete, you can resume Phase 13 tasks that don't conflict
 
 **Parallel Work Allowed**:
+
 - Phase 13: CORS configuration (task 4.6-4.7)
 - Phase 13: Rate limiting (tasks 4.1-4.4)
 - Phase 13: Input validation schemas (tasks 3.1-3.3) — but defer JWT validation
@@ -155,6 +166,7 @@ The multi-tenant SaaS foundation (`plan-saas-monetization-model`) is **architect
 - Implement subscription service
 
 **Parallel Work Allowed**:
+
 - Phase 13: CSV injection prevention (already done, but can enhance)
 - Phase 13: Error handling (already done)
 
@@ -176,12 +188,14 @@ The multi-tenant SaaS foundation (`plan-saas-monetization-model`) is **architect
 **Resume**: `use-cloudflare-r2-and-a-serverless-database` Phase 14-15
 
 **Now Safe to Deploy Because**:
+
 - Schema includes multi-tenant structure
 - Auth is organization-aware
 - All routes filter by tenant
 - Production will launch with SaaS model from day 1
 
 **Deploy Sequence**:
+
 1. Phase 14: Run Neon migrations (now includes multi-tenant tables)
 2. Phase 15: Deploy Workers with multi-tenant routes
 3. Phase 15: End-to-end production testing with multiple orgs
@@ -190,18 +204,18 @@ The multi-tenant SaaS foundation (`plan-saas-monetization-model`) is **architect
 
 ## 🔄 Dependency Matrix
 
-| Task Category | Can Continue? | Reason |
-|---------------|--------------|--------|
-| **Storage abstraction** | ✅ COMPLETE | No tenant-specific changes needed (organizationId added to Upload model later) |
-| **CSV parser** | ✅ COMPLETE | Works at service layer, will receive organizationId parameter in Week 4 |
-| **Workers code** | ✅ COMPLETE | Routes will be updated in Week 4 to include tenant filtering |
-| **R2 setup** | ✅ Continue | Lifecycle rules, analytics — doesn't touch code |
-| **Database migrations** | ❌ BLOCKED | Would deploy single-tenant schema; wait for multi-tenant schema complete |
-| **Production deployment** | ❌ BLOCKED | Would launch single-tenant; wait for multi-tenant routes complete |
-| **Phase 13: JWT validation** | ❌ BLOCKED | Conflicts with multi-tenant auth changes |
-| **Phase 13: CORS/rate limit** | ✅ Continue | Orthogonal to multi-tenant work |
-| **Phase 13: Input validation** | ✅ Continue | Orthogonal, but defer JWT schemas |
-| **New features (any)** | ❌ BLOCKED | Would be built on single-tenant; all features paused |
+| Task Category                  | Can Continue? | Reason                                                                         |
+| ------------------------------ | ------------- | ------------------------------------------------------------------------------ |
+| **Storage abstraction**        | ✅ COMPLETE   | No tenant-specific changes needed (organizationId added to Upload model later) |
+| **CSV parser**                 | ✅ COMPLETE   | Works at service layer, will receive organizationId parameter in Week 4        |
+| **Workers code**               | ✅ COMPLETE   | Routes will be updated in Week 4 to include tenant filtering                   |
+| **R2 setup**                   | ✅ Continue   | Lifecycle rules, analytics — doesn't touch code                                |
+| **Database migrations**        | ❌ BLOCKED    | Would deploy single-tenant schema; wait for multi-tenant schema complete       |
+| **Production deployment**      | ❌ BLOCKED    | Would launch single-tenant; wait for multi-tenant routes complete              |
+| **Phase 13: JWT validation**   | ❌ BLOCKED    | Conflicts with multi-tenant auth changes                                       |
+| **Phase 13: CORS/rate limit**  | ✅ Continue   | Orthogonal to multi-tenant work                                                |
+| **Phase 13: Input validation** | ✅ Continue   | Orthogonal, but defer JWT schemas                                              |
+| **New features (any)**         | ❌ BLOCKED    | Would be built on single-tenant; all features paused                           |
 
 ---
 
@@ -214,11 +228,11 @@ Add blocking note to Phase 14-15:
 ```markdown
 ## 14. Database Migration Workflows
 
-> **⚠️ BLOCKED**: This phase is paused pending completion of `plan-saas-monetization-model` 
-> (multi-tenant SaaS foundation). Once multi-tenant schema is complete (Week 7), 
+> **⚠️ BLOCKED**: This phase is paused pending completion of `plan-saas-monetization-model`
+> (multi-tenant SaaS foundation). Once multi-tenant schema is complete (Week 7),
 > this phase will resume with migrations that include Organization and subscription tables.
 >
-> **Reason**: Deploying single-tenant migrations now would require a second migration 
+> **Reason**: Deploying single-tenant migrations now would require a second migration
 > for multi-tenant, causing production downtime and data migration complexity.
 ```
 
@@ -243,18 +257,21 @@ openspec archive phase-13-security-hardening --yes
 ## 🎯 Success Criteria
 
 ### Week 2 Checkpoint
+
 - [ ] Organization, subscription_tiers tables exist
 - [ ] All models have organizationId column (NULLABLE)
 - [ ] Default organization created and data backfilled
 - [ ] Migration tested on SQLite + PostgreSQL test databases
 
 ### Week 4 Checkpoint
+
 - [ ] JWT includes organizationId and tierLevel
 - [ ] Login validates organization membership
 - [ ] All routes filter by req.organizationId
 - [ ] Feature gating middleware enforces tier limits
 
 ### Week 7 Checkpoint (Multi-Tenant Complete)
+
 - [ ] organizationId is NOT NULL on all models
 - [ ] Stripe integration complete (webhooks tested)
 - [ ] Trial system working (14-day auto-downgrade)
@@ -262,6 +279,7 @@ openspec archive phase-13-security-hardening --yes
 - [ ] Ready for production deployment
 
 ### Week 8+ (Resume R2/Serverless Deployment)
+
 - [ ] Phase 14 migrations run on Neon (includes multi-tenant schema)
 - [ ] Workers deployed with tenant-aware routes
 - [ ] Production end-to-end test with 2+ organizations

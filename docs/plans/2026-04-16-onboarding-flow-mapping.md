@@ -59,12 +59,14 @@
 The first-login admin bootstrap should be inserted **between Clerk org creation and the first protected route load**. Two approaches:
 
 ### Approach A: Intercept at `/scan` load (recommended)
+
 - After `<CreateOrganization>` completes → redirects to `/scan`
 - Before rendering `/scan`, call backend bootstrap endpoint
 - Backend: verify Clerk org context → create DB org if needed → assign admin if no active admin → return membership context
 - This is retry-safe (idempotent) and doesn't require modifying Clerk's `<CreateOrganization>` callbacks
 
 ### Approach B: Add callback on `<CreateOrganization>` completion
+
 - Use Clerk's `afterCreateOrganizationUrl` as a custom route (e.g., `/onboarding/complete`)
 - Call backend bootstrap from that route, then redirect to `/scan`
 - Slightly more explicit but adds a transient route
@@ -73,12 +75,12 @@ The first-login admin bootstrap should be inserted **between Clerk org creation 
 
 ## Current Role Usage (Legacy)
 
-| Location | Role values used |
-|----------|-----------------|
-| `ClerkAuthProvider` | `'Manager'`, `'Team Member'` |
-| `App.tsx` route guards | `userRole === 'Manager'` for `/settings` |
-| `auth.middleware.ts` | `requireManager` checks `'Manager' \|\| 'admin'` |
+| Location                         | Role values used                                                         |
+| -------------------------------- | ------------------------------------------------------------------------ |
+| `ClerkAuthProvider`              | `'Manager'`, `'Team Member'`                                             |
+| `App.tsx` route guards           | `userRole === 'Manager'` for `/settings`                                 |
+| `auth.middleware.ts`             | `requireManager` checks `'Manager' \|\| 'admin'`                         |
 | `organization-invite.service.ts` | `InviteRole = 'admin' \| 'member'`, maps to `'Manager' \| 'Team Member'` |
-| Test auth bypass | `role: 'Manager'` |
+| Test auth bypass                 | `role: 'Manager'`                                                        |
 
 All of the above need migration to canonical roles (`admin`, `team_member`, optional `manager`).

@@ -96,173 +96,182 @@ router.get('/dashboard', requireOrgRole('admin'), async (req: AuthRequest, res: 
  * GET /api/admin/metrics/subscription-tiers
  * Get detailed subscription tier distribution and revenue
  */
-router.get('/subscription-tiers', requireOrgRole('admin'), async (req: AuthRequest, res: Response) => {
-  try {
-    const prisma = getDefaultDatabaseClient();
+router.get(
+  '/subscription-tiers',
+  requireOrgRole('admin'),
+  async (req: AuthRequest, res: Response) => {
+    try {
+      const prisma = getDefaultDatabaseClient();
 
-    // Get subscription counts by tier
-    const tierCounts = await prisma.subscriptionTier.groupBy({
-      by: ['tierLevel', 'status'],
-      _count: true,
-    });
+      // Get subscription counts by tier
+      const tierCounts = await prisma.subscriptionTier.groupBy({
+        by: ['tierLevel', 'status'],
+        _count: true,
+      });
 
-    // Calculate revenue by tier
-    const tierMetrics = tierCounts.reduce(
-      (acc, tier) => {
-        const key = tier.tierLevel.toLowerCase();
-        // Map legacy tiers to standard pricing if needed
-        let price = 0;
-        if (key in TIER_PRICES) {
-          price = TIER_PRICES[key as TierLevel];
-        } else if (key === 'pro') {
-          price = TIER_PRICES.professional;
-        } else if (key === 'enterprise') {
-          price = TIER_PRICES.concierge; // Map enterprise to concierge for now
-        }
+      // Calculate revenue by tier
+      const tierMetrics = tierCounts.reduce(
+        (acc, tier) => {
+          const key = tier.tierLevel.toLowerCase();
+          // Map legacy tiers to standard pricing if needed
+          let price = 0;
+          if (key in TIER_PRICES) {
+            price = TIER_PRICES[key as TierLevel];
+          } else if (key === 'pro') {
+            price = TIER_PRICES.professional;
+          } else if (key === 'enterprise') {
+            price = TIER_PRICES.concierge; // Map enterprise to concierge for now
+          }
 
-        if (!acc[key]) {
-          acc[key] = {
-            tier: tier.tierLevel,
-            total: 0,
-            active: 0,
-            trial: 0,
-            canceled: 0,
-            monthlyRevenue: 0,
-          };
-        }
+          if (!acc[key]) {
+            acc[key] = {
+              tier: tier.tierLevel,
+              total: 0,
+              active: 0,
+              trial: 0,
+              canceled: 0,
+              monthlyRevenue: 0,
+            };
+          }
 
-        acc[key].total += tier._count;
-        if (tier.status === 'active') {
-          acc[key].active += tier._count;
-          acc[key].monthlyRevenue += tier._count * price;
-        } else if (tier.status === 'trial') {
-          acc[key].trial += tier._count;
-        } else if (tier.status === 'canceled') {
-          acc[key].canceled += tier._count;
-        }
+          acc[key].total += tier._count;
+          if (tier.status === 'active') {
+            acc[key].active += tier._count;
+            acc[key].monthlyRevenue += tier._count * price;
+          } else if (tier.status === 'trial') {
+            acc[key].trial += tier._count;
+          } else if (tier.status === 'canceled') {
+            acc[key].canceled += tier._count;
+          }
 
-        return acc;
-      },
-      {} as Record<string, TierMetricsSummary>,
-    );
+          return acc;
+        },
+        {} as Record<string, TierMetricsSummary>,
+      );
 
-    // Convert revenue to dollars
-    Object.values(tierMetrics).forEach((tier) => {
-      tier.monthlyRevenue = tier.monthlyRevenue / 100;
-    });
+      // Convert revenue to dollars
+      Object.values(tierMetrics).forEach((tier) => {
+        tier.monthlyRevenue = tier.monthlyRevenue / 100;
+      });
 
-    res.json({
-      tiers: tierMetrics,
-      totalRevenue: Object.values(tierMetrics).reduce(
-        (sum: number, tier) => sum + tier.monthlyRevenue,
-        0,
-      ),
-      totalSubscriptions: Object.values(tierMetrics).reduce(
-        (sum: number, tier) => sum + tier.total,
-        0,
-      ),
-      lastUpdated: new Date(),
-    });
-  } catch (error) {
-    Logger.error('Failed to retrieve subscription tier metrics', {
-      error: error instanceof Error ? error.message : 'Unknown error',
-    });
+      res.json({
+        tiers: tierMetrics,
+        totalRevenue: Object.values(tierMetrics).reduce(
+          (sum: number, tier) => sum + tier.monthlyRevenue,
+          0,
+        ),
+        totalSubscriptions: Object.values(tierMetrics).reduce(
+          (sum: number, tier) => sum + tier.total,
+          0,
+        ),
+        lastUpdated: new Date(),
+      });
+    } catch (error) {
+      Logger.error('Failed to retrieve subscription tier metrics', {
+        error: error instanceof Error ? error.message : 'Unknown error',
+      });
 
-    res.status(500).json({
-      message: 'Failed to retrieve subscription tier metrics',
-    });
-  }
-});
+      res.status(500).json({
+        message: 'Failed to retrieve subscription tier metrics',
+      });
+    }
+  },
+);
 
 /**
  * GET /api/admin/metrics/revenue-projections
  * Get revenue projections based on current trends
  */
-router.get('/revenue-projections', requireOrgRole('admin'), async (req: AuthRequest, res: Response) => {
-  try {
-    const prisma = getDefaultDatabaseClient();
+router.get(
+  '/revenue-projections',
+  requireOrgRole('admin'),
+  async (req: AuthRequest, res: Response) => {
+    try {
+      const prisma = getDefaultDatabaseClient();
 
-    // Get last 90 days of metrics snapshots
-    const ninetyDaysAgo = new Date();
-    ninetyDaysAgo.setDate(ninetyDaysAgo.getDate() - 90);
+      // Get last 90 days of metrics snapshots
+      const ninetyDaysAgo = new Date();
+      ninetyDaysAgo.setDate(ninetyDaysAgo.getDate() - 90);
 
-    const snapshots = await prisma.metricsSnapshot.findMany({
-      where: {
-        date: {
-          gte: ninetyDaysAgo,
+      const snapshots = await prisma.metricsSnapshot.findMany({
+        where: {
+          date: {
+            gte: ninetyDaysAgo,
+          },
         },
-      },
-      orderBy: { date: 'asc' },
-    });
+        orderBy: { date: 'asc' },
+      });
 
-    if (snapshots.length < 30) {
-      return res.json({
-        projections: {
-          next30Days: 0,
-          next90Days: 0,
-          next180Days: 0,
+      if (snapshots.length < 30) {
+        return res.json({
+          projections: {
+            next30Days: 0,
+            next90Days: 0,
+            next180Days: 0,
+          },
+          trend: 'insufficient_data',
+          confidence: 'low',
+          message: 'Need at least 30 days of data for projections',
+        });
+      }
+
+      // Calculate growth rates
+      const recentRevenue =
+        snapshots.slice(-7).reduce((sum, s) => sum + s.totalRevenueCents, 0) / 7 / 100;
+      const previousRevenue =
+        snapshots.slice(-14, -7).reduce((sum, s) => sum + s.totalRevenueCents, 0) / 7 / 100;
+
+      const weeklyGrowthRate =
+        previousRevenue > 0 ? (recentRevenue - previousRevenue) / previousRevenue : 0;
+      const monthlyGrowthRate = Math.pow(1 + weeklyGrowthRate, 4) - 1; // Approximate monthly growth
+
+      const currentMonthlyRevenue = snapshots[snapshots.length - 1]?.totalRevenueCents / 100 || 0;
+
+      // Calculate projections
+      const projections = {
+        next30Days: currentMonthlyRevenue * (1 + monthlyGrowthRate),
+        next90Days: currentMonthlyRevenue * Math.pow(1 + monthlyGrowthRate, 3),
+        next180Days: currentMonthlyRevenue * Math.pow(1 + monthlyGrowthRate, 6),
+      };
+
+      // Determine trend
+      let trend = 'stable';
+      if (monthlyGrowthRate > 0.05) trend = 'growing';
+      else if (monthlyGrowthRate < -0.05) trend = 'declining';
+
+      // Determine confidence based on data consistency
+      const revenueVariance = calculateVariance(snapshots.map((s) => s.totalRevenueCents / 100));
+      const avgRevenue =
+        snapshots.reduce((sum, s) => sum + s.totalRevenueCents / 100, 0) / snapshots.length;
+      const coefficientOfVariation =
+        avgRevenue > 0 ? revenueVariance / (avgRevenue * avgRevenue) : 0;
+
+      let confidence = 'high';
+      if (coefficientOfVariation > 0.3) confidence = 'low';
+      else if (coefficientOfVariation > 0.15) confidence = 'medium';
+
+      res.json({
+        projections,
+        trend,
+        confidence,
+        metrics: {
+          currentMonthlyRevenue,
+          monthlyGrowthRate: Math.round(monthlyGrowthRate * 10000) / 100, // Round to 2 decimal places
+          dataPoints: snapshots.length,
         },
-        trend: 'insufficient_data',
-        confidence: 'low',
-        message: 'Need at least 30 days of data for projections',
+        lastUpdated: new Date(),
+      });
+    } catch (error) {
+      Logger.error('Failed to generate revenue projections', {
+        error: error instanceof Error ? error.message : 'Unknown error',
+      });
+
+      res.status(500).json({
+        message: 'Failed to generate revenue projections',
       });
     }
-
-    // Calculate growth rates
-    const recentRevenue =
-      snapshots.slice(-7).reduce((sum, s) => sum + s.totalRevenueCents, 0) / 7 / 100;
-    const previousRevenue =
-      snapshots.slice(-14, -7).reduce((sum, s) => sum + s.totalRevenueCents, 0) / 7 / 100;
-
-    const weeklyGrowthRate =
-      previousRevenue > 0 ? (recentRevenue - previousRevenue) / previousRevenue : 0;
-    const monthlyGrowthRate = Math.pow(1 + weeklyGrowthRate, 4) - 1; // Approximate monthly growth
-
-    const currentMonthlyRevenue = snapshots[snapshots.length - 1]?.totalRevenueCents / 100 || 0;
-
-    // Calculate projections
-    const projections = {
-      next30Days: currentMonthlyRevenue * (1 + monthlyGrowthRate),
-      next90Days: currentMonthlyRevenue * Math.pow(1 + monthlyGrowthRate, 3),
-      next180Days: currentMonthlyRevenue * Math.pow(1 + monthlyGrowthRate, 6),
-    };
-
-    // Determine trend
-    let trend = 'stable';
-    if (monthlyGrowthRate > 0.05) trend = 'growing';
-    else if (monthlyGrowthRate < -0.05) trend = 'declining';
-
-    // Determine confidence based on data consistency
-    const revenueVariance = calculateVariance(snapshots.map((s) => s.totalRevenueCents / 100));
-    const avgRevenue =
-      snapshots.reduce((sum, s) => sum + s.totalRevenueCents / 100, 0) / snapshots.length;
-    const coefficientOfVariation = avgRevenue > 0 ? revenueVariance / (avgRevenue * avgRevenue) : 0;
-
-    let confidence = 'high';
-    if (coefficientOfVariation > 0.3) confidence = 'low';
-    else if (coefficientOfVariation > 0.15) confidence = 'medium';
-
-    res.json({
-      projections,
-      trend,
-      confidence,
-      metrics: {
-        currentMonthlyRevenue,
-        monthlyGrowthRate: Math.round(monthlyGrowthRate * 10000) / 100, // Round to 2 decimal places
-        dataPoints: snapshots.length,
-      },
-      lastUpdated: new Date(),
-    });
-  } catch (error) {
-    Logger.error('Failed to generate revenue projections', {
-      error: error instanceof Error ? error.message : 'Unknown error',
-    });
-
-    res.status(500).json({
-      message: 'Failed to generate revenue projections',
-    });
-  }
-});
+  },
+);
 
 /**
  * GET /api/admin/metrics/historical

@@ -5,17 +5,20 @@ Organization management currently spans Clerk membership data, backend Prisma mo
 **Clerk plan constraint (V1):** Production Clerk plan only supports two org roles: `admin` and `team_member` (member). The `manager` role is available in dev but not in production until plan upgrade. All specs treat `manager` as optional/future.
 
 Current implementation baseline:
+
 - Backend auth gates rely on `requireManager` and allow legacy role values (`Manager`, `admin`) rather than canonical org roles.
 - Invite creation and acceptance currently operate on `admin/member` invite roles and map them to `Manager/Team Member` user roles.
 - Workers user synchronization maps Clerk membership roles but does not enforce org role checks for upload endpoints.
 - Prisma stores roles as `String` on `User` and `OrganizationInvite`, so existing data can contain mixed values.
 
 Stakeholders:
+
 - Pharmacy owners and managers administering users and uploads.
 - Team members with restricted, read-only operational access.
 - Engineering and support teams maintaining auth, onboarding, and incident response.
 
 Constraints:
+
 - Keep tenant isolation strict (`organizationId` always server-derived).
 - Use strict canonical role persistence internally, with boundary mapping only for external role inputs.
 - Keep backend and Workers authorization behavior functionally equivalent.
@@ -24,6 +27,7 @@ Constraints:
 ## Goals / Non-Goals
 
 **Goals:**
+
 - Establish one canonical org role model across frontend, backend, and Workers.
 - Implement deterministic first-login bootstrap that assigns `admin` to the initial org user.
 - Implement secure invite lifecycle with explicit role assignment at acceptance.
@@ -31,6 +35,7 @@ Constraints:
 - Add auditable, rate-limited security controls around invite and membership operations.
 
 **Non-Goals:**
+
 - Replacing Clerk as the identity provider.
 - Re-architecting subscription tier logic.
 - Rewriting CSV processing internals beyond role-gating entry points.
@@ -39,6 +44,7 @@ Constraints:
 ## Decisions
 
 ### 1) Enum-first canonical role model with thin ingress mapping
+
 - Decision: Migrate `User.role` and `OrganizationInvite.role` to strict canonical enum values (`admin`, `manager` (optional), `team_member`) and use those values throughout internal logic. Keep only a thin mapping layer at external ingestion boundaries (for example Clerk membership role strings) before persistence. Note: production Clerk plan only has `admin` and `team_member`; `manager` is dev-only until plan upgrade.
 - Rationale: There are no production users to preserve, so this is the lowest-complexity path with the strongest long-term consistency and least authorization drift.
 - Alternatives considered:
@@ -46,6 +52,7 @@ Constraints:
   - Keep legacy mixed roles indefinitely: lowest effort, but continues authorization drift.
 
 ### 2) First-login admin bootstrap is deterministic and idempotent
+
 - Decision: During first authenticated onboarding for an organization, assign `admin` only when no active admin exists for that org; otherwise map from Clerk/invite role.
 - Rationale: Prevents accidental multiple-admin bootstrap while keeping onboarding retry-safe.
 - Alternatives considered:
@@ -53,6 +60,7 @@ Constraints:
   - Manual admin assignment only: safer control, but poor onboarding UX and higher support burden.
 
 ### 3) Invite lifecycle uses one-time expiring tokens with identity checks
+
 - Decision: Keep token-based invites but require one-time acceptance, expiration enforcement, and email match against verified Clerk identity at acceptance.
 - Rationale: Protects against token replay and cross-account acceptance while preserving current invite UX.
 - Alternatives considered:
@@ -60,6 +68,7 @@ Constraints:
   - Passwordless invite-only auth path: stronger isolation but higher implementation complexity in this phase.
 
 ### 4) Authorization guard is centralized and shared by route intent
+
 - Decision: Introduce a role-guard contract (`requireOrgRole`) and apply it consistently to backend org-management and upload endpoints using only canonical enum roles.
 - Rationale: Consolidates permission logic and reduces per-route drift.
 - Alternatives considered:
@@ -67,12 +76,14 @@ Constraints:
   - Build full policy service now: flexible but beyond scope for this phase.
 
 ### 5) Workers authorization parity with backend
+
 - Decision: Extend Workers role mapping and upload handlers to enforce the same canonical role permissions (`admin`, or `manager` if enabled, for uploads).
 - Rationale: Avoids split-brain authorization where edge and origin disagree.
 - Alternatives considered:
   - Backend-only enforcement: simpler but inconsistent behavior depending on entry path.
 
 ### 6) Auditing and abuse controls are mandatory for invite/admin actions
+
 - Decision: Record org role/invite state changes in audit logs and apply rate limiting to invite creation and acceptance endpoints.
 - Rationale: Supports incident response, abuse detection, and compliance expectations.
 - Alternatives considered:
@@ -80,6 +91,7 @@ Constraints:
   - No invite-specific limits: higher abuse and spam risk.
 
 ### 7) Rate limiting via Cloudflare WAF Rules (primary) with optional backend defense-in-depth
+
 - Decision: Implement rate limiting at Cloudflare edge using WAF Rate Limiting Rules for IP-based limits, with optional backend validation using in-memory middleware for authenticated-user tracking.
 - Rationale: Cloudflare-native rate limiting requires zero external infrastructure (no Redis), operates globally at edge, integrates with existing Workers deployment, and scales automatically.
 - **Specification:**
@@ -119,6 +131,7 @@ Constraints:
 10. Enable audit events and endpoint rate limits; validate with integration and role-matrix tests.
 
 Rollback strategy:
+
 - Keep pre-migration snapshots/branch state so enum migration can be reverted cleanly if needed.
 - If issues occur, temporarily relax only ingress normalization rules while preserving canonical enum persistence.
 - Roll back route-level strict checks only as an emergency path, while preserving audit logging and invite expiration protections.

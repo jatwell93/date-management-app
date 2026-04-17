@@ -131,21 +131,9 @@ Click **Add CORS policy** and enter:
       "https://www.yourdomain.com",
       "http://localhost:3000"
     ],
-    "AllowedMethods": [
-      "GET",
-      "PUT",
-      "POST",
-      "DELETE",
-      "HEAD"
-    ],
-    "AllowedHeaders": [
-      "*"
-    ],
-    "ExposeHeaders": [
-      "ETag",
-      "Content-Length",
-      "Content-Type"
-    ],
+    "AllowedMethods": ["GET", "PUT", "POST", "DELETE", "HEAD"],
+    "AllowedHeaders": ["*"],
+    "ExposeHeaders": ["ETag", "Content-Length", "Content-Type"],
     "MaxAgeSeconds": 3600
   }
 ]
@@ -153,13 +141,13 @@ Click **Add CORS policy** and enter:
 
 ### CORS Configuration Notes
 
-| Field | Purpose |
-|-------|---------|
+| Field            | Purpose                                                            |
+| ---------------- | ------------------------------------------------------------------ |
 | `AllowedOrigins` | Domains that can make requests. Include localhost for development. |
-| `AllowedMethods` | HTTP methods allowed. PUT is required for presigned uploads. |
-| `AllowedHeaders` | Request headers allowed. Use `*` for flexibility. |
-| `ExposeHeaders` | Response headers accessible to JavaScript. |
-| `MaxAgeSeconds` | How long browsers cache CORS preflight responses. |
+| `AllowedMethods` | HTTP methods allowed. PUT is required for presigned uploads.       |
+| `AllowedHeaders` | Request headers allowed. Use `*` for flexibility.                  |
+| `ExposeHeaders`  | Response headers accessible to JavaScript.                         |
+| `MaxAgeSeconds`  | How long browsers cache CORS preflight responses.                  |
 
 ### Production CORS (Stricter)
 
@@ -168,10 +156,7 @@ For production, remove localhost:
 ```json
 [
   {
-    "AllowedOrigins": [
-      "https://yourdomain.com",
-      "https://www.yourdomain.com"
-    ],
+    "AllowedOrigins": ["https://yourdomain.com", "https://www.yourdomain.com"],
     "AllowedMethods": ["GET", "PUT", "DELETE", "HEAD"],
     "AllowedHeaders": ["*"],
     "ExposeHeaders": ["ETag", "Content-Length", "Content-Type"],
@@ -236,7 +221,7 @@ csv-uploads-prod/
 
 ### Encryption at Rest
 
-R2 automatically encrypts all objects at rest using **AES-256** encryption. 
+R2 automatically encrypts all objects at rest using **AES-256** encryption.
 
 ✅ **No additional configuration required.**
 
@@ -253,6 +238,7 @@ All R2 API requests use **HTTPS/TLS 1.2+**.
 R2 uses Cloudflare-managed encryption keys. Customer-managed keys (CMK) are not currently supported.
 
 For compliance requirements:
+
 - SOC 2 Type II: ✅ Compliant
 - GDPR: ✅ EU regions available
 - HIPAA: ⚠️ Consult Cloudflare documentation
@@ -280,14 +266,14 @@ MAX_FILE_SIZE=10485760
 
 ### Environment Variable Reference
 
-| Variable | Required | Description |
-|----------|----------|-------------|
-| `STORAGE_PROVIDER` | Yes | Set to `r2` for production |
-| `R2_ACCOUNT_ID` | Yes | Your Cloudflare account ID (32 chars) |
-| `R2_ACCESS_KEY_ID` | Yes | R2 API token access key |
-| `R2_SECRET_ACCESS_KEY` | Yes | R2 API token secret key |
-| `R2_BUCKET_NAME` | Yes | Your R2 bucket name |
-| `MAX_FILE_SIZE` | No | Max upload size in bytes (default: 10MB) |
+| Variable               | Required | Description                              |
+| ---------------------- | -------- | ---------------------------------------- |
+| `STORAGE_PROVIDER`     | Yes      | Set to `r2` for production               |
+| `R2_ACCOUNT_ID`        | Yes      | Your Cloudflare account ID (32 chars)    |
+| `R2_ACCESS_KEY_ID`     | Yes      | R2 API token access key                  |
+| `R2_SECRET_ACCESS_KEY` | Yes      | R2 API token secret key                  |
+| `R2_BUCKET_NAME`       | Yes      | Your R2 bucket name                      |
+| `MAX_FILE_SIZE`        | No       | Max upload size in bytes (default: 10MB) |
 
 ### For Cloudflare Workers (Production)
 
@@ -381,6 +367,7 @@ aws s3 rm s3://csv-uploads-prod/test.txt \
 **Cause**: Invalid or expired API token
 
 **Solution**:
+
 1. Verify `R2_ACCESS_KEY_ID` and `R2_SECRET_ACCESS_KEY` are correct
 2. Check token hasn't expired
 3. Verify token has Object Read & Write permissions
@@ -391,6 +378,7 @@ aws s3 rm s3://csv-uploads-prod/test.txt \
 **Cause**: Bucket name doesn't match
 
 **Solution**:
+
 1. Verify `R2_BUCKET_NAME` matches exactly (case-sensitive)
 2. Check bucket exists in Cloudflare dashboard
 3. Verify Account ID is correct
@@ -400,6 +388,7 @@ aws s3 rm s3://csv-uploads-prod/test.txt \
 **Cause**: CORS policy not configured or missing origin
 
 **Solution**:
+
 1. Add your frontend domain to AllowedOrigins
 2. Include `http://localhost:3000` for development
 3. Wait 1-2 minutes for CORS changes to propagate
@@ -409,6 +398,7 @@ aws s3 rm s3://csv-uploads-prod/test.txt \
 **Cause**: Secret key is wrong or has extra whitespace
 
 **Solution**:
+
 1. Regenerate the API token
 2. Copy secret key exactly (no trailing spaces)
 3. Check for encoding issues if copying from password manager
@@ -418,6 +408,7 @@ aws s3 rm s3://csv-uploads-prod/test.txt \
 **Cause**: Distance to R2 region or file size
 
 **Solution**:
+
 1. Choose R2 region closest to your users
 2. Use presigned URLs for direct browser uploads
 3. Consider chunked uploads for files >50MB
@@ -443,16 +434,17 @@ DEBUG=aws-sdk* npx ts-node scripts/test-r2-connection.ts
 
 R2 pricing is simple and predictable:
 
-| Resource | Price | Free Tier |
-|----------|-------|-----------|
-| Storage | $0.015/GB/month | 10 GB |
-| Class A Operations (write) | $4.50/million | 1 million |
-| Class B Operations (read) | $0.36/million | 10 million |
-| Egress | **$0.00** | Unlimited |
+| Resource                   | Price           | Free Tier  |
+| -------------------------- | --------------- | ---------- |
+| Storage                    | $0.015/GB/month | 10 GB      |
+| Class A Operations (write) | $4.50/million   | 1 million  |
+| Class B Operations (read)  | $0.36/million   | 10 million |
+| Egress                     | **$0.00**       | Unlimited  |
 
 ### Example Monthly Cost
 
 For a typical application with:
+
 - 10 GB stored CSV files
 - 100,000 uploads/month
 - 1,000,000 downloads/month
@@ -460,6 +452,7 @@ For a typical application with:
 **Cost**: ~$0.50/month (mostly within free tier)
 
 Compare to AWS S3:
+
 - Same storage + operations: ~$5/month
 - Plus egress for downloads: ~$90/month (1TB @ $0.09/GB)
 
@@ -617,15 +610,15 @@ npx wrangler hyperdrive list
 
 ```typescript
 // ✅ Correct
-hyperdriveConnectionString: env.HYPERDRIVE.connectionString
+hyperdriveConnectionString: env.HYPERDRIVE.connectionString;
 
 // ❌ Wrong
-connectionUrl: process.env.NEON_CONNECTION_STRING
+connectionUrl: process.env.NEON_CONNECTION_STRING;
 ```
 
 #### High latency despite Hyperdrive
 
-**Solution**: 
+**Solution**:
 
 1. Check Hyperdrive region matches Neon region (ap-southeast-2 in your case)
 2. Verify you're not using direct Neon connections in parallel
@@ -645,12 +638,13 @@ Monitor Hyperdrive performance in Cloudflare Dashboard:
 
 ### Cost Comparison
 
-| Tier | Queries/Day | Cost |
-|------|-------------|------|
-| **Free** | 100,000 | $0 |
-| **Paid** | Unlimited | $5/month (Workers Paid plan) |
+| Tier     | Queries/Day | Cost                         |
+| -------- | ----------- | ---------------------------- |
+| **Free** | 100,000     | $0                           |
+| **Paid** | Unlimited   | $5/month (Workers Paid plan) |
 
 **Note**: The Workers Paid plan ($5/month) includes Hyperdrive plus:
+
 - Unmetered requests (vs 100k/day free)
 - Longer CPU time limits
 - Additional features

@@ -12,7 +12,12 @@
  */
 
 import { jwtVerify, JWTPayload } from 'jose';
-import { TierLevel, SubscriptionStatus, TIER_LIMITS, AVAILABLE_FEATURES } from '../../../shared/types/subscription';
+import {
+  TierLevel,
+  SubscriptionStatus,
+  TIER_LIMITS,
+  AVAILABLE_FEATURES,
+} from '../../../shared/types/subscription';
 
 /**
  * Task 8B.1: JWT Token Payload with Multi-Tenant Context
@@ -123,7 +128,7 @@ export function extractOrganizationId(token: TokenPayload | null): string | null
  */
 export async function querySubscriptionTier(
   organizationId: string,
-  dbClient: any // SQL query client from @neondatabase/serverless
+  dbClient: any, // SQL query client from @neondatabase/serverless
 ): Promise<SubscriptionTierData | null> {
   try {
     // Parameterized query to prevent SQL injection
@@ -151,11 +156,7 @@ export async function querySubscriptionTier(
 
     // Type validation
     if (!isTierLevel(row.tierLevel) || !isSubscriptionStatus(row.status)) {
-      console.error(
-        '[Auth] Invalid subscription tier data for org',
-        organizationId,
-        row
-      );
+      console.error('[Auth] Invalid subscription tier data for org', organizationId, row);
       return null;
     }
 
@@ -185,7 +186,7 @@ export async function querySubscriptionTier(
  */
 export function validateOrganizationStatus(
   subscription: SubscriptionTierData | null,
-  organizationId: string
+  organizationId: string,
 ): { isValid: boolean; error?: string } {
   if (!subscription) {
     return {
@@ -218,7 +219,7 @@ export function validateOrganizationStatus(
 export async function authenticateWorkerRequest(
   token: string | null,
   jwtSecret: string,
-  dbClient: any
+  dbClient: any,
 ): Promise<AuthContext> {
   // Step 1: Check token provided
   if (!token) {

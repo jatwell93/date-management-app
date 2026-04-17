@@ -11,26 +11,27 @@ Complete reference of all error codes returned by the API, including their meani
 
 ## HTTP Status Codes
 
-| Code | Meaning | Common Cause |
-|------|---------|--------------|
-| 200 | OK | Request succeeded |
-| 201 | Created | Resource successfully created |
-| 204 | No Content | Request succeeded, no body to return |
-| 400 | Bad Request | Invalid input, malformed JSON, missing fields |
-| 401 | Unauthorized | Missing or invalid JWT token |
-| 403 | Forbidden | Authenticated but lacks permission (cross-tenant access) |
-| 404 | Not Found | Resource doesn't exist or has been deleted |
-| 409 | Conflict | Request conflicts with current state (e.g., duplicate) |
-| 429 | Too Many Requests | Rate limit exceeded |
-| 500 | Internal Server Error | Server error, usually transient |
-| 502 | Bad Gateway | Database or downstream service unavailable |
-| 503 | Service Unavailable | Server temporarily unavailable, retry later |
+| Code | Meaning               | Common Cause                                             |
+| ---- | --------------------- | -------------------------------------------------------- |
+| 200  | OK                    | Request succeeded                                        |
+| 201  | Created               | Resource successfully created                            |
+| 204  | No Content            | Request succeeded, no body to return                     |
+| 400  | Bad Request           | Invalid input, malformed JSON, missing fields            |
+| 401  | Unauthorized          | Missing or invalid JWT token                             |
+| 403  | Forbidden             | Authenticated but lacks permission (cross-tenant access) |
+| 404  | Not Found             | Resource doesn't exist or has been deleted               |
+| 409  | Conflict              | Request conflicts with current state (e.g., duplicate)   |
+| 429  | Too Many Requests     | Rate limit exceeded                                      |
+| 500  | Internal Server Error | Server error, usually transient                          |
+| 502  | Bad Gateway           | Database or downstream service unavailable               |
+| 503  | Service Unavailable   | Server temporarily unavailable, retry later              |
 
 ---
 
 ## Application-Specific Error Codes
 
 Error responses follow this format:
+
 ```json
 {
   "error": {
@@ -48,6 +49,7 @@ Error responses follow this format:
 ### Authentication Errors
 
 #### ERR_AUTH_MISSING_TOKEN
+
 - **HTTP Status**: 401
 - **Message**: "Authentication token missing"
 - **Cause**: Request missing `Authorization: Bearer <token>` header
@@ -57,11 +59,12 @@ Error responses follow this format:
   ```javascript
   // Ensure token is sent
   const response = await fetch('/api/products', {
-    headers: { 'Authorization': `Bearer ${token}` }
+    headers: { Authorization: `Bearer ${token}` },
   });
   ```
 
 #### ERR_AUTH_INVALID_TOKEN
+
 - **HTTP Status**: 401
 - **Message**: "Invalid or expired authentication token"
 - **Cause**: Token malformed, expired, or revoked
@@ -70,6 +73,7 @@ Error responses follow this format:
 - **Fix**: Clear localStorage, redirect to login
 
 #### ERR_AUTH_TOKEN_EXPIRED
+
 - **HTTP Status**: 401
 - **Message**: "Authentication token has expired"
 - **Cause**: Token validity period has passed (typically 24 hours)
@@ -85,6 +89,7 @@ Error responses follow this format:
   ```
 
 #### ERR_AUTH_INVALID_SIGNATURE
+
 - **HTTP Status**: 401
 - **Message**: "Token signature verification failed"
 - **Cause**: Token was modified or signed with different key
@@ -97,6 +102,7 @@ Error responses follow this format:
 ### Authorization Errors
 
 #### ERR_FORBIDDEN_CROSS_TENANT_ACCESS
+
 - **HTTP Status**: 403
 - **Message**: "Cannot access resources from another organization"
 - **Cause**: User attempting to access product/area from different organization
@@ -105,6 +111,7 @@ Error responses follow this format:
 - **Developer Action**: Verify organizationId in JWT matches resource
 
 #### ERR_FORBIDDEN_INSUFFICIENT_PERMISSIONS
+
 - **HTTP Status**: 403
 - **Message**: "User does not have permission for this action"
 - **Cause**: User role doesn't allow this operation
@@ -115,6 +122,7 @@ Error responses follow this format:
   - User trying to manage billing (needs owner/billing role)
 
 #### ERR_FORBIDDEN_SUBSCRIPTION_REQUIRED
+
 - **HTTP Status**: 403
 - **Message**: "Active subscription required for this feature"
 - **Cause**: User's subscription has expired or is on Free tier trying pro feature
@@ -130,6 +138,7 @@ Error responses follow this format:
 ### Validation Errors
 
 #### ERR_VALIDATION_INVALID_JSON
+
 - **HTTP Status**: 400
 - **Message**: "Request body is not valid JSON"
 - **Cause**: Malformed JSON in request body
@@ -138,6 +147,7 @@ Error responses follow this format:
 - **Fix**: Use JSON validator, check quotes and commas
 
 #### ERR_VALIDATION_MISSING_FIELD
+
 - **HTTP Status**: 400
 - **Message**: "Missing required field: {fieldName}"
 - **Cause**: Required field not provided in request
@@ -154,6 +164,7 @@ Error responses follow this format:
   ```
 
 #### ERR_VALIDATION_INVALID_FIELD
+
 - **HTTP Status**: 400
 - **Message**: "Invalid value for field: {fieldName}"
 - **Cause**: Field value invalid type, format, or range
@@ -164,6 +175,7 @@ Error responses follow this format:
   - `quantity: -5` (expects positive integer)
 
 #### ERR_VALIDATION_INVALID_EMAIL
+
 - **HTTP Status**: 400
 - **Message**: "Invalid email address format"
 - **Cause**: Email doesn't match valid format
@@ -172,6 +184,7 @@ Error responses follow this format:
 - **Pattern**: Must be `user@domain.ext`
 
 #### ERR_VALIDATION_PASSWORD_TOO_WEAK
+
 - **HTTP Status**: 400
 - **Message**: "Password does not meet security requirements"
 - **Cause**: Password < 8 chars, no uppercase, no numbers, or no special chars
@@ -179,10 +192,11 @@ Error responses follow this format:
   - Minimum 8 characters
   - At least one uppercase letter (A-Z)
   - At least one number (0-9)
-  - At least one special character (!@#$%^&*)
+  - At least one special character (!@#$%^&\*)
 - **User Action**: Create stronger password
 
 #### ERR_VALIDATION_DUPLICATE_EMAIL
+
 - **HTTP Status**: 409
 - **Message**: "Email already registered"
 - **Cause**: Email already has account
@@ -194,6 +208,7 @@ Error responses follow this format:
 ### CSV Upload Errors
 
 #### ERR_CSV_INVALID_FORMAT
+
 - **HTTP Status**: 400
 - **Message**: "CSV file format is invalid"
 - **Cause**: Missing required columns or invalid encoding
@@ -201,13 +216,14 @@ Error responses follow this format:
   - `name` (product name)
   - `barcode` (optional, unique within org)
   - `category` (optional, string)
-- **User Action**: 
+- **User Action**:
   - Verify file is CSV format
   - Check column headers match required names
   - Ensure UTF-8 encoding (not ANSI or UTF-16)
 - **Retryable**: No
 
 #### ERR_CSV_MISSING_HEADERS
+
 - **HTTP Status**: 400
 - **Message**: "Missing required CSV headers: {columns}"
 - **Cause**: Required column not found
@@ -215,6 +231,7 @@ Error responses follow this format:
 - **User Action**: Add missing columns to CSV
 - **Retryable**: No
 - **Example Fix**:
+
   ```
   # ❌ Wrong
   Product,Code
@@ -226,6 +243,7 @@ Error responses follow this format:
   ```
 
 #### ERR_CSV_EMPTY_FILE
+
 - **HTTP Status**: 400
 - **Message**: "CSV file is empty"
 - **Cause**: File has no data rows (headers OK, but 0 rows)
@@ -233,6 +251,7 @@ Error responses follow this format:
 - **Retryable**: No
 
 #### ERR_CSV_PARSE_ERROR
+
 - **HTTP Status**: 400
 - **Message**: "Error parsing CSV at line {lineNumber}: {reason}"
 - **Cause**:
@@ -240,13 +259,14 @@ Error responses follow this format:
   - Unclosed quotes
   - Line too long
   - Invalid character
-- **User Action**: 
+- **User Action**:
   - Re-save CSV as UTF-8
   - Check for special characters that need escaping
   - Break into multiple files if too large
 - **Retryable**: No
 
 #### ERR_CSV_ROW_INVALID
+
 - **HTTP Status**: 400
 - **Message**: "Row {rowNumber} invalid: {reason}"
 - **Cause**: Data in row doesn't validate
@@ -260,15 +280,17 @@ Error responses follow this format:
 - **Retryable**: Yes (after fixing rows)
 
 #### ERR_CSV_DUPLICATE_BARCODE
+
 - **HTTP Status**: 409
 - **Message**: "Barcode already exists: {barcode}"
 - **Cause**: Another product in your organization has this barcode
-- **User Action**: 
+- **User Action**:
   - Use unique barcode
   - Or remove barcode if optional
 - **Retryable**: No (data conflict, not transient)
 
 #### ERR_CSV_FILE_TOO_LARGE
+
 - **HTTP Status**: 413
 - **Message**: "File size exceeds maximum allowed (500MB)"
 - **Cause**: CSV file > 500MB
@@ -277,15 +299,17 @@ Error responses follow this format:
 - **Recommended**: Split into files < 100MB
 
 #### ERR_CSV_UPLOAD_TIMEOUT
+
 - **HTTP Status**: 504
 - **Message**: "CSV processing timed out after 5 minutes"
 - **Cause**: Very large file taking too long to process
-- **User Action**: 
+- **User Action**:
   - Split file into smaller chunks
   - Try again during off-peak hours
 - **Retryable**: Yes, try with smaller file
 
 #### ERR_CSV_PRESIGNED_URL_EXPIRED
+
 - **HTTP Status**: 410
 - **Message**: "Presigned upload URL has expired"
 - **Cause**: Too much time passed between URL generation and upload (>6 hours)
@@ -298,6 +322,7 @@ Error responses follow this format:
 ### Product Management Errors
 
 #### ERR_PRODUCT_NOT_FOUND
+
 - **HTTP Status**: 404
 - **Message**: "Product not found"
 - **Cause**: Product ID doesn't exist or deleted
@@ -305,6 +330,7 @@ Error responses follow this format:
 - **Retryable**: No
 
 #### ERR_PRODUCT_INVALID_BARCODE
+
 - **HTTP Status**: 400
 - **Message**: "Barcode already in use by another product"
 - **Cause**: Attempting to create/update with existing barcode
@@ -312,6 +338,7 @@ Error responses follow this format:
 - **Retryable**: No
 
 #### ERR_PRODUCT_DELETE_FAILED
+
 - **HTTP Status**: 500
 - **Message**: "Failed to delete product, please try again"
 - **Cause**: Database issue, transient failure
@@ -324,6 +351,7 @@ Error responses follow this format:
 ### Store Area Errors
 
 #### ERR_STORE_AREA_NOT_FOUND
+
 - **HTTP Status**: 404
 - **Message**: "Store area not found"
 - **Cause**: Area ID doesn't exist or deleted
@@ -331,6 +359,7 @@ Error responses follow this format:
 - **Retryable**: No
 
 #### ERR_STORE_AREA_IN_USE
+
 - **HTTP Status**: 409
 - **Message**: "Cannot delete store area with products"
 - **Cause**: Store area has products assigned, cannot delete while in use
@@ -342,9 +371,10 @@ Error responses follow this format:
 ### Database & Infrastructure Errors
 
 #### ERR_DATABASE_CONNECTION_FAILED
+
 - **HTTP Status**: 502
 - **Message**: "Database connection failed, please try again"
-- **Cause**: 
+- **Cause**:
   - Database not responding
   - Network issue
   - Connection pool exhausted
@@ -359,6 +389,7 @@ Error responses follow this format:
   ```
 
 #### ERR_DATABASE_QUERY_TIMEOUT
+
 - **HTTP Status**: 504
 - **Message**: "Database query timed out"
 - **Cause**: Query taking >30 seconds
@@ -367,6 +398,7 @@ Error responses follow this format:
 - **If Recurring**: Report to support (query performance issue)
 
 #### ERR_DATABASE_CONNECTION_POOL_EXHAUSTED
+
 - **HTTP Status**: 503
 - **Message**: "Too many concurrent requests, please try again"
 - **Cause**: All database connections in use
@@ -375,6 +407,7 @@ Error responses follow this format:
 - **If Frequent**: Indicates need to scale database
 
 #### ERR_STORAGE_UNAVAILABLE
+
 - **HTTP Status**: 503
 - **Message**: "File storage service unavailable"
 - **Cause**: Cloudflare R2 temporarily down
@@ -383,10 +416,11 @@ Error responses follow this format:
 - **If Persists**: Check Cloudflare status page
 
 #### ERR_STORAGE_QUOTA_EXCEEDED
+
 - **HTTP Status**: 507
 - **Message**: "Storage quota exceeded"
 - **Cause**: Organization has reached storage limit
-- **User Action**: 
+- **User Action**:
   - Delete old unnecessary files
   - Upgrade storage plan
 - **Retryable**: No (need to free space)
@@ -396,6 +430,7 @@ Error responses follow this format:
 ### Rate Limiting Errors
 
 #### ERR_RATE_LIMIT_EXCEEDED
+
 - **HTTP Status**: 429
 - **Message**: "Rate limit exceeded. Retry after {seconds} seconds"
 - **Cause**: Too many requests from same user/IP
@@ -409,6 +444,7 @@ Error responses follow this format:
 - **Response Header**: `Retry-After: {seconds}`
 
 #### ERR_PRESIGNED_URL_RATE_LIMIT
+
 - **HTTP Status**: 429
 - **Message**: "Presigned URL request limit exceeded"
 - **Cause**: Generated too many presigned URLs too quickly
@@ -421,6 +457,7 @@ Error responses follow this format:
 ### Billing & Subscription Errors
 
 #### ERR_BILLING_PAYMENT_FAILED
+
 - **HTTP Status**: 402
 - **Message**: "Payment failed: {reason}"
 - **Causes**:
@@ -428,7 +465,7 @@ Error responses follow this format:
   - Insufficient funds
   - Expired card
   - Fraudulent transaction detected
-- **User Action**: 
+- **User Action**:
   - Update payment method
   - Use different card
   - Contact bank if repeatedly declined
@@ -436,6 +473,7 @@ Error responses follow this format:
 - **Won't Retry Automatically**: Security risk
 
 #### ERR_BILLING_INVALID_CARD
+
 - **HTTP Status**: 400
 - **Message**: "Invalid payment card"
 - **Cause**: Card number, expiry, or CVC invalid
@@ -443,6 +481,7 @@ Error responses follow this format:
 - **Retryable**: No (user error)
 
 #### ERR_BILLING_CARD_EXPIRED
+
 - **HTTP Status**: 400
 - **Message**: "Payment card has expired"
 - **Cause**: Card expiration date passed
@@ -450,6 +489,7 @@ Error responses follow this format:
 - **Retryable**: No
 
 #### ERR_SUBSCRIPTION_CANCELED
+
 - **HTTP Status**: 403
 - **Message**: "Subscription has been canceled"
 - **Cause**: Subscription was canceled by user or system
@@ -457,6 +497,7 @@ Error responses follow this format:
 - **Retryable**: No
 
 #### ERR_SUBSCRIPTION_PAST_DUE
+
 - **HTTP Status**: 402
 - **Message**: "Subscription payment is past due"
 - **Cause**: Automatic payment failed
@@ -468,9 +509,10 @@ Error responses follow this format:
 ### Webhook Errors
 
 #### ERR_WEBHOOK_SIGNATURE_INVALID
+
 - **HTTP Status**: 401
 - **Message**: "Invalid webhook signature"
-- **Cause**: 
+- **Cause**:
   - Timestamp outside tolerance (>5 min old)
   - Signature doesn't match
   - Wrong webhook signing secret used
@@ -478,6 +520,7 @@ Error responses follow this format:
 - **Action**: Reject webhook, don't process
 
 #### ERR_WEBHOOK_DUPLICATE_EVENT
+
 - **HTTP Status**: 409
 - **Message**: "This event has already been processed"
 - **Cause**: Duplicate webhook received (Stripe resend for reliability)
@@ -489,6 +532,7 @@ Error responses follow this format:
 ### General Server Errors
 
 #### ERR_INTERNAL_SERVER_ERROR
+
 - **HTTP Status**: 500
 - **Message**: "An unexpected error occurred"
 - **Cause**: Unhandled server error
@@ -498,6 +542,7 @@ Error responses follow this format:
 - **Developer Action**: Check Sentry for full error trace
 
 #### ERR_SERVICE_UNAVAILABLE
+
 - **HTTP Status**: 503
 - **Message**: "Service temporarily unavailable"
 - **Cause**:
@@ -508,6 +553,7 @@ Error responses follow this format:
 - **Retryable**: Yes, with exponential backoff
 
 #### ERR_WORKER_TIMEOUT
+
 - **HTTP Status**: 504
 - **Message**: "Request timeout"
 - **Cause**: Request took >30 seconds
@@ -523,9 +569,10 @@ Error responses follow this format:
 
 ```javascript
 // Classify errors
-const isRetryable = error.code?.startsWith('ERR_DATABASE_') || 
-                   error.code === 'ERR_RATE_LIMIT_EXCEEDED' ||
-                   error.code === 'ERR_SERVICE_UNAVAILABLE';
+const isRetryable =
+  error.code?.startsWith('ERR_DATABASE_') ||
+  error.code === 'ERR_RATE_LIMIT_EXCEEDED' ||
+  error.code === 'ERR_SERVICE_UNAVAILABLE';
 
 // Implement exponential backoff
 async function retryFetch(url, options, maxAttempts = 3) {
@@ -539,17 +586,17 @@ async function retryFetch(url, options, maxAttempts = 3) {
     } catch (error) {
       if (attempt === maxAttempts) throw error;
       const delay = Math.pow(2, attempt - 1) * 100;
-      await new Promise(resolve => setTimeout(resolve, delay));
+      await new Promise((resolve) => setTimeout(resolve, delay));
     }
   }
 }
 
 // Show user-friendly messages
 const userMessages = {
-  'ERR_AUTH_TOKEN_EXPIRED': 'Please login again',
-  'ERR_CSV_FILE_TOO_LARGE': 'File is too large, split into smaller files',
-  'ERR_RATE_LIMIT_EXCEEDED': 'Too many requests, please wait a moment',
-  'ERR_DATABASE_CONNECTION_FAILED': 'Network issue, retrying automatically...'
+  ERR_AUTH_TOKEN_EXPIRED: 'Please login again',
+  ERR_CSV_FILE_TOO_LARGE: 'File is too large, split into smaller files',
+  ERR_RATE_LIMIT_EXCEEDED: 'Too many requests, please wait a moment',
+  ERR_DATABASE_CONNECTION_FAILED: 'Network issue, retrying automatically...',
 };
 ```
 
@@ -563,7 +610,7 @@ logger.error('CSV processing failed', {
   organizationId: 'org_123',
   fileSizeBytes: 1000000,
   duration_ms: 5000,
-  requestId: 'req_abc123'
+  requestId: 'req_abc123',
 });
 
 // Return structured errors
@@ -573,8 +620,8 @@ res.status(400).json({
     message: 'Error parsing CSV at line 42',
     details: { lineNumber: 42 },
     retryable: false,
-    requestId: req.id
-  }
+    requestId: req.id,
+  },
 });
 ```
 

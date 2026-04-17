@@ -88,5 +88,4 @@ describe('Frontend role constants', () => {
       expect(hasPermission('team_member', PERMISSIONS.READ_ONLY)).toBe(true);
     });
   });
-
 });

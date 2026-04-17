@@ -16,12 +16,14 @@ const mockPrisma = {
 };
 
 jest.mock('../../middleware/requireOrgRole', () => ({
-  requireOrgRole: (...allowedRoles: string[]) => (req: any, _res: any, next: any) => {
-    req.organizationId = 'org-admin-test';
-    req.userId = 42;
-    req.userRole = allowedRoles[0] || 'admin';
-    next();
-  },
+  requireOrgRole:
+    (...allowedRoles: string[]) =>
+    (req: any, _res: any, next: any) => {
+      req.organizationId = 'org-admin-test';
+      req.userId = 42;
+      req.userRole = allowedRoles[0] || 'admin';
+      next();
+    },
 }));
 
 jest.mock('../../services/application.monitoring.service', () => ({

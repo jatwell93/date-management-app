@@ -1,10 +1,13 @@
 # Code Review: Trial Store Production Security
+
 **Date**: 2026-03-17
 **Ready for Production**: No (requires remediation of Priority 1 issues)
 **Critical Issues**: 4
 
 ## Scope and Review Plan
+
 This review focused on the backend/frontend paths most relevant for first-store production risk:
+
 1. Access control and auth/session lifecycle
 2. Transport and crypto hardening
 3. API/input/file-upload abuse resistance
@@ -124,6 +127,7 @@ This review focused on the backend/frontend paths most relevant for first-store 
 ## Threat Model Snapshot (Trial Store)
 
 ### High-value assets
+
 - Tenant data (products, inventory, reports)
 - Billing/subscription state
 - Upload pipeline and R2 objects
@@ -131,6 +135,7 @@ This review focused on the backend/frontend paths most relevant for first-store 
 - Auth tokens and webhook secrets
 
 ### Top attack paths
+
 1. Compromised browser script steals localStorage bearer token
 2. Privilege misuse of backup/restore by non-manager authenticated user
 3. Recon via public metrics/diagnostic endpoints followed by targeted abuse
@@ -140,6 +145,7 @@ This review focused on the backend/frontend paths most relevant for first-store 
 ## Compliance Readiness (GDPR/SOC 2)
 
 ### GDPR
+
 - Strengths:
   - Retention and incident docs exist.
 - Gaps:
@@ -151,6 +157,7 @@ This review focused on the backend/frontend paths most relevant for first-store 
   - Add data processing inventory and lawful basis mapping.
 
 ### SOC 2 (Security/Availability/Confidentiality)
+
 - Strengths:
   - Logging, Sentry instrumentation, and runbooks are present.
 - Gaps:
@@ -197,6 +204,7 @@ This review focused on the backend/frontend paths most relevant for first-store 
    - Map controls to SOC 2 criteria and GDPR obligations quarterly.
 
 ## Recommended Immediate Next Actions (7-day window)
+
 1. Add `requireManager` to backup routes and test role enforcement.
 2. Remove HTTP fallback in production and add startup fail-fast.
 3. Restrict diagnostics endpoints to authenticated admin/internal network only.
@@ -206,6 +214,7 @@ This review focused on the backend/frontend paths most relevant for first-store 
 ## Remediation Status Update (2026-03-17)
 
 ### Completed
+
 - Backup and restore routes are now manager-restricted.
 - Production HTTPS startup now fails hard instead of downgrading to HTTP.
 - Public diagnostics were reduced and privileged health/metrics endpoints now require authenticated manager access.
@@ -215,5 +224,6 @@ This review focused on the backend/frontend paths most relevant for first-store 
 - Production CORS now blocks requests with no `Origin` header by default unless explicitly enabled via `ALLOW_NO_ORIGIN_IN_PRODUCTION=true`.
 
 ### Residual Risk / Follow-up
+
 - Frontend session transport still uses bearer tokens accessible to application JavaScript at runtime. This is materially better than persistent browser storage, but it is not equivalent to `httpOnly` cookie isolation. Full cookie-based session transport remains a larger architectural change.
 - Distributed rate limiting remains open. The app currently lacks a shared rate-limit store such as Redis or equivalent edge-backed coordination, so multi-instance enforcement still depends on infrastructure that is not yet wired into this backend.

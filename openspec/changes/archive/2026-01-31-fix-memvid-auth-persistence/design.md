@@ -5,11 +5,13 @@ The project uses `memvid` for project memory management. The retrieval (`mem-rec
 ## Goals / Non-Goals
 
 **Goals:**
+
 - Provide a persistent way to store and load the `GEMINI_API_KEY` for local development.
 - Ensure all memory management scripts automatically pick up configuration from the `.env` file.
 - Maintain compatibility with manual environment variable overrides.
 
 **Non-Goals:**
+
 - Global shell configuration modification (e.g., editing `.bashrc`).
 - Implementing a custom configuration UI or credential manager.
 

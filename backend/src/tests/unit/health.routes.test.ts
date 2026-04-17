@@ -33,7 +33,10 @@ jest.mock('../../middleware/auth.middleware', () => ({
 }));
 
 jest.mock('../../middleware/requireOrgRole', () => ({
-  requireOrgRole: (...allowedRoles: string[]) => (_req: unknown, _res: unknown, next: () => void) => next(),
+  requireOrgRole:
+    (...allowedRoles: string[]) =>
+    (_req: unknown, _res: unknown, next: () => void) =>
+      next(),
 }));
 
 import healthRouter, {

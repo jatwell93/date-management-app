@@ -3,12 +3,14 @@
 ## Quick Start
 
 1. **Set your Neon connection string:**
+
    ```bash
    # Update your .env.production file with real values:
    NEON_CONNECTION_STRING=postgresql://your-actual-neon-connection-string
    ```
 
 2. **Verify the connection:**
+
    ```bash
    cd backend
    npm run verify:neon
@@ -30,6 +32,7 @@
 ## Schema Details
 
 The production schema uses PostgreSQL with these key differences from SQLite:
+
 - UUID primary keys for better performance
 - Native PostgreSQL indexes
 - Proper foreign key constraints with cascading deletes
@@ -38,6 +41,7 @@ The production schema uses PostgreSQL with these key differences from SQLite:
 ## Verification
 
 After migration, you should see:
+
 - ✅ All 14 tables created
 - ✅ 20 tier feature flags seeded
 - ✅ Database ready for production
@@ -45,15 +49,18 @@ After migration, you should see:
 ## Troubleshooting
 
 ### Connection Failed
+
 - Check NEON_CONNECTION_STRING is correct
 - Ensure Neon database is active
 - Verify SSL is enabled (required by Neon)
 
 ### Permission Denied
+
 - Ensure database user has CREATE TABLE permissions
 - Check if connection string includes correct user/password
 
 ### Tables Already Exist
+
 - Migration is designed to be safe for existing tables
 - It will update schema if needed
 - Always backup before migration
@@ -61,6 +68,7 @@ After migration, you should see:
 ## Next Steps
 
 After successful migration:
+
 1. Deploy Cloudflare Workers
 2. Configure production secrets
 3. Deploy frontend

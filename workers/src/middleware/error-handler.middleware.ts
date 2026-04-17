@@ -1,6 +1,6 @@
 /**
  * Error Handling Middleware for Cloudflare Workers
- * 
+ *
  * Centralized error handling with optional Sentry integration.
  */
 
@@ -72,7 +72,9 @@ export function createErrorHandler(env: Env) {
 
   return (error: Error, req: ExpressRequest, res: ExpressResponse) => {
     const metricsContext = (req as any).metricsContext;
-    const durationMs = metricsContext?.startTime ? Date.now() - metricsContext.startTime : undefined;
+    const durationMs = metricsContext?.startTime
+      ? Date.now() - metricsContext.startTime
+      : undefined;
 
     // Log error
     logger.error('Request error', {
@@ -88,7 +90,7 @@ export function createErrorHandler(env: Env) {
 
     // Send error response (don't leak stack traces in production)
     const isDevelopment = env.NODE_ENV === 'development';
-    
+
     res.status(500).json({
       error: 'Internal Server Error',
       message: isDevelopment ? error.message : 'An unexpected error occurred',
@@ -105,20 +107,13 @@ export function sanitizeForLogging(data: any): any {
     return data;
   }
 
-  const sensitiveFields = [
-    'password',
-    'token',
-    'secret',
-    'authorization',
-    'api_key',
-    'apiKey',
-  ];
+  const sensitiveFields = ['password', 'token', 'secret', 'authorization', 'api_key', 'apiKey'];
 
   const sanitized = { ...data };
 
   for (const key of Object.keys(sanitized)) {
     const lowerKey = key.toLowerCase();
-    if (sensitiveFields.some(field => lowerKey.includes(field))) {
+    if (sensitiveFields.some((field) => lowerKey.includes(field))) {
       sanitized[key] = '[REDACTED]';
     } else if (typeof sanitized[key] === 'object') {
       sanitized[key] = sanitizeForLogging(sanitized[key]);
@@ -138,32 +133,36 @@ export function createRequestLogger(env: Env) {
     const startTime = Date.now();
 
     // Log incoming request
-    console.log(JSON.stringify({
-      timestamp: new Date().toISOString(),
-      level: 'info',
-      message: 'Incoming request',
-      organizationId: req.organizationId,
-      path: req.path,
-      method: req.method,
-      correlationId: req.correlationId,
-      userId: req.user?.id ?? req.userId,
-    }));
+    console.log(
+      JSON.stringify({
+        timestamp: new Date().toISOString(),
+        level: 'info',
+        message: 'Incoming request',
+        organizationId: req.organizationId,
+        path: req.path,
+        method: req.method,
+        correlationId: req.correlationId,
+        userId: req.user?.id ?? req.userId,
+      }),
+    );
 
     // Wrap response to log completion
     const originalJson = res.json.bind(res);
-    res.json = function(data: any) {
+    res.json = function (data: any) {
       const duration = Date.now() - startTime;
-      console.log(JSON.stringify({
-        timestamp: new Date().toISOString(),
-        level: 'info',
-        message: 'Request processed',
-        organizationId: req.organizationId,
-        path: req.path,
-        duration: duration,
-        statusCode: res['statusCode'] || 200,
-        correlationId: req.correlationId,
-        userId: req.user?.id ?? req.userId,
-      }));
+      console.log(
+        JSON.stringify({
+          timestamp: new Date().toISOString(),
+          level: 'info',
+          message: 'Request processed',
+          organizationId: req.organizationId,
+          path: req.path,
+          duration: duration,
+          statusCode: res['statusCode'] || 200,
+          correlationId: req.correlationId,
+          userId: req.user?.id ?? req.userId,
+        }),
+      );
       return originalJson(data);
     };
 

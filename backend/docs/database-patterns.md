@@ -45,19 +45,21 @@ The database abstraction provides a unified interface for database operations, a
 
 The project maintains two Prisma schema files:
 
-| File | Provider | Use Case |
-|------|----------|----------|
-| `schema.prisma` | SQLite | Development, testing |
-| `schema.planetscale.prisma` | MySQL | Production with PlanetScale |
+| File                        | Provider | Use Case                    |
+| --------------------------- | -------- | --------------------------- |
+| `schema.prisma`             | SQLite   | Development, testing        |
+| `schema.planetscale.prisma` | MySQL    | Production with PlanetScale |
 
 ### Switching Schemas
 
 **For Development (default):**
+
 ```bash
 npx prisma generate
 ```
 
 **For Production:**
+
 ```bash
 npx prisma generate --schema=./prisma/schema.planetscale.prisma
 ```
@@ -128,11 +130,7 @@ const service = new InventoryService(mockDb as any);
 ```typescript
 import { withTransaction } from './database';
 
-async function transferInventory(
-  db: PrismaClient,
-  itemId: number,
-  newLocationId: number
-) {
+async function transferInventory(db: PrismaClient, itemId: number, newLocationId: number) {
   await withTransaction(db, async (tx) => {
     // Update inventory item location
     await tx.inventoryItem.update({
@@ -159,8 +157,8 @@ async function transferInventory(
 ```typescript
 interface Product {
   id: number;
-  barcode: string;      // Unique product barcode
-  sku: string;          // Unique SKU
+  barcode: string; // Unique product barcode
+  sku: string; // Unique SKU
   name: string;
   costPrice: number;
   notes: string;
@@ -189,7 +187,7 @@ interface InventoryItem {
 interface StoreArea {
   id: number;
   name: string;
-  subDepartment?: string;  // Optional sub-department
+  subDepartment?: string; // Optional sub-department
   lastChecked?: Date;
   createdAt: Date;
   updatedAt: Date;
@@ -250,12 +248,12 @@ See `docs/database-migrations.md` for detailed workflow.
 
 The schema includes indexes optimized for common queries:
 
-| Table | Indexed Fields | Purpose |
-|-------|---------------|---------|
-| products | sku, barcode | Product lookups |
-| inventory_items | expiryDate, status | Expiry queries |
-| inventory_items | productId, locationId | Join performance |
-| expired_item_transactions | transactionDate, action | Reports |
+| Table                     | Indexed Fields          | Purpose          |
+| ------------------------- | ----------------------- | ---------------- |
+| products                  | sku, barcode            | Product lookups  |
+| inventory_items           | expiryDate, status      | Expiry queries   |
+| inventory_items           | productId, locationId   | Join performance |
+| expired_item_transactions | transactionDate, action | Reports          |
 
 ## Testing
 
@@ -356,9 +354,9 @@ try {
 
 ## Troubleshooting
 
-| Issue | Cause | Solution |
-|-------|-------|----------|
-| Connection timeout | Wrong DATABASE_URL | Check .env file |
-| Schema mismatch | Wrong schema file | Run `npx prisma generate` |
-| Migration errors | Conflicting changes | Run `npx prisma migrate reset` (dev only) |
-| Type errors | Outdated client | Run `npx prisma generate` |
+| Issue              | Cause               | Solution                                  |
+| ------------------ | ------------------- | ----------------------------------------- |
+| Connection timeout | Wrong DATABASE_URL  | Check .env file                           |
+| Schema mismatch    | Wrong schema file   | Run `npx prisma generate`                 |
+| Migration errors   | Conflicting changes | Run `npx prisma migrate reset` (dev only) |
+| Type errors        | Outdated client     | Run `npx prisma generate`                 |

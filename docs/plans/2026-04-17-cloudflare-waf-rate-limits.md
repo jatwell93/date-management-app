@@ -11,36 +11,36 @@ These rules apply to the Workers deployment (`date-management-api-prod`).
 
 ## Rule 1: Invite Creation
 
-| Field | Value |
-|---|---|
-| **Name** | Rate limit invite creation |
-| **Match** | `http.request.uri.path eq "/api/organization/invites"` AND `http.request.method eq "POST"` |
-| **Rate** | 10 requests per 60 seconds |
-| **Counting** | Per IP (`ip.src`) |
-| **Action** | Block for 300 seconds (5 min) |
-| **Response code** | 429 |
+| Field             | Value                                                                                      |
+| ----------------- | ------------------------------------------------------------------------------------------ |
+| **Name**          | Rate limit invite creation                                                                 |
+| **Match**         | `http.request.uri.path eq "/api/organization/invites"` AND `http.request.method eq "POST"` |
+| **Rate**          | 10 requests per 60 seconds                                                                 |
+| **Counting**      | Per IP (`ip.src`)                                                                          |
+| **Action**        | Block for 300 seconds (5 min)                                                              |
+| **Response code** | 429                                                                                        |
 
 ## Rule 2: Invite Acceptance
 
-| Field | Value |
-|---|---|
-| **Name** | Rate limit invite acceptance |
-| **Match** | `http.request.uri.path matches "^/api/organization/invites/[^/]+/accept$"` AND `http.request.method eq "POST"` |
-| **Rate** | 5 requests per 60 seconds |
-| **Counting** | Per IP (`ip.src`) |
-| **Action** | Block for 300 seconds (5 min) |
-| **Response code** | 429 |
+| Field             | Value                                                                                                          |
+| ----------------- | -------------------------------------------------------------------------------------------------------------- |
+| **Name**          | Rate limit invite acceptance                                                                                   |
+| **Match**         | `http.request.uri.path matches "^/api/organization/invites/[^/]+/accept$"` AND `http.request.method eq "POST"` |
+| **Rate**          | 5 requests per 60 seconds                                                                                      |
+| **Counting**      | Per IP (`ip.src`)                                                                                              |
+| **Action**        | Block for 300 seconds (5 min)                                                                                  |
+| **Response code** | 429                                                                                                            |
 
 ## Rule 3: Role Assignment
 
-| Field | Value |
-|---|---|
-| **Name** | Rate limit role changes |
-| **Match** | `http.request.uri.path matches "^/api/organization/members/[^/]+/role$"` AND `http.request.method eq "POST"` |
-| **Rate** | 20 requests per 3600 seconds |
-| **Counting** | Per IP (`ip.src`) |
-| **Action** | Block for 3600 seconds (1 hour) |
-| **Response code** | 429 |
+| Field             | Value                                                                                                        |
+| ----------------- | ------------------------------------------------------------------------------------------------------------ |
+| **Name**          | Rate limit role changes                                                                                      |
+| **Match**         | `http.request.uri.path matches "^/api/organization/members/[^/]+/role$"` AND `http.request.method eq "POST"` |
+| **Rate**          | 20 requests per 3600 seconds                                                                                 |
+| **Counting**      | Per IP (`ip.src`)                                                                                            |
+| **Action**        | Block for 3600 seconds (1 hour)                                                                              |
+| **Response code** | 429                                                                                                          |
 
 ---
 

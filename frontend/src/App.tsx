@@ -539,8 +539,8 @@ function AppContent({
                   path="/settings"
                   element={
                     isLoggedIn &&
-                      userRole &&
-                      hasPermission(userRole, PERMISSIONS.MANAGE_MEMBERS) ? (
+                    userRole &&
+                    hasPermission(userRole, PERMISSIONS.MANAGE_MEMBERS) ? (
                       <SettingsPage />
                     ) : isLoggedIn ? (
                       <Navigate to="/scan" />
@@ -553,8 +553,8 @@ function AppContent({
                   path="/settings/*"
                   element={
                     isLoggedIn &&
-                      userRole &&
-                      hasPermission(userRole, PERMISSIONS.MANAGE_MEMBERS) ? (
+                    userRole &&
+                    hasPermission(userRole, PERMISSIONS.MANAGE_MEMBERS) ? (
                       <SettingsPage />
                     ) : isLoggedIn ? (
                       <Navigate to="/scan" />

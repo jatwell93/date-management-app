@@ -18,7 +18,7 @@ async function build() {
       mainFields: ['browser', 'module', 'main'],
       sourcemap: true,
       minify: true,
-      
+
       // Externalize Node.js native modules that can't run in Workers
       external: [
         // Native SQLite bindings
@@ -26,54 +26,75 @@ async function build() {
         'better-sqlite3',
         '@mapbox/node-pre-gyp',
         'node-pre-gyp',
-        
+
         // AWS SDK (not needed in Workers)
         'mock-aws-s3',
         'aws-sdk',
         'nock',
-        
+
         // Node.js built-ins (both with and without node: prefix)
-        'fs', 'node:fs',
-        'path', 'node:path',
-        'crypto', 'node:crypto',
-        'util', 'node:util',
-        'stream', 'node:stream',
-        'events', 'node:events',
-        'assert', 'node:assert',
-        'process', 'node:process',
-        'url', 'node:url',
-        'http', 'node:http',
-        'https', 'node:https',
-        'zlib', 'node:zlib',
-        'net', 'node:net',
-        'tls', 'node:tls',
-        'os', 'node:os',
-        'child_process', 'node:child_process',
-        'querystring', 'node:querystring',
-        'buffer', 'node:buffer',
-        'timers', 'node:timers',
-        'string_decoder', 'node:string_decoder',
-        'async_hooks', 'node:async_hooks',
-        
+        'fs',
+        'node:fs',
+        'path',
+        'node:path',
+        'crypto',
+        'node:crypto',
+        'util',
+        'node:util',
+        'stream',
+        'node:stream',
+        'events',
+        'node:events',
+        'assert',
+        'node:assert',
+        'process',
+        'node:process',
+        'url',
+        'node:url',
+        'http',
+        'node:http',
+        'https',
+        'node:https',
+        'zlib',
+        'node:zlib',
+        'net',
+        'node:net',
+        'tls',
+        'node:tls',
+        'os',
+        'node:os',
+        'child_process',
+        'node:child_process',
+        'querystring',
+        'node:querystring',
+        'buffer',
+        'node:buffer',
+        'timers',
+        'node:timers',
+        'string_decoder',
+        'node:string_decoder',
+        'async_hooks',
+        'node:async_hooks',
+
         // Test dependencies
         'mock-fs',
         '@types/mock-fs',
       ],
-      
+
       // Handle .html files
       loader: {
         '.html': 'text',
       },
-      
+
       // Define for environment detection
       define: {
         'process.env.WORKERS_ENVIRONMENT': '"true"',
       },
-      
+
       // Log level
       logLevel: 'info',
     });
-    
+
     console.log('✅ Workers build completed successfully');
   } catch (error) {
     console.error('❌ Workers build failed:', error);

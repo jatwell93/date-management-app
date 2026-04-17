@@ -74,19 +74,19 @@ any → canceled (on customer cancellation)
 
 ### Tier Limits
 
-| Tier | max_skus | max_users | max_inventory_items | storage_bytes |
-|------|----------|-----------|---------------------|---------------|
-| starter | 500 | 1 | 5,000 | 1GB |
-| professional | 2,000 | 3 | 20,000 | 10GB |
-| premium | unlimited | 10 | unlimited | 100GB |
-| concierge | unlimited | 10 | unlimited | unlimited |
+| Tier         | max_skus  | max_users | max_inventory_items | storage_bytes |
+| ------------ | --------- | --------- | ------------------- | ------------- |
+| starter      | 500       | 1         | 5,000               | 1GB           |
+| professional | 2,000     | 3         | 20,000              | 10GB          |
+| premium      | unlimited | 10        | unlimited           | 100GB         |
+| concierge    | unlimited | 10        | unlimited           | unlimited     |
 
 ### Feature Gates
 
 - **POST /products** → `checkUsageLimit('max_skus')`
 - **POST /inventory-items** → `checkUsageLimit('max_inventory_items')`
 - **POST /users** → `checkUsageLimit('max_users')`
-- **POST /uploads/*` → `checkUsageLimit('storage_bytes')`
+- \*_POST /uploads/_`→`checkUsageLimit('storage_bytes')`
 - **GET /api/reports/analytics** → `requireFeature('advanced_analytics')`
 
 ## Creation Lock Management
@@ -143,6 +143,7 @@ any → canceled (on customer cancellation)
 **Symptoms**: Tier not reflecting in Stripe, limits not applied
 
 **Steps**:
+
 1. Check webhook logs: `grep "subscription.updated" /var/log/app.log`
 2. Verify Stripe metadata includes `organizationId`
 3. Check database: `SELECT * FROM subscription_tiers WHERE organization_id = ?`
@@ -153,6 +154,7 @@ any → canceled (on customer cancellation)
 **Symptoms**: Cannot create new items despite being within limits
 
 **Steps**:
+
 1. Check usage: `SELECT * FROM organization_usages WHERE organization_id = ?`
 2. Check tier limits in `TIER_LIMITS`
 3. Verify lock status: `SELECT isCreationLocked FROM organizations WHERE id = ?`
@@ -163,6 +165,7 @@ any → canceled (on customer cancellation)
 **Symptoms**: Past-due subscriptions not being downgraded
 
 **Steps**:
+
 1. Check scheduler logs: `grep "Dunning job" /var/log/app.log`
 2. Verify job is registered: Check `scheduler.service.ts` initialization
 3. Run manually: `node dist/jobs/dunning.job.js`
@@ -173,6 +176,7 @@ any → canceled (on customer cancellation)
 **Symptoms**: Stripe events not updating database
 
 **Steps**:
+
 1. Check webhook URL in Stripe dashboard
 2. Verify webhook secret: `STRIPE_WEBHOOK_SECRET` env var
 3. Check webhook logs: `grep "Webhook received" /var/log/app.log`
@@ -186,9 +190,9 @@ If needed (e.g., payment processor outage):
 
 ```sql
 -- Extend grace period by updating pastDueSince for affected orgs
-UPDATE subscription_tiers 
+UPDATE subscription_tiers
 SET pastDueSince = datetime('now', '-3 days')
-WHERE status = 'past_due' 
+WHERE status = 'past_due'
 AND pastDueSince < datetime('now', '-7 days');
 ```
 
@@ -212,7 +216,7 @@ For specific customer issues:
 
 ```sql
 -- Update subscription tier
-UPDATE subscription_tiers 
+UPDATE subscription_tiers
 SET tierLevel = 'professional', status = 'active'
 WHERE organization_id = 'CUSTOMER_ORG_ID';
 

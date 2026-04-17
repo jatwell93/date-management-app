@@ -5,11 +5,13 @@ The backend test suite currently passes but emits noisy warnings and skips the C
 ## Goals / Non-Goals
 
 **Goals:**
+
 - Silence Sentry-related instrumentation warnings during tests without changing production behavior.
 - Eliminate MaxListeners warnings by removing the underlying source of duplicate listeners.
 - Run CSV parser integration tests against the standard migrated test database so they no longer skip.
 
 **Non-Goals:**
+
 - Changing production Sentry configuration, alerting, or routing.
 - Modifying CSV parser business logic or performance characteristics.
 - Altering API responses or contracts.

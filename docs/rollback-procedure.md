@@ -80,11 +80,12 @@ curl http://your-vps-domain.com/health/live
 
 Access your domain registrar or DNS provider (Cloudflare, Route53, GoDaddy, etc.):
 
-| Current (Cloudflare Workers) | New (VPS) |
-|-----|-----------|
+| Current (Cloudflare Workers)  | New (VPS)                             |
+| ----------------------------- | ------------------------------------- |
 | CNAME → workers.dev subdomain | A record → `xxx.xxx.xxx.xxx` (VPS IP) |
 
 **Steps:**
+
 1. Log in to DNS provider dashboard
 2. Find your domain's DNS settings
 3. Locate the A record for `api.yourdomain.com` (or your API subdomain)
@@ -219,6 +220,7 @@ If any step fails:
 ## Rollback Execution Checklist - [DATE/TIME]
 
 ### Prerequisites
+
 - [ ] VPS SSH access verified
 - [ ] Express server started and healthy
 - [ ] Database connectivity confirmed
@@ -226,16 +228,19 @@ If any step fails:
 - [ ] Team notified in #incidents
 
 ### DNS Switchover
+
 - [ ] DNS A record updated to VPS IP
 - [ ] DNS propagation verified (nslookup/dig)
 - [ ] TTL set to 300 seconds
 
 ### Frontend Update
+
 - [ ] Frontend .env updated to point to VPS API_URL
 - [ ] Frontend rebuilt (npm run build)
 - [ ] Frontend redeployed
 
 ### Verification
+
 - [ ] API liveness responds (GET /health/live)
 - [ ] API readiness checked (GET /health/ready)
 - [ ] Detailed health checked (GET /health/health)
@@ -246,15 +251,16 @@ If any step fails:
 - [ ] No errors in Express logs
 
 ### Post-Rollback
+
 - [ ] Workers deployment stopped/disabled
 - [ ] Incident logged with timestamp
 - [ ] Customer notification posted to status page
 - [ ] Logs preserved for debugging
 - [ ] Post-mortem scheduled for 24 hours
 
-**Rollback Completed**: _____ (timestamp)  
-**Executed By**: _____ (name)  
-**Verified By**: _____ (name)
+**Rollback Completed**: **\_** (timestamp)  
+**Executed By**: **\_** (name)  
+**Verified By**: **\_** (name)
 ```
 
 ---
@@ -263,15 +269,16 @@ If any step fails:
 
 Watch these metrics during rollback:
 
-| Metric | Normal | Alert |
-|--------|--------|-------|
-| API Response Time | <500ms | >2s |
-| Error Rate | <0.1% | >1% |
+| Metric                   | Normal      | Alert    |
+| ------------------------ | ----------- | -------- |
+| API Response Time        | <500ms      | >2s      |
+| Error Rate               | <0.1%       | >1%      |
 | Database Connection Pool | 5-10 active | >15 or 0 |
-| Memory Usage | <60% | >80% |
-| CPU Usage | <40% | >70% |
+| Memory Usage             | <60%        | >80%     |
+| CPU Usage                | <40%        | >70%     |
 
 If alerts trigger, check:
+
 1. Database connection string (verify PostgreSQL running)
 2. API key/auth settings in .env
 3. Express server logs for errors
@@ -320,15 +327,15 @@ npm start  # test locally before deploying
 
 ## Appendix: VPS Server Details
 
-| Component | Location | Command |
-|-----------|----------|---------|
-| **Express App** | `/home/date-management-app` | `npm run start` |
-| **Environment** | `.env` (production) | Update API keys here |
-| **Database** | PostgreSQL/SQLite | `psql` or `sqlite3` |
-| **Logs** | `pm2 logs` | Monitor in real-time |
-| **Process Manager** | PM2 | `pm2 start ecosystem.config.js` |
-| **Nginx (if used)** | `/etc/nginx/sites-available` | `systemctl restart nginx` |
-| **SSL Cert** | Let's Encrypt | Auto-renewal via certbot |
+| Component           | Location                     | Command                         |
+| ------------------- | ---------------------------- | ------------------------------- |
+| **Express App**     | `/home/date-management-app`  | `npm run start`                 |
+| **Environment**     | `.env` (production)          | Update API keys here            |
+| **Database**        | PostgreSQL/SQLite            | `psql` or `sqlite3`             |
+| **Logs**            | `pm2 logs`                   | Monitor in real-time            |
+| **Process Manager** | PM2                          | `pm2 start ecosystem.config.js` |
+| **Nginx (if used)** | `/etc/nginx/sites-available` | `systemctl restart nginx`       |
+| **SSL Cert**        | Let's Encrypt                | Auto-renewal via certbot        |
 
 ---
 

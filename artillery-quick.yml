@@ -1,21 +1,21 @@
 config:
-  target: "https://date-management-api-dev.date-management-app.workers.dev"
+  target: 'https://date-management-api-dev.date-management-app.workers.dev'
   phases:
     # Quick warm-up
     - duration: 10
       arrivalRate: 5
-      name: "Warm-up"
+      name: 'Warm-up'
     # Sustained load - measure p95
     - duration: 30
       arrivalRate: 50
-      name: "Sustained load"
+      name: 'Sustained load'
   http:
     timeout: 10
 
 scenarios:
   # Health check endpoint (no auth)
-  - name: "Health Check"
+  - name: 'Health Check'
     weight: 100
     flow:
       - get:
-          url: "/health"
+          url: '/health'

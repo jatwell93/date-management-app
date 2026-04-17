@@ -3,6 +3,7 @@
 ## 🎯 Progress Summary
 
 **Completed Phases:**
+
 - ✅ Phase 1: Schema Preparation (9/9 tasks) - Multi-tenant database schema created and migrated
 - ✅ Phase 3: TypeScript Interfaces (8/8 tasks) - All models and types defined
 - ✅ Phase 4: Authentication Layer (10/10 tasks) - JWT auth with organization context complete
@@ -11,9 +12,11 @@
 - ✅ Phase 16: Monitoring & Observability (6/6 tasks) - SaaS metrics, alerts, dashboard, daily reports
 
 **Skipped:**
+
 - ⏭️ Phase 2: Data Migration (9 tasks) - Not needed for fresh SaaS launch
 
 **Remaining:**
+
 - 📋 Phase 7-20: Services refactor, Stripe integration, trial system, UI, testing, deployment (120 tasks)
 
 **Current Status:** 54/161 tasks complete (34% done) | Monitoring & Observability complete with comprehensive SaaS metrics
@@ -36,7 +39,7 @@
 ## 2. Data Migration (Phase 1 - Week 2)
 
 > **⏭️ SKIPPED**: Fresh SaaS launch with no existing customers. Data backfill not required.
-> 
+>
 > When customers sign up, they create their organization and data from day 1.
 > If future customer migrations are needed, implement as part of onboarding workflow (CSV import).
 
@@ -210,6 +213,7 @@
 ## 10. Stripe Webhook Handlers (Phase 4 - Week 5)
 
 **NOTE:** Use skills/stripe-webhooks
+
 - [x] 10.1 Create webhook route: POST /api/webhooks/stripe with raw body parsing
 - [x] 10.2 Implement signature verification using stripe.webhooks.constructEvent()
 - [x] 10.3 Create handler for `customer.subscription.created`: Create subscription_tiers record
@@ -222,7 +226,7 @@
 - [x] 10.10 Implement dead letter queue: Send to queue after 72h retry failures
 - [x] 10.11 Add webhook failure rate monitoring: Alert if >5% failures in 1-hour window
 - [x] 10.12 Write integration tests for all webhook handlers with test events
-**USER STEPS**
+      **USER STEPS**
 - [x] Set SENTRY_DSN in environment (backend .env / deploy)
 - [x] **DEFERRED POST-MVP** - Optional: Create alert rules in Sentry UI
   - Note: Full alerting code already implemented (ApplicationMonitoringService tracks webhook_handler_error, ProcessedWebhookEvent anomalies)
@@ -230,6 +234,7 @@
   - (Optional) Tune thresholds in ApplicationMonitoringService.initialize() config for custom alert behavior
 
 ## 11. Trial System (Phase 4 - Week 6)
+
 - [x] 11.0 Investigate the usefulness of https://github.com/themacn/trial-abuse-guard and https://github.com/eramitgupta/disposable-email will implementing either or both save time in the long run. Use tools to search for other options (should be free and opensource)
 - [x] 11.1 Create trial signup flow: POST /api/signup with trial_tier=professional
 - [x] 11.2 Set trial_end_date = now + 14 days in subscription_tiers record
@@ -260,6 +265,7 @@
 ## 13. Multi-Tenant Testing (Phase 5 - Week 7)
 
 ### Cross-Tenant Data Isolation Tests
+
 **File**: `backend/src/tests/integration/multi-tenant-cross-tenant-isolation.test.ts` (NEW)
 **Pattern**: Use real Prisma client (not mocked) following `subscription.integration.test.ts` pattern
 
@@ -290,6 +296,7 @@
   - [x] Assert: Service layer correctly filters by tenant context
 
 ### Feature Gate Enforcement Tests
+
 **File**: `backend/src/tests/integration/multi-tenant-feature-gates.test.ts` (NEW)
 **Pattern**: Reuse `requireFeature()` middleware from `feature-gate.middleware.test.ts`
 
@@ -304,7 +311,9 @@
   - [x] Assert: Feature gates enforce tier restrictions
 
 ### Security & Performance Tests
-**Files**: 
+
+**Files**:
+
 - `backend/src/tests/integration/multi-tenant-penetration.test.ts` (NEW)
 - `backend/src/tests/integration/multi-tenant-load.test.ts` (NEW)
 
@@ -337,7 +346,7 @@
   - [x] Create 3 users for Org B
   - [x] Verify all 3 users created successfully (201 Created)
   - [x] Assert: User limit enforced per tier
-  > **NOTE**: The `checkUsageLimit('max_users')` middleware reads `activeUsers` (not `totalUsers`) from `organization_usage`. Use the correct schema field name `activeUsers` in all test setup data — see schema.prisma `OrganizationUsage` model. Previous test failures were caused by using `totalUsers` which doesn't exist.
+    > **NOTE**: The `checkUsageLimit('max_users')` middleware reads `activeUsers` (not `totalUsers`) from `organization_usage`. Use the correct schema field name `activeUsers` in all test setup data — see schema.prisma `OrganizationUsage` model. Previous test failures were caused by using `totalUsers` which doesn't exist.
 
 - [x] 13.7 **Storage quota increment/decrement per organization**:
   - [x] Create Org A with Starter subscription
@@ -350,9 +359,10 @@
   - [x] Verify organization_usage.storageUsedBytes = 2048 (decremented)
   - [x] Create Org B, upload file, verify Org A's storage unchanged
   - [x] Assert: Storage quota tracked per organization
-  > **NOTE**: `StorageQuotaService.recordUpload` and `markUploadDeleted` are NOT wrapped in a `$transaction`. The upload record create and `organizationUsage.upsert` are separate DB calls. For this test, sequential assertions will work, but be aware that if a test fails mid-way the usage counter may be stale. Also: `storageUsedBytes` is an `Int` in schema.prisma — it can theoretically go negative on double-delete. The test should verify that deleting an already-deleted upload does NOT decrement again.
+    > **NOTE**: `StorageQuotaService.recordUpload` and `markUploadDeleted` are NOT wrapped in a `$transaction`. The upload record create and `organizationUsage.upsert` are separate DB calls. For this test, sequential assertions will work, but be aware that if a test fails mid-way the usage counter may be stale. Also: `storageUsedBytes` is an `Int` in schema.prisma — it can theoretically go negative on double-delete. The test should verify that deleting an already-deleted upload does NOT decrement again.
 
 ### Trial System Workflow Tests
+
 **File**: `backend/src/tests/integration/multi-tenant-trial-workflow.test.ts` (NEW)
 **Pattern**: Reuse subscription service trial tests from `subscription.service.test.ts`
 
@@ -368,9 +378,10 @@
   - [x] Verify organization_usage.maxUsers = 1 (Starter limit)
   - [x] Verify trial_events table has 'trial_expired' event logged
   - [x] Assert: Trial expiration downgrades to Starter with correct limits
-  > **NOTE**: The existing `multi-tenant-trial-workflow.test.ts` already covers basic trial creation, expiration, and downgrade via `subscriptionService.downgradeExpiredTrials()`. Task 13.8 specifies "trigger scheduler.service trial expiration cron job" — the actual entry point is `runTrialExpirationJob()` from `jobs/trialExpiration.job.ts`, which internally calls `subscriptionService.downgradeExpiredTrials()`. If testing the job directly, mock `EmailService` to prevent real email sends (the job calls `emailService.sendDowngradeWarningEmail`). The existing test does NOT seed `organizationUsage` records, so the remaining sub-tasks (verify `maxSkus`/`maxUsers` downgrade) will need an `organizationUsage` record created in `beforeEach`.
+    > **NOTE**: The existing `multi-tenant-trial-workflow.test.ts` already covers basic trial creation, expiration, and downgrade via `subscriptionService.downgradeExpiredTrials()`. Task 13.8 specifies "trigger scheduler.service trial expiration cron job" — the actual entry point is `runTrialExpirationJob()` from `jobs/trialExpiration.job.ts`, which internally calls `subscriptionService.downgradeExpiredTrials()`. If testing the job directly, mock `EmailService` to prevent real email sends (the job calls `emailService.sendDowngradeWarningEmail`). The existing test does NOT seed `organizationUsage` records, so the remaining sub-tasks (verify `maxSkus`/`maxUsers` downgrade) will need an `organizationUsage` record created in `beforeEach`.
 
 ### Subscription State Transition Tests
+
 **File**: `backend/src/tests/integration/multi-tenant-subscription-transitions.test.ts` (NEW)
 **Pattern**: Reuse subscription service patterns from `subscription.service.test.ts`
 
@@ -383,7 +394,7 @@
   - [x] POST /api/products (501st product)
   - [x] Verify 201 Created (now within Professional limit)
   - [x] Assert: Upgrade applies new limits immediately
-  > **NOTE**: `subscriptionService.updateSubscription(orgId, newPriceId)` takes a **Stripe price ID** (e.g. `'price_professional'`), NOT a tier name. It also calls `stripe.subscriptions.retrieve` and `stripe.subscriptions.update` — both must be mocked. Critically, `updateSubscription` updates `subscriptionTier.tierLevel` but does **NOT** update `organizationUsage.maxSkus`/`maxUsers`. You'll need to either: (a) add that logic to the service before writing the test, or (b) manually update the usage record in the test to simulate the expected state. Without this, the test will fail at "Verify organization_usage.maxSkus = 2000".
+    > **NOTE**: `subscriptionService.updateSubscription(orgId, newPriceId)` takes a **Stripe price ID** (e.g. `'price_professional'`), NOT a tier name. It also calls `stripe.subscriptions.retrieve` and `stripe.subscriptions.update` — both must be mocked. Critically, `updateSubscription` updates `subscriptionTier.tierLevel` but does **NOT** update `organizationUsage.maxSkus`/`maxUsers`. You'll need to either: (a) add that logic to the service before writing the test, or (b) manually update the usage record in the test to simulate the expected state. Without this, the test will fail at "Verify organization_usage.maxSkus = 2000".
 
 - [x] 13.10 **Subscription downgrade warns if over-limit**:
   - [x] Create Org A with Professional subscription (max_skus=2000)
@@ -397,9 +408,10 @@
   - [x] Verify response.body.message contains "Usage limit reached"
   - [x] Verify email service queued downgrade warning email
   - [x] Assert: Downgrade applies new limits but doesn't delete data
-  > **NOTE**: Same issue as 13.9 — `updateSubscription` does not update `organizationUsage` limits. Also: creating 1500 products for the test will be slow with individual inserts. Use `prisma.product.createMany()` with generated data. The `ProductService.createProduct` path includes the atomic TOCTOU check, so bulk-inserting via raw Prisma (bypassing the service) is faster but requires manually setting `organizationUsage.totalSkus = 1500`.
+    > **NOTE**: Same issue as 13.9 — `updateSubscription` does not update `organizationUsage` limits. Also: creating 1500 products for the test will be slow with individual inserts. Use `prisma.product.createMany()` with generated data. The `ProductService.createProduct` path includes the atomic TOCTOU check, so bulk-inserting via raw Prisma (bypassing the service) is faster but requires manually setting `organizationUsage.totalSkus = 1500`.
 
 ### Security Penetration Tests
+
 **File**: `backend/src/tests/security/cross-tenant-penetration.test.ts` (NEW)
 **Pattern**: Security-focused test suite (new pattern)
 
@@ -415,9 +427,10 @@
   - [x] Attempt to modify JWT token organizationId (invalid signature)
   - [x] Verify 401 Unauthorized (JWT validation fails)
   - [x] Assert: All parameter tampering attempts blocked
-  > **NOTE**: The existing `multi-tenant-penetration.test.ts` already covers SQL injection, IDOR, parameter tampering, mass assignment, and null/undefined org handling. It uses mock routes with a custom auth middleware that extracts org from `Authorization: Bearer token:{orgId}` format. Task 13.11 subtasks for query param spoofing and body spoofing are already implemented. The remaining sub-task (modify JWT signature) requires testing with the **real** `authenticateToken` middleware — but in test mode with `TEST_AUTH_BYPASS=true`, all auth is bypassed (hardcoded to `userId:1, organizationId:'default-org'`). To test JWT validation, set `TEST_AUTH_BYPASS=false` and sign a real JWT with `jsonwebtoken` using `process.env.JWT_SECRET='test_secret'`, then tamper with the payload and re-sign with a different secret.
+    > **NOTE**: The existing `multi-tenant-penetration.test.ts` already covers SQL injection, IDOR, parameter tampering, mass assignment, and null/undefined org handling. It uses mock routes with a custom auth middleware that extracts org from `Authorization: Bearer token:{orgId}` format. Task 13.11 subtasks for query param spoofing and body spoofing are already implemented. The remaining sub-task (modify JWT signature) requires testing with the **real** `authenticateToken` middleware — but in test mode with `TEST_AUTH_BYPASS=true`, all auth is bypassed (hardcoded to `userId:1, organizationId:'default-org'`). To test JWT validation, set `TEST_AUTH_BYPASS=false` and sign a real JWT with `jsonwebtoken` using `process.env.JWT_SECRET='test_secret'`, then tamper with the payload and re-sign with a different secret.
 
 ### Load Tests
+
 **File**: `backend/src/tests/integration/multi-tenant-load.test.ts` (NEW)
 **Pattern**: Reuse load test pattern from `upload-load.test.ts` (Promise.all with 1000 concurrent requests)
 **Opt-in**: Set `RUN_MULTI_TENANT_LOAD_TESTS=true` to execute
@@ -436,7 +449,7 @@
   - [x] Test with 495 SKUs per org, then 5 concurrent creates (boundary test)
   - [x] Verify exactly 5 orgs reach 500 SKU limit, no over-limit creates
   - [x] Assert: Concurrent access maintains data isolation and atomicity
-  > **NOTE**: The `ProductService.createProduct` TOCTOU fix uses a Prisma `$transaction` with `findUnique` + check + `create` + `increment`. SQLite does NOT support true concurrent write transactions — it uses a single writer lock. This means the boundary test (495 SKUs + 5 concurrent creates) will serialize at the DB level in SQLite, so the race condition the TOCTOU fix prevents would only manifest with PostgreSQL/PlanetScale. The test will still pass (it just won't prove concurrency safety on SQLite). Add a comment noting this limitation. Also: creating 100 orgs × 495 products = 49,500 rows — use `prisma.product.createMany()` and manually set `organizationUsage.totalSkus = 495` to avoid running 49,500 individual transactions.
+    > **NOTE**: The `ProductService.createProduct` TOCTOU fix uses a Prisma `$transaction` with `findUnique` + check + `create` + `increment`. SQLite does NOT support true concurrent write transactions — it uses a single writer lock. This means the boundary test (495 SKUs + 5 concurrent creates) will serialize at the DB level in SQLite, so the race condition the TOCTOU fix prevents would only manifest with PostgreSQL/PlanetScale. The test will still pass (it just won't prove concurrency safety on SQLite). Add a comment noting this limitation. Also: creating 100 orgs × 495 products = 49,500 rows — use `prisma.product.createMany()` and manually set `organizationUsage.totalSkus = 495` to avoid running 49,500 individual transactions.
 
 ## 14. Migration Finalization (Phase 5 - Week 7)
 
@@ -472,6 +485,7 @@
   - Print orphan count per table. Exit code 1 if any orphans found.
 
 - [x] 14.1.2 **Add npm script** to `backend/package.json`:
+
   ```json
   "audit:org-ids": "npx ts-node scripts/audit-org-ids.ts"
   ```
@@ -521,10 +535,12 @@
   - `organization Organization?` → `organization Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)`
 
 - [x] 14.2.9 **Generate Prisma migration** for dev:
+
   ```bash
   cd backend
   npx prisma migrate dev --name make_organization_id_required
   ```
+
   - Review the generated SQL in `backend/prisma/migrations/<timestamp>_make_organization_id_required/migration.sql`
   - Confirm it contains `ALTER TABLE ... ALTER COLUMN organization_id SET NOT NULL` (or SQLite equivalent: table recreation)
   - **SQLite note**: SQLite doesn't support `ALTER COLUMN`. Prisma will recreate tables. This is expected for dev only. Production uses PostgreSQL which supports `ALTER COLUMN` natively.
@@ -533,6 +549,7 @@
   ```bash
   npx prisma generate
   ```
+
   - Verify TypeScript types now show `organizationId: string` (not `string | null`) in generated client
 
 ---
@@ -545,17 +562,20 @@ no SaaS models (SubscriptionTier, TierFeatureFlag, OrganizationUsage, etc.). It 
 the dev schema (minus the SQLite datasource — production uses PostgreSQL via Neon).
 
 - [x] 14.3.1 **Copy the full dev schema** from `backend/prisma/schema.prisma` to `backend/prisma/production/schema.prisma`, then change ONLY the datasource block:
+
   ```prisma
   datasource db {
     provider = "postgresql"
     url      = env("NEON_CONNECTION_STRING")
   }
   ```
+
   - Keep the header comment updated to reference Neon PostgreSQL
   - Keep all models, relations, indexes, and maps identical to dev schema
   - **Do NOT** cherry-pick models — copy the entire file to prevent future drift
 
 - [x] 14.3.2 **Validate the production schema** compiles:
+
   ```bash
   npx prisma validate --schema=./prisma/production/schema.prisma
   ```
@@ -583,9 +603,11 @@ the dev schema (minus the SQLite datasource — production uses PostgreSQL via N
   - If any of the 8 models from 14.2 are missing `onDelete: Cascade`, add it now
 
 - [x] 14.4.2 **Generate migration** if any cascade changes were needed beyond 14.2:
+
   ```bash
   npx prisma migrate dev --name add_cascade_delete_constraints
   ```
+
   - If no changes detected, skip this migration (14.2.9 already handled it)
 
 - [x] 14.4.3 **Sync cascade changes** to `backend/prisma/production/schema.prisma` (copy updated models)
@@ -602,6 +624,7 @@ every service MUST receive a real `organizationId` from the auth middleware — 
 **File**: `backend/src/services/service-provider.ts`
 
 - [x] 14.5.1a **Refactor `ServiceProvider` constructor** to accept `organizationId: string` as a required parameter:
+
   ```typescript
   constructor(
     private organizationId: string,
@@ -623,6 +646,7 @@ every service MUST receive a real `organizationId` from the auth middleware — 
   # Run from backend/
   npx grep -rn "new ServiceProvider" src/
   ```
+
   - Each callsite should be in a route handler or controller that has `req.organizationId` from auth middleware
   - Update each: `new ServiceProvider()` → `new ServiceProvider(req.organizationId!)`
 
@@ -631,10 +655,13 @@ every service MUST receive a real `organizationId` from the auth middleware — 
 **File**: `backend/src/services/product.service.ts` (~line 239)
 
 - [x] 14.5.2a **Change constructor** from:
+
   ```typescript
   this.organizationId = organizationId ?? 'default-org';
   ```
+
   to:
+
   ```typescript
   if (!organizationId) {
     throw new Error('organizationId is required for ProductService');
@@ -674,6 +701,7 @@ every service MUST receive a real `organizationId` from the auth middleware — 
 **CRITICAL**: This service currently has NO `organizationId` field and NO tenant filtering in queries.
 
 - [x] 14.5.5a **Add `organizationId` as a required constructor parameter**:
+
   ```typescript
   private organizationId: string;
 
@@ -693,6 +721,7 @@ every service MUST receive a real `organizationId` from the auth middleware — 
   - Any other query methods — search for `findMany`, `findUnique`, `findFirst`, `create`, `update`, `delete`
 
 - [x] 14.5.5c **Update `mapPrismaToModel`** (~line 132): Remove `?? 'default-org'` fallback:
+
   ```typescript
   organizationId: area.organizationId, // No longer nullable
   ```
@@ -724,9 +753,11 @@ shows **no `MULTI_TENANT_ENABLED` env var exists** — multi-tenancy is already 
 in auth middleware and service constructors. This task is effectively a no-op verification.
 
 - [x] 14.6.1 **Verify no `MULTI_TENANT_ENABLED` references** exist in the codebase:
+
   ```bash
   grep -rn "MULTI_TENANT" backend/src/ frontend/src/ workers/src/
   ```
+
   - Expected: Only test file references (e.g., `multi-tenant-load.test.ts` file names)
   - If any runtime code checks this flag, remove the conditional and keep only the multi-tenant branch
 
@@ -735,7 +766,7 @@ in auth middleware and service constructors. This task is effectively a no-op ve
   - This means NO request can reach a route handler without `organizationId`. Multi-tenant is enforced.
 
 - [x] 14.6.3 **Document decision**: Add a note to this task confirming MULTI_TENANT_ENABLED was never implemented
-  as an env var — multi-tenancy was built as always-on by design.
+      as an env var — multi-tenancy was built as always-on by design.
 
 ---
 
@@ -758,7 +789,7 @@ in auth middleware and service constructors. This task is effectively a no-op ve
 - [x] 14.7.3 **Verify `frontend/.env.example`** has `REACT_APP_CLERK_PUBLISHABLE_KEY` ✅ (line 15)
 
 - [x] 14.7.4 **Check root `.env.example`** exists and has relevant keys. If not, create one that references
-  both backend and frontend examples.
+      both backend and frontend examples.
 
 - [x] 14.7.5 **Update `backend/SECURITY.md`** if it references old auth patterns (PIN-based):
   - Ensure it documents Clerk as the primary auth provider
@@ -771,21 +802,27 @@ in auth middleware and service constructors. This task is effectively a no-op ve
 **Purpose**: Confirm all changes compile and pass. The test suite has 678 tests across 62 suites (9 intentionally skipped).
 
 - [x] 14.8.1 **Run TypeScript compilation check**:
+
   ```bash
   cd backend && npx tsc --noEmit
   ```
+
   - Result: ✅ 0 errors after fixing multi-tenant migration type issues
 
 - [x] 14.8.2 **Run backend linting**:
+
   ```bash
   cd backend && npm run lint
   ```
+
   - Result: ✅ 0 errors, 312 warnings (warnings acceptable)
 
 - [x] 14.8.3 **Run the full backend test suite**:
+
   ```bash
   cd backend && npm test -- --forceExit
   ```
+
   - Expected: 62 suites pass, 678 tests pass, 9 skipped, 0 failures
   - **Likely test fixes needed**:
     - Tests that create mock data with `organizationId: null` will now fail Prisma validation
@@ -794,23 +831,26 @@ in auth middleware and service constructors. This task is effectively a no-op ve
     - See MEMORY[e8f01c99] for the full test fix prevention guidelines
 
 - [x] 14.8.4 **Run frontend test suite**:
+
   ```bash
   cd frontend && npm test -- --watchAll=false
   ```
+
   - Result: ✅ 29/29 suites passed, 268 passed, 1 todo, 0 failed
 
 - [x] 14.8.5 **Run the audit script** one final time:
   ```bash
   cd backend && npm run audit:org-ids
   ```
+
   - Must exit with code 0
-  
+
 ---
 
 ### 14.9 Final Review Checklist
 
 - [x] 14.9.1 **Schema parity check**: Diff `backend/prisma/schema.prisma` vs `backend/prisma/production/schema.prisma`
-  — only the `datasource` block should differ
+      — only the `datasource` block should differ
 - [x] 14.9.2 **No `'default-org'` in non-test code**: `grep -rn "default-org" backend/src/ --include="*.ts" | grep -v "test"` should return 0 results (except `auth.middleware.ts` TEST_AUTH_BYPASS)
 - [x] 14.9.3 **No optional organizationId in schema**: `grep "organizationId.*String?" backend/prisma/schema.prisma` should return 0 results
 - [x] 14.9.4 **All relations have onDelete: Cascade**: Verify all 8 org relations have cascade delete
@@ -833,12 +873,10 @@ in auth middleware and service constructors. This task is effectively a no-op ve
   - ✅ Created `MetricsSnapshot` table for daily metric storage
   - ✅ Implemented `SaasMetricsService` with calculation methods for all metrics
   - ✅ Integrated with `ApplicationMonitoringService` for real-time tracking
-  
 - [x] 16.2 Add alerts: webhook_failure_rate >5%, trial_conversion_rate <10%, payment_failure_rate >2%
   - ✅ Implemented alert thresholds in `SaasMetricsService`
   - ✅ Created `HourlyWebhookCheckJob` for real-time webhook monitoring
   - ✅ Added alert logging to Sentry and console
-  
 - [x] 16.3 Create dashboard: Subscription tier distribution, usage by tier, revenue projections
   - ✅ Created admin metrics routes:
     - `/api/admin/metrics/dashboard` - Comprehensive metrics view
@@ -846,25 +884,23 @@ in auth middleware and service constructors. This task is effectively a no-op ve
     - `/api/admin/metrics/revenue-projections` - Revenue projections with trend analysis
     - `/api/admin/metrics/historical` - Historical data retrieval
     - `/api/admin/metrics/alerts` - Current alert status
-  
 - [x] 16.4 Add logging: Cross-tenant access attempts (security), feature gate rejections (conversion)
   - ✅ Created `tenant-isolation.middleware.ts` for cross-tenant access detection
   - ✅ Enhanced `feature-gate.middleware.ts` with detailed conversion tracking
   - ✅ All security events logged to Sentry with full context
-  
 - [x] 16.5 Configure Sentry alerting for webhook processing errors
   - ✅ Enhanced `WebhookService` with comprehensive error reporting
   - ✅ Added `reportWebhookError()` and `reportCriticalWebhookFailure()` methods
   - ✅ Implemented error classification (client vs server errors)
-  
 - [x] 16.6 Create daily report: New trials, conversions, churns, revenue changes
   - ✅ Created `DailyReportService` with HTML report generation
   - ✅ Implemented `DailyReportEmailJob` scheduled for 00:01 UTC
   - ✅ Reports include: metrics summary, trends, tier distribution, alerts
 
 ### Implementation Details:
+
 - **Database**: Added `MetricsSnapshot` and `WebhookMetrics` tables
-- **Services**: `SaasMetricsService`, `DailyReportService` 
+- **Services**: `SaasMetricsService`, `DailyReportService`
 - **Jobs**: `DailyMetricsJob`, `HourlyWebhookCheckJob`, `DailyReportEmailJob`
 - **Middleware**: `tenant-isolation.middleware.ts` (new), enhanced `feature-gate.middleware.ts`
 - **Routes**: `admin.metrics.routes.ts` (new)
@@ -872,10 +908,11 @@ in auth middleware and service constructors. This task is effectively a no-op ve
 
 ## 16A. Prevention Tasks - Gap Closure (CRITICAL - Must Complete Before Phase 17) [MOVED FROM 18]
 
-> **Context**: Gap analysis identified 20 critical implementation gaps between design spec and current code. 
+> **Context**: Gap analysis identified 20 critical implementation gaps between design spec and current code.
 > These prevention tasks address root causes BEFORE deployment to avoid:
+>
 > - **Data leaks** from incomplete organizationId filtering
-> - **Financial issues** from webhook processing failures  
+> - **Financial issues** from webhook processing failures
 > - **Zero revenue** from missing trial system
 > - **Feature bypass** from unenforced limits
 > - **Support overload** from edge case handling
@@ -936,7 +973,7 @@ in auth middleware and service constructors. This task is effectively a no-op ve
 ### Phase 16A.D: Feature Gating Enforcement (CRITICAL - Feature Bypass Prevention)
 
 - [x] 16A.D.1 **AUDIT ROUTES**: Review all protected routes in product.routes.ts, inventory.routes.ts, user.routes.ts, upload.routes.ts, report.routes.ts. Add `checkUsageLimit()` middleware to POST routes, `requireFeature()` to premium routes
-- [x] 16A.D.2 **APPLY MIDDLEWARE**: 
+- [x] 16A.D.2 **APPLY MIDDLEWARE**:
   - [x] POST /products: Add `checkUsageLimit('max_skus')` after authenticateToken (product.routes.ts:117-122, 236-241)
   - [x] POST /inventory-items: Add `checkUsageLimit('max_inventory_items')` (inventory.routes.ts:162)
   - [x] POST /users: Add `checkUsageLimit('max_users')` (already present in user.routes.ts:62-64)
@@ -1026,7 +1063,7 @@ in auth middleware and service constructors. This task is effectively a no-op ve
   - [x] How to diagnose cross-tenant leaks (check organizationId NULL queries, audit logs)
   - [x] Created comprehensive runbook at `docs/SAAS_OPERATIONAL_RUNBOOK.md`
   - [x] Includes: dunning process flow, troubleshooting guides, emergency procedures, monitoring setup
-- [x] 16A.G.4 **DUNNING CRON JOB**: 
+- [x] 16A.G.4 **DUNNING CRON JOB**:
   - [x] Created `backend/src/jobs/dunning.job.ts` - runs daily at 02:00 UTC
   - [x] Implements `downgradeExpiredPastDue()` method with transaction safety
   - [x] Sends aggregate Sentry alerts for batch downgrades
@@ -1162,9 +1199,11 @@ in auth middleware and service constructors. This task is effectively a no-op ve
   - File: `docs/cross-tenant-isolation-assurance.md`
 
 ---
+
 ## 16B. Validation Checklist (Run Before Phase 17 Deployment)
 
 **Must-Pass Gates**:
+
 - [x] 16B.1 All Phase 17.5 blocking items resolved (10 clarifications answered) ✅ **COMPLETE**
 - [x] 16B.2 Phase 6-7 routes/services fully verified with integration tests (6.13 passes)
 - [x] 16B.3 Phase 9 Stripe service fully implemented (createSubscription, updateSubscription, cancelSubscription working)
@@ -1178,7 +1217,7 @@ in auth middleware and service constructors. This task is effectively a no-op ve
 - [x] 16B.11 Schema audit script passing on test DB (Phase 14.1) - includes max_inventory_items per DECISION 8A.2
 - [x] 16B.12 Stripe test mode webhook delivery 100% success for 24 hours (7-day dunning grace period per DECISION 8A.9)
 - [x] 16B.13 All Sentry alerts configured (Phase 16 + Phase 16A.B.7)
-**NOTE** Limited alerts created due to student-only account
+      **NOTE** Limited alerts created due to student-only account
 - [x] 16B.14 Operational runbook complete (Phase 16A.G.3) and team trained (auto-create org flow per DECISION 8A.3)
 
 ### Final Checks before Deploying
@@ -1196,7 +1235,6 @@ in auth middleware and service constructors. This task is effectively a no-op ve
 
 ### Outcomes from final checks
 
-
 # Test Failure Analysis & Risk Assessment
 
 Let me analyze each category of failures to determine their value and production risk:
@@ -1208,10 +1246,12 @@ Let me analyze each category of failures to determine their value and production
 ### 1. 🟡 Lint Check - **LOW PRIORITY**
 
 **Breakdown:**
+
 - 138 errors: Mostly in `scripts/` directory (Node.js scripts with `console`, `require`, `process` globals)
 - 488 warnings: Primarily `@typescript-eslint/no-explicit-any` in test files
 
 **Production Impact:** ❌ **ZERO**
+
 - Lint errors are in development scripts, not production code
 - Warnings are in test files, not shipped to production
 - TypeScript compilation already passed (stricter check)
@@ -1223,11 +1263,13 @@ Let me analyze each category of failures to determine their value and production
 ### 2. 🟢 Backend Test (1 failure) - **SKIP**
 
 **Failure:** `XLSX Upload Functionality Tests › should process XLSX with alternative header names`
+
 ```
 EBUSY: resource busy or locked, unlink 'test.xlsx'
 ```
 
 **Analysis:**
+
 - **Type:** File system race condition in test cleanup
 - **Cause:** Windows file locking (test environment issue)
 - **Production Impact:** ❌ **ZERO** - XLSX upload functionality works (852 other tests pass)
@@ -1246,44 +1288,54 @@ Let me check what these failures actually test:
 **Failure Breakdown:**
 
 #### a) [StorageQuotaWarning.test.tsx](cci:7://file:///c:/Users/josha/date-management-app/frontend/src/components/__tests__/StorageQuotaWarning.test.tsx:0:0-0:0) - **LOW VALUE**
+
 ```
 Unable to find element with text: /Storage Quota Warning/i
 ```
+
 - **Issue:** Component not rendering in test environment
 - **Production Impact:** ⚠️ **LOW** - Storage quota warnings are non-critical UI
 - **Fix Effort:** Medium (mock setup issue)
 
 #### b) [StorageQuotaWarning.smoke.test.tsx](cci:7://file:///c:/Users/josha/date-management-app/frontend/src/components/__tests__/StorageQuotaWarning.smoke.test.tsx:0:0-0:0) - **LOW VALUE**
+
 ```
 Expected render time: < 100ms
 Received: 102.6ms
 ```
+
 - **Issue:** Performance assertion too strict (2.6ms over threshold)
 - **Production Impact:** ❌ **ZERO** - 102ms is still fast
 - **Fix Effort:** Trivial (increase threshold to 150ms)
 
 #### c) [useHardwareScan.test.ts](cci:7://file:///c:/Users/josha/date-management-app/frontend/src/hooks/__tests__/useHardwareScan.test.ts:0:0-0:0) - **⚠️ MEDIUM VALUE**
+
 ```
 Expected: "12345678"
 Received: "2345678"
 ```
+
 - **Issue:** Timing issue in hardware scanner keystroke accumulation
 - **Production Impact:** ⚠️ **MEDIUM** - Barcode scanning is core functionality
 - **Risk:** First keystroke might be dropped in production
 - **Fix Effort:** Medium (timing/debounce logic)
 
 #### d) [UsageReportPage.test.tsx](cci:7://file:///c:/Users/josha/date-management-app/frontend/src/tests/UsageReportPage.test.tsx:0:0-0:0) - **LOW VALUE**
+
 ```
 Exceeded timeout of 5000ms
 ```
+
 - **Issue:** Async test timing out (mock setup)
 - **Production Impact:** ❌ **ZERO** - Reports page works (E2E passed)
 - **Fix Effort:** Low (increase timeout)
 
 #### e) [ScanPage.test.tsx](cci:7://file:///c:/Users/josha/date-management-app/frontend/src/pages/__tests__/ScanPage.test.tsx:0:0-0:0) - **LOW VALUE**
+
 ```
 Exceeded timeout of 5000ms
 ```
+
 - **Issue:** Async test timing out
 - **Production Impact:** ❌ **ZERO** - Scan page works (E2E passed)
 - **Fix Effort:** Low (increase timeout)
@@ -1304,18 +1356,19 @@ Based on the analysis, here's my assessment of whether to fix these before produ
 
 ### ✅ Safe to Deploy As-Is (No Fix Needed)
 
-| Category | Count | Risk | Reason |
-|----------|-------|------|--------|
-| **Lint errors** | 138 | ❌ None | Development scripts only, not production code |
-| **Lint warnings** | 488 | ❌ None | Test files with `any` types - doesn't ship to production |
-| **Backend test** | 1 | ❌ None | Windows file lock flake - functionality works (852 tests pass) |
-| **Frontend timeouts** | 3 | ❌ None | Test environment timing - E2E verified pages work |
-| **Frontend perf test** | 1 | ❌ None | 102ms vs 100ms threshold - trivial |
-| **StorageQuotaWarning** | 1 | ⚠️ Low | Non-critical UI feature, test mock issue |
+| Category                | Count | Risk    | Reason                                                         |
+| ----------------------- | ----- | ------- | -------------------------------------------------------------- |
+| **Lint errors**         | 138   | ❌ None | Development scripts only, not production code                  |
+| **Lint warnings**       | 488   | ❌ None | Test files with `any` types - doesn't ship to production       |
+| **Backend test**        | 1     | ❌ None | Windows file lock flake - functionality works (852 tests pass) |
+| **Frontend timeouts**   | 3     | ❌ None | Test environment timing - E2E verified pages work              |
+| **Frontend perf test**  | 1     | ❌ None | 102ms vs 100ms threshold - trivial                             |
+| **StorageQuotaWarning** | 1     | ⚠️ Low  | Non-critical UI feature, test mock issue                       |
 
 ### ⚠️ **ONE ITEM TO INVESTIGATE POST-DEPLOYMENT**
 
 **`useHardwareScan` - Barcode Scanner Keystroke Timing**
+
 - **Issue:** First character dropped in test (`"2345678"` instead of `"12345678"`)
 - **Risk Level:** ⚠️ **MEDIUM** - Core scanning functionality
 - **Production Impact:** Could cause first digit to be missed in rapid barcode scans
@@ -1338,6 +1391,7 @@ The 14 E2E failures need investigation, but **don't block deployment** because:
 3. **Likely test assertions** - Not functional failures
 
 **Recommended approach:**
+
 - Deploy to staging first
 - Manually verify the 14 failed test scenarios
 - If they work manually, it's test issues (safe to deploy)
@@ -1348,18 +1402,21 @@ The 14 E2E failures need investigation, but **don't block deployment** because:
 ## 📊 Value Assessment
 
 ### Tests Worth Keeping (High Value)
+
 ✅ **Backend tests** (852 passing) - Validate business logic, multi-tenancy, webhooks  
 ✅ **E2E auth tests** (working) - Verify critical user flows  
-✅ **Frontend component tests** (263 passing) - Catch UI regressions  
+✅ **Frontend component tests** (263 passing) - Catch UI regressions
 
 ### Tests Worth Fixing Post-Deploy (Medium Value)
+
 ⚠️ **useHardwareScan timing** - Monitor in production first  
-⚠️ **E2E failures** - Investigate in staging  
+⚠️ **E2E failures** - Investigate in staging
 
 ### Tests Worth Deleting/Ignoring (Low Value)
+
 ❌ **Lint warnings on test files** - Technical debt, not bugs  
 ❌ **Performance test (102ms)** - Overly strict threshold  
-❌ **Timeout tests** - Test environment issue, E2E verified  
+❌ **Timeout tests** - Test environment issue, E2E verified
 
 ---
 
@@ -1378,8 +1435,9 @@ The 14 E2E failures need investigation, but **don't block deployment** because:
    - Clean up lint warnings (technical debt)
 
 **Why this is safe:**
+
 - 99% backend test pass rate
-- 98% frontend test pass rate  
+- 98% frontend test pass rate
 - TypeScript compilation clean
 - Security scan clean
 - Authentication verified working

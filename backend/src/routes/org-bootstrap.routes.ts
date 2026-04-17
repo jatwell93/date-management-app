@@ -34,12 +34,8 @@ router.post(
         return res.status(401).json({ message: 'Authentication required' });
       }
 
-      const {
-        organizationName,
-        organizationSlug,
-        clerkOrganizationId,
-        clerkMembershipRole,
-      } = clerkReq.body;
+      const { organizationName, organizationSlug, clerkOrganizationId, clerkMembershipRole } =
+        clerkReq.body;
 
       // Validation already handled by validateRequest middleware
 

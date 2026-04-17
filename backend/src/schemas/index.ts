@@ -48,8 +48,18 @@ export const organizationInviteAcceptSchema = z.object({
 
 export const organizationBootstrapSchema = z.object({
   body: z.object({
-    organizationName: z.string().min(1, 'Organization name is required').max(100, 'Organization name must be at most 100 characters'),
-    organizationSlug: z.string().min(1, 'Organization slug is required').max(50, 'Organization slug must be at most 50 characters').regex(/^[a-z0-9_-]+$/, 'Organization slug must contain only lowercase letters, numbers, hyphens, and underscores'),
+    organizationName: z
+      .string()
+      .min(1, 'Organization name is required')
+      .max(100, 'Organization name must be at most 100 characters'),
+    organizationSlug: z
+      .string()
+      .min(1, 'Organization slug is required')
+      .max(50, 'Organization slug must be at most 50 characters')
+      .regex(
+        /^[a-z0-9_-]+$/,
+        'Organization slug must contain only lowercase letters, numbers, hyphens, and underscores',
+      ),
     clerkOrganizationId: z.string().min(1, 'Clerk organization ID is required'),
     clerkMembershipRole: z.string().optional(),
   }),
