@@ -1,7 +1,8 @@
 import { Router, Response, NextFunction } from 'express';
 import { UserService } from '../services/user.service';
 import { User } from '../models/user.model';
-import { authenticateToken, requireManager, AuthRequest } from '../middleware/auth.middleware';
+import { authenticateToken, AuthRequest } from '../middleware/auth.middleware';
+import { requireOrgRole } from '../middleware/requireOrgRole';
 import { validateDataIntegrity } from '../middleware/validation.middleware';
 import { validateRequest } from '../middleware/validateRequest';
 import { userSchema } from '../schemas';
@@ -20,7 +21,7 @@ function getUserServiceForRequest(req: AuthRequest) {
 router.get(
   '/',
   authenticateToken,
-  requireManager,
+  requireOrgRole('admin', 'manager'),
   async (req: AuthRequest, res: Response, next: NextFunction) => {
     try {
       const userService = getUserServiceForRequest(req);
@@ -36,7 +37,7 @@ router.get(
 router.get(
   '/:id',
   authenticateToken,
-  requireManager,
+  requireOrgRole('admin', 'manager'),
   async (req: AuthRequest, res: Response, next: NextFunction) => {
     try {
       const id = Number.parseInt(req.params.id, 10);
@@ -68,7 +69,7 @@ router.get(
 router.post(
   '/',
   authenticateToken,
-  requireManager,
+  requireOrgRole('admin', 'manager'),
   checkUsageLimit('max_users'),
   standardLimiter,
   validateRequest(userSchema),
@@ -107,7 +108,7 @@ router.post(
 router.put(
   '/:id',
   authenticateToken,
-  requireManager,
+  requireOrgRole('admin', 'manager'),
   standardLimiter,
   validateRequest(userSchema),
   validateDataIntegrity,
@@ -157,7 +158,7 @@ router.put(
 router.delete(
   '/:id',
   authenticateToken,
-  requireManager,
+  requireOrgRole('admin'),
   standardLimiter,
   async (req: AuthRequest, res: Response, next: NextFunction) => {
     try {

@@ -71,6 +71,7 @@ async function cleanupAllTablesForPostgres(): Promise<void> {
   await prisma.$executeRawUnsafe(`
     TRUNCATE TABLE
       "audit_log",
+      "org_audit_log",
       "item_transactions",
       "expired_item_transactions",
       "inventory_items",
@@ -102,6 +103,7 @@ async function cleanupTierFlagsForSqlite(): Promise<void> {
 async function cleanupTablesForSqlite(): Promise<void> {
   const childTables = [
     'audit_log',
+    'org_audit_log',
     'item_transactions',
     'expired_item_transactions',
     'inventory_items',
@@ -156,12 +158,12 @@ async function seedDefaultOrganizationAndUsers(): Promise<void> {
     await tx.user.upsert({
       where: { id: 1 },
       update: {
-        role: 'Manager',
+        role: 'admin',
         organizationId: defaultOrg.id,
       },
       create: {
         id: 1,
-        role: 'Manager',
+        role: 'admin',
         organizationId: defaultOrg.id,
       },
     });
@@ -169,12 +171,12 @@ async function seedDefaultOrganizationAndUsers(): Promise<void> {
     await tx.user.upsert({
       where: { id: 2 },
       update: {
-        role: 'Staff',
+        role: 'team_member',
         organizationId: defaultOrg.id,
       },
       create: {
         id: 2,
-        role: 'Staff',
+        role: 'team_member',
         organizationId: defaultOrg.id,
       },
     });

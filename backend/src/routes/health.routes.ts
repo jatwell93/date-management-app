@@ -3,7 +3,8 @@ import { getDb, releaseDb } from '../database';
 import { DatabaseMonitoringService } from '../services/database.monitoring.service';
 import { validateTierFeatureFlags, ValidationResult } from '../utils/validate-tier-flags';
 import { getDefaultDatabaseClient } from '../database/database-factory';
-import { authenticateToken, requireManager, AuthRequest } from '../middleware/auth.middleware';
+import { authenticateToken, AuthRequest } from '../middleware/auth.middleware';
+import { requireOrgRole } from '../middleware/requireOrgRole';
 
 const router = Router();
 
@@ -153,7 +154,7 @@ router.get('/ready', async (req, res) => {
 });
 
 // Metrics endpoint for basic server info
-router.get('/metrics', authenticateToken, requireManager, (req: AuthRequest, res) => {
+router.get('/metrics', authenticateToken, requireOrgRole('admin'), (req: AuthRequest, res) => {
   const uptime = process.uptime();
   const memoryUsage = process.memoryUsage();
   const cpuUsage = process.cpuUsage ? process.cpuUsage() : null;
@@ -178,7 +179,7 @@ router.get('/metrics', authenticateToken, requireManager, (req: AuthRequest, res
 });
 
 // Database metrics endpoint
-router.get('/database-metrics', authenticateToken, requireManager, (req: AuthRequest, res) => {
+router.get('/database-metrics', authenticateToken, requireOrgRole('admin'), (req: AuthRequest, res) => {
   try {
     const dbMetrics = DatabaseMonitoringService.getInstance().getMetrics();
 
@@ -197,7 +198,7 @@ router.get('/database-metrics', authenticateToken, requireManager, (req: AuthReq
 });
 
 // Database health check endpoint
-router.get('/database-health', authenticateToken, requireManager, (req: AuthRequest, res) => {
+router.get('/database-health', authenticateToken, requireOrgRole('admin'), (req: AuthRequest, res) => {
   let db;
   try {
     // Check database connectivity
@@ -241,7 +242,7 @@ router.get('/database-health', authenticateToken, requireManager, (req: AuthRequ
 });
 
 // Recent alerts endpoint
-router.get('/recent-alerts', authenticateToken, requireManager, (req: AuthRequest, res) => {
+router.get('/recent-alerts', authenticateToken, requireOrgRole('admin'), (req: AuthRequest, res) => {
   // In a real implementation, this would return alerts from the last N minutes
   // For now, we'll return an empty list
   res.status(200).json({

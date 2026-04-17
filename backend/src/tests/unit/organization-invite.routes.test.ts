@@ -17,7 +17,14 @@ jest.mock('../../middleware/auth.middleware', () => ({
     req.userId = userIdHeader ? Number(userIdHeader) : undefined;
     next();
   },
-  requireManager: (_req: any, _res: any, next: any) => next(),
+}));
+
+jest.mock('../../middleware/requireOrgRole', () => ({
+  requireOrgRole: (...allowedRoles: string[]) => (req: any, _res: any, next: any) => {
+    // Mock the role check - always pass for tests
+    req.userRole = allowedRoles[0] || 'admin';
+    next();
+  },
 }));
 
 jest.mock('../../middleware/clerk-auth.middleware', () => ({
@@ -88,7 +95,7 @@ describe('organization-invite.routes', () => {
       id: 'invite-1',
       organizationId: 'org-1',
       email: 'teammate@example.com',
-      role: 'member',
+      role: 'team_member',
       token: 'token-123',
       status: 'PENDING',
     });
@@ -124,7 +131,7 @@ describe('organization-invite.routes', () => {
         .post('/organization/invites')
         .set('x-org-id', 'org-1')
         .set('x-user-id', '42')
-        .send({ email: 'teammate@example.com', role: 'member' });
+        .send({ email: 'teammate@example.com', role: 'team_member' });
 
       expect(response.status).toBe(201);
       expect(response.body).toEqual(
@@ -139,7 +146,7 @@ describe('organization-invite.routes', () => {
         organizationId: 'org-1',
         invitedByUserId: 42,
         email: 'teammate@example.com',
-        role: 'member',
+        role: 'team_member',
       });
 
       expect(mockSendOrganizationInviteEmail).toHaveBeenCalledWith(
@@ -157,7 +164,7 @@ describe('organization-invite.routes', () => {
       const response = await request(app)
         .post('/organization/invites')
         .set('x-user-id', '42')
-        .send({ email: 'teammate@example.com', role: 'member' });
+        .send({ email: 'teammate@example.com', role: 'team_member' });
 
       expect(response.status).toBe(401);
       expect(response.body).toEqual({ message: 'Access denied: Missing organization context' });
@@ -171,7 +178,7 @@ describe('organization-invite.routes', () => {
         .post('/organization/invites')
         .set('x-org-id', 'org-1')
         .set('x-user-id', '42')
-        .send({ email: 'teammate@example.com', role: 'member' });
+        .send({ email: 'teammate@example.com', role: 'team_member' });
 
       expect(response.status).toBe(404);
       expect(response.body).toEqual({ message: 'Organization not found' });
@@ -201,7 +208,7 @@ describe('organization-invite.routes', () => {
         .post('/organization/invites')
         .set('x-org-id', 'org-1')
         .set('x-user-id', '42')
-        .send({ email: 'teammate@example.com', role: 'member' });
+        .send({ email: 'teammate@example.com', role: 'team_member' });
 
       expect(response.status).toBe(500);
       expect(response.body).toEqual({ message: 'Internal server error' });
@@ -318,11 +325,12 @@ describe('organization-invite.routes', () => {
     it('revokes invite for a valid organization context', async () => {
       const response = await request(app)
         .delete('/organization/invites/invite-1')
-        .set('x-org-id', 'org-1');
+        .set('x-org-id', 'org-1')
+        .set('x-user-id', '42');
 
       expect(response.status).toBe(200);
       expect(response.body).toEqual({ id: 'invite-1', status: 'REVOKED' });
-      expect(mockRevokeInvite).toHaveBeenCalledWith('org-1', 'invite-1');
+      expect(mockRevokeInvite).toHaveBeenCalledWith('org-1', 'invite-1', 42);
     });
 
     it('maps known revoke errors to structured error response', async () => {

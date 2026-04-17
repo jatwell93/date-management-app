@@ -1,5 +1,6 @@
 import { Router, Response } from 'express';
-import { AuthRequest, requireManager } from '../middleware/auth.middleware';
+import { AuthRequest } from '../middleware/auth.middleware';
+import { requireOrgRole } from '../middleware/requireOrgRole';
 import { ApplicationMonitoringService } from '../services/application.monitoring.service';
 import { SaasMetricsService } from '../services/saas-metrics.service';
 import { getDefaultDatabaseClient } from '../database/database-factory';
@@ -23,7 +24,7 @@ interface TierMetricsSummary {
  * GET /api/admin/metrics/dashboard
  * Get comprehensive dashboard metrics
  */
-router.get('/dashboard', requireManager, async (req: AuthRequest, res: Response) => {
+router.get('/dashboard', requireOrgRole('admin'), async (req: AuthRequest, res: Response) => {
   try {
     const [saasMetrics, applicationMetrics] = await Promise.all([
       saasMetricsService.getSaasMetrics(),
@@ -95,7 +96,7 @@ router.get('/dashboard', requireManager, async (req: AuthRequest, res: Response)
  * GET /api/admin/metrics/subscription-tiers
  * Get detailed subscription tier distribution and revenue
  */
-router.get('/subscription-tiers', requireManager, async (req: AuthRequest, res: Response) => {
+router.get('/subscription-tiers', requireOrgRole('admin'), async (req: AuthRequest, res: Response) => {
   try {
     const prisma = getDefaultDatabaseClient();
 
@@ -177,7 +178,7 @@ router.get('/subscription-tiers', requireManager, async (req: AuthRequest, res: 
  * GET /api/admin/metrics/revenue-projections
  * Get revenue projections based on current trends
  */
-router.get('/revenue-projections', requireManager, async (req: AuthRequest, res: Response) => {
+router.get('/revenue-projections', requireOrgRole('admin'), async (req: AuthRequest, res: Response) => {
   try {
     const prisma = getDefaultDatabaseClient();
 
@@ -267,7 +268,7 @@ router.get('/revenue-projections', requireManager, async (req: AuthRequest, res:
  * GET /api/admin/metrics/historical
  * Get historical metrics for a given time range
  */
-router.get('/historical', requireManager, async (req: AuthRequest, res: Response) => {
+router.get('/historical', requireOrgRole('admin'), async (req: AuthRequest, res: Response) => {
   try {
     const daysParam = parseInt(req.query.days as string) || 30;
     const days = Math.min(Math.max(daysParam, 7), 365); // Clamp between 7 and 365 days
@@ -334,7 +335,7 @@ router.get('/historical', requireManager, async (req: AuthRequest, res: Response
  * GET /api/admin/metrics/alerts
  * Get current alert status
  */
-router.get('/alerts', requireManager, async (req: AuthRequest, res: Response) => {
+router.get('/alerts', requireOrgRole('admin'), async (req: AuthRequest, res: Response) => {
   try {
     const metrics = await saasMetricsService.getSaasMetrics();
 

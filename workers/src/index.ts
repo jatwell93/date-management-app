@@ -31,6 +31,7 @@ import {
   formatMetricsForAnalytics,
 } from './middleware/metrics.middleware';
 import { authenticateRequest, addUserIdHeader, unauthorized, isPublicEndpoint } from './middleware/auth';
+import { createUploadRoleMiddleware } from './middleware/require-role.middleware';
 import { handleHealthCheck } from './health';
 import { createDatabaseClient } from '../../backend/src/database/database-factory';
 
@@ -109,9 +110,9 @@ class WorkersRouter {
       .replace(/\//g, '\\/')
       // Express-style named params: ":name"
       .replace(/:(\w+)/g, '(?<$1>[^/]+)');
-    
+
     const regex = new RegExp(`^${regexPattern}$`);
-    
+
     this.routes.push({
       path: regex,
       handler: async (req: ExpressRequest, res: ExpressResponse) => {
@@ -193,21 +194,21 @@ function registerExpressRouter(
 ) {
   // Express router stores routes in router.stack
   const stack = expressRouter.stack || [];
-  
+
   for (const layer of stack) {
     if (layer.route) {
       // Direct route handler
       const methods = Object.keys(layer.route.methods);
       const path = basePath + layer.route.path;
-      
+
       // Register for each HTTP method
       for (const method of methods) {
         const handlers = layer.route.stack.map((l: any) => l.handle);
-        
+
         // Wrap all handlers with adapter
         workersRouter.addRoute(path, async (req: ExpressRequest, res: ExpressResponse) => {
           req.method = method.toUpperCase();
-          
+
           // Execute handlers in sequence
           for (const handler of handlers) {
             await adaptExpressHandler(handler)(req, res);
@@ -231,7 +232,7 @@ function createJWTAuthMiddleware(env: Env): ExpressMiddleware {
   return async (req: ExpressRequest, res: ExpressResponse, next: () => void) => {
     // Task 7.6: Skip validation for public endpoints
     const isPublic = isPublicEndpoint(req.path);
-    
+
     // Allow public endpoints without authentication
     if (isPublic) {
       return next(); // Continue to next middleware
@@ -269,6 +270,15 @@ function createJWTAuthMiddleware(env: Env): ExpressMiddleware {
       req.organizationId = authResult.organizationId;
     }
 
+    if (authResult.role) {
+      req.userRole = authResult.role;
+      if (!req.user) {
+        req.user = { id: authResult.userId!, role: authResult.role };
+      } else {
+        req.user.role = authResult.role;
+      }
+    }
+
     return next(); // Continue to next middleware
   };
 }
@@ -282,26 +292,29 @@ function createRouter(env: Env): WorkersRouter {
   // Global middleware execution order (important!)
   // 1. Metrics initialization (first, to track all requests)
   router.use(createMetricsInitializer(env));
-  
+
   // 2. Security headers (early to apply to all responses)
   // Phase 20 Security Audit: CSP headers prevent XSS attacks
   router.use(createSecurityHeadersMiddleware(env));
-  
+
   // 3. CORS handling
   router.use(createProductionCors(env));
-  
+
   // 4. Rate limiting
   router.use(createRateLimiter(env));
-  
+
   // 5. JWT validation (after rate limiting to save resources)
   router.use(createJWTAuthMiddleware(env)); // Task 7: JWT validation
+
+  // 5b. Role-based upload authorization (after auth so role is available)
+  router.use(createUploadRoleMiddleware());
 
   // 6. Query complexity controls (list limits + timeout budget)
   router.use(createQueryLimiter(env));
 
   // 7. Database connection pressure protection
   router.use(createConnectionLimiter(env));
-  
+
   // 8. Request logging (after auth so organizationId is available)
   router.use(createRequestLogger(env));
 
@@ -369,7 +382,7 @@ export default Sentry.withSentry(
     async fetch(request: Request, env: any, ctx: ExecutionContext): Promise<Response> {
       const url = new URL(request.url);
       const startTime = Date.now();
-      
+
       // Fast-path health check (bypass full routing)
       if (url.pathname === '/health' && (request.method === 'GET' || request.method === 'OPTIONS')) {
         return handleHealthCheck(request, env);
@@ -403,7 +416,7 @@ export default Sentry.withSentry(
         }
 
         const response = res.toResponse();
-        
+
         // Extract metrics from request context (includes CSV instrumentation if applicable)
         const metrics = getRequestMetrics(req, res, response.status);
         writeMetrics(env, metrics);
@@ -413,7 +426,7 @@ export default Sentry.withSentry(
         // Global error handler
         const responseTime = Date.now() - startTime;
         const requestId = request.headers.get('x-request-id') || request.headers.get('cf-ray');
-        
+
         logger.error('Unhandled error in fetch handler', {
           error: error instanceof Error ? error.message : 'Unknown error',
           stack: error instanceof Error ? error.stack : undefined,
@@ -431,13 +444,13 @@ export default Sentry.withSentry(
           errorMessage: error instanceof Error ? error.message : 'Unknown error',
           correlationId: requestId || undefined,
         };
-        
+
         writeMetrics(env, errorMetrics);
 
         return new Response(
           JSON.stringify({
             error: 'Internal Server Error',
-            message: env.NODE_ENV === 'development' 
+            message: env.NODE_ENV === 'development'
               ? (error instanceof Error ? error.message : 'Unknown error')
               : 'An unexpected error occurred',
           }),

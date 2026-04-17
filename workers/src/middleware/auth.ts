@@ -7,6 +7,7 @@
  */
 
 import { jwtVerify, SignJWT, JWTPayload } from 'jose';
+import { normalizeRole, RoleValue } from '../constants/roles';
 
 /**
  * JWT Payload interface
@@ -55,7 +56,7 @@ function extractToken(authHeader: string | null): string | null {
   if (!authHeader?.startsWith('Bearer ')) {
     return null;
   }
-  
+
   return authHeader.slice(7); // Remove "Bearer " prefix
 }
 
@@ -74,12 +75,12 @@ export async function verifyJWT(
   try {
     const encoder = new TextEncoder();
     const secretKey = encoder.encode(secret);
-    
+
     // Add 5-minute clock skew tolerance for exp validation
     const { payload } = await jwtVerify(token, secretKey, {
       clockTolerance: 5 * 60, // 5 minutes in seconds
     });
-    
+
     return payload as JWTPayloadData;
   } catch (error) {
     // Token is invalid, expired, or signature doesn't match
@@ -88,7 +89,7 @@ export async function verifyJWT(
     if (process.env.DEBUG) {
       console.error('JWT verification failed:', errorMsg);
     }
-    
+
     return null;
   }
 }
@@ -111,7 +112,7 @@ export async function createJWT(
 ): Promise<string> {
   const encoder = new TextEncoder();
   const secretKey = encoder.encode(secret);
-  
+
   return await new SignJWT({ userId, organizationId })
     .setProtectedHeader({ alg: 'HS256' })
     .setExpirationTime(expiresIn)
@@ -135,27 +136,28 @@ export async function authenticateRequest(
   authenticated: boolean;
   userId?: number;
   organizationId?: string;
+  role?: RoleValue;
   error?: string;
 }> {
   const authHeader = request.headers.get('Authorization');
   const token = extractToken(authHeader);
-  
+
   if (!token) {
     return {
       authenticated: false,
       error: 'Missing or malformed Authorization header',
     };
   }
-  
+
   const payload = await verifyJWT(token, jwtSecret);
-  
+
   if (!payload) {
     return {
       authenticated: false,
       error: 'Invalid or expired JWT token',
     };
   }
-  
+
   if (!payload.userId) {
     return {
       authenticated: false,
@@ -169,11 +171,12 @@ export async function authenticateRequest(
       error: 'Invalid token: missing organizationId',
     };
   }
-  
+
   return {
     authenticated: true,
     userId: payload.userId,
     organizationId: payload.organizationId,
+    role: payload.role ? normalizeRole(payload.role) : undefined,
   };
 }
 
@@ -198,15 +201,15 @@ export function createAuthMiddleware(jwtSecret: string) {
     shouldBypass: boolean;
   }> => {
     const { pathname } = context;
-    
+
     // Task 7.6: Skip validation for public endpoints
     if (isPublicEndpoint(pathname)) {
       return { authenticated: true, shouldBypass: true };
     }
-    
+
     // Authenticate protected endpoint
     const result = await authenticateRequest(request, jwtSecret);
-    
+
     return {
       authenticated: result.authenticated,
       userId: result.userId,
@@ -230,7 +233,7 @@ export function addUserIdHeader(
 ): Request {
   const headers = new Headers(request.headers);
   headers.set('x-user-id', String(userId));
-  
+
   return new Request(request, { headers });
 }
 

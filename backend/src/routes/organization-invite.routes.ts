@@ -1,5 +1,6 @@
 import { Router, Response, RequestHandler } from 'express';
-import { authenticateToken, requireManager, AuthRequest } from '../middleware/auth.middleware';
+import { authenticateToken, AuthRequest } from '../middleware/auth.middleware';
+import { requireOrgRole } from '../middleware/requireOrgRole';
 import { clerkAuth, ClerkAuthRequest } from '../middleware/clerk-auth.middleware';
 import { standardLimiter } from '../middleware/rateLimiter';
 import { validateRequest } from '../middleware/validateRequest';
@@ -9,6 +10,7 @@ import { OrganizationService } from '../services/organization.service';
 import { EmailService } from '../services/email.service';
 import { envConfig } from '../config/environment';
 import { isBaseError } from '../errors';
+import { RoleValue } from '../constants/roles';
 
 const router = Router();
 const inviteService = new OrganizationInviteService();
@@ -20,7 +22,7 @@ const clerkAuthHandler: RequestHandler = (req, res, next) =>
 router.post(
   '/invites',
   authenticateToken,
-  requireManager,
+  requireOrgRole('admin', 'manager'),
   standardLimiter,
   validateRequest(organizationInviteCreateSchema),
   async (req: AuthRequest, res: Response) => {
@@ -33,7 +35,7 @@ router.post(
         organizationId: req.organizationId,
         invitedByUserId: req.userId,
         email: req.body.email as string,
-        role: req.body.role as 'admin' | 'member',
+        role: req.body.role as RoleValue,
       });
 
       const organization = await organizationService.getOrganization(req.organizationId);
@@ -96,7 +98,7 @@ router.post(
   },
 );
 
-router.get('/invites', authenticateToken, requireManager, async (req: AuthRequest, res) => {
+router.get('/invites', authenticateToken, requireOrgRole('admin', 'manager'), async (req: AuthRequest, res) => {
   try {
     if (!req.organizationId) {
       return res.status(401).json({ message: 'Access denied: Missing organization context' });
@@ -116,14 +118,14 @@ router.get('/invites', authenticateToken, requireManager, async (req: AuthReques
 router.delete(
   '/invites/:inviteId',
   authenticateToken,
-  requireManager,
+  requireOrgRole('admin', 'manager'),
   async (req: AuthRequest, res) => {
     try {
       if (!req.organizationId) {
         return res.status(401).json({ message: 'Access denied: Missing organization context' });
       }
 
-      const invite = await inviteService.revokeInvite(req.organizationId, req.params.inviteId);
+      const invite = await inviteService.revokeInvite(req.organizationId, req.params.inviteId, req.userId);
       return res.json(invite);
     } catch (error) {
       if (isBaseError(error)) {
@@ -135,7 +137,47 @@ router.delete(
   },
 );
 
-router.delete('/', authenticateToken, requireManager, async (req: AuthRequest, res: Response) => {
+router.post(
+  '/invites/:inviteId/resend',
+  authenticateToken,
+  requireOrgRole('admin', 'manager'),
+  standardLimiter,
+  async (req: AuthRequest, res: Response) => {
+    try {
+      if (!req.organizationId || !req.userId) {
+        return res.status(401).json({ message: 'Access denied: Missing organization context' });
+      }
+
+      const updated = await inviteService.resendInvite(req.organizationId, req.params.inviteId, req.userId);
+
+      const organization = await organizationService.getOrganization(req.organizationId);
+      if (!organization) {
+        return res.status(404).json({ message: 'Organization not found' });
+      }
+
+      const baseUrl = envConfig.FRONTEND_URL || 'http://localhost:3000';
+      const inviteUrl = `${baseUrl}/invites/accept?token=${updated.token}`;
+
+      await emailService.sendOrganizationInviteEmail({
+        organizationId: req.organizationId,
+        toEmail: updated.email,
+        organizationName: organization.name,
+        inviteUrl,
+        invitedByUserId: req.userId,
+      });
+
+      return res.status(200).json({ message: 'Invite resent', inviteId: updated.id });
+    } catch (error) {
+      if (isBaseError(error)) {
+        return res.status(error.statusCode).json({ message: error.message, code: error.code });
+      }
+
+      return res.status(500).json({ message: 'Internal server error' });
+    }
+  },
+);
+
+router.delete('/', authenticateToken, requireOrgRole('admin'), async (req: AuthRequest, res: Response) => {
   try {
     if (!req.organizationId) {
       return res.status(401).json({ message: 'Access denied: Missing organization context' });
