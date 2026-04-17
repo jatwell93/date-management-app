@@ -92,7 +92,7 @@ describe('requireOrgRole middleware', () => {
   describe('legacy role normalization', () => {
     const middleware = requireOrgRole(ROLES.ADMIN);
 
-    it('normalizes legacy "Manager" to admin', () => {
+    it('normalizes legacy "Manager" to manager and blocks admin-only route', () => {
       const { req, res, next } = createMockReqRes('Manager');
       middleware(req as any, res, next);
       // Manager normalizes to 'manager', not 'admin', so should be blocked

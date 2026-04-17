@@ -96,7 +96,7 @@ describe('user.routes', () => {
     mockCreateUser.mockResolvedValue({
       id: 2,
       organizationId: 'org-1',
-      role: 'member',
+      role: 'team_member',
     });
 
     mockUpdateUser.mockResolvedValue(true);
@@ -286,7 +286,7 @@ describe('user.routes', () => {
       const response = await request(app)
         .put('/users/1')
         .set('x-org-id', 'org-1')
-        .send({ role: 'member' });
+        .send({ role: 'team_member' });
 
       expect(response.status).toBe(200);
       expect(response.body).toEqual({
@@ -294,7 +294,7 @@ describe('user.routes', () => {
         organizationId: 'org-1',
         role: 'team_member',
       });
-      expect(mockUpdateUser).toHaveBeenCalledWith(1, { role: 'member' });
+      expect(mockUpdateUser).toHaveBeenCalledWith(1, { role: 'team_member' });
     });
 
     it('updates user with pin+role payload', async () => {

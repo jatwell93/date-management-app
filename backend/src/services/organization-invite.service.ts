@@ -4,7 +4,7 @@ import { PrismaClient } from '@prisma/client';
 import { getDefaultDatabaseClient } from '../database/database-factory';
 import { ConflictError, NotFoundError, PaymentRequiredError, ValidationError } from '../errors';
 import { TIER_LIMITS, TierLevel } from '../types/subscription';
-import { RoleValue, isValidRole, ROLES } from '../constants/roles';
+import { RoleValue, isValidRole } from '../constants/roles';
 import { OrgAuditService } from './org-audit.service';
 import { AUDIT_EVENT_TYPES } from '../constants/roles';
 
@@ -26,6 +26,7 @@ export interface AcceptInviteParams {
 
 const BCRYPT_COST = 12;
 const TOKEN_BYTES = 32;
+const LEGACY_TOKEN_FALLBACK_MAX_CANDIDATES = 25;
 
 export class OrganizationInviteService {
   private prisma: PrismaClient;
@@ -222,6 +223,14 @@ export class OrganizationInviteService {
       throw new NotFoundError('Invite not found or invalid');
     }
 
+    if (this.isInviteExpired(invite)) {
+      const expiredTransitionCount = await this.markInviteAsExpired(invite.id);
+      if (expiredTransitionCount === 0 && invite.status !== 'EXPIRED') {
+        throw new ValidationError('Invite is no longer valid');
+      }
+      throw new ValidationError('Invite has expired');
+    }
+
     if (invite.status !== 'PENDING') {
       throw new ValidationError('Invite is no longer valid');
     }
@@ -331,7 +340,6 @@ export class OrganizationInviteService {
         where: {
           id: inviteId,
           status: 'PENDING',
-          expiresAt: { gt: this.nowProvider() },
         },
       });
 
@@ -347,8 +355,9 @@ export class OrganizationInviteService {
     const pendingInvites = await this.prisma.organizationInvite.findMany({
       where: {
         status: 'PENDING',
-        expiresAt: { gt: this.nowProvider() },
       },
+      orderBy: { createdAt: 'desc' },
+      take: LEGACY_TOKEN_FALLBACK_MAX_CANDIDATES,
     });
 
     for (const candidate of pendingInvites) {
@@ -358,6 +367,37 @@ export class OrganizationInviteService {
     }
 
     return null;
+  }
+
+  private isInviteExpired(invite: { expiresAt: Date | null; inviteTokenExpiresAt: Date | null }) {
+    const now = this.nowProvider().getTime();
+    const expiresAt = invite.expiresAt?.getTime();
+    const inviteTokenExpiresAt = invite.inviteTokenExpiresAt?.getTime();
+
+    if (expiresAt != null && expiresAt <= now) {
+      return true;
+    }
+
+    if (inviteTokenExpiresAt != null && inviteTokenExpiresAt <= now) {
+      return true;
+    }
+
+    return false;
+  }
+
+  private async markInviteAsExpired(inviteId: string) {
+    const result = await this.prisma.organizationInvite.updateMany({
+      where: {
+        id: inviteId,
+        status: 'PENDING',
+      },
+      data: {
+        status: 'EXPIRED',
+        inviteTokenHash: null,
+      },
+    });
+
+    return result.count;
   }
 
   private parseInviteToken(token: string): string | null {

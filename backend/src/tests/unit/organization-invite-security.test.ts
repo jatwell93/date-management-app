@@ -147,5 +147,37 @@ describe('OrganizationInviteService Security', () => {
 
       expect(updatedInvite?.inviteTokenHash).toBeNull();
     });
+
+    it('marks pending invites as EXPIRED when token is expired', async () => {
+      const invite = await service.createInvite({
+        organizationId: 'test-org',
+        invitedByUserId: 1,
+        email: 'expired@example.com',
+        role: 'team_member',
+      });
+
+      await prisma.organizationInvite.update({
+        where: { id: invite.id },
+        data: {
+          expiresAt: new Date(Date.now() - 60 * 1000),
+          inviteTokenExpiresAt: new Date(Date.now() - 60 * 1000),
+        },
+      });
+
+      await expect(
+        service.acceptInvite({
+          token: invite.token,
+          clerkUserId: 'clerk_expired_123',
+          email: 'expired@example.com',
+        }),
+      ).rejects.toThrow('Invite has expired');
+
+      const updatedInvite = await prisma.organizationInvite.findUnique({
+        where: { id: invite.id },
+      });
+
+      expect(updatedInvite?.status).toBe('EXPIRED');
+      expect(updatedInvite?.inviteTokenHash).toBeNull();
+    });
   });
 });
