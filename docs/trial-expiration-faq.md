@@ -35,6 +35,7 @@ Your trial starts **immediately** when you create your organization. The trial e
 ### How do I know when my trial expires?
 
 You'll see a **trial banner** at the top of every page showing:
+
 - Days remaining until expiration
 - Trial end date
 - Quick upgrade button
@@ -54,11 +55,13 @@ You can also check your trial status in **Settings → Billing**.
 ### Days 10, 5, and 2: Reminder Emails
 
 You'll receive reminder emails at:
+
 - **Day 10** (4 days remaining)
 - **Day 5** (2 days remaining)
 - **Day 2** (1 day remaining)
 
 Each email includes:
+
 - Days remaining
 - Upgrade link
 - What happens if you don't upgrade
@@ -66,6 +69,7 @@ Each email includes:
 ### Day 14: Trial Expires (Midnight UTC)
 
 At midnight UTC on day 14:
+
 - Trial status changes to "expired"
 - Auto-downgrade to **Starter tier** begins
 - You can still log in and access all data
@@ -73,6 +77,7 @@ At midnight UTC on day 14:
 ### Day 15: Auto-Downgrade Complete
 
 By day 15, your account is on the Starter tier:
+
 - 500 SKU limit (down from 2,000)
 - 1 user limit (down from 3)
 - 5,000 inventory item limit (down from 20,000)
@@ -91,6 +96,7 @@ By day 15, your account is on the Starter tier:
 ### What can I still do?
 
 You retain full **read access** to everything:
+
 - ✅ View all products and inventory
 - ✅ Generate reports
 - ✅ Export data
@@ -99,6 +105,7 @@ You retain full **read access** to everything:
 ### What is blocked?
 
 If you're over the Starter tier limits, **creation is blocked**:
+
 - ❌ Adding new products
 - ❌ Adding new inventory items
 - ❌ Adding new users
@@ -109,12 +116,14 @@ If you're over the Starter tier limits, **creation is blocked**:
 You have two options:
 
 **Option 1: Upgrade (Fastest)**
+
 1. Go to **Settings → Billing**
 2. Choose Professional ($29/month) or higher tier
 3. Complete payment
 4. Lock removed immediately
 
 **Option 2: Reduce Usage**
+
 1. Delete products to get below 500 SKUs
 2. Or remove users to get to 1 user
 3. Lock is automatically removed when within limits
@@ -130,6 +139,7 @@ See the [Tier Downgrade Guide](./tier-downgrade-guide.md) for detailed instructi
 After trial expiration, you have a **48-hour grace period** to add a payment method without losing any data or functionality.
 
 During the grace period:
+
 - You can still upgrade without any interruption
 - All Professional tier features remain available
 - No creation lock is applied (even if over Starter limits)
@@ -137,11 +147,13 @@ During the grace period:
 ### Converting After Expiration
 
 You can upgrade at any time, even after:
+
 - Trial has expired
 - Account was downgraded to Starter
 - Creation lock is active
 
 Once you upgrade:
+
 - Your tier limits are immediately restored
 - Creation lock is automatically removed
 - All features are re-enabled
@@ -149,6 +161,7 @@ Once you upgrade:
 ### Reactivating a Canceled Account
 
 If you previously canceled your subscription:
+
 1. Log in to your account
 2. Go to **Settings → Billing**
 3. Click **Reactivate Subscription**
@@ -169,6 +182,7 @@ If you previously canceled your subscription:
 ### Q: What if I'm over the Starter limits when my trial expires?
 
 **A**: A creation lock is applied. You cannot add new products/inventory until you either:
+
 - Upgrade to a higher tier
 - Delete excess products to get within 500 SKUs
 
@@ -199,6 +213,7 @@ If you previously canceled your subscription:
 ### Q: Can I export my data before the trial expires?
 
 **A**: Yes! You can export your products at any time:
+
 - Use **Settings → Export Data** for a full backup
 - Or use the API: `GET /api/products/export-excess`
 
@@ -222,19 +237,20 @@ If you previously canceled your subscription:
 
 The system tracks these trial-related events:
 
-| Event | When Logged |
-|-------|-------------|
-| `trial_started` | Organization created |
+| Event                 | When Logged                     |
+| --------------------- | ------------------------------- |
+| `trial_started`       | Organization created            |
 | `trial_reminder_sent` | Days 10, 5, 2 before expiration |
-| `trial_converted` | User upgrades to paid tier |
-| `trial_expired` | Trial end date reached |
-| `payment_confirmed` | First successful payment |
+| `trial_converted`     | User upgrades to paid tier      |
+| `trial_expired`       | Trial end date reached          |
+| `payment_confirmed`   | First successful payment        |
 
 View these in **Settings → Activity Log**.
 
 ### Trial Conversion Tracking
 
 We track conversion rates to improve our service. This includes:
+
 - Trial start date
 - Conversion date (if applicable)
 - Selected tier after conversion
@@ -252,4 +268,4 @@ No personal or business data is shared with third parties.
 
 ---
 
-*Last updated: March 2026*
+_Last updated: March 2026_

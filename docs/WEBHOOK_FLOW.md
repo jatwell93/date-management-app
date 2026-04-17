@@ -68,15 +68,15 @@ Express Router: POST /api/webhooks/stripe
 
 ```typescript
 // Get signature from header
-signature = req.headers['stripe-signature']
+signature = req.headers['stripe-signature'];
 // Example: "t=1234567890,v1=abcdef123..."
 
 // Verify signature using raw body + webhook secret
 event = Stripe.webhooks.constructEvent(
   rawBody,
   signature,
-  envConfig.STRIPE_WEBHOOK_SECRET  // whsec_xxx from Stripe
-)
+  envConfig.STRIPE_WEBHOOK_SECRET, // whsec_xxx from Stripe
+);
 
 // ✅ If valid → Continue
 // ❌ If invalid → Return 400, don't process
@@ -100,18 +100,18 @@ if (webhookService.isNewEvent(event.id)) {
 // Route event to correct handler based on type
 switch (event.type) {
   case 'customer.subscription.created':
-    await handleSubscriptionCreated(event.data.object)
-    break
-    
+    await handleSubscriptionCreated(event.data.object);
+    break;
+
   case 'customer.subscription.updated':
-    await handleSubscriptionUpdated(event.data.object)
-    break
-    
+    await handleSubscriptionUpdated(event.data.object);
+    break;
+
   // ... other event types
 }
 
 // Mark event as processed
-webhookService.markEventProcessed(event.id, event.type)
+webhookService.markEventProcessed(event.id, event.type);
 
 // ✅ Return 200 OK
 ```
@@ -224,11 +224,13 @@ Database updated automatically
 ## Security: Signature Verification
 
 Why it matters:
+
 - Prevents malicious actors from sending fake webhooks
 - Guarantees webhook comes from Stripe (authentic)
 - Guarantees webhook hasn't been tampered with in transit
 
 How it works:
+
 ```
 1. Stripe uses STRIPE_WEBHOOK_SECRET to sign the webhook
 2. Signature sent in Stripe-Signature header
@@ -244,6 +246,7 @@ It's like a HMAC (Hash-Based Message Authentication Code)
 ## Webhook Retry Logic (Handled by Stripe)
 
 If your endpoint returns non-2xx:
+
 ```
 Attempt 1: Immediately
 Attempt 2: 5 seconds later (if 1st failed)
@@ -258,6 +261,7 @@ Maximum: 8 attempts over 24 hours
 ```
 
 Your endpoint should:
+
 - Return 2xx for success (don't retry)
 - Return 4xx for validation errors (don't retry)
 - Return 5xx for temporary errors (will retry)
@@ -291,12 +295,11 @@ Once webhook receiving works, implement the TODO handlers:
 
 ## Files Reference
 
-| File | Purpose |
-|------|---------|
+| File                                      | Purpose                                          |
+| ----------------------------------------- | ------------------------------------------------ |
 | `backend/src/services/webhook.service.ts` | Webhook verification, idempotency, event routing |
-| `backend/src/routes/webhook.routes.ts` | Express route handler |
-| `backend/src/config/environment.ts` | Loads STRIPE_SECRET_KEY, STRIPE_WEBHOOK_SECRET |
-| `docs/LOCAL_WEBHOOK_SETUP.md` | Complete setup guide (ngrok/localtunnel) |
-| `.env.example` | Environment variable template |
-| `WEBHOOK_FLOW.md` | This file |
-
+| `backend/src/routes/webhook.routes.ts`    | Express route handler                            |
+| `backend/src/config/environment.ts`       | Loads STRIPE_SECRET_KEY, STRIPE_WEBHOOK_SECRET   |
+| `docs/LOCAL_WEBHOOK_SETUP.md`             | Complete setup guide (ngrok/localtunnel)         |
+| `.env.example`                            | Environment variable template                    |
+| `WEBHOOK_FLOW.md`                         | This file                                        |

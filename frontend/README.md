@@ -32,6 +32,7 @@ http://localhost:3000/?forceHandheld=true
 ```
 
 This forces the app into handheld mode with:
+
 - Full-screen scanner interface
 - Larger touch targets (48×48px minimum buttons)
 - Handheld-specific toolbar with sync status
@@ -69,6 +70,7 @@ The app includes full **offline support** via service worker:
 - **Manual sync:** Tap **Sync Now** button to trigger sync immediately
 
 **Offline workflow:**
+
 1. Scan barcodes while disconnected
 2. App stores scans in local IndexedDB database
 3. Sync status shows "Offline"
@@ -115,14 +117,14 @@ If managing many devices (pharmacy chain with 10+ PDTs):
 
 ### Troubleshooting Handheld Setup
 
-| Issue | Solution |
-|-------|----------|
-| **App doesn't detect as handheld** | Make sure device screen is ≤600×800px, OR add `?forceHandheld=true` to URL |
-| **Barcode scanning doesn't work** | Verify device scanner is configured (see device setup guide for Zebra/Honeywell/CipherLab) |
-| **WiFi not working** | Ensure device WiFi is enabled and connected to pharmacy network; contact your IT support |
-| **Can't add app to home screen** | Use Chrome (not default browser); ensure HTTPS is enabled on production URL |
-| **Sync fails after scanning** | Check WiFi connectivity; verify your account is still logged in; try manual sync |
-| **App is slow or freezing** | Restart device; clear browser cache (Settings > Apps > [Browser] > Storage > Clear Cache) |
+| Issue                              | Solution                                                                                   |
+| ---------------------------------- | ------------------------------------------------------------------------------------------ |
+| **App doesn't detect as handheld** | Make sure device screen is ≤600×800px, OR add `?forceHandheld=true` to URL                 |
+| **Barcode scanning doesn't work**  | Verify device scanner is configured (see device setup guide for Zebra/Honeywell/CipherLab) |
+| **WiFi not working**               | Ensure device WiFi is enabled and connected to pharmacy network; contact your IT support   |
+| **Can't add app to home screen**   | Use Chrome (not default browser); ensure HTTPS is enabled on production URL                |
+| **Sync fails after scanning**      | Check WiFi connectivity; verify your account is still logged in; try manual sync           |
+| **App is slow or freezing**        | Restart device; clear browser cache (Settings > Apps > [Browser] > Storage > Clear Cache)  |
 
 ---
 

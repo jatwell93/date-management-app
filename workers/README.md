@@ -28,6 +28,7 @@ workers/
 ### Prerequisites
 
 1. Install Wrangler CLI globally:
+
    ```bash
    npm install -g wrangler
    ```
@@ -139,12 +140,14 @@ npm run tail:prod
 The Express adapter (`express-adapter.ts`) converts between Workers and Express request/response models:
 
 ### Workers Request → Express Request
+
 - Parses JSON, form data, and multipart uploads
 - Extracts query parameters and route params
 - Provides Express-style `req.get()` method
 - Maps Cloudflare headers (e.g., `CF-Connecting-IP` → `req.ip`)
 
 ### Express Response → Workers Response
+
 - Provides `res.status()`, `res.json()`, `res.send()`
 - Builds Workers Response with correct headers
 - Supports middleware chains
@@ -168,10 +171,7 @@ Production CORS restricts to specific frontend domains:
 
 ```typescript
 // Configured in cors.middleware.ts
-const allowedOrigins = [
-  'https://yourdomain.com',
-  'https://www.yourdomain.com',
-];
+const allowedOrigins = ['https://yourdomain.com', 'https://www.yourdomain.com'];
 ```
 
 Update these values before deploying to production.
@@ -184,6 +184,7 @@ Per-IP rate limiting with separate limits for authenticated and unauthenticated 
 - **Authenticated**: 100 requests/minute (default)
 
 Rate limit headers returned:
+
 - `X-RateLimit-Limit`: Total allowed requests
 - `X-RateLimit-Remaining`: Remaining requests in window
 - `X-RateLimit-Reset`: Timestamp when limit resets
@@ -192,6 +193,7 @@ Rate limit headers returned:
 ### Error Handling
 
 Centralized error handling with:
+
 - Structured JSON logging
 - Sentry integration (optional)
 - Sanitization of sensitive data
@@ -220,6 +222,7 @@ Testing with Miniflare (local Workers runtime):
 Workers scripts have a 1MB limit. Current bundle size: **TBD** (measure after full route integration).
 
 **Optimization strategies** if bundle exceeds 800KB:
+
 - Code splitting by route group
 - Tree-shaking unused dependencies
 - Dynamic imports for large libraries
@@ -229,6 +232,7 @@ Workers scripts have a 1MB limit. Current bundle size: **TBD** (measure after fu
 Workers cold start time: **<10ms target**
 
 Measured after deployment with:
+
 ```bash
 curl -w "Time: %{time_total}s\n" https://your-worker.workers.dev/health
 ```
@@ -242,6 +246,7 @@ curl -w "Time: %{time_total}s\n" https://your-worker.workers.dev/health
 **Cause**: Missing dependency or incorrect import path
 
 **Fix**:
+
 ```bash
 cd workers
 npm install
@@ -274,6 +279,7 @@ wrangler tail --env production --format pretty
 ```
 
 Check Workers dashboard:
+
 - https://dash.cloudflare.com → Workers & Pages → date-management-api
 
 ## Limitations
@@ -288,6 +294,7 @@ Check Workers dashboard:
 ### Express Compatibility
 
 **Supported:**
+
 - ✅ Route handlers (`router.get`, `router.post`, etc.)
 - ✅ Middleware chains
 - ✅ `req.body`, `req.params`, `req.query`
@@ -295,6 +302,7 @@ Check Workers dashboard:
 - ✅ Authentication middleware
 
 **Not Supported:**
+
 - ❌ File uploads via `multer` (use direct R2 presigned URLs instead)
 - ❌ Session middleware (use JWT tokens)
 - ❌ `res.redirect()` (implement custom redirect logic)

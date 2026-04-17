@@ -375,12 +375,12 @@ model SubscriptionTier {
   stripeSubscriptionId String?         // NULL during trial
   stripeCustomerId     String          // Created at org setup (never NULL)
   status               SubscriptionStatus
-  
+
   // Trial fields (NEW)
   trialEndDate         DateTime?       // NULL if not in trial
   trialStartedAt       DateTime?       // When trial began
   trialConvertedAt     DateTime?       // When converted to paid
-  
+
   createdAt            DateTime
   updatedAt            DateTime
 }
@@ -548,17 +548,17 @@ Handler Actions:
 
 ## 6. Error Handling
 
-| Error | Scenario | Response | Action |
-|-------|----------|----------|--------|
-| Email not found | User attempts login before signup completes | 401 Unauthorized | Redirect to signup |
-| Disposable email | User signs up with mailinator | 400 Bad Request | Show error, suggest real email |
-| Already in trial | User tries to create 2nd org | 400 Bad Request | Show error, link to existing org |
-| Payment declined | Card declined during conversion | 402 Payment Required | Show Stripe error, retry with different card |
-| Not in trial | User tries to convert already-paid subscription | 400 Bad Request | Show error, link to billing settings |
-| Unauthorized | Non-admin tries to convert trial | 403 Forbidden | Show error, suggest contact admin |
-| Rate limited | User submits conversion 10x in 1 minute | 429 Too Many Requests | Show error, encourage single submission |
-| Email service down | Reminder job fails to send email | 500 (logged, retried by job scheduler) | Alert ops via Sentry |
-| Stripe API down | Conversion fails to reach Stripe | 503 Service Unavailable | Show error, encourage user to retry later |
+| Error              | Scenario                                        | Response                               | Action                                       |
+| ------------------ | ----------------------------------------------- | -------------------------------------- | -------------------------------------------- |
+| Email not found    | User attempts login before signup completes     | 401 Unauthorized                       | Redirect to signup                           |
+| Disposable email   | User signs up with mailinator                   | 400 Bad Request                        | Show error, suggest real email               |
+| Already in trial   | User tries to create 2nd org                    | 400 Bad Request                        | Show error, link to existing org             |
+| Payment declined   | Card declined during conversion                 | 402 Payment Required                   | Show Stripe error, retry with different card |
+| Not in trial       | User tries to convert already-paid subscription | 400 Bad Request                        | Show error, link to billing settings         |
+| Unauthorized       | Non-admin tries to convert trial                | 403 Forbidden                          | Show error, suggest contact admin            |
+| Rate limited       | User submits conversion 10x in 1 minute         | 429 Too Many Requests                  | Show error, encourage single submission      |
+| Email service down | Reminder job fails to send email                | 500 (logged, retried by job scheduler) | Alert ops via Sentry                         |
+| Stripe API down    | Conversion fails to reach Stripe                | 503 Service Unavailable                | Show error, encourage user to retry later    |
 
 ---
 
@@ -579,14 +579,14 @@ Handler Actions:
 
 By end of Phase 4A:
 
-| Metric | Target | Notes |
-|--------|--------|-------|
-| Trial signup flow | <2s end-to-end | Clerk fast SSR |
-| Conversion rate | >50% | Professional tier appeal |
-| Reminder delivery | 99% | SendGrid reliability |
-| Downgrade atomicity | 100% (no failures) | Transaction isolation verified |
-| Payment success | 95%+ | Industry standard |
-| Email idempotency | 100% (no duplicates) | sentRemindersAt tracking |
+| Metric              | Target               | Notes                          |
+| ------------------- | -------------------- | ------------------------------ |
+| Trial signup flow   | <2s end-to-end       | Clerk fast SSR                 |
+| Conversion rate     | >50%                 | Professional tier appeal       |
+| Reminder delivery   | 99%                  | SendGrid reliability           |
+| Downgrade atomicity | 100% (no failures)   | Transaction isolation verified |
+| Payment success     | 95%+                 | Industry standard              |
+| Email idempotency   | 100% (no duplicates) | sentRemindersAt tracking       |
 
 ---
 

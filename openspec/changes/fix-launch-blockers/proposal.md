@@ -3,6 +3,7 @@
 ## Why
 
 **Current State:** Pre-launch verification uncovered three blocking categories preventing deployment:
+
 1. **9/91 backend test suites failing** (dev environment) due to org-scoped key mismatches and auth context mocking issues
 2. **207 ESLint errors** preventing merge gate from passing (E2E parse errors, undefined globals, formatting)
 3. **1 critical + 1 medium security findings** from UBS scan (webhook signature logging, unhandled JSON.parse)
@@ -16,6 +17,7 @@ These issues were discovered in comprehensive pre-launch verification and must b
 ## What Changes
 
 We will implement:
+
 - **Backend Test Fixes:** Resolve org-scoped key mismatches in upload service tests and auth context mocking in presigned flow tests
 - **Prisma Production Test Config:** Fix datasource mismatch between jest.config.neon.js and prisma/schema.prisma
 - **Lint Error Remediation:** Resolve E2E parse errors, CommonJS undefined globals, and Prettier formatting violations
@@ -23,6 +25,7 @@ We will implement:
 - **Coverage Validation:** Verify backend 59% and frontend 40% coverage with test suite fixes
 
 **Outcome:** All verification gates passing:
+
 - Backend: 91/91 test suites passing (both dev and prod)
 - Frontend: 29/29 suites passing (maintained)
 - Lint: 0 errors (warnings acceptable)
@@ -47,6 +50,7 @@ None (all fixes are within existing architectures)
 ## Impact
 
 **Files with Changes:**
+
 - `backend/src/services/upload.service.ts` - Add org context validation fixes
 - `backend/src/tests/services/upload.service.test.ts` - Fix test mocking patterns
 - `backend/src/tests/setup-after-env.ts` - Prisma config adaptation
@@ -58,6 +62,7 @@ None (all fixes are within existing architectures)
 - `shared/types/subscription.js` - Fix CommonJS exports
 
 **Test Coverage:**
+
 - Backend coverage remains 59% (fix test suite completeness)
 - Frontend coverage remains 40%
 - No new coverage requirements, focus on test suite passing

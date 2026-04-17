@@ -13,9 +13,5 @@
     "resolveJsonModule": true
   },
   "include": ["src/**/*", "../shared/**/*"],
-  "exclude": [
-    "src/tests/**/*",
-    "**/*.test.ts",
-    "**/*.spec.ts"
-  ]
+  "exclude": ["src/tests/**/*", "**/*.test.ts", "**/*.spec.ts"]
 }

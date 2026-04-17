@@ -1,9 +1,11 @@
 # Operational Runbooks for Date Management Application
 
 ## Overview
+
 This document provides runbooks for common operational scenarios and procedures for the Date Management Application in production.
 
 ## Table of Contents
+
 1. [Emergency Response Procedures](#emergency-response-procedures)
 2. [Daily Operations](#daily-operations)
 3. [Troubleshooting Common Issues](#troubleshooting-common-issues)
@@ -13,26 +15,31 @@ This document provides runbooks for common operational scenarios and procedures 
 ## Emergency Response Procedures
 
 ### Application is Unavailable
+
 1. Check application status:
+
    ```bash
    pm2 status
    ```
 
 2. If application is not running:
+
    ```bash
    pm2 start date-management-app
    ```
 
 3. If application is running but not responding:
+
    ```bash
    # Check logs
    pm2 logs date-management-app --lines 50
-   
+
    # Restart the application
    pm2 restart date-management-app
    ```
 
 4. Check reverse proxy status (Nginx/Apache):
+
    ```bash
    sudo systemctl status nginx
    # or
@@ -47,17 +54,21 @@ This document provides runbooks for common operational scenarios and procedures 
    ```
 
 ### Database Connection Issues
+
 1. Check database file accessibility:
+
    ```bash
    ls -la /path/to/database.sqlite
    ```
 
 2. Check database file permissions:
+
    ```bash
    stat /path/to/database.sqlite
    ```
 
 3. Check if database is locked:
+
    ```bash
    # Look for -wal and -shm files
    ls -la /path/to/database*
@@ -70,17 +81,21 @@ This document provides runbooks for common operational scenarios and procedures 
    ```
 
 ### High Memory/CPU Usage
+
 1. Check current resource usage:
+
    ```bash
    pm2 monit
    ```
 
 2. Identify problematic processes:
+
    ```bash
    ps aux | grep node
    ```
 
 3. Restart the application if needed:
+
    ```bash
    pm2 restart date-management-app
    ```
@@ -90,12 +105,15 @@ This document provides runbooks for common operational scenarios and procedures 
 ## Daily Operations
 
 ### Backup Verification
+
 1. Check backup files:
+
    ```bash
    ls -la /path/to/backups/
    ```
 
 2. Verify backup cron job is running:
+
    ```bash
    crontab -l
    ```
@@ -106,7 +124,9 @@ This document provides runbooks for common operational scenarios and procedures 
    ```
 
 ### Log Monitoring
+
 1. Check application logs:
+
    ```bash
    pm2 logs date-management-app --lines 100
    ```
@@ -121,7 +141,9 @@ This document provides runbooks for common operational scenarios and procedures 
    ```
 
 ### Health Checks
+
 1. Verify health endpoints:
+
    ```bash
    curl -i https://yourdomain.com/health
    curl -i https://yourdomain.com/live
@@ -136,12 +158,15 @@ This document provides runbooks for common operational scenarios and procedures 
 ## Troubleshooting Common Issues
 
 ### Slow Query Detection
+
 1. Check database monitoring metrics:
+
    ```bash
    curl -i https://yourdomain.com/health/database-metrics
    ```
 
 2. Review slow query logs in application logs:
+
    ```bash
    pm2 logs date-management-app | grep "Slow query detected"
    ```
@@ -149,7 +174,9 @@ This document provides runbooks for common operational scenarios and procedures 
 3. Identify and optimize queries causing performance issues
 
 ### Authentication Issues
+
 1. Verify JWT secret is correctly set:
+
    ```bash
    # Check your .env file
    cat .env | grep JWT_SECRET
@@ -162,6 +189,7 @@ This document provides runbooks for common operational scenarios and procedures 
 3. Clear and regenerate tokens if needed
 
 ### Service Worker Cache Issues
+
 1. Clear service worker cache:
    - In browser developer tools, go to Application tab
    - Clear storage/cache for the domain
@@ -175,6 +203,7 @@ This document provides runbooks for common operational scenarios and procedures 
 ## Performance Monitoring
 
 ### Key Metrics to Monitor
+
 - **API Response Times**: Monitor 95th percentile response times
 - **Database Performance**: Track slow queries and connection pool metrics
 - **System Resources**: CPU, memory, and disk utilization
@@ -182,12 +211,14 @@ This document provides runbooks for common operational scenarios and procedures 
 - **User Activity**: Track requests per minute and concurrent users
 
 ### Database-Specific Metrics
+
 - **Connection Pool**: Monitor utilization against threshold (90%)
 - **Slow Queries**: Track queries taking >100ms
 - **Table Sizes**: Monitor growth, especially inventory_items table
 - **Row Counts**: Track against threshold (100k rows)
 
 ### Alert Thresholds
+
 - **High**: >90% connection pool utilization
 - **High**: >100 slow queries per minute
 - **Medium**: Table size >100MB
@@ -197,12 +228,14 @@ This document provides runbooks for common operational scenarios and procedures 
 ## Incident Response
 
 ### Incident Classification
+
 - **Critical**: Application completely unavailable
 - **High**: Core functionality impaired
 - **Medium**: Performance degradation
 - **Low**: Minor issues with workarounds available
 
 ### Response Procedures
+
 1. **Acknowledge**: Confirm incident received within 15 minutes
 2. **Assess**: Determine scope and impact within 30 minutes
 3. **Communicate**: Notify stakeholders about issue
@@ -211,6 +244,7 @@ This document provides runbooks for common operational scenarios and procedures 
 6. **Review**: Conduct post-incident review
 
 ### Communication Template
+
 ```
 Subject: [PRIORITY] Date Management Application Incident - [DATE]
 
@@ -234,6 +268,7 @@ Updates will be provided every [time interval] or as status changes.
 ```
 
 ## Maintenance Windows
+
 - **Weekly**: Check logs, verify backups, review performance metrics
 - **Monthly**: Security updates, dependency updates, database maintenance
 - **Quarterly**: System resource review, scaling assessment
@@ -241,9 +276,11 @@ Updates will be provided every [time interval] or as status changes.
 ## Scraping and Billing Abuse Runbook (Cloudflare + Neon)
 
 ### Purpose
+
 Apply manual dashboard controls that reduce scraping-driven cost spikes before and during trial launch.
 
 ### Preconditions
+
 - Production Cloudflare account access (WAF, Workers, Billing Alerts)
 - Neon project owner/editor access (Billing + Connection settings)
 - On-call email and SMS destinations confirmed
@@ -303,12 +340,14 @@ Apply manual dashboard controls that reduce scraping-driven cost spikes before a
 
 Use Workers Analytics Engine SQL API against the `analytics_events` dataset.
 These queries align with the current Worker metrics schema:
+
 - `index1`: route group / endpoint
 - `index2`: method
 - `index3`: status class (for example `2xx`, `4xx`, `5xx`)
 - `double1`: response time (ms)
 
 1. Request volume by minute (all API)
+
 ```sql
 SELECT
    intDiv(toUInt32(timestamp), 60) * 60 AS minute_bucket,
@@ -322,6 +361,7 @@ LIMIT 120;
 ```
 
 2. Request volume by route + method by minute
+
 ```sql
 SELECT
    intDiv(toUInt32(timestamp), 60) * 60 AS minute_bucket,
@@ -337,6 +377,7 @@ LIMIT 500;
 ```
 
 3. 5xx surge detection by minute
+
 ```sql
 SELECT
    intDiv(toUInt32(timestamp), 60) * 60 AS minute_bucket,
@@ -351,6 +392,7 @@ LIMIT 120;
 ```
 
 4. High latency by route over trailing 15 minutes
+
 ```sql
 SELECT
    index1 AS route_group,
@@ -366,6 +408,7 @@ LIMIT 50;
 ```
 
 5. Top noisy routes (latest 10 minutes)
+
 ```sql
 SELECT
    index1 AS route_group,
@@ -382,15 +425,16 @@ LIMIT 20;
 
 Start with these thresholds and tune weekly during trial:
 
-| Metric | Source | Warning | Alert | Notes |
-|---|---|---:|---:|---|
-| Requests/min (all API) | Analytics Engine Query #1 | >500 | >2,000 | Matches launch checklist target |
-| 5xx/min | Analytics Engine Query #3 | >25 | >100 | Indicates instability or abusive traffic |
-| Average route latency (15m) | Analytics Engine Query #4 | >500ms | >1,500ms | Use only routes with `request_count >= 30` |
-| DB active connections | Neon Monitoring | >50 | >100 | Compare against branch connection posture |
-| Unique IPs/min | Cloudflare Security Analytics | >200 | >1,000 | Use Cloudflare dashboard/logs (not in WAE dataset schema) |
+| Metric                      | Source                        | Warning |    Alert | Notes                                                     |
+| --------------------------- | ----------------------------- | ------: | -------: | --------------------------------------------------------- |
+| Requests/min (all API)      | Analytics Engine Query #1     |    >500 |   >2,000 | Matches launch checklist target                           |
+| 5xx/min                     | Analytics Engine Query #3     |     >25 |     >100 | Indicates instability or abusive traffic                  |
+| Average route latency (15m) | Analytics Engine Query #4     |  >500ms | >1,500ms | Use only routes with `request_count >= 30`                |
+| DB active connections       | Neon Monitoring               |     >50 |     >100 | Compare against branch connection posture                 |
+| Unique IPs/min              | Cloudflare Security Analytics |    >200 |   >1,000 | Use Cloudflare dashboard/logs (not in WAE dataset schema) |
 
 Operational note:
+
 - Unique IP thresholds are intentionally sourced from Cloudflare Security Analytics because current `analytics_events` schema does not include client IP dimensions.
 - If needed later, add anonymized IP cardinality dimensions via Worker metrics and update queries.
 
@@ -416,6 +460,7 @@ Operational note:
 3. Document every threshold change and reason in incident log.
 
 ## Escalation Contacts
+
 - Primary: [Contact Information]
 - Secondary: [Contact Information]
 - Vendor Support: [Contact Information if applicable]

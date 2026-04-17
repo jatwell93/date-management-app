@@ -11,17 +11,17 @@ Provide actionable **SOPs** for on-call engineers handling billing incidents: St
 
 ## PagerDuty Rotation
 
-- Escalation policy *Billing-Critical*: L1 engineering → L2 engineering → CTO.
+- Escalation policy _Billing-Critical_: L1 engineering → L2 engineering → CTO.
 - Runbook URL pinned in PagerDuty service description.
 
 ## Common Alerts & Remedies
 
-| Alert Name | Trigger | Immediate Action | Follow-up |
-|------------|---------|------------------|-----------|
-| `webhook_failure_rate` > 5 % | Sentry breadcrumb `webhook-error` count / 5 m window | 1. Acknowledge <5 m. 2. Check `SENTRY_EVENT_ID` for stack trace. 3. Inspect `/var/log/app/webhook-error.log`. | Deploy hotfix if code bug; otherwise retry events via Stripe Dashboard → **Developers > Webhooks > Retry**. |
-| `payment_failure_rate` > 2 % | Stripe `invoice.payment_failed` in >2 % orgs last 1 h | 1. Verify Stripe status page. 2. If global Stripe outage, set statuspage incident. | After Stripe recovery, rerun dunning job: `npm run jobs:dunning-now`. |
-| `trial_conversion_rate` < 10 % | Grafana metric | Check email deliverability (SendGrid stats) & banner visibility. | Coordinate with Growth team. |
-| Downgrade Warning Email Bounce | SendGrid event `bounce` w/ template `downgrade_warning` | 1. Create Zendesk ticket to manually contact customer. | Remove invalid address; flag for CRM update. |
+| Alert Name                     | Trigger                                                 | Immediate Action                                                                                              | Follow-up                                                                                                   |
+| ------------------------------ | ------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------- | ----------------------------------------------------------------------------------------------------------- |
+| `webhook_failure_rate` > 5 %   | Sentry breadcrumb `webhook-error` count / 5 m window    | 1. Acknowledge <5 m. 2. Check `SENTRY_EVENT_ID` for stack trace. 3. Inspect `/var/log/app/webhook-error.log`. | Deploy hotfix if code bug; otherwise retry events via Stripe Dashboard → **Developers > Webhooks > Retry**. |
+| `payment_failure_rate` > 2 %   | Stripe `invoice.payment_failed` in >2 % orgs last 1 h   | 1. Verify Stripe status page. 2. If global Stripe outage, set statuspage incident.                            | After Stripe recovery, rerun dunning job: `npm run jobs:dunning-now`.                                       |
+| `trial_conversion_rate` < 10 % | Grafana metric                                          | Check email deliverability (SendGrid stats) & banner visibility.                                              | Coordinate with Growth team.                                                                                |
+| Downgrade Warning Email Bounce | SendGrid event `bounce` w/ template `downgrade_warning` | 1. Create Zendesk ticket to manually contact customer.                                                        | Remove invalid address; flag for CRM update.                                                                |
 
 ## Webhook Troubleshooting Checklist
 
@@ -56,6 +56,7 @@ Provide actionable **SOPs** for on-call engineers handling billing incidents: St
 ## Emergency Disable Billing
 
 If Stripe outage threatens core operations:
+
 1. Set env `BILLING_DISABLED=true` via config rollout.
 2. Feature flag prevents webhook errors from blocking requests.
 3. Post-incident: unset flag, replay missed events.

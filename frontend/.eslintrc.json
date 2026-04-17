@@ -1,11 +1,6 @@
 {
   "parser": "@typescript-eslint/parser",
-  "extends": [
-    "react-app",
-    "react-app/jest",
-    "plugin:@typescript-eslint/recommended",
-    "prettier"
-  ],
+  "extends": ["react-app", "react-app/jest", "plugin:@typescript-eslint/recommended", "prettier"],
   "plugins": ["@typescript-eslint", "prettier"],
   "parserOptions": {
     "ecmaVersion": 2020,
@@ -27,7 +22,13 @@
   },
   "overrides": [
     {
-      "files": ["**/*.test.ts", "**/*.test.tsx", "**/tests/**", "**/__tests__/**", "**/setupTests.ts"],
+      "files": [
+        "**/*.test.ts",
+        "**/*.test.tsx",
+        "**/tests/**",
+        "**/__tests__/**",
+        "**/setupTests.ts"
+      ],
       "rules": {
         "testing-library/no-node-access": "warn",
         "testing-library/no-wait-for-multiple-assertions": "warn",

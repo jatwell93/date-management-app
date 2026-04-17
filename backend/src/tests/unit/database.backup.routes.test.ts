@@ -30,12 +30,17 @@ jest.mock('../../middleware/auth.middleware', () => ({
     }
     next();
   },
-  requireManager: (req: any, res: any, next: any) => {
-    if (req.get('x-manager') !== 'true') {
-      return res.status(403).json({ message: 'Forbidden' });
-    }
-    next();
-  },
+}));
+
+jest.mock('../../middleware/requireOrgRole', () => ({
+  requireOrgRole:
+    (...allowedRoles: string[]) =>
+    (req: any, res: any, next: any) => {
+      if (req.get('x-manager') !== 'true') {
+        return res.status(403).json({ message: 'Forbidden' });
+      }
+      next();
+    },
 }));
 
 jest.mock('../../middleware/validateRequest', () => ({

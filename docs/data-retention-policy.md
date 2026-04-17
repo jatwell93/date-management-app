@@ -14,6 +14,7 @@ This policy defines how long data is retained in the system, when it's deleted, 
 ## Scope
 
 This policy applies to:
+
 - ✓ CSV upload files (stored in Cloudflare R2)
 - ✓ Database records (products, orders, inventory in Neon)
 - ✓ Audit logs (API access, user actions, payments)
@@ -64,11 +65,13 @@ Uploads over 180 days old:       DELETE permanently
 ```
 
 **Organization Override**: Organizations on **Premium** tier can request extended retention (1 year)
+
 - Request via support ticket
 - Cost: $0.01 per GB per month (R2 storage cost)
 - Documented in admin interface
 
-**Failed Uploads**: 
+**Failed Uploads**:
+
 - Failed uploads (error during processing) retained for **7 days** for debugging
 - Automatic cleanup of failed uploads older than 7 days
 - Users cannot access failed uploads (no need to notify)
@@ -89,20 +92,20 @@ aws s3api put-bucket-lifecycle-configuration \
 
 ### Retention Periods by Record Type
 
-| Record Type | Retention | Reason | Deletion Method |
-|-------------|-----------|--------|-----------------|
-| **Products** | Indefinite | Core business data | Manual via admin |
-| **Inventory** | Indefinite | Business records | Manual via admin |
-| **Audit Logs** | 1 year | Operational/Security | Scheduled job |
-| **API Keys** | Indefinite* | Security | Revoke on user request |
-| **Session/Tokens** | 30 days after expiration | Compliance (temporary) | Automatic cleanup |
-| **Failed Transactions** | 90 days | Debug/Dispute | Automatic cleanup |
-| **User Activity Logs** | 2 years | Compliance/Investigation | Scheduled job |
-| **Payment Records** | 7 years** | Financial/Tax compliance | Manual archive only |
-| **GDPR Requests** | Indefinite | Compliance audit trail | Never delete |
+| Record Type             | Retention                | Reason                   | Deletion Method        |
+| ----------------------- | ------------------------ | ------------------------ | ---------------------- |
+| **Products**            | Indefinite               | Core business data       | Manual via admin       |
+| **Inventory**           | Indefinite               | Business records         | Manual via admin       |
+| **Audit Logs**          | 1 year                   | Operational/Security     | Scheduled job          |
+| **API Keys**            | Indefinite\*             | Security                 | Revoke on user request |
+| **Session/Tokens**      | 30 days after expiration | Compliance (temporary)   | Automatic cleanup      |
+| **Failed Transactions** | 90 days                  | Debug/Dispute            | Automatic cleanup      |
+| **User Activity Logs**  | 2 years                  | Compliance/Investigation | Scheduled job          |
+| **Payment Records**     | 7 years\*\*              | Financial/Tax compliance | Manual archive only    |
+| **GDPR Requests**       | Indefinite               | Compliance audit trail   | Never delete           |
 
-*API Keys: Revoke immediately on suspicion of compromise  
-**Payment Records: Immutable per PCI-DSS and tax law
+\*API Keys: Revoke immediately on suspicion of compromise  
+\*\*Payment Records: Immutable per PCI-DSS and tax law
 
 ### Product Soft Delete (GDPR Compliance)
 
@@ -123,6 +126,7 @@ DELETE FROM products WHERE deleted_at < NOW() - INTERVAL '30 days';
 ```
 
 **Rationale**:
+
 1. Soft delete allows 30-day recovery window if accidental
 2. Hard delete after 30 days ensures GDPR compliance (not stored system)
 3. Users can request permanent deletion immediately if needed
@@ -133,13 +137,13 @@ DELETE FROM products WHERE deleted_at < NOW() - INTERVAL '30 days';
 
 ### Retention Periods
 
-| Log Type | Retention | Access | Archival |
-|----------|-----------|--------|----------|
-| **API Access Logs** | 1 year | Admins only | Neon backups |
-| **User Action Logs** | 2 years | Admins only | Neon backups |
-| **Security Events** | 1 year | Admins + Security | Neon backups |
-| **Payment Audit Trail** | 7 years | Finance only | Cold storage |
-| **Application Errors** | 90 days | Dev + Ops | Sentry (auto-delete) |
+| Log Type                | Retention | Access            | Archival             |
+| ----------------------- | --------- | ----------------- | -------------------- |
+| **API Access Logs**     | 1 year    | Admins only       | Neon backups         |
+| **User Action Logs**    | 2 years   | Admins only       | Neon backups         |
+| **Security Events**     | 1 year    | Admins + Security | Neon backups         |
+| **Payment Audit Trail** | 7 years   | Finance only      | Cold storage         |
+| **Application Errors**  | 90 days   | Dev + Ops         | Sentry (auto-delete) |
 
 ### Implementation
 
@@ -155,8 +159,8 @@ export async function cleanupAuditLogs() {
   await db.auditLog.deleteMany({
     where: {
       type: 'API_ACCESS',
-      createdAt: { lt: oneYearAgo }
-    }
+      createdAt: { lt: oneYearAgo },
+    },
   });
 
   // Delete user action logs older than 2 years (if not payment-related)
@@ -164,8 +168,8 @@ export async function cleanupAuditLogs() {
   await db.auditLog.deleteMany({
     where: {
       type: { not: 'PAYMENT' },
-      createdAt: { lt: twoYearsAgo }
-    }
+      createdAt: { lt: twoYearsAgo },
+    },
   });
 
   // Never delete payment audit logs (7-year retention)
@@ -226,7 +230,7 @@ CREATE TABLE deletion_requests (
   cancelled_at TIMESTAMP,
   completed_at TIMESTAMP,
   reason TEXT,
-  
+
   -- Immutable audit fields
   created_by VARCHAR(50) DEFAULT 'user-request',
   created_at TIMESTAMP NOT NULL DEFAULT NOW()
@@ -255,8 +259,8 @@ export async function processGDPRDeletions() {
     where: {
       cancelled_at: null,
       completed_at: null,
-      requested_at: { lt: new Date(Date.now() - 7 * 24 * 60 * 60 * 1000) }
-    }
+      requested_at: { lt: new Date(Date.now() - 7 * 24 * 60 * 60 * 1000) },
+    },
   });
 
   for (const request of readyForDeletion) {
@@ -264,7 +268,7 @@ export async function processGDPRDeletions() {
       // Delete user organizations (only if user is sole owner)
       const organizations = await db.organization.findMany({
         where: { created_by: request.user_id },
-        include: { members: true }
+        include: { members: true },
       });
 
       for (const org of organizations) {
@@ -274,14 +278,14 @@ export async function processGDPRDeletions() {
         } else {
           // Multiple members - remove user only
           await db.organizationMember.deleteMany({
-            where: { user_id: request.user_id }
+            where: { user_id: request.user_id },
           });
         }
       }
 
       // Delete user products
       await db.product.deleteMany({
-        where: { created_by: request.user_id }
+        where: { created_by: request.user_id },
       });
 
       // Soft-delete user account
@@ -289,14 +293,14 @@ export async function processGDPRDeletions() {
         where: { id: request.user_id },
         data: {
           email: `deleted-${request.user_id}@placeholder.local`,
-          deleted_at: new Date()
-        }
+          deleted_at: new Date(),
+        },
       });
 
       // Mark deletion complete
       await db.deletionRequest.update({
         where: { id: request.id },
-        data: { completed_at: new Date() }
+        data: { completed_at: new Date() },
       });
 
       // Log immutable audit record
@@ -306,8 +310,8 @@ export async function processGDPRDeletions() {
           action: 'COMPLETED',
           user_id: request.user_id,
           email: request.email,
-          deleted_count: 1 // User record
-        }
+          deleted_count: 1, // User record
+        },
       });
 
       logger.info(`GDPR deletion completed for user ${request.user_id}`);
@@ -328,6 +332,7 @@ export async function processGDPRDeletions() {
 ### Neon Database Backups
 
 Covered under [Neon Backup & Restore](./neon-backup-restore.md):
+
 - **Starter Plan**: 7-day automatic retention
 - **Pro Plan**: 30-day automatic retention
 - **No manual action needed**: Neon handles deletion automatically
@@ -335,6 +340,7 @@ Covered under [Neon Backup & Restore](./neon-backup-restore.md):
 ### R2 Object Versioning
 
 If R2 versioning enabled:
+
 - **Current objects**: Covered under CSV Upload policy (90/180 days)
 - **Previous versions**: Retained for 30 days (allows accidental recovery)
 - **Older versions**: Deleted automatically via lifecycle rules
@@ -378,10 +384,10 @@ These records are immutable and kept indefinitely for compliance:
 async function exportUserData(userId: string) {
   const user = await db.user.findUnique({ where: { id: userId } });
   const organizations = await db.organization.findMany({
-    where: { members: { some: { user_id: userId } } }
+    where: { members: { some: { user_id: userId } } },
   });
   const products = await db.product.findMany({
-    where: { created_by: userId }
+    where: { created_by: userId },
   });
 
   return {
@@ -389,7 +395,7 @@ async function exportUserData(userId: string) {
     organizations,
     products,
     export_date: new Date().toISOString(),
-    retention_policy_url: 'https://yourdomain.com/legal/retention'
+    retention_policy_url: 'https://yourdomain.com/legal/retention',
   };
 }
 ```
@@ -400,12 +406,12 @@ async function exportUserData(userId: string) {
 
 ### Services with Data Access
 
-| Service | Data Type | Retention | Contact |
-|---------|-----------|-----------|---------|
-| **Neon** | Database records | 7-30 days (auto-backups) | privacy@neon.tech |
-| **Cloudflare R2** | CSV uploads | 90-180 days (lifecycle) | privacy@cloudflare.com |
-| **Stripe** | Payment info | 7 years (PCI compliance) | privacy@stripe.com |
-| **Sentry** | Error logs | 90 days (auto-delete) | privacy@sentry.io |
+| Service           | Data Type        | Retention                | Contact                |
+| ----------------- | ---------------- | ------------------------ | ---------------------- |
+| **Neon**          | Database records | 7-30 days (auto-backups) | privacy@neon.tech      |
+| **Cloudflare R2** | CSV uploads      | 90-180 days (lifecycle)  | privacy@cloudflare.com |
+| **Stripe**        | Payment info     | 7 years (PCI compliance) | privacy@stripe.com     |
+| **Sentry**        | Error logs       | 90 days (auto-delete)    | privacy@sentry.io      |
 
 **DPA Status**: All processors have signed Data Processing Agreements
 
@@ -421,10 +427,11 @@ If data breach occurs:
 4. **Within 5 days**: File official breach report (if mandated)
 
 **Notification Template**:
+
 ```
 Subject: [URGENT] Data Security Notice - Action Required
 
-We discovered unauthorized access to [DATA TYPE]. 
+We discovered unauthorized access to [DATA TYPE].
 Investigation shows [SCOPE OF EXPOSURE].
 Steps we took: [MITIGATION].
 What you should do: [USER ACTIONS].
@@ -440,6 +447,7 @@ Questions? Contact: support@yourdomain.com
 **Example**: Enterprise customer wants to retain CSV uploads for 2 years for audit
 
 **Process**:
+
 1. Customer submits request with business justification
 2. Review by legal/compliance team (~1 week)
 3. If approved: Update organization retention policy
@@ -468,6 +476,7 @@ Questions? Contact: support@yourdomain.com
 ### If Employee Leaves Company
 
 **All employee access revoked immediately:**
+
 - Remove API keys
 - Delete session tokens
 - Remove from all organizations
@@ -479,15 +488,15 @@ Questions? Contact: support@yourdomain.com
 
 ## Quick Reference Table
 
-| Data Type | Retention | Hard Delete | Soft Delete | Compliance |
-|-----------|-----------|------------|------------|-----------|
-| **CSV Uploads** | 90 days | Day 180 | N/A | Cost control |
-| **Database Records** | Indefinite | Manual | 30 days | Business/legal |
-| **Audit Logs** | 1 year | Day 365 | N/A | Security |
-| **Payment Records** | 7 years | Never | N/A | Tax/PCI |
-| **User Deletions** | 30 days | Day 30 | 7 days | GDPR Article 17 |
-| **API Keys** | Indefinite | On revoke | N/A | Security |
-| **Session Tokens** | 30 days expired | Day 30 | N/A | Session security |
+| Data Type            | Retention       | Hard Delete | Soft Delete | Compliance       |
+| -------------------- | --------------- | ----------- | ----------- | ---------------- |
+| **CSV Uploads**      | 90 days         | Day 180     | N/A         | Cost control     |
+| **Database Records** | Indefinite      | Manual      | 30 days     | Business/legal   |
+| **Audit Logs**       | 1 year          | Day 365     | N/A         | Security         |
+| **Payment Records**  | 7 years         | Never       | N/A         | Tax/PCI          |
+| **User Deletions**   | 30 days         | Day 30      | 7 days      | GDPR Article 17  |
+| **API Keys**         | Indefinite      | On revoke   | N/A         | Security         |
+| **Session Tokens**   | 30 days expired | Day 30      | N/A         | Session security |
 
 ---
 

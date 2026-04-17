@@ -5,6 +5,7 @@ This document explains the PWA manifest configuration for deploying the date-man
 ## Overview
 
 The Progressive Web App (PWA) manifest (`public/manifest.json`) defines how the app appears when installed as a standalone PWA on PDT devices. Proper configuration ensures:
+
 - Correct orientation (portrait)
 - Proper display mode (standalone, full-screen)
 - Correct start URL for handheld deployment
@@ -14,6 +15,7 @@ The Progressive Web App (PWA) manifest (`public/manifest.json`) defines how the 
 ## Current Manifest Configuration
 
 ### Location
+
 ```
 frontend/public/manifest.json
 ```
@@ -76,6 +78,7 @@ frontend/public/manifest.json
 ✅ **Why:** Hides browser UI (address bar, tabs), maximizes screen real estate for scanning.
 
 **Display Options:**
+
 - `standalone` → Full-screen, no browser UI (✅ Recommended)
 - `fullscreen` → True full-screen (not recommended, less control)
 - `minimal-ui` → Shows minimal browser controls
@@ -103,7 +106,7 @@ frontend/public/manifest.json
 // frontend/src/App.tsx
 useEffect(() => {
   const { isHandheld } = useHandheldDetectionContext();
-  
+
   if (isHandheld && location.pathname === '/') {
     navigate('/scan');
   }
@@ -137,6 +140,7 @@ This is displayed while the app loads. Match to your splash screen or primary ba
 ### Icon Requirements for Handheld
 
 Icons must be:
+
 1. **Square** (192×192, 512×512)
 2. **PNG format**
 3. **Transparent background** (or opaque)
@@ -210,16 +214,13 @@ self.addEventListener('install', (event) => {
         '/static/css/main.css',
         // ... other critical files
       ]);
-    })
+    }),
   );
 });
 
 self.addEventListener('fetch', (event) => {
   // Network first, fallback to cache
-  event.respondWith(
-    fetch(event.request)
-      .catch(() => caches.match(event.request))
-  );
+  event.respondWith(fetch(event.request).catch(() => caches.match(event.request)));
 });
 ```
 
@@ -338,6 +339,7 @@ npx http-server -p 443 -S build
 ### Production Deployment
 
 For pharmacy deployment, ensure:
+
 1. **Server:** Apache, Nginx, or Cloud CDN
 2. **TLS/SSL:** Valid HTTPS certificate
 3. **HSTS:** Enable HTTP Strict-Transport-Security
@@ -390,13 +392,13 @@ DevTools → Application → Manifest
 
 ### Common Issues
 
-| Issue | Cause | Fix |
-|-------|-------|-----|
-| "Add to Home Screen" missing | Manifest not found | `<link rel="manifest" href="/manifest.json">` in HTML |
-| Icons don't appear | Icon paths incorrect | Check `src` path in manifest, ensure PNG is square |
-| App doesn't load offline | Service worker not registered | Call `serviceWorkerRegistration.register()` |
-| Display still shows address bar | `display: "browser"` | Change to `display: "standalone"` |
-| Orientation keeps changing | Not set in manifest | Add `"orientation": "portrait"` |
+| Issue                           | Cause                         | Fix                                                   |
+| ------------------------------- | ----------------------------- | ----------------------------------------------------- |
+| "Add to Home Screen" missing    | Manifest not found            | `<link rel="manifest" href="/manifest.json">` in HTML |
+| Icons don't appear              | Icon paths incorrect          | Check `src` path in manifest, ensure PNG is square    |
+| App doesn't load offline        | Service worker not registered | Call `serviceWorkerRegistration.register()`           |
+| Display still shows address bar | `display: "browser"`          | Change to `display: "standalone"`                     |
+| Orientation keeps changing      | Not set in manifest           | Add `"orientation": "portrait"`                       |
 
 ### Test Manifest Validity
 

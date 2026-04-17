@@ -1,6 +1,6 @@
 /**
  * Express-to-Workers Adapter
- * 
+ *
  * Provides compatibility layer between Express route handlers and Cloudflare Workers.
  * Converts Workers Request/Response objects to Express-style req/res objects.
  */
@@ -85,11 +85,11 @@ export class ExpressResponse {
 export async function createExpressRequest(
   request: Request,
   params: Record<string, string> = {},
-  env: Env
+  env: Env,
 ): Promise<ExpressRequest> {
   const url = new URL(request.url);
   const query: Record<string, string> = {};
-  
+
   // Parse query parameters
   url.searchParams.forEach((value, key) => {
     query[key] = value;
@@ -98,7 +98,7 @@ export async function createExpressRequest(
   // Parse request body if present
   let body: any = null;
   const contentType = request.headers.get('Content-Type') || '';
-  
+
   if (request.method !== 'GET' && request.method !== 'HEAD') {
     if (contentType.includes('application/json')) {
       try {
@@ -122,9 +122,10 @@ export async function createExpressRequest(
   });
 
   // Get client IP (from CF-Connecting-IP header or fallback)
-  const ip = request.headers.get('CF-Connecting-IP') || 
-             request.headers.get('X-Forwarded-For')?.split(',')[0].trim() || 
-             'unknown';
+  const ip =
+    request.headers.get('CF-Connecting-IP') ||
+    request.headers.get('X-Forwarded-For')?.split(',')[0].trim() ||
+    'unknown';
 
   return {
     body,
@@ -144,10 +145,7 @@ export async function createExpressRequest(
 /**
  * Express route handler type
  */
-export type ExpressHandler = (
-  req: ExpressRequest,
-  res: ExpressResponse
-) => Promise<void> | void;
+export type ExpressHandler = (req: ExpressRequest, res: ExpressResponse) => Promise<void> | void;
 
 /**
  * Middleware function type
@@ -155,7 +153,7 @@ export type ExpressHandler = (
 export type ExpressMiddleware = (
   req: ExpressRequest,
   res: ExpressResponse,
-  next: () => void
+  next: () => void,
 ) => Promise<void> | void;
 
 /**
@@ -164,7 +162,7 @@ export type ExpressMiddleware = (
 export async function executeMiddleware(
   middlewares: ExpressMiddleware[],
   req: ExpressRequest,
-  res: ExpressResponse
+  res: ExpressResponse,
 ): Promise<boolean> {
   for (const middleware of middlewares) {
     let nextCalled = false;

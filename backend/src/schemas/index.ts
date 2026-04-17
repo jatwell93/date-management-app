@@ -18,7 +18,7 @@ export const loginSchema = z.object({
       .min(4, 'PIN must be at least 4 digits')
       .max(6, 'PIN must be at most 6 digits')
       .regex(/^\d+$/, 'PIN must contain only digits'),
-    role: z.enum(['Manager', 'Team Member'] as const).optional(),
+    role: z.enum(['admin', 'manager', 'team_member'] as const).optional(),
   }),
 });
 
@@ -29,20 +29,39 @@ export const userSchema = z.object({
       .min(4, 'PIN must be at least 4 digits')
       .max(6, 'PIN must be at most 6 digits')
       .regex(/^\d+$/, 'PIN must contain only digits'),
-    role: z.enum(['Manager', 'Team Member'] as const),
+    role: z.enum(['admin', 'manager', 'team_member'] as const),
   }),
 });
 
 export const organizationInviteCreateSchema = z.object({
   body: z.object({
     email: z.string().email('Email must be valid'),
-    role: z.enum(['admin', 'member'] as const),
+    role: z.enum(['admin', 'manager', 'team_member'] as const),
   }),
 });
 
 export const organizationInviteAcceptSchema = z.object({
   body: z.object({
     token: z.string().min(1, 'Invite token is required'),
+  }),
+});
+
+export const organizationBootstrapSchema = z.object({
+  body: z.object({
+    organizationName: z
+      .string()
+      .min(1, 'Organization name is required')
+      .max(100, 'Organization name must be at most 100 characters'),
+    organizationSlug: z
+      .string()
+      .min(1, 'Organization slug is required')
+      .max(50, 'Organization slug must be at most 50 characters')
+      .regex(
+        /^[a-z0-9_-]+$/,
+        'Organization slug must contain only lowercase letters, numbers, hyphens, and underscores',
+      ),
+    clerkOrganizationId: z.string().min(1, 'Clerk organization ID is required'),
+    clerkMembershipRole: z.string().optional(),
   }),
 });
 

@@ -16,12 +16,12 @@ async function main() {
 
   if (user.organizationId) {
     console.log('User already has organization:', user.organizationId);
-    
+
     // Check if subscription exists
     const sub = await prisma.subscriptionTier.findFirst({
       where: { organizationId: user.organizationId },
     });
-    
+
     if (sub) {
       console.log('Subscription already exists:', sub.status, sub.tierLevel);
     } else {
@@ -29,7 +29,7 @@ async function main() {
       const trialEnd = new Date();
       trialEnd.setDate(trialEnd.getDate() + 14);
       trialEnd.setHours(0, 0, 0, 0);
-      
+
       const newSub = await prisma.subscriptionTier.create({
         data: {
           organizationId: user.organizationId,

@@ -87,7 +87,7 @@ This checklist ensures all critical systems are verified before deploying to pro
 
 - [x] **Data retention policies in place**
   - Verify: Document at `docs/data-retention-policy.md`
-  - Requirements: 
+  - Requirements:
     - User deletion process documented
     - Organization data purge process documented
     - GDPR compliance verified
@@ -302,19 +302,19 @@ This checklist ensures all critical systems are verified before deploying to pro
 
 ## Sign-Off
 
-| Role | Name | Date | Status |
-|------|------|------|--------|
-| Tech Lead | ________ | _______ | _____ |
-| QA | ________ | _______ | _____ |
-| Product | ________ | _______ | _____ |
-| DevOps | ________ | _______ | _____ |
+| Role      | Name         | Date       | Status |
+| --------- | ------------ | ---------- | ------ |
+| Tech Lead | **\_\_\_\_** | **\_\_\_** | **\_** |
+| QA        | **\_\_\_\_** | **\_\_\_** | **\_** |
+| Product   | **\_\_\_\_** | **\_\_\_** | **\_** |
+| DevOps    | **\_\_\_\_** | **\_\_\_** | **\_** |
 
 ---
 
 ## Incident Contact
 
-**On-Call Lead:** ________  
-**Escalation:** ________  
-**Neon Support:** ________  
-**Stripe Support:** ________  
-**Cloudflare Support:** ________
+**On-Call Lead:** **\_\_\_\_**  
+**Escalation:** **\_\_\_\_**  
+**Neon Support:** **\_\_\_\_**  
+**Stripe Support:** **\_\_\_\_**  
+**Cloudflare Support:** **\_\_\_\_**

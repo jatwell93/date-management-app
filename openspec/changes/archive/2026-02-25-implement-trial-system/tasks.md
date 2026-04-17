@@ -304,13 +304,11 @@
   - [x] `SubscriptionService.createTrialSubscription()`: Verify dates correct (00:00 UTC)
   - [x] `SubscriptionService.convertTrialToPaid()`: Test atomicity with transaction mock
   - [x] `SubscriptionService.downgradeExpiredTrials()`: Test bulk downgrade, atomicity
-  
 - [x] Integration tests:
   - [x] Full signup flow: Clerk webhook → Organization + User + Trial created
   - [x] Conversion flow: Trial → Paid, Stripe + DB consistent
   - [x] Downgrade flow: Expired trial → Starter, email sent
   - [x] Authorization: Non-admin user cannot convert trial
-  
 - [x] Edge case tests:
   - [x] Simultaneous conversions (both fail, no double-charge) - covered by transaction atomicity
   - [x] Webhook replayed (idempotency: second run doesn't create duplicate org) - covered by webhook idempotency tests
@@ -360,22 +358,22 @@
 
 ## Summary by Phase
 
-| Phase | Component | Key Deliverable |
-|-------|-----------|-----------------|
-| 1A | Auth Setup | Clerk SDK configured, webhook tested |
-| 1B | Schema | Migration applied, no data loss |
-| 1C | Routes | Clerk JWT extraction, webhook handler working |
-| 2 | Abuse Prev. | Disposable email check, signup validated |
-| 3 | Trial Creation | Trial subscription in DB, dates correct |
-| 4 | Status Endpoint | Frontend can fetch trial details |
-| 5 | Reminders | Daily job runs, emails sent (idempotent) |
-| 6 | Downgrade | Expired trials auto-downgraded atomically |
-| 7 | Conversion | Trial → Paid, Stripe + DB consistent |
-| 8 | Frontend | UI shows trial status, upgrade button |
-| 9 | Webhooks | Stripe payment confirmed, DB updated |
-| 10 | Error Handling | All failures logged, job resilient |
-| 11 | Testing | All phases tested, edge cases covered |
-| 12 | Cleanup | Docs updated, PIN auth removed, ready for handoff |
+| Phase | Component       | Key Deliverable                                   |
+| ----- | --------------- | ------------------------------------------------- |
+| 1A    | Auth Setup      | Clerk SDK configured, webhook tested              |
+| 1B    | Schema          | Migration applied, no data loss                   |
+| 1C    | Routes          | Clerk JWT extraction, webhook handler working     |
+| 2     | Abuse Prev.     | Disposable email check, signup validated          |
+| 3     | Trial Creation  | Trial subscription in DB, dates correct           |
+| 4     | Status Endpoint | Frontend can fetch trial details                  |
+| 5     | Reminders       | Daily job runs, emails sent (idempotent)          |
+| 6     | Downgrade       | Expired trials auto-downgraded atomically         |
+| 7     | Conversion      | Trial → Paid, Stripe + DB consistent              |
+| 8     | Frontend        | UI shows trial status, upgrade button             |
+| 9     | Webhooks        | Stripe payment confirmed, DB updated              |
+| 10    | Error Handling  | All failures logged, job resilient                |
+| 11    | Testing         | All phases tested, edge cases covered             |
+| 12    | Cleanup         | Docs updated, PIN auth removed, ready for handoff |
 
 ---
 
@@ -399,12 +397,14 @@
 ## NOTE FOR V2: Full Role Migration
 
 **Current Approach (Phase 1D MVP):** Role mapping strategy
+
 - Invites store roles as `admin` / `member`
-- Users created with mapped roles: `Manager` / `Team Member` 
+- Users created with mapped roles: `Manager` / `Team Member`
 - Minimal code churn, defers refactor to later phase
 - Allows Clerk signup + multi-user invites to ship quickly
 
 **V2 Migration (Future Phase):** Full role system alignment
+
 - Standardize everywhere to either `admin` / `member` OR `Manager` / `Team Member`
 - Remove role mapping translation layer from `OrganizationInviteService.mapInviteRole()`
 - Update authorization checks (`requireManager()` middleware) to use consistent role values
@@ -413,6 +413,7 @@
 - **Recommended for v2** once Clerk auth + invites are validated in production and stable
 
 **Files to Update in V2 Role Migration:**
+
 - `src/middleware/auth.middleware.ts` (requireManager logic)
 - `src/services/organization-invite.service.ts` (remove mapInviteRole method)
 - `src/models/user.model.ts` (role union type)

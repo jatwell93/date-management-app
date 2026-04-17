@@ -1,10 +1,10 @@
 /**
  * Cloudflare Workers Entry Point (Minimal)
- * 
+ *
  * This is a minimal implementation that doesn't import backend Express routes
  * to avoid pulling in SQLite dependencies. It provides essential API endpoints
  * using Workers-native code.
- * 
+ *
  * For full API compatibility, backend Express routes would need refactoring
  * to separate business logic from Node.js-specific code.
  */
@@ -34,11 +34,11 @@ function getCorsHeaders(env: Env, requestOrigin?: string): HeadersInit {
   // For development/testing: Allow all origins
   // In production with real domain, use FRONTEND_URL env var
   const allowAll = env.NODE_ENV !== 'production' || !env.FRONTEND_URL;
-  
-  const allowedOrigin = allowAll 
-    ? (requestOrigin || '*')
+
+  const allowedOrigin = allowAll
+    ? requestOrigin || '*'
     : env.FRONTEND_URL || 'http://localhost:3000';
-  
+
   return {
     'Access-Control-Allow-Origin': allowedOrigin,
     'Access-Control-Allow-Methods': 'GET, POST, PUT, PATCH, DELETE, OPTIONS',
@@ -67,7 +67,7 @@ function jsonResponse(data: unknown, status = 200, env?: Env, requestOrigin?: st
     'Content-Type': 'application/json',
     ...(env ? getCorsHeaders(env, requestOrigin) : {}),
   };
-  
+
   return new Response(JSON.stringify(data), { status, headers });
 }
 
@@ -93,8 +93,8 @@ function appendVaryHeader(headers: Headers, value: string): void {
 
   const values = existing
     .split(',')
-    .map(v => v.trim().toLowerCase())
-    .filter(v => v.length > 0);
+    .map((v) => v.trim().toLowerCase())
+    .filter((v) => v.length > 0);
 
   const newValue = value.toLowerCase();
 
@@ -105,7 +105,10 @@ function appendVaryHeader(headers: Headers, value: string): void {
   headers.set('Vary', values.join(', '));
 }
 
-export async function maybeCompressJsonResponse(request: Request, response: Response): Promise<Response> {
+export async function maybeCompressJsonResponse(
+  request: Request,
+  response: Response,
+): Promise<Response> {
   if (!requestSupportsGzip(request)) {
     return response;
   }
@@ -161,7 +164,7 @@ function getClientIp(request: Request): string {
 function applyRateLimitHeaders(
   response: Response,
   decision: RateLimitDecision,
-  retryAfterSeconds?: number
+  retryAfterSeconds?: number,
 ): Response {
   const headers = new Headers(response.headers);
   headers.set('X-RateLimit-Limit', String(decision.limit));
@@ -185,8 +188,7 @@ async function checkRateLimit(request: Request, env: Env): Promise<RateLimitDeci
   const maxAuthenticated = parseInt(env.RATE_LIMIT_MAX_AUTHENTICATED || '30', 10);
 
   const pathname = new URL(request.url).pathname;
-  const isPresignedUpload =
-    request.method === 'PUT' && pathname.includes('/upload/presigned/');
+  const isPresignedUpload = request.method === 'PUT' && pathname.includes('/upload/presigned/');
   const isAuthenticated = Boolean(request.headers.get('Authorization')) || isPresignedUpload;
   const limit = isAuthenticated ? maxAuthenticated : maxAnonymous;
 
@@ -277,194 +279,224 @@ export default Sentry.withSentry(
     tracesSampleRate: 1.0, // Adjust to 0.1 later to save on free tier quota
   }),
   {
-  async fetch(request: Request, env: Env, ctx: ExecutionContext): Promise<Response> {
-    const url = new URL(request.url);
-    const { pathname } = url;
-    const method = request.method;
+    async fetch(request: Request, env: Env, ctx: ExecutionContext): Promise<Response> {
+      const url = new URL(request.url);
+      const { pathname } = url;
+      const method = request.method;
 
-    const requestOrigin = request.headers.get('Origin') || '';
+      const requestOrigin = request.headers.get('Origin') || '';
 
-    // Handle CORS preflight
-    if (method === 'OPTIONS') {
-      return handleOptions(request, env);
-    }
-
-    try {
-      // Test route for Sentry testing
-      if (pathname === '/api/test-error') {
-        // This will trigger an error that should be captured by Sentry
-        throw new Error('Test error from Cloudflare Workers - this should be captured by Sentry');
+      // Handle CORS preflight
+      if (method === 'OPTIONS') {
+        return handleOptions(request, env);
       }
 
-      // Health check endpoint (no auth required)
-      if (pathname === '/health' || pathname === '/api/health') {
-        const healthResponse = await handleHealthCheck(request, env);
-        return maybeCompressJsonResponse(request, healthResponse);
-      }
+      try {
+        // Test route for Sentry testing
+        if (pathname === '/api/test-error') {
+          // This will trigger an error that should be captured by Sentry
+          throw new Error('Test error from Cloudflare Workers - this should be captured by Sentry');
+        }
 
-      // Root metadata endpoint for human-friendly API discovery
-      if (pathname === '/') {
-        return maybeCompressJsonResponse(
-          request,
-          jsonResponse(
-            {
-              service: 'ExpiryMate API',
-              status: 'ok',
-              health: '/health',
-              docs: '/api',
-            },
-            200,
-            env,
-            requestOrigin
-          )
-        );
-      }
+        // Health check endpoint (no auth required)
+        if (pathname === '/health' || pathname === '/api/health') {
+          const healthResponse = await handleHealthCheck(request, env);
+          return maybeCompressJsonResponse(request, healthResponse);
+        }
 
-      // Clerk webhook endpoint (public, signature-verified)
-      if (method === 'POST' && (pathname === '/api/webhooks/clerk' || pathname === '/webhooks/clerk')) {
-        const webhookResponse = await handleClerkWebhook(request, env, requestOrigin);
-        return maybeCompressJsonResponse(request, webhookResponse);
-      }
-
-      // API routes
-      if (pathname.startsWith('/api/') || pathname.startsWith('/upload/')) {
-        const rateLimitDecision = await checkRateLimit(request, env);
-        const finalizeApiResponse = async (responseLike: Response | Promise<Response>) => {
-          const response = await responseLike;
-          return maybeCompressJsonResponse(request, applyRateLimitHeaders(response, rateLimitDecision));
-        };
-
-        if (!rateLimitDecision.allowed) {
-          const retryAfter = Math.max(1, Math.ceil((rateLimitDecision.resetTime - Date.now()) / 1000));
-          const blockedResponse = errorResponse(
-            `Rate limit exceeded. Please try again in ${retryAfter} seconds.`,
-            429,
-            env,
-            requestOrigin
-          );
+        // Root metadata endpoint for human-friendly API discovery
+        if (pathname === '/') {
           return maybeCompressJsonResponse(
             request,
-            applyRateLimitHeaders(blockedResponse, rateLimitDecision, retryAfter)
+            jsonResponse(
+              {
+                service: 'ExpiryMate API',
+                status: 'ok',
+                health: '/health',
+                docs: '/api',
+              },
+              200,
+              env,
+              requestOrigin,
+            ),
           );
         }
 
-        if (!env.JWT_SECRET?.trim()) {
-          const jwtErrorResponse = errorResponse('JWT_SECRET is required', 500, env, requestOrigin);
-          return finalizeApiResponse(jwtErrorResponse);
+        // Clerk webhook endpoint (public, signature-verified)
+        if (
+          method === 'POST' &&
+          (pathname === '/api/webhooks/clerk' || pathname === '/webhooks/clerk')
+        ) {
+          const webhookResponse = await handleClerkWebhook(request, env, requestOrigin);
+          return maybeCompressJsonResponse(request, webhookResponse);
         }
 
-        const uploadRouteBase = pathname.startsWith('/api/upload') ? '/api/upload' : '/upload';
+        // API routes
+        if (pathname.startsWith('/api/') || pathname.startsWith('/upload/')) {
+          const rateLimitDecision = await checkRateLimit(request, env);
+          const finalizeApiResponse = async (responseLike: Response | Promise<Response>) => {
+            const response = await responseLike;
+            return maybeCompressJsonResponse(
+              request,
+              applyRateLimitHeaders(response, rateLimitDecision),
+            );
+          };
 
-        // Workers-native upload endpoints
-        if (method === 'POST' && pathname === `${uploadRouteBase}/initiate`) {
-          return finalizeApiResponse(handleUploadInitiate(request, env, uploadRouteBase));
-        }
-
-        if (method === 'POST' && pathname.startsWith(`${uploadRouteBase}/direct/`)) {
-          const encodedKey = pathname.slice(`${uploadRouteBase}/direct/`.length);
-          if (!encodedKey) {
-            return finalizeApiResponse(errorResponse('Missing key in URL', 400, env, requestOrigin));
-          }
-          let key: string;
-          try {
-            key = decodeURIComponent(encodedKey);
-          } catch (error) {
-            return finalizeApiResponse(errorResponse('Invalid key encoding', 400, env, requestOrigin));
-          }
-          return finalizeApiResponse(handleUploadDirect(request, env, key));
-        }
-
-        if (method === 'PUT' && pathname.startsWith(`${uploadRouteBase}/presigned/`)) {
-          const encodedKey = pathname.slice(`${uploadRouteBase}/presigned/`.length);
-          if (!encodedKey) {
-            return finalizeApiResponse(errorResponse('Missing key in URL', 400, env, requestOrigin));
-          }
-
-          let key: string;
-          try {
-            key = decodeURIComponent(encodedKey);
-          } catch {
-            return finalizeApiResponse(errorResponse('Invalid key encoding', 400, env, requestOrigin));
+          if (!rateLimitDecision.allowed) {
+            const retryAfter = Math.max(
+              1,
+              Math.ceil((rateLimitDecision.resetTime - Date.now()) / 1000),
+            );
+            const blockedResponse = errorResponse(
+              `Rate limit exceeded. Please try again in ${retryAfter} seconds.`,
+              429,
+              env,
+              requestOrigin,
+            );
+            return maybeCompressJsonResponse(
+              request,
+              applyRateLimitHeaders(blockedResponse, rateLimitDecision, retryAfter),
+            );
           }
 
-          const uploadToken = url.searchParams.get('token');
-          return finalizeApiResponse(handleUploadPresigned(request, env, key, uploadToken));
-        }
-
-        if (method === 'GET' && pathname.startsWith(`${uploadRouteBase}/status/`)) {
-          const encodedKey = pathname.slice(`${uploadRouteBase}/status/`.length);
-          if (!encodedKey) {
-            return finalizeApiResponse(errorResponse('Missing key in URL', 400, env, requestOrigin));
+          if (!env.JWT_SECRET?.trim()) {
+            const jwtErrorResponse = errorResponse(
+              'JWT_SECRET is required',
+              500,
+              env,
+              requestOrigin,
+            );
+            return finalizeApiResponse(jwtErrorResponse);
           }
 
-          let key: string;
-          try {
-            key = decodeURIComponent(encodedKey);
-          } catch {
-            return finalizeApiResponse(errorResponse('Invalid key encoding', 400, env, requestOrigin));
+          const uploadRouteBase = pathname.startsWith('/api/upload') ? '/api/upload' : '/upload';
+
+          // Workers-native upload endpoints
+          if (method === 'POST' && pathname === `${uploadRouteBase}/initiate`) {
+            return finalizeApiResponse(handleUploadInitiate(request, env, uploadRouteBase));
           }
 
-          return finalizeApiResponse(handleUploadStatus(request, env, key));
+          if (method === 'POST' && pathname.startsWith(`${uploadRouteBase}/direct/`)) {
+            const encodedKey = pathname.slice(`${uploadRouteBase}/direct/`.length);
+            if (!encodedKey) {
+              return finalizeApiResponse(
+                errorResponse('Missing key in URL', 400, env, requestOrigin),
+              );
+            }
+            let key: string;
+            try {
+              key = decodeURIComponent(encodedKey);
+            } catch (error) {
+              return finalizeApiResponse(
+                errorResponse('Invalid key encoding', 400, env, requestOrigin),
+              );
+            }
+            return finalizeApiResponse(handleUploadDirect(request, env, key));
+          }
+
+          if (method === 'PUT' && pathname.startsWith(`${uploadRouteBase}/presigned/`)) {
+            const encodedKey = pathname.slice(`${uploadRouteBase}/presigned/`.length);
+            if (!encodedKey) {
+              return finalizeApiResponse(
+                errorResponse('Missing key in URL', 400, env, requestOrigin),
+              );
+            }
+
+            let key: string;
+            try {
+              key = decodeURIComponent(encodedKey);
+            } catch {
+              return finalizeApiResponse(
+                errorResponse('Invalid key encoding', 400, env, requestOrigin),
+              );
+            }
+
+            const uploadToken = url.searchParams.get('token');
+            return finalizeApiResponse(handleUploadPresigned(request, env, key, uploadToken));
+          }
+
+          if (method === 'GET' && pathname.startsWith(`${uploadRouteBase}/status/`)) {
+            const encodedKey = pathname.slice(`${uploadRouteBase}/status/`.length);
+            if (!encodedKey) {
+              return finalizeApiResponse(
+                errorResponse('Missing key in URL', 400, env, requestOrigin),
+              );
+            }
+
+            let key: string;
+            try {
+              key = decodeURIComponent(encodedKey);
+            } catch {
+              return finalizeApiResponse(
+                errorResponse('Invalid key encoding', 400, env, requestOrigin),
+              );
+            }
+
+            return finalizeApiResponse(handleUploadStatus(request, env, key));
+          }
+
+          if (method === 'POST' && pathname === `${uploadRouteBase}/complete`) {
+            return finalizeApiResponse(handleUploadComplete(request, env));
+          }
+
+          // Initialize database connection for remaining API endpoints
+          const db = createWorkersDatabase(env);
+
+          // Route handling
+          switch (true) {
+            // Auth endpoints
+            case pathname === '/api/auth/login' && method === 'POST':
+              return finalizeApiResponse(handleLogin(request, db, env));
+
+            case pathname === '/api/auth/register' && method === 'POST':
+              return finalizeApiResponse(handleRegister(request, db, env));
+
+            // User endpoints (require auth)
+            case pathname === '/api/users/me' && method === 'GET':
+              return finalizeApiResponse(handleGetCurrentUser(request, db, env));
+
+            // Products endpoints
+            case pathname === '/api/products' && method === 'GET':
+              return finalizeApiResponse(handleGetProducts(request, db, env));
+
+            case pathname.match(/^\/api\/products\/\d+$/) && method === 'GET':
+              return finalizeApiResponse(handleGetProduct(request, db, env, pathname));
+
+            // Inventory endpoints
+            case pathname === '/api/inventory-items' && method === 'GET':
+              return finalizeApiResponse(handleGetInventory(request, db, env));
+
+            // Store areas endpoints
+            case pathname === '/api/store-areas' && method === 'GET':
+              return finalizeApiResponse(handleGetStoreAreas(request, db, env));
+
+            // Dashboard endpoints
+            case pathname === '/api/dashboard' && method === 'GET':
+              return finalizeApiResponse(handleGetDashboard(request, db, env));
+
+            // Subscription endpoints
+            case pathname === '/api/subscription/trial-status' && method === 'GET':
+              return finalizeApiResponse(handleGetTrialStatus(request, db, env));
+
+            default:
+              return finalizeApiResponse(errorResponse('Not Found', 404, env));
+          }
         }
 
-        if (method === 'POST' && pathname === `${uploadRouteBase}/complete`) {
-          return finalizeApiResponse(handleUploadComplete(request, env));
-        }
-
-        // Initialize database connection for remaining API endpoints
-        const db = createWorkersDatabase(env);
-
-        // Route handling
-        switch (true) {
-          // Auth endpoints
-          case pathname === '/api/auth/login' && method === 'POST':
-            return finalizeApiResponse(handleLogin(request, db, env));
-
-          case pathname === '/api/auth/register' && method === 'POST':
-            return finalizeApiResponse(handleRegister(request, db, env));
-
-          // User endpoints (require auth)
-          case pathname === '/api/users/me' && method === 'GET':
-            return finalizeApiResponse(handleGetCurrentUser(request, db, env));
-
-          // Products endpoints
-          case pathname === '/api/products' && method === 'GET':
-            return finalizeApiResponse(handleGetProducts(request, db, env));
-
-          case pathname.match(/^\/api\/products\/\d+$/) && method === 'GET':
-            return finalizeApiResponse(handleGetProduct(request, db, env, pathname));
-
-          // Inventory endpoints
-          case pathname === '/api/inventory-items' && method === 'GET':
-            return finalizeApiResponse(handleGetInventory(request, db, env));
-
-          // Store areas endpoints
-          case pathname === '/api/store-areas' && method === 'GET':
-            return finalizeApiResponse(handleGetStoreAreas(request, db, env));
-
-          // Dashboard endpoints
-          case pathname === '/api/dashboard' && method === 'GET':
-            return finalizeApiResponse(handleGetDashboard(request, db, env));
-
-          // Subscription endpoints
-          case pathname === '/api/subscription/trial-status' && method === 'GET':
-            return finalizeApiResponse(handleGetTrialStatus(request, db, env));
-
-          default:
-            return finalizeApiResponse(errorResponse('Not Found', 404, env));
-        }
+        return maybeCompressJsonResponse(request, errorResponse('Not Found', 404, env));
+      } catch (error) {
+        console.error('Unhandled error:', error);
+        const message =
+          env.NODE_ENV === 'development'
+            ? error instanceof Error
+              ? error.message
+              : 'Unknown error'
+            : 'Internal Server Error';
+        return maybeCompressJsonResponse(request, errorResponse(message, 500, env, requestOrigin));
       }
-
-      return maybeCompressJsonResponse(request, errorResponse('Not Found', 404, env));
-    } catch (error) {
-      console.error('Unhandled error:', error);
-      const message = env.NODE_ENV === 'development' 
-        ? (error instanceof Error ? error.message : 'Unknown error')
-        : 'Internal Server Error';
-      return maybeCompressJsonResponse(request, errorResponse(message, 500, env, requestOrigin));
-    }
+    },
   },
-});
+);
 
 // =============================================================================
 // API Handlers (Using Neon serverless driver)
@@ -481,15 +513,15 @@ import { SignJWT, jwtVerify } from 'jose';
 async function hashPassword(password: string): Promise<string> {
   const encoder = new TextEncoder();
   const salt = crypto.getRandomValues(new Uint8Array(16));
-  
+
   const keyMaterial = await crypto.subtle.importKey(
     'raw',
     encoder.encode(password),
     'PBKDF2',
     false,
-    ['deriveBits']
+    ['deriveBits'],
   );
-  
+
   const hash = await crypto.subtle.deriveBits(
     {
       name: 'PBKDF2',
@@ -498,14 +530,14 @@ async function hashPassword(password: string): Promise<string> {
       hash: 'SHA-256',
     },
     keyMaterial,
-    256
+    256,
   );
-  
+
   // Combine salt and hash for storage
   const combined = new Uint8Array(salt.length + new Uint8Array(hash).length);
   combined.set(salt);
   combined.set(new Uint8Array(hash), salt.length);
-  
+
   // Return as base64
   return btoa(String.fromCharCode(...combined));
 }
@@ -516,24 +548,26 @@ async function hashPassword(password: string): Promise<string> {
 async function verifyPassword(password: string, storedHash: string): Promise<boolean> {
   try {
     const encoder = new TextEncoder();
-    
+
     // Decode stored hash
     const combined = new Uint8Array(
-      atob(storedHash).split('').map(c => c.charCodeAt(0))
+      atob(storedHash)
+        .split('')
+        .map((c) => c.charCodeAt(0)),
     );
-    
+
     // Extract salt (first 16 bytes)
     const salt = combined.slice(0, 16);
     const storedHashBytes = combined.slice(16);
-    
+
     const keyMaterial = await crypto.subtle.importKey(
       'raw',
       encoder.encode(password),
       'PBKDF2',
       false,
-      ['deriveBits']
+      ['deriveBits'],
     );
-    
+
     const hash = await crypto.subtle.deriveBits(
       {
         name: 'PBKDF2',
@@ -542,13 +576,13 @@ async function verifyPassword(password: string, storedHash: string): Promise<boo
         hash: 'SHA-256',
       },
       keyMaterial,
-      256
+      256,
     );
-    
+
     // Compare hashes
     const hashBytes = new Uint8Array(hash);
     if (hashBytes.length !== storedHashBytes.length) return false;
-    
+
     return hashBytes.every((byte, i) => byte === storedHashBytes[i]);
   } catch {
     return false;
@@ -557,7 +591,7 @@ async function verifyPassword(password: string, storedHash: string): Promise<boo
 
 /**
  * Verify bcrypt-style hash (for backward compatibility with existing users)
- * Note: Full bcrypt verification isn't available in Workers, 
+ * Note: Full bcrypt verification isn't available in Workers,
  * so we use a simple prefix check and assume valid for testing
  */
 async function verifyBcryptPassword(password: string, storedHash: string): Promise<boolean> {
@@ -571,7 +605,7 @@ async function verifyBcryptPassword(password: string, storedHash: string): Promi
     console.warn('Bcrypt hash detected - cannot verify in Workers. Migration needed.');
     return false;
   }
-  
+
   // Try PBKDF2 verification
   return verifyPassword(password, storedHash);
 }
@@ -589,7 +623,7 @@ function requireJwtSecret(env: Env): Uint8Array {
  */
 async function createToken(userId: number, env: Env): Promise<string> {
   const secret = requireJwtSecret(env);
-  
+
   return await new SignJWT({ userId })
     .setProtectedHeader({ alg: 'HS256' })
     .setExpirationTime('24h')
@@ -689,7 +723,7 @@ function decodeClerkWebhookSecret(secret: string): Uint8Array {
 
   try {
     const binary = atob(padded);
-    return Uint8Array.from(binary, char => char.charCodeAt(0));
+    return Uint8Array.from(binary, (char) => char.charCodeAt(0));
   } catch {
     // Fallback for non-base64 test/local secrets.
     return new TextEncoder().encode(rawSecret);
@@ -712,7 +746,7 @@ function timingSafeEqual(a: string, b: string): boolean {
 
 function extractSvixV1Signatures(signatureHeader: string): string[] {
   const matches = signatureHeader.matchAll(/v1,([A-Za-z0-9+/=]+)/g);
-  return Array.from(matches, match => match[1]);
+  return Array.from(matches, (match) => match[1]);
 }
 
 async function verifyClerkSvixSignature(
@@ -738,11 +772,11 @@ async function verifyClerkSvixSignature(
     secretBytes,
     { name: 'HMAC', hash: 'SHA-256' },
     false,
-    ['sign']
+    ['sign'],
   );
 
   const expectedSignature = toBase64(
-    await crypto.subtle.sign('HMAC', key, new TextEncoder().encode(message))
+    await crypto.subtle.sign('HMAC', key, new TextEncoder().encode(message)),
   );
 
   const candidateSignatures = extractSvixV1Signatures(headers.signature);
@@ -750,7 +784,9 @@ async function verifyClerkSvixSignature(
     throw new Error('Invalid svix-signature header');
   }
 
-  const isValid = candidateSignatures.some(signature => timingSafeEqual(signature, expectedSignature));
+  const isValid = candidateSignatures.some((signature) =>
+    timingSafeEqual(signature, expectedSignature),
+  );
 
   if (!isValid) {
     throw new Error('Invalid Clerk webhook signature');
@@ -782,7 +818,8 @@ function mapClerkRole(role: unknown): string {
 
 function extractPrimaryClerkEmail(data: Record<string, unknown>): string | null {
   const addresses = Array.isArray(data.email_addresses) ? data.email_addresses : [];
-  const primaryId = typeof data.primary_email_address_id === 'string' ? data.primary_email_address_id : null;
+  const primaryId =
+    typeof data.primary_email_address_id === 'string' ? data.primary_email_address_id : null;
 
   const pickEmail = (candidate: unknown): string | null => {
     if (!candidate || typeof candidate !== 'object') {
@@ -794,7 +831,7 @@ function extractPrimaryClerkEmail(data: Record<string, unknown>): string | null 
   };
 
   if (primaryId) {
-    const primary = addresses.find(candidate => {
+    const primary = addresses.find((candidate) => {
       if (!candidate || typeof candidate !== 'object') {
         return false;
       }
@@ -819,10 +856,15 @@ function extractPrimaryClerkEmail(data: Record<string, unknown>): string | null 
   return null;
 }
 
-function deriveUsername(data: Record<string, unknown>, email: string | null, clerkUserId: string): string {
-  const raw = typeof data.username === 'string' && data.username.trim().length > 0
-    ? data.username.trim()
-    : email?.split('@')[0] || `user-${clerkUserId.slice(-8)}`;
+function deriveUsername(
+  data: Record<string, unknown>,
+  email: string | null,
+  clerkUserId: string,
+): string {
+  const raw =
+    typeof data.username === 'string' && data.username.trim().length > 0
+      ? data.username.trim()
+      : email?.split('@')[0] || `user-${clerkUserId.slice(-8)}`;
 
   return sanitizeSlug(raw, `user-${Date.now().toString(36)}`);
 }
@@ -867,9 +909,8 @@ async function findOrCreateOrganization(
   clerkOrganization: Record<string, unknown> | null,
   fallbackEmail?: string | null,
 ): Promise<string> {
-  const clerkOrganizationId = clerkOrganization && typeof clerkOrganization.id === 'string'
-    ? clerkOrganization.id
-    : null;
+  const clerkOrganizationId =
+    clerkOrganization && typeof clerkOrganization.id === 'string' ? clerkOrganization.id : null;
 
   if (clerkOrganizationId) {
     const existing = await sql`
@@ -885,21 +926,20 @@ async function findOrCreateOrganization(
   }
 
   const fallbackLabel = fallbackEmail?.split('@')[0] || 'organization';
-  const providedName = clerkOrganization && typeof clerkOrganization.name === 'string'
-    ? clerkOrganization.name
-    : null;
+  const providedName =
+    clerkOrganization && typeof clerkOrganization.name === 'string' ? clerkOrganization.name : null;
   const orgName = providedName || `${fallbackLabel}'s Organization`;
 
-  const providedSlug = clerkOrganization && typeof clerkOrganization.slug === 'string'
-    ? clerkOrganization.slug
-    : null;
+  const providedSlug =
+    clerkOrganization && typeof clerkOrganization.slug === 'string' ? clerkOrganization.slug : null;
   const baseSlug = sanitizeSlug(
     providedSlug || orgName || clerkOrganizationId || fallbackLabel,
-    `org-${crypto.randomUUID().slice(0, 8)}`
+    `org-${crypto.randomUUID().slice(0, 8)}`,
   );
 
   for (let attempt = 0; attempt < 5; attempt += 1) {
-    const slug = attempt === 0 ? baseSlug : `${baseSlug}-${crypto.randomUUID().slice(0, 8)}-${attempt}`;
+    const slug =
+      attempt === 0 ? baseSlug : `${baseSlug}-${crypto.randomUUID().slice(0, 8)}-${attempt}`;
 
     try {
       const rows = await sql`
@@ -944,15 +984,9 @@ async function upsertClerkUser(
     role: string;
     email?: string | null;
     username?: string | null;
-  }
+  },
 ): Promise<void> {
-  const {
-    clerkUserId,
-    organizationId,
-    role,
-    email = null,
-    username = null,
-  } = options;
+  const { clerkUserId, organizationId, role, email = null, username = null } = options;
 
   try {
     await sql`
@@ -1008,11 +1042,13 @@ async function upsertClerkUser(
   }
 }
 
-async function processClerkWebhookEvent(sql: SqlClient, event: ClerkWebhookEventPayload): Promise<void> {
+async function processClerkWebhookEvent(
+  sql: SqlClient,
+  event: ClerkWebhookEventPayload,
+): Promise<void> {
   const eventType = typeof event.type === 'string' ? event.type : 'unknown';
-  const data = event.data && typeof event.data === 'object'
-    ? event.data as Record<string, unknown>
-    : {};
+  const data =
+    event.data && typeof event.data === 'object' ? (event.data as Record<string, unknown>) : {};
 
   switch (eventType) {
     case 'user.created': {
@@ -1025,12 +1061,13 @@ async function processClerkWebhookEvent(sql: SqlClient, event: ClerkWebhookEvent
       const memberships = Array.isArray(data.organization_memberships)
         ? data.organization_memberships
         : [];
-      const firstMembership = memberships.find(item => item && typeof item === 'object') as
+      const firstMembership = memberships.find((item) => item && typeof item === 'object') as
         | Record<string, unknown>
         | undefined;
-      const orgPayload = firstMembership && typeof firstMembership.organization === 'object'
-        ? firstMembership.organization as Record<string, unknown>
-        : null;
+      const orgPayload =
+        firstMembership && typeof firstMembership.organization === 'object'
+          ? (firstMembership.organization as Record<string, unknown>)
+          : null;
 
       const organizationId = await findOrCreateOrganization(sql, orgPayload, primaryEmail);
       const username = deriveUsername(data, primaryEmail, clerkUserId);
@@ -1058,12 +1095,13 @@ async function processClerkWebhookEvent(sql: SqlClient, event: ClerkWebhookEvent
       const memberships = Array.isArray(data.organization_memberships)
         ? data.organization_memberships
         : [];
-      const firstMembership = memberships.find(item => item && typeof item === 'object') as
+      const firstMembership = memberships.find((item) => item && typeof item === 'object') as
         | Record<string, unknown>
         | undefined;
-      const orgPayload = firstMembership && typeof firstMembership.organization === 'object'
-        ? firstMembership.organization as Record<string, unknown>
-        : null;
+      const orgPayload =
+        firstMembership && typeof firstMembership.organization === 'object'
+          ? (firstMembership.organization as Record<string, unknown>)
+          : null;
       const organizationId = await findOrCreateOrganization(sql, orgPayload, primaryEmail);
 
       await upsertClerkUser(sql, {
@@ -1085,21 +1123,24 @@ async function processClerkWebhookEvent(sql: SqlClient, event: ClerkWebhookEvent
 
     case 'organizationMembership.created': {
       const publicUserData = data.public_user_data as Record<string, unknown> | undefined;
-      const clerkUserId = publicUserData && typeof publicUserData.user_id === 'string'
-        ? publicUserData.user_id
-        : null;
+      const clerkUserId =
+        publicUserData && typeof publicUserData.user_id === 'string'
+          ? publicUserData.user_id
+          : null;
 
-      const organizationPayload = data.organization && typeof data.organization === 'object'
-        ? data.organization as Record<string, unknown>
-        : null;
+      const organizationPayload =
+        data.organization && typeof data.organization === 'object'
+          ? (data.organization as Record<string, unknown>)
+          : null;
 
       if (!clerkUserId || !organizationPayload) {
         return;
       }
 
-      const identifier = publicUserData && typeof publicUserData.identifier === 'string'
-        ? publicUserData.identifier.toLowerCase()
-        : null;
+      const identifier =
+        publicUserData && typeof publicUserData.identifier === 'string'
+          ? publicUserData.identifier.toLowerCase()
+          : null;
       const organizationId = await findOrCreateOrganization(sql, organizationPayload, identifier);
       const role = mapClerkRole(data.role);
 
@@ -1130,20 +1171,23 @@ async function processClerkWebhookEvent(sql: SqlClient, event: ClerkWebhookEvent
 
     case 'organizationMembership.deleted': {
       const publicUserData = data.public_user_data as Record<string, unknown> | undefined;
-      const clerkUserId = publicUserData && typeof publicUserData.user_id === 'string'
-        ? publicUserData.user_id
-        : null;
-      const organizationPayload = data.organization && typeof data.organization === 'object'
-        ? data.organization as Record<string, unknown>
-        : null;
+      const clerkUserId =
+        publicUserData && typeof publicUserData.user_id === 'string'
+          ? publicUserData.user_id
+          : null;
+      const organizationPayload =
+        data.organization && typeof data.organization === 'object'
+          ? (data.organization as Record<string, unknown>)
+          : null;
 
       if (!clerkUserId) {
         return;
       }
 
-      const clerkOrganizationId = organizationPayload && typeof organizationPayload.id === 'string'
-        ? organizationPayload.id
-        : null;
+      const clerkOrganizationId =
+        organizationPayload && typeof organizationPayload.id === 'string'
+          ? organizationPayload.id
+          : null;
 
       if (clerkOrganizationId) {
         const orgRows = await sql`
@@ -1205,7 +1249,11 @@ async function markClerkWebhookEventProcessed(
   `;
 }
 
-async function handleClerkWebhook(request: Request, env: Env, requestOrigin?: string): Promise<Response> {
+async function handleClerkWebhook(
+  request: Request,
+  env: Env,
+  requestOrigin?: string,
+): Promise<Response> {
   const headers: ClerkWebhookHeaders = {
     id: request.headers.get('svix-id') || '',
     timestamp: request.headers.get('svix-timestamp') || '',
@@ -1227,7 +1275,10 @@ async function handleClerkWebhook(request: Request, env: Env, requestOrigin?: st
     await verifyClerkSvixSignature(rawBody, headers, webhookSecret);
   } catch (error) {
     const message = error instanceof Error ? error.message : 'Signature verification failed';
-    console.error('[CLERK_WEBHOOK] Signature verification failed', { message, eventId: headers.id });
+    console.error('[CLERK_WEBHOOK] Signature verification failed', {
+      message,
+      eventId: headers.id,
+    });
     return errorResponse(message, 400, env, requestOrigin);
   }
 
@@ -1266,8 +1317,8 @@ async function handleClerkWebhook(request: Request, env: Env, requestOrigin?: st
  * POST /api/auth/login
  */
 async function handleLogin(request: Request, db: Database, env: Env): Promise<Response> {
-  const body = await request.json() as { email: string; password: string };
-  
+  const body = (await request.json()) as { email: string; password: string };
+
   if (!body.email || !body.password) {
     return errorResponse('Email and password are required', 400, env);
   }
@@ -1285,23 +1336,27 @@ async function handleLogin(request: Request, db: Database, env: Env): Promise<Re
 
   const token = await createToken(user.id, env);
 
-  return jsonResponse({
-    token,
-    user: {
-      id: user.id,
-      email: user.email,
-      name: user.name,
-      role: user.role,
+  return jsonResponse(
+    {
+      token,
+      user: {
+        id: user.id,
+        email: user.email,
+        name: user.name,
+        role: user.role,
+      },
     },
-  }, 200, env);
+    200,
+    env,
+  );
 }
 
 /**
  * POST /api/auth/register
  */
 async function handleRegister(request: Request, db: Database, env: Env): Promise<Response> {
-  const body = await request.json() as { email: string; password: string; name: string };
-  
+  const body = (await request.json()) as { email: string; password: string; name: string };
+
   if (!body.email || !body.password || !body.name) {
     return errorResponse('Email, password, and name are required', 400, env);
   }
@@ -1313,11 +1368,12 @@ async function handleRegister(request: Request, db: Database, env: Env): Promise
   }
 
   const passwordHash = await hashPassword(body.password);
-  const emailPrefix = body.email
-    .split('@')[0]
-    .toLowerCase()
-    .replace(/[^a-z0-9_-]/g, '')
-    .slice(0, 24) || 'user';
+  const emailPrefix =
+    body.email
+      .split('@')[0]
+      .toLowerCase()
+      .replace(/[^a-z0-9_-]/g, '')
+      .slice(0, 24) || 'user';
   const uniqueUsername = `${emailPrefix}-${Date.now().toString(36)}`;
 
   const user = await db.createUser({
@@ -1329,15 +1385,19 @@ async function handleRegister(request: Request, db: Database, env: Env): Promise
 
   const token = await createToken(user.id, env);
 
-  return jsonResponse({
-    token,
-    user: {
-      id: user.id,
-      email: user.email,
-      name: user.name,
-      role: user.role,
+  return jsonResponse(
+    {
+      token,
+      user: {
+        id: user.id,
+        email: user.email,
+        name: user.name,
+        role: user.role,
+      },
     },
-  }, 201, env);
+    201,
+    env,
+  );
 }
 
 /**
@@ -1355,13 +1415,17 @@ async function handleGetCurrentUser(request: Request, db: Database, env: Env): P
     return errorResponse('User not found', 404, env);
   }
 
-  return jsonResponse({
-    id: user.id,
-    email: user.email,
-    name: user.name,
-    role: user.role,
-    createdAt: user.createdAt,
-  }, 200, env);
+  return jsonResponse(
+    {
+      id: user.id,
+      email: user.email,
+      name: user.name,
+      role: user.role,
+      createdAt: user.createdAt,
+    },
+    200,
+    env,
+  );
 }
 
 /**
@@ -1389,7 +1453,12 @@ async function handleGetProducts(request: Request, db: Database, env: Env): Prom
 /**
  * GET /api/products/:id
  */
-async function handleGetProduct(request: Request, db: Database, env: Env, pathname: string): Promise<Response> {
+async function handleGetProduct(
+  request: Request,
+  db: Database,
+  env: Env,
+  pathname: string,
+): Promise<Response> {
   const auth = await authenticateRequest(request, env);
   if (!auth) {
     return errorResponse('Unauthorized', 401, env);
@@ -1508,7 +1577,12 @@ const SUBSCRIPTION_TIER_LIMITS: Record<
     maxUsers: 50,
     maxProducts: 25000,
     maxStoreAreas: 100,
-    features: ['All professional features', 'Priority support', 'Custom integrations', 'API access'],
+    features: [
+      'All professional features',
+      'Priority support',
+      'Custom integrations',
+      'API access',
+    ],
   },
   concierge: {
     maxUsers: -1,
@@ -1614,14 +1688,14 @@ async function handleGetTrialStatus(request: Request, db: Database, env: Env): P
 export async function handleUploadInitiate(
   request: Request,
   env: Env,
-  uploadRouteBase: '/upload' | '/api/upload'
+  uploadRouteBase: '/upload' | '/api/upload',
 ): Promise<Response> {
   const auth = await authenticateRequest(request, env);
   if (!auth) {
     return errorResponse('Unauthorized', 401, env);
   }
 
-  const body = await request.json() as {
+  const body = (await request.json()) as {
     filename?: string;
     fileSize?: number;
     contentType?: string;
@@ -1651,7 +1725,7 @@ export async function handleUploadInitiate(
         key,
       },
       200,
-      env
+      env,
     );
   }
 
@@ -1663,7 +1737,7 @@ export async function handleUploadInitiate(
       key,
     },
     200,
-    env
+    env,
   );
 }
 
@@ -1674,7 +1748,7 @@ async function handleUploadPresigned(
   request: Request,
   env: Env,
   key: string,
-  uploadToken: string | null
+  uploadToken: string | null,
 ): Promise<Response> {
   if (!uploadToken) {
     return errorResponse('Missing upload token', 401, env);
@@ -1763,7 +1837,7 @@ async function handleUploadDirect(request: Request, env: Env, key: string): Prom
       key,
     },
     200,
-    env
+    env,
   );
 }
 
@@ -1776,7 +1850,7 @@ async function handleUploadComplete(request: Request, env: Env): Promise<Respons
     return errorResponse('Unauthorized', 401, env);
   }
 
-  const body = await request.json() as { key?: string };
+  const body = (await request.json()) as { key?: string };
   if (!body.key) {
     return errorResponse('Missing required field: key', 400, env);
   }
@@ -1796,7 +1870,11 @@ async function handleUploadComplete(request: Request, env: Env): Promise<Respons
 /**
  * GET /upload/status/:key and /api/upload/status/:key
  */
-export async function handleUploadStatus(request: Request, env: Env, key: string): Promise<Response> {
+export async function handleUploadStatus(
+  request: Request,
+  env: Env,
+  key: string,
+): Promise<Response> {
   const auth = await authenticateRequest(request, env);
   if (!auth) {
     return errorResponse('Unauthorized', 401, env);
@@ -1819,11 +1897,8 @@ export async function handleUploadStatus(request: Request, env: Env, key: string
       key,
     },
     200,
-    env
+    env,
   );
 }
 
-export {
-  handleLogin,
-  handleRegister,
-};
+export { handleLogin, handleRegister };

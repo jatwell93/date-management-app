@@ -7,6 +7,7 @@ Current SQLite-based backend works well for development but limits global scalab
 ### Cost Breakdown (50k users, 10GB storage)
 
 **Current VPS/AWS Approach:**
+
 - VPS: $100/month (4GB RAM, 80GB storage)
 - S3 Storage: $2/month (10GB)
 - S3 Egress: $2,000/month (22TB @ $0.09/GB)
@@ -15,6 +16,7 @@ Current SQLite-based backend works well for development but limits global scalab
 - **Total: $2,207/month**
 
 **Cloudflare + Neon Approach:**
+
 - Cloudflare Workers: $5/month (10M requests included, then $0.50/million)
 - Cloudflare R2 Storage: $0.15/month (10GB @ $0.015/GB)
 - R2 Egress: $0/month (zero egress fees!)
@@ -25,16 +27,19 @@ Current SQLite-based backend works well for development but limits global scalab
 **Savings: $1,932/month (87% reduction)**
 
 At startup scale (no paying users), costs drop even further:
+
 - Free tier: $0/month (Cloudflare Workers + R2 free allowances, Neon free tier 0.5GB)
 - Light usage: <$25/month (within generous free tiers)
 
 ## What Changes
 
 ### Dual Environment Strategy
+
 - **Development**: Keep Express + SQLite + local filesystem (no Cloudflare dependencies)
 - **Production**: Add Cloudflare Workers + R2 + Neon (deployed to edge)
 
 ### New Production Infrastructure
+
 - Add **Cloudflare Workers** deployment target for production API endpoints
 - Add **Cloudflare R2** for production CSV file storage (zero egress fees)
 - Add **Neon** serverless PostgreSQL for production database
@@ -49,6 +54,7 @@ At startup scale (no paying users), costs drop even further:
 - Add **Neon monitoring** for production query performance
 
 ### Development Experience Preserved
+
 - Express server remains primary development environment
 - SQLite continues for local testing (no cloud dependencies)
 - Existing test suite works unchanged
@@ -81,11 +87,13 @@ At startup scale (no paying users), costs drop even further:
 ## Impact
 
 ### Backend Infrastructure (Additive, Not Replacement)
+
 - **Current**: `backend/src/index.ts` - Express server with SQLite (KEEPS for dev)
 - **New**: `workers/` directory for production Cloudflare Workers deployment
 - **Migration**: 40-60 hours for production-ready implementation
 
 ### New Abstraction Layers
+
 - `backend/src/storage/storage-provider.interface.ts` - Unified storage interface
 - `backend/src/storage/local-storage.provider.ts` - Filesystem implementation (dev)
 - `backend/src/storage/r2-storage.provider.ts` - R2 implementation (prod)
@@ -94,6 +102,7 @@ At startup scale (no paying users), costs drop even further:
 - `backend/src/database/neon-database.provider.ts` - Neon PostgreSQL implementation (prod)
 
 ### Affected Services (Refactored, Not Rewritten)
+
 - `backend/src/services/csv-upload.service.ts` - Use storage abstraction instead of direct fs calls
 - `backend/src/services/inventory.service.ts` - Use database abstraction instead of direct SQLite calls
 - `backend/src/services/product.service.ts` - Use database abstraction instead of direct SQLite calls
@@ -101,12 +110,14 @@ At startup scale (no paying users), costs drop even further:
 - All routes remain unchanged (Express in dev, Workers adapter in prod)
 
 ### Database Layer (Dual Support)
+
 - `backend/src/database.ts` - Add environment detection and provider factory
 - `backend/src/migrations/*` - Keep existing SQLite migrations for dev
 - `backend/prisma/migrations/neon/*` - Directory for production Neon PostgreSQL migrations (already created)
 - Repository/model files - Use abstraction layer (no direct DB calls)
 
 ### Security Changes
+
 - Add Workers Secrets for production: `DATABASE_URL`, `R2_ACCESS_KEY`, `R2_SECRET_KEY`
 - Development uses `.env` file (existing pattern)
 - Implement TLS-only database connections via Hyperdrive to Neon (production)
@@ -114,21 +125,24 @@ At startup scale (no paying users), costs drop even further:
 - Configure CORS for R2 presigned upload URLs (production only)
 
 ### External Dependencies
+
 - **Add (Production)**: `@cloudflare/workers-types`, `pg` (postgres driver), Wrangler CLI
 - **Add (Both)**: Abstraction layer types, environment detection utilities
 - **Keep (Development)**: `better-sqlite3`, `express`, existing dev dependencies
-- **Cost**: 
+- **Cost**:
   - Cloudflare Workers Paid: $5/month (includes Hyperdrive)
   - Cloudflare R2: $0.015/GB/month storage, zero egress
   - Neon Free: 0.5GB storage, 100 CU-hours compute (sufficient for MVP)
   - Neon Scale: $0.35/GB-month storage + $0.106/CU-hour compute (if Free exceeded)
 
 ### Frontend Changes (Minimal)
+
 - Update API base URL configuration (environment variable selects dev vs prod endpoint)
 - Implement presigned URL upload flow for production (falls back to direct upload in dev)
 - No code changes needed - environment-aware configuration only
 
 ### Testing Strategy
+
 - Existing Jest tests continue working with SQLite (no changes needed)
 - Add integration tests for storage abstraction layer (both providers)
 - Add integration tests for database abstraction layer (both providers)
@@ -136,6 +150,7 @@ At startup scale (no paying users), costs drop even further:
 - Estimated 15-20 hours for abstraction layer tests
 
 ### Development Workflow (Unchanged)
+
 - `npm run dev` - Start Express server (no Cloudflare needed)
 - `npm test` - Run Jest with SQLite
 - Database migrations: `npm run migrate` (SQLite)
@@ -143,6 +158,7 @@ At startup scale (no paying users), costs drop even further:
 - No cloud dependencies required for local development
 
 ### Production Deployment (New)
+
 - **Build**: `npm run build:workers` - Compile Workers bundle
 - **Deploy**: `wrangler deploy` - Deploy to Cloudflare edge (global)
 - **Migrations**: `npx prisma migrate deploy` - Apply Neon migrations
@@ -150,6 +166,7 @@ At startup scale (no paying users), costs drop even further:
 - Zero-downtime deploys, no server management
 
 ### Operational Impact
+
 - Development: No changes (same local workflow)
 - Production: 3-4 hours/month maintenance (down from 5-7h with VPS)
 - No SSH access needed for production, no server patching
@@ -158,6 +175,7 @@ At startup scale (no paying users), costs drop even further:
 - Local logs/debugging unchanged
 
 ### Risk Mitigation
+
 - Development environment unaffected (can always work locally)
 - R2 S3-compatible API enables fallback to AWS S3 if needed (20-40h)
 - Neon PostgreSQL compatibility enables migration to self-hosted PostgreSQL or RDS
@@ -166,6 +184,7 @@ At startup scale (no paying users), costs drop even further:
 - Can rollback production to VPS deployment if critical Cloudflare issue
 
 ### Compliance Considerations
+
 - Development: No compliance requirements (local only)
 - Production: SOC 2 Type II compliant (Cloudflare + Neon)
 - **Not available**: ISO 27001, HIPAA (consult Neon documentation for enterprise compliance)

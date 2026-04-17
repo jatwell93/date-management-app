@@ -7,14 +7,14 @@ status: draft
 
 # Subscription Tiers
 
-| Tier | Monthly Price (USD) | Max SKUs | Max Users | Max Inventory Items | Support | SLA |
-|------|--------------------|---------|----------|---------------------|---------|-----|
-| **Starter** | $0 (trial → $19)* | 500 | 1 | 5 000 | Community | N/A |
-| **Professional** | $49 | 5 000 | 5 | 50 000 | Email | 99.5 % |
-| **Premium** | $199 | 20 000 | 20 | 500 000 | Priority Email | 99.9 % |
-| **Concierge** | Contact Sales | Unlimited | Unlimited | Unlimited | Dedicated CSM & Slack | 99.99 % |
+| Tier             | Monthly Price (USD) | Max SKUs  | Max Users | Max Inventory Items | Support               | SLA     |
+| ---------------- | ------------------- | --------- | --------- | ------------------- | --------------------- | ------- |
+| **Starter**      | $0 (trial → $19)\*  | 500       | 1         | 5 000               | Community             | N/A     |
+| **Professional** | $49                 | 5 000     | 5         | 50 000              | Email                 | 99.5 %  |
+| **Premium**      | $199                | 20 000    | 20        | 500 000             | Priority Email        | 99.9 %  |
+| **Concierge**    | Contact Sales       | Unlimited | Unlimited | Unlimited           | Dedicated CSM & Slack | 99.99 % |
 
-\* Starter converts automatically after the 14-day trial.  Cancel anytime during trial.
+\* Starter converts automatically after the 14-day trial. Cancel anytime during trial.
 
 ## Feature Comparison
 
@@ -39,17 +39,17 @@ status: draft
 
 ## How Limits Are Enforced
 
-| Resource | Enforcement Point |
-|----------|-------------------|
-| SKUs | `ProductService.create` → throws `LimitError` if count ≥ maxSkus |
-| Users | `UserInviteService.accept` → checks `OrganizationUsage` |
-| Inventory Items | `InventoryService.create` |
+| Resource        | Enforcement Point                                                |
+| --------------- | ---------------------------------------------------------------- |
+| SKUs            | `ProductService.create` → throws `LimitError` if count ≥ maxSkus |
+| Users           | `UserInviteService.accept` → checks `OrganizationUsage`          |
+| Inventory Items | `InventoryService.create`                                        |
 
 Limits cached in `TierLimitsCache` (60 s) to keep lookups fast.
 
 ## Testing Matrix
 
-Use `scripts/generate-usage-fixtures.ts` to create orgs at each limit boundary.  Integration tests cover:
+Use `scripts/generate-usage-fixtures.ts` to create orgs at each limit boundary. Integration tests cover:
 
 - Create @ limit → 409 `over_limit` error.
 - Upgrade tier → retry create → 201 success.

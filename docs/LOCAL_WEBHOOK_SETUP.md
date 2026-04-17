@@ -11,11 +11,13 @@ Stripe webhooks are POST requests sent from Stripe's servers to your application
 ### 1.1 Install ngrok
 
 **macOS:**
+
 ```bash
 brew install ngrok
 ```
 
 **Windows (via Chocolatey):**
+
 ```bash
 choco install ngrok
 ```
@@ -33,11 +35,13 @@ npm run dev
 ### 1.3 Start ngrok Tunnel
 
 In a new terminal:
+
 ```bash
 ngrok http 3001
 ```
 
 You'll see output like:
+
 ```
 Forwarding    https://abc123.ngrok.io -> http://localhost:3001
 ```
@@ -62,6 +66,7 @@ Copy the HTTPS URL (`https://abc123.ngrok.io`)
 ### 1.5 Update Environment Variables
 
 Create `.env.development` in the `backend/` directory:
+
 ```bash
 # Copy from .env.example
 cp .env.example backend/.env.development
@@ -83,10 +88,12 @@ The backend will load your new `.env.development` and have access to the Stripe 
 ### 1.7 Test the Webhook
 
 In the Stripe Dashboard, find your webhook endpoint and click **Send test event**:
+
 - Select event type: `customer.subscription.created`
 - Click **Send event**
 
 You should see the webhook logged in your backend console:
+
 ```
 Processing webhook event: customer.subscription.created
 ```
@@ -94,6 +101,7 @@ Processing webhook event: customer.subscription.created
 ### 1.8 Keep ngrok Running
 
 Every time you restart your backend or need a fresh ngrok session:
+
 ```bash
 ngrok http 3001  # Get new forwarding URL
 # Update ngrok URL in Stripe Dashboard Webhooks settings
@@ -121,6 +129,7 @@ npm run dev
 ### 2.3 Start Tunnel
 
 In a new terminal:
+
 ```bash
 lt --port 3001 --subdomain pharmacy-app
 ```
@@ -142,20 +151,21 @@ Add `STRIPE_SECRET_KEY` and `STRIPE_WEBHOOK_SECRET` to `.env.development`.
 The webhook handler follows these principles:
 
 ### Handler Sequence
+
 1. **Verify Signature First** — Reject invalid requests with 4xx
 2. **Parse Payload Second** — After verification, construct the event
 3. **Handle Idempotently** — Check event ID, then process; return 2xx for duplicates
 
 ### Current Event Handlers
 
-| Event | Status | Handler |
-|-------|--------|---------|
-| `customer.subscription.created` | TODO | Create subscription_tiers record |
-| `customer.subscription.updated` | TODO | Update tier_level, current_period_end |
-| `customer.subscription.deleted` | TODO | Downgrade to Starter tier |
-| `checkout.session.completed` | TODO | Mark trial_completed |
-| `invoice.payment_failed` | TODO | Set status=past_due, trigger dunning |
-| `customer.subscription.trial_will_end` | TODO | Send reminder email |
+| Event                                  | Status | Handler                               |
+| -------------------------------------- | ------ | ------------------------------------- |
+| `customer.subscription.created`        | TODO   | Create subscription_tiers record      |
+| `customer.subscription.updated`        | TODO   | Update tier_level, current_period_end |
+| `customer.subscription.deleted`        | TODO   | Downgrade to Starter tier             |
+| `checkout.session.completed`           | TODO   | Mark trial_completed                  |
+| `invoice.payment_failed`               | TODO   | Set status=past_due, trigger dunning  |
+| `customer.subscription.trial_will_end` | TODO   | Send reminder email                   |
 
 See [`backend/src/services/webhook.service.ts`](../backend/src/services/webhook.service.ts) for implementation details.
 

@@ -3,6 +3,7 @@
 ## Nginx Setup
 
 1. Install Nginx:
+
    ```bash
    # On Ubuntu/Debian
    sudo apt update
@@ -18,6 +19,7 @@
    ```
 
 2. Copy the provided `nginx.conf` file to your nginx configuration directory:
+
    ```bash
    sudo cp nginx.conf /etc/nginx/sites-available/date-management-app
    sudo ln -s /etc/nginx/sites-available/date-management-app /etc/nginx/sites-enabled/
@@ -28,6 +30,7 @@
    - Ensure the backend server address matches your production backend server
 
 4. Test the nginx configuration:
+
    ```bash
    sudo nginx -t
    ```
@@ -96,6 +99,7 @@ To enable SSL/HTTPS (recommended for production):
 1. Obtain an SSL certificate (free from Let's Encrypt or purchased)
 
 2. Update the nginx configuration to include SSL:
+
    ```nginx
    server {
        listen 443 ssl http2;

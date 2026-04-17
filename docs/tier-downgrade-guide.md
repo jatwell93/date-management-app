@@ -19,12 +19,12 @@ When your subscription tier is downgraded (either voluntarily or due to payment 
 
 Each subscription tier has specific limits for different resource types:
 
-| Tier | Max SKUs (Products) | Max Users | Max Inventory Items | Storage |
-|------|---------------------|-----------|---------------------|---------|
-| **Starter** | 500 | 1 | 5,000 | 1 GB |
-| **Professional** | 2,000 | 3 | 20,000 | 10 GB |
-| **Premium** | Unlimited | 10 | Unlimited | 100 GB |
-| **Concierge** | Unlimited | 10 | Unlimited | Unlimited |
+| Tier             | Max SKUs (Products) | Max Users | Max Inventory Items | Storage   |
+| ---------------- | ------------------- | --------- | ------------------- | --------- |
+| **Starter**      | 500                 | 1         | 5,000               | 1 GB      |
+| **Professional** | 2,000               | 3         | 20,000              | 10 GB     |
+| **Premium**      | Unlimited           | 10        | Unlimited           | 100 GB    |
+| **Concierge**    | Unlimited           | 10        | Unlimited           | Unlimited |
 
 ### Important Limit Definitions
 
@@ -42,6 +42,7 @@ These limits are **independent** - you can hit your SKU limit while having plent
 ### Scenario 1: Downgrade Within Limits
 
 If your current usage is below the new tier's limits:
+
 - ✅ Downgrade proceeds immediately
 - ✅ All existing data remains accessible
 - ✅ You can continue creating new products/inventory
@@ -50,6 +51,7 @@ If your current usage is below the new tier's limits:
 ### Scenario 2: Downgrade Exceeds Limits
 
 If your current usage exceeds the new tier's limits:
+
 - ⚠️ Downgrade proceeds but **creation lock** is applied
 - ✅ All existing data remains accessible (read, update, delete)
 - ❌ **New creations blocked** until usage drops below limits
@@ -73,6 +75,7 @@ Creation lock (`isCreationLocked` flag on your organization) is a safety mechani
 ### What Is Blocked?
 
 When creation lock is active:
+
 - ❌ Creating new products (POST /products)
 - ❌ Creating new inventory items (POST /inventory-items)
 - ❌ Adding new users (POST /users)
@@ -91,12 +94,14 @@ When creation lock is active:
 **Via UI**: Look for the warning banner at the top of the page
 
 **Via API**:
+
 ```bash
 curl -H "Authorization: Bearer YOUR_TOKEN" \
   https://api.yourdomain.com/api/organization/usage
 ```
 
 Response will include:
+
 ```json
 {
   "isCreationLocked": true,
@@ -125,7 +130,8 @@ If you prefer to stay on your current tier, you must delete enough products/inve
 
 #### Step-by-Step Process
 
-1. **Check current usage**: 
+1. **Check current usage**:
+
    ```bash
    curl -H "Authorization: Bearer YOUR_TOKEN" \
      https://api.yourdomain.com/api/organization/usage
@@ -139,6 +145,7 @@ If you prefer to stay on your current tier, you must delete enough products/inve
    - Products with zero quantity across all areas
 
 4. **Delete products** via UI or API:
+
    ```bash
    curl -X DELETE \
      -H "Authorization: Bearer YOUR_TOKEN" \
@@ -172,6 +179,7 @@ curl -H "Authorization: Bearer YOUR_TOKEN" \
 ```
 
 The export includes:
+
 - Product ID
 - SKU
 - Name
@@ -208,7 +216,7 @@ id,sku,name,category,barcode,costPrice,createdAt,inventoryCount
 
 ```sql
 -- View current usage vs limits
-SELECT 
+SELECT
   o.id,
   o.name,
   o.isCreationLocked,
@@ -230,7 +238,7 @@ WHERE o.id = 'YOUR_ORG_ID';
 
 ```sql
 -- Get products beyond Starter limit (oldest first)
-SELECT 
+SELECT
   p.id,
   p.sku,
   p.name,
@@ -247,7 +255,7 @@ LIMIT 1000 OFFSET 500;  -- Skip first 500 (within limit)
 
 ```sql
 -- Products that can be safely deleted (no inventory assigned)
-SELECT 
+SELECT
   p.id,
   p.sku,
   p.name,
@@ -263,8 +271,8 @@ ORDER BY p.created_at ASC;
 
 ```sql
 -- ⚠️ USE WITH CAUTION - Only when usage is actually within limits
-UPDATE organizations 
-SET isCreationLocked = false 
+UPDATE organizations
+SET isCreationLocked = false
 WHERE id = 'YOUR_ORG_ID';
 
 -- Log the action
@@ -277,21 +285,27 @@ VALUES ('YOUR_ORG_ID', 'manual_lock_removal', 'Creation lock manually removed by
 ## Frequently Asked Questions
 
 ### Q: Will I lose data during a downgrade?
+
 **A**: No. Downgrades never delete your existing data. You retain full read/update/delete access to all products and inventory. Only new creations are blocked until you reduce usage or upgrade.
 
 ### Q: How long do I have to resolve an over-limit situation?
+
 **A**: There is no time limit. The creation lock persists until you either (1) delete enough products to fall within limits, or (2) upgrade to a tier that accommodates your current usage.
 
 ### Q: Can I partially resolve by deleting just enough products?
+
 **A**: Yes. You only need to delete enough products to bring your `totalSkus` equal to or below your `maxSkus`. For example, if you have 1,500 products on Starter (500 limit), deleting 1,001 products will unlock creation.
 
 ### Q: What happens if I try to create while locked?
-**A**: You'll receive a 403 Forbidden response with message: *"Your account is creation-locked because your current usage exceeds your subscription tier limits. Remove items or upgrade to re-enable creation."*
+
+**A**: You'll receive a 403 Forbidden response with message: _"Your account is creation-locked because your current usage exceeds your subscription tier limits. Remove items or upgrade to re-enable creation."_
 
 ### Q: Does the lock affect CSV uploads?
+
 **A**: Yes. CSV uploads that would create new products are blocked. The upload endpoint checks limits before processing.
 
 ### Q: Can I move products to another organization instead of deleting?
+
 **A**: No. Products cannot be transferred between organizations. You must delete and recreate them in the target organization.
 
 ---
@@ -304,4 +318,4 @@ VALUES ('YOUR_ORG_ID', 'manual_lock_removal', 'Creation lock manually removed by
 
 ---
 
-*Last updated: March 2026*
+_Last updated: March 2026_

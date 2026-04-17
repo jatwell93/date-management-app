@@ -1,13 +1,16 @@
 # Environment Setup
 
 ## Overview
+
 This project supports two environments:
+
 - **Development (Node.js + SQLite + Local Storage)**
 - **Production (Cloudflare Workers + Neon + R2)**
 
 The backend loads configuration from `.env.development` or `.env.production` based on `NODE_ENV`.
 
 ## Development
+
 1. Copy the template:
    - Use backend/.env.development as a starting point.
 2. Ensure the following minimum values are set:
@@ -18,6 +21,7 @@ The backend loads configuration from `.env.development` or `.env.production` bas
 Development does **not** require Neon or R2 credentials.
 
 ## Production (Template)
+
 1. Use backend/.env.production as a template.
 2. Replace placeholders with real values:
    - `JWT_SECRET`
@@ -25,6 +29,7 @@ Development does **not** require Neon or R2 credentials.
    - `R2_*` credentials
 
 ## Key Variables
+
 - `DATABASE_PROVIDER`: `sqlite` (dev) or `postgresql` (prod)
 - `STORAGE_PROVIDER`: `local` (dev) or `r2` (prod)
 - `FRONTEND_URL` / `CORS_ORIGIN`: allowed frontend origins
@@ -35,14 +40,17 @@ Development does **not** require Neon or R2 credentials.
 - `PRESIGNED_URL_EXPIRY_SECONDS`: how long presigned URLs remain valid before expiring (default is 6 hours = 21600 seconds); used for R2 direct uploads
 
 ## Production CORS Notes
+
 - Requests without an `Origin` header are rejected in production by default.
 - If you must support trusted non-browser clients that omit `Origin`, explicitly set `ALLOW_NO_ORIGIN_IN_PRODUCTION=true`.
 - Keep `CORS_ORIGINS` restricted to known frontend domains.
 
 ## Workers Secrets
+
 Production secrets must be added via Wrangler (do **not** store them in Git).
 
 Example:
+
 - `wrangler secret put DATABASE_URL`
 - `wrangler secret put R2_ACCOUNT_ID`
 - `wrangler secret put R2_ACCESS_KEY_ID`

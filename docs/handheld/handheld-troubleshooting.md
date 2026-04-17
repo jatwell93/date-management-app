@@ -13,12 +13,14 @@ Your Zebra device is likely in **kiosk mode**, which restricts home screen acces
 ### Issue: Can't access Android home screen (locked in FRED or EHS)
 
 **Symptoms:**
+
 - Device only shows FRED Mobility or a locked screen
 - No navigation bar (triangle/circle/square) at bottom
 - Back/Home buttons don't work
 - Can't access Settings or DataWedge
 
 **Root Cause:**
+
 - Zebra EHS, FRED Mobility, or another MDM is configured to lock the device
 - [Zebra EHS documentation confirms: HOME/BACK can be blocked entirely](https://techdocs.zebra.com/ehs/latest/guide/features/)
 
@@ -49,17 +51,20 @@ Your Zebra device is likely in **kiosk mode**, which restricts home screen acces
 ### Issue: DataWedge not configured or keyboard output disabled
 
 **Symptoms:**
+
 - Barcode scanner button works (device beeps or vibrates)
 - Input does NOT appear in the app
 - No DataWedge profile exists, or profile has keyboard disabled
 
 **Root Cause:**
+
 - DataWedge doesn't have an active profile with keyboard output enabled
 - Device is locked in kiosk and you can't access Settings to configure it
 
 **Solution:**
 
 1. **Ask pharmacy IT to verify DataWedge setup:**
+
    ```
    Can you check if DataWedge is configured on this Zebra device?
    1. Open Settings > DataWedge
@@ -82,11 +87,13 @@ Your Zebra device is likely in **kiosk mode**, which restricts home screen acces
 ### Issue: Barcode scanning works in FRED but not in our app
 
 **Symptoms:**
+
 - Pharmacy's point-of-sale or other app receives barcode input fine
 - Your web app does NOT receive barcode input
 - Device is running FRED Mobility
 
 **Root Cause:**
+
 - FRED's kiosk launcher may restrict keyboard input to FRED apps only
 - Your web app may not have focus/permission in the browser sandbox
 
@@ -112,12 +119,14 @@ Your Zebra device is likely in **kiosk mode**, which restricts home screen acces
 ### Issue: CipherLab device locked in kiosk/launcher mode
 
 **Symptoms:**
+
 - Device only shows CipherLab Kiosk or Reader Config interface
 - No Android home screen visible
 - Back/Home buttons don't work
 - Can't access Settings or install apps
 
 **Root Cause:**
+
 - CipherLab kiosk mode is configured by the device admin
 - Android navigation is locked or remapped to stay in kiosk
 
@@ -164,6 +173,7 @@ Your Zebra device is likely in **kiosk mode**, which restricts home screen acces
    - **Fix:** Open DevTools (F12), **Application** tab, **Service Workers**, clear cache; then refresh
 
 **Quick Test:**
+
 ```bash
 # Verify production domain has HTTPS and service worker
 curl -I https://your-app.example.com
@@ -183,7 +193,7 @@ curl -I https://your-app.example.com
 1. **Network credentials are wrong**
    - Pharmacy WiFi often requires username + password (WPA2-Enterprise)
    - Device may have old credentials cached
-   - **Fix:** 
+   - **Fix:**
      - Go to **Settings** > **Network & Internet** > **WiFi**
      - Long-press the network name > **Forget**
      - Reconnect with correct password
@@ -198,6 +208,7 @@ curl -I https://your-app.example.com
    - **Fix:** Contact pharmacy IT to whitelist your app domain; ensure HTTPS certificate is trusted
 
 **Quick Test (on device):**
+
 ```
 Open Chrome
 Try visiting any HTTPS website (e.g., google.com)
@@ -216,47 +227,45 @@ Try visiting any HTTPS website (e.g., google.com)
 **Device-specific fixes:**
 
 **Zebra TC21-HC / TC26-HC:**
+
 1. Verify DataWedge is **Active**:
    - **Settings** > **DataWedge**
    - Look for a profile with a selected **radio button**
    - If none, tap a radio button to activate a profile
-   
 2. Verify keyboard output is enabled:
    - **DataWedge** > active profile > **Output** > **Keyboard** > toggle **Enabled**
-   
 3. Restart DataWedge:
    - **Settings** > **Apps** > **DataWedge** > **Force Stop**
    - Wait 3 seconds
    - Try scanning again
 
 **Honeywell CT45 XP:**
+
 1. Verify keyboard output is enabled:
    - **Honeywell Settings** > **Scanner Configuration** > toggle **Enable**
    - Verify **Output format** is `Keyboard ASCII` or `Keyboard HID`
-   
 2. Unlock settings if needed:
    - If prompted for PIN, enter `1234` (default)
-   
 3. Restart device:
    - Power off device completely
    - Wait 10 seconds
    - Power on and retry scanning
 
 **CipherLab RS36:**
+
 1. Verify Reader Config has keyboard output enabled:
    - **Reader Config** app > your profile
    - **Output Settings** > toggle **Enable**
    - **Data format** should be `Raw`
-   
 2. Unlock Reader Config if needed:
    - Default PIN is `0000`
    - If locked, contact CipherLab support for factory reset
-   
 3. Verify the profile is set as **Default**:
    - Tap your profile > **Set as Default**
    - Restart the app
 
 **All Devices:**
+
 - **Check barcode format:** Ensure you're scanning a supported barcode type (Code128, EAN-13, GS1-128)
 - **Check barcode quality:** Damaged or faded barcodes won't scan; try a new barcode
 - **Check scanner is enabled:** Physical scanner module may be disabled in device OS settings
@@ -274,11 +283,9 @@ Try visiting any HTTPS website (e.g., google.com)
    - **Fix (Zebra):**
      - **DataWedge** > active profile > **Output** > **Keyboard**
      - Increase **Keystroke Delay** from 25ms to 50–100ms
-   
    - **Fix (Honeywell):**
      - **Honeywell Settings** > **Scanner Configuration**
      - Increase **Output Delay** or **Keystroke Delay** to 50–100ms
-   
    - **Fix (CipherLab):**
      - **Reader Config** > profile > **Output Settings**
      - Increase **Message Terminator Delay** to 50–100ms
@@ -299,11 +306,9 @@ Try visiting any HTTPS website (e.g., google.com)
    - **Fix (Zebra):**
      - **DataWedge** > active profile > **Output** > **Keyboard**
      - Set **Prefix** and **Suffix** to empty (blank)
-   
    - **Fix (Honeywell):**
      - **Honeywell Settings** > **Scanner Configuration**
      - Find **Message Prefix/Suffix** > set both to empty
-   
    - **Fix (CipherLab):**
      - **Reader Config** > profile > **Output Settings**
      - Clear any **Prefix** or **Suffix** fields
@@ -326,11 +331,9 @@ Try visiting any HTTPS website (e.g., google.com)
    - **Fix (Zebra):**
      - **DataWedge** > **GS1 Parsing** > toggle **Enable**
      - Or: **Keystroke Output** > **FNC1** > set to **GS** (ASCII 29)
-   
    - **Fix (Honeywell):**
      - **Honeywell Settings** > **Scanner Configuration**
      - Find **GS1 Mode** > set to **Enabled** or **Use FNC1**
-   
    - **Fix (CipherLab):**
      - **Reader Config** > **Symbology** > select **GS-128** (GS1-128 variant)
      - Ensure **Data format** is `Raw` (not transformed)
@@ -383,6 +386,7 @@ Try visiting any HTTPS website (e.g., google.com)
    - **Fix:** Change to **Real-time** for immediate syncs
 
 **Advanced: Check Network Events**
+
 1. Open DevTools (F12) > **Network** tab
 2. Scan a barcode
 3. Look for a POST request in the Network tab
@@ -402,6 +406,7 @@ Try visiting any HTTPS website (e.g., google.com)
 **This is normal behavior.** The app deduplicates within a 2-second window. If two identical scans are submitted >2 seconds apart, both are recorded (in case user intentionally scanned twice).
 
 **If duplicates are unexpected:**
+
 1. Verify your sync strategy is set to **Real-time** (not Manual, which might accumulate)
 2. Ensure the 2-second dedup window is active
 3. Contact admin if duplicates persist
@@ -434,6 +439,7 @@ Try visiting any HTTPS website (e.g., google.com)
    - **Fix:** Close other apps; use barcode scanning app in isolation
 
 **Quick Performance Test:**
+
 ```javascript
 // In DevTools Console, measure response time
 const start = performance.now();
@@ -453,11 +459,13 @@ Target: <1000ms per action (1 second)
 **Symptoms:** Buttons are tiny, text is hard to read, touch targets are too close together
 
 **This is a UX bug.** Please report with:
+
 - Device model (Zebra TC21-HC, Honeywell CT45 XP, CipherLab RS36)
 - Screen size (diagonal inches + resolution)
 - Which component is too small (buttons, text, fields)
 
 **Temporary workarounds:**
+
 1. Zooming in (Ctrl++ on desktop; pinch on device)—may cause layout issues
 2. Using landscape orientation if available (toggle in device settings)
 3. Switching to desktop version (remove `?forceHandheld=true` from URL)
@@ -519,6 +527,7 @@ Target: <1000ms per action (1 second)
 **Symptoms:** Battery goes from 100% to 20% in 1–2 hours of scanning
 
 **Expected behavior:** Barcode scanning uses significant power:
+
 - Camera/scanner hardware: 15–25% / hour
 - WiFi/sync: 5–10% / hour
 - **Expected drain:** 20–30% per 2 hours
@@ -568,17 +577,17 @@ If you encounter a problem not covered here:
 
 ## Quick Reference: Common Fixes
 
-| Issue | Quick Fix |
-|-------|-----------|
-| **Device won't connect to WiFi** | Forget network, reconnect with correct password |
-| **Barcode scanner not working** | Restart DataWedge/Reader Config; verify keyboard output enabled |
-| **Barcode incomplete** | Increase device keystroke delay to 50–100ms |
-| **GS1 fields not parsed** | Enable FNC1 or GS1 mode in device settings |
-| **Sync fails** | Reconnect WiFi, log out and log back in |
-| **App freezes** | Close app completely, reopen |
-| **UI too small** | Use `?forceHandheld=true` to enable full handheld mode |
-| **Battery drains fast** | Reduce screen brightness, switch to Batch sync mode |
-| **Session expired** | Log out and log back in |
+| Issue                            | Quick Fix                                                       |
+| -------------------------------- | --------------------------------------------------------------- |
+| **Device won't connect to WiFi** | Forget network, reconnect with correct password                 |
+| **Barcode scanner not working**  | Restart DataWedge/Reader Config; verify keyboard output enabled |
+| **Barcode incomplete**           | Increase device keystroke delay to 50–100ms                     |
+| **GS1 fields not parsed**        | Enable FNC1 or GS1 mode in device settings                      |
+| **Sync fails**                   | Reconnect WiFi, log out and log back in                         |
+| **App freezes**                  | Close app completely, reopen                                    |
+| **UI too small**                 | Use `?forceHandheld=true` to enable full handheld mode          |
+| **Battery drains fast**          | Reduce screen brightness, switch to Batch sync mode             |
+| **Session expired**              | Log out and log back in                                         |
 
 ---
 

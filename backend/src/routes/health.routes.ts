@@ -3,7 +3,8 @@ import { getDb, releaseDb } from '../database';
 import { DatabaseMonitoringService } from '../services/database.monitoring.service';
 import { validateTierFeatureFlags, ValidationResult } from '../utils/validate-tier-flags';
 import { getDefaultDatabaseClient } from '../database/database-factory';
-import { authenticateToken, requireManager, AuthRequest } from '../middleware/auth.middleware';
+import { authenticateToken, AuthRequest } from '../middleware/auth.middleware';
+import { requireOrgRole } from '../middleware/requireOrgRole';
 
 const router = Router();
 
@@ -153,7 +154,7 @@ router.get('/ready', async (req, res) => {
 });
 
 // Metrics endpoint for basic server info
-router.get('/metrics', authenticateToken, requireManager, (req: AuthRequest, res) => {
+router.get('/metrics', authenticateToken, requireOrgRole('admin'), (req: AuthRequest, res) => {
   const uptime = process.uptime();
   const memoryUsage = process.memoryUsage();
   const cpuUsage = process.cpuUsage ? process.cpuUsage() : null;
@@ -178,77 +179,92 @@ router.get('/metrics', authenticateToken, requireManager, (req: AuthRequest, res
 });
 
 // Database metrics endpoint
-router.get('/database-metrics', authenticateToken, requireManager, (req: AuthRequest, res) => {
-  try {
-    const dbMetrics = DatabaseMonitoringService.getInstance().getMetrics();
+router.get(
+  '/database-metrics',
+  authenticateToken,
+  requireOrgRole('admin'),
+  (req: AuthRequest, res) => {
+    try {
+      const dbMetrics = DatabaseMonitoringService.getInstance().getMetrics();
 
-    res.status(200).json({
-      status: 'success',
-      timestamp: new Date().toISOString(),
-      metrics: dbMetrics,
-    });
-  } catch (error: unknown) {
-    res.status(500).json({
-      status: 'error',
-      timestamp: new Date().toISOString(),
-      error: `Failed to retrieve database metrics: ${getErrorMessage(error, 'Unknown error')}`,
-    });
-  }
-});
+      res.status(200).json({
+        status: 'success',
+        timestamp: new Date().toISOString(),
+        metrics: dbMetrics,
+      });
+    } catch (error: unknown) {
+      res.status(500).json({
+        status: 'error',
+        timestamp: new Date().toISOString(),
+        error: `Failed to retrieve database metrics: ${getErrorMessage(error, 'Unknown error')}`,
+      });
+    }
+  },
+);
 
 // Database health check endpoint
-router.get('/database-health', authenticateToken, requireManager, (req: AuthRequest, res) => {
-  let db;
-  try {
-    // Check database connectivity
-    db = getDb();
-    const result = db.prepare('SELECT 1 as alive').get() as { alive?: number } | undefined;
+router.get(
+  '/database-health',
+  authenticateToken,
+  requireOrgRole('admin'),
+  (req: AuthRequest, res) => {
+    let db;
+    try {
+      // Check database connectivity
+      db = getDb();
+      const result = db.prepare('SELECT 1 as alive').get() as { alive?: number } | undefined;
 
-    if (result && result.alive === 1) {
-      res.status(200).json({
-        status: 'healthy',
-        timestamp: new Date().toISOString(),
-        database: {
-          connected: true,
-          version: db.pragma ? db.pragma('user_version', { simple: true }) : 'N/A',
-          integrity_check: db.pragma ? db.pragma('integrity_check', { simple: true }) : 'N/A',
-        },
-      });
-    } else {
+      if (result && result.alive === 1) {
+        res.status(200).json({
+          status: 'healthy',
+          timestamp: new Date().toISOString(),
+          database: {
+            connected: true,
+            version: db.pragma ? db.pragma('user_version', { simple: true }) : 'N/A',
+            integrity_check: db.pragma ? db.pragma('integrity_check', { simple: true }) : 'N/A',
+          },
+        });
+      } else {
+        res.status(503).json({
+          status: 'unhealthy',
+          timestamp: new Date().toISOString(),
+          database: {
+            connected: false,
+            error: 'Database connectivity test failed',
+          },
+        });
+      }
+    } catch (error: unknown) {
       res.status(503).json({
         status: 'unhealthy',
         timestamp: new Date().toISOString(),
         database: {
           connected: false,
-          error: 'Database connectivity test failed',
+          error: `Database connectivity error: ${getErrorMessage(error, 'Unknown error')}`,
         },
       });
+    } finally {
+      if (db) {
+        releaseDb(db);
+      }
     }
-  } catch (error: unknown) {
-    res.status(503).json({
-      status: 'unhealthy',
-      timestamp: new Date().toISOString(),
-      database: {
-        connected: false,
-        error: `Database connectivity error: ${getErrorMessage(error, 'Unknown error')}`,
-      },
-    });
-  } finally {
-    if (db) {
-      releaseDb(db);
-    }
-  }
-});
+  },
+);
 
 // Recent alerts endpoint
-router.get('/recent-alerts', authenticateToken, requireManager, (req: AuthRequest, res) => {
-  // In a real implementation, this would return alerts from the last N minutes
-  // For now, we'll return an empty list
-  res.status(200).json({
-    status: 'success',
-    timestamp: new Date().toISOString(),
-    alerts: [], // This would come from a persisted alert store in a real implementation
-  });
-});
+router.get(
+  '/recent-alerts',
+  authenticateToken,
+  requireOrgRole('admin'),
+  (req: AuthRequest, res) => {
+    // In a real implementation, this would return alerts from the last N minutes
+    // For now, we'll return an empty list
+    res.status(200).json({
+      status: 'success',
+      timestamp: new Date().toISOString(),
+      alerts: [], // This would come from a persisted alert store in a real implementation
+    });
+  },
+);
 
 export default router;

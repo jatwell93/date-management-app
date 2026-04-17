@@ -25,12 +25,12 @@ Neon automatically creates point-in-time snapshots:
 
 ### Backup Retention by Plan
 
-| Plan | Retention | Snapshot Frequency | Notes |
-|------|-----------|-------------------|-------|
-| **Free** | 3 days | 6 hours | Limited retention |
-| **Starter** | 7 days | 1 hour | Production-ready |
-| **Pro** | 30 days | Continuous | Enterprise standard |
-| **Enterprise** | Custom | Continuous | Negotiate with Neon |
+| Plan           | Retention | Snapshot Frequency | Notes               |
+| -------------- | --------- | ------------------ | ------------------- |
+| **Free**       | 3 days    | 6 hours            | Limited retention   |
+| **Starter**    | 7 days    | 1 hour             | Production-ready    |
+| **Pro**        | 30 days   | Continuous         | Enterprise standard |
+| **Enterprise** | Custom    | Continuous         | Negotiate with Neon |
 
 **Current Plan**: Starter (7-day retention)  
 **Upgrade to Pro**: If longer retention or more frequent backups needed
@@ -127,18 +127,23 @@ psql "your-connection-string" -c "SELECT pg_size_pretty(pg_database_size(current
 4. **Test Restored Data**
    - Get connection string for new branch (shown in dashboard)
    - Connect via `psql` and verify data
+
    ```bash
    psql "postgresql://user:pass@restore-branch.neon.tech/..." -c "SELECT COUNT(*) FROM products;"
    ```
+
    - Verify row counts match expected values
    - Spot-check specific records to ensure data integrity
 
 5. **Validate Data Integrity**
    - Check foreign key relationships
+
    ```bash
    psql "..." -c "SELECT * FROM information_schema.table_constraints WHERE constraint_type='FOREIGN KEY';"
    ```
+
    - Check for orphaned records
+
    ```bash
    psql "..." -c "SELECT COUNT(*) FROM products WHERE organization_id NOT IN (SELECT id FROM organizations);"
    # Should be 0 (no orphans)
@@ -147,9 +152,11 @@ psql "your-connection-string" -c "SELECT pg_size_pretty(pg_database_size(current
 6. **Run Application Against Restored Database**
    - Update application .env to point to restore branch connection string
    - Start Express server pointing to restore branch
+
    ```bash
    DATABASE_URL="postgresql://user:pass@restore-branch.neon.tech/..." npm run dev
    ```
+
    - Test API endpoints: GET /api/products, POST /api/csv-upload, etc.
    - Verify all endpoints work without errors
 
@@ -207,11 +214,11 @@ If you need to restore to exact moment before corruption/incident:
 psql "your-restored-connection-string"
 
 -- Check row counts by table
-SELECT 
-  tablename, 
+SELECT
+  tablename,
   (SELECT COUNT(*) FROM pg_class WHERE oid = ('public.' || tablename)::regclass) as row_count
-FROM pg_tables 
-WHERE schemaname = 'public' 
+FROM pg_tables
+WHERE schemaname = 'public'
 ORDER BY tablename;
 
 -- Check for constraint violations
@@ -223,7 +230,7 @@ SELECT count(*) FROM organizations WHERE id IS NULL;
 SELECT count(*) FROM _prisma_migrations WHERE id IS NULL;
 
 -- Check audit trail (timestamps make sense)
-SELECT 
+SELECT
   MIN(created_at) as oldest_record,
   MAX(created_at) as newest_record,
   MAX(created_at) - MIN(created_at) as data_span
@@ -253,14 +260,14 @@ psql "your-restored-connection-string"
 SELECT * FROM products WHERE name LIKE 'Test Product%' LIMIT 5;
 
 -- Verify relationships intact
-SELECT p.id, p.name, o.name as org_name 
-FROM products p 
-LEFT JOIN organizations o ON p.organization_id = o.id 
+SELECT p.id, p.name, o.name as org_name
+FROM products p
+LEFT JOIN organizations o ON p.organization_id = o.id
 WHERE p.id IN (1, 2, 3);
 
 -- Verify recent uploads are present
-SELECT * FROM products 
-WHERE created_at > NOW() - INTERVAL '24 hours' 
+SELECT * FROM products
+WHERE created_at > NOW() - INTERVAL '24 hours'
 LIMIT 10;
 ```
 
@@ -270,11 +277,11 @@ LIMIT 10;
 
 ### 4.1 Backup Verification Schedule
 
-| Frequency | Task | Owner |
-|-----------|------|-------|
-| **Weekly** | Test restore to new branch | DevOps |
-| **Monthly** | Full disaster recovery drill | Team Lead |
-| **Quarterly** | Review backup retention policy | CTO |
+| Frequency     | Task                           | Owner     |
+| ------------- | ------------------------------ | --------- |
+| **Weekly**    | Test restore to new branch     | DevOps    |
+| **Monthly**   | Full disaster recovery drill   | Team Lead |
+| **Quarterly** | Review backup retention policy | CTO       |
 
 ### 4.2 Automatic Backup Verification Script
 
@@ -355,6 +362,7 @@ npx ts-node backend/scripts/verify-neon-backups.ts
 **Situation**: Duplicate or corrupted records found in products table
 
 **Response**:
+
 1. Identify corruption timestamp (when first appeared)
 2. Create restore branch from backup BEFORE corruption
 3. Test restored branch thoroughly (see 3.1, 3.2, 3.3)
@@ -368,6 +376,7 @@ npx ts-node backend/scripts/verify-neon-backups.ts
 **Situation**: Critical table column deleted or renamed accidentally
 
 **Response**:
+
 1. Create restore branch from before schema change
 2. Use `pg_dump` to compare schemas:
    ```bash
@@ -383,6 +392,7 @@ npx ts-node backend/scripts/verify-neon-backups.ts
 **Situation**: Database slow, suspected bloated indexes/dead tuples
 
 **Response**:
+
 1. Run VACUUM ANALYZE in current database (before restoring)
    ```bash
    psql $DATABASE_URL -c "VACUUM ANALYZE;"
@@ -397,6 +407,7 @@ npx ts-node backend/scripts/verify-neon-backups.ts
 **Situation**: Neon database unreachable, connection pool exhausted
 
 **Response**:
+
 1. Check Neon status page for incidents
 2. If Neon infrastructure issue:
    - Wait for Neon to recover
@@ -419,6 +430,7 @@ postgresql://[user]:[password]@[host]/[database]?sslmode=require
 ```
 
 **Neon Console Location:**
+
 1. Project → Branches → main branch
 2. Click **Connection Details**
 3. Copy "Connection String" (full string with password)

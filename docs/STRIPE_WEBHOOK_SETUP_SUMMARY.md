@@ -4,52 +4,60 @@ This document summarizes what's been set up for local webhook testing.
 
 ## What Was Created
 
-### 1. **Webhook Handler Service** 
-   - File: `backend/src/services/webhook.service.ts`
-   - Implements Stripe signature verification
-   - Handles idempotent event processing
-   - Event handlers (currently TODOs):
-     - ✅ `customer.subscription.created` 
-     - ✅ `customer.subscription.updated`
-     - ✅ `customer.subscription.deleted`
-     - ✅ `checkout.session.completed`
-     - ✅ `invoice.payment_failed`
-     - ✅ `customer.subscription.trial_will_end`
+### 1. **Webhook Handler Service**
+
+- File: `backend/src/services/webhook.service.ts`
+- Implements Stripe signature verification
+- Handles idempotent event processing
+- Event handlers (currently TODOs):
+  - ✅ `customer.subscription.created`
+  - ✅ `customer.subscription.updated`
+  - ✅ `customer.subscription.deleted`
+  - ✅ `checkout.session.completed`
+  - ✅ `invoice.payment_failed`
+  - ✅ `customer.subscription.trial_will_end`
 
 ### 2. **Webhook Routes**
-   - File: `backend/src/routes/webhook.routes.ts`
-   - Endpoint: `POST /api/webhooks/stripe`
-   - Verify → Parse → Handle (idempotent sequence)
-   - Raw body parsing for Stripe signature verification
+
+- File: `backend/src/routes/webhook.routes.ts`
+- Endpoint: `POST /api/webhooks/stripe`
+- Verify → Parse → Handle (idempotent sequence)
+- Raw body parsing for Stripe signature verification
 
 ### 3. **Backend Integration**
-   - Webhook routes mounted in `backend/src/index.ts`
-   - Uses `express.raw()` middleware BEFORE `express.json()`
-   - Separate from authenticated routes
+
+- Webhook routes mounted in `backend/src/index.ts`
+- Uses `express.raw()` middleware BEFORE `express.json()`
+- Separate from authenticated routes
 
 ### 4. **Environment Configuration**
-   - Updated `backend/src/config/environment.ts` with Stripe keys
-   - Added `.env.example` with all environment variables
-   - Added `STRIPE_SECRET_KEY` and `STRIPE_WEBHOOK_SECRET` variables
+
+- Updated `backend/src/config/environment.ts` with Stripe keys
+- Added `.env.example` with all environment variables
+- Added `STRIPE_SECRET_KEY` and `STRIPE_WEBHOOK_SECRET` variables
 
 ### 5. **Stripe Package**
-   - Added `stripe@^13.10.0` to `backend/package.json`
-   - Run `npm install` in backend directory to get it
+
+- Added `stripe@^13.10.0` to `backend/package.json`
+- Run `npm install` in backend directory to get it
 
 ### 6. **Documentation**
-   - Created `docs/LOCAL_WEBHOOK_SETUP.md` with complete setup guide
-   - Includes ngrok and localtunnel options
-   - Troubleshooting section
+
+- Created `docs/LOCAL_WEBHOOK_SETUP.md` with complete setup guide
+- Includes ngrok and localtunnel options
+- Troubleshooting section
 
 ## Quick Start (5 Minutes)
 
 ### Step 1: Install Stripe Package
+
 ```bash
 cd backend
 npm install
 ```
 
 ### Step 2: Set Up Tunnel
+
 ```bash
 # Option A: ngrok (recommended)
 brew install ngrok
@@ -61,10 +69,12 @@ lt --port 3001 --subdomain pharmacy-app
 ```
 
 You'll get a URL like:
+
 - ngrok: `https://abc123.ngrok.io`
 - localtunnel: `https://pharmacy-app.loca.lt`
 
 ### Step 3: Configure Stripe Webhook
+
 1. Go to [Stripe Dashboard](https://dashboard.stripe.com/test/webhooks)
 2. Click **Add endpoint**
 3. Enter: `https://abc123.ngrok.io/api/webhooks/stripe` (use your tunnel URL)
@@ -79,6 +89,7 @@ You'll get a URL like:
 6. Copy the **Signing secret** (starts with `whsec_`)
 
 ### Step 4: Configure Environment
+
 ```bash
 # In backend/.env.development (or backend/.env):
 STRIPE_SECRET_KEY=sk_test_xxxxx        # From https://dashboard.stripe.com/apikeys
@@ -86,12 +97,14 @@ STRIPE_WEBHOOK_SECRET=whsec_xxxxx      # From step 3 above
 ```
 
 ### Step 5: Start Backend
+
 ```bash
 npm run dev
 # Server should be running on http://localhost:3001
 ```
 
 ### Step 6: Test Webhook
+
 1. Go to Stripe Dashboard → Webhooks → Your endpoint
 2. Click **Send test event**
 3. Select `customer.subscription.created`
@@ -101,7 +114,7 @@ npm run dev
 ## Files Changed
 
 - ✅ `backend/src/services/webhook.service.ts` - Created
-- ✅ `backend/src/routes/webhook.routes.ts` - Created  
+- ✅ `backend/src/routes/webhook.routes.ts` - Created
 - ✅ `backend/src/index.ts` - Updated (added webhook routes)
 - ✅ `backend/src/config/environment.ts` - Updated (added Stripe config)
 - ✅ `backend/package.json` - Updated (added stripe package)
@@ -145,20 +158,24 @@ npm run dev
 ## Troubleshooting
 
 ### "STRIP_SECRET_KEY not found" or "STRIPE_WEBHOOK_SECRET not found"
+
 - Check `.env.development` file exists in `backend/` directory
 - Verify values are not empty (should start with `sk_test_` and `whsec_`)
 - Restart backend after updating `.env` file
 
 ### Webhook not being received
+
 - Check tunnel is still running (`ngrok http 3001` or `lt --port 3001`)
 - Verify URL is correct in Stripe Dashboard (should match tunnel URL)
 - Check Stripe Dashboard → Webhooks → View recent attempts
 
 ### Signature verification failed
+
 - Ensure `STRIPE_WEBHOOK_SECRET` matches Stripe Dashboard (whitespace matters!)
 - Should start with `whsec_` (not `sk_test_`)
 
 ### Port 3001 already in use
+
 - Change `PORT` in `.env.development`
 - Or kill the process using port 3001: `lsof -i :3001`
 

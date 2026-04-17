@@ -9,6 +9,7 @@ Your CSV file must contain the following four columns. You can use alternative n
 ### 1. SKU (Stock Keeping Unit)
 
 **Required Column Names:**
+
 - `SKU`
 - `Item Code`
 - `Reorder Number`
@@ -18,6 +19,7 @@ Your CSV file must contain the following four columns. You can use alternative n
 ### 2. Name
 
 **Required Column Names:**
+
 - `Name`
 - `Item Description`
 - `Product Name`
@@ -27,6 +29,7 @@ Your CSV file must contain the following four columns. You can use alternative n
 ### 3. Cost
 
 **Required Column Names:**
+
 - `Cost`
 - `Cost Price`
 - `Unit Cost`
@@ -40,6 +43,7 @@ Your CSV file must contain the following four columns. You can use alternative n
 ### 4. Barcode
 
 **Required Column Names:**
+
 - `Barcode`
 - `Alias`
 - `EAN`
@@ -57,24 +61,30 @@ Your CSV file must contain the following four columns. You can use alternative n
 ## Data Format Requirements
 
 ### SKU Field
+
 - **Length**: Maximum 100 characters
 - **Type**: Text or alphanumeric
 
 ### Name Field
+
 - **Length**: Maximum 200 characters
 - **Type**: Text
 
 ### Cost Field
+
 The system supports multiple formats for cost values:
 
 #### Numeric Values
+
 - Basic numbers: `12.99`, `100`, `0.99`, `1000.00`
 - With thousands separators: `1,234.56`, `12,345.67`, `1,000,000.99`
 
 #### European Number Format
+
 - Uses dots for thousands separators and commas for decimal: `1.234,56`, `12.345,67`, `1.000.000,99`
 
 #### Currency Symbols
+
 - Currency symbols at the beginning: `$12.34`, `€15.50`, `£12.34`, `¥1234`
 - Currency symbols at the end: `12.34$`, `12.34€`, `1234¥`
 - Common supported currency symbols:
@@ -93,13 +103,16 @@ The system supports multiple formats for cost values:
   - And others: `¢`, `Є`, `₵`, `₸`, `₼`, `₾`, `₯`
 
 #### Currency Abbreviations
+
 - Currency codes: `USD 12.34`, `EUR 12.34`, `GBP 12.34`, `AUD 12.34`, `CAD 12.34`, `JPY 1234`, `RMB 12.34`, `Rp 1.234,56`
 
 #### Complex Currency Representations
+
 - Combining abbreviations with symbols: `AUD$ 1,234.56`, `CAD $1,234.56`
-- With spaces: ` € 1.234,56 ` (spaces are automatically trimmed)
+- With spaces: `€ 1.234,56` (spaces are automatically trimmed)
 
 ### Barcode Field
+
 - **Length**: Maximum 100 characters
 - **Type**: Text or numeric
 

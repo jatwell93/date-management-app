@@ -20,7 +20,16 @@ jest.mock('../../middleware/auth.middleware', () => ({
     req.organizationId = req.get('x-org-id') || undefined;
     next();
   },
-  requireManager: (_req: any, _res: any, next: any) => next(),
+}));
+
+jest.mock('../../middleware/requireOrgRole', () => ({
+  requireOrgRole:
+    (...allowedRoles: string[]) =>
+    (req: any, _res: any, next: any) => {
+      // Mock the role check - always pass for tests
+      req.userRole = allowedRoles[0] || 'admin';
+      next();
+    },
 }));
 
 jest.mock('../../middleware/validation.middleware', () => ({
@@ -73,7 +82,7 @@ describe('user.routes', () => {
       {
         id: 1,
         organizationId: 'org-1',
-        role: 'Manager',
+        role: 'admin',
       },
     ]);
 
@@ -87,7 +96,7 @@ describe('user.routes', () => {
     mockCreateUser.mockResolvedValue({
       id: 2,
       organizationId: 'org-1',
-      role: 'member',
+      role: 'team_member',
     });
 
     mockUpdateUser.mockResolvedValue(true);
@@ -103,7 +112,7 @@ describe('user.routes', () => {
         {
           id: 1,
           organizationId: 'org-1',
-          role: 'Manager',
+          role: 'admin',
         },
       ]);
       expect(mockUserServiceCtor).toHaveBeenCalledWith('org-1');
@@ -196,19 +205,19 @@ describe('user.routes', () => {
       const response = await request(app)
         .post('/users')
         .set('x-org-id', 'org-1')
-        .send({ pin: '1234', role: 'member' });
+        .send({ pin: '1234', role: 'team_member' });
 
       expect(response.status).toBe(201);
       expect(response.body).toEqual(
         expect.objectContaining({
           id: 2,
           organizationId: 'org-1',
-          role: 'member',
+          role: 'team_member',
         }),
       );
       expect(mockCreateUser).toHaveBeenCalledWith({
         pin: '1234',
-        role: 'member',
+        role: 'team_member',
         organizationId: 'org-1',
       });
     });
@@ -219,7 +228,7 @@ describe('user.routes', () => {
       const response = await request(app)
         .post('/users')
         .set('x-org-id', 'org-1')
-        .send({ pin: '1234', role: 'member' });
+        .send({ pin: '1234', role: 'team_member' });
 
       expect(response.status).toBe(500);
       expect(response.body).toEqual({ message: 'Internal server error' });
@@ -271,33 +280,33 @@ describe('user.routes', () => {
       mockGetUserById.mockResolvedValueOnce({
         id: 1,
         organizationId: 'org-1',
-        role: 'member',
+        role: 'team_member',
       });
 
       const response = await request(app)
         .put('/users/1')
         .set('x-org-id', 'org-1')
-        .send({ role: 'member' });
+        .send({ role: 'team_member' });
 
       expect(response.status).toBe(200);
       expect(response.body).toEqual({
         id: 1,
         organizationId: 'org-1',
-        role: 'member',
+        role: 'team_member',
       });
-      expect(mockUpdateUser).toHaveBeenCalledWith(1, { role: 'member' });
+      expect(mockUpdateUser).toHaveBeenCalledWith(1, { role: 'team_member' });
     });
 
     it('updates user with pin+role payload', async () => {
       const response = await request(app)
         .put('/users/1')
         .set('x-org-id', 'org-1')
-        .send({ pin: '9876', role: 'Manager' });
+        .send({ pin: '9876', role: 'admin' });
 
       expect(response.status).toBe(200);
       expect(mockUpdateUser).toHaveBeenCalledWith(1, {
         pin: '9876',
-        role: 'Manager',
+        role: 'admin',
       });
     });
 

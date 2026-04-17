@@ -16,59 +16,69 @@ Quick reference for common Stripe webhook problems and how to resolve them.
 ## Common Issues
 
 ### 1) Signature verification failed
+
 - Symptom: 400 from `/api/webhooks/stripe` with "signature verification failed".
 - Cause: Missing/incorrect `STRIPE_WEBHOOK_SECRET` or request body not raw.
 - Fix:
   - Ensure `STRIPE_WEBHOOK_SECRET` in environment matches Stripe dashboard.
   - Confirm route uses `express.raw()` (already configured in `index.ts`).
   - Replay event via Stripe CLI once fixed: `stripe listen --forward-to localhost:3000/api/webhooks/stripe`.
-**Diagnostic**:
+    **Diagnostic**:
+
 ```bash
 npm run diagnose:webhook -- --recent
 ```
 
 ### 2) Missing organizationId in customer metadata
+
 - Symptom: Handler throws `Missing organizationId in Stripe customer metadata`.
 - Cause: Stripe `customer.metadata.organizationId` not set.
 - Fix:
   - Add `organizationId` to the Stripe Customer metadata in your billing/checkout flow.
   - For tests, mock `customer.metadata.organizationId` with the organization id.
-**Check with diagnostic**:
+    **Check with diagnostic**:
+
 ```bash
 npm run diagnose:webhook -- --org <org_id>
 ```
 
 ### 3) Duplicate/replayed events
+
 - Symptom: Same event processed multiple times or duplicate DB rows.
 - Cause: No idempotency check or race on marking processed.
 - Fix:
   - `ProcessedWebhookEvent` model enforces idempotency (unique `id`).
   - Handler returns 200 for duplicates and records idempotency skips for monitoring.
-**Verification**:
+    **Verification**:
+
 ```bash
 npm run diagnose:webhook -- --event-id <evt_id> --verbose
 ```
 
 ### 4) Customer deleted
+
 - Symptom: `Customer has been deleted` / NotFoundError.
 - Cause: Stripe customer is deleted; metadata unavailable.
 - Fix:
   - Skip processing or reconcile customer in Stripe/DB.
   - Use audit logs to review affected orgs.
-**Fix**:
+    **Fix**:
 - Skip processing or reconcile customer in Stripe/DB.
 - Use audit logs to review affected orgs:
+
 ```sql
-SELECT * FROM audit_logs 
-WHERE action LIKE '%subscription%' 
+SELECT * FROM audit_logs
+WHERE action LIKE '%subscription%'
   AND change_description LIKE '%<customer_id>%'
 ORDER BY created_at DESC;
 ```
 
 ### 5) Missing tier metadata (price.metadata.tier)
+
 - Symptom: Handler defaults to `starter` tier or logs warning.
 - Fix: Ensure price objects used in subscriptions include `metadata.tier` or rely on default behavior.
-**Fix**: Ensure price objects used in subscriptions include `metadata.tier`:
+  **Fix**: Ensure price objects used in subscriptions include `metadata.tier`:
+
 ```bash
 stripe prices update <price_id> -d "metadata[tier]=professional"
 ```
@@ -76,11 +86,12 @@ stripe prices update <price_id> -d "metadata[tier]=professional"
 Or rely on default behavior (defaults to 'starter' if not specified).
 
 ### 6) Email sending failed (SendGrid)
+
 - Symptom: Emails not delivered; logs show `SENDGRID_API_KEY not set`.
 - Fix:
   - Set `SENDGRID_API_KEY` in environment and verify sender domain.
   - Check SendGrid dashboard for suppressed recipients and template IDs.
-**Fix**:
+    **Fix**:
 - Set `SENDGRID_API_KEY` in environment and verify sender domain.
 - Check SendGrid dashboard for suppressed recipients and template IDs.
 - Verify template IDs in `backend/src/services/email.service.ts`:
@@ -89,16 +100,18 @@ Or rely on default behavior (defaults to 'starter' if not specified).
   - `downgradeWarning`: d-a4639fceab7747d798b1931b955163e2
 
 ### 7) DB unique constraint errors when marking processed
+
 - Symptom: Prisma P2002 on `processedWebhookEvent.create()`.
 - Cause: Concurrent attempts to mark same event processed.
 - Fix:
   - This is expected; handler swallows P2002 and treats event as already processed.
   - Monitor idempotency skip rate to detect replay attacks.
-**Fix**:
+    **Fix**:
 - This is expected; handler swallows P2002 and treats event as already processed.
 - Monitor idempotency skip rate to detect replay attacks.
 
 ### 8) Webhook Not Processing (No Events Received)
+
 - Where to look:
   - Sentry: handler failures and validation warnings
   - Application monitoring: webhook latency, failure count, idempotency skip rate
@@ -110,27 +123,29 @@ Or rely on default behavior (defaults to 'starter' if not specified).
 
 The system handles 8 webhook event types:
 
-| Event | Handler | Purpose |
-|-------|---------|---------|
-| `customer.subscription.created` | `handleSubscriptionCreated` | Creates subscription record, sets usage limits |
-| `customer.subscription.updated` | `handleSubscriptionUpdated` | Updates tier, applies creation lock on downgrade |
-| `customer.subscription.deleted` | `handleSubscriptionDeleted` | Cancels subscription, downgrades to Starter |
-| `checkout.session.completed` | `handleCheckoutSessionCompleted` | Marks trial as converted |
-| `invoice.payment_failed` | `handleInvoicePaymentFailed` | Sets past_due, queues dunning email |
-| `customer.subscription.trial_will_end` | `handleTrialWillEnd` | Sends trial reminder email |
-| `payment_intent.succeeded` | `handlePaymentIntentSucceeded` | Confirms trial conversion |
-| `payment_intent.payment_failed` | `handlePaymentIntentFailed` | Logs failure, sends alert |
+| Event                                  | Handler                          | Purpose                                          |
+| -------------------------------------- | -------------------------------- | ------------------------------------------------ |
+| `customer.subscription.created`        | `handleSubscriptionCreated`      | Creates subscription record, sets usage limits   |
+| `customer.subscription.updated`        | `handleSubscriptionUpdated`      | Updates tier, applies creation lock on downgrade |
+| `customer.subscription.deleted`        | `handleSubscriptionDeleted`      | Cancels subscription, downgrades to Starter      |
+| `checkout.session.completed`           | `handleCheckoutSessionCompleted` | Marks trial as converted                         |
+| `invoice.payment_failed`               | `handleInvoicePaymentFailed`     | Sets past_due, queues dunning email              |
+| `customer.subscription.trial_will_end` | `handleTrialWillEnd`             | Sends trial reminder email                       |
+| `payment_intent.succeeded`             | `handlePaymentIntentSucceeded`   | Confirms trial conversion                        |
+| `payment_intent.payment_failed`        | `handlePaymentIntentFailed`      | Logs failure, sends alert                        |
 
 ### Handler Behavior
 
 **Success (200)**: Event processed successfully or was a duplicate (idempotent).
 
-**Client Error (400)**: 
+**Client Error (400)**:
+
 - Signature verification failed
 - Invalid payload
 - Missing required metadata
 
 **Server Error (500)**:
+
 - Database errors (Stripe will retry)
 - External service failures (Stripe will retry)
 
@@ -154,21 +169,23 @@ npm run diagnose:webhook -- --org <org_id> --verbose
 ### Manual Database Queries
 
 **Check processed events**:
+
 ```sql
 -- Recent events by type
-SELECT event_type, COUNT(*) as count 
-FROM processed_webhook_events 
+SELECT event_type, COUNT(*) as count
+FROM processed_webhook_events
 WHERE processed_at > datetime('now', '-24 hours')
 GROUP BY event_type;
 ```
 
 **Check for missing events**:
+
 ```sql
 -- Find organizations without recent subscription events
 SELECT o.id, o.name, st.tier_level, st.status
 FROM organizations o
 JOIN subscription_tiers st ON o.id = st.organization_id
-LEFT JOIN processed_webhook_events pwe 
+LEFT JOIN processed_webhook_events pwe
   ON pwe.event_type LIKE 'customer.subscription%'
   AND pwe.processed_at > datetime('now', '-7 days')
 WHERE pwe.id IS NULL;
@@ -181,12 +198,14 @@ WHERE pwe.id IS NULL;
 ### customer.subscription.created
 
 **Fails when**:
+
 - Stripe customer missing `organizationId` metadata
 - Organization doesn't exist in database
 
 **Log location**: `webhook.service.ts:290-380`
 
 **Recovery**:
+
 1. Check metadata: `npm run diagnose:webhook -- --org <org_id>`
 2. If org missing, create organization manually
 3. Replay event: `stripe events resend <evt_id>`
@@ -196,14 +215,16 @@ WHERE pwe.id IS NULL;
 ### invoice.payment_failed
 
 **Timeline**:
+
 - Day 0: Event received, status → `past_due`, dunning email sent
 - Days 1-7: Grace period (access continues)
 - Day 8: Dunning job auto-downgrades to Starter
 
 **Check dunning status**:
+
 ```sql
-SELECT status, past_due_since 
-FROM subscription_tiers 
+SELECT status, past_due_since
+FROM subscription_tiers
 WHERE organization_id = '<org_id>';
 ```
 
@@ -240,19 +261,19 @@ stripe events resend <event_id>
 
 ### Sentry Alerts
 
-| Alert | Trigger | Severity |
-|-------|---------|----------|
-| webhook_handler_error | >1/day | Error |
-| webhook_critical_failure | Missing metadata | Fatal |
-| idempotency_skip_anomaly | Sudden spike | Warning |
+| Alert                    | Trigger          | Severity |
+| ------------------------ | ---------------- | -------- |
+| webhook_handler_error    | >1/day           | Error    |
+| webhook_critical_failure | Missing metadata | Fatal    |
+| idempotency_skip_anomaly | Sudden spike     | Warning  |
 
 ### When to Return 500 vs 200
 
-| Response | Use When | Stripe Behavior |
-|----------|----------|-----------------|
-| **200** | Success, duplicate, validation error | No retry |
-| **400** | Signature failed, invalid payload | No retry |
-| **500** | Database error, transient failure | Retries with backoff |
+| Response | Use When                             | Stripe Behavior      |
+| -------- | ------------------------------------ | -------------------- |
+| **200**  | Success, duplicate, validation error | No retry             |
+| **400**  | Signature failed, invalid payload    | No retry             |
+| **500**  | Database error, transient failure    | Retries with backoff |
 
 ---
 
@@ -264,4 +285,4 @@ stripe events resend <event_id>
 
 ---
 
-*Last updated: March 2026*
+_Last updated: March 2026_
