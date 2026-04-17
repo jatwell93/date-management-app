@@ -1,3 +1,4 @@
+import bcrypt from 'bcrypt';
 import { PrismaClient } from '@prisma/client';
 import { OrganizationInviteService } from '../../services/organization-invite.service';
 import { ConflictError, NotFoundError, PaymentRequiredError, ValidationError } from '../../errors';
@@ -24,6 +25,10 @@ describe('OrganizationInviteService', () => {
         findMany: jest.fn(),
         create: jest.fn(),
         update: jest.fn(),
+        updateMany: jest.fn(),
+      },
+      orgAuditLog: {
+        create: jest.fn(),
       },
       $transaction: jest.fn(async (arg: any) => {
         if (Array.isArray(arg)) {
@@ -51,8 +56,9 @@ describe('OrganizationInviteService', () => {
         id: 'invite-1',
         organizationId: 'org-1',
         email: 'user@example.com',
-        role: 'member',
-        token: 'token',
+        role: 'team_member',
+        inviteTokenHash: 'hashed-token',
+        inviteTokenExpiresAt: new Date('2026-02-24T00:00:00.000Z'),
         status: 'PENDING',
         expiresAt: new Date('2026-02-24T00:00:00.000Z'),
         invitedByUserId: 1,
@@ -63,19 +69,22 @@ describe('OrganizationInviteService', () => {
         organizationId: 'org-1',
         invitedByUserId: 1,
         email: 'User@Example.com',
-        role: 'member',
+        role: 'team_member',
       });
 
       expect(invite.email).toBe('user@example.com');
+      expect(invite.token).toEqual(expect.any(String));
+      expect(invite.token).toContain('.');
       expect(mockPrisma.organizationInvite.create).toHaveBeenCalledWith(
         expect.objectContaining({
           data: expect.objectContaining({
             organizationId: 'org-1',
             email: 'user@example.com',
-            role: 'member',
+            role: 'team_member',
             status: 'PENDING',
             invitedByUserId: 1,
-            token: expect.any(String),
+            inviteTokenHash: expect.any(String),
+            inviteTokenExpiresAt: expect.any(Date),
           }),
         }),
       );
@@ -91,7 +100,7 @@ describe('OrganizationInviteService', () => {
           organizationId: 'org-1',
           invitedByUserId: 1,
           email: 'user@example.com',
-          role: 'member',
+          role: 'team_member',
         }),
       ).rejects.toBeInstanceOf(PaymentRequiredError);
     });
@@ -108,7 +117,7 @@ describe('OrganizationInviteService', () => {
           organizationId: 'org-1',
           invitedByUserId: 1,
           email: 'user@example.com',
-          role: 'member',
+          role: 'team_member',
         }),
       ).rejects.toBeInstanceOf(ConflictError);
     });
@@ -116,11 +125,17 @@ describe('OrganizationInviteService', () => {
 
   describe('acceptInvite', () => {
     it('accepts a valid invite and creates user', async () => {
+      const inviteToken = '550e8400-e29b-41d4-a716-446655440000.secret';
+      const inviteTokenHash = await bcrypt.hash(inviteToken, 4);
+
       mockPrisma.organizationInvite.findFirst.mockResolvedValue({
-        id: 'invite-1',
+        id: '550e8400-e29b-41d4-a716-446655440000',
         organizationId: 'org-1',
-        role: 'member',
+        email: 'user@example.com',
+        role: 'team_member',
+        inviteTokenHash,
         status: 'PENDING',
+        inviteTokenExpiresAt: new Date('2026-02-20T00:00:00.000Z'),
         expiresAt: new Date('2026-02-20T00:00:00.000Z'),
       });
       mockPrisma.subscriptionTier.findFirst.mockResolvedValue({ tierLevel: 'professional' });
@@ -129,13 +144,13 @@ describe('OrganizationInviteService', () => {
       mockPrisma.user.findFirst.mockResolvedValue(null);
       mockPrisma.user.create.mockResolvedValue({ id: 10, organizationId: 'org-1' });
       mockPrisma.organizationInvite.update.mockResolvedValue({
-        id: 'invite-1',
+        id: '550e8400-e29b-41d4-a716-446655440000',
         organizationId: 'org-1',
         status: 'ACCEPTED',
       });
 
       const result = await service.acceptInvite({
-        token: 'token',
+        token: inviteToken,
         clerkUserId: 'user_123',
         email: 'user@example.com',
         username: 'user',
@@ -149,25 +164,31 @@ describe('OrganizationInviteService', () => {
             clerkUserId: 'user_123',
             email: 'user@example.com',
             username: 'user',
-            role: 'Team Member',
+            role: 'team_member',
           }),
         }),
       );
     });
 
     it('marks expired invites as expired', async () => {
+      const inviteToken = '550e8400-e29b-41d4-a716-446655440001.secret';
+      const inviteTokenHash = await bcrypt.hash(inviteToken, 4);
+
       mockPrisma.organizationInvite.findFirst.mockResolvedValue({
-        id: 'invite-1',
+        id: '550e8400-e29b-41d4-a716-446655440001',
         organizationId: 'org-1',
-        role: 'member',
+        email: 'user@example.com',
+        role: 'team_member',
+        inviteTokenHash,
         status: 'PENDING',
+        inviteTokenExpiresAt: new Date('2026-02-10T00:00:00.000Z'),
         expiresAt: new Date('2026-02-10T00:00:00.000Z'),
       });
-      mockPrisma.organizationInvite.update.mockResolvedValue({ id: 'invite-1' });
+      mockPrisma.organizationInvite.updateMany.mockResolvedValue({ count: 1 });
 
       await expect(
         service.acceptInvite({
-          token: 'token',
+          token: inviteToken,
           clerkUserId: 'user_123',
           email: 'user@example.com',
         }),
@@ -179,7 +200,7 @@ describe('OrganizationInviteService', () => {
 
       await expect(
         service.acceptInvite({
-          token: 'token',
+          token: '550e8400-e29b-41d4-a716-446655440002.secret',
           clerkUserId: 'user_123',
           email: 'user@example.com',
         }),
