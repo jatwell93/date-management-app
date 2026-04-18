@@ -71,7 +71,7 @@
     "prisma": "^5.22.0",
     "rate-limiter-flexible": "^8.0.1",
     "sqlite": "^5.1.1",
-    "sqlite3": "^5.1.7",
+    "sqlite3": "^6.0.1",
     "stripe": "^13.10.0",
     "svix": "^1.85.0",
     "validator": "^13.15.15",
