@@ -200,13 +200,11 @@
   - Ensure `npm start` runs successfully in frontend directory
   - Open DevTools (F12) console for all testing below
   - Keep [handheld-debug-guide.md](docs/handheld-debug-guide.md) open for reference
-  
 - [x] 14.0.2 Test handheld UI detection and rendering:
   - Open app with `http://localhost:3002/?forceHandheld=true`
   - Verify handheld layout loads (full-screen scanner, large buttons, HandheldScanToolbar visible)
   - Verify desktop browser window resized to ≤600×800px triggers handheld mode automatically
   - Check that all handheld-only components render (HandheldScanner, sync status, strategy selector)
-  
 - [x] 14.0.3 Test keyboard input detection (50ms threshold):
   - Use DevTools Console snippet from [handheld-debug-guide.md](docs/handheld-debug-guide.md#manually-keyboard-event-injection)
   - Simulate fast barcode scan (10ms keystroke delay):
@@ -220,7 +218,6 @@
     ```
   - Verify slow typing does NOT trigger hardware scan path (should treat as manual entry)
   - Check console logs show timing detection working correctly
-  
 - [x] 14.0.4 Test GS1-128 barcode parsing:
   - Simulate scan of GS1-128 test barcode:
     ```javascript
@@ -229,7 +226,6 @@
   - Verify parsed data appears in console: GTIN, batch, expiry, serial
   - Verify expiry date field auto-fills on ScanPage
   - Test with fixture barcodes from [handheld-debug-guide.md](docs/handheld-debug-guide.md#test-data-barcode-fixtures)
-  
 - [x] 14.0.5 Test offline sync logic and strategies:
   - In DevTools Network tab, throttle connection to "Offline" (DevTools > Network > Offline)
   - Simulate scan:
@@ -240,26 +236,22 @@
   - Verify sync status shows "Offline" in toolbar
   - Restore network connection (back to "No throttling")
   - Verify sync completes and status shows "Synced"
-  
 - [x] 14.0.6 Test all three sync strategies:
   - **Real-time mode:** Scan 3 barcodes, verify each syncs immediately (<2s) to network requests
   - **Batch mode:** Switch to batch strategy, scan 3 barcodes, verify none sync immediately; wait 10+ minutes or trigger manual sync, verify all 3 sync together
   - **Manual mode:** Switch to manual, scan 3 barcodes, verify no automatic sync; tap "Sync Now", verify scans sync
   - Document any timing issues for pharmacy visit
-  
 - [x] 14.0.7 Test haptic feedback simulation:
   - Open DevTools Console
   - Navigate to ScanPage and scan a barcode (simulated or real)
   - Check console for haptic API calls: `navigator.vibrate()` being invoked
   - If testing on a device (not just desktop), verify slight vibration on scan
-  
 - [x] 14.0.8 Performance baseline on desktop:
   - Open DevTools Performance tab
   - Simulate 10 rapid scans in real-time mode
   - Record Performance profile
   - Note frame rate, memory usage, CPU spike frequency (for comparison at pharmacy)
   - Target: <200ms per scan processing, no frame drops on handheld UI
-  
 - [x] 14.0.9 Pre-test checklist pass:
   - [x] Handheld layout renders correctly
   - [x] Keyboard input detection working (50ms threshold validated)

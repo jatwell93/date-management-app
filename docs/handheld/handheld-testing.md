@@ -5,6 +5,7 @@ This document provides comprehensive testing instructions for handheld UI compon
 ## Overview
 
 Handheld components must be tested across multiple scenarios:
+
 - Desktop environment (development)
 - Handheld device emulation (browser DevTools)
 - Actual pharmacy PDT devices (Zebra, CipherLab)
@@ -45,7 +46,7 @@ describe('HandheldScanner', () => {
   it('renders camera mode on handheld devices', () => {
     // Arrange: Create test data
     const mockOnScan = jest.fn();
-    
+
     // Act: Render component
     render(
       <HandheldProvider value={mockContext}>
@@ -217,9 +218,7 @@ console.log(navigator.userAgent);
 // Expected: "Mozilla/5.0 (Linux; Android..."
 
 // 2. Test touch events
-document.getElementById('scan-button').dispatchEvent(
-  new TouchEvent('touchstart', {})
-);
+document.getElementById('scan-button').dispatchEvent(new TouchEvent('touchstart', {}));
 
 // 3. Test offline mode
 navigator.onLine = false;
@@ -227,8 +226,7 @@ navigator.onLine = false;
 
 // 4. Check service worker
 if ('serviceWorker' in navigator) {
-  navigator.serviceWorker.getRegistrations()
-    .then(regs => console.log('Service Workers:', regs));
+  navigator.serviceWorker.getRegistrations().then((regs) => console.log('Service Workers:', regs));
 }
 ```
 
@@ -265,10 +263,10 @@ On device, navigate to `/scan` page:
 ```
 1. Scan UPC barcode:     1234567890
    Expected: Form populates with product
-   
+
 2. Scan GS1 barcode:     (01)12345678901231(17)250131
    Expected: Expiry field auto-populate to "2025-01-31"
-   
+
 3. Scan invalid:         ABCD1234
    Expected: Error message, new-product form
 ```
@@ -376,26 +374,22 @@ describe('Handheld Scan Workflow', () => {
 
   it('completes a scan-to-submit workflow', () => {
     // 1. Verify handheld toolbar visible
-    cy.get('[data-testid="handheld-scan-toolbar"]')
-      .should('be.visible');
+    cy.get('[data-testid="handheld-scan-toolbar"]').should('be.visible');
 
     // 2. Trigger barcode scan
     cy.get('[data-testid="handheld-scan-trigger"]').click();
 
     // 3. Verify product lookup
-    cy.get('[data-testid="product-lookup"]')
-      .should('contain', '12345678901231');
+    cy.get('[data-testid="product-lookup"]').should('contain', '12345678901231');
 
     // 4. Verify sync status
-    cy.get('[data-testid="sync-status"]')
-      .should('contain.text', 'Synced');
+    cy.get('[data-testid="sync-status"]').should('contain.text', 'Synced');
 
     // 5. Submit form
     cy.get('button').contains('Submit').click();
 
     // 6. Verify success message
-    cy.get('[role="alert"]')
-      .should('contain.text', 'Scan submitted');
+    cy.get('[role="alert"]').should('contain.text', 'Scan submitted');
   });
 
   it('handles offline sync queue', () => {
@@ -409,8 +403,7 @@ describe('Handheld Scan Workflow', () => {
     cy.get('button').contains('Submit').click();
 
     // Verify offline queue grows
-    cy.get('[data-testid="sync-now-button"]')
-      .should('not.be.disabled');
+    cy.get('[data-testid="sync-now-button"]').should('not.be.disabled');
   });
 });
 ```
@@ -456,22 +449,25 @@ Profile component render times:
 ```tsx
 import { Profiler } from 'react';
 
-<Profiler id="handheld-scan" onRender={(id, phase, actualDuration) => {
-  console.log(`${id} (${phase}): ${actualDuration}ms`);
-}}>
+<Profiler
+  id="handheld-scan"
+  onRender={(id, phase, actualDuration) => {
+    console.log(`${id} (${phase}): ${actualDuration}ms`);
+  }}
+>
   <ScanPage />
-</Profiler>
+</Profiler>;
 ```
 
 ### Expected Performance Metrics
 
-| Operation | Target | Actual |
-|-----------|--------|--------|
-| App mount | < 2s | 1.2s |
-| Barcode scan | < 100ms | 45ms |
-| Form submit | < 500ms | 250ms |
-| Settings open | < 300ms | 120ms |
-| Sync complete | < 5s | 2.3s |
+| Operation     | Target  | Actual |
+| ------------- | ------- | ------ |
+| App mount     | < 2s    | 1.2s   |
+| Barcode scan  | < 100ms | 45ms   |
+| Form submit   | < 500ms | 250ms  |
+| Settings open | < 300ms | 120ms  |
+| Sync complete | < 5s    | 2.3s   |
 
 ## Offline Testing
 
@@ -532,20 +528,21 @@ After running tests on actual devices or emulators, document results:
 
 ## Results
 
-| Component | Feature | Status | Notes |
-|-----------|---------|--------|-------|
-| HandheldScanner | Camera mode default | ✅ PASS | Renders camera-first on device |
-| HandheldScanner | GS1 barcode parsing | ✅ PASS | Expiry auto-populates correctly |
-| HandheldScanToolbar | Sync strategy selector | ✅ PASS | All options working |
-| HandheldScanToolbar | Real-time sync | ✅ PASS | Data syncs immediately online |
-| HandheldScanToolbar | Offline queue | ✅ PASS | Queue persists in offline state |
-| HandheldLayout | Full-screen layout | ✅ PASS | Proper flex layout on 5" screen |
-| Accessibility | Touch targets (44×44) | ✅ PASS | All buttons meet minimum size |
-| Accessibility | Color contrast | ✅ PASS | 4.5:1 ratio on all text |
-| Offline | Queue persistence | ✅ PASS | Data survives app restart |
-| Performance | App startup | ✅ PASS | < 2s on actual device |
+| Component           | Feature                | Status  | Notes                           |
+| ------------------- | ---------------------- | ------- | ------------------------------- |
+| HandheldScanner     | Camera mode default    | ✅ PASS | Renders camera-first on device  |
+| HandheldScanner     | GS1 barcode parsing    | ✅ PASS | Expiry auto-populates correctly |
+| HandheldScanToolbar | Sync strategy selector | ✅ PASS | All options working             |
+| HandheldScanToolbar | Real-time sync         | ✅ PASS | Data syncs immediately online   |
+| HandheldScanToolbar | Offline queue          | ✅ PASS | Queue persists in offline state |
+| HandheldLayout      | Full-screen layout     | ✅ PASS | Proper flex layout on 5" screen |
+| Accessibility       | Touch targets (44×44)  | ✅ PASS | All buttons meet minimum size   |
+| Accessibility       | Color contrast         | ✅ PASS | 4.5:1 ratio on all text         |
+| Offline             | Queue persistence      | ✅ PASS | Data survives app restart       |
+| Performance         | App startup            | ✅ PASS | < 2s on actual device           |
 
 ## Passed Tests: 15/15 (100%)
+
 ## Coverage: 83%+ statement coverage
 ```
 
@@ -553,18 +550,18 @@ After running tests on actual devices or emulators, document results:
 
 ### Common Test Failures
 
-| Error | Cause | Solution |
-|-------|-------|----------|
-| `Cannot find element by testid` | Selector doesn't exist | Check component `data-testid` attributes |
-| `Timeout waiting for element` | Async operation incomplete | Use `waitFor()` or `screen.findBy` |
-| `Not wrapped in Provider` | Missing context wrapper | Wrap test render in `<HandheldProvider>` |
-| `Scanner mock not called` | Event handler issue | Check `onScan` prop connection |
-| `Sync button disabled when shouldn't be` | `queueLength` hardcoded | Update `queueLength` prop in test |
+| Error                                    | Cause                      | Solution                                 |
+| ---------------------------------------- | -------------------------- | ---------------------------------------- |
+| `Cannot find element by testid`          | Selector doesn't exist     | Check component `data-testid` attributes |
+| `Timeout waiting for element`            | Async operation incomplete | Use `waitFor()` or `screen.findBy`       |
+| `Not wrapped in Provider`                | Missing context wrapper    | Wrap test render in `<HandheldProvider>` |
+| `Scanner mock not called`                | Event handler issue        | Check `onScan` prop connection           |
+| `Sync button disabled when shouldn't be` | `queueLength` hardcoded    | Update `queueLength` prop in test        |
 
 ## Resources
 
 - **Test File:** `frontend/src/pages/__tests__/ScanPage.test.tsx`
-- **Component Files:** 
+- **Component Files:**
   - `frontend/src/components/HandheldScanner.tsx`
   - `frontend/src/components/HandheldScanToolbar.tsx`
   - `frontend/src/layouts/HandheldLayout.tsx`
@@ -589,6 +586,7 @@ npm test -- --watch
 ```
 
 **Next Steps:**
+
 - Deploy test fixtures to actual handheld devices
 - Verify GS1 parsing with real pharmacy barcodes
 - Test offline sync queue on actual network conditions

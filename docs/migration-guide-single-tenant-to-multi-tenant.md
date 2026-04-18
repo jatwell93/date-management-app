@@ -18,18 +18,22 @@ This guide walks operators through upgrading an existing single-tenant Date-Mana
 ## Step-by-Step
 
 1. **Enable maintenance mode**
+
    ```bash
    kubectl scale deploy/backend --replicas 0
    kubectl scale deploy/frontend --replicas 0
    ```
 
 2. **Apply schema migrations**
+
    ```bash
    cd backend && npx prisma migrate deploy
    ```
+
    Creates `Organization`, adds `organizationId` FK column everywhere (`NOT NULL`) with default `'default-org'`.
 
 3. **Back-fill organization rows**
+
    ```sql
    INSERT INTO "Organization" (id, name)
    VALUES ('default-org', 'Legacy Org')
@@ -37,6 +41,7 @@ This guide walks operators through upgrading an existing single-tenant Date-Mana
    ```
 
 4. **Update existing data**
+
    ```sql
    UPDATE "Product"          SET "organizationId"='default-org';
    UPDATE "InventoryItem"    SET "organizationId"='default-org';
@@ -45,6 +50,7 @@ This guide walks operators through upgrading an existing single-tenant Date-Mana
    ```
 
 5. **Assign owner role to admin user**
+
    ```sql
    INSERT INTO "OrganizationUserRole" (organizationId, userId, role)
    VALUES ('default-org', 1, 'OWNER')
@@ -52,19 +58,22 @@ This guide walks operators through upgrading an existing single-tenant Date-Mana
    ```
 
 6. **Run verification script**
+
    ```bash
    node scripts/verify-migration.js --org default-org
    ```
+
    Ensures every row now references a valid organization.
 
 7. **Deploy new code**
+
    ```bash
    kubectl rollout restart deploy/backend
    kubectl rollout restart deploy/frontend
    ```
 
 8. **Smoke test**
-   - Sign in → verify org picker shows *Legacy Org*.
+   - Sign in → verify org picker shows _Legacy Org_.
    - CRUD product → ensure read/write OK.
    - Stripe subscription page loads.
 

@@ -11,9 +11,11 @@ Recent UBS scans show critical and warning findings with high merit (hardcoded s
 ## Capabilities
 
 ### New Capabilities
+
 - `secure-config-validation`: Fail-fast startup validation for required secrets.
 
 ### Modified Capabilities
+
 - None.
 
 ## Impact

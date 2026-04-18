@@ -14,8 +14,8 @@ module.exports = async () => {
     execSync(
       'npx prisma db push --schema=./prisma/schema.prisma --accept-data-loss --skip-generate',
       {
-      stdio: 'inherit',
-      cwd: process.cwd(),
+        stdio: 'inherit',
+        cwd: process.cwd(),
       },
     );
     console.log('Test database migrated successfully.');

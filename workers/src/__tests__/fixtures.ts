@@ -1,6 +1,6 @@
 /**
  * Integration Test Fixtures & Utilities
- * 
+ *
  * Provides test data, mock database setup, and assertion helpers
  * for multi-tenant integration tests
  */
@@ -29,7 +29,7 @@ export function createTestJWT(payload: JWTTestPayload): string {
   // Create a minimal valid JWT structure for testing
   // Header.Payload.Signature (base64url encoded)
   const header = Buffer.from(JSON.stringify({ alg: 'HS256', typ: 'JWT' })).toString('base64url');
-  
+
   const claims = {
     organizationId: payload.organizationId,
     sub: payload.sub || 'test-user-123',
@@ -37,12 +37,12 @@ export function createTestJWT(payload: JWTTestPayload): string {
     tier_level: payload.tier_level || 'starter',
     exp: payload.exp || Math.floor(Date.now() / 1000) + 3600,
     iat: Math.floor(Date.now() / 1000),
-    iss: 'test-issuer'
+    iss: 'test-issuer',
   };
-  
+
   const body = Buffer.from(JSON.stringify(claims)).toString('base64url');
   const signature = Buffer.from('test-signature').toString('base64url');
-  
+
   return `${header}.${body}.${signature}`;
 }
 
@@ -64,8 +64,8 @@ export const testEnv = {
   R2_SECRET_ACCESS_KEY: 'test-secret',
   R2_BUCKET_NAME: 'test-bucket',
   HYPERDRIVE: {
-    connectionString: process.env.NEON_TEST_CONNECTION_STRING || ''
-  }
+    connectionString: process.env.NEON_TEST_CONNECTION_STRING || '',
+  },
 };
 
 /**
@@ -80,7 +80,7 @@ export const testData = {
     organization_id: organizationId,
     created_at: new Date(),
     updated_at: new Date(),
-    ...overrides
+    ...overrides,
   }),
 
   inventoryItem: (organizationId: string, productId: number, overrides?: any) => ({
@@ -92,7 +92,7 @@ export const testData = {
     organization_id: organizationId,
     created_at: new Date(),
     updated_at: new Date(),
-    ...overrides
+    ...overrides,
   }),
 
   storeArea: (organizationId: string, overrides?: any) => ({
@@ -102,7 +102,7 @@ export const testData = {
     organization_id: organizationId,
     created_at: new Date(),
     updated_at: new Date(),
-    ...overrides
+    ...overrides,
   }),
 
   organization: (overrides?: any) => ({
@@ -111,13 +111,13 @@ export const testData = {
     status: 'active',
     created_at: new Date(),
     updated_at: new Date(),
-    ...overrides
+    ...overrides,
   }),
 
   subscription: (
     arg1?: string | { [key: string]: any },
     tierLevel: string = 'professional',
-    overrides?: any
+    overrides?: any,
   ) => {
     // Support both call patterns used in tests:
     // 1) subscription({ status: 'canceled' })
@@ -132,7 +132,7 @@ export const testData = {
         billing_period_end: new Date(Date.now() + 30 * 24 * 60 * 60 * 1000),
         created_at: new Date(),
         updated_at: new Date(),
-        ...objectOverrides
+        ...objectOverrides,
       };
     }
 
@@ -144,9 +144,9 @@ export const testData = {
       billing_period_end: new Date(Date.now() + 30 * 24 * 60 * 60 * 1000),
       created_at: new Date(),
       updated_at: new Date(),
-      ...overrides
+      ...overrides,
     };
-  }
+  },
 };
 
 /**
@@ -157,20 +157,27 @@ export const tierLimits = {
     max_skus: 500,
     max_users: 1,
     max_storage: 1024 * 1024 * 100, // 100MB
-    features: ['basic_inventory', 'product_management']
+    features: ['basic_inventory', 'product_management'],
   },
   professional: {
     max_skus: 2000,
     max_users: 10,
     max_storage: 1024 * 1024 * 1024, // 1GB
-    features: ['basic_inventory', 'product_management', 'advanced_analytics', 'bulk_export']
+    features: ['basic_inventory', 'product_management', 'advanced_analytics', 'bulk_export'],
   },
   concierge: {
     max_skus: Infinity,
     max_users: Infinity,
     max_storage: Infinity,
-    features: ['basic_inventory', 'product_management', 'advanced_analytics', 'bulk_export', 'api_access', 'custom_integrations']
-  }
+    features: [
+      'basic_inventory',
+      'product_management',
+      'advanced_analytics',
+      'bulk_export',
+      'api_access',
+      'custom_integrations',
+    ],
+  },
 };
 
 /**
@@ -182,7 +189,7 @@ export const testAssertions = {
    */
   assertOrgIsolation(results: any[], organizationId: string, orgField = 'organization_id') {
     expect(results).toBeDefined();
-    results.forEach(result => {
+    results.forEach((result) => {
       expect(result[orgField]).toBe(organizationId);
     });
   },
@@ -202,7 +209,7 @@ export const testAssertions = {
     if (expectedMessage && response.body) {
       expect(JSON.stringify(response.body)).toContain(expectedMessage);
     }
-  }
+  },
 };
 
 /**
@@ -211,6 +218,6 @@ export const testAssertions = {
 export function createMockContext() {
   return {
     waitUntil: (promise: Promise<any>) => {},
-    passThroughOnException: () => {}
+    passThroughOnException: () => {},
   };
 }

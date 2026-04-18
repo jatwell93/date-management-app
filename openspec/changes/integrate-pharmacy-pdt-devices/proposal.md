@@ -34,6 +34,7 @@ _(No existing spec requirements are changing. All PDT functionality is additive 
 ## Impact
 
 **Frontend code:**
+
 - `frontend/src/components/CameraScanner.tsx` — Parameterize resolution, add continuous scan mode prop
 - `frontend/src/components/Scanner.tsx` — Add `defaultMode` prop, accept hardware keyboard wedge input
 - `frontend/src/pages/ScanPage.tsx` — Swap to handheld scanner component when `isHandheld` detected
@@ -46,30 +47,36 @@ _(No existing spec requirements are changing. All PDT functionality is additive 
 - New: `frontend/src/styles/handheld.css` — Media queries and overrides for rugged 5" displays
 
 **Sync infrastructure:**
+
 - `frontend/src/lib/offline-sync.ts` — Add configurable sync interval (PDT modes)
 - `frontend/src/lib/sync-manager.ts` — Add PDT sync strategy configuration
 
 **PWA manifest:**
+
 - `frontend/public/manifest.json` — Consider `start_url: "/scan"` for PDT "Add to Home Screen" installs
 
 **Backend:** No changes required. PDT scans flow through existing product lookup and inventory item creation endpoints. The `deviceId` field may be added to audit logs in a future phase.
 
 **Dependencies:**
+
 - No new npm packages required for MVP (keyboard wedge is native DOM events, GS1 parsing is custom)
 - Quagga.js remains for camera fallback
 - Future: Vendor SDKs (Zebra Enterprise Browser JS API, Honeywell Mobility SDK for Web, CipherLab HTML5 API) for advanced hardware control beyond keyboard wedge
 
 **Parallel work with active specs:**
+
 - `plan-saas-monetization-model`: PDT support can be **gated as a Premium/Concierge tier feature** using the feature-gate middleware (Phase 5, already complete). No blocking dependency — PDT work runs in parallel. Integration point: add `pdt_scanning` feature flag to `tier_feature_flags` seed data.
 - `use-cloudflare-r2-and-a-serverless-database`: PDT integration is **entirely frontend-scoped** and does not touch storage abstraction, database layer, or Workers. Fully parallel. Both share the same backend API surface — PDT scans hit the same `/products/by-barcode/:barcode` and `/inventory-items` POST endpoints already deployed.
 
 **Testing:**
+
 - Unit tests for device detection hook, keyboard wedge hook, GS1 parser
 - Component tests for HandheldScanner rendering and mode switching
 - Integration tests at Pharmacy A on Zebra TC21-HC (baseline performance on real device)
 - Update existing `ScanPage.test.tsx` and `Scanner.test.tsx` with handheld mode coverage
 
 **Risks:**
+
 - Keyboard wedge reliability varies by vendor configuration (DataWedge, Honeywell Settings) — mitigation: document required device configuration per vendor
 - Android 14 intent delay (500ms) on newer Zebra devices — mitigation: recommend `sendOrderedBroadcast()` in device config
 - 5" screen real estate constrains product detail display — mitigation: progressive disclosure, scroll-below-fold for secondary info

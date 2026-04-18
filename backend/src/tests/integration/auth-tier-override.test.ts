@@ -280,8 +280,10 @@ describe('Auth Middleware Tier Override', () => {
       data: {
         organizationId: org.id,
         email: `invite-${nonce}@example.com`,
-        role: 'member',
-        token: `invite-token-${nonce}`,
+        role: 'team_member',
+        status: 'PENDING',
+        inviteTokenHash: `invite-hash-${nonce}`,
+        inviteTokenExpiresAt: new Date(Date.now() + 24 * 60 * 60 * 1000),
         expiresAt: new Date(Date.now() + 24 * 60 * 60 * 1000),
         invitedByUserId: user.id,
       },

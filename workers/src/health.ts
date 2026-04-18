@@ -1,6 +1,6 @@
 /**
  * Health Check Endpoint
- * 
+ *
  * Lightweight health check that verifies:
  * - Workers service is running
  * - R2 bucket connectivity (optional)
@@ -34,7 +34,10 @@ export interface HealthCheckResult {
 /**
  * Perform health check
  */
-export async function healthCheck(env: Env, includeConnectivity: boolean = false): Promise<HealthCheckResult> {
+export async function healthCheck(
+  env: Env,
+  includeConnectivity: boolean = false,
+): Promise<HealthCheckResult> {
   const startTime = Date.now();
   const result: HealthCheckResult = {
     status: 'healthy',
@@ -98,29 +101,29 @@ export async function healthCheck(env: Env, includeConnectivity: boolean = false
  */
 function getCorsHeaders(request: Request, env: Env): HeadersInit {
   const origin = request.headers.get('Origin') || '';
-  
+
   // Allowed origins for CORS
   const allowedOrigins = [
     'http://localhost:3000',
-    'http://localhost:3001', 
+    'http://localhost:3001',
     'http://127.0.0.1:3000',
     'http://127.0.0.1:3001',
     'http://127.0.0.1:3002',
     'https://d412d559.date-management-status.pages.dev',
     'https://date-management-status.pages.dev',
   ];
-  
+
   // Add frontend URL if configured
   if (env.FRONTEND_URL) {
     allowedOrigins.push(env.FRONTEND_URL);
   }
-  
+
   // Check if origin is allowed
   let allowedOrigin = '';
   if (origin) {
     try {
       const requestUrl = new URL(origin);
-      const isAllowed = allowedOrigins.some(allowed => {
+      const isAllowed = allowedOrigins.some((allowed) => {
         try {
           const allowedUrl = new URL(allowed);
           return requestUrl.origin === allowedUrl.origin;
@@ -133,12 +136,12 @@ function getCorsHeaders(request: Request, env: Env): HeadersInit {
       allowedOrigin = allowedOrigins.includes(origin) ? origin : '';
     }
   }
-  
+
   const headers: HeadersInit = {
     'Content-Type': 'application/json',
     'Cache-Control': 'no-cache, no-store, must-revalidate',
   };
-  
+
   // Add CORS headers if origin is allowed
   if (allowedOrigin) {
     headers['Access-Control-Allow-Origin'] = allowedOrigin;
@@ -146,7 +149,7 @@ function getCorsHeaders(request: Request, env: Env): HeadersInit {
     headers['Access-Control-Allow-Headers'] = 'Content-Type, Authorization';
     headers['Access-Control-Max-Age'] = '86400';
   }
-  
+
   return headers;
 }
 
@@ -167,7 +170,7 @@ export async function handleHealthCheck(request: Request, env: Env): Promise<Res
 
   try {
     const result = await healthCheck(env, includeConnectivity);
-    
+
     const statusCode = result.status === 'healthy' ? 200 : result.status === 'degraded' ? 200 : 503;
 
     return new Response(JSON.stringify(result, null, 2), {
@@ -176,15 +179,19 @@ export async function handleHealthCheck(request: Request, env: Env): Promise<Res
     });
   } catch (error) {
     return new Response(
-      JSON.stringify({
-        status: 'unhealthy',
-        timestamp: new Date().toISOString(),
-        error: error instanceof Error ? error.message : 'Health check failed',
-      }, null, 2),
+      JSON.stringify(
+        {
+          status: 'unhealthy',
+          timestamp: new Date().toISOString(),
+          error: error instanceof Error ? error.message : 'Health check failed',
+        },
+        null,
+        2,
+      ),
       {
         status: 503,
         headers: getCorsHeaders(request, env),
-      }
+      },
     );
   }
 }

@@ -6,13 +6,14 @@
 **Phase:** 8B of "Use Cloudflare R2 & Serverless Database"  
 **Priority:** 🔴 CRITICAL - Blocks production deployment  
 **Estimated Effort:** 8-10 hours across 4 implementation phases  
-**Timeline:** Next 1-2 sprints  
+**Timeline:** Next 1-2 sprints
 
 ---
 
 ## Problem Statement
 
 **Current Situation:**
+
 - Cloudflare Workers handlers exist but lack multi-tenant authentication and authorization
 - JWT tokens contain `organizationId`, but Workers handlers do NOT extract or validate it
 - No subscription tier validation in Workers
@@ -20,6 +21,7 @@
 - No usage limit checks (e.g., Starter tier limited to 500 SKUs)
 
 **Risk:**
+
 - 🚨 Production Workers would allow cross-tenant data access
 - 🚨 Subscription limits would be bypassed
 - 🚨 Canceled organizations would still have access
@@ -39,21 +41,25 @@ Port multi-tenant authentication from backend Express middleware to edge-native 
 ### Design Decisions
 
 #### Decision 1: Use Edge-Native Handlers (NOT importing backend routes)
+
 - **Why:** Backend routes depend on better-sqlite3 (native bindings incompatible with Workers)
 - **Chosen approach:** Jose for JWT verification + @neondatabase/serverless for Neon queries
 - **Benefit:** 254.8KB bundle size (10x smaller than Prisma import approach)
 
 #### Decision 2: JWT Verification with Jose
+
 - **Why:** Jose is lightweight, zero-dependency, Works-compatible
 - **Alternative:** Clerk fallback (requires CLERK_SECRET_KEY, higher latency)
 - **Pattern:** Verify JWT → extract organizationId → query subscription tier from Neon
 
 #### Decision 3: Subscription Caching Strategy
+
 - **Phase 8B (MVP):** Query Neon on each request (acceptable: Hyperdrive pooling keeps latency <30ms)
 - **Phase 8B+:** Implement Durable Objects or KV cache for distributed caching (future optimization)
 - **Why:** Simple, no coordination needed for MVP; good enough with Hyperdrive pooling
 
 #### Decision 4: Parameterized Queries Only
+
 - **Why:** Prevent SQL injection, especially critical with untrusted organizationId
 - **Pattern:** Use @neondatabase/serverless sql template literals exclusively
 - **Enforcement:** Code review gate: any raw SQL string concatenation = reject
@@ -63,6 +69,7 @@ Port multi-tenant authentication from backend Express middleware to edge-native 
 ## Current State
 
 ### ✅ Completed (Foundation)
+
 - Phase 2: Storage abstraction layer with R2 provider
 - Phase 3: Database abstraction with Prisma + Neon integration
 - Phase 4: Services refactored with organizationId parameter
@@ -72,6 +79,7 @@ Port multi-tenant authentication from backend Express middleware to edge-native 
 - Phase 8.1-8.13: Basic Workers handlers (login, register, getProducts, etc.)
 
 ### ⚠️ Incomplete (Blocking)
+
 - **Auth context extraction** — JWT verified but organizationId NOT extracted/validated
 - **Subscription tier validation** — No check for active status
 - **Organization scope filtering** — Handlers don't filter queries by organizationId
@@ -84,9 +92,11 @@ Port multi-tenant authentication from backend Express middleware to edge-native 
 ## Scope & Tasks Breakdown
 
 ### Phase 1: Auth Context (Task 8B.1) — ~3 hours
+
 **Goal:** Extract and validate organization context from JWT in Workers
 
 **Tasks:**
+
 - Create auth utilities module (`workers/src/utils/auth.ts`)
 - Implement JWT verification using jose
 - Extract organizationId from token payload
@@ -98,9 +108,11 @@ Port multi-tenant authentication from backend Express middleware to edge-native 
 **Output:** `AuthContext` object injected into request with userId, organizationId, tierLevel
 
 ### Phase 2: Feature Gates (Task 8B.2) — ~2 hours
+
 **Goal:** Port feature gate and usage limit logic to Workers
 
 **Tasks:**
+
 - Create feature gate utility (`workers/src/utils/feature-gates.ts`)
 - Port `requireFeature` logic from backend middleware
 - Port `checkUsageLimit` logic from backend middleware
@@ -111,9 +123,11 @@ Port multi-tenant authentication from backend Express middleware to edge-native 
 **Output:** Reusable middleware for protecting endpoints with feature/usage gates
 
 ### Phase 3: Handler Updates (Task 8B.3) — ~3 hours
+
 **Goal:** Update all edge-native handlers to filter by organizationId
 
 **Tasks:**
+
 - Update `getProducts` handler: Add `WHERE organizationId = $1` to query
 - Update `getInventory` handler: Add org scope filter
 - Update `getStoreAreas` handler: Add org scope filter
@@ -125,9 +139,11 @@ Port multi-tenant authentication from backend Express middleware to edge-native 
 **Output:** All handlers safely scoped to organization
 
 ### Phase 4: Integration Tests (Task 8B.4) — ~2 hours
+
 **Goal:** Verify multi-tenant security boundary and subscription enforcement
 
 **Tests to Write:**
+
 - **Cross-tenant isolation:** Org A cannot read Org B's products/inventory (2 tests)
 - **Feature gate enforcement:** Starter tier blocked from Premium features (2 tests)
 - **Usage limit enforcement:** Starter tier SKU limit = 500 (1 test)
@@ -143,18 +159,19 @@ Port multi-tenant authentication from backend Express middleware to edge-native 
 
 ## Risks & Mitigations
 
-| Risk | Severity | Root Cause | Mitigation |
-|------|----------|-----------|-----------|
-| Hyperdrived latency spikes | 🟡 Medium | Cold Neon connection | Implement Durable Objects cache in Phase 8B+, monitor p95 latency |
-| SQL injection via organizationId | 🔴 Critical | Raw SQL concatenation | Code review gate: reject any non-parameterized SQL, use sql template literals only |
-| Stale tier data (user on old plan) | 🟡 Medium | No tier caching | Add X-Org-Tier-Version header like backend, clients validate on read |
-| Test environment cross-contamination | 🟡 Medium | Shared test DB | Use test org ID prefix, clean up in afterEach hook |
+| Risk                                 | Severity    | Root Cause            | Mitigation                                                                         |
+| ------------------------------------ | ----------- | --------------------- | ---------------------------------------------------------------------------------- |
+| Hyperdrived latency spikes           | 🟡 Medium   | Cold Neon connection  | Implement Durable Objects cache in Phase 8B+, monitor p95 latency                  |
+| SQL injection via organizationId     | 🔴 Critical | Raw SQL concatenation | Code review gate: reject any non-parameterized SQL, use sql template literals only |
+| Stale tier data (user on old plan)   | 🟡 Medium   | No tier caching       | Add X-Org-Tier-Version header like backend, clients validate on read               |
+| Test environment cross-contamination | 🟡 Medium   | Shared test DB        | Use test org ID prefix, clean up in afterEach hook                                 |
 
 ---
 
 ## Success Criteria
 
 ✅ **Must Have (MVP):**
+
 1. JWT organizationId extracted and validated in every request
 2. Organization status checked (active orgs only, canceled rejected)
 3. All database queries filtered by organizationId
@@ -164,6 +181,7 @@ Port multi-tenant authentication from backend Express middleware to edge-native 
 7. Subscription tier validation tests passing
 
 ✅ **Nice to Have (Post-MVP):**
+
 - Distributed caching (Durable Objects/KV) for subscription tiers
 - Per-tier rate limiting (Pro tier: 100 req/min, Starter: 10 req/min)
 - Detailed usage analytics per organization
@@ -174,16 +192,19 @@ Port multi-tenant authentication from backend Express middleware to edge-native 
 ## Related Artifacts
 
 **Existing Backend Code to Port:**
+
 - `backend/src/middleware/auth.middleware.ts` — JWT verification, subscription validation
 - `backend/src/middleware/feature-gate.middleware.ts` — Feature gates, usage limits
 - `backend/src/types/subscription.ts` — TIER_LIMITS, FEATURE_FLAGS constants
 - `backend/src/handlers/` — Query patterns using Prisma (adapt to @neondatabase/serverless)
 
 **Specs Affected:**
+
 - Will update `openspec/specs/workers.md` with auth flow and tier validation requirments
 - May add new security delta spec for multi-tenant isolation (TBD in Phase 8B.1)
 
 **Dependencies:**
+
 - Phase 2 ✅ Storage abstraction
 - Phase 7 ✅ Neon + Hyperdrive
 - Phase 8 ⚠️ Workers infrastructure (in progress)

@@ -3,26 +3,21 @@ import { useUser, useAuth, useOrganization, ClerkProvider } from '@clerk/clerk-r
 import { jwtDecode, JwtPayload } from 'jwt-decode';
 import * as Sentry from '@sentry/react';
 import { offlineSyncService } from '../lib/offline-sync';
+import { RoleValue, normalizeRole } from '../constants/roles';
 
 interface ClerkAuthProviderProps {
   children: React.ReactNode;
   publishableKey: string;
 }
 
-const decodeTokenAndGetRole = (token: string | null): 'Manager' | 'Team Member' | null => {
+const decodeTokenAndGetRole = (token: string | null): RoleValue | null => {
   if (!token) return null;
   try {
     const decodedToken = jwtDecode<JwtPayload & { role?: string }>(token);
-    const role = decodedToken.role;
-    if (role === 'Manager') {
-      return 'Manager';
-    } else if (role === 'Team Member') {
-      return 'Team Member';
-    }
-    return 'Team Member'; // Default role
+    return normalizeRole(decodedToken.role);
   } catch (error) {
     Sentry.captureException(error, { tags: { feature: 'auth' } });
-    return 'Team Member';
+    return 'team_member';
   }
 };
 
@@ -67,7 +62,7 @@ interface AuthContextType {
   token: string | null;
   userId: number | null;
   userName: string | null;
-  userRole: 'Manager' | 'Team Member' | null;
+  userRole: RoleValue | null;
   handleLogin: (token: string) => void;
   handleLogout: () => void;
 }
@@ -92,7 +87,7 @@ function ClerkAuthInner({ children }: { children: React.ReactNode }) {
   const [isFullySignedIn, setIsFullySignedIn] = useState(false);
   const [userId, setUserId] = useState<number | null>(null);
   const [userName, setUserName] = useState<string | null>(null);
-  const [userRole, setUserRole] = useState<'Manager' | 'Team Member' | null>(null);
+  const [userRole, setUserRole] = useState<RoleValue | null>(null);
 
   useEffect(() => {
     // Clear any legacy persisted bearer tokens. Auth state remains Clerk-managed.

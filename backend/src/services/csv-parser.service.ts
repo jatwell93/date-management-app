@@ -649,9 +649,7 @@ export class CSVParserService extends EventEmitter {
 
     const departmentRaw = rawDepartment?.trim();
     const department =
-      departmentRaw && departmentRaw !== ''
-        ? this.sanitizeValue(departmentRaw)
-        : undefined;
+      departmentRaw && departmentRaw !== '' ? this.sanitizeValue(departmentRaw) : undefined;
 
     return {
       row: {
@@ -834,8 +832,7 @@ export class CSVParserService extends EventEmitter {
               continue;
             }
 
-            const departmentName =
-              row.department ?? CSVParserService.UNALLOCATED_DEPARTMENT_NAME;
+            const departmentName = row.department ?? CSVParserService.UNALLOCATED_DEPARTMENT_NAME;
             let locationId = departmentIdCache.get(departmentName);
             if (locationId === undefined) {
               locationId = await this.getOrCreateStoreAreaByName(tx, departmentName);

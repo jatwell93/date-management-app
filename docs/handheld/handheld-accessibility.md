@@ -13,6 +13,7 @@ Accessible handheld UIs ensure that all pharmacy staff, including those with vis
 ✅ **Required:** All interactive elements must have a minimum of **44px × 44px** touch target area.
 
 This applies to:
+
 - Buttons (Sync Now, Settings)
 - Select dropdowns (Sync Strategy selector)
 - Text inputs
@@ -64,12 +65,12 @@ This applies to:
 
 ### Sync Status Colors (Verified)
 
-| Status | Color | Hex | Contrast Ratio | Passes |
-|--------|-------|-----|----------------|--------|
-| Syncing | Blue | #2563EB | 7.5:1 | ✅ AA |
-| Synced | Green | #16A34A | 5.8:1 | ✅ AA |
-| Offline | Yellow | #CA8A04 | 4.6:1 | ✅ AA |
-| Failed | Red | #DC2626 | 6.2:1 | ✅ AA |
+| Status  | Color  | Hex     | Contrast Ratio | Passes |
+| ------- | ------ | ------- | -------------- | ------ |
+| Syncing | Blue   | #2563EB | 7.5:1          | ✅ AA  |
+| Synced  | Green  | #16A34A | 5.8:1          | ✅ AA  |
+| Offline | Yellow | #CA8A04 | 4.6:1          | ✅ AA  |
+| Failed  | Red    | #DC2626 | 6.2:1          | ✅ AA  |
 
 ### Text Color Combinations
 
@@ -107,6 +108,7 @@ This applies to:
 ### Focus Management
 
 ✅ **Required:** All interactive elements must be:
+
 1. Reachable via keyboard (Tab/Shift+Tab)
 2. Have visible focus indicator
 3. Be operable via Enter, Space, or arrow keys
@@ -277,6 +279,7 @@ const handleBarcodeScan = (result: HardwareScanResult) => {
 ### Clear, Actionable Errors
 
 ✅ **Required:** Error messages must be:
+
 1. Associated with the field that caused the error
 2. Written in plain language
 3. Suggest corrective action
@@ -330,6 +333,7 @@ npm test -- --coverage
 ### Screen Reader Testing
 
 Test with:
+
 - **VoiceOver** (iOS, macOS)
 - **TalkBack** (Android)
 - **NVDA** (Windows)
@@ -338,6 +342,7 @@ Test with:
 ### Device Testing
 
 Test on actual handheld devices:
+
 - **Zebra TC21-HC/TC26-HC** - 5" screen, Android
 - **CipherLab RS36/RK25** - 5" screen, Android
 
@@ -346,7 +351,7 @@ Test on actual handheld devices:
 ```tsx
 // Enable accessibility testing in development
 if (process.env.NODE_ENV === 'development') {
-  import('axe-core').then(axe => {
+  import('axe-core').then((axe) => {
     axe.run();
   });
 }
@@ -358,20 +363,20 @@ if (process.env.NODE_ENV === 'development') {
       <App />
     </div>
   </body>
-</html>
+</html>;
 ```
 
 ## WCAG 2.1 AA Compliance Checklist
 
-| Criterion | Status | Notes |
-|-----------|--------|-------|
-| 1.4.3 Contrast (Minimum) | ✅ | All text 4.5:1 ratio |
-| 2.1.1 Keyboard | ✅ | All features keyboard accessible |
-| 2.5.5 Target Size | ✅ | All targets 44×44px minimum |
-| 2.5.2 Pointer Cancellation | ✅ | Touch can be cancelled mid-drag |
-| 3.2.1 On Focus | ✅ | No unexpected navigation on focus |
-| 4.1.2 Name, Role, Value | ✅ | All UI has proper ARIA labels |
-| 4.1.3 Status Messages | ✅ | Sync status announced to screen readers |
+| Criterion                  | Status | Notes                                   |
+| -------------------------- | ------ | --------------------------------------- |
+| 1.4.3 Contrast (Minimum)   | ✅     | All text 4.5:1 ratio                    |
+| 2.1.1 Keyboard             | ✅     | All features keyboard accessible        |
+| 2.5.5 Target Size          | ✅     | All targets 44×44px minimum             |
+| 2.5.2 Pointer Cancellation | ✅     | Touch can be cancelled mid-drag         |
+| 3.2.1 On Focus             | ✅     | No unexpected navigation on focus       |
+| 4.1.2 Name, Role, Value    | ✅     | All UI has proper ARIA labels           |
+| 4.1.3 Status Messages      | ✅     | Sync status announced to screen readers |
 
 ## References
 

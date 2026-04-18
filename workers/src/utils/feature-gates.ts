@@ -50,14 +50,14 @@ export interface UsageLimitResult {
  * @param featureKey - Feature to check access for
  * @returns FeatureCheckResult with access status
  */
-export function checkFeatureAccess(tierLevel: TierLevel, featureKey: FeatureKey): FeatureCheckResult {
+export function checkFeatureAccess(
+  tierLevel: TierLevel,
+  featureKey: FeatureKey,
+): FeatureCheckResult {
   // Map feature keys to tier limits
   // Some features map directly to tier limits, others are tier-based
   const tierFeatureMap: Record<TierLevel, Set<FeatureKey>> = {
-    starter: new Set([
-      AVAILABLE_FEATURES.MAX_SKUS,
-      AVAILABLE_FEATURES.MAX_USERS,
-    ]),
+    starter: new Set([AVAILABLE_FEATURES.MAX_SKUS, AVAILABLE_FEATURES.MAX_USERS]),
     professional: new Set([
       AVAILABLE_FEATURES.MAX_SKUS,
       AVAILABLE_FEATURES.MAX_USERS,
@@ -111,7 +111,7 @@ export async function checkUsageLimit(
   organizationId: string,
   limitKey: LimitKey,
   tierLevel: TierLevel,
-  dbClient: any
+  dbClient: any,
 ): Promise<UsageLimitResult> {
   // Get tier limit
   const limit = TIER_LIMITS[tierLevel]?.[limitKey] ?? null;
@@ -170,7 +170,9 @@ export async function checkUsageLimit(
       currentUsage,
       limit,
       percentageUsed,
-      error: !isWithinLimit ? `Usage limit exceeded: ${currentUsage}/${limit} ${limitKey}` : undefined,
+      error: !isWithinLimit
+        ? `Usage limit exceeded: ${currentUsage}/${limit} ${limitKey}`
+        : undefined,
     };
   } catch (error) {
     console.error('[FeatureGate] Error checking usage limit:', error);
@@ -212,7 +214,7 @@ export function enforceUsageLimit(limitKey: LimitKey) {
   return async (
     organizationId: string,
     tierLevel: TierLevel,
-    dbClient: any
+    dbClient: any,
   ): Promise<{ allowed: boolean; error?: string; result?: UsageLimitResult }> => {
     const check = await checkUsageLimit(organizationId, limitKey, tierLevel, dbClient);
     return {
@@ -254,7 +256,7 @@ export function formatUsageLimitCTA(
   limitKey: LimitKey,
   currentUsage: number,
   limit: number,
-  currentTier: TierLevel
+  currentTier: TierLevel,
 ): string {
   const tierUpgradeMap: Record<TierLevel, string> = {
     starter: 'Upgrade to Professional',

@@ -1,6 +1,6 @@
 /**
  * Workers Database Retry Wrapper
- * 
+ *
  * Wraps Neon serverless driver operations with exponential backoff retry logic
  * for handling transient connection failures in Cloudflare Workers.
  */
@@ -25,15 +25,15 @@ export interface WorkersDbRetryOptions {
 
 /**
  * Execute a Neon SQL query with automatic retry on connection errors
- * 
+ *
  * This wrapper adds exponential backoff retry logic to Neon serverless driver operations,
  * helping recover from transient connection issues in Workers environments.
- * 
+ *
  * @param sqlOperation - Function that returns a Neon SQL query
  * @param options - Retry configuration
  * @returns Query result
  * @throws Last error if all retries exhausted
- * 
+ *
  * @example
  * ```typescript
  * const results = await withNeonRetry(
@@ -46,11 +46,7 @@ export async function withNeonRetry<T>(
   sqlOperation: () => Promise<T>,
   options: WorkersDbRetryOptions = {},
 ): Promise<T> {
-  const {
-    maxAttempts = 3,
-    initialDelayMs = 100,
-    maxDelayMs = 2000,
-  } = options;
+  const { maxAttempts = 3, initialDelayMs = 100, maxDelayMs = 2000 } = options;
 
   let lastError: Error | null = null;
   let delayMs = initialDelayMs;
@@ -63,9 +59,10 @@ export async function withNeonRetry<T>(
       const errorMessage = lastError.message;
 
       // Check if error is a transient connection error
-      const isTransient = /(?:connection|timeout|ECONNREFUSED|ECONNRESET|ETIMEDOUT|pool|Hyperdrive)/i.test(
-        errorMessage
-      );
+      const isTransient =
+        /(?:connection|timeout|ECONNREFUSED|ECONNRESET|ETIMEDOUT|pool|Hyperdrive)/i.test(
+          errorMessage,
+        );
 
       // Don't retry non-transient errors (e.g., validation, auth, query errors)
       if (!isTransient) {
@@ -84,11 +81,11 @@ export async function withNeonRetry<T>(
 
       console.warn(
         `[Workers-DB-Retry] Attempt ${attempt}/${maxAttempts} failed: ${errorMessage}. ` +
-        `Retrying in ${currentDelayMs.toFixed(0)}ms...`
+          `Retrying in ${currentDelayMs.toFixed(0)}ms...`,
       );
 
       // Wait before next attempt
-      await new Promise(resolve => setTimeout(resolve, currentDelayMs));
+      await new Promise((resolve) => setTimeout(resolve, currentDelayMs));
 
       // Increase delay exponentially for next attempt
       delayMs *= 2;
@@ -101,12 +98,12 @@ export async function withNeonRetry<T>(
 
 /**
  * Create a SQL function with built-in retry logic
- * 
+ *
  * Returns a function that automatically retries on connection errors.
- * 
+ *
  * @param sqlFn - The Neon SQL function from @neondatabase/serverless
  * @returns Wrapped version with retry logic
- * 
+ *
  * @example
  * ```typescript
  * const sqlWithRetry = createRetryableSql(sql);
@@ -115,12 +112,9 @@ export async function withNeonRetry<T>(
  */
 export function createRetryableSql<TResult>(
   sqlFn: SqlTaggedTemplate<TResult>,
-  options: WorkersDbRetryOptions = {}
+  options: WorkersDbRetryOptions = {},
 ) {
   return (strings: TemplateStringsArray, ...values: unknown[]): Promise<TResult> => {
-    return withNeonRetry(
-      () => Promise.resolve(sqlFn(strings, ...values)),
-      options
-    );
+    return withNeonRetry(() => Promise.resolve(sqlFn(strings, ...values)), options);
   };
 }

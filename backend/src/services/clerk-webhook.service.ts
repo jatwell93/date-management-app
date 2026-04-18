@@ -20,6 +20,7 @@ import * as Sentry from '@sentry/node';
 import { ApplicationMonitoringService } from './application.monitoring.service';
 import { ConflictError } from '../errors';
 import { isPrismaErrorCode, PRISMA_ERROR_CODES } from '../utils/prisma-error';
+import { ROLES, normalizeRole } from '../constants/roles';
 
 // Simple logging utility
 const log = {
@@ -244,7 +245,7 @@ export class ClerkWebhookService {
           email: primaryEmail,
           username: username || primaryEmail.split('@')[0],
           organizationId,
-          role: orgMembership?.role === 'admin' ? 'Manager' : 'Team Member',
+          role: orgMembership?.role === 'admin' ? ROLES.ADMIN : ROLES.TEAM_MEMBER,
           createdAt: new Date(),
           updatedAt: new Date(),
         },
@@ -368,7 +369,7 @@ export class ClerkWebhookService {
       const org = await this.findOrCreateOrganization(organization);
 
       // Map Clerk role to app role
-      const appRole = role === 'org:admin' ? 'Manager' : 'Team Member';
+      const appRole = normalizeRole(role === 'org:admin' ? ROLES.ADMIN : ROLES.TEAM_MEMBER);
 
       // Link user to organization
       const updated = await this.prisma.user.updateMany({

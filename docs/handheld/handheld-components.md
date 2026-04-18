@@ -42,11 +42,7 @@ export function ScanPage() {
 
   return (
     <HandheldLayout>
-      <HandheldScanner
-        onScan={handleBarcodeScan}
-        continuous={true}
-        disabled={false}
-      />
+      <HandheldScanner onScan={handleBarcodeScan} continuous={true} disabled={false} />
     </HandheldLayout>
   );
 }
@@ -130,12 +126,12 @@ export function ScanPage() {
 
 #### Sync Status Colors
 
-| Status | Color | Meaning |
-|--------|-------|---------|
-| `syncing` | Blue | Currently synchronizing with server |
-| `synced` | Green | All data synchronized successfully |
-| `offline` | Yellow | Device is offline, data queued |
-| `failed` | Red | Sync operation failed |
+| Status    | Color  | Meaning                             |
+| --------- | ------ | ----------------------------------- |
+| `syncing` | Blue   | Currently synchronizing with server |
+| `synced`  | Green  | All data synchronized successfully  |
+| `offline` | Yellow | Device is offline, data queued      |
+| `failed`  | Red    | Sync operation failed               |
 
 ### 3. HandheldLayout
 
@@ -220,7 +216,7 @@ Handheld components support GS1 barcode parsing for automatic data population:
 export function ScanPage() {
   const handleBarcodeScan = (result: HardwareScanResult) => {
     const parsed = parseGS1Barcode(result.barcode);
-    
+
     if (parsed) {
       // Auto-populate form fields
       setGtin(parsed.gtin);
@@ -305,7 +301,9 @@ describe('ScanPage Handheld Integration', () => {
 ## Best Practices
 
 ### 1. Always Use HandheldLayout as Top-Level Wrapper
+
 Ensures handheld detection and toolbar are available throughout the app:
+
 ```tsx
 <HandheldLayout userName={currentUser} syncStatus={status} ...>
   <Router>
@@ -317,7 +315,9 @@ Ensures handheld detection and toolbar are available throughout the app:
 ```
 
 ### 2. Handle GS1 Parsing Errors
+
 Always have a fallback when GS1 parsing fails:
+
 ```tsx
 const handleBarcodeScan = (result: HardwareScanResult) => {
   const parsed = parseGS1Barcode(result.barcode);
@@ -329,13 +329,17 @@ const handleBarcodeScan = (result: HardwareScanResult) => {
 ```
 
 ### 3. Respect Offline State
+
 Monitor network connectivity and display appropriate UI:
+
 ```tsx
 const syncStatus = navigator.onLine ? 'synced' : 'offline';
 ```
 
 ### 4. Test on Multiple Screen Sizes
+
 Test on actual 5" PDT devices or use device emulation:
+
 - **Browser DevTools:** Emulate "Mobile" with 540x720 resolution
 - **Actual Devices:** Test on Zebra TC21-HC, TC26-HC, CipherLab RS36, etc.
 

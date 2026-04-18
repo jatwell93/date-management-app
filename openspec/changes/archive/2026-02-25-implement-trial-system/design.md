@@ -45,6 +45,7 @@ model User {
 ```
 
 **Changes**:
+
 - ❌ Remove `pin` field
 - ✅ Add `clerkUserId` (links to Clerk)
 - ✅ Add `email` (from Clerk, unique)
@@ -62,12 +63,12 @@ model SubscriptionTier {
   stripeSubscriptionId String?
   stripeCustomerId     String    // NEW: Created when org created, reused for billing
   status               SubscriptionStatus
-  
+
   // NEW: Trial fields
   trialEndDate         DateTime?           // NULL for non-trial subscriptions
   trialStartedAt       DateTime?           // When trial began
   trialConvertedAt     DateTime?           // When user upgraded from trial
-  
+
   createdAt            DateTime  @default(now())
   updatedAt            DateTime  @updatedAt
 
@@ -89,11 +90,12 @@ enum SubscriptionStatus {
 ```
 
 **Key Addition**:
+
 - `stripeCustomerId`: Create once when org created, reuse for trial + conversion (fixes Issue #2)
 
 ### TrialEvent Model (New)
 
-```prisma
+````prisma
 model TrialEvent {
   id             String    @id @default(cuid())
   organizationId String
@@ -101,10 +103,10 @@ model TrialEvent {
   occurredAt     DateTime  @default(now())
   metadata       Json?     // { daysTrialed: 14, downgradedToTier: "starter", ... }
   sentRemindersAt Json?    // { 10: true, 5: true, 2: true } for idempotency
-  
+
   // Relations
   subscription   SubscriptionTier @relation(fields: [organizationId], references: [organizationId])
-  
+
   @@index([organizationId])
   @@index([eventType])
   @@index([occurredAt])
@@ -133,8 +135,9 @@ model OrganizationInvite {
   @@index([status])
   @@map("organization_invites")
 }
-```
-```
+````
+
+````
 
 **Key Feature**:
 - `sentRemindersAt`: Track which reminders sent (fixes Issue #8 - idempotency)
@@ -156,13 +159,13 @@ async createStripeCustomer(organizationId: string, email: string): Promise<strin
     email,
     metadata: { organizationId },
   });
-  
+
   // Store in DB
   await this.prisma.subscriptionTier.update({
     where: { organizationId },
     data: { stripeCustomerId: customer.id },
   });
-  
+
   return customer.id;
 }
 
@@ -174,7 +177,7 @@ async createTrialSubscription(
   trialDays: number = 14,
 ): Promise<SubscriptionTier> {
   const trialEndDate = addDays(new Date(), trialDays);
-  
+
   return await this.prisma.subscriptionTier.create({
     data: {
       organizationId,
@@ -248,7 +251,7 @@ async convertTrialToPaid(
 async downgradeExpiredTrials(): Promise<number> {
   return await this.prisma.$transaction(async (tx) => {
     const now = new Date();
-    
+
     const expiredTrials = await tx.subscriptionTier.findMany({
       where: {
         status: SubscriptionStatus.TRIALING,
@@ -268,7 +271,7 @@ async downgradeExpiredTrials(): Promise<number> {
       });
 
       const daysTrialed = differenceInDays(now, trial.trialStartedAt);
-      
+
       // Log event
       await tx.trialEvent.create({
         data: {
@@ -298,7 +301,7 @@ async findTrialsNeedingReminders(): Promise<Array<{
   organizationName: string;
 }>> {
   const now = new Date();
-  
+
   const trialsNeedingReminders = await this.prisma.subscriptionTier.findMany({
     where: {
       status: SubscriptionStatus.TRIALING,
@@ -355,7 +358,7 @@ async logTrialEvent(
     },
   });
 }
-```
+````
 
 ### TrialAbuseGuard (New Service)
 
@@ -436,10 +439,11 @@ async logAction(
 ```
 
 **Managers can now query audit trail:**
+
 ```sql
-SELECT username, action, COUNT(*) as count 
-FROM audit_logs 
-WHERE organization_id = 'org_123' 
+SELECT username, action, COUNT(*) as count
+FROM audit_logs
+WHERE organization_id = 'org_123'
   AND action = 'checked_expiry'
   AND timestamp > NOW() - INTERVAL '7 days'
 GROUP BY username, action
@@ -631,6 +635,7 @@ export async function runTrialExpirationJob() {
 ```
 
 **Scheduled with node-cron**:
+
 ```typescript
 cron.schedule('0 0 * * *', runTrialExpirationJob); // Daily 00:00 UTC
 ```
@@ -642,7 +647,7 @@ cron.schedule('0 0 * * *', runTrialExpirationJob); // Daily 00:00 UTC
 ### Frontend (React CRA)
 
 ```typescript
-import { SignUp, useAuth, useUser } from "@clerk/react";
+import { SignUp, useAuth, useUser } from '@clerk/react';
 
 // Clerk handles:
 // - Email/password signup via <SignUp /> component
@@ -660,10 +665,10 @@ const { user } = useUser();
 ### Backend (Express)
 
 ```typescript
-import { verifyToken } from "@clerk/backend";
+import { verifyToken } from '@clerk/backend';
 
 // Verify JWT from React frontend Authorization header
-const token = req.headers.authorization?.split(" ")[1];
+const token = req.headers.authorization?.split(' ')[1];
 const decoded = await verifyToken(token);
 // decoded includes: { sub: userId, username, email, org }
 // Use decoded.username in audit logs
@@ -691,6 +696,7 @@ const decoded = await verifyToken(token);
 ```
 
 **Clerk Configuration (Already Done):**
+
 - ✅ Email/password enabled
 - ✅ Username field enabled (will be populated during signup)
 - ✅ Google OAuth provider
@@ -701,20 +707,20 @@ const decoded = await verifyToken(token);
 
 ## Issues Fixed
 
-| Issue | Fix |
-|-------|-----|
-| #1: Auth model mismatch | Use Clerk (email/password + OAuth) |
-| #2: No Stripe customer | Create customer when org created, reuse for trial + conversion |
-| #3: Wrong service method | Fixed: `findTrialsNeedingReminders()` instead of undefined method |
-| #4: Downgrade job missing email | Added to `runTrialExpirationJob()` |
-| #5: Race condition | Use `$transaction` for atomic updates |
-| #6: Phone field | Clerk provides email, phone optional (not needed Phase 4) |
-| #7: Timezone cutoff | Documented: trials end at 00:00 UTC, stored consistently |
-| #8: Email idempotency | Track sent reminders in `sentRemindersAt` JSON |
-| #9: Error handling | Try/catch in job, log to Sentry, don't crash |
-| #10: Stripe payment intent | Use `payment_behavior: 'error_if_incomplete'` for fail-fast |
-| #11: Org-user auth | Clerk tenant isolation + organizationId filters |
-| #12: Idempotency tests | Added to Phase 7 |
+| Issue                           | Fix                                                               |
+| ------------------------------- | ----------------------------------------------------------------- |
+| #1: Auth model mismatch         | Use Clerk (email/password + OAuth)                                |
+| #2: No Stripe customer          | Create customer when org created, reuse for trial + conversion    |
+| #3: Wrong service method        | Fixed: `findTrialsNeedingReminders()` instead of undefined method |
+| #4: Downgrade job missing email | Added to `runTrialExpirationJob()`                                |
+| #5: Race condition              | Use `$transaction` for atomic updates                             |
+| #6: Phone field                 | Clerk provides email, phone optional (not needed Phase 4)         |
+| #7: Timezone cutoff             | Documented: trials end at 00:00 UTC, stored consistently          |
+| #8: Email idempotency           | Track sent reminders in `sentRemindersAt` JSON                    |
+| #9: Error handling              | Try/catch in job, log to Sentry, don't crash                      |
+| #10: Stripe payment intent      | Use `payment_behavior: 'error_if_incomplete'` for fail-fast       |
+| #11: Org-user auth              | Clerk tenant isolation + organizationId filters                   |
+| #12: Idempotency tests          | Added to Phase 7                                                  |
 
 ---
 

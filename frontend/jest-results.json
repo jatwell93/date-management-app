@@ -1,1 +1,2476 @@
-{"numFailedTestSuites":0,"numFailedTests":0,"numPassedTestSuites":29,"numPassedTests":268,"numPendingTestSuites":0,"numPendingTests":0,"numRuntimeErrorTestSuites":0,"numTodoTests":1,"numTotalTestSuites":29,"numTotalTests":269,"openHandles":[],"snapshot":{"added":0,"didUpdate":false,"failure":false,"filesAdded":0,"filesRemoved":0,"filesRemovedList":[],"filesUnmatched":0,"filesUpdated":0,"matched":0,"total":0,"unchecked":0,"uncheckedKeysByFile":[],"unmatched":0,"updated":0},"startTime":1772244067100,"success":true,"testResults":[{"assertionResults":[{"ancestorTitles":["Clerk Integration Setup"],"failureMessages":[],"fullName":"Clerk Integration Setup should render ClerkProvider without crashing","location":null,"status":"passed","title":"should render ClerkProvider without crashing"},{"ancestorTitles":["Clerk Integration Setup"],"failureMessages":[],"fullName":"Clerk Integration Setup should throw error if REACT_APP_CLERK_PUBLISHABLE_KEY is missing","location":null,"status":"passed","title":"should throw error if REACT_APP_CLERK_PUBLISHABLE_KEY is missing"}],"endTime":1772244075134,"message":"","name":"C:\\Users\\josha\\date-management-app\\frontend\\src\\tests\\clerk-setup.test.tsx","startTime":1772244070908,"status":"passed","summary":""},{"assertionResults":[{"ancestorTitles":["useHandheldDetection","localStorage override"],"failureMessages":[],"fullName":"useHandheldDetection localStorage override should detect handheld when forceHandheld is set to true","location":null,"status":"passed","title":"should detect handheld when forceHandheld is set to true"},{"ancestorTitles":["useHandheldDetection","localStorage override"],"failureMessages":[],"fullName":"useHandheldDetection localStorage override should not detect handheld when forceHandheld is not set","location":null,"status":"passed","title":"should not detect handheld when forceHandheld is not set"},{"ancestorTitles":["useHandheldDetection","user agent detection"],"failureMessages":[],"fullName":"useHandheldDetection user agent detection should detect Zebra device","location":null,"status":"passed","title":"should detect Zebra device"},{"ancestorTitles":["useHandheldDetection","user agent detection"],"failureMessages":[],"fullName":"useHandheldDetection user agent detection should detect Honeywell device","location":null,"status":"passed","title":"should detect Honeywell device"},{"ancestorTitles":["useHandheldDetection","user agent detection"],"failureMessages":[],"fullName":"useHandheldDetection user agent detection should detect CipherLab device","location":null,"status":"passed","title":"should detect CipherLab device"},{"ancestorTitles":["useHandheldDetection","screen dimension detection"],"failureMessages":[],"fullName":"useHandheldDetection screen dimension detection should detect handheld for small screens","location":null,"status":"passed","title":"should detect handheld for small screens"},{"ancestorTitles":["useHandheldDetection","screen dimension detection"],"failureMessages":[],"fullName":"useHandheldDetection screen dimension detection should not detect handheld for large screens","location":null,"status":"passed","title":"should not detect handheld for large screens"},{"ancestorTitles":["useHandheldDetection","screen dimension detection"],"failureMessages":[],"fullName":"useHandheldDetection screen dimension detection should detect handheld at threshold dimensions","location":null,"status":"passed","title":"should detect handheld at threshold dimensions"},{"ancestorTitles":["useHandheldDetection","refresh function"],"failureMessages":[],"fullName":"useHandheldDetection refresh function should re-run detection when refresh is called","location":null,"status":"passed","title":"should re-run detection when refresh is called"},{"ancestorTitles":["useHandheldDetection","refresh function"],"failureMessages":[],"fullName":"useHandheldDetection refresh function should update screen dimensions when refresh is called","location":null,"status":"passed","title":"should update screen dimensions when refresh is called"},{"ancestorTitles":["useHandheldDetection","initial state"],"failureMessages":[],"fullName":"useHandheldDetection initial state should return false for isHandheld initially when no detection criteria met","location":null,"status":"passed","title":"should return false for isHandheld initially when no detection criteria met"},{"ancestorTitles":["useHandheldDetection","initial state"],"failureMessages":[],"fullName":"useHandheldDetection initial state should initialize with correct screen dimensions","location":null,"status":"passed","title":"should initialize with correct screen dimensions"},{"ancestorTitles":["useHandheldDetection","detection priority"],"failureMessages":[],"fullName":"useHandheldDetection detection priority should prioritize localStorage override over user agent","location":null,"status":"passed","title":"should prioritize localStorage override over user agent"},{"ancestorTitles":["useHandheldDetection","detection priority"],"failureMessages":[],"fullName":"useHandheldDetection detection priority should prioritize user agent over screen dimensions","location":null,"status":"passed","title":"should prioritize user agent over screen dimensions"}],"endTime":1772244075243,"message":"","name":"C:\\Users\\josha\\date-management-app\\frontend\\src\\hooks\\__tests__\\useHandheldDetection.test.ts","startTime":1772244070906,"status":"passed","summary":""},{"assertionResults":[{"ancestorTitles":["OfflineSyncService","Queue Management"],"failureMessages":[],"fullName":"OfflineSyncService Queue Management should add operations to the queue","location":null,"status":"passed","title":"should add operations to the queue"},{"ancestorTitles":["OfflineSyncService","Queue Management"],"failureMessages":[],"fullName":"OfflineSyncService Queue Management should retrieve pending operations by entity type","location":null,"status":"passed","title":"should retrieve pending operations by entity type"},{"ancestorTitles":["OfflineSyncService","Queue Management"],"failureMessages":[],"fullName":"OfflineSyncService Queue Management should count pending operations correctly","location":null,"status":"passed","title":"should count pending operations correctly"},{"ancestorTitles":["OfflineSyncService","Queue Management"],"failureMessages":[],"fullName":"OfflineSyncService Queue Management should clear the queue","location":null,"status":"passed","title":"should clear the queue"},{"ancestorTitles":["OfflineSyncService","Synchronization Logic"],"failureMessages":[],"fullName":"OfflineSyncService Synchronization Logic should sync operations when online","location":null,"status":"passed","title":"should sync operations when online"},{"ancestorTitles":["OfflineSyncService","Synchronization Logic"],"failureMessages":[],"fullName":"OfflineSyncService Synchronization Logic should not sync when queue is empty","location":null,"status":"passed","title":"should not sync when queue is empty"},{"ancestorTitles":["OfflineSyncService","Synchronization Logic"],"failureMessages":[],"fullName":"OfflineSyncService Synchronization Logic should stop syncing if an operation fails","location":null,"status":"passed","title":"should stop syncing if an operation fails"},{"ancestorTitles":["OfflineSyncService","Synchronization Logic"],"failureMessages":[],"fullName":"OfflineSyncService Synchronization Logic should retry failed operations on next sync","location":null,"status":"passed","title":"should retry failed operations on next sync"},{"ancestorTitles":["OfflineSyncService","Online/Offline Handling"],"failureMessages":[],"fullName":"OfflineSyncService Online/Offline Handling should report correct offline status","location":null,"status":"passed","title":"should report correct offline status"},{"ancestorTitles":["OfflineSyncService","Online/Offline Handling"],"failureMessages":[],"fullName":"OfflineSyncService Online/Offline Handling should trigger sync when coming online","location":null,"status":"passed","title":"should trigger sync when coming online"},{"ancestorTitles":["OfflineSyncService","API Endpoint & Method Mapping"],"failureMessages":[],"fullName":"OfflineSyncService API Endpoint & Method Mapping should send POST request for create","location":null,"status":"passed","title":"should send POST request for create"},{"ancestorTitles":["OfflineSyncService","API Endpoint & Method Mapping"],"failureMessages":[],"fullName":"OfflineSyncService API Endpoint & Method Mapping should send PUT request for update","location":null,"status":"passed","title":"should send PUT request for update"},{"ancestorTitles":["OfflineSyncService","API Endpoint & Method Mapping"],"failureMessages":[],"fullName":"OfflineSyncService API Endpoint & Method Mapping should send DELETE request for delete","location":null,"status":"passed","title":"should send DELETE request for delete"},{"ancestorTitles":["OfflineSyncService","Sync Strategies"],"failureMessages":[],"fullName":"OfflineSyncService Sync Strategies should set and get sync strategy","location":null,"status":"passed","title":"should set and get sync strategy"},{"ancestorTitles":["OfflineSyncService","Sync Strategies"],"failureMessages":[],"fullName":"OfflineSyncService Sync Strategies should trigger sync immediately in real-time mode","location":null,"status":"passed","title":"should trigger sync immediately in real-time mode"},{"ancestorTitles":["OfflineSyncService","Sync Strategies"],"failureMessages":[],"fullName":"OfflineSyncService Sync Strategies should not trigger sync immediately in batch mode","location":null,"status":"passed","title":"should not trigger sync immediately in batch mode"},{"ancestorTitles":["OfflineSyncService","Sync Strategies"],"failureMessages":[],"fullName":"OfflineSyncService Sync Strategies should not trigger sync immediately in manual mode","location":null,"status":"passed","title":"should not trigger sync immediately in manual mode"}],"endTime":1772244075589,"message":"","name":"C:\\Users\\josha\\date-management-app\\frontend\\src\\lib\\__tests__\\offline-sync.test.ts","startTime":1772244070912,"status":"passed","summary":""},{"assertionResults":[{"ancestorTitles":["OfflineSyncService - Sync Strategy Tests"],"failureMessages":[],"fullName":"OfflineSyncService - Sync Strategy Tests should initialize with real-time strategy as default","location":null,"status":"passed","title":"should initialize with real-time strategy as default"},{"ancestorTitles":["OfflineSyncService - Sync Strategy Tests"],"failureMessages":[],"fullName":"OfflineSyncService - Sync Strategy Tests should allow changing sync strategy and persist to localStorage","location":null,"status":"passed","title":"should allow changing sync strategy and persist to localStorage"},{"ancestorTitles":["OfflineSyncService - Sync Strategy Tests"],"failureMessages":[],"fullName":"OfflineSyncService - Sync Strategy Tests should load sync strategy from localStorage on initialization","location":null,"status":"passed","title":"should load sync strategy from localStorage on initialization"},{"ancestorTitles":["OfflineSyncService - Sync Strategy Tests"],"failureMessages":[],"fullName":"OfflineSyncService - Sync Strategy Tests should handle real-time strategy with immediate sync on addOperation","location":null,"status":"passed","title":"should handle real-time strategy with immediate sync on addOperation"},{"ancestorTitles":["OfflineSyncService - Sync Strategy Tests"],"failureMessages":[],"fullName":"OfflineSyncService - Sync Strategy Tests should not trigger immediate sync in batch strategy on addOperation","location":null,"status":"passed","title":"should not trigger immediate sync in batch strategy on addOperation"},{"ancestorTitles":["OfflineSyncService - Sync Strategy Tests"],"failureMessages":[],"fullName":"OfflineSyncService - Sync Strategy Tests should not schedule automatic syncs in manual strategy","location":null,"status":"passed","title":"should not schedule automatic syncs in manual strategy"},{"ancestorTitles":["OfflineSyncService - Sync Strategy Tests"],"failureMessages":[],"fullName":"OfflineSyncService - Sync Strategy Tests should schedule 10-minute intervals for batch strategy","location":null,"status":"passed","title":"should schedule 10-minute intervals for batch strategy"},{"ancestorTitles":["OfflineSyncService - Sync Strategy Tests"],"failureMessages":[],"fullName":"OfflineSyncService - Sync Strategy Tests should schedule 30-second intervals for real-time strategy","location":null,"status":"passed","title":"should schedule 30-second intervals for real-time strategy"},{"ancestorTitles":["OfflineSyncService - Sync Strategy Tests"],"failureMessages":[],"fullName":"OfflineSyncService - Sync Strategy Tests should retry sync with exponential backoff on failure","location":null,"status":"passed","title":"should retry sync with exponential backoff on failure"}],"endTime":1772244075645,"message":"","name":"C:\\Users\\josha\\date-management-app\\frontend\\src\\lib\\__tests__\\offline-sync-strategy.test.tsx","startTime":1772244070905,"status":"passed","summary":""},{"assertionResults":[{"ancestorTitles":["Scanner"],"failureMessages":[],"fullName":"Scanner renders the scanner input and button","location":null,"status":"passed","title":"renders the scanner input and button"},{"ancestorTitles":["Scanner"],"failureMessages":[],"fullName":"Scanner calls onScan with the entered barcode when button is clicked","location":null,"status":"passed","title":"calls onScan with the entered barcode when button is clicked"},{"ancestorTitles":["Scanner"],"failureMessages":[],"fullName":"Scanner calls onScan with the entered barcode when form is submitted","location":null,"status":"passed","title":"calls onScan with the entered barcode when form is submitted"},{"ancestorTitles":["Scanner"],"failureMessages":[],"fullName":"Scanner does not call onScan if barcode is empty","location":null,"status":"passed","title":"does not call onScan if barcode is empty"},{"ancestorTitles":["Scanner","defaultMode prop"],"failureMessages":[],"fullName":"Scanner defaultMode prop starts in text mode by default","location":null,"status":"passed","title":"starts in text mode by default"},{"ancestorTitles":["Scanner","defaultMode prop"],"failureMessages":[],"fullName":"Scanner defaultMode prop starts in camera mode when defaultMode=\"camera\"","location":null,"status":"passed","title":"starts in camera mode when defaultMode=\"camera\""},{"ancestorTitles":["Scanner","hardware scan integration"],"failureMessages":[],"fullName":"Scanner hardware scan integration initializes useHardwareScan hook","location":null,"status":"passed","title":"initializes useHardwareScan hook"},{"ancestorTitles":["Scanner","hardware scan integration"],"failureMessages":[],"fullName":"Scanner hardware scan integration routes hardware scan through onScan callback as HardwareScanResult","location":null,"status":"passed","title":"routes hardware scan through onScan callback as HardwareScanResult"},{"ancestorTitles":["Scanner","camera mode switching"],"failureMessages":[],"fullName":"Scanner camera mode switching switches to camera mode when Use Camera button is clicked","location":null,"status":"passed","title":"switches to camera mode when Use Camera button is clicked"},{"ancestorTitles":["Scanner","camera mode switching"],"failureMessages":[],"fullName":"Scanner camera mode switching switches back to text mode when Use Text Input button is clicked","location":null,"status":"passed","title":"switches back to text mode when Use Text Input button is clicked"}],"endTime":1772244075868,"message":"","name":"C:\\Users\\josha\\date-management-app\\frontend\\src\\tests\\Scanner.test.tsx","startTime":1772244070906,"status":"passed","summary":""},{"assertionResults":[{"ancestorTitles":["SubscriptionDashboard"],"failureMessages":[],"fullName":"SubscriptionDashboard renders tier badge with correct tier level","location":null,"status":"passed","title":"renders tier badge with correct tier level"},{"ancestorTitles":["SubscriptionDashboard"],"failureMessages":[],"fullName":"SubscriptionDashboard displays usage progress bars for all resources","location":null,"status":"passed","title":"displays usage progress bars for all resources"},{"ancestorTitles":["SubscriptionDashboard"],"failureMessages":[],"fullName":"SubscriptionDashboard shows upgrade CTA for non-premium tiers","location":null,"status":"passed","title":"shows upgrade CTA for non-premium tiers"},{"ancestorTitles":["SubscriptionDashboard"],"failureMessages":[],"fullName":"SubscriptionDashboard displays unlimited for null limits","location":null,"status":"passed","title":"displays unlimited for null limits"},{"ancestorTitles":["SubscriptionDashboard"],"failureMessages":[],"fullName":"SubscriptionDashboard handles API errors gracefully","location":null,"status":"passed","title":"handles API errors gracefully"},{"ancestorTitles":["SubscriptionDashboard"],"failureMessages":[],"fullName":"SubscriptionDashboard shows loading state initially","location":null,"status":"passed","title":"shows loading state initially"},{"ancestorTitles":["SubscriptionDashboard"],"failureMessages":[],"fullName":"SubscriptionDashboard calculates percentage correctly for progress bars","location":null,"status":"passed","title":"calculates percentage correctly for progress bars"}],"endTime":1772244076501,"message":"","name":"C:\\Users\\josha\\date-management-app\\frontend\\src\\components\\__tests__\\SubscriptionDashboard.test.tsx","startTime":1772244070906,"status":"passed","summary":""},{"assertionResults":[{"ancestorTitles":["CameraScanner"],"failureMessages":[],"fullName":"CameraScanner initializes Quagga on mount","location":null,"status":"passed","title":"initializes Quagga on mount"},{"ancestorTitles":["CameraScanner"],"failureMessages":[],"fullName":"CameraScanner starts scanner when initialization succeeds","location":null,"status":"passed","title":"starts scanner when initialization succeeds"},{"ancestorTitles":["CameraScanner"],"failureMessages":[],"fullName":"CameraScanner handles initialization error","location":null,"status":"passed","title":"handles initialization error"},{"ancestorTitles":["CameraScanner"],"failureMessages":[],"fullName":"CameraScanner calls onDetected when code is scanned","location":null,"status":"passed","title":"calls onDetected when code is scanned"},{"ancestorTitles":["CameraScanner"],"failureMessages":[],"fullName":"CameraScanner stops scanner after detection (after delay)","location":null,"status":"passed","title":"stops scanner after detection (after delay)"},{"ancestorTitles":["CameraScanner"],"failureMessages":[],"fullName":"CameraScanner stops scanner on unmount","location":null,"status":"passed","title":"stops scanner on unmount"},{"ancestorTitles":["CameraScanner"],"failureMessages":[],"fullName":"CameraScanner resets scanner when retry button is clicked","location":null,"status":"passed","title":"resets scanner when retry button is clicked"},{"ancestorTitles":["CameraScanner","continuous mode"],"failureMessages":[],"fullName":"CameraScanner continuous mode does not stop scanner after detection when continuous=true","location":null,"status":"passed","title":"does not stop scanner after detection when continuous=true"},{"ancestorTitles":["CameraScanner","continuous mode"],"failureMessages":[],"fullName":"CameraScanner continuous mode stops scanner after detection when continuous=false (default)","location":null,"status":"passed","title":"stops scanner after detection when continuous=false (default)"},{"ancestorTitles":["CameraScanner","continuous mode"],"failureMessages":[],"fullName":"CameraScanner continuous mode prevents duplicate barcode scans within 2-second window","location":null,"status":"passed","title":"prevents duplicate barcode scans within 2-second window"},{"ancestorTitles":["CameraScanner","continuous mode"],"failureMessages":[],"fullName":"CameraScanner continuous mode allows different barcodes to be scanned immediately","location":null,"status":"passed","title":"allows different barcodes to be scanned immediately"},{"ancestorTitles":["CameraScanner","continuous mode"],"failureMessages":[],"fullName":"CameraScanner continuous mode shows continuous scan mode indicator","location":null,"status":"passed","title":"shows continuous scan mode indicator"},{"ancestorTitles":["CameraScanner","continuous mode"],"failureMessages":[],"fullName":"CameraScanner continuous mode does not show continuous mode indicator when continuous=false","location":null,"status":"passed","title":"does not show continuous mode indicator when continuous=false"}],"endTime":1772244076764,"message":"","name":"C:\\Users\\josha\\date-management-app\\frontend\\src\\components\\__tests__\\CameraScanner.test.tsx","startTime":1772244070907,"status":"passed","summary":""},{"assertionResults":[{"ancestorTitles":["HandheldScanner"],"failureMessages":[],"fullName":"HandheldScanner renders Scanner with defaultMode=\"camera\" when isHandheld=true","location":null,"status":"passed","title":"renders Scanner with defaultMode=\"camera\" when isHandheld=true"},{"ancestorTitles":["HandheldScanner"],"failureMessages":[],"fullName":"HandheldScanner renders Scanner with defaultMode=\"text\" when isHandheld=false","location":null,"status":"passed","title":"renders Scanner with defaultMode=\"text\" when isHandheld=false"},{"ancestorTitles":["HandheldScanner"],"failureMessages":[],"fullName":"HandheldScanner applies handheld-specific styling classes","location":null,"status":"passed","title":"applies handheld-specific styling classes"},{"ancestorTitles":["HandheldScanner"],"failureMessages":[],"fullName":"HandheldScanner passes onScan prop to Scanner component","location":null,"status":"passed","title":"passes onScan prop to Scanner component"},{"ancestorTitles":["HandheldScanner"],"failureMessages":[],"fullName":"HandheldScanner throws error when used outside HandheldProvider","location":null,"status":"passed","title":"throws error when used outside HandheldProvider"}],"endTime":1772244076876,"message":"","name":"C:\\Users\\josha\\date-management-app\\frontend\\src\\components\\__tests__\\HandheldScanner.test.tsx","startTime":1772244070906,"status":"passed","summary":""},{"assertionResults":[{"ancestorTitles":["OfflineSyncService - Sync Strategies","Sync Strategy Management"],"failureMessages":[],"fullName":"OfflineSyncService - Sync Strategies Sync Strategy Management should load default sync strategy from localStorage","location":null,"status":"passed","title":"should load default sync strategy from localStorage"},{"ancestorTitles":["OfflineSyncService - Sync Strategies","Sync Strategy Management"],"failureMessages":[],"fullName":"OfflineSyncService - Sync Strategies Sync Strategy Management should set and persist sync strategy","location":null,"status":"passed","title":"should set and persist sync strategy"},{"ancestorTitles":["OfflineSyncService - Sync Strategies","Sync Strategy Management"],"failureMessages":[],"fullName":"OfflineSyncService - Sync Strategies Sync Strategy Management should get current sync strategy","location":null,"status":"passed","title":"should get current sync strategy"},{"ancestorTitles":["OfflineSyncService - Sync Strategies","Real-time Strategy"],"failureMessages":[],"fullName":"OfflineSyncService - Sync Strategies Real-time Strategy should trigger sync immediately after adding operation in real-time mode","location":null,"status":"passed","title":"should trigger sync immediately after adding operation in real-time mode"},{"ancestorTitles":["OfflineSyncService - Sync Strategies","Real-time Strategy"],"failureMessages":[],"fullName":"OfflineSyncService - Sync Strategies Real-time Strategy should not schedule automatic intervals in real-time mode","location":null,"status":"passed","title":"should not schedule automatic intervals in real-time mode"},{"ancestorTitles":["OfflineSyncService - Sync Strategies","Batch Strategy"],"failureMessages":[],"fullName":"OfflineSyncService - Sync Strategies Batch Strategy should not trigger immediate sync after adding operation in batch mode","location":null,"status":"passed","title":"should not trigger immediate sync after adding operation in batch mode"},{"ancestorTitles":["OfflineSyncService - Sync Strategies","Batch Strategy"],"failureMessages":[],"fullName":"OfflineSyncService - Sync Strategies Batch Strategy should schedule sync every 10 minutes in batch mode","location":null,"status":"passed","title":"should schedule sync every 10 minutes in batch mode"},{"ancestorTitles":["OfflineSyncService - Sync Strategies","Manual Strategy"],"failureMessages":[],"fullName":"OfflineSyncService - Sync Strategies Manual Strategy should not trigger immediate sync after adding operation in manual mode","location":null,"status":"passed","title":"should not trigger immediate sync after adding operation in manual mode"},{"ancestorTitles":["OfflineSyncService - Sync Strategies","Manual Strategy"],"failureMessages":[],"fullName":"OfflineSyncService - Sync Strategies Manual Strategy should not schedule automatic intervals in manual mode","location":null,"status":"passed","title":"should not schedule automatic intervals in manual mode"},{"ancestorTitles":["OfflineSyncService - Sync Strategies","Manual Strategy"],"failureMessages":[],"fullName":"OfflineSyncService - Sync Strategies Manual Strategy should allow manual sync trigger","location":null,"status":"passed","title":"should allow manual sync trigger"},{"ancestorTitles":["OfflineSyncService - Sync Strategies","Strategy Changes"],"failureMessages":[],"fullName":"OfflineSyncService - Sync Strategies Strategy Changes should reschedule sync when strategy changes from batch to manual","location":null,"status":"passed","title":"should reschedule sync when strategy changes from batch to manual"},{"ancestorTitles":["OfflineSyncService - Sync Strategies","Strategy Changes"],"failureMessages":[],"fullName":"OfflineSyncService - Sync Strategies Strategy Changes should reschedule sync when strategy changes from manual to real-time","location":null,"status":"passed","title":"should reschedule sync when strategy changes from manual to real-time"},{"ancestorTitles":["OfflineSyncService - Sync Strategies","Exponential Backoff Retry"],"failureMessages":[],"fullName":"OfflineSyncService - Sync Strategies Exponential Backoff Retry should retry failed sync with exponential backoff","location":null,"status":"passed","title":"should retry failed sync with exponential backoff"},{"ancestorTitles":["OfflineSyncService - Sync Strategies","Exponential Backoff Retry"],"failureMessages":[],"fullName":"OfflineSyncService - Sync Strategies Exponential Backoff Retry should stop retrying after max attempts and keep items in queue","location":null,"status":"passed","title":"should stop retrying after max attempts and keep items in queue"}],"endTime":1772244077324,"message":"","name":"C:\\Users\\josha\\date-management-app\\frontend\\src\\tests\\offline-sync.test.ts","startTime":1772244075385,"status":"passed","summary":""},{"assertionResults":[{"ancestorTitles":["useHardwareScan"],"failureMessages":[],"fullName":"useHardwareScan should be callable without errors when mounted","location":null,"status":"passed","title":"should be callable without errors when mounted"},{"ancestorTitles":["useHardwareScan"],"failureMessages":[],"fullName":"useHardwareScan should accumulate rapid keystrokes within 50ms timing window and emit onScan on Enter","location":null,"status":"passed","title":"should accumulate rapid keystrokes within 50ms timing window and emit onScan on Enter"},{"ancestorTitles":["useHardwareScan"],"failureMessages":[],"fullName":"useHardwareScan should NOT trigger hardware scan for slow human typing (>50ms between keystrokes)","location":null,"status":"passed","title":"should NOT trigger hardware scan for slow human typing (>50ms between keystrokes)"},{"ancestorTitles":["useHardwareScan"],"failureMessages":[],"fullName":"useHardwareScan should accumulate characters correctly across Enter boundary","location":null,"status":"passed","title":"should accumulate characters correctly across Enter boundary"},{"ancestorTitles":["useHardwareScan"],"failureMessages":[],"fullName":"useHardwareScan should handle Enter key without any accumulated characters gracefully","location":null,"status":"passed","title":"should handle Enter key without any accumulated characters gracefully"},{"ancestorTitles":["useHardwareScan"],"failureMessages":[],"fullName":"useHardwareScan should ignore non-printable keys except Enter","location":null,"status":"passed","title":"should ignore non-printable keys except Enter"},{"ancestorTitles":["useHardwareScan"],"failureMessages":[],"fullName":"useHardwareScan should prevent duplicate rapid Enter presses from double-submitting","location":null,"status":"passed","title":"should prevent duplicate rapid Enter presses from double-submitting"}],"endTime":1772244077624,"message":"","name":"C:\\Users\\josha\\date-management-app\\frontend\\src\\hooks\\__tests__\\useHardwareScan.test.ts","startTime":1772244075958,"status":"passed","summary":""},{"assertionResults":[{"ancestorTitles":["UserManagementPage"],"failureMessages":[],"fullName":"UserManagementPage renders user management page and fetches users","location":null,"status":"passed","title":"renders user management page and fetches users"},{"ancestorTitles":["UserManagementPage"],"failureMessages":[],"fullName":"UserManagementPage creates a new user","location":null,"status":"passed","title":"creates a new user"},{"ancestorTitles":["UserManagementPage"],"failureMessages":[],"fullName":"UserManagementPage updates an existing user role","location":null,"status":"passed","title":"updates an existing user role"},{"ancestorTitles":["UserManagementPage"],"failureMessages":[],"fullName":"UserManagementPage deletes a user","location":null,"status":"passed","title":"deletes a user"}],"endTime":1772244078234,"message":"","name":"C:\\Users\\josha\\date-management-app\\frontend\\src\\tests\\UserManagementPage.test.tsx","startTime":1772244075361,"status":"passed","summary":""},{"assertionResults":[{"ancestorTitles":["HandheldLayout"],"failureMessages":[],"fullName":"HandheldLayout renders children content","location":null,"status":"passed","title":"renders children content"},{"ancestorTitles":["HandheldLayout"],"failureMessages":[],"fullName":"HandheldLayout renders HandheldScanToolbar when isHandheld=true","location":null,"status":"passed","title":"renders HandheldScanToolbar when isHandheld=true"},{"ancestorTitles":["HandheldLayout"],"failureMessages":[],"fullName":"HandheldLayout does not render HandheldScanToolbar when isHandheld=false","location":null,"status":"passed","title":"does not render HandheldScanToolbar when isHandheld=false"},{"ancestorTitles":["HandheldLayout"],"failureMessages":[],"fullName":"HandheldLayout applies full viewport height styling for handheld devices","location":null,"status":"passed","title":"applies full viewport height styling for handheld devices"},{"ancestorTitles":["HandheldLayout"],"failureMessages":[],"fullName":"HandheldLayout applies full-screen layout without max-width container for handheld devices","location":null,"status":"passed","title":"applies full-screen layout without max-width container for handheld devices"},{"ancestorTitles":["HandheldLayout"],"failureMessages":[],"fullName":"HandheldLayout applies desktop layout with max-width container when isHandheld=false","location":null,"status":"passed","title":"applies desktop layout with max-width container when isHandheld=false"},{"ancestorTitles":["HandheldLayout"],"failureMessages":[],"fullName":"HandheldLayout passes toolbar props to HandheldScanToolbar","location":null,"status":"passed","title":"passes toolbar props to HandheldScanToolbar"},{"ancestorTitles":["HandheldLayout"],"failureMessages":[],"fullName":"HandheldLayout throws error when used outside HandheldProvider","location":null,"status":"passed","title":"throws error when used outside HandheldProvider"}],"endTime":1772244078636,"message":"","name":"C:\\Users\\josha\\date-management-app\\frontend\\src\\layouts\\__tests__\\HandheldLayout.test.tsx","startTime":1772244077032,"status":"passed","summary":""},{"assertionResults":[{"ancestorTitles":["HandheldScanToolbar"],"failureMessages":[],"fullName":"HandheldScanToolbar renders user name when provided","location":null,"status":"passed","title":"renders user name when provided"},{"ancestorTitles":["HandheldScanToolbar"],"failureMessages":[],"fullName":"HandheldScanToolbar displays sync status indicators","location":null,"status":"passed","title":"displays sync status indicators"},{"ancestorTitles":["HandheldScanToolbar"],"failureMessages":[],"fullName":"HandheldScanToolbar shows different sync status messages","location":null,"status":"passed","title":"shows different sync status messages"},{"ancestorTitles":["HandheldScanToolbar"],"failureMessages":[],"fullName":"HandheldScanToolbar disables Sync Now button when queue is empty","location":null,"status":"passed","title":"disables Sync Now button when queue is empty"},{"ancestorTitles":["HandheldScanToolbar"],"failureMessages":[],"fullName":"HandheldScanToolbar enables Sync Now button when queue has items","location":null,"status":"passed","title":"enables Sync Now button when queue has items"},{"ancestorTitles":["HandheldScanToolbar"],"failureMessages":[],"fullName":"HandheldScanToolbar calls onSyncNow when Sync Now button is clicked","location":null,"status":"passed","title":"calls onSyncNow when Sync Now button is clicked"},{"ancestorTitles":["HandheldScanToolbar"],"failureMessages":[],"fullName":"HandheldScanToolbar uses sync strategy from context","location":null,"status":"passed","title":"uses sync strategy from context"},{"ancestorTitles":["HandheldScanToolbar"],"failureMessages":[],"fullName":"HandheldScanToolbar renders settings button","location":null,"status":"passed","title":"renders settings button"},{"ancestorTitles":["HandheldScanToolbar"],"failureMessages":[],"fullName":"HandheldScanToolbar calls onSettingsClick when settings button is clicked","location":null,"status":"passed","title":"calls onSettingsClick when settings button is clicked"},{"ancestorTitles":["HandheldScanToolbar"],"failureMessages":[],"fullName":"HandheldScanToolbar applies handheld-specific styling","location":null,"status":"passed","title":"applies handheld-specific styling"},{"ancestorTitles":["HandheldScanToolbar"],"failureMessages":[],"fullName":"HandheldScanToolbar positions as sticky toolbar with proper z-index","location":null,"status":"passed","title":"positions as sticky toolbar with proper z-index"},{"ancestorTitles":["HandheldScanToolbar"],"failureMessages":[],"fullName":"HandheldScanToolbar throws error when used outside HandheldProvider","location":null,"status":"passed","title":"throws error when used outside HandheldProvider"}],"endTime":1772244079168,"message":"","name":"C:\\Users\\josha\\date-management-app\\frontend\\src\\components\\__tests__\\HandheldScanToolbar.test.tsx","startTime":1772244076959,"status":"passed","summary":""},{"assertionResults":[{"ancestorTitles":["LoginPage"],"failureMessages":[],"fullName":"LoginPage renders login form","location":null,"status":"passed","title":"renders login form"},{"ancestorTitles":["LoginPage"],"failureMessages":[],"fullName":"LoginPage calls onLogin with token on successful login","location":null,"status":"passed","title":"calls onLogin with token on successful login"},{"ancestorTitles":["LoginPage"],"failureMessages":[],"fullName":"LoginPage displays error message on failed login","location":null,"status":"passed","title":"displays error message on failed login"}],"endTime":1772244079248,"message":"","name":"C:\\Users\\josha\\date-management-app\\frontend\\src\\tests\\LoginPage.test.tsx","startTime":1772244077674,"status":"passed","summary":""},{"assertionResults":[{"ancestorTitles":["UpgradeModal"],"failureMessages":[],"fullName":"UpgradeModal renders tier comparison table with all 4 tiers","location":null,"status":"passed","title":"renders tier comparison table with all 4 tiers"},{"ancestorTitles":["UpgradeModal"],"failureMessages":[],"fullName":"UpgradeModal displays pricing for each tier","location":null,"status":"passed","title":"displays pricing for each tier"},{"ancestorTitles":["UpgradeModal"],"failureMessages":[],"fullName":"UpgradeModal shows feature comparison with checkmarks","location":null,"status":"passed","title":"shows feature comparison with checkmarks"},{"ancestorTitles":["UpgradeModal"],"failureMessages":[],"fullName":"UpgradeModal highlights current tier","location":null,"status":"passed","title":"highlights current tier"},{"ancestorTitles":["UpgradeModal"],"failureMessages":[],"fullName":"UpgradeModal calls onSelectPlan when upgrade button clicked","location":null,"status":"passed","title":"calls onSelectPlan when upgrade button clicked"},{"ancestorTitles":["UpgradeModal"],"failureMessages":[],"fullName":"UpgradeModal calls onClose when close button clicked","location":null,"status":"passed","title":"calls onClose when close button clicked"},{"ancestorTitles":["UpgradeModal"],"failureMessages":[],"fullName":"UpgradeModal does not render when isOpen is false","location":null,"status":"passed","title":"does not render when isOpen is false"},{"ancestorTitles":["UpgradeModal"],"failureMessages":[],"fullName":"UpgradeModal disables upgrade button for current tier","location":null,"status":"passed","title":"disables upgrade button for current tier"},{"ancestorTitles":["UpgradeModal"],"failureMessages":[],"fullName":"UpgradeModal shows annual pricing option","location":null,"status":"passed","title":"shows annual pricing option"}],"endTime":1772244079347,"message":"","name":"C:\\Users\\josha\\date-management-app\\frontend\\src\\components\\__tests__\\UpgradeModal.test.tsx","startTime":1772244070907,"status":"passed","summary":""},{"assertionResults":[{"ancestorTitles":["ReportsPage"],"failureMessages":[],"fullName":"ReportsPage renders monthly expiry report data on successful fetch","location":null,"status":"passed","title":"renders monthly expiry report data on successful fetch"},{"ancestorTitles":["ReportsPage"],"failureMessages":[],"fullName":"ReportsPage displays an error message if token is missing","location":null,"status":"passed","title":"displays an error message if token is missing"},{"ancestorTitles":["ReportsPage"],"failureMessages":[],"fullName":"ReportsPage displays an error message on failed data fetch","location":null,"status":"passed","title":"displays an error message on failed data fetch"}],"endTime":1772244079434,"message":"","name":"C:\\Users\\josha\\date-management-app\\frontend\\src\\tests\\ReportsPage.test.tsx","startTime":1772244078306,"status":"passed","summary":""},{"assertionResults":[{"ancestorTitles":["UsageReportPage"],"failureMessages":[],"fullName":"UsageReportPage renders usage report data on successful fetch","location":null,"status":"passed","title":"renders usage report data on successful fetch"},{"ancestorTitles":["UsageReportPage"],"failureMessages":[],"fullName":"UsageReportPage displays an error message if token is missing","location":null,"status":"passed","title":"displays an error message if token is missing"},{"ancestorTitles":["UsageReportPage"],"failureMessages":[],"fullName":"UsageReportPage displays an error message on failed data fetch","location":null,"status":"passed","title":"displays an error message on failed data fetch"}],"endTime":1772244079763,"message":"","name":"C:\\Users\\josha\\date-management-app\\frontend\\src\\tests\\UsageReportPage.test.tsx","startTime":1772244076619,"status":"passed","summary":""},{"assertionResults":[{"ancestorTitles":["StoreAreaManagementPage"],"failureMessages":[],"fullName":"StoreAreaManagementPage renders the store area management page and fetches areas","location":null,"status":"passed","title":"renders the store area management page and fetches areas"},{"ancestorTitles":["StoreAreaManagementPage"],"failureMessages":[],"fullName":"StoreAreaManagementPage adds a new store area","location":null,"status":"passed","title":"adds a new store area"},{"ancestorTitles":["StoreAreaManagementPage"],"failureMessages":[],"fullName":"StoreAreaManagementPage edits an existing store area","location":null,"status":"passed","title":"edits an existing store area"},{"ancestorTitles":["StoreAreaManagementPage"],"failureMessages":[],"fullName":"StoreAreaManagementPage deletes a store area","location":null,"status":"passed","title":"deletes a store area"}],"endTime":1772244079767,"message":"","name":"C:\\Users\\josha\\date-management-app\\frontend\\src\\tests\\StoreAreaManagementPage.test.tsx","startTime":1772244075740,"status":"passed","summary":""},{"assertionResults":[{"ancestorTitles":["DashboardPage"],"failureMessages":[],"fullName":"DashboardPage renders dashboard data on successful fetch","location":null,"status":"passed","title":"renders dashboard data on successful fetch"},{"ancestorTitles":["DashboardPage"],"failureMessages":[],"fullName":"DashboardPage displays an error message if token is missing","location":null,"status":"passed","title":"displays an error message if token is missing"},{"ancestorTitles":["DashboardPage"],"failureMessages":[],"fullName":"DashboardPage displays an error message on failed data fetch","location":null,"status":"passed","title":"displays an error message on failed data fetch"}],"endTime":1772244079947,"message":"","name":"C:\\Users\\josha\\date-management-app\\frontend\\src\\tests\\DashboardPage.test.tsx","startTime":1772244078696,"status":"passed","summary":""},{"assertionResults":[{"ancestorTitles":["parseGS1Barcode","GTIN extraction (01)"],"failureMessages":[],"fullName":"parseGS1Barcode GTIN extraction (01) extracts GTIN from valid GS1 barcode","location":null,"status":"passed","title":"extracts GTIN from valid GS1 barcode"},{"ancestorTitles":["parseGS1Barcode","GTIN extraction (01)"],"failureMessages":[],"fullName":"parseGS1Barcode GTIN extraction (01) handles GTIN without other fields","location":null,"status":"passed","title":"handles GTIN without other fields"},{"ancestorTitles":["parseGS1Barcode","GTIN extraction (01)"],"failureMessages":[],"fullName":"parseGS1Barcode GTIN extraction (01) ignores invalid GTIN length","location":null,"status":"passed","title":"ignores invalid GTIN length"},{"ancestorTitles":["parseGS1Barcode","Batch/Lot extraction (10)"],"failureMessages":[],"fullName":"parseGS1Barcode Batch/Lot extraction (10) extracts batch number with space separator","location":null,"status":"passed","title":"extracts batch number with space separator"},{"ancestorTitles":["parseGS1Barcode","Batch/Lot extraction (10)"],"failureMessages":[],"fullName":"parseGS1Barcode Batch/Lot extraction (10) handles batch numbers with special characters","location":null,"status":"passed","title":"handles batch numbers with special characters"},{"ancestorTitles":["parseGS1Barcode","Batch/Lot extraction (10)"],"failureMessages":[],"fullName":"parseGS1Barcode Batch/Lot extraction (10) trims whitespace from batch numbers","location":null,"status":"passed","title":"trims whitespace from batch numbers"},{"ancestorTitles":["parseGS1Barcode","Expiry date extraction (17)"],"failureMessages":[],"fullName":"parseGS1Barcode Expiry date extraction (17) converts YYMMDD to ISO date","location":null,"status":"passed","title":"converts YYMMDD to ISO date"},{"ancestorTitles":["parseGS1Barcode","Expiry date extraction (17)"],"failureMessages":[],"fullName":"parseGS1Barcode Expiry date extraction (17) handles century boundary (50 = 1950, 49 = 2049)","location":null,"status":"passed","title":"handles century boundary (50 = 1950, 49 = 2049)"},{"ancestorTitles":["parseGS1Barcode","Expiry date extraction (17)"],"failureMessages":[],"fullName":"parseGS1Barcode Expiry date extraction (17) rejects invalid dates","location":null,"status":"passed","title":"rejects invalid dates"},{"ancestorTitles":["parseGS1Barcode","Expiry date extraction (17)"],"failureMessages":[],"fullName":"parseGS1Barcode Expiry date extraction (17) rejects malformed date strings","location":null,"status":"passed","title":"rejects malformed date strings"},{"ancestorTitles":["parseGS1Barcode","Serial number extraction (21)"],"failureMessages":[],"fullName":"parseGS1Barcode Serial number extraction (21) extracts serial number","location":null,"status":"passed","title":"extracts serial number"},{"ancestorTitles":["parseGS1Barcode","Serial number extraction (21)"],"failureMessages":[],"fullName":"parseGS1Barcode Serial number extraction (21) handles serial numbers with spaces","location":null,"status":"passed","title":"handles serial numbers with spaces"},{"ancestorTitles":["parseGS1Barcode","Complete pharmacy barcode"],"failureMessages":[],"fullName":"parseGS1Barcode Complete pharmacy barcode parses full pharmaceutical GS1 barcode","location":null,"status":"passed","title":"parses full pharmaceutical GS1 barcode"},{"ancestorTitles":["parseGS1Barcode","Complete pharmacy barcode"],"failureMessages":[],"fullName":"parseGS1Barcode Complete pharmacy barcode handles real pharmacy barcode format","location":null,"status":"passed","title":"handles real pharmacy barcode format"},{"ancestorTitles":["parseGS1Barcode","Complete pharmacy barcode"],"failureMessages":[],"fullName":"parseGS1Barcode Complete pharmacy barcode parses raw GS1 barcode without brackets","location":null,"status":"passed","title":"parses raw GS1 barcode without brackets"},{"ancestorTitles":["parseGS1Barcode","Complete pharmacy barcode"],"failureMessages":[],"fullName":"parseGS1Barcode Complete pharmacy barcode parses fixture-style raw GS1 barcode with batch and serial","location":null,"status":"passed","title":"parses fixture-style raw GS1 barcode with batch and serial"},{"ancestorTitles":["parseGS1Barcode","Non-GS1 barcodes"],"failureMessages":[],"fullName":"parseGS1Barcode Non-GS1 barcodes handles regular EAN-13 barcode","location":null,"status":"passed","title":"handles regular EAN-13 barcode"},{"ancestorTitles":["parseGS1Barcode","Non-GS1 barcodes"],"failureMessages":[],"fullName":"parseGS1Barcode Non-GS1 barcodes handles Code 128 non-GS1 barcode","location":null,"status":"passed","title":"handles Code 128 non-GS1 barcode"},{"ancestorTitles":["parseGS1Barcode","Error handling"],"failureMessages":[],"fullName":"parseGS1Barcode Error handling handles empty barcode","location":null,"status":"passed","title":"handles empty barcode"},{"ancestorTitles":["parseGS1Barcode","Error handling"],"failureMessages":[],"fullName":"parseGS1Barcode Error handling handles null/undefined barcode","location":null,"status":"passed","title":"handles null/undefined barcode"},{"ancestorTitles":["parseGS1Barcode","Error handling"],"failureMessages":[],"fullName":"parseGS1Barcode Error handling handles malformed GS1 data gracefully","location":null,"status":"passed","title":"handles malformed GS1 data gracefully"},{"ancestorTitles":["parseGS1Barcode","Edge cases"],"failureMessages":[],"fullName":"parseGS1Barcode Edge cases handles multiple spaces in batch numbers","location":null,"status":"passed","title":"handles multiple spaces in batch numbers"},{"ancestorTitles":["parseGS1Barcode","Edge cases"],"failureMessages":[],"fullName":"parseGS1Barcode Edge cases handles minimum length fields","location":null,"status":"passed","title":"handles minimum length fields"},{"ancestorTitles":["isGS1Barcode"],"failureMessages":[],"fullName":"isGS1Barcode returns true for barcodes with GS1 AIs","location":null,"status":"passed","title":"returns true for barcodes with GS1 AIs"},{"ancestorTitles":["isGS1Barcode"],"failureMessages":[],"fullName":"isGS1Barcode returns false for non-GS1 barcodes","location":null,"status":"passed","title":"returns false for non-GS1 barcodes"},{"ancestorTitles":["isGS1Barcode"],"failureMessages":[],"fullName":"isGS1Barcode returns false for empty or invalid input","location":null,"status":"passed","title":"returns false for empty or invalid input"}],"endTime":1772244079956,"message":"","name":"C:\\Users\\josha\\date-management-app\\frontend\\src\\lib\\__tests__\\gs1-parser.test.ts","startTime":1772244079289,"status":"passed","summary":""},{"assertionResults":[{"ancestorTitles":["StorageQuotaWarning - Smoke Tests","Integration with App"],"failureMessages":[],"fullName":"StorageQuotaWarning - Smoke Tests Integration with App should show warning overlay when storage exceeds 80% on free tier","location":null,"status":"passed","title":"should show warning overlay when storage exceeds 80% on free tier"},{"ancestorTitles":["StorageQuotaWarning - Smoke Tests","Integration with App"],"failureMessages":[],"fullName":"StorageQuotaWarning - Smoke Tests Integration with App should not interfere with app when storage is below 80%","location":null,"status":"passed","title":"should not interfere with app when storage is below 80%"},{"ancestorTitles":["StorageQuotaWarning - Smoke Tests","Integration with App"],"failureMessages":[],"fullName":"StorageQuotaWarning - Smoke Tests Integration with App should allow app interaction after dismissing warning","location":null,"status":"passed","title":"should allow app interaction after dismissing warning"},{"ancestorTitles":["StorageQuotaWarning - Smoke Tests","Real-world Scenarios"],"failureMessages":[],"fullName":"StorageQuotaWarning - Smoke Tests Real-world Scenarios should warn free tier user at 85% usage","location":null,"status":"passed","title":"should warn free tier user at 85% usage"},{"ancestorTitles":["StorageQuotaWarning - Smoke Tests","Real-world Scenarios"],"failureMessages":[],"fullName":"StorageQuotaWarning - Smoke Tests Real-world Scenarios should warn pro tier user at 90% usage (9GB of 10GB)","location":null,"status":"passed","title":"should warn pro tier user at 90% usage (9GB of 10GB)"},{"ancestorTitles":["StorageQuotaWarning - Smoke Tests","Real-world Scenarios"],"failureMessages":[],"fullName":"StorageQuotaWarning - Smoke Tests Real-world Scenarios should warn at exactly 100% usage","location":null,"status":"passed","title":"should warn at exactly 100% usage"},{"ancestorTitles":["StorageQuotaWarning - Smoke Tests","Real-world Scenarios"],"failureMessages":[],"fullName":"StorageQuotaWarning - Smoke Tests Real-world Scenarios should handle network errors gracefully without crashing app","location":null,"status":"passed","title":"should handle network errors gracefully without crashing app"},{"ancestorTitles":["StorageQuotaWarning - Smoke Tests","Real-world Scenarios"],"failureMessages":[],"fullName":"StorageQuotaWarning - Smoke Tests Real-world Scenarios should persist dismissal across component remounts","location":null,"status":"passed","title":"should persist dismissal across component remounts"},{"ancestorTitles":["StorageQuotaWarning - Smoke Tests","Performance and UX"],"failureMessages":[],"fullName":"StorageQuotaWarning - Smoke Tests Performance and UX should render without blocking main UI","location":null,"status":"passed","title":"should render without blocking main UI"},{"ancestorTitles":["StorageQuotaWarning - Smoke Tests","Performance and UX"],"failureMessages":[],"fullName":"StorageQuotaWarning - Smoke Tests Performance and UX should show loading state without blocking","location":null,"status":"passed","title":"should show loading state without blocking"},{"ancestorTitles":["StorageQuotaWarning - Smoke Tests","Accessibility"],"failureMessages":[],"fullName":"StorageQuotaWarning - Smoke Tests Accessibility should have proper ARIA labels for screen readers","location":null,"status":"passed","title":"should have proper ARIA labels for screen readers"},{"ancestorTitles":["StorageQuotaWarning - Smoke Tests","Accessibility"],"failureMessages":[],"fullName":"StorageQuotaWarning - Smoke Tests Accessibility should be keyboard navigable","location":null,"status":"passed","title":"should be keyboard navigable"}],"endTime":1772244079962,"message":"","name":"C:\\Users\\josha\\date-management-app\\frontend\\src\\components\\__tests__\\StorageQuotaWarning.smoke.test.tsx","startTime":1772244077413,"status":"passed","summary":""},{"assertionResults":[{"ancestorTitles":[],"failureMessages":[],"fullName":"App renders without crashing","location":null,"status":"todo","title":"App renders without crashing"}],"endTime":1772244079971,"message":"","name":"C:\\Users\\josha\\date-management-app\\frontend\\src\\App.test.tsx","startTime":1772244079505,"status":"passed","summary":""},{"assertionResults":[{"ancestorTitles":["utils","cn"],"failureMessages":[],"fullName":"utils cn should merge class names correctly","location":null,"status":"passed","title":"should merge class names correctly"},{"ancestorTitles":["utils","cn"],"failureMessages":[],"fullName":"utils cn should handle tailwind conflicts","location":null,"status":"passed","title":"should handle tailwind conflicts"},{"ancestorTitles":["utils","isWithinMarkdownPeriod"],"failureMessages":[],"fullName":"utils isWithinMarkdownPeriod should return false if expiryDate is null","location":null,"status":"passed","title":"should return false if expiryDate is null"},{"ancestorTitles":["utils","isWithinMarkdownPeriod"],"failureMessages":[],"fullName":"utils isWithinMarkdownPeriod should return true if expiry is within N days","location":null,"status":"passed","title":"should return true if expiry is within N days"},{"ancestorTitles":["utils","isWithinMarkdownPeriod"],"failureMessages":[],"fullName":"utils isWithinMarkdownPeriod should return false if expiry is outside N days","location":null,"status":"passed","title":"should return false if expiry is outside N days"},{"ancestorTitles":["utils","isWithinMarkdownPeriod"],"failureMessages":[],"fullName":"utils isWithinMarkdownPeriod should handle past dates","location":null,"status":"passed","title":"should handle past dates"},{"ancestorTitles":["utils","calculateMarkdownPrice"],"failureMessages":[],"fullName":"utils calculateMarkdownPrice should markdown by 20% if expiry <= 30 days","location":null,"status":"passed","title":"should markdown by 20% if expiry <= 30 days"},{"ancestorTitles":["utils","calculateMarkdownPrice"],"failureMessages":[],"fullName":"utils calculateMarkdownPrice should apply no markdown if expiry is between 31 and 60 days","location":null,"status":"passed","title":"should apply no markdown if expiry is between 31 and 60 days"},{"ancestorTitles":["utils","calculateMarkdownPrice"],"failureMessages":[],"fullName":"utils calculateMarkdownPrice should markup by 20% if expiry is between 61 and 90 days","location":null,"status":"passed","title":"should markup by 20% if expiry is between 61 and 90 days"},{"ancestorTitles":["utils","calculateMarkdownPrice"],"failureMessages":[],"fullName":"utils calculateMarkdownPrice should apply no markdown if expiry is > 90 days","location":null,"status":"passed","title":"should apply no markdown if expiry is > 90 days"},{"ancestorTitles":["utils","calculateMarkdownPercentage"],"failureMessages":[],"fullName":"utils calculateMarkdownPercentage should return -20 if expiry <= 30 days","location":null,"status":"passed","title":"should return -20 if expiry <= 30 days"},{"ancestorTitles":["utils","calculateMarkdownPercentage"],"failureMessages":[],"fullName":"utils calculateMarkdownPercentage should return 0 if expiry is between 31 and 60 days","location":null,"status":"passed","title":"should return 0 if expiry is between 31 and 60 days"},{"ancestorTitles":["utils","calculateMarkdownPercentage"],"failureMessages":[],"fullName":"utils calculateMarkdownPercentage should return 20 if expiry is between 61 and 90 days","location":null,"status":"passed","title":"should return 20 if expiry is between 61 and 90 days"},{"ancestorTitles":["utils","calculateMarkdownPercentage"],"failureMessages":[],"fullName":"utils calculateMarkdownPercentage should return 0 if expiry is > 90 days","location":null,"status":"passed","title":"should return 0 if expiry is > 90 days"}],"endTime":1772244080025,"message":"","name":"C:\\Users\\josha\\date-management-app\\frontend\\src\\lib\\__tests__\\utils.test.ts","startTime":1772244079433,"status":"passed","summary":""},{"assertionResults":[{"ancestorTitles":["StorageQuotaWarning","API Integration"],"failureMessages":[],"fullName":"StorageQuotaWarning API Integration fetches quota data on mount with correct URL and headers","location":null,"status":"passed","title":"fetches quota data on mount with correct URL and headers"},{"ancestorTitles":["StorageQuotaWarning","API Integration"],"failureMessages":[],"fullName":"StorageQuotaWarning API Integration includes subscription tier in query params","location":null,"status":"passed","title":"includes subscription tier in query params"},{"ancestorTitles":["StorageQuotaWarning","API Integration"],"failureMessages":[],"fullName":"StorageQuotaWarning API Integration handles API error gracefully","location":null,"status":"passed","title":"handles API error gracefully"},{"ancestorTitles":["StorageQuotaWarning","API Integration"],"failureMessages":[],"fullName":"StorageQuotaWarning API Integration handles non-OK response status","location":null,"status":"passed","title":"handles non-OK response status"},{"ancestorTitles":["StorageQuotaWarning","API Integration"],"failureMessages":[],"fullName":"StorageQuotaWarning API Integration does not fetch when no auth token exists","location":null,"status":"passed","title":"does not fetch when no auth token exists"},{"ancestorTitles":["StorageQuotaWarning","Visibility Logic"],"failureMessages":[],"fullName":"StorageQuotaWarning Visibility Logic shows warning when quota is at warning threshold (80%)","location":null,"status":"passed","title":"shows warning when quota is at warning threshold (80%)"},{"ancestorTitles":["StorageQuotaWarning","Visibility Logic"],"failureMessages":[],"fullName":"StorageQuotaWarning Visibility Logic shows warning when quota is above threshold (90%)","location":null,"status":"passed","title":"shows warning when quota is above threshold (90%)"},{"ancestorTitles":["StorageQuotaWarning","Visibility Logic"],"failureMessages":[],"fullName":"StorageQuotaWarning Visibility Logic does not show when quota is below threshold (70%)","location":null,"status":"passed","title":"does not show when quota is below threshold (70%)"},{"ancestorTitles":["StorageQuotaWarning","Visibility Logic"],"failureMessages":[],"fullName":"StorageQuotaWarning Visibility Logic does not show when isWarning is false","location":null,"status":"passed","title":"does not show when isWarning is false"},{"ancestorTitles":["StorageQuotaWarning","Data Display"],"failureMessages":[],"fullName":"StorageQuotaWarning Data Display displays percentage correctly","location":null,"status":"passed","title":"displays percentage correctly"},{"ancestorTitles":["StorageQuotaWarning","Data Display"],"failureMessages":[],"fullName":"StorageQuotaWarning Data Display displays used storage amount","location":null,"status":"passed","title":"displays used storage amount"},{"ancestorTitles":["StorageQuotaWarning","Data Display"],"failureMessages":[],"fullName":"StorageQuotaWarning Data Display displays total storage limit","location":null,"status":"passed","title":"displays total storage limit"},{"ancestorTitles":["StorageQuotaWarning","Data Display"],"failureMessages":[],"fullName":"StorageQuotaWarning Data Display displays remaining storage when not at limit","location":null,"status":"passed","title":"displays remaining storage when not at limit"},{"ancestorTitles":["StorageQuotaWarning","Data Display"],"failureMessages":[],"fullName":"StorageQuotaWarning Data Display displays at-limit message when storage is full","location":null,"status":"passed","title":"displays at-limit message when storage is full"},{"ancestorTitles":["StorageQuotaWarning","Data Display"],"failureMessages":[],"fullName":"StorageQuotaWarning Data Display displays current subscription tier","location":null,"status":"passed","title":"displays current subscription tier"},{"ancestorTitles":["StorageQuotaWarning","Data Display"],"failureMessages":[],"fullName":"StorageQuotaWarning Data Display displays Pro tier correctly","location":null,"status":"passed","title":"displays Pro tier correctly"},{"ancestorTitles":["StorageQuotaWarning","Data Display"],"failureMessages":[],"fullName":"StorageQuotaWarning Data Display renders progress bar with correct width","location":null,"status":"passed","title":"renders progress bar with correct width"},{"ancestorTitles":["StorageQuotaWarning","Data Display"],"failureMessages":[],"fullName":"StorageQuotaWarning Data Display caps progress bar at 100% for over-quota usage","location":null,"status":"passed","title":"caps progress bar at 100% for over-quota usage"},{"ancestorTitles":["StorageQuotaWarning","Dismiss Functionality"],"failureMessages":[],"fullName":"StorageQuotaWarning Dismiss Functionality dismisses when close button is clicked","location":null,"status":"passed","title":"dismisses when close button is clicked"},{"ancestorTitles":["StorageQuotaWarning","Dismiss Functionality"],"failureMessages":[],"fullName":"StorageQuotaWarning Dismiss Functionality dismisses when \"Remind Me Later\" button is clicked","location":null,"status":"passed","title":"dismisses when \"Remind Me Later\" button is clicked"},{"ancestorTitles":["StorageQuotaWarning","Dismiss Functionality"],"failureMessages":[],"fullName":"StorageQuotaWarning Dismiss Functionality dismisses when overlay is clicked","location":null,"status":"passed","title":"dismisses when overlay is clicked"},{"ancestorTitles":["StorageQuotaWarning","Dismiss Functionality"],"failureMessages":[],"fullName":"StorageQuotaWarning Dismiss Functionality stores dismiss timestamp in localStorage","location":null,"status":"passed","title":"stores dismiss timestamp in localStorage"},{"ancestorTitles":["StorageQuotaWarning","Dismiss Functionality"],"failureMessages":[],"fullName":"StorageQuotaWarning Dismiss Functionality does not show when dismissed within autoHideDays","location":null,"status":"passed","title":"does not show when dismissed within autoHideDays"},{"ancestorTitles":["StorageQuotaWarning","Dismiss Functionality"],"failureMessages":[],"fullName":"StorageQuotaWarning Dismiss Functionality shows again after autoHideDays have passed","location":null,"status":"passed","title":"shows again after autoHideDays have passed"},{"ancestorTitles":["StorageQuotaWarning","Dismiss Functionality"],"failureMessages":[],"fullName":"StorageQuotaWarning Dismiss Functionality respects custom autoHideDays prop","location":null,"status":"passed","title":"respects custom autoHideDays prop"},{"ancestorTitles":["StorageQuotaWarning","Upgrade Button"],"failureMessages":[],"fullName":"StorageQuotaWarning Upgrade Button calls onUpgrade when Upgrade Plan button is clicked","location":null,"status":"passed","title":"calls onUpgrade when Upgrade Plan button is clicked"},{"ancestorTitles":["StorageQuotaWarning","Upgrade Button"],"failureMessages":[],"fullName":"StorageQuotaWarning Upgrade Button does not render Upgrade Plan button when onUpgrade is not provided","location":null,"status":"passed","title":"does not render Upgrade Plan button when onUpgrade is not provided"},{"ancestorTitles":["StorageQuotaWarning","Byte Formatting"],"failureMessages":[],"fullName":"StorageQuotaWarning Byte Formatting formats bytes correctly","location":null,"status":"passed","title":"formats bytes correctly"},{"ancestorTitles":["StorageQuotaWarning","Footer Message"],"failureMessages":[],"fullName":"StorageQuotaWarning Footer Message displays autoHideDays in footer message","location":null,"status":"passed","title":"displays autoHideDays in footer message"},{"ancestorTitles":["StorageQuotaWarning","Footer Message"],"failureMessages":[],"fullName":"StorageQuotaWarning Footer Message displays custom autoHideDays in footer message","location":null,"status":"passed","title":"displays custom autoHideDays in footer message"},{"ancestorTitles":["StorageQuotaWarning","Edge Cases"],"failureMessages":[],"fullName":"StorageQuotaWarning Edge Cases handles 0 bytes used","location":null,"status":"passed","title":"handles 0 bytes used"},{"ancestorTitles":["StorageQuotaWarning","Edge Cases"],"failureMessages":[],"fullName":"StorageQuotaWarning Edge Cases handles exactly 80% usage","location":null,"status":"passed","title":"handles exactly 80% usage"},{"ancestorTitles":["StorageQuotaWarning","Edge Cases"],"failureMessages":[],"fullName":"StorageQuotaWarning Edge Cases handles over 100% usage","location":null,"status":"passed","title":"handles over 100% usage"}],"endTime":1772244080032,"message":"","name":"C:\\Users\\josha\\date-management-app\\frontend\\src\\components\\__tests__\\StorageQuotaWarning.test.tsx","startTime":1772244075693,"status":"passed","summary":""},{"assertionResults":[{"ancestorTitles":["synchronizeOfflineData"],"failureMessages":[],"fullName":"synchronizeOfflineData should not synchronize if token is missing","location":null,"status":"passed","title":"should not synchronize if token is missing"},{"ancestorTitles":["synchronizeOfflineData"],"failureMessages":[],"fullName":"synchronizeOfflineData should not synchronize if offline","location":null,"status":"passed","title":"should not synchronize if offline"},{"ancestorTitles":["synchronizeOfflineData"],"failureMessages":[],"fullName":"synchronizeOfflineData should synchronize pending inventory items when online","location":null,"status":"passed","title":"should synchronize pending inventory items when online"},{"ancestorTitles":["synchronizeOfflineData"],"failureMessages":[],"fullName":"synchronizeOfflineData should handle failed synchronization gracefully","location":null,"status":"passed","title":"should handle failed synchronization gracefully"},{"ancestorTitles":["synchronizeOfflineData"],"failureMessages":[],"fullName":"synchronizeOfflineData should do nothing if no pending items","location":null,"status":"passed","title":"should do nothing if no pending items"}],"endTime":1772244080147,"message":"","name":"C:\\Users\\josha\\date-management-app\\frontend\\src\\tests\\sync-manager.test.ts","startTime":1772244079251,"status":"passed","summary":""},{"assertionResults":[{"ancestorTitles":["ScanPage Integration"],"failureMessages":[],"fullName":"ScanPage Integration renders and fetches store areas on mount","location":null,"status":"passed","title":"renders and fetches store areas on mount"},{"ancestorTitles":["ScanPage Integration"],"failureMessages":[],"fullName":"ScanPage Integration displays product details after scanning a valid barcode (>8 chars)","location":null,"status":"passed","title":"displays product details after scanning a valid barcode (>8 chars)"},{"ancestorTitles":["ScanPage Integration"],"failureMessages":[],"fullName":"ScanPage Integration displays product details after scanning a valid SKU (<=8 chars)","location":null,"status":"passed","title":"displays product details after scanning a valid SKU (<=8 chars)"},{"ancestorTitles":["ScanPage Integration"],"failureMessages":[],"fullName":"ScanPage Integration shows new product form if product not found","location":null,"status":"passed","title":"shows new product form if product not found"},{"ancestorTitles":["ScanPage Integration"],"failureMessages":[],"fullName":"ScanPage Integration submits inventory item successfully when online","location":null,"status":"passed","title":"submits inventory item successfully when online"},{"ancestorTitles":["ScanPage Integration"],"failureMessages":[],"fullName":"ScanPage Integration saves to offline storage when offline","location":null,"status":"passed","title":"saves to offline storage when offline"},{"ancestorTitles":["ScanPage Integration","Handheld Integration Tests"],"failureMessages":[],"fullName":"ScanPage Integration Handheld Integration Tests renders HandheldScanner instead of regular Scanner when in handheld mode","location":null,"status":"passed","title":"renders HandheldScanner instead of regular Scanner when in handheld mode"},{"ancestorTitles":["ScanPage Integration","Handheld Integration Tests"],"failureMessages":[],"fullName":"ScanPage Integration Handheld Integration Tests auto-populates expiry date from GS1 barcode data in handheld mode","location":null,"status":"passed","title":"auto-populates expiry date from GS1 barcode data in handheld mode"},{"ancestorTitles":["ScanPage Integration","Handheld Integration Tests"],"failureMessages":[],"fullName":"ScanPage Integration Handheld Integration Tests displays sync strategy selector in handheld toolbar","location":null,"status":"passed","title":"displays sync strategy selector in handheld toolbar"},{"ancestorTitles":["ScanPage Integration","Handheld Integration Tests"],"failureMessages":[],"fullName":"ScanPage Integration Handheld Integration Tests allows changing sync strategy in handheld mode","location":null,"status":"passed","title":"allows changing sync strategy in handheld mode"},{"ancestorTitles":["ScanPage Integration","Handheld Integration Tests"],"failureMessages":[],"fullName":"ScanPage Integration Handheld Integration Tests shows sync status in handheld toolbar","location":null,"status":"passed","title":"shows sync status in handheld toolbar"},{"ancestorTitles":["ScanPage Integration","Handheld Integration Tests"],"failureMessages":[],"fullName":"ScanPage Integration Handheld Integration Tests displays queue length in handheld toolbar when items are pending","location":null,"status":"passed","title":"displays queue length in handheld toolbar when items are pending"},{"ancestorTitles":["ScanPage Integration","Handheld Integration Tests"],"failureMessages":[],"fullName":"ScanPage Integration Handheld Integration Tests provides settings navigation in handheld toolbar","location":null,"status":"passed","title":"provides settings navigation in handheld toolbar"},{"ancestorTitles":["ScanPage Integration","Handheld Integration Tests"],"failureMessages":[],"fullName":"ScanPage Integration Handheld Integration Tests applies full-screen layout in handheld mode","location":null,"status":"passed","title":"applies full-screen layout in handheld mode"},{"ancestorTitles":["ScanPage Integration","Handheld Integration Tests"],"failureMessages":[],"fullName":"ScanPage Integration Handheld Integration Tests handles GS1 parsing errors gracefully in handheld mode","location":null,"status":"passed","title":"handles GS1 parsing errors gracefully in handheld mode"}],"endTime":1772244080326,"message":"","name":"C:\\Users\\josha\\date-management-app\\frontend\\src\\pages\\__tests__\\ScanPage.test.tsx","startTime":1772244070907,"status":"passed","summary":""},{"assertionResults":[{"ancestorTitles":["offlineStorage"],"failureMessages":[],"fullName":"offlineStorage should set and get an item","location":null,"status":"passed","title":"should set and get an item"},{"ancestorTitles":["offlineStorage"],"failureMessages":[],"fullName":"offlineStorage should return null for a non-existent item","location":null,"status":"passed","title":"should return null for a non-existent item"},{"ancestorTitles":["offlineStorage"],"failureMessages":[],"fullName":"offlineStorage should remove an item","location":null,"status":"passed","title":"should remove an item"},{"ancestorTitles":["offlineStorage"],"failureMessages":[],"fullName":"offlineStorage should clear all items","location":null,"status":"passed","title":"should clear all items"},{"ancestorTitles":["offlineStorage"],"failureMessages":[],"fullName":"offlineStorage should return all keys","location":null,"status":"passed","title":"should return all keys"}],"endTime":1772244080349,"message":"","name":"C:\\Users\\josha\\date-management-app\\frontend\\src\\tests\\offline-storage.test.ts","startTime":1772244079874,"status":"passed","summary":""},{"assertionResults":[{"ancestorTitles":["haptic","triggerHaptic"],"failureMessages":[],"fullName":"haptic triggerHaptic should call navigator.vibrate() with default duration of 50ms","location":null,"status":"passed","title":"should call navigator.vibrate() with default duration of 50ms"},{"ancestorTitles":["haptic","triggerHaptic"],"failureMessages":[],"fullName":"haptic triggerHaptic should call navigator.vibrate() with custom duration","location":null,"status":"passed","title":"should call navigator.vibrate() with custom duration"},{"ancestorTitles":["haptic","triggerHaptic"],"failureMessages":[],"fullName":"haptic triggerHaptic should handle missing navigator.vibrate gracefully (no error thrown)","location":null,"status":"passed","title":"should handle missing navigator.vibrate gracefully (no error thrown)"},{"ancestorTitles":["haptic","triggerHaptic"],"failureMessages":[],"fullName":"haptic triggerHaptic should respect custom duration parameter of 75ms","location":null,"status":"passed","title":"should respect custom duration parameter of 75ms"},{"ancestorTitles":["haptic","triggerHaptic"],"failureMessages":[],"fullName":"haptic triggerHaptic should support zero duration (stop vibration)","location":null,"status":"passed","title":"should support zero duration (stop vibration)"},{"ancestorTitles":["haptic","triggerHaptic"],"failureMessages":[],"fullName":"haptic triggerHaptic should handle error thrown by navigator.vibrate gracefully","location":null,"status":"passed","title":"should handle error thrown by navigator.vibrate gracefully"},{"ancestorTitles":["haptic","triggerHaptic"],"failureMessages":[],"fullName":"haptic triggerHaptic should return undefined (void function)","location":null,"status":"passed","title":"should return undefined (void function)"}],"endTime":1772244080360,"message":"","name":"C:\\Users\\josha\\date-management-app\\frontend\\src\\lib\\__tests__\\haptic.test.ts","startTime":1772244079941,"status":"passed","summary":""},{"assertionResults":[{"ancestorTitles":["MarkdownCalculator"],"failureMessages":[],"fullName":"MarkdownCalculator renders the markdown calculator form","location":null,"status":"passed","title":"renders the markdown calculator form"},{"ancestorTitles":["MarkdownCalculator"],"failureMessages":[],"fullName":"MarkdownCalculator calculates markdown price correctly for items expiring within 30 days","location":null,"status":"passed","title":"calculates markdown price correctly for items expiring within 30 days"},{"ancestorTitles":["MarkdownCalculator"],"failureMessages":[],"fullName":"MarkdownCalculator displays Normal status when no expiry date is set","location":null,"status":"passed","title":"displays Normal status when no expiry date is set"},{"ancestorTitles":["MarkdownCalculator"],"failureMessages":[],"fullName":"MarkdownCalculator displays Expired status for items past expiry date","location":null,"status":"passed","title":"displays Expired status for items past expiry date"}],"endTime":1772244080393,"message":"","name":"C:\\Users\\josha\\date-management-app\\frontend\\src\\tests\\MarkdownCalculator.test.tsx","startTime":1772244070906,"status":"passed","summary":""}],"wasInterrupted":false}
+{
+  "numFailedTestSuites": 0,
+  "numFailedTests": 0,
+  "numPassedTestSuites": 29,
+  "numPassedTests": 268,
+  "numPendingTestSuites": 0,
+  "numPendingTests": 0,
+  "numRuntimeErrorTestSuites": 0,
+  "numTodoTests": 1,
+  "numTotalTestSuites": 29,
+  "numTotalTests": 269,
+  "openHandles": [],
+  "snapshot": {
+    "added": 0,
+    "didUpdate": false,
+    "failure": false,
+    "filesAdded": 0,
+    "filesRemoved": 0,
+    "filesRemovedList": [],
+    "filesUnmatched": 0,
+    "filesUpdated": 0,
+    "matched": 0,
+    "total": 0,
+    "unchecked": 0,
+    "uncheckedKeysByFile": [],
+    "unmatched": 0,
+    "updated": 0
+  },
+  "startTime": 1772244067100,
+  "success": true,
+  "testResults": [
+    {
+      "assertionResults": [
+        {
+          "ancestorTitles": ["Clerk Integration Setup"],
+          "failureMessages": [],
+          "fullName": "Clerk Integration Setup should render ClerkProvider without crashing",
+          "location": null,
+          "status": "passed",
+          "title": "should render ClerkProvider without crashing"
+        },
+        {
+          "ancestorTitles": ["Clerk Integration Setup"],
+          "failureMessages": [],
+          "fullName": "Clerk Integration Setup should throw error if REACT_APP_CLERK_PUBLISHABLE_KEY is missing",
+          "location": null,
+          "status": "passed",
+          "title": "should throw error if REACT_APP_CLERK_PUBLISHABLE_KEY is missing"
+        }
+      ],
+      "endTime": 1772244075134,
+      "message": "",
+      "name": "C:\\Users\\josha\\date-management-app\\frontend\\src\\tests\\clerk-setup.test.tsx",
+      "startTime": 1772244070908,
+      "status": "passed",
+      "summary": ""
+    },
+    {
+      "assertionResults": [
+        {
+          "ancestorTitles": ["useHandheldDetection", "localStorage override"],
+          "failureMessages": [],
+          "fullName": "useHandheldDetection localStorage override should detect handheld when forceHandheld is set to true",
+          "location": null,
+          "status": "passed",
+          "title": "should detect handheld when forceHandheld is set to true"
+        },
+        {
+          "ancestorTitles": ["useHandheldDetection", "localStorage override"],
+          "failureMessages": [],
+          "fullName": "useHandheldDetection localStorage override should not detect handheld when forceHandheld is not set",
+          "location": null,
+          "status": "passed",
+          "title": "should not detect handheld when forceHandheld is not set"
+        },
+        {
+          "ancestorTitles": ["useHandheldDetection", "user agent detection"],
+          "failureMessages": [],
+          "fullName": "useHandheldDetection user agent detection should detect Zebra device",
+          "location": null,
+          "status": "passed",
+          "title": "should detect Zebra device"
+        },
+        {
+          "ancestorTitles": ["useHandheldDetection", "user agent detection"],
+          "failureMessages": [],
+          "fullName": "useHandheldDetection user agent detection should detect Honeywell device",
+          "location": null,
+          "status": "passed",
+          "title": "should detect Honeywell device"
+        },
+        {
+          "ancestorTitles": ["useHandheldDetection", "user agent detection"],
+          "failureMessages": [],
+          "fullName": "useHandheldDetection user agent detection should detect CipherLab device",
+          "location": null,
+          "status": "passed",
+          "title": "should detect CipherLab device"
+        },
+        {
+          "ancestorTitles": ["useHandheldDetection", "screen dimension detection"],
+          "failureMessages": [],
+          "fullName": "useHandheldDetection screen dimension detection should detect handheld for small screens",
+          "location": null,
+          "status": "passed",
+          "title": "should detect handheld for small screens"
+        },
+        {
+          "ancestorTitles": ["useHandheldDetection", "screen dimension detection"],
+          "failureMessages": [],
+          "fullName": "useHandheldDetection screen dimension detection should not detect handheld for large screens",
+          "location": null,
+          "status": "passed",
+          "title": "should not detect handheld for large screens"
+        },
+        {
+          "ancestorTitles": ["useHandheldDetection", "screen dimension detection"],
+          "failureMessages": [],
+          "fullName": "useHandheldDetection screen dimension detection should detect handheld at threshold dimensions",
+          "location": null,
+          "status": "passed",
+          "title": "should detect handheld at threshold dimensions"
+        },
+        {
+          "ancestorTitles": ["useHandheldDetection", "refresh function"],
+          "failureMessages": [],
+          "fullName": "useHandheldDetection refresh function should re-run detection when refresh is called",
+          "location": null,
+          "status": "passed",
+          "title": "should re-run detection when refresh is called"
+        },
+        {
+          "ancestorTitles": ["useHandheldDetection", "refresh function"],
+          "failureMessages": [],
+          "fullName": "useHandheldDetection refresh function should update screen dimensions when refresh is called",
+          "location": null,
+          "status": "passed",
+          "title": "should update screen dimensions when refresh is called"
+        },
+        {
+          "ancestorTitles": ["useHandheldDetection", "initial state"],
+          "failureMessages": [],
+          "fullName": "useHandheldDetection initial state should return false for isHandheld initially when no detection criteria met",
+          "location": null,
+          "status": "passed",
+          "title": "should return false for isHandheld initially when no detection criteria met"
+        },
+        {
+          "ancestorTitles": ["useHandheldDetection", "initial state"],
+          "failureMessages": [],
+          "fullName": "useHandheldDetection initial state should initialize with correct screen dimensions",
+          "location": null,
+          "status": "passed",
+          "title": "should initialize with correct screen dimensions"
+        },
+        {
+          "ancestorTitles": ["useHandheldDetection", "detection priority"],
+          "failureMessages": [],
+          "fullName": "useHandheldDetection detection priority should prioritize localStorage override over user agent",
+          "location": null,
+          "status": "passed",
+          "title": "should prioritize localStorage override over user agent"
+        },
+        {
+          "ancestorTitles": ["useHandheldDetection", "detection priority"],
+          "failureMessages": [],
+          "fullName": "useHandheldDetection detection priority should prioritize user agent over screen dimensions",
+          "location": null,
+          "status": "passed",
+          "title": "should prioritize user agent over screen dimensions"
+        }
+      ],
+      "endTime": 1772244075243,
+      "message": "",
+      "name": "C:\\Users\\josha\\date-management-app\\frontend\\src\\hooks\\__tests__\\useHandheldDetection.test.ts",
+      "startTime": 1772244070906,
+      "status": "passed",
+      "summary": ""
+    },
+    {
+      "assertionResults": [
+        {
+          "ancestorTitles": ["OfflineSyncService", "Queue Management"],
+          "failureMessages": [],
+          "fullName": "OfflineSyncService Queue Management should add operations to the queue",
+          "location": null,
+          "status": "passed",
+          "title": "should add operations to the queue"
+        },
+        {
+          "ancestorTitles": ["OfflineSyncService", "Queue Management"],
+          "failureMessages": [],
+          "fullName": "OfflineSyncService Queue Management should retrieve pending operations by entity type",
+          "location": null,
+          "status": "passed",
+          "title": "should retrieve pending operations by entity type"
+        },
+        {
+          "ancestorTitles": ["OfflineSyncService", "Queue Management"],
+          "failureMessages": [],
+          "fullName": "OfflineSyncService Queue Management should count pending operations correctly",
+          "location": null,
+          "status": "passed",
+          "title": "should count pending operations correctly"
+        },
+        {
+          "ancestorTitles": ["OfflineSyncService", "Queue Management"],
+          "failureMessages": [],
+          "fullName": "OfflineSyncService Queue Management should clear the queue",
+          "location": null,
+          "status": "passed",
+          "title": "should clear the queue"
+        },
+        {
+          "ancestorTitles": ["OfflineSyncService", "Synchronization Logic"],
+          "failureMessages": [],
+          "fullName": "OfflineSyncService Synchronization Logic should sync operations when online",
+          "location": null,
+          "status": "passed",
+          "title": "should sync operations when online"
+        },
+        {
+          "ancestorTitles": ["OfflineSyncService", "Synchronization Logic"],
+          "failureMessages": [],
+          "fullName": "OfflineSyncService Synchronization Logic should not sync when queue is empty",
+          "location": null,
+          "status": "passed",
+          "title": "should not sync when queue is empty"
+        },
+        {
+          "ancestorTitles": ["OfflineSyncService", "Synchronization Logic"],
+          "failureMessages": [],
+          "fullName": "OfflineSyncService Synchronization Logic should stop syncing if an operation fails",
+          "location": null,
+          "status": "passed",
+          "title": "should stop syncing if an operation fails"
+        },
+        {
+          "ancestorTitles": ["OfflineSyncService", "Synchronization Logic"],
+          "failureMessages": [],
+          "fullName": "OfflineSyncService Synchronization Logic should retry failed operations on next sync",
+          "location": null,
+          "status": "passed",
+          "title": "should retry failed operations on next sync"
+        },
+        {
+          "ancestorTitles": ["OfflineSyncService", "Online/Offline Handling"],
+          "failureMessages": [],
+          "fullName": "OfflineSyncService Online/Offline Handling should report correct offline status",
+          "location": null,
+          "status": "passed",
+          "title": "should report correct offline status"
+        },
+        {
+          "ancestorTitles": ["OfflineSyncService", "Online/Offline Handling"],
+          "failureMessages": [],
+          "fullName": "OfflineSyncService Online/Offline Handling should trigger sync when coming online",
+          "location": null,
+          "status": "passed",
+          "title": "should trigger sync when coming online"
+        },
+        {
+          "ancestorTitles": ["OfflineSyncService", "API Endpoint & Method Mapping"],
+          "failureMessages": [],
+          "fullName": "OfflineSyncService API Endpoint & Method Mapping should send POST request for create",
+          "location": null,
+          "status": "passed",
+          "title": "should send POST request for create"
+        },
+        {
+          "ancestorTitles": ["OfflineSyncService", "API Endpoint & Method Mapping"],
+          "failureMessages": [],
+          "fullName": "OfflineSyncService API Endpoint & Method Mapping should send PUT request for update",
+          "location": null,
+          "status": "passed",
+          "title": "should send PUT request for update"
+        },
+        {
+          "ancestorTitles": ["OfflineSyncService", "API Endpoint & Method Mapping"],
+          "failureMessages": [],
+          "fullName": "OfflineSyncService API Endpoint & Method Mapping should send DELETE request for delete",
+          "location": null,
+          "status": "passed",
+          "title": "should send DELETE request for delete"
+        },
+        {
+          "ancestorTitles": ["OfflineSyncService", "Sync Strategies"],
+          "failureMessages": [],
+          "fullName": "OfflineSyncService Sync Strategies should set and get sync strategy",
+          "location": null,
+          "status": "passed",
+          "title": "should set and get sync strategy"
+        },
+        {
+          "ancestorTitles": ["OfflineSyncService", "Sync Strategies"],
+          "failureMessages": [],
+          "fullName": "OfflineSyncService Sync Strategies should trigger sync immediately in real-time mode",
+          "location": null,
+          "status": "passed",
+          "title": "should trigger sync immediately in real-time mode"
+        },
+        {
+          "ancestorTitles": ["OfflineSyncService", "Sync Strategies"],
+          "failureMessages": [],
+          "fullName": "OfflineSyncService Sync Strategies should not trigger sync immediately in batch mode",
+          "location": null,
+          "status": "passed",
+          "title": "should not trigger sync immediately in batch mode"
+        },
+        {
+          "ancestorTitles": ["OfflineSyncService", "Sync Strategies"],
+          "failureMessages": [],
+          "fullName": "OfflineSyncService Sync Strategies should not trigger sync immediately in manual mode",
+          "location": null,
+          "status": "passed",
+          "title": "should not trigger sync immediately in manual mode"
+        }
+      ],
+      "endTime": 1772244075589,
+      "message": "",
+      "name": "C:\\Users\\josha\\date-management-app\\frontend\\src\\lib\\__tests__\\offline-sync.test.ts",
+      "startTime": 1772244070912,
+      "status": "passed",
+      "summary": ""
+    },
+    {
+      "assertionResults": [
+        {
+          "ancestorTitles": ["OfflineSyncService - Sync Strategy Tests"],
+          "failureMessages": [],
+          "fullName": "OfflineSyncService - Sync Strategy Tests should initialize with real-time strategy as default",
+          "location": null,
+          "status": "passed",
+          "title": "should initialize with real-time strategy as default"
+        },
+        {
+          "ancestorTitles": ["OfflineSyncService - Sync Strategy Tests"],
+          "failureMessages": [],
+          "fullName": "OfflineSyncService - Sync Strategy Tests should allow changing sync strategy and persist to localStorage",
+          "location": null,
+          "status": "passed",
+          "title": "should allow changing sync strategy and persist to localStorage"
+        },
+        {
+          "ancestorTitles": ["OfflineSyncService - Sync Strategy Tests"],
+          "failureMessages": [],
+          "fullName": "OfflineSyncService - Sync Strategy Tests should load sync strategy from localStorage on initialization",
+          "location": null,
+          "status": "passed",
+          "title": "should load sync strategy from localStorage on initialization"
+        },
+        {
+          "ancestorTitles": ["OfflineSyncService - Sync Strategy Tests"],
+          "failureMessages": [],
+          "fullName": "OfflineSyncService - Sync Strategy Tests should handle real-time strategy with immediate sync on addOperation",
+          "location": null,
+          "status": "passed",
+          "title": "should handle real-time strategy with immediate sync on addOperation"
+        },
+        {
+          "ancestorTitles": ["OfflineSyncService - Sync Strategy Tests"],
+          "failureMessages": [],
+          "fullName": "OfflineSyncService - Sync Strategy Tests should not trigger immediate sync in batch strategy on addOperation",
+          "location": null,
+          "status": "passed",
+          "title": "should not trigger immediate sync in batch strategy on addOperation"
+        },
+        {
+          "ancestorTitles": ["OfflineSyncService - Sync Strategy Tests"],
+          "failureMessages": [],
+          "fullName": "OfflineSyncService - Sync Strategy Tests should not schedule automatic syncs in manual strategy",
+          "location": null,
+          "status": "passed",
+          "title": "should not schedule automatic syncs in manual strategy"
+        },
+        {
+          "ancestorTitles": ["OfflineSyncService - Sync Strategy Tests"],
+          "failureMessages": [],
+          "fullName": "OfflineSyncService - Sync Strategy Tests should schedule 10-minute intervals for batch strategy",
+          "location": null,
+          "status": "passed",
+          "title": "should schedule 10-minute intervals for batch strategy"
+        },
+        {
+          "ancestorTitles": ["OfflineSyncService - Sync Strategy Tests"],
+          "failureMessages": [],
+          "fullName": "OfflineSyncService - Sync Strategy Tests should schedule 30-second intervals for real-time strategy",
+          "location": null,
+          "status": "passed",
+          "title": "should schedule 30-second intervals for real-time strategy"
+        },
+        {
+          "ancestorTitles": ["OfflineSyncService - Sync Strategy Tests"],
+          "failureMessages": [],
+          "fullName": "OfflineSyncService - Sync Strategy Tests should retry sync with exponential backoff on failure",
+          "location": null,
+          "status": "passed",
+          "title": "should retry sync with exponential backoff on failure"
+        }
+      ],
+      "endTime": 1772244075645,
+      "message": "",
+      "name": "C:\\Users\\josha\\date-management-app\\frontend\\src\\lib\\__tests__\\offline-sync-strategy.test.tsx",
+      "startTime": 1772244070905,
+      "status": "passed",
+      "summary": ""
+    },
+    {
+      "assertionResults": [
+        {
+          "ancestorTitles": ["Scanner"],
+          "failureMessages": [],
+          "fullName": "Scanner renders the scanner input and button",
+          "location": null,
+          "status": "passed",
+          "title": "renders the scanner input and button"
+        },
+        {
+          "ancestorTitles": ["Scanner"],
+          "failureMessages": [],
+          "fullName": "Scanner calls onScan with the entered barcode when button is clicked",
+          "location": null,
+          "status": "passed",
+          "title": "calls onScan with the entered barcode when button is clicked"
+        },
+        {
+          "ancestorTitles": ["Scanner"],
+          "failureMessages": [],
+          "fullName": "Scanner calls onScan with the entered barcode when form is submitted",
+          "location": null,
+          "status": "passed",
+          "title": "calls onScan with the entered barcode when form is submitted"
+        },
+        {
+          "ancestorTitles": ["Scanner"],
+          "failureMessages": [],
+          "fullName": "Scanner does not call onScan if barcode is empty",
+          "location": null,
+          "status": "passed",
+          "title": "does not call onScan if barcode is empty"
+        },
+        {
+          "ancestorTitles": ["Scanner", "defaultMode prop"],
+          "failureMessages": [],
+          "fullName": "Scanner defaultMode prop starts in text mode by default",
+          "location": null,
+          "status": "passed",
+          "title": "starts in text mode by default"
+        },
+        {
+          "ancestorTitles": ["Scanner", "defaultMode prop"],
+          "failureMessages": [],
+          "fullName": "Scanner defaultMode prop starts in camera mode when defaultMode=\"camera\"",
+          "location": null,
+          "status": "passed",
+          "title": "starts in camera mode when defaultMode=\"camera\""
+        },
+        {
+          "ancestorTitles": ["Scanner", "hardware scan integration"],
+          "failureMessages": [],
+          "fullName": "Scanner hardware scan integration initializes useHardwareScan hook",
+          "location": null,
+          "status": "passed",
+          "title": "initializes useHardwareScan hook"
+        },
+        {
+          "ancestorTitles": ["Scanner", "hardware scan integration"],
+          "failureMessages": [],
+          "fullName": "Scanner hardware scan integration routes hardware scan through onScan callback as HardwareScanResult",
+          "location": null,
+          "status": "passed",
+          "title": "routes hardware scan through onScan callback as HardwareScanResult"
+        },
+        {
+          "ancestorTitles": ["Scanner", "camera mode switching"],
+          "failureMessages": [],
+          "fullName": "Scanner camera mode switching switches to camera mode when Use Camera button is clicked",
+          "location": null,
+          "status": "passed",
+          "title": "switches to camera mode when Use Camera button is clicked"
+        },
+        {
+          "ancestorTitles": ["Scanner", "camera mode switching"],
+          "failureMessages": [],
+          "fullName": "Scanner camera mode switching switches back to text mode when Use Text Input button is clicked",
+          "location": null,
+          "status": "passed",
+          "title": "switches back to text mode when Use Text Input button is clicked"
+        }
+      ],
+      "endTime": 1772244075868,
+      "message": "",
+      "name": "C:\\Users\\josha\\date-management-app\\frontend\\src\\tests\\Scanner.test.tsx",
+      "startTime": 1772244070906,
+      "status": "passed",
+      "summary": ""
+    },
+    {
+      "assertionResults": [
+        {
+          "ancestorTitles": ["SubscriptionDashboard"],
+          "failureMessages": [],
+          "fullName": "SubscriptionDashboard renders tier badge with correct tier level",
+          "location": null,
+          "status": "passed",
+          "title": "renders tier badge with correct tier level"
+        },
+        {
+          "ancestorTitles": ["SubscriptionDashboard"],
+          "failureMessages": [],
+          "fullName": "SubscriptionDashboard displays usage progress bars for all resources",
+          "location": null,
+          "status": "passed",
+          "title": "displays usage progress bars for all resources"
+        },
+        {
+          "ancestorTitles": ["SubscriptionDashboard"],
+          "failureMessages": [],
+          "fullName": "SubscriptionDashboard shows upgrade CTA for non-premium tiers",
+          "location": null,
+          "status": "passed",
+          "title": "shows upgrade CTA for non-premium tiers"
+        },
+        {
+          "ancestorTitles": ["SubscriptionDashboard"],
+          "failureMessages": [],
+          "fullName": "SubscriptionDashboard displays unlimited for null limits",
+          "location": null,
+          "status": "passed",
+          "title": "displays unlimited for null limits"
+        },
+        {
+          "ancestorTitles": ["SubscriptionDashboard"],
+          "failureMessages": [],
+          "fullName": "SubscriptionDashboard handles API errors gracefully",
+          "location": null,
+          "status": "passed",
+          "title": "handles API errors gracefully"
+        },
+        {
+          "ancestorTitles": ["SubscriptionDashboard"],
+          "failureMessages": [],
+          "fullName": "SubscriptionDashboard shows loading state initially",
+          "location": null,
+          "status": "passed",
+          "title": "shows loading state initially"
+        },
+        {
+          "ancestorTitles": ["SubscriptionDashboard"],
+          "failureMessages": [],
+          "fullName": "SubscriptionDashboard calculates percentage correctly for progress bars",
+          "location": null,
+          "status": "passed",
+          "title": "calculates percentage correctly for progress bars"
+        }
+      ],
+      "endTime": 1772244076501,
+      "message": "",
+      "name": "C:\\Users\\josha\\date-management-app\\frontend\\src\\components\\__tests__\\SubscriptionDashboard.test.tsx",
+      "startTime": 1772244070906,
+      "status": "passed",
+      "summary": ""
+    },
+    {
+      "assertionResults": [
+        {
+          "ancestorTitles": ["CameraScanner"],
+          "failureMessages": [],
+          "fullName": "CameraScanner initializes Quagga on mount",
+          "location": null,
+          "status": "passed",
+          "title": "initializes Quagga on mount"
+        },
+        {
+          "ancestorTitles": ["CameraScanner"],
+          "failureMessages": [],
+          "fullName": "CameraScanner starts scanner when initialization succeeds",
+          "location": null,
+          "status": "passed",
+          "title": "starts scanner when initialization succeeds"
+        },
+        {
+          "ancestorTitles": ["CameraScanner"],
+          "failureMessages": [],
+          "fullName": "CameraScanner handles initialization error",
+          "location": null,
+          "status": "passed",
+          "title": "handles initialization error"
+        },
+        {
+          "ancestorTitles": ["CameraScanner"],
+          "failureMessages": [],
+          "fullName": "CameraScanner calls onDetected when code is scanned",
+          "location": null,
+          "status": "passed",
+          "title": "calls onDetected when code is scanned"
+        },
+        {
+          "ancestorTitles": ["CameraScanner"],
+          "failureMessages": [],
+          "fullName": "CameraScanner stops scanner after detection (after delay)",
+          "location": null,
+          "status": "passed",
+          "title": "stops scanner after detection (after delay)"
+        },
+        {
+          "ancestorTitles": ["CameraScanner"],
+          "failureMessages": [],
+          "fullName": "CameraScanner stops scanner on unmount",
+          "location": null,
+          "status": "passed",
+          "title": "stops scanner on unmount"
+        },
+        {
+          "ancestorTitles": ["CameraScanner"],
+          "failureMessages": [],
+          "fullName": "CameraScanner resets scanner when retry button is clicked",
+          "location": null,
+          "status": "passed",
+          "title": "resets scanner when retry button is clicked"
+        },
+        {
+          "ancestorTitles": ["CameraScanner", "continuous mode"],
+          "failureMessages": [],
+          "fullName": "CameraScanner continuous mode does not stop scanner after detection when continuous=true",
+          "location": null,
+          "status": "passed",
+          "title": "does not stop scanner after detection when continuous=true"
+        },
+        {
+          "ancestorTitles": ["CameraScanner", "continuous mode"],
+          "failureMessages": [],
+          "fullName": "CameraScanner continuous mode stops scanner after detection when continuous=false (default)",
+          "location": null,
+          "status": "passed",
+          "title": "stops scanner after detection when continuous=false (default)"
+        },
+        {
+          "ancestorTitles": ["CameraScanner", "continuous mode"],
+          "failureMessages": [],
+          "fullName": "CameraScanner continuous mode prevents duplicate barcode scans within 2-second window",
+          "location": null,
+          "status": "passed",
+          "title": "prevents duplicate barcode scans within 2-second window"
+        },
+        {
+          "ancestorTitles": ["CameraScanner", "continuous mode"],
+          "failureMessages": [],
+          "fullName": "CameraScanner continuous mode allows different barcodes to be scanned immediately",
+          "location": null,
+          "status": "passed",
+          "title": "allows different barcodes to be scanned immediately"
+        },
+        {
+          "ancestorTitles": ["CameraScanner", "continuous mode"],
+          "failureMessages": [],
+          "fullName": "CameraScanner continuous mode shows continuous scan mode indicator",
+          "location": null,
+          "status": "passed",
+          "title": "shows continuous scan mode indicator"
+        },
+        {
+          "ancestorTitles": ["CameraScanner", "continuous mode"],
+          "failureMessages": [],
+          "fullName": "CameraScanner continuous mode does not show continuous mode indicator when continuous=false",
+          "location": null,
+          "status": "passed",
+          "title": "does not show continuous mode indicator when continuous=false"
+        }
+      ],
+      "endTime": 1772244076764,
+      "message": "",
+      "name": "C:\\Users\\josha\\date-management-app\\frontend\\src\\components\\__tests__\\CameraScanner.test.tsx",
+      "startTime": 1772244070907,
+      "status": "passed",
+      "summary": ""
+    },
+    {
+      "assertionResults": [
+        {
+          "ancestorTitles": ["HandheldScanner"],
+          "failureMessages": [],
+          "fullName": "HandheldScanner renders Scanner with defaultMode=\"camera\" when isHandheld=true",
+          "location": null,
+          "status": "passed",
+          "title": "renders Scanner with defaultMode=\"camera\" when isHandheld=true"
+        },
+        {
+          "ancestorTitles": ["HandheldScanner"],
+          "failureMessages": [],
+          "fullName": "HandheldScanner renders Scanner with defaultMode=\"text\" when isHandheld=false",
+          "location": null,
+          "status": "passed",
+          "title": "renders Scanner with defaultMode=\"text\" when isHandheld=false"
+        },
+        {
+          "ancestorTitles": ["HandheldScanner"],
+          "failureMessages": [],
+          "fullName": "HandheldScanner applies handheld-specific styling classes",
+          "location": null,
+          "status": "passed",
+          "title": "applies handheld-specific styling classes"
+        },
+        {
+          "ancestorTitles": ["HandheldScanner"],
+          "failureMessages": [],
+          "fullName": "HandheldScanner passes onScan prop to Scanner component",
+          "location": null,
+          "status": "passed",
+          "title": "passes onScan prop to Scanner component"
+        },
+        {
+          "ancestorTitles": ["HandheldScanner"],
+          "failureMessages": [],
+          "fullName": "HandheldScanner throws error when used outside HandheldProvider",
+          "location": null,
+          "status": "passed",
+          "title": "throws error when used outside HandheldProvider"
+        }
+      ],
+      "endTime": 1772244076876,
+      "message": "",
+      "name": "C:\\Users\\josha\\date-management-app\\frontend\\src\\components\\__tests__\\HandheldScanner.test.tsx",
+      "startTime": 1772244070906,
+      "status": "passed",
+      "summary": ""
+    },
+    {
+      "assertionResults": [
+        {
+          "ancestorTitles": ["OfflineSyncService - Sync Strategies", "Sync Strategy Management"],
+          "failureMessages": [],
+          "fullName": "OfflineSyncService - Sync Strategies Sync Strategy Management should load default sync strategy from localStorage",
+          "location": null,
+          "status": "passed",
+          "title": "should load default sync strategy from localStorage"
+        },
+        {
+          "ancestorTitles": ["OfflineSyncService - Sync Strategies", "Sync Strategy Management"],
+          "failureMessages": [],
+          "fullName": "OfflineSyncService - Sync Strategies Sync Strategy Management should set and persist sync strategy",
+          "location": null,
+          "status": "passed",
+          "title": "should set and persist sync strategy"
+        },
+        {
+          "ancestorTitles": ["OfflineSyncService - Sync Strategies", "Sync Strategy Management"],
+          "failureMessages": [],
+          "fullName": "OfflineSyncService - Sync Strategies Sync Strategy Management should get current sync strategy",
+          "location": null,
+          "status": "passed",
+          "title": "should get current sync strategy"
+        },
+        {
+          "ancestorTitles": ["OfflineSyncService - Sync Strategies", "Real-time Strategy"],
+          "failureMessages": [],
+          "fullName": "OfflineSyncService - Sync Strategies Real-time Strategy should trigger sync immediately after adding operation in real-time mode",
+          "location": null,
+          "status": "passed",
+          "title": "should trigger sync immediately after adding operation in real-time mode"
+        },
+        {
+          "ancestorTitles": ["OfflineSyncService - Sync Strategies", "Real-time Strategy"],
+          "failureMessages": [],
+          "fullName": "OfflineSyncService - Sync Strategies Real-time Strategy should not schedule automatic intervals in real-time mode",
+          "location": null,
+          "status": "passed",
+          "title": "should not schedule automatic intervals in real-time mode"
+        },
+        {
+          "ancestorTitles": ["OfflineSyncService - Sync Strategies", "Batch Strategy"],
+          "failureMessages": [],
+          "fullName": "OfflineSyncService - Sync Strategies Batch Strategy should not trigger immediate sync after adding operation in batch mode",
+          "location": null,
+          "status": "passed",
+          "title": "should not trigger immediate sync after adding operation in batch mode"
+        },
+        {
+          "ancestorTitles": ["OfflineSyncService - Sync Strategies", "Batch Strategy"],
+          "failureMessages": [],
+          "fullName": "OfflineSyncService - Sync Strategies Batch Strategy should schedule sync every 10 minutes in batch mode",
+          "location": null,
+          "status": "passed",
+          "title": "should schedule sync every 10 minutes in batch mode"
+        },
+        {
+          "ancestorTitles": ["OfflineSyncService - Sync Strategies", "Manual Strategy"],
+          "failureMessages": [],
+          "fullName": "OfflineSyncService - Sync Strategies Manual Strategy should not trigger immediate sync after adding operation in manual mode",
+          "location": null,
+          "status": "passed",
+          "title": "should not trigger immediate sync after adding operation in manual mode"
+        },
+        {
+          "ancestorTitles": ["OfflineSyncService - Sync Strategies", "Manual Strategy"],
+          "failureMessages": [],
+          "fullName": "OfflineSyncService - Sync Strategies Manual Strategy should not schedule automatic intervals in manual mode",
+          "location": null,
+          "status": "passed",
+          "title": "should not schedule automatic intervals in manual mode"
+        },
+        {
+          "ancestorTitles": ["OfflineSyncService - Sync Strategies", "Manual Strategy"],
+          "failureMessages": [],
+          "fullName": "OfflineSyncService - Sync Strategies Manual Strategy should allow manual sync trigger",
+          "location": null,
+          "status": "passed",
+          "title": "should allow manual sync trigger"
+        },
+        {
+          "ancestorTitles": ["OfflineSyncService - Sync Strategies", "Strategy Changes"],
+          "failureMessages": [],
+          "fullName": "OfflineSyncService - Sync Strategies Strategy Changes should reschedule sync when strategy changes from batch to manual",
+          "location": null,
+          "status": "passed",
+          "title": "should reschedule sync when strategy changes from batch to manual"
+        },
+        {
+          "ancestorTitles": ["OfflineSyncService - Sync Strategies", "Strategy Changes"],
+          "failureMessages": [],
+          "fullName": "OfflineSyncService - Sync Strategies Strategy Changes should reschedule sync when strategy changes from manual to real-time",
+          "location": null,
+          "status": "passed",
+          "title": "should reschedule sync when strategy changes from manual to real-time"
+        },
+        {
+          "ancestorTitles": ["OfflineSyncService - Sync Strategies", "Exponential Backoff Retry"],
+          "failureMessages": [],
+          "fullName": "OfflineSyncService - Sync Strategies Exponential Backoff Retry should retry failed sync with exponential backoff",
+          "location": null,
+          "status": "passed",
+          "title": "should retry failed sync with exponential backoff"
+        },
+        {
+          "ancestorTitles": ["OfflineSyncService - Sync Strategies", "Exponential Backoff Retry"],
+          "failureMessages": [],
+          "fullName": "OfflineSyncService - Sync Strategies Exponential Backoff Retry should stop retrying after max attempts and keep items in queue",
+          "location": null,
+          "status": "passed",
+          "title": "should stop retrying after max attempts and keep items in queue"
+        }
+      ],
+      "endTime": 1772244077324,
+      "message": "",
+      "name": "C:\\Users\\josha\\date-management-app\\frontend\\src\\tests\\offline-sync.test.ts",
+      "startTime": 1772244075385,
+      "status": "passed",
+      "summary": ""
+    },
+    {
+      "assertionResults": [
+        {
+          "ancestorTitles": ["useHardwareScan"],
+          "failureMessages": [],
+          "fullName": "useHardwareScan should be callable without errors when mounted",
+          "location": null,
+          "status": "passed",
+          "title": "should be callable without errors when mounted"
+        },
+        {
+          "ancestorTitles": ["useHardwareScan"],
+          "failureMessages": [],
+          "fullName": "useHardwareScan should accumulate rapid keystrokes within 50ms timing window and emit onScan on Enter",
+          "location": null,
+          "status": "passed",
+          "title": "should accumulate rapid keystrokes within 50ms timing window and emit onScan on Enter"
+        },
+        {
+          "ancestorTitles": ["useHardwareScan"],
+          "failureMessages": [],
+          "fullName": "useHardwareScan should NOT trigger hardware scan for slow human typing (>50ms between keystrokes)",
+          "location": null,
+          "status": "passed",
+          "title": "should NOT trigger hardware scan for slow human typing (>50ms between keystrokes)"
+        },
+        {
+          "ancestorTitles": ["useHardwareScan"],
+          "failureMessages": [],
+          "fullName": "useHardwareScan should accumulate characters correctly across Enter boundary",
+          "location": null,
+          "status": "passed",
+          "title": "should accumulate characters correctly across Enter boundary"
+        },
+        {
+          "ancestorTitles": ["useHardwareScan"],
+          "failureMessages": [],
+          "fullName": "useHardwareScan should handle Enter key without any accumulated characters gracefully",
+          "location": null,
+          "status": "passed",
+          "title": "should handle Enter key without any accumulated characters gracefully"
+        },
+        {
+          "ancestorTitles": ["useHardwareScan"],
+          "failureMessages": [],
+          "fullName": "useHardwareScan should ignore non-printable keys except Enter",
+          "location": null,
+          "status": "passed",
+          "title": "should ignore non-printable keys except Enter"
+        },
+        {
+          "ancestorTitles": ["useHardwareScan"],
+          "failureMessages": [],
+          "fullName": "useHardwareScan should prevent duplicate rapid Enter presses from double-submitting",
+          "location": null,
+          "status": "passed",
+          "title": "should prevent duplicate rapid Enter presses from double-submitting"
+        }
+      ],
+      "endTime": 1772244077624,
+      "message": "",
+      "name": "C:\\Users\\josha\\date-management-app\\frontend\\src\\hooks\\__tests__\\useHardwareScan.test.ts",
+      "startTime": 1772244075958,
+      "status": "passed",
+      "summary": ""
+    },
+    {
+      "assertionResults": [
+        {
+          "ancestorTitles": ["UserManagementPage"],
+          "failureMessages": [],
+          "fullName": "UserManagementPage renders user management page and fetches users",
+          "location": null,
+          "status": "passed",
+          "title": "renders user management page and fetches users"
+        },
+        {
+          "ancestorTitles": ["UserManagementPage"],
+          "failureMessages": [],
+          "fullName": "UserManagementPage creates a new user",
+          "location": null,
+          "status": "passed",
+          "title": "creates a new user"
+        },
+        {
+          "ancestorTitles": ["UserManagementPage"],
+          "failureMessages": [],
+          "fullName": "UserManagementPage updates an existing user role",
+          "location": null,
+          "status": "passed",
+          "title": "updates an existing user role"
+        },
+        {
+          "ancestorTitles": ["UserManagementPage"],
+          "failureMessages": [],
+          "fullName": "UserManagementPage deletes a user",
+          "location": null,
+          "status": "passed",
+          "title": "deletes a user"
+        }
+      ],
+      "endTime": 1772244078234,
+      "message": "",
+      "name": "C:\\Users\\josha\\date-management-app\\frontend\\src\\tests\\UserManagementPage.test.tsx",
+      "startTime": 1772244075361,
+      "status": "passed",
+      "summary": ""
+    },
+    {
+      "assertionResults": [
+        {
+          "ancestorTitles": ["HandheldLayout"],
+          "failureMessages": [],
+          "fullName": "HandheldLayout renders children content",
+          "location": null,
+          "status": "passed",
+          "title": "renders children content"
+        },
+        {
+          "ancestorTitles": ["HandheldLayout"],
+          "failureMessages": [],
+          "fullName": "HandheldLayout renders HandheldScanToolbar when isHandheld=true",
+          "location": null,
+          "status": "passed",
+          "title": "renders HandheldScanToolbar when isHandheld=true"
+        },
+        {
+          "ancestorTitles": ["HandheldLayout"],
+          "failureMessages": [],
+          "fullName": "HandheldLayout does not render HandheldScanToolbar when isHandheld=false",
+          "location": null,
+          "status": "passed",
+          "title": "does not render HandheldScanToolbar when isHandheld=false"
+        },
+        {
+          "ancestorTitles": ["HandheldLayout"],
+          "failureMessages": [],
+          "fullName": "HandheldLayout applies full viewport height styling for handheld devices",
+          "location": null,
+          "status": "passed",
+          "title": "applies full viewport height styling for handheld devices"
+        },
+        {
+          "ancestorTitles": ["HandheldLayout"],
+          "failureMessages": [],
+          "fullName": "HandheldLayout applies full-screen layout without max-width container for handheld devices",
+          "location": null,
+          "status": "passed",
+          "title": "applies full-screen layout without max-width container for handheld devices"
+        },
+        {
+          "ancestorTitles": ["HandheldLayout"],
+          "failureMessages": [],
+          "fullName": "HandheldLayout applies desktop layout with max-width container when isHandheld=false",
+          "location": null,
+          "status": "passed",
+          "title": "applies desktop layout with max-width container when isHandheld=false"
+        },
+        {
+          "ancestorTitles": ["HandheldLayout"],
+          "failureMessages": [],
+          "fullName": "HandheldLayout passes toolbar props to HandheldScanToolbar",
+          "location": null,
+          "status": "passed",
+          "title": "passes toolbar props to HandheldScanToolbar"
+        },
+        {
+          "ancestorTitles": ["HandheldLayout"],
+          "failureMessages": [],
+          "fullName": "HandheldLayout throws error when used outside HandheldProvider",
+          "location": null,
+          "status": "passed",
+          "title": "throws error when used outside HandheldProvider"
+        }
+      ],
+      "endTime": 1772244078636,
+      "message": "",
+      "name": "C:\\Users\\josha\\date-management-app\\frontend\\src\\layouts\\__tests__\\HandheldLayout.test.tsx",
+      "startTime": 1772244077032,
+      "status": "passed",
+      "summary": ""
+    },
+    {
+      "assertionResults": [
+        {
+          "ancestorTitles": ["HandheldScanToolbar"],
+          "failureMessages": [],
+          "fullName": "HandheldScanToolbar renders user name when provided",
+          "location": null,
+          "status": "passed",
+          "title": "renders user name when provided"
+        },
+        {
+          "ancestorTitles": ["HandheldScanToolbar"],
+          "failureMessages": [],
+          "fullName": "HandheldScanToolbar displays sync status indicators",
+          "location": null,
+          "status": "passed",
+          "title": "displays sync status indicators"
+        },
+        {
+          "ancestorTitles": ["HandheldScanToolbar"],
+          "failureMessages": [],
+          "fullName": "HandheldScanToolbar shows different sync status messages",
+          "location": null,
+          "status": "passed",
+          "title": "shows different sync status messages"
+        },
+        {
+          "ancestorTitles": ["HandheldScanToolbar"],
+          "failureMessages": [],
+          "fullName": "HandheldScanToolbar disables Sync Now button when queue is empty",
+          "location": null,
+          "status": "passed",
+          "title": "disables Sync Now button when queue is empty"
+        },
+        {
+          "ancestorTitles": ["HandheldScanToolbar"],
+          "failureMessages": [],
+          "fullName": "HandheldScanToolbar enables Sync Now button when queue has items",
+          "location": null,
+          "status": "passed",
+          "title": "enables Sync Now button when queue has items"
+        },
+        {
+          "ancestorTitles": ["HandheldScanToolbar"],
+          "failureMessages": [],
+          "fullName": "HandheldScanToolbar calls onSyncNow when Sync Now button is clicked",
+          "location": null,
+          "status": "passed",
+          "title": "calls onSyncNow when Sync Now button is clicked"
+        },
+        {
+          "ancestorTitles": ["HandheldScanToolbar"],
+          "failureMessages": [],
+          "fullName": "HandheldScanToolbar uses sync strategy from context",
+          "location": null,
+          "status": "passed",
+          "title": "uses sync strategy from context"
+        },
+        {
+          "ancestorTitles": ["HandheldScanToolbar"],
+          "failureMessages": [],
+          "fullName": "HandheldScanToolbar renders settings button",
+          "location": null,
+          "status": "passed",
+          "title": "renders settings button"
+        },
+        {
+          "ancestorTitles": ["HandheldScanToolbar"],
+          "failureMessages": [],
+          "fullName": "HandheldScanToolbar calls onSettingsClick when settings button is clicked",
+          "location": null,
+          "status": "passed",
+          "title": "calls onSettingsClick when settings button is clicked"
+        },
+        {
+          "ancestorTitles": ["HandheldScanToolbar"],
+          "failureMessages": [],
+          "fullName": "HandheldScanToolbar applies handheld-specific styling",
+          "location": null,
+          "status": "passed",
+          "title": "applies handheld-specific styling"
+        },
+        {
+          "ancestorTitles": ["HandheldScanToolbar"],
+          "failureMessages": [],
+          "fullName": "HandheldScanToolbar positions as sticky toolbar with proper z-index",
+          "location": null,
+          "status": "passed",
+          "title": "positions as sticky toolbar with proper z-index"
+        },
+        {
+          "ancestorTitles": ["HandheldScanToolbar"],
+          "failureMessages": [],
+          "fullName": "HandheldScanToolbar throws error when used outside HandheldProvider",
+          "location": null,
+          "status": "passed",
+          "title": "throws error when used outside HandheldProvider"
+        }
+      ],
+      "endTime": 1772244079168,
+      "message": "",
+      "name": "C:\\Users\\josha\\date-management-app\\frontend\\src\\components\\__tests__\\HandheldScanToolbar.test.tsx",
+      "startTime": 1772244076959,
+      "status": "passed",
+      "summary": ""
+    },
+    {
+      "assertionResults": [
+        {
+          "ancestorTitles": ["LoginPage"],
+          "failureMessages": [],
+          "fullName": "LoginPage renders login form",
+          "location": null,
+          "status": "passed",
+          "title": "renders login form"
+        },
+        {
+          "ancestorTitles": ["LoginPage"],
+          "failureMessages": [],
+          "fullName": "LoginPage calls onLogin with token on successful login",
+          "location": null,
+          "status": "passed",
+          "title": "calls onLogin with token on successful login"
+        },
+        {
+          "ancestorTitles": ["LoginPage"],
+          "failureMessages": [],
+          "fullName": "LoginPage displays error message on failed login",
+          "location": null,
+          "status": "passed",
+          "title": "displays error message on failed login"
+        }
+      ],
+      "endTime": 1772244079248,
+      "message": "",
+      "name": "C:\\Users\\josha\\date-management-app\\frontend\\src\\tests\\LoginPage.test.tsx",
+      "startTime": 1772244077674,
+      "status": "passed",
+      "summary": ""
+    },
+    {
+      "assertionResults": [
+        {
+          "ancestorTitles": ["UpgradeModal"],
+          "failureMessages": [],
+          "fullName": "UpgradeModal renders tier comparison table with all 4 tiers",
+          "location": null,
+          "status": "passed",
+          "title": "renders tier comparison table with all 4 tiers"
+        },
+        {
+          "ancestorTitles": ["UpgradeModal"],
+          "failureMessages": [],
+          "fullName": "UpgradeModal displays pricing for each tier",
+          "location": null,
+          "status": "passed",
+          "title": "displays pricing for each tier"
+        },
+        {
+          "ancestorTitles": ["UpgradeModal"],
+          "failureMessages": [],
+          "fullName": "UpgradeModal shows feature comparison with checkmarks",
+          "location": null,
+          "status": "passed",
+          "title": "shows feature comparison with checkmarks"
+        },
+        {
+          "ancestorTitles": ["UpgradeModal"],
+          "failureMessages": [],
+          "fullName": "UpgradeModal highlights current tier",
+          "location": null,
+          "status": "passed",
+          "title": "highlights current tier"
+        },
+        {
+          "ancestorTitles": ["UpgradeModal"],
+          "failureMessages": [],
+          "fullName": "UpgradeModal calls onSelectPlan when upgrade button clicked",
+          "location": null,
+          "status": "passed",
+          "title": "calls onSelectPlan when upgrade button clicked"
+        },
+        {
+          "ancestorTitles": ["UpgradeModal"],
+          "failureMessages": [],
+          "fullName": "UpgradeModal calls onClose when close button clicked",
+          "location": null,
+          "status": "passed",
+          "title": "calls onClose when close button clicked"
+        },
+        {
+          "ancestorTitles": ["UpgradeModal"],
+          "failureMessages": [],
+          "fullName": "UpgradeModal does not render when isOpen is false",
+          "location": null,
+          "status": "passed",
+          "title": "does not render when isOpen is false"
+        },
+        {
+          "ancestorTitles": ["UpgradeModal"],
+          "failureMessages": [],
+          "fullName": "UpgradeModal disables upgrade button for current tier",
+          "location": null,
+          "status": "passed",
+          "title": "disables upgrade button for current tier"
+        },
+        {
+          "ancestorTitles": ["UpgradeModal"],
+          "failureMessages": [],
+          "fullName": "UpgradeModal shows annual pricing option",
+          "location": null,
+          "status": "passed",
+          "title": "shows annual pricing option"
+        }
+      ],
+      "endTime": 1772244079347,
+      "message": "",
+      "name": "C:\\Users\\josha\\date-management-app\\frontend\\src\\components\\__tests__\\UpgradeModal.test.tsx",
+      "startTime": 1772244070907,
+      "status": "passed",
+      "summary": ""
+    },
+    {
+      "assertionResults": [
+        {
+          "ancestorTitles": ["ReportsPage"],
+          "failureMessages": [],
+          "fullName": "ReportsPage renders monthly expiry report data on successful fetch",
+          "location": null,
+          "status": "passed",
+          "title": "renders monthly expiry report data on successful fetch"
+        },
+        {
+          "ancestorTitles": ["ReportsPage"],
+          "failureMessages": [],
+          "fullName": "ReportsPage displays an error message if token is missing",
+          "location": null,
+          "status": "passed",
+          "title": "displays an error message if token is missing"
+        },
+        {
+          "ancestorTitles": ["ReportsPage"],
+          "failureMessages": [],
+          "fullName": "ReportsPage displays an error message on failed data fetch",
+          "location": null,
+          "status": "passed",
+          "title": "displays an error message on failed data fetch"
+        }
+      ],
+      "endTime": 1772244079434,
+      "message": "",
+      "name": "C:\\Users\\josha\\date-management-app\\frontend\\src\\tests\\ReportsPage.test.tsx",
+      "startTime": 1772244078306,
+      "status": "passed",
+      "summary": ""
+    },
+    {
+      "assertionResults": [
+        {
+          "ancestorTitles": ["UsageReportPage"],
+          "failureMessages": [],
+          "fullName": "UsageReportPage renders usage report data on successful fetch",
+          "location": null,
+          "status": "passed",
+          "title": "renders usage report data on successful fetch"
+        },
+        {
+          "ancestorTitles": ["UsageReportPage"],
+          "failureMessages": [],
+          "fullName": "UsageReportPage displays an error message if token is missing",
+          "location": null,
+          "status": "passed",
+          "title": "displays an error message if token is missing"
+        },
+        {
+          "ancestorTitles": ["UsageReportPage"],
+          "failureMessages": [],
+          "fullName": "UsageReportPage displays an error message on failed data fetch",
+          "location": null,
+          "status": "passed",
+          "title": "displays an error message on failed data fetch"
+        }
+      ],
+      "endTime": 1772244079763,
+      "message": "",
+      "name": "C:\\Users\\josha\\date-management-app\\frontend\\src\\tests\\UsageReportPage.test.tsx",
+      "startTime": 1772244076619,
+      "status": "passed",
+      "summary": ""
+    },
+    {
+      "assertionResults": [
+        {
+          "ancestorTitles": ["StoreAreaManagementPage"],
+          "failureMessages": [],
+          "fullName": "StoreAreaManagementPage renders the store area management page and fetches areas",
+          "location": null,
+          "status": "passed",
+          "title": "renders the store area management page and fetches areas"
+        },
+        {
+          "ancestorTitles": ["StoreAreaManagementPage"],
+          "failureMessages": [],
+          "fullName": "StoreAreaManagementPage adds a new store area",
+          "location": null,
+          "status": "passed",
+          "title": "adds a new store area"
+        },
+        {
+          "ancestorTitles": ["StoreAreaManagementPage"],
+          "failureMessages": [],
+          "fullName": "StoreAreaManagementPage edits an existing store area",
+          "location": null,
+          "status": "passed",
+          "title": "edits an existing store area"
+        },
+        {
+          "ancestorTitles": ["StoreAreaManagementPage"],
+          "failureMessages": [],
+          "fullName": "StoreAreaManagementPage deletes a store area",
+          "location": null,
+          "status": "passed",
+          "title": "deletes a store area"
+        }
+      ],
+      "endTime": 1772244079767,
+      "message": "",
+      "name": "C:\\Users\\josha\\date-management-app\\frontend\\src\\tests\\StoreAreaManagementPage.test.tsx",
+      "startTime": 1772244075740,
+      "status": "passed",
+      "summary": ""
+    },
+    {
+      "assertionResults": [
+        {
+          "ancestorTitles": ["DashboardPage"],
+          "failureMessages": [],
+          "fullName": "DashboardPage renders dashboard data on successful fetch",
+          "location": null,
+          "status": "passed",
+          "title": "renders dashboard data on successful fetch"
+        },
+        {
+          "ancestorTitles": ["DashboardPage"],
+          "failureMessages": [],
+          "fullName": "DashboardPage displays an error message if token is missing",
+          "location": null,
+          "status": "passed",
+          "title": "displays an error message if token is missing"
+        },
+        {
+          "ancestorTitles": ["DashboardPage"],
+          "failureMessages": [],
+          "fullName": "DashboardPage displays an error message on failed data fetch",
+          "location": null,
+          "status": "passed",
+          "title": "displays an error message on failed data fetch"
+        }
+      ],
+      "endTime": 1772244079947,
+      "message": "",
+      "name": "C:\\Users\\josha\\date-management-app\\frontend\\src\\tests\\DashboardPage.test.tsx",
+      "startTime": 1772244078696,
+      "status": "passed",
+      "summary": ""
+    },
+    {
+      "assertionResults": [
+        {
+          "ancestorTitles": ["parseGS1Barcode", "GTIN extraction (01)"],
+          "failureMessages": [],
+          "fullName": "parseGS1Barcode GTIN extraction (01) extracts GTIN from valid GS1 barcode",
+          "location": null,
+          "status": "passed",
+          "title": "extracts GTIN from valid GS1 barcode"
+        },
+        {
+          "ancestorTitles": ["parseGS1Barcode", "GTIN extraction (01)"],
+          "failureMessages": [],
+          "fullName": "parseGS1Barcode GTIN extraction (01) handles GTIN without other fields",
+          "location": null,
+          "status": "passed",
+          "title": "handles GTIN without other fields"
+        },
+        {
+          "ancestorTitles": ["parseGS1Barcode", "GTIN extraction (01)"],
+          "failureMessages": [],
+          "fullName": "parseGS1Barcode GTIN extraction (01) ignores invalid GTIN length",
+          "location": null,
+          "status": "passed",
+          "title": "ignores invalid GTIN length"
+        },
+        {
+          "ancestorTitles": ["parseGS1Barcode", "Batch/Lot extraction (10)"],
+          "failureMessages": [],
+          "fullName": "parseGS1Barcode Batch/Lot extraction (10) extracts batch number with space separator",
+          "location": null,
+          "status": "passed",
+          "title": "extracts batch number with space separator"
+        },
+        {
+          "ancestorTitles": ["parseGS1Barcode", "Batch/Lot extraction (10)"],
+          "failureMessages": [],
+          "fullName": "parseGS1Barcode Batch/Lot extraction (10) handles batch numbers with special characters",
+          "location": null,
+          "status": "passed",
+          "title": "handles batch numbers with special characters"
+        },
+        {
+          "ancestorTitles": ["parseGS1Barcode", "Batch/Lot extraction (10)"],
+          "failureMessages": [],
+          "fullName": "parseGS1Barcode Batch/Lot extraction (10) trims whitespace from batch numbers",
+          "location": null,
+          "status": "passed",
+          "title": "trims whitespace from batch numbers"
+        },
+        {
+          "ancestorTitles": ["parseGS1Barcode", "Expiry date extraction (17)"],
+          "failureMessages": [],
+          "fullName": "parseGS1Barcode Expiry date extraction (17) converts YYMMDD to ISO date",
+          "location": null,
+          "status": "passed",
+          "title": "converts YYMMDD to ISO date"
+        },
+        {
+          "ancestorTitles": ["parseGS1Barcode", "Expiry date extraction (17)"],
+          "failureMessages": [],
+          "fullName": "parseGS1Barcode Expiry date extraction (17) handles century boundary (50 = 1950, 49 = 2049)",
+          "location": null,
+          "status": "passed",
+          "title": "handles century boundary (50 = 1950, 49 = 2049)"
+        },
+        {
+          "ancestorTitles": ["parseGS1Barcode", "Expiry date extraction (17)"],
+          "failureMessages": [],
+          "fullName": "parseGS1Barcode Expiry date extraction (17) rejects invalid dates",
+          "location": null,
+          "status": "passed",
+          "title": "rejects invalid dates"
+        },
+        {
+          "ancestorTitles": ["parseGS1Barcode", "Expiry date extraction (17)"],
+          "failureMessages": [],
+          "fullName": "parseGS1Barcode Expiry date extraction (17) rejects malformed date strings",
+          "location": null,
+          "status": "passed",
+          "title": "rejects malformed date strings"
+        },
+        {
+          "ancestorTitles": ["parseGS1Barcode", "Serial number extraction (21)"],
+          "failureMessages": [],
+          "fullName": "parseGS1Barcode Serial number extraction (21) extracts serial number",
+          "location": null,
+          "status": "passed",
+          "title": "extracts serial number"
+        },
+        {
+          "ancestorTitles": ["parseGS1Barcode", "Serial number extraction (21)"],
+          "failureMessages": [],
+          "fullName": "parseGS1Barcode Serial number extraction (21) handles serial numbers with spaces",
+          "location": null,
+          "status": "passed",
+          "title": "handles serial numbers with spaces"
+        },
+        {
+          "ancestorTitles": ["parseGS1Barcode", "Complete pharmacy barcode"],
+          "failureMessages": [],
+          "fullName": "parseGS1Barcode Complete pharmacy barcode parses full pharmaceutical GS1 barcode",
+          "location": null,
+          "status": "passed",
+          "title": "parses full pharmaceutical GS1 barcode"
+        },
+        {
+          "ancestorTitles": ["parseGS1Barcode", "Complete pharmacy barcode"],
+          "failureMessages": [],
+          "fullName": "parseGS1Barcode Complete pharmacy barcode handles real pharmacy barcode format",
+          "location": null,
+          "status": "passed",
+          "title": "handles real pharmacy barcode format"
+        },
+        {
+          "ancestorTitles": ["parseGS1Barcode", "Complete pharmacy barcode"],
+          "failureMessages": [],
+          "fullName": "parseGS1Barcode Complete pharmacy barcode parses raw GS1 barcode without brackets",
+          "location": null,
+          "status": "passed",
+          "title": "parses raw GS1 barcode without brackets"
+        },
+        {
+          "ancestorTitles": ["parseGS1Barcode", "Complete pharmacy barcode"],
+          "failureMessages": [],
+          "fullName": "parseGS1Barcode Complete pharmacy barcode parses fixture-style raw GS1 barcode with batch and serial",
+          "location": null,
+          "status": "passed",
+          "title": "parses fixture-style raw GS1 barcode with batch and serial"
+        },
+        {
+          "ancestorTitles": ["parseGS1Barcode", "Non-GS1 barcodes"],
+          "failureMessages": [],
+          "fullName": "parseGS1Barcode Non-GS1 barcodes handles regular EAN-13 barcode",
+          "location": null,
+          "status": "passed",
+          "title": "handles regular EAN-13 barcode"
+        },
+        {
+          "ancestorTitles": ["parseGS1Barcode", "Non-GS1 barcodes"],
+          "failureMessages": [],
+          "fullName": "parseGS1Barcode Non-GS1 barcodes handles Code 128 non-GS1 barcode",
+          "location": null,
+          "status": "passed",
+          "title": "handles Code 128 non-GS1 barcode"
+        },
+        {
+          "ancestorTitles": ["parseGS1Barcode", "Error handling"],
+          "failureMessages": [],
+          "fullName": "parseGS1Barcode Error handling handles empty barcode",
+          "location": null,
+          "status": "passed",
+          "title": "handles empty barcode"
+        },
+        {
+          "ancestorTitles": ["parseGS1Barcode", "Error handling"],
+          "failureMessages": [],
+          "fullName": "parseGS1Barcode Error handling handles null/undefined barcode",
+          "location": null,
+          "status": "passed",
+          "title": "handles null/undefined barcode"
+        },
+        {
+          "ancestorTitles": ["parseGS1Barcode", "Error handling"],
+          "failureMessages": [],
+          "fullName": "parseGS1Barcode Error handling handles malformed GS1 data gracefully",
+          "location": null,
+          "status": "passed",
+          "title": "handles malformed GS1 data gracefully"
+        },
+        {
+          "ancestorTitles": ["parseGS1Barcode", "Edge cases"],
+          "failureMessages": [],
+          "fullName": "parseGS1Barcode Edge cases handles multiple spaces in batch numbers",
+          "location": null,
+          "status": "passed",
+          "title": "handles multiple spaces in batch numbers"
+        },
+        {
+          "ancestorTitles": ["parseGS1Barcode", "Edge cases"],
+          "failureMessages": [],
+          "fullName": "parseGS1Barcode Edge cases handles minimum length fields",
+          "location": null,
+          "status": "passed",
+          "title": "handles minimum length fields"
+        },
+        {
+          "ancestorTitles": ["isGS1Barcode"],
+          "failureMessages": [],
+          "fullName": "isGS1Barcode returns true for barcodes with GS1 AIs",
+          "location": null,
+          "status": "passed",
+          "title": "returns true for barcodes with GS1 AIs"
+        },
+        {
+          "ancestorTitles": ["isGS1Barcode"],
+          "failureMessages": [],
+          "fullName": "isGS1Barcode returns false for non-GS1 barcodes",
+          "location": null,
+          "status": "passed",
+          "title": "returns false for non-GS1 barcodes"
+        },
+        {
+          "ancestorTitles": ["isGS1Barcode"],
+          "failureMessages": [],
+          "fullName": "isGS1Barcode returns false for empty or invalid input",
+          "location": null,
+          "status": "passed",
+          "title": "returns false for empty or invalid input"
+        }
+      ],
+      "endTime": 1772244079956,
+      "message": "",
+      "name": "C:\\Users\\josha\\date-management-app\\frontend\\src\\lib\\__tests__\\gs1-parser.test.ts",
+      "startTime": 1772244079289,
+      "status": "passed",
+      "summary": ""
+    },
+    {
+      "assertionResults": [
+        {
+          "ancestorTitles": ["StorageQuotaWarning - Smoke Tests", "Integration with App"],
+          "failureMessages": [],
+          "fullName": "StorageQuotaWarning - Smoke Tests Integration with App should show warning overlay when storage exceeds 80% on free tier",
+          "location": null,
+          "status": "passed",
+          "title": "should show warning overlay when storage exceeds 80% on free tier"
+        },
+        {
+          "ancestorTitles": ["StorageQuotaWarning - Smoke Tests", "Integration with App"],
+          "failureMessages": [],
+          "fullName": "StorageQuotaWarning - Smoke Tests Integration with App should not interfere with app when storage is below 80%",
+          "location": null,
+          "status": "passed",
+          "title": "should not interfere with app when storage is below 80%"
+        },
+        {
+          "ancestorTitles": ["StorageQuotaWarning - Smoke Tests", "Integration with App"],
+          "failureMessages": [],
+          "fullName": "StorageQuotaWarning - Smoke Tests Integration with App should allow app interaction after dismissing warning",
+          "location": null,
+          "status": "passed",
+          "title": "should allow app interaction after dismissing warning"
+        },
+        {
+          "ancestorTitles": ["StorageQuotaWarning - Smoke Tests", "Real-world Scenarios"],
+          "failureMessages": [],
+          "fullName": "StorageQuotaWarning - Smoke Tests Real-world Scenarios should warn free tier user at 85% usage",
+          "location": null,
+          "status": "passed",
+          "title": "should warn free tier user at 85% usage"
+        },
+        {
+          "ancestorTitles": ["StorageQuotaWarning - Smoke Tests", "Real-world Scenarios"],
+          "failureMessages": [],
+          "fullName": "StorageQuotaWarning - Smoke Tests Real-world Scenarios should warn pro tier user at 90% usage (9GB of 10GB)",
+          "location": null,
+          "status": "passed",
+          "title": "should warn pro tier user at 90% usage (9GB of 10GB)"
+        },
+        {
+          "ancestorTitles": ["StorageQuotaWarning - Smoke Tests", "Real-world Scenarios"],
+          "failureMessages": [],
+          "fullName": "StorageQuotaWarning - Smoke Tests Real-world Scenarios should warn at exactly 100% usage",
+          "location": null,
+          "status": "passed",
+          "title": "should warn at exactly 100% usage"
+        },
+        {
+          "ancestorTitles": ["StorageQuotaWarning - Smoke Tests", "Real-world Scenarios"],
+          "failureMessages": [],
+          "fullName": "StorageQuotaWarning - Smoke Tests Real-world Scenarios should handle network errors gracefully without crashing app",
+          "location": null,
+          "status": "passed",
+          "title": "should handle network errors gracefully without crashing app"
+        },
+        {
+          "ancestorTitles": ["StorageQuotaWarning - Smoke Tests", "Real-world Scenarios"],
+          "failureMessages": [],
+          "fullName": "StorageQuotaWarning - Smoke Tests Real-world Scenarios should persist dismissal across component remounts",
+          "location": null,
+          "status": "passed",
+          "title": "should persist dismissal across component remounts"
+        },
+        {
+          "ancestorTitles": ["StorageQuotaWarning - Smoke Tests", "Performance and UX"],
+          "failureMessages": [],
+          "fullName": "StorageQuotaWarning - Smoke Tests Performance and UX should render without blocking main UI",
+          "location": null,
+          "status": "passed",
+          "title": "should render without blocking main UI"
+        },
+        {
+          "ancestorTitles": ["StorageQuotaWarning - Smoke Tests", "Performance and UX"],
+          "failureMessages": [],
+          "fullName": "StorageQuotaWarning - Smoke Tests Performance and UX should show loading state without blocking",
+          "location": null,
+          "status": "passed",
+          "title": "should show loading state without blocking"
+        },
+        {
+          "ancestorTitles": ["StorageQuotaWarning - Smoke Tests", "Accessibility"],
+          "failureMessages": [],
+          "fullName": "StorageQuotaWarning - Smoke Tests Accessibility should have proper ARIA labels for screen readers",
+          "location": null,
+          "status": "passed",
+          "title": "should have proper ARIA labels for screen readers"
+        },
+        {
+          "ancestorTitles": ["StorageQuotaWarning - Smoke Tests", "Accessibility"],
+          "failureMessages": [],
+          "fullName": "StorageQuotaWarning - Smoke Tests Accessibility should be keyboard navigable",
+          "location": null,
+          "status": "passed",
+          "title": "should be keyboard navigable"
+        }
+      ],
+      "endTime": 1772244079962,
+      "message": "",
+      "name": "C:\\Users\\josha\\date-management-app\\frontend\\src\\components\\__tests__\\StorageQuotaWarning.smoke.test.tsx",
+      "startTime": 1772244077413,
+      "status": "passed",
+      "summary": ""
+    },
+    {
+      "assertionResults": [
+        {
+          "ancestorTitles": [],
+          "failureMessages": [],
+          "fullName": "App renders without crashing",
+          "location": null,
+          "status": "todo",
+          "title": "App renders without crashing"
+        }
+      ],
+      "endTime": 1772244079971,
+      "message": "",
+      "name": "C:\\Users\\josha\\date-management-app\\frontend\\src\\App.test.tsx",
+      "startTime": 1772244079505,
+      "status": "passed",
+      "summary": ""
+    },
+    {
+      "assertionResults": [
+        {
+          "ancestorTitles": ["utils", "cn"],
+          "failureMessages": [],
+          "fullName": "utils cn should merge class names correctly",
+          "location": null,
+          "status": "passed",
+          "title": "should merge class names correctly"
+        },
+        {
+          "ancestorTitles": ["utils", "cn"],
+          "failureMessages": [],
+          "fullName": "utils cn should handle tailwind conflicts",
+          "location": null,
+          "status": "passed",
+          "title": "should handle tailwind conflicts"
+        },
+        {
+          "ancestorTitles": ["utils", "isWithinMarkdownPeriod"],
+          "failureMessages": [],
+          "fullName": "utils isWithinMarkdownPeriod should return false if expiryDate is null",
+          "location": null,
+          "status": "passed",
+          "title": "should return false if expiryDate is null"
+        },
+        {
+          "ancestorTitles": ["utils", "isWithinMarkdownPeriod"],
+          "failureMessages": [],
+          "fullName": "utils isWithinMarkdownPeriod should return true if expiry is within N days",
+          "location": null,
+          "status": "passed",
+          "title": "should return true if expiry is within N days"
+        },
+        {
+          "ancestorTitles": ["utils", "isWithinMarkdownPeriod"],
+          "failureMessages": [],
+          "fullName": "utils isWithinMarkdownPeriod should return false if expiry is outside N days",
+          "location": null,
+          "status": "passed",
+          "title": "should return false if expiry is outside N days"
+        },
+        {
+          "ancestorTitles": ["utils", "isWithinMarkdownPeriod"],
+          "failureMessages": [],
+          "fullName": "utils isWithinMarkdownPeriod should handle past dates",
+          "location": null,
+          "status": "passed",
+          "title": "should handle past dates"
+        },
+        {
+          "ancestorTitles": ["utils", "calculateMarkdownPrice"],
+          "failureMessages": [],
+          "fullName": "utils calculateMarkdownPrice should markdown by 20% if expiry <= 30 days",
+          "location": null,
+          "status": "passed",
+          "title": "should markdown by 20% if expiry <= 30 days"
+        },
+        {
+          "ancestorTitles": ["utils", "calculateMarkdownPrice"],
+          "failureMessages": [],
+          "fullName": "utils calculateMarkdownPrice should apply no markdown if expiry is between 31 and 60 days",
+          "location": null,
+          "status": "passed",
+          "title": "should apply no markdown if expiry is between 31 and 60 days"
+        },
+        {
+          "ancestorTitles": ["utils", "calculateMarkdownPrice"],
+          "failureMessages": [],
+          "fullName": "utils calculateMarkdownPrice should markup by 20% if expiry is between 61 and 90 days",
+          "location": null,
+          "status": "passed",
+          "title": "should markup by 20% if expiry is between 61 and 90 days"
+        },
+        {
+          "ancestorTitles": ["utils", "calculateMarkdownPrice"],
+          "failureMessages": [],
+          "fullName": "utils calculateMarkdownPrice should apply no markdown if expiry is > 90 days",
+          "location": null,
+          "status": "passed",
+          "title": "should apply no markdown if expiry is > 90 days"
+        },
+        {
+          "ancestorTitles": ["utils", "calculateMarkdownPercentage"],
+          "failureMessages": [],
+          "fullName": "utils calculateMarkdownPercentage should return -20 if expiry <= 30 days",
+          "location": null,
+          "status": "passed",
+          "title": "should return -20 if expiry <= 30 days"
+        },
+        {
+          "ancestorTitles": ["utils", "calculateMarkdownPercentage"],
+          "failureMessages": [],
+          "fullName": "utils calculateMarkdownPercentage should return 0 if expiry is between 31 and 60 days",
+          "location": null,
+          "status": "passed",
+          "title": "should return 0 if expiry is between 31 and 60 days"
+        },
+        {
+          "ancestorTitles": ["utils", "calculateMarkdownPercentage"],
+          "failureMessages": [],
+          "fullName": "utils calculateMarkdownPercentage should return 20 if expiry is between 61 and 90 days",
+          "location": null,
+          "status": "passed",
+          "title": "should return 20 if expiry is between 61 and 90 days"
+        },
+        {
+          "ancestorTitles": ["utils", "calculateMarkdownPercentage"],
+          "failureMessages": [],
+          "fullName": "utils calculateMarkdownPercentage should return 0 if expiry is > 90 days",
+          "location": null,
+          "status": "passed",
+          "title": "should return 0 if expiry is > 90 days"
+        }
+      ],
+      "endTime": 1772244080025,
+      "message": "",
+      "name": "C:\\Users\\josha\\date-management-app\\frontend\\src\\lib\\__tests__\\utils.test.ts",
+      "startTime": 1772244079433,
+      "status": "passed",
+      "summary": ""
+    },
+    {
+      "assertionResults": [
+        {
+          "ancestorTitles": ["StorageQuotaWarning", "API Integration"],
+          "failureMessages": [],
+          "fullName": "StorageQuotaWarning API Integration fetches quota data on mount with correct URL and headers",
+          "location": null,
+          "status": "passed",
+          "title": "fetches quota data on mount with correct URL and headers"
+        },
+        {
+          "ancestorTitles": ["StorageQuotaWarning", "API Integration"],
+          "failureMessages": [],
+          "fullName": "StorageQuotaWarning API Integration includes subscription tier in query params",
+          "location": null,
+          "status": "passed",
+          "title": "includes subscription tier in query params"
+        },
+        {
+          "ancestorTitles": ["StorageQuotaWarning", "API Integration"],
+          "failureMessages": [],
+          "fullName": "StorageQuotaWarning API Integration handles API error gracefully",
+          "location": null,
+          "status": "passed",
+          "title": "handles API error gracefully"
+        },
+        {
+          "ancestorTitles": ["StorageQuotaWarning", "API Integration"],
+          "failureMessages": [],
+          "fullName": "StorageQuotaWarning API Integration handles non-OK response status",
+          "location": null,
+          "status": "passed",
+          "title": "handles non-OK response status"
+        },
+        {
+          "ancestorTitles": ["StorageQuotaWarning", "API Integration"],
+          "failureMessages": [],
+          "fullName": "StorageQuotaWarning API Integration does not fetch when no auth token exists",
+          "location": null,
+          "status": "passed",
+          "title": "does not fetch when no auth token exists"
+        },
+        {
+          "ancestorTitles": ["StorageQuotaWarning", "Visibility Logic"],
+          "failureMessages": [],
+          "fullName": "StorageQuotaWarning Visibility Logic shows warning when quota is at warning threshold (80%)",
+          "location": null,
+          "status": "passed",
+          "title": "shows warning when quota is at warning threshold (80%)"
+        },
+        {
+          "ancestorTitles": ["StorageQuotaWarning", "Visibility Logic"],
+          "failureMessages": [],
+          "fullName": "StorageQuotaWarning Visibility Logic shows warning when quota is above threshold (90%)",
+          "location": null,
+          "status": "passed",
+          "title": "shows warning when quota is above threshold (90%)"
+        },
+        {
+          "ancestorTitles": ["StorageQuotaWarning", "Visibility Logic"],
+          "failureMessages": [],
+          "fullName": "StorageQuotaWarning Visibility Logic does not show when quota is below threshold (70%)",
+          "location": null,
+          "status": "passed",
+          "title": "does not show when quota is below threshold (70%)"
+        },
+        {
+          "ancestorTitles": ["StorageQuotaWarning", "Visibility Logic"],
+          "failureMessages": [],
+          "fullName": "StorageQuotaWarning Visibility Logic does not show when isWarning is false",
+          "location": null,
+          "status": "passed",
+          "title": "does not show when isWarning is false"
+        },
+        {
+          "ancestorTitles": ["StorageQuotaWarning", "Data Display"],
+          "failureMessages": [],
+          "fullName": "StorageQuotaWarning Data Display displays percentage correctly",
+          "location": null,
+          "status": "passed",
+          "title": "displays percentage correctly"
+        },
+        {
+          "ancestorTitles": ["StorageQuotaWarning", "Data Display"],
+          "failureMessages": [],
+          "fullName": "StorageQuotaWarning Data Display displays used storage amount",
+          "location": null,
+          "status": "passed",
+          "title": "displays used storage amount"
+        },
+        {
+          "ancestorTitles": ["StorageQuotaWarning", "Data Display"],
+          "failureMessages": [],
+          "fullName": "StorageQuotaWarning Data Display displays total storage limit",
+          "location": null,
+          "status": "passed",
+          "title": "displays total storage limit"
+        },
+        {
+          "ancestorTitles": ["StorageQuotaWarning", "Data Display"],
+          "failureMessages": [],
+          "fullName": "StorageQuotaWarning Data Display displays remaining storage when not at limit",
+          "location": null,
+          "status": "passed",
+          "title": "displays remaining storage when not at limit"
+        },
+        {
+          "ancestorTitles": ["StorageQuotaWarning", "Data Display"],
+          "failureMessages": [],
+          "fullName": "StorageQuotaWarning Data Display displays at-limit message when storage is full",
+          "location": null,
+          "status": "passed",
+          "title": "displays at-limit message when storage is full"
+        },
+        {
+          "ancestorTitles": ["StorageQuotaWarning", "Data Display"],
+          "failureMessages": [],
+          "fullName": "StorageQuotaWarning Data Display displays current subscription tier",
+          "location": null,
+          "status": "passed",
+          "title": "displays current subscription tier"
+        },
+        {
+          "ancestorTitles": ["StorageQuotaWarning", "Data Display"],
+          "failureMessages": [],
+          "fullName": "StorageQuotaWarning Data Display displays Pro tier correctly",
+          "location": null,
+          "status": "passed",
+          "title": "displays Pro tier correctly"
+        },
+        {
+          "ancestorTitles": ["StorageQuotaWarning", "Data Display"],
+          "failureMessages": [],
+          "fullName": "StorageQuotaWarning Data Display renders progress bar with correct width",
+          "location": null,
+          "status": "passed",
+          "title": "renders progress bar with correct width"
+        },
+        {
+          "ancestorTitles": ["StorageQuotaWarning", "Data Display"],
+          "failureMessages": [],
+          "fullName": "StorageQuotaWarning Data Display caps progress bar at 100% for over-quota usage",
+          "location": null,
+          "status": "passed",
+          "title": "caps progress bar at 100% for over-quota usage"
+        },
+        {
+          "ancestorTitles": ["StorageQuotaWarning", "Dismiss Functionality"],
+          "failureMessages": [],
+          "fullName": "StorageQuotaWarning Dismiss Functionality dismisses when close button is clicked",
+          "location": null,
+          "status": "passed",
+          "title": "dismisses when close button is clicked"
+        },
+        {
+          "ancestorTitles": ["StorageQuotaWarning", "Dismiss Functionality"],
+          "failureMessages": [],
+          "fullName": "StorageQuotaWarning Dismiss Functionality dismisses when \"Remind Me Later\" button is clicked",
+          "location": null,
+          "status": "passed",
+          "title": "dismisses when \"Remind Me Later\" button is clicked"
+        },
+        {
+          "ancestorTitles": ["StorageQuotaWarning", "Dismiss Functionality"],
+          "failureMessages": [],
+          "fullName": "StorageQuotaWarning Dismiss Functionality dismisses when overlay is clicked",
+          "location": null,
+          "status": "passed",
+          "title": "dismisses when overlay is clicked"
+        },
+        {
+          "ancestorTitles": ["StorageQuotaWarning", "Dismiss Functionality"],
+          "failureMessages": [],
+          "fullName": "StorageQuotaWarning Dismiss Functionality stores dismiss timestamp in localStorage",
+          "location": null,
+          "status": "passed",
+          "title": "stores dismiss timestamp in localStorage"
+        },
+        {
+          "ancestorTitles": ["StorageQuotaWarning", "Dismiss Functionality"],
+          "failureMessages": [],
+          "fullName": "StorageQuotaWarning Dismiss Functionality does not show when dismissed within autoHideDays",
+          "location": null,
+          "status": "passed",
+          "title": "does not show when dismissed within autoHideDays"
+        },
+        {
+          "ancestorTitles": ["StorageQuotaWarning", "Dismiss Functionality"],
+          "failureMessages": [],
+          "fullName": "StorageQuotaWarning Dismiss Functionality shows again after autoHideDays have passed",
+          "location": null,
+          "status": "passed",
+          "title": "shows again after autoHideDays have passed"
+        },
+        {
+          "ancestorTitles": ["StorageQuotaWarning", "Dismiss Functionality"],
+          "failureMessages": [],
+          "fullName": "StorageQuotaWarning Dismiss Functionality respects custom autoHideDays prop",
+          "location": null,
+          "status": "passed",
+          "title": "respects custom autoHideDays prop"
+        },
+        {
+          "ancestorTitles": ["StorageQuotaWarning", "Upgrade Button"],
+          "failureMessages": [],
+          "fullName": "StorageQuotaWarning Upgrade Button calls onUpgrade when Upgrade Plan button is clicked",
+          "location": null,
+          "status": "passed",
+          "title": "calls onUpgrade when Upgrade Plan button is clicked"
+        },
+        {
+          "ancestorTitles": ["StorageQuotaWarning", "Upgrade Button"],
+          "failureMessages": [],
+          "fullName": "StorageQuotaWarning Upgrade Button does not render Upgrade Plan button when onUpgrade is not provided",
+          "location": null,
+          "status": "passed",
+          "title": "does not render Upgrade Plan button when onUpgrade is not provided"
+        },
+        {
+          "ancestorTitles": ["StorageQuotaWarning", "Byte Formatting"],
+          "failureMessages": [],
+          "fullName": "StorageQuotaWarning Byte Formatting formats bytes correctly",
+          "location": null,
+          "status": "passed",
+          "title": "formats bytes correctly"
+        },
+        {
+          "ancestorTitles": ["StorageQuotaWarning", "Footer Message"],
+          "failureMessages": [],
+          "fullName": "StorageQuotaWarning Footer Message displays autoHideDays in footer message",
+          "location": null,
+          "status": "passed",
+          "title": "displays autoHideDays in footer message"
+        },
+        {
+          "ancestorTitles": ["StorageQuotaWarning", "Footer Message"],
+          "failureMessages": [],
+          "fullName": "StorageQuotaWarning Footer Message displays custom autoHideDays in footer message",
+          "location": null,
+          "status": "passed",
+          "title": "displays custom autoHideDays in footer message"
+        },
+        {
+          "ancestorTitles": ["StorageQuotaWarning", "Edge Cases"],
+          "failureMessages": [],
+          "fullName": "StorageQuotaWarning Edge Cases handles 0 bytes used",
+          "location": null,
+          "status": "passed",
+          "title": "handles 0 bytes used"
+        },
+        {
+          "ancestorTitles": ["StorageQuotaWarning", "Edge Cases"],
+          "failureMessages": [],
+          "fullName": "StorageQuotaWarning Edge Cases handles exactly 80% usage",
+          "location": null,
+          "status": "passed",
+          "title": "handles exactly 80% usage"
+        },
+        {
+          "ancestorTitles": ["StorageQuotaWarning", "Edge Cases"],
+          "failureMessages": [],
+          "fullName": "StorageQuotaWarning Edge Cases handles over 100% usage",
+          "location": null,
+          "status": "passed",
+          "title": "handles over 100% usage"
+        }
+      ],
+      "endTime": 1772244080032,
+      "message": "",
+      "name": "C:\\Users\\josha\\date-management-app\\frontend\\src\\components\\__tests__\\StorageQuotaWarning.test.tsx",
+      "startTime": 1772244075693,
+      "status": "passed",
+      "summary": ""
+    },
+    {
+      "assertionResults": [
+        {
+          "ancestorTitles": ["synchronizeOfflineData"],
+          "failureMessages": [],
+          "fullName": "synchronizeOfflineData should not synchronize if token is missing",
+          "location": null,
+          "status": "passed",
+          "title": "should not synchronize if token is missing"
+        },
+        {
+          "ancestorTitles": ["synchronizeOfflineData"],
+          "failureMessages": [],
+          "fullName": "synchronizeOfflineData should not synchronize if offline",
+          "location": null,
+          "status": "passed",
+          "title": "should not synchronize if offline"
+        },
+        {
+          "ancestorTitles": ["synchronizeOfflineData"],
+          "failureMessages": [],
+          "fullName": "synchronizeOfflineData should synchronize pending inventory items when online",
+          "location": null,
+          "status": "passed",
+          "title": "should synchronize pending inventory items when online"
+        },
+        {
+          "ancestorTitles": ["synchronizeOfflineData"],
+          "failureMessages": [],
+          "fullName": "synchronizeOfflineData should handle failed synchronization gracefully",
+          "location": null,
+          "status": "passed",
+          "title": "should handle failed synchronization gracefully"
+        },
+        {
+          "ancestorTitles": ["synchronizeOfflineData"],
+          "failureMessages": [],
+          "fullName": "synchronizeOfflineData should do nothing if no pending items",
+          "location": null,
+          "status": "passed",
+          "title": "should do nothing if no pending items"
+        }
+      ],
+      "endTime": 1772244080147,
+      "message": "",
+      "name": "C:\\Users\\josha\\date-management-app\\frontend\\src\\tests\\sync-manager.test.ts",
+      "startTime": 1772244079251,
+      "status": "passed",
+      "summary": ""
+    },
+    {
+      "assertionResults": [
+        {
+          "ancestorTitles": ["ScanPage Integration"],
+          "failureMessages": [],
+          "fullName": "ScanPage Integration renders and fetches store areas on mount",
+          "location": null,
+          "status": "passed",
+          "title": "renders and fetches store areas on mount"
+        },
+        {
+          "ancestorTitles": ["ScanPage Integration"],
+          "failureMessages": [],
+          "fullName": "ScanPage Integration displays product details after scanning a valid barcode (>8 chars)",
+          "location": null,
+          "status": "passed",
+          "title": "displays product details after scanning a valid barcode (>8 chars)"
+        },
+        {
+          "ancestorTitles": ["ScanPage Integration"],
+          "failureMessages": [],
+          "fullName": "ScanPage Integration displays product details after scanning a valid SKU (<=8 chars)",
+          "location": null,
+          "status": "passed",
+          "title": "displays product details after scanning a valid SKU (<=8 chars)"
+        },
+        {
+          "ancestorTitles": ["ScanPage Integration"],
+          "failureMessages": [],
+          "fullName": "ScanPage Integration shows new product form if product not found",
+          "location": null,
+          "status": "passed",
+          "title": "shows new product form if product not found"
+        },
+        {
+          "ancestorTitles": ["ScanPage Integration"],
+          "failureMessages": [],
+          "fullName": "ScanPage Integration submits inventory item successfully when online",
+          "location": null,
+          "status": "passed",
+          "title": "submits inventory item successfully when online"
+        },
+        {
+          "ancestorTitles": ["ScanPage Integration"],
+          "failureMessages": [],
+          "fullName": "ScanPage Integration saves to offline storage when offline",
+          "location": null,
+          "status": "passed",
+          "title": "saves to offline storage when offline"
+        },
+        {
+          "ancestorTitles": ["ScanPage Integration", "Handheld Integration Tests"],
+          "failureMessages": [],
+          "fullName": "ScanPage Integration Handheld Integration Tests renders HandheldScanner instead of regular Scanner when in handheld mode",
+          "location": null,
+          "status": "passed",
+          "title": "renders HandheldScanner instead of regular Scanner when in handheld mode"
+        },
+        {
+          "ancestorTitles": ["ScanPage Integration", "Handheld Integration Tests"],
+          "failureMessages": [],
+          "fullName": "ScanPage Integration Handheld Integration Tests auto-populates expiry date from GS1 barcode data in handheld mode",
+          "location": null,
+          "status": "passed",
+          "title": "auto-populates expiry date from GS1 barcode data in handheld mode"
+        },
+        {
+          "ancestorTitles": ["ScanPage Integration", "Handheld Integration Tests"],
+          "failureMessages": [],
+          "fullName": "ScanPage Integration Handheld Integration Tests displays sync strategy selector in handheld toolbar",
+          "location": null,
+          "status": "passed",
+          "title": "displays sync strategy selector in handheld toolbar"
+        },
+        {
+          "ancestorTitles": ["ScanPage Integration", "Handheld Integration Tests"],
+          "failureMessages": [],
+          "fullName": "ScanPage Integration Handheld Integration Tests allows changing sync strategy in handheld mode",
+          "location": null,
+          "status": "passed",
+          "title": "allows changing sync strategy in handheld mode"
+        },
+        {
+          "ancestorTitles": ["ScanPage Integration", "Handheld Integration Tests"],
+          "failureMessages": [],
+          "fullName": "ScanPage Integration Handheld Integration Tests shows sync status in handheld toolbar",
+          "location": null,
+          "status": "passed",
+          "title": "shows sync status in handheld toolbar"
+        },
+        {
+          "ancestorTitles": ["ScanPage Integration", "Handheld Integration Tests"],
+          "failureMessages": [],
+          "fullName": "ScanPage Integration Handheld Integration Tests displays queue length in handheld toolbar when items are pending",
+          "location": null,
+          "status": "passed",
+          "title": "displays queue length in handheld toolbar when items are pending"
+        },
+        {
+          "ancestorTitles": ["ScanPage Integration", "Handheld Integration Tests"],
+          "failureMessages": [],
+          "fullName": "ScanPage Integration Handheld Integration Tests provides settings navigation in handheld toolbar",
+          "location": null,
+          "status": "passed",
+          "title": "provides settings navigation in handheld toolbar"
+        },
+        {
+          "ancestorTitles": ["ScanPage Integration", "Handheld Integration Tests"],
+          "failureMessages": [],
+          "fullName": "ScanPage Integration Handheld Integration Tests applies full-screen layout in handheld mode",
+          "location": null,
+          "status": "passed",
+          "title": "applies full-screen layout in handheld mode"
+        },
+        {
+          "ancestorTitles": ["ScanPage Integration", "Handheld Integration Tests"],
+          "failureMessages": [],
+          "fullName": "ScanPage Integration Handheld Integration Tests handles GS1 parsing errors gracefully in handheld mode",
+          "location": null,
+          "status": "passed",
+          "title": "handles GS1 parsing errors gracefully in handheld mode"
+        }
+      ],
+      "endTime": 1772244080326,
+      "message": "",
+      "name": "C:\\Users\\josha\\date-management-app\\frontend\\src\\pages\\__tests__\\ScanPage.test.tsx",
+      "startTime": 1772244070907,
+      "status": "passed",
+      "summary": ""
+    },
+    {
+      "assertionResults": [
+        {
+          "ancestorTitles": ["offlineStorage"],
+          "failureMessages": [],
+          "fullName": "offlineStorage should set and get an item",
+          "location": null,
+          "status": "passed",
+          "title": "should set and get an item"
+        },
+        {
+          "ancestorTitles": ["offlineStorage"],
+          "failureMessages": [],
+          "fullName": "offlineStorage should return null for a non-existent item",
+          "location": null,
+          "status": "passed",
+          "title": "should return null for a non-existent item"
+        },
+        {
+          "ancestorTitles": ["offlineStorage"],
+          "failureMessages": [],
+          "fullName": "offlineStorage should remove an item",
+          "location": null,
+          "status": "passed",
+          "title": "should remove an item"
+        },
+        {
+          "ancestorTitles": ["offlineStorage"],
+          "failureMessages": [],
+          "fullName": "offlineStorage should clear all items",
+          "location": null,
+          "status": "passed",
+          "title": "should clear all items"
+        },
+        {
+          "ancestorTitles": ["offlineStorage"],
+          "failureMessages": [],
+          "fullName": "offlineStorage should return all keys",
+          "location": null,
+          "status": "passed",
+          "title": "should return all keys"
+        }
+      ],
+      "endTime": 1772244080349,
+      "message": "",
+      "name": "C:\\Users\\josha\\date-management-app\\frontend\\src\\tests\\offline-storage.test.ts",
+      "startTime": 1772244079874,
+      "status": "passed",
+      "summary": ""
+    },
+    {
+      "assertionResults": [
+        {
+          "ancestorTitles": ["haptic", "triggerHaptic"],
+          "failureMessages": [],
+          "fullName": "haptic triggerHaptic should call navigator.vibrate() with default duration of 50ms",
+          "location": null,
+          "status": "passed",
+          "title": "should call navigator.vibrate() with default duration of 50ms"
+        },
+        {
+          "ancestorTitles": ["haptic", "triggerHaptic"],
+          "failureMessages": [],
+          "fullName": "haptic triggerHaptic should call navigator.vibrate() with custom duration",
+          "location": null,
+          "status": "passed",
+          "title": "should call navigator.vibrate() with custom duration"
+        },
+        {
+          "ancestorTitles": ["haptic", "triggerHaptic"],
+          "failureMessages": [],
+          "fullName": "haptic triggerHaptic should handle missing navigator.vibrate gracefully (no error thrown)",
+          "location": null,
+          "status": "passed",
+          "title": "should handle missing navigator.vibrate gracefully (no error thrown)"
+        },
+        {
+          "ancestorTitles": ["haptic", "triggerHaptic"],
+          "failureMessages": [],
+          "fullName": "haptic triggerHaptic should respect custom duration parameter of 75ms",
+          "location": null,
+          "status": "passed",
+          "title": "should respect custom duration parameter of 75ms"
+        },
+        {
+          "ancestorTitles": ["haptic", "triggerHaptic"],
+          "failureMessages": [],
+          "fullName": "haptic triggerHaptic should support zero duration (stop vibration)",
+          "location": null,
+          "status": "passed",
+          "title": "should support zero duration (stop vibration)"
+        },
+        {
+          "ancestorTitles": ["haptic", "triggerHaptic"],
+          "failureMessages": [],
+          "fullName": "haptic triggerHaptic should handle error thrown by navigator.vibrate gracefully",
+          "location": null,
+          "status": "passed",
+          "title": "should handle error thrown by navigator.vibrate gracefully"
+        },
+        {
+          "ancestorTitles": ["haptic", "triggerHaptic"],
+          "failureMessages": [],
+          "fullName": "haptic triggerHaptic should return undefined (void function)",
+          "location": null,
+          "status": "passed",
+          "title": "should return undefined (void function)"
+        }
+      ],
+      "endTime": 1772244080360,
+      "message": "",
+      "name": "C:\\Users\\josha\\date-management-app\\frontend\\src\\lib\\__tests__\\haptic.test.ts",
+      "startTime": 1772244079941,
+      "status": "passed",
+      "summary": ""
+    },
+    {
+      "assertionResults": [
+        {
+          "ancestorTitles": ["MarkdownCalculator"],
+          "failureMessages": [],
+          "fullName": "MarkdownCalculator renders the markdown calculator form",
+          "location": null,
+          "status": "passed",
+          "title": "renders the markdown calculator form"
+        },
+        {
+          "ancestorTitles": ["MarkdownCalculator"],
+          "failureMessages": [],
+          "fullName": "MarkdownCalculator calculates markdown price correctly for items expiring within 30 days",
+          "location": null,
+          "status": "passed",
+          "title": "calculates markdown price correctly for items expiring within 30 days"
+        },
+        {
+          "ancestorTitles": ["MarkdownCalculator"],
+          "failureMessages": [],
+          "fullName": "MarkdownCalculator displays Normal status when no expiry date is set",
+          "location": null,
+          "status": "passed",
+          "title": "displays Normal status when no expiry date is set"
+        },
+        {
+          "ancestorTitles": ["MarkdownCalculator"],
+          "failureMessages": [],
+          "fullName": "MarkdownCalculator displays Expired status for items past expiry date",
+          "location": null,
+          "status": "passed",
+          "title": "displays Expired status for items past expiry date"
+        }
+      ],
+      "endTime": 1772244080393,
+      "message": "",
+      "name": "C:\\Users\\josha\\date-management-app\\frontend\\src\\tests\\MarkdownCalculator.test.tsx",
+      "startTime": 1772244070906,
+      "status": "passed",
+      "summary": ""
+    }
+  ],
+  "wasInterrupted": false
+}

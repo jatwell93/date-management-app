@@ -3,6 +3,7 @@
 Observability today is limited to error reporting. There is no consistent metrics stream for CSV processing and upload flows, and Workers logs are not structured. We need MVP-level observability with minimal overhead and zero additional infrastructure while keeping a future path to richer dashboards (Grafana) open.
 
 Constraints:
+
 - Prefer built-in Cloudflare Analytics for initial dashboarding
 - Use Sentry + Cloudflare for alerting (no new paid services)
 - Keep Worker bundle size and runtime overhead low
@@ -10,6 +11,7 @@ Constraints:
 ## Goals / Non-Goals
 
 **Goals:**
+
 - Enable Cloudflare Workers Analytics for baseline infrastructure metrics
 - Emit custom metrics for CSV processing and upload operations (60/40 split)
 - Add structured JSON logging in Workers for consistent log correlation
@@ -18,6 +20,7 @@ Constraints:
 - Provide a dashboard using Cloudflare Analytics with a documented Grafana migration path
 
 **Non-Goals:**
+
 - Full OpenTelemetry pipeline and collector setup
 - Vendor-specific dashboarding beyond Cloudflare Analytics
 - Long-term retention or historical analytics beyond Cloudflare defaults
@@ -65,6 +68,7 @@ Constraints:
 6. Verify dashboard reflects new metrics and logs.
 
 Rollback:
+
 - Disable alert policies.
 - Revert metrics/logging middleware if needed.
 

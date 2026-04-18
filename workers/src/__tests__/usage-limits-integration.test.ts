@@ -1,6 +1,6 @@
 /**
  * Integration Test: Usage Limit Enforcement (4.3)
- * 
+ *
  * Verifies that subscription tier usage limits are enforced
  */
 
@@ -22,7 +22,7 @@ describe('Phase 4.3: Usage Limit Enforcement', () => {
        * 5. Assert: Message: "Upgrade to Professional to add more SKUs"
        * 6. Assert: Includes current usage: "You have 500/500 SKUs"
        */
-      
+
       const starterLimit = tierLimits.starter.max_skus;
       expect(starterLimit).toBe(500);
     });
@@ -36,7 +36,7 @@ describe('Phase 4.3: Usage Limit Enforcement', () => {
        * 4. Try to create 2,001st
        * 5. Assert: 403 Forbidden (limit reached)
        */
-      
+
       const proLimit = tierLimits.professional.max_skus;
       expect(proLimit).toBe(2000);
     });
@@ -48,7 +48,7 @@ describe('Phase 4.3: Usage Limit Enforcement', () => {
        * 2. Create 100,000+ products
        * 3. Assert: All succeed, no limit reached
        */
-      
+
       const conciergeLimit = tierLimits.concierge.max_skus;
       expect(conciergeLimit).toBe(Infinity);
     });
@@ -64,7 +64,7 @@ describe('Phase 4.3: Usage Limit Enforcement', () => {
        * 4. Assert: Message: "Upgrade to add more team members"
        * 5. Assert: Current usage: "1/1 users"
        */
-      
+
       const starterSeats = tierLimits.starter.max_users;
       expect(starterSeats).toBe(1);
     });
@@ -78,7 +78,7 @@ describe('Phase 4.3: Usage Limit Enforcement', () => {
        * 4. Try to invite 11th user
        * 5. Assert: 403 Forbidden
        */
-      
+
       const proSeats = tierLimits.professional.max_users;
       expect(proSeats).toBe(10);
     });
@@ -90,7 +90,7 @@ describe('Phase 4.3: Usage Limit Enforcement', () => {
        * 2. Invite 1000+ users
        * 3. Assert: All succeed, no limit
        */
-      
+
       const conciergeSeats = tierLimits.concierge.max_users;
       expect(conciergeSeats).toBe(Infinity);
     });
@@ -107,7 +107,7 @@ describe('Phase 4.3: Usage Limit Enforcement', () => {
        * 5. Assert: 403 Forbidden
        * 6. Assert: Message includes storage exceeded
        */
-      
+
       const starterStorage = tierLimits.starter.max_storage;
       expect(starterStorage).toBe(1024 * 1024 * 100);
     });
@@ -120,7 +120,7 @@ describe('Phase 4.3: Usage Limit Enforcement', () => {
        * 3. Try to exceed limit
        * 4. Assert: 403 Forbidden
        */
-      
+
       const proStorage = tierLimits.professional.max_storage;
       expect(proStorage).toBe(1024 * 1024 * 1024);
     });
@@ -132,7 +132,7 @@ describe('Phase 4.3: Usage Limit Enforcement', () => {
        * 2. Upload arbitrary amounts
        * 3. Assert: All succeed, no limit
        */
-      
+
       const conciergeStorage = tierLimits.concierge.max_storage;
       expect(conciergeStorage).toBe(Infinity);
     });
@@ -148,7 +148,7 @@ describe('Phase 4.3: Usage Limit Enforcement', () => {
        * 3. Compare: currentUsage < limit
        * 4. Return: { isWithinLimit: boolean, currentUsage: number, limit: number }
        */
-      
+
       const expected = true; // Real count from DB
       expect(expected).toBe(true);
     });
@@ -164,7 +164,7 @@ describe('Phase 4.3: Usage Limit Enforcement', () => {
        *
        * Cannot bypass by client manipulation
        */
-      
+
       const expected = true; // Enforced server-side
       expect(expected).toBe(true);
     });
@@ -181,7 +181,7 @@ describe('Phase 4.3: Usage Limit Enforcement', () => {
        * - Org B counts 75 (not 125)
        * - Each org's limit checked against their count only
        */
-      
+
       const expected = true; // organizationId filter in count query
       expect(expected).toBe(true);
     });
@@ -200,7 +200,7 @@ describe('Phase 4.3: Usage Limit Enforcement', () => {
        *   upgradeUrl: "https://app.example.com/billing/upgrade"
        * }
        */
-      
+
       const expected = true; // Clear upgrade path in error
       expect(expected).toBe(true);
     });

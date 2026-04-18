@@ -12,9 +12,11 @@ The `mem-recall.js` and `mem-log.js` scripts currently rely on the `GEMINI_API_K
 ## Capabilities
 
 ### New Capabilities
+
 - `environment-variable-management`: Centralized management of project-wide environment variables using .env files for local development.
 
 ### Modified Capabilities
+
 - `memory-management`: Extend memory retrieval and logging to support automatic environment configuration.
 
 ## Impact

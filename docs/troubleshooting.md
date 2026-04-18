@@ -23,6 +23,7 @@ Common issues and their solutions for the Date Management App across development
 **Symptoms:** `ERR! code ERESOLVE` or dependency conflicts
 
 **Solution:**
+
 ```bash
 # Option 1: Use legacy peer deps (npm 7+)
 npm install --legacy-peer-deps
@@ -43,6 +44,7 @@ npm install
 **Solutions:**
 
 Linux/macOS:
+
 ```bash
 # Find process using port
 lsof -i :3001
@@ -55,6 +57,7 @@ PORT=3002 npm run dev
 ```
 
 Windows:
+
 ```bash
 # Find process using port
 netstat -ano | findstr :3001
@@ -71,6 +74,7 @@ set PORT=3002 && npm run dev
 **Symptoms:** `error TS2304: Cannot find name 'X'`
 
 **Solution:**
+
 ```bash
 # Regenerate Prisma client
 npx prisma generate
@@ -87,6 +91,7 @@ npm run build
 **Symptoms:** Changes not reflected when saving files
 
 **Solution:**
+
 ```bash
 # Verify nodemon is installed
 npm ls nodemon
@@ -134,6 +139,7 @@ npm run test -- --forceExit
 **Symptoms:** `npx prisma migrate reset` hangs or fails
 
 **Solution:**
+
 ```bash
 # Kill any active connections
 lsof | grep database.sqlite  # macOS/Linux
@@ -151,6 +157,7 @@ npx prisma migrate dev --name init
 **Symptoms:** `Error: timeout` or `ECONNREFUSED`
 
 **Causes:**
+
 - Database is suspended (free tier suspends after 1 week)
 - Network connectivity issue
 - Invalid connection string
@@ -184,6 +191,7 @@ neon branches create main --project-id <id>
 **Symptoms:** `FATAL: password authentication failed` or `role "..." does not exist`
 
 **Solution:**
+
 ```bash
 # 1. Verify credentials in Neon dashboard
 # https://console.neon.tech/app/projects
@@ -204,6 +212,7 @@ npm run migrate:prod
 **Symptoms:** `SSL: CERTIFICATE_VERIFY_FAILED` or TLS errors
 
 **Solution:**
+
 ```bash
 # Neon requires SSL. Ensure connection string has sslmode=require
 DATABASE_URL=postgresql://user:pass@host/db?sslmode=require
@@ -224,6 +233,7 @@ NODE_TLS_REJECT_UNAUTHORIZED=0 npm run start
 **Causes:** Files stored in upload directory that was deleted
 
 **Solution:**
+
 ```bash
 # Ensure uploads/ directory is writable
 mkdir -p uploads/
@@ -244,11 +254,13 @@ git check-ignore uploads/
 **Symptoms:** "Access Denied" or 403 errors when uploading to R2
 
 **Causes:**
+
 - Invalid R2 credentials
 - R2 bucket not created
 - Insufficient permissions
 
 **Solution:**
+
 ```bash
 # 1. Verify R2 credentials
 wrangler r2 bucket list
@@ -276,6 +288,7 @@ wrangler r2 object delete <bucket> test.txt
 **Causes:** R2 CORS policy not configured or incorrect
 
 **Solution:**
+
 ```bash
 # 1. Verify CORS policy in R2 bucket settings
 # https://dash.cloudflare.com/
@@ -300,11 +313,13 @@ wrangler r2 object delete <bucket> test.txt
 **Symptoms:** 403 or 404 when accessing presigned URL
 
 **Causes:**
+
 - URL expired (default 1 hour)
 - Wrong bucket or key
 - Credential permissions missing
 
 **Solution:**
+
 ```bash
 # The presigned URL is valid for 1 hour
 # If testing manually, regenerate the URL:
@@ -326,11 +341,13 @@ curl -X POST http://localhost:3001/api/upload/initiate \
 **Symptoms:** `401 Unauthorized` or "Invalid token"
 
 **Causes:**
+
 - Token expired
 - Wrong JWT_SECRET
 - Token malformed
 
 **Solution:**
+
 ```bash
 # 1. Verify JWT_SECRET is consistent
 echo $JWT_SECRET
@@ -351,10 +368,12 @@ wrangler secret list --env production
 **Symptoms:** `Access to XMLHttpRequest blocked by CORS policy`
 
 **Causes:**
+
 - Frontend domain not in CORS_ORIGIN allowlist
 - Credentials not sent with request
 
 **Solution:**
+
 ```bash
 # 1. Check CORS configuration
 echo $CORS_ORIGIN
@@ -382,6 +401,7 @@ CORS_ORIGIN="*"  # Only for dev! Uses stricter config in prod
 **Symptoms:** `Error: wrangler publish` fails with 50x error
 
 **Solution:**
+
 ```bash
 # 1. Verify Cloudflare credentials
 wrangler whoami
@@ -407,6 +427,7 @@ wrangler publish --env production
 **Causes:** Workers can't use Node.js built-ins or native modules
 
 **Solution:**
+
 ```bash
 # Don't import Node.js specific modules in Workers:
 ❌ import * as fs from 'fs'         // Node.js only
@@ -426,11 +447,13 @@ wrangler publish --env production
 **Symptoms:** `Worker exceeded CPU time limit` or 503 Gateway Timeout
 
 **Causes:**
+
 - Complex database queries
 - Large file processing
 - Infinite loops
 
 **Solution:**
+
 ```bash
 # 1. Check query complexity
 # Log slow queries: see docs/performance.md
@@ -457,6 +480,7 @@ const users = await db.user.findMany({
 **Symptoms:** `GET /health` returns 500 or `database: 'unhealthy'`
 
 **Solution:**
+
 ```bash
 # 1. Check database connection
 curl https://api.yourdomain.com/health/ready
@@ -484,6 +508,7 @@ psql $DATABASE_URL -c "SELECT 1"
 **Symptoms:** Responses taking >500ms
 
 **Solution:**
+
 ```bash
 # 1. Check query performance
 # In Neon dashboard: Monitoring → Query Performance
@@ -508,11 +533,13 @@ NODE_OPTIONS=--inspect npm run dev
 **Symptoms:** Memory usage grows over time, server crashes
 
 **Causes:**
+
 - Memory leak in service code
 - Large file buffering
 - Connection pooling issue
 
 **Solution:**
+
 ```bash
 # 1. Monitor memory
 node --max-old-space-size=4096 index.js  # Increase heap
@@ -543,11 +570,13 @@ console.log(prisma.$metrics.connectionStats());
 **Symptoms:** Tests pass with `npm test` but fail in GitHub Actions
 
 **Causes:**
+
 - Environment variable differences
 - Missing services (Neon, R2)
 - Race conditions
 
 **Solution:**
+
 ```bash
 # 1. Ensure .env.test is configured correctly
 cp .env.example .env.test
@@ -568,6 +597,7 @@ npm test -- --forceExit  # Ensure all connections close
 **Symptoms:** Playwright tests timeout after 30s
 
 **Solution:**
+
 ```bash
 # 1. Increase timeout
 # In playwright.config.ts:
@@ -597,6 +627,7 @@ npx playwright test --debug
 **Causes:** Shared test data, transaction conflicts
 
 **Solution:**
+
 ```bash
 # 1. Use transactions for test cleanup
 // In beforeEach/afterEach:
@@ -625,6 +656,7 @@ const user = await db.user.create({ data: { email: `${testId}@test.com` } });
 **Symptoms:** `wrangler publish` or build process hangs indefinitely
 
 **Solution:**
+
 ```bash
 # 1. Check logs
 wrangler publish --env production --verbose
@@ -647,6 +679,7 @@ curl https://api.cloudflare.com/
 **Symptoms:** `https://api.yourdomain.com` returns 502 or 503
 
 **Solution:**
+
 ```bash
 # 1. Check Workers status
 wrangler tail --env production
@@ -690,19 +723,21 @@ npm test -- --verbose
 ### Logs to Check
 
 1. **Application Logs**
+
    ```bash
    # Backend: backend/logs/ or console output
    npm run dev 2>&1 | tee app.log
-   
+
    # Workers: CloudFlare dashboard or wrangler tail
    wrangler tail --env production
    ```
 
 2. **Database Logs**
+
    ```bash
    # SQLite: Enable query logging
    DATABASE_DEBUG=1 npm run dev
-   
+
    # Neon: Check dashboard
    # https://console.neon.tech → Monitoring → Query Log
    ```
@@ -713,16 +748,16 @@ npm test -- --verbose
 
 ### Common Error Messages
 
-| Error | Cause | Solution |
-|-------|-------|----------|
-| `ENOENT: no such file` | File/directory not found | Check file path and existence |
-| `EACCES: permission denied` | File permissions issue | Run with `sudo` or fix chmod |
-| `ECONNREFUSED` | Service not running or wrong port | Check server is running on correct port |
-| `connect ETIMEDOUT` | Network timeout | Check firewall, VPN, DNS |
-| `INVALID_ARGUMENT` | Wrong env variable format | Validate variable syntax |
-| `SSL_CERTIFICATE_VERIFY_FAILED` | SSL/TLS issue | Ensure TLS setup, see database section |
-| `CORS error` | Frontend domain not allowed | Add to CORS_ORIGIN allowlist |
-| `401 Unauthorized` | Invalid or expired token | Generate new token, check secret |
+| Error                           | Cause                             | Solution                                |
+| ------------------------------- | --------------------------------- | --------------------------------------- |
+| `ENOENT: no such file`          | File/directory not found          | Check file path and existence           |
+| `EACCES: permission denied`     | File permissions issue            | Run with `sudo` or fix chmod            |
+| `ECONNREFUSED`                  | Service not running or wrong port | Check server is running on correct port |
+| `connect ETIMEDOUT`             | Network timeout                   | Check firewall, VPN, DNS                |
+| `INVALID_ARGUMENT`              | Wrong env variable format         | Validate variable syntax                |
+| `SSL_CERTIFICATE_VERIFY_FAILED` | SSL/TLS issue                     | Ensure TLS setup, see database section  |
+| `CORS error`                    | Frontend domain not allowed       | Add to CORS_ORIGIN allowlist            |
+| `401 Unauthorized`              | Invalid or expired token          | Generate new token, check secret        |
 
 ### Getting Support
 
@@ -747,4 +782,3 @@ If you can't resolve the issue:
    - Filter by timestamp
    - Check similar errors
    - Review stack traces
-

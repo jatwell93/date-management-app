@@ -39,11 +39,12 @@ The easiest way to debug handheld scanning is to enable **Debug Mode** from your
 2. **Simulate keyboard input:**
    - Open DevTools Console (F12)
    - Run this JavaScript snippet to trigger a simulated hardware scan:
+
    ```javascript
    // Simulate a scan of barcode "1234567890"
    const barcode = '1234567890';
    const delay = 10; // 10ms between keystrokes (hardware speed)
-   
+
    let charIndex = 0;
    const scanInterval = setInterval(() => {
      if (charIndex < barcode.length) {
@@ -51,7 +52,7 @@ The easiest way to debug handheld scanning is to enable **Debug Mode** from your
        const event = new KeyboardEvent('keydown', {
          keyCode: key,
          key: barcode[charIndex],
-         bubbles: true
+         bubbles: true,
        });
        document.dispatchEvent(event);
        charIndex++;
@@ -60,7 +61,7 @@ The easiest way to debug handheld scanning is to enable **Debug Mode** from your
        const enterEvent = new KeyboardEvent('keydown', {
          keyCode: 13,
          key: 'Enter',
-         bubbles: true
+         bubbles: true,
        });
        document.dispatchEvent(enterEvent);
        clearInterval(scanInterval);
@@ -212,7 +213,7 @@ let scanBuffer = '';
 
 document.addEventListener('keydown', (e) => {
   if (!keylogEnabled) return;
-  
+
   if (e.key === 'Enter') {
     console.log(`[SCAN-END] Complete: "${scanBuffer}"`);
     scanBuffer = '';
@@ -226,6 +227,7 @@ console.log('Keyboard logging started. Scan a barcode, then run: keylogEnabled =
 ```
 
 **Output example:**
+
 ```
 [KEY] char="1", code=49, timing=1708034520123
 [KEY] char="2", code=50, timing=1708034520129
@@ -265,16 +267,18 @@ If your pharmacy uses GS1-128 barcodes with expiry dates, batch numbers, etc.:
      - The format is YYMMDD (example: `210921` = September 21, 2021)
 
 3. **Test GS1 parser directly:**
+
    ```javascript
    // Import the GS1 parser (assumes it's exported globally or in a test utility)
    const { parseGS1Barcode } = window; // or require from test utils
-   
+
    // Test with a sample GS1-128 barcode
    const result = parseGS1Barcode('0193939393141710B256092121B256');
    console.log('Parsed:', result);
    ```
 
    Expected output:
+
    ```javascript
    {
      gtin: "937939393141",
@@ -343,22 +347,27 @@ To measure how long syncs are taking:
 Use these barcodes to test different scanner capabilities:
 
 ### EAN-13 (Standard UPC)
+
 ```
 5901234123457    (7-digit)
 978020137962     (ISBN-10 style, valid EAN-13)
 ```
 
 ### Code128
+
 ```
 GS1 PHARMACY 2026  (simple text)
 LOT-B256-EXP-2026  (with dashes and letters)
 ```
 
 ### GS1-128 (Pharmaceutical)
+
 ```
 0137939393141710B256092121B256
 ```
+
 Parses to:
+
 - **GTIN:** 937939393141
 - **Batch:** B256
 - **Expiry:** Sept 21, 2021
@@ -368,15 +377,15 @@ Parses to:
 
 ## Common Issues & Solutions
 
-| Issue | Cause | Solution |
-|-------|-------|----------|
-| **No keyboard events appear in console** | Device keyboard output is disabled or misconfigured | Check device settings (DataWedge/Honeywell/Reader Config); verify keyboard output is enabled |
-| **Events appear but barcode incomplete** | Keystroke delay too short | Increase device keystroke delay to 50–100ms |
-| **App doesn't detect as handheld** | Desktop or screen size doesn't match handheld thresholds | Use `?forceHandheld=true` URL parameter to force handheld mode; verify screen ≤600×800px |
-| **GS1 parsing returns empty fields** | FNC1 characters not included in barcode | Ensure device outputs FNC1 character (usually ASCII 29 or GS); check device GS1 settings |
-| **Sync fails immediately after scan** | Network issue or authentication expired | Check WiFi connection, verify device can reach server, log out and log back in if session expired |
-| **Duplicate scans submitted** | User scanned twice or Enter key repeated | This is normal—app deduplicates within 2-second window (only submits once) |
-| **Slow sync (>5 seconds per barcode)** | Network congestion or server overload | Check device WiFi signal strength; try batch or manual sync mode; contact admin if persistent |
+| Issue                                    | Cause                                                    | Solution                                                                                          |
+| ---------------------------------------- | -------------------------------------------------------- | ------------------------------------------------------------------------------------------------- |
+| **No keyboard events appear in console** | Device keyboard output is disabled or misconfigured      | Check device settings (DataWedge/Honeywell/Reader Config); verify keyboard output is enabled      |
+| **Events appear but barcode incomplete** | Keystroke delay too short                                | Increase device keystroke delay to 50–100ms                                                       |
+| **App doesn't detect as handheld**       | Desktop or screen size doesn't match handheld thresholds | Use `?forceHandheld=true` URL parameter to force handheld mode; verify screen ≤600×800px          |
+| **GS1 parsing returns empty fields**     | FNC1 characters not included in barcode                  | Ensure device outputs FNC1 character (usually ASCII 29 or GS); check device GS1 settings          |
+| **Sync fails immediately after scan**    | Network issue or authentication expired                  | Check WiFi connection, verify device can reach server, log out and log back in if session expired |
+| **Duplicate scans submitted**            | User scanned twice or Enter key repeated                 | This is normal—app deduplicates within 2-second window (only submits once)                        |
+| **Slow sync (>5 seconds per barcode)**   | Network congestion or server overload                    | Check device WiFi signal strength; try batch or manual sync mode; contact admin if persistent     |
 
 ---
 
@@ -389,7 +398,7 @@ If you need to test the app's keyboard handling without a real device:
 function simulateScan(barcode, delayBetweenChars = 10) {
   return new Promise((resolve) => {
     let i = 0;
-    
+
     const scanInterval = setInterval(() => {
       if (i < barcode.length) {
         const char = barcode[i];

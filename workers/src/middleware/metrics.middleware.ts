@@ -1,10 +1,10 @@
 /**
  * Metrics Collection Middleware for Cloudflare Workers
- * 
+ *
  * Captures and instruments metrics for:
  * - All API requests (response time, status)
  * - CSV uploads (file size, processing duration, row count)
- * 
+ *
  * Metrics are written to Cloudflare Analytics Engine for dashboard monitoring.
  */
 
@@ -85,7 +85,7 @@ export function trackCsvUpload(
     fileSize: number;
     rowCount?: number;
     batchCount?: number;
-  }
+  },
 ): void {
   if (!req.metricsContext) {
     req.metricsContext = {
@@ -124,7 +124,7 @@ export function trackCsvProcessing(
     rowCount?: number;
     batchCount?: number;
     errors?: number;
-  }
+  },
 ): void {
   if (!req.metricsContext) {
     req.metricsContext = {
@@ -160,11 +160,7 @@ export function trackCsvProcessing(
  * Extract collected metrics and finalize response metrics
  * Call this at the end of request processing to get final metrics
  */
-export function getRequestMetrics(
-  req: any,
-  res: any,
-  status: number
-): RequestMetrics {
+export function getRequestMetrics(req: any, res: any, status: number): RequestMetrics {
   const metricsContext = req.metricsContext || {
     startTime: Date.now(),
     metrics: {
@@ -214,7 +210,7 @@ export function writeCustomMetrics(env: Env, metrics: Partial<RequestMetrics>): 
 
 /**
  * Format metrics for Cloudflare Analytics Engine
- * 
+ *
  * Analytics Engine dataset schema:
  * - indexes: [routeGroup] - single sampling key
  * - blobs: [method, statusClass] - dimensions for grouping/filtering
@@ -248,7 +244,7 @@ export const metricsUtils = {
    */
   async measureAsync<T>(
     operation: () => Promise<T>,
-    onDuration?: (duration: number) => void
+    onDuration?: (duration: number) => void,
   ): Promise<T> {
     const start = Date.now();
     const result = await operation();

@@ -5,11 +5,13 @@ The user attempted to manually create a Git pre-commit hook to run the Ultimate 
 ## Goals / Non-Goals
 
 **Goals:**
+
 - Correct the `.git/hooks/pre-commit` file structure (add shebang, remove noise).
 - Ensure the hook is executable and correctly blocks commits on critical UBS findings.
 - Restore the `git commit` functionality.
 
 **Non-Goals:**
+
 - Modifying the UBS tool itself.
 - Altering the project's build or test scripts.
 

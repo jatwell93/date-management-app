@@ -5,6 +5,7 @@ This document describes how to deploy and test the Cloudflare Workers to the pre
 ## Overview
 
 The Workers deployment process includes:
+
 1. Building the Workers bundle
 2. Deploying to preview environment (development)
 3. Testing the preview deployment
@@ -27,6 +28,7 @@ npm run build
 ```
 
 **Output**:
+
 ```
 dist/index.js         254.8kb
 dist/index.js.map     443.9kb
@@ -44,6 +46,7 @@ npm run deploy:dev
 This deploys the Workers to Cloudflare's free `workers.dev` subdomain.
 
 **Output**:
+
 ```
 ✓ Uploaded date-management-api-dev (X.XXmb) in X.XXs
 ✓ Published at https://date-management-api-dev.{username}.workers.dev
@@ -69,6 +72,7 @@ npm test
 This runs all Workers tests against the local `wrangler dev` environment.
 
 **Test Suite Output**:
+
 ```
  ✓ src/workers-deployment.test.ts (6 tests)
    ✓ Health Check > should return 200 OK from health endpoint
@@ -102,6 +106,7 @@ curl https://date-management-api-dev.{username}.workers.dev/health
 ```
 
 **Expected Response**:
+
 ```json
 {
   "status": "ok",
@@ -114,6 +119,7 @@ curl https://date-management-api-dev.{username}.workers.dev/health
 ### Environment Variables (Preview/Development)
 
 **Set via `wrangler.toml` [env.development]**:
+
 ```toml
 [env.development]
 name = "date-management-api-dev"
@@ -126,6 +132,7 @@ STORAGE_PROVIDER = "local"
 ### Secrets (Set via CLI)
 
 Development environment secrets:
+
 ```bash
 # Set Neon connection string
 wrangler secret put NEON_CONNECTION_STRING --env development
@@ -155,11 +162,13 @@ npm run tail
 ### Performance Metrics
 
 Workers provides built-in analytics:
+
 1. Log in to Cloudflare Dashboard
 2. Navigate to Workers → date-management-api-dev
 3. View "Analytics" tab
 
 **Key Metrics**:
+
 - Requests per minute
 - Error rate
 - P50/P95/P99 latency
@@ -170,6 +179,7 @@ Workers provides built-in analytics:
 ### Deployment Fails with "Account ID Required"
 
 **Solution**:
+
 ```bash
 # Initialize Wrangler with account ID
 wrangler login
@@ -179,6 +189,7 @@ wrangler login
 ### Cold Start Too Slow
 
 Workers should respond in <50ms typically. If slower:
+
 1. Check Neon connection pooling (Hyperdrive)
 2. Verify R2 credentials are valid
 3. Check for errors in Worker logs
@@ -186,11 +197,13 @@ Workers should respond in <50ms typically. If slower:
 ### 502 Bad Gateway from Worker
 
 **Causes**:
+
 - Network request timeout
 - Database connection timeout
 - R2 authentication failure
 
 **Debug**:
+
 ```bash
 # View Worker logs
 wrangler tail
@@ -216,6 +229,7 @@ If issues occur after deployment:
 
 1. Revert to previous version if using Git
 2. Redeploy previous version:
+
    ```bash
    git checkout <previous-commit>
    npm run build && npm run deploy
