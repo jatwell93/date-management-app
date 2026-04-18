@@ -1,11 +1,12 @@
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
+import * as Sentry from '@sentry/react';
 import { SubscriptionDashboard } from '../components/SubscriptionDashboard';
 import { UpgradeModal } from '../components/UpgradeModal';
 import { ManageSubscriptionButton } from '../components/ManageSubscriptionButton';
 import { UsageWarning } from '../components/UsageWarning';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '../components/ui/card';
 import { Button } from '../components/ui/button';
-import { API_BASE_URL } from '../lib/api.service';
+import { buildApiUrl } from '../lib/api.service';
 import type { TierLevel, SubscriptionData, UsageData } from '../types/subscription';
 
 interface SubscriptionSettingsPageProps {
@@ -17,6 +18,62 @@ export function SubscriptionSettingsPage({ token }: SubscriptionSettingsPageProp
   const [subscription, setSubscription] = useState<SubscriptionData | null>(null);
   const [usage, setUsage] = useState<UsageData | null>(null);
   const [cancelLoading, setCancelLoading] = useState(false);
+
+  useEffect(() => {
+    if (!token) {
+      setSubscription(null);
+      setUsage(null);
+      return;
+    }
+
+    let isMounted = true;
+
+    const loadSubscriptionData = async () => {
+      try {
+        const [subscriptionRes, usageRes] = await Promise.all([
+          fetch(buildApiUrl('/subscription/current'), {
+            headers: { Authorization: `Bearer ${token}` },
+          }),
+          fetch(buildApiUrl('/organization/usage'), {
+            headers: { Authorization: `Bearer ${token}` },
+          }),
+        ]);
+
+        if (!subscriptionRes.ok || !usageRes.ok) {
+          throw new Error('Failed to fetch subscription settings data');
+        }
+
+        const [subscriptionData, usageData] = await Promise.all([
+          subscriptionRes.json(),
+          usageRes.json(),
+        ]);
+
+        if (!isMounted) {
+          return;
+        }
+
+        setSubscription(subscriptionData);
+        setUsage(usageData);
+      } catch (error) {
+        Sentry.captureException(error, {
+          tags: { feature: 'subscription-settings' },
+        });
+
+        if (!isMounted) {
+          return;
+        }
+
+        setSubscription(null);
+        setUsage(null);
+      }
+    };
+
+    loadSubscriptionData();
+
+    return () => {
+      isMounted = false;
+    };
+  }, [token]);
 
   const handleUpgrade = () => {
     setShowUpgradeModal(true);
@@ -52,7 +109,7 @@ export function SubscriptionSettingsPage({ token }: SubscriptionSettingsPageProp
         return;
       }
 
-      const response = await fetch(`${API_BASE_URL}/api/subscription/create-checkout-session`, {
+      const response = await fetch(buildApiUrl('/subscription/create-checkout-session'), {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
@@ -72,7 +129,9 @@ export function SubscriptionSettingsPage({ token }: SubscriptionSettingsPageProp
       const { url } = await response.json();
       window.location.href = url;
     } catch (error) {
-      console.error('Error creating checkout session:', error);
+      Sentry.captureException(error, {
+        tags: { feature: 'subscription-upgrade' },
+      });
       alert('Failed to start upgrade process. Please try again.');
     }
   };
@@ -88,7 +147,7 @@ export function SubscriptionSettingsPage({ token }: SubscriptionSettingsPageProp
 
     setCancelLoading(true);
     try {
-      const response = await fetch(`${API_BASE_URL}/api/subscription/cancel`, {
+      const response = await fetch(buildApiUrl('/subscription/cancel'), {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
@@ -105,7 +164,9 @@ export function SubscriptionSettingsPage({ token }: SubscriptionSettingsPageProp
       );
       window.location.reload();
     } catch (error) {
-      console.error('Error canceling subscription:', error);
+      Sentry.captureException(error, {
+        tags: { feature: 'subscription-cancel' },
+      });
       alert('Failed to cancel subscription. Please try again or contact support.');
     } finally {
       setCancelLoading(false);

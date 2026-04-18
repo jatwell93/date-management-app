@@ -5,18 +5,20 @@ The Git pre-commit hook is failing on Windows with an "error: cannot spawn .git/
 ## What Changes
 
 - Update `.git/hooks/pre-commit` to:
-    - Include a standard `#!/bin/sh` shebang.
-    - Remove the trailing `HOOK` identifier.
-    - Correctly check for the `ubs` command.
-    - Run `ubs` and capture output to `bug-scan-report.json`.
+  - Include a standard `#!/bin/sh` shebang.
+  - Remove the trailing `HOOK` identifier.
+  - Correctly check for the `ubs` command.
+  - Run `ubs` and capture output to `bug-scan-report.json`.
 - Ensure the hook file is executable.
 
 ## Capabilities
 
 ### New Capabilities
+
 None.
 
 ### Modified Capabilities
+
 None.
 
 ## Impact

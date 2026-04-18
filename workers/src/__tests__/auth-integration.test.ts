@@ -1,6 +1,6 @@
 /**
  * Integration Test: Authentication & Token Expiry (4.5)
- * 
+ *
  * Verifies JWT token validation and expiry handling
  */
 
@@ -20,12 +20,12 @@ describe('Phase 4.5: Authentication & Token Expiry', () => {
        * 5. Assert: organizationId extracted from token
        * 6. Assert: Data filtered by that organizationId
        */
-      
+
       const validToken = createTestJWT({
         organizationId: 'test-org-123',
-        exp: Math.floor(Date.now() / 1000) + 3600 // 1 hour from now
+        exp: Math.floor(Date.now() / 1000) + 3600, // 1 hour from now
       });
-      
+
       expect(validToken).toMatch(/^eyJ/); // Valid JWT format
     });
 
@@ -41,16 +41,16 @@ describe('Phase 4.5: Authentication & Token Expiry', () => {
        *   iss: string (issuer)
        * }
        */
-      
+
       const tokenPayload = {
         organizationId: 'test-org-456',
         sub: 'user-id-789',
         email: 'test@example.com',
         exp: Math.floor(Date.now() / 1000) + 3600,
         iat: Math.floor(Date.now() / 1000),
-        iss: 'date-management-auth'
+        iss: 'date-management-auth',
       };
-      
+
       const token = createTestJWT(tokenPayload);
       expect(token).toBeDefined();
     });
@@ -67,12 +67,12 @@ describe('Phase 4.5: Authentication & Token Expiry', () => {
        * 5. Assert: Message: "Token has expired"
        * 6. Assert: No data returned
        */
-      
+
       const expiredToken = createTestJWT({
         organizationId: 'test-org-789',
-        exp: Math.floor(Date.now() / 1000) - 3600 // 1 hour ago
+        exp: Math.floor(Date.now() / 1000) - 3600, // 1 hour ago
       });
-      
+
       expect(expiredToken).toMatch(/^eyJ/); // Still valid JWT format, but expired
     });
 
@@ -86,7 +86,7 @@ describe('Phase 4.5: Authentication & Token Expiry', () => {
        *   expiredAt: "2025-01-15T10:30:00Z"
        * }
        */
-      
+
       const expected = true; // Clear re-auth instruction
       expect(expected).toBe(true);
     });
@@ -100,7 +100,7 @@ describe('Phase 4.5: Authentication & Token Expiry', () => {
        * - User must re-authenticate to get new token
        * - Prevents security issues with compromised tokens
        */
-      
+
       const expected = true; // No refresh for expired tokens
       expect(expected).toBe(true);
     });
@@ -114,7 +114,7 @@ describe('Phase 4.5: Authentication & Token Expiry', () => {
        * 2. Assert: 401 Unauthorized
        * 3. Assert: Message: "Authorization header required"
        */
-      
+
       const expected = true; // Header validation required
       expect(expected).toBe(true);
     });
@@ -128,7 +128,7 @@ describe('Phase 4.5: Authentication & Token Expiry', () => {
        *
        * Expected format: "Bearer <JWT>"
        */
-      
+
       const expected = true; // Format validation required
       expect(expected).toBe(true);
     });
@@ -142,7 +142,7 @@ describe('Phase 4.5: Authentication & Token Expiry', () => {
        * 4. Assert: 401 Unauthorized
        * 5. Assert: Signature verification fails
        */
-      
+
       const expected = true; // Signature must match server secret
       expect(expected).toBe(true);
     });
@@ -157,7 +157,7 @@ describe('Phase 4.5: Authentication & Token Expiry', () => {
        *
        * If token missing any required claim → 401
        */
-      
+
       const expected = true; // All claims validated
       expect(expected).toBe(true);
     });
@@ -174,7 +174,7 @@ describe('Phase 4.5: Authentication & Token Expiry', () => {
        * 5. Extract and validate organizationId claim
        * 6. Attach to request context
        */
-      
+
       const expected = true; // Middleware chain enforced
       expect(expected).toBe(true);
     });
@@ -188,7 +188,7 @@ describe('Phase 4.5: Authentication & Token Expiry', () => {
        * 4. If valid → attaches validated org to request.ctx
        * 5. Handler executes with trusted organizationId
        */
-      
+
       const expected = true; // Handler receives pre-validated org
       expect(expected).toBe(true);
     });
@@ -202,7 +202,7 @@ describe('Phase 4.5: Authentication & Token Expiry', () => {
        * organizationId is TRUST BOUNDARY
        * Must come from cryptographically verified token only
        */
-      
+
       const expected = true; // Org from token, not user input
       expect(expected).toBe(true);
     });
@@ -219,7 +219,7 @@ describe('Phase 4.5: Authentication & Token Expiry', () => {
        * 5. Make same request
        * 6. Assert: 401 Unauthorized (now expired)
        */
-      
+
       const expected = true; // Expiry is time-based, not grace period
       expect(expected).toBe(true);
     });
@@ -233,7 +233,7 @@ describe('Phase 4.5: Authentication & Token Expiry', () => {
        *
        * No upper limit on expiry (some tokens live very long)
        */
-      
+
       const expected = true; // Only checks exp > now
       expect(expected).toBe(true);
     });
@@ -264,26 +264,26 @@ describe('Phase 4.5: Authentication & Token Expiry', () => {
       // Token expired 1 minute ago → within 5-minute tolerance, should be accepted
       const withinToleranceToken = createTestJWT({
         organizationId: 'test-org-123',
-        exp: now - 60
+        exp: now - 60,
       });
 
       const withinToleranceResponse = await SELF.fetch('https://example.com/api/health', {
         headers: {
-          Authorization: `Bearer ${withinToleranceToken}`
-        }
+          Authorization: `Bearer ${withinToleranceToken}`,
+        },
       });
       expect(withinToleranceResponse.status).toBe(200);
 
       // Token expired 6 minutes ago → beyond 5-minute tolerance, should be rejected
       const beyondToleranceToken = createTestJWT({
         organizationId: 'test-org-123',
-        exp: now - (clockSkewTolerance + 60)
+        exp: now - (clockSkewTolerance + 60),
       });
 
       const beyondToleranceResponse = await SELF.fetch('https://example.com/api/health', {
         headers: {
-          Authorization: `Bearer ${beyondToleranceToken}`
-        }
+          Authorization: `Bearer ${beyondToleranceToken}`,
+        },
       });
       expect(beyondToleranceResponse.status).toBe(401);
     });
@@ -298,7 +298,7 @@ describe('Phase 4.5: Authentication & Token Expiry', () => {
        * - Token valid until exp time, regardless
        * - For immediate access denial, update subscription status
        */
-      
+
       const expected = true; // Stateless tokens, no revocation
       expect(expected).toBe(true);
     });
@@ -312,7 +312,7 @@ describe('Phase 4.5: Authentication & Token Expiry', () => {
        * 4. Assert: 403 Forbidden (subscription check, not token check)
        * 5. Token still valid for signature, but subscription blocks access
        */
-      
+
       const expected = true; // Subscription re-checked per-request
       expect(expected).toBe(true);
     });
@@ -331,7 +331,7 @@ describe('Phase 4.5: Authentication & Token Expiry', () => {
        *
        * Don't expose token structure to client
        */
-      
+
       const expected = true; // Minimal error details
       expect(expected).toBe(true);
     });

@@ -2,7 +2,7 @@ import { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { Button } from './ui/button';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from './ui/card';
-import { API_BASE_URL } from '../lib/api.service';
+import { buildApiUrl } from '../lib/api.service';
 
 interface SubscriptionTierResponse {
   status: 'ACTIVE' | 'TRIALING' | 'EXPIRED' | 'CANCELED';
@@ -45,7 +45,7 @@ export function TrialUpgradeFlow({ token }: TrialUpgradeFlowProps) {
 
     const fetchTrialStatus = async () => {
       try {
-        const response = await fetch(`${API_BASE_URL}/api/subscription/trial-status`, {
+        const response = await fetch(buildApiUrl('/subscription/trial-status'), {
           headers: {
             Authorization: `Bearer ${token}`,
           },
@@ -74,7 +74,7 @@ export function TrialUpgradeFlow({ token }: TrialUpgradeFlowProps) {
     setError(null);
 
     try {
-      const response = await fetch(`${API_BASE_URL}/api/subscription/convert-trial`, {
+      const response = await fetch(buildApiUrl('/subscription/convert-trial'), {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',

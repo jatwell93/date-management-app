@@ -1,6 +1,6 @@
 /**
  * Rate Limiting Middleware for Cloudflare Workers
- * 
+ *
  * Implements distributed IP-based rate limiting using Cloudflare KV when available.
  * Falls back to in-memory storage when KV is not configured (development/test safety net).
  */
@@ -168,7 +168,7 @@ class KvRateLimiter {
 function getClientIp(req: ExpressRequest): string {
   return (
     (req.headers['cf-connecting-ip'] as string) ||
-    ((req.headers['x-forwarded-for'] as string)?.split(',')[0]?.trim()) ||
+    (req.headers['x-forwarded-for'] as string)?.split(',')[0]?.trim() ||
     'unknown'
   );
 }
@@ -193,7 +193,10 @@ export function createRateLimiter(env: Env): ExpressMiddleware {
       : await inMemoryLimiter.checkLimit(key, isAuthenticated);
 
     // Set rate limit headers
-    res.setHeader('X-RateLimit-Limit', isAuthenticated ? maxAuthenticated.toString() : maxRequests.toString());
+    res.setHeader(
+      'X-RateLimit-Limit',
+      isAuthenticated ? maxAuthenticated.toString() : maxRequests.toString(),
+    );
     res.setHeader('X-RateLimit-Remaining', result.remaining.toString());
     res.setHeader('X-RateLimit-Reset', new Date(result.resetTime).toISOString());
 

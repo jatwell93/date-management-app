@@ -1,9 +1,9 @@
 /**
  * Workers Database Client
- * 
+ *
  * Uses Neon's edge-native serverless driver for Cloudflare Workers.
  * This is purpose-built for edge environments - no Prisma, no native bindings.
- * 
+ *
  * Uses Hyperdrive for edge-pooled connections to Neon PostgreSQL.
  */
 
@@ -17,24 +17,24 @@ import type { Env } from './types/env';
  */
 export interface Database {
   sql: NeonQueryFunction<false, false>;
-  
+
   // User queries
   findUserByEmail(email: string): Promise<User | null>;
   findUserById(id: number): Promise<User | null>;
   createUser(data: CreateUserData): Promise<User>;
-  
+
   // Product queries
   findProducts(options?: { limit?: number; offset?: number; search?: string }): Promise<Product[]>;
   findProductById(id: number): Promise<Product | null>;
   countProducts(search?: string): Promise<number>;
-  
+
   // Inventory queries
   findInventoryItems(options?: { limit?: number; offset?: number }): Promise<InventoryItem[]>;
   countInventoryItems(): Promise<number>;
-  
+
   // Store area queries
   findStoreAreas(): Promise<StoreArea[]>;
-  
+
   // Dashboard queries
   getDashboardStats(): Promise<DashboardStats>;
 }
@@ -107,12 +107,16 @@ export function createWorkersDatabase(env: Env): Database {
   if (connectionString) {
     console.log('[Database] Connecting via Neon serverless driver (direct)');
   } else if (env.HYPERDRIVE?.connectionString) {
-    console.warn('[Database] Direct Neon connection not found, falling back to Hyperdrive connection string');
+    console.warn(
+      '[Database] Direct Neon connection not found, falling back to Hyperdrive connection string',
+    );
     connectionString = env.HYPERDRIVE.connectionString;
   }
-  
+
   if (!connectionString) {
-    throw new Error('No database connection string available. Configure NEON_CONNECTION_STRING, DATABASE_URL, or HYPERDRIVE.');
+    throw new Error(
+      'No database connection string available. Configure NEON_CONNECTION_STRING, DATABASE_URL, or HYPERDRIVE.',
+    );
   }
 
   // Create Neon SQL tagged template function
@@ -136,7 +140,7 @@ export function createWorkersDatabase(env: Env): Database {
         WHERE LOWER(email) = LOWER(${email})
         LIMIT 1
       `;
-      return rows[0] as User || null;
+      return (rows[0] as User) || null;
     },
 
     async findUserById(id: number): Promise<User | null> {
@@ -153,7 +157,7 @@ export function createWorkersDatabase(env: Env): Database {
         WHERE id = ${id}
         LIMIT 1
       `;
-      return rows[0] as User || null;
+      return (rows[0] as User) || null;
     },
 
     async createUser(data: CreateUserData): Promise<User> {
@@ -197,30 +201,34 @@ export function createWorkersDatabase(env: Env): Database {
     },
 
     // Product queries
-    async findProducts(options?: { limit?: number; offset?: number; search?: string }): Promise<Product[]> {
+    async findProducts(options?: {
+      limit?: number;
+      offset?: number;
+      search?: string;
+    }): Promise<Product[]> {
       const limit = options?.limit || 50;
       const offset = options?.offset || 0;
       const search = options?.search;
 
       if (search) {
         const searchPattern = `%${search}%`;
-        return await sql`
+        return (await sql`
           SELECT id, name, barcode, description, category,
                  created_at as "createdAt", updated_at as "updatedAt"
           FROM products
           WHERE name ILIKE ${searchPattern} OR barcode ILIKE ${searchPattern}
           ORDER BY name ASC
           LIMIT ${limit} OFFSET ${offset}
-        ` as Product[];
+        `) as Product[];
       }
 
-      return await sql`
+      return (await sql`
         SELECT id, name, barcode, description, category,
                created_at as "createdAt", updated_at as "updatedAt"
         FROM products
         ORDER BY name ASC
         LIMIT ${limit} OFFSET ${offset}
-      ` as Product[];
+      `) as Product[];
     },
 
     async findProductById(id: number): Promise<Product | null> {
@@ -231,7 +239,7 @@ export function createWorkersDatabase(env: Env): Database {
         WHERE id = ${id}
         LIMIT 1
       `;
-      return rows[0] as Product || null;
+      return (rows[0] as Product) || null;
     },
 
     async countProducts(search?: string): Promise<number> {
@@ -247,12 +255,15 @@ export function createWorkersDatabase(env: Env): Database {
       return rows[0]?.count || 0;
     },
 
-    // Inventory queries  
-    async findInventoryItems(options?: { limit?: number; offset?: number }): Promise<InventoryItem[]> {
+    // Inventory queries
+    async findInventoryItems(options?: {
+      limit?: number;
+      offset?: number;
+    }): Promise<InventoryItem[]> {
       const limit = options?.limit || 50;
       const offset = options?.offset || 0;
 
-      return await sql`
+      return (await sql`
         SELECT 
           i.id, i.product_id as "productId", i.quantity, 
           i.expiry_date as "expiryDate", i.store_area_id as "storeAreaId",
@@ -268,7 +279,7 @@ export function createWorkersDatabase(env: Env): Database {
         LEFT JOIN store_areas s ON i.store_area_id = s.id
         ORDER BY i.expiry_date ASC NULLS LAST
         LIMIT ${limit} OFFSET ${offset}
-      ` as InventoryItem[];
+      `) as InventoryItem[];
     },
 
     async countInventoryItems(): Promise<number> {
@@ -278,12 +289,12 @@ export function createWorkersDatabase(env: Env): Database {
 
     // Store area queries
     async findStoreAreas(): Promise<StoreArea[]> {
-      return await sql`
+      return (await sql`
         SELECT id, name, description,
                created_at as "createdAt", updated_at as "updatedAt"
         FROM store_areas
         ORDER BY name ASC
-      ` as StoreArea[];
+      `) as StoreArea[];
     },
 
     // Dashboard queries

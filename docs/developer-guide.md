@@ -23,6 +23,7 @@
 ### First-Time Setup
 
 **Prerequisites:**
+
 - Node.js ≥18.x
 - npm ≥9.x
 - Git
@@ -90,11 +91,13 @@ npm run dev
 ### Environment Variables
 
 The app loads environment variables from:
+
 1. `.env` - General settings
 2. `.env.development` - Development-specific (loaded when NODE_ENV=development)
 3. `.env.production` - Production-specific (loaded when NODE_ENV=production)
 
 **Development defaults:**
+
 - Database: SQLite (`database.sqlite`)
 - Storage: Local filesystem (`./uploads`)
 - Auth: Clerk (development keys)
@@ -102,6 +105,7 @@ The app loads environment variables from:
 ### Auto-Reload
 
 The dev server uses `nodemon` to watch for changes:
+
 - **Watches:** `src/`, `.env`, `.env.development`
 - **Extensions:** `.ts`, `.json`
 - **Debounce:** 2 seconds
@@ -156,7 +160,9 @@ describe('MyService', () => {
     it('should do expected behavior', () => {
       // Arrange
       const service = new MyService();
-      const input = { /* test data */ };
+      const input = {
+        /* test data */
+      };
 
       // Act
       const result = service.methodName(input);
@@ -173,6 +179,7 @@ describe('MyService', () => {
 ```
 
 **Testing guidelines:**
+
 - ✅ Test business logic in services
 - ✅ Test validation logic
 - ✅ Test error handling
@@ -260,11 +267,13 @@ npx prisma migrate dev --name description-of-change
 ### Add a New API Endpoint
 
 1. **Define route:** `src/routes/resource.routes.ts`
+
    ```typescript
    router.post('/resources', authenticateToken, resourceController.create);
    ```
 
 2. **Create controller:** `src/controllers/resourceController.ts`
+
    ```typescript
    export const resourceController = {
      async create(req: Request, res: Response) {
@@ -274,11 +283,12 @@ npx prisma migrate dev --name description-of-change
        } catch (error) {
          res.status(400).json({ error: error.message });
        }
-     }
+     },
    };
    ```
 
 3. **Create service:** `src/services/resourceService.ts`
+
    ```typescript
    export class ResourceService {
      async create(data: CreateResourceDTO): Promise<Resource> {
@@ -301,6 +311,7 @@ npx prisma migrate dev --name description-of-change
 ### Add a Database Model
 
 1. **Update Prisma schema:** `prisma/schema.prisma`
+
    ```prisma
    model Resource {
      id             Int      @id @default(autoincrement())
@@ -308,25 +319,28 @@ npx prisma migrate dev --name description-of-change
      organizationId Int
      createdAt      DateTime @default(now())
      updatedAt      DateTime @updatedAt
-     
+
      organization Organization @relation(fields: [organizationId], references: [id])
-     
+
      @@index([organizationId])
      @@map("resources")
    }
    ```
 
 2. **Generate migration:**
+
    ```bash
    npx prisma migrate dev --name add_resource_model
    ```
 
 3. **Generate Prisma client:**
+
    ```bash
    npx prisma generate
    ```
 
 4. **Create TypeScript types:** `src/types/Resource.ts`
+
    ```typescript
    export interface Resource {
      id: number;
@@ -372,6 +386,7 @@ npm run type-check
 4. **Debug Workers (Wrangler)** - Debug Cloudflare Workers locally
 
 **Breakpoints:**
+
 - Click left gutter in editor to add breakpoint
 - Breakpoints work in both TypeScript source and tests
 
@@ -429,6 +444,7 @@ Refs: <change-id>
 ```
 
 **Types:**
+
 - `feat:` - New feature
 - `fix:` - Bug fix
 - `chore:` - Maintenance
@@ -517,6 +533,80 @@ npm run workers:deploy:prod
 cd ../workers
 wrangler secret put DATABASE_URL
 wrangler secret put JWT_SECRET
+```
+
+### Frontend Pages Deployment Flow (Current Setup)
+
+Frontend deploys are managed by [pages-deploy.yml](../.github/workflows/pages-deploy.yml).
+
+### Branch Workflow (Keep This)
+
+1. Create a feature branch from main.
+2. Open a PR into main.
+3. Preview deploy runs automatically from the PR.
+4. Test the preview URL: `https://pr-<number>.date-management-frontend.pages.dev`.
+5. Merge PR to main only after preview validation.
+6. Production deploy runs from main.
+
+Note: You do not need a separate long-lived preview branch for this workflow.
+
+### Preview vs Production Rules
+
+- Preview deploy:
+  - Trigger: pull requests targeting main
+  - Clerk key requirement: `REACT_APP_CLERK_PUBLISHABLE_KEY` must be `pk_test_*`
+- Production deploy:
+  - Trigger: push to main (or workflow_dispatch on main)
+  - Clerk key requirement: `REACT_APP_CLERK_PUBLISHABLE_KEY` must be `pk_live_*`
+
+### Required GitHub Secrets
+
+Set `DOPPLER_TOKEN` as an environment secret in both GitHub Environments:
+
+1. `preview` environment:
+
+- Secret name: `DOPPLER_TOKEN`
+- Doppler config must return `pk_test_*` for `REACT_APP_CLERK_PUBLISHABLE_KEY`
+
+2. `production` environment:
+
+- Secret name: `DOPPLER_TOKEN`
+- Doppler config must return `pk_live_*` for `REACT_APP_CLERK_PUBLISHABLE_KEY`
+
+If only a repository-level `DOPPLER_TOKEN` is set, both jobs may use the same Doppler config.
+
+### Common Mistakes and Symptoms
+
+1. Preview uses `pk_live_*`:
+
+- Symptom: Clerk sign-in panel fails or Clerk API origin errors on `pages.dev`.
+- Fix: Ensure preview environment `DOPPLER_TOKEN` points to preview Doppler config with `pk_test_*`.
+
+2. Production uses `pk_test_*`:
+
+- Symptom: Production deployment fails during validation.
+- Fix: Ensure production environment `DOPPLER_TOKEN` points to production Doppler config with `pk_live_*`.
+
+3. Preview updated but production did not:
+
+- Symptom: Different JS bundle hashes between preview and production.
+- Fix: Check the main workflow run status (queued/failed) and rerun after resolving the blocking error.
+
+4. Changes merged but no frontend deploy:
+
+- Symptom: No new Pages deployment run.
+- Fix: Confirm changed files matched workflow paths (`frontend/**` or `.github/workflows/pages-deploy.yml`).
+
+### Quick Verification Commands
+
+```bash
+# Production key mode
+prod_asset=$(curl -sS https://www.expirymate.com.au/login | tr '"' '\n' | grep '/static/js/main\.' | head -n1)
+curl -sS "https://www.expirymate.com.au${prod_asset}" | rg -o 'pk_(test|live)_[A-Za-z0-9_]+' -N | sort -u
+
+# Preview key mode (replace 96 with your PR number)
+pre_asset=$(curl -sS https://pr-96.date-management-frontend.pages.dev/login | tr '"' '\n' | grep '/static/js/main\.' | head -n1)
+curl -sS "https://pr-96.date-management-frontend.pages.dev${pre_asset}" | rg -o 'pk_(test|live)_[A-Za-z0-9_]+' -N | sort -u
 ```
 
 ### Post-Deployment
@@ -694,6 +784,7 @@ JWT_SECRET=dev-secret-change-in-production
    - [AGENTS.md](../AGENTS.md) - Development standards
 
 2. **Search codebase:**
+
    ```bash
    # Find similar patterns
    grep -r "pattern" src/
@@ -703,6 +794,7 @@ JWT_SECRET=dev-secret-change-in-production
    ```
 
 3. **Check git history:**
+
    ```bash
    # See recent changes to a file
    git log -p path/to/file
@@ -722,29 +814,29 @@ JWT_SECRET=dev-secret-change-in-production
 
 ### Most Used Commands
 
-| Task | Command |
-|------|---------|
-| Start dev server | `npm run dev` |
-| Run tests | `npm test` |
+| Task              | Command              |
+| ----------------- | -------------------- |
+| Start dev server  | `npm run dev`        |
+| Run tests         | `npm test`           |
 | Run tests (watch) | `npm run test:watch` |
-| Database GUI | `npm run db:studio` |
-| Run migration | `npm run migrate` |
-| Format code | `npm run format` |
-| Check style | `npm run lint` |
-| Fix style | `npm run lint:fix` |
+| Database GUI      | `npm run db:studio`  |
+| Run migration     | `npm run migrate`    |
+| Format code       | `npm run format`     |
+| Check style       | `npm run lint`       |
+| Fix style         | `npm run lint:fix`   |
 
 ### File Locations
 
-| Type | Location |
-|------|----------|
-| Routes | `src/routes/` |
-| Controllers | `src/controllers/` |
-| Services | `src/services/` |
+| Type            | Location               |
+| --------------- | ---------------------- |
+| Routes          | `src/routes/`          |
+| Controllers     | `src/controllers/`     |
+| Services        | `src/services/`        |
 | Database Models | `prisma/schema.prisma` |
-| Migrations | `prisma/migrations/` |
-| Tests | `src/__tests__/` |
-| Config | `src/config/` |
-| Types | `src/types/` |
+| Migrations      | `prisma/migrations/`   |
+| Tests           | `src/__tests__/`       |
+| Config          | `src/config/`          |
+| Types           | `src/types/`           |
 
 ---
 
@@ -752,7 +844,7 @@ JWT_SECRET=dev-secret-change-in-production
 
 - [Testing Guide](./TESTING.md) - Comprehensive testing documentation
 - [Multi-Tenant Guide](./multi-tenant-guide.md) - Multi-tenancy patterns
-- [Security Guide](./security.md) - Security best practices  
+- [Security Guide](./security.md) - Security best practices
 - [Operational Runbook](./operational-runbook.md) - Production operations
 
 ---

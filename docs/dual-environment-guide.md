@@ -18,6 +18,7 @@ Complete guide for developing and testing the Date Management App across local d
 ## Environment Overview
 
 ### Development Environment
+
 - **Database:** SQLite (local file: `database.sqlite`)
 - **Storage:** Local filesystem (`uploads/` directory)
 - **Compute:** Node.js/Express server
@@ -26,6 +27,7 @@ Complete guide for developing and testing the Date Management App across local d
 - **Connection:** localhost:3001
 
 ### Production Environment
+
 - **Database:** Neon PostgreSQL (serverless)
 - **Storage:** Cloudflare R2 (object storage)
 - **Compute:** Cloudflare Workers (edge compute)
@@ -183,12 +185,14 @@ wrangler secret list --env production
 **4. Deploy Frontend**
 
 Deploy the React frontend to:
+
 - Cloudflare Pages (recommended)
 - Vercel
 - Netlify
 - Your own CDN
 
 Set environment variables:
+
 ```
 REACT_APP_API_URL=https://api.yourdomain.com
 REACT_APP_SENTRY_DSN=your-sentry-dsn
@@ -232,6 +236,7 @@ export const isProduction = process.env.NODE_ENV === 'production';
 ```
 
 Based on this, the app automatically:
+
 - Loads the correct `.env` file
 - Selects SQLite or PostgreSQL
 - Selects local or R2 storage
@@ -307,16 +312,17 @@ FRONTEND_URL=https://yourdomain.com npm run test:e2e:prod
 
 ### SQLite (Development)
 
-| Feature | Details |
-|---------|---------|
-| **Setup** | Automatic, no external service |
-| **Connection** | Local file `database.sqlite` |
-| **Concurrency** | Limited, good for development |
-| **Backups** | Copy database.sqlite file |
+| Feature         | Details                         |
+| --------------- | ------------------------------- |
+| **Setup**       | Automatic, no external service  |
+| **Connection**  | Local file `database.sqlite`    |
+| **Concurrency** | Limited, good for development   |
+| **Backups**     | Copy database.sqlite file       |
 | **Performance** | Fast for <1000 concurrent users |
-| **Cost** | Free |
+| **Cost**        | Free                            |
 
 **Commands:**
+
 ```bash
 # Create/reset database
 npm run migrate:dev
@@ -330,16 +336,17 @@ npm run db:export > backup.sql
 
 ### PostgreSQL/Neon (Production)
 
-| Feature | Details |
-|---------|---------|
-| **Setup** | Requires Neon account (free tier OK) |
-| **Connection** | Secure TLS connection to Neon |
-| **Concurrency** | Handles 1000+ concurrent users |
-| **Backups** | Neon automatic backups, manual via CLI |
-| **Performance** | Optimized for multi-tenant SaaS |
-| **Cost** | Free tier or $19-99/month |
+| Feature         | Details                                |
+| --------------- | -------------------------------------- |
+| **Setup**       | Requires Neon account (free tier OK)   |
+| **Connection**  | Secure TLS connection to Neon          |
+| **Concurrency** | Handles 1000+ concurrent users         |
+| **Backups**     | Neon automatic backups, manual via CLI |
+| **Performance** | Optimized for multi-tenant SaaS        |
+| **Cost**        | Free tier or $19-99/month              |
 
 **Commands:**
+
 ```bash
 # Create/reset Neon database
 npm run migrate:prod
@@ -360,15 +367,16 @@ pg_dump postgresql://user:pass@host/db > backup.sql
 
 ### Local Storage (Development)
 
-| Feature | Details |
-|---------|---------|
-| **Location** | `uploads/` directory |
-| **File Format** | Direct storage, JSON metadata sidecar |
+| Feature            | Details                                 |
+| ------------------ | --------------------------------------- |
+| **Location**       | `uploads/` directory                    |
+| **File Format**    | Direct storage, JSON metadata sidecar   |
 | **Presigned URLs** | Not supported, uses direct file serving |
-| **Cleanup** | Manual deletion of files |
-| **Cost** | Free (uses local disk) |
+| **Cleanup**        | Manual deletion of files                |
+| **Cost**           | Free (uses local disk)                  |
 
 **Testing:**
+
 ```bash
 # View uploaded files
 ls -la uploads/
@@ -380,15 +388,16 @@ curl -X POST http://localhost:3001/api/upload/direct \
 
 ### R2 Storage (Production)
 
-| Feature | Details |
-|---------|---------|
-| **Location** | Cloudflare R2 bucket |
-| **File Format** | Binary objects with metadata |
-| **Presigned URLs** | Supported, 1-hour expiry default |
-| **Cleanup** | Automatic via lifecycle rules |
-| **Cost** | Free tier: 10GB storage + 1M API calls/month |
+| Feature            | Details                                      |
+| ------------------ | -------------------------------------------- |
+| **Location**       | Cloudflare R2 bucket                         |
+| **File Format**    | Binary objects with metadata                 |
+| **Presigned URLs** | Supported, 1-hour expiry default             |
+| **Cleanup**        | Automatic via lifecycle rules                |
+| **Cost**           | Free tier: 10GB storage + 1M API calls/month |
 
 **Testing:**
+
 ```bash
 # Test from CLI
 wrangler r2 object get <bucket> <key>
@@ -406,6 +415,7 @@ wrangler r2 object get <bucket> <key>
 **Problem:** `database.sqlite` not found or corrupted
 
 **Solution:**
+
 ```bash
 # Reset database
 npm run migrate:reset
@@ -421,6 +431,7 @@ npm run migrate:reset
 **Problem:** `Error: connect ECONNREFUSED` or authentication error
 
 **Solution:**
+
 ```bash
 # Verify connection string
 echo $DATABASE_URL
@@ -440,6 +451,7 @@ neon projects list
 **Problem:** Changed `.env` file but changes not reflected
 
 **Solution:**
+
 ```bash
 # Clear environment and restart
 unset NODE_ENV
@@ -458,12 +470,14 @@ npm run dev
 **Problem:** Tests pass in SQLite but fail in PostgreSQL
 
 **Likely Causes:**
+
 - Type differences (SQLite is lenient with types)
 - JSON handling differences
 - Transaction behavior differences
 - Decimal precision differences
 
 **Solution:**
+
 ```bash
 # Run tests for each environment separately
 NODE_ENV=development npm test
@@ -478,6 +492,7 @@ NODE_ENV=production npm test
 **Problem:** 403 Forbidden or CORS errors
 
 **Solution:**
+
 1. Verify R2 credentials in Workers Secrets
 2. Check R2 bucket CORS policy
 3. Verify presigned URL hasn't expired
@@ -509,4 +524,3 @@ NODE_ENV=production npm test
 - ✅ Monitor database performance
 - ✅ Have rollback procedure ready
 - ❌ Don't test in production directly (use staging)
-

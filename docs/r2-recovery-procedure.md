@@ -96,6 +96,7 @@ aws s3 sync s3://csv-uploads-prod ./uploads/r2-recovery \
 ```
 
 **Example Output**:
+
 ```
 download: s3://csv-uploads-prod/2026-03-01/inventory-123.csv to uploads/r2-recovery/2026-03-01/inventory-123.csv
 download: s3://csv-uploads-prod/2026-03-02/inventory-456.csv to uploads/r2-recovery/2026-03-02/inventory-456.csv
@@ -339,16 +340,19 @@ bash backend/scripts/recover-r2-to-local.sh
 ## R2 Recovery Execution Checklist - [DATE/TIME]
 
 ### Prerequisites
+
 - [ ] AWS CLI installed (aws --version)
 - [ ] R2 credentials available (not in Git)
 - [ ] Local disk space verified (minimum 2x R2 bucket size)
 - [ ] Network connectivity tested
 
 ### Setup
+
 - [ ] AWS CLI configured for R2 (aws configure --profile r2)
 - [ ] R2 credentials verified (aws s3 ls --profile r2 ...)
 
 ### Recovery
+
 - [ ] Local recovery directory created (./uploads/r2-recovery)
 - [ ] AWS S3 sync started (aws s3 sync ...)
 - [ ] Sync completed without errors
@@ -357,6 +361,7 @@ bash backend/scripts/recover-r2-to-local.sh
 - [ ] Spot-check: Several CSV files opened and verified readable
 
 ### Integration
+
 - [ ] Application .env updated to use local storage provider
 - [ ] Application pointed to recovered files directory
 - [ ] Application restarted
@@ -364,15 +369,16 @@ bash backend/scripts/recover-r2-to-local.sh
 - [ ] Files accessible through application
 
 ### Documentation
+
 - [ ] Recovery manifest created (r2-recovery-manifest.json)
 - [ ] Checksums saved (r2-recovery-checksums.txt)
-- [ ] Logs captured (r2-recovery-*.log)
+- [ ] Logs captured (r2-recovery-\*.log)
 
-**Recovery Completed**: _____ (timestamp)  
-**Executed By**: _____ (name)  
-**Verified By**: _____ (name)  
-**Total Files Recovered**: _____  
-**Total Size**: _____
+**Recovery Completed**: **\_** (timestamp)  
+**Executed By**: **\_** (name)  
+**Verified By**: **\_** (name)  
+**Total Files Recovered**: **\_**  
+**Total Size**: **\_**
 ```
 
 ---
@@ -387,12 +393,12 @@ bash backend/scripts/recover-r2-to-local.sh
 
 ## R2 Configuration Reference
 
-| Parameter | Value | Notes |
-|-----------|-------|-------|
-| **Endpoint URL** | `https://<account-id>.r2.cloudflarestorage.com` | Replace with your account ID |
-| **Region** | `us-east-1` | R2 is region-agnostic but AWS CLI requires region |
-| **Bucket Name** | `csv-uploads-prod` | Verify current bucket name |
-| **API Resource URL** | `https://<account-id>.r2.cloudflarestorage.com/csv-uploads-prod` | Direct access URL |
+| Parameter            | Value                                                            | Notes                                             |
+| -------------------- | ---------------------------------------------------------------- | ------------------------------------------------- |
+| **Endpoint URL**     | `https://<account-id>.r2.cloudflarestorage.com`                  | Replace with your account ID                      |
+| **Region**           | `us-east-1`                                                      | R2 is region-agnostic but AWS CLI requires region |
+| **Bucket Name**      | `csv-uploads-prod`                                               | Verify current bucket name                        |
+| **API Resource URL** | `https://<account-id>.r2.cloudflarestorage.com/csv-uploads-prod` | Direct access URL                                 |
 
 ---
 

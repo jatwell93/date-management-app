@@ -4,8 +4,10 @@
  * Pre-upload validation to provide better user feedback before processing
  */
 
-// Column name alternatives matching backend COLUMN_ALTERNATIVES
-const REQUIRED_COLUMNS = {
+export type UploadImportType = 'product-catalog' | 'expiry-list';
+
+// Column name alternatives matching backend parser contracts
+const PRODUCT_REQUIRED_COLUMNS = {
   sku: [
     'SKU',
     'Item Code',
@@ -50,9 +52,32 @@ const REQUIRED_COLUMNS = {
   ],
 };
 
+const EXPIRY_REQUIRED_COLUMNS = {
+  sku: PRODUCT_REQUIRED_COLUMNS.sku,
+  usedByDate: [
+    'Used-By Date',
+    'Used By Date',
+    'Used By',
+    'Use By Date',
+    'Use By',
+    'Expiry Date',
+    'Expiry',
+    'Best Before',
+    'used_by_date',
+    'usedbydate',
+    'expiry_date',
+  ],
+};
+
+const REQUIRED_COLUMNS_BY_TYPE: Record<UploadImportType, Record<string, string[]>> = {
+  'product-catalog': PRODUCT_REQUIRED_COLUMNS,
+  'expiry-list': EXPIRY_REQUIRED_COLUMNS,
+};
+
 export interface ColumnValidationResult {
   isValid: boolean;
   missingColumns: string[];
+  importType: UploadImportType;
   foundColumns: Record<string, string>; // Maps required field -> actual column name
   suggestions: Record<string, string[]>; // Suggests possible matches for missing columns
 }
@@ -96,19 +121,24 @@ async function readCSVHeaders(file: File): Promise<string[]> {
 /**
  * Validate that all required columns are present in CSV headers
  */
-export async function validateCSVColumns(file: File): Promise<ColumnValidationResult> {
+export async function validateCSVColumns(
+  file: File,
+  importType: UploadImportType = 'product-catalog',
+): Promise<ColumnValidationResult> {
   const headers = await readCSVHeaders(file);
   const headersLower = headers.map((h) => h.toLowerCase());
+  const requiredColumns = REQUIRED_COLUMNS_BY_TYPE[importType];
 
   const result: ColumnValidationResult = {
     isValid: true,
     missingColumns: [],
+    importType,
     foundColumns: {},
     suggestions: {},
   };
 
   // Check each required field
-  for (const [fieldName, alternatives] of Object.entries(REQUIRED_COLUMNS)) {
+  for (const [fieldName, alternatives] of Object.entries(requiredColumns)) {
     let found = false;
 
     for (const alt of alternatives) {
@@ -172,12 +202,11 @@ export function formatColumnValidationError(validation: ColumnValidationResult):
     return '';
   }
 
+  const requiredColumns = REQUIRED_COLUMNS_BY_TYPE[validation.importType];
   const messages: string[] = [];
 
   for (const missingField of validation.missingColumns) {
-    const expectedNames = REQUIRED_COLUMNS[missingField as keyof typeof REQUIRED_COLUMNS]
-      .slice(0, 3)
-      .join(', ');
+    const expectedNames = requiredColumns[missingField].slice(0, 3).join(', ');
 
     let msg = `Missing required column: "${missingField.toUpperCase()}". Expected one of: ${expectedNames}`;
 

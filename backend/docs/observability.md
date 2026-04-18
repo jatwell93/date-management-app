@@ -9,6 +9,7 @@
 ## Overview
 
 This project uses **correlation IDs** and **structured logging** to trace requests across:
+
 - **Cloudflare Workers** (edge/API gateway)
 - **Backend** (Express/Prisma business logic)
 - **Frontend** (React client)
@@ -27,6 +28,7 @@ Request → Workers (generate ID) → Backend (attach to logs) → Sentry (tag t
 ```
 
 **Benefits:**
+
 - Trace a single request across distributed logs
 - Debug user-reported issues by timestamp → correlation ID → full stack trace
 - Connect frontend errors to backend failures
@@ -34,6 +36,7 @@ Request → Workers (generate ID) → Backend (attach to logs) → Sentry (tag t
 ### 1.2 Implementation
 
 **Workers Middleware** ([workers/src/middleware/metrics.middleware.ts](../../workers/src/middleware/metrics.middleware.ts))
+
 ```typescript
 export const createMetricsInitializer = (): Middleware => {
   return async (req, res, next) => {
@@ -45,16 +48,17 @@ export const createMetricsInitializer = (): Middleware => {
 
     // Attach to request for downstream access
     req.correlationId = correlationId;
-    
+
     // Add response header for client correlation
     res.setHeader('X-Correlation-ID', correlationId);
-    
+
     next();
   };
 };
 ```
 
 **Backend Logging** ([backend/src/services/csv-parser.service.ts](../../backend/src/services/csv-parser.service.ts))
+
 ```typescript
 // Emit metrics with correlation context
 Logger.info('CSV processing complete', {
@@ -66,11 +70,12 @@ Logger.info('CSV processing complete', {
   skipped,
   errorCount: errors.length,
   durationMs: Date.now() - startTime,
-  correlationId: req.headers['x-correlation-id'] // From Workers
+  correlationId: req.headers['x-correlation-id'], // From Workers
 });
 ```
 
 **Frontend Tracking** ([frontend/src/pages/CSVUploadPage.tsx](../../frontend/src/pages/CSVUploadPage.tsx))
+
 ```typescript
 // Extract correlation ID from response headers
 const correlationId = response.headers.get('X-Correlation-ID');
@@ -80,7 +85,7 @@ logUploadMetric({
   status: 'success',
   fileSize: file.size,
   durationMs: Date.now() - startTime,
-  correlationId
+  correlationId,
 });
 ```
 
@@ -89,23 +94,27 @@ logUploadMetric({
 **Scenario:** User reports "Upload failed at 10:30am on Feb 7"
 
 **Step 1: Find correlation ID in Sentry**
+
 1. Go to Sentry → Performance → Transactions
 2. Filter by timestamp: `2026-02-07 10:30:00` ± 5 minutes
 3. Click transaction → Copy `correlationId` tag
 
 **Step 2: Search Workers logs**
+
 ```bash
 npx wrangler tail --env production --search <correlationId>
 # Output: Full request/response logs with status codes, timing
 ```
 
 **Step 3: Search backend logs**
+
 ```bash
 grep <correlationId> backend/logs/app.log
 # Output: CSV processing metrics, DB queries, errors
 ```
 
 **Step 4: Reconstruct timeline**
+
 - Workers: Request received at 10:30:12.345
 - Backend: CSV processing started at 10:30:12.456
 - Backend: DB query slow at 10:30:13.789 (200ms+)
@@ -138,20 +147,22 @@ All logs use consistent JSON structure for machine parsing:
 ```
 
 **Why JSON?**
+
 - Easy parsing in log aggregators (if upgraded to paid tier)
 - Consistent field names across Workers/Backend
 - Sentry auto-extracts structured data
 
 ### 2.2 Log Levels
 
-| Level | Use Case | Example |
-|-------|----------|---------|
+| Level     | Use Case                                 | Example                                   |
+| --------- | ---------------------------------------- | ----------------------------------------- |
 | **ERROR** | Exceptions that need immediate attention | Uncaught exception, DB connection failure |
-| **WARN** | Degraded state, not critical | Storage quota >80%, slow query 150-200ms |
-| **INFO** | Business metrics, audit trail | CSV upload complete, user created |
-| **DEBUG** | Development troubleshooting | Variable values, conditional branches |
+| **WARN**  | Degraded state, not critical             | Storage quota >80%, slow query 150-200ms  |
+| **INFO**  | Business metrics, audit trail            | CSV upload complete, user created         |
+| **DEBUG** | Development troubleshooting              | Variable values, conditional branches     |
 
 **Production Logger** ([backend/src/utils/logger.ts](../../backend/src/utils/logger.ts))
+
 ```typescript
 import { Logger } from './utils/logger';
 
@@ -160,7 +171,7 @@ Logger.info('Upload completed', {
   uploadKey: 'abc123',
   userId: 42,
   fileSize: 1048576,
-  durationMs: 2500
+  durationMs: 2500,
 });
 
 // ❌ Avoid: String concatenation (not machine-parsable)
@@ -170,12 +181,13 @@ Logger.info(`Upload abc123 completed for user 42 in 2500ms`);
 ### 2.3 Sensitive Data Filtering
 
 **Automatic Sanitization** ([workers/src/middleware/error-handler.middleware.ts](../../workers/src/middleware/error-handler.middleware.ts))
+
 ```typescript
 const SENSITIVE_FIELDS = ['password', 'token', 'authorization', 'api_key', 'secret'];
 
 function sanitizeForLogging(obj: Record<string, unknown>): Record<string, unknown> {
   const sanitized: Record<string, unknown> = {};
-  
+
   for (const [key, value] of Object.entries(obj)) {
     if (SENSITIVE_FIELDS.some((field) => key.toLowerCase().includes(field))) {
       sanitized[key] = '[REDACTED]';
@@ -185,7 +197,7 @@ function sanitizeForLogging(obj: Record<string, unknown>): Record<string, unknow
       sanitized[key] = value;
     }
   }
-  
+
   return sanitized;
 }
 
@@ -195,6 +207,7 @@ const sanitizedHeaders = sanitizeForLogging(req.headers);
 ```
 
 **Always sanitize:**
+
 - HTTP headers (authorization, cookies)
 - Request bodies (passwords, API keys)
 - Error messages (user input with PII)
@@ -206,6 +219,7 @@ const sanitizedHeaders = sanitizeForLogging(req.headers);
 ### 3.1 Workers Metrics
 
 **Request Metrics** ([workers/src/middleware/metrics.middleware.ts](../../workers/src/middleware/metrics.middleware.ts))
+
 ```typescript
 // Metrics collected per request
 interface RequestMetrics {
@@ -213,9 +227,9 @@ interface RequestMetrics {
   method: string;
   endpoint: string;
   statusCode: number;
-  statusClass: string;      // "2xx", "4xx", "5xx" (for aggregation)
-  routeGroup: string;       // "/api/v1/uploads" (reduce cardinality)
-  responseTime: number;     // milliseconds
+  statusClass: string; // "2xx", "4xx", "5xx" (for aggregation)
+  routeGroup: string; // "/api/v1/uploads" (reduce cardinality)
+  responseTime: number; // milliseconds
   correlationId?: string;
 }
 
@@ -223,28 +237,31 @@ interface RequestMetrics {
 export const formatMetricsForAnalytics = (metrics: RequestMetrics) => {
   return {
     blobs: [
-      metrics.routeGroup,     // Index for grouping
+      metrics.routeGroup, // Index for grouping
       metrics.method,
       metrics.statusClass,
-      metrics.correlationId || 'unknown'
+      metrics.correlationId || 'unknown',
     ],
     doubles: [metrics.responseTime],
-    indexes: [metrics.routeGroup]  // Fast filtering
+    indexes: [metrics.routeGroup], // Fast filtering
   };
 };
 ```
 
 **Why status class grouping?**
+
 - Reduce series cardinality (3 classes vs. 50+ status codes)
 - Aggregate across similar errors (all 4xx = client errors)
 
 **Why route grouping?**
+
 - `/api/v1/uploads/abc123` → `/api/v1/uploads` (reduce unique routes)
 - Works with dynamic path parameters
 
 ### 3.2 Backend Metrics
 
 **CSV Processing Metrics** ([backend/src/services/csv-parser.service.ts](../../backend/src/services/csv-parser.service.ts))
+
 ```typescript
 // Emit after processing completes
 Logger.info('CSV processing complete', {
@@ -255,11 +272,12 @@ Logger.info('CSV processing complete', {
   updated,
   skipped,
   errorCount: errors.length,
-  durationMs: Date.now() - startTime
+  durationMs: Date.now() - startTime,
 });
 ```
 
 **Upload Metrics** ([backend/src/services/upload.service.ts](../../backend/src/services/upload.service.ts))
+
 ```typescript
 // Track upload success/failure
 Logger.info('Upload operation complete', {
@@ -269,11 +287,12 @@ Logger.info('Upload operation complete', {
   fileSize: upload.fileSize,
   contentType: upload.contentType,
   processingDurationMs: Date.now() - startTime,
-  status: 'success'  // or 'failure'
+  status: 'success', // or 'failure'
 });
 ```
 
 **Querying backend metrics:**
+
 ```bash
 # Find all failed uploads today
 grep "Upload operation complete" backend/logs/app.log | grep '"status":"failure"'
@@ -285,6 +304,7 @@ grep "CSV processing complete" backend/logs/app.log | jq '.durationMs' | awk '{ 
 ### 3.3 Frontend Metrics
 
 **Client-Side Tracking** ([frontend/src/pages/CSVUploadPage.tsx](../../frontend/src/pages/CSVUploadPage.tsx))
+
 ```typescript
 // Log upload metrics to Sentry
 const logUploadMetric = (metrics: {
@@ -299,28 +319,30 @@ const logUploadMetric = (metrics: {
     tags: {
       status: metrics.status,
       method: metrics.method,
-      errorCategory: metrics.errorCategory
+      errorCategory: metrics.errorCategory,
     },
     extra: {
       fileSize: metrics.fileSize,
-      durationMs: metrics.durationMs
-    }
+      durationMs: metrics.durationMs,
+    },
   });
 };
 ```
 
 **Why categorize errors?**
+
 - `initiate_failed`: API connection issue (check backend health)
 - `processing_failed`: CSV parsing error (check file format)
 - `upload_failed`: R2 storage issue (check bucket permissions)
 
 **Retry Tracking:**
+
 ```typescript
 // Log each retry attempt
 console.log('[Upload Metrics] Retry attempt', {
   attempt: attemptNumber,
   errorCategory: categorizeUploadError(error),
-  willRetry: attemptNumber < maxRetries
+  willRetry: attemptNumber < maxRetries,
 });
 ```
 
@@ -331,37 +353,40 @@ console.log('[Upload Metrics] Retry attempt', {
 ### 4.1 Sentry Discover (Custom Queries)
 
 **CSV Upload Success Rate (Last 7 Days)**
+
 ```
-Query: 
+Query:
   event.type:transaction
   AND transaction:/api/v1/uploads/*
-  
+
 Columns:
   - timestamp.to_day
   - count()
   - count_if(transaction.status:ok)
-  
-Formula: 
+
+Formula:
   (count_if(ok) / count()) * 100
-  
+
 Expected: >95% success rate
 ```
 
 **Upload Retry Frequency**
+
 ```
 Query:
   message:"Retry attempt"
-  
+
 Columns:
   - timestamp.to_hour
   - count()
-  
+
 Expected: <10% of total uploads
 ```
 
 ### 4.2 Workers Logs Queries
 
 **Error Rate by Route (Last 3 Days)**
+
 ```bash
 # Download logs via wrangler tail, then parse with jq
 npx wrangler tail --env production --format json > logs.json
@@ -372,6 +397,7 @@ jq -r 'select(.statusClass == "5xx") | .routeGroup' logs.json \
 ```
 
 **P95 Latency by Endpoint**
+
 ```bash
 # Extract response times
 jq -r 'select(.metadata.responseTime) | .metadata.responseTime' logs.json \
@@ -381,6 +407,7 @@ jq -r 'select(.metadata.responseTime) | .metadata.responseTime' logs.json \
 ### 4.3 Backend Log Analysis
 
 **Slow CSV Processing (>5 seconds)**
+
 ```bash
 grep "CSV processing complete" backend/logs/app.log \
   | jq 'select(.durationMs > 5000) | { uploadKey, totalRows, durationMs }' \
@@ -388,6 +415,7 @@ grep "CSV processing complete" backend/logs/app.log \
 ```
 
 **Storage Quota Violations**
+
 ```bash
 grep "quota" backend/logs/app.log \
   | jq 'select(.level == "WARN" or .level == "ERROR") | { timestamp, userId, message }'
@@ -400,18 +428,20 @@ grep "quota" backend/logs/app.log \
 ### 5.1 Sentry Transaction Tracing
 
 **Enable for all routes** (already configured in [backend/src/index.ts](../../backend/src/index.ts))
+
 ```typescript
 Sentry.init({
   dsn: process.env.SENTRY_DSN,
-  tracesSampleRate: 1.0,  // 100% sampling (fine for current volume)
+  tracesSampleRate: 1.0, // 100% sampling (fine for current volume)
   integrations: [
     new Sentry.Integrations.Http({ tracing: true }),
-    new Prisma.Integrations.Prisma({ prisma: prismaClient })
-  ]
+    new Prisma.Integrations.Prisma({ prisma: prismaClient }),
+  ],
 });
 ```
 
 **View traces:**
+
 1. Sentry → Performance → Transactions
 2. Click transaction → View trace waterfall
 3. See:
@@ -423,6 +453,7 @@ Sentry.init({
 ### 5.2 Custom Performance Marks
 
 **Add to critical code paths:**
+
 ```typescript
 // Start timing
 const startTime = Date.now();
@@ -438,7 +469,7 @@ Sentry.addBreadcrumb({
   category: 'performance',
   message: 'CSV parsing',
   level: 'info',
-  data: { durationMs }
+  data: { durationMs },
 });
 ```
 
@@ -449,6 +480,7 @@ Sentry.addBreadcrumb({
 ### 6.1 "User reports upload failure"
 
 **Step-by-step:**
+
 1. Ask user for approximate timestamp
 2. Search Sentry transactions by timestamp
 3. Find failed transaction → Extract correlation ID
@@ -458,6 +490,7 @@ Sentry.addBreadcrumb({
 7. Reproduce in dev with same CSV file
 
 **Common findings:**
+
 - 413 error → File too large (check `MAX_FILE_SIZE` in wrangler.toml)
 - 500 error → CSV parsing failed (check row format)
 - Timeout → Slow DB query (check Sentry performance tab)
@@ -465,6 +498,7 @@ Sentry.addBreadcrumb({
 ### 6.2 "Sudden spike in errors"
 
 **Step-by-step:**
+
 1. Check Sentry Issues → Sort by frequency
 2. Group by error message (same root cause?)
 3. Check deployment timeline (recent code push?)
@@ -475,6 +509,7 @@ Sentry.addBreadcrumb({
 ### 6.3 "Dashboard shows high p95 latency"
 
 **Step-by-step:**
+
 1. Sentry → Performance → Web Vitals → Sort by slowest transactions
 2. Click slowest transaction → View span breakdown
 3. Identify bottleneck:
@@ -489,6 +524,7 @@ Sentry.addBreadcrumb({
 ## 7. Best Practices
 
 ### ✅ DO:
+
 - Include correlation ID in all logs
 - Use structured JSON (not string concatenation)
 - Sanitize sensitive fields before logging
@@ -497,6 +533,7 @@ Sentry.addBreadcrumb({
 - Group metrics by status class/route group (reduce cardinality)
 
 ### ❌ DON'T:
+
 - Log inside tight loops (creates noise)
 - Include passwords/tokens in logs (security risk)
 - Use INFO level for debug noise (keep logs clean)
@@ -510,14 +547,17 @@ Sentry.addBreadcrumb({
 When outgrowing Free tier, consider:
 
 **Log Aggregation:**
+
 - **Grafana Loki**: Free, self-hosted log aggregation
 - **Datadog**: Paid, advanced querying + alerting
 
 **Real-Time Dashboards:**
+
 - **Grafana Cloud**: Free tier, visualize Sentry + custom metrics
 - **Cloudflare Workers Analytics Engine**: Paid tier for advanced queries
 
 **Distributed Tracing:**
+
 - **Jaeger**: Free, self-hosted, OpenTelemetry-compatible
 - **Sentry Performance**: Paid tier for full tracing + profiling
 

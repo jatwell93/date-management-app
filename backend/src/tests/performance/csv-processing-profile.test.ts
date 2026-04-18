@@ -198,11 +198,10 @@ describe('CSV Processing Performance Profile', () => {
       console.log(`   Std Dev: ${Math.round(stdDev)} rows/sec`);
       console.log(`   CV: ${coefficientOfVariation.toFixed(2)}%`);
 
-      // CI/Windows variance can be noisy; use a slightly higher threshold there,
-      // but keep a stricter guard on more stable environments.
-      const isCi = !!process.env.CI;
+      // Windows runners (local + CI) show higher timer variance for this
+      // micro-benchmark; keep stricter guard on non-Windows environments.
       const isWindows = os.platform() === 'win32';
-      const maxCoefficientOfVariation = isCi && isWindows ? 35 : 25;
+      const maxCoefficientOfVariation = isWindows ? 35 : 25;
 
       expect(coefficientOfVariation).toBeLessThan(maxCoefficientOfVariation);
     }, 45000);

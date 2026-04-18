@@ -7,6 +7,7 @@ Implement defense-in-depth protections against scraping attacks and related auth
 ## Combined Execution Strategy (Options 1, 2, 3)
 
 This change now combines two security concerns into one plan:
+
 - Scraping and billing-abuse protection (distributed rate limiting + edge controls)
 - Session transport hardening (in-memory token now, cookie migration later)
 
@@ -17,6 +18,7 @@ This change now combines two security concerns into one plan:
 **Workload:** Medium (roughly 2-4 engineering days + dashboard configuration)
 
 **Current risk addressed:**
+
 - High if multi-instance scraping bypass is possible
 - Medium for cost spike from automated abuse
 
@@ -29,6 +31,7 @@ This change now combines two security concerns into one plan:
 **Workload:** Medium (roughly 2-5 engineering days spread over trial)
 
 **Current risk addressed:**
+
 - Medium for false positives/false negatives in limits
 - Medium for DB saturation and expensive query patterns
 
@@ -41,6 +44,7 @@ This change now combines two security concerns into one plan:
 **Workload:** High (roughly 1-2 weeks, cross-cutting frontend/backend auth changes)
 
 **Current residual risk:**
+
 - Tokens are no longer persisted in browser storage, but remain accessible at runtime to app JavaScript
 - XSS impact is reduced but not eliminated compared with `httpOnly` cookies
 
@@ -55,7 +59,7 @@ This change now combines two security concerns into one plan:
   - Enable for production environment
   - Reference: [Cloudflare Bot Management](https://developers.cloudflare.com/bots/)
 
-- [ ] **1.2** Configure Cloudflare WAF Rate Limiting Rules
+- [ ] **1.2** Configure Cloudflare WAF Rate Limiting Rules (blocked)
   - Go to Security → WAF → Rate Limiting Rules
   - Create rule for `/api/*` endpoints:
     - Match: `http.request.uri.path` matches `/api/*`
@@ -67,29 +71,39 @@ This change now combines two security concerns into one plan:
     - Action: Block
     - Threshold: 30 requests/minute
     - Period: 60 seconds
+  - **NOTE:** Would need to upgrade to enterprise
 
-- [ ] **1.3** Add Custom Firewall Rules
+- [ ] **1.3** Add Custom Firewall Rules (blocked)
   - Go to Security → WAF → Custom Rules
   - Create rule: Block Known Scrapers
     - Expression: `(cf.threat_score > 10)`
     - Action: JS Challenge
+  - **NOTE**: Would need to upgrade to enterprise
 
-- [ ] **1.4** Enable Cloudflare Analytics Engine
+- [x] **1.4** Enable Cloudflare Analytics Engine
   - Go to Cloudflare Dashboard → Workers → Analytics Engine
   - Enable the feature
   - Note: Required for anomaly detection queries
+  - Verification evidence:
+    - Production deploy confirms binding: `env.ANALYTICS -> analytics_events` on `date-management-api-prod`
+    - Live traffic generated against production endpoints (`/api/health`, `/health`, `/api/products`)
+    - Worker tail confirms successful production request handling during validation
+  - Follow-up note:
+    - SQL API row-level verification from this environment requires an API token with `Account Analytics Read` (or dashboard query view) to confirm dataset rows directly
 
 ### Phase 2 (Option 1): KV-Backed Distributed Rate Limiter
 
 > NOTE: Redis/Upstash is not required for this phase. Use Cloudflare KV as the distributed state store.
 
 - [x] **2.1** Create KV Namespace
+
   ```bash
   cd workers
   npx wrangler kv namespace create RATE_LIMITER
   ```
 
 - [x] **2.2** Update wrangler.toml with KV binding
+
   ```toml
   [[env.production.kv_namespaces]]
   binding = "RATE_LIMITER"
@@ -191,9 +205,10 @@ This change now combines two security concerns into one plan:
 ### Phase 5 (Option 2): Monitoring & Detection
 
 - [x] **5.1** Create Analytics Engine anomaly queries
+
   ```sql
   -- Detect scraping patterns
-  SELECT 
+  SELECT
     count() as request_count,
     any(cf.source_ip) as sample_ip,
     bin(time, 1 minute) as minute
@@ -282,20 +297,20 @@ This change now combines two security concerns into one plan:
 
 ## Configuration Summary
 
-| Setting | Current | New Value |
-|---------|---------|-----------|
-| Anonymous rate limit | 10/min | 5/min |
-| Authenticated rate limit | 100/min | 30/min |
-| Health endpoint rate limit | None | 30/min |
-| Concurrent DB connections | Unlimited | 50 |
-| Query result limit | Unlimited | 100 |
-| Query timeout | 30s | 10s |
-| R2 storage alert | None | Warn 8 GB, Alert 10 GB |
-| R2 API calls alert | None | Unsupported on current account (target: Warn 2M/month, Alert 3M/month) |
-| Workers requests alert | None | Unsupported on current account (target: Warn 500k/day, Alert 1M/day) |
-| Workers execution duration alert | None | Unsupported on current account (target: Warn 80%, Alert 95%) |
-| Browser token persistence | Removed | In-memory only (current) |
-| Browser auth transport target | Bearer in JS runtime | httpOnly cookie transport (Phase 7) |
+| Setting                          | Current              | New Value                                                              |
+| -------------------------------- | -------------------- | ---------------------------------------------------------------------- |
+| Anonymous rate limit             | 10/min               | 5/min                                                                  |
+| Authenticated rate limit         | 100/min              | 30/min                                                                 |
+| Health endpoint rate limit       | None                 | 30/min                                                                 |
+| Concurrent DB connections        | Unlimited            | 50                                                                     |
+| Query result limit               | Unlimited            | 100                                                                    |
+| Query timeout                    | 30s                  | 10s                                                                    |
+| R2 storage alert                 | None                 | Warn 8 GB, Alert 10 GB                                                 |
+| R2 API calls alert               | None                 | Unsupported on current account (target: Warn 2M/month, Alert 3M/month) |
+| Workers requests alert           | None                 | Unsupported on current account (target: Warn 500k/day, Alert 1M/day)   |
+| Workers execution duration alert | None                 | Unsupported on current account (target: Warn 80%, Alert 95%)           |
+| Browser token persistence        | Removed              | In-memory only (current)                                               |
+| Browser auth transport target    | Bearer in JS runtime | httpOnly cookie transport (Phase 7)                                    |
 
 ## References
 

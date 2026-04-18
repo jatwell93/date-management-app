@@ -1,6 +1,6 @@
 /**
  * Integration Test: Subscription Validation (4.4)
- * 
+ *
  * Verifies that subscription status controls access to service
  */
 
@@ -27,7 +27,7 @@ describe('Phase 4.4: Subscription Validation', () => {
        * 8. Request DELETE /api/products/:id
        * 9. Assert: 200 OK
        */
-      
+
       const activeSubscription = testData.subscription({ status: 'active' });
       expect(activeSubscription.status).toBe('active');
     });
@@ -40,7 +40,7 @@ describe('Phase 4.4: Subscription Validation', () => {
        * 3. Assert: features list includes all features for tier
        * 4. Assert: renewal_date is in future
        */
-      
+
       const expected = true; // Subscription metadata available
       expect(expected).toBe(true);
     });
@@ -56,7 +56,7 @@ describe('Phase 4.4: Subscription Validation', () => {
        * 4. Assert: Message: "Subscription canceled"
        * 5. All endpoints return 403, not different errors
        */
-      
+
       const canceledSubscription = testData.subscription({ status: 'canceled' });
       expect(canceledSubscription.status).toBe('canceled');
     });
@@ -72,7 +72,7 @@ describe('Phase 4.4: Subscription Validation', () => {
        *   supportUrl: "..."
        * }
        */
-      
+
       const expected = true; // Clear reason provided
       expect(expected).toBe(true);
     });
@@ -89,7 +89,7 @@ describe('Phase 4.4: Subscription Validation', () => {
        * 5. Assert: 403 Forbidden
        * 6. Assert: Message: "Subscription expired. Please renew to continue."
        */
-      
+
       const expiredSubscription = testData.subscription({ status: 'expired' });
       expect(expiredSubscription.status).toBe('expired');
     });
@@ -101,7 +101,7 @@ describe('Phase 4.4: Subscription Validation', () => {
        * - Within grace: Access allowed, UI shows "Renewal Due Soon"
        * - After grace: 403 Forbidden
        */
-      
+
       const gracePeriodDays = 7;
       expect(gracePeriodDays).toBe(7);
     });
@@ -117,7 +117,7 @@ describe('Phase 4.4: Subscription Validation', () => {
        * 4. Assert: Message: "No subscription configured"
        * 5. Assert: Includes sign-up/upgrade CTA
        */
-      
+
       const noSubscription = testData.subscription({ status: null });
       expect(noSubscription.status).toBe(null);
     });
@@ -131,12 +131,12 @@ describe('Phase 4.4: Subscription Validation', () => {
        * 4. Request API during trial
        * 5. Assert: 200 OK (trial = active access)
        */
-      
-      const trialSubscription = testData.subscription({ 
+
+      const trialSubscription = testData.subscription({
         status: 'trial',
-        end_date: new Date(Date.now() + 14 * 24 * 60 * 60 * 1000)
+        end_date: new Date(Date.now() + 14 * 24 * 60 * 60 * 1000),
       });
-      
+
       expect(trialSubscription.status).toBe('trial');
     });
   });
@@ -151,7 +151,7 @@ describe('Phase 4.4: Subscription Validation', () => {
        * 4. If valid: Call next handler
        * 5. If invalid: Return 403 with appropriate message
        */
-      
+
       const expected = true; // DB query confirms status
       expect(expected).toBe(true);
     });
@@ -166,7 +166,7 @@ describe('Phase 4.4: Subscription Validation', () => {
        *
        * Each request MUST query current subscription status
        */
-      
+
       const expected = true; // Per-request check required
       expect(expected).toBe(true);
     });
@@ -181,7 +181,7 @@ describe('Phase 4.4: Subscription Validation', () => {
        *
        * Must check database state
        */
-      
+
       const expected = true; // Server-side validation only
       expect(expected).toBe(true);
     });
@@ -196,11 +196,11 @@ describe('Phase 4.4: Subscription Validation', () => {
        * - 'professional' → 10k SKUs, 10 users, analytics
        * - 'concierge' → Unlimited, custom integrations
        */
-      
+
       const starterSub = testData.subscription({ tier_level: 'starter' });
       const proSub = testData.subscription({ tier_level: 'professional' });
       const conciergeSub = testData.subscription({ tier_level: 'concierge' });
-      
+
       expect(starterSub.tier_level).toBe('starter');
       expect(proSub.tier_level).toBe('professional');
       expect(conciergeSub.tier_level).toBe('concierge');
@@ -216,7 +216,7 @@ describe('Phase 4.4: Subscription Validation', () => {
        *
        * Feature gates re-evaluated with new tier
        */
-      
+
       const expected = true; // Feature gates read from subscription.tier_level
       expect(expected).toBe(true);
     });
@@ -226,20 +226,20 @@ describe('Phase 4.4: Subscription Validation', () => {
     it('Subscription error includes appropriate CTA', async () => {
       /**
        * MESSAGE FORMAT BY STATUS:
-       * 
+       *
        * status: 'canceled' →
        * "Your subscription was canceled. Contact support to reactivate."
-       * 
+       *
        * status: 'expired' →
        * "Your subscription expired on [date]. Renew now to continue."
-       * 
+       *
        * status: null (no subscription) →
        * "Get started with a subscription to access the app."
-       * 
+       *
        * status: 'trial' (trial expired) →
        * "Your trial has ended. Start a subscription."
        */
-      
+
       const expected = true; // Clear next-step guidance
       expect(expected).toBe(true);
     });

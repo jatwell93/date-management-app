@@ -1,5 +1,4 @@
 import React, { useState, useEffect, useCallback } from 'react';
-import * as Sentry from '@sentry/react';
 import {
   BrowserRouter as Router,
   Routes,
@@ -37,9 +36,10 @@ import ErrorBoundary from './components/ErrorBoundary';
 import { synchronizeOfflineData, getPendingInventoryItemCount } from './lib/sync-manager';
 import { offlineSyncService } from './lib/offline-sync';
 import { offlineStorage as _offlineStorage } from './lib/offline-storage';
-import { jwtDecode, JwtPayload } from 'jwt-decode';
 import { ToastProvider } from './components/ui/toast-provider';
 import { HandheldProvider, useHandheldDetectionContext } from './contexts/HandheldContext';
+import { useOrgBootstrap } from './hooks/useOrgBootstrap';
+import { hasPermission, PERMISSIONS } from './constants/roles';
 import { HandheldLayout } from './layouts/HandheldLayout';
 import './globals.css';
 import './styles/handheld.css';
@@ -58,64 +58,7 @@ const checkForceHandheldQueryParam = () => {
   return false;
 };
 
-// Helper function to verify if a token is still valid by checking its expiration
-const _verifyToken = (token: string | null): boolean => {
-  if (!token) return false;
-  try {
-    const decodedToken = jwtDecode<JwtPayload>(token);
-    const currentTime = Date.now() / 1000; // Convert to Unix timestamp
-    // If the token is expired, return false
-    return decodedToken.exp ? decodedToken.exp > currentTime : false;
-  } catch (error) {
-    Sentry.captureException(error, { tags: { feature: 'auth' } });
-    return false; // If there's an error decoding, treat it as invalid
-  }
-};
-
-// Helper function to decode JWT and get role
-const _decodeTokenAndGetRole = (token: string | null): 'Manager' | 'Team Member' | null => {
-  if (!token) return null;
-  try {
-    const decodedToken = jwtDecode<JwtPayload & { role?: string }>(token);
-    const role = decodedToken.role;
-    if (role === 'Manager') {
-      return 'Manager';
-    } else if (role === 'Team Member') {
-      return 'Team Member';
-    }
-    Sentry.captureMessage('Unknown role in session, defaulting to Team Member', {
-      level: 'warning',
-      tags: { feature: 'auth' },
-    });
-    return 'Team Member'; // Default role if not specified
-  } catch (error) {
-    Sentry.captureException(error, { tags: { feature: 'auth' } });
-    return 'Team Member'; // Default to Team Member on error
-  }
-};
-
-const _decodeTokenAndGetUserId = (token: string | null): number | null => {
-  if (!token) return null;
-  try {
-    const decodedToken = jwtDecode<JwtPayload & { userId?: number }>(token);
-    return typeof decodedToken.userId === 'number' ? decodedToken.userId : null;
-  } catch (error) {
-    Sentry.captureException(error, { tags: { feature: 'auth' } });
-    return null;
-  }
-};
-
-// Helper function to decode JWT and get user name
-const _decodeTokenAndGetUserName = (token: string | null): string | null => {
-  if (!token) return null;
-  try {
-    const decodedToken = jwtDecode<JwtPayload & { name?: string; email?: string }>(token);
-    return decodedToken.name || decodedToken.email || null;
-  } catch (error) {
-    Sentry.captureException(error, { tags: { feature: 'auth' } });
-    return null;
-  }
-};
+// Legacy JWT helpers removed - use ClerkAuthProvider context instead
 
 // Component that uses handheld context for conditional rendering
 function AppContent({
@@ -136,6 +79,7 @@ function AppContent({
     handleLogout,
   } = useAuthContext();
   const isLoggedIn = hasSession && isFullySignedIn;
+  const { isBootstrapped, isBootstrapping, bootstrapError } = useOrgBootstrap();
   const { isHandheld } = useHandheldDetectionContext();
   const location = useLocation();
   const navigate = useNavigate();
@@ -188,6 +132,38 @@ function AppContent({
       navigate('/scan', { replace: true });
     }
   }, [isHandheld, isLoggedIn, location.pathname, navigate]);
+
+  // Show loading state while bootstrap is in progress.
+  if (isBootstrapping) {
+    return (
+      <div className="min-h-screen bg-background text-foreground flex items-center justify-center">
+        <div className="text-center">
+          <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-primary mx-auto mb-4"></div>
+          <p className="text-muted-foreground">Setting up your organization...</p>
+        </div>
+      </div>
+    );
+  }
+
+  // Show error state if bootstrap failed.
+  if (!isBootstrapped && !isBootstrapping && isLoggedIn && bootstrapError) {
+    return (
+      <div className="min-h-screen bg-background text-foreground flex items-center justify-center">
+        <div className="text-center">
+          <h1 className="text-2xl font-semibold text-destructive mb-2">Setup Required</h1>
+          <p className="text-muted-foreground mb-4">
+            Please complete your organization setup to continue.
+          </p>
+          <button
+            onClick={() => window.location.reload()}
+            className="px-4 py-2 bg-primary text-primary-foreground rounded-md hover:bg-primary/90 transition-colors"
+          >
+            Retry Setup
+          </button>
+        </div>
+      </div>
+    );
+  }
 
   return (
     <div className="min-h-screen bg-background text-foreground">
@@ -309,7 +285,7 @@ function AppContent({
                       Markdown Calculator
                     </Link>
                   </li>
-                  {userRole === 'Manager' && (
+                  {userRole && hasPermission(userRole, PERMISSIONS.MANAGE_MEMBERS) && (
                     <>
                       <li>
                         <Link to="/user-management" className="hover:opacity-90 transition-opacity">
@@ -327,6 +303,11 @@ function AppContent({
                       <li>
                         <Link to="/csv-upload" className="hover:opacity-90 transition-opacity">
                           CSV Upload
+                        </Link>
+                      </li>
+                      <li>
+                        <Link to="/expiry-import" className="hover:opacity-90 transition-opacity">
+                          Expiry Import
                         </Link>
                       </li>
                       <li>
@@ -435,7 +416,7 @@ function AppContent({
                       Upgrade
                     </Link>
                   </li>
-                  {userRole === 'Manager' && (
+                  {userRole && hasPermission(userRole, PERMISSIONS.MANAGE_MEMBERS) && (
                     <>
                       <li>
                         <Link
@@ -462,6 +443,15 @@ function AppContent({
                           onClick={() => setIsMobileMenuOpen(false)}
                         >
                           CSV Upload
+                        </Link>
+                      </li>
+                      <li>
+                        <Link
+                          to="/expiry-import"
+                          className="block hover:opacity-90 transition-opacity"
+                          onClick={() => setIsMobileMenuOpen(false)}
+                        >
+                          Expiry Import
                         </Link>
                       </li>
                       <li>
@@ -510,16 +500,8 @@ function AppContent({
             <ErrorBoundary>
               <Routes>
                 <Route
-                  path="/login"
-                  element={isLoggedIn ? <Navigate to="/scan" /> : <ClerkSignInPage />}
-                />
-                <Route
                   path="/login/*"
                   element={isLoggedIn ? <Navigate to="/scan" /> : <ClerkSignInPage />}
-                />
-                <Route
-                  path="/sign-up"
-                  element={isLoggedIn ? <Navigate to="/scan" /> : <ClerkSignUpPage />}
                 />
                 <Route
                   path="/sign-up/*"
@@ -556,7 +538,9 @@ function AppContent({
                 <Route
                   path="/settings"
                   element={
-                    isLoggedIn && userRole === 'Manager' ? (
+                    isLoggedIn &&
+                    userRole &&
+                    hasPermission(userRole, PERMISSIONS.MANAGE_MEMBERS) ? (
                       <SettingsPage />
                     ) : isLoggedIn ? (
                       <Navigate to="/scan" />
@@ -568,7 +552,9 @@ function AppContent({
                 <Route
                   path="/settings/*"
                   element={
-                    isLoggedIn && userRole === 'Manager' ? (
+                    isLoggedIn &&
+                    userRole &&
+                    hasPermission(userRole, PERMISSIONS.MANAGE_MEMBERS) ? (
                       <SettingsPage />
                     ) : isLoggedIn ? (
                       <Navigate to="/scan" />
@@ -627,7 +613,7 @@ function AppContent({
                     isLoggedIn ? <MarkdownCalculator token={token} /> : <Navigate to="/login" />
                   }
                 />
-                {userRole === 'Manager' && (
+                {userRole && hasPermission(userRole, PERMISSIONS.MANAGE_MEMBERS) && (
                   <>
                     <Route
                       path="/user-management"
@@ -651,6 +637,16 @@ function AppContent({
                         isLoggedIn ? <CSVUploadPage token={token} /> : <Navigate to="/login" />
                       }
                     />
+                    <Route
+                      path="/expiry-import"
+                      element={
+                        isLoggedIn ? (
+                          <CSVUploadPage token={token} defaultImportType="expiry-list" />
+                        ) : (
+                          <Navigate to="/login" />
+                        )
+                      }
+                    />
                   </>
                 )}
                 <Route path="*" element={<Navigate to="/login" />} />
@@ -663,16 +659,8 @@ function AppContent({
           <ErrorBoundary>
             <Routes>
               <Route
-                path="/login"
-                element={isLoggedIn ? <Navigate to="/scan" /> : <ClerkSignInPage />}
-              />
-              <Route
                 path="/login/*"
                 element={isLoggedIn ? <Navigate to="/scan" /> : <ClerkSignInPage />}
-              />
-              <Route
-                path="/sign-up"
-                element={isLoggedIn ? <Navigate to="/scan" /> : <ClerkSignUpPage />}
               />
               <Route
                 path="/sign-up/*"
@@ -709,7 +697,7 @@ function AppContent({
               <Route
                 path="/settings"
                 element={
-                  isLoggedIn && userRole === 'Manager' ? (
+                  isLoggedIn && userRole && hasPermission(userRole, PERMISSIONS.MANAGE_MEMBERS) ? (
                     <SettingsPage />
                   ) : isLoggedIn ? (
                     <Navigate to="/scan" />
@@ -721,7 +709,7 @@ function AppContent({
               <Route
                 path="/settings/*"
                 element={
-                  isLoggedIn && userRole === 'Manager' ? (
+                  isLoggedIn && userRole && hasPermission(userRole, PERMISSIONS.MANAGE_MEMBERS) ? (
                     <SettingsPage />
                   ) : isLoggedIn ? (
                     <Navigate to="/scan" />
@@ -770,7 +758,7 @@ function AppContent({
                   isLoggedIn ? <MarkdownCalculator token={token} /> : <Navigate to="/login" />
                 }
               />
-              {userRole === 'Manager' && (
+              {userRole && hasPermission(userRole, PERMISSIONS.MANAGE_MEMBERS) && (
                 <>
                   <Route
                     path="/user-management"
@@ -792,6 +780,16 @@ function AppContent({
                     path="/csv-upload"
                     element={
                       isLoggedIn ? <CSVUploadPage token={token} /> : <Navigate to="/login" />
+                    }
+                  />
+                  <Route
+                    path="/expiry-import"
+                    element={
+                      isLoggedIn ? (
+                        <CSVUploadPage token={token} defaultImportType="expiry-list" />
+                      ) : (
+                        <Navigate to="/login" />
+                      )
                     }
                   />
                 </>

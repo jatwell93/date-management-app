@@ -1,4 +1,45 @@
-export const API_BASE_URL = process.env.REACT_APP_API_URL || 'http://localhost:3001';
+const RAW_API_BASE_URL =
+  process.env.REACT_APP_API_URL || process.env.REACT_APP_API_BASE_URL || 'http://localhost:3001';
+
+export const API_BASE_URL = RAW_API_BASE_URL.replace(/\/+$/, '');
+export const API_AUTH_UNAUTHORIZED_EVENT = 'app:auth-unauthorized';
+
+const ABSOLUTE_URL_REGEX = /^https?:\/\//i;
+
+function normalizeEndpoint(endpoint: string): string {
+  if (!endpoint) {
+    return '/';
+  }
+
+  if (ABSOLUTE_URL_REGEX.test(endpoint)) {
+    return endpoint;
+  }
+
+  return endpoint.startsWith('/') ? endpoint : `/${endpoint}`;
+}
+
+export function buildApiUrl(endpoint: string, baseUrl: string = API_BASE_URL): string {
+  const normalizedEndpoint = normalizeEndpoint(endpoint);
+
+  if (ABSOLUTE_URL_REGEX.test(normalizedEndpoint)) {
+    return normalizedEndpoint;
+  }
+
+  const sanitizedBaseUrl = baseUrl.replace(/\/+$/, '');
+  const baseHasApiSuffix = /\/api$/i.test(sanitizedBaseUrl);
+  const endpointHasApiPrefix =
+    normalizedEndpoint === '/api' || normalizedEndpoint.startsWith('/api/');
+
+  let finalEndpoint = normalizedEndpoint;
+
+  if (baseHasApiSuffix && endpointHasApiPrefix) {
+    finalEndpoint = normalizedEndpoint.replace(/^\/api/, '') || '/';
+  } else if (!baseHasApiSuffix && !endpointHasApiPrefix) {
+    finalEndpoint = `/api${normalizedEndpoint}`;
+  }
+
+  return `${sanitizedBaseUrl}${finalEndpoint}`;
+}
 
 class ApiService {
   private baseUrl: string;
@@ -9,7 +50,7 @@ class ApiService {
   }
 
   private async request<T>(endpoint: string, options: RequestInit): Promise<T> {
-    const url = `${this.baseUrl}${endpoint}`;
+    const url = buildApiUrl(endpoint, this.baseUrl);
     const response = await fetch(url, {
       ...options,
       headers: {
@@ -18,15 +59,20 @@ class ApiService {
       },
     });
 
-    // If authentication error (401), log out the user and redirect to login
+    // If authentication error (401), clear local auth state and notify app-level handlers
     if (response.status === 401) {
       // Remove auth token from localStorage
       localStorage.removeItem('authToken');
       localStorage.removeItem('session');
 
-      // Redirect to login page by reloading the window
-      // This will trigger the useEffect in App component to update isLoggedIn state
-      window.location.href = '/login';
+      // Emit a global auth event and let app-level auth handling decide next steps.
+      if (typeof window !== 'undefined') {
+        window.dispatchEvent(
+          new CustomEvent(API_AUTH_UNAUTHORIZED_EVENT, {
+            detail: { endpoint: url, status: response.status },
+          }),
+        );
+      }
 
       throw new Error('Authentication failed. You have been logged out.');
     }

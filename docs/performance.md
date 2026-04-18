@@ -25,26 +25,26 @@
 
 ### Production Targets
 
-| Metric | Target | Rationale |
-|--------|--------|-----------|
-| **API p95 Latency** | <200ms | User-perceived responsiveness |
-| **API p99 Latency** | <500ms | Edge case protection |
-| **Cold Start p95** | <300ms | Workers runtime initialization |
-| **Workers Bundle Size** | <500 KiB | Faster deployments, cold starts |
-| **CSV Processing** | <25s for 10K rows | Workers CPU time limit protection |
-| **Error Rate** | <1% | Reliability threshold |
-| **Uptime** | >99.9% | Three nines availability |
+| Metric                  | Target            | Rationale                         |
+| ----------------------- | ----------------- | --------------------------------- |
+| **API p95 Latency**     | <200ms            | User-perceived responsiveness     |
+| **API p99 Latency**     | <500ms            | Edge case protection              |
+| **Cold Start p95**      | <300ms            | Workers runtime initialization    |
+| **Workers Bundle Size** | <500 KiB          | Faster deployments, cold starts   |
+| **CSV Processing**      | <25s for 10K rows | Workers CPU time limit protection |
+| **Error Rate**          | <1%               | Reliability threshold             |
+| **Uptime**              | >99.9%            | Three nines availability          |
 
 ### Current Status (Development Environment)
 
-| Metric | Current | Target | Status |
-|--------|---------|--------|--------|
-| API p95 Latency | 162.80ms | <200ms | ✅ **18.6% under target** |
-| API p99 Latency | 191.40ms | <500ms | ✅ **61.7% under target** |
-| Cold Start p95 | 295.85ms | <300ms | ✅ **1.4% under target** |
-| Workers Bundle | 298.7 KiB | <500 KiB | ✅ **40.3% buffer** |
-| CSV 10K rows | 0.57s | <25s | ✅ **97.7% under target** |
-| Error Rate | 0% | <1% | ✅ **Zero errors** |
+| Metric          | Current   | Target   | Status                    |
+| --------------- | --------- | -------- | ------------------------- |
+| API p95 Latency | 162.80ms  | <200ms   | ✅ **18.6% under target** |
+| API p99 Latency | 191.40ms  | <500ms   | ✅ **61.7% under target** |
+| Cold Start p95  | 295.85ms  | <300ms   | ✅ **1.4% under target**  |
+| Workers Bundle  | 298.7 KiB | <500 KiB | ✅ **40.3% buffer**       |
+| CSV 10K rows    | 0.57s     | <25s     | ✅ **97.7% under target** |
+| Error Rate      | 0%        | <1%      | ✅ **Zero errors**        |
 
 ---
 
@@ -79,6 +79,7 @@
 **Cold Start Definition:** Time from idle Workers instance (35+ seconds without requests) to first byte returned.
 
 **Test Configuration:**
+
 - Sample size: 10 requests
 - Idle time between samples: 35 seconds (ensures cold start)
 - Endpoint: `/api/health` (minimal database query)
@@ -86,21 +87,22 @@
 
 ### Results
 
-| Metric | Value | Notes |
-|--------|-------|-------|
-| **Runtime Startup** | 19ms | Wrangler deployment time |
-| **Min TTFB** | 101.47ms | Best case cold start |
-| **Median (p50)** | 110.23ms | Typical cold start |
-| **Mean** | 147.53ms | Average includes outliers |
-| **p95** | 295.85ms | 95th percentile |
-| **p99** | 295.85ms | 99th percentile (small sample) |
-| **Max TTFB** | 295.85ms | Worst case observed |
+| Metric              | Value    | Notes                          |
+| ------------------- | -------- | ------------------------------ |
+| **Runtime Startup** | 19ms     | Wrangler deployment time       |
+| **Min TTFB**        | 101.47ms | Best case cold start           |
+| **Median (p50)**    | 110.23ms | Typical cold start             |
+| **Mean**            | 147.53ms | Average includes outliers      |
+| **p95**             | 295.85ms | 95th percentile                |
+| **p99**             | 295.85ms | 99th percentile (small sample) |
+| **Max TTFB**        | 295.85ms | Worst case observed            |
 
 ### Analysis
 
 ✅ **Target Met:** p95 cold start (295.85ms) is 1.4% under 300ms target.
 
 **Variance Factors:**
+
 - Edge routing latency (client → nearest Cloudflare POP)
 - Regional database connection establishment (Hyperdrive handshake)
 - Network jitter and DNS resolution time
@@ -117,20 +119,22 @@
 
 ### Optimization Results
 
-| Stage | Raw Size | Gzip Size | Change |
-|-------|----------|-----------|--------|
-| **Before Minification** | 573.6 KiB | - | Baseline |
-| **After Minification** | 298.7 KiB | - | **-47.9%** |
-| **CI Limit** | 500 KiB | - | 40.3% buffer |
+| Stage                   | Raw Size  | Gzip Size | Change       |
+| ----------------------- | --------- | --------- | ------------ |
+| **Before Minification** | 573.6 KiB | -         | Baseline     |
+| **After Minification**  | 298.7 KiB | -         | **-47.9%**   |
+| **CI Limit**            | 500 KiB   | -         | 40.3% buffer |
 
 ### Implementation
 
 **Build Configuration (`workers/build.js`):**
+
 ```javascript
-minify: true  // esbuild minification enabled
+minify: true; // esbuild minification enabled
 ```
 
 **CI Enforcement:**
+
 - Workflow: `.github/workflows/workers-bundle-size-check.yml`
 - Trigger: Pull requests and pushes affecting `workers/**`
 - Hard Limit: 512,000 bytes (500 KiB)
@@ -141,6 +145,7 @@ minify: true  // esbuild minification enabled
 ✅ **Bundle Size Target Met:** 298.7 KiB (40.3% under 500 KiB limit)
 
 **Benefits:**
+
 - **Faster Deployments:** Smaller bundles upload faster to Cloudflare edge
 - **Improved Cold Starts:** Less code to parse and initialize
 - **Cost Efficiency:** Reduced bandwidth for Workers script distribution
@@ -160,6 +165,7 @@ minify: true  // esbuild minification enabled
 **Compression Strategy:** Conditional gzip based on client capabilities
 
 **Decision Logic:**
+
 1. ✅ Client sends `Accept-Encoding: gzip` header
 2. ✅ Response is JSON content type
 3. ✅ Response size >1KB (threshold for compression benefit)
@@ -171,6 +177,7 @@ minify: true  // esbuild minification enabled
 ### Validation Results
 
 **Test Commands:**
+
 ```bash
 # With gzip support
 curl -I -H "Accept-Encoding: gzip" \
@@ -183,22 +190,24 @@ curl -I \
 
 **Observed Behavior:**
 
-| Client Request | Server Response | Status |
-|----------------|-----------------|--------|
-| `Accept-Encoding: gzip` | `Content-Encoding: gzip` | ✅ Compressed |
-| No encoding header | No compression | ✅ Uncompressed |
-| `Accept-Encoding: deflate` | No compression | ✅ Only gzip supported |
+| Client Request             | Server Response          | Status                 |
+| -------------------------- | ------------------------ | ---------------------- |
+| `Accept-Encoding: gzip`    | `Content-Encoding: gzip` | ✅ Compressed          |
+| No encoding header         | No compression           | ✅ Uncompressed        |
+| `Accept-Encoding: deflate` | No compression           | ✅ Only gzip supported |
 
 ### Impact
 
 ✅ **Compression Working:** Reduces JSON payload size by ~60-80% for supported clients.
 
 **Typical Compression Ratios:**
+
 - Small responses (<1KB): Not compressed (overhead outweighs benefit)
 - Medium responses (1-10KB): ~50-70% reduction
 - Large responses (>10KB): ~70-80% reduction
 
 **Trade-offs:**
+
 - **CPU Cost:** Minimal (~1-2ms compression time)
 - **Bandwidth Savings:** Significant (60-80% for JSON)
 - **Compatibility:** Degrades gracefully for non-supporting clients
@@ -216,12 +225,14 @@ curl -I \
 **Tool:** Artillery 2.0.23 (Node.js load testing framework)
 
 **Test Scenario:**
+
 - Endpoint: `/api/health` (lightweight authentication-free endpoint)
 - Concurrency: 100 concurrent requests
 - Method: HTTP GET
 - Execution: Bash curl loop (fallback from Artillery due to terminal compatibility)
 
 **Scripts Created:**
+
 - `artillery.yml` - Full load test configuration with multiple scenarios
 - `artillery-quick.yml` - Quick health check test for CI/CD
 - `artillery-processor.js` - Custom metrics processor
@@ -230,28 +241,30 @@ curl -I \
 
 ### Results (100 Samples)
 
-| Percentile | Latency | Target | Status |
-|------------|---------|--------|--------|
-| **Minimum** | 99.69ms | - | Best case |
-| **Mean** | 130.43ms | - | Average |
-| **Median (p50)** | 132.56ms | - | Typical request |
-| **p75** | 141.11ms | - | Good performance |
-| **p90** | 149.48ms | - | Excellent |
-| **p95** | 162.80ms | **<200ms** | ✅ **18.6% under target** |
-| **p99** | 191.40ms | <500ms | ✅ **61.7% under target** |
-| **Maximum** | 191.40ms | - | Worst case |
+| Percentile       | Latency  | Target     | Status                    |
+| ---------------- | -------- | ---------- | ------------------------- |
+| **Minimum**      | 99.69ms  | -          | Best case                 |
+| **Mean**         | 130.43ms | -          | Average                   |
+| **Median (p50)** | 132.56ms | -          | Typical request           |
+| **p75**          | 141.11ms | -          | Good performance          |
+| **p90**          | 149.48ms | -          | Excellent                 |
+| **p95**          | 162.80ms | **<200ms** | ✅ **18.6% under target** |
+| **p99**          | 191.40ms | <500ms     | ✅ **61.7% under target** |
+| **Maximum**      | 191.40ms | -          | Worst case                |
 
 ### Analysis
 
 ✅ **Load Test PASSED:** p95 latency (162.80ms) well under 200ms SLA.
 
 **Key Observations:**
+
 1. **Tight Distribution:** ~90ms range (99.69ms - 191.40ms) indicates stable performance
 2. **No Error Spikes:** 0% error rate across 100 concurrent requests
 3. **Consistent Throughput:** No degradation at 100 concurrent load
 4. **Healthy Margin:** 18.6% buffer under p95 target, 61.7% under p99 target
 
 **Scalability Confidence:**
+
 - Workers handle 100 concurrent requests without degradation
 - Hyperdrive connection pooling effective (no connection exhaustion)
 - Neon Serverless Postgres responsive under load
@@ -260,6 +273,7 @@ curl -I \
 ### Load Testing Scripts
 
 **npm Commands:**
+
 ```bash
 npm run test:load          # Full Artillery test suite
 npm run test:load:quick    # Quick health check (20 users, 30s)
@@ -267,6 +281,7 @@ npm run test:load:report   # Generate HTML report
 ```
 
 **Fallback Method (if Artillery execution issues):**
+
 ```bash
 # Concurrent curl requests with latency capture
 for i in {1..100}; do
@@ -292,10 +307,12 @@ node analyze-load-test.js
 ### Test Methodology
 
 **Test Files:**
+
 - Real pharmacy data: 7,649 rows (production dataset)
 - Synthetic data: 1,000 / 5,000 / 10,000 rows (scalability testing)
 
 **Measured Metrics:**
+
 - Parse time (seconds)
 - Throughput (rows/second)
 - Memory delta (heap usage increase)
@@ -303,12 +320,12 @@ node analyze-load-test.js
 
 ### Results
 
-| Dataset | Rows | Parse Time | Throughput | Memory Delta | Status |
-|---------|------|------------|------------|--------------|--------|
-| **Real Pharmacy** | 7,649 | 1.82s | 4,199 rows/s | ~2MB | ✅ Production validated |
-| **Test 1K** | 1,000 | 0.17s | 5,800 rows/s | <1MB | ✅ Fast |
-| **Test 5K** | 5,000 | 0.59s | 8,448 rows/s | ~2MB | ✅ Linear scaling |
-| **Test 10K** | 10,000 | 0.57s | 17,410 rows/s | ~4MB | ✅ **Target achieved** |
+| Dataset           | Rows   | Parse Time | Throughput    | Memory Delta | Status                  |
+| ----------------- | ------ | ---------- | ------------- | ------------ | ----------------------- |
+| **Real Pharmacy** | 7,649  | 1.82s      | 4,199 rows/s  | ~2MB         | ✅ Production validated |
+| **Test 1K**       | 1,000  | 0.17s      | 5,800 rows/s  | <1MB         | ✅ Fast                 |
+| **Test 5K**       | 5,000  | 0.59s      | 8,448 rows/s  | ~2MB         | ✅ Linear scaling       |
+| **Test 10K**      | 10,000 | 0.57s      | 17,410 rows/s | ~4MB         | ✅ **Target achieved**  |
 
 **Throughput Consistency:** 16.89% CV (coefficient of variation) - Excellent stability
 
@@ -317,6 +334,7 @@ node analyze-load-test.js
 ✅ **10K Row Target Met:** 0.57s parsing time is **97.7% under 25s target**.
 
 **Workers CPU Time Protection:**
+
 - Workers have 30-second CPU time limit
 - 10K rows at 0.57s = **1.9% of CPU budget**
 - Safety margin: **93% buffer** for database operations, validation, API overhead
@@ -324,16 +342,19 @@ node analyze-load-test.js
 ### CSV UX Enhancements
 
 **Pre-Upload Validation:**
+
 - Column name validator with fuzzy matching suggestions
 - Row count estimation with >25,000 row warning
 - Utility: `frontend/src/utils/csvValidator.ts`
 
 **Upload Result Enhancements:**
+
 - Backend column summary tracking: `columnsUsed`, `columnsIgnored`
 - User-friendly validation messages
 - Enhanced `CSVParseResult` interface in backend
 
 **Benefits:**
+
 - Prevents failed uploads due to column name typos
 - Warns users about excessively large files before upload
 - Provides actionable feedback on ignored columns
@@ -347,6 +368,7 @@ node analyze-load-test.js
 **Error Handling:** Validation errors caught early (before database writes).
 
 **Optimization Opportunities:**
+
 1. **Batch Inserts:** Use Prisma `createMany()` for bulk operations
 2. **Background Processing:** Move long CSV parsing to queue for >10K rows
 3. **Progressive Response:** Stream parsing results back to client
@@ -358,18 +380,21 @@ node analyze-load-test.js
 ### Active Monitoring
 
 **Sentry Performance Monitoring:**
+
 - **Endpoint tracking:** All API routes instrumented
 - **Transaction sampling:** 100% in development, configurable in production
 - **Slow query alerts:** Database queries >200ms flagged
 - **Error tracking:** Automatic error capture with stack traces
 
 **Cloudflare Analytics:**
+
 - **Request volume:** Real-time traffic graphs
 - **Status code distribution:** 2xx/4xx/5xx breakdown
 - **Edge response time:** p50/p95/p99 latency
 - **Geographic distribution:** Requests by region
 
 **Neon Monitoring:**
+
 - **Connection pool:** Active connections, wait time
 - **Query performance:** Slow query log (configurable threshold)
 - **Storage usage:** Database size, growth rate
@@ -378,16 +403,19 @@ node analyze-load-test.js
 ### Alert Configuration
 
 **Sentry Alerts:**
+
 1. **Error Rate >1%:** Immediate notification (Slack/email)
 2. **p95 Latency >500ms:** Warning threshold (15-minute window)
 3. **Database Query >1s:** Slow query alert (investigate optimization)
 
 **Cloudflare Alerts:**
+
 1. **5xx Error Rate >0.1%:** Critical severity (potential outage)
 2. **Origin Connection Failures:** Hyperdrive/Neon connection issues
 3. **High Bandwidth Usage:** Unexpected traffic spike
 
 **Neon Alerts:**
+
 1. **Connection Pool Exhaustion:** Max connections reached
 2. **Storage Threshold:** Approaching plan limits (configurable)
 3. **Compute Autoscaling:** Unexpected scale-up events
@@ -395,11 +423,13 @@ node analyze-load-test.js
 ### Monitoring Dashboard
 
 **Recommended Setup:**
+
 - **Primary:** Sentry Performance dashboard (application-level metrics)
 - **Secondary:** Cloudflare Analytics (infrastructure-level metrics)
 - **Tertiary:** Neon Console (database-level metrics)
 
 **Key Metrics to Watch:**
+
 1. **Apdex Score:** User satisfaction metric (T=200ms threshold)
 2. **Throughput:** Requests per minute
 3. **Error Rate:** Percentage of failed requests
@@ -465,6 +495,7 @@ node analyze-load-test.js
 Before deploying to production, run the following performance validation:
 
 #### 1. Bundle Size Check
+
 ```bash
 # Automated via CI workflow
 npm run build:workers
@@ -476,6 +507,7 @@ ls -lh workers/dist/index.js
 ```
 
 #### 2. Cold Start Measurement
+
 ```bash
 # Script: Measure cold start latency (10 samples)
 ./scripts/measure-cold-start.sh https://your-workers-url.workers.dev
@@ -484,6 +516,7 @@ ls -lh workers/dist/index.js
 ```
 
 #### 3. Load Testing
+
 ```bash
 # Quick smoke test (20 users, 30 seconds)
 npm run test:load:quick
@@ -498,6 +531,7 @@ node analyze-load-test.js
 ```
 
 #### 4. CSV Processing Validation
+
 ```bash
 # Upload test file (10K rows)
 # Measure parse time via API response logs
@@ -506,6 +540,7 @@ node analyze-load-test.js
 ```
 
 #### 5. Compression Verification
+
 ```bash
 # Test gzip compression
 curl -I -H "Accept-Encoding: gzip" https://your-workers-url.workers.dev/api/health | grep "Content-Encoding"
@@ -516,21 +551,25 @@ curl -I -H "Accept-Encoding: gzip" https://your-workers-url.workers.dev/api/heal
 ### Post-Deployment Monitoring
 
 **First Hour:**
+
 - Monitor Sentry for errors and performance regressions
 - Check Cloudflare Analytics for traffic patterns
 - Verify Neon connection pool healthy
 
 **First 24 Hours:**
+
 - Compare latency percentiles to baseline (±20% acceptable)
 - Check error rate <1%
 - Validate cost projections (Cloudflare + Neon usage)
 
 **First Week:**
+
 - Analyze slow query patterns in Neon
 - Identify optimization opportunities
 - Tune alert thresholds based on actual traffic
 
 **Quarterly:**
+
 - Run load tests to detect performance regressions
 - Review infrastructure costs and optimize
 - Update baselines with current metrics
@@ -542,11 +581,13 @@ curl -I -H "Accept-Encoding: gzip" https://your-workers-url.workers.dev/api/heal
 ### Artillery (Load Testing)
 
 **Installation:**
+
 ```bash
 npm install -D artillery
 ```
 
 **Usage:**
+
 ```bash
 # Quick health check
 artillery run artillery-quick.yml
@@ -559,6 +600,7 @@ artillery report results.json --output report.html
 ```
 
 **Configuration Files:**
+
 - `artillery.yml` - Full test configuration (warm-up, ramp-up, sustained, peak phases)
 - `artillery-quick.yml` - Fast smoke test
 - `artillery-processor.js` - Custom scenario hooks
@@ -571,6 +613,7 @@ artillery report results.json --output report.html
 **Purpose:** Calculate percentiles from curl latency logs.
 
 **Usage:**
+
 ```bash
 # Capture latencies from concurrent curl requests
 for i in {1..100}; do
@@ -588,6 +631,7 @@ node analyze-load-test.js
 ### Manual Testing
 
 **Cold Start Measurement:**
+
 ```bash
 # Wait 35+ seconds for idle Workers instance
 sleep 40
@@ -598,6 +642,7 @@ curl -w "TTFB: %{time_starttransfer}s\n" -s -o /dev/null \
 ```
 
 **Bundle Size Check:**
+
 ```bash
 # Build Workers bundle
 npm run build:workers
@@ -608,6 +653,7 @@ wc -c workers/dist/index.js
 ```
 
 **Compression Verification:**
+
 ```bash
 # With gzip support
 curl -I -H "Accept-Encoding: gzip" https://your-workers-url.workers.dev/api/health
@@ -623,6 +669,7 @@ curl -I https://your-workers-url.workers.dev/api/health
 ### CI/CD Integration
 
 **Automated Checks:**
+
 1. **Bundle Size Gate** (`.github/workflows/workers-bundle-size-check.yml`)
    - Runs on: Pull requests, pushes to `workers/**`
    - Enforces: <500 KiB raw bundle size
@@ -641,6 +688,7 @@ curl -I https://your-workers-url.workers.dev/api/health
 ### Local Development
 
 **Pre-Commit Checks:**
+
 ```bash
 # Bundle size
 npm run build:workers && ls -lh workers/dist/index.js
@@ -656,6 +704,7 @@ npm test
 ```
 
 **Performance Profiling:**
+
 - Use `console.time()` / `console.timeEnd()` for function timing
 - Sentry transaction spans for request breakdown
 - Neon query logs for database performance
@@ -671,11 +720,13 @@ npm test
 **Sample Size:** 10 requests
 
 **Raw Latencies (seconds):**
+
 ```
 0.10147, 0.10235, 0.12458, 0.11023, 0.29585, 0.10598, 0.11247, 0.10823, 0.11456, 0.12356
 ```
 
 **Statistical Analysis:**
+
 - Min: 101.47ms
 - p50: 110.23ms
 - Mean: 147.53ms
@@ -686,12 +737,14 @@ npm test
 
 **Date:** March 7, 2026  
 **Before:**
+
 ```bash
 $ ls -lh workers/dist/index.js
 573.6 KiB
 ```
 
 **After:**
+
 ```bash
 $ ls -lh workers/dist/index.js
 298.7 KiB  # 47.9% reduction
@@ -703,6 +756,7 @@ $ ls -lh workers/dist/index.js
 
 **Date:** March 7, 2026  
 **With gzip:**
+
 ```bash
 $ curl -I -H "Accept-Encoding: gzip" https://date-management-api-dev.date-management-app.workers.dev/api/health
 Content-Encoding: gzip
@@ -710,6 +764,7 @@ Vary: Accept-Encoding
 ```
 
 **Without gzip:**
+
 ```bash
 $ curl -I https://date-management-api-dev.date-management-app.workers.dev/api/health
 # No Content-Encoding header (uncompressed)
@@ -722,6 +777,7 @@ $ curl -I https://date-management-api-dev.date-management-app.workers.dev/api/he
 **Endpoint:** `/api/health`
 
 **Raw Output (analyze-load-test.js):**
+
 ```
 Load Test Results (100 concurrent requests)
 ==================================================
@@ -744,12 +800,14 @@ p99:         191.40 ms
 **Test Data:** Real pharmacy CSV (7,649 rows)
 
 **Results:**
+
 - Parse time: 1.82s
 - Throughput: 4,199 rows/sec
 - Memory delta: ~2MB
 - Validation: All columns mapped successfully
 
 **Scalability Tests:**
+
 - 1,000 rows: 0.17s (5,800 rows/s)
 - 5,000 rows: 0.59s (8,448 rows/s)
 - 10,000 rows: 0.57s (17,410 rows/s) ✅
@@ -766,6 +824,7 @@ p99:         191.40 ms
 **Next Review:** June 7, 2026
 
 **Update Triggers:**
+
 - Production deployment (Phase 15)
 - Infrastructure changes (database, Workers, R2)
 - Performance regressions or improvements
@@ -773,6 +832,7 @@ p99:         191.40 ms
 - SLA adjustments
 
 **Related Documentation:**
+
 - [Monitoring & Alerting](./monitoring.md)
 - [Cloudflare Infrastructure Setup](./cloudflare-setup.md)
 - [Testing Guide](./TESTING.md)

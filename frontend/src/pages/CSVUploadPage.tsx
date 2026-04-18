@@ -15,23 +15,44 @@ import {
   formatColumnValidationError,
   type ColumnValidationResult,
   type RowEstimate,
+  type UploadImportType,
 } from '../utils/csvValidator';
+import { buildApiUrl } from '../lib/api.service';
+
+interface RejectedRowDetail {
+  rowNumber: number;
+  rawValues: {
+    sku: string;
+    itemDescription: string;
+    usedByDate: string;
+  };
+  reason: string;
+  reasonCode?: string;
+}
 
 interface UploadResponse {
   success: boolean;
   message: string;
   importedCount?: number;
   updatedCount?: number;
+  mergedCount?: number;
+  rejectedCount?: number;
   errorCount?: number;
   skippedCount?: number;
   processedCount?: number;
   totalCount?: number;
+  rejectedRows?: RejectedRowDetail[];
   errors?: string[];
   columnsUsed?: string[];
   columnsIgnored?: number;
 }
 
-export const CSVUploadPage: React.FC<{ token: string | null }> = ({ token }) => {
+export const CSVUploadPage: React.FC<{
+  token: string | null;
+  defaultImportType?: UploadImportType;
+}> = ({ token, defaultImportType = 'product-catalog' }) => {
+  const fileInputId = 'csv-upload-file-input';
+  const [importType, setImportType] = useState<UploadImportType>(defaultImportType);
   const [selectedFile, setSelectedFile] = useState<File | null>(null);
   const [isUploading, setIsUploading] = useState(false);
   const [uploadResult, setUploadResult] = useState<UploadResponse | null>(null);
@@ -94,6 +115,90 @@ export const CSVUploadPage: React.FC<{ token: string | null }> = ({ token }) => 
     }
 
     return null;
+  };
+
+  const isExpiryImport = importType === 'expiry-list';
+
+  const toUploadResultFromSummary = (summary: Record<string, unknown>): UploadResponse => {
+    return {
+      success: true,
+      message: 'File uploaded and processed successfully',
+      importedCount: Number(summary.importedCount ?? 0),
+      updatedCount: Number(summary.updatedCount ?? 0),
+      mergedCount: Number(summary.mergedCount ?? summary.updatedCount ?? 0),
+      rejectedCount: Number(summary.rejectedCount ?? summary.skippedCount ?? 0),
+      errorCount: Number(summary.errorCount ?? 0),
+      skippedCount: Number(summary.skippedCount ?? summary.rejectedCount ?? 0),
+      processedCount: Number(summary.rowsProcessed ?? summary.processedCount ?? 0),
+      totalCount: Number(summary.rowsTotal ?? summary.totalCount ?? 0),
+      columnsUsed: Array.isArray(summary.columnsUsed)
+        ? (summary.columnsUsed as string[])
+        : undefined,
+      columnsIgnored:
+        typeof summary.columnsIgnored === 'number' ? (summary.columnsIgnored as number) : undefined,
+      rejectedRows: Array.isArray(summary.rejectedRows)
+        ? (summary.rejectedRows as RejectedRowDetail[])
+        : undefined,
+    };
+  };
+
+  const triggerFileDownload = (blob: Blob, filename: string) => {
+    const url = URL.createObjectURL(blob);
+    const anchor = document.createElement('a');
+    anchor.href = url;
+    anchor.download = filename;
+    document.body.appendChild(anchor);
+    anchor.click();
+    anchor.remove();
+    URL.revokeObjectURL(url);
+  };
+
+  const downloadExpiryTemplate = (format: 'csv' | 'xlsx' | 'xls') => {
+    const templateRows = [
+      ['SKU', 'Item Description', 'Used-By Date', 'Department'],
+      ['1001', 'Sample Vitamin C 500mg', '12/12/26', 'Vitamins'],
+      ['1002', 'Sample Moisturiser 200ml', '12/2026', 'Skincare'],
+    ];
+
+    const guidanceRows = [
+      ['Guidance', 'Value'],
+      ['Required columns', 'SKU, Used-By Date'],
+      ['Optional columns', 'Item Description, Department'],
+      ['Accepted date formats', 'dd/mm/yy, dd/mm/yyyy, mm/yy, mm/yyyy, mm-yy, mm-yyyy'],
+      ['Rejected examples', '12/12 (ambiguous year), Dec/2026 (month names unsupported)'],
+      ['Normalization rule', 'Month-year formats normalize to the last day of the month'],
+    ];
+
+    if (format === 'csv') {
+      const csvBody = templateRows
+        .map((row) => row.map((cell) => `"${String(cell).replace(/"/g, '""')}"`).join(','))
+        .join('\n');
+      const csvGuidance = guidanceRows.map((row) => `# ${row[0]}: ${row[1]}`).join('\n');
+      const csvContent = `${csvBody}\n\n${csvGuidance}\n`;
+
+      triggerFileDownload(
+        new Blob([csvContent], { type: 'text/csv;charset=utf-8' }),
+        'expiry-import-template.csv',
+      );
+      return;
+    }
+
+    const workbook = XLSX.utils.book_new();
+    const templateSheet = XLSX.utils.aoa_to_sheet(templateRows);
+    const guidanceSheet = XLSX.utils.aoa_to_sheet(guidanceRows);
+    XLSX.utils.book_append_sheet(workbook, templateSheet, 'Template');
+    XLSX.utils.book_append_sheet(workbook, guidanceSheet, 'Guidance');
+
+    const binary = XLSX.write(workbook, {
+      bookType: format,
+      type: 'array',
+    });
+
+    const mimeType =
+      format === 'xlsx'
+        ? 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet'
+        : 'application/vnd.ms-excel';
+    triggerFileDownload(new Blob([binary], { type: mimeType }), `expiry-import-template.${format}`);
   };
 
   const normalizeUploadFile = async (
@@ -181,9 +286,9 @@ export const CSVUploadPage: React.FC<{ token: string | null }> = ({ token }) => 
 
       // Validate columns (async)
       try {
-        const validation = await validateCSVColumns(file);
+        const validation = await validateCSVColumns(file, importType);
         setColumnValidation(validation);
-      } catch (error) {
+      } catch (_error) {
         // Non-blocking - will be caught during upload
       }
 
@@ -231,39 +336,53 @@ export const CSVUploadPage: React.FC<{ token: string | null }> = ({ token }) => 
   };
 
   const pollUploadStatus = async (key: string) => {
-    const apiUrl = process.env.REACT_APP_API_URL || '';
     const maxAttempts = 30; // 30 seconds max
     const pollInterval = 1000; // 1 second
+    const nonRetryableStatusCodes = new Set([400, 401, 403, 404]);
 
     for (let attempt = 0; attempt < maxAttempts; attempt++) {
       try {
         // URL encode the key to handle slashes in the path
         const encodedKey = encodeURIComponent(key);
-        const statusRes = await fetch(`${apiUrl}/upload/status/${encodedKey}`, {
+        const statusRes = await fetch(buildApiUrl(`/upload/status/${encodedKey}`), {
           headers: {
             Authorization: `Bearer ${token}`,
           },
         });
 
         if (!statusRes.ok) {
-          throw new Error('Failed to get upload status');
+          if (nonRetryableStatusCodes.has(statusRes.status)) {
+            let statusErrorMessage = '';
+
+            try {
+              const errorBody = (await statusRes.json()) as {
+                error?: unknown;
+                message?: unknown;
+              };
+              const apiMessage =
+                typeof errorBody.error === 'string'
+                  ? errorBody.error
+                  : typeof errorBody.message === 'string'
+                    ? errorBody.message
+                    : '';
+
+              if (apiMessage) {
+                statusErrorMessage = `: ${apiMessage}`;
+              }
+            } catch (_parseError) {
+              // Ignore malformed/empty error payloads and fall back to generic message.
+            }
+
+            throw new Error(`Processing failed${statusErrorMessage}`);
+          }
+
+          throw new Error(`Failed to get upload status (HTTP ${statusRes.status})`);
         }
 
         const statusData = await statusRes.json();
 
-        if (statusData.status === 'complete') {
-          setUploadResult({
-            success: true,
-            message: 'File uploaded and processed successfully',
-            importedCount: statusData.importedCount,
-            updatedCount: statusData.updatedCount,
-            errorCount: statusData.errorCount,
-            skippedCount: statusData.skippedCount,
-            processedCount: statusData.rowsProcessed,
-            totalCount: statusData.rowsTotal,
-            columnsUsed: statusData.columnsUsed,
-            columnsIgnored: statusData.columnsIgnored,
-          });
+        if (statusData.status === 'complete' || statusData.status === 'completed') {
+          setUploadResult(toUploadResultFromSummary(statusData));
           return;
         } else if (statusData.status === 'failed') {
           setUploadResult({
@@ -280,7 +399,11 @@ export const CSVUploadPage: React.FC<{ token: string | null }> = ({ token }) => 
         // Wait before next poll
         await new Promise((resolve) => setTimeout(resolve, pollInterval));
       } catch (error) {
-        // Continue polling on error
+        if (error instanceof Error && error.message.startsWith('Processing failed')) {
+          throw error;
+        }
+
+        // Continue polling on transient errors.
       }
     }
 
@@ -329,9 +452,9 @@ export const CSVUploadPage: React.FC<{ token: string | null }> = ({ token }) => 
 
       // 1. Initiate Upload
       setProgressMessage('Initiating upload...');
-      const apiUrl = process.env.REACT_APP_API_URL || '';
+      const uploadBaseUrl = buildApiUrl('/upload');
 
-      const initiateRes = await fetch(`${apiUrl}/upload/initiate`, {
+      const initiateRes = await fetch(`${uploadBaseUrl}/initiate`, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
@@ -341,6 +464,7 @@ export const CSVUploadPage: React.FC<{ token: string | null }> = ({ token }) => 
           filename: fileNameToUpload,
           fileSize: fileToUpload.size,
           contentType: fileToUpload.type,
+          importType,
         }),
       });
 
@@ -369,11 +493,9 @@ export const CSVUploadPage: React.FC<{ token: string | null }> = ({ token }) => 
         if (strategy === 'direct') {
           const formData = new FormData();
           formData.append('file', fileToUpload);
+          formData.append('importType', importType);
 
-          // Use key in the URL path: /upload/direct/:key
-          const directUrl = uploadUrl.startsWith('http')
-            ? `${uploadUrl}/${encodeURIComponent(key)}`
-            : `${apiUrl}/upload/direct/${encodeURIComponent(key)}`;
+          const directUrl = uploadUrl.startsWith('http') ? uploadUrl : `${uploadBaseUrl}/direct`;
 
           const directRes = await uploadWithRetry(directUrl, {
             method: 'POST',
@@ -389,6 +511,22 @@ export const CSVUploadPage: React.FC<{ token: string | null }> = ({ token }) => 
 
           const directData = await directRes.json();
           uploadKey = directData.key || key; // Use key from response if available
+
+          if (isExpiryImport && directData.importedCount !== undefined) {
+            setUploadResult(toUploadResultFromSummary(directData));
+            setUploadProgress(0);
+            setProgressMessage('');
+
+            logUploadMetric('upload_complete', {
+              fileSize: fileToUpload.size,
+              durationMs: Date.now() - uploadStartTime,
+              result: 'success',
+              method: strategy,
+              fileType: fileToUpload.type,
+              importType,
+            });
+            return;
+          }
         } else {
           // Presigned PUT
           await uploadWithRetry(uploadUrl, {
@@ -408,16 +546,33 @@ export const CSVUploadPage: React.FC<{ token: string | null }> = ({ token }) => 
       // 3. Complete (Trigger Processing)
       if (strategy === 'presigned') {
         setProgressMessage('Processing file...');
-        const completeRes = await fetch(`${apiUrl}/upload/complete`, {
+        const completeRes = await fetch(`${uploadBaseUrl}/complete`, {
           method: 'POST',
           headers: {
             'Content-Type': 'application/json',
             Authorization: `Bearer ${token}`,
           },
-          body: JSON.stringify({ key: uploadKey }),
+          body: JSON.stringify({ key: uploadKey, importType }),
         });
 
         if (!completeRes.ok) throw new Error('Processing failed');
+
+        const completeData = await completeRes.json();
+        if (isExpiryImport && completeData.importedCount !== undefined) {
+          setUploadResult(toUploadResultFromSummary(completeData));
+
+          logUploadMetric('upload_complete', {
+            fileSize: fileToUpload.size,
+            durationMs: Date.now() - uploadStartTime,
+            result: 'success',
+            method: strategy,
+            fileType: fileToUpload.type,
+            importType,
+          });
+          setUploadProgress(0);
+          setProgressMessage('');
+          return;
+        }
       }
 
       // Poll for processing completion
@@ -429,6 +584,7 @@ export const CSVUploadPage: React.FC<{ token: string | null }> = ({ token }) => 
         result: 'success',
         method: strategy,
         fileType: fileToUpload.type,
+        importType,
       });
       setUploadProgress(0);
       setProgressMessage('');
@@ -453,6 +609,7 @@ export const CSVUploadPage: React.FC<{ token: string | null }> = ({ token }) => 
         result: 'failure',
         method: 'unknown',
         errorCategory: categorizeUploadError(error),
+        importType,
       });
     } finally {
       setIsUploading(false);
@@ -470,45 +627,146 @@ export const CSVUploadPage: React.FC<{ token: string | null }> = ({ token }) => 
     setRowEstimate(null);
   };
 
+  const handleImportTypeChange = (nextType: UploadImportType) => {
+    if (nextType === importType) {
+      return;
+    }
+
+    setImportType(nextType);
+    handleReset();
+  };
+
+  const previewHeaders = filePreview[0] || [];
+  const previewRows = filePreview.slice(1);
+
   return (
     <div className="max-w-4xl mx-auto">
-      <h1 className="text-2xl font-bold mb-6">Product Upload (CSV/XLSX/XLS)</h1>
+      <h1 className="text-2xl font-bold mb-6">
+        {isExpiryImport ? 'Expiry List Import (CSV/XLSX/XLS)' : 'Product Upload (CSV/XLSX/XLS)'}
+      </h1>
 
       <div className="bg-white p-6 rounded-lg shadow-md">
+        <div className="mb-5 flex flex-wrap gap-2">
+          <button
+            type="button"
+            onClick={() => handleImportTypeChange('product-catalog')}
+            className={`px-3 py-2 rounded-md text-sm font-medium transition-colors ${
+              importType === 'product-catalog'
+                ? 'bg-inventory-primary-600 text-white'
+                : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
+            }`}
+          >
+            Product Upload
+          </button>
+          <button
+            type="button"
+            onClick={() => handleImportTypeChange('expiry-list')}
+            className={`px-3 py-2 rounded-md text-sm font-medium transition-colors ${
+              importType === 'expiry-list'
+                ? 'bg-inventory-primary-600 text-white'
+                : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
+            }`}
+          >
+            Expiry List Import
+          </button>
+        </div>
+
         <p className="mb-4 text-gray-700">
-          Upload a CSV, XLSX, or XLS file containing product information (SKU, Name, Cost, Barcode)
-          to update your product database.
+          {isExpiryImport
+            ? 'Upload a CSV, XLSX, or XLS file containing SKU, optional item description, and used-by date data to import expiry list records.'
+            : 'Upload a CSV, XLSX, or XLS file containing product information (SKU, Name, Cost, Barcode) to update your product database.'}
         </p>
 
         {/* Column name and format guidelines */}
         <div className="mb-6 p-4 bg-inventory-primary-50 rounded-md">
           <h3 className="text-lg font-medium text-inventory-primary-800 mb-2">Format Guidelines</h3>
-          <ul className="list-disc pl-5 space-y-1 text-sm text-inventory-primary-700">
-            <li>
-              Required columns: <code className="bg-inventory-primary-100 px-1 rounded">SKU</code>,{' '}
-              <code className="bg-inventory-primary-100 px-1 rounded">Name</code>,{' '}
-              <code className="bg-inventory-primary-100 px-1 rounded">Cost</code>,{' '}
-              <code className="bg-inventory-primary-100 px-1 rounded">Barcode</code>
-            </li>
-            <li>
-              Column names are case-insensitive and can include common variations (e.g., "Product
-              Name", "Item Name", "Item Cost", "Unit Cost")
-            </li>
-            <li>
-              Cost format: Use decimal numbers like{' '}
-              <code className="bg-blue-100 px-1 rounded">1.99</code> or{' '}
-              <code className="bg-blue-100 px-1 rounded">19.99</code> (no currency symbols)
-            </li>
-          </ul>
+          {isExpiryImport ? (
+            <ul className="list-disc pl-5 space-y-1 text-sm text-inventory-primary-700">
+              <li>
+                Required columns: <code className="bg-inventory-primary-100 px-1 rounded">SKU</code>
+                , <code className="bg-inventory-primary-100 px-1 rounded">Used-By Date</code>
+              </li>
+              <li>
+                Optional columns:{' '}
+                <code className="bg-inventory-primary-100 px-1 rounded">Item Description</code>,{' '}
+                <code className="bg-inventory-primary-100 px-1 rounded">Department</code>
+              </li>
+              <li>
+                Accepted date formats: <code className="bg-blue-100 px-1 rounded">dd/mm/yy</code>,{' '}
+                <code className="bg-blue-100 px-1 rounded">dd/mm/yyyy</code>,{' '}
+                <code className="bg-blue-100 px-1 rounded">mm/yy</code>,{' '}
+                <code className="bg-blue-100 px-1 rounded">mm/yyyy</code>,{' '}
+                <code className="bg-blue-100 px-1 rounded">mm-yy</code>,{' '}
+                <code className="bg-blue-100 px-1 rounded">mm-yyyy</code>
+              </li>
+              <li>
+                Rejected examples: <code className="bg-red-100 px-1 rounded">12/12</code>{' '}
+                (ambiguous), <code className="bg-red-100 px-1 rounded">Dec/2026</code> (month names
+                unsupported)
+              </li>
+            </ul>
+          ) : (
+            <ul className="list-disc pl-5 space-y-1 text-sm text-inventory-primary-700">
+              <li>
+                Required columns: <code className="bg-inventory-primary-100 px-1 rounded">SKU</code>
+                , <code className="bg-inventory-primary-100 px-1 rounded">Name</code>,{' '}
+                <code className="bg-inventory-primary-100 px-1 rounded">Cost</code>,{' '}
+                <code className="bg-inventory-primary-100 px-1 rounded">Barcode</code>
+              </li>
+              <li>
+                Column names are case-insensitive and can include common variations (e.g., "Product
+                Name", "Item Name", "Item Cost", "Unit Cost")
+              </li>
+              <li>
+                Cost format: Use decimal numbers like{' '}
+                <code className="bg-blue-100 px-1 rounded">1.99</code> or{' '}
+                <code className="bg-blue-100 px-1 rounded">19.99</code> (no currency symbols)
+              </li>
+            </ul>
+          )}
         </div>
+
+        {isExpiryImport && (
+          <div className="mb-6 p-4 bg-gray-50 rounded-md border border-gray-200">
+            <h3 className="text-lg font-medium text-gray-800 mb-2">Download Import Templates</h3>
+            <p className="text-sm text-gray-600 mb-3">
+              Templates include required fields, accepted date examples, and rejected-format
+              guidance.
+            </p>
+            <div className="flex flex-wrap gap-2">
+              <button
+                type="button"
+                onClick={() => downloadExpiryTemplate('csv')}
+                className="px-3 py-2 rounded-md bg-inventory-primary-600 text-white text-sm font-medium hover:bg-inventory-primary-700"
+              >
+                Download CSV Template
+              </button>
+              <button
+                type="button"
+                onClick={() => downloadExpiryTemplate('xlsx')}
+                className="px-3 py-2 rounded-md bg-inventory-primary-600 text-white text-sm font-medium hover:bg-inventory-primary-700"
+              >
+                Download XLSX Template
+              </button>
+              <button
+                type="button"
+                onClick={() => downloadExpiryTemplate('xls')}
+                className="px-3 py-2 rounded-md bg-inventory-primary-600 text-white text-sm font-medium hover:bg-inventory-primary-700"
+              >
+                Download XLS Template
+              </button>
+            </div>
+          </div>
+        )}
 
         <form onSubmit={handleSubmit}>
           <div className="mb-4">
-            <label className="block text-sm font-medium text-gray-700 mb-2">
+            <label htmlFor={fileInputId} className="block text-sm font-medium text-gray-700 mb-2">
               CSV/XLSX/XLS File
             </label>
             <div className="flex items-center">
               <input
+                id={fileInputId}
                 type="file"
                 accept=".csv,text/csv,.xlsx,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet,.xls,application/vnd.ms-excel"
                 onChange={handleFileChange}
@@ -524,8 +782,9 @@ export const CSVUploadPage: React.FC<{ token: string | null }> = ({ token }) => 
               )}
             </div>
             <p className="mt-2 text-sm text-gray-500">
-              The CSV/XLSX/XLS file should contain columns: SKU, Name, Cost, and Barcode (in that
-              order)
+              {isExpiryImport
+                ? 'The file should include SKU and Used-By Date columns. When the Department column is omitted, items are assigned to Unallocated.'
+                : 'The CSV/XLSX/XLS file should contain columns: SKU, Name, Cost, and Barcode (in that order).'}
             </p>
           </div>
 
@@ -536,32 +795,25 @@ export const CSVUploadPage: React.FC<{ token: string | null }> = ({ token }) => 
                 <Table>
                   <TableHeader>
                     <TableRow>
-                      <TableHead className="text-left text-xs font-medium text-muted-foreground uppercase tracking-wider">
-                        SKU
-                      </TableHead>
-                      <TableHead className="text-left text-xs font-medium text-muted-foreground uppercase tracking-wider">
-                        Name
-                      </TableHead>
-                      <TableHead className="text-left text-xs font-medium text-muted-foreground uppercase tracking-wider">
-                        Cost
-                      </TableHead>
-                      <TableHead className="text-left text-xs font-medium text-muted-foreground uppercase tracking-wider">
-                        Barcode
-                      </TableHead>
+                      {previewHeaders.map((header, index) => (
+                        <TableHead
+                          key={`${header}-${index}`}
+                          className="text-left text-xs font-medium text-muted-foreground uppercase tracking-wider"
+                        >
+                          {header || `Column ${index + 1}`}
+                        </TableHead>
+                      ))}
                     </TableRow>
                   </TableHeader>
                   <TableBody>
-                    {filePreview.map((row, rowIndex) => (
-                      <TableRow
-                        key={rowIndex}
-                        className={rowIndex === 0 ? 'bg-muted font-semibold' : ''}
-                      >
-                        {row.map((cell, cellIndex) => (
+                    {previewRows.map((row, rowIndex) => (
+                      <TableRow key={rowIndex}>
+                        {previewHeaders.map((_, cellIndex) => (
                           <TableCell
                             key={cellIndex}
                             className="whitespace-nowrap text-sm text-foreground"
                           >
-                            {cell}
+                            {row[cellIndex] || ''}
                           </TableCell>
                         ))}
                       </TableRow>
@@ -631,7 +883,11 @@ export const CSVUploadPage: React.FC<{ token: string | null }> = ({ token }) => 
                   : 'bg-inventory-primary-600 hover:bg-inventory-primary-700'
               }`}
             >
-              {isUploading ? 'Uploading...' : 'Upload CSV/XLSX/XLS'}
+              {isUploading
+                ? 'Uploading...'
+                : isExpiryImport
+                  ? 'Upload Expiry List'
+                  : 'Upload CSV/XLSX/XLS'}
             </button>
 
             <button
@@ -658,14 +914,25 @@ export const CSVUploadPage: React.FC<{ token: string | null }> = ({ token }) => 
               uploadResult.processedCount !== undefined) && (
               <div className="mt-2">
                 {uploadResult.importedCount !== undefined && (
-                  <p>Products imported: {uploadResult.importedCount}</p>
+                  <p>
+                    {isExpiryImport ? 'Rows imported' : 'Products imported'}:{' '}
+                    {uploadResult.importedCount}
+                  </p>
                 )}
-                {uploadResult.updatedCount !== undefined && (
-                  <p>Products updated: {uploadResult.updatedCount}</p>
+                {isExpiryImport ? (
+                  <p>Rows merged: {uploadResult.mergedCount ?? uploadResult.updatedCount ?? 0}</p>
+                ) : (
+                  uploadResult.updatedCount !== undefined && (
+                    <p>Products updated: {uploadResult.updatedCount}</p>
+                  )
                 )}
                 {uploadResult.errorCount !== undefined && <p>Errors: {uploadResult.errorCount}</p>}
-                {uploadResult.skippedCount !== undefined && (
-                  <p>Rows skipped: {uploadResult.skippedCount}</p>
+                {(uploadResult.rejectedCount !== undefined ||
+                  uploadResult.skippedCount !== undefined) && (
+                  <p>
+                    {isExpiryImport ? 'Rows rejected' : 'Rows skipped'}:{' '}
+                    {uploadResult.rejectedCount ?? uploadResult.skippedCount ?? 0}
+                  </p>
                 )}
                 {uploadResult.processedCount !== undefined && (
                   <p>
@@ -675,6 +942,28 @@ export const CSVUploadPage: React.FC<{ token: string | null }> = ({ token }) => 
                 )}
               </div>
             )}
+
+            {isExpiryImport &&
+              uploadResult.rejectedRows &&
+              uploadResult.rejectedRows.length > 0 && (
+                <div className="mt-3 p-3 bg-white bg-opacity-60 rounded border border-inventory-error-200">
+                  <p className="text-sm font-medium mb-2">Rejected rows</p>
+                  <div className="space-y-2">
+                    {uploadResult.rejectedRows.map((row) => (
+                      <div key={`${row.rowNumber}-${row.reason}`} className="text-sm">
+                        <p className="font-medium">
+                          Row {row.rowNumber}: {row.reason}
+                        </p>
+                        <p className="text-xs opacity-90">
+                          SKU: {row.rawValues.sku || '-'} | Item Description:{' '}
+                          {row.rawValues.itemDescription || '-'} | Used-By Date:{' '}
+                          {row.rawValues.usedByDate || '-'}
+                        </p>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              )}
 
             {/* Column Usage Summary */}
             {uploadResult.columnsUsed && uploadResult.columnsUsed.length > 0 && (

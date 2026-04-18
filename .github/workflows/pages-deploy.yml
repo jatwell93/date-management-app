@@ -24,13 +24,14 @@ concurrency:
 
 jobs:
   deploy-preview:
-    if: github.event_name == 'pull_request' && github.event.pull_request.head.repo.fork == false
+    if: github.event_name == 'pull_request' && github.event.pull_request.head.repo.fork == false && github.event.pull_request.user.login != 'dependabot[bot]'
     runs-on: ubuntu-latest
     environment:
       name: preview
       url: https://pr-${{ github.event.number }}.date-management-frontend.pages.dev
     env:
       DOPPLER_TOKEN: ${{ secrets.DOPPLER_TOKEN }}
+      CLOUDFLARE_ACCOUNT_ID: 0d7fd66d4292d901c684b723f66be69f
 
     steps:
       - uses: actions/checkout@v4
@@ -51,23 +52,45 @@ jobs:
 
       - name: Validate required Doppler secrets
         run: |
-          required_vars=(
-            REACT_APP_API_URL
-            REACT_APP_API_BASE_URL
-            REACT_APP_CLERK_PUBLISHABLE_KEY
-            CLOUDFLARE_API_TOKEN
-            CLOUDFLARE_ACCOUNT_ID
-          )
+          doppler run -- bash -lc '
+            required_vars=(
+              REACT_APP_CLERK_PUBLISHABLE_KEY
+              CLOUDFLARE_API_TOKEN
+            )
 
-          for var_name in "${required_vars[@]}"; do
-            if ! doppler run -- bash -lc "[ -n \"\${$var_name}\" ]"; then
-              echo "::error::Missing required Doppler secret: ${var_name}"
+            for var_name in "${required_vars[@]}"; do
+              if [ -z "${!var_name:-}" ]; then
+                echo "::error::Missing required Doppler secret: ${var_name}"
+                exit 1
+              fi
+            done
+
+            if [ -z "${REACT_APP_API_URL:-}" ] && [ -z "${REACT_APP_API_BASE_URL:-}" ]; then
+              echo "::error::Missing required Doppler secret: set REACT_APP_API_URL or REACT_APP_API_BASE_URL"
               exit 1
             fi
-          done
+
+            if [[ "${REACT_APP_CLERK_PUBLISHABLE_KEY}" != pk_test_* ]]; then
+              echo "::error::Preview deployment requires a Clerk test publishable key (pk_test_*)."
+              echo "::error::Use a preview Doppler config/token so pages.dev previews can render Clerk auth correctly."
+              exit 1
+            fi
+
+          '
 
       - name: Build frontend
-        run: doppler run -- npm run build
+        run: |
+          doppler run -- bash -lc '
+            export REACT_APP_API_URL="${REACT_APP_API_URL:-${REACT_APP_API_BASE_URL:-}}"
+            export REACT_APP_API_BASE_URL="${REACT_APP_API_BASE_URL:-${REACT_APP_API_URL:-}}"
+
+            if [ -z "${REACT_APP_API_URL}" ] || [ -z "${REACT_APP_API_BASE_URL}" ]; then
+              echo "::error::Missing API endpoint secret: set REACT_APP_API_URL or REACT_APP_API_BASE_URL"
+              exit 1
+            fi
+
+            npm run build
+          '
         working-directory: ./frontend
 
       - name: Deploy preview to Cloudflare Pages
@@ -85,13 +108,14 @@ jobs:
           echo "Production URL remains: https://www.expirymate.com.au" >> "$GITHUB_STEP_SUMMARY"
 
   deploy-production:
-    if: github.event_name == 'push'
+    if: github.event_name == 'push' || (github.event_name == 'workflow_dispatch' && github.ref == 'refs/heads/main')
     runs-on: ubuntu-latest
     environment:
       name: production
       url: https://www.expirymate.com.au
     env:
       DOPPLER_TOKEN: ${{ secrets.DOPPLER_TOKEN }}
+      CLOUDFLARE_ACCOUNT_ID: 0d7fd66d4292d901c684b723f66be69f
 
     steps:
       - uses: actions/checkout@v4
@@ -112,23 +136,49 @@ jobs:
 
       - name: Validate required Doppler secrets
         run: |
-          required_vars=(
-            REACT_APP_API_URL
-            REACT_APP_API_BASE_URL
-            REACT_APP_CLERK_PUBLISHABLE_KEY
-            CLOUDFLARE_API_TOKEN
-            CLOUDFLARE_ACCOUNT_ID
-          )
+          doppler run -- bash -lc '
+            required_vars=(
+              REACT_APP_CLERK_PUBLISHABLE_KEY
+              CLOUDFLARE_API_TOKEN
+            )
 
-          for var_name in "${required_vars[@]}"; do
-            if ! doppler run -- bash -lc "[ -n \"\${$var_name}\" ]"; then
-              echo "::error::Missing required Doppler secret: ${var_name}"
+            for var_name in "${required_vars[@]}"; do
+              if [ -z "${!var_name:-}" ]; then
+                echo "::error::Missing required Doppler secret: ${var_name}"
+                exit 1
+              fi
+            done
+
+            if [ -z "${REACT_APP_API_URL:-}" ] && [ -z "${REACT_APP_API_BASE_URL:-}" ]; then
+              echo "::error::Missing required Doppler secret: set REACT_APP_API_URL or REACT_APP_API_BASE_URL"
               exit 1
             fi
-          done
+
+            if [ -z "${REACT_APP_CLERK_PUBLISHABLE_KEY:-}" ]; then
+              echo "::error::Missing required Doppler secret: REACT_APP_CLERK_PUBLISHABLE_KEY"
+              exit 1
+            fi
+
+            if [[ "${REACT_APP_CLERK_PUBLISHABLE_KEY}" != pk_live_* ]]; then
+              echo "::error::Production deployment requires a Clerk live publishable key (pk_live_*)"
+              echo "::error::Deployment blocked to prevent serving Clerk test keys in production."
+              exit 1
+            fi
+          '
 
       - name: Build frontend
-        run: doppler run -- npm run build
+        run: |
+          doppler run -- bash -lc '
+            export REACT_APP_API_URL="${REACT_APP_API_URL:-${REACT_APP_API_BASE_URL:-}}"
+            export REACT_APP_API_BASE_URL="${REACT_APP_API_BASE_URL:-${REACT_APP_API_URL:-}}"
+
+            if [ -z "${REACT_APP_API_URL}" ] || [ -z "${REACT_APP_API_BASE_URL}" ]; then
+              echo "::error::Missing API endpoint secret: set REACT_APP_API_URL or REACT_APP_API_BASE_URL"
+              exit 1
+            fi
+
+            npm run build
+          '
         working-directory: ./frontend
 
       - name: Deploy production to Cloudflare Pages

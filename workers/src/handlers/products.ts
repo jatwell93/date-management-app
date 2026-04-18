@@ -1,9 +1,9 @@
 /**
  * Products Handler - Multi-Tenant Safe
- * 
+ *
  * All queries filter by organizationId using parameterized template literals
  * to prevent SQL injection and ensure multi-tenant data isolation.
- * 
+ *
  * All database operations include automatic retry logic for transient failures.
  */
 
@@ -22,10 +22,7 @@ export interface Product {
   updated_at: Date;
 }
 
-export async function getProducts(
-  env: Env,
-  organizationId: string
-): Promise<Product[]> {
+export async function getProducts(env: Env, organizationId: string): Promise<Product[]> {
   return withNeonRetry(async () => {
     const sql = neon(getConnectionString(env));
     const results = await sql`
@@ -42,7 +39,7 @@ export async function getProducts(
 export async function getProductById(
   env: Env,
   organizationId: string,
-  productId: number
+  productId: number,
 ): Promise<Product | null> {
   return withNeonRetry(async () => {
     const sql = neon(getConnectionString(env));
@@ -59,7 +56,7 @@ export async function getProductById(
 export async function getProductByBarcode(
   env: Env,
   organizationId: string,
-  barcode: string
+  barcode: string,
 ): Promise<Product | null> {
   return withNeonRetry(async () => {
     const sql = neon(getConnectionString(env));
@@ -73,10 +70,7 @@ export async function getProductByBarcode(
   });
 }
 
-export async function countProducts(
-  env: Env,
-  organizationId: string
-): Promise<number> {
+export async function countProducts(env: Env, organizationId: string): Promise<number> {
   return withNeonRetry(async () => {
     const sql = neon(getConnectionString(env));
     const results = await sql`
@@ -95,11 +89,11 @@ export async function createProduct(
     barcode?: string;
     description?: string;
     category?: string;
-  }
+  },
 ): Promise<Product> {
   return withNeonRetry(async () => {
     const sql = neon(getConnectionString(env));
-    const results = await sql`
+    const results = (await sql`
       INSERT INTO products (
         name, barcode, description, category, organization_id, created_at, updated_at
       ) VALUES (
@@ -113,8 +107,8 @@ export async function createProduct(
       )
       RETURNING id, name, barcode, description, category, organization_id,
                 created_at, updated_at
-    ` as Product[];
-    
+    `) as Product[];
+
     if (!results[0]) throw new Error('Failed to create product');
     return results[0];
   });
@@ -123,13 +117,13 @@ export async function createProduct(
 export async function deleteProduct(
   env: Env,
   organizationId: string,
-  productId: number
+  productId: number,
 ): Promise<boolean> {
   return withNeonRetry(async () => {
     // Verify ownership first
     const existing = await getProductById(env, organizationId, productId);
     if (!existing) return false;
-    
+
     const sql = neon(getConnectionString(env));
     const results = await sql`
       DELETE FROM products

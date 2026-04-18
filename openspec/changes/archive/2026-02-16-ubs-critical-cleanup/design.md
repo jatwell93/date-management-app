@@ -5,11 +5,13 @@ UBS findings include critical issues around secret handling and warning-level pa
 ## Goals / Non-Goals
 
 **Goals:**
+
 - Remove hardcoded secret fallbacks and require env vars at startup.
 - Keep .env files untracked and ensure examples do not contain secrets.
 - Resolve a small, vetted set of high-merit warning findings.
 
 **Non-Goals:**
+
 - Broad refactors or large-scale warning cleanups.
 - Behavior changes to API responses or feature workflows.
 - Global sanitization of all JSON responses.

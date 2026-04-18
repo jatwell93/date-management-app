@@ -1,6 +1,7 @@
 import { useState } from 'react';
+import * as Sentry from '@sentry/react';
 import { Button } from './ui/button';
-import { API_BASE_URL } from '../lib/api.service';
+import { buildApiUrl } from '../lib/api.service';
 
 interface ManageSubscriptionButtonProps {
   token: string | null;
@@ -22,7 +23,7 @@ export function ManageSubscriptionButton({
 
     setLoading(true);
     try {
-      const response = await fetch(`${API_BASE_URL}/api/subscription/create-portal-session`, {
+      const response = await fetch(buildApiUrl('/subscription/create-portal-session'), {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
@@ -40,7 +41,9 @@ export function ManageSubscriptionButton({
       const { url } = await response.json();
       window.location.href = url;
     } catch (error) {
-      console.error('Error opening billing portal:', error);
+      Sentry.captureException(error, {
+        tags: { feature: 'billing-portal' },
+      });
       alert('Failed to open billing portal. Please try again.');
     } finally {
       setLoading(false);

@@ -11,3 +11,10 @@ export const UploadStatus = {
 } as const;
 
 export type UploadStatusValue = (typeof UploadStatus)[keyof typeof UploadStatus];
+
+export const UploadImportType = {
+  PRODUCT_CATALOG: 'product-catalog',
+  EXPIRY_LIST: 'expiry-list',
+} as const;
+
+export type UploadImportTypeValue = (typeof UploadImportType)[keyof typeof UploadImportType];

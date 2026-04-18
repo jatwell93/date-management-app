@@ -39,6 +39,10 @@ function isCiRuntime(): boolean {
   return process.env.CI === 'true' || process.env.GITHUB_ACTIONS === 'true';
 }
 
+function isUnitTestSuite(testPath: string): boolean {
+  return /[\\/]tests[\\/]unit[\\/]/.test(testPath);
+}
+
 function assertSupportedDatabaseUrl(isPostgres: boolean): void {
   const databaseUrl = process.env.DATABASE_URL;
   const hasSqliteUrl = databaseUrl?.startsWith('file:') === true;
@@ -67,6 +71,7 @@ async function cleanupAllTablesForPostgres(): Promise<void> {
   await prisma.$executeRawUnsafe(`
     TRUNCATE TABLE
       "audit_log",
+      "org_audit_log",
       "item_transactions",
       "expired_item_transactions",
       "inventory_items",
@@ -98,6 +103,7 @@ async function cleanupTierFlagsForSqlite(): Promise<void> {
 async function cleanupTablesForSqlite(): Promise<void> {
   const childTables = [
     'audit_log',
+    'org_audit_log',
     'item_transactions',
     'expired_item_transactions',
     'inventory_items',
@@ -137,9 +143,10 @@ async function seedDefaultOrganizationAndUsers(): Promise<void> {
   // Keep this transactional so PostgreSQL always sees parent org before child users.
   await prisma.$transaction(async (tx) => {
     const defaultOrg = await tx.organization.upsert({
-      where: { slug: 'default-org' },
+      where: { id: 'default-org' },
       update: {
         name: 'Default Organization',
+        slug: 'default-org',
       },
       create: {
         id: 'default-org',
@@ -151,12 +158,12 @@ async function seedDefaultOrganizationAndUsers(): Promise<void> {
     await tx.user.upsert({
       where: { id: 1 },
       update: {
-        role: 'Manager',
+        role: 'admin',
         organizationId: defaultOrg.id,
       },
       create: {
         id: 1,
-        role: 'Manager',
+        role: 'admin',
         organizationId: defaultOrg.id,
       },
     });
@@ -164,12 +171,12 @@ async function seedDefaultOrganizationAndUsers(): Promise<void> {
     await tx.user.upsert({
       where: { id: 2 },
       update: {
-        role: 'Staff',
+        role: 'team_member',
         organizationId: defaultOrg.id,
       },
       create: {
         id: 2,
-        role: 'Staff',
+        role: 'team_member',
         organizationId: defaultOrg.id,
       },
     });
@@ -177,13 +184,17 @@ async function seedDefaultOrganizationAndUsers(): Promise<void> {
 }
 
 beforeEach(async () => {
-  const isPostgres = isPostgresRuntime();
   const testPath =
     (expect as unknown as { getState?: () => { testPath?: string } }).getState?.().testPath || '';
+  const isUnitSuite = isUnitTestSuite(testPath);
+  const isPostgres = isUnitSuite ? false : isPostgresRuntime();
   const isTierFlagsSuite = testPath.includes('validate-tier-flags.test.ts');
 
   try {
-    assertSupportedDatabaseUrl(isPostgres);
+    // Unit tests may intentionally mutate DATABASE_URL and should not be blocked by global DB URL assertions.
+    if (!isUnitSuite) {
+      assertSupportedDatabaseUrl(isPostgres);
+    }
   } catch (error) {
     if (isCiRuntime()) {
       throw error;

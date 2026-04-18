@@ -6,6 +6,7 @@
 ## Overview
 
 Comprehensive monitoring and alerting strategy for production deployment. This guide covers:
+
 - What to monitor
 - How to set up alerts
 - Dashboards and visualization
@@ -63,24 +64,28 @@ Comprehensive monitoring and alerting strategy for production deployment. This g
 ### Backend Application
 
 #### Response Times
+
 - **Metric**: P50 / P95 / P99 response latency
 - **Target**: P95 < 500ms for dashboard, <1s for CSV endpoints
 - **Alert Threshold**: P95 > 1000ms for 5+ minutes
 - **Tool**: Sentry Performance Monitoring
 
 #### Error Rate
+
 - **Metric**: 5xx errors per minute
 - **Target**: <5 errors/min in normal operation
 - **Alert Threshold**: >10 errors/min
 - **Tool**: Sentry, CloudWatch
 
 #### Database Queries
+
 - **Metric**: Slow query count (queries > 1000ms)
 - **Target**: <5 slow queries in 1 hour
 - **Alert Threshold**: >20 slow queries in 1 hour
 - **Tool**: Neon dashboard, pg_stat_statements
 
 #### CSV Processing
+
 - **Metric**: Processing time, rows processed/sec
 - **Target**: 1000-10000 rows/sec
 - **Alert Threshold**: <100 rows/sec (likely bottleneck)
@@ -88,21 +93,25 @@ Comprehensive monitoring and alerting strategy for production deployment. This g
 ### Workers (Serverless)
 
 #### Request Count
+
 - **Metric**: Requests per minute
 - **Target**: Variable based on traffic
 - **Alert Threshold**: Anomaly detection (>2x baseline)
 
 #### Cold Start Times
+
 - **Metric**: Time to first response after deploy
 - **Target**: <100ms
 - **Alert Threshold**: >500ms indicates memory issues
 
 #### CPU & Memory
+
 - **Metric**: CPU time per request, memory usage
 - **Target**: <50ms CPU/request, <50MB memory
 - **Alert Threshold**: >200ms CPU or >256MB memory
 
 #### Database Connection Pool
+
 - **Metric**: Active connections, pool wait time
 - **Target**: <50% pool utilization during normal traffic
 - **Alert Threshold**: >90% utilization or waits >100ms
@@ -110,21 +119,25 @@ Comprehensive monitoring and alerting strategy for production deployment. This g
 ### Database (Neon)
 
 #### Connection Status
+
 - **Metric**: Active connections in pool
 - **Target**: <50% of max pool size
 - **Alert Threshold**: >80% of pool connections used
 
 #### Disk Usage
+
 - **Metric**: Database size, growth rate
 - **Target**: Monitor for unusual growth
 - **Alert Threshold**: >95% of allocated space
 
 #### Query Performance
+
 - **Metric**: Max query execution time
 - **Target**: <1s for 99th percentile
 - **Alert Threshold**: 95th percentile > 2s
 
 #### Replication Lag
+
 - **Metric**: Standby replication delay (if applicable)
 - **Target**: <100ms
 - **Alert Threshold**: >1s lag
@@ -132,16 +145,19 @@ Comprehensive monitoring and alerting strategy for production deployment. This g
 ### Storage (Cloudflare R2)
 
 #### Upload Success Rate
+
 - **Metric**: Successful presigned uploads / total
 - **Target**: >99.5%
 - **Alert Threshold**: <99%
 
 #### Request Latency
+
 - **Metric**: Upload/download latency p95
 - **Target**: <500ms
 - **Alert Threshold**: >2s
 
 #### Quota Usage
+
 - **Metric**: Bytes stored, operations count
 - **Target**: Monitor growth
 - **Alert Threshold**: >80% of quota
@@ -153,97 +169,97 @@ Comprehensive monitoring and alerting strategy for production deployment. This g
 ### Critical Alerts (Notify on-call immediately)
 
 ```yaml
-- name: "Error Rate High"
-  condition: "5xx_errors_per_minute > 20"
-  duration: "2 minutes"
-  severity: "CRITICAL"
-  action: "PagerDuty -> Immediate notification"
+- name: 'Error Rate High'
+  condition: '5xx_errors_per_minute > 20'
+  duration: '2 minutes'
+  severity: 'CRITICAL'
+  action: 'PagerDuty -> Immediate notification'
 
-- name: "Database Down"
-  condition: "neon_connection_failed"
-  duration: "30 seconds"
-  severity: "CRITICAL"
-  action: "PagerDuty -> Page oncall, Slack #oncall"
+- name: 'Database Down'
+  condition: 'neon_connection_failed'
+  duration: '30 seconds'
+  severity: 'CRITICAL'
+  action: 'PagerDuty -> Page oncall, Slack #oncall'
 
-- name: "Workers Deployment Failed"
-  condition: "workers_deploy_error"
-  duration: "N/A"
-  severity: "CRITICAL"
-  action: "Email + Slack notification"
+- name: 'Workers Deployment Failed'
+  condition: 'workers_deploy_error'
+  duration: 'N/A'
+  severity: 'CRITICAL'
+  action: 'Email + Slack notification'
 
-- name: "Presigned URL Expiry Issue"
-  condition: "presigned_url_expired_during_upload"
-  duration: "5 minutes"
-  severity: "CRITICAL"
-  action: "PagerDuty + Slack"
+- name: 'Presigned URL Expiry Issue'
+  condition: 'presigned_url_expired_during_upload'
+  duration: '5 minutes'
+  severity: 'CRITICAL'
+  action: 'PagerDuty + Slack'
 
-- name: "CSV Parser Memory Leak"
-  condition: "csv_parser_memory > 500MB"
-  duration: "5 minutes"
-  severity: "CRITICAL"
-  action: "PagerDuty -> Memory investigation"
+- name: 'CSV Parser Memory Leak'
+  condition: 'csv_parser_memory > 500MB'
+  duration: '5 minutes'
+  severity: 'CRITICAL'
+  action: 'PagerDuty -> Memory investigation'
 
-- name: "Payment Processing Failure"
-  condition: "stripe_webhook_failures > 10"
-  duration: "10 minutes"
-  severity: "CRITICAL"
-  action: "PagerDuty + CFO notification"
+- name: 'Payment Processing Failure'
+  condition: 'stripe_webhook_failures > 10'
+  duration: '10 minutes'
+  severity: 'CRITICAL'
+  action: 'PagerDuty + CFO notification'
 ```
 
 ### High Priority Alerts (Page during business hours)
 
 ```yaml
-- name: "High Response Time"
-  condition: "p95_latency_ms > 1000"
-  duration: "5 minutes"
-  severity: "HIGH"
-  action: "PagerDuty if during business hours, else Slack"
+- name: 'High Response Time'
+  condition: 'p95_latency_ms > 1000'
+  duration: '5 minutes'
+  severity: 'HIGH'
+  action: 'PagerDuty if during business hours, else Slack'
 
-- name: "Slow Query Spike"
-  condition: "slow_queries_per_hour > 20"
-  duration: "10 minutes"
-  severity: "HIGH"
-  action: "Auto-investigate with database query analyzer"
+- name: 'Slow Query Spike'
+  condition: 'slow_queries_per_hour > 20'
+  duration: '10 minutes'
+  severity: 'HIGH'
+  action: 'Auto-investigate with database query analyzer'
 
-- name: "Database Connection Pool Warning"
-  condition: "pool_utilization > 80%"
-  duration: "5 minutes"
-  severity: "HIGH"
-  action: "Slack notification, prepare to scale"
+- name: 'Database Connection Pool Warning'
+  condition: 'pool_utilization > 80%'
+  duration: '5 minutes'
+  severity: 'HIGH'
+  action: 'Slack notification, prepare to scale'
 
-- name: "CSV Upload Failures"
-  condition: "csv_upload_error_rate > 5%"
-  duration: "15 minutes"
-  severity: "HIGH"
-  action: "Slack + review R2 connectivity"
+- name: 'CSV Upload Failures'
+  condition: 'csv_upload_error_rate > 5%'
+  duration: '15 minutes'
+  severity: 'HIGH'
+  action: 'Slack + review R2 connectivity'
 
-- name: "Presigned URL Rate Limit Triggered"
-  condition: "presigned_url_rate_limit_exceeded"
-  duration: "N/A"
-  severity: "MEDIUM"
-  action: "Log and monitor, possible bot activity"
+- name: 'Presigned URL Rate Limit Triggered'
+  condition: 'presigned_url_rate_limit_exceeded'
+  duration: 'N/A'
+  severity: 'MEDIUM'
+  action: 'Log and monitor, possible bot activity'
 ```
 
 ### Medium Priority Alerts (Slack notification)
 
 ```yaml
-- name: "Disk Usage Growing Rapidly"
-  condition: "database_size_growth > 10GB per hour"
-  duration: "1 hour"
-  severity: "MEDIUM"
-  action: "Slack notification, investigate bulk loads"
+- name: 'Disk Usage Growing Rapidly'
+  condition: 'database_size_growth > 10GB per hour'
+  duration: '1 hour'
+  severity: 'MEDIUM'
+  action: 'Slack notification, investigate bulk loads'
 
-- name: "Backup Failure"
-  condition: "neon_backup_failed"
-  duration: "N/A"
-  severity: "MEDIUM"
-  action: "Slack #ops, retry manually if needed"
+- name: 'Backup Failure'
+  condition: 'neon_backup_failed'
+  duration: 'N/A'
+  severity: 'MEDIUM'
+  action: 'Slack #ops, retry manually if needed'
 
-- name: "Certificate Expiration Warning"
-  condition: "ssl_cert_expires_in < 30 days"
-  duration: "N/A"
-  severity: "LOW"
-  action: "Email reminder to renew"
+- name: 'Certificate Expiration Warning'
+  condition: 'ssl_cert_expires_in < 30 days'
+  duration: 'N/A'
+  severity: 'LOW'
+  action: 'Email reminder to renew'
 ```
 
 ---
@@ -289,6 +305,7 @@ LIMIT 20;
 ```
 
 **Alert Setup**:
+
 - Slow query detection: Built-in Neon feature
 - Threshold: >1000ms mean execution time
 - Notification: Email to #ops
@@ -296,6 +313,7 @@ LIMIT 20;
 #### Connection Pool
 
 **Alert Setup**:
+
 - In Neon compute settings
 - Alert on connection count > 80% of max
 - Notification: Email alert
@@ -327,6 +345,7 @@ Notification: Slack via webhook
 ### Main Operations Dashboard (Grafana/Datadog Alternative)
 
 **Key Panels**:
+
 1. **System Health**
    - Workers status
    - Database connection pool
@@ -354,18 +373,21 @@ Notification: Slack via webhook
 ### Per-Service Dashboards
 
 #### Backend Dashboard
+
 - Request count by endpoint
 - Error rate by status code
 - CPU/Memory utilization
 - Database query performance
 
 #### Workers Dashboard
+
 - Requests per region
 - CPU time per request
 - Cold start count
 - Memory usage
 
 #### Frontend Dashboard
+
 - JavaScript errors
 - Page load times
 - User interactions
@@ -377,24 +399,26 @@ Notification: Slack via webhook
 
 ### Log Levels
 
-| Level | When | Example |
-|-------|------|---------|
-| ERROR | Failures needing intervention | "CSV parse failed: invalid encoding" |
-| WARN | Degraded but functioning | "Response time > 1s", "Retry attempt 2/3" |
-| INFO | Important events | "CSV upload started", "User signup completed" |
-| DEBUG | Development/troubleshooting | "Query execution: 234ms", "Cache hit" |
+| Level | When                          | Example                                       |
+| ----- | ----------------------------- | --------------------------------------------- |
+| ERROR | Failures needing intervention | "CSV parse failed: invalid encoding"          |
+| WARN  | Degraded but functioning      | "Response time > 1s", "Retry attempt 2/3"     |
+| INFO  | Important events              | "CSV upload started", "User signup completed" |
+| DEBUG | Development/troubleshooting   | "Query execution: 234ms", "Cache hit"         |
 
 ### Log Aggregation
 
 **Central Location**: CloudWatch (for AWS) or Loki (self-hosted)
 
 **Backend Logs**:
+
 ```
 Format: [timestamp] [level] [service] message
 Example: 2026-03-16T10:30:45Z ERROR csv-processor Parse error at row 1500
 ```
 
 **Workers Logs**:
+
 ```
 // Access via Cloudflare dashboard → Workers → Tail
 
@@ -402,6 +426,7 @@ Example: 2026-03-16T10:30:45Z ERROR csv-processor Parse error at row 1500
 ```
 
 **Database Logs**:
+
 ```
 // Neon: Query logs visible in dashboard
 SELECT * FROM pg_log WHERE level = 'error'
@@ -423,11 +448,13 @@ SELECT * FROM pg_log WHERE level = 'error'
 **Team Members**: [List names]
 
 **Rotation**:
+
 - Weekly rotation (Monday 9am → next Monday 9am)
 - Primary on-call: Responds to alerts
 - Secondary on-call: Backup for primary unavailable
 
 **Access Requirements**:
+
 - PagerDuty account with incident response
 - Neon project admin access
 - Cloudflare Workers deployment access
@@ -481,15 +508,15 @@ Level 3 (Director/VP):
 
 ### Contact Information
 
-| Role | Name | Phone | Email | Backup |
-|------|------|-------|-------|--------|
-| On-Call Primary | _______ | _______ | _______ | _______ |
-| On-Call Secondary | _______ | _______ | _______ | _______ |
-| Team Lead | _______ | _______ | _______ | _______ |
-| VP Engineering | _______ | _______ | _______ | _______ |
-| Neon Support | - | - | support@neon.tech | 24/7 |
-| Stripe Support | - | - | support@stripe.com | 24/7 |
-| Cloudflare Support | - | - | support@cloudflare.com | 24/7 |
+| Role               | Name       | Phone      | Email                  | Backup     |
+| ------------------ | ---------- | ---------- | ---------------------- | ---------- |
+| On-Call Primary    | **\_\_\_** | **\_\_\_** | **\_\_\_**             | **\_\_\_** |
+| On-Call Secondary  | **\_\_\_** | **\_\_\_** | **\_\_\_**             | **\_\_\_** |
+| Team Lead          | **\_\_\_** | **\_\_\_** | **\_\_\_**             | **\_\_\_** |
+| VP Engineering     | **\_\_\_** | **\_\_\_** | **\_\_\_**             | **\_\_\_** |
+| Neon Support       | -          | -          | support@neon.tech      | 24/7       |
+| Stripe Support     | -          | -          | support@stripe.com     | 24/7       |
+| Cloudflare Support | -          | -          | support@cloudflare.com | 24/7       |
 
 ---
 
@@ -498,17 +525,20 @@ Level 3 (Director/VP):
 ### Runbook: High 5xx Error Rate
 
 **Diagnosis**:
+
 1. Check Sentry dashboard for error patterns
 2. Identify if specific endpoint affected
 3. Check recent deployments
 
 **Quick Fixes** (in order):
+
 1. Check database connection: `SELECT NOW()` in Neon
 2. Check Workers deployment status
 3. Check R2 bucket availability
 4. Restart connection pool if hanging
 
 **If Unresolved**:
+
 - Rollback last Workers deployment
 - Rollback last backend deployment
 - Scale up database compute
@@ -518,17 +548,19 @@ Level 3 (Director/VP):
 **Symptoms**: "Too many connections" errors, request timeouts
 
 **Steps**:
+
 1. Check pool utilization: Neon dashboard → Monitoring
 2. Kill idle connections:
    ```sql
-   SELECT pg_terminate_backend(pid) 
-   FROM pg_stat_activity 
+   SELECT pg_terminate_backend(pid)
+   FROM pg_stat_activity
    WHERE state = 'idle' AND query_start < now() - interval '10 min';
    ```
 3. Increase pool size if legitimate load
 4. Check for connection leaks in code
 
 **Prevention**:
+
 - Review CSV processor for proper cleanup (finally blocks)
 - Verify retry logic closes connections
 - Monitor for unhandled rejections
@@ -536,6 +568,7 @@ Level 3 (Director/VP):
 ### Runbook: CSV Upload Failures
 
 **Check**:
+
 1. Is R2 bucket accessible? (Cloudflare dashboard)
 2. Are presigned URLs expiring too fast?
    - Check: `PRESIGNED_URL_EXPIRY_SECONDS` env var
@@ -544,6 +577,7 @@ Level 3 (Director/VP):
 4. Is CSV parser hanging? (Check memory usage)
 
 **Fix**:
+
 1. Increase presigned URL expiry
 2. Clear old files from R2 (if quota full)
 3. Restart CSV processor if hanging
@@ -592,18 +626,18 @@ Level 3 (Director/VP):
 SELECT count(*), state FROM pg_stat_activity GROUP BY state;
 
 -- Slow queries
-SELECT query, calls, mean_time, max_time 
-FROM pg_stat_statements 
-WHERE mean_time > 1000 
+SELECT query, calls, mean_time, max_time
+FROM pg_stat_statements
+WHERE mean_time > 1000
 ORDER BY max_time DESC LIMIT 10;
 
 -- Database size
 SELECT pg_size_pretty(pg_database_size(current_database()));
 
 -- Active long transactions
-SELECT pid, usename, state, query_start, state_change 
-FROM pg_stat_activity 
-WHERE state != 'idle' 
+SELECT pid, usename, state, query_start, state_change
+FROM pg_stat_activity
+WHERE state != 'idle'
 AND query_start < now() - interval '5 min';
 ```
 

@@ -11,6 +11,7 @@
 ## What Changes
 
 We will implement:
+
 - **Cloudflare Edge Protection:** Bot Fight Mode, WAF rate limiting rules, IP reputation blocking
 - **Distributed Rate Limiting:** Migrate from in-memory to KV-backed rate limiting in Workers
 - **Database Connection Protection:** Add connection pooling limits and query complexity controls
@@ -19,6 +20,7 @@ We will implement:
 - **Session Transport Hardening Plan:** Add post-trial migration path from JS-managed bearer transport to cookie-based `httpOnly` transport
 
 **Outcome:** A single combined security program with clear sequencing:
+
 1. Pre-trial controls for immediate billing-abuse protection
 2. In-trial tuning and DB cost protection
 3. Post-trial session transport architecture hardening
@@ -45,6 +47,7 @@ We will implement:
 ## Impact
 
 **Code Areas:**
+
 - `workers/src/middleware/rate-limit.middleware.ts`: Migrate to KV storage
 - `workers/wrangler.toml`: Add KV namespace binding, update rate limit config
 - `workers/src/middleware/connection-limiter.middleware.ts`: New middleware
@@ -53,12 +56,14 @@ We will implement:
 - Cloudflare Dashboard: WAF rules, Bot Fight Mode, budget alerts
 
 **External Dependencies:**
+
 - Cloudflare KV namespace for rate limiting
 - Cloudflare Analytics Engine (enabled in dashboard)
 - Neon project budget alerts
 - No Redis/Upstash required for initial distributed rate limiting path
 
 **Cost Impact:**
+
 - Cloudflare KV: ~$0.50/10M writes (minimal)
 - Cloudflare WAF: Included in Pro plan or free
 - Analytics Engine: Free tier available
@@ -66,6 +71,7 @@ We will implement:
 ## Analysis
 
 **Current:** `workers/src/middleware/rate-limit.middleware.ts:20`
+
 - Uses in-memory Map for rate limit storage
 - Each Worker instance has separate state
 - Resets on deployment

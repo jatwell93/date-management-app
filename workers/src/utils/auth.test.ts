@@ -31,7 +31,7 @@ const TEST_USER_ID = 1;
 async function createTestJWT(
   userId: number = TEST_USER_ID,
   organizationId: string = TEST_ORG_ID,
-  expiresIn: string = '24h'
+  expiresIn: string = '24h',
 ): Promise<string> {
   const encoder = new TextEncoder();
   const secretKey = encoder.encode(TEST_JWT_SECRET);
@@ -52,7 +52,7 @@ async function createTestJWT(
  */
 function createMockSubscription(
   tierLevel: 'starter' | 'professional' | 'premium' | 'concierge' = 'professional',
-  status: SubscriptionStatus = SubscriptionStatus.ACTIVE
+  status: SubscriptionStatus = SubscriptionStatus.ACTIVE,
 ): SubscriptionTierData {
   return {
     id: 'sub-123',
@@ -356,7 +356,11 @@ describe('authenticateWorkerRequest', () => {
 
   it('should reject request with invalid token', async () => {
     // Act
-    const context = await authenticateWorkerRequest('invalid.token.here', TEST_JWT_SECRET, mockDbClient);
+    const context = await authenticateWorkerRequest(
+      'invalid.token.here',
+      TEST_JWT_SECRET,
+      mockDbClient,
+    );
 
     // Assert
     expect(context.isValid).toBe(false);

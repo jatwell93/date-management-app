@@ -2,18 +2,44 @@ import * as fs from 'fs/promises';
 import * as path from 'path';
 import * as os from 'os';
 import { StorageProvider, FileMetadata } from '../storage/storage-provider.interface';
-import { CSVParserService } from './csv-parser.service';
+import { CSVParserService, RowError } from './csv-parser.service';
 import { envConfig } from '../config/environment';
 import { StorageQuotaService } from './storage-quota.service';
 import { Logger } from '../utils/logger';
 import { getDefaultDatabaseClient } from '../database/database-factory';
-import { UploadStatus } from '../types/upload.types';
+import { UploadImportType, UploadImportTypeValue, UploadStatus } from '../types/upload.types';
 
 export interface InitiateUploadResponse {
   strategy: 'direct' | 'presigned';
   uploadUrl: string;
   method: 'POST' | 'PUT';
   key: string;
+}
+
+export interface ExpiryRejectedRow {
+  rowNumber: number;
+  rawValues: {
+    sku: string;
+    itemDescription: string;
+    usedByDate: string;
+  };
+  reason: string;
+  reasonCode?: string;
+}
+
+export interface UploadProcessingResult {
+  importType: UploadImportTypeValue;
+  totalRows: number;
+  importedCount: number;
+  updatedCount: number;
+  skippedCount: number;
+  errorCount: number;
+  rejectedRows?: ExpiryRejectedRow[];
+}
+
+export interface DirectUploadResult {
+  key: string;
+  processingResult: UploadProcessingResult;
 }
 
 export class UploadService {
@@ -36,6 +62,7 @@ export class UploadService {
     filename: string,
     fileSize: number,
     _contentType: string,
+    _importType: UploadImportTypeValue = UploadImportType.PRODUCT_CATALOG,
   ): Promise<InitiateUploadResponse> {
     // 1. Validate file size logic
     const MAX_SIZE = envConfig.MAX_UPLOAD_SIZE_BYTES || 10 * 1024 * 1024; // Default 10MB
@@ -93,7 +120,11 @@ export class UploadService {
   /**
    * Finalize upload and trigger parsing
    */
-  async completeUpload(key: string, userId: number): Promise<void> {
+  async completeUpload(
+    key: string,
+    userId: number,
+    importType: UploadImportTypeValue = UploadImportType.PRODUCT_CATALOG,
+  ): Promise<UploadProcessingResult> {
     this.assertOrganizationScopedKey(key);
 
     const startTime = Date.now();
@@ -132,7 +163,11 @@ export class UploadService {
       );
 
       // 3. Process file
-      const parseResultRaw = await this.csvParser.processFile(tempPath, { uploadKey: key, userId });
+      const parseResultRaw = await this.csvParser.processFile(tempPath, {
+        uploadKey: key,
+        userId,
+        importType,
+      });
       if (!parseResultRaw) {
         throw new Error(`CSV parsing failed: no result returned for upload key ${key}`);
       }
@@ -145,11 +180,24 @@ export class UploadService {
         columnsUsed: parseResultRaw.columnsUsed,
         columnsIgnored: parseResultRaw.columnsIgnored,
       };
+      const rejectedRows =
+        importType === UploadImportType.EXPIRY_LIST
+          ? this.buildExpiryRejectedRows(parseResult.errors)
+          : undefined;
+      const processingResult: UploadProcessingResult = {
+        importType,
+        totalRows: parseResult.total,
+        importedCount: parseResult.imported,
+        updatedCount: parseResult.updated,
+        skippedCount: parseResult.skipped,
+        errorCount: parseResult.errors.length,
+        ...(rejectedRows && rejectedRows.length > 0 ? { rejectedRows } : {}),
+      };
 
       // Best-effort status update: parsing success should not fail if status row is missing.
       try {
         const prisma = getDefaultDatabaseClient();
-        await prisma.upload.update({
+        await prisma.upload.updateMany({
           where: { fileKey: key },
           data: {
             status: UploadStatus.COMPLETED,
@@ -174,7 +222,7 @@ export class UploadService {
         // Set status to FAILED to avoid inconsistent COMPLETED status without metrics
         try {
           const prisma = getDefaultDatabaseClient();
-          await prisma.upload.update({
+          await prisma.upload.updateMany({
             where: { fileKey: key },
             data: { status: UploadStatus.FAILED },
           });
@@ -199,13 +247,15 @@ export class UploadService {
         columnsUsed: parseResult.columnsUsed,
         columnsIgnored: parseResult.columnsIgnored,
       });
+
+      return processingResult;
     } catch (error) {
       const errorMessage = error instanceof Error ? error.message : 'Unknown error';
 
       // Update database status to 'failed' so frontend polling can detect the error
       try {
         const prisma = getDefaultDatabaseClient();
-        await prisma.upload.update({
+        await prisma.upload.updateMany({
           where: { fileKey: key },
           data: {
             status: UploadStatus.FAILED,
@@ -254,7 +304,8 @@ export class UploadService {
     filename: string,
     contentType: string,
     userId: number,
-  ): Promise<string> {
+    importType: UploadImportTypeValue = UploadImportType.PRODUCT_CATALOG,
+  ): Promise<DirectUploadResult> {
     const startTime = Date.now();
     const timestamp = Date.now();
     // MULTI-TENANT FIX: Scope key to organization for isolation
@@ -266,8 +317,9 @@ export class UploadService {
     await this.storage.upload(key, buffer, contentType);
 
     // 2. Trigger processing
+    let processingResult: UploadProcessingResult;
     try {
-      await this.completeUpload(key, userId);
+      processingResult = await this.completeUpload(key, userId, importType);
       Logger.info('Direct upload metrics', {
         uploadKey: key,
         userId,
@@ -289,7 +341,10 @@ export class UploadService {
       throw error;
     }
 
-    return key;
+    return {
+      key,
+      processingResult,
+    };
   }
 
   /**
@@ -324,5 +379,30 @@ export class UploadService {
     ) {
       throw new Error('Access denied: Upload key does not belong to this organization');
     }
+  }
+
+  private buildExpiryRejectedRows(errors: RowError[]): ExpiryRejectedRow[] {
+    const rowsByNumber = new Map<number, ExpiryRejectedRow>();
+
+    for (const error of errors) {
+      if (error.rowNumber <= 0) {
+        continue;
+      }
+
+      if (!rowsByNumber.has(error.rowNumber)) {
+        rowsByNumber.set(error.rowNumber, {
+          rowNumber: error.rowNumber,
+          rawValues: {
+            sku: error.rawValues?.sku || '',
+            itemDescription: error.rawValues?.itemDescription || '',
+            usedByDate: error.rawValues?.usedByDate || '',
+          },
+          reason: error.message,
+          reasonCode: error.reasonCode,
+        });
+      }
+    }
+
+    return Array.from(rowsByNumber.values()).sort((a, b) => a.rowNumber - b.rowNumber);
   }
 }

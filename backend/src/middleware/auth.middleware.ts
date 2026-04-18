@@ -184,12 +184,12 @@ export const authenticateToken = async (req: AuthRequest, res: Response, next: N
 function setTestAuthContext(req: AuthRequest, next: NextFunction): void {
   req.user = {
     id: 1,
-    role: 'Manager',
+    role: 'admin',
     organizationId: TEST_AUTH_BYPASS_ORG_ID,
     tierLevel: 'professional',
   };
   req.userId = 1;
-  req.userRole = 'Manager';
+  req.userRole = 'admin';
   req.organizationId = TEST_AUTH_BYPASS_ORG_ID;
   req.tierLevel = 'professional';
   next();

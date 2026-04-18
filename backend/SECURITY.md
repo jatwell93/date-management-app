@@ -26,6 +26,7 @@ We will acknowledge your report within 48 hours and provide a detailed response 
 **Severity**: High  
 **Status**: Accepted Risk  
 **Justification**:
+
 - Vulnerability affects build-time operations (npm install), not runtime
 - Production environment uses Neon PostgreSQL (not SQLite)
 - SQLite3 is development-only dependency
@@ -33,19 +34,22 @@ We will acknowledge your report within 48 hours and provide a detailed response 
 - Risk: Low (no user-controlled file operations during installation)
 
 **Mitigation**:
+
 - Run `npm ci` in production (uses package-lock.json with verified checksums)
 - Development machines regularly updated
 - CI/CD pipelines use isolated environments
 
 #### 2. xlsx (sheetjs-style)
 
-**Vulnerability**: 
+**Vulnerability**:
+
 - Prototype Pollution (GHSA-4r6h-8v6p-xvw6)
 - Regular Expression Denial of Service (GHSA-5pgg-2g8v-p4x9)
 
 **Severity**: High  
 **Status**: Accepted Risk with Mitigations  
 **Justification**:
+
 - No fix available from package maintainers
 - Used only for CSV/XLSX parsing of trusted user uploads (authentication required)
 - Input sanitized before processing (CSV injection prevention implemented)
@@ -53,6 +57,7 @@ We will acknowledge your report within 48 hours and provide a detailed response 
 - File size limits enforced (10MB max)
 
 **Mitigation**:
+
 - Input validation with zod schemas
 - CSV injection sanitization (escapes `=`, `+`, `-`, `@` at cell start)
 - Request size limits: 10MB payload
@@ -61,11 +66,13 @@ We will acknowledge your report within 48 hours and provide a detailed response 
 - Uploaded files processed asynchronously (no blocking main thread)
 
 **Risk Assessment**: Low-Medium
+
 - Prototype pollution: Requires malicious file upload from authenticated user
 - ReDoS: Mitigated by file size limits and rate limiting
 - Impact limited to single user session (not system-wide)
 
 **Monitoring**:
+
 - Application logging tracks all file uploads with user ID
 - Sentry error tracking monitors for parsing failures
 - UBS (Ultimate Bug Scanner) runs pre-commit to catch code issues
@@ -75,6 +82,7 @@ We will acknowledge your report within 48 hours and provide a detailed response 
 ## Security Measures Implemented
 
 ### 1. Authentication & Authorization
+
 - **Clerk Authentication** (OAuth 2.0/OpenID Connect)
   - JWT tokens signed by Clerk with RSA keys
   - Token verification via `CLERK_SECRET_KEY`
@@ -92,6 +100,7 @@ We will acknowledge your report within 48 hours and provide a detailed response 
   - JWT_SECRET_OLD support for graceful rotation
 
 ### 2. Input Validation
+
 - Zod schemas for all API endpoints
 - CSV injection prevention (sanitizes leading `=`, `+`, `-`, `@`)
 - Request body size limit: 10MB
@@ -99,18 +108,21 @@ We will acknowledge your report within 48 hours and provide a detailed response 
 - Barcode validation (alphanumeric, 8-14 characters)
 
 ### 3. Rate Limiting
+
 - Strict: 5 requests/15min (login, register)
 - Upload: 10 requests/hour (file uploads)
 - Standard: 100 requests/15min (other endpoints)
 
 ### 4. CORS Security
+
 - Environment-based whitelist
 - Development: localhost:3000, localhost:3001
 - Production: Configured via `CORS_ORIGINS` environment
 
 variable
 
-### 5. Database Security  
+### 5. Database Security
+
 - **Prisma ORM** (prevents SQL injection)
 - **Transaction Atomicity**: All critical operations use `prisma.$transaction()`
   - Trial conversions: Stripe + DB updates in single transaction
@@ -121,6 +133,7 @@ variable
 - **Refresh token storage** with expiry tracking
 
 ### 6. Error Handling & Logging
+
 - **Custom error classes** (AuthenticationError, ValidationError, etc.)
 - **Global error handler middleware**
 - **Structured error responses**
@@ -130,6 +143,7 @@ variable
 - **Correlation IDs** for request tracing
 
 ### 7. Secrets Management
+
 - No hardcoded secrets in codebase
 - `.env` files (excluded from git via `.gitignore`)
 - git-secrets pre-commit hooks
@@ -137,6 +151,7 @@ variable
 - Environment-specific configurations
 
 ### 8. Workers Edge Security
+
 - JWT validation at edge using `jose` library
 - Public key verification for tokens
 - Request signing for backend communication
@@ -173,6 +188,7 @@ Security Team: [security@yourproject.com](mailto:security@yourproject.com)
 Emergency Contact: [urgent@yourproject.com](mailto:urgent@yourproject.com)
 
 **Response Time**:
+
 - Critical vulnerabilities: 24 hours
 - High vulnerabilities: 48 hours
 - Medium/Low vulnerabilities: 7 days

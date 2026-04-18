@@ -1,12 +1,12 @@
-
 # AGENTS.md
+
 **Node.js/Express/TypeScript Development Guide**
 
 **Version:** 1.2.3  
 **Status:** Canonical guide for AI-assisted Node/Express/TypeScript development  
 **Last Updated:** February 2026
 
-***
+---
 
 ## Table of Contents
 
@@ -21,26 +21,28 @@
 9. **Security Code Review**
 10. **Troubleshooting**
 
-***
+---
 
 ### Note on SKILLS/AGENTS
-SKILLs and AGENTS live in .github/ for VSCode and .agents/ for Windsurf and can should be used when the work needs specific knowledge that a skill or agent contains 
+
+SKILLs and AGENTS live in .github/ for VSCode and .agents/ for Windsurf and can should be used when the work needs specific knowledge that a skill or agent contains
 
 ### Note on MCP
+
 **Always** check for tools and MCP servers to assist with modifications e.g. use the shadcn-UI-mcp to find default components rather than building from scratch.
 
-***
+---
 
 ## 1. Compliance Core Rules
 
 ### Startup Compliance Output (Every Session)
 
-| Rule | Requirement | Validation |
-|------|------------|-----------|
-| ❌ **No new files without reuse analysis** | Search codebase, check existing controllers/services, provide justification | "Analyzed `src/controllers/X`, `src/services/Y`. Cannot extend because [reason]" |
-| ❌ **No rewrites when refactoring possible** | Prefer incremental improvements to existing services/controllers | "Extending `User` service at line X rather than creating new service" |
-| ❌ **No ignoring Express/TS conventions** | Follow Express REST patterns, layered architecture (routes → controllers → services → data access), TypeScript strict types, CRA conventions for React | "Follows Express patterns: routes in `src/routes/`, controllers in `src/controllers/`, services in `src/services/`, DB access in `src/db/` or `src/repositories/`; React follows CRA `src/` structure" |
-| ❌ **No skipping tests** | TDD mandatory—red, green, refactor. Never commit without tests | "Red: wrote failing test \| Green: implemented \| Verified: exit code 0" |
+| Rule                                         | Requirement                                                                                                                                            | Validation                                                                                                                                                                                             |
+| -------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------ | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| ❌ **No new files without reuse analysis**   | Search codebase, check existing controllers/services, provide justification                                                                            | "Analyzed `src/controllers/X`, `src/services/Y`. Cannot extend because [reason]"                                                                                                                       |
+| ❌ **No rewrites when refactoring possible** | Prefer incremental improvements to existing services/controllers                                                                                       | "Extending `User` service at line X rather than creating new service"                                                                                                                                  |
+| ❌ **No ignoring Express/TS conventions**    | Follow Express REST patterns, layered architecture (routes → controllers → services → data access), TypeScript strict types, CRA conventions for React | "Follows Express patterns: routes in `src/routes/`, controllers in `src/controllers/`, services in `src/services/`, DB access in `src/db/` or `src/repositories/`; React follows CRA `src/` structure" |
+| ❌ **No skipping tests**                     | TDD mandatory—red, green, refactor. Never commit without tests                                                                                         | "Red: wrote failing test \| Green: implemented \| Verified: exit code 0"                                                                                                                               |
 
 ### The Four Sacred Rules (Express/TypeScript-Specific)
 
@@ -53,13 +55,14 @@ SKILLs and AGENTS live in .github/ for VSCode and .agents/ for Windsurf and can 
 - **Code Quality**: Must pass `npm run lint`, `npm test`, and `ubs .` before commit
 - **Task Tracking**: Use OpenSpec workflows for ALL work—no markdown TODOs
 
-***
+---
 
 ### Non-Negotiables
 
 Following Express/TypeScript conventions reduces code. Always ask: **"Does Express/Node already provide this?"**
 
 **Good:**
+
 - **Route**: `src/routes/users.ts` defining endpoints
 - **Controller**: `src/controllers/usersController.ts` handling requests/responses
 - **Service**: `src/services/usersService.ts` containing business logic
@@ -67,12 +70,13 @@ Following Express/TypeScript conventions reduces code. Always ask: **"Does Expre
 - **Model/Types**: `src/models/User.ts` or `src/types/User.ts` for TypeScript interfaces/types
 
 **Anti-Pattern:**
+
 - Custom database layer bypassing established patterns
 - Non-standard directory structures
 - Controllers with business logic (should be in services)
 - Missing TypeScript types
 
-***
+---
 
 ## 2. Express/TypeScript Development Standards
 
@@ -80,13 +84,13 @@ Following Express/TypeScript conventions reduces code. Always ask: **"Does Expre
 
 #### Layered Architecture (Separation of Concerns)
 
-| Component | Responsibility | Anti-Pattern |
-|-----------|---------------|--------------|
-| **Route** | Define endpoints, map HTTP methods to controllers | Business logic in routes |
-| **Controller** | Handle requests/responses, validate input, call services | Direct database queries, business logic |
-| **Service** | Business logic, orchestration, data transformation | HTTP-specific code, direct DB queries |
-| **Repository/Data Access** | Database operations, queries, transactions | Business logic |
-| **Model/Type** | TypeScript interfaces/types, data shape validation | Logic implementation |
+| Component                  | Responsibility                                           | Anti-Pattern                            |
+| -------------------------- | -------------------------------------------------------- | --------------------------------------- |
+| **Route**                  | Define endpoints, map HTTP methods to controllers        | Business logic in routes                |
+| **Controller**             | Handle requests/responses, validate input, call services | Direct database queries, business logic |
+| **Service**                | Business logic, orchestration, data transformation       | HTTP-specific code, direct DB queries   |
+| **Repository/Data Access** | Database operations, queries, transactions               | Business logic                          |
+| **Model/Type**             | TypeScript interfaces/types, data shape validation       | Logic implementation                    |
 
 #### RESTful Design
 
@@ -99,12 +103,12 @@ import { usersController } from '../controllers/usersController';
 
 const router = express.Router();
 
-router.get('/', usersController.index);        // GET /users - list all
-router.get('/:id', usersController.show);      // GET /users/:id - single resource
-router.post('/', usersController.create);      // POST /users - create new
-router.put('/:id', usersController.update);    // PUT /users/:id - full update
-router.patch('/:id', usersController.update);  // PATCH /users/:id - partial update
-router.delete('/:id', usersController.destroy);// DELETE /users/:id - delete
+router.get('/', usersController.index); // GET /users - list all
+router.get('/:id', usersController.show); // GET /users/:id - single resource
+router.post('/', usersController.create); // POST /users - create new
+router.put('/:id', usersController.update); // PUT /users/:id - full update
+router.patch('/:id', usersController.update); // PATCH /users/:id - partial update
+router.delete('/:id', usersController.destroy); // DELETE /users/:id - delete
 
 export default router;
 ```
@@ -147,7 +151,7 @@ export const usersController = {
     } catch (error) {
       res.status(400).json({ error: error.message });
     }
-  }
+  },
 };
 
 // src/services/usersService.ts - Business logic
@@ -160,15 +164,15 @@ export const usersService = {
     if (!userData.email.includes('@')) {
       throw new Error('Invalid email format');
     }
-    
+
     // Create user
     const user = await usersRepository.create(userData);
-    
+
     // Send welcome email (business logic)
     await emailService.sendWelcome(user.email);
-    
+
     return user;
-  }
+  },
 };
 ```
 
@@ -182,11 +186,11 @@ export const usersController = {
     if (!req.body.email.includes('@')) {
       return res.status(400).json({ error: 'Invalid email' });
     }
-    
+
     const user = await usersRepository.create(req.body);
     await emailService.sendWelcome(user.email); // Business logic in controller!
     res.json(user);
-  }
+  },
 };
 ```
 
@@ -205,7 +209,7 @@ import { emailService } from './emailService';
 export class UserRegistration {
   constructor(
     private userRepo = usersRepository,
-    private emailSvc = emailService
+    private emailSvc = emailService,
   ) {}
 
   async register(userData: CreateUserDTO): Promise<User> {
@@ -248,9 +252,9 @@ describe('UserService', () => {
   it('sends email on create', async () => {
     const mockEmailService = { notify: jest.fn() };
     const service = new UserService(mockEmailService);
-    
+
     await service.createAndNotify({ email: 'test@example.com', name: 'Test' });
-    
+
     expect(mockEmailService.notify).toHaveBeenCalled();
   });
 });
@@ -274,7 +278,7 @@ async function activateUser(user: User): Promise<User> {
   if (user.isActive) {
     return user;
   }
-  
+
   try {
     user.activatedAt = new Date();
     await usersRepository.update(user);
@@ -297,6 +301,7 @@ codemap --deps          # How files connect
 codemap --diff          # What changed vs main
 codemap --diff --ref branch  # Changes vs specific branch
 ```
+
 # Agentlens Integration
 
 This project uses **agentlens** for AI-optimized documentation.
@@ -333,12 +338,12 @@ Follow this order to understand the codebase efficiently:
 
 ## Commands
 
-| Task | Command |
-|------|---------|
-| Regenerate docs | `agentlens` |
+| Task                       | Command                 |
+| -------------------------- | ----------------------- |
+| Regenerate docs            | `agentlens`             |
 | Fast update (changed only) | `agentlens --diff main` |
-| Check if stale | `agentlens --check` |
-| Force full regen | `agentlens --force` |
+| Check if stale             | `agentlens --check`     |
+| Force full regen           | `agentlens --force`     |
 
 ## Key Patterns
 
@@ -362,12 +367,14 @@ Follow this order to understand the codebase efficiently:
 6. Check OpenSpec changes: `openspec list` (see active work)
 
 **Quick Bug Fix (< 30 min):**
+
 - Load relevant controller/service/repository
 - Understand failing test (if applicable)
 - Load affected routes
 - Check OpenSpec: `openspec list` (active changes)
 
 **Standard Feature Work (2-4 hours):**
+
 - Load `README.md` (project overview)
 - Load database schema from `src/db/schema.sql` or migration files
 - Load relevant controllers, services, repositories
@@ -375,6 +382,7 @@ Follow this order to understand the codebase efficiently:
 - Check OpenSpec: `openspec list` and `openspec list --specs` (get context)
 
 **Architecture/Refactoring (4+ hours):**
+
 - Load all of above
 - Load architecture documentation
 - Load decision logs (if exists)
@@ -382,6 +390,7 @@ Follow this order to understand the codebase efficiently:
 - Check OpenSpec: `openspec list` and review `openspec/project.md`
 
 **Package-Specific Work:**
+
 - Load `packages.md` when working with Express middleware, authentication, testing libraries, etc.
 
 ### Session Question Protocol
@@ -394,12 +403,14 @@ Before starting work, clarify:
 4. **Constraints**: Any architectural requirements or limitations?
 5. **Context**: What related work exists? PRs, issues, patterns
 
-***
+---
 
-## 4. Project Structure 
+## 4. Project Structure
+
 ### Documentation Standards
 
 **README.md** should include:
+
 - What this project does
 - Local setup (Node version, npm/yarn, DB setup)
 - How to run tests (`npm test`)
@@ -408,12 +419,13 @@ Before starting work, clarify:
 - Contributing guidelines
 
 **docs/architecture.md** should include:
+
 - System components (routes, controllers, services, background jobs)
 - Key data flows (e.g., user signup flow)
 - External integrations
 - Performance considerations
 
-----------
+---
 
 ## 5. State Machine
 
@@ -421,7 +433,7 @@ Before starting work, clarify:
 
 ### States: PLAN → BUILD → QA → APPROVAL → APPLY → DOCS
 
-----------
+---
 
 ### PLAN State (Proposal)
 
@@ -429,7 +441,7 @@ Before starting work, clarify:
 **Actions:**
 
 1.  **Search Memory (REQUIRED):** Run `node scripts/mem-recall.js "<task keywords>"` to find similar patterns, past solutions, or related work
-2. Choose a concise `change-id` (e.g., `add-user-validation`).
+2.  Choose a concise `change-id` (e.g., `add-user-validation`).
 3.  Run: `openspec proposal <change-id>`.
 4.  Edit `openspec/changes/<change-id>/proposal.md` with analysis, reuse strategy, and implementation steps.
 5.  Edit `openspec/changes/<change-id>/tasks.md` with the checklist of work.
@@ -439,50 +451,58 @@ Before starting work, clarify:
 **Required Content (in `proposal.md`):**
 
 ```markdown
-# Proposal: [Feature/Fix Name]   
-## Analysis -  
-**Current**: `src/controllers/usersController.ts` 
-- User controller with X endpoints 
-**Affected**: `src/services/usersService.ts`, `src/__tests__/users.test.ts` 
-**Pattern**: Extends existing validation middleware   
+# Proposal: [Feature/Fix Name]
 
-## Reuse Strategy 
-- Extend User service with new validation method 
-- Follow existing test pattern from `src/__tests__/posts.test.ts`   
+## Analysis -
+
+**Current**: `src/controllers/usersController.ts`
+
+- User controller with X endpoints
+  **Affected**: `src/services/usersService.ts`, `src/__tests__/users.test.ts`
+  **Pattern**: Extends existing validation middleware
+
+## Reuse Strategy
+
+- Extend User service with new validation method
+- Follow existing test pattern from `src/__tests__/posts.test.ts`
 
 ## Implementation Steps
-1. Add validation method to `usersService.ts` 
-2. Update controller to use new validation 
-3. Add helper to `usersRepository.ts` 
+
+1. Add validation method to `usersService.ts`
+2. Update controller to use new validation
+3. Add helper to `usersRepository.ts`
 ```
 
 **Exit:** User approves the proposal files (`proposal.md` & `tasks.md`).
 
-----------
+---
 
 ### BUILD State (Implementation)
 
 **In:** Approved Proposal **Out:** Code changes
 
 **Actions:**
+
 1. **Codemap:** Use codemap commands for context of project structure:
+
 ```bash
 codemap .               # Project structure
 codemap --deps          # How files connect
 ```
+
 2.  **Read Tasks:** Review `openspec/changes/<change-id>/tasks.md`.
 3.  **Branch (REQUIRED):** `git checkout -b feature/<change-id>`
 4.  **Loop through Tasks:**
-    -   Mark task "In Progress" in `tasks.md` (mentally or via status if applicable).
-    -   **RED Phase:** Write failing tests.
-    -   **GREEN Phase:** Implement code.
-    -   **Refactor:** Clean up.
-    -   Mark task `[x]` in `tasks.md`.
+    - Mark task "In Progress" in `tasks.md` (mentally or via status if applicable).
+    - **RED Phase:** Write failing tests.
+    - **GREEN Phase:** Implement code.
+    - **Refactor:** Clean up.
+    - Mark task `[x]` in `tasks.md`.
 5.  **Scans:** Run tests and UBS.
 
 #### TDD Phases
 
-```typescript 
+```typescript
 // PHASE 1: RED - Failing test
 // src/__tests__/users.test.ts
 describe('User', () => {
@@ -501,38 +521,40 @@ export const usersService = {
     // ... implementation
     return {
       isValid: true,
-      errors: []
+      errors: [],
     };
-  }
+  },
 };
 
 // Verify: npm test (should now pass)
-
 ```
 
 **Exit:** Tests pass (`npm run test:frontend:diff` or `npm run test:backend:diff`), linter clean, `tasks.md` fully checked `[x]`.
 
-----------
+---
 
 ### QA State
 
 **In:** BUILD presented **Out:** Test results, UBS reults, Linter **Exit:** Tests pass OR user waiver
 
 **Execute:**
+
 #### UBS (Ultimate Bug Scanner)
 
 Flags likely bugs early. Use before every commit.
 
 ```bash
-ubs <changed-files> # Specific files (1s) [RECOMMENDED] 
-ubs $(git diff --name-only) # Staged files 
+ubs <changed-files> # Specific files (1s) [RECOMMENDED]
+ubs $(git diff --name-only) # Staged files
 ubs --only=ts,js,tsx src/ # Language filter
 ```
-**PASS**: No critical results found. 
+
+**PASS**: No critical results found.
 **FAIL**: Critical warnings: [list out findings and plan of action]
 
-- ✅ Linter: clean 
-----------
+- ✅ Linter: clean
+
+---
 
 ### APPROVAL State (HUMAN GATE)
 
@@ -541,8 +563,10 @@ ubs --only=ts,js,tsx src/ # Language filter
 **Present:**
 
 ```markdown
-## Ready for Approval   
-### Summary 
+## Ready for Approval
+
+### Summary
+
 3. Code Review Checklist
 
 Before committing, verify:
@@ -554,13 +578,13 @@ Before committing, verify:
 - ✅ Custom errors used for business logic errors
 - ✅ DI used for dependencies
 - ✅ No hardcoded config (use environment)
-- ✅ Linter: clean 
+- ✅ Linter: clean
 - ✅ UBS: passed without 'Critical'
-- ✅ OpenSpec: completed task marked in `tasks.md`   
-**Please review. Reply with:** - "approved" / "looks good" → push to git - "change X" → Back to BUILD - "revert" → Discard all
+- ✅ OpenSpec: completed task marked in `tasks.md`  
+  **Please review. Reply with:** - "approved" / "looks good" → push to git - "change X" → Back to BUILD - "revert" → Discard all
 ```
 
-----------
+---
 
 ### APPLY State
 
@@ -568,8 +592,9 @@ Before committing, verify:
 
 **Actions:**
 
-1. Verify all tests pass (one final time). 
+1. Verify all tests pass (one final time).
 2. Commit Changes: Use conventional commit format:
+
 ```bash
 git add .
 git commit -m "feat(<area>): brief description
@@ -579,12 +604,13 @@ git commit -m "feat(<area>): brief description
 
 Refs: <change-id>"
 ```
-2. Push feature branch: `git push feature/<change-id>` 
-3. User creates a pull request via GitHub 
+
+2. Push feature branch: `git push feature/<change-id>`
+3. User creates a pull request via GitHub
 4. User raises any findings from CodeSense check
 5. After PR approval and merge, confirm success
 
-----------
+---
 
 ### DOCS State (Archive)
 
@@ -593,7 +619,7 @@ Refs: <change-id>"
 **Actions:**
 
 1.  Confirm OpenSpec up to do `list`:
-2. Store Memory: Use `node scripts/mem-log.js` to log what was accomplished:
+2.  Store Memory: Use `node scripts/mem-log.js` to log what was accomplished:
 
     ```bash
     node scripts/mem-log.js FEATURE "Feature Title" "What was changed and why"
@@ -602,10 +628,11 @@ Refs: <change-id>"
     # Or for architectural decisions:
     node scripts/mem-log.js ARCHITECTURE "Decision Title" "Choice and rationale"
     ```
-3. Update `README.md` or `docs/` if architecture changed.
-4. Validate state: `openspec validate --strict`.
 
-----------
+3.  Update `README.md` or `docs/` if architecture changed.
+4.  Validate state: `openspec validate --strict`.
+
+---
 
 ## 6. Task Management with OpenSpec
 
@@ -614,18 +641,18 @@ Refs: <change-id>"
 Use `--json` flag for programmatic output.
 
 ```bash
-# Check what to work on  
-openspec list                           # Active changes with task progress  
-openspec list --specs                   # List current specifications  
-openspec show <change-id> --json        # View change details  
-  
-# Create changes (proposal stage)  
-openspec proposal <change-id>           # Create new change proposal  
-openspec validate <change-id> --strict  # Validate proposal formatting  
-  
-# Manage workflow  
-openspec show <change-id>               # Review proposal, tasks, deltas  
-openspec archive <change-id> --yes      # Archive completed change  
+# Check what to work on
+openspec list                           # Active changes with task progress
+openspec list --specs                   # List current specifications
+openspec show <change-id> --json        # View change details
+
+# Create changes (proposal stage)
+openspec proposal <change-id>           # Create new change proposal
+openspec validate <change-id> --strict  # Validate proposal formatting
+
+# Manage workflow
+openspec show <change-id>               # Review proposal, tasks, deltas
+openspec archive <change-id> --yes      # Archive completed change
 openspec validate --all                 # Validate all changes and specs
 ```
 
@@ -642,32 +669,32 @@ openspec validate --all                 # Validate all changes and specs
 
 OpenSpec tracks progress through `tasks.md` files using markdown checkboxes:
 
-| Status | Display | Meaning |
-|--------|---------|---------|
-| No tasks.md | "No tasks" | Still in proposal stage |
-| All `[ ]` | "3/5 tasks" | Active implementation |
-| All `[x]` | "✓ Complete" | Ready for archive |
+| Status      | Display      | Meaning                 |
+| ----------- | ------------ | ----------------------- |
+| No tasks.md | "No tasks"   | Still in proposal stage |
+| All `[ ]`   | "3/5 tasks"  | Active implementation   |
+| All `[x]`   | "✓ Complete" | Ready for archive       |
 
 ### Important Rules
 
--   Use **OpenSpec** for ALL change tracking (no markdown TODOs).
--   Always validate proposals: `openspec validate <id> --strict`.
--   Run `openspec list` to see active work before starting.
--   Complete tasks sequentially in `tasks.md`.
--   Archive changes after deployment: `openspec archive <id> --yes`.
--   Store change files in `openspec/changes/[change-id]/` structure.
--   Do **NOT** create planning documents in repo root.
--   Do **NOT** skip validation steps.
--   Do **NOT** archive without completing all tasks.
+- Use **OpenSpec** for ALL change tracking (no markdown TODOs).
+- Always validate proposals: `openspec validate <id> --strict`.
+- Run `openspec list` to see active work before starting.
+- Complete tasks sequentially in `tasks.md`.
+- Archive changes after deployment: `openspec archive <id> --yes`.
+- Store change files in `openspec/changes/[change-id]/` structure.
+- Do **NOT** create planning documents in repo root.
+- Do **NOT** skip validation steps.
+- Do **NOT** archive without completing all tasks.
 
 ### Change Types
 
--   **Features:** New capabilities (use `## ADDED Requirements` in specs).
--   **Modifications:** Changes to existing behavior (use `## MODIFIED Requirements` in specs).
--   **Removals:** Deprecated features (use `## REMOVED Requirements` in specs).
--   **Renaming:** Requirement name changes only (use `## RENAMED Requirements` in specs).
+- **Features:** New capabilities (use `## ADDED Requirements` in specs).
+- **Modifications:** Changes to existing behavior (use `## MODIFIED Requirements` in specs).
+- **Removals:** Deprecated features (use `## REMOVED Requirements` in specs).
+- **Renaming:** Requirement name changes only (use `## RENAMED Requirements` in specs).
 
-----------
+---
 
 ## 7. Quality & Testing
 
@@ -678,40 +705,40 @@ OpenSpec tracks progress through `tasks.md` files using markdown checkboxes:
 1.  **Red**: Write test that fails
 
 ```
-// src/__tests__/users.test.ts  
-it('sends welcome email when user created', async () => {  
-  const user = await usersService.create({ email: 'test@example.com', name: 'Test' });  
-  expect(emailService.sendWelcome).toHaveBeenCalledWith(user.email);  
+// src/__tests__/users.test.ts
+it('sends welcome email when user created', async () => {
+  const user = await usersService.create({ email: 'test@example.com', name: 'Test' });
+  expect(emailService.sendWelcome).toHaveBeenCalledWith(user.email);
 });
 ```
 
 2.  **Green**: Implement minimal code to pass
 
 ```
-// src/services/usersService.ts  
-export const usersService = {  
-  async create(data: CreateUserDTO): Promise<User> {  
-    const user = await usersRepository.create(data);  
-    await emailService.sendWelcome(user.email);  
-    return user;  
-  }  
+// src/services/usersService.ts
+export const usersService = {
+  async create(data: CreateUserDTO): Promise<User> {
+    const user = await usersRepository.create(data);
+    await emailService.sendWelcome(user.email);
+    return user;
+  }
 };
 ```
 
 3.  **Refactor**: Improve without changing behavior
 
 ```
-// src/services/usersService.ts  
-export const usersService = {  
-  async create(data: CreateUserDTO): Promise<User> {  
-    const user = await usersRepository.create(data);  
-    await this.queueWelcomeEmail(user);  
-    return user;  
-  },  
-    
-  private async queueWelcomeEmail(user: User) {  
-    await emailQueue.add({ userId: user.id });  
-  }  
+// src/services/usersService.ts
+export const usersService = {
+  async create(data: CreateUserDTO): Promise<User> {
+    const user = await usersRepository.create(data);
+    await this.queueWelcomeEmail(user);
+    return user;
+  },
+
+  private async queueWelcomeEmail(user: User) {
+    await emailQueue.add({ userId: user.id });
+  }
 };
 ```
 
@@ -720,22 +747,22 @@ export const usersService = {
 Before marking task complete, run all (must pass):
 
 ```
-# Run all tests  
-npm run test:coverage                     # Expected: high level of quality coverage  
-  
-# Run linter with auto-fix  
-npm run lint                              # Expected: exit code 0 or only minor 
-  
-# Check TypeScript compilation  
-npm run build                             # Expected: exit code 0  
-# OR  
-tsc --noEmit  
-  
-# Validate OpenSpec changes  
+# Run all tests
+npm run test:coverage                     # Expected: high level of quality coverage
+
+# Run linter with auto-fix
+npm run lint                              # Expected: exit code 0 or only minor
+
+# Check TypeScript compilation
+npm run build                             # Expected: exit code 0
+# OR
+tsc --noEmit
+
+# Validate OpenSpec changes
 openspec validate --all                   # Expected: exit code 0
 ```
 
-----------
+---
 
 ## 8. Memory Management
 
@@ -744,6 +771,7 @@ openspec validate --all                   # Expected: exit code 0
 This project uses **Memvid** as a lightweight, file-based memory layer. All project knowledge is stored in a single `project-memory.mv2` file at the project root.
 
 ### Why Memvid
+
 - **Zero daemon overhead** — No database server, just a single file
 - **Offline-first** — Works entirely locally, perfect for low-resource devices
 - **Fast retrieval** — Rust-based lexical search (~1-2ms)
@@ -755,7 +783,7 @@ This project uses **Memvid** as a lightweight, file-based memory layer. All proj
 # Store a memory
 node scripts/mem-log.js <KIND> <TITLE> <MESSAGE>
 
-# Recall memories  
+# Recall memories
 node scripts/mem-recall.js <QUERY>
 
 # Direct CLI access
@@ -766,15 +794,15 @@ memvid timeline project-memory.mv2
 
 ### Memory Kinds
 
-| Kind | Use For |
-|------|---------|
-| `FIX` | Bug fixes and their solutions |
-| `PATTERN` | Architectural decisions, coding conventions |
-| `DECISION` | Why we chose X over Y |
-| `FEATURE` | New feature implementations |
-| `ERROR` | Common errors and how to resolve them |
-| `ARCHITECTURE` | System design patterns |
-| `WORKFLOW` | Process/workflow documentation |
+| Kind           | Use For                                     |
+| -------------- | ------------------------------------------- |
+| `FIX`          | Bug fixes and their solutions               |
+| `PATTERN`      | Architectural decisions, coding conventions |
+| `DECISION`     | Why we chose X over Y                       |
+| `FEATURE`      | New feature implementations                 |
+| `ERROR`        | Common errors and how to resolve them       |
+| `ARCHITECTURE` | System design patterns                      |
+| `WORKFLOW`     | Process/workflow documentation              |
 
 ### Usage Examples
 
@@ -796,23 +824,26 @@ node scripts/mem-recall.js "expired items"
 ## Memvid Memory Protocol
 
 ### REQUIRED: Before Starting Work
+
 Run `node scripts/mem-recall.js "<task keywords>"` to check for relevant project context.
 
 ### REQUIRED: Automatic Storage Triggers
+
 Store memories using `node scripts/mem-log.js` on ANY of:
+
 - **Bug fix** → problem + solution
-- **Architecture decision** → choice + rationale  
+- **Architecture decision** → choice + rationale
 - **Pattern discovered** → reusable approach
 - **Feature completed** → what was built and why
 - **Error resolved** → error message + fix
 
 ### Search Tips
+
 - Lexical search is **case-aware** — capitalize key terms (e.g., "Controllers" not "controllers")
 - Use specific terms from your codebase
 - Check `memvid timeline project-memory.mv2` to see all stored memories
 
-Do NOT wait to be asked. Memory storage should happen as you work.  
-
+Do NOT wait to be asked. Memory storage should happen as you work.
 
 ## 9. Security Code Review
 
@@ -820,58 +851,58 @@ Do NOT wait to be asked. Memory storage should happen as you work.
 
 Before APPROVAL, verify:
 
--   ✅ No hardcoded secrets (API keys, passwords, tokens)
--   ✅ All user input validated (using validation middleware or libraries like `joi`, `zod`)
--   ✅ All user input sanitized when displayed
--   ✅ No SQL injection (use parameterized queries or ORM)
--   ✅ Authentication required on sensitive endpoints
--   ✅ Authorization verified (current user can perform action?)
--   ✅ Sensitive data logged appropriately (no passwords in logs)
--   ✅ CSRF protection enabled (if applicable)
--   ✅ Rate limiting on public endpoints (if applicable)
+- ✅ No hardcoded secrets (API keys, passwords, tokens)
+- ✅ All user input validated (using validation middleware or libraries like `joi`, `zod`)
+- ✅ All user input sanitized when displayed
+- ✅ No SQL injection (use parameterized queries or ORM)
+- ✅ Authentication required on sensitive endpoints
+- ✅ Authorization verified (current user can perform action?)
+- ✅ Sensitive data logged appropriately (no passwords in logs)
+- ✅ CSRF protection enabled (if applicable)
+- ✅ Rate limiting on public endpoints (if applicable)
 
 **Good:**
 
-```typescript 
-// src/controllers/usersController.ts  
-import { Request, Response } from 'express';  
-import { usersService } from '../services/usersService';  
-import { authenticateUser, authorizeAdmin } from '../middleware/auth';  
-  
-export const usersController = {  
-  async update(req: Request, res: Response) {  
-    try {  
-      // Validate input  
-      const validated = updateUserSchema.parse(req.body);  
-        
-      // Authorization check  
-      if (req.user.id !== Number(req.params.id) && !req.user.isAdmin) {  
-        return res.status(403).json({ error: 'Not authorized' });  
-      }  
-        
-      const user = await usersService.update(Number(req.params.id), validated);  
-      res.json(user);  
-    } catch (error) {  
-      res.status(400).json({ error: error.message });  
-    }  
-  }  
-};  
-  
-// src/routes/users.ts  
+```typescript
+// src/controllers/usersController.ts
+import { Request, Response } from 'express';
+import { usersService } from '../services/usersService';
+import { authenticateUser, authorizeAdmin } from '../middleware/auth';
+
+export const usersController = {
+  async update(req: Request, res: Response) {
+    try {
+      // Validate input
+      const validated = updateUserSchema.parse(req.body);
+
+      // Authorization check
+      if (req.user.id !== Number(req.params.id) && !req.user.isAdmin) {
+        return res.status(403).json({ error: 'Not authorized' });
+      }
+
+      const user = await usersService.update(Number(req.params.id), validated);
+      res.json(user);
+    } catch (error) {
+      res.status(400).json({ error: error.message });
+    }
+  },
+};
+
+// src/routes/users.ts
 router.put('/:id', authenticateUser, usersController.update);
 ```
 
 **Anti-Pattern:**
 
 ```
-// DONT DO THIS  
-export const usersController = {  
-  async update(req: Request, res: Response) {  
-    // Raw SQL - vulnerable to injection!  
-    const sql = `UPDATE users SET email = '${req.body.email}' WHERE id = ${req.params.id}`;  
-    await db.run(sql);  
-    res.json({ success: true });  
-  }  
+// DONT DO THIS
+export const usersController = {
+  async update(req: Request, res: Response) {
+    // Raw SQL - vulnerable to injection!
+    const sql = `UPDATE users SET email = '${req.body.email}' WHERE id = ${req.params.id}`;
+    await db.run(sql);
+    res.json({ success: true });
+  }
 };
 ```
 
@@ -887,7 +918,7 @@ Must pass before merge:
 6.  ✅ Comments explain why, not what
 7.  ✅ OpenSpec validation passed (`openspec validate --all`)
 
-----------
+---
 
 ## 10. Troubleshooting
 
@@ -904,54 +935,54 @@ Must pass before merge:
 
 ### Common Issues
 
-| Problem | Symptom | Solution |
-|---------|---------|----------|
-| **Test Failures** | `npm test` returns non-zero | Read error message, check test expectations, verify test data setup/mocks |
-| **Linter Errors** | `npm run lint` fails | Run linter with auto-fix, resolve remaining manually |
-| **UBS False Positives** | UBS flags something that's not a bug | Check context, ignore if safe, document why in code comment |
-| **Database Issues** | Connection or query errors | Check SQLite3 connection string, verify migrations run, check file permissions |
-| **TypeScript Errors** | `tsc` compilation fails | Check types, imports, and `tsconfig.json` settings |
-| **Dependency Issues** | Package not found error | Run `npm install` or `yarn install`, verify `package.json` and `package-lock.json` committed |
-| **State Issues** | Tests pass individually, fail together | Check test isolation, use `beforeEach`/`afterEach` hooks, avoid shared state |
-| **Performance** | Endpoint slow | Profile with logging, check N+1 queries, add database indexes |
-| **OpenSpec Validation** | `openspec validate` fails | Check delta spec format, ensure scenarios use `####` headers, verify SHALL/MUST in requirements |
+| Problem                 | Symptom                                | Solution                                                                                        |
+| ----------------------- | -------------------------------------- | ----------------------------------------------------------------------------------------------- |
+| **Test Failures**       | `npm test` returns non-zero            | Read error message, check test expectations, verify test data setup/mocks                       |
+| **Linter Errors**       | `npm run lint` fails                   | Run linter with auto-fix, resolve remaining manually                                            |
+| **UBS False Positives** | UBS flags something that's not a bug   | Check context, ignore if safe, document why in code comment                                     |
+| **Database Issues**     | Connection or query errors             | Check SQLite3 connection string, verify migrations run, check file permissions                  |
+| **TypeScript Errors**   | `tsc` compilation fails                | Check types, imports, and `tsconfig.json` settings                                              |
+| **Dependency Issues**   | Package not found error                | Run `npm install` or `yarn install`, verify `package.json` and `package-lock.json` committed    |
+| **State Issues**        | Tests pass individually, fail together | Check test isolation, use `beforeEach`/`afterEach` hooks, avoid shared state                    |
+| **Performance**         | Endpoint slow                          | Profile with logging, check N+1 queries, add database indexes                                   |
+| **OpenSpec Validation** | `openspec validate` fails              | Check delta spec format, ensure scenarios use `####` headers, verify SHALL/MUST in requirements |
 
-----------
+---
 
 ## Best Practices Summary
 
 ### DO:
 
--   ✅ Follow Express REST patterns (routes → controllers → services → data access)
--   ✅ Use TypeScript strict mode with explicit types
--   ✅ Write tests before code (TDD)
--   ✅ Inject dependencies for testability
--   ✅ Keep controllers thin, logic in services
--   ✅ Use parameterized queries (avoid raw SQL)
--   ✅ Validate input, sanitize output
--   ✅ Comment why, not what
--   ✅ Cite code in plans (`src/controllers/users.ts:42`)
--   ✅ Use OpenSpec for change tracking (not markdown TODOs)
--   ✅ Request approval before merge
--   ✅ Document architectural decisions
--   ✅ Load `packages.md` when working with packages
--   ✅ Follow CRA conventions for React (components in `src/`, standard folder structure)
--   ✅ Validate OpenSpec changes before implementation
+- ✅ Follow Express REST patterns (routes → controllers → services → data access)
+- ✅ Use TypeScript strict mode with explicit types
+- ✅ Write tests before code (TDD)
+- ✅ Inject dependencies for testability
+- ✅ Keep controllers thin, logic in services
+- ✅ Use parameterized queries (avoid raw SQL)
+- ✅ Validate input, sanitize output
+- ✅ Comment why, not what
+- ✅ Cite code in plans (`src/controllers/users.ts:42`)
+- ✅ Use OpenSpec for change tracking (not markdown TODOs)
+- ✅ Request approval before merge
+- ✅ Document architectural decisions
+- ✅ Load `packages.md` when working with packages
+- ✅ Follow CRA conventions for React (components in `src/`, standard folder structure)
+- ✅ Validate OpenSpec changes before implementation
 
 ### DON'T:
 
--   ❌ Hardcode secrets, APIs, or config
--   ❌ Skip tests or commit untested code
--   ❌ Skip UBS scanning (bugs found early ≠ bugs found in prod)
--   ❌ Modify code without reading full context
--   ❌ Use mock data in production
--   ❌ Write raw SQL instead of using ORM/query builder properly
--   ❌ Put business logic in controllers
--   ❌ Use `any` type without justification
--   ❌ Introduce unjustified abstraction
--   ❌ Commit to `main`/`master` directly
--   ❌ Force-push to shared branches
--   ❌ Ignore security checklist
--   ❌ Create markdown TODOs instead of OpenSpec changes
--   ❌ Skip OpenSpec validation steps
--   ❌ Eject CRA unless absolutely necessary
+- ❌ Hardcode secrets, APIs, or config
+- ❌ Skip tests or commit untested code
+- ❌ Skip UBS scanning (bugs found early ≠ bugs found in prod)
+- ❌ Modify code without reading full context
+- ❌ Use mock data in production
+- ❌ Write raw SQL instead of using ORM/query builder properly
+- ❌ Put business logic in controllers
+- ❌ Use `any` type without justification
+- ❌ Introduce unjustified abstraction
+- ❌ Commit to `main`/`master` directly
+- ❌ Force-push to shared branches
+- ❌ Ignore security checklist
+- ❌ Create markdown TODOs instead of OpenSpec changes
+- ❌ Skip OpenSpec validation steps
+- ❌ Eject CRA unless absolutely necessary
