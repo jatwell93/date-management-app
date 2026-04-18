@@ -56,6 +56,11 @@
       "sourceType": "github",
       "computedHash": "7311ed85870f37e9af1e8354c500e7c4161893d845031eed43dd1d55157da83a"
     },
+    "expect": {
+      "source": "millionco/expect",
+      "sourceType": "github",
+      "computedHash": "2bf046b63a3a614a713ecdb62e1704141b345d22f69232802e9be9c6b5f05a45"
+    },
     "find-skills": {
       "source": "vercel-labs/skills",
       "sourceType": "github",
