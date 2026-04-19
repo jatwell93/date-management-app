@@ -129,7 +129,7 @@ WHERE metadata LIKE '%token%';
 1. Create a new Clerk organization
 2. Sign in as first member → call `POST /api/organization/bootstrap`
 3. Verify response: `{ role: "admin", isFirstAdmin: true }`
-4. Verify DB: `SELECT role FROM "User" WHERE clerk_user_id = '<id>'` → `admin`
+4. Verify DB: `SELECT role FROM users WHERE clerk_user_id = '<id>'` → `admin`
 
 ### (b) Invite Acceptance
 1. Admin creates invite: `POST /api/organization/invites`
