@@ -75,11 +75,19 @@ function AppContent({
     userId,
     userName,
     userRole,
+    updateBootstrapRole,
     token,
     handleLogout,
   } = useAuthContext();
   const isLoggedIn = hasSession && isFullySignedIn;
-  const { isBootstrapped, isBootstrapping, bootstrapError } = useOrgBootstrap();
+  const { isBootstrapped, isBootstrapping, bootstrapError, bootstrapResult } = useOrgBootstrap();
+  const effectiveUserRole = bootstrapResult?.role ?? userRole;
+
+  useEffect(() => {
+    if (bootstrapResult?.role) {
+      updateBootstrapRole(bootstrapResult.role);
+    }
+  }, [bootstrapResult?.role, updateBootstrapRole]);
   const { isHandheld } = useHandheldDetectionContext();
   const location = useLocation();
   const navigate = useNavigate();
@@ -285,7 +293,7 @@ function AppContent({
                       Markdown Calculator
                     </Link>
                   </li>
-                  {userRole && hasPermission(userRole, PERMISSIONS.MANAGE_MEMBERS) && (
+                  {effectiveUserRole && hasPermission(effectiveUserRole, PERMISSIONS.MANAGE_MEMBERS) && (
                     <>
                       <li>
                         <Link to="/user-management" className="hover:opacity-90 transition-opacity">
@@ -416,7 +424,7 @@ function AppContent({
                       Upgrade
                     </Link>
                   </li>
-                  {userRole && hasPermission(userRole, PERMISSIONS.MANAGE_MEMBERS) && (
+                  {effectiveUserRole && hasPermission(effectiveUserRole, PERMISSIONS.MANAGE_MEMBERS) && (
                     <>
                       <li>
                         <Link
@@ -538,9 +546,7 @@ function AppContent({
                 <Route
                   path="/settings"
                   element={
-                    isLoggedIn &&
-                    userRole &&
-                    hasPermission(userRole, PERMISSIONS.MANAGE_MEMBERS) ? (
+                    isLoggedIn && effectiveUserRole && hasPermission(effectiveUserRole, PERMISSIONS.MANAGE_MEMBERS) ? (
                       <SettingsPage />
                     ) : isLoggedIn ? (
                       <Navigate to="/scan" />
@@ -552,9 +558,7 @@ function AppContent({
                 <Route
                   path="/settings/*"
                   element={
-                    isLoggedIn &&
-                    userRole &&
-                    hasPermission(userRole, PERMISSIONS.MANAGE_MEMBERS) ? (
+                    isLoggedIn && effectiveUserRole && hasPermission(effectiveUserRole, PERMISSIONS.MANAGE_MEMBERS) ? (
                       <SettingsPage />
                     ) : isLoggedIn ? (
                       <Navigate to="/scan" />
@@ -613,7 +617,7 @@ function AppContent({
                     isLoggedIn ? <MarkdownCalculator token={token} /> : <Navigate to="/login" />
                   }
                 />
-                {userRole && hasPermission(userRole, PERMISSIONS.MANAGE_MEMBERS) && (
+                {effectiveUserRole && hasPermission(effectiveUserRole, PERMISSIONS.MANAGE_MEMBERS) && (
                   <>
                     <Route
                       path="/user-management"
@@ -697,7 +701,7 @@ function AppContent({
               <Route
                 path="/settings"
                 element={
-                  isLoggedIn && userRole && hasPermission(userRole, PERMISSIONS.MANAGE_MEMBERS) ? (
+                  isLoggedIn && effectiveUserRole && hasPermission(effectiveUserRole, PERMISSIONS.MANAGE_MEMBERS) ? (
                     <SettingsPage />
                   ) : isLoggedIn ? (
                     <Navigate to="/scan" />
@@ -709,7 +713,7 @@ function AppContent({
               <Route
                 path="/settings/*"
                 element={
-                  isLoggedIn && userRole && hasPermission(userRole, PERMISSIONS.MANAGE_MEMBERS) ? (
+                  isLoggedIn && effectiveUserRole && hasPermission(effectiveUserRole, PERMISSIONS.MANAGE_MEMBERS) ? (
                     <SettingsPage />
                   ) : isLoggedIn ? (
                     <Navigate to="/scan" />
@@ -741,16 +745,24 @@ function AppContent({
               <Route
                 path="/detailed-expiry-report"
                 element={
-                  isLoggedIn ? <DetailedExpiryReportPage token={token} /> : <Navigate to="/login" />
+                  isLoggedIn ? (
+                    <DetailedExpiryReportPage token={token} />
+                  ) : (
+                    <Navigate to="/login" />
+                  )
                 }
               />
               <Route
                 path="/expired-items"
-                element={isLoggedIn ? <ExpiredItemsPage token={token} /> : <Navigate to="/login" />}
+                element={
+                  isLoggedIn ? <ExpiredItemsPage token={token} /> : <Navigate to="/login" />
+                }
               />
               <Route
                 path="/usage-report"
-                element={isLoggedIn ? <UsageReportPage token={token} /> : <Navigate to="/login" />}
+                element={
+                  isLoggedIn ? <UsageReportPage token={token} /> : <Navigate to="/login" />
+                }
               />
               <Route
                 path="/markdown-calculator"
@@ -758,7 +770,7 @@ function AppContent({
                   isLoggedIn ? <MarkdownCalculator token={token} /> : <Navigate to="/login" />
                 }
               />
-              {userRole && hasPermission(userRole, PERMISSIONS.MANAGE_MEMBERS) && (
+              {effectiveUserRole && hasPermission(effectiveUserRole, PERMISSIONS.MANAGE_MEMBERS) && (
                 <>
                   <Route
                     path="/user-management"

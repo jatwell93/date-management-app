@@ -13,8 +13,8 @@ interface ClerkAuthProviderProps {
 const decodeTokenAndGetRole = (token: string | null): RoleValue | null => {
   if (!token) return null;
   try {
-    const decodedToken = jwtDecode<JwtPayload & { role?: string }>(token);
-    return normalizeRole(decodedToken.role);
+    const decodedToken = jwtDecode<JwtPayload & { role?: string; org_role?: string }>(token);
+    return normalizeRole(decodedToken.role ?? decodedToken.org_role);
   } catch (error) {
     Sentry.captureException(error, { tags: { feature: 'auth' } });
     return 'team_member';
@@ -63,6 +63,7 @@ interface AuthContextType {
   userId: number | null;
   userName: string | null;
   userRole: RoleValue | null;
+  updateBootstrapRole: (role: RoleValue) => void;
   handleLogin: (token: string) => void;
   handleLogout: () => void;
 }
@@ -212,6 +213,7 @@ function ClerkAuthInner({ children }: { children: React.ReactNode }) {
     userId,
     userName,
     userRole,
+    updateBootstrapRole: setUserRole,
     handleLogin,
     handleLogout,
   };
