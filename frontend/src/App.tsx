@@ -81,13 +81,15 @@ function AppContent({
   } = useAuthContext();
   const isLoggedIn = hasSession && isFullySignedIn;
   const { isBootstrapped, isBootstrapping, bootstrapError, bootstrapResult } = useOrgBootstrap();
-  const effectiveUserRole = bootstrapResult?.role ?? userRole;
+  const hasCurrentUserBootstrapRole =
+    bootstrapResult?.userId === userId && !!bootstrapResult?.role;
+  const effectiveUserRole = hasCurrentUserBootstrapRole ? bootstrapResult.role : userRole;
 
   useEffect(() => {
-    if (bootstrapResult?.role) {
+    if (hasCurrentUserBootstrapRole) {
       updateBootstrapRole(bootstrapResult.role);
     }
-  }, [bootstrapResult?.role, updateBootstrapRole]);
+  }, [bootstrapResult?.role, hasCurrentUserBootstrapRole, updateBootstrapRole]);
   const { isHandheld } = useHandheldDetectionContext();
   const location = useLocation();
   const navigate = useNavigate();
