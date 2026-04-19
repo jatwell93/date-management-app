@@ -81,8 +81,7 @@ function AppContent({
   } = useAuthContext();
   const isLoggedIn = hasSession && isFullySignedIn;
   const { isBootstrapped, isBootstrapping, bootstrapError, bootstrapResult } = useOrgBootstrap();
-  const hasCurrentUserBootstrapRole =
-    bootstrapResult?.userId === userId && !!bootstrapResult?.role;
+  const hasCurrentUserBootstrapRole = bootstrapResult?.userId === userId && !!bootstrapResult?.role;
   const effectiveUserRole = hasCurrentUserBootstrapRole ? bootstrapResult.role : userRole;
 
   useEffect(() => {
@@ -295,38 +294,42 @@ function AppContent({
                       Markdown Calculator
                     </Link>
                   </li>
-                  {effectiveUserRole && hasPermission(effectiveUserRole, PERMISSIONS.MANAGE_MEMBERS) && (
-                    <>
-                      <li>
-                        <Link to="/user-management" className="hover:opacity-90 transition-opacity">
-                          User Management
-                        </Link>
-                      </li>
-                      <li>
-                        <Link
-                          to="/store-area-management"
-                          className="hover:opacity-90 transition-opacity"
-                        >
-                          Store Areas
-                        </Link>
-                      </li>
-                      <li>
-                        <Link to="/csv-upload" className="hover:opacity-90 transition-opacity">
-                          CSV Upload
-                        </Link>
-                      </li>
-                      <li>
-                        <Link to="/expiry-import" className="hover:opacity-90 transition-opacity">
-                          Expiry Import
-                        </Link>
-                      </li>
-                      <li>
-                        <Link to="/settings" className="hover:opacity-90 transition-opacity">
-                          Settings
-                        </Link>
-                      </li>
-                    </>
-                  )}
+                  {effectiveUserRole &&
+                    hasPermission(effectiveUserRole, PERMISSIONS.MANAGE_MEMBERS) && (
+                      <>
+                        <li>
+                          <Link
+                            to="/user-management"
+                            className="hover:opacity-90 transition-opacity"
+                          >
+                            User Management
+                          </Link>
+                        </li>
+                        <li>
+                          <Link
+                            to="/store-area-management"
+                            className="hover:opacity-90 transition-opacity"
+                          >
+                            Store Areas
+                          </Link>
+                        </li>
+                        <li>
+                          <Link to="/csv-upload" className="hover:opacity-90 transition-opacity">
+                            CSV Upload
+                          </Link>
+                        </li>
+                        <li>
+                          <Link to="/expiry-import" className="hover:opacity-90 transition-opacity">
+                            Expiry Import
+                          </Link>
+                        </li>
+                        <li>
+                          <Link to="/settings" className="hover:opacity-90 transition-opacity">
+                            Settings
+                          </Link>
+                        </li>
+                      </>
+                    )}
                 </ul>
 
                 {/* Desktop Logout button */}
@@ -426,55 +429,56 @@ function AppContent({
                       Upgrade
                     </Link>
                   </li>
-                  {effectiveUserRole && hasPermission(effectiveUserRole, PERMISSIONS.MANAGE_MEMBERS) && (
-                    <>
-                      <li>
-                        <Link
-                          to="/user-management"
-                          className="block hover:opacity-90 transition-opacity"
-                          onClick={() => setIsMobileMenuOpen(false)}
-                        >
-                          User Management
-                        </Link>
-                      </li>
-                      <li>
-                        <Link
-                          to="/store-area-management"
-                          className="block hover:opacity-90 transition-opacity"
-                          onClick={() => setIsMobileMenuOpen(false)}
-                        >
-                          Store Areas
-                        </Link>
-                      </li>
-                      <li>
-                        <Link
-                          to="/csv-upload"
-                          className="block hover:opacity-90 transition-opacity"
-                          onClick={() => setIsMobileMenuOpen(false)}
-                        >
-                          CSV Upload
-                        </Link>
-                      </li>
-                      <li>
-                        <Link
-                          to="/expiry-import"
-                          className="block hover:opacity-90 transition-opacity"
-                          onClick={() => setIsMobileMenuOpen(false)}
-                        >
-                          Expiry Import
-                        </Link>
-                      </li>
-                      <li>
-                        <Link
-                          to="/settings"
-                          className="block hover:opacity-90 transition-opacity"
-                          onClick={() => setIsMobileMenuOpen(false)}
-                        >
-                          Settings
-                        </Link>
-                      </li>
-                    </>
-                  )}
+                  {effectiveUserRole &&
+                    hasPermission(effectiveUserRole, PERMISSIONS.MANAGE_MEMBERS) && (
+                      <>
+                        <li>
+                          <Link
+                            to="/user-management"
+                            className="block hover:opacity-90 transition-opacity"
+                            onClick={() => setIsMobileMenuOpen(false)}
+                          >
+                            User Management
+                          </Link>
+                        </li>
+                        <li>
+                          <Link
+                            to="/store-area-management"
+                            className="block hover:opacity-90 transition-opacity"
+                            onClick={() => setIsMobileMenuOpen(false)}
+                          >
+                            Store Areas
+                          </Link>
+                        </li>
+                        <li>
+                          <Link
+                            to="/csv-upload"
+                            className="block hover:opacity-90 transition-opacity"
+                            onClick={() => setIsMobileMenuOpen(false)}
+                          >
+                            CSV Upload
+                          </Link>
+                        </li>
+                        <li>
+                          <Link
+                            to="/expiry-import"
+                            className="block hover:opacity-90 transition-opacity"
+                            onClick={() => setIsMobileMenuOpen(false)}
+                          >
+                            Expiry Import
+                          </Link>
+                        </li>
+                        <li>
+                          <Link
+                            to="/settings"
+                            className="block hover:opacity-90 transition-opacity"
+                            onClick={() => setIsMobileMenuOpen(false)}
+                          >
+                            Settings
+                          </Link>
+                        </li>
+                      </>
+                    )}
                   <li>
                     <button
                       onClick={() => {
@@ -548,7 +552,9 @@ function AppContent({
                 <Route
                   path="/settings"
                   element={
-                    isLoggedIn && effectiveUserRole && hasPermission(effectiveUserRole, PERMISSIONS.MANAGE_MEMBERS) ? (
+                    isLoggedIn &&
+                    effectiveUserRole &&
+                    hasPermission(effectiveUserRole, PERMISSIONS.MANAGE_MEMBERS) ? (
                       <SettingsPage />
                     ) : isLoggedIn ? (
                       <Navigate to="/scan" />
@@ -560,7 +566,9 @@ function AppContent({
                 <Route
                   path="/settings/*"
                   element={
-                    isLoggedIn && effectiveUserRole && hasPermission(effectiveUserRole, PERMISSIONS.MANAGE_MEMBERS) ? (
+                    isLoggedIn &&
+                    effectiveUserRole &&
+                    hasPermission(effectiveUserRole, PERMISSIONS.MANAGE_MEMBERS) ? (
                       <SettingsPage />
                     ) : isLoggedIn ? (
                       <Navigate to="/scan" />
@@ -619,42 +627,47 @@ function AppContent({
                     isLoggedIn ? <MarkdownCalculator token={token} /> : <Navigate to="/login" />
                   }
                 />
-                {effectiveUserRole && hasPermission(effectiveUserRole, PERMISSIONS.MANAGE_MEMBERS) && (
-                  <>
-                    <Route
-                      path="/user-management"
-                      element={
-                        isLoggedIn ? <UserManagementPage token={token} /> : <Navigate to="/login" />
-                      }
-                    />
-                    <Route
-                      path="/store-area-management"
-                      element={
-                        isLoggedIn ? (
-                          <StoreAreaManagementPage token={token} />
-                        ) : (
-                          <Navigate to="/login" />
-                        )
-                      }
-                    />
-                    <Route
-                      path="/csv-upload"
-                      element={
-                        isLoggedIn ? <CSVUploadPage token={token} /> : <Navigate to="/login" />
-                      }
-                    />
-                    <Route
-                      path="/expiry-import"
-                      element={
-                        isLoggedIn ? (
-                          <CSVUploadPage token={token} defaultImportType="expiry-list" />
-                        ) : (
-                          <Navigate to="/login" />
-                        )
-                      }
-                    />
-                  </>
-                )}
+                {effectiveUserRole &&
+                  hasPermission(effectiveUserRole, PERMISSIONS.MANAGE_MEMBERS) && (
+                    <>
+                      <Route
+                        path="/user-management"
+                        element={
+                          isLoggedIn ? (
+                            <UserManagementPage token={token} />
+                          ) : (
+                            <Navigate to="/login" />
+                          )
+                        }
+                      />
+                      <Route
+                        path="/store-area-management"
+                        element={
+                          isLoggedIn ? (
+                            <StoreAreaManagementPage token={token} />
+                          ) : (
+                            <Navigate to="/login" />
+                          )
+                        }
+                      />
+                      <Route
+                        path="/csv-upload"
+                        element={
+                          isLoggedIn ? <CSVUploadPage token={token} /> : <Navigate to="/login" />
+                        }
+                      />
+                      <Route
+                        path="/expiry-import"
+                        element={
+                          isLoggedIn ? (
+                            <CSVUploadPage token={token} defaultImportType="expiry-list" />
+                          ) : (
+                            <Navigate to="/login" />
+                          )
+                        }
+                      />
+                    </>
+                  )}
                 <Route path="*" element={<Navigate to="/login" />} />
               </Routes>
             </ErrorBoundary>
@@ -703,7 +716,9 @@ function AppContent({
               <Route
                 path="/settings"
                 element={
-                  isLoggedIn && effectiveUserRole && hasPermission(effectiveUserRole, PERMISSIONS.MANAGE_MEMBERS) ? (
+                  isLoggedIn &&
+                  effectiveUserRole &&
+                  hasPermission(effectiveUserRole, PERMISSIONS.MANAGE_MEMBERS) ? (
                     <SettingsPage />
                   ) : isLoggedIn ? (
                     <Navigate to="/scan" />
@@ -715,7 +730,9 @@ function AppContent({
               <Route
                 path="/settings/*"
                 element={
-                  isLoggedIn && effectiveUserRole && hasPermission(effectiveUserRole, PERMISSIONS.MANAGE_MEMBERS) ? (
+                  isLoggedIn &&
+                  effectiveUserRole &&
+                  hasPermission(effectiveUserRole, PERMISSIONS.MANAGE_MEMBERS) ? (
                     <SettingsPage />
                   ) : isLoggedIn ? (
                     <Navigate to="/scan" />
@@ -747,24 +764,16 @@ function AppContent({
               <Route
                 path="/detailed-expiry-report"
                 element={
-                  isLoggedIn ? (
-                    <DetailedExpiryReportPage token={token} />
-                  ) : (
-                    <Navigate to="/login" />
-                  )
+                  isLoggedIn ? <DetailedExpiryReportPage token={token} /> : <Navigate to="/login" />
                 }
               />
               <Route
                 path="/expired-items"
-                element={
-                  isLoggedIn ? <ExpiredItemsPage token={token} /> : <Navigate to="/login" />
-                }
+                element={isLoggedIn ? <ExpiredItemsPage token={token} /> : <Navigate to="/login" />}
               />
               <Route
                 path="/usage-report"
-                element={
-                  isLoggedIn ? <UsageReportPage token={token} /> : <Navigate to="/login" />
-                }
+                element={isLoggedIn ? <UsageReportPage token={token} /> : <Navigate to="/login" />}
               />
               <Route
                 path="/markdown-calculator"
@@ -772,42 +781,43 @@ function AppContent({
                   isLoggedIn ? <MarkdownCalculator token={token} /> : <Navigate to="/login" />
                 }
               />
-              {effectiveUserRole && hasPermission(effectiveUserRole, PERMISSIONS.MANAGE_MEMBERS) && (
-                <>
-                  <Route
-                    path="/user-management"
-                    element={
-                      isLoggedIn ? <UserManagementPage token={token} /> : <Navigate to="/login" />
-                    }
-                  />
-                  <Route
-                    path="/store-area-management"
-                    element={
-                      isLoggedIn ? (
-                        <StoreAreaManagementPage token={token} />
-                      ) : (
-                        <Navigate to="/login" />
-                      )
-                    }
-                  />
-                  <Route
-                    path="/csv-upload"
-                    element={
-                      isLoggedIn ? <CSVUploadPage token={token} /> : <Navigate to="/login" />
-                    }
-                  />
-                  <Route
-                    path="/expiry-import"
-                    element={
-                      isLoggedIn ? (
-                        <CSVUploadPage token={token} defaultImportType="expiry-list" />
-                      ) : (
-                        <Navigate to="/login" />
-                      )
-                    }
-                  />
-                </>
-              )}
+              {effectiveUserRole &&
+                hasPermission(effectiveUserRole, PERMISSIONS.MANAGE_MEMBERS) && (
+                  <>
+                    <Route
+                      path="/user-management"
+                      element={
+                        isLoggedIn ? <UserManagementPage token={token} /> : <Navigate to="/login" />
+                      }
+                    />
+                    <Route
+                      path="/store-area-management"
+                      element={
+                        isLoggedIn ? (
+                          <StoreAreaManagementPage token={token} />
+                        ) : (
+                          <Navigate to="/login" />
+                        )
+                      }
+                    />
+                    <Route
+                      path="/csv-upload"
+                      element={
+                        isLoggedIn ? <CSVUploadPage token={token} /> : <Navigate to="/login" />
+                      }
+                    />
+                    <Route
+                      path="/expiry-import"
+                      element={
+                        isLoggedIn ? (
+                          <CSVUploadPage token={token} defaultImportType="expiry-list" />
+                        ) : (
+                          <Navigate to="/login" />
+                        )
+                      }
+                    />
+                  </>
+                )}
               <Route path="*" element={<Navigate to="/login" />} />
             </Routes>
           </ErrorBoundary>
