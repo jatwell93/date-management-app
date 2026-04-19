@@ -64,11 +64,11 @@ Invites: 0 updated, N already canonical (N total)
 
 ```sql
 -- Should return 0 rows
-SELECT id, role FROM "User"
+SELECT id, role FROM users
 WHERE role NOT IN ('admin', 'manager', 'team_member');
 
 -- Should return 0 rows
-SELECT id, role FROM "OrganizationInvite"
+SELECT id, role FROM organization_invites
 WHERE role NOT IN ('admin', 'manager', 'team_member');
 ```
 
