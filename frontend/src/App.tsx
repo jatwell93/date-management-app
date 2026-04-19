@@ -81,14 +81,21 @@ function AppContent({
   } = useAuthContext();
   const isLoggedIn = hasSession && isFullySignedIn;
   const { isBootstrapped, isBootstrapping, bootstrapError, bootstrapResult } = useOrgBootstrap();
-  const hasCurrentUserBootstrapRole = bootstrapResult?.userId === userId && !!bootstrapResult?.role;
+  const isCurrentBootstrapResult = bootstrapResult?.userId === userId;
+  const hasCurrentUserBootstrapRole = isCurrentBootstrapResult && !!bootstrapResult?.role;
   const effectiveUserRole = hasCurrentUserBootstrapRole ? bootstrapResult.role : userRole;
 
   useEffect(() => {
     if (hasCurrentUserBootstrapRole) {
       updateBootstrapRole(bootstrapResult.role);
     }
-  }, [bootstrapResult?.role, hasCurrentUserBootstrapRole, updateBootstrapRole]);
+  }, [
+    bootstrapResult?.role,
+    bootstrapResult?.userId,
+    hasCurrentUserBootstrapRole,
+    updateBootstrapRole,
+    userId,
+  ]);
   const { isHandheld } = useHandheldDetectionContext();
   const location = useLocation();
   const navigate = useNavigate();
@@ -553,8 +560,8 @@ function AppContent({
                   path="/settings"
                   element={
                     isLoggedIn &&
-                    effectiveUserRole &&
-                    hasPermission(effectiveUserRole, PERMISSIONS.MANAGE_MEMBERS) ? (
+                      effectiveUserRole &&
+                      hasPermission(effectiveUserRole, PERMISSIONS.MANAGE_MEMBERS) ? (
                       <SettingsPage />
                     ) : isLoggedIn ? (
                       <Navigate to="/scan" />
@@ -567,8 +574,8 @@ function AppContent({
                   path="/settings/*"
                   element={
                     isLoggedIn &&
-                    effectiveUserRole &&
-                    hasPermission(effectiveUserRole, PERMISSIONS.MANAGE_MEMBERS) ? (
+                      effectiveUserRole &&
+                      hasPermission(effectiveUserRole, PERMISSIONS.MANAGE_MEMBERS) ? (
                       <SettingsPage />
                     ) : isLoggedIn ? (
                       <Navigate to="/scan" />
@@ -717,8 +724,8 @@ function AppContent({
                 path="/settings"
                 element={
                   isLoggedIn &&
-                  effectiveUserRole &&
-                  hasPermission(effectiveUserRole, PERMISSIONS.MANAGE_MEMBERS) ? (
+                    effectiveUserRole &&
+                    hasPermission(effectiveUserRole, PERMISSIONS.MANAGE_MEMBERS) ? (
                     <SettingsPage />
                   ) : isLoggedIn ? (
                     <Navigate to="/scan" />
@@ -731,8 +738,8 @@ function AppContent({
                 path="/settings/*"
                 element={
                   isLoggedIn &&
-                  effectiveUserRole &&
-                  hasPermission(effectiveUserRole, PERMISSIONS.MANAGE_MEMBERS) ? (
+                    effectiveUserRole &&
+                    hasPermission(effectiveUserRole, PERMISSIONS.MANAGE_MEMBERS) ? (
                     <SettingsPage />
                   ) : isLoggedIn ? (
                     <Navigate to="/scan" />
