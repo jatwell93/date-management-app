@@ -2,7 +2,7 @@
 
 **Feature**: `add-clerk-organization-management-rbac`  
 **Date**: 2026-04-19  
-**Status**: Merged to `main`
+**Status**: Pending merge
 
 ---
 
@@ -213,7 +213,7 @@ Re-enable after adjusting threshold values.
 
 **Check**: Verify user's `role` in DB is a canonical value:
 ```sql
-SELECT id, email, role FROM "User" WHERE email = '<user_email>';
+SELECT id, email, role FROM users WHERE email = '<user_email>';
 -- If non-canonical, run backfill
 ```
 
