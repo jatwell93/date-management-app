@@ -88,7 +88,7 @@ Covered by `backend/src/tests/unit/organization-invite-security.test.ts` (5 test
 ```sql
 -- Verify no plain-text tokens in DB (all values should look like bcrypt hashes starting with $2b$)
 SELECT id, LEFT(invite_token_hash, 7) AS hash_prefix
-FROM organization_invite
+FROM organization_invites
 WHERE invite_token_hash IS NOT NULL
 LIMIT 5;
 -- Expected: $2b$12$...
