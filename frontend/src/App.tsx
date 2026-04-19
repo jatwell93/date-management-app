@@ -560,8 +560,8 @@ function AppContent({
                   path="/settings"
                   element={
                     isLoggedIn &&
-                      effectiveUserRole &&
-                      hasPermission(effectiveUserRole, PERMISSIONS.MANAGE_MEMBERS) ? (
+                    effectiveUserRole &&
+                    hasPermission(effectiveUserRole, PERMISSIONS.MANAGE_MEMBERS) ? (
                       <SettingsPage />
                     ) : isLoggedIn ? (
                       <Navigate to="/scan" />
@@ -574,8 +574,8 @@ function AppContent({
                   path="/settings/*"
                   element={
                     isLoggedIn &&
-                      effectiveUserRole &&
-                      hasPermission(effectiveUserRole, PERMISSIONS.MANAGE_MEMBERS) ? (
+                    effectiveUserRole &&
+                    hasPermission(effectiveUserRole, PERMISSIONS.MANAGE_MEMBERS) ? (
                       <SettingsPage />
                     ) : isLoggedIn ? (
                       <Navigate to="/scan" />
@@ -724,8 +724,8 @@ function AppContent({
                 path="/settings"
                 element={
                   isLoggedIn &&
-                    effectiveUserRole &&
-                    hasPermission(effectiveUserRole, PERMISSIONS.MANAGE_MEMBERS) ? (
+                  effectiveUserRole &&
+                  hasPermission(effectiveUserRole, PERMISSIONS.MANAGE_MEMBERS) ? (
                     <SettingsPage />
                   ) : isLoggedIn ? (
                     <Navigate to="/scan" />
@@ -738,8 +738,8 @@ function AppContent({
                 path="/settings/*"
                 element={
                   isLoggedIn &&
-                    effectiveUserRole &&
-                    hasPermission(effectiveUserRole, PERMISSIONS.MANAGE_MEMBERS) ? (
+                  effectiveUserRole &&
+                  hasPermission(effectiveUserRole, PERMISSIONS.MANAGE_MEMBERS) ? (
                     <SettingsPage />
                   ) : isLoggedIn ? (
                     <Navigate to="/scan" />
