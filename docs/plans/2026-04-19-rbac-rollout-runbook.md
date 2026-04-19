@@ -247,7 +247,7 @@ The system must never allow the last admin to be removed from an organization.
 ```sql
 -- Confirm each org has at least one admin
 SELECT organization_id, COUNT(*) as admin_count
-FROM "User"
+FROM users
 WHERE role = 'admin'
 GROUP BY organization_id
 HAVING COUNT(*) = 0;
