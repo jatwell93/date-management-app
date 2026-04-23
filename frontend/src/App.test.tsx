@@ -2,18 +2,21 @@ import { render, waitFor } from '@testing-library/react';
 import { API_AUTH_UNAUTHORIZED_EVENT } from './lib/api.service';
 import { useAuthContext } from './components/ClerkAuthProvider';
 
-jest.mock('react-router-dom', () => ({
-  BrowserRouter: ({ children }: { children: any }) => children,
-  Routes: ({ children }: { children: any }) => children,
-  Route: () => null,
-  Link: ({ children }: { children: any }) => children,
-  Navigate: () => null,
-  useLocation: () => ({ pathname: '/' }),
-  useNavigate: () => jest.fn(),
-}));
+jest.mock('react-router-dom');
 
 jest.mock('./components/ClerkAuthProvider', () => ({
   useAuthContext: jest.fn(),
+}));
+
+// Mock useOrgBootstrap to avoid Clerk hooks
+jest.mock('./hooks/useOrgBootstrap', () => ({
+  useOrgBootstrap: () => ({
+    isBootstrapped: true,
+    isBootstrapping: false,
+    bootstrapError: null,
+    bootstrapResult: null,
+    retry: jest.fn(),
+  }),
 }));
 
 // Mock child page components to avoid their imports
