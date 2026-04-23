@@ -1,29 +1,31 @@
+import { render, waitFor } from '@testing-library/react';
+import App from './App';
 import { API_AUTH_UNAUTHORIZED_EVENT } from './lib/api.service';
+import { useAuthContext } from './contexts/AuthContext';
+
+jest.mock('./contexts/AuthContext', () => ({
+  useAuthContext: jest.fn(),
+}));
 
 describe('App unauthorized event handling', () => {
-  it('should clear auth state when unauthorized event is fired', (done) => {
-    // This test verifies that the App component has an event listener
-    // that responds to API_AUTH_UNAUTHORIZED_EVENT
+  it('should call handleLogout when unauthorized event is fired', async () => {
+    const handleLogout = jest.fn();
 
-    const listener = jest.fn();
-
-    // Simulate what the App component should do when unauthorized
-    window.addEventListener(API_AUTH_UNAUTHORIZED_EVENT, listener);
-
-    // Fire the event
-    const event = new CustomEvent(API_AUTH_UNAUTHORIZED_EVENT, {
-      detail: { endpoint: '/api/test', status: 401 },
+    (useAuthContext as jest.Mock).mockReturnValue({
+      handleLogout,
     });
-    window.dispatchEvent(event);
 
-    // Verify listener was called
-    expect(listener).toHaveBeenCalledTimes(1);
-    expect(listener).toHaveBeenCalledWith(
-      expect.objectContaining({ detail: { endpoint: '/api/test', status: 401 } }),
+    render(<App />);
+
+    window.dispatchEvent(
+      new CustomEvent(API_AUTH_UNAUTHORIZED_EVENT, {
+        detail: { endpoint: '/api/test', status: 401 },
+      }),
     );
 
-    window.removeEventListener(API_AUTH_UNAUTHORIZED_EVENT, listener);
-    done();
+    await waitFor(() => {
+      expect(handleLogout).toHaveBeenCalledTimes(1);
+    });
   });
 });
 
