@@ -546,6 +546,7 @@
   - **SQLite note**: SQLite doesn't support `ALTER COLUMN`. Prisma will recreate tables. This is expected for dev only. Production uses PostgreSQL which supports `ALTER COLUMN` natively.
 
 - [x] 14.2.10 **Regenerate Prisma client**:
+
   ```bash
   npx prisma generate
   ```
@@ -642,6 +643,7 @@ every service MUST receive a real `organizationId` from the auth middleware — 
 - [x] 14.5.1c **Update `getUploadService()`** (line 64): Change `'default-org'` → `this.organizationId`
 
 - [x] 14.5.1d **Find all callsites** of `new ServiceProvider()` and pass `organizationId`:
+
   ```bash
   # Run from backend/
   npx grep -rn "new ServiceProvider" src/
@@ -839,6 +841,7 @@ in auth middleware and service constructors. This task is effectively a no-op ve
   - Result: ✅ 29/29 suites passed, 268 passed, 1 todo, 0 failed
 
 - [x] 14.8.5 **Run the audit script** one final time:
+
   ```bash
   cd backend && npm run audit:org-ids
   ```
