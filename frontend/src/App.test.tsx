@@ -1,9 +1,9 @@
 import { render, waitFor } from '@testing-library/react';
 import App from './App';
 import { API_AUTH_UNAUTHORIZED_EVENT } from './lib/api.service';
-import { useAuthContext } from './contexts/AuthContext';
+import { useAuthContext } from './components/ClerkAuthProvider';
 
-jest.mock('./contexts/AuthContext', () => ({
+jest.mock('./components/ClerkAuthProvider', () => ({
   useAuthContext: jest.fn(),
 }));
 
@@ -29,4 +29,4 @@ describe('App unauthorized event handling', () => {
   });
 });
 
-export {};
+export { };
