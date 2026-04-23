@@ -7,6 +7,7 @@ try {
 }
 
 import express from 'express';
+import type { Router as ExpressRouter } from 'express';
 import helmet from 'helmet';
 import * as Sentry from '@sentry/node';
 import { createServer, Server as HttpsServer } from 'https';
@@ -27,7 +28,6 @@ import expiredItemRoutes from './routes/expired-item.routes';
 import uploadRoutes from './routes/upload.routes';
 import storageQuotaRoutes from './routes/storage-quota.routes';
 import webhookRoutes from './routes/webhook.routes';
-import organizationInviteRoutes from './routes/organization-invite.routes';
 import orgBootstrapRoutes from './routes/org-bootstrap.routes';
 import subscriptionRoutes from './routes/subscription.routes';
 import { authenticateToken } from './middleware/auth.middleware';
@@ -42,6 +42,14 @@ import { SQLiteAnalyticsAdapter } from './adapters/analytics/SQLiteAnalyticsAdap
 import { getDb } from './database';
 import { envConfig } from './config/environment';
 import { Logger } from './utils/logger';
+
+let organizationInviteRoutes: ExpressRouter | null = null;
+
+if (envConfig.ENABLE_CUSTOM_ORG_INVITES) {
+  // Keep legacy invite endpoints behind an explicit feature flag.
+  // eslint-disable-next-line @typescript-eslint/no-var-requires
+  organizationInviteRoutes = require('./routes/organization-invite.routes').default;
+}
 
 const app = express();
 const port = envConfig.PORT;
@@ -300,7 +308,9 @@ app.use('/dashboard', authenticateToken, dashboardRoutes);
 app.use('/api/dashboard', authenticateToken, dashboardRoutes);
 app.use('/users', authenticateToken, userRoutes);
 app.use('/api/users', authenticateToken, userRoutes);
-app.use('/api/organizations', organizationInviteRoutes);
+if (organizationInviteRoutes) {
+  app.use('/api/organizations', organizationInviteRoutes);
+}
 app.use('/api/organization', orgBootstrapRoutes);
 app.use('/database', authenticateToken, databaseBackupRoutes);
 app.use('/api/database', authenticateToken, databaseBackupRoutes);

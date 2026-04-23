@@ -21,13 +21,16 @@ interface UseOrgBootstrapReturn {
 }
 
 /**
- * Hook that calls POST /api/organization/bootstrap after Clerk auth + org
- * context is established. Idempotent — safe to re-run on every mount.
+ * Hook that calls POST /api/organization/bootstrap after Clerk auth is established.
+ * Works with or without Clerk organization context:
+ * - If user is in a Clerk org, uses that org ID
+ * - If user has no Clerk org, backend creates a default organization
+ * - Idempotent — safe to re-run on every mount.
  *
  * Returns the bootstrap state so the UI can render loading/error/success.
  */
 export function useOrgBootstrap(): UseOrgBootstrapReturn {
-  const { getToken } = useAuth();
+  const { getToken, isLoaded: isAuthLoaded, userId } = useAuth();
   const { organization, isLoaded: isOrgLoaded } = useOrganization();
   const [isBootstrapped, setIsBootstrapped] = useState(false);
   const [isBootstrapping, setIsBootstrapping] = useState(false);
@@ -36,7 +39,9 @@ export function useOrgBootstrap(): UseOrgBootstrapReturn {
   const attemptedRef = useRef(false);
 
   const doBootstrap = useCallback(async () => {
-    if (!organization || !isOrgLoaded) return;
+    // Wait for auth and org context to finish loading.
+    // If organization is still null after load, backend creates a default org.
+    if (!isAuthLoaded || !isOrgLoaded || !userId) return;
 
     setIsBootstrapping(true);
     setBootstrapError(null);
@@ -48,13 +53,19 @@ export function useOrgBootstrap(): UseOrgBootstrapReturn {
         return;
       }
 
-      const result = await apiService.post<BootstrapResult>(
-        '/api/organization/bootstrap',
-        {
+      // If user is in a Clerk organization, use that
+      // Otherwise, backend will create a default organization
+      const bootstrapPayload = {
+        ...(organization && {
           clerkOrganizationId: organization.id,
           organizationName: organization.name,
           organizationSlug: organization.slug ?? organization.id,
-        },
+        }),
+      };
+
+      const result = await apiService.post<BootstrapResult>(
+        '/api/organization/bootstrap',
+        bootstrapPayload,
         token,
       );
 
@@ -63,17 +74,20 @@ export function useOrgBootstrap(): UseOrgBootstrapReturn {
     } catch (error) {
       const message = error instanceof Error ? error.message : 'Bootstrap failed';
       setBootstrapError(message);
+      console.error('[useOrgBootstrap] Bootstrap error:', message, { error });
     } finally {
       setIsBootstrapping(false);
     }
-  }, [getToken, organization, isOrgLoaded]);
+  }, [getToken, userId, isAuthLoaded, isOrgLoaded, organization]);
 
   useEffect(() => {
-    if (!isOrgLoaded || !organization || attemptedRef.current) return;
+    // Trigger bootstrap only after Clerk org loading completes.
+    // This avoids invited users falling into the default-org path prematurely.
+    if (!isAuthLoaded || !isOrgLoaded || !userId || attemptedRef.current) return;
 
     attemptedRef.current = true;
     void doBootstrap();
-  }, [isOrgLoaded, organization, doBootstrap]);
+  }, [isAuthLoaded, isOrgLoaded, userId, doBootstrap]);
 
   const retry = useCallback(() => {
     attemptedRef.current = false;

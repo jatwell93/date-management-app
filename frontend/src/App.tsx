@@ -41,6 +41,7 @@ import { HandheldProvider, useHandheldDetectionContext } from './contexts/Handhe
 import { useOrgBootstrap } from './hooks/useOrgBootstrap';
 import { hasPermission, PERMISSIONS } from './constants/roles';
 import { HandheldLayout } from './layouts/HandheldLayout';
+import { API_AUTH_UNAUTHORIZED_EVENT } from './lib/api.service';
 import './globals.css';
 import './styles/handheld.css';
 
@@ -125,6 +126,24 @@ function AppContent({
     };
   }, []);
 
+  // Handle API authorization failures (401 responses)
+  useEffect(() => {
+    const handleUnauthorized = (event: Event) => {
+      // Log the unauthorized event for debugging
+      if (event instanceof CustomEvent) {
+        console.warn('[Auth] Unauthorized API response detected:', event.detail);
+      }
+      // Call logout to clear auth state and redirect to login
+      handleLogout();
+    };
+
+    window.addEventListener(API_AUTH_UNAUTHORIZED_EVENT, handleUnauthorized);
+
+    return () => {
+      window.removeEventListener(API_AUTH_UNAUTHORIZED_EVENT, handleUnauthorized);
+    };
+  }, [handleLogout]);
+
   useEffect(() => {
     void refreshPendingQueueCount();
     const intervalId = window.setInterval(() => {
@@ -165,11 +184,19 @@ function AppContent({
   if (!isBootstrapped && !isBootstrapping && isLoggedIn && bootstrapError) {
     return (
       <div className="min-h-screen bg-background text-foreground flex items-center justify-center">
-        <div className="text-center">
+        <div className="text-center max-w-md">
           <h1 className="text-2xl font-semibold text-destructive mb-2">Setup Required</h1>
           <p className="text-muted-foreground mb-4">
             Please complete your organization setup to continue.
           </p>
+          {process.env.NODE_ENV === 'development' && (
+            <details className="mb-4 text-left bg-destructive/10 p-3 rounded text-sm">
+              <summary className="cursor-pointer font-semibold mb-2">Debug Info</summary>
+              <code className="block whitespace-pre-wrap break-words text-xs text-destructive">
+                {bootstrapError}
+              </code>
+            </details>
+          )}
           <button
             onClick={() => window.location.reload()}
             className="px-4 py-2 bg-primary text-primary-foreground rounded-md hover:bg-primary/90 transition-colors"
@@ -560,8 +587,8 @@ function AppContent({
                   path="/settings"
                   element={
                     isLoggedIn &&
-                    effectiveUserRole &&
-                    hasPermission(effectiveUserRole, PERMISSIONS.MANAGE_MEMBERS) ? (
+                      effectiveUserRole &&
+                      hasPermission(effectiveUserRole, PERMISSIONS.MANAGE_MEMBERS) ? (
                       <SettingsPage />
                     ) : isLoggedIn ? (
                       <Navigate to="/scan" />
@@ -574,8 +601,8 @@ function AppContent({
                   path="/settings/*"
                   element={
                     isLoggedIn &&
-                    effectiveUserRole &&
-                    hasPermission(effectiveUserRole, PERMISSIONS.MANAGE_MEMBERS) ? (
+                      effectiveUserRole &&
+                      hasPermission(effectiveUserRole, PERMISSIONS.MANAGE_MEMBERS) ? (
                       <SettingsPage />
                     ) : isLoggedIn ? (
                       <Navigate to="/scan" />
@@ -724,8 +751,8 @@ function AppContent({
                 path="/settings"
                 element={
                   isLoggedIn &&
-                  effectiveUserRole &&
-                  hasPermission(effectiveUserRole, PERMISSIONS.MANAGE_MEMBERS) ? (
+                    effectiveUserRole &&
+                    hasPermission(effectiveUserRole, PERMISSIONS.MANAGE_MEMBERS) ? (
                     <SettingsPage />
                   ) : isLoggedIn ? (
                     <Navigate to="/scan" />
@@ -738,8 +765,8 @@ function AppContent({
                 path="/settings/*"
                 element={
                   isLoggedIn &&
-                  effectiveUserRole &&
-                  hasPermission(effectiveUserRole, PERMISSIONS.MANAGE_MEMBERS) ? (
+                    effectiveUserRole &&
+                    hasPermission(effectiveUserRole, PERMISSIONS.MANAGE_MEMBERS) ? (
                     <SettingsPage />
                   ) : isLoggedIn ? (
                     <Navigate to="/scan" />
