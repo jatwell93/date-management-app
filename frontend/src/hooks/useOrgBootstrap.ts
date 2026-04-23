@@ -37,6 +37,7 @@ export function useOrgBootstrap(): UseOrgBootstrapReturn {
   const [bootstrapError, setBootstrapError] = useState<string | null>(null);
   const [bootstrapResult, setBootstrapResult] = useState<BootstrapResult | null>(null);
   const attemptedRef = useRef(false);
+  const lastUserIdRef = useRef<string | null | undefined>(userId);
 
   const doBootstrap = useCallback(async () => {
     // Wait for auth and org context to finish loading.
@@ -79,6 +80,17 @@ export function useOrgBootstrap(): UseOrgBootstrapReturn {
       setIsBootstrapping(false);
     }
   }, [getToken, userId, isAuthLoaded, isOrgLoaded, organization]);
+
+  useEffect(() => {
+    if (lastUserIdRef.current !== userId) {
+      lastUserIdRef.current = userId;
+      attemptedRef.current = false;
+      setIsBootstrapped(false);
+      setIsBootstrapping(false);
+      setBootstrapError(null);
+      setBootstrapResult(null);
+    }
+  }, [userId]);
 
   useEffect(() => {
     // Trigger bootstrap only after Clerk org loading completes.

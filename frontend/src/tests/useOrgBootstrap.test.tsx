@@ -1,4 +1,4 @@
-import React from 'react';
+import React, { useEffect } from 'react';
 import { render, waitFor } from '@testing-library/react';
 import { useAuth, useOrganization } from '@clerk/clerk-react';
 import { apiService } from '../lib/api.service';
@@ -15,8 +15,13 @@ jest.mock('../lib/api.service', () => ({
   },
 }));
 
-function Probe() {
-  useOrgBootstrap();
+function Probe({ onState }: { onState?: (state: ReturnType<typeof useOrgBootstrap>) => void }) {
+  const state = useOrgBootstrap();
+
+  useEffect(() => {
+    onState?.(state);
+  }, [onState, state]);
+
   return null;
 }
 
@@ -101,5 +106,51 @@ describe('useOrgBootstrap', () => {
     });
 
     expect(mockPost).toHaveBeenCalledWith('/api/organization/bootstrap', {}, 'clerk-token');
+  });
+
+  it('retries bootstrap and clears stale state when Clerk user changes', async () => {
+    const getToken = jest.fn().mockResolvedValue('clerk-token');
+    const authState = {
+      getToken,
+      isLoaded: true,
+      userId: 'user_a',
+    };
+
+    mockUseAuth.mockImplementation(() => authState);
+    mockUseOrganization.mockReturnValue({
+      organization: null,
+      isLoaded: true,
+    });
+
+    const stateUpdates: Array<ReturnType<typeof useOrgBootstrap>> = [];
+
+    const { rerender } = render(
+      <Probe
+        onState={(state) => {
+          stateUpdates.push(state);
+        }}
+      />,
+    );
+
+    await waitFor(() => {
+      expect(mockPost).toHaveBeenCalledTimes(1);
+    });
+
+    authState.userId = 'user_b';
+    rerender(
+      <Probe
+        onState={(state) => {
+          stateUpdates.push(state);
+        }}
+      />,
+    );
+
+    await waitFor(() => {
+      expect(mockPost).toHaveBeenCalledTimes(2);
+    });
+
+    expect(
+      stateUpdates.some((state) => !state.isBootstrapped && state.bootstrapResult === null),
+    ).toBe(true);
   });
 });
