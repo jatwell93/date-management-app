@@ -48,4 +48,4 @@ describe('App unauthorized event handling', () => {
   });
 });
 
-export { };
+export {};
