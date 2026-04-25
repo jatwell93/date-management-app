@@ -79,6 +79,7 @@ import dashboardRoutes from '../../backend/src/routes/dashboard.routes';
 import expiredItemRoutes from '../../backend/src/routes/expired-item.routes';
 import healthRoutes from '../../backend/src/routes/health.routes';
 import inventoryRoutes from '../../backend/src/routes/inventory.routes';
+import orgBootstrapRoutes from '../../backend/src/routes/org-bootstrap.routes';
 import reportRoutes from '../../backend/src/routes/report.routes';
 import storeAreaRoutes from '../../backend/src/routes/store-area.routes';
 import userRoutes from '../../backend/src/routes/user.routes';
@@ -337,6 +338,7 @@ function createRouter(env: Env): WorkersRouter {
   registerExpressRouter(router, expiredItemRoutes, '/api/expired-items', env);
   registerExpressRouter(router, healthRoutes, '/api/health', env);
   registerExpressRouter(router, inventoryRoutes, '/api/inventory-items', env);
+  registerExpressRouter(router, orgBootstrapRoutes, '/api/organization', env);
   registerExpressRouter(router, reportRoutes, '/api/reports', env);
   registerExpressRouter(router, storeAreaRoutes, '/api/store-areas', env);
   registerExpressRouter(router, userRoutes, '/api/users', env);

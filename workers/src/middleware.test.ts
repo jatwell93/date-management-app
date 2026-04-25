@@ -1,4 +1,5 @@
 import { describe, it, expect, vi } from 'vitest';
+import { isPublicEndpoint } from './middleware/auth';
 import { createCorsMiddleware } from './middleware/cors.middleware';
 import { createRateLimiter } from './middleware/rate-limit.middleware';
 import { createConnectionLimiter } from './middleware/connection-limiter.middleware';
@@ -6,6 +7,30 @@ import { createQueryLimiter } from './middleware/query-limiter.middleware';
 import { formatMetricsForAnalytics } from './middleware/metrics.middleware';
 import { ExpressResponse, ExpressRequest } from './express-adapter';
 import type { Env } from './types/env';
+
+describe('Auth middleware helpers', () => {
+  it('treats organization bootstrap as public for Workers edge auth', () => {
+    // Given: The Clerk-backed organization bootstrap endpoint path
+    const pathname = '/api/organization/bootstrap';
+
+    // When: The Workers public-endpoint helper evaluates the path
+    const result = isPublicEndpoint(pathname);
+
+    // Then: The request bypasses legacy JWT validation at the edge
+    expect(result).toBe(true);
+  });
+
+  it('keeps unrelated protected API routes behind Workers auth', () => {
+    // Given: A protected API route that should still require Workers auth
+    const pathname = '/api/users';
+
+    // When: The Workers public-endpoint helper evaluates the path
+    const result = isPublicEndpoint(pathname);
+
+    // Then: The request does not bypass edge authentication
+    expect(result).toBe(false);
+  });
+});
 
 describe('CORS middleware', () => {
   it('sets allow-origin for matching origin', async () => {

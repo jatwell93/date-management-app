@@ -23,7 +23,13 @@ export interface JWTPayloadData extends JWTPayload {
  * Public endpoints that don't require JWT validation
  * Task 7.6: Define public endpoints
  */
-const PUBLIC_ENDPOINTS = ['/auth/login', '/auth/register', '/health', '/health/check'];
+const PUBLIC_ENDPOINTS = [
+  '/auth/login',
+  '/auth/register',
+  '/health',
+  '/health/check',
+  '/organization/bootstrap',
+];
 
 /**
  * Check if endpoint is public (doesn't require authentication)
