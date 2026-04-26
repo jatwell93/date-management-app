@@ -720,7 +720,25 @@ interface OrganizationBootstrapBody {
 
 type BootstrapRoleValue = 'admin' | 'manager' | 'team_member';
 
-function getClerkAuthorizedParties(env: Env): string[] {
+const DEFAULT_PAGES_PREVIEW_BASE_HOST = 'date-management-frontend.pages.dev';
+
+function getPagesPreviewBaseHost(env: Env): string {
+  const candidates = [env.FRONTEND_URL, env.CORS_ORIGIN];
+  for (const candidate of candidates) {
+    if (!candidate) continue;
+    try {
+      const { hostname } = new URL(candidate);
+      if (hostname.endsWith('.pages.dev')) {
+        return hostname;
+      }
+    } catch {
+      // ignore malformed env values
+    }
+  }
+  return DEFAULT_PAGES_PREVIEW_BASE_HOST;
+}
+
+function getClerkAuthorizedParties(env: Env, requestOrigin?: string): string[] {
   const parties = new Set<string>(['http://localhost:3002', 'http://127.0.0.1:3002']);
 
   if (env.FRONTEND_URL) {
@@ -729,6 +747,28 @@ function getClerkAuthorizedParties(env: Env): string[] {
 
   if (env.CORS_ORIGIN) {
     parties.add(env.CORS_ORIGIN);
+  }
+
+  // In non-production, allow Cloudflare Pages preview deploys whose hostnames
+  // change per build (e.g. https://7f5e6f1a.date-management-frontend.pages.dev).
+  // Scope is restricted to this project's Pages subdomain (derived from
+  // FRONTEND_URL when it is a pages.dev host, otherwise the well-known
+  // project base) and to https only, so an attacker-controlled Origin
+  // header cannot expand the allowlist to arbitrary pages.dev tenants.
+  // Production keeps the strict allowlist defined by FRONTEND_URL/CORS_ORIGIN.
+  if (env.NODE_ENV !== 'production' && requestOrigin) {
+    try {
+      const url = new URL(requestOrigin);
+      if (url.protocol === 'https:') {
+        const projectBase = getPagesPreviewBaseHost(env);
+        const previewSuffix = `.${projectBase}`;
+        if (url.hostname === projectBase || url.hostname.endsWith(previewSuffix)) {
+          parties.add(`https://${url.hostname}`);
+        }
+      }
+    } catch {
+      // ignore malformed Origin headers
+    }
   }
 
   return Array.from(parties);
@@ -775,7 +815,7 @@ async function authenticateClerkRequest(
   try {
     const payload = (await verifyToken(token, {
       secretKey,
-      authorizedParties: getClerkAuthorizedParties(env),
+      authorizedParties: getClerkAuthorizedParties(env, requestOrigin),
     })) as ClerkSessionClaims;
 
     if (!payload.sub) {
