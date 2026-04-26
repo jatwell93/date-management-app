@@ -13,6 +13,7 @@ import { Env } from './types/env';
 import { handleHealthCheck } from './health';
 import { createWorkersDatabase } from './database';
 import * as Sentry from '@sentry/cloudflare';
+import { createClerkClient, verifyToken } from '@clerk/backend';
 
 const COMPRESSION_MIN_BYTES = 1024;
 const DIRECT_UPLOAD_THRESHOLD_BYTES = 2 * 1024 * 1024;
@@ -772,8 +773,7 @@ async function authenticateClerkRequest(
   }
 
   try {
-    const clerkBackend = await import('../../backend/node_modules/@clerk/backend');
-    const payload = (await clerkBackend.verifyToken(token, {
+    const payload = (await verifyToken(token, {
       secretKey,
       authorizedParties: getClerkAuthorizedParties(env),
     })) as ClerkSessionClaims;
@@ -810,8 +810,7 @@ async function getClerkUserProfile(
     return { email: null, username: null };
   }
 
-  const clerkBackend = await import('../../backend/node_modules/@clerk/backend');
-  const clerkClient = clerkBackend.createClerkClient({ secretKey });
+  const clerkClient = createClerkClient({ secretKey });
   const user = await clerkClient.users.getUser(clerkUserId);
 
   return {
