@@ -72,10 +72,10 @@ describe('StorageProvider Integration', () => {
   const r2IntegrationEnabled = process.env.RUN_R2_INTEGRATION_TESTS === 'true';
   const hasR2Config = Boolean(
     r2IntegrationEnabled &&
-    process.env.R2_ACCOUNT_ID &&
-    process.env.R2_ACCESS_KEY_ID &&
-    process.env.R2_SECRET_ACCESS_KEY &&
-    process.env.R2_BUCKET_NAME,
+      process.env.R2_ACCOUNT_ID &&
+      process.env.R2_ACCESS_KEY_ID &&
+      process.env.R2_SECRET_ACCESS_KEY &&
+      process.env.R2_BUCKET_NAME,
   );
 
   (hasR2Config ? describe : describe.skip)('R2StorageProvider', () => {
