@@ -21,6 +21,7 @@ export interface Env {
   QUERY_MAX_RESULTS?: string; // default: 100
   QUERY_TIMEOUT_MS?: string; // default: 10000
   FRONTEND_URL?: string; // Frontend URL for CORS configuration
+  CORS_ORIGIN?: string; // Optional alternate frontend origin for token validation
 
   // ============================================================================
   // Secrets (Set via wrangler secret put)
@@ -34,6 +35,9 @@ export interface Env {
 
   // JWT authentication secret
   JWT_SECRET: string;
+
+  // Clerk backend secret for verifying Clerk session tokens
+  CLERK_SECRET_KEY?: string;
 
   // Clerk Svix webhook signing secret (whsec_...)
   CLERK_WEBHOOK_SECRET: string;

@@ -3,6 +3,7 @@ import { describe, it, expect, vi } from 'vitest';
 import { healthCheck } from './health';
 import {
   handleLogin,
+  handleOrganizationBootstrap,
   handleRegister,
   handleUploadInitiate,
   handleUploadStatus,
@@ -140,6 +141,24 @@ describe('API config guard', () => {
     expect(response.status).toBe(500);
     const body = (await response.json()) as any;
     expect(body.error).toBeTruthy();
+  });
+
+  it('routes /api/organization/bootstrap instead of returning 404', async () => {
+    // Given: A bootstrap request hitting the deployed minimal Worker entrypoint
+    const response = await SELF.fetch('https://example.com/api/organization/bootstrap', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({}),
+    });
+
+    // When: The Worker processes the bootstrap route
+    const body = (await response.json()) as any;
+
+    // Then: The route exists, even if auth/config validation still fails
+    expect(response.status).not.toBe(404);
+    expect(body.error || body.message).toBeTruthy();
   });
 
   it('returns 500 when database config is missing for /api/users/me', async () => {
@@ -307,6 +326,23 @@ describe('Auth input validation', () => {
     HYPERDRIVE: {} as Hyperdrive,
   } as Env;
 
+  it('returns 401 when organization bootstrap is called without a bearer token', async () => {
+    // Given: A bootstrap request without Clerk authentication
+    const request = new Request('https://example.com/api/organization/bootstrap', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({}),
+    });
+
+    // When: The dedicated bootstrap handler runs
+    const response = await handleOrganizationBootstrap(request, envForAuth);
+
+    // Then: The request is rejected as unauthorized instead of 404ing
+    expect(response.status).toBe(401);
+    const body = (await response.json()) as any;
+    expect(body.error || body.message).toBeTruthy();
+  });
+
   const createDb = (overrides: Partial<Database> = {}): Database => ({
     sql: {} as any,
     findUserByEmail: vi.fn().mockResolvedValue(null),
@@ -384,8 +420,8 @@ describe('Auth input validation', () => {
 
 describe('Workers database connection strategy', () => {
   it('prefers direct Neon connection when available to avoid Hyperdrive DNS failures', () => {
-    const logSpy = vi.spyOn(console, 'log').mockImplementation(() => {});
-    const warnSpy = vi.spyOn(console, 'warn').mockImplementation(() => {});
+    const logSpy = vi.spyOn(console, 'log').mockImplementation(() => { });
+    const warnSpy = vi.spyOn(console, 'warn').mockImplementation(() => { });
 
     const envWithBoth = {
       NODE_ENV: 'production',
