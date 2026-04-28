@@ -20,8 +20,7 @@ export interface Env {
   MAX_CONCURRENT_CONNECTIONS?: string; // default: 50
   QUERY_MAX_RESULTS?: string; // default: 100
   QUERY_TIMEOUT_MS?: string; // default: 10000
-  FRONTEND_URL?: string; // Frontend URL for CORS configuration
-  CORS_ORIGIN?: string; // Optional alternate frontend origin for token validation
+  FRONTEND_URL?: string; // Frontend URL for CORS + Clerk authorizedParties
 
   // ============================================================================
   // Secrets (Set via wrangler secret put)
@@ -48,9 +47,8 @@ export interface Env {
   R2_SECRET_ACCESS_KEY: string;
   R2_BUCKET_NAME: string;
 
-  // Optional: Sentry DSN for error monitoring (renamed from SENTRY_DSN for clarity)
+  // Optional: Sentry DSN for error monitoring
   WORKERS_SENTRY_DSN?: string;
-  SENTRY_DSN?: string; // Deprecated: use WORKERS_SENTRY_DSN
 
   // ============================================================================
   // R2 Bucket Bindings

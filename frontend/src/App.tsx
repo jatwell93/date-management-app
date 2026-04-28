@@ -189,7 +189,7 @@ function AppContent({
       <div className="min-h-screen bg-background text-foreground flex items-center justify-center">
         <div className="text-center">
           <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-primary mx-auto mb-4"></div>
-          <p className="text-muted-foreground">Setting up your organization...</p>
+          <p className="text-muted-foreground">Loading your workspace…</p>
         </div>
       </div>
     );
@@ -602,8 +602,8 @@ function AppContent({
                   path="/settings"
                   element={
                     isLoggedIn &&
-                    effectiveUserRole &&
-                    hasPermission(effectiveUserRole, PERMISSIONS.MANAGE_MEMBERS) ? (
+                      effectiveUserRole &&
+                      hasPermission(effectiveUserRole, PERMISSIONS.MANAGE_MEMBERS) ? (
                       <SettingsPage />
                     ) : isLoggedIn ? (
                       <Navigate to="/scan" />
@@ -616,8 +616,8 @@ function AppContent({
                   path="/settings/*"
                   element={
                     isLoggedIn &&
-                    effectiveUserRole &&
-                    hasPermission(effectiveUserRole, PERMISSIONS.MANAGE_MEMBERS) ? (
+                      effectiveUserRole &&
+                      hasPermission(effectiveUserRole, PERMISSIONS.MANAGE_MEMBERS) ? (
                       <SettingsPage />
                     ) : isLoggedIn ? (
                       <Navigate to="/scan" />
@@ -766,8 +766,8 @@ function AppContent({
                 path="/settings"
                 element={
                   isLoggedIn &&
-                  effectiveUserRole &&
-                  hasPermission(effectiveUserRole, PERMISSIONS.MANAGE_MEMBERS) ? (
+                    effectiveUserRole &&
+                    hasPermission(effectiveUserRole, PERMISSIONS.MANAGE_MEMBERS) ? (
                     <SettingsPage />
                   ) : isLoggedIn ? (
                     <Navigate to="/scan" />
@@ -780,8 +780,8 @@ function AppContent({
                 path="/settings/*"
                 element={
                   isLoggedIn &&
-                  effectiveUserRole &&
-                  hasPermission(effectiveUserRole, PERMISSIONS.MANAGE_MEMBERS) ? (
+                    effectiveUserRole &&
+                    hasPermission(effectiveUserRole, PERMISSIONS.MANAGE_MEMBERS) ? (
                     <SettingsPage />
                   ) : isLoggedIn ? (
                     <Navigate to="/scan" />

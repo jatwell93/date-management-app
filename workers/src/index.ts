@@ -52,7 +52,7 @@ import { createDatabaseClient } from '../../backend/src/database/database-factor
  */
 function initializeSentry(env: Env) {
   // Dynamically check for Sentry initialization based on env
-  if (env.SENTRY_DSN) {
+  if (env.WORKERS_SENTRY_DSN) {
     // Sentry initialization would happen here
     // For now, errors are captured via the custom error handler below
     return true;
@@ -389,7 +389,7 @@ function writeMetrics(env: Env, metrics: any): void {
  */
 export default Sentry.withSentry(
   (env: any) => ({
-    dsn: env.WORKERS_SENTRY_DSN || env.SENTRY_DSN,
+    dsn: env.WORKERS_SENTRY_DSN,
     tracesSampleRate: 1.0, // Adjust to 0.1 later to save on free tier quota
   }),
   {

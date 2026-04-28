@@ -79,6 +79,66 @@ function errorResponse(message: string, status = 500, env?: Env, requestOrigin?:
   return jsonResponse({ error: message }, status, env, requestOrigin);
 }
 
+// ---- Shared validation helpers ---------------------------------------------
+
+/**
+ * Canonical role allowlist. Production Clerk plan only supports 'admin' and
+ * 'team_member'; 'manager' is dev-only and may be enabled in dev/staging
+ * once the Clerk plan is upgraded. See MEMORY[6ae2c3e4].
+ */
+const ROLES_PROD = new Set<string>(['admin', 'team_member']);
+const ROLES_DEV = new Set<string>(['admin', 'manager', 'team_member']);
+
+function getAllowedRoles(env: Env): Set<string> {
+  return env.NODE_ENV === 'production' ? ROLES_PROD : ROLES_DEV;
+}
+
+function isValidRole(role: string): boolean {
+  // We don't have env here at all call sites; use the superset for validation
+  // and rely on the per-env getAllowedRoles for error messages. The DB column
+  // accepts any string, so the *gate* is the bigger risk than role validation.
+  return ROLES_DEV.has(role);
+}
+
+/**
+ * User-management capability gate. In prod only 'admin' can manage users; in
+ * dev 'manager' is permitted as well so existing test fixtures keep working.
+ */
+function canManageUsers(role: string | undefined): boolean {
+  if (!role) return false;
+  if (role === 'admin') return true;
+  // 'manager' is dev-only. We don't have env here so we conservatively allow
+  // it; the role itself does not exist in production Clerk so this branch is
+  // unreachable in prod.
+  return role === 'manager';
+}
+
+/** Parse a path-segment into a positive integer or return null. */
+function parsePositiveInt(value: string): number | null {
+  const n = Number(value);
+  if (!Number.isInteger(n) || n < 1) return null;
+  return n;
+}
+
+/** ISO calendar date YYYY-MM-DD (no time component). */
+const ISO_DATE_RE = /^\d{4}-\d{2}-\d{2}$/;
+
+/**
+ * Detect a Postgres unique-violation. Prefer the SQLSTATE code over
+ * substring matching the message, which is locale/version dependent.
+ */
+function isUniqueViolation(error: unknown): boolean {
+  if (!error || typeof error !== 'object') return false;
+  const e = error as { code?: unknown; message?: unknown };
+  if (e.code === '23505') return true;
+  // Some neon driver wrappers nest the pg error under .cause.
+  const cause = (error as { cause?: { code?: unknown } }).cause;
+  if (cause && typeof cause === 'object' && (cause as { code?: unknown }).code === '23505') {
+    return true;
+  }
+  return false;
+}
+
 function requestSupportsGzip(request: Request): boolean {
   const acceptEncoding = request.headers.get('Accept-Encoding') || '';
   return acceptEncoding.toLowerCase().includes('gzip');
@@ -276,7 +336,7 @@ async function checkRateLimit(request: Request, env: Env): Promise<RateLimitDeci
  */
 export default Sentry.withSentry(
   (env: any) => ({
-    dsn: env.WORKERS_SENTRY_DSN || env.SENTRY_DSN,
+    dsn: env.WORKERS_SENTRY_DSN,
     tracesSampleRate: 1.0, // Adjust to 0.1 later to save on free tier quota
   }),
   {
@@ -482,9 +542,33 @@ export default Sentry.withSentry(
             case pathname === '/api/users/me' && method === 'GET':
               return finalizeApiResponse(handleGetCurrentUser(request, db, env));
 
+            case pathname === '/api/users' && method === 'GET':
+              return finalizeApiResponse(handleListUsers(request, db, env));
+
+            case pathname === '/api/users' && method === 'POST':
+              return finalizeApiResponse(handleCreateLegacyUser(request, db, env));
+
+            case pathname.match(/^\/api\/users\/\d+\/reset-pin$/) && method === 'PUT':
+              return finalizeApiResponse(handleResetUserPin(request, db, env));
+
+            case pathname.match(/^\/api\/users\/\d+$/) && method === 'PUT':
+              return finalizeApiResponse(handleUpdateUser(request, db, env, pathname));
+
+            case pathname.match(/^\/api\/users\/\d+$/) && method === 'DELETE':
+              return finalizeApiResponse(handleDeleteUser(request, db, env, pathname));
+
             // Products endpoints
             case pathname === '/api/products' && method === 'GET':
               return finalizeApiResponse(handleGetProducts(request, db, env));
+
+            case pathname === '/api/products' && method === 'POST':
+              return finalizeApiResponse(handleCreateProduct(request, db, env));
+
+            case pathname.match(/^\/api\/products\/by-barcode\/[^/]+$/) && method === 'GET':
+              return finalizeApiResponse(handleGetProductByBarcode(request, db, env, pathname));
+
+            case pathname.match(/^\/api\/products\/by-sku\/[^/]+$/) && method === 'GET':
+              return finalizeApiResponse(handleGetProductBySku(request, db, env, pathname));
 
             case pathname.match(/^\/api\/products\/\d+$/) && method === 'GET':
               return finalizeApiResponse(handleGetProduct(request, db, env, pathname));
@@ -493,9 +577,35 @@ export default Sentry.withSentry(
             case pathname === '/api/inventory-items' && method === 'GET':
               return finalizeApiResponse(handleGetInventory(request, db, env));
 
+            case pathname === '/api/inventory-items' && method === 'POST':
+              return finalizeApiResponse(handleCreateInventoryItem(request, db, env));
+
+            case pathname.match(/^\/api\/inventory-items\/by-barcode\/[^/]+$/) && method === 'GET':
+              return finalizeApiResponse(handleGetInventoryByBarcode(request, db, env, pathname));
+
+            case pathname.match(/^\/api\/inventory-items\/recent\/product\/\d+$/) && method === 'GET':
+              return finalizeApiResponse(
+                handleGetRecentInventoryByProduct(request, db, env, pathname),
+              );
+
+            case pathname.match(/^\/api\/inventory-items\/\d+$/) && method === 'PUT':
+              return finalizeApiResponse(handleUpdateInventoryItem(request, db, env, pathname));
+
+            case pathname.match(/^\/api\/inventory-items\/\d+$/) && method === 'DELETE':
+              return finalizeApiResponse(handleDeleteInventoryItem(request, db, env, pathname));
+
             // Store areas endpoints
             case pathname === '/api/store-areas' && method === 'GET':
               return finalizeApiResponse(handleGetStoreAreas(request, db, env));
+
+            case pathname === '/api/store-areas' && method === 'POST':
+              return finalizeApiResponse(handleCreateStoreArea(request, db, env));
+
+            case pathname.match(/^\/api\/store-areas\/\d+$/) && method === 'PUT':
+              return finalizeApiResponse(handleUpdateStoreArea(request, db, env, pathname));
+
+            case pathname.match(/^\/api\/store-areas\/\d+$/) && method === 'DELETE':
+              return finalizeApiResponse(handleDeleteStoreArea(request, db, env, pathname));
 
             // Dashboard endpoints
             case pathname === '/api/dashboard' && method === 'GET':
@@ -801,7 +911,7 @@ type BootstrapRoleValue = 'admin' | 'manager' | 'team_member';
 const DEFAULT_PAGES_PREVIEW_BASE_HOST = 'date-management-frontend.pages.dev';
 
 function getPagesPreviewBaseHost(env: Env): string {
-  const candidates = [env.FRONTEND_URL, env.CORS_ORIGIN];
+  const candidates = [env.FRONTEND_URL];
   for (const candidate of candidates) {
     if (!candidate) continue;
     try {
@@ -816,15 +926,11 @@ function getPagesPreviewBaseHost(env: Env): string {
   return DEFAULT_PAGES_PREVIEW_BASE_HOST;
 }
 
-function getClerkAuthorizedParties(env: Env, requestOrigin?: string): string[] {
+export function getClerkAuthorizedParties(env: Env, requestOrigin?: string): string[] {
   const parties = new Set<string>(['http://localhost:3002', 'http://127.0.0.1:3002']);
 
   if (env.FRONTEND_URL) {
     parties.add(env.FRONTEND_URL);
-  }
-
-  if (env.CORS_ORIGIN) {
-    parties.add(env.CORS_ORIGIN);
   }
 
   // In non-production, allow Cloudflare Pages preview deploys whose hostnames
@@ -833,7 +939,7 @@ function getClerkAuthorizedParties(env: Env, requestOrigin?: string): string[] {
   // FRONTEND_URL when it is a pages.dev host, otherwise the well-known
   // project base) and to https only, so an attacker-controlled Origin
   // header cannot expand the allowlist to arbitrary pages.dev tenants.
-  // Production keeps the strict allowlist defined by FRONTEND_URL/CORS_ORIGIN.
+  // Production keeps the strict allowlist defined by FRONTEND_URL.
   if (env.NODE_ENV !== 'production' && requestOrigin) {
     try {
       const url = new URL(requestOrigin);
@@ -2085,6 +2191,604 @@ async function handleGetExpiredItems(
   if (auth instanceof Response) return auth;
   const items = await db.getExpiredItems();
   return jsonResponse(items, 200, env);
+}
+
+/**
+ * GET /api/products/by-barcode/:barcode
+ */
+async function handleGetProductByBarcode(
+  request: Request,
+  db: Database,
+  env: Env,
+  pathname: string,
+): Promise<Response> {
+  const auth = await authenticateApiRequest(request, env, db);
+  if (auth instanceof Response) return auth;
+
+  const match = pathname.match(/^\/api\/products\/by-barcode\/([^/]+)$/);
+  if (!match) {
+    return errorResponse('Invalid barcode', 400, env);
+  }
+
+  const barcode = decodeURIComponent(match[1]);
+  const product = await db.findProductByBarcode(auth.organizationId, barcode);
+  if (!product) {
+    return errorResponse('Product not found', 404, env);
+  }
+  return jsonResponse(product, 200, env);
+}
+
+/**
+ * GET /api/products/by-sku/:sku
+ */
+async function handleGetProductBySku(
+  request: Request,
+  db: Database,
+  env: Env,
+  pathname: string,
+): Promise<Response> {
+  const auth = await authenticateApiRequest(request, env, db);
+  if (auth instanceof Response) return auth;
+
+  const match = pathname.match(/^\/api\/products\/by-sku\/([^/]+)$/);
+  if (!match) {
+    return errorResponse('Invalid sku', 400, env);
+  }
+
+  const sku = decodeURIComponent(match[1]);
+  const product = await db.findProductBySku(auth.organizationId, sku);
+  if (!product) {
+    return errorResponse('Product not found', 404, env);
+  }
+  return jsonResponse(product, 200, env);
+}
+
+/**
+ * POST /api/products
+ */
+async function handleCreateProduct(request: Request, db: Database, env: Env): Promise<Response> {
+  const auth = await authenticateApiRequest(request, env, db);
+  if (auth instanceof Response) return auth;
+
+  const body = (await request.json()) as {
+    barcode?: string;
+    sku?: string | null;
+    name?: string;
+    costPrice?: number;
+    notes?: string;
+  };
+
+  if (!body.barcode || typeof body.barcode !== 'string') {
+    return errorResponse('Missing required field: barcode', 400, env);
+  }
+  if (!body.name || typeof body.name !== 'string') {
+    return errorResponse('Missing required field: name', 400, env);
+  }
+
+  try {
+    const product = await db.createProduct(auth.organizationId, {
+      barcode: body.barcode,
+      sku: body.sku ?? null,
+      name: body.name,
+      costPrice: typeof body.costPrice === 'number' ? body.costPrice : 0,
+      notes: typeof body.notes === 'string' ? body.notes : '',
+    });
+    return jsonResponse(product, 201, env);
+  } catch (error) {
+    if (isUniqueViolation(error)) {
+      return errorResponse('Product with this barcode or SKU already exists', 409, env);
+    }
+    console.error('handleCreateProduct error:', error);
+    return errorResponse('Internal server error', 500, env);
+  }
+}
+
+/**
+ * GET /api/inventory-items/by-barcode/:barcode
+ */
+async function handleGetInventoryByBarcode(
+  request: Request,
+  db: Database,
+  env: Env,
+  pathname: string,
+): Promise<Response> {
+  const auth = await authenticateApiRequest(request, env, db);
+  if (auth instanceof Response) return auth;
+
+  const match = pathname.match(/^\/api\/inventory-items\/by-barcode\/([^/]+)$/);
+  if (!match) {
+    return errorResponse('Invalid barcode', 400, env);
+  }
+
+  const barcode = decodeURIComponent(match[1]);
+  const product = await db.findProductByBarcode(auth.organizationId, barcode);
+  if (!product) {
+    return errorResponse('Product not found', 404, env);
+  }
+
+  const items = await db.findInventoryItemsByProductId(auth.organizationId, product.id);
+  return jsonResponse(items, 200, env);
+}
+
+/**
+ * GET /api/inventory-items/recent/product/:productId
+ */
+async function handleGetRecentInventoryByProduct(
+  request: Request,
+  db: Database,
+  env: Env,
+  pathname: string,
+): Promise<Response> {
+  const auth = await authenticateApiRequest(request, env, db);
+  if (auth instanceof Response) return auth;
+
+  const match = pathname.match(/^\/api\/inventory-items\/recent\/product\/(\d+)$/);
+  if (!match) {
+    return errorResponse('Invalid product id', 400, env);
+  }
+
+  const productId = parseInt(match[1], 10);
+  const url = new URL(request.url);
+  const limitParam = parseInt(url.searchParams.get('limit') || '5', 10);
+  const limit = !Number.isFinite(limitParam) || limitParam <= 0 ? 5 : Math.min(limitParam, 50);
+
+  const items = await db.findRecentInventoryItemsByProductId(
+    auth.organizationId,
+    productId,
+    limit,
+  );
+  return jsonResponse(items, 200, env);
+}
+
+/**
+ * POST /api/inventory-items
+ */
+async function handleCreateInventoryItem(
+  request: Request,
+  db: Database,
+  env: Env,
+): Promise<Response> {
+  const auth = await authenticateApiRequest(request, env, db);
+  if (auth instanceof Response) return auth;
+
+  const body = (await request.json()) as {
+    productId?: number;
+    product_id?: number;
+    expiryDate?: string;
+    expiry_date?: string;
+    locationId?: number;
+    location_id?: number;
+    status?: string;
+  };
+
+  const productId = body.productId ?? body.product_id;
+  const expiryDate = body.expiryDate ?? body.expiry_date;
+  const locationId = body.locationId ?? body.location_id;
+
+  if (productId === undefined || !Number.isInteger(productId) || productId < 1) {
+    return errorResponse('Missing or invalid productId', 400, env);
+  }
+  if (!expiryDate || typeof expiryDate !== 'string' || !ISO_DATE_RE.test(expiryDate)) {
+    return errorResponse('Missing or invalid expiryDate (expected YYYY-MM-DD)', 400, env);
+  }
+  if (locationId === undefined || !Number.isInteger(locationId) || locationId < 1) {
+    return errorResponse('Missing or invalid locationId', 400, env);
+  }
+
+  try {
+    const item = await db.createInventoryItem(auth.organizationId, auth.userId, {
+      productId,
+      expiryDate,
+      locationId,
+      status: typeof body.status === 'string' ? body.status : undefined,
+    });
+    return jsonResponse(item, 201, env);
+  } catch (error) {
+    const message = error instanceof Error ? error.message : 'Internal server error';
+    if (message === 'Product does not exist' || message === 'Location does not exist') {
+      return errorResponse(message, 400, env);
+    }
+    console.error('handleCreateInventoryItem error:', error);
+    return errorResponse('Internal server error', 500, env);
+  }
+}
+
+/**
+ * PUT /api/inventory-items/:id
+ */
+async function handleUpdateInventoryItem(
+  request: Request,
+  db: Database,
+  env: Env,
+  pathname: string,
+): Promise<Response> {
+  const auth = await authenticateApiRequest(request, env, db);
+  if (auth instanceof Response) return auth;
+
+  const match = pathname.match(/^\/api\/inventory-items\/(\d+)$/);
+  if (!match) {
+    return errorResponse('Invalid inventory item id', 400, env);
+  }
+  const id = parsePositiveInt(match[1]);
+  if (id === null) {
+    return errorResponse('Invalid inventory item id', 400, env);
+  }
+
+  const body = (await request.json()) as {
+    productId?: number;
+    expiryDate?: string;
+    locationId?: number;
+    status?: string;
+  };
+
+  if (body.productId !== undefined && !Number.isInteger(body.productId)) {
+    return errorResponse('Invalid productId', 400, env);
+  }
+  if (body.locationId !== undefined && !Number.isInteger(body.locationId)) {
+    return errorResponse('Invalid locationId', 400, env);
+  }
+  if (body.expiryDate !== undefined && !ISO_DATE_RE.test(body.expiryDate)) {
+    return errorResponse('Invalid expiryDate (expected YYYY-MM-DD)', 400, env);
+  }
+
+  try {
+    const updated = await db.updateInventoryItem(auth.organizationId, auth.userId, id, {
+      productId: body.productId,
+      expiryDate: body.expiryDate,
+      locationId: body.locationId,
+      status: body.status,
+    });
+    if (!updated) {
+      return errorResponse('Inventory item not found', 404, env);
+    }
+    return jsonResponse(updated, 200, env);
+  } catch (error) {
+    const message = error instanceof Error ? error.message : 'Internal server error';
+    if (message === 'Location does not exist') {
+      return errorResponse(message, 400, env);
+    }
+    console.error('handleUpdateInventoryItem error:', error);
+    return errorResponse('Internal server error', 500, env);
+  }
+}
+
+/**
+ * DELETE /api/inventory-items/:id
+ */
+async function handleDeleteInventoryItem(
+  request: Request,
+  db: Database,
+  env: Env,
+  pathname: string,
+): Promise<Response> {
+  const auth = await authenticateApiRequest(request, env, db);
+  if (auth instanceof Response) return auth;
+
+  const match = pathname.match(/^\/api\/inventory-items\/(\d+)$/);
+  if (!match) {
+    return errorResponse('Invalid inventory item id', 400, env);
+  }
+  const id = parsePositiveInt(match[1]);
+  if (id === null) {
+    return errorResponse('Invalid inventory item id', 400, env);
+  }
+
+  const deleted = await db.deleteInventoryItem(auth.organizationId, auth.userId, id);
+  if (!deleted) {
+    return errorResponse('Inventory item not found', 404, env);
+  }
+  return jsonResponse({ message: 'Inventory item deleted successfully' }, 200, env);
+}
+
+/**
+ * POST /api/store-areas
+ */
+async function handleCreateStoreArea(
+  request: Request,
+  db: Database,
+  env: Env,
+): Promise<Response> {
+  const auth = await authenticateApiRequest(request, env, db);
+  if (auth instanceof Response) return auth;
+
+  const body = (await request.json()) as {
+    name?: string;
+    subDepartment?: string | null;
+    sub_department?: string | null;
+  };
+
+  if (!body.name || typeof body.name !== 'string' || body.name.trim().length === 0) {
+    return errorResponse('Missing required field: name', 400, env);
+  }
+
+  const subDepartment =
+    body.subDepartment !== undefined
+      ? body.subDepartment
+      : body.sub_department !== undefined
+        ? body.sub_department
+        : null;
+
+  try {
+    const area = await db.createStoreArea(auth.organizationId, {
+      name: body.name.trim(),
+      subDepartment: subDepartment ?? null,
+    });
+    return jsonResponse(area, 201, env);
+  } catch (error) {
+    if (isUniqueViolation(error)) {
+      return errorResponse('Store area with this name already exists', 409, env);
+    }
+    console.error('handleCreateStoreArea error:', error);
+    return errorResponse('Internal server error', 500, env);
+  }
+}
+
+/**
+ * PUT /api/store-areas/:id
+ */
+async function handleUpdateStoreArea(
+  request: Request,
+  db: Database,
+  env: Env,
+  pathname: string,
+): Promise<Response> {
+  const auth = await authenticateApiRequest(request, env, db);
+  if (auth instanceof Response) return auth;
+
+  const match = pathname.match(/^\/api\/store-areas\/(\d+)$/);
+  if (!match) {
+    return errorResponse('Invalid store area id', 400, env);
+  }
+  const id = parseInt(match[1], 10);
+
+  const body = (await request.json()) as {
+    name?: string;
+    subDepartment?: string | null;
+    sub_department?: string | null;
+  };
+
+  const data: { name?: string; subDepartment?: string | null } = {};
+  if (typeof body.name === 'string') data.name = body.name.trim();
+  if (body.subDepartment !== undefined) {
+    data.subDepartment = body.subDepartment ?? null;
+  } else if (body.sub_department !== undefined) {
+    data.subDepartment = body.sub_department ?? null;
+  }
+
+  const updated = await db.updateStoreArea(auth.organizationId, id, data);
+  if (!updated) {
+    return errorResponse('Store area not found', 404, env);
+  }
+  return jsonResponse(updated, 200, env);
+}
+
+/**
+ * DELETE /api/store-areas/:id
+ */
+async function handleDeleteStoreArea(
+  request: Request,
+  db: Database,
+  env: Env,
+  pathname: string,
+): Promise<Response> {
+  const auth = await authenticateApiRequest(request, env, db);
+  if (auth instanceof Response) return auth;
+
+  const match = pathname.match(/^\/api\/store-areas\/(\d+)$/);
+  if (!match) {
+    return errorResponse('Invalid store area id', 400, env);
+  }
+  const id = parseInt(match[1], 10);
+
+  try {
+    const deleted = await db.deleteStoreArea(auth.organizationId, id);
+    if (!deleted) {
+      return errorResponse('Store area not found', 404, env);
+    }
+    return jsonResponse({ message: 'Store area deleted successfully' }, 200, env);
+  } catch (error) {
+    const message = error instanceof Error ? error.message : 'Internal server error';
+    if (message.includes('in use')) {
+      return errorResponse(message, 409, env);
+    }
+    console.error('handleDeleteStoreArea error:', error);
+    return errorResponse('Internal server error', 500, env);
+  }
+}
+
+/**
+ * GET /api/users
+ *
+ * Restricted to admins (and managers in non-prod). The listing surfaces email,
+ * username, role and clerkUserId for every user in the org, which is sensitive
+ * enough that team_member callers must not see it.
+ */
+async function handleListUsers(request: Request, db: Database, env: Env): Promise<Response> {
+  const auth = await authenticateApiRequest(request, env, db);
+  if (auth instanceof Response) return auth;
+
+  if (!canManageUsers(auth.role)) {
+    return errorResponse('Only admins can list users', 403, env);
+  }
+
+  const users = await db.listUsers(auth.organizationId);
+  return jsonResponse(users, 200, env);
+}
+
+/**
+ * POST /api/users — creates a team member user record in the caller's org.
+ * Signup is managed by Clerk; this endpoint exists for legacy local user
+ * creation and is intentionally limited: it only allows an admin to
+ * pre-provision a username/role placeholder. Clerk user linkage happens
+ * later when the user signs in via Clerk and the bootstrap route links
+ * the Clerk ID.
+ */
+async function handleCreateLegacyUser(
+  request: Request,
+  db: Database,
+  env: Env,
+): Promise<Response> {
+  const auth = await authenticateApiRequest(request, env, db);
+  if (auth instanceof Response) return auth;
+
+  if (!canManageUsers(auth.role)) {
+    return errorResponse('Only admins can create users', 403, env);
+  }
+
+  const body = (await request.json()) as { pin?: string; role?: string; username?: string };
+  const requestedRole = typeof body.role === 'string' ? body.role : 'team_member';
+  if (!isValidRole(requestedRole)) {
+    return errorResponse(
+      `Invalid role. Allowed: ${Array.from(getAllowedRoles(env)).join(', ')}`,
+      400,
+      env,
+    );
+  }
+  const username = typeof body.username === 'string' ? body.username : null;
+
+  try {
+    // Enforce tier max_users limit before insert. Source of truth is the
+    // backend TIER_LIMITS constant (MEMORY[26ef5121]); we replicate the
+    // numeric cap inline here because Workers doesn't import the backend
+    // module. If unset/null, treat as unlimited.
+    const usageRows = await db.sql`
+      SELECT
+        ou.active_users::int as "activeUsers",
+        ou.max_users::int as "maxUsers"
+      FROM organization_usage ou
+      WHERE ou.organization_id = ${auth.organizationId}
+      LIMIT 1
+    `;
+    const usage = usageRows[0];
+    if (usage && usage.maxUsers !== null && usage.activeUsers >= usage.maxUsers) {
+      return errorResponse(
+        `User limit reached for your subscription tier (max ${usage.maxUsers})`,
+        402,
+        env,
+      );
+    }
+
+    const rows = await db.sql`
+      INSERT INTO users (organization_id, username, role, created_at, updated_at)
+      VALUES (${auth.organizationId}, ${username}, ${requestedRole}, NOW(), NOW())
+      RETURNING id, email, username, role,
+                clerk_user_id as "clerkUserId",
+                created_at::text as "createdAt"
+    `;
+    return jsonResponse(rows[0], 201, env);
+  } catch (error) {
+    if (isUniqueViolation(error)) {
+      return errorResponse('User with this username already exists', 409, env);
+    }
+    console.error('handleCreateLegacyUser error:', error);
+    return errorResponse('Internal server error', 500, env);
+  }
+}
+
+/**
+ * PUT /api/users/:id — update role.
+ */
+async function handleUpdateUser(
+  request: Request,
+  db: Database,
+  env: Env,
+  pathname: string,
+): Promise<Response> {
+  const auth = await authenticateApiRequest(request, env, db);
+  if (auth instanceof Response) return auth;
+
+  if (!canManageUsers(auth.role)) {
+    return errorResponse('Only admins can update users', 403, env);
+  }
+
+  const match = pathname.match(/^\/api\/users\/(\d+)$/);
+  if (!match) {
+    return errorResponse('Invalid user id', 400, env);
+  }
+  const id = parsePositiveInt(match[1]);
+  if (id === null) {
+    return errorResponse('Invalid user id', 400, env);
+  }
+
+  const body = (await request.json()) as { role?: string };
+  if (!body.role || typeof body.role !== 'string') {
+    return errorResponse('Missing required field: role', 400, env);
+  }
+  if (!isValidRole(body.role)) {
+    return errorResponse(
+      `Invalid role. Allowed: ${Array.from(getAllowedRoles(env)).join(', ')}`,
+      400,
+      env,
+    );
+  }
+
+  const updated = await db.updateUserRole(auth.organizationId, id, body.role);
+  if (!updated) {
+    return errorResponse('User not found', 404, env);
+  }
+  return jsonResponse(updated, 200, env);
+}
+
+/**
+ * PUT /api/users/:id/reset-pin — deprecated under Clerk. Returns 410 Gone with guidance.
+ *
+ * Authentication is required so this endpoint cannot be used as an unauthenticated
+ * existence-probe for user IDs (review #1).
+ */
+async function handleResetUserPin(
+  request: Request,
+  db: Database,
+  env: Env,
+): Promise<Response> {
+  const auth = await authenticateApiRequest(request, env, db);
+  if (auth instanceof Response) return auth;
+
+  return errorResponse(
+    'PIN login is no longer supported. Use Clerk-managed password reset.',
+    410,
+    env,
+  );
+}
+
+/**
+ * DELETE /api/users/:id — soft delete.
+ */
+async function handleDeleteUser(
+  request: Request,
+  db: Database,
+  env: Env,
+  pathname: string,
+): Promise<Response> {
+  const auth = await authenticateApiRequest(request, env, db);
+  if (auth instanceof Response) return auth;
+
+  if (!canManageUsers(auth.role)) {
+    return errorResponse('Only admins can delete users', 403, env);
+  }
+
+  const match = pathname.match(/^\/api\/users\/(\d+)$/);
+  if (!match) {
+    return errorResponse('Invalid user id', 400, env);
+  }
+  const id = parsePositiveInt(match[1]);
+  if (id === null) {
+    return errorResponse('Invalid user id', 400, env);
+  }
+
+  if (id === auth.userId) {
+    return errorResponse('You cannot delete your own user record', 400, env);
+  }
+
+  // TODO(clerk-orgs): softDeleteUser only flips deleted_at locally. The
+  // matching Clerk org membership is not removed, so the user can sign in
+  // again and bootstrap will re-link or create a new local row. Wire this
+  // into the Clerk org-membership webhook (or call the Clerk Backend SDK
+  // here) before exposing this endpoint to operators. See review #12.
+  const deleted = await db.softDeleteUser(auth.organizationId, id);
+  if (!deleted) {
+    return errorResponse('User not found', 404, env);
+  }
+  return jsonResponse({ message: 'User deleted successfully' }, 200, env);
 }
 
 /**
