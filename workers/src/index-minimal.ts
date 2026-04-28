@@ -2126,6 +2126,7 @@ async function handleProcessExpiredItem(
     const transaction = await db.processExpiredItem(
       body.inventoryItemId,
       auth.userId,
+      auth.organizationId,
       body.action,
       body.unitsDiscarded,
     );

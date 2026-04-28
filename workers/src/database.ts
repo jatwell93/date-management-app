@@ -50,7 +50,13 @@ export interface Database {
 
   // Expired items queries
   getExpiredItems(): Promise<ExpiredItemRow[]>;
-  processExpiredItem(inventoryItemId: number, userId: number, action: string, unitsDiscarded?: number): Promise<ExpiredItemTransaction>;
+  processExpiredItem(
+    inventoryItemId: number,
+    userId: number,
+    organizationId: string,
+    action: string,
+    unitsDiscarded?: number,
+  ): Promise<ExpiredItemTransaction>;
 }
 
 // Type definitions matching backend Prisma schema
@@ -187,16 +193,17 @@ export interface ExpiredItemRow {
   costPrice: number;
   locationId: number;
   locationName: string;
-  quantity: number;
+  quantityAvailable: number;
 }
 
 export interface ExpiredItemTransaction {
   id: number;
   inventoryItemId: number;
   action: string;
+  userId: number | null;
   unitsDiscarded: number | null;
-  processedAt: string;
-  processedBy: number;
+  financialLoss: number | null;
+  transactionDate: string;
 }
 
 /**
@@ -526,13 +533,13 @@ export function createWorkersDatabase(env: Env): Database {
           return (await sql`
             SELECT
               al.user_id as "userId",
-              COALESCE(u.name, u.email, 'Unknown') as "userName",
+              COALESCE(u.username, u.email, 'Unknown') as "userName",
               COUNT(*)::int as "itemCount"
             FROM audit_log al
             LEFT JOIN users u ON al.user_id = u.id
             WHERE al.change_description LIKE '%created%'
               AND al.created_at >= CURRENT_DATE - make_interval(days => ${days})
-            GROUP BY al.user_id, COALESCE(u.name, u.email, 'Unknown')
+            GROUP BY al.user_id, COALESCE(u.username, u.email, 'Unknown')
             ORDER BY "itemCount" DESC
             LIMIT 10
           `) as ItemsByUserReportItem[];
@@ -542,12 +549,12 @@ export function createWorkersDatabase(env: Env): Database {
       return (await sql`
         SELECT
           al.user_id as "userId",
-          COALESCE(u.name, u.email, 'Unknown') as "userName",
+          COALESCE(u.username, u.email, 'Unknown') as "userName",
           COUNT(*)::int as "itemCount"
         FROM audit_log al
         LEFT JOIN users u ON al.user_id = u.id
         WHERE al.change_description LIKE '%created%'
-        GROUP BY al.user_id, COALESCE(u.name, u.email, 'Unknown')
+        GROUP BY al.user_id, COALESCE(u.username, u.email, 'Unknown')
         ORDER BY "itemCount" DESC
         LIMIT 10
       `) as ItemsByUserReportItem[];
@@ -610,7 +617,7 @@ export function createWorkersDatabase(env: Env): Database {
           COALESCE(p.cost_price, 0) as "costPrice",
           ii.location_id as "locationId",
           sa.name as "locationName",
-          COALESCE(ii.quantity, 1)::int as quantity
+          1::int as "quantityAvailable"
         FROM inventory_items ii
         JOIN products p ON ii.product_id = p.id
         JOIN store_areas sa ON ii.location_id = sa.id
@@ -623,10 +630,22 @@ export function createWorkersDatabase(env: Env): Database {
     async processExpiredItem(
       inventoryItemId: number,
       userId: number,
+      organizationId: string,
       action: string,
       unitsDiscarded?: number,
     ): Promise<ExpiredItemTransaction> {
       const newStatus = action === 'sold_through' ? 'Sold Through' : 'Expired';
+      const financialLossRows = await sql`
+        SELECT COALESCE(p.cost_price, 0) * ${action === 'expired' ? unitsDiscarded ?? 0 : 0} as "financialLoss"
+        FROM inventory_items ii
+        JOIN products p ON ii.product_id = p.id
+        WHERE ii.id = ${inventoryItemId}
+        LIMIT 1
+      `;
+
+      if (!financialLossRows[0]) {
+        throw new Error(`Inventory item ${inventoryItemId} not found`);
+      }
 
       await sql`
         UPDATE inventory_items
@@ -636,16 +655,17 @@ export function createWorkersDatabase(env: Env): Database {
 
       const rows = await sql`
         INSERT INTO expired_item_transactions
-          (inventory_item_id, action, units_discarded, processed_by, processed_at)
+          (organization_id, inventory_item_id, user_id, action, units_discarded, financial_loss, transaction_date, created_at, updated_at)
         VALUES
-          (${inventoryItemId}, ${action}, ${unitsDiscarded ?? null}, ${userId}, NOW())
+          (${organizationId}, ${inventoryItemId}, ${userId}, ${action}, ${unitsDiscarded ?? null}, ${Number(financialLossRows[0].financialLoss) || null}, NOW(), NOW(), NOW())
         RETURNING
           id,
           inventory_item_id as "inventoryItemId",
+          user_id as "userId",
           action,
           units_discarded as "unitsDiscarded",
-          processed_at::text as "processedAt",
-          processed_by as "processedBy"
+          financial_loss as "financialLoss",
+          transaction_date::text as "transactionDate"
       `;
 
       return rows[0] as ExpiredItemTransaction;
