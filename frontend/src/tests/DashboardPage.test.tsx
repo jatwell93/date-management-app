@@ -18,9 +18,12 @@ describe('DashboardPage', () => {
 
   it('renders dashboard data on successful fetch', async () => {
     (apiService.get as jest.Mock).mockResolvedValue({
-      totalProducts: 100,
-      expiringSoon: 10,
-      markdownItems: 5,
+      stats: {
+        totalProducts: 100,
+        totalInventoryItems: 42,
+        expiringItems: 10,
+        lowStockItems: 5,
+      },
       recentActivity: [
         {
           id: 1,
@@ -37,9 +40,11 @@ describe('DashboardPage', () => {
 
     expect(await screen.findByText(/Total Products/i)).toBeInTheDocument();
     expect(screen.getByText('100')).toBeInTheDocument();
+    expect(screen.getByText(/Inventory Items/i)).toBeInTheDocument();
+    expect(screen.getByText('42')).toBeInTheDocument();
     expect(screen.getByText(/Expiring Soon/i)).toBeInTheDocument();
     expect(screen.getByText('10')).toBeInTheDocument();
-    expect(screen.getByText(/Markdown Items/i)).toBeInTheDocument();
+    expect(screen.getByText(/Low Stock/i)).toBeInTheDocument();
     expect(screen.getByText('5')).toBeInTheDocument();
     expect(screen.getByText(/Recent Activity/i)).toBeInTheDocument();
     expect(screen.getByText(/Activity 1/i)).toBeInTheDocument();
