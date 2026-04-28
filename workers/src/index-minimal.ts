@@ -281,15 +281,41 @@ export default Sentry.withSentry(
   }),
   {
     async fetch(request: Request, env: Env, ctx: ExecutionContext): Promise<Response> {
+      const requestOrigin = request.headers.get('Origin') || '';
+
+      // Belt-and-suspenders: ensure every response (including unhandled
+      // exceptions and preflights) carries CORS headers. Without this an
+      // exception thrown above the inner try/catch can produce a bare 500
+      // that the browser blocks before the developer ever sees the real
+      // error message.
+      const withCors = (response: Response): Response => {
+        if (response.headers.has('Access-Control-Allow-Origin')) {
+          return response;
+        }
+        const corsHeaders = getCorsHeaders(env, requestOrigin) as Record<string, string>;
+        const merged = new Headers(response.headers);
+        for (const [key, value] of Object.entries(corsHeaders)) {
+          merged.set(key, value);
+        }
+        return new Response(response.body, {
+          status: response.status,
+          statusText: response.statusText,
+          headers: merged,
+        });
+      };
+
       const url = new URL(request.url);
       const { pathname } = url;
       const method = request.method;
 
-      const requestOrigin = request.headers.get('Origin') || '';
-
       // Handle CORS preflight
       if (method === 'OPTIONS') {
-        return handleOptions(request, env);
+        try {
+          return withCors(handleOptions(request, env));
+        } catch (error) {
+          console.error('Unhandled error in OPTIONS handler:', error);
+          return withCors(errorResponse('Internal Server Error', 500, env, requestOrigin));
+        }
       }
 
       try {
@@ -487,16 +513,31 @@ export default Sentry.withSentry(
           }
         }
 
-        return maybeCompressJsonResponse(request, errorResponse('Not Found', 404, env));
+        return withCors(await maybeCompressJsonResponse(request, errorResponse('Not Found', 404, env, requestOrigin)));
       } catch (error) {
         console.error('Unhandled error:', error);
         const message =
           env.NODE_ENV === 'development'
             ? error instanceof Error
-              ? error.message
+              ? `${error.message}${error.stack ? `\n${error.stack}` : ''}`
               : 'Unknown error'
             : 'Internal Server Error';
-        return maybeCompressJsonResponse(request, errorResponse(message, 500, env, requestOrigin));
+        try {
+          return withCors(
+            await maybeCompressJsonResponse(
+              request,
+              errorResponse(message, 500, env, requestOrigin),
+            ),
+          );
+        } catch (compressError) {
+          console.error('Error while writing error response:', compressError);
+          return withCors(
+            new Response(JSON.stringify({ error: message }), {
+              status: 500,
+              headers: { 'Content-Type': 'application/json' },
+            }),
+          );
+        }
       }
     },
   },
@@ -1241,9 +1282,14 @@ async function findOrCreateOrganization(
     const slug =
       attempt === 0 ? baseSlug : `${baseSlug}-${crypto.randomUUID().slice(0, 8)}-${attempt}`;
 
+    // Prisma's @default(uuid()) generates the UUID in the JS layer rather than
+    // creating a SQL DEFAULT, so the organizations.id column has no DB default.
+    // Raw SQL inserts must supply the id explicitly.
+    const newOrgId = crypto.randomUUID();
     try {
       const rows = await sql`
         INSERT INTO organizations (
+          id,
           clerk_organization_id,
           name,
           slug,
@@ -1251,6 +1297,7 @@ async function findOrCreateOrganization(
           created_at,
           updated_at
         ) VALUES (
+          ${newOrgId},
           ${clerkOrganizationId},
           ${orgName},
           ${slug},
@@ -1701,12 +1748,63 @@ async function handleRegister(request: Request, db: Database, env: Env): Promise
 }
 
 /**
+ * Authenticate an API request via Clerk and resolve the internal user record.
+ * Returns either an authenticated context or an error Response (already with
+ * CORS headers applied via errorResponse).
+ *
+ * The frontend now signs requests with Clerk RS256 JWTs, so the legacy
+ * authenticateRequest (which expects a token signed with our local JWT_SECRET)
+ * always returns null for those tokens. Repeated 401s cause the React app to
+ * treat the session as expired and sign the user out, bouncing to /login
+ * immediately after a successful bootstrap.
+ */
+async function authenticateApiRequest(
+  request: Request,
+  env: Env,
+  db: Database,
+): Promise<
+  | { userId: number; organizationId: string; clerkUserId: string; role: string }
+  | Response
+> {
+  const requestOrigin = request.headers.get('Origin') || '';
+  const clerkResult = await authenticateClerkRequest(request, env, requestOrigin);
+  if (clerkResult instanceof Response) {
+    return clerkResult;
+  }
+
+  const rows = await db.sql`
+    SELECT id,
+           organization_id as "organizationId",
+           role
+    FROM users
+    WHERE clerk_user_id = ${clerkResult.clerkUserId}
+      AND deleted_at IS NULL
+    LIMIT 1
+  `;
+  if (!rows[0]) {
+    return errorResponse(
+      'User has not completed organization bootstrap',
+      401,
+      env,
+      requestOrigin,
+    );
+  }
+
+  return {
+    userId: Number(rows[0].id),
+    organizationId: String(rows[0].organizationId),
+    clerkUserId: clerkResult.clerkUserId,
+    role: String(rows[0].role || 'team_member'),
+  };
+}
+
+/**
  * GET /api/users/me
  */
 async function handleGetCurrentUser(request: Request, db: Database, env: Env): Promise<Response> {
-  const auth = await authenticateRequest(request, env);
-  if (!auth) {
-    return errorResponse('Unauthorized', 401, env);
+  const auth = await authenticateApiRequest(request, env, db);
+  if (auth instanceof Response) {
+    return auth;
   }
 
   const user = await db.findUserById(auth.userId);
@@ -1732,9 +1830,9 @@ async function handleGetCurrentUser(request: Request, db: Database, env: Env): P
  * GET /api/products
  */
 async function handleGetProducts(request: Request, db: Database, env: Env): Promise<Response> {
-  const auth = await authenticateRequest(request, env);
-  if (!auth) {
-    return errorResponse('Unauthorized', 401, env);
+  const auth = await authenticateApiRequest(request, env, db);
+  if (auth instanceof Response) {
+    return auth;
   }
 
   const url = new URL(request.url);
@@ -1759,9 +1857,9 @@ async function handleGetProduct(
   env: Env,
   pathname: string,
 ): Promise<Response> {
-  const auth = await authenticateRequest(request, env);
-  if (!auth) {
-    return errorResponse('Unauthorized', 401, env);
+  const auth = await authenticateApiRequest(request, env, db);
+  if (auth instanceof Response) {
+    return auth;
   }
 
   const match = pathname.match(/\/api\/products\/(\d+)/);
@@ -1783,9 +1881,9 @@ async function handleGetProduct(
  * GET /api/inventory-items
  */
 async function handleGetInventory(request: Request, db: Database, env: Env): Promise<Response> {
-  const auth = await authenticateRequest(request, env);
-  if (!auth) {
-    return errorResponse('Unauthorized', 401, env);
+  const auth = await authenticateApiRequest(request, env, db);
+  if (auth instanceof Response) {
+    return auth;
   }
 
   const url = new URL(request.url);
@@ -1804,9 +1902,9 @@ async function handleGetInventory(request: Request, db: Database, env: Env): Pro
  * GET /api/store-areas
  */
 async function handleGetStoreAreas(request: Request, db: Database, env: Env): Promise<Response> {
-  const auth = await authenticateRequest(request, env);
-  if (!auth) {
-    return errorResponse('Unauthorized', 401, env);
+  const auth = await authenticateApiRequest(request, env, db);
+  if (auth instanceof Response) {
+    return auth;
   }
 
   const areas = await db.findStoreAreas();
@@ -1818,9 +1916,9 @@ async function handleGetStoreAreas(request: Request, db: Database, env: Env): Pr
  * GET /api/dashboard
  */
 async function handleGetDashboard(request: Request, db: Database, env: Env): Promise<Response> {
-  const auth = await authenticateRequest(request, env);
-  if (!auth) {
-    return errorResponse('Unauthorized', 401, env);
+  const auth = await authenticateApiRequest(request, env, db);
+  if (auth instanceof Response) {
+    return auth;
   }
 
   const stats = await db.getDashboardStats();
@@ -1896,22 +1994,12 @@ const SUBSCRIPTION_TIER_LIMITS: Record<
  * GET /api/subscription/trial-status
  */
 async function handleGetTrialStatus(request: Request, db: Database, env: Env): Promise<Response> {
-  const auth = await authenticateRequest(request, env);
-  if (!auth) {
-    return errorResponse('Unauthorized', 401, env);
+  const auth = await authenticateApiRequest(request, env, db);
+  if (auth instanceof Response) {
+    return auth;
   }
 
-  const userRows = await db.sql`
-    SELECT organization_id
-    FROM users
-    WHERE id = ${auth.userId}
-    LIMIT 1
-  `;
-
-  const organizationId = userRows[0]?.organization_id as string | undefined;
-  if (!organizationId) {
-    return errorResponse('User or organization not found', 404, env);
-  }
+  const organizationId = auth.organizationId;
 
   const subscriptionRows = await db.sql`
     SELECT

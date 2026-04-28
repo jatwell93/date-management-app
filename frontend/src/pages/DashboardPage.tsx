@@ -6,19 +6,33 @@ interface DashboardPageProps {
   token: string | null;
 }
 
-interface DashboardData {
+interface DashboardStats {
   totalProducts: number;
-  expiringSoon: number;
-  markdownItems: number;
-  recentActivity: {
-    id: number;
-    description: string;
-    timestamp: string;
-  }[];
+  totalInventoryItems: number;
+  expiringItems: number;
+  lowStockItems: number;
+}
+
+interface DashboardActivityEntry {
+  id: number;
+  description: string;
+  timestamp: string;
+}
+
+// The Workers API (GET /api/dashboard) returns `{ stats: DashboardStats }`.
+// Older versions of this page expected a flat object with
+// `expiringSoon`/`markdownItems`/`recentActivity` — that shape is no longer
+// produced by the backend and tried to call `.map` on an undefined
+// `recentActivity`, which threw and left the user stuck on the generic
+// ErrorBoundary fallback with nothing in the console.
+interface DashboardResponse {
+  stats: DashboardStats;
+  recentActivity?: DashboardActivityEntry[];
 }
 
 export function DashboardPage({ token }: DashboardPageProps) {
-  const [dashboardData, setDashboardData] = useState<DashboardData | null>(null);
+  const [stats, setStats] = useState<DashboardStats | null>(null);
+  const [recentActivity, setRecentActivity] = useState<DashboardActivityEntry[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
@@ -31,8 +45,9 @@ export function DashboardPage({ token }: DashboardPageProps) {
       }
 
       try {
-        const data = await apiService.get<DashboardData>('/dashboard', token);
-        setDashboardData(data);
+        const data = await apiService.get<DashboardResponse>('/dashboard', token);
+        setStats(data?.stats ?? null);
+        setRecentActivity(Array.isArray(data?.recentActivity) ? data.recentActivity : []);
       } catch (err: unknown) {
         if (err instanceof Error) {
           setError(err.message);
@@ -62,7 +77,16 @@ export function DashboardPage({ token }: DashboardPageProps) {
           <CardTitle>Total Products</CardTitle>
         </CardHeader>
         <CardContent>
-          <p className="text-3xl font-bold">{dashboardData?.totalProducts}</p>
+          <p className="text-3xl font-bold">{stats?.totalProducts ?? 0}</p>
+        </CardContent>
+      </Card>
+
+      <Card>
+        <CardHeader>
+          <CardTitle>Inventory Items</CardTitle>
+        </CardHeader>
+        <CardContent>
+          <p className="text-3xl font-bold">{stats?.totalInventoryItems ?? 0}</p>
         </CardContent>
       </Card>
 
@@ -71,16 +95,16 @@ export function DashboardPage({ token }: DashboardPageProps) {
           <CardTitle>Expiring Soon</CardTitle>
         </CardHeader>
         <CardContent>
-          <p className="text-3xl font-bold text-orange-500">{dashboardData?.expiringSoon}</p>
+          <p className="text-3xl font-bold text-orange-500">{stats?.expiringItems ?? 0}</p>
         </CardContent>
       </Card>
 
       <Card>
         <CardHeader>
-          <CardTitle>Markdown Items</CardTitle>
+          <CardTitle>Low Stock</CardTitle>
         </CardHeader>
         <CardContent>
-          <p className="text-3xl font-bold text-red-500">{dashboardData?.markdownItems}</p>
+          <p className="text-3xl font-bold text-red-500">{stats?.lowStockItems ?? 0}</p>
         </CardContent>
       </Card>
 
@@ -89,14 +113,18 @@ export function DashboardPage({ token }: DashboardPageProps) {
           <CardTitle>Recent Activity</CardTitle>
         </CardHeader>
         <CardContent>
-          <ul>
-            {dashboardData?.recentActivity.map((activity) => (
-              <li key={activity.id} className="mb-2 pb-2 border-b last:border-b-0">
-                <p className="text-sm">{activity.description}</p>
-                <p className="text-xs text-gray-500">{activity.timestamp}</p>
-              </li>
-            ))}
-          </ul>
+          {recentActivity.length === 0 ? (
+            <p className="text-sm text-muted-foreground">No recent activity yet.</p>
+          ) : (
+            <ul>
+              {recentActivity.map((activity) => (
+                <li key={activity.id} className="mb-2 pb-2 border-b last:border-b-0">
+                  <p className="text-sm">{activity.description}</p>
+                  <p className="text-xs text-gray-500">{activity.timestamp}</p>
+                </li>
+              ))}
+            </ul>
+          )}
         </CardContent>
       </Card>
     </div>
