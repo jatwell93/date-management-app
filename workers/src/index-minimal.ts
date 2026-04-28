@@ -538,7 +538,12 @@ export default Sentry.withSentry(
           }
         }
 
-        return withCors(await maybeCompressJsonResponse(request, errorResponse('Not Found', 404, env, requestOrigin)));
+        return withCors(
+          await maybeCompressJsonResponse(
+            request,
+            errorResponse('Not Found', 404, env, requestOrigin),
+          ),
+        );
       } catch (error) {
         console.error('Unhandled error:', error);
         const message =
@@ -845,16 +850,17 @@ function normalizeBootstrapRole(role: string | null | undefined): BootstrapRoleV
     return 'team_member';
   }
 
-  if (role === 'admin' || role === 'Admin' || role === 'ADMIN' || role === 'owner' || role === 'org:admin') {
+  if (
+    role === 'admin' ||
+    role === 'Admin' ||
+    role === 'ADMIN' ||
+    role === 'owner' ||
+    role === 'org:admin'
+  ) {
     return 'admin';
   }
 
-  if (
-    role === 'manager' ||
-    role === 'Manager' ||
-    role === 'MANAGER' ||
-    role === 'org:manager'
-  ) {
+  if (role === 'manager' || role === 'Manager' || role === 'MANAGER' || role === 'org:manager') {
     return 'manager';
   }
 
@@ -949,7 +955,12 @@ export async function handleOrganizationBootstrap(request: Request, env: Env): P
 
   const email = authResult.email || profile.email;
   if (!email) {
-    return errorResponse('Authenticated Clerk user is missing a primary email', 400, env, requestOrigin);
+    return errorResponse(
+      'Authenticated Clerk user is missing a primary email',
+      400,
+      env,
+      requestOrigin,
+    );
   }
 
   const username =
@@ -974,10 +985,10 @@ export async function handleOrganizationBootstrap(request: Request, env: Env): P
   const isNewOrg = existingOrg.length === 0;
   const organizationId = isNewOrg
     ? await findOrCreateOrganization(
-      db.sql,
-      { id: finalClerkOrgId, name: finalOrgName, slug: finalOrgSlug },
-      email,
-    )
+        db.sql,
+        { id: finalClerkOrgId, name: finalOrgName, slug: finalOrgSlug },
+        email,
+      )
     : String(existingOrg[0].id);
 
   const existingUser = await db.sql`
@@ -1788,8 +1799,7 @@ async function authenticateApiRequest(
   env: Env,
   db: Database,
 ): Promise<
-  | { userId: number; organizationId: string; clerkUserId: string; role: string }
-  | Response
+  { userId: number; organizationId: string; clerkUserId: string; role: string } | Response
 > {
   const requestOrigin = request.headers.get('Origin') || '';
   const clerkResult = await authenticateClerkRequest(request, env, requestOrigin);
@@ -1807,12 +1817,7 @@ async function authenticateApiRequest(
     LIMIT 1
   `;
   if (!rows[0]) {
-    return errorResponse(
-      'User has not completed organization bootstrap',
-      401,
-      env,
-      requestOrigin,
-    );
+    return errorResponse('User has not completed organization bootstrap', 401, env, requestOrigin);
   }
 
   return {
@@ -1964,7 +1969,11 @@ async function handleGetExpiryReport(request: Request, db: Database, env: Env): 
 /**
  * GET /api/reports/expiry-overall
  */
-async function handleGetExpiryOverallReport(request: Request, db: Database, env: Env): Promise<Response> {
+async function handleGetExpiryOverallReport(
+  request: Request,
+  db: Database,
+  env: Env,
+): Promise<Response> {
   const auth = await authenticateApiRequest(request, env, db);
   if (auth instanceof Response) return auth;
   const report = await db.getOverallExpiryReport();
@@ -1974,7 +1983,11 @@ async function handleGetExpiryOverallReport(request: Request, db: Database, env:
 /**
  * GET /api/reports/expiry-details
  */
-async function handleGetExpiryDetailsReport(request: Request, db: Database, env: Env): Promise<Response> {
+async function handleGetExpiryDetailsReport(
+  request: Request,
+  db: Database,
+  env: Env,
+): Promise<Response> {
   const auth = await authenticateApiRequest(request, env, db);
   if (auth instanceof Response) return auth;
   const report = await db.getDetailedExpiryReport();
@@ -1984,7 +1997,11 @@ async function handleGetExpiryDetailsReport(request: Request, db: Database, env:
 /**
  * GET /api/reports/daily-usage
  */
-async function handleGetDailyUsageReport(request: Request, db: Database, env: Env): Promise<Response> {
+async function handleGetDailyUsageReport(
+  request: Request,
+  db: Database,
+  env: Env,
+): Promise<Response> {
   const auth = await authenticateApiRequest(request, env, db);
   if (auth instanceof Response) return auth;
   const report = await db.getDailyUsageReport();
@@ -1994,7 +2011,11 @@ async function handleGetDailyUsageReport(request: Request, db: Database, env: En
 /**
  * GET /api/reports/items-by-user
  */
-async function handleGetItemsByUserReport(request: Request, db: Database, env: Env): Promise<Response> {
+async function handleGetItemsByUserReport(
+  request: Request,
+  db: Database,
+  env: Env,
+): Promise<Response> {
   const auth = await authenticateApiRequest(request, env, db);
   if (auth instanceof Response) return auth;
   const url = new URL(request.url);
@@ -2006,7 +2027,11 @@ async function handleGetItemsByUserReport(request: Request, db: Database, env: E
 /**
  * GET /api/reports/items-by-date
  */
-async function handleGetItemsByDateReport(request: Request, db: Database, env: Env): Promise<Response> {
+async function handleGetItemsByDateReport(
+  request: Request,
+  db: Database,
+  env: Env,
+): Promise<Response> {
   const auth = await authenticateApiRequest(request, env, db);
   if (auth instanceof Response) return auth;
   const report = await db.getItemsByDateReport();
@@ -2016,7 +2041,11 @@ async function handleGetItemsByDateReport(request: Request, db: Database, env: E
 /**
  * GET /api/reports/loss-by-sku
  */
-async function handleGetLossBySkuReport(request: Request, db: Database, env: Env): Promise<Response> {
+async function handleGetLossBySkuReport(
+  request: Request,
+  db: Database,
+  env: Env,
+): Promise<Response> {
   const auth = await authenticateApiRequest(request, env, db);
   if (auth instanceof Response) return auth;
   const report = await db.getLossBySkuReport();
@@ -2026,7 +2055,11 @@ async function handleGetLossBySkuReport(request: Request, db: Database, env: Env
 /**
  * GET /api/reports/loss-by-department
  */
-async function handleGetLossByDepartmentReport(request: Request, db: Database, env: Env): Promise<Response> {
+async function handleGetLossByDepartmentReport(
+  request: Request,
+  db: Database,
+  env: Env,
+): Promise<Response> {
   const auth = await authenticateApiRequest(request, env, db);
   if (auth instanceof Response) return auth;
   const report = await db.getLossByDepartmentReport();
@@ -2124,13 +2157,13 @@ async function handleGetTrialStatus(request: Request, db: Database, env: Env): P
 
   const subscription = subscriptionRows[0] as
     | {
-      status?: string;
-      tier_level?: string;
-      trial_end_date?: string | null;
-      trial_started_at?: string | null;
-      trial_converted_at?: string | null;
-      billing_cycle?: string | null;
-    }
+        status?: string;
+        tier_level?: string;
+        trial_end_date?: string | null;
+        trial_started_at?: string | null;
+        trial_converted_at?: string | null;
+        billing_cycle?: string | null;
+      }
     | undefined;
 
   let daysRemaining: number | null = null;
@@ -2139,8 +2172,8 @@ async function handleGetTrialStatus(request: Request, db: Database, env: Env): P
   const subscriptionStatusRaw = (subscription?.status || 'EXPIRED').toUpperCase();
   const normalizedStatus: 'ACTIVE' | 'TRIALING' | 'EXPIRED' | 'CANCELED' =
     subscriptionStatusRaw === 'ACTIVE' ||
-      subscriptionStatusRaw === 'TRIALING' ||
-      subscriptionStatusRaw === 'CANCELED'
+    subscriptionStatusRaw === 'TRIALING' ||
+    subscriptionStatusRaw === 'CANCELED'
       ? subscriptionStatusRaw
       : 'EXPIRED';
 
@@ -2162,14 +2195,14 @@ async function handleGetTrialStatus(request: Request, db: Database, env: Env): P
     isTrialExpired: normalizedStatus === 'TRIALING' && isTrialExpired,
     subscription: subscription
       ? {
-        status: normalizedStatus,
-        tierLevel: subscription.tier_level || 'starter',
-        trialEndDate: subscription.trial_end_date || null,
-        trialStartedAt: subscription.trial_started_at || null,
-        trialConvertedAt: subscription.trial_converted_at || null,
-        daysRemaining,
-        billingCycle: subscription.billing_cycle || null,
-      }
+          status: normalizedStatus,
+          tierLevel: subscription.tier_level || 'starter',
+          trialEndDate: subscription.trial_end_date || null,
+          trialStartedAt: subscription.trial_started_at || null,
+          trialConvertedAt: subscription.trial_converted_at || null,
+          daysRemaining,
+          billingCycle: subscription.billing_cycle || null,
+        }
       : null,
     tierLimits,
   };

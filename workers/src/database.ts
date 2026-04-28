@@ -443,9 +443,14 @@ export function createWorkersDatabase(env: Env): Database {
         WHERE expiry_date IS NOT NULL
       `;
       return (rows[0] || {
-        month: 'Overall', total_expiring: 0, expired_count: 0,
-        markdown1_count: 0, markdown2_count: 0, markdown3_count: 0,
-        total_markdown: 0, latest_expiry_date: null,
+        month: 'Overall',
+        total_expiring: 0,
+        expired_count: 0,
+        markdown1_count: 0,
+        markdown2_count: 0,
+        markdown3_count: 0,
+        total_markdown: 0,
+        latest_expiry_date: null,
       }) as MonthlyExpiryReport;
     },
 

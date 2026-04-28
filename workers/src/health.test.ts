@@ -420,8 +420,8 @@ describe('Auth input validation', () => {
 
 describe('Workers database connection strategy', () => {
   it('prefers direct Neon connection when available to avoid Hyperdrive DNS failures', () => {
-    const logSpy = vi.spyOn(console, 'log').mockImplementation(() => { });
-    const warnSpy = vi.spyOn(console, 'warn').mockImplementation(() => { });
+    const logSpy = vi.spyOn(console, 'log').mockImplementation(() => {});
+    const warnSpy = vi.spyOn(console, 'warn').mockImplementation(() => {});
 
     const envWithBoth = {
       NODE_ENV: 'production',
