@@ -37,6 +37,16 @@ export interface Database {
 
   // Dashboard queries
   getDashboardStats(): Promise<DashboardStats>;
+
+  // Report queries
+  getMonthlyExpiryReport(): Promise<MonthlyExpiryReport[]>;
+  getOverallExpiryReport(): Promise<MonthlyExpiryReport>;
+  getDetailedExpiryReport(): Promise<DetailedExpiryReportItem[]>;
+  getDailyUsageReport(): Promise<DailyUsageReportItem[]>;
+  getItemsByUserReport(timeFrameDays?: string): Promise<ItemsByUserReportItem[]>;
+  getItemsByDateReport(): Promise<ItemsByDateReportItem[]>;
+  getLossBySkuReport(): Promise<LossBySkuReportItem[]>;
+  getLossByDepartmentReport(): Promise<LossByDepartmentReportItem[]>;
 }
 
 // Type definitions matching backend Prisma schema
@@ -104,6 +114,63 @@ export interface DashboardStats {
   totalInventoryItems: number;
   expiringItems: number;
   lowStockItems: number;
+}
+
+export interface MonthlyExpiryReport {
+  month: string;
+  total_expiring: number;
+  expired_count: number;
+  markdown1_count: number;
+  markdown2_count: number;
+  markdown3_count: number;
+  total_markdown: number;
+  latest_expiry_date: string;
+}
+
+export interface DailyUsageReportItem {
+  date: string;
+  user_id: number;
+  user_role: string;
+  creations: number;
+  updates: number;
+  deletions: number;
+}
+
+export interface ItemsByUserReportItem {
+  userId: number;
+  userName: string;
+  itemCount: number;
+}
+
+export interface ItemsByDateReportItem {
+  date: string;
+  itemCount: number;
+}
+
+export interface DetailedExpiryReportItem {
+  inventoryId: number;
+  expiryDate: string;
+  status: string;
+  productId: number;
+  productName: string;
+  sku: string;
+  costPrice: number;
+  locationId: number;
+  locationName: string;
+  subDepartment: string | null;
+}
+
+export interface LossBySkuReportItem {
+  sku: string;
+  productName: string;
+  totalLoss: number;
+  count: number;
+}
+
+export interface LossByDepartmentReportItem {
+  department: string;
+  totalLoss: number;
+  count: number;
 }
 
 /**
@@ -339,6 +406,164 @@ export function createWorkersDatabase(env: Env): Database {
         expiringItems: expiring[0]?.count || 0,
         lowStockItems: lowStock[0]?.count || 0,
       };
+    },
+
+    // Report queries
+    async getMonthlyExpiryReport(): Promise<MonthlyExpiryReport[]> {
+      return (await sql`
+        SELECT
+          to_char(expiry_date, 'YYYY-MM') as month,
+          COUNT(*)::int as total_expiring,
+          SUM(CASE WHEN status = 'Expired' THEN 1 ELSE 0 END)::int as expired_count,
+          SUM(CASE WHEN status = 'Markdown 1' THEN 1 ELSE 0 END)::int as markdown1_count,
+          SUM(CASE WHEN status = 'Markdown 2' THEN 1 ELSE 0 END)::int as markdown2_count,
+          SUM(CASE WHEN status = 'Markdown 3' THEN 1 ELSE 0 END)::int as markdown3_count,
+          SUM(CASE WHEN status LIKE 'Markdown%' THEN 1 ELSE 0 END)::int as total_markdown,
+          MAX(expiry_date)::text as latest_expiry_date
+        FROM inventory_items
+        WHERE expiry_date IS NOT NULL
+        GROUP BY to_char(expiry_date, 'YYYY-MM')
+        ORDER BY month DESC
+        LIMIT 12
+      `) as MonthlyExpiryReport[];
+    },
+
+    async getOverallExpiryReport(): Promise<MonthlyExpiryReport> {
+      const rows = await sql`
+        SELECT
+          'Overall' as month,
+          COUNT(*)::int as total_expiring,
+          SUM(CASE WHEN status = 'Expired' THEN 1 ELSE 0 END)::int as expired_count,
+          SUM(CASE WHEN status = 'Markdown 1' THEN 1 ELSE 0 END)::int as markdown1_count,
+          SUM(CASE WHEN status = 'Markdown 2' THEN 1 ELSE 0 END)::int as markdown2_count,
+          SUM(CASE WHEN status = 'Markdown 3' THEN 1 ELSE 0 END)::int as markdown3_count,
+          SUM(CASE WHEN status LIKE 'Markdown%' THEN 1 ELSE 0 END)::int as total_markdown,
+          MAX(expiry_date)::text as latest_expiry_date
+        FROM inventory_items
+        WHERE expiry_date IS NOT NULL
+      `;
+      return (rows[0] || {
+        month: 'Overall', total_expiring: 0, expired_count: 0,
+        markdown1_count: 0, markdown2_count: 0, markdown3_count: 0,
+        total_markdown: 0, latest_expiry_date: null,
+      }) as MonthlyExpiryReport;
+    },
+
+    async getDetailedExpiryReport(): Promise<DetailedExpiryReportItem[]> {
+      return (await sql`
+        SELECT
+          ii.id as "inventoryId",
+          ii.expiry_date::text as "expiryDate",
+          ii.status,
+          p.id as "productId",
+          p.name as "productName",
+          COALESCE(p.sku, '') as sku,
+          COALESCE(p.cost_price, 0) as "costPrice",
+          sa.id as "locationId",
+          sa.name as "locationName",
+          sa.sub_department as "subDepartment"
+        FROM inventory_items ii
+        JOIN products p ON ii.product_id = p.id
+        JOIN store_areas sa ON ii.location_id = sa.id
+        WHERE ii.expiry_date >= CURRENT_DATE
+          AND ii.expiry_date <= CURRENT_DATE + INTERVAL '90 days'
+        ORDER BY ii.expiry_date ASC
+      `) as DetailedExpiryReportItem[];
+    },
+
+    async getDailyUsageReport(): Promise<DailyUsageReportItem[]> {
+      return (await sql`
+        SELECT
+          al.created_at::date::text as date,
+          COALESCE(u.id, al.user_id) as user_id,
+          COALESCE(u.role, 'Unknown') as user_role,
+          COUNT(CASE WHEN al.change_description LIKE '%created%' THEN 1 END)::int as creations,
+          COUNT(CASE WHEN al.change_description LIKE '%updated%' THEN 1 END)::int as updates,
+          COUNT(CASE WHEN al.change_description LIKE '%deleted%' THEN 1 END)::int as deletions
+        FROM audit_log al
+        LEFT JOIN users u ON al.user_id = u.id
+        WHERE al.created_at::date >= CURRENT_DATE - INTERVAL '90 days'
+        GROUP BY al.created_at::date, COALESCE(u.id, al.user_id), COALESCE(u.role, 'Unknown')
+        ORDER BY al.created_at::date DESC
+      `) as DailyUsageReportItem[];
+    },
+
+    async getItemsByUserReport(timeFrameDays?: string): Promise<ItemsByUserReportItem[]> {
+      if (timeFrameDays && timeFrameDays !== 'all-time') {
+        const days = parseInt(timeFrameDays, 10);
+        if (!isNaN(days) && days > 0) {
+          return (await sql`
+            SELECT
+              al.user_id as "userId",
+              COALESCE(u.name, u.email, 'Unknown') as "userName",
+              COUNT(*)::int as "itemCount"
+            FROM audit_log al
+            LEFT JOIN users u ON al.user_id = u.id
+            WHERE al.change_description LIKE '%created%'
+              AND al.created_at >= CURRENT_DATE - make_interval(days => ${days})
+            GROUP BY al.user_id, COALESCE(u.name, u.email, 'Unknown')
+            ORDER BY "itemCount" DESC
+            LIMIT 10
+          `) as ItemsByUserReportItem[];
+        }
+      }
+
+      return (await sql`
+        SELECT
+          al.user_id as "userId",
+          COALESCE(u.name, u.email, 'Unknown') as "userName",
+          COUNT(*)::int as "itemCount"
+        FROM audit_log al
+        LEFT JOIN users u ON al.user_id = u.id
+        WHERE al.change_description LIKE '%created%'
+        GROUP BY al.user_id, COALESCE(u.name, u.email, 'Unknown')
+        ORDER BY "itemCount" DESC
+        LIMIT 10
+      `) as ItemsByUserReportItem[];
+    },
+
+    async getItemsByDateReport(): Promise<ItemsByDateReportItem[]> {
+      return (await sql`
+        SELECT
+          al.created_at::date::text as date,
+          COUNT(*)::int as "itemCount"
+        FROM audit_log al
+        WHERE al.change_description LIKE '%created%'
+        GROUP BY al.created_at::date
+        ORDER BY date DESC
+        LIMIT 30
+      `) as ItemsByDateReportItem[];
+    },
+
+    async getLossBySkuReport(): Promise<LossBySkuReportItem[]> {
+      return (await sql`
+        SELECT
+          COALESCE(p.sku, '') as sku,
+          p.name as "productName",
+          COALESCE(SUM(p.cost_price), 0) as "totalLoss",
+          COUNT(*)::int as count
+        FROM inventory_items ii
+        JOIN products p ON ii.product_id = p.id
+        WHERE ii.status = 'Expired'
+        GROUP BY p.sku, p.name
+        ORDER BY "totalLoss" DESC
+        LIMIT 10
+      `) as LossBySkuReportItem[];
+    },
+
+    async getLossByDepartmentReport(): Promise<LossByDepartmentReportItem[]> {
+      return (await sql`
+        SELECT
+          sa.sub_department as department,
+          COALESCE(SUM(p.cost_price), 0) as "totalLoss",
+          COUNT(*)::int as count
+        FROM inventory_items ii
+        JOIN products p ON ii.product_id = p.id
+        JOIN store_areas sa ON ii.location_id = sa.id
+        WHERE ii.status = 'Expired' AND sa.sub_department IS NOT NULL
+        GROUP BY sa.sub_department
+        ORDER BY "totalLoss" DESC
+      `) as LossByDepartmentReportItem[];
     },
   };
 }

@@ -501,6 +501,31 @@ export default Sentry.withSentry(
             case pathname === '/api/dashboard' && method === 'GET':
               return finalizeApiResponse(handleGetDashboard(request, db, env));
 
+            // Report endpoints
+            case pathname === '/api/reports/expiry' && method === 'GET':
+              return finalizeApiResponse(handleGetExpiryReport(request, db, env));
+
+            case pathname === '/api/reports/expiry-overall' && method === 'GET':
+              return finalizeApiResponse(handleGetExpiryOverallReport(request, db, env));
+
+            case pathname === '/api/reports/expiry-details' && method === 'GET':
+              return finalizeApiResponse(handleGetExpiryDetailsReport(request, db, env));
+
+            case pathname === '/api/reports/daily-usage' && method === 'GET':
+              return finalizeApiResponse(handleGetDailyUsageReport(request, db, env));
+
+            case pathname === '/api/reports/items-by-user' && method === 'GET':
+              return finalizeApiResponse(handleGetItemsByUserReport(request, db, env));
+
+            case pathname === '/api/reports/items-by-date' && method === 'GET':
+              return finalizeApiResponse(handleGetItemsByDateReport(request, db, env));
+
+            case pathname === '/api/reports/loss-by-sku' && method === 'GET':
+              return finalizeApiResponse(handleGetLossBySkuReport(request, db, env));
+
+            case pathname === '/api/reports/loss-by-department' && method === 'GET':
+              return finalizeApiResponse(handleGetLossByDepartmentReport(request, db, env));
+
             // Subscription endpoints
             case pathname === '/api/subscription/trial-status' && method === 'GET':
               return finalizeApiResponse(handleGetTrialStatus(request, db, env));
@@ -1924,6 +1949,88 @@ async function handleGetDashboard(request: Request, db: Database, env: Env): Pro
   const stats = await db.getDashboardStats();
 
   return jsonResponse({ stats }, 200, env);
+}
+
+/**
+ * GET /api/reports/expiry
+ */
+async function handleGetExpiryReport(request: Request, db: Database, env: Env): Promise<Response> {
+  const auth = await authenticateApiRequest(request, env, db);
+  if (auth instanceof Response) return auth;
+  const report = await db.getMonthlyExpiryReport();
+  return jsonResponse(report, 200, env);
+}
+
+/**
+ * GET /api/reports/expiry-overall
+ */
+async function handleGetExpiryOverallReport(request: Request, db: Database, env: Env): Promise<Response> {
+  const auth = await authenticateApiRequest(request, env, db);
+  if (auth instanceof Response) return auth;
+  const report = await db.getOverallExpiryReport();
+  return jsonResponse(report, 200, env);
+}
+
+/**
+ * GET /api/reports/expiry-details
+ */
+async function handleGetExpiryDetailsReport(request: Request, db: Database, env: Env): Promise<Response> {
+  const auth = await authenticateApiRequest(request, env, db);
+  if (auth instanceof Response) return auth;
+  const report = await db.getDetailedExpiryReport();
+  return jsonResponse(report, 200, env);
+}
+
+/**
+ * GET /api/reports/daily-usage
+ */
+async function handleGetDailyUsageReport(request: Request, db: Database, env: Env): Promise<Response> {
+  const auth = await authenticateApiRequest(request, env, db);
+  if (auth instanceof Response) return auth;
+  const report = await db.getDailyUsageReport();
+  return jsonResponse(report, 200, env);
+}
+
+/**
+ * GET /api/reports/items-by-user
+ */
+async function handleGetItemsByUserReport(request: Request, db: Database, env: Env): Promise<Response> {
+  const auth = await authenticateApiRequest(request, env, db);
+  if (auth instanceof Response) return auth;
+  const url = new URL(request.url);
+  const timeFrame = url.searchParams.get('timeFrame') || undefined;
+  const report = await db.getItemsByUserReport(timeFrame);
+  return jsonResponse(report, 200, env);
+}
+
+/**
+ * GET /api/reports/items-by-date
+ */
+async function handleGetItemsByDateReport(request: Request, db: Database, env: Env): Promise<Response> {
+  const auth = await authenticateApiRequest(request, env, db);
+  if (auth instanceof Response) return auth;
+  const report = await db.getItemsByDateReport();
+  return jsonResponse(report, 200, env);
+}
+
+/**
+ * GET /api/reports/loss-by-sku
+ */
+async function handleGetLossBySkuReport(request: Request, db: Database, env: Env): Promise<Response> {
+  const auth = await authenticateApiRequest(request, env, db);
+  if (auth instanceof Response) return auth;
+  const report = await db.getLossBySkuReport();
+  return jsonResponse(report, 200, env);
+}
+
+/**
+ * GET /api/reports/loss-by-department
+ */
+async function handleGetLossByDepartmentReport(request: Request, db: Database, env: Env): Promise<Response> {
+  const auth = await authenticateApiRequest(request, env, db);
+  if (auth instanceof Response) return auth;
+  const report = await db.getLossByDepartmentReport();
+  return jsonResponse(report, 200, env);
 }
 
 type TrialStatusResponse = {

@@ -56,6 +56,7 @@ const decodeTokenAndGetUserEmail = (token: string | null): string | null => {
 
 // Auth context to share auth state
 interface AuthContextType {
+  isLoading: boolean;
   isLoggedIn: boolean;
   isFullySignedIn: boolean;
   hasOrganization: boolean;
@@ -204,8 +205,10 @@ function ClerkAuthInner({ children }: { children: React.ReactNode }) {
   };
 
   const hasOrganization = isOrgLoaded && !!organization;
+  const isLoading = !isLoaded;
 
   const contextValue: AuthContextType = {
+    isLoading,
     isLoggedIn,
     isFullySignedIn,
     hasOrganization,

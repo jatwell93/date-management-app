@@ -70,6 +70,7 @@ function AppContent({
   setIsMobileMenuOpen: (open: boolean) => void;
 }) {
   const {
+    isLoading: isAuthLoading,
     isLoggedIn: hasSession,
     isFullySignedIn,
     hasOrganization,
@@ -168,6 +169,19 @@ function AppContent({
       navigate('/scan', { replace: true });
     }
   }, [isHandheld, isLoggedIn, location.pathname, navigate]);
+
+  // Show loading state while Clerk auth is still initializing so protected
+  // routes don't flash-redirect to /login on page refresh.
+  if (isAuthLoading) {
+    return (
+      <div className="min-h-screen bg-background text-foreground flex items-center justify-center">
+        <div className="text-center">
+          <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-primary mx-auto mb-4"></div>
+          <p className="text-muted-foreground">Loading...</p>
+        </div>
+      </div>
+    );
+  }
 
   // Show loading state while bootstrap is in progress.
   if (isBootstrapping) {
@@ -588,8 +602,8 @@ function AppContent({
                   path="/settings"
                   element={
                     isLoggedIn &&
-                    effectiveUserRole &&
-                    hasPermission(effectiveUserRole, PERMISSIONS.MANAGE_MEMBERS) ? (
+                      effectiveUserRole &&
+                      hasPermission(effectiveUserRole, PERMISSIONS.MANAGE_MEMBERS) ? (
                       <SettingsPage />
                     ) : isLoggedIn ? (
                       <Navigate to="/scan" />
@@ -602,8 +616,8 @@ function AppContent({
                   path="/settings/*"
                   element={
                     isLoggedIn &&
-                    effectiveUserRole &&
-                    hasPermission(effectiveUserRole, PERMISSIONS.MANAGE_MEMBERS) ? (
+                      effectiveUserRole &&
+                      hasPermission(effectiveUserRole, PERMISSIONS.MANAGE_MEMBERS) ? (
                       <SettingsPage />
                     ) : isLoggedIn ? (
                       <Navigate to="/scan" />
@@ -752,8 +766,8 @@ function AppContent({
                 path="/settings"
                 element={
                   isLoggedIn &&
-                  effectiveUserRole &&
-                  hasPermission(effectiveUserRole, PERMISSIONS.MANAGE_MEMBERS) ? (
+                    effectiveUserRole &&
+                    hasPermission(effectiveUserRole, PERMISSIONS.MANAGE_MEMBERS) ? (
                     <SettingsPage />
                   ) : isLoggedIn ? (
                     <Navigate to="/scan" />
@@ -766,8 +780,8 @@ function AppContent({
                 path="/settings/*"
                 element={
                   isLoggedIn &&
-                  effectiveUserRole &&
-                  hasPermission(effectiveUserRole, PERMISSIONS.MANAGE_MEMBERS) ? (
+                    effectiveUserRole &&
+                    hasPermission(effectiveUserRole, PERMISSIONS.MANAGE_MEMBERS) ? (
                     <SettingsPage />
                   ) : isLoggedIn ? (
                     <Navigate to="/scan" />
