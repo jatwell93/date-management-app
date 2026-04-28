@@ -205,7 +205,11 @@ function ClerkAuthInner({ children }: { children: React.ReactNode }) {
   };
 
   const hasOrganization = isOrgLoaded && !!organization;
-  const isLoading = !isLoaded;
+  // Keep loading true while Clerk SDK initializes OR while a signed-in user
+  // is waiting for the async getToken() call to resolve. This prevents a gap
+  // where isLoggedIn is false but the user IS authenticated, which caused
+  // flash-redirects to /login and double 2FA screen renders.
+  const isLoading = !isLoaded || (isLoaded && !!isSignedIn && !token);
 
   const contextValue: AuthContextType = {
     isLoading,

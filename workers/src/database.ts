@@ -47,6 +47,10 @@ export interface Database {
   getItemsByDateReport(): Promise<ItemsByDateReportItem[]>;
   getLossBySkuReport(): Promise<LossBySkuReportItem[]>;
   getLossByDepartmentReport(): Promise<LossByDepartmentReportItem[]>;
+
+  // Expired items queries
+  getExpiredItems(): Promise<ExpiredItemRow[]>;
+  processExpiredItem(inventoryItemId: number, userId: number, action: string, unitsDiscarded?: number): Promise<ExpiredItemTransaction>;
 }
 
 // Type definitions matching backend Prisma schema
@@ -171,6 +175,28 @@ export interface LossByDepartmentReportItem {
   department: string;
   totalLoss: number;
   count: number;
+}
+
+export interface ExpiredItemRow {
+  id: number;
+  productId: number;
+  productName: string;
+  sku: string;
+  expiryDate: string;
+  status: string;
+  costPrice: number;
+  locationId: number;
+  locationName: string;
+  quantity: number;
+}
+
+export interface ExpiredItemTransaction {
+  id: number;
+  inventoryItemId: number;
+  action: string;
+  unitsDiscarded: number | null;
+  processedAt: string;
+  processedBy: number;
 }
 
 /**
@@ -569,6 +595,60 @@ export function createWorkersDatabase(env: Env): Database {
         GROUP BY sa.sub_department
         ORDER BY "totalLoss" DESC
       `) as LossByDepartmentReportItem[];
+    },
+
+    // Expired items queries
+    async getExpiredItems(): Promise<ExpiredItemRow[]> {
+      return (await sql`
+        SELECT
+          ii.id,
+          ii.product_id as "productId",
+          p.name as "productName",
+          COALESCE(p.sku, '') as sku,
+          ii.expiry_date::text as "expiryDate",
+          ii.status,
+          COALESCE(p.cost_price, 0) as "costPrice",
+          ii.location_id as "locationId",
+          sa.name as "locationName",
+          COALESCE(ii.quantity, 1)::int as quantity
+        FROM inventory_items ii
+        JOIN products p ON ii.product_id = p.id
+        JOIN store_areas sa ON ii.location_id = sa.id
+        WHERE ii.expiry_date < CURRENT_DATE
+          OR ii.status IN ('Expired', 'Markdown 1', 'Markdown 2', 'Markdown 3')
+        ORDER BY ii.expiry_date ASC
+      `) as ExpiredItemRow[];
+    },
+
+    async processExpiredItem(
+      inventoryItemId: number,
+      userId: number,
+      action: string,
+      unitsDiscarded?: number,
+    ): Promise<ExpiredItemTransaction> {
+      const newStatus = action === 'sold_through' ? 'Sold Through' : 'Expired';
+
+      await sql`
+        UPDATE inventory_items
+        SET status = ${newStatus}, updated_at = NOW()
+        WHERE id = ${inventoryItemId}
+      `;
+
+      const rows = await sql`
+        INSERT INTO expired_item_transactions
+          (inventory_item_id, action, units_discarded, processed_by, processed_at)
+        VALUES
+          (${inventoryItemId}, ${action}, ${unitsDiscarded ?? null}, ${userId}, NOW())
+        RETURNING
+          id,
+          inventory_item_id as "inventoryItemId",
+          action,
+          units_discarded as "unitsDiscarded",
+          processed_at::text as "processedAt",
+          processed_by as "processedBy"
+      `;
+
+      return rows[0] as ExpiredItemTransaction;
     },
   };
 }

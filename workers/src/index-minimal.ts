@@ -526,6 +526,13 @@ export default Sentry.withSentry(
             case pathname === '/api/reports/loss-by-department' && method === 'GET':
               return finalizeApiResponse(handleGetLossByDepartmentReport(request, db, env));
 
+            // Expired items endpoints
+            case pathname === '/api/expired-items' && method === 'GET':
+              return finalizeApiResponse(handleGetExpiredItems(request, db, env));
+
+            case pathname === '/api/expired-items/process' && method === 'POST':
+              return finalizeApiResponse(handleProcessExpiredItem(request, db, env));
+
             // Subscription endpoints
             case pathname === '/api/subscription/trial-status' && method === 'GET':
               return finalizeApiResponse(handleGetTrialStatus(request, db, env));
@@ -985,10 +992,10 @@ export async function handleOrganizationBootstrap(request: Request, env: Env): P
   const isNewOrg = existingOrg.length === 0;
   const organizationId = isNewOrg
     ? await findOrCreateOrganization(
-        db.sql,
-        { id: finalClerkOrgId, name: finalOrgName, slug: finalOrgSlug },
-        email,
-      )
+      db.sql,
+      { id: finalClerkOrgId, name: finalOrgName, slug: finalOrgSlug },
+      email,
+    )
     : String(existingOrg[0].id);
 
   const existingUser = await db.sql`
@@ -2066,6 +2073,72 @@ async function handleGetLossByDepartmentReport(
   return jsonResponse(report, 200, env);
 }
 
+/**
+ * GET /api/expired-items
+ */
+async function handleGetExpiredItems(
+  request: Request,
+  db: Database,
+  env: Env,
+): Promise<Response> {
+  const auth = await authenticateApiRequest(request, env, db);
+  if (auth instanceof Response) return auth;
+  const items = await db.getExpiredItems();
+  return jsonResponse(items, 200, env);
+}
+
+/**
+ * POST /api/expired-items/process
+ */
+async function handleProcessExpiredItem(
+  request: Request,
+  db: Database,
+  env: Env,
+): Promise<Response> {
+  const auth = await authenticateApiRequest(request, env, db);
+  if (auth instanceof Response) return auth;
+
+  const body = (await request.json()) as {
+    inventoryItemId?: number;
+    action?: string;
+    unitsDiscarded?: number;
+  };
+
+  if (!body.inventoryItemId || typeof body.inventoryItemId !== 'number' || body.inventoryItemId < 1) {
+    return errorResponse('Missing or invalid required field: inventoryItemId', 400, env);
+  }
+
+  if (!body.action || (body.action !== 'sold_through' && body.action !== 'expired')) {
+    return errorResponse("Action must be either 'sold_through' or 'expired'", 400, env);
+  }
+
+  if (body.action === 'expired') {
+    if (!body.unitsDiscarded || typeof body.unitsDiscarded !== 'number' || body.unitsDiscarded <= 0) {
+      return errorResponse(
+        'Units discarded must be a positive number when marking as expired',
+        400,
+        env,
+      );
+    }
+  }
+
+  try {
+    const transaction = await db.processExpiredItem(
+      body.inventoryItemId,
+      auth.userId,
+      body.action,
+      body.unitsDiscarded,
+    );
+    return jsonResponse(transaction, 201, env);
+  } catch (error) {
+    const message = error instanceof Error ? error.message : 'Internal server error';
+    if (message.includes('not found')) {
+      return errorResponse(message, 404, env);
+    }
+    return errorResponse('Internal server error', 500, env);
+  }
+}
+
 type TrialStatusResponse = {
   isInTrial: boolean;
   isTrialExpired: boolean;
@@ -2157,13 +2230,13 @@ async function handleGetTrialStatus(request: Request, db: Database, env: Env): P
 
   const subscription = subscriptionRows[0] as
     | {
-        status?: string;
-        tier_level?: string;
-        trial_end_date?: string | null;
-        trial_started_at?: string | null;
-        trial_converted_at?: string | null;
-        billing_cycle?: string | null;
-      }
+      status?: string;
+      tier_level?: string;
+      trial_end_date?: string | null;
+      trial_started_at?: string | null;
+      trial_converted_at?: string | null;
+      billing_cycle?: string | null;
+    }
     | undefined;
 
   let daysRemaining: number | null = null;
@@ -2172,8 +2245,8 @@ async function handleGetTrialStatus(request: Request, db: Database, env: Env): P
   const subscriptionStatusRaw = (subscription?.status || 'EXPIRED').toUpperCase();
   const normalizedStatus: 'ACTIVE' | 'TRIALING' | 'EXPIRED' | 'CANCELED' =
     subscriptionStatusRaw === 'ACTIVE' ||
-    subscriptionStatusRaw === 'TRIALING' ||
-    subscriptionStatusRaw === 'CANCELED'
+      subscriptionStatusRaw === 'TRIALING' ||
+      subscriptionStatusRaw === 'CANCELED'
       ? subscriptionStatusRaw
       : 'EXPIRED';
 
@@ -2195,14 +2268,14 @@ async function handleGetTrialStatus(request: Request, db: Database, env: Env): P
     isTrialExpired: normalizedStatus === 'TRIALING' && isTrialExpired,
     subscription: subscription
       ? {
-          status: normalizedStatus,
-          tierLevel: subscription.tier_level || 'starter',
-          trialEndDate: subscription.trial_end_date || null,
-          trialStartedAt: subscription.trial_started_at || null,
-          trialConvertedAt: subscription.trial_converted_at || null,
-          daysRemaining,
-          billingCycle: subscription.billing_cycle || null,
-        }
+        status: normalizedStatus,
+        tierLevel: subscription.tier_level || 'starter',
+        trialEndDate: subscription.trial_end_date || null,
+        trialStartedAt: subscription.trial_started_at || null,
+        trialConvertedAt: subscription.trial_converted_at || null,
+        daysRemaining,
+        billingCycle: subscription.billing_cycle || null,
+      }
       : null,
     tierLimits,
   };
