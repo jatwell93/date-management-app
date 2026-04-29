@@ -64,5 +64,42 @@ jobs:
             fi
           done
 
+      - name: Guardrail - ensure prod Doppler config (block dev/preview values)
+        run: |
+          doppler run -- bash -lc '
+            # CLERK_SECRET_KEY must be a live key for production
+            if [ -n "${CLERK_SECRET_KEY:-}" ] && [[ "${CLERK_SECRET_KEY}" != sk_live_* ]]; then
+              echo "::error::Production Worker requires a Clerk live secret key (sk_live_*)."
+              echo "::error::Doppler appears to be bound to a non-prod config. Verify DOPPLER_TOKEN targets the prd/production Doppler config."
+              exit 1
+            fi
+
+            # FRONTEND_URL must be the canonical prod host.
+            # Reject dev/preview/tunnel hosts and anything outside expirymate.com.au.
+            PROD_HOST_RE='^https://([a-z0-9-]+\.)?expirymate\.com\.au(/.*)?$'
+            value="${FRONTEND_URL:-}"
+            if [ -z "${value}" ]; then
+              echo "::error::Production Worker requires FRONTEND_URL to be set."
+              exit 1
+            fi
+            if [[ "${value}" == *"-dev."*".workers.dev"* ]] \
+              || [[ "${value}" == *"localhost"* ]] \
+              || [[ "${value}" == *"127.0.0.1"* ]] \
+              || [[ "${value}" == *".pages.dev"* ]] \
+              || [[ "${value}" == *"ngrok"* ]] \
+              || [[ "${value}" == *".trycloudflare.com"* ]] \
+              || [[ "${value}" == *".loca.lt"* ]] \
+              || [[ "${value}" == *".lhr.life"* ]]; then
+              echo "::error::Production Worker FRONTEND_URL=${value} points at a dev/preview/tunnel host."
+              echo "::error::Doppler likely bound to wrong config. Verify the production token."
+              exit 1
+            fi
+            if ! [[ "${value}" =~ ${PROD_HOST_RE} ]]; then
+              echo "::error::Production Worker FRONTEND_URL=${value} is not a canonical expirymate.com.au host."
+              echo "::error::If this is intentional, update the allowlist in workers-deploy.yml."
+              exit 1
+            fi
+          '
+
       - name: Deploy production worker
         run: doppler run -- npx wrangler deploy --env production

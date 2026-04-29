@@ -73,6 +73,7 @@ export interface EnvironmentConfig {
   CLERK_SECRET_KEY?: string;
   CLERK_PUBLISHABLE_KEY?: string;
   CLERK_WEBHOOK_SECRET?: string;
+  ENABLE_CUSTOM_ORG_INVITES: boolean;
   // Error Handling Configuration
   ERROR_HIDE_STACK_TRACE_IN_PRODUCTION: boolean;
   ERROR_LOG_LEVEL: string;
@@ -211,6 +212,7 @@ function validateEnvironment(env: RawEnv, allowMissingRequired: boolean): Enviro
     CLERK_SECRET_KEY: env.CLERK_SECRET_KEY, // Required in production, optional during development
     CLERK_PUBLISHABLE_KEY: env.CLERK_PUBLISHABLE_KEY,
     CLERK_WEBHOOK_SECRET: env.CLERK_WEBHOOK_SECRET,
+    ENABLE_CUSTOM_ORG_INVITES: env.ENABLE_CUSTOM_ORG_INVITES === 'true',
     // Error Handling Configuration
     ERROR_HIDE_STACK_TRACE_IN_PRODUCTION: nodeEnv === 'production',
     ERROR_LOG_LEVEL: env.ERROR_LOG_LEVEL || 'error',

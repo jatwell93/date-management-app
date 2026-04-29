@@ -80,6 +80,7 @@ jest.mock('../../services/email.service', () => ({
 jest.mock('../../config/environment', () => ({
   envConfig: {
     FRONTEND_URL: 'https://app.test.local',
+    ENABLE_CUSTOM_ORG_INVITES: true,
   },
 }));
 

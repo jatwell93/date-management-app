@@ -17,7 +17,7 @@ module.exports = {
   },
   jest: {
     configure: {
-      transformIgnorePatterns: ['node_modules/(?!uuid)'],
+      transformIgnorePatterns: ['node_modules/(?!uuid|react-router|react-router-dom)'],
       moduleNameMapper: {
         '^uuid$': '<rootDir>/src/__mocks__/uuid.js',
       },

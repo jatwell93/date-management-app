@@ -37,6 +37,90 @@ export interface Database {
 
   // Dashboard queries
   getDashboardStats(): Promise<DashboardStats>;
+
+  // Report queries
+  getMonthlyExpiryReport(): Promise<MonthlyExpiryReport[]>;
+  getOverallExpiryReport(): Promise<MonthlyExpiryReport>;
+  getDetailedExpiryReport(): Promise<DetailedExpiryReportItem[]>;
+  getDailyUsageReport(): Promise<DailyUsageReportItem[]>;
+  getItemsByUserReport(timeFrameDays?: string): Promise<ItemsByUserReportItem[]>;
+  getItemsByDateReport(): Promise<ItemsByDateReportItem[]>;
+  getLossBySkuReport(): Promise<LossBySkuReportItem[]>;
+  getLossByDepartmentReport(): Promise<LossByDepartmentReportItem[]>;
+
+  // Expired items queries
+  getExpiredItems(): Promise<ExpiredItemRow[]>;
+  processExpiredItem(
+    inventoryItemId: number,
+    userId: number,
+    organizationId: string,
+    action: string,
+    unitsDiscarded?: number,
+  ): Promise<ExpiredItemTransaction>;
+
+  // Product CRUD (scan flow)
+  findProductByBarcode(organizationId: string, barcode: string): Promise<Product | null>;
+  findProductBySku(organizationId: string, sku: string): Promise<Product | null>;
+  createProduct(
+    organizationId: string,
+    data: {
+      barcode: string;
+      sku?: string | null;
+      name: string;
+      costPrice?: number;
+      notes?: string;
+    },
+  ): Promise<Product>;
+
+  // Inventory CRUD
+  findInventoryItemById(organizationId: string, id: number): Promise<InventoryItem | null>;
+  findInventoryItemsByProductId(
+    organizationId: string,
+    productId: number,
+  ): Promise<InventoryItem[]>;
+  findRecentInventoryItemsByProductId(
+    organizationId: string,
+    productId: number,
+    limit: number,
+  ): Promise<RecentInventoryItem[]>;
+  createInventoryItem(
+    organizationId: string,
+    userId: number,
+    data: {
+      productId: number;
+      expiryDate: string;
+      locationId: number;
+      status?: string;
+    },
+  ): Promise<InventoryItem>;
+  updateInventoryItem(
+    organizationId: string,
+    userId: number,
+    id: number,
+    data: { productId?: number; expiryDate?: string; locationId?: number; status?: string },
+  ): Promise<InventoryItem | null>;
+  deleteInventoryItem(organizationId: string, userId: number, id: number): Promise<boolean>;
+
+  // Store area CRUD
+  createStoreArea(
+    organizationId: string,
+    data: { name: string; subDepartment?: string | null },
+  ): Promise<StoreArea>;
+  updateStoreArea(
+    organizationId: string,
+    id: number,
+    data: { name?: string; subDepartment?: string | null },
+  ): Promise<StoreArea | null>;
+  deleteStoreArea(organizationId: string, id: number): Promise<boolean>;
+
+  // Users CRUD
+  listUsers(organizationId: string): Promise<UserListItem[]>;
+  updateUserRole(
+    organizationId: string,
+    userId: number,
+    role: string,
+  ): Promise<UserListItem | null>;
+  softDeleteUser(organizationId: string, userId: number): Promise<boolean>;
 }
 
 // Type definitions matching backend Prisma schema
@@ -58,34 +142,45 @@ export interface CreateUserData {
   role?: string;
 }
 
+// Field set kept aligned with the Prisma schema in
+// backend/prisma/schema.prisma. Older `description`, `category`, `quantity`
+// fields were removed when the schema migrated to sku/cost_price/notes and
+// location_id/status. Optional flags exist purely so legacy frontend code
+// that still reads those properties degrades to undefined instead of throwing.
 export interface Product {
   id: number;
   name: string;
   barcode: string | null;
-  description: string | null;
-  category: string | null;
+  sku: string | null;
+  costPrice: number | null;
+  notes: string | null;
   createdAt: Date;
   updatedAt: Date;
+  description?: string | null;
+  category?: string | null;
 }
 
 export interface InventoryItem {
   id: number;
   productId: number;
-  quantity: number;
   expiryDate: Date | null;
-  storeAreaId: number | null;
+  locationId: number | null;
+  status: string | null;
   createdAt: Date;
   updatedAt: Date;
   product?: Product;
   storeArea?: StoreArea;
+  storeAreaId?: number | null;
+  quantity?: number;
 }
 
 export interface StoreArea {
   id: number;
   name: string;
-  description: string | null;
+  subDepartment: string | null;
   createdAt: Date;
   updatedAt: Date;
+  description?: string | null;
 }
 
 export interface DashboardStats {
@@ -93,6 +188,105 @@ export interface DashboardStats {
   totalInventoryItems: number;
   expiringItems: number;
   lowStockItems: number;
+}
+
+export interface MonthlyExpiryReport {
+  month: string;
+  total_expiring: number;
+  expired_count: number;
+  markdown1_count: number;
+  markdown2_count: number;
+  markdown3_count: number;
+  total_markdown: number;
+  latest_expiry_date: string;
+}
+
+export interface DailyUsageReportItem {
+  date: string;
+  user_id: number;
+  user_role: string;
+  creations: number;
+  updates: number;
+  deletions: number;
+}
+
+export interface ItemsByUserReportItem {
+  userId: number;
+  userName: string;
+  itemCount: number;
+}
+
+export interface ItemsByDateReportItem {
+  date: string;
+  itemCount: number;
+}
+
+export interface DetailedExpiryReportItem {
+  inventoryId: number;
+  expiryDate: string;
+  status: string;
+  productId: number;
+  productName: string;
+  sku: string;
+  costPrice: number;
+  locationId: number;
+  locationName: string;
+  subDepartment: string | null;
+}
+
+export interface LossBySkuReportItem {
+  sku: string;
+  productName: string;
+  totalLoss: number;
+  count: number;
+}
+
+export interface LossByDepartmentReportItem {
+  department: string;
+  totalLoss: number;
+  count: number;
+}
+
+export interface ExpiredItemRow {
+  id: number;
+  productId: number;
+  productName: string;
+  sku: string;
+  expiryDate: string;
+  status: string;
+  costPrice: number;
+  locationId: number;
+  locationName: string;
+  quantityAvailable: number;
+}
+
+export interface RecentInventoryItem {
+  id: number;
+  productId: number;
+  expiryDate: string | null;
+  locationId: number | null;
+  locationName: string | null;
+  status: string | null;
+  createdAt: string;
+}
+
+export interface UserListItem {
+  id: number;
+  email: string | null;
+  username: string | null;
+  role: string;
+  clerkUserId: string | null;
+  createdAt: string;
+}
+
+export interface ExpiredItemTransaction {
+  id: number;
+  inventoryItemId: number;
+  action: string;
+  userId: number | null;
+  unitsDiscarded: number | null;
+  financialLoss: number | null;
+  transactionDate: string;
 }
 
 /**
@@ -213,17 +407,21 @@ export function createWorkersDatabase(env: Env): Database {
       if (search) {
         const searchPattern = `%${search}%`;
         return (await sql`
-          SELECT id, name, barcode, description, category,
+          SELECT id, name, barcode, sku,
+                 cost_price as "costPrice", notes,
                  created_at as "createdAt", updated_at as "updatedAt"
           FROM products
-          WHERE name ILIKE ${searchPattern} OR barcode ILIKE ${searchPattern}
+          WHERE name ILIKE ${searchPattern}
+             OR barcode ILIKE ${searchPattern}
+             OR sku ILIKE ${searchPattern}
           ORDER BY name ASC
           LIMIT ${limit} OFFSET ${offset}
         `) as Product[];
       }
 
       return (await sql`
-        SELECT id, name, barcode, description, category,
+        SELECT id, name, barcode, sku,
+               cost_price as "costPrice", notes,
                created_at as "createdAt", updated_at as "updatedAt"
         FROM products
         ORDER BY name ASC
@@ -233,7 +431,8 @@ export function createWorkersDatabase(env: Env): Database {
 
     async findProductById(id: number): Promise<Product | null> {
       const rows = await sql`
-        SELECT id, name, barcode, description, category,
+        SELECT id, name, barcode, sku,
+               cost_price as "costPrice", notes,
                created_at as "createdAt", updated_at as "updatedAt"
         FROM products
         WHERE id = ${id}
@@ -247,7 +446,9 @@ export function createWorkersDatabase(env: Env): Database {
         const searchPattern = `%${search}%`;
         const rows = await sql`
           SELECT COUNT(*)::int as count FROM products
-          WHERE name ILIKE ${searchPattern} OR barcode ILIKE ${searchPattern}
+          WHERE name ILIKE ${searchPattern}
+             OR barcode ILIKE ${searchPattern}
+             OR sku ILIKE ${searchPattern}
         `;
         return rows[0]?.count || 0;
       }
@@ -264,19 +465,22 @@ export function createWorkersDatabase(env: Env): Database {
       const offset = options?.offset || 0;
 
       return (await sql`
-        SELECT 
-          i.id, i.product_id as "productId", i.quantity, 
-          i.expiry_date as "expiryDate", i.store_area_id as "storeAreaId",
+        SELECT
+          i.id, i.product_id as "productId",
+          i.expiry_date as "expiryDate",
+          i.location_id as "locationId",
+          i.location_id as "storeAreaId",
+          i.status,
           i.created_at as "createdAt", i.updated_at as "updatedAt",
           json_build_object(
-            'id', p.id, 'name', p.name, 'barcode', p.barcode, 'category', p.category
+            'id', p.id, 'name', p.name, 'barcode', p.barcode, 'sku', p.sku
           ) as product,
-          CASE WHEN s.id IS NOT NULL THEN 
-            json_build_object('id', s.id, 'name', s.name)
+          CASE WHEN s.id IS NOT NULL THEN
+            json_build_object('id', s.id, 'name', s.name, 'subDepartment', s.sub_department)
           ELSE NULL END as "storeArea"
         FROM inventory_items i
         LEFT JOIN products p ON i.product_id = p.id
-        LEFT JOIN store_areas s ON i.store_area_id = s.id
+        LEFT JOIN store_areas s ON i.location_id = s.id
         ORDER BY i.expiry_date ASC NULLS LAST
         LIMIT ${limit} OFFSET ${offset}
       `) as InventoryItem[];
@@ -290,7 +494,8 @@ export function createWorkersDatabase(env: Env): Database {
     // Store area queries
     async findStoreAreas(): Promise<StoreArea[]> {
       return (await sql`
-        SELECT id, name, description,
+        SELECT id, name,
+               sub_department as "subDepartment",
                created_at as "createdAt", updated_at as "updatedAt"
         FROM store_areas
         ORDER BY name ASC
@@ -299,12 +504,16 @@ export function createWorkersDatabase(env: Env): Database {
 
     // Dashboard queries
     async getDashboardStats(): Promise<DashboardStats> {
+      // The schema dropped the legacy `quantity` column in favour of a
+      // `status` enum on inventory_items. The DashboardStats `lowStockItems`
+      // counter now reflects items flagged as Critical/LowStock.
       const [products, inventory, expiring, lowStock] = await Promise.all([
         sql`SELECT COUNT(*)::int as count FROM products`,
         sql`SELECT COUNT(*)::int as count FROM inventory_items`,
-        sql`SELECT COUNT(*)::int as count FROM inventory_items 
+        sql`SELECT COUNT(*)::int as count FROM inventory_items
             WHERE expiry_date IS NOT NULL AND expiry_date <= NOW() + INTERVAL '7 days'`,
-        sql`SELECT COUNT(*)::int as count FROM inventory_items WHERE quantity <= 5`,
+        sql`SELECT COUNT(*)::int as count FROM inventory_items
+            WHERE status IN ('Critical', 'LowStock', 'Low')`,
       ]);
 
       return {
@@ -313,6 +522,608 @@ export function createWorkersDatabase(env: Env): Database {
         expiringItems: expiring[0]?.count || 0,
         lowStockItems: lowStock[0]?.count || 0,
       };
+    },
+
+    // Report queries
+    async getMonthlyExpiryReport(): Promise<MonthlyExpiryReport[]> {
+      return (await sql`
+        SELECT
+          to_char(expiry_date, 'YYYY-MM') as month,
+          COUNT(*)::int as total_expiring,
+          SUM(CASE WHEN status = 'Expired' THEN 1 ELSE 0 END)::int as expired_count,
+          SUM(CASE WHEN status = 'Markdown 1' THEN 1 ELSE 0 END)::int as markdown1_count,
+          SUM(CASE WHEN status = 'Markdown 2' THEN 1 ELSE 0 END)::int as markdown2_count,
+          SUM(CASE WHEN status = 'Markdown 3' THEN 1 ELSE 0 END)::int as markdown3_count,
+          SUM(CASE WHEN status LIKE 'Markdown%' THEN 1 ELSE 0 END)::int as total_markdown,
+          MAX(expiry_date)::text as latest_expiry_date
+        FROM inventory_items
+        WHERE expiry_date IS NOT NULL
+        GROUP BY to_char(expiry_date, 'YYYY-MM')
+        ORDER BY month DESC
+        LIMIT 12
+      `) as MonthlyExpiryReport[];
+    },
+
+    async getOverallExpiryReport(): Promise<MonthlyExpiryReport> {
+      const rows = await sql`
+        SELECT
+          'Overall' as month,
+          COUNT(*)::int as total_expiring,
+          SUM(CASE WHEN status = 'Expired' THEN 1 ELSE 0 END)::int as expired_count,
+          SUM(CASE WHEN status = 'Markdown 1' THEN 1 ELSE 0 END)::int as markdown1_count,
+          SUM(CASE WHEN status = 'Markdown 2' THEN 1 ELSE 0 END)::int as markdown2_count,
+          SUM(CASE WHEN status = 'Markdown 3' THEN 1 ELSE 0 END)::int as markdown3_count,
+          SUM(CASE WHEN status LIKE 'Markdown%' THEN 1 ELSE 0 END)::int as total_markdown,
+          MAX(expiry_date)::text as latest_expiry_date
+        FROM inventory_items
+        WHERE expiry_date IS NOT NULL
+      `;
+      return (rows[0] || {
+        month: 'Overall',
+        total_expiring: 0,
+        expired_count: 0,
+        markdown1_count: 0,
+        markdown2_count: 0,
+        markdown3_count: 0,
+        total_markdown: 0,
+        latest_expiry_date: null,
+      }) as MonthlyExpiryReport;
+    },
+
+    async getDetailedExpiryReport(): Promise<DetailedExpiryReportItem[]> {
+      return (await sql`
+        SELECT
+          ii.id as "inventoryId",
+          ii.expiry_date::text as "expiryDate",
+          ii.status,
+          p.id as "productId",
+          p.name as "productName",
+          COALESCE(p.sku, '') as sku,
+          COALESCE(p.cost_price, 0) as "costPrice",
+          sa.id as "locationId",
+          sa.name as "locationName",
+          sa.sub_department as "subDepartment"
+        FROM inventory_items ii
+        JOIN products p ON ii.product_id = p.id
+        JOIN store_areas sa ON ii.location_id = sa.id
+        WHERE ii.expiry_date >= CURRENT_DATE
+          AND ii.expiry_date <= CURRENT_DATE + INTERVAL '90 days'
+        ORDER BY ii.expiry_date ASC
+      `) as DetailedExpiryReportItem[];
+    },
+
+    async getDailyUsageReport(): Promise<DailyUsageReportItem[]> {
+      return (await sql`
+        SELECT
+          al.created_at::date::text as date,
+          COALESCE(u.id, al.user_id) as user_id,
+          COALESCE(u.role, 'Unknown') as user_role,
+          COUNT(CASE WHEN al.change_description LIKE '%created%' THEN 1 END)::int as creations,
+          COUNT(CASE WHEN al.change_description LIKE '%updated%' THEN 1 END)::int as updates,
+          COUNT(CASE WHEN al.change_description LIKE '%deleted%' THEN 1 END)::int as deletions
+        FROM audit_log al
+        LEFT JOIN users u ON al.user_id = u.id
+        WHERE al.created_at::date >= CURRENT_DATE - INTERVAL '90 days'
+        GROUP BY al.created_at::date, COALESCE(u.id, al.user_id), COALESCE(u.role, 'Unknown')
+        ORDER BY al.created_at::date DESC
+      `) as DailyUsageReportItem[];
+    },
+
+    async getItemsByUserReport(timeFrameDays?: string): Promise<ItemsByUserReportItem[]> {
+      if (timeFrameDays && timeFrameDays !== 'all-time') {
+        const days = parseInt(timeFrameDays, 10);
+        if (!isNaN(days) && days > 0) {
+          return (await sql`
+            SELECT
+              al.user_id as "userId",
+              COALESCE(u.username, u.email, 'Unknown') as "userName",
+              COUNT(*)::int as "itemCount"
+            FROM audit_log al
+            LEFT JOIN users u ON al.user_id = u.id
+            WHERE al.change_description LIKE '%created%'
+              AND al.created_at >= CURRENT_DATE - make_interval(days => ${days})
+            GROUP BY al.user_id, COALESCE(u.username, u.email, 'Unknown')
+            ORDER BY "itemCount" DESC
+            LIMIT 10
+          `) as ItemsByUserReportItem[];
+        }
+      }
+
+      return (await sql`
+        SELECT
+          al.user_id as "userId",
+          COALESCE(u.username, u.email, 'Unknown') as "userName",
+          COUNT(*)::int as "itemCount"
+        FROM audit_log al
+        LEFT JOIN users u ON al.user_id = u.id
+        WHERE al.change_description LIKE '%created%'
+        GROUP BY al.user_id, COALESCE(u.username, u.email, 'Unknown')
+        ORDER BY "itemCount" DESC
+        LIMIT 10
+      `) as ItemsByUserReportItem[];
+    },
+
+    async getItemsByDateReport(): Promise<ItemsByDateReportItem[]> {
+      return (await sql`
+        SELECT
+          al.created_at::date::text as date,
+          COUNT(*)::int as "itemCount"
+        FROM audit_log al
+        WHERE al.change_description LIKE '%created%'
+        GROUP BY al.created_at::date
+        ORDER BY date DESC
+        LIMIT 30
+      `) as ItemsByDateReportItem[];
+    },
+
+    async getLossBySkuReport(): Promise<LossBySkuReportItem[]> {
+      return (await sql`
+        SELECT
+          COALESCE(p.sku, '') as sku,
+          p.name as "productName",
+          COALESCE(SUM(p.cost_price), 0) as "totalLoss",
+          COUNT(*)::int as count
+        FROM inventory_items ii
+        JOIN products p ON ii.product_id = p.id
+        WHERE ii.status = 'Expired'
+        GROUP BY p.sku, p.name
+        ORDER BY "totalLoss" DESC
+        LIMIT 10
+      `) as LossBySkuReportItem[];
+    },
+
+    async getLossByDepartmentReport(): Promise<LossByDepartmentReportItem[]> {
+      return (await sql`
+        SELECT
+          sa.sub_department as department,
+          COALESCE(SUM(p.cost_price), 0) as "totalLoss",
+          COUNT(*)::int as count
+        FROM inventory_items ii
+        JOIN products p ON ii.product_id = p.id
+        JOIN store_areas sa ON ii.location_id = sa.id
+        WHERE ii.status = 'Expired' AND sa.sub_department IS NOT NULL
+        GROUP BY sa.sub_department
+        ORDER BY "totalLoss" DESC
+      `) as LossByDepartmentReportItem[];
+    },
+
+    // Expired items queries
+    async getExpiredItems(): Promise<ExpiredItemRow[]> {
+      return (await sql`
+        SELECT
+          ii.id,
+          ii.product_id as "productId",
+          p.name as "productName",
+          COALESCE(p.sku, '') as sku,
+          ii.expiry_date::text as "expiryDate",
+          ii.status,
+          COALESCE(p.cost_price, 0) as "costPrice",
+          ii.location_id as "locationId",
+          sa.name as "locationName",
+          1::int as "quantityAvailable"
+        FROM inventory_items ii
+        JOIN products p ON ii.product_id = p.id
+        JOIN store_areas sa ON ii.location_id = sa.id
+        WHERE ii.expiry_date < CURRENT_DATE
+          OR ii.status IN ('Expired', 'Markdown 1', 'Markdown 2', 'Markdown 3')
+        ORDER BY ii.expiry_date ASC
+      `) as ExpiredItemRow[];
+    },
+
+    async processExpiredItem(
+      inventoryItemId: number,
+      userId: number,
+      organizationId: string,
+      action: string,
+      unitsDiscarded?: number,
+    ): Promise<ExpiredItemTransaction> {
+      const newStatus = action === 'sold_through' ? 'Sold Through' : 'Expired';
+      const financialLossRows = await sql`
+        SELECT COALESCE(p.cost_price, 0) * ${action === 'expired' ? (unitsDiscarded ?? 0) : 0} as "financialLoss"
+        FROM inventory_items ii
+        JOIN products p ON ii.product_id = p.id
+        WHERE ii.id = ${inventoryItemId}
+        LIMIT 1
+      `;
+
+      if (!financialLossRows[0]) {
+        throw new Error(`Inventory item ${inventoryItemId} not found`);
+      }
+
+      await sql`
+        UPDATE inventory_items
+        SET status = ${newStatus}, updated_at = NOW()
+        WHERE id = ${inventoryItemId}
+      `;
+
+      const rows = await sql`
+        INSERT INTO expired_item_transactions
+          (organization_id, inventory_item_id, user_id, action, units_discarded, financial_loss, transaction_date, created_at, updated_at)
+        VALUES
+          (${organizationId}, ${inventoryItemId}, ${userId}, ${action}, ${unitsDiscarded ?? null}, ${Number(financialLossRows[0].financialLoss) || null}, NOW(), NOW(), NOW())
+        RETURNING
+          id,
+          inventory_item_id as "inventoryItemId",
+          user_id as "userId",
+          action,
+          units_discarded as "unitsDiscarded",
+          financial_loss as "financialLoss",
+          transaction_date::text as "transactionDate"
+      `;
+
+      return rows[0] as ExpiredItemTransaction;
+    },
+
+    // ---- Product CRUD (scan flow) ----
+    async findProductByBarcode(organizationId: string, barcode: string): Promise<Product | null> {
+      const rows = await sql`
+        SELECT id, name, barcode, sku,
+               cost_price as "costPrice", notes,
+               created_at as "createdAt", updated_at as "updatedAt"
+        FROM products
+        WHERE organization_id = ${organizationId} AND barcode = ${barcode}
+        LIMIT 1
+      `;
+      return (rows[0] as Product) || null;
+    },
+
+    async findProductBySku(organizationId: string, sku: string): Promise<Product | null> {
+      const rows = await sql`
+        SELECT id, name, barcode, sku,
+               cost_price as "costPrice", notes,
+               created_at as "createdAt", updated_at as "updatedAt"
+        FROM products
+        WHERE organization_id = ${organizationId} AND sku = ${sku}
+        LIMIT 1
+      `;
+      return (rows[0] as Product) || null;
+    },
+
+    async createProduct(
+      organizationId: string,
+      data: {
+        barcode: string;
+        sku?: string | null;
+        name: string;
+        costPrice?: number;
+        notes?: string;
+      },
+    ): Promise<Product> {
+      const rows = await sql`
+        INSERT INTO products (organization_id, barcode, sku, name, cost_price, notes, created_at, updated_at)
+        VALUES (
+          ${organizationId},
+          ${data.barcode},
+          ${data.sku ?? data.barcode},
+          ${data.name},
+          ${data.costPrice ?? 0},
+          ${data.notes ?? ''},
+          NOW(),
+          NOW()
+        )
+        RETURNING id, name, barcode, sku,
+                  cost_price as "costPrice", notes,
+                  created_at as "createdAt", updated_at as "updatedAt"
+      `;
+      return rows[0] as Product;
+    },
+
+    // ---- Inventory CRUD ----
+    async findInventoryItemById(organizationId: string, id: number): Promise<InventoryItem | null> {
+      const rows = await sql`
+        SELECT
+          i.id, i.product_id as "productId",
+          i.expiry_date as "expiryDate",
+          i.location_id as "locationId",
+          i.location_id as "storeAreaId",
+          i.status,
+          i.created_at as "createdAt", i.updated_at as "updatedAt"
+        FROM inventory_items i
+        WHERE i.id = ${id} AND i.organization_id = ${organizationId}
+        LIMIT 1
+      `;
+      return (rows[0] as InventoryItem) || null;
+    },
+
+    async findInventoryItemsByProductId(
+      organizationId: string,
+      productId: number,
+    ): Promise<InventoryItem[]> {
+      return (await sql`
+        SELECT
+          i.id, i.product_id as "productId",
+          i.expiry_date as "expiryDate",
+          i.location_id as "locationId",
+          i.location_id as "storeAreaId",
+          i.status,
+          i.created_at as "createdAt", i.updated_at as "updatedAt",
+          CASE WHEN s.id IS NOT NULL THEN
+            json_build_object('id', s.id, 'name', s.name, 'subDepartment', s.sub_department)
+          ELSE NULL END as "storeArea"
+        FROM inventory_items i
+        LEFT JOIN store_areas s ON i.location_id = s.id
+        WHERE i.organization_id = ${organizationId} AND i.product_id = ${productId}
+        ORDER BY i.expiry_date ASC NULLS LAST
+      `) as InventoryItem[];
+    },
+
+    async findRecentInventoryItemsByProductId(
+      organizationId: string,
+      productId: number,
+      limit: number,
+    ): Promise<RecentInventoryItem[]> {
+      return (await sql`
+        SELECT
+          i.id,
+          i.product_id as "productId",
+          i.expiry_date::text as "expiryDate",
+          i.location_id as "locationId",
+          s.name as "locationName",
+          i.status,
+          i.created_at::text as "createdAt"
+        FROM inventory_items i
+        LEFT JOIN store_areas s ON i.location_id = s.id
+        WHERE i.organization_id = ${organizationId} AND i.product_id = ${productId}
+        ORDER BY i.created_at DESC
+        LIMIT ${limit}
+      `) as RecentInventoryItem[];
+    },
+
+    async createInventoryItem(
+      organizationId: string,
+      userId: number,
+      data: {
+        productId: number;
+        expiryDate: string;
+        locationId: number;
+        status?: string;
+      },
+    ): Promise<InventoryItem> {
+      // Validate product + location belong to the same org
+      const productRows = await sql`
+        SELECT id FROM products
+        WHERE id = ${data.productId} AND organization_id = ${organizationId}
+        LIMIT 1
+      `;
+      if (!productRows[0]) {
+        throw new Error('Product does not exist');
+      }
+
+      const locationRows = await sql`
+        SELECT id FROM store_areas
+        WHERE id = ${data.locationId} AND organization_id = ${organizationId}
+        LIMIT 1
+      `;
+      if (!locationRows[0]) {
+        throw new Error('Location does not exist');
+      }
+
+      // Atomic insert + audit via CTE so we never end up with an inventory
+      // item lacking an audit row (or vice versa) on partial failure.
+      const rows = await sql`
+        WITH inserted AS (
+          INSERT INTO inventory_items
+            (organization_id, product_id, expiry_date, location_id, status, created_at, updated_at)
+          VALUES
+            (${organizationId}, ${data.productId}, ${data.expiryDate}, ${data.locationId},
+             ${data.status ?? 'Normal'}, NOW(), NOW())
+          RETURNING id, product_id, expiry_date, location_id, status, created_at, updated_at
+        ), audited AS (
+          INSERT INTO audit_log
+            (organization_id, user_id, inventory_item_id, action, change_description, created_at)
+          SELECT ${organizationId}, ${userId}, id, 'create', 'inventory item created', NOW()
+          FROM inserted
+        )
+        SELECT id,
+               product_id as "productId",
+               expiry_date as "expiryDate",
+               location_id as "locationId",
+               location_id as "storeAreaId",
+               status,
+               created_at as "createdAt",
+               updated_at as "updatedAt"
+        FROM inserted
+      `;
+
+      return rows[0] as InventoryItem;
+    },
+
+    async updateInventoryItem(
+      organizationId: string,
+      userId: number,
+      id: number,
+      data: { productId?: number; expiryDate?: string; locationId?: number; status?: string },
+    ): Promise<InventoryItem | null> {
+      // Verify ownership
+      const existing = await sql`
+        SELECT id FROM inventory_items
+        WHERE id = ${id} AND organization_id = ${organizationId}
+        LIMIT 1
+      `;
+      if (!existing[0]) {
+        return null;
+      }
+
+      // If locationId provided, verify it belongs to the org
+      if (data.locationId !== undefined) {
+        const locationRows = await sql`
+          SELECT id FROM store_areas
+          WHERE id = ${data.locationId} AND organization_id = ${organizationId}
+          LIMIT 1
+        `;
+        if (!locationRows[0]) {
+          throw new Error('Location does not exist');
+        }
+      }
+
+      // Atomic update + audit via CTE.
+      const rows = await sql`
+        WITH updated AS (
+          UPDATE inventory_items
+          SET
+            product_id = COALESCE(${data.productId ?? null}, product_id),
+            expiry_date = COALESCE(${data.expiryDate ?? null}, expiry_date),
+            location_id = COALESCE(${data.locationId ?? null}, location_id),
+            status = COALESCE(${data.status ?? null}, status),
+            updated_at = NOW()
+          WHERE id = ${id} AND organization_id = ${organizationId}
+          RETURNING id, product_id, expiry_date, location_id, status, created_at, updated_at
+        ), audited AS (
+          INSERT INTO audit_log
+            (organization_id, user_id, inventory_item_id, action, change_description, created_at)
+          SELECT ${organizationId}, ${userId}, id, 'update', 'inventory item updated', NOW()
+          FROM updated
+        )
+        SELECT id,
+               product_id as "productId",
+               expiry_date as "expiryDate",
+               location_id as "locationId",
+               location_id as "storeAreaId",
+               status,
+               created_at as "createdAt",
+               updated_at as "updatedAt"
+        FROM updated
+      `;
+
+      return (rows[0] as InventoryItem) || null;
+    },
+
+    async deleteInventoryItem(
+      organizationId: string,
+      userId: number,
+      id: number,
+    ): Promise<boolean> {
+      // Atomic delete + audit via CTE. The audit row is only inserted if the
+      // delete actually removed a row owned by this org, so we never log a
+      // phantom delete and never delete without an audit trail.
+      //
+      // Note: audit_log.inventory_item_id may have a FK to inventory_items.
+      // Postgres CTEs evaluate to a consistent snapshot for the duration of
+      // the statement, so the FK is satisfied at constraint-check time. If a
+      // future migration adds a deferrable FK or removes it entirely, this
+      // pattern still works.
+      const rows = await sql`
+        WITH deleted AS (
+          DELETE FROM inventory_items
+          WHERE id = ${id} AND organization_id = ${organizationId}
+          RETURNING id
+        ), audited AS (
+          INSERT INTO audit_log
+            (organization_id, user_id, inventory_item_id, action, change_description, created_at)
+          SELECT ${organizationId}, ${userId}, id, 'delete', 'inventory item deleted', NOW()
+          FROM deleted
+        )
+        SELECT id FROM deleted
+      `;
+      return !!rows[0];
+    },
+
+    // ---- Store area CRUD ----
+    async createStoreArea(
+      organizationId: string,
+      data: { name: string; subDepartment?: string | null },
+    ): Promise<StoreArea> {
+      const rows = await sql`
+        INSERT INTO store_areas (organization_id, name, sub_department, created_at, updated_at)
+        VALUES (${organizationId}, ${data.name}, ${data.subDepartment ?? null}, NOW(), NOW())
+        RETURNING id, name,
+                  sub_department as "subDepartment",
+                  created_at as "createdAt", updated_at as "updatedAt"
+      `;
+      return rows[0] as StoreArea;
+    },
+
+    async updateStoreArea(
+      organizationId: string,
+      id: number,
+      data: { name?: string; subDepartment?: string | null },
+    ): Promise<StoreArea | null> {
+      const existing = await sql`
+        SELECT id FROM store_areas
+        WHERE id = ${id} AND organization_id = ${organizationId}
+        LIMIT 1
+      `;
+      if (!existing[0]) {
+        return null;
+      }
+
+      const rows = await sql`
+        UPDATE store_areas
+        SET
+          name = COALESCE(${data.name ?? null}, name),
+          sub_department = CASE
+            WHEN ${data.subDepartment === undefined} THEN sub_department
+            ELSE ${data.subDepartment ?? null}
+          END,
+          updated_at = NOW()
+        WHERE id = ${id} AND organization_id = ${organizationId}
+        RETURNING id, name,
+                  sub_department as "subDepartment",
+                  created_at as "createdAt", updated_at as "updatedAt"
+      `;
+      return (rows[0] as StoreArea) || null;
+    },
+
+    async deleteStoreArea(organizationId: string, id: number): Promise<boolean> {
+      const inUse = await sql`
+        SELECT 1 FROM inventory_items
+        WHERE location_id = ${id} AND organization_id = ${organizationId}
+        LIMIT 1
+      `;
+      if (inUse[0]) {
+        throw new Error('Store area is in use by inventory items');
+      }
+
+      const rows = await sql`
+        DELETE FROM store_areas
+        WHERE id = ${id} AND organization_id = ${organizationId}
+        RETURNING id
+      `;
+      return !!rows[0];
+    },
+
+    // ---- Users CRUD ----
+    async listUsers(organizationId: string): Promise<UserListItem[]> {
+      return (await sql`
+        SELECT
+          id, email, username, role,
+          clerk_user_id as "clerkUserId",
+          created_at::text as "createdAt"
+        FROM users
+        WHERE organization_id = ${organizationId}
+          AND deleted_at IS NULL
+        ORDER BY created_at ASC
+      `) as UserListItem[];
+    },
+
+    async updateUserRole(
+      organizationId: string,
+      userId: number,
+      role: string,
+    ): Promise<UserListItem | null> {
+      const rows = await sql`
+        UPDATE users
+        SET role = ${role}, updated_at = NOW()
+        WHERE id = ${userId}
+          AND organization_id = ${organizationId}
+          AND deleted_at IS NULL
+        RETURNING id, email, username, role,
+                  clerk_user_id as "clerkUserId",
+                  created_at::text as "createdAt"
+      `;
+      return (rows[0] as UserListItem) || null;
+    },
+
+    async softDeleteUser(organizationId: string, userId: number): Promise<boolean> {
+      const rows = await sql`
+        UPDATE users
+        SET deleted_at = NOW(), updated_at = NOW()
+        WHERE id = ${userId}
+          AND organization_id = ${organizationId}
+          AND deleted_at IS NULL
+        RETURNING id
+      `;
+      return !!rows[0];
     },
   };
 }

@@ -62,6 +62,13 @@ describe('Frontend role constants', () => {
       expect(normalizeRole('ADMIN')).toBe('admin');
     });
 
+    it('maps Clerk org_role prefixed values to canonical roles', () => {
+      expect(normalizeRole('org:admin')).toBe('admin');
+      expect(normalizeRole('org:manager')).toBe('manager');
+      expect(normalizeRole('org:member')).toBe('team_member');
+      expect(normalizeRole('org:team_member')).toBe('team_member');
+    });
+
     it('defaults to team_member for null/undefined/unknown', () => {
       expect(normalizeRole(null)).toBe('team_member');
       expect(normalizeRole(undefined)).toBe('team_member');

@@ -13,8 +13,8 @@ interface ClerkAuthProviderProps {
 const decodeTokenAndGetRole = (token: string | null): RoleValue | null => {
   if (!token) return null;
   try {
-    const decodedToken = jwtDecode<JwtPayload & { role?: string }>(token);
-    return normalizeRole(decodedToken.role);
+    const decodedToken = jwtDecode<JwtPayload & { role?: string; org_role?: string }>(token);
+    return normalizeRole(decodedToken.role ?? decodedToken.org_role);
   } catch (error) {
     Sentry.captureException(error, { tags: { feature: 'auth' } });
     return 'team_member';
@@ -56,6 +56,7 @@ const decodeTokenAndGetUserEmail = (token: string | null): string | null => {
 
 // Auth context to share auth state
 interface AuthContextType {
+  isLoading: boolean;
   isLoggedIn: boolean;
   isFullySignedIn: boolean;
   hasOrganization: boolean;
@@ -63,6 +64,7 @@ interface AuthContextType {
   userId: number | null;
   userName: string | null;
   userRole: RoleValue | null;
+  updateBootstrapRole: (role: RoleValue) => void;
   handleLogin: (token: string) => void;
   handleLogout: () => void;
 }
@@ -203,8 +205,14 @@ function ClerkAuthInner({ children }: { children: React.ReactNode }) {
   };
 
   const hasOrganization = isOrgLoaded && !!organization;
+  // Keep loading true while Clerk SDK initializes OR while a signed-in user
+  // is waiting for the async getToken() call to resolve. This prevents a gap
+  // where isLoggedIn is false but the user IS authenticated, which caused
+  // flash-redirects to /login and double 2FA screen renders.
+  const isLoading = !isLoaded || (isLoaded && !!isSignedIn && !token);
 
   const contextValue: AuthContextType = {
+    isLoading,
     isLoggedIn,
     isFullySignedIn,
     hasOrganization,
@@ -212,6 +220,7 @@ function ClerkAuthInner({ children }: { children: React.ReactNode }) {
     userId,
     userName,
     userRole,
+    updateBootstrapRole: setUserRole,
     handleLogin,
     handleLogout,
   };

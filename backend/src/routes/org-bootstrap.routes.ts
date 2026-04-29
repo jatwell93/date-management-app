@@ -37,13 +37,23 @@ router.post(
       const { organizationName, organizationSlug, clerkOrganizationId, clerkMembershipRole } =
         clerkReq.body;
 
-      // Validation already handled by validateRequest middleware
+      // If no clerkOrganizationId provided, generate a default one
+      // This allows bootstrap to work for users without explicit Clerk org context
+      const finalClerkOrgId =
+        clerkOrganizationId || `clerk-org-${clerkReq.auth.userId}-${Date.now()}`;
+      const finalOrgName =
+        organizationName || `${clerkReq.auth.email.split('@')[0]}'s Organization`;
+      const finalOrgSlug =
+        organizationSlug ||
+        `${clerkReq.auth.email.split('@')[0]}-${Date.now()}`
+          .toLowerCase()
+          .replace(/[^a-z0-9-]/g, '-');
 
       const result = await bootstrapService.bootstrap({
         clerkUserId: clerkReq.auth.userId,
-        clerkOrganizationId,
-        organizationName,
-        organizationSlug,
+        clerkOrganizationId: finalClerkOrgId,
+        organizationName: finalOrgName,
+        organizationSlug: finalOrgSlug,
         email: clerkReq.auth.email,
         username: clerkReq.auth.username ?? null,
         clerkMembershipRole: clerkMembershipRole ?? null,

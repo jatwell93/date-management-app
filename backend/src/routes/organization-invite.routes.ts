@@ -18,9 +18,17 @@ const organizationService = new OrganizationService();
 const emailService = new EmailService();
 const clerkAuthHandler: RequestHandler = (req, res, next) =>
   clerkAuth(req as ClerkAuthRequest, res, next);
+const requireCustomInviteRoutesEnabled: RequestHandler = (_req, res, next) => {
+  if (!envConfig.ENABLE_CUSTOM_ORG_INVITES) {
+    return res.status(404).json({ code: 'NOT_FOUND', message: 'Endpoint not found' });
+  }
+
+  return next();
+};
 
 router.post(
   '/invites',
+  requireCustomInviteRoutesEnabled,
   authenticateToken,
   requireOrgRole('admin', 'manager'),
   standardLimiter,
@@ -67,6 +75,7 @@ router.post(
 
 router.post(
   '/invites/accept',
+  requireCustomInviteRoutesEnabled,
   clerkAuthHandler,
   standardLimiter,
   validateRequest(organizationInviteAcceptSchema),
@@ -100,6 +109,7 @@ router.post(
 
 router.get(
   '/invites',
+  requireCustomInviteRoutesEnabled,
   authenticateToken,
   requireOrgRole('admin', 'manager'),
   async (req: AuthRequest, res) => {
@@ -122,6 +132,7 @@ router.get(
 
 router.delete(
   '/invites/:inviteId',
+  requireCustomInviteRoutesEnabled,
   authenticateToken,
   requireOrgRole('admin', 'manager'),
   async (req: AuthRequest, res) => {
@@ -148,6 +159,7 @@ router.delete(
 
 router.post(
   '/invites/:inviteId/resend',
+  requireCustomInviteRoutesEnabled,
   authenticateToken,
   requireOrgRole('admin', 'manager'),
   standardLimiter,

@@ -51,7 +51,8 @@ export const organizationBootstrapSchema = z.object({
     organizationName: z
       .string()
       .min(1, 'Organization name is required')
-      .max(100, 'Organization name must be at most 100 characters'),
+      .max(100, 'Organization name must be at most 100 characters')
+      .optional(),
     organizationSlug: z
       .string()
       .min(1, 'Organization slug is required')
@@ -59,8 +60,9 @@ export const organizationBootstrapSchema = z.object({
       .regex(
         /^[a-z0-9_-]+$/,
         'Organization slug must contain only lowercase letters, numbers, hyphens, and underscores',
-      ),
-    clerkOrganizationId: z.string().min(1, 'Clerk organization ID is required'),
+      )
+      .optional(),
+    clerkOrganizationId: z.string().min(1, 'Clerk organization ID is required').optional(),
     clerkMembershipRole: z.string().optional(),
   }),
 });

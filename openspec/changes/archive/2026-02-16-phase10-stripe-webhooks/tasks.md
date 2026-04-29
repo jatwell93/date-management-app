@@ -66,6 +66,7 @@ Implement complete Stripe webhook handling with persistent idempotency, email no
   - [x] Verify organization exists in database
   - [x] Extract `tierLevel` from `price.metadata.tier`
   - [x] Create `subscription_tiers` record in Prisma transaction:
+
     ```typescript
     await prisma.$transaction(async (tx) => {
       const subscriptionTier = await tx.subscriptionTier.create({
@@ -89,6 +90,7 @@ Implement complete Stripe webhook handling with persistent idempotency, email no
       });
     });
     ```
+
   - [x] Log success with `organizationId` and `tierLevel`
 
 - [x] 3.2 Implement `handleSubscriptionUpdated` (Phase 18.B.3.2)
@@ -126,6 +128,7 @@ Implement complete Stripe webhook handling with persistent idempotency, email no
   - [x] Apply soft lock if usage > Starter limits (DECISION 17.5.8)
   - [x] Log downgrade event to audit log
   - [x] Wrap in transaction:
+
     ```typescript
     await prisma.$transaction(async (tx) => {
       await tx.subscriptionTier.update({

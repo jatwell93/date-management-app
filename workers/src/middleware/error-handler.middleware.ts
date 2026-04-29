@@ -41,7 +41,7 @@ export class WorkersLogger {
     console.log(JSON.stringify(logEntry));
 
     // Send to Sentry for errors
-    if (level === LogLevel.ERROR && this.env.SENTRY_DSN) {
+    if (level === LogLevel.ERROR && this.env.WORKERS_SENTRY_DSN) {
       // Sentry integration would go here
       // For now, just log to console
     }

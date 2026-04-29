@@ -80,6 +80,7 @@ const ExpiredItemsPage: React.FC<ExpiredItemsPageProps> = ({ token }) => {
     LossByDepartmentReportItem[] | null
   >(null);
   const [chartsLoading, setChartsLoading] = useState(true);
+  const [chartsError, setChartsError] = useState<string | null>(null);
 
   const navigate = useNavigate();
 
@@ -217,29 +218,42 @@ const ExpiredItemsPage: React.FC<ExpiredItemsPageProps> = ({ token }) => {
     }
   };
 
-  // Fetch chart data
+  // Fetch chart data — failures here should NOT blank out the rest of the page.
   useEffect(() => {
     const fetchChartData = async () => {
       if (!token) {
-        setError('Authentication token is missing.');
+        setChartsError('Authentication token is missing.');
         setChartsLoading(false);
         return;
       }
 
       try {
-        // Fetch both chart datasets concurrently
-        const [lossBySku, lossByDepartment] = await Promise.all([
+        // Fetch both chart datasets concurrently. Tolerate per-chart failure.
+        const [lossBySkuResult, lossByDeptResult] = await Promise.allSettled([
           apiService.get<LossBySkuReportItem[]>('/reports/loss-by-sku', token),
           apiService.get<LossByDepartmentReportItem[]>('/reports/loss-by-department', token),
         ]);
 
-        setLossBySkuData(lossBySku);
-        setLossByDepartmentData(lossByDepartment);
-      } catch (err: unknown) {
-        if (err instanceof Error) {
-          setError(err.message);
+        if (lossBySkuResult.status === 'fulfilled') {
+          setLossBySkuData(lossBySkuResult.value ?? []);
         } else {
-          setError('An unknown error occurred when fetching chart data');
+          setLossBySkuData([]);
+        }
+
+        if (lossByDeptResult.status === 'fulfilled') {
+          setLossByDepartmentData(lossByDeptResult.value ?? []);
+        } else {
+          setLossByDepartmentData([]);
+        }
+
+        if (lossBySkuResult.status === 'rejected' && lossByDeptResult.status === 'rejected') {
+          const reason =
+            lossBySkuResult.reason instanceof Error
+              ? lossBySkuResult.reason.message
+              : 'Could not load loss reports';
+          setChartsError(reason);
+        } else {
+          setChartsError(null);
         }
       } finally {
         setChartsLoading(false);
@@ -400,6 +414,11 @@ const ExpiredItemsPage: React.FC<ExpiredItemsPageProps> = ({ token }) => {
       )}
 
       {/* Chart Section */}
+      {chartsError && (
+        <div className="mt-6 p-3 rounded-md bg-destructive/10 text-destructive text-sm">
+          {chartsError}
+        </div>
+      )}
       <div className="grid grid-cols-1 md:grid-cols-2 gap-6 mb-6 mt-8">
         <Card>
           <CardHeader>

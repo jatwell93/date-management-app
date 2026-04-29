@@ -38,6 +38,13 @@ registerRoute(
       return false;
     }
 
+    // Skip Clerk auth callback / task URLs so they always hit the network.
+    // This prevents stale cached index.html from interfering with multi-step
+    // sign-in flows (e.g. 2FA factor-two screens).
+    if (url.hostname.includes('clerk')) {
+      return false;
+    }
+
     // If this is a URL that contains a file extension, skip this route.
     if (url.pathname.match(/\.[^/]*$/)) {
       return false;
@@ -85,29 +92,11 @@ registerRoute(
   }),
 );
 
-// Cache API requests for offline use
-registerRoute(
-  // Match API requests
-  ({ url }) =>
-    url.pathname.startsWith('/api/') ||
-    url.pathname.includes('/auth/') ||
-    url.pathname.includes('/products/') ||
-    url.pathname.includes('/inventory-items/') ||
-    url.pathname.includes('/store-areas/') ||
-    url.pathname.includes('/reports/') ||
-    url.pathname.includes('/dashboard/') ||
-    url.pathname.includes('/users/'),
-  // Use network first strategy, falling back to cache if offline
-  new StaleWhileRevalidate({
-    cacheName: 'api-cache',
-    plugins: [
-      new ExpirationPlugin({
-        maxEntries: 100,
-        maxAgeSeconds: 24 * 60 * 60, // 24 hours
-      }),
-    ],
-  }),
-);
+// NOTE: API caching is intentionally disabled. API requests go to a
+// cross-origin Workers domain (*.workers.dev) while the frontend is served
+// from a different origin (*.pages.dev). StaleWhileRevalidate cannot handle
+// opaque cross-origin responses, which causes "no-response" errors and CORS
+// failures. All API data should be fetched fresh from the network.
 
 // This allows the web app to trigger a skipWaiting revision for service worker updates
 self.addEventListener('message', (event) => {

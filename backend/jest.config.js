@@ -49,4 +49,6 @@ module.exports = {
   // Performance optimization
   maxWorkers: 1,
   testTimeout: 30000,
+  // Required to force exit when analytics singleton keeps the process alive
+  forceExit: true,
 };

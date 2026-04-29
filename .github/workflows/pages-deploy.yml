@@ -76,6 +76,20 @@ jobs:
               exit 1
             fi
 
+            # Guardrail: ensure preview build does not point at production Worker
+            api_url="${REACT_APP_API_URL:-${REACT_APP_API_BASE_URL:-}}"
+            if [ -z "${api_url}" ]; then
+              echo "::error::REACT_APP_API_URL / REACT_APP_API_BASE_URL is empty after Doppler resolution."
+              echo "::error::Refusing to build a preview frontend with an empty API base URL."
+              exit 1
+            fi
+            if [[ "${api_url}" == *"-prod."*".workers.dev"* ]] || [[ "${api_url}" == *"api.expirymate.com.au"* ]]; then
+              echo "::error::Preview build is pointing at the PRODUCTION API (${api_url})."
+              echo "::error::Doppler preview config should point REACT_APP_API_URL at the dev Worker (e.g. *-dev.workers.dev)."
+              echo "::error::This usually means DOPPLER_TOKEN is bound to the wrong config. Verify the preview token targets the dev/preview Doppler config."
+              exit 1
+            fi
+
           '
 
       - name: Build frontend
@@ -162,6 +176,27 @@ jobs:
             if [[ "${REACT_APP_CLERK_PUBLISHABLE_KEY}" != pk_live_* ]]; then
               echo "::error::Production deployment requires a Clerk live publishable key (pk_live_*)"
               echo "::error::Deployment blocked to prevent serving Clerk test keys in production."
+              exit 1
+            fi
+
+            # Guardrail: ensure production build does not point at dev/preview/tunnel hosts
+            api_url="${REACT_APP_API_URL:-${REACT_APP_API_BASE_URL:-}}"
+            if [ -z "${api_url}" ]; then
+              echo "::error::REACT_APP_API_URL / REACT_APP_API_BASE_URL is empty after Doppler resolution."
+              echo "::error::Refusing to build a production frontend with an empty API base URL."
+              exit 1
+            fi
+            if [[ "${api_url}" == *"-dev."*".workers.dev"* ]] \
+              || [[ "${api_url}" == *"localhost"* ]] \
+              || [[ "${api_url}" == *"127.0.0.1"* ]] \
+              || [[ "${api_url}" == *"ngrok"* ]] \
+              || [[ "${api_url}" == *".trycloudflare.com"* ]] \
+              || [[ "${api_url}" == *".loca.lt"* ]] \
+              || [[ "${api_url}" == *".lhr.life"* ]] \
+              || [[ "${api_url}" == *".pages.dev"* ]]; then
+              echo "::error::Production build is pointing at a non-prod API (${api_url})."
+              echo "::error::Doppler production config must point REACT_APP_API_URL at the prod Worker (e.g. https://api.expirymate.com.au)."
+              echo "::error::This usually means DOPPLER_TOKEN is bound to the wrong config. Verify the production token targets the prd/production Doppler config."
               exit 1
             fi
           '

@@ -2,7 +2,7 @@
 
 ## Overview
 
-This procedure documents how to quickly revert from production Cloudflare Workers deployment back to the VPS/Express server. Use this when:
+This procedure documents how to quickly revert from production Cloudflare Workers deployment back to the VPS/Express server. Use this shit hits the fan:
 
 - Cloudflare Workers deployment has critical bugs requiring immediate rollback
 - R2 or Neon integration is causing cascade failures

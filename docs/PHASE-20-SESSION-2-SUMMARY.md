@@ -112,7 +112,7 @@
 3. **[docs/production-deployment-checklist.md](docs/production-deployment-checklist.md)** - 950 lines
 4. **[docs/monitoring-and-alerting.md](docs/monitoring-and-alerting.md)** - 1200 lines
 5. **[docs/error-codes-reference.md](docs/error-codes-reference.md)** - 1100 lines
-6. **[workers/src/**tests**/error-handling.test.ts](workers/src/__tests__/error-handling.test.ts)** - 650 lines
+6. **[workers/src/**tests**/error-handling.test.ts](workers/src/**tests**/error-handling.test.ts)** - 650 lines
 7. **[backend/src/tests/unit/csv-edge-cases.test.ts](backend/src/tests/unit/csv-edge-cases.test.ts)** - 950 lines
 
 ---

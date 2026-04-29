@@ -52,7 +52,7 @@ import { createDatabaseClient } from '../../backend/src/database/database-factor
  */
 function initializeSentry(env: Env) {
   // Dynamically check for Sentry initialization based on env
-  if (env.SENTRY_DSN) {
+  if (env.WORKERS_SENTRY_DSN) {
     // Sentry initialization would happen here
     // For now, errors are captured via the custom error handler below
     return true;
@@ -79,6 +79,7 @@ import dashboardRoutes from '../../backend/src/routes/dashboard.routes';
 import expiredItemRoutes from '../../backend/src/routes/expired-item.routes';
 import healthRoutes from '../../backend/src/routes/health.routes';
 import inventoryRoutes from '../../backend/src/routes/inventory.routes';
+import orgBootstrapRoutes from '../../backend/src/routes/org-bootstrap.routes';
 import reportRoutes from '../../backend/src/routes/report.routes';
 import storeAreaRoutes from '../../backend/src/routes/store-area.routes';
 import userRoutes from '../../backend/src/routes/user.routes';
@@ -337,6 +338,7 @@ function createRouter(env: Env): WorkersRouter {
   registerExpressRouter(router, expiredItemRoutes, '/api/expired-items', env);
   registerExpressRouter(router, healthRoutes, '/api/health', env);
   registerExpressRouter(router, inventoryRoutes, '/api/inventory-items', env);
+  registerExpressRouter(router, orgBootstrapRoutes, '/api/organization', env);
   registerExpressRouter(router, reportRoutes, '/api/reports', env);
   registerExpressRouter(router, storeAreaRoutes, '/api/store-areas', env);
   registerExpressRouter(router, userRoutes, '/api/users', env);
@@ -387,7 +389,7 @@ function writeMetrics(env: Env, metrics: any): void {
  */
 export default Sentry.withSentry(
   (env: any) => ({
-    dsn: env.WORKERS_SENTRY_DSN || env.SENTRY_DSN,
+    dsn: env.WORKERS_SENTRY_DSN,
     tracesSampleRate: 1.0, // Adjust to 0.1 later to save on free tier quota
   }),
   {
