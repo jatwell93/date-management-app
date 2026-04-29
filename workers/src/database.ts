@@ -719,7 +719,7 @@ export function createWorkersDatabase(env: Env): Database {
     ): Promise<ExpiredItemTransaction> {
       const newStatus = action === 'sold_through' ? 'Sold Through' : 'Expired';
       const financialLossRows = await sql`
-        SELECT COALESCE(p.cost_price, 0) * ${action === 'expired' ? unitsDiscarded ?? 0 : 0} as "financialLoss"
+        SELECT COALESCE(p.cost_price, 0) * ${action === 'expired' ? (unitsDiscarded ?? 0) : 0} as "financialLoss"
         FROM inventory_items ii
         JOIN products p ON ii.product_id = p.id
         WHERE ii.id = ${inventoryItemId}
@@ -809,10 +809,7 @@ export function createWorkersDatabase(env: Env): Database {
     },
 
     // ---- Inventory CRUD ----
-    async findInventoryItemById(
-      organizationId: string,
-      id: number,
-    ): Promise<InventoryItem | null> {
+    async findInventoryItemById(organizationId: string, id: number): Promise<InventoryItem | null> {
       const rows = await sql`
         SELECT
           i.id, i.product_id as "productId",

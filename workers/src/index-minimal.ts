@@ -583,7 +583,8 @@ export default Sentry.withSentry(
             case pathname.match(/^\/api\/inventory-items\/by-barcode\/[^/]+$/) && method === 'GET':
               return finalizeApiResponse(handleGetInventoryByBarcode(request, db, env, pathname));
 
-            case pathname.match(/^\/api\/inventory-items\/recent\/product\/\d+$/) && method === 'GET':
+            case pathname.match(/^\/api\/inventory-items\/recent\/product\/\d+$/) &&
+              method === 'GET':
               return finalizeApiResponse(
                 handleGetRecentInventoryByProduct(request, db, env, pathname),
               );
@@ -1098,10 +1099,10 @@ export async function handleOrganizationBootstrap(request: Request, env: Env): P
   const isNewOrg = existingOrg.length === 0;
   const organizationId = isNewOrg
     ? await findOrCreateOrganization(
-      db.sql,
-      { id: finalClerkOrgId, name: finalOrgName, slug: finalOrgSlug },
-      email,
-    )
+        db.sql,
+        { id: finalClerkOrgId, name: finalOrgName, slug: finalOrgSlug },
+        email,
+      )
     : String(existingOrg[0].id);
 
   const existingUser = await db.sql`
@@ -2182,11 +2183,7 @@ async function handleGetLossByDepartmentReport(
 /**
  * GET /api/expired-items
  */
-async function handleGetExpiredItems(
-  request: Request,
-  db: Database,
-  env: Env,
-): Promise<Response> {
+async function handleGetExpiredItems(request: Request, db: Database, env: Env): Promise<Response> {
   const auth = await authenticateApiRequest(request, env, db);
   if (auth instanceof Response) return auth;
   const items = await db.getExpiredItems();
@@ -2332,11 +2329,7 @@ async function handleGetRecentInventoryByProduct(
   const limitParam = parseInt(url.searchParams.get('limit') || '5', 10);
   const limit = !Number.isFinite(limitParam) || limitParam <= 0 ? 5 : Math.min(limitParam, 50);
 
-  const items = await db.findRecentInventoryItemsByProductId(
-    auth.organizationId,
-    productId,
-    limit,
-  );
+  const items = await db.findRecentInventoryItemsByProductId(auth.organizationId, productId, limit);
   return jsonResponse(items, 200, env);
 }
 
@@ -2483,11 +2476,7 @@ async function handleDeleteInventoryItem(
 /**
  * POST /api/store-areas
  */
-async function handleCreateStoreArea(
-  request: Request,
-  db: Database,
-  env: Env,
-): Promise<Response> {
+async function handleCreateStoreArea(request: Request, db: Database, env: Env): Promise<Response> {
   const auth = await authenticateApiRequest(request, env, db);
   if (auth instanceof Response) return auth;
 
@@ -2623,11 +2612,7 @@ async function handleListUsers(request: Request, db: Database, env: Env): Promis
  * later when the user signs in via Clerk and the bootstrap route links
  * the Clerk ID.
  */
-async function handleCreateLegacyUser(
-  request: Request,
-  db: Database,
-  env: Env,
-): Promise<Response> {
+async function handleCreateLegacyUser(request: Request, db: Database, env: Env): Promise<Response> {
   const auth = await authenticateApiRequest(request, env, db);
   if (auth instanceof Response) return auth;
 
@@ -2735,11 +2720,7 @@ async function handleUpdateUser(
  * Authentication is required so this endpoint cannot be used as an unauthenticated
  * existence-probe for user IDs (review #1).
  */
-async function handleResetUserPin(
-  request: Request,
-  db: Database,
-  env: Env,
-): Promise<Response> {
+async function handleResetUserPin(request: Request, db: Database, env: Env): Promise<Response> {
   const auth = await authenticateApiRequest(request, env, db);
   if (auth instanceof Response) return auth;
 
@@ -2808,7 +2789,11 @@ async function handleProcessExpiredItem(
     unitsDiscarded?: number;
   };
 
-  if (!body.inventoryItemId || typeof body.inventoryItemId !== 'number' || body.inventoryItemId < 1) {
+  if (
+    !body.inventoryItemId ||
+    typeof body.inventoryItemId !== 'number' ||
+    body.inventoryItemId < 1
+  ) {
     return errorResponse('Missing or invalid required field: inventoryItemId', 400, env);
   }
 
@@ -2817,7 +2802,11 @@ async function handleProcessExpiredItem(
   }
 
   if (body.action === 'expired') {
-    if (!body.unitsDiscarded || typeof body.unitsDiscarded !== 'number' || body.unitsDiscarded <= 0) {
+    if (
+      !body.unitsDiscarded ||
+      typeof body.unitsDiscarded !== 'number' ||
+      body.unitsDiscarded <= 0
+    ) {
       return errorResponse(
         'Units discarded must be a positive number when marking as expired',
         400,
@@ -2935,13 +2924,13 @@ async function handleGetTrialStatus(request: Request, db: Database, env: Env): P
 
   const subscription = subscriptionRows[0] as
     | {
-      status?: string;
-      tier_level?: string;
-      trial_end_date?: string | null;
-      trial_started_at?: string | null;
-      trial_converted_at?: string | null;
-      billing_cycle?: string | null;
-    }
+        status?: string;
+        tier_level?: string;
+        trial_end_date?: string | null;
+        trial_started_at?: string | null;
+        trial_converted_at?: string | null;
+        billing_cycle?: string | null;
+      }
     | undefined;
 
   let daysRemaining: number | null = null;
@@ -2950,8 +2939,8 @@ async function handleGetTrialStatus(request: Request, db: Database, env: Env): P
   const subscriptionStatusRaw = (subscription?.status || 'EXPIRED').toUpperCase();
   const normalizedStatus: 'ACTIVE' | 'TRIALING' | 'EXPIRED' | 'CANCELED' =
     subscriptionStatusRaw === 'ACTIVE' ||
-      subscriptionStatusRaw === 'TRIALING' ||
-      subscriptionStatusRaw === 'CANCELED'
+    subscriptionStatusRaw === 'TRIALING' ||
+    subscriptionStatusRaw === 'CANCELED'
       ? subscriptionStatusRaw
       : 'EXPIRED';
 
@@ -2973,14 +2962,14 @@ async function handleGetTrialStatus(request: Request, db: Database, env: Env): P
     isTrialExpired: normalizedStatus === 'TRIALING' && isTrialExpired,
     subscription: subscription
       ? {
-        status: normalizedStatus,
-        tierLevel: subscription.tier_level || 'starter',
-        trialEndDate: subscription.trial_end_date || null,
-        trialStartedAt: subscription.trial_started_at || null,
-        trialConvertedAt: subscription.trial_converted_at || null,
-        daysRemaining,
-        billingCycle: subscription.billing_cycle || null,
-      }
+          status: normalizedStatus,
+          tierLevel: subscription.tier_level || 'starter',
+          trialEndDate: subscription.trial_end_date || null,
+          trialStartedAt: subscription.trial_started_at || null,
+          trialConvertedAt: subscription.trial_converted_at || null,
+          daysRemaining,
+          billingCycle: subscription.billing_cycle || null,
+        }
       : null,
     tierLimits,
   };
