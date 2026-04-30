@@ -79,9 +79,13 @@ describe('API Contract Compatibility - Field Mapping Logic', () => {
       const deprecated = getDeprecatedSnakeCaseFields(body);
 
       expect(deprecated).toHaveLength(3);
-      expect(deprecated[0]).toContain('product_id');
-      expect(deprecated[1]).toContain('expiry_date');
-      expect(deprecated[2]).toContain('location_id');
+      expect(deprecated).toEqual(
+        expect.arrayContaining([
+          expect.stringContaining('product_id'),
+          expect.stringContaining('expiry_date'),
+          expect.stringContaining('location_id'),
+        ]),
+      );
     });
 
     it('should report snake_case fields as deprecated even when camelCase is also present', () => {
@@ -96,7 +100,7 @@ describe('API Contract Compatibility - Field Mapping Logic', () => {
       const deprecated = getDeprecatedSnakeCaseFields(body);
 
       expect(deprecated).toHaveLength(1);
-      expect(deprecated[0]).toContain('product_id');
+      expect(deprecated).toEqual([expect.stringContaining('product_id')]);
     });
 
     it('should return empty array when only camelCase fields are used', () => {
