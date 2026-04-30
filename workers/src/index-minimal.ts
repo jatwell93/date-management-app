@@ -2354,9 +2354,21 @@ async function handleCreateInventoryItem(
     status?: string;
   };
 
+  // Support both camelCase and snake_case for backward compatibility
   const productId = body.productId ?? body.product_id;
   const expiryDate = body.expiryDate ?? body.expiry_date;
   const locationId = body.locationId ?? body.location_id;
+
+  // Log deprecation warnings for snake_case usage
+  if (body.product_id !== undefined && body.productId === undefined) {
+    console.warn('DEPRECATION: product_id is deprecated, use productId instead');
+  }
+  if (body.expiry_date !== undefined && body.expiryDate === undefined) {
+    console.warn('DEPRECATION: expiry_date is deprecated, use expiryDate instead');
+  }
+  if (body.location_id !== undefined && body.locationId === undefined) {
+    console.warn('DEPRECATION: location_id is deprecated, use locationId instead');
+  }
 
   if (productId === undefined || !Number.isInteger(productId) || productId < 1) {
     return errorResponse('Missing or invalid productId', 400, env);
