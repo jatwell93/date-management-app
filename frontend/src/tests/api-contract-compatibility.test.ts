@@ -17,7 +17,7 @@ describe('API Contract Compatibility', () => {
     mockConsoleWarn.mockClear();
   });
 
-  afterEach(() => {
+  afterAll(() => {
     mockConsoleWarn.mockRestore();
   });
 

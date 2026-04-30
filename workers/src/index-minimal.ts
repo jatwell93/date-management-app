@@ -14,6 +14,11 @@ import { handleHealthCheck } from './health';
 import { createWorkersDatabase } from './database';
 import * as Sentry from '@sentry/cloudflare';
 import { createClerkClient, verifyToken } from '@clerk/backend';
+import {
+  resolveInventoryFields,
+  getDeprecatedSnakeCaseFields,
+  InventoryItemRequestBody,
+} from './utils/inventory-field-mapping';
 
 const COMPRESSION_MIN_BYTES = 1024;
 const DIRECT_UPLOAD_THRESHOLD_BYTES = 2 * 1024 * 1024;
@@ -2344,30 +2349,15 @@ async function handleCreateInventoryItem(
   const auth = await authenticateApiRequest(request, env, db);
   if (auth instanceof Response) return auth;
 
-  const body = (await request.json()) as {
-    productId?: number;
-    product_id?: number;
-    expiryDate?: string;
-    expiry_date?: string;
-    locationId?: number;
-    location_id?: number;
-    status?: string;
-  };
+  const body = (await request.json()) as InventoryItemRequestBody;
 
   // Support both camelCase and snake_case for backward compatibility
-  const productId = body.productId ?? body.product_id;
-  const expiryDate = body.expiryDate ?? body.expiry_date;
-  const locationId = body.locationId ?? body.location_id;
+  const { productId, expiryDate, locationId } = resolveInventoryFields(body);
 
-  // Log deprecation warnings for snake_case usage
-  if (body.product_id !== undefined && body.productId === undefined) {
-    console.warn('DEPRECATION: product_id is deprecated, use productId instead');
-  }
-  if (body.expiry_date !== undefined && body.expiryDate === undefined) {
-    console.warn('DEPRECATION: expiry_date is deprecated, use expiryDate instead');
-  }
-  if (body.location_id !== undefined && body.locationId === undefined) {
-    console.warn('DEPRECATION: location_id is deprecated, use locationId instead');
+  // Log deprecation warnings whenever deprecated snake_case fields are present
+  const deprecatedFields = getDeprecatedSnakeCaseFields(body);
+  if (deprecatedFields.length > 0) {
+    console.warn(`DEPRECATION: snake_case fields are deprecated. Please migrate: ${deprecatedFields.join(', ')}`);
   }
 
   if (productId === undefined || !Number.isInteger(productId) || productId < 1) {

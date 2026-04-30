@@ -1,30 +1,21 @@
 import { describe, it, expect } from 'vitest';
-
-// Type that accepts both camelCase and snake_case fields
-type InventoryItemRequest = {
-  productId?: number;
-  product_id?: number;
-  expiryDate?: string;
-  expiry_date?: string;
-  locationId?: number;
-  location_id?: number;
-  status?: string;
-};
+import {
+  resolveInventoryFields,
+  getDeprecatedSnakeCaseFields,
+  InventoryItemRequestBody,
+} from '../utils/inventory-field-mapping';
 
 describe('API Contract Compatibility - Field Mapping Logic', () => {
-  describe('Field Name Resolution', () => {
+  describe('resolveInventoryFields', () => {
     it('should map camelCase fields correctly', () => {
-      // Simulate the field mapping logic from handleCreateInventoryItem
-      const body: InventoryItemRequest = {
+      const body: InventoryItemRequestBody = {
         productId: 1,
         expiryDate: '2026-12-31',
         locationId: 1,
         status: 'active',
       };
 
-      const productId = body.productId ?? body.product_id;
-      const expiryDate = body.expiryDate ?? body.expiry_date;
-      const locationId = body.locationId ?? body.location_id;
+      const { productId, expiryDate, locationId } = resolveInventoryFields(body);
 
       expect(productId).toBe(1);
       expect(expiryDate).toBe('2026-12-31');
@@ -32,16 +23,14 @@ describe('API Contract Compatibility - Field Mapping Logic', () => {
     });
 
     it('should map snake_case fields correctly (backward compatibility)', () => {
-      const body: InventoryItemRequest = {
+      const body: InventoryItemRequestBody = {
         product_id: 1,
         expiry_date: '2026-12-31',
         location_id: 1,
         status: 'active',
       };
 
-      const productId = body.productId ?? body.product_id;
-      const expiryDate = body.expiryDate ?? body.expiry_date;
-      const locationId = body.locationId ?? body.location_id;
+      const { productId, expiryDate, locationId } = resolveInventoryFields(body);
 
       expect(productId).toBe(1);
       expect(expiryDate).toBe('2026-12-31');
@@ -49,7 +38,7 @@ describe('API Contract Compatibility - Field Mapping Logic', () => {
     });
 
     it('should prioritize camelCase over snake_case when both are provided', () => {
-      const body: InventoryItemRequest = {
+      const body: InventoryItemRequestBody = {
         productId: 2, // Should take precedence
         product_id: 1, // Should be ignored
         expiryDate: '2026-12-31',
@@ -57,62 +46,69 @@ describe('API Contract Compatibility - Field Mapping Logic', () => {
         status: 'active',
       };
 
-      const productId = body.productId ?? body.product_id;
-      const expiryDate = body.expiryDate ?? body.expiry_date;
-      const locationId = body.locationId ?? body.location_id;
+      const { productId, expiryDate, locationId } = resolveInventoryFields(body);
 
-      expect(productId).toBe(2); // camelCase value should be used
+      expect(productId).toBe(2);
       expect(expiryDate).toBe('2026-12-31');
       expect(locationId).toBe(1);
     });
 
-    it('should handle missing required fields correctly', () => {
-      const body: InventoryItemRequest = {
+    it('should return undefined for missing required fields', () => {
+      const body: InventoryItemRequestBody = {
         // Missing both productId and product_id
         expiry_date: '2026-12-31',
         location_id: 1,
       };
 
-      const productId = body.productId ?? body.product_id;
-      const expiryDate = body.expiryDate ?? body.expiry_date;
-      const locationId = body.locationId ?? body.location_id;
+      const { productId, expiryDate, locationId } = resolveInventoryFields(body);
 
       expect(productId).toBeUndefined();
       expect(expiryDate).toBe('2026-12-31');
       expect(locationId).toBe(1);
     });
+  });
 
-    it('should detect snake_case usage for deprecation warnings', () => {
-      const body: InventoryItemRequest = {
+  describe('getDeprecatedSnakeCaseFields', () => {
+    it('should report all deprecated snake_case fields when present', () => {
+      const body: InventoryItemRequestBody = {
         product_id: 1,
         expiry_date: '2026-12-31',
         location_id: 1,
       };
 
-      // Simulate deprecation warning logic
-      const shouldWarnProductId = body.product_id !== undefined && body.productId === undefined;
-      const shouldWarnExpiryDate = body.expiry_date !== undefined && body.expiryDate === undefined;
-      const shouldWarnLocationId = body.location_id !== undefined && body.locationId === undefined;
+      const deprecated = getDeprecatedSnakeCaseFields(body);
 
-      expect(shouldWarnProductId).toBe(true);
-      expect(shouldWarnExpiryDate).toBe(true);
-      expect(shouldWarnLocationId).toBe(true);
+      expect(deprecated).toHaveLength(3);
+      expect(deprecated[0]).toContain('product_id');
+      expect(deprecated[1]).toContain('expiry_date');
+      expect(deprecated[2]).toContain('location_id');
     });
 
-    it('should not warn when using camelCase', () => {
-      const body: InventoryItemRequest = {
+    it('should report snake_case fields as deprecated even when camelCase is also present', () => {
+      // When both are provided, the snake_case field is still present and still deprecated
+      const body: InventoryItemRequestBody = {
+        productId: 2,
+        product_id: 1,
+        expiryDate: '2026-12-31',
+        locationId: 1,
+      };
+
+      const deprecated = getDeprecatedSnakeCaseFields(body);
+
+      expect(deprecated).toHaveLength(1);
+      expect(deprecated[0]).toContain('product_id');
+    });
+
+    it('should return empty array when only camelCase fields are used', () => {
+      const body: InventoryItemRequestBody = {
         productId: 1,
         expiryDate: '2026-12-31',
         locationId: 1,
       };
 
-      const shouldWarnProductId = body.product_id !== undefined && body.productId === undefined;
-      const shouldWarnExpiryDate = body.expiry_date !== undefined && body.expiryDate === undefined;
-      const shouldWarnLocationId = body.location_id !== undefined && body.locationId === undefined;
+      const deprecated = getDeprecatedSnakeCaseFields(body);
 
-      expect(shouldWarnProductId).toBe(false);
-      expect(shouldWarnExpiryDate).toBe(false);
-      expect(shouldWarnLocationId).toBe(false);
+      expect(deprecated).toHaveLength(0);
     });
   });
 });

@@ -42,10 +42,10 @@ export async function synchronizeOfflineData(token: string | null) {
         await offlineStorage.removeItem(key);
       } catch (err: unknown) {
         if (err instanceof Error) {
-          console.error(`Error synchronizing item ${key}:`, err.message);
+          console.error(`Error synchronizing item ${key}:`, err);
           // Could add user notification here if needed
         } else {
-          console.error(`An unknown error occurred while synchronizing item ${key}`);
+          console.error(`An unknown error occurred while synchronizing item ${key}`, err);
         }
         // Keep item in offline storage for retry later
       }
