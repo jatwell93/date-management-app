@@ -22,6 +22,8 @@ import { StoreAreaManagementPage } from './pages/StoreAreaManagementPage';
 import { CSVUploadPage } from './pages/CSVUploadPage';
 import { DetailedExpiryReportPage } from './pages/DetailedExpiryReportPage';
 import ExpiredItemsPage from './pages/ExpiredItemsPage';
+import { SubscriptionSettingsPage } from './pages/SubscriptionSettingsPage';
+import { UserProfile } from '@clerk/clerk-react';
 import { StorageQuotaWarning } from './components/StorageQuotaWarning';
 import { TrialBanner } from './components/TrialBanner';
 import { TrialUpgradeFlow } from './components/TrialUpgradeFlow';
@@ -333,6 +335,31 @@ function AppContent({
                             className="block px-4 py-2 hover:bg-gray-100 rounded-sm transition-colors"
                           >
                             Usage Report
+                          </Link>
+                        </DropdownMenuItem>
+                      </DropdownMenuContent>
+                    </DropdownMenu>
+                  </li>
+                  <li>
+                    <DropdownMenu>
+                      <DropdownMenuTrigger className="hover:opacity-90 transition-opacity focus:outline-none bg-transparent border-none cursor-pointer">
+                        Account
+                      </DropdownMenuTrigger>
+                      <DropdownMenuContent className="bg-white text-gray-800 border border-gray-200 rounded-md shadow-lg p-1 mt-1">
+                        <DropdownMenuItem asChild>
+                          <Link
+                            to="/profile"
+                            className="block px-4 py-2 hover:bg-gray-100 rounded-sm transition-colors"
+                          >
+                            Profile
+                          </Link>
+                        </DropdownMenuItem>
+                        <DropdownMenuItem asChild>
+                          <Link
+                            to="/subscription"
+                            className="block px-4 py-2 hover:bg-gray-100 rounded-sm transition-colors"
+                          >
+                            Billing
                           </Link>
                         </DropdownMenuItem>
                       </DropdownMenuContent>
@@ -676,6 +703,36 @@ function AppContent({
                     isLoggedIn ? <MarkdownCalculator token={token} /> : <Navigate to="/login" />
                   }
                 />
+                <Route
+                  path="/profile"
+                  element={
+                    isLoggedIn ? (
+                      <UserProfile routing="path" path="/profile" />
+                    ) : (
+                      <Navigate to="/login" />
+                    )
+                  }
+                />
+                <Route
+                  path="/profile/*"
+                  element={
+                    isLoggedIn ? (
+                      <UserProfile routing="path" path="/profile" />
+                    ) : (
+                      <Navigate to="/login" />
+                    )
+                  }
+                />
+                <Route
+                  path="/subscription"
+                  element={
+                    isLoggedIn ? (
+                      <SubscriptionSettingsPage token={token} />
+                    ) : (
+                      <Navigate to="/login" />
+                    )
+                  }
+                />
                 {effectiveUserRole &&
                   hasPermission(effectiveUserRole, PERMISSIONS.MANAGE_MEMBERS) && (
                     <>
@@ -828,6 +885,36 @@ function AppContent({
                 path="/markdown-calculator"
                 element={
                   isLoggedIn ? <MarkdownCalculator token={token} /> : <Navigate to="/login" />
+                }
+              />
+              <Route
+                path="/profile"
+                element={
+                  isLoggedIn ? (
+                    <UserProfile routing="path" path="/profile" />
+                  ) : (
+                    <Navigate to="/login" />
+                  )
+                }
+              />
+              <Route
+                path="/profile/*"
+                element={
+                  isLoggedIn ? (
+                    <UserProfile routing="path" path="/profile" />
+                  ) : (
+                    <Navigate to="/login" />
+                  )
+                }
+              />
+              <Route
+                path="/subscription"
+                element={
+                  isLoggedIn ? (
+                    <SubscriptionSettingsPage token={token} />
+                  ) : (
+                    <Navigate to="/login" />
+                  )
                 }
               />
               {effectiveUserRole &&
