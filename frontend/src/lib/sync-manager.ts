@@ -40,14 +40,15 @@ export async function synchronizeOfflineData(token: string | null) {
 
         // console.log(`Successfully synchronized item: ${key}`);
         await offlineStorage.removeItem(key);
-      } catch (_err: unknown) {
-        // if (_err instanceof Error) {
-        //   console.error(`Error synchronizing item ${key}:`, _err.message);
-        // } else {
-        //   console.error(
-        //     `An unknown error occurred while synchronizing item ${key}`,
-        //   );
-        // }
+      } catch (err: unknown) {
+        if (err instanceof Error) {
+          // eslint-disable-next-line no-console
+          console.error(`Error synchronizing item ${key}:`, err);
+          // Could add user notification here if needed
+        } else {
+          // eslint-disable-next-line no-console
+          console.error(`An unknown error occurred while synchronizing item ${key}`, err);
+        }
         // Keep item in offline storage for retry later
       }
     }
