@@ -31,6 +31,10 @@ describe('SeedService', () => {
     }
   });
 
+  afterAll(async () => {
+    await prisma.$disconnect();
+  });
+
   it('seeds demo data successfully', async () => {
     const result = await service.seedDemoData(testOrgId);
 
@@ -58,13 +62,19 @@ describe('SeedService', () => {
 
   it('is idempotent (can be called multiple times)', async () => {
     // First call
-    await service.seedDemoData(testOrgId);
+    const firstResult = await service.seedDemoData(testOrgId);
+    expect(firstResult.productsCreated).toBe(8);
+    expect(firstResult.areasCreated).toBe(3);
 
-    // Call it a second time
+    // Second call should report 0 newly created
     const result = await service.seedDemoData(testOrgId);
 
     expect(result.success).toBe(true);
-    // Counts should stay same
+    expect(result.productsCreated).toBe(0);
+    expect(result.areasCreated).toBe(0);
+    expect(result.inventoryItemsCreated).toBe(0);
+
+    // Counts in DB should stay the same
     const productsCount = await prisma.product.count({
       where: { organizationId: testOrgId },
     });

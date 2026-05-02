@@ -59,20 +59,7 @@ test.describe('Subscription - Stripe Checkout Session', () => {
     await expect(annualButton).toHaveAttribute('data-state', 'on');
   });
 
-  test('Stripe checkout session redirect with test key', async ({ page, context }) => {
-    // Set up listener for navigation before clicking upgrade
-    let stripeCheckoutUrl: string | null = null;
-    page.on('popup', async (popup) => {
-      await popup.waitForLoadState();
-      stripeCheckoutUrl = popup.url();
-      await popup.close();
-    });
-
-    // Also listen for regular navigation to Stripe
-    page.on('framenavigated', () => {
-      // Stripe redirects happen via window.location.href
-    });
-
+  test('Stripe checkout session redirect with test key', async ({ page }) => {
     await page.goto('/subscription');
 
     const upgradeButton = page.getByRole('button', { name: /upgrade/i }).first();
@@ -81,75 +68,73 @@ test.describe('Subscription - Stripe Checkout Session', () => {
     // Wait for modal
     await expect(page.getByText(/upgrade your plan/i)).toBeVisible({ timeout: 8000 });
 
-    // Select Professional tier (not current plan)
-    const professionalUpgradeButton = page
+    // Intercept the checkout-session API call to capture the redirect URL
+    // without requiring real navigation to Stripe
+    let checkoutUrl: string | null = null;
+    page.on('response', async (response) => {
+      if (
+        response.url().includes('/subscription/create-checkout-session') &&
+        response.status() === 200
+      ) {
+        try {
+          const json = await response.json();
+          if (json?.url) checkoutUrl = json.url;
+        } catch {
+          // ignore
+        }
+      }
+    });
+
+    // Stub Stripe navigation to prevent real redirect
+    await page.route(/checkout\.stripe\.com|payment\.stripe\.com/, (route) => route.abort());
+
+    // Select Professional tier, fall back to Premium if it is the current plan
+    let tierButton = page
       .locator('[data-tier="professional"]')
       .getByRole('button', { name: /upgrade/i })
       .first();
 
-    // Ensure Professional is not the current plan
-    const isCurrent = await professionalUpgradeButton.isDisabled();
+    const isCurrent = await tierButton.isDisabled().catch(() => false);
     if (isCurrent) {
-      // If Professional is current, try Premium instead
-      const premiumUpgradeButton = page
+      tierButton = page
         .locator('[data-tier="premium"]')
         .getByRole('button', { name: /upgrade/i })
         .first();
-      await expect(premiumUpgradeButton).toBeVisible({ timeout: 5000 });
-      await expect(premiumUpgradeButton).not.toBeDisabled();
-
-      // Click upgrade for Premium
-      // Note: This will redirect to Stripe, so we need to listen for the navigation
-      const navigationPromise = page.waitForNavigation({ timeout: 10000 }).catch(() => null);
-
-      await premiumUpgradeButton.click();
-
-      // Wait for navigation to complete
-      const navigationResult = await navigationPromise;
-
-      // The page should have navigated to a Stripe URL
-      await page.waitForURL(/checkout\.stripe\.com/, { timeout: 10000 }).catch(() => {
-        // If no navigation occurred, the test will document this failure
-      });
-
-      // Assert the current URL contains Stripe domain (indicating successful checkout redirect)
-      const currentUrl = page.url();
-      expect(currentUrl).toContain('stripe.com');
-      expect(currentUrl).toMatch(/checkout\.stripe\.com|payment\.stripe\.com/);
-    } else {
-      // Professional is available, upgrade to it
-      await expect(professionalUpgradeButton).toBeVisible({ timeout: 5000 });
-      await expect(professionalUpgradeButton).not.toBeDisabled();
-
-      // Wait for navigation to Stripe
-      const navigationPromise = page.waitForNavigation({ timeout: 10000 }).catch(() => null);
-
-      await professionalUpgradeButton.click();
-
-      // Give the page a moment to start navigation
-      await page.waitForURL(/checkout\.stripe\.com/, { timeout: 10000 }).catch(() => {
-        // Navigation might not happen if test environment isn't set up
-        // Document this for debugging
-      });
-
-      // Verify we're now on a Stripe domain
-      const currentUrl = page.url();
-      expect(currentUrl).toContain('stripe.com');
     }
+
+    await expect(tierButton).toBeVisible({ timeout: 5000 });
+    await expect(tierButton).not.toBeDisabled();
+
+    // Wait for the API response
+    const apiPromise = page
+      .waitForResponse(
+        (response) =>
+          response.url().includes('/subscription/create-checkout-session') &&
+          response.status() === 200,
+        { timeout: 10000 },
+      )
+      .catch(() => null);
+
+    await tierButton.click();
+    await apiPromise;
+
+    // Assert the API returned a Stripe checkout URL (not that real navigation happened)
+    expect(checkoutUrl).not.toBeNull();
+    expect(checkoutUrl).toMatch(/checkout\.stripe\.com|payment\.stripe\.com/);
   });
 
-  test('Checkout session includes correct metadata (organizationId)', async ({ page }) => {
-    // Intercept the API call to create-checkout-session
-    const responses: unknown[] = [];
-    page.on('response', async (response) => {
-      if (response.url().includes('/subscription/create-checkout-session')) {
-        try {
-          const json = await response.json();
-          responses.push(json);
-        } catch {
-          // Ignore parse errors
-        }
+  test('Checkout session returns a Stripe URL and valid session ID', async ({ page }) => {
+    // Intercept the request body to verify organizationId context is sent,
+    // and the response to verify the Stripe URL and session ID.
+    let requestBody: Record<string, unknown> | null = null;
+    await page.route('**/subscription/create-checkout-session', (route) => {
+      const req = route.request();
+      try {
+        requestBody = req.postDataJSON() as Record<string, unknown>;
+      } catch {
+        // ignore parse errors
       }
+      route.continue();
     });
 
     await page.goto('/subscription');
@@ -166,7 +151,7 @@ test.describe('Subscription - Stripe Checkout Session', () => {
       .getByRole('button', { name: /upgrade/i })
       .first();
 
-    let isCurrent = await tierButton.isDisabled().catch(() => false);
+    const isCurrent = await tierButton.isDisabled().catch(() => false);
 
     if (isCurrent) {
       tierButton = page
@@ -193,9 +178,14 @@ test.describe('Subscription - Stripe Checkout Session', () => {
       expect(responseBody).toHaveProperty('url');
       expect(responseBody.url).toMatch(/stripe\.com/);
 
-      // Verify session ID is present
+      // Verify the organizationId context was included in the request
+      if (requestBody) {
+        expect(requestBody).toHaveProperty('organizationId');
+        expect(typeof requestBody.organizationId).toBe('string');
+      }
+
+      // Verify session ID is present and formatted correctly
       if (responseBody.sessionId) {
-        expect(responseBody.sessionId).toBeTruthy();
         expect(responseBody.sessionId).toMatch(/^cs_/); // Stripe checkout session IDs start with cs_
       }
     } catch (error) {

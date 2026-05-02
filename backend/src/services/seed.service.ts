@@ -26,25 +26,21 @@ export class SeedService {
           { name: 'Cooler', subDepartment: 'Refrigerated' },
         ];
 
-        const createdAreas = await Promise.all(
-          areas.map((area) =>
-            tx.storeArea.upsert({
-              where: {
-                organizationId_name_subDepartment: {
-                  organizationId,
-                  name: area.name,
-                  subDepartment: area.subDepartment,
-                },
-              },
-              update: {},
-              create: {
-                organizationId,
-                name: area.name,
-                subDepartment: area.subDepartment,
-              },
-            }),
-          ),
+        const areaResults = await Promise.all(
+          areas.map(async (area) => {
+            const existing = await tx.storeArea.findFirst({
+              where: { organizationId, name: area.name, subDepartment: area.subDepartment },
+            });
+            if (existing) return { record: existing, created: false };
+            const record = await tx.storeArea.create({
+              data: { organizationId, name: area.name, subDepartment: area.subDepartment },
+            });
+            return { record, created: true };
+          }),
         );
+
+        const createdAreas = areaResults.map((r) => r.record);
+        const areasCreatedCount = areaResults.filter((r) => r.created).length;
 
         // 2. Create Sample Pharmacy Products
         const products = [
@@ -110,24 +106,25 @@ export class SeedService {
         let inventoryItemsCreatedCount = 0;
 
         for (const p of products) {
-          const product = await tx.product.upsert({
-            where: {
-              organizationId_sku: {
-                organizationId,
-                sku: p.sku,
-              },
-            },
-            update: {},
-            create: {
-              organizationId,
-              name: p.name,
-              sku: p.sku,
-              barcode: p.barcode,
-              costPrice: p.costPrice,
-            },
+          const existingProduct = await tx.product.findFirst({
+            where: { organizationId, sku: p.sku },
           });
 
-          productsCreatedCount++;
+          let product;
+          if (existingProduct) {
+            product = existingProduct;
+          } else {
+            product = await tx.product.create({
+              data: {
+                organizationId,
+                name: p.name,
+                sku: p.sku,
+                barcode: p.barcode,
+                costPrice: p.costPrice,
+              },
+            });
+            productsCreatedCount++;
+          }
 
           // 3. Create Inventory Items with realistic expiry dates
           // Some soon-to-expire (2-3 months), some far (12-24 months)
@@ -161,7 +158,7 @@ export class SeedService {
         return {
           success: true,
           productsCreated: productsCreatedCount,
-          areasCreated: createdAreas.length,
+          areasCreated: areasCreatedCount,
           inventoryItemsCreated: inventoryItemsCreatedCount,
         };
       });

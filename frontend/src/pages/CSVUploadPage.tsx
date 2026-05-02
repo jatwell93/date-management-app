@@ -54,7 +54,14 @@ export const CSVUploadPage: React.FC<{
 }> = ({ token, defaultImportType = 'product-catalog' }) => {
   const [searchParams] = useSearchParams();
   const navigate = useNavigate();
-  const returnUrl = searchParams.get('return');
+  const rawReturnUrl = searchParams.get('return');
+  // Only allow safe in-app paths: must start with a single '/' and must not contain a protocol or '//'
+  const returnUrl =
+    rawReturnUrl &&
+    /^\/[^/]/.test(rawReturnUrl) &&
+    !rawReturnUrl.includes('://')
+      ? rawReturnUrl
+      : null;
 
   const fileInputId = 'csv-upload-file-input';
   const [importType, setImportType] = useState<UploadImportType>(defaultImportType);

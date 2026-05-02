@@ -1,13 +1,42 @@
-import React from 'react';
+import React, { useEffect, useState } from 'react';
 import { useOrganization } from '@clerk/clerk-react';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '../components/ui/card';
+
+interface MemberRecord {
+  id: string;
+  role: string;
+  createdAt: Date | null;
+  publicUserData?: {
+    firstName?: string | null;
+    lastName?: string | null;
+    identifier?: string | null;
+  } | null;
+}
 
 interface UserManagementPageProps {
   token: string | null;
 }
 
 export function UserManagementPage({ token }: UserManagementPageProps) {
-  const { organization } = useOrganization();
+  const { organization, isLoaded } = useOrganization();
+  const [members, setMembers] = useState<MemberRecord[]>([]);
+  const [isFetchingMembers, setIsFetchingMembers] = useState(false);
+
+  useEffect(() => {
+    if (!organization) return;
+    setIsFetchingMembers(true);
+    organization
+      .getMemberships({ limit: 50 })
+      .then((result) => {
+        setMembers(result.data as MemberRecord[]);
+      })
+      .catch(() => {
+        setMembers([]);
+      })
+      .finally(() => {
+        setIsFetchingMembers(false);
+      });
+  }, [organization]);
 
   return (
     <div className="max-w-4xl mx-auto py-8 px-4">
@@ -16,7 +45,7 @@ export function UserManagementPage({ token }: UserManagementPageProps) {
         <p className="mt-1 text-gray-600">Manage your organization members and their roles.</p>
       </div>
 
-      {!organization ? (
+      {!isLoaded || !organization ? (
         <Card>
           <CardContent className="pt-6">
             <p className="text-center text-gray-500">Loading organization...</p>
@@ -31,7 +60,9 @@ export function UserManagementPage({ token }: UserManagementPageProps) {
             </CardDescription>
           </CardHeader>
           <CardContent>
-            {organization.memberships && organization.memberships.length > 0 ? (
+            {isFetchingMembers ? (
+              <p className="text-center text-gray-500">Loading members...</p>
+            ) : members.length > 0 ? (
               <div className="overflow-x-auto">
                 <table className="w-full text-sm">
                   <thead>
@@ -43,13 +74,15 @@ export function UserManagementPage({ token }: UserManagementPageProps) {
                     </tr>
                   </thead>
                   <tbody>
-                    {organization.memberships.map((membership) => (
+                    {members.map((membership) => (
                       <tr key={membership.id} className="border-b hover:bg-gray-50">
                         <td className="py-2 px-4">
                           {membership.publicUserData?.firstName}{' '}
                           {membership.publicUserData?.lastName}
                         </td>
-                        <td className="py-2 px-4">{membership.publicUserData?.email}</td>
+                        <td className="py-2 px-4">
+                          {membership.publicUserData?.identifier}
+                        </td>
                         <td className="py-2 px-4 capitalize">{membership.role}</td>
                         <td className="py-2 px-4 capitalize">
                           {membership.createdAt ? 'Active' : 'Pending'}

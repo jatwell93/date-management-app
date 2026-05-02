@@ -89,7 +89,7 @@ function AppContent({
 
   // Task 1.1: Debug role propagation timing
   useEffect(() => {
-    let timeoutId: NodeJS.Timeout;
+    let timeoutId: ReturnType<typeof setTimeout> | undefined;
     if (isBootstrapping) {
       timeoutId = setTimeout(() => {
         if (isBootstrapping) {
@@ -386,6 +386,11 @@ function AppContent({
                     </DropdownMenu>
                   </li>
                   <li>
+                    <Link to="/subscription" className="hover:opacity-90 transition-opacity">
+                      Billing
+                    </Link>
+                  </li>
+                  <li>
                     <Link to="/markdown-calculator" className="hover:opacity-90 transition-opacity">
                       Markdown Calculator
                     </Link>
@@ -514,6 +519,15 @@ function AppContent({
                       onClick={() => setIsMobileMenuOpen(false)}
                     >
                       Markdown Calculator
+                    </Link>
+                  </li>
+                  <li>
+                    <Link
+                      to="/subscription"
+                      className="block hover:opacity-90 transition-opacity"
+                      onClick={() => setIsMobileMenuOpen(false)}
+                    >
+                      Billing
                     </Link>
                   </li>
                   <li>

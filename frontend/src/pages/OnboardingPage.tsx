@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react';
+import { type ComponentType, useState, useEffect } from 'react';
 import { useNavigate, useSearchParams } from 'react-router-dom';
 import { CreateOrganization, useAuth, useOrganization } from '@clerk/clerk-react';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '../components/ui/card';
@@ -24,7 +24,7 @@ const normalizeStep = (step: OnboardingStep, hasOrg: boolean): OnboardingStep =>
 interface StepConfig {
   title: string;
   description: string;
-  component: React.ComponentType<StepProps>;
+  component: ComponentType<StepProps>;
 }
 
 interface StepProps {
@@ -296,7 +296,6 @@ export function OnboardingPage() {
   const [searchParams, setSearchParams] = useSearchParams();
   const { organization, isLoaded: isOrgLoaded } = useOrganization();
   const [currentStep, setCurrentStep] = useState<OnboardingStep>(0);
-  const navigate = useNavigate();
 
   // Initialize step from URL query param or organization state
   useEffect(() => {
