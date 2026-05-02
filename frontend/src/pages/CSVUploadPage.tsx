@@ -1038,16 +1038,20 @@ export const CSVUploadPage: React.FC<{
               </div>
             )}
 
-            {uploadResult.success && returnUrl && (
-              <div className="mt-6 pt-4 border-t border-inventory-success-200">
-                <button
-                  onClick={() => navigate(returnUrl)}
-                  className="w-full py-2 bg-inventory-success-600 text-white rounded-md font-semibold hover:bg-inventory-success-700 transition"
-                >
-                  Continue to next step
-                </button>
-              </div>
-            )}
+            {uploadResult.success &&
+              typeof returnUrl === 'string' &&
+              returnUrl.startsWith('/') &&
+              !returnUrl.startsWith('//') &&
+              !/^[a-zA-Z][a-zA-Z\d+\-.]*:/.test(returnUrl) && (
+                <div className="mt-6 pt-4 border-t border-inventory-success-200">
+                  <button
+                    onClick={() => navigate(returnUrl)}
+                    className="w-full py-2 bg-inventory-success-600 text-white rounded-md font-semibold hover:bg-inventory-success-700 transition"
+                  >
+                    Continue to next step
+                  </button>
+                </div>
+              )}
           </div>
         )}
       </div>
