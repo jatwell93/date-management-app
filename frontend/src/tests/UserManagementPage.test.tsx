@@ -19,8 +19,6 @@ jest.mock('../components/ui/card', () => ({
 }));
 
 describe('UserManagementPage', () => {
-  const mockToken = 'mock-token';
-
   beforeEach(() => {
     jest.clearAllMocks();
     (useOrganization as jest.Mock).mockReturnValue({
@@ -59,7 +57,7 @@ describe('UserManagementPage', () => {
       ],
     });
 
-    render(<UserManagementPage token={mockToken} />);
+    render(<UserManagementPage />);
 
     expect(screen.getByText('Team Members')).toBeInTheDocument();
     expect(screen.getByText(/Members in Test Org/i)).toBeInTheDocument();
@@ -85,7 +83,7 @@ describe('UserManagementPage', () => {
     expect(within(rows[2]).getByText('member')).toBeInTheDocument();
     expect(within(rows[2]).getByText('Pending')).toBeInTheDocument();
 
-    expect(mockGetMemberships).toHaveBeenCalledWith({ limit: 50 });
+    expect(mockGetMemberships).toHaveBeenCalledWith({ pageSize: 50 });
   });
 
   test('shows loading state when organization is not loaded', () => {
@@ -94,14 +92,14 @@ describe('UserManagementPage', () => {
       isLoaded: false,
     });
 
-    render(<UserManagementPage token={mockToken} />);
+    render(<UserManagementPage />);
     expect(screen.getByText('Loading organization...')).toBeInTheDocument();
   });
 
   test('shows empty state when no members found', async () => {
     mockGetMemberships.mockResolvedValue({ data: [] });
 
-    render(<UserManagementPage token={mockToken} />);
+    render(<UserManagementPage />);
 
     await waitFor(() => {
       expect(screen.getByText('No members found in this organization.')).toBeInTheDocument();

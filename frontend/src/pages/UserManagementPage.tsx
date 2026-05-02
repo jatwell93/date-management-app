@@ -13,11 +13,7 @@ interface MemberRecord {
   } | null;
 }
 
-interface UserManagementPageProps {
-  token: string | null;
-}
-
-export function UserManagementPage({ token }: UserManagementPageProps) {
+export function UserManagementPage() {
   const { organization, isLoaded } = useOrganization();
   const [members, setMembers] = useState<MemberRecord[]>([]);
   const [isFetchingMembers, setIsFetchingMembers] = useState(false);
@@ -26,7 +22,7 @@ export function UserManagementPage({ token }: UserManagementPageProps) {
     if (!organization) return;
     setIsFetchingMembers(true);
     organization
-      .getMemberships({ limit: 50 })
+      .getMemberships({ pageSize: 50 })
       .then((result) => {
         setMembers(result.data as MemberRecord[]);
       })

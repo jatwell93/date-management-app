@@ -76,7 +76,6 @@ function AppContent({
     isLoading: isAuthLoading,
     isLoggedIn: hasSession,
     isFullySignedIn,
-    hasOrganization,
     userId,
     userName,
     userRole,
@@ -752,13 +751,7 @@ function AppContent({
                     <>
                       <Route
                         path="/user-management"
-                        element={
-                          isLoggedIn ? (
-                            <UserManagementPage token={token} />
-                          ) : (
-                            <Navigate to="/login" />
-                          )
-                        }
+                        element={isLoggedIn ? <UserManagementPage /> : <Navigate to="/login" />}
                       />
                       <Route
                         path="/store-area-management"
@@ -913,9 +906,7 @@ function AppContent({
                   <>
                     <Route
                       path="/user-management"
-                      element={
-                        isLoggedIn ? <UserManagementPage token={token} /> : <Navigate to="/login" />
-                      }
+                      element={isLoggedIn ? <UserManagementPage /> : <Navigate to="/login" />}
                     />
                     <Route
                       path="/store-area-management"

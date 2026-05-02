@@ -39,7 +39,7 @@ interface StepProps {
  * - Render Clerk's CreateOrganization component
  * - Redirect to step 1 on completion
  */
-function Step0({ onNext }: StepProps) {
+function Step0(_props: StepProps) {
   return (
     <Card>
       <CardHeader>
@@ -186,7 +186,7 @@ function Step1({ onNext }: StepProps) {
  * - 3-slide carousel explaining Dashboard > Catalog > Scans
  * - Final button redirects to /scan
  */
-function Step2({ isLastStep }: StepProps) {
+function Step2(_props: StepProps) {
   const navigate = useNavigate();
   const [slideIndex, setSlideIndex] = useState(0);
 
