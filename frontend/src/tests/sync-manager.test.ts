@@ -55,14 +55,14 @@ describe('synchronizeOfflineData', () => {
     ]);
     (offlineStorage.getItem as jest.Mock)
       .mockResolvedValueOnce({
-        product_id: 1,
-        expiry_date: '2026-12-31',
-        location_id: 1,
+        productId: 1,
+        expiryDate: '2026-12-31',
+        locationId: 1,
       })
       .mockResolvedValueOnce({
-        product_id: 2,
-        expiry_date: '2026-11-30',
-        location_id: 2,
+        productId: 2,
+        expiryDate: '2026-11-30',
+        locationId: 2,
       });
 
     await synchronizeOfflineData('mock_token');
@@ -77,18 +77,18 @@ describe('synchronizeOfflineData', () => {
     expect(apiService.post).toHaveBeenCalledWith(
       '/inventory-items',
       {
-        product_id: 1,
-        expiry_date: '2026-12-31',
-        location_id: 1,
+        productId: 1,
+        expiryDate: '2026-12-31',
+        locationId: 1,
       },
       'mock_token',
     );
     expect(apiService.post).toHaveBeenCalledWith(
       '/inventory-items',
       {
-        product_id: 2,
-        expiry_date: '2026-11-30',
-        location_id: 2,
+        productId: 2,
+        expiryDate: '2026-11-30',
+        locationId: 2,
       },
       'mock_token',
     );
@@ -100,9 +100,9 @@ describe('synchronizeOfflineData', () => {
   it('should handle failed synchronization gracefully', async () => {
     (offlineStorage.keys as jest.Mock).mockResolvedValueOnce(['pending-inventory-item-1']);
     (offlineStorage.getItem as jest.Mock).mockResolvedValueOnce({
-      product_id: 1,
-      expiry_date: '2026-12-31',
-      location_id: 1,
+      productId: 1,
+      expiryDate: '2026-12-31',
+      locationId: 1,
     });
     (apiService.post as jest.Mock).mockRejectedValueOnce(new Error('Failed to add item'));
 

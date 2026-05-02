@@ -39,6 +39,7 @@ yarn-error.log*
 backend/eslint-report.json
 .tmp-eslint-report.json
 backend/.tmp-eslint-report.json
+eslint-out.txt
 
 # OS generated files
 .DS_Store

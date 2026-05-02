@@ -52,22 +52,22 @@ interface ProductDetails {
 
 interface InventoryItem {
   id: number;
-  product_id: number;
-  expiry_date: string;
-  location_id: number;
+  productId: number;
+  expiryDate: string;
+  locationId: number;
   status: string;
-  created_at: string;
-  updated_at: string;
+  createdAt: string;
+  updatedAt: string;
 }
 
 interface RecentInventoryItem {
   id: number;
-  product_id: number;
-  expiry_date: string;
-  location_id: number;
+  productId: number;
+  expiryDate: string;
+  locationId: number;
   status: string;
-  created_at: string;
-  updated_at: string;
+  createdAt: string;
+  updatedAt: string;
 }
 
 export function ScanPage({ token }: ScanPageProps) {
@@ -573,13 +573,13 @@ export function ScanPage({ token }: ScanPageProps) {
                     <div>
                       <p className="text-foreground">
                         <span className="font-medium">Expiry Date:</span>{' '}
-                        {new Date(entry.expiry_date).toLocaleDateString('en-AU', {
+                        {new Date(entry.expiryDate).toLocaleDateString('en-AU', {
                           timeZone: 'Australia/Sydney',
                         })}
                       </p>
                       <p className="text-muted-foreground text-sm">
                         Added:{' '}
-                        {new Date(entry.created_at).toLocaleString('en-AU', {
+                        {new Date(entry.createdAt).toLocaleString('en-AU', {
                           timeZone: 'Australia/Sydney',
                         })}
                       </p>
