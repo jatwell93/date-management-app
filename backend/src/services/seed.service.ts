@@ -28,8 +28,14 @@ export class SeedService {
 
         const areaResults = await Promise.all(
           areas.map(async (area) => {
-            const existing = await tx.storeArea.findFirst({
-              where: { organizationId, name: area.name, subDepartment: area.subDepartment },
+            const existing = await tx.storeArea.findUnique({
+              where: {
+                organizationId_name_subDepartment: {
+                  organizationId,
+                  name: area.name,
+                  subDepartment: area.subDepartment,
+                },
+              },
             });
             if (existing) return { record: existing, created: false };
             const record = await tx.storeArea.create({
@@ -106,8 +112,8 @@ export class SeedService {
         let inventoryItemsCreatedCount = 0;
 
         for (const p of products) {
-          const existingProduct = await tx.product.findFirst({
-            where: { organizationId, sku: p.sku },
+          const existingProduct = await tx.product.findUnique({
+            where: { organizationId_sku: { organizationId, sku: p.sku } },
           });
 
           let product;
