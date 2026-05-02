@@ -57,9 +57,7 @@ export const CSVUploadPage: React.FC<{
   const rawReturnUrl = searchParams.get('return');
   // Only allow safe in-app paths: must start with a single '/' and must not contain a protocol or '//'
   const returnUrl =
-    rawReturnUrl &&
-    /^\/[^/]/.test(rawReturnUrl) &&
-    !rawReturnUrl.includes('://')
+    rawReturnUrl && /^\/[^/]/.test(rawReturnUrl) && !rawReturnUrl.includes('://')
       ? rawReturnUrl
       : null;
 

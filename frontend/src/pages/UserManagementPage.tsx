@@ -80,9 +80,7 @@ export function UserManagementPage({ token }: UserManagementPageProps) {
                           {membership.publicUserData?.firstName}{' '}
                           {membership.publicUserData?.lastName}
                         </td>
-                        <td className="py-2 px-4">
-                          {membership.publicUserData?.identifier}
-                        </td>
+                        <td className="py-2 px-4">{membership.publicUserData?.identifier}</td>
                         <td className="py-2 px-4 capitalize">{membership.role}</td>
                         <td className="py-2 px-4 capitalize">
                           {membership.createdAt ? 'Active' : 'Pending'}

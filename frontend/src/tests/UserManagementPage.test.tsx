@@ -71,7 +71,7 @@ describe('UserManagementPage', () => {
 
     const table = screen.getByRole('table');
     const rows = within(table).getAllByRole('row');
-    
+
     // Header + 2 data rows
     expect(rows).toHaveLength(3);
 
