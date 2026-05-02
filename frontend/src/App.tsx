@@ -8,6 +8,7 @@ import {
   useLocation,
   useNavigate,
 } from 'react-router-dom';
+import * as Sentry from '@sentry/react';
 import { ClerkSignInPage, ClerkSignUpPage } from './components/ClerkAuthPage';
 import { OnboardingPage } from './pages/OnboardingPage';
 import { SettingsPage } from './pages/SettingsPage';
@@ -85,6 +86,25 @@ function AppContent({
   } = useAuthContext();
   const isLoggedIn = hasSession && isFullySignedIn;
   const { isBootstrapped, isBootstrapping, bootstrapError, bootstrapResult } = useOrgBootstrap();
+
+  // Task 1.1: Debug role propagation timing
+  useEffect(() => {
+    let timeoutId: NodeJS.Timeout;
+    if (isBootstrapping) {
+      timeoutId = setTimeout(() => {
+        if (isBootstrapping) {
+          Sentry.captureMessage(
+            '[Bootstrap] Organization bootstrap is taking longer than 2 seconds...',
+            'warning',
+          );
+        }
+      }, 2000);
+    }
+    return () => {
+      if (timeoutId) clearTimeout(timeoutId);
+    };
+  }, [isBootstrapping]);
+
   const isCurrentBootstrapResult = bootstrapResult?.userId === userId;
   const hasCurrentUserBootstrapRole = isCurrentBootstrapResult && !!bootstrapResult?.role;
   const effectiveUserRole = hasCurrentUserBootstrapRole ? bootstrapResult.role : userRole;
@@ -599,31 +619,11 @@ function AppContent({
                 />
                 <Route
                   path="/onboarding"
-                  element={
-                    isLoggedIn ? (
-                      hasOrganization ? (
-                        <Navigate to="/scan" />
-                      ) : (
-                        <OnboardingPage />
-                      )
-                    ) : (
-                      <Navigate to="/login" />
-                    )
-                  }
+                  element={isLoggedIn ? <OnboardingPage /> : <Navigate to="/login" />}
                 />
                 <Route
                   path="/onboarding/*"
-                  element={
-                    isLoggedIn ? (
-                      hasOrganization ? (
-                        <Navigate to="/scan" />
-                      ) : (
-                        <OnboardingPage />
-                      )
-                    ) : (
-                      <Navigate to="/login" />
-                    )
-                  }
+                  element={isLoggedIn ? <OnboardingPage /> : <Navigate to="/login" />}
                 />
                 <Route
                   path="/settings"
@@ -793,32 +793,13 @@ function AppContent({
               />
               <Route
                 path="/onboarding"
-                element={
-                  isLoggedIn ? (
-                    hasOrganization ? (
-                      <Navigate to="/scan" />
-                    ) : (
-                      <OnboardingPage />
-                    )
-                  ) : (
-                    <Navigate to="/login" />
-                  )
-                }
+                element={isLoggedIn ? <OnboardingPage /> : <Navigate to="/login" />}
               />
               <Route
                 path="/onboarding/*"
-                element={
-                  isLoggedIn ? (
-                    hasOrganization ? (
-                      <Navigate to="/scan" />
-                    ) : (
-                      <OnboardingPage />
-                    )
-                  ) : (
-                    <Navigate to="/login" />
-                  )
-                }
+                element={isLoggedIn ? <OnboardingPage /> : <Navigate to="/login" />}
               />
+
               <Route
                 path="/settings"
                 element={
@@ -910,11 +891,7 @@ function AppContent({
               <Route
                 path="/subscription"
                 element={
-                  isLoggedIn ? (
-                    <SubscriptionSettingsPage token={token} />
-                  ) : (
-                    <Navigate to="/login" />
-                  )
+                  isLoggedIn ? <SubscriptionSettingsPage token={token} /> : <Navigate to="/login" />
                 }
               />
               {effectiveUserRole &&

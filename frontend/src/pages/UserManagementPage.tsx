@@ -15,7 +15,7 @@ export function UserManagementPage({ token }: UserManagementPageProps) {
         <h1 className="text-2xl font-bold text-gray-900">Team Members</h1>
         <p className="mt-1 text-gray-600">Manage your organization members and their roles.</p>
       </div>
-      
+
       {!organization ? (
         <Card>
           <CardContent className="pt-6">
@@ -46,11 +46,14 @@ export function UserManagementPage({ token }: UserManagementPageProps) {
                     {organization.memberships.map((membership) => (
                       <tr key={membership.id} className="border-b hover:bg-gray-50">
                         <td className="py-2 px-4">
-                          {membership.publicUserData?.firstName} {membership.publicUserData?.lastName}
+                          {membership.publicUserData?.firstName}{' '}
+                          {membership.publicUserData?.lastName}
                         </td>
                         <td className="py-2 px-4">{membership.publicUserData?.email}</td>
                         <td className="py-2 px-4 capitalize">{membership.role}</td>
-                        <td className="py-2 px-4 capitalize">{membership.createdAt ? 'Active' : 'Pending'}</td>
+                        <td className="py-2 px-4 capitalize">
+                          {membership.createdAt ? 'Active' : 'Pending'}
+                        </td>
                       </tr>
                     ))}
                   </tbody>

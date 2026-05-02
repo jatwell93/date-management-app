@@ -1,4 +1,5 @@
 import React, { useState } from 'react';
+import { useSearchParams, useNavigate } from 'react-router-dom';
 import * as Sentry from '@sentry/react';
 import * as XLSX from 'xlsx';
 import {
@@ -51,6 +52,10 @@ export const CSVUploadPage: React.FC<{
   token: string | null;
   defaultImportType?: UploadImportType;
 }> = ({ token, defaultImportType = 'product-catalog' }) => {
+  const [searchParams] = useSearchParams();
+  const navigate = useNavigate();
+  const returnUrl = searchParams.get('return');
+
   const fileInputId = 'csv-upload-file-input';
   const [importType, setImportType] = useState<UploadImportType>(defaultImportType);
   const [selectedFile, setSelectedFile] = useState<File | null>(null);
@@ -1023,6 +1028,17 @@ export const CSVUploadPage: React.FC<{
                     </li>
                   ))}
                 </ul>
+              </div>
+            )}
+
+            {uploadResult.success && returnUrl && (
+              <div className="mt-6 pt-4 border-t border-inventory-success-200">
+                <button
+                  onClick={() => navigate(returnUrl)}
+                  className="w-full py-2 bg-inventory-success-600 text-white rounded-md font-semibold hover:bg-inventory-success-700 transition"
+                >
+                  Continue to next step
+                </button>
               </div>
             )}
           </div>

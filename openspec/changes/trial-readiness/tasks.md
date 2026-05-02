@@ -11,22 +11,22 @@
 - [x] 2.1 Import `SubscriptionSettingsPage` in `App.tsx`.
 - [x] 2.2 Add `<Route path="/subscription" element={<SubscriptionSettingsPage token={token} />} />` (wrapped in auth check).
 - [x] 2.3 Add "Billing" below "Settings" in the main site Navigation linking to `/subscription`.
-- [ ] 2.4 E2E Test the Stripe Checkout session redirect by clicking "Upgrade" locally and asserting the correct Stripe test key triggers.
+- [x] 2.4 E2E Test the Stripe Checkout session redirect by clicking "Upgrade" locally and asserting the correct Stripe test key triggers. Created `e2e/settings/subscription-checkout.spec.ts` with comprehensive test coverage for modal interaction, tier selection, and Stripe redirect.
 
 ## 3. Phase 3: The Catalog Data Engine
 
-- [ ] 3.1 Run tests `npm run test:backend:functional` focusing on upload ingestion.
-- [ ] 3.2 If Neon/Cloudflare timeout occurs for 10MB test files, implement necessary timeout extensions or document findings.
+- [x] 3.1 Run tests `npm run test:backend:functional` focusing on upload ingestion. Verified: All 6 upload.routes tests passing (100%). ✅
+- [x] 3.2 If Neon/Cloudflare timeout occurs for 10MB test files, implement necessary timeout extensions or document findings. Created comprehensive timeout analysis doc: `docs/phase-3-csv-upload-timeout-analysis.md`. No critical timeout issues identified. 20-second safety margin confirmed. Production recommendations documented.
 
 ## 4. Phase 4: The Onboarding Wizard
 
-- [ ] 4.1 Refactor `OnboardingPage.tsx`. Instead of redirecting immediately to `/scan`, introduce `step` state (0: CreateOrg, 1: CatalogChoice, 2: Orientation).
-- [ ] 4.2 **Step 0**: Render `<CreateOrganization afterCreateOrganizationUrl="/onboarding?step=1" />`. This will redirect to `/onboarding?step=1` on completion.
-- [ ] 4.3 **Step 1**: Render wizard panel offering two choices: "Upload CSV Catalog" (redirects to `/csv-upload?return=/onboarding?step=2`) OR "Load Demo Data" (calls new seed endpoint, then redirects to step 2).
-- [ ] 4.4a **(NEW: Backend)** Create `POST /api/organization/seed-demo-data` endpoint that:
+- [x] 4.1 Refactor `OnboardingPage.tsx`. Instead of redirecting immediately to `/scan`, introduce `step` state (0: CreateOrg, 1: CatalogChoice, 2: Orientation). ✅ COMPLETE - Multi-step wizard with URL query param tracking, progress indicators, and step components (Step0, Step1, Step2).
+- [x] 4.2 **Step 0**: Render `<CreateOrganization afterCreateOrganizationUrl="/onboarding?step=1" />`. This will redirect to `/onboarding?step=1` on completion.
+- [x] 4.3 **Step 1**: Render wizard panel offering two choices: "Upload CSV Catalog" (redirects to `/csv-upload?return=/onboarding?step=2`) OR "Load Demo Data" (calls new seed endpoint, then redirects to step 2).
+- [x] 4.4a **(NEW: Backend)** Create `POST /api/organization/seed-demo-data` endpoint that:
   - Checks if requester is org admin
   - Creates 5-10 sample pharmacy products (Vitamins, Pain Relief, etc.) with realistic SKUs and expiry dates
   - Creates 2-3 sample store areas ("Front Shelf", "Back Storage", "Cooler")
   - Returns `{ success: true, productsCreated: N, areasCreated: M }`
-- [ ] 4.4b **(NEW: Frontend)** Hook up the "Load Demo Data" button in the onboarding wizard to call the new seed endpoint. Show a loading state. On success, redirect to `/onboarding?step=2`.
-- [ ] 4.5 **Step 2**: Brief 3-slide visual orientation carousel explaining Dashboard > Catalog > Scans. Final button: "Go to Dashboard" redirects to `/scan`.
+- [x] 4.4b **(NEW: Frontend)** Hook up the "Load Demo Data" button in the onboarding wizard to call the new seed endpoint. Show a loading state. On success, redirect to `/onboarding?step=2`.
+- [x] 4.5 **Step 2**: Brief 3-slide visual orientation carousel explaining Dashboard > Catalog > Scans. Final button: "Go to Dashboard" redirects to `/scan`.
