@@ -2,8 +2,10 @@ import { PrismaClient } from '@prisma/client';
 import { Logger } from '../utils/logger';
 import { getDefaultDatabaseClient } from '../database/database-factory';
 import { SubscriptionService } from './subscription.service';
+import { AnalyticsRepository } from '../repositories/analytics.repository';
 import * as Sentry from '@sentry/node';
 import { ALERT_THRESHOLDS, TIER_PRICES, validateAlertThresholds } from '../types/subscription';
+import { injectable, singleton, inject } from 'tsyringe';
 
 export interface SaasMetrics {
   trialConversionRate: number;
@@ -42,18 +44,23 @@ export interface SaasAlertThresholds {
  * SaaS Metrics Service
  * Calculates and tracks business metrics for the SaaS monetization model
  */
+@injectable()
+@singleton()
 export class SaasMetricsService {
   private prisma: PrismaClient;
   private subscriptionService: SubscriptionService;
+  private analyticsRepo: AnalyticsRepository;
   private alertThresholds: SaasAlertThresholds;
 
   constructor(
-    prismaClient?: PrismaClient,
+    @inject(PrismaClient) prismaClient?: PrismaClient,
     subscriptionService?: SubscriptionService,
+    @inject(AnalyticsRepository) analyticsRepo?: AnalyticsRepository,
     customThresholds?: Partial<typeof ALERT_THRESHOLDS>,
   ) {
     this.prisma = prismaClient ?? getDefaultDatabaseClient();
     this.subscriptionService = subscriptionService ?? new SubscriptionService(this.prisma);
+    this.analyticsRepo = analyticsRepo ?? new AnalyticsRepository(this.prisma);
 
     // Validate and set alert thresholds
     this.alertThresholds = validateAlertThresholds(customThresholds || {});

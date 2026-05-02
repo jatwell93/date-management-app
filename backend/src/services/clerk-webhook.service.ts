@@ -12,15 +12,15 @@
 
 import { Response } from 'express';
 import { PrismaClient } from '@prisma/client';
-import { envConfig } from '../config/environment';
 import { getDefaultDatabaseClient } from '../database/database-factory';
 import { SubscriptionService } from './subscription.service';
-import { Webhook } from 'svix';
 import * as Sentry from '@sentry/node';
 import { ApplicationMonitoringService } from './application.monitoring.service';
 import { ConflictError } from '../errors';
 import { isPrismaErrorCode, PRISMA_ERROR_CODES } from '../utils/prisma-error';
 import { ROLES, normalizeRole } from '../constants/roles';
+import { ClerkWebhookSignatureService } from './clerk-webhook-signature.service';
+import { injectable, inject } from 'tsyringe';
 
 // Simple logging utility
 const log = {
@@ -80,42 +80,30 @@ interface ClerkMembershipPayload {
   role?: string;
 }
 
+@injectable()
 export class ClerkWebhookService {
   private prisma: PrismaClient;
   private subscriptionService: SubscriptionService;
   private monitor: ApplicationMonitoringService;
+  private signatureVerifier: ClerkWebhookSignatureService;
 
-  constructor(prismaClient?: PrismaClient, subscriptionService?: SubscriptionService) {
+  constructor(
+    @inject(PrismaClient) prismaClient?: PrismaClient,
+    subscriptionService?: SubscriptionService,
+    signatureVerifier?: ClerkWebhookSignatureService,
+  ) {
     this.prisma = prismaClient ?? getDefaultDatabaseClient();
     this.subscriptionService = subscriptionService ?? new SubscriptionService(this.prisma);
     this.monitor = ApplicationMonitoringService.getInstance();
+    this.signatureVerifier =
+      signatureVerifier ?? new ClerkWebhookSignatureService(process.env.CLERK_WEBHOOK_SECRET);
   }
 
   /**
    * Verify Clerk webhook signature using Svix
    */
   verifySignature(payload: Buffer, headers: Record<string, string>): unknown {
-    if (!envConfig.CLERK_WEBHOOK_SECRET) {
-      throw new Error('CLERK_WEBHOOK_SECRET is not configured');
-    }
-
-    const wh = new Webhook(envConfig.CLERK_WEBHOOK_SECRET);
-
-    // Get the svix-specific headers
-    const svixId = headers['svix-id'];
-    const svixTimestamp = headers['svix-timestamp'];
-    const svixSignature = headers['svix-signature'];
-
-    if (!svixId || !svixTimestamp || !svixSignature) {
-      throw new Error('Missing required Svix headers');
-    }
-
-    // Verify the webhook
-    return wh.verify(payload.toString(), {
-      'svix-id': svixId,
-      'svix-timestamp': svixTimestamp,
-      'svix-signature': svixSignature,
-    });
+    return this.signatureVerifier.verifySignature(payload, headers);
   }
 
   /**

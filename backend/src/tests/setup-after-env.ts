@@ -1,7 +1,12 @@
+// Enable decorators for dependency injection
+// Must be imported before any DI operations
+import 'reflect-metadata';
+
 import { PrismaClient } from '@prisma/client';
 import { AnalyticsService } from '../services/analytics.service';
 import { ApplicationMonitoringService } from '../services/application.monitoring.service';
 import { DatabaseMonitoringService } from '../services/database.monitoring.service';
+import { resetDiContainer } from '../di';
 import { resetOrgCounter } from './helpers/test-factories';
 
 const prisma = new PrismaClient();
@@ -246,6 +251,7 @@ beforeEach(async () => {
 
 afterEach(() => {
   stopBackgroundServices();
+  resetDiContainer();
 });
 
 afterAll(async () => {

@@ -2,6 +2,7 @@ import { Logger } from '../utils/logger';
 import { Request, Response, NextFunction } from 'express';
 import { EventEmitter } from 'events';
 import { SaasMetricsService, SaasMetrics } from './saas-metrics.service';
+import { injectable, singleton, inject } from 'tsyringe';
 
 // Define application alert types
 export enum ApplicationAlertType {
@@ -86,6 +87,8 @@ export interface ApplicationMonitoringConfig {
  * Application Monitoring Service
  * Provides monitoring, metrics collection, and alerting for application performance
  */
+@injectable()
+@singleton()
 export class ApplicationMonitoringService extends EventEmitter {
   private static instance: ApplicationMonitoringService;
   private config: ApplicationMonitoringConfig;
@@ -130,7 +133,7 @@ export class ApplicationMonitoringService extends EventEmitter {
   // Store request start times for performance tracking
   private requestStartTimes = new Map<string, number>();
 
-  private constructor() {
+  constructor(@inject(SaasMetricsService) saasMetricsService?: SaasMetricsService) {
     super();
     // Set default configuration
     this.config = {
@@ -156,7 +159,7 @@ export class ApplicationMonitoringService extends EventEmitter {
     };
 
     // Initialize SaaS metrics service
-    this.saasMetricsService = new SaasMetricsService();
+    this.saasMetricsService = saasMetricsService ?? new SaasMetricsService();
 
     // Note: Graceful shutdown handlers moved to application bootstrap (src/index.ts)
     // to ensure proper separation of concerns and prevent monitoring from controlling

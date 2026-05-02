@@ -13,6 +13,7 @@ import { envConfig } from '../config/environment';
 import { getDefaultDatabaseClient } from '../database/database-factory';
 import { Logger } from '../utils/logger';
 import * as Sentry from '@sentry/node';
+import { injectable, inject } from 'tsyringe';
 
 const TEMPLATE_IDS = {
   trialEndingSoon: 'd-916668c6137341c292fad8cf219cb0ee',
@@ -40,10 +41,11 @@ function toTemplateRecord(value: unknown): Record<string, unknown> | undefined {
   return undefined;
 }
 
+@injectable()
 export class EmailService {
   private prisma: PrismaClient;
 
-  constructor(prismaClient?: PrismaClient) {
+  constructor(@inject(PrismaClient) prismaClient?: PrismaClient) {
     this.prisma = prismaClient ?? getDefaultDatabaseClient();
 
     if (envConfig.SENDGRID_API_KEY) {

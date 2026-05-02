@@ -18,32 +18,21 @@ import { envConfig } from '../config/environment';
 import { getDefaultDatabaseClient } from '../database/database-factory';
 import { SubscriptionService } from './subscription.service';
 import { EmailService } from './email.service';
+import { StripeWebhookSignatureService } from './stripe-webhook-signature.service';
 import { TIER_LIMITS, TierLevel, SubscriptionStatus } from '../types/subscription';
 import { NotFoundError } from '../errors';
 import * as Sentry from '@sentry/node';
 import { ApplicationMonitoringService } from './application.monitoring.service';
 import { invalidateSubscriptionCache } from '../middleware/auth.middleware';
-import { DEFAULT_LIMITS } from '../constants/default-limits';
+import { getTierLimits, TierLimits } from './webhook-subscription.helpers';
+import { dispatchStripeWebhookEvent } from './webhook-event-dispatcher';
+import { injectable, inject } from 'tsyringe';
 
-interface TierLimits {
-  max_skus: number | null;
-  max_users: number | null;
-  max_inventory_items: number | null;
-}
+import { DEFAULT_LIMITS } from '../constants/default-limits';
 
 interface ErrorWithCode {
   code?: string;
 }
-
-const getTierLimits = (tierLevel: TierLevel): TierLimits => {
-  const limits = TIER_LIMITS[tierLevel];
-
-  return {
-    max_skus: limits.max_skus ?? null,
-    max_users: limits.max_users ?? null,
-    max_inventory_items: limits.max_inventory_items ?? null,
-  };
-};
 
 // Simple logging utility
 const log = {
@@ -58,20 +47,29 @@ const log = {
   },
 };
 
+@injectable()
 export class WebhookService {
   private stripe: Stripe | null;
   private prisma: PrismaClient;
   private subscriptionService: SubscriptionService;
   private emailService: EmailService;
+  private signatureVerifier: StripeWebhookSignatureService;
 
   constructor(
-    prismaClient?: PrismaClient,
+    @inject(PrismaClient) prismaClient?: PrismaClient,
     subscriptionService?: SubscriptionService,
     emailService?: EmailService,
+    signatureVerifier?: StripeWebhookSignatureService,
   ) {
     this.prisma = prismaClient ?? getDefaultDatabaseClient();
     this.subscriptionService = subscriptionService ?? new SubscriptionService(this.prisma);
     this.emailService = emailService ?? new EmailService(this.prisma);
+    this.signatureVerifier =
+      signatureVerifier ??
+      new StripeWebhookSignatureService(
+        envConfig.STRIPE_SECRET_KEY,
+        envConfig.STRIPE_WEBHOOK_SECRET,
+      );
 
     if (envConfig.STRIPE_SECRET_KEY) {
       this.stripe = new Stripe(envConfig.STRIPE_SECRET_KEY, {
@@ -92,30 +90,7 @@ export class WebhookService {
    * Stripe signature is computed over the raw request body
    */
   verifySignature(rawBody: Buffer, signature: string): Stripe.Event {
-    if (!this.stripe || !envConfig.STRIPE_SECRET_KEY) {
-      throw new Error('STRIPE_SECRET_KEY environment variable is required');
-    }
-
-    if (!envConfig.STRIPE_WEBHOOK_SECRET) {
-      throw new Error('STRIPE_WEBHOOK_SECRET environment variable is required');
-    }
-
-    try {
-      const event = this.stripe.webhooks.constructEvent(
-        rawBody,
-        signature,
-        envConfig.STRIPE_WEBHOOK_SECRET,
-      );
-      return event;
-    } catch (error) {
-      const err = error as Error;
-      log.error('Stripe signature verification failed', {
-        error: err.message,
-        // CWE-532: Do not log raw signature - it's a secret credential
-        signatureStatus: 'verification_failed',
-      });
-      throw new Error(`Webhook Error: ${err.message}`);
-    }
+    return this.signatureVerifier.verifySignature(rawBody, signature);
   }
 
   /**
@@ -171,58 +146,19 @@ export class WebhookService {
     });
 
     try {
-      switch (event.type) {
-        case 'customer.subscription.created': {
-          const subscription = event.data.object as Stripe.Subscription;
-          await this.handleSubscriptionCreated(subscription);
-          break;
-        }
-
-        case 'customer.subscription.updated': {
-          const subscription = event.data.object as Stripe.Subscription;
-          await this.handleSubscriptionUpdated(subscription);
-          break;
-        }
-
-        case 'customer.subscription.deleted': {
-          const subscription = event.data.object as Stripe.Subscription;
-          await this.handleSubscriptionDeleted(subscription);
-          break;
-        }
-
-        case 'checkout.session.completed': {
-          const session = event.data.object as Stripe.Checkout.Session;
-          await this.handleCheckoutSessionCompleted(session);
-          break;
-        }
-
-        case 'invoice.payment_failed': {
-          const invoice = event.data.object as Stripe.Invoice;
-          await this.handleInvoicePaymentFailed(invoice);
-          break;
-        }
-
-        case 'customer.subscription.trial_will_end': {
-          const subscription = event.data.object as Stripe.Subscription;
-          await this.handleTrialWillEnd(subscription);
-          break;
-        }
-
-        case 'payment_intent.succeeded': {
-          const paymentIntent = event.data.object as Stripe.PaymentIntent;
-          await this.handlePaymentIntentSucceeded(paymentIntent);
-          break;
-        }
-
-        case 'payment_intent.payment_failed': {
-          const paymentIntent = event.data.object as Stripe.PaymentIntent;
-          await this.handlePaymentIntentFailed(paymentIntent);
-          break;
-        }
-
-        default:
-          log.info(`Unhandled webhook event type: ${event.type}`);
-      }
+      await dispatchStripeWebhookEvent(event, {
+        handleSubscriptionCreated: this.handleSubscriptionCreated.bind(this),
+        handleSubscriptionUpdated: this.handleSubscriptionUpdated.bind(this),
+        handleSubscriptionDeleted: this.handleSubscriptionDeleted.bind(this),
+        handleCheckoutSessionCompleted: this.handleCheckoutSessionCompleted.bind(this),
+        handleInvoicePaymentFailed: this.handleInvoicePaymentFailed.bind(this),
+        handleTrialWillEnd: this.handleTrialWillEnd.bind(this),
+        handlePaymentIntentSucceeded: this.handlePaymentIntentSucceeded.bind(this),
+        handlePaymentIntentFailed: this.handlePaymentIntentFailed.bind(this),
+        handleUnhandledEvent: (eventType: string) => {
+          log.info(`Unhandled webhook event type: ${eventType}`);
+        },
+      });
     } catch (error) {
       // Report webhook processing error with context
       this.reportWebhookError(error as Error, {

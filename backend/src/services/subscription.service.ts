@@ -16,16 +16,24 @@ import { SubscriptionTier } from '../models/subscription-tier.model';
 import { BillingCycle, SubscriptionStatus, TierLevel, TIER_LIMITS } from '../types/subscription';
 import { InternalError, NotFoundError } from '../errors';
 import * as Sentry from '@sentry/node';
+import { hasActiveStripeAccessWindow } from './subscription-access.helpers';
+import {
+  getPriceIdForTier,
+  mapStripeSubscriptionStatusToLocal,
+} from './subscription-billing.helpers';
+import { buildTrialSubscriptionSetup } from './subscription-trial.helpers';
+import { injectable, inject } from 'tsyringe';
 
 function getErrorMessage(error: unknown): string {
   return error instanceof Error ? error.message : String(error);
 }
 
+@injectable()
 export class SubscriptionService {
   private prisma: PrismaClient;
   private stripe: Stripe;
 
-  constructor(prismaClient?: PrismaClient, stripeClient?: Stripe) {
+  constructor(@inject(PrismaClient) prismaClient?: PrismaClient, stripeClient?: Stripe) {
     this.prisma = prismaClient ?? getDefaultDatabaseClient();
 
     if (stripeClient) {
@@ -83,17 +91,7 @@ export class SubscriptionService {
         subscriptionTier.stripeSubscriptionId,
       );
 
-      if (stripeSubscription.status !== 'canceled') {
-        return true;
-      }
-
-      const periodEnd = stripeSubscription.current_period_end
-        ? new Date(stripeSubscription.current_period_end * 1000)
-        : null;
-
-      return Boolean(
-        stripeSubscription.cancel_at_period_end && periodEnd && periodEnd.getTime() > Date.now(),
-      );
+      return hasActiveStripeAccessWindow(stripeSubscription);
     } catch (error) {
       Logger.warn('Failed to verify Stripe access window', {
         organizationId: subscriptionTier.organizationId,
@@ -128,46 +126,30 @@ export class SubscriptionService {
       metadata: { organizationId },
     });
 
-    const trialEndDate = new Date();
-    trialEndDate.setUTCDate(trialEndDate.getUTCDate() + trialDays);
-    trialEndDate.setUTCHours(0, 0, 0, 0); // Expire at 00:00 UTC on day N
+    const trialSetup = buildTrialSubscriptionSetup(
+      organizationId,
+      stripeCustomer.id,
+      trialDays,
+      new Date(),
+    );
 
     await this.prisma.subscriptionTier.create({
-      data: {
-        organizationId,
-        tierLevel: 'professional' as TierLevel,
-        status: SubscriptionStatus.TRIALING,
-        stripeCustomerId: stripeCustomer.id,
-        trialStartedAt: new Date(),
-        trialEndDate,
-        billingCycle: BillingCycle.MONTHLY,
-      },
+      data: trialSetup.subscriptionTierData,
     });
 
-    // Initialize organization usage with Professional tier limits (16A.C.1)
-    const professionalLimits = TIER_LIMITS['professional'];
     await this.prisma.organizationUsage.create({
-      data: {
-        organizationId,
-        activeUsers: 1,
-        maxUsers: professionalLimits.max_users ?? 10,
-        totalSkus: 0,
-        maxSkus: professionalLimits.max_skus ?? 2000,
-        totalInventoryItems: 0,
-        maxInventoryItems: professionalLimits.max_inventory_items ?? 20000,
-        storageUsedBytes: 0,
-      },
+      data: trialSetup.organizationUsageData,
     });
 
     // Log trial_started event (16A.C.5)
     await this.logTrialEvent(organizationId, 'trial_started', {
       trialDays,
       tierLevel: 'professional',
-      trialEndDate: trialEndDate.toISOString(),
+      trialEndDate: trialSetup.trialEndDate.toISOString(),
     });
 
     Logger.info(
-      `Trial subscription created for organization ${organizationId}, ends ${trialEndDate.toISOString()}`,
+      `Trial subscription created for organization ${organizationId}, ends ${trialSetup.trialEndDate.toISOString()}`,
     );
   }
 
@@ -227,7 +209,7 @@ export class SubscriptionService {
           organizationId,
           tierLevel,
           stripeSubscriptionId: stripeSubscription.id,
-          status: this.mapStripeStatusToLocal(stripeSubscription.status),
+          status: mapStripeSubscriptionStatusToLocal(stripeSubscription.status),
           billingCycle,
           trialEndDate: stripeSubscription.trial_end
             ? new Date(stripeSubscription.trial_end * 1000)
@@ -326,7 +308,7 @@ export class SubscriptionService {
         where: { id: subscriptionTier.id },
         data: {
           tierLevel: newTierLevel,
-          status: this.mapStripeStatusToLocal(updatedSubscription.status),
+          status: mapStripeSubscriptionStatusToLocal(updatedSubscription.status),
         },
       });
 
@@ -378,7 +360,7 @@ export class SubscriptionService {
       const updated = await this.prisma.subscriptionTier.update({
         where: { id: subscriptionTier.id },
         data: {
-          status: this.mapStripeStatusToLocal(canceledSubscription.status),
+          status: mapStripeSubscriptionStatusToLocal(canceledSubscription.status),
         },
       });
 
@@ -429,7 +411,7 @@ export class SubscriptionService {
       const updated = await this.prisma.subscriptionTier.update({
         where: { id: subscriptionTier.id },
         data: {
-          status: this.mapStripeStatusToLocal(reactivatedSubscription.status),
+          status: mapStripeSubscriptionStatusToLocal(reactivatedSubscription.status),
         },
       });
 
@@ -483,7 +465,7 @@ export class SubscriptionService {
         where: { id: subscriptionTier.id },
         data: {
           tierLevel,
-          status: this.mapStripeStatusToLocal(stripeSubscription.status),
+          status: mapStripeSubscriptionStatusToLocal(stripeSubscription.status),
           trialEndDate: stripeSubscription.trial_end
             ? new Date(stripeSubscription.trial_end * 1000)
             : null,
@@ -525,29 +507,6 @@ export class SubscriptionService {
     }
 
     return tier;
-  }
-
-  /**
-   * Map Stripe subscription status to local SubscriptionStatus enum
-   */
-  private mapStripeStatusToLocal(
-    stripeStatus: Stripe.Subscription.Status | string,
-  ): SubscriptionStatus {
-    switch (stripeStatus) {
-      case 'active':
-        return SubscriptionStatus.ACTIVE;
-      case 'canceled':
-        return SubscriptionStatus.CANCELED;
-      case 'past_due':
-        return SubscriptionStatus.PAST_DUE;
-      case 'trialing':
-        return SubscriptionStatus.TRIALING;
-      case 'incomplete':
-      case 'incomplete_expired':
-      default:
-        // Map incomplete states to active (they may transition)
-        return SubscriptionStatus.ACTIVE;
-    }
   }
 
   // ========== Phase 5: Trial Reminder System ==========
@@ -886,7 +845,7 @@ export class SubscriptionService {
     }
 
     // Get the price ID based on tier and billing cycle
-    const priceId = this.getPriceIdForTier(trial.tierLevel as TierLevel, billingCycle);
+    const priceId = getPriceIdForTier(trial.tierLevel as TierLevel, billingCycle);
 
     try {
       // Create the subscription in Stripe
@@ -1002,29 +961,6 @@ export class SubscriptionService {
     }
 
     return results;
-  }
-
-  /**
-   * Get Stripe price ID for a given tier and billing cycle
-   */
-  private getPriceIdForTier(tierLevel: TierLevel, billingCycle: BillingCycle): string {
-    const prices: Record<string, { monthly: string; annual: string }> = {
-      professional: {
-        monthly: process.env.STRIPE_PROFESSIONAL_MONTHLY_PRICE_ID || 'price_professional_monthly',
-        annual: process.env.STRIPE_PROFESSIONAL_ANNUAL_PRICE_ID || 'price_professional_annual',
-      },
-      premium: {
-        monthly: process.env.STRIPE_PREMIUM_MONTHLY_PRICE_ID || 'price_premium_monthly',
-        annual: process.env.STRIPE_PREMIUM_ANNUAL_PRICE_ID || 'price_premium_annual',
-      },
-      concierge: {
-        monthly: process.env.STRIPE_CONCIERGE_MONTHLY_PRICE_ID || 'price_concierge_monthly',
-        annual: process.env.STRIPE_CONCIERGE_ANNUAL_PRICE_ID || 'price_concierge_annual',
-      },
-    };
-
-    const tierPrices = prices[tierLevel] || prices.professional;
-    return billingCycle === BillingCycle.ANNUAL ? tierPrices.annual : tierPrices.monthly;
   }
 
   /**
