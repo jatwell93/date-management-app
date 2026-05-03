@@ -7,6 +7,11 @@ import { injectable, inject } from 'tsyringe';
 
 import { InventoryRepository } from '../repositories/inventory.repository';
 import { ProductRepository } from '../repositories/product.repository';
+import {
+  calculateInventoryMarkdownPrice,
+  calculateInventoryMarkdownStatus,
+  INVENTORY_MARKDOWN_THRESHOLDS,
+} from './inventory-markdown.helpers';
 
 export interface CreateInventoryItemInput {
   productId: number;
@@ -25,11 +30,7 @@ export class InventoryService {
   private organizationId: string;
 
   // Markdown thresholds in days
-  private static readonly MARKDOWN_THRESHOLDS = {
-    markdown3: 7, // Within 1 week: cost price - 20%
-    markdown2: 14, // Within 2 weeks: cost price
-    markdown1: 30, // Within 1 month: cost price + 20%
-  } as const;
+  private static readonly MARKDOWN_THRESHOLDS = INVENTORY_MARKDOWN_THRESHOLDS;
 
   /**
    * Constructor with optional dependency injection
@@ -300,32 +301,7 @@ export class InventoryService {
   }
 
   private calculateMarkdownStatusInternal(expiryDate: string): InventoryStatus {
-    if (!expiryDate) {
-      return 'Normal';
-    }
-
-    const expiry = new Date(expiryDate);
-    if (Number.isNaN(expiry.getTime())) {
-      return 'Normal';
-    }
-
-    const now = new Date();
-    const daysDiff = Math.ceil((expiry.getTime() - now.getTime()) / (1000 * 60 * 60 * 24));
-
-    if (daysDiff <= 0) {
-      return 'Expired';
-    }
-    if (daysDiff <= InventoryService.MARKDOWN_THRESHOLDS.markdown3) {
-      return 'Markdown 3';
-    }
-    if (daysDiff <= InventoryService.MARKDOWN_THRESHOLDS.markdown2) {
-      return 'Markdown 2';
-    }
-    if (daysDiff <= InventoryService.MARKDOWN_THRESHOLDS.markdown1) {
-      return 'Markdown 1';
-    }
-
-    return 'Normal';
+    return calculateInventoryMarkdownStatus(expiryDate);
   }
 
   async calculateMarkdownStatus(expiryDate: string): Promise<InventoryStatus> {
@@ -398,23 +374,7 @@ export class InventoryService {
       return null;
     }
 
-    const expiryDate = new Date(item.expiryDate);
-    const now = new Date();
-    const daysUntilExpiry = Math.ceil(
-      (expiryDate.getTime() - now.getTime()) / (1000 * 60 * 60 * 24),
-    );
-
-    const costPrice = item.product.costPrice;
-
-    if (daysUntilExpiry <= InventoryService.MARKDOWN_THRESHOLDS.markdown3) {
-      return costPrice * 0.8; // 20% discount
-    } else if (daysUntilExpiry <= InventoryService.MARKDOWN_THRESHOLDS.markdown2) {
-      return costPrice; // Cost price
-    } else if (daysUntilExpiry <= InventoryService.MARKDOWN_THRESHOLDS.markdown1) {
-      return costPrice * 1.2; // 20% markup
-    }
-
-    return null; // No markdown/markup
+    return calculateInventoryMarkdownPrice(item.product.costPrice, item.expiryDate);
   }
 
   private async validateResourceOwnership(
