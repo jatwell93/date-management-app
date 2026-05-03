@@ -1,23 +1,24 @@
 import { PrismaClient } from '@prisma/client';
 import { getDefaultDatabaseClient } from '../database/database-factory';
 import { Organization } from '../models/organization.model';
+import { OrganizationRepository } from '../repositories/organization.repository';
 import { invalidateSubscriptionCache } from '../middleware/auth.middleware';
 import { isPrismaErrorCode, PRISMA_ERROR_CODES } from '../utils/prisma-error';
 
 export class OrganizationService {
   private prisma: PrismaClient;
+  private organizationRepo: OrganizationRepository;
 
-  constructor(prismaClient?: PrismaClient) {
+  constructor(prismaClient?: PrismaClient, organizationRepo?: OrganizationRepository) {
     this.prisma = prismaClient ?? getDefaultDatabaseClient();
+    this.organizationRepo = organizationRepo ?? new OrganizationRepository(this.prisma);
   }
 
   /**
    * Get organization by ID
    */
   async getOrganization(id: string): Promise<Organization | null> {
-    const org = await this.prisma.organization.findUnique({
-      where: { id },
-    });
+    const org = await this.organizationRepo.findById(id);
     return org ? this.mapPrismaToModel(org) : null;
   }
 
@@ -29,20 +30,10 @@ export class OrganizationService {
     updates: Partial<Pick<Organization, 'name' | 'slug'>>,
   ): Promise<Organization | null> {
     try {
-      const updated = await this.prisma.organization.update({
-        where: { id },
-        data: {
-          ...(updates.name !== undefined && { name: updates.name }),
-          ...(updates.slug !== undefined && { slug: updates.slug }),
-        },
-      });
+      const updated = await this.organizationRepo.update(id, updates);
       return this.mapPrismaToModel(updated);
     } catch (error: unknown) {
-      if (
-        error instanceof Object &&
-        'code' in error &&
-        (error as Record<string, unknown>).code === 'P2025'
-      ) {
+      if (isPrismaErrorCode(error, PRISMA_ERROR_CODES.NOT_FOUND)) {
         return null; // Organization not found
       }
       throw error;
@@ -55,34 +46,7 @@ export class OrganizationService {
    */
   async deleteOrganization(id: string): Promise<boolean> {
     try {
-      await this.prisma.$transaction(async (tx) => {
-        const users = await tx.user.findMany({
-          where: { organizationId: id },
-          select: { id: true },
-        });
-        const userIds = users.map((user) => user.id);
-
-        await tx.auditLog.deleteMany({ where: { organizationId: id } });
-        await tx.itemTransaction.deleteMany({ where: { organizationId: id } });
-        await tx.expiredItemTransaction.deleteMany({ where: { organizationId: id } });
-        await tx.upload.deleteMany({ where: { organizationId: id } });
-        await tx.organizationInvite.deleteMany({ where: { organizationId: id } });
-        if (userIds.length > 0) {
-          await tx.refreshToken.deleteMany({ where: { userId: { in: userIds } } });
-        }
-
-        await tx.inventoryItem.deleteMany({ where: { organizationId: id } });
-        await tx.storeArea.deleteMany({ where: { organizationId: id } });
-        await tx.product.deleteMany({ where: { organizationId: id } });
-        await tx.subscriptionTier.deleteMany({ where: { organizationId: id } });
-        await tx.trialEvent.deleteMany({ where: { organizationId: id } });
-        await tx.organizationUsage.deleteMany({ where: { organizationId: id } });
-        await tx.user.deleteMany({ where: { organizationId: id } });
-
-        await tx.organization.delete({
-          where: { id },
-        });
-      });
+      await this.organizationRepo.deleteCascade(id);
 
       // Ensure auth middleware does not serve stale tier data for deleted org
       invalidateSubscriptionCache(id);

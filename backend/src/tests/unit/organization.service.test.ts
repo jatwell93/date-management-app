@@ -1,5 +1,6 @@
 import { OrganizationService } from '../../services/organization.service';
 import { PrismaClient } from '@prisma/client';
+import { OrganizationRepository } from '../../repositories/organization.repository';
 
 const invalidateSubscriptionCacheMock = jest.fn();
 
@@ -210,5 +211,46 @@ describe('OrganizationService', () => {
         'Database unavailable',
       );
     });
+  });
+});
+
+describe('OrganizationService repository injection', () => {
+  const now = new Date('2026-01-01T00:00:00.000Z');
+
+  it('uses the injected repository for organization reads', async () => {
+    const repository = {
+      findById: jest.fn().mockResolvedValue({
+        id: 'org-123',
+        name: 'Test Organization',
+        slug: 'test-org',
+        createdAt: now,
+        updatedAt: now,
+      }),
+    } as unknown as OrganizationRepository;
+    const service = new OrganizationService({} as PrismaClient, repository);
+
+    const result = await service.getOrganization('org-123');
+
+    expect(repository.findById).toHaveBeenCalledWith('org-123');
+    expect(result).toEqual({
+      id: 'org-123',
+      name: 'Test Organization',
+      slug: 'test-org',
+      createdAt: now,
+      updatedAt: now,
+    });
+  });
+
+  it('invalidates subscription cache after repository deletion succeeds', async () => {
+    const repository = {
+      deleteCascade: jest.fn().mockResolvedValue(undefined),
+    } as unknown as OrganizationRepository;
+    const service = new OrganizationService({} as PrismaClient, repository);
+
+    const result = await service.deleteOrganization('org-123');
+
+    expect(result).toBe(true);
+    expect(repository.deleteCascade).toHaveBeenCalledWith('org-123');
+    expect(invalidateSubscriptionCacheMock).toHaveBeenCalledWith('org-123');
   });
 });
