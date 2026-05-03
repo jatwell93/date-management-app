@@ -1,11 +1,13 @@
 import { PrismaClient } from '@prisma/client';
 import { getDefaultDatabaseClient } from '../database/database-factory';
 import { StoreArea } from '../models/store-area.model';
+import { StoreAreaRepository } from '../repositories/store-area.repository';
 import { getOrganizationId } from '../utils/auth-bypass';
 import { isPrismaNotFound } from '../utils/prisma-error';
 
 export class StoreAreaService {
   private prisma: PrismaClient;
+  private storeAreaRepo: StoreAreaRepository;
   private organizationId: string;
 
   /**
@@ -13,30 +15,28 @@ export class StoreAreaService {
    * @param organizationId - Organization ID for tenant filtering (optional in tests)
    * @param prismaClient - Optional PrismaClient for testing/custom configurations
    */
-  constructor(organizationId?: string, prismaClient?: PrismaClient) {
+  constructor(
+    organizationId?: string,
+    prismaClient?: PrismaClient,
+    storeAreaRepo?: StoreAreaRepository,
+  ) {
     this.organizationId = getOrganizationId(organizationId);
     this.prisma = prismaClient ?? getDefaultDatabaseClient();
+    this.storeAreaRepo = storeAreaRepo ?? new StoreAreaRepository(this.prisma);
   }
 
   async getAllStoreAreas(): Promise<StoreArea[]> {
-    const results = await this.prisma.storeArea.findMany({
-      where: { organizationId: this.organizationId },
-      orderBy: { name: 'asc' },
-    });
+    const results = await this.storeAreaRepo.findAll(this.organizationId);
     return results.map(this.mapPrismaToModel);
   }
 
   async getStoreAreaById(id: number): Promise<StoreArea | null> {
-    const result = await this.prisma.storeArea.findFirst({
-      where: { id, organizationId: this.organizationId },
-    });
+    const result = await this.storeAreaRepo.findById(id, this.organizationId);
     return result ? this.mapPrismaToModel(result) : null;
   }
 
   async getStoreAreaByName(name: string): Promise<StoreArea[]> {
-    const results = await this.prisma.storeArea.findMany({
-      where: { name, organizationId: this.organizationId },
-    });
+    const results = await this.storeAreaRepo.findByName(name, this.organizationId);
     return results.map(this.mapPrismaToModel);
   }
 
@@ -44,13 +44,11 @@ export class StoreAreaService {
     name: string,
     subDepartment: string | null,
   ): Promise<StoreArea | null> {
-    const result = await this.prisma.storeArea.findFirst({
-      where: {
-        name,
-        subDepartment: subDepartment ?? null,
-        organizationId: this.organizationId,
-      },
-    });
+    const result = await this.storeAreaRepo.findByNameAndSubDepartment(
+      name,
+      subDepartment,
+      this.organizationId,
+    );
     return result ? this.mapPrismaToModel(result) : null;
   }
 
@@ -66,14 +64,7 @@ export class StoreAreaService {
       throw new Error('A store area with this name and sub-department combination already exists');
     }
 
-    const newArea = await this.prisma.storeArea.create({
-      data: {
-        organizationId: this.organizationId,
-        name: area.name,
-        subDepartment: area.subDepartment || null,
-        lastChecked: area.lastChecked ? new Date(area.lastChecked) : null,
-      },
-    });
+    const newArea = await this.storeAreaRepo.create(this.organizationId, area);
 
     return this.mapPrismaToModel(newArea);
   }
@@ -87,16 +78,7 @@ export class StoreAreaService {
     }
 
     try {
-      const updatedArea = await this.prisma.storeArea.update({
-        where: { id },
-        data: {
-          ...(area.name !== undefined && { name: area.name }),
-          ...(area.subDepartment !== undefined && { subDepartment: area.subDepartment || null }),
-          ...(area.lastChecked !== undefined && {
-            lastChecked: area.lastChecked ? new Date(area.lastChecked) : null,
-          }),
-        },
-      });
+      const updatedArea = await this.storeAreaRepo.update(id, area);
 
       return this.mapPrismaToModel(updatedArea);
     } catch (error: unknown) {
@@ -110,9 +92,7 @@ export class StoreAreaService {
 
   async deleteStoreArea(id: number): Promise<boolean> {
     try {
-      await this.prisma.storeArea.delete({
-        where: { id },
-      });
+      await this.storeAreaRepo.delete(id);
       return true;
     } catch (error: unknown) {
       // Prisma throws P2025 when record not found
