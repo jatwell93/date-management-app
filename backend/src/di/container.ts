@@ -10,6 +10,7 @@ import { SubscriptionRepository } from '../repositories/subscription.repository'
 import { AnalyticsRepository } from '../repositories/analytics.repository';
 import { StoreAreaRepository } from '../repositories/store-area.repository';
 import { OrganizationRepository } from '../repositories/organization.repository';
+import { UserRepository } from '../repositories/user.repository';
 
 let initialized = false;
 
@@ -39,6 +40,7 @@ export function initializeDiContainer(): void {
   container.registerSingleton(AnalyticsRepository);
   container.registerSingleton(StoreAreaRepository);
   container.registerSingleton(OrganizationRepository);
+  container.registerSingleton(UserRepository);
 
   // Register ProductService factory
   container.register('ProductServiceFactory', {

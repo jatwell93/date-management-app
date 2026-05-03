@@ -2,6 +2,7 @@ import { PrismaClient } from '@prisma/client';
 import { AuthService } from '../../services/auth.service';
 import { UserService } from '../../services/user.service';
 import { ConflictError } from '../../errors';
+import { UserRepository } from '../../repositories/user.repository';
 
 describe('UserService', () => {
   let prisma: PrismaClient;
@@ -268,5 +269,50 @@ describe('UserService', () => {
 
       expect(result).toBe(false);
     });
+  });
+});
+
+describe('UserService repository injection', () => {
+  const organizationId = 'org-123';
+  const createdAt = new Date('2026-01-01T00:00:00.000Z');
+  const updatedAt = new Date('2026-01-02T00:00:00.000Z');
+
+  it('uses the injected repository for organization-scoped user reads', async () => {
+    const repository = {
+      findByOrganization: jest.fn().mockResolvedValue([
+        {
+          id: 1,
+          organizationId,
+          clerkUserId: null,
+          email: null,
+          username: null,
+          role: 'Manager',
+          createdAt,
+          updatedAt,
+        },
+      ]),
+    } as unknown as UserRepository;
+    const service = new UserService(
+      organizationId,
+      {} as PrismaClient,
+      {} as AuthService,
+      repository,
+    );
+
+    const result = await service.getUsers();
+
+    expect(repository.findByOrganization).toHaveBeenCalledWith(organizationId);
+    expect(result).toEqual([
+      {
+        id: 1,
+        organizationId,
+        clerkUserId: null,
+        email: null,
+        username: null,
+        role: 'Manager',
+        created_at: createdAt.toISOString(),
+        updated_at: updatedAt.toISOString(),
+      },
+    ]);
   });
 });
