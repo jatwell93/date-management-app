@@ -37,7 +37,7 @@
 - [x] 5.1 Split subscription lifecycle logic into smaller units for trial setup, billing state, and access checks.
 - [x] 5.2 Move any remaining mixed-responsibility logic out of the subscription service once the split is in place.
 - [x] 5.3 Refactor any other oversized service that still mixes unrelated responsibilities after the first three decompositions.
-- [ ] 5.4 Re-run the service-size and dependency review before starting any fourth decomposition so the next target is deliberate.
+- [x] 5.4 Re-run the service-size and dependency review before starting any fourth decomposition so the next target is deliberate.
 
 ## 6. Repository Layer
 
