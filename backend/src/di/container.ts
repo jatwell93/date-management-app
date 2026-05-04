@@ -4,6 +4,8 @@ import { PrismaClient } from '@prisma/client';
 import { getDefaultDatabaseClient } from '../database/database-factory';
 import { ProductService } from '../services/product.service';
 import { InventoryService } from '../services/inventory.service';
+import { SubscriptionService } from '../services/subscription.service';
+import { getStripeClient } from '../utils/stripe';
 import { ProductRepository } from '../repositories/product.repository';
 import { InventoryRepository } from '../repositories/inventory.repository';
 import { SubscriptionRepository } from '../repositories/subscription.repository';
@@ -43,6 +45,14 @@ export function initializeDiContainer(): void {
   container.registerSingleton(OrganizationRepository);
   container.registerSingleton(UserRepository);
   container.registerSingleton(OrgAuditRepository);
+
+  container.register(SubscriptionService, {
+    useFactory: (dependencyContainer) =>
+      new SubscriptionService(dependencyContainer.resolve(PrismaClient)),
+  });
+  container.register('StripeClientFactory', {
+    useValue: getStripeClient,
+  });
 
   // Register ProductService factory
   container.register('ProductServiceFactory', {

@@ -1,14 +1,13 @@
 import { Request, Response, RequestHandler } from 'express';
 import { ClerkAuthRequest } from '../middleware/clerk-auth.middleware';
-import { getDefaultDatabaseClient } from '../database/database-factory';
 import { SubscriptionService } from '../services/subscription.service';
 import { BillingCycle } from '../types/subscription';
 import { getStripeClient } from '../utils/stripe';
 import { validateRedirectUrl, validateStripePriceId } from '../utils/url-validator';
 import { injectable, inject } from 'tsyringe';
 import { NotFoundError, ValidationError, AuthenticationError, InternalError } from '../errors';
-
-const prisma = getDefaultDatabaseClient();
+import { UserRepository } from '../repositories/user.repository';
+import { SubscriptionRepository } from '../repositories/subscription.repository';
 
 interface SubscriptionTierResponse {
   status: 'ACTIVE' | 'TRIALING' | 'EXPIRED' | 'CANCELED';
@@ -73,7 +72,13 @@ const TIER_LIMITS = {
 
 @injectable()
 export class SubscriptionController {
-  constructor(private subscriptionService: SubscriptionService) {}
+  constructor(
+    private subscriptionService: SubscriptionService,
+    private userRepository: UserRepository,
+    private subscriptionRepository: SubscriptionRepository,
+    @inject('StripeClientFactory')
+    private stripeClientFactory: () => ReturnType<typeof getStripeClient>,
+  ) {}
 
   async getTrialStatus(req: Request, res: Response): Promise<void> {
     try {
@@ -83,16 +88,7 @@ export class SubscriptionController {
         throw new AuthenticationError('User ID missing from request');
       }
 
-      const user = await prisma.user.findUnique({
-        where: { clerkUserId: userId },
-        include: {
-          organization: {
-            include: {
-              subscriptionTiers: true,
-            },
-          },
-        },
-      });
+      const user = await this.userRepository.findByClerkUserIdWithOrganizationSubscriptions(userId);
 
       if (!user || !user.organization) {
         throw new NotFoundError('User or organization not found');
@@ -160,10 +156,7 @@ export class SubscriptionController {
       }
 
       // Get user's organization
-      const user = await prisma.user.findUnique({
-        where: { clerkUserId: userId },
-        select: { organizationId: true },
-      });
+      const user = await this.userRepository.findOrganizationIdByClerkUserId(userId);
 
       if (!user?.organizationId) {
         throw new NotFoundError('User organization not found');
@@ -191,6 +184,12 @@ export class SubscriptionController {
         error instanceof ValidationError ||
         error instanceof NotFoundError ||
         error instanceof AuthenticationError
+      ) {
+        throw error;
+      }
+      if (
+        error instanceof Error &&
+        typeof (error as Error & { statusCode?: unknown }).statusCode === 'number'
       ) {
         throw error;
       }
@@ -223,17 +222,14 @@ export class SubscriptionController {
         );
       }
 
-      const user = await prisma.user.findUnique({
-        where: { clerkUserId: userId },
-        include: { organization: { include: { subscriptionTiers: true } } },
-      });
+      const user = await this.userRepository.findByClerkUserIdWithOrganizationSubscriptions(userId);
 
       if (!user?.organization) {
         throw new NotFoundError('Organization not found');
       }
 
       const subscription = user.organization.subscriptionTiers?.[0];
-      const stripe = getStripeClient();
+      const stripe = this.stripeClientFactory();
 
       // Get or create Stripe customer
       let customerId = subscription?.stripeCustomerId;
@@ -246,10 +242,7 @@ export class SubscriptionController {
 
         // Persist the customer ID to database
         if (subscription) {
-          await prisma.subscriptionTier.update({
-            where: { id: subscription.id },
-            data: { stripeCustomerId: customerId },
-          });
+          await this.subscriptionRepository.updateStripeCustomerId(subscription.id, customerId);
         }
       }
 
@@ -298,10 +291,7 @@ export class SubscriptionController {
         }
       }
 
-      const user = await prisma.user.findUnique({
-        where: { clerkUserId: userId },
-        include: { organization: { include: { subscriptionTiers: true } } },
-      });
+      const user = await this.userRepository.findByClerkUserIdWithOrganizationSubscriptions(userId);
 
       if (!user?.organization) {
         throw new NotFoundError('Organization not found');
@@ -312,7 +302,7 @@ export class SubscriptionController {
         throw new ValidationError('No Stripe customer found');
       }
 
-      const stripe = getStripeClient();
+      const stripe = this.stripeClientFactory();
       const session = await stripe.billingPortal.sessions.create({
         customer: subscription.stripeCustomerId,
         return_url: returnUrl || `${process.env.FRONTEND_URL}/settings`,
@@ -327,6 +317,9 @@ export class SubscriptionController {
         error instanceof AuthenticationError
       ) {
         throw error;
+      }
+      if (error instanceof Error) {
+        throw new InternalError(error.message);
       }
       throw new InternalError('Failed to create portal session');
     }

@@ -31,6 +31,10 @@ export class SubscriptionRepository {
     });
   }
 
+  async updateStripeCustomerId(id: number, stripeCustomerId: string, tx?: DbClient): Promise<any> {
+    return this.update(id, { stripeCustomerId }, tx);
+  }
+
   async findUsageByOrganizationId(organizationId: string, tx?: DbClient): Promise<any | null> {
     return this.getClient(tx).organizationUsage.findUnique({
       where: { organizationId },

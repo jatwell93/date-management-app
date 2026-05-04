@@ -18,6 +18,7 @@ describe('UserRepository', () => {
     user: {
       findMany: jest.Mock;
       findFirst: jest.Mock;
+      findUnique: jest.Mock;
       create: jest.Mock;
       update: jest.Mock;
       delete: jest.Mock;
@@ -30,6 +31,7 @@ describe('UserRepository', () => {
       user: {
         findMany: jest.fn(),
         findFirst: jest.fn(),
+        findUnique: jest.fn(),
         create: jest.fn(),
         update: jest.fn(),
         delete: jest.fn(),
@@ -90,6 +92,36 @@ describe('UserRepository', () => {
     expect(prisma.user.update).toHaveBeenCalledWith({
       where: { id: 1, organizationId },
       data: { role: 'admin' },
+    });
+  });
+
+  it('finds a Clerk user with organization subscription data', async () => {
+    prisma.user.findUnique.mockResolvedValue(user);
+
+    const result = await repository.findByClerkUserIdWithOrganizationSubscriptions('clerk-1');
+
+    expect(result).toBe(user);
+    expect(prisma.user.findUnique).toHaveBeenCalledWith({
+      where: { clerkUserId: 'clerk-1' },
+      include: {
+        organization: {
+          include: {
+            subscriptionTiers: true,
+          },
+        },
+      },
+    });
+  });
+
+  it('finds a Clerk user organization id', async () => {
+    prisma.user.findUnique.mockResolvedValue({ organizationId });
+
+    const result = await repository.findOrganizationIdByClerkUserId('clerk-1');
+
+    expect(result).toEqual({ organizationId });
+    expect(prisma.user.findUnique).toHaveBeenCalledWith({
+      where: { clerkUserId: 'clerk-1' },
+      select: { organizationId: true },
     });
   });
 });

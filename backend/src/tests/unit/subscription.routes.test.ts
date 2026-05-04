@@ -66,16 +66,37 @@ jest.mock('../../utils/url-validator', () => ({
 
 import subscriptionRouter from '../../routes/subscription.routes';
 
+const actualDi = jest.requireActual('../../di/container') as typeof import('../../di/container');
+const actualUserRepository = jest.requireActual(
+  '../../repositories/user.repository',
+) as typeof import('../../repositories/user.repository');
+const actualSubscriptionRepository = jest.requireActual(
+  '../../repositories/subscription.repository',
+) as typeof import('../../repositories/subscription.repository');
+const actualSubscriptionService = jest.requireActual(
+  '../../services/subscription.service',
+) as typeof import('../../services/subscription.service');
+
 describe('subscription.routes', () => {
   const app = express();
 
   app.use(express.json());
   app.use('/subscription', subscriptionRouter);
+  app.use(
+    (
+      error: Error & { statusCode?: number },
+      _req: express.Request,
+      res: express.Response,
+      _next: express.NextFunction,
+    ) => {
+      res.status(error.statusCode ?? 500).json({ error: error.message });
+    },
+  );
 
   beforeEach(() => {
     jest.clearAllMocks();
 
-    process.env.FRONTEND_URL = 'https://app.test.local';
+    process.env.FRONTEND_URL = 'http://localhost:3000';
 
     mockValidateStripePriceId.mockImplementation(() => undefined);
     mockValidateRedirectUrl.mockImplementation(() => undefined);
@@ -117,6 +138,38 @@ describe('subscription.routes', () => {
     mockStripeBillingPortalSessionCreate.mockResolvedValue({
       url: 'https://billing.stripe.com/session_test_123',
     });
+
+    const diContainer = actualDi.getDiContainer();
+    diContainer.registerInstance(actualUserRepository.UserRepository, {
+      findByClerkUserIdWithOrganizationSubscriptions: (...args: unknown[]) =>
+        mockFindUnique(...args),
+      findOrganizationIdByClerkUserId: (...args: unknown[]) => mockFindUnique(...args),
+    } as never);
+    diContainer.registerInstance(actualSubscriptionRepository.SubscriptionRepository, {
+      updateStripeCustomerId: (id: number, stripeCustomerId: string) =>
+        mockSubscriptionTierUpdate({
+          where: { id },
+          data: { stripeCustomerId },
+        }),
+    } as never);
+    diContainer.registerInstance(actualSubscriptionService.SubscriptionService, {
+      convertTrialToPaid: (...args: unknown[]) => mockConvertTrialToPaid(...args),
+    } as never);
+    diContainer.registerInstance('StripeClientFactory', () => ({
+      customers: {
+        create: (...args: unknown[]) => mockStripeCustomersCreate(...args),
+      },
+      checkout: {
+        sessions: {
+          create: (...args: unknown[]) => mockStripeCheckoutSessionCreate(...args),
+        },
+      },
+      billingPortal: {
+        sessions: {
+          create: (...args: unknown[]) => mockStripeBillingPortalSessionCreate(...args),
+        },
+      },
+    }));
   });
 
   describe('GET /subscription/trial-status', () => {
@@ -391,8 +444,8 @@ describe('subscription.routes', () => {
         .set('x-clerk-user-id', 'user_123')
         .send({
           priceId: 'price_123',
-          successUrl: 'https://app.test.local/success',
-          cancelUrl: 'https://app.test.local/cancel',
+          successUrl: 'http://localhost:3000/success',
+          cancelUrl: 'http://localhost:3000/cancel',
         });
 
       expect(response.status).toBe(400);
@@ -408,8 +461,8 @@ describe('subscription.routes', () => {
         .set('x-clerk-user-id', 'user_123')
         .send({
           priceId: 'price_1234567890',
-          successUrl: 'https://app.test.local/success',
-          cancelUrl: 'https://app.test.local/cancel',
+          successUrl: 'http://localhost:3000/success',
+          cancelUrl: 'http://localhost:3000/cancel',
         });
 
       expect(response.status).toBe(404);
@@ -422,8 +475,8 @@ describe('subscription.routes', () => {
         .set('x-clerk-user-id', 'user_123')
         .send({
           priceId: 'price_1234567890',
-          successUrl: 'https://app.test.local/success',
-          cancelUrl: 'https://app.test.local/cancel',
+          successUrl: 'http://localhost:3000/success',
+          cancelUrl: 'http://localhost:3000/cancel',
         });
 
       expect(response.status).toBe(200);
@@ -456,8 +509,8 @@ describe('subscription.routes', () => {
         .set('x-clerk-user-id', 'user_123')
         .send({
           priceId: 'price_1234567890',
-          successUrl: 'https://app.test.local/success',
-          cancelUrl: 'https://app.test.local/cancel',
+          successUrl: 'http://localhost:3000/success',
+          cancelUrl: 'http://localhost:3000/cancel',
         });
 
       expect(response.status).toBe(200);
@@ -485,8 +538,8 @@ describe('subscription.routes', () => {
         .set('x-clerk-user-id', 'user_123')
         .send({
           priceId: 'price_1234567890',
-          successUrl: 'https://app.test.local/success',
-          cancelUrl: 'https://app.test.local/cancel',
+          successUrl: 'http://localhost:3000/success',
+          cancelUrl: 'http://localhost:3000/cancel',
         });
 
       expect(response.status).toBe(200);
@@ -516,8 +569,8 @@ describe('subscription.routes', () => {
         .set('x-clerk-user-id', 'user_123')
         .send({
           priceId: 'price_1234567890',
-          successUrl: 'https://app.test.local/success',
-          cancelUrl: 'https://app.test.local/cancel',
+          successUrl: 'http://localhost:3000/success',
+          cancelUrl: 'http://localhost:3000/cancel',
         });
 
       expect(response.status).toBe(200);
@@ -535,8 +588,8 @@ describe('subscription.routes', () => {
         .set('x-clerk-user-id', 'user_123')
         .send({
           priceId: 'price_1234567890',
-          successUrl: 'https://app.test.local/success',
-          cancelUrl: 'https://app.test.local/cancel',
+          successUrl: 'http://localhost:3000/success',
+          cancelUrl: 'http://localhost:3000/cancel',
         });
 
       expect(response.status).toBe(500);
@@ -556,7 +609,7 @@ describe('subscription.routes', () => {
         .send({ returnUrl: 'not-a-url' });
 
       expect(response.status).toBe(400);
-      expect(response.body).toEqual({ error: 'returnUrl is not a valid URL' });
+      expect(response.body).toEqual({ error: 'returnUrl is not a valid URL: not-a-url' });
     });
 
     it('returns 404 when portal session is requested without organization', async () => {
@@ -565,7 +618,7 @@ describe('subscription.routes', () => {
       const response = await request(app)
         .post('/subscription/create-portal-session')
         .set('x-clerk-user-id', 'user_123')
-        .send({ returnUrl: 'https://app.test.local/settings' });
+        .send({ returnUrl: 'http://localhost:3000/settings' });
 
       expect(response.status).toBe(404);
       expect(response.body).toEqual({ error: 'Organization not found' });
@@ -590,13 +643,13 @@ describe('subscription.routes', () => {
       const response = await request(app)
         .post('/subscription/create-portal-session')
         .set('x-clerk-user-id', 'user_123')
-        .send({ returnUrl: 'https://app.test.local/account' });
+        .send({ returnUrl: 'http://localhost:3000/account' });
 
       expect(response.status).toBe(200);
       expect(response.body).toEqual({ url: 'https://billing.stripe.com/session_test_123' });
       expect(mockStripeBillingPortalSessionCreate).toHaveBeenCalledWith({
         customer: 'cus_existing',
-        return_url: 'https://app.test.local/account',
+        return_url: 'http://localhost:3000/account',
       });
     });
 
@@ -609,7 +662,7 @@ describe('subscription.routes', () => {
       expect(response.status).toBe(200);
       expect(mockStripeBillingPortalSessionCreate).toHaveBeenCalledWith({
         customer: 'cus_existing',
-        return_url: 'https://app.test.local/settings',
+        return_url: 'http://localhost:3000/settings',
       });
     });
 
@@ -619,7 +672,7 @@ describe('subscription.routes', () => {
       const response = await request(app)
         .post('/subscription/create-portal-session')
         .set('x-clerk-user-id', 'user_123')
-        .send({ returnUrl: 'https://app.test.local/account' });
+        .send({ returnUrl: 'http://localhost:3000/account' });
 
       expect(response.status).toBe(500);
       expect(response.body).toEqual({ error: 'portal unavailable' });

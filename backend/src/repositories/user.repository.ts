@@ -3,6 +3,15 @@ import { injectable, inject } from 'tsyringe';
 import { User } from '../models/user.model';
 
 type UserRecord = Prisma.UserGetPayload<Record<string, never>>;
+type UserWithOrganizationSubscriptions = Prisma.UserGetPayload<{
+  include: {
+    organization: {
+      include: {
+        subscriptionTiers: true;
+      };
+    };
+  };
+}>;
 
 export interface CreateClerkUserRecordParams {
   organizationId: string;
@@ -92,6 +101,30 @@ export class UserRepository {
       where: {
         OR: identityMatches,
       },
+    });
+  }
+
+  async findByClerkUserIdWithOrganizationSubscriptions(
+    clerkUserId: string,
+  ): Promise<UserWithOrganizationSubscriptions | null> {
+    return this.prisma.user.findUnique({
+      where: { clerkUserId },
+      include: {
+        organization: {
+          include: {
+            subscriptionTiers: true,
+          },
+        },
+      },
+    });
+  }
+
+  async findOrganizationIdByClerkUserId(
+    clerkUserId: string,
+  ): Promise<{ organizationId: string | null } | null> {
+    return this.prisma.user.findUnique({
+      where: { clerkUserId },
+      select: { organizationId: true },
     });
   }
 
