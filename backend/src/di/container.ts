@@ -11,6 +11,7 @@ import { AnalyticsRepository } from '../repositories/analytics.repository';
 import { StoreAreaRepository } from '../repositories/store-area.repository';
 import { OrganizationRepository } from '../repositories/organization.repository';
 import { UserRepository } from '../repositories/user.repository';
+import { OrgAuditRepository } from '../repositories/org-audit.repository';
 
 let initialized = false;
 
@@ -41,6 +42,7 @@ export function initializeDiContainer(): void {
   container.registerSingleton(StoreAreaRepository);
   container.registerSingleton(OrganizationRepository);
   container.registerSingleton(UserRepository);
+  container.registerSingleton(OrgAuditRepository);
 
   // Register ProductService factory
   container.register('ProductServiceFactory', {
