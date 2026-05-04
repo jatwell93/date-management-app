@@ -55,6 +55,33 @@ export class ProductRepository {
     });
   }
 
+  async findBySkuOrBarcode(
+    sku: string,
+    barcode: string,
+    organizationId: string,
+    tx?: DbClient,
+  ): Promise<{ bySku: any | null; byBarcode: any | null }> {
+    const client = this.getClient(tx);
+    const bySku = await client.product.findUnique({
+      where: {
+        organizationId_sku: {
+          organizationId,
+          sku,
+        },
+      },
+    });
+    const byBarcode = await client.product.findUnique({
+      where: {
+        organizationId_barcode: {
+          organizationId,
+          barcode,
+        },
+      },
+    });
+
+    return { bySku, byBarcode };
+  }
+
   async create(data: any, tx?: DbClient): Promise<any> {
     return this.getClient(tx).product.create({
       data,

@@ -950,24 +950,11 @@ export class ProductService {
   }
 
   private async getProductBySkuOrBarcode(sku: string, barcode: string): Promise<Product | null> {
-    // Check for products by SKU and barcode independently within the organization
-    const bySku = await this.prisma.product.findUnique({
-      where: {
-        organizationId_sku: {
-          organizationId: this.organizationId,
-          sku,
-        },
-      },
-    });
-
-    const byBarcode = await this.prisma.product.findUnique({
-      where: {
-        organizationId_barcode: {
-          organizationId: this.organizationId,
-          barcode,
-        },
-      },
-    });
+    const { bySku, byBarcode } = await this.productRepo.findBySkuOrBarcode(
+      sku,
+      barcode,
+      this.organizationId,
+    );
 
     // If both match different products, this is an error case
     if (bySku && byBarcode && bySku.id !== byBarcode.id) {
