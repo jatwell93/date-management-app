@@ -7,8 +7,10 @@ const mockComplete = jest.fn();
 const mockStatus = jest.fn();
 
 const mockGetUploadService = jest.fn();
+const mockGetUploadRepository = jest.fn();
 const mockServiceProviderCtor = jest.fn().mockImplementation(() => ({
   getUploadService: mockGetUploadService,
+  getUploadRepository: mockGetUploadRepository,
 }));
 
 const mockCheckUsageLimit = jest
@@ -76,6 +78,7 @@ describe('upload.routes', () => {
     mockComplete.mockReset();
     mockStatus.mockReset();
     mockGetUploadService.mockReset();
+    mockGetUploadRepository.mockReset();
     mockServiceProviderCtor.mockClear();
     mockValidateRequest.mockClear();
 
@@ -96,6 +99,7 @@ describe('upload.routes', () => {
     });
 
     mockGetUploadService.mockReturnValue({});
+    mockGetUploadRepository.mockReturnValue({});
   });
 
   it('registers storage usage guard for upload write endpoints', () => {

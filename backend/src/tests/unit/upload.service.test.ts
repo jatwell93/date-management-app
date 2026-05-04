@@ -3,12 +3,14 @@ import { StorageProvider } from '../../storage/storage-provider.interface';
 import { CSVParserService } from '../../services/csv-parser.service';
 import { StorageQuotaService } from '../../services/storage-quota.service';
 import { envConfig } from '../../config/environment';
+import { UploadRepository } from '../../repositories/upload.repository';
 
 describe('UploadService', () => {
   let uploadService: UploadService;
   let mockStorage: jest.Mocked<StorageProvider>;
   let mockCsvParser: jest.Mocked<CSVParserService>;
   let mockStorageQuotaService: jest.Mocked<StorageQuotaService>;
+  let mockUploadRepository: jest.Mocked<Pick<UploadRepository, 'markCompleted' | 'markFailed'>>;
   const organizationId = 'org-123';
 
   beforeEach(() => {
@@ -29,12 +31,17 @@ describe('UploadService', () => {
       recordUpload: jest.fn() as jest.Mock,
       markUploadDeleted: jest.fn() as jest.Mock,
     } as any as jest.Mocked<StorageQuotaService>;
+    mockUploadRepository = {
+      markCompleted: jest.fn(),
+      markFailed: jest.fn(),
+    };
 
     uploadService = new UploadService(
       organizationId,
       mockStorage,
       mockCsvParser,
       mockStorageQuotaService,
+      mockUploadRepository as never,
     );
   });
 
@@ -122,6 +129,16 @@ describe('UploadService', () => {
         uploadKey: key,
         userId,
         importType: 'product-catalog',
+      });
+      expect(mockUploadRepository.markCompleted).toHaveBeenCalledWith(key, {
+        rowsProcessed: 3,
+        rowsTotal: 3,
+        rowsImported: 3,
+        rowsUpdated: 0,
+        rowsSkipped: 0,
+        rowErrorCount: 0,
+        columnsUsed: '[]',
+        columnsIgnored: 0,
       });
     });
 

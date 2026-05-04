@@ -13,7 +13,10 @@ const router = express.Router();
 // Helper function to get services with organization context
 function getServicesForRequest(req: AuthRequest) {
   const serviceProvider = new ServiceProvider({ organizationId: req.organizationId });
-  const uploadController = new UploadController(serviceProvider.getUploadService());
+  const uploadController = new UploadController(
+    serviceProvider.getUploadService(),
+    serviceProvider.getUploadRepository(),
+  );
   return { uploadController };
 }
 

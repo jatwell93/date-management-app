@@ -14,6 +14,7 @@ import { StoreAreaRepository } from '../repositories/store-area.repository';
 import { OrganizationRepository } from '../repositories/organization.repository';
 import { UserRepository } from '../repositories/user.repository';
 import { OrgAuditRepository } from '../repositories/org-audit.repository';
+import { UploadRepository } from '../repositories/upload.repository';
 
 let initialized = false;
 
@@ -45,6 +46,7 @@ export function initializeDiContainer(): void {
   container.registerSingleton(OrganizationRepository);
   container.registerSingleton(UserRepository);
   container.registerSingleton(OrgAuditRepository);
+  container.registerSingleton(UploadRepository);
 
   container.register(SubscriptionService, {
     useFactory: (dependencyContainer) =>

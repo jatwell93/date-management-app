@@ -3,9 +3,13 @@ import { AuthRequest } from '../middleware/auth.middleware';
 import { UploadService } from '../services/upload.service';
 import { getDefaultDatabaseClient } from '../database/database-factory';
 import { UploadImportType } from '../types/upload.types';
+import { UploadRepository } from '../repositories/upload.repository';
 
 export class UploadController {
-  constructor(private uploadService: UploadService) {}
+  constructor(
+    private uploadService: UploadService,
+    private uploadRepository = new UploadRepository(getDefaultDatabaseClient()),
+  ) {}
 
   /**
    * Initiate upload: determine strategy (Direct vs Presigned)
@@ -165,26 +169,7 @@ export class UploadController {
       // Decode URL-encoded key (handles keys with slashes)
       const decodedKey = decodeURIComponent(key);
 
-      // Query upload status from database
-      const prisma = getDefaultDatabaseClient();
-      const upload = await prisma.upload.findUnique({
-        where: { fileKey: decodedKey },
-        select: {
-          status: true,
-          uploadProgress: true,
-          processingMessage: true,
-          errorMessage: true,
-          rowsProcessed: true,
-          rowsTotal: true,
-          rowsImported: true,
-          rowsUpdated: true,
-          rowsSkipped: true,
-          rowErrorCount: true,
-          columnsUsed: true,
-          columnsIgnored: true,
-          organizationId: true,
-        },
-      });
+      const upload = await this.uploadRepository.findStatusByFileKey(decodedKey);
 
       if (!upload) {
         res.status(404).json({ error: 'Upload not found' });
