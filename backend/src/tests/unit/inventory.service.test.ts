@@ -210,6 +210,42 @@ describe('InventoryService', () => {
   });
 
   describe('getAllInventoryItems', () => {
+    it('delegates inventory reads to the repository when injected', async () => {
+      const inventoryRepo = {
+        findAll: jest.fn().mockResolvedValue([
+          {
+            id: 1,
+            productId: 1,
+            locationId: 1,
+            organizationId,
+            expiryDate: new Date('2026-01-01T00:00:00.000Z'),
+            status: 'Normal',
+            createdAt: new Date('2026-01-01T00:00:00.000Z'),
+            updatedAt: new Date('2026-01-02T00:00:00.000Z'),
+          },
+        ]),
+      };
+      const service = new InventoryService(
+        organizationId,
+        mockPrisma as unknown as PrismaClient,
+        inventoryRepo as never,
+      );
+
+      mockPrisma.inventoryItem.findMany.mockRejectedValue(
+        new Error('service should use repository'),
+      );
+
+      const result = await service.getAllInventoryItems();
+
+      expect(inventoryRepo.findAll).toHaveBeenCalledWith(organizationId);
+      expect(mockPrisma.inventoryItem.findMany).not.toHaveBeenCalled();
+      expect(result[0]).toMatchObject({
+        id: 1,
+        organizationId,
+        status: 'Normal',
+      });
+    });
+
     it('should return all inventory items for the organization', async () => {
       const mockItems = [
         {
@@ -237,7 +273,63 @@ describe('InventoryService', () => {
     });
   });
 
+  describe('getInventoryItemById', () => {
+    it('delegates item lookup to the repository when injected', async () => {
+      const inventoryRepo = {
+        findById: jest.fn().mockResolvedValue({
+          id: 1,
+          productId: 1,
+          locationId: 1,
+          organizationId,
+          expiryDate: new Date('2026-01-01T00:00:00.000Z'),
+          status: 'Normal',
+          createdAt: new Date('2026-01-01T00:00:00.000Z'),
+          updatedAt: new Date('2026-01-02T00:00:00.000Z'),
+        }),
+      };
+      const service = new InventoryService(
+        organizationId,
+        mockPrisma as unknown as PrismaClient,
+        inventoryRepo as never,
+      );
+
+      mockPrisma.inventoryItem.findFirst.mockRejectedValue(
+        new Error('service should use repository'),
+      );
+
+      const result = await service.getInventoryItemById(1);
+
+      expect(inventoryRepo.findById).toHaveBeenCalledWith(1, organizationId);
+      expect(mockPrisma.inventoryItem.findFirst).not.toHaveBeenCalled();
+      expect(result).toMatchObject({
+        id: 1,
+        organizationId,
+        status: 'Normal',
+      });
+    });
+  });
+
   describe('getInventoryItemsByProductId', () => {
+    it('delegates product inventory reads to the repository when injected', async () => {
+      const inventoryRepo = {
+        findByProductId: jest.fn().mockResolvedValue([]),
+      };
+      const service = new InventoryService(
+        organizationId,
+        mockPrisma as unknown as PrismaClient,
+        inventoryRepo as never,
+      );
+
+      mockPrisma.inventoryItem.findMany.mockRejectedValue(
+        new Error('service should use repository'),
+      );
+
+      await service.getInventoryItemsByProductId(1);
+
+      expect(inventoryRepo.findByProductId).toHaveBeenCalledWith(1, organizationId);
+      expect(mockPrisma.inventoryItem.findMany).not.toHaveBeenCalled();
+    });
+
     it('should return inventory items for a specific product within organization', async () => {
       const mockItems = [
         {
@@ -267,6 +359,26 @@ describe('InventoryService', () => {
   });
 
   describe('getRecentInventoryItemsByProductId', () => {
+    it('delegates recent product inventory reads to the repository when injected', async () => {
+      const inventoryRepo = {
+        findRecentByProductId: jest.fn().mockResolvedValue([]),
+      };
+      const service = new InventoryService(
+        organizationId,
+        mockPrisma as unknown as PrismaClient,
+        inventoryRepo as never,
+      );
+
+      mockPrisma.inventoryItem.findMany.mockRejectedValue(
+        new Error('service should use repository'),
+      );
+
+      await service.getRecentInventoryItemsByProductId(1, 5);
+
+      expect(inventoryRepo.findRecentByProductId).toHaveBeenCalledWith(1, organizationId, 5);
+      expect(mockPrisma.inventoryItem.findMany).not.toHaveBeenCalled();
+    });
+
     it('should return recent inventory items for a specific product within organization', async () => {
       const mockItems = [
         {
@@ -298,6 +410,26 @@ describe('InventoryService', () => {
   });
 
   describe('getInventoryItemsByLocationId', () => {
+    it('delegates location inventory reads to the repository when injected', async () => {
+      const inventoryRepo = {
+        findByLocationId: jest.fn().mockResolvedValue([]),
+      };
+      const service = new InventoryService(
+        organizationId,
+        mockPrisma as unknown as PrismaClient,
+        inventoryRepo as never,
+      );
+
+      mockPrisma.inventoryItem.findMany.mockRejectedValue(
+        new Error('service should use repository'),
+      );
+
+      await service.getInventoryItemsByLocationId(1);
+
+      expect(inventoryRepo.findByLocationId).toHaveBeenCalledWith(1, organizationId);
+      expect(mockPrisma.inventoryItem.findMany).not.toHaveBeenCalled();
+    });
+
     it('should return inventory items for a specific location within organization', async () => {
       const mockItems = [
         {

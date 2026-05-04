@@ -28,6 +28,7 @@ type InventoryTransactionInput = Omit<ItemTransaction, 'id' | 'transaction_date'
 export class InventoryService {
   private prisma: PrismaClient;
   private organizationId: string;
+  private inventoryRepo: InventoryRepository;
 
   // Markdown thresholds in days
   private static readonly MARKDOWN_THRESHOLDS = INVENTORY_MARKDOWN_THRESHOLDS;
@@ -47,7 +48,7 @@ export class InventoryService {
   ) {
     this.organizationId = getOrganizationId(organizationId);
     this.prisma = prismaClient ?? getDefaultDatabaseClient();
-    void inventoryRepo;
+    this.inventoryRepo = inventoryRepo ?? new InventoryRepository(this.prisma);
     void productRepo;
   }
 
@@ -55,9 +56,7 @@ export class InventoryService {
    * Get all inventory items
    */
   async getAllInventoryItems(): Promise<InventoryItem[]> {
-    const items = await this.prisma.inventoryItem.findMany({
-      where: { organizationId: this.organizationId },
-    });
+    const items = await this.inventoryRepo.findAll(this.organizationId);
     return items.map((item) => this.mapPrismaToModel(item));
   }
 
@@ -65,9 +64,7 @@ export class InventoryService {
    * Get a specific inventory item by ID
    */
   async getInventoryItemById(id: number): Promise<InventoryItem | null> {
-    const item = await this.prisma.inventoryItem.findFirst({
-      where: { id, organizationId: this.organizationId },
-    });
+    const item = await this.inventoryRepo.findById(id, this.organizationId);
     return item ? this.mapPrismaToModel(item) : null;
   }
 
@@ -75,9 +72,7 @@ export class InventoryService {
    * Get inventory items for a specific product
    */
   async getInventoryItemsByProductId(productId: number): Promise<InventoryItem[]> {
-    const items = await this.prisma.inventoryItem.findMany({
-      where: { productId, organizationId: this.organizationId },
-    });
+    const items = await this.inventoryRepo.findByProductId(productId, this.organizationId);
     return items.map((item) => this.mapPrismaToModel(item));
   }
 
@@ -88,11 +83,11 @@ export class InventoryService {
     productId: number,
     limit: number,
   ): Promise<InventoryItem[]> {
-    const items = await this.prisma.inventoryItem.findMany({
-      where: { productId, organizationId: this.organizationId },
-      orderBy: { createdAt: 'desc' },
-      take: limit,
-    });
+    const items = await this.inventoryRepo.findRecentByProductId(
+      productId,
+      this.organizationId,
+      limit,
+    );
     return items.map((item) => this.mapPrismaToModel(item));
   }
 
@@ -100,9 +95,7 @@ export class InventoryService {
    * Get inventory items for a specific location
    */
   async getInventoryItemsByLocationId(locationId: number): Promise<InventoryItem[]> {
-    const items = await this.prisma.inventoryItem.findMany({
-      where: { locationId, organizationId: this.organizationId },
-    });
+    const items = await this.inventoryRepo.findByLocationId(locationId, this.organizationId);
     return items.map((item) => this.mapPrismaToModel(item));
   }
 

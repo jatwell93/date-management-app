@@ -12,11 +12,8 @@ export class InventoryRepository {
   }
 
   async findById(id: number, organizationId: string): Promise<any | null> {
-    return this.prisma.inventoryItem.findUnique({
-      where: {
-        id,
-        organizationId,
-      },
+    return this.prisma.inventoryItem.findFirst({
+      where: { id, organizationId },
     });
   }
 
