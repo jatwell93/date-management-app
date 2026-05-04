@@ -14,6 +14,7 @@ import { UserService } from './user.service';
 import { SubscriptionService } from './subscription.service';
 import { getOrganizationId, TEST_AUTH_BYPASS_ORG_ID } from '../utils/auth-bypass';
 import { UploadRepository } from '../repositories/upload.repository';
+import { StorageQuotaRepository } from '../repositories/storage-quota.repository';
 
 export interface ServiceProviderConfig {
   organizationId?: string;
@@ -35,6 +36,7 @@ export class ServiceProvider {
   private reportService?: ReportService;
   private subscriptionService?: SubscriptionService;
   private uploadRepository?: UploadRepository;
+  private storageQuotaRepository?: StorageQuotaRepository;
 
   constructor(config: ServiceProviderConfig = {}) {
     this.organizationId = getOrganizationId(config.organizationId);
@@ -88,7 +90,10 @@ export class ServiceProvider {
 
   getStorageQuotaService(): StorageQuotaService {
     if (!this.storageQuotaService) {
-      this.storageQuotaService = new StorageQuotaService(this.organizationId);
+      this.storageQuotaService = new StorageQuotaService(
+        this.organizationId,
+        this.getStorageQuotaRepository(),
+      );
     }
     return this.storageQuotaService;
   }
@@ -111,6 +116,13 @@ export class ServiceProvider {
       this.uploadRepository = new UploadRepository(this.prisma);
     }
     return this.uploadRepository;
+  }
+
+  getStorageQuotaRepository(): StorageQuotaRepository {
+    if (!this.storageQuotaRepository) {
+      this.storageQuotaRepository = new StorageQuotaRepository(this.prisma);
+    }
+    return this.storageQuotaRepository;
   }
 
   getAnalyticsService(): AnalyticsService {

@@ -1,6 +1,5 @@
-import { PrismaClient } from '@prisma/client';
 import { getDefaultDatabaseClient } from '../database/database-factory';
-import { UploadStatus } from '../types/upload.types';
+import { StorageQuotaRepository } from '../repositories/storage-quota.repository';
 
 /**
  * Subscription tier configuration
@@ -49,10 +48,12 @@ export interface StorageQuotaInfo {
  * Tracks storage usage per tenant and enforces quota limits.
  */
 export class StorageQuotaService {
-  private prisma: PrismaClient;
   private organizationId: string;
 
-  constructor(organizationId?: string, prismaClient?: PrismaClient) {
+  constructor(
+    organizationId?: string,
+    private storageQuotaRepository = new StorageQuotaRepository(getDefaultDatabaseClient()),
+  ) {
     if (!organizationId || organizationId.trim() === '') {
       throw new Error('Organization ID is required and cannot be empty');
     }
@@ -67,7 +68,6 @@ export class StorageQuotaService {
     }
 
     this.organizationId = organizationId;
-    this.prisma = prismaClient ?? getDefaultDatabaseClient();
   }
 
   /**
@@ -124,19 +124,7 @@ export class StorageQuotaService {
    */
   private async calculateOrganizationStorageUsage(): Promise<number> {
     try {
-      const result = await this.prisma.upload.aggregate({
-        where: {
-          organizationId: this.organizationId,
-          status: {
-            in: [UploadStatus.PROCESSING, UploadStatus.COMPLETED],
-          },
-        },
-        _sum: {
-          fileSizeBytes: true,
-        },
-      });
-
-      return result._sum.fileSizeBytes ?? 0;
+      return await this.storageQuotaRepository.sumActiveUploadBytes(this.organizationId);
     } catch (error) {
       console.error(
         `Failed to calculate storage usage for organization ${this.organizationId}:`,
@@ -155,44 +143,13 @@ export class StorageQuotaService {
     contentType?: string,
   ): Promise<void> {
     try {
-      // Use transaction to ensure both operations succeed or fail together
-      await this.prisma.$transaction(async (tx) => {
-        // Record the upload metadata with PROCESSING status.
-        // Note: Status is PROCESSING initially because processing hasn't completed yet.
-        // This differs from quota tracking where storage is immediately counted.
-        // Status will be updated to COMPLETED after successful processing.
-        // See: src/types/upload.types.ts for the full upload lifecycle documentation.
-        await tx.upload.create({
-          data: {
-            organizationId,
-            userId,
-            fileKey,
-            fileName,
-            fileSizeBytes,
-            contentType,
-            status: UploadStatus.PROCESSING,
-          },
-        });
-
-        // Update organization storage usage
-        await tx.organizationUsage.upsert({
-          where: {
-            organizationId,
-          },
-          update: {
-            storageUsedBytes: {
-              increment: fileSizeBytes,
-            },
-          },
-          create: {
-            organizationId,
-            storageUsedBytes: fileSizeBytes,
-            totalSkus: 0,
-            activeUsers: 0,
-            maxUsers: 0, // Will be set by subscription tier
-            maxSkus: 0, // Will be set by subscription tier
-          },
-        });
+      await this.storageQuotaRepository.recordUpload({
+        organizationId,
+        userId,
+        fileKey,
+        fileName,
+        fileSizeBytes,
+        contentType,
       });
     } catch (error) {
       console.warn('Failed to record upload metadata:', error);
@@ -202,34 +159,7 @@ export class StorageQuotaService {
 
   async markUploadDeleted(organizationId: string, fileKey: string): Promise<void> {
     try {
-      // Use transaction to ensure both operations succeed or fail together
-      await this.prisma.$transaction(async (tx) => {
-        // Get the file size before marking as deleted
-        const upload = (await tx.upload.findUnique({
-          where: { fileKey },
-          select: { fileSizeBytes: true },
-        })) as { fileSizeBytes: number } | null;
-
-        if (upload) {
-          // Mark upload as deleted
-          await tx.upload.update({
-            where: { fileKey },
-            data: { status: 'deleted' },
-          });
-
-          // Decrement organization storage usage
-          await tx.organizationUsage.update({
-            where: {
-              organizationId,
-            },
-            data: {
-              storageUsedBytes: {
-                decrement: upload.fileSizeBytes,
-              },
-            },
-          });
-        }
-      });
+      await this.storageQuotaRepository.markUploadDeleted(organizationId, fileKey);
     } catch (error) {
       console.error('Failed to mark upload as deleted:', error);
       throw error;
