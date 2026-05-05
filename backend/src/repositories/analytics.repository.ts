@@ -43,6 +43,17 @@ export class AnalyticsRepository {
     });
   }
 
+  async findMetricsSnapshotsSince(startDate: Date): Promise<any[]> {
+    return this.prisma.metricsSnapshot.findMany({
+      where: {
+        date: {
+          gte: startDate,
+        },
+      },
+      orderBy: { date: 'asc' },
+    });
+  }
+
   async findWebhookMetricsByDateRange(startDate: Date, endDate: Date): Promise<any[]> {
     return this.prisma.webhookMetrics.findMany({
       where: {

@@ -3,6 +3,7 @@ import { SubscriptionRepository } from '../../repositories/subscription.reposito
 describe('SubscriptionRepository', () => {
   let prisma: {
     subscriptionTier: {
+      groupBy: jest.Mock;
       update: jest.Mock;
     };
     tierFeatureFlag: {
@@ -16,6 +17,7 @@ describe('SubscriptionRepository', () => {
   beforeEach(() => {
     prisma = {
       subscriptionTier: {
+        groupBy: jest.fn(),
         update: jest.fn(),
       },
       tierFeatureFlag: {
@@ -36,6 +38,24 @@ describe('SubscriptionRepository', () => {
     expect(prisma.subscriptionTier.update).toHaveBeenCalledWith({
       where: { id: 1 },
       data: { stripeCustomerId: 'cus_123' },
+    });
+  });
+
+  it('groups subscriptions by tier and status for admin metrics', async () => {
+    prisma.subscriptionTier.groupBy.mockResolvedValue([
+      { tierLevel: 'starter', status: 'trial', _count: 3 },
+      { tierLevel: 'professional', status: 'active', _count: 2 },
+    ]);
+
+    const result = await repository.groupSubscriptionCountsByTierAndStatus();
+
+    expect(result).toEqual([
+      { tierLevel: 'starter', status: 'trial', _count: 3 },
+      { tierLevel: 'professional', status: 'active', _count: 2 },
+    ]);
+    expect(prisma.subscriptionTier.groupBy).toHaveBeenCalledWith({
+      by: ['tierLevel', 'status'],
+      _count: true,
     });
   });
 

@@ -3,9 +3,11 @@ import { AuthRequest } from '../middleware/auth.middleware';
 import { requireOrgRole } from '../middleware/requireOrgRole';
 import { ApplicationMonitoringService } from '../services/application.monitoring.service';
 import { SaasMetricsService } from '../services/saas-metrics.service';
-import { getDefaultDatabaseClient } from '../database/database-factory';
 import { Logger } from '../utils/logger';
 import { TIER_PRICES, TierLevel, ALERT_THRESHOLDS } from '../types/subscription';
+import { getDiContainer } from '../di/container';
+import { SubscriptionRepository } from '../repositories/subscription.repository';
+import { AnalyticsRepository } from '../repositories/analytics.repository';
 
 const router = Router();
 const monitoringService = ApplicationMonitoringService.getInstance();
@@ -18,6 +20,14 @@ interface TierMetricsSummary {
   trial: number;
   canceled: number;
   monthlyRevenue: number;
+}
+
+function getSubscriptionRepository(): SubscriptionRepository {
+  return getDiContainer().resolve(SubscriptionRepository);
+}
+
+function getAnalyticsRepository(): AnalyticsRepository {
+  return getDiContainer().resolve(AnalyticsRepository);
 }
 
 /**
@@ -101,13 +111,7 @@ router.get(
   requireOrgRole('admin'),
   async (req: AuthRequest, res: Response) => {
     try {
-      const prisma = getDefaultDatabaseClient();
-
-      // Get subscription counts by tier
-      const tierCounts = await prisma.subscriptionTier.groupBy({
-        by: ['tierLevel', 'status'],
-        _count: true,
-      });
+      const tierCounts = await getSubscriptionRepository().groupSubscriptionCountsByTierAndStatus();
 
       // Calculate revenue by tier
       const tierMetrics = tierCounts.reduce(
@@ -187,20 +191,11 @@ router.get(
   requireOrgRole('admin'),
   async (req: AuthRequest, res: Response) => {
     try {
-      const prisma = getDefaultDatabaseClient();
-
       // Get last 90 days of metrics snapshots
       const ninetyDaysAgo = new Date();
       ninetyDaysAgo.setDate(ninetyDaysAgo.getDate() - 90);
 
-      const snapshots = await prisma.metricsSnapshot.findMany({
-        where: {
-          date: {
-            gte: ninetyDaysAgo,
-          },
-        },
-        orderBy: { date: 'asc' },
-      });
+      const snapshots = await getAnalyticsRepository().findMetricsSnapshotsSince(ninetyDaysAgo);
 
       if (snapshots.length < 30) {
         return res.json({
@@ -282,18 +277,10 @@ router.get('/historical', requireOrgRole('admin'), async (req: AuthRequest, res:
     const daysParam = parseInt(req.query.days as string) || 30;
     const days = Math.min(Math.max(daysParam, 7), 365); // Clamp between 7 and 365 days
 
-    const prisma = getDefaultDatabaseClient();
     const startDate = new Date();
     startDate.setDate(startDate.getDate() - days);
 
-    const snapshots = await prisma.metricsSnapshot.findMany({
-      where: {
-        date: {
-          gte: startDate,
-        },
-      },
-      orderBy: { date: 'asc' },
-    });
+    const snapshots = await getAnalyticsRepository().findMetricsSnapshotsSince(startDate);
 
     // Transform data for frontend consumption
     const historical = snapshots.map((snapshot) => {

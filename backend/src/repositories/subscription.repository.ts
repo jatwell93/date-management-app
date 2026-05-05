@@ -10,6 +10,12 @@ export interface TierFeatureFlagSeedParams {
   limitValue: number | null;
 }
 
+export interface SubscriptionTierStatusCount {
+  tierLevel: string;
+  status: string;
+  _count: number;
+}
+
 @injectable()
 export class SubscriptionRepository {
   constructor(@inject(PrismaClient) private prisma: PrismaClient) {}
@@ -40,6 +46,13 @@ export class SubscriptionRepository {
 
   async updateStripeCustomerId(id: number, stripeCustomerId: string, tx?: DbClient): Promise<any> {
     return this.update(id, { stripeCustomerId }, tx);
+  }
+
+  async groupSubscriptionCountsByTierAndStatus(): Promise<SubscriptionTierStatusCount[]> {
+    return this.prisma.subscriptionTier.groupBy({
+      by: ['tierLevel', 'status'],
+      _count: true,
+    });
   }
 
   async findUsageByOrganizationId(organizationId: string, tx?: DbClient): Promise<any | null> {
