@@ -16,6 +16,20 @@ export interface SubscriptionTierStatusCount {
   _count: number;
 }
 
+export interface StripeLinkedSubscription {
+  id: number;
+  organizationId: string;
+  stripeSubscriptionId: string | null;
+  tierLevel: string;
+  status: string;
+}
+
+export interface StripeSubscriptionSyncUpdate {
+  tierLevel: string;
+  status: string;
+  trialEndDate: Date | null;
+}
+
 @injectable()
 export class SubscriptionRepository {
   constructor(@inject(PrismaClient) private prisma: PrismaClient) {}
@@ -52,6 +66,31 @@ export class SubscriptionRepository {
     return this.prisma.subscriptionTier.groupBy({
       by: ['tierLevel', 'status'],
       _count: true,
+    });
+  }
+
+  async findStripeLinkedSubscriptions(): Promise<StripeLinkedSubscription[]> {
+    return this.prisma.subscriptionTier.findMany({
+      where: {
+        stripeSubscriptionId: { not: null },
+      },
+      select: {
+        id: true,
+        organizationId: true,
+        stripeSubscriptionId: true,
+        tierLevel: true,
+        status: true,
+      },
+    });
+  }
+
+  async updateByStripeSubscriptionId(
+    stripeSubscriptionId: string,
+    data: StripeSubscriptionSyncUpdate,
+  ): Promise<{ count: number }> {
+    return this.prisma.subscriptionTier.updateMany({
+      where: { stripeSubscriptionId },
+      data,
     });
   }
 

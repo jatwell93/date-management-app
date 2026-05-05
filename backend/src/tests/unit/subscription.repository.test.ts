@@ -3,7 +3,9 @@ import { SubscriptionRepository } from '../../repositories/subscription.reposito
 describe('SubscriptionRepository', () => {
   let prisma: {
     subscriptionTier: {
+      findMany: jest.Mock;
       groupBy: jest.Mock;
+      updateMany: jest.Mock;
       update: jest.Mock;
     };
     tierFeatureFlag: {
@@ -17,7 +19,9 @@ describe('SubscriptionRepository', () => {
   beforeEach(() => {
     prisma = {
       subscriptionTier: {
+        findMany: jest.fn(),
         groupBy: jest.fn(),
+        updateMany: jest.fn(),
         update: jest.fn(),
       },
       tierFeatureFlag: {
@@ -56,6 +60,63 @@ describe('SubscriptionRepository', () => {
     expect(prisma.subscriptionTier.groupBy).toHaveBeenCalledWith({
       by: ['tierLevel', 'status'],
       _count: true,
+    });
+  });
+
+  it('finds subscriptions linked to Stripe for reconciliation', async () => {
+    prisma.subscriptionTier.findMany.mockResolvedValue([
+      {
+        id: 1,
+        organizationId: 'org-123',
+        stripeSubscriptionId: 'sub_abc',
+        tierLevel: 'starter',
+        status: 'active',
+      },
+    ]);
+
+    const result = await repository.findStripeLinkedSubscriptions();
+
+    expect(result).toEqual([
+      {
+        id: 1,
+        organizationId: 'org-123',
+        stripeSubscriptionId: 'sub_abc',
+        tierLevel: 'starter',
+        status: 'active',
+      },
+    ]);
+    expect(prisma.subscriptionTier.findMany).toHaveBeenCalledWith({
+      where: {
+        stripeSubscriptionId: { not: null },
+      },
+      select: {
+        id: true,
+        organizationId: true,
+        stripeSubscriptionId: true,
+        tierLevel: true,
+        status: true,
+      },
+    });
+  });
+
+  it('updates a subscription by Stripe subscription id for reconciliation', async () => {
+    const trialEndDate = new Date('2026-01-31T00:00:00.000Z');
+    prisma.subscriptionTier.updateMany.mockResolvedValue({ count: 1 });
+
+    const result = await repository.updateByStripeSubscriptionId('sub_abc', {
+      tierLevel: 'professional',
+      status: 'active',
+      trialEndDate,
+    });
+
+    expect(result).toEqual({ count: 1 });
+    expect(prisma.subscriptionTier.updateMany).toHaveBeenCalledWith({
+      where: { stripeSubscriptionId: 'sub_abc' },
+      data: {
+        tierLevel: 'professional',
+        status: 'active',
+        trialEndDate,
+      },
     });
   });
 

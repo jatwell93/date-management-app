@@ -12,11 +12,11 @@
 
 import cron, { ScheduledTask } from 'node-cron';
 import Stripe from 'stripe';
-import { PrismaClient } from '@prisma/client';
-import { getDefaultDatabaseClient } from '../database/database-factory';
 import { envConfig } from '../config/environment';
 import { Logger } from '../utils/logger';
 import * as Sentry from '@sentry/node';
+import { getDiContainer } from '../di/container';
+import { SubscriptionRepository } from '../repositories/subscription.repository';
 
 let cronJob: ScheduledTask | null = null;
 
@@ -48,23 +48,15 @@ function normalizeStatus(stripeStatus: Stripe.Subscription.Status): string {
 /**
  * Core sync logic — exported for testability with injected dependencies.
  */
-export async function runStripeSyncJob(prisma: PrismaClient, stripeClient: Stripe): Promise<void> {
+export async function runStripeSyncJob(
+  subscriptionRepository: SubscriptionRepository,
+  stripeClient: Stripe,
+): Promise<void> {
   Logger.info('Starting hourly Stripe subscription sync job');
 
   try {
     // Step 1: Fetch all local subscriptions that have a Stripe subscription ID
-    const localSubscriptions = await prisma.subscriptionTier.findMany({
-      where: {
-        stripeSubscriptionId: { not: null },
-      },
-      select: {
-        id: true,
-        organizationId: true,
-        stripeSubscriptionId: true,
-        tierLevel: true,
-        status: true,
-      },
-    });
+    const localSubscriptions = await subscriptionRepository.findStripeLinkedSubscriptions();
 
     if (localSubscriptions.length === 0) {
       Logger.info('No local Stripe-linked subscriptions found, skipping sync');
@@ -140,13 +132,10 @@ export async function runStripeSyncJob(prisma: PrismaClient, stripeClient: Strip
           stripeStatus,
         });
 
-        await prisma.subscriptionTier.updateMany({
-          where: { stripeSubscriptionId: stripeId },
-          data: {
-            tierLevel: stripeTier,
-            status: stripeStatus,
-            trialEndDate: stripeTrialEnd,
-          },
+        await subscriptionRepository.updateByStripeSubscriptionId(stripeId, {
+          tierLevel: stripeTier,
+          status: stripeStatus,
+          trialEndDate: stripeTrialEnd,
         });
 
         divergenceCount++;
@@ -191,14 +180,14 @@ export function startStripeSyncJob(): void {
     return;
   }
 
-  const prisma = getDefaultDatabaseClient();
+  const subscriptionRepository = getDiContainer().resolve(SubscriptionRepository);
   const stripeClient = new Stripe(envConfig.STRIPE_SECRET_KEY, {
     apiVersion: '2023-08-16',
   });
 
   // Schedule: Every hour at minute 0
   cronJob = cron.schedule('0 * * * *', async () => {
-    await runStripeSyncJob(prisma as unknown as PrismaClient, stripeClient);
+    await runStripeSyncJob(subscriptionRepository, stripeClient);
   });
 
   Logger.info('Stripe subscription sync job started (hourly at :00)');

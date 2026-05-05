@@ -1,25 +1,56 @@
-import { runStripeSyncJob } from '../../jobs/stripe-sync.job';
-import { PrismaClient } from '@prisma/client';
 import Stripe from 'stripe';
+import {
+  runStripeSyncJob,
+  startStripeSyncJob,
+  stopStripeSyncJob,
+} from '../../jobs/stripe-sync.job';
+import { SubscriptionRepository } from '../../repositories/subscription.repository';
+
+const mockStop = jest.fn();
+const mockSchedule = jest.fn(() => ({ stop: mockStop }));
+const mockResolve = jest.fn();
+const mockGetDefaultDatabaseClient = jest.fn(() => {
+  throw new Error('stripe sync job must resolve repositories through DI');
+});
 
 jest.mock('@prisma/client');
-jest.mock('stripe');
-jest.mock('../../database/database-factory');
+jest.mock('stripe', () => jest.fn().mockImplementation(() => mockStripeClient));
+jest.mock('node-cron', () => ({
+  __esModule: true,
+  default: {
+    schedule: (...args: unknown[]) => mockSchedule(...args),
+  },
+  schedule: (...args: unknown[]) => mockSchedule(...args),
+}));
+jest.mock('../../database/database-factory', () => ({
+  getDefaultDatabaseClient: () => mockGetDefaultDatabaseClient(),
+}));
+jest.mock('../../di/container', () => ({
+  getDiContainer: () => ({
+    resolve: (...args: unknown[]) => mockResolve(...args),
+  }),
+}));
 jest.mock('../../config/environment', () => ({
   envConfig: { STRIPE_SECRET_KEY: 'sk_test_123' },
 }));
 
+const mockStripeClient = {
+  subscriptions: {
+    list: jest.fn(),
+  },
+};
+
 describe('StripeSyncJob', () => {
-  let mockPrisma: any;
+  let mockRepository: {
+    findStripeLinkedSubscriptions: jest.Mock;
+    updateByStripeSubscriptionId: jest.Mock;
+  };
   let mockStripe: any;
 
   beforeEach(() => {
-    mockPrisma = {
-      subscriptionTier: {
-        findMany: jest.fn(),
-        updateMany: jest.fn(),
-      },
-      $disconnect: jest.fn(),
+    mockRepository = {
+      findStripeLinkedSubscriptions: jest.fn(),
+      updateByStripeSubscriptionId: jest.fn(),
     };
 
     mockStripe = {
@@ -29,11 +60,14 @@ describe('StripeSyncJob', () => {
     };
 
     jest.clearAllMocks();
+    mockStripeClient.subscriptions.list.mockReset();
+    mockResolve.mockReturnValue(mockRepository);
+    stopStripeSyncJob();
   });
 
   it('syncs a diverged subscription tier from Stripe', async () => {
     // Local DB says 'starter', Stripe says 'professional'
-    mockPrisma.subscriptionTier.findMany.mockResolvedValue([
+    mockRepository.findStripeLinkedSubscriptions.mockResolvedValue([
       {
         id: 1,
         organizationId: 'org-123',
@@ -56,16 +90,19 @@ describe('StripeSyncJob', () => {
       has_more: false,
     });
 
-    await runStripeSyncJob(mockPrisma as unknown as PrismaClient, mockStripe as unknown as Stripe);
+    await runStripeSyncJob(
+      mockRepository as unknown as SubscriptionRepository,
+      mockStripe as Stripe,
+    );
 
-    expect(mockPrisma.subscriptionTier.updateMany).toHaveBeenCalledWith({
-      where: { stripeSubscriptionId: 'sub_abc' },
-      data: expect.objectContaining({ tierLevel: 'professional' }),
-    });
+    expect(mockRepository.updateByStripeSubscriptionId).toHaveBeenCalledWith(
+      'sub_abc',
+      expect.objectContaining({ tierLevel: 'professional' }),
+    );
   });
 
   it('does NOT update when local state matches Stripe', async () => {
-    mockPrisma.subscriptionTier.findMany.mockResolvedValue([
+    mockRepository.findStripeLinkedSubscriptions.mockResolvedValue([
       {
         id: 1,
         organizationId: 'org-123',
@@ -88,13 +125,16 @@ describe('StripeSyncJob', () => {
       has_more: false,
     });
 
-    await runStripeSyncJob(mockPrisma as unknown as PrismaClient, mockStripe as unknown as Stripe);
+    await runStripeSyncJob(
+      mockRepository as unknown as SubscriptionRepository,
+      mockStripe as Stripe,
+    );
 
-    expect(mockPrisma.subscriptionTier.updateMany).not.toHaveBeenCalled();
+    expect(mockRepository.updateByStripeSubscriptionId).not.toHaveBeenCalled();
   });
 
   it('handles subscriptions missing from Stripe (log warning, do not delete)', async () => {
-    mockPrisma.subscriptionTier.findMany.mockResolvedValue([
+    mockRepository.findStripeLinkedSubscriptions.mockResolvedValue([
       {
         id: 1,
         organizationId: 'org-123',
@@ -112,24 +152,24 @@ describe('StripeSyncJob', () => {
 
     // Should not throw
     await expect(
-      runStripeSyncJob(mockPrisma as unknown as PrismaClient, mockStripe as unknown as Stripe),
+      runStripeSyncJob(mockRepository as unknown as SubscriptionRepository, mockStripe as Stripe),
     ).resolves.not.toThrow();
 
     // Should NOT delete or change status
-    expect(mockPrisma.subscriptionTier.updateMany).not.toHaveBeenCalled();
+    expect(mockRepository.updateByStripeSubscriptionId).not.toHaveBeenCalled();
   });
 
   it('handles Stripe API error gracefully without crashing', async () => {
-    mockPrisma.subscriptionTier.findMany.mockResolvedValue([]);
+    mockRepository.findStripeLinkedSubscriptions.mockResolvedValue([]);
     mockStripe.subscriptions.list.mockRejectedValue(new Error('Stripe API down'));
 
     await expect(
-      runStripeSyncJob(mockPrisma as unknown as PrismaClient, mockStripe as unknown as Stripe),
+      runStripeSyncJob(mockRepository as unknown as SubscriptionRepository, mockStripe as Stripe),
     ).resolves.not.toThrow();
   });
 
   it('skips local records missing stripeSubscriptionId without throwing', async () => {
-    mockPrisma.subscriptionTier.findMany.mockResolvedValue([
+    mockRepository.findStripeLinkedSubscriptions.mockResolvedValue([
       {
         id: 1,
         organizationId: 'org-123',
@@ -145,14 +185,14 @@ describe('StripeSyncJob', () => {
     });
 
     await expect(
-      runStripeSyncJob(mockPrisma as unknown as PrismaClient, mockStripe as unknown as Stripe),
+      runStripeSyncJob(mockRepository as unknown as SubscriptionRepository, mockStripe as Stripe),
     ).resolves.not.toThrow();
-    expect(mockPrisma.subscriptionTier.updateMany).not.toHaveBeenCalled();
+    expect(mockRepository.updateByStripeSubscriptionId).not.toHaveBeenCalled();
   });
 
   it('handles paginated Stripe response with has_more=true', async () => {
     // Ensure there is at least one local subscription so the sync runs
-    mockPrisma.subscriptionTier.findMany.mockResolvedValue([
+    mockRepository.findStripeLinkedSubscriptions.mockResolvedValue([
       {
         id: 1,
         organizationId: 'org-123',
@@ -185,9 +225,25 @@ describe('StripeSyncJob', () => {
         has_more: false,
       });
 
-    await runStripeSyncJob(mockPrisma as unknown as PrismaClient, mockStripe as unknown as Stripe);
+    await runStripeSyncJob(
+      mockRepository as unknown as SubscriptionRepository,
+      mockStripe as Stripe,
+    );
 
     // Should have called list twice (pagination)
     expect(mockStripe.subscriptions.list).toHaveBeenCalledTimes(2);
+  });
+
+  it('starts the cron job with a DI-resolved subscription repository', async () => {
+    mockRepository.findStripeLinkedSubscriptions.mockResolvedValue([]);
+    mockStripeClient.subscriptions.list.mockResolvedValue({ data: [], has_more: false });
+
+    startStripeSyncJob();
+    await mockSchedule.mock.calls[0][1]();
+
+    expect(mockGetDefaultDatabaseClient).not.toHaveBeenCalled();
+    expect(mockResolve).toHaveBeenCalledWith(SubscriptionRepository);
+    expect(mockSchedule).toHaveBeenCalledWith('0 * * * *', expect.any(Function));
+    expect(mockRepository.findStripeLinkedSubscriptions).toHaveBeenCalled();
   });
 });
