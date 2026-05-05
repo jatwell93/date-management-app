@@ -1,12 +1,15 @@
 import { ApplicationMonitoringService } from '../services/application.monitoring.service';
 import { SaasMetricsService } from '../services/saas-metrics.service';
 import { Logger } from '../utils/logger';
-import { getDefaultDatabaseClient } from '../database/database-factory';
 import * as Sentry from '@sentry/node';
 import { ALERT_THRESHOLDS } from '../types/subscription';
+import { getDiContainer } from '../di/container';
+import { JobLockRepository } from '../repositories/job-lock.repository';
 
-interface ErrorWithCode {
-  code?: string;
+interface DailyMetricsJobDependencies {
+  monitoringService?: ApplicationMonitoringService;
+  saasMetricsService?: SaasMetricsService;
+  jobLockRepository?: JobLockRepository;
 }
 
 /**
@@ -17,11 +20,14 @@ interface ErrorWithCode {
 export class DailyMetricsJob {
   private monitoringService: ApplicationMonitoringService;
   private saasMetricsService: SaasMetricsService;
-  private prisma = getDefaultDatabaseClient();
+  private jobLockRepository: JobLockRepository;
 
-  constructor() {
-    this.monitoringService = ApplicationMonitoringService.getInstance();
-    this.saasMetricsService = new SaasMetricsService();
+  constructor(dependencies: DailyMetricsJobDependencies = {}) {
+    this.monitoringService =
+      dependencies.monitoringService ?? ApplicationMonitoringService.getInstance();
+    this.saasMetricsService = dependencies.saasMetricsService ?? new SaasMetricsService();
+    this.jobLockRepository =
+      dependencies.jobLockRepository ?? getDiContainer().resolve(JobLockRepository);
   }
 
   /**
@@ -95,43 +101,15 @@ export class DailyMetricsJob {
    * Acquire a distributed lock using the database
    */
   private async acquireLock(lockKey: string, timeoutMinutes: number = 10): Promise<boolean> {
-    const expiresAt = new Date();
-    expiresAt.setMinutes(expiresAt.getMinutes() + timeoutMinutes);
+    const acquired = await this.jobLockRepository.acquire(lockKey, timeoutMinutes);
 
-    try {
-      // Try to create a lock record
-      await this.prisma.$executeRaw`
-        INSERT INTO migrations (name, appliedAt) 
-        VALUES (${lockKey}, ${expiresAt})
-      `;
-
-      Logger.debug('Lock acquired', { lockKey, expiresAt });
-      return true;
-    } catch (error: unknown) {
-      // Check if lock exists and is expired
-      const errorCode =
-        error && typeof error === 'object' && 'code' in error
-          ? (error as ErrorWithCode).code
-          : undefined;
-
-      if (errorCode === 'SQLITE_CONSTRAINT') {
-        const existingLock = (await this.prisma.$queryRaw`
-          SELECT appliedAt FROM migrations WHERE name = ${lockKey}
-        `) as Array<{ appliedAt: Date }>;
-
-        if (existingLock.length > 0 && existingLock[0].appliedAt < new Date()) {
-          // Lock is expired, clean it up and retry
-          await this.releaseLock(lockKey);
-          return this.acquireLock(lockKey, timeoutMinutes);
-        }
-      }
-
-      Logger.debug('Failed to acquire lock', {
-        lockKey,
-        error: error instanceof Error ? error.message : 'Unknown error',
-      });
-      return false;
+    if (acquired) {
+      Logger.debug('Lock acquired', { lockKey });
+    } else {
+      Logger.debug('Failed to acquire lock', { lockKey });
     }
+
+    return acquired;
   }
 
   /**
@@ -139,9 +117,7 @@ export class DailyMetricsJob {
    */
   private async releaseLock(lockKey: string): Promise<void> {
     try {
-      await this.prisma.$executeRaw`
-        DELETE FROM migrations WHERE name = ${lockKey}
-      `;
+      await this.jobLockRepository.release(lockKey);
 
       Logger.debug('Lock released', { lockKey });
     } catch (error) {
