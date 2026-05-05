@@ -1,14 +1,13 @@
 import { Response } from 'express';
 import { AuthRequest } from '../middleware/auth.middleware';
 import { UploadService } from '../services/upload.service';
-import { getDefaultDatabaseClient } from '../database/database-factory';
 import { UploadImportType } from '../types/upload.types';
 import { UploadRepository } from '../repositories/upload.repository';
 
 export class UploadController {
   constructor(
     private uploadService: UploadService,
-    private uploadRepository = new UploadRepository(getDefaultDatabaseClient()),
+    private uploadRepository: UploadRepository,
   ) {}
 
   /**

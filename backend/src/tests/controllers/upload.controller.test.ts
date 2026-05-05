@@ -12,6 +12,10 @@ const mockUploadService = {
   handleDirectUpload: jest.fn(),
 } as unknown as jest.Mocked<UploadService>;
 
+const mockUploadRepository = {
+  findStatusByFileKey: jest.fn(),
+};
+
 // Mock middleware
 jest.mock('../../middleware/auth.middleware', () => ({
   authenticateToken: (req: any, res: any, next: any) => {
@@ -47,7 +51,7 @@ const app = express();
 app.use(express.json());
 
 // Setup controller and routes for testing
-const uploadController = new UploadController(mockUploadService);
+const uploadController = new UploadController(mockUploadService, mockUploadRepository as any);
 const router = express.Router();
 router.post('/initiate', authenticateToken, (req, res) => uploadController.initiate(req, res));
 router.post('/complete', authenticateToken, (req, res) => uploadController.complete(req, res));

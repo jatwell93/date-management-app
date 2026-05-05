@@ -151,7 +151,10 @@ describe('Upload Routes with ServiceProvider Integration', () => {
     });
 
     // Setup routes with ServiceProvider
-    const uploadController = new UploadController(serviceProvider.getUploadService());
+    const uploadController = new UploadController(
+      serviceProvider.getUploadService(),
+      serviceProvider.getUploadRepository(),
+    );
 
     app.post('/api/upload/initiate', (req, res) => uploadController.initiate(req, res));
     app.post('/api/upload/direct', upload.single('file'), (req, res) =>

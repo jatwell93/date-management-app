@@ -71,7 +71,8 @@ const createTestApp = (
     csvParser as any,
     storageQuotaService as any,
   );
-  const controller = new UploadController(uploadService);
+  const uploadRepository = { findStatusByFileKey: jest.fn() };
+  const controller = new UploadController(uploadService, uploadRepository as any);
 
   app.post('/api/upload/direct', upload.single('file'), (req, res) => controller.direct(req, res));
 
