@@ -3,6 +3,13 @@ import { injectable, inject } from 'tsyringe';
 
 type DbClient = PrismaClient | Prisma.TransactionClient;
 
+export interface TierFeatureFlagSeedParams {
+  tierLevel: string;
+  featureKey: string;
+  enabled: boolean;
+  limitValue: number | null;
+}
+
 @injectable()
 export class SubscriptionRepository {
   constructor(@inject(PrismaClient) private prisma: PrismaClient) {}
@@ -52,5 +59,50 @@ export class SubscriptionRepository {
       where: { organizationId },
       data,
     });
+  }
+
+  async findTierFeatureFlag(tierLevel: string, featureKey: string): Promise<any | null> {
+    return this.prisma.tierFeatureFlag.findUnique({
+      where: {
+        tierLevel_featureKey: {
+          tierLevel,
+          featureKey,
+        },
+      },
+    });
+  }
+
+  async countTierFeatureFlags(): Promise<number> {
+    return this.prisma.tierFeatureFlag.count();
+  }
+
+  async seedTierFeatureFlag(params: TierFeatureFlagSeedParams): Promise<{ seeded: boolean }> {
+    const existing = await this.prisma.tierFeatureFlag.findUnique({
+      where: {
+        tierLevel_featureKey: {
+          tierLevel: params.tierLevel,
+          featureKey: params.featureKey,
+        },
+      },
+      select: { id: true },
+    });
+
+    await this.prisma.tierFeatureFlag.upsert({
+      where: {
+        tierLevel_featureKey: {
+          tierLevel: params.tierLevel,
+          featureKey: params.featureKey,
+        },
+      },
+      update: {},
+      create: {
+        tierLevel: params.tierLevel,
+        featureKey: params.featureKey,
+        enabled: params.enabled,
+        limitValue: params.limitValue,
+      },
+    });
+
+    return { seeded: !existing };
   }
 }

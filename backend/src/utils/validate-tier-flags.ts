@@ -59,9 +59,76 @@ export interface ValidationResult {
   flagCounts: Record<string, number>;
 }
 
+type Tier = (typeof REQUIRED_TIERS)[number];
+type Feature = (typeof REQUIRED_FEATURES)[number];
+
+interface TierFeatureFlagStore {
+  findTierFeatureFlag(
+    tierLevel: Tier,
+    featureKey: Feature,
+  ): Promise<{ limitValue?: number | null } | null>;
+  countTierFeatureFlags(): Promise<number>;
+  seedTierFeatureFlag(params: {
+    tierLevel: Tier;
+    featureKey: Feature;
+    enabled: boolean;
+    limitValue: number | null;
+  }): Promise<{ seeded: boolean }>;
+}
+
+type TierFeatureFlagSource = PrismaClient | TierFeatureFlagStore;
+
+function createTierFeatureFlagStore(source: TierFeatureFlagSource): TierFeatureFlagStore {
+  if ('findTierFeatureFlag' in source) {
+    return source;
+  }
+
+  return {
+    findTierFeatureFlag: (tierLevel, featureKey) =>
+      source.tierFeatureFlag.findUnique({
+        where: {
+          tierLevel_featureKey: {
+            tierLevel,
+            featureKey,
+          },
+        },
+      }),
+    countTierFeatureFlags: () => source.tierFeatureFlag.count(),
+    seedTierFeatureFlag: async ({ tierLevel, featureKey, enabled, limitValue }) => {
+      const existing = await source.tierFeatureFlag.findUnique({
+        where: {
+          tierLevel_featureKey: {
+            tierLevel,
+            featureKey,
+          },
+        },
+        select: { id: true },
+      });
+
+      await source.tierFeatureFlag.upsert({
+        where: {
+          tierLevel_featureKey: {
+            tierLevel,
+            featureKey,
+          },
+        },
+        update: {},
+        create: {
+          tierLevel,
+          featureKey,
+          enabled,
+          limitValue,
+        },
+      });
+
+      return { seeded: !existing };
+    },
+  };
+}
+
 function getDefaultTierFeatureConfig(
-  tier: (typeof REQUIRED_TIERS)[number],
-  feature: (typeof REQUIRED_FEATURES)[number],
+  tier: Tier,
+  feature: Feature,
 ): { enabled: boolean; limitValue: number | null } {
   const limitValue = EXPECTED_LIMITS[tier]?.[feature] ?? null;
   const enabled = feature.startsWith('max_') || tier !== 'starter';
@@ -72,14 +139,17 @@ function getDefaultTierFeatureConfig(
  * Validates that all required tier feature flags exist in the database
  * This is a critical check that should run at application startup
  *
- * @param prisma - PrismaClient instance
+ * @param source - PrismaClient or repository providing tier feature flag access
  * @returns ValidationResult with detailed status
  */
-export async function validateTierFeatureFlags(prisma: PrismaClient): Promise<ValidationResult> {
+export async function validateTierFeatureFlags(
+  source: TierFeatureFlagSource,
+): Promise<ValidationResult> {
   const errors: string[] = [];
   const warnings: string[] = [];
   const missingFeatures: string[] = [];
   const flagCounts: Record<string, number> = {};
+  const tierFeatureFlags = createTierFeatureFlagStore(source);
 
   Logger.info('Starting tier feature flags validation...');
 
@@ -88,14 +158,7 @@ export async function validateTierFeatureFlags(prisma: PrismaClient): Promise<Va
     let tierFlagCount = 0;
 
     for (const feature of REQUIRED_FEATURES) {
-      const flag = await prisma.tierFeatureFlag.findUnique({
-        where: {
-          tierLevel_featureKey: {
-            tierLevel: tier,
-            featureKey: feature,
-          },
-        },
-      });
+      const flag = await tierFeatureFlags.findTierFeatureFlag(tier, feature);
 
       if (!flag) {
         const missingKey = `${tier}.${feature}`;
@@ -167,13 +230,17 @@ export async function validateTierFeatureFlags(prisma: PrismaClient): Promise<Va
  * Quick validation that can be used for health checks
  * Returns boolean only - faster than full validation
  *
- * @param prisma - PrismaClient instance
+ * @param source - PrismaClient or repository providing tier feature flag access
  * @returns true if all required flags exist, false otherwise
  */
-export async function quickValidateTierFeatureFlags(prisma: PrismaClient): Promise<boolean> {
+export async function quickValidateTierFeatureFlags(
+  source: TierFeatureFlagSource,
+): Promise<boolean> {
+  const tierFeatureFlags = createTierFeatureFlagStore(source);
+
   try {
     // Count total feature flags
-    const totalFlags = await prisma.tierFeatureFlag.count();
+    const totalFlags = await tierFeatureFlags.countTierFeatureFlags();
     const requiredCount = REQUIRED_TIERS.length * REQUIRED_FEATURES.length;
 
     if (totalFlags < requiredCount) {
@@ -182,14 +249,7 @@ export async function quickValidateTierFeatureFlags(prisma: PrismaClient): Promi
 
     // Quick check - just verify one critical flag per tier exists
     for (const tier of REQUIRED_TIERS) {
-      const flag = await prisma.tierFeatureFlag.findUnique({
-        where: {
-          tierLevel_featureKey: {
-            tierLevel: tier,
-            featureKey: 'max_skus',
-          },
-        },
-      });
+      const flag = await tierFeatureFlags.findTierFeatureFlag(tier, 'max_skus');
 
       if (!flag) {
         return false;
@@ -209,49 +269,31 @@ export async function quickValidateTierFeatureFlags(prisma: PrismaClient): Promi
  * Seeds missing tier feature flags with default values
  * Use with caution - should be run manually, not automatically
  *
- * @param prisma - PrismaClient instance
+ * @param source - PrismaClient or repository providing tier feature flag access
  * @returns Result of seeding operation
  */
 export async function seedMissingTierFeatureFlags(
-  prisma: PrismaClient,
+  source: TierFeatureFlagSource,
 ): Promise<{ seeded: string[]; errors: string[] }> {
   const seeded: string[] = [];
   const errors: string[] = [];
+  const tierFeatureFlags = createTierFeatureFlagStore(source);
 
   Logger.info('Starting to seed missing tier feature flags...');
 
   for (const tier of REQUIRED_TIERS) {
     for (const feature of REQUIRED_FEATURES) {
       try {
-        const existing = await prisma.tierFeatureFlag.findUnique({
-          where: {
-            tierLevel_featureKey: {
-              tierLevel: tier,
-              featureKey: feature,
-            },
-          },
-          select: { id: true },
-        });
-
         const { enabled, limitValue } = getDefaultTierFeatureConfig(tier, feature);
 
-        await prisma.tierFeatureFlag.upsert({
-          where: {
-            tierLevel_featureKey: {
-              tierLevel: tier,
-              featureKey: feature,
-            },
-          },
-          update: {},
-          create: {
-            tierLevel: tier,
-            featureKey: feature,
-            enabled,
-            limitValue,
-          },
+        const result = await tierFeatureFlags.seedTierFeatureFlag({
+          tierLevel: tier,
+          featureKey: feature,
+          enabled,
+          limitValue,
         });
 
-        if (!existing) {
+        if (result.seeded) {
           seeded.push(`${tier}.${feature}`);
           Logger.info(`Seeded feature flag: ${tier}.${feature}`, { enabled, limitValue });
         }

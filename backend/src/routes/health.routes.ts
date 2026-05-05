@@ -2,9 +2,10 @@ import { Router } from 'express';
 import { getDb, releaseDb } from '../database';
 import { DatabaseMonitoringService } from '../services/database.monitoring.service';
 import { validateTierFeatureFlags, ValidationResult } from '../utils/validate-tier-flags';
-import { getDefaultDatabaseClient } from '../database/database-factory';
 import { authenticateToken, AuthRequest } from '../middleware/auth.middleware';
 import { requireOrgRole } from '../middleware/requireOrgRole';
+import { getDiContainer } from '../di/container';
+import { SubscriptionRepository } from '../repositories/subscription.repository';
 
 const router = Router();
 
@@ -21,8 +22,8 @@ function getErrorMessage(error: unknown, fallback: string): string {
  * Call this during application startup
  */
 export async function initializeTierFlagValidation(): Promise<void> {
-  const prisma = getDefaultDatabaseClient();
-  tierFlagsValidationResult = await validateTierFeatureFlags(prisma);
+  const subscriptionRepository = getDiContainer().resolve(SubscriptionRepository);
+  tierFlagsValidationResult = await validateTierFeatureFlags(subscriptionRepository);
   tierFlagsValidationTime = new Date();
 }
 
@@ -30,8 +31,8 @@ export async function initializeTierFlagValidation(): Promise<void> {
  * Re-validate tier feature flags (for health check refreshes)
  */
 export async function revalidateTierFlags(): Promise<boolean> {
-  const prisma = getDefaultDatabaseClient();
-  const result = await validateTierFeatureFlags(prisma);
+  const subscriptionRepository = getDiContainer().resolve(SubscriptionRepository);
+  const result = await validateTierFeatureFlags(subscriptionRepository);
   tierFlagsValidationResult = result;
   tierFlagsValidationTime = new Date();
   return result.valid;
