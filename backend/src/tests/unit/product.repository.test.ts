@@ -19,6 +19,7 @@ describe('ProductRepository', () => {
   let prisma: {
     product: {
       findUnique: jest.Mock;
+      findMany: jest.Mock;
     };
   };
   let repository: ProductRepository;
@@ -27,6 +28,7 @@ describe('ProductRepository', () => {
     prisma = {
       product: {
         findUnique: jest.fn(),
+        findMany: jest.fn(),
       },
     };
     repository = new ProductRepository(prisma as never);
@@ -51,6 +53,24 @@ describe('ProductRepository', () => {
         organizationId_barcode: {
           organizationId,
           barcode: 'BAR-1',
+        },
+      },
+    });
+  });
+
+  it('finds excess products for deletion priority within an organization', async () => {
+    prisma.product.findMany.mockResolvedValue([productRecord]);
+
+    const result = await repository.findExcessProductsByOrganization(organizationId, 5);
+
+    expect(result).toEqual([productRecord]);
+    expect(prisma.product.findMany).toHaveBeenCalledWith({
+      where: { organizationId },
+      orderBy: { createdAt: 'asc' },
+      skip: 5,
+      include: {
+        _count: {
+          select: { inventoryItems: true },
         },
       },
     });

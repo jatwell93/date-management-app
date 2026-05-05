@@ -2,7 +2,6 @@ import { Response, NextFunction } from 'express';
 import { ProductService } from '../services/product.service';
 import { AuthRequest } from '../middleware/auth.middleware';
 import { Product } from '../models/product.model';
-import { getDefaultDatabaseClient } from '../database/database-factory';
 import { TIER_LIMITS, TierLevel } from '../types/subscription';
 import { escapeCSVValue } from '../utils/csv';
 import * as path from 'path';
@@ -15,12 +14,16 @@ import {
   isBaseError,
 } from '../errors';
 import { injectable, inject } from 'tsyringe';
+import { ProductRepository } from '../repositories/product.repository';
+import { SubscriptionRepository } from '../repositories/subscription.repository';
 
 @injectable()
 export class ProductController {
   constructor(
     @inject('ProductServiceFactory')
     private productServiceFactory: (orgId: string) => ProductService,
+    private productRepository: ProductRepository,
+    private subscriptionRepository: SubscriptionRepository,
   ) {}
 
   private getService(req: AuthRequest): ProductService {
@@ -193,18 +196,13 @@ export class ProductController {
 
   async exportExcess(req: AuthRequest, res: Response, next: NextFunction): Promise<void> {
     try {
-      const prisma = getDefaultDatabaseClient();
       const organizationId = req.organizationId;
 
       if (!organizationId) {
         throw new AuthenticationError('Organization context missing');
       }
 
-      // Get current subscription tier
-      const subscription = await prisma.subscriptionTier.findFirst({
-        where: { organizationId },
-        orderBy: { createdAt: 'desc' },
-      });
+      const subscription = await this.subscriptionRepository.findByOrganizationId(organizationId);
 
       if (!subscription) {
         throw new NotFoundError('Subscription not found');
@@ -223,11 +221,7 @@ export class ProductController {
         return;
       }
 
-      // Get current usage
-      const usage = await prisma.organizationUsage.findUnique({
-        where: { organizationId },
-        select: { totalSkus: true },
-      });
+      const usage = await this.subscriptionRepository.findUsageByOrganizationId(organizationId);
 
       const currentCount = usage?.totalSkus || 0;
       const excessCount = currentCount - maxSkus;
@@ -244,17 +238,10 @@ export class ProductController {
         return;
       }
 
-      // Get excess products (oldest first for deletion priority)
-      const excessProducts = await prisma.product.findMany({
-        where: { organizationId },
-        orderBy: { createdAt: 'asc' },
-        skip: maxSkus,
-        include: {
-          _count: {
-            select: { inventoryItems: true },
-          },
-        },
-      });
+      const excessProducts = await this.productRepository.findExcessProductsByOrganization(
+        organizationId,
+        maxSkus,
+      );
 
       // Format response
       const products = excessProducts.map((p) => ({

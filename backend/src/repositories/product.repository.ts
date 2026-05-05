@@ -112,4 +112,21 @@ export class ProductRepository {
       where: { organizationId },
     });
   }
+
+  async findExcessProductsByOrganization(
+    organizationId: string,
+    maxSkus: number,
+    tx?: DbClient,
+  ): Promise<any[]> {
+    return this.getClient(tx).product.findMany({
+      where: { organizationId },
+      orderBy: { createdAt: 'asc' },
+      skip: maxSkus,
+      include: {
+        _count: {
+          select: { inventoryItems: true },
+        },
+      },
+    });
+  }
 }

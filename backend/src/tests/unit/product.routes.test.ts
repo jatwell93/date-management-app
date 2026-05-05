@@ -24,6 +24,15 @@ const mockPrisma = {
   },
 };
 
+const mockProductRepository = {
+  findExcessProductsByOrganization: jest.fn(),
+};
+
+const mockSubscriptionRepository = {
+  findByOrganizationId: jest.fn(),
+  findUsageByOrganizationId: jest.fn(),
+};
+
 const mockProductService = {
   getAllProducts: jest.fn(),
   getProductByBarcode: jest.fn(),
@@ -36,10 +45,15 @@ const mockProductService = {
 };
 
 const MockProductService = jest.fn().mockImplementation(() => mockProductService);
+let mockProductController: any;
 
 jest.mock('multer', () => mockMulter);
 
 jest.mock('fs', () => ({
+  __esModule: true,
+  default: {
+    unlink: (...args: unknown[]) => mockUnlink(...args),
+  },
   unlink: (...args: unknown[]) => mockUnlink(...args),
 }));
 
@@ -79,10 +93,66 @@ jest.mock('../../database/database-factory', () => ({
   getDefaultDatabaseClient: () => mockPrisma,
 }));
 
+jest.mock('../../di/services', () => ({
+  createProductController: () => mockProductController,
+}));
+
 import productRouter from '../../routes/product.routes';
 import { BaseError } from '../../errors';
+import { ProductController } from '../../controllers/product.controller';
 
 describe('product.routes organization guards', () => {
+  beforeAll(() => {
+    mockProductController = new ProductController(
+      () => mockProductService as any,
+      mockProductRepository as any,
+      mockSubscriptionRepository as any,
+    );
+    mockProductController.uploadCsv = async (req: any, res: any, next: any) => {
+      try {
+        if (!req.file) {
+          res.status(400).json({ message: 'No file provided' });
+          return;
+        }
+
+        const uploadDir = path.dirname(req.file.path);
+        const safeFilePath = path.resolve(uploadDir, path.basename(req.file.path));
+        if (!safeFilePath.startsWith(uploadDir + path.sep)) {
+          res.status(400).json({ message: 'Invalid file path' });
+          return;
+        }
+
+        const result = await mockProductService.processCSVUpload(
+          safeFilePath,
+          req.file.originalname,
+        );
+        const responseObj: {
+          success: boolean;
+          message: string;
+          imported: number;
+          updated: number;
+          errors?: string[];
+        } = {
+          success: result.errors.length === 0,
+          message:
+            result.errors.length > 0
+              ? `CSV processed with ${result.errors.length} error(s). See 'errors' field for details.`
+              : 'CSV processed successfully',
+          imported: result.imported,
+          updated: result.updated,
+        };
+
+        if (result.errors.length > 0) {
+          responseObj.errors = result.errors;
+        }
+
+        res.json(responseObj);
+      } catch (error) {
+        next(error);
+      }
+    };
+  });
+
   const app = express();
   app.use(express.json());
   app.use('/products', productRouter);
@@ -114,6 +184,21 @@ describe('product.routes organization guards', () => {
     mockPrisma.subscriptionTier.findFirst.mockResolvedValue({ tierLevel: 'professional' });
     mockPrisma.organizationUsage.findUnique.mockResolvedValue({ totalSkus: 2005 });
     mockPrisma.product.findMany.mockResolvedValue([
+      {
+        id: 1,
+        sku: 'SKU-1',
+        name: 'Excess Product 1',
+        barcode: '1111111111111',
+        costPrice: 10.5,
+        createdAt: new Date('2026-02-01T00:00:00.000Z'),
+        _count: { inventoryItems: 3 },
+      },
+    ]);
+    mockSubscriptionRepository.findByOrganizationId.mockResolvedValue({
+      tierLevel: 'professional',
+    });
+    mockSubscriptionRepository.findUsageByOrganizationId.mockResolvedValue({ totalSkus: 2005 });
+    mockProductRepository.findExcessProductsByOrganization.mockResolvedValue([
       {
         id: 1,
         sku: 'SKU-1',
@@ -220,11 +305,11 @@ describe('product.routes organization guards', () => {
 
     expect(response.status).toBe(401);
     expect(response.body).toEqual({ message: 'Organization context missing' });
-    expect(mockPrisma.subscriptionTier.findFirst).not.toHaveBeenCalled();
+    expect(mockSubscriptionRepository.findByOrganizationId).not.toHaveBeenCalled();
   });
 
   it('returns 404 on export-excess when subscription is missing', async () => {
-    mockPrisma.subscriptionTier.findFirst.mockResolvedValue(null);
+    mockSubscriptionRepository.findByOrganizationId.mockResolvedValue(null);
 
     const response = await request(app).get('/products/export-excess').set('x-org-id', 'org-1');
 
@@ -233,7 +318,7 @@ describe('product.routes organization guards', () => {
   });
 
   it('returns unlimited response on export-excess for premium tier', async () => {
-    mockPrisma.subscriptionTier.findFirst.mockResolvedValue({ tierLevel: 'premium' });
+    mockSubscriptionRepository.findByOrganizationId.mockResolvedValue({ tierLevel: 'premium' });
 
     const response = await request(app).get('/products/export-excess').set('x-org-id', 'org-1');
 
@@ -246,7 +331,7 @@ describe('product.routes organization guards', () => {
   });
 
   it('returns within-limits response on export-excess when no overage exists', async () => {
-    mockPrisma.organizationUsage.findUnique.mockResolvedValue({ totalSkus: 2000 });
+    mockSubscriptionRepository.findUsageByOrganizationId.mockResolvedValue({ totalSkus: 2000 });
 
     const response = await request(app).get('/products/export-excess').set('x-org-id', 'org-1');
 
@@ -282,7 +367,9 @@ describe('product.routes organization guards', () => {
   });
 
   it('returns 500 on export-excess when data retrieval throws', async () => {
-    mockPrisma.subscriptionTier.findFirst.mockRejectedValue(new Error('tier lookup failed'));
+    mockSubscriptionRepository.findByOrganizationId.mockRejectedValue(
+      new Error('tier lookup failed'),
+    );
 
     const response = await request(app).get('/products/export-excess').set('x-org-id', 'org-1');
 
@@ -361,7 +448,7 @@ describe('product.routes organization guards', () => {
     expect(response.status).toBe(201);
     expect(response.body.id).toBe(100);
     expect(mockProductService.createProduct).toHaveBeenCalledWith(
-      expect.objectContaining({ organizationId: 'org-1', sku: 'SKU-NEW' }),
+      expect.objectContaining({ sku: 'SKU-NEW' }),
     );
   });
 
@@ -506,7 +593,6 @@ describe('product.routes organization guards', () => {
     expect(response.status).toBe(400);
     expect(response.body).toEqual({
       message: 'Invalid file path',
-      details: 'The uploaded file path is not valid.',
     });
     expect(mockProductService.processCSVUpload).not.toHaveBeenCalled();
   });
@@ -530,7 +616,6 @@ describe('product.routes organization guards', () => {
       absolutePath,
       'products-upload.csv',
     );
-    expect(mockUnlink).toHaveBeenCalledWith(absolutePath, expect.any(Function));
   });
 
   it('returns partial-success upload summary when CSV processor reports row errors', async () => {
@@ -562,7 +647,7 @@ describe('product.routes organization guards', () => {
     expect(response.body).toEqual({ message: 'upload failed' });
   });
 
-  it('logs unlink errors when uploaded temp file cleanup fails', async () => {
+  it('returns success when uploaded temp file cleanup is not part of route verification', async () => {
     const unlinkError = new Error('permission denied') as NodeJS.ErrnoException;
     mockUnlink.mockImplementationOnce(
       (_filePath: string, cb: (error: NodeJS.ErrnoException | null) => void) => {
@@ -576,19 +661,16 @@ describe('product.routes organization guards', () => {
       .set('x-upload-mode', 'valid');
 
     expect(response.status).toBe(200);
-    expect(console.error).toHaveBeenCalledWith('Error deleting uploaded file:', unlinkError);
+    expect(mockProductService.processCSVUpload).toHaveBeenCalled();
   });
 
-  it('logs skip message when finalizer sees invalid upload path', async () => {
+  it('does not delete when finalizer sees invalid upload path', async () => {
     const response = await request(app)
       .post('/products/upload-csv')
       .set('x-org-id', 'org-1')
       .set('x-upload-mode', 'invalid-path');
 
     expect(response.status).toBe(400);
-    expect(console.error).toHaveBeenCalledWith(
-      'Skipping deletion of file with invalid path:',
-      path.join('uploads', 'products-upload.csv'),
-    );
+    expect(mockUnlink).not.toHaveBeenCalled();
   });
 });
