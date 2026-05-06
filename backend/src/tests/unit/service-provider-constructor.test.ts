@@ -62,6 +62,20 @@ describe('ServiceProvider - Constructor Fix', () => {
     });
   });
 
+  describe('Migrated seam caching', () => {
+    it('reuses repository-backed services and repositories per provider instance', () => {
+      const mockPrisma = {} as PrismaClient;
+      const provider = ServiceProvider.withClients(mockPrisma, {} as any);
+
+      expect(provider.getUploadRepository()).toBe(provider.getUploadRepository());
+      expect(provider.getStorageQuotaRepository()).toBe(provider.getStorageQuotaRepository());
+      expect(provider.getReportRepository()).toBe(provider.getReportRepository());
+      expect(provider.getDashboardService()).toBe(provider.getDashboardService());
+      expect(provider.getUploadService()).toBe(provider.getUploadService());
+      expect(provider.getStorageQuotaService()).toBe(provider.getStorageQuotaService());
+    });
+  });
+
   describe('Type Safety', () => {
     it('should prevent ambiguous parameter passing', () => {
       // This should be impossible with the new API:
