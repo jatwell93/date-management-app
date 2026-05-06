@@ -53,11 +53,11 @@
 
 ## 7. Type Safety and Error Handling
 
-- [ ] 7.1 Replace untyped external payload handling with explicit interfaces, unions, or guarded unknowns in the webhook and CSV paths.
-- [ ] 7.2 Remove approved production `any` usages from the changed backend modules.
-- [ ] 7.3 Centralize error translation in middleware and remove service-level HTTP response formatting.
-- [ ] 7.4 Replace ad hoc console logging in production code with structured logger usage.
-- [ ] 7.5 Confirm error responses remain shape-compatible with existing clients after middleware centralization.
+- [x] 7.1 Replace untyped external payload handling with explicit interfaces, unions, or guarded unknowns in the webhook and CSV paths.
+- [x] 7.2 Remove approved production `any` usages from the changed backend modules.
+- [x] 7.3 Centralize error translation in middleware and remove service-level HTTP response formatting.
+- [x] 7.4 Replace ad hoc console logging in production code with structured logger usage.
+- [x] 7.5 Confirm error responses remain shape-compatible with existing clients after middleware centralization.
 
 ## 8. Test Suite Hygiene
 
