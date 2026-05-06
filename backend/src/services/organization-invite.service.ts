@@ -1,5 +1,6 @@
 import crypto from 'crypto';
 import bcrypt from 'bcrypt';
+import { Logger } from '../utils/logger';
 import { PrismaClient } from '@prisma/client';
 import { getDefaultDatabaseClient } from '../database/database-factory';
 import { ConflictError, NotFoundError, PaymentRequiredError, ValidationError } from '../errors';
@@ -105,7 +106,7 @@ export class OrganizationInviteService {
       });
     } catch (error) {
       // Audit failure should not block invite creation
-      console.error('Failed to emit invite creation audit event', {
+      Logger.error('Failed to emit invite creation audit event', {
         error,
         organizationId: params.organizationId,
         inviteId: invite.id,

@@ -1,5 +1,6 @@
 import { getDefaultDatabaseClient } from '../database/database-factory';
 import { StorageQuotaRepository } from '../repositories/storage-quota.repository';
+import { Logger } from '../utils/logger';
 
 /**
  * Subscription tier configuration
@@ -126,10 +127,7 @@ export class StorageQuotaService {
     try {
       return await this.storageQuotaRepository.sumActiveUploadBytes(this.organizationId);
     } catch (error) {
-      console.error(
-        `Failed to calculate storage usage for organization ${this.organizationId}:`,
-        error,
-      );
+      Logger.error(`Failed to calculate storage usage for organization ${this.organizationId}`, { error: error instanceof Error ? error.message : String(error) });
       return 0;
     }
   }
@@ -152,7 +150,7 @@ export class StorageQuotaService {
         contentType,
       });
     } catch (error) {
-      console.warn('Failed to record upload metadata:', error);
+      Logger.warn('Failed to record upload metadata', { error: error instanceof Error ? error.message : String(error) });
       throw error;
     }
   }
@@ -161,7 +159,7 @@ export class StorageQuotaService {
     try {
       await this.storageQuotaRepository.markUploadDeleted(organizationId, fileKey);
     } catch (error) {
-      console.error('Failed to mark upload as deleted:', error);
+      Logger.error('Failed to mark upload as deleted', { error: error instanceof Error ? error.message : String(error) });
       throw error;
     }
   }

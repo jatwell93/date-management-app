@@ -1,4 +1,5 @@
 import { PrismaClient } from '@prisma/client';
+import { Logger } from '../utils/logger';
 import { getDefaultDatabaseClient } from '../database/database-factory';
 import { getOrganizationId } from '../utils/auth-bypass';
 import { Product } from '../models/product.model';
@@ -433,7 +434,7 @@ export class ProductService {
           }),
         )
         .on('error', (error) => {
-          console.error('CSV parsing error:', error);
+          Logger.error('CSV parsing error', { error: error instanceof Error ? error.message : String(error) });
           errors.push(`CSV parsing error: ${error.message}`);
           reject({ imported, updated, errors });
         })
@@ -595,7 +596,7 @@ export class ProductService {
               }
             } catch (error: unknown) {
               const errorMessage = error instanceof Error ? error.message : 'Unknown error';
-              console.error(`Error processing row ${recordCount}:`, error);
+              Logger.error(`Error processing row ${recordCount}`, { error: errorMessage });
               errors.push(`Row ${recordCount}: Unexpected error processing data - ${errorMessage}`);
             }
           })();
@@ -613,7 +614,7 @@ export class ProductService {
 
             resolve({ imported, updated, errors });
           } catch (finalError: unknown) {
-            console.error('Error in final processing:', finalError);
+            Logger.error('Error in final processing', { error: finalError instanceof Error ? finalError.message : String(finalError) });
             const finalErrorMessage =
               finalError instanceof Error ? finalError.message : 'Unknown error';
             errors.push(`Final processing error: ${finalErrorMessage}`);
@@ -862,9 +863,7 @@ export class ProductService {
       errors.push(`Error processing XLSX file: ${(error as Error).message}`);
     }
 
-    console.log(
-      `XLSX processing complete: ${imported} imported, ${updated} updated, ${errors.length} errors`,
-    );
+    Logger.info('XLSX processing complete', { imported, updated, errors: errors.length });
     return { imported, updated, errors };
   }
 

@@ -1,5 +1,6 @@
 import { Response, NextFunction } from 'express';
 import { ProductService } from '../services/product.service';
+import { Logger } from '../utils/logger';
 import { AuthRequest } from '../middleware/auth.middleware';
 import { Product } from '../models/product.model';
 import { TIER_LIMITS, TierLevel } from '../types/subscription';
@@ -24,7 +25,7 @@ export class ProductController {
     private productServiceFactory: (orgId: string) => ProductService,
     private productRepository: ProductRepository,
     private subscriptionRepository: SubscriptionRepository,
-  ) {}
+  ) { }
 
   private getService(req: AuthRequest): ProductService {
     if (!req.organizationId) {
@@ -353,7 +354,7 @@ export class ProductController {
         if (safeFilePath.startsWith(uploadDir + path.sep)) {
           fs.unlink(safeFilePath, (err: NodeJS.ErrnoException | null) => {
             if (err) {
-              console.error('Error deleting uploaded file:', err);
+              Logger.error('Error deleting uploaded file', { error: err.message });
             }
           });
         }
