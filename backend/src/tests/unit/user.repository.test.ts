@@ -124,4 +124,28 @@ describe('UserRepository', () => {
       select: { organizationId: true },
     });
   });
+
+  it('finds an active Clerk user for authentication', async () => {
+    prisma.user.findUnique.mockResolvedValue({
+      id: 1,
+      role: 'member',
+      organizationId,
+    });
+
+    const result = await repository.findActiveByClerkUserId('clerk-1');
+
+    expect(result).toEqual({
+      id: 1,
+      role: 'member',
+      organizationId,
+    });
+    expect(prisma.user.findUnique).toHaveBeenCalledWith({
+      where: { clerkUserId: 'clerk-1', deletedAt: null },
+      select: {
+        id: true,
+        role: true,
+        organizationId: true,
+      },
+    });
+  });
 });

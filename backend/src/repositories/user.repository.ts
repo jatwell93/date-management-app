@@ -128,6 +128,19 @@ export class UserRepository {
     });
   }
 
+  async findActiveByClerkUserId(
+    clerkUserId: string,
+  ): Promise<{ id: number; role: string; organizationId: string | null } | null> {
+    return this.prisma.user.findUnique({
+      where: { clerkUserId, deletedAt: null },
+      select: {
+        id: true,
+        role: true,
+        organizationId: true,
+      },
+    });
+  }
+
   async createClerkUser(params: CreateClerkUserRecordParams): Promise<UserRecord> {
     return this.prisma.user.create({
       data: {

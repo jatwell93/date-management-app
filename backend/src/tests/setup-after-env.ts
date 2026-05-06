@@ -6,7 +6,7 @@ import { PrismaClient } from '@prisma/client';
 import { AnalyticsService } from '../services/analytics.service';
 import { ApplicationMonitoringService } from '../services/application.monitoring.service';
 import { DatabaseMonitoringService } from '../services/database.monitoring.service';
-import { resetDiContainer } from '../di';
+import { resetDiContainer } from '../di/container';
 import { resetOrgCounter } from './helpers/test-factories';
 
 const prisma = new PrismaClient();

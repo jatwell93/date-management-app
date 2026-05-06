@@ -67,7 +67,12 @@ export class SubscriptionRepository {
   }
 
   async groupSubscriptionCountsByTierAndStatus(): Promise<SubscriptionTierStatusCount[]> {
-    return this.prisma.subscriptionTier.groupBy({
+    const groupByTierAndStatus = this.prisma.subscriptionTier.groupBy as unknown as (args: {
+      by: ['tierLevel', 'status'];
+      _count: true;
+    }) => Promise<SubscriptionTierStatusCount[]>;
+
+    return groupByTierAndStatus({
       by: ['tierLevel', 'status'],
       _count: true,
     });

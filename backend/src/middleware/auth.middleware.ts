@@ -4,9 +4,11 @@ import { verifyToken as verifyClerkToken } from '@clerk/backend';
 import { SubscriptionTier } from '@prisma/client';
 import { AnalyticsService, AnalyticsEventType } from '../services/analytics.service';
 import { BillingCycle, TierLevel, SubscriptionStatus } from '../types/subscription';
-import { getDefaultDatabaseClient } from '../database/database-factory';
 import { envConfig } from '../config/environment';
 import { SubscriptionService } from '../services/subscription.service';
+import { getDiContainer } from '../di/container';
+import { UserRepository } from '../repositories/user.repository';
+import { SubscriptionRepository } from '../repositories/subscription.repository';
 
 export interface AuthRequest extends Request {
   userId?: number;
@@ -241,16 +243,9 @@ async function resolveFromClerkToken(token: string): Promise<TokenPayload | null
       authorizedParties: getAuthorizedParties(),
     })) as ClerkTokenPayload;
 
-    const prisma = getDefaultDatabaseClient();
+    const userRepository = getDiContainer().resolve(UserRepository);
 
-    const user = await prisma.user.findUnique({
-      where: { clerkUserId: clerkDecoded.sub, deletedAt: null },
-      select: {
-        id: true,
-        role: true,
-        organizationId: true,
-      },
-    });
+    const user = await userRepository.findActiveByClerkUserId(clerkDecoded.sub);
 
     // Exclude soft-deleted users
     if (!user || user.organizationId === null) {
@@ -310,11 +305,8 @@ async function validateOrganizationSubscription(
     subscription = cached.subscription.data;
     hasActiveAccess = cached.subscription.hasActiveAccess;
   } else {
-    const prisma = getDefaultDatabaseClient();
-    subscription = await prisma.subscriptionTier.findFirst({
-      where: { organizationId: orgId },
-      orderBy: { createdAt: 'desc' },
-    });
+    const subscriptionRepository = getDiContainer().resolve(SubscriptionRepository);
+    subscription = await subscriptionRepository.findLatestByOrganizationId(orgId);
 
     if (subscription && subscription.status === SubscriptionStatus.CANCELED) {
       const tierLevel = isTierLevel(subscription.tierLevel) ? subscription.tierLevel : null;
@@ -323,7 +315,7 @@ async function validateOrganizationSubscription(
         : null;
 
       if (tierLevel && billingCycle) {
-        const subscriptionService = new SubscriptionService(prisma);
+        const subscriptionService = getDiContainer().resolve(SubscriptionService);
         hasActiveAccess = await subscriptionService.isAccessActive({
           id: subscription.id,
           organizationId: subscription.organizationId,

@@ -5,6 +5,12 @@ import { SubscriptionStatus } from '../../types/subscription';
 const trackEvent = jest.fn();
 let mockPrisma: any;
 let mockIsAccessActive: jest.Mock;
+const mockSubscriptionRepository = {
+  findLatestByOrganizationId: jest.fn(),
+};
+const mockUserRepository = {
+  findActiveByClerkUserId: jest.fn(),
+};
 
 jest.mock('jsonwebtoken', () => ({
   verify: jest.fn(),
@@ -13,6 +19,27 @@ jest.mock('jsonwebtoken', () => ({
 
 jest.mock('../../database/database-factory', () => ({
   getDefaultDatabaseClient: () => mockPrisma,
+}));
+
+jest.mock('../../di/container', () => ({
+  getDiContainer: () => ({
+    resolve: (token: unknown) => {
+      const tokenName =
+        typeof token === 'function' && 'name' in token ? (token as { name: string }).name : token;
+
+      if (tokenName === 'SubscriptionRepository') {
+        return mockSubscriptionRepository;
+      }
+      if (tokenName === 'UserRepository') {
+        return mockUserRepository;
+      }
+      if (tokenName === 'SubscriptionService' || tokenName === 'mockConstructor') {
+        return { isAccessActive: (...args: any[]) => mockIsAccessActive(...args) };
+      }
+
+      throw new Error(`Unexpected DI token: ${String(tokenName)}`);
+    },
+  }),
 }));
 
 jest.mock('../../services/subscription.service', () => ({
@@ -104,6 +131,8 @@ describe('auth middleware', () => {
       },
     };
     mockIsAccessActive = jest.fn();
+    mockSubscriptionRepository.findLatestByOrganizationId.mockReset();
+    mockUserRepository.findActiveByClerkUserId.mockReset();
     // Ensure jwt.verify mock is available
     (jwt.verify as jest.Mock).mockReset();
   });
@@ -199,7 +228,7 @@ describe('auth middleware', () => {
         exp: Math.floor(Date.now() / 1000) + 300,
       });
 
-      (mockPrisma.subscriptionTier.findFirst as jest.Mock).mockResolvedValue({
+      mockSubscriptionRepository.findLatestByOrganizationId.mockResolvedValue({
         id: 1,
         organizationId: 'org-1',
         tierLevel: 'professional',
@@ -244,7 +273,7 @@ describe('auth middleware', () => {
         exp: Math.floor(Date.now() / 1000) + 300,
       });
 
-      (mockPrisma.subscriptionTier.findFirst as jest.Mock).mockResolvedValue({
+      mockSubscriptionRepository.findLatestByOrganizationId.mockResolvedValue({
         id: 2,
         organizationId: 'org-stale-tier',
         tierLevel: 'starter',
@@ -283,7 +312,7 @@ describe('auth middleware', () => {
         exp: Math.floor(Date.now() / 1000) + 300,
       });
 
-      (mockPrisma.subscriptionTier.findFirst as jest.Mock).mockResolvedValue({
+      mockSubscriptionRepository.findLatestByOrganizationId.mockResolvedValue({
         id: 1,
         organizationId: 'org-1',
         tierLevel: 'professional',
@@ -313,7 +342,7 @@ describe('auth middleware', () => {
         exp: Math.floor(Date.now() / 1000) + 300,
       });
 
-      (mockPrisma.subscriptionTier.findFirst as jest.Mock).mockResolvedValue({
+      mockSubscriptionRepository.findLatestByOrganizationId.mockResolvedValue({
         id: 1,
         organizationId: 'org-1',
         tierLevel: 'professional',
