@@ -16,11 +16,35 @@
  */
 
 import { Request, Response, NextFunction } from 'express';
+import Stripe from 'stripe';
 import { WebhookService } from '../services/webhook.service';
 import { ClerkWebhookService } from '../services/clerk-webhook.service';
 import { ApplicationMonitoringService } from '../services/application.monitoring.service';
 import { ConflictError, NotFoundError } from '../errors';
 import { injectable, inject } from 'tsyringe';
+import * as Sentry from '@sentry/node';
+import { Logger } from '../utils/logger';
+
+function sendWebhookSuccess(res: Response): void {
+  res.status(200).json({ received: true });
+}
+
+function sendWebhookError(res: Response, message: string, statusCode = 400): void {
+  if (statusCode >= 500) {
+    Sentry.captureMessage(`Webhook server error: ${message}`, {
+      level: 'error',
+      tags: { component: 'webhook', error_type: 'server_error', status_code: statusCode.toString() },
+      extra: { message, timestamp: new Date().toISOString() },
+    });
+  } else if (statusCode >= 400) {
+    Sentry.captureMessage(`Webhook client error: ${message}`, {
+      level: 'warning',
+      tags: { component: 'webhook', error_type: 'client_error', status_code: statusCode.toString() },
+      extra: { message, timestamp: new Date().toISOString() },
+    });
+  }
+  res.status(statusCode).json({ error: message });
+}
 
 type ClerkWebhookEventPayload = {
   type?: string;
@@ -49,7 +73,7 @@ export class WebhookController {
   constructor(
     private webhookService: WebhookService,
     private clerkWebhookService: ClerkWebhookService,
-  ) {}
+  ) { }
 
   /**
    * Handle Stripe webhook events
@@ -67,22 +91,22 @@ export class WebhookController {
       const signature = req.headers['stripe-signature'] as string;
 
       if (!signature) {
-        console.warn('[WEBHOOK] Webhook request missing stripe-signature header');
-        this.webhookService.sendError(res, 'Missing stripe-signature header', 400);
+        Logger.warn('[WEBHOOK] Webhook request missing stripe-signature header');
+        sendWebhookError(res, 'Missing stripe-signature header', 400);
         return;
       }
 
-      let event;
+      let event: Stripe.Event;
       try {
         const rawBody = req.body; // Body is raw Buffer when using express.raw()
         event = this.webhookService.verifySignature(rawBody as Buffer, signature);
       } catch (verifyError) {
         const error = verifyError as Error;
-        console.error('[WEBHOOK] Webhook signature verification failed', {
+        Logger.error('[WEBHOOK] Webhook signature verification failed', {
           error: error.message,
-          signature,
+          signaturePresent: Boolean(signature),
         });
-        this.webhookService.sendError(res, error.message, 400);
+        sendWebhookError(res, error.message, 400);
         return;
       }
 
@@ -92,7 +116,7 @@ export class WebhookController {
       const startTs = Date.now();
 
       if (!isNew) {
-        console.log('[WEBHOOK] Duplicate webhook event, returning success without reprocessing', {
+        Logger.info('[WEBHOOK] Duplicate webhook event, returning success without reprocessing', {
           eventId: event.id,
           eventType: event.type,
         });
@@ -101,7 +125,7 @@ export class WebhookController {
         monitor.recordWebhookEvent(event.type, 0, 'skipped');
 
         // Return 200 OK for duplicate events (Stripe expects idempotent response)
-        this.webhookService.sendSuccess(res);
+        sendWebhookSuccess(res);
         return;
       }
 
@@ -112,24 +136,24 @@ export class WebhookController {
         const duration = Date.now() - startTs;
         monitor.recordWebhookEvent(event.type, duration, 'success');
 
-        console.log('[WEBHOOK] Webhook event processed successfully', {
+        Logger.info('[WEBHOOK] Webhook event processed successfully', {
           eventId: event.id,
           eventType: event.type,
         });
-        this.webhookService.sendSuccess(res);
+        sendWebhookSuccess(res);
       } catch (handleError) {
         const error = handleError as Error;
         const duration = Date.now() - startTs;
         monitor.recordWebhookEvent(event.type, duration, 'error');
 
-        console.error('[WEBHOOK] Error processing webhook event', {
+        Logger.error('[WEBHOOK] Error processing webhook event', {
           eventId: event.id,
           eventType: event.type,
           error: error.message,
         });
 
         if (isNonRecoverableStripeWebhookError(error)) {
-          console.warn(
+          Logger.warn(
             '[WEBHOOK] Non-recoverable Stripe webhook error, acknowledging event to stop retries',
             {
               eventId: event.id,
@@ -137,19 +161,19 @@ export class WebhookController {
               error: error.message,
             },
           );
-          this.webhookService.sendSuccess(res);
+          sendWebhookSuccess(res);
           return;
         }
 
         // Return 500 for transient processing errors (Stripe will retry)
-        this.webhookService.sendError(res, 'Error processing webhook event', 500);
+        sendWebhookError(res, 'Error processing webhook event', 500);
       }
     } catch (error) {
       const err = error as Error;
-      console.error('[WEBHOOK] Unexpected error in webhook handler', {
+      Logger.error('[WEBHOOK] Unexpected error in webhook handler', {
         error: err.message,
       });
-      this.webhookService.sendError(res, 'Internal server error', 500);
+      sendWebhookError(res, 'Internal server error', 500);
     }
   }
 
@@ -173,8 +197,8 @@ export class WebhookController {
       };
 
       if (!headers['svix-id'] || !headers['svix-timestamp'] || !headers['svix-signature']) {
-        console.warn('[CLERK_WEBHOOK] Webhook request missing required Svix headers');
-        this.clerkWebhookService.sendError(res, 'Missing required Svix headers', 400);
+        Logger.warn('[CLERK_WEBHOOK] Webhook request missing required Svix headers');
+        sendWebhookError(res, 'Missing required Svix headers', 400);
         return;
       }
 
@@ -183,17 +207,19 @@ export class WebhookController {
         const rawBody = req.body; // Body is raw Buffer when using express.raw()
         const verifiedEvent = this.clerkWebhookService.verifySignature(rawBody as Buffer, headers);
         if (!isClerkWebhookEventPayload(verifiedEvent)) {
-          this.clerkWebhookService.sendError(res, 'Invalid webhook payload', 400);
+          sendWebhookError(res, 'Invalid webhook payload', 400);
           return;
         }
         event = verifiedEvent;
       } catch (verifyError) {
         const error = verifyError as Error;
-        console.error('[CLERK_WEBHOOK] Webhook signature verification failed', {
+        Logger.error('[CLERK_WEBHOOK] Webhook signature verification failed', {
           error: error.message,
-          headers,
+          svixId: headers['svix-id'],
+          svixTimestampPresent: Boolean(headers['svix-timestamp']),
+          svixSignaturePresent: Boolean(headers['svix-signature']),
         });
-        this.clerkWebhookService.sendError(res, error.message, 400);
+        sendWebhookError(res, error.message, 400);
         return;
       }
 
@@ -206,19 +232,16 @@ export class WebhookController {
       const startTs = Date.now();
 
       if (!isNew) {
-        console.log(
-          '[CLERK_WEBHOOK] Duplicate webhook event, returning success without reprocessing',
-          {
-            eventId: svixEventId,
-            eventType,
-          },
-        );
+        Logger.info('[CLERK_WEBHOOK] Duplicate webhook event, returning success without reprocessing', {
+          eventId: svixEventId,
+          eventType,
+        });
 
         // record idempotency skip metric
         monitor.recordWebhookEvent(eventType, 0, 'skipped');
 
         // Return 200 OK for duplicate events
-        this.clerkWebhookService.sendSuccess(res);
+        sendWebhookSuccess(res);
         return;
       }
 
@@ -229,36 +252,36 @@ export class WebhookController {
         const duration = Date.now() - startTs;
         monitor.recordWebhookEvent(eventType, duration, 'success');
 
-        console.log('[CLERK_WEBHOOK] Webhook event processed successfully', {
+        Logger.info('[CLERK_WEBHOOK] Webhook event processed successfully', {
           eventId: svixEventId,
           eventType,
         });
-        this.clerkWebhookService.sendSuccess(res);
+        sendWebhookSuccess(res);
       } catch (handleError) {
         const error = handleError as Error;
         const duration = Date.now() - startTs;
         monitor.recordWebhookEvent(eventType, duration, 'error');
 
-        console.error('[CLERK_WEBHOOK] Error processing webhook event', {
+        Logger.error('[CLERK_WEBHOOK] Error processing webhook event', {
           eventId: svixEventId,
           eventType,
           error: error.message,
         });
 
         if (error instanceof ConflictError) {
-          this.clerkWebhookService.sendError(res, error.message, error.statusCode);
+          sendWebhookError(res, error.message, error.statusCode);
           return;
         }
 
         // Return 500 for transient processing errors (Clerk will retry)
-        this.clerkWebhookService.sendError(res, 'Error processing webhook event', 500);
+        sendWebhookError(res, 'Error processing webhook event', 500);
       }
     } catch (error) {
       const err = error as Error;
-      console.error('[CLERK_WEBHOOK] Unexpected error in webhook handler', {
+      Logger.error('[CLERK_WEBHOOK] Unexpected error in webhook handler', {
         error: err.message,
       });
-      this.clerkWebhookService.sendError(res, 'Internal server error', 500);
+      sendWebhookError(res, 'Internal server error', 500);
     }
   }
 }

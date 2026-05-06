@@ -10,7 +10,6 @@
  * 3. Handle idempotently (check event ID, process, store)
  */
 
-import { Response } from 'express';
 import { PrismaClient } from '@prisma/client';
 import { getDefaultDatabaseClient } from '../database/database-factory';
 import { SubscriptionService } from './subscription.service';
@@ -21,18 +20,12 @@ import { isPrismaErrorCode, PRISMA_ERROR_CODES } from '../utils/prisma-error';
 import { ROLES, normalizeRole } from '../constants/roles';
 import { ClerkWebhookSignatureService } from './clerk-webhook-signature.service';
 import { injectable, inject } from 'tsyringe';
+import { Logger } from '../utils/logger';
 
-// Simple logging utility
 const log = {
-  info: (message: string, data?: Record<string, unknown>) => {
-    console.log(`[CLERK_WEBHOOK] ${message}`, data ? JSON.stringify(data) : '');
-  },
-  warn: (message: string, data?: Record<string, unknown>) => {
-    console.warn(`[CLERK_WEBHOOK] ${message}`, data ? JSON.stringify(data) : '');
-  },
-  error: (message: string, data?: Record<string, unknown>) => {
-    console.error(`[CLERK_WEBHOOK] ${message}`, data ? JSON.stringify(data) : '');
-  },
+  info: (message: string, data?: Record<string, unknown>) => Logger.info(`[CLERK_WEBHOOK] ${message}`, data),
+  warn: (message: string, data?: Record<string, unknown>) => Logger.warn(`[CLERK_WEBHOOK] ${message}`, data),
+  error: (message: string, data?: Record<string, unknown>) => Logger.error(`[CLERK_WEBHOOK] ${message}`, data),
 };
 
 interface ClerkWebhookEvent {
@@ -584,19 +577,6 @@ export class ClerkWebhookService {
     }
   }
 
-  /**
-   * Send success response
-   */
-  sendSuccess(res: Response): void {
-    res.status(200).json({ received: true });
-  }
-
-  /**
-   * Send error response
-   */
-  sendError(res: Response, message: string, statusCode: number = 400): void {
-    res.status(statusCode).json({ error: message });
-  }
 }
 
 // Export singleton instance

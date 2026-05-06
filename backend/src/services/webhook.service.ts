@@ -11,7 +11,6 @@
  */
 
 import Stripe from 'stripe';
-import { Response } from 'express';
 import { PrismaClient } from '@prisma/client';
 import type { Prisma, SubscriptionTier } from '@prisma/client';
 import { envConfig } from '../config/environment';
@@ -27,6 +26,7 @@ import { invalidateSubscriptionCache } from '../middleware/auth.middleware';
 import { getTierLimits, TierLimits } from './webhook-subscription.helpers';
 import { dispatchStripeWebhookEvent } from './webhook-event-dispatcher';
 import { injectable, inject } from 'tsyringe';
+import { Logger } from '../utils/logger';
 
 import { DEFAULT_LIMITS } from '../constants/default-limits';
 
@@ -34,17 +34,10 @@ interface ErrorWithCode {
   code?: string;
 }
 
-// Simple logging utility
 const log = {
-  info: (message: string, data?: Record<string, unknown>) => {
-    console.log(`[WEBHOOK] ${message}`, data ? JSON.stringify(data) : '');
-  },
-  warn: (message: string, data?: Record<string, unknown>) => {
-    console.warn(`[WEBHOOK] ${message}`, data ? JSON.stringify(data) : '');
-  },
-  error: (message: string, data?: Record<string, unknown>) => {
-    console.error(`[WEBHOOK] ${message}`, data ? JSON.stringify(data) : '');
-  },
+  info: (message: string, data?: Record<string, unknown>) => Logger.info(`[WEBHOOK] ${message}`, data),
+  warn: (message: string, data?: Record<string, unknown>) => Logger.warn(`[WEBHOOK] ${message}`, data),
+  error: (message: string, data?: Record<string, unknown>) => Logger.error(`[WEBHOOK] ${message}`, data),
 };
 
 @injectable()
@@ -792,56 +785,6 @@ export class WebhookService {
   }
 
   /**
-   * Send webhook success response
-   *
-   * Return 200 OK for both new and duplicate events (idempotency)
-   */
-  sendSuccess(res: Response): Response {
-    return res.status(200).json({ received: true });
-  }
-
-  /**
-   * Send webhook error response
-   *
-   * Return 4xx for client errors (signature verification, invalid format)
-   * Return 5xx only for temporary server errors (will trigger Stripe retry)
-   */
-  sendError(res: Response, message: string, statusCode = 400): Response {
-    // Log webhook errors to Sentry for monitoring
-    if (statusCode >= 500) {
-      // Server errors are critical as they may cause webhook delivery failures
-      Sentry.captureMessage(`Webhook server error: ${message}`, {
-        level: 'error',
-        tags: {
-          component: 'webhook',
-          error_type: 'server_error',
-          status_code: statusCode.toString(),
-        },
-        extra: {
-          message,
-          timestamp: new Date().toISOString(),
-        },
-      });
-    } else if (statusCode >= 400) {
-      // Client errors may indicate configuration issues
-      Sentry.captureMessage(`Webhook client error: ${message}`, {
-        level: 'warning',
-        tags: {
-          component: 'webhook',
-          error_type: 'client_error',
-          status_code: statusCode.toString(),
-        },
-        extra: {
-          message,
-          timestamp: new Date().toISOString(),
-        },
-      });
-    }
-
-    return res.status(statusCode).json({ error: message });
-  }
-
-  /**
    * Report webhook processing error to Sentry with context
    */
   private reportWebhookError(
@@ -916,7 +859,7 @@ export class WebhookService {
       TIER_LIMITS[newTierLevel].max_skus !== null &&
       (TIER_LIMITS[oldTier.tierLevel as TierLevel].max_skus === null ||
         (TIER_LIMITS[newTierLevel].max_skus as number) <
-          (TIER_LIMITS[oldTier.tierLevel as TierLevel].max_skus as number))
+        (TIER_LIMITS[oldTier.tierLevel as TierLevel].max_skus as number))
     );
   }
 
