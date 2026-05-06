@@ -6,9 +6,9 @@ import { CSVParserService, RowError } from './csv-parser.service';
 import { envConfig } from '../config/environment';
 import { StorageQuotaService } from './storage-quota.service';
 import { Logger } from '../utils/logger';
-import { getDefaultDatabaseClient } from '../database/database-factory';
 import { UploadImportType, UploadImportTypeValue } from '../types/upload.types';
 import { UploadRepository } from '../repositories/upload.repository';
+import { getDiContainer } from '../di/container';
 
 export interface InitiateUploadResponse {
   strategy: 'direct' | 'presigned';
@@ -49,7 +49,7 @@ export class UploadService {
     private storage: StorageProvider,
     private csvParser: CSVParserService,
     private storageQuotaService: StorageQuotaService,
-    private uploadRepository = new UploadRepository(getDefaultDatabaseClient()),
+    private uploadRepository = getDiContainer().resolve(UploadRepository),
   ) {}
 
   /**
