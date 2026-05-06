@@ -45,6 +45,10 @@ export class SubscriptionRepository {
     });
   }
 
+  async findLatestByOrganizationId(organizationId: string, tx?: DbClient): Promise<any | null> {
+    return this.findByOrganizationId(organizationId, tx);
+  }
+
   async create(data: any, tx?: DbClient): Promise<any> {
     return this.getClient(tx).subscriptionTier.create({
       data,
@@ -97,6 +101,23 @@ export class SubscriptionRepository {
   async findUsageByOrganizationId(organizationId: string, tx?: DbClient): Promise<any | null> {
     return this.getClient(tx).organizationUsage.findUnique({
       where: { organizationId },
+    });
+  }
+
+  async getOrCreateUsage(organizationId: string, tx?: DbClient): Promise<any> {
+    return this.getClient(tx).organizationUsage.upsert({
+      where: { organizationId },
+      create: {
+        organizationId,
+        activeUsers: 0,
+        maxUsers: 1,
+        totalSkus: 0,
+        maxSkus: 500,
+        totalInventoryItems: 0,
+        maxInventoryItems: 5000,
+        storageUsedBytes: 0,
+      },
+      update: {},
     });
   }
 

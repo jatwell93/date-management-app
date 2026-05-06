@@ -4,9 +4,13 @@ describe('SubscriptionRepository', () => {
   let prisma: {
     subscriptionTier: {
       findMany: jest.Mock;
+      findFirst: jest.Mock;
       groupBy: jest.Mock;
       updateMany: jest.Mock;
       update: jest.Mock;
+    };
+    organizationUsage: {
+      upsert: jest.Mock;
     };
     tierFeatureFlag: {
       count: jest.Mock;
@@ -20,9 +24,13 @@ describe('SubscriptionRepository', () => {
     prisma = {
       subscriptionTier: {
         findMany: jest.fn(),
+        findFirst: jest.fn(),
         groupBy: jest.fn(),
         updateMany: jest.fn(),
         update: jest.fn(),
+      },
+      organizationUsage: {
+        upsert: jest.fn(),
       },
       tierFeatureFlag: {
         count: jest.fn(),
@@ -141,6 +149,66 @@ describe('SubscriptionRepository', () => {
           featureKey: 'max_skus',
         },
       },
+    });
+  });
+
+  it('finds the latest subscription for feature-gate limit checks', async () => {
+    prisma.subscriptionTier.findFirst.mockResolvedValue({
+      organizationId: 'org-123',
+      tierLevel: 'professional',
+      createdAt: new Date('2026-01-02T00:00:00.000Z'),
+    });
+
+    const result = await repository.findLatestByOrganizationId('org-123');
+
+    expect(result).toEqual({
+      organizationId: 'org-123',
+      tierLevel: 'professional',
+      createdAt: new Date('2026-01-02T00:00:00.000Z'),
+    });
+    expect(prisma.subscriptionTier.findFirst).toHaveBeenCalledWith({
+      where: { organizationId: 'org-123' },
+      orderBy: { createdAt: 'desc' },
+    });
+  });
+
+  it('gets or creates organization usage for feature-gate limit checks', async () => {
+    prisma.organizationUsage.upsert.mockResolvedValue({
+      organizationId: 'org-123',
+      activeUsers: 0,
+      maxUsers: 1,
+      totalSkus: 0,
+      maxSkus: 500,
+      totalInventoryItems: 0,
+      maxInventoryItems: 5000,
+      storageUsedBytes: 0,
+    });
+
+    const result = await repository.getOrCreateUsage('org-123');
+
+    expect(result).toEqual({
+      organizationId: 'org-123',
+      activeUsers: 0,
+      maxUsers: 1,
+      totalSkus: 0,
+      maxSkus: 500,
+      totalInventoryItems: 0,
+      maxInventoryItems: 5000,
+      storageUsedBytes: 0,
+    });
+    expect(prisma.organizationUsage.upsert).toHaveBeenCalledWith({
+      where: { organizationId: 'org-123' },
+      create: {
+        organizationId: 'org-123',
+        activeUsers: 0,
+        maxUsers: 1,
+        totalSkus: 0,
+        maxSkus: 500,
+        totalInventoryItems: 0,
+        maxInventoryItems: 5000,
+        storageUsedBytes: 0,
+      },
+      update: {},
     });
   });
 

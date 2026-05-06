@@ -88,6 +88,18 @@ describe('OrganizationRepository', () => {
     });
   });
 
+  it('selects organization creation lock state by id', async () => {
+    prisma.organization.findUnique.mockResolvedValue({ isCreationLocked: true });
+
+    const result = await repository.findCreationLockById('org-123');
+
+    expect(result).toEqual({ isCreationLocked: true });
+    expect(prisma.organization.findUnique).toHaveBeenCalledWith({
+      where: { id: 'org-123' },
+      select: { isCreationLocked: true },
+    });
+  });
+
   it('deletes organization data in a transaction before deleting the organization', async () => {
     prisma.user.findMany.mockResolvedValue([{ id: 10 }, { id: 11 }]);
     prisma.organization.delete.mockResolvedValue(organization);

@@ -1,11 +1,13 @@
 import { Response, NextFunction } from 'express';
 import { AuthRequest } from './auth.middleware';
-import { getDefaultDatabaseClient } from '../database/database-factory';
 import { AnalyticsService, AnalyticsEventType } from '../services/analytics.service';
 import { Logger } from '../utils/logger';
 import * as Sentry from '@sentry/node';
 import { TIER_LIMITS, TierLevel } from '../types/subscription';
 import { resolveUnlimitedLimit } from '../constants/default-limits';
+import { getDiContainer } from '../di/container';
+import { OrganizationRepository } from '../repositories/organization.repository';
+import { SubscriptionRepository } from '../repositories/subscription.repository';
 
 // Feature keys from tier_feature_flags table
 export type FeatureKey =
@@ -32,8 +34,6 @@ export interface UsageLimitResult {
   limit: number;
   percentageUsed: number;
 }
-
-type DbClient = ReturnType<typeof getDefaultDatabaseClient>;
 
 interface OrganizationUsageSnapshot {
   totalSkus: number;
@@ -155,14 +155,11 @@ export const checkUsageLimit = (limitKey: LimitKey) => {
         });
       }
 
-      const prisma = getDefaultDatabaseClient();
-      const organizationUsage = await getOrCreateOrganizationUsage(prisma, req.organizationId);
+      const { subscriptionRepository, organizationRepository } = getFeatureGateRepositories();
+      const organizationUsage = await subscriptionRepository.getOrCreateUsage(req.organizationId);
 
       // Check creation lock — applied by webhook handler on over-limit downgrade/cancellation
-      const org = await prisma.organization.findUnique({
-        where: { id: req.organizationId },
-        select: { isCreationLocked: true },
-      });
+      const org = await organizationRepository.findCreationLockById(req.organizationId);
 
       if (org?.isCreationLocked && req.method === 'POST') {
         Logger.warn('Creation locked: org over limit, blocking write operation', {
@@ -184,7 +181,7 @@ export const checkUsageLimit = (limitKey: LimitKey) => {
 
       // Determine the limit and usage based on limitKey
       const { currentUsage, limit } = await calculateUsageAndLimit(
-        prisma,
+        subscriptionRepository,
         limitKey,
         organizationUsage,
         req.organizationId,
@@ -226,26 +223,20 @@ export const checkUsageLimit = (limitKey: LimitKey) => {
   };
 };
 
-async function getOrCreateOrganizationUsage(prisma: DbClient, organizationId: string) {
-  // Use upsert to avoid race condition (16A.D.4)
-  return await prisma.organizationUsage.upsert({
-    where: { organizationId },
-    create: {
-      organizationId,
-      activeUsers: 0,
-      maxUsers: 1,
-      totalSkus: 0,
-      maxSkus: 500,
-      totalInventoryItems: 0,
-      maxInventoryItems: 5000,
-      storageUsedBytes: 0,
-    },
-    update: {},
-  });
+function getFeatureGateRepositories(): {
+  subscriptionRepository: SubscriptionRepository;
+  organizationRepository: OrganizationRepository;
+} {
+  const diContainer = getDiContainer();
+
+  return {
+    subscriptionRepository: diContainer.resolve(SubscriptionRepository),
+    organizationRepository: diContainer.resolve(OrganizationRepository),
+  };
 }
 
 async function calculateUsageAndLimit(
-  prisma: DbClient,
+  subscriptionRepository: SubscriptionRepository,
   limitKey: LimitKey,
   usage: OrganizationUsageSnapshot,
   organizationId: string,
@@ -266,19 +257,16 @@ async function calculateUsageAndLimit(
   }
 
   // Handle tier-based limits
-  return await calculateTierBasedLimit(prisma, limitKey, usage, organizationId);
+  return await calculateTierBasedLimit(subscriptionRepository, limitKey, usage, organizationId);
 }
 
 async function calculateTierBasedLimit(
-  prisma: DbClient,
+  subscriptionRepository: SubscriptionRepository,
   limitKey: LimitKey,
   usage: OrganizationUsageSnapshot,
   organizationId: string,
 ): Promise<{ currentUsage: number; limit: number }> {
-  const subscriptionTier = await prisma.subscriptionTier.findFirst({
-    where: { organizationId },
-    orderBy: { createdAt: 'desc' },
-  });
+  const subscriptionTier = await subscriptionRepository.findLatestByOrganizationId(organizationId);
 
   const tierLevel = (subscriptionTier?.tierLevel as TierLevel) || 'starter';
   const tierLimit = TIER_LIMITS[tierLevel]?.[limitKey];
@@ -401,16 +389,9 @@ export const checkFeature = async (
   featureKey: FeatureKey,
 ): Promise<FeatureCheckResult> => {
   try {
-    const prisma = getDefaultDatabaseClient();
+    const { subscriptionRepository } = getFeatureGateRepositories();
 
-    const featureFlag = await prisma.tierFeatureFlag.findUnique({
-      where: {
-        tierLevel_featureKey: {
-          tierLevel,
-          featureKey,
-        },
-      },
-    });
+    const featureFlag = await subscriptionRepository.findTierFeatureFlag(tierLevel, featureKey);
 
     return {
       isEnabled: featureFlag?.enabled ?? false,

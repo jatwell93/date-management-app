@@ -15,6 +15,13 @@ export class OrganizationRepository {
     });
   }
 
+  async findCreationLockById(id: string): Promise<{ isCreationLocked: boolean } | null> {
+    return this.prisma.organization.findUnique({
+      where: { id },
+      select: { isCreationLocked: true },
+    });
+  }
+
   async update(id: string, updates: OrganizationUpdate): Promise<OrganizationRecord> {
     return this.prisma.organization.update({
       where: { id },
