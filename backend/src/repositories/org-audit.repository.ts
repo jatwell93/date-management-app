@@ -1,4 +1,4 @@
-import { PrismaClient, Prisma } from '@prisma/client';
+import { PrismaClient, Prisma, OrgAuditLog } from '@prisma/client';
 import { injectable, inject } from 'tsyringe';
 import { AuditEventType } from '../constants/roles';
 import type { OrgAuditEntry } from '../services/org-audit.service';
@@ -15,7 +15,7 @@ export interface OrgAuditQueryOptions {
 
 @injectable()
 export class OrgAuditRepository {
-  constructor(@inject(PrismaClient) private prisma: PrismaClient) {}
+  constructor(@inject(PrismaClient) private prisma: PrismaClient) { }
 
   private getClient(client?: DbClient): DbClient {
     return client ?? this.prisma;
@@ -39,7 +39,7 @@ export class OrgAuditRepository {
     });
   }
 
-  async findByOrganization(organizationId: string, options?: OrgAuditQueryOptions): Promise<any[]> {
+  async findByOrganization(organizationId: string, options?: OrgAuditQueryOptions): Promise<OrgAuditLog[]> {
     const where: Record<string, unknown> = { organizationId };
 
     if (options?.eventType) {

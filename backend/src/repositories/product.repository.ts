@@ -1,11 +1,13 @@
-import { PrismaClient, Prisma } from '@prisma/client';
+import { PrismaClient, Prisma, Product } from '@prisma/client';
 import { injectable, inject } from 'tsyringe';
+
+type ProductWithCount = Product & { _count: { inventoryItems: number } };
 
 type DbClient = PrismaClient | Prisma.TransactionClient;
 
 @injectable()
 export class ProductRepository {
-  constructor(@inject(PrismaClient) private prisma: PrismaClient) {}
+  constructor(@inject(PrismaClient) private prisma: PrismaClient) { }
 
   private getClient(tx?: DbClient): DbClient {
     return tx ?? this.prisma;
@@ -16,7 +18,7 @@ export class ProductRepository {
     limit?: number,
     offset?: number,
     tx?: DbClient,
-  ): Promise<any[]> {
+  ): Promise<Product[]> {
     return this.getClient(tx).product.findMany({
       where: { organizationId },
       ...(limit !== undefined && { take: limit }),
@@ -24,7 +26,7 @@ export class ProductRepository {
     });
   }
 
-  async findById(id: number, organizationId: string, tx?: DbClient): Promise<any | null> {
+  async findById(id: number, organizationId: string, tx?: DbClient): Promise<Product | null> {
     return this.getClient(tx).product.findUnique({
       where: {
         id,
@@ -33,7 +35,7 @@ export class ProductRepository {
     });
   }
 
-  async findByBarcode(barcode: string, organizationId: string, tx?: DbClient): Promise<any | null> {
+  async findByBarcode(barcode: string, organizationId: string, tx?: DbClient): Promise<Product | null> {
     return this.getClient(tx).product.findUnique({
       where: {
         organizationId_barcode: {
@@ -44,7 +46,7 @@ export class ProductRepository {
     });
   }
 
-  async findBySku(sku: string, organizationId: string, tx?: DbClient): Promise<any | null> {
+  async findBySku(sku: string, organizationId: string, tx?: DbClient): Promise<Product | null> {
     return this.getClient(tx).product.findUnique({
       where: {
         organizationId_sku: {
@@ -60,7 +62,7 @@ export class ProductRepository {
     barcode: string,
     organizationId: string,
     tx?: DbClient,
-  ): Promise<{ bySku: any | null; byBarcode: any | null }> {
+  ): Promise<{ bySku: Product | null; byBarcode: Product | null }> {
     const client = this.getClient(tx);
     const bySku = await client.product.findUnique({
       where: {
@@ -82,13 +84,13 @@ export class ProductRepository {
     return { bySku, byBarcode };
   }
 
-  async create(data: any, tx?: DbClient): Promise<any> {
+  async create(data: Prisma.ProductUncheckedCreateInput, tx?: DbClient): Promise<Product> {
     return this.getClient(tx).product.create({
       data,
     });
   }
 
-  async update(id: number, organizationId: string, data: any, tx?: DbClient): Promise<any> {
+  async update(id: number, organizationId: string, data: Prisma.ProductUncheckedUpdateInput, tx?: DbClient): Promise<Product> {
     return this.getClient(tx).product.update({
       where: {
         id,
@@ -117,7 +119,7 @@ export class ProductRepository {
     organizationId: string,
     maxSkus: number,
     tx?: DbClient,
-  ): Promise<any[]> {
+  ): Promise<ProductWithCount[]> {
     return this.getClient(tx).product.findMany({
       where: { organizationId },
       orderBy: { createdAt: 'asc' },
@@ -127,6 +129,6 @@ export class ProductRepository {
           select: { inventoryItems: true },
         },
       },
-    });
+    }) as Promise<ProductWithCount[]>;
   }
 }

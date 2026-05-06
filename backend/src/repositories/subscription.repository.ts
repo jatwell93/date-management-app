@@ -1,4 +1,4 @@
-import { PrismaClient, Prisma } from '@prisma/client';
+import { PrismaClient, Prisma, SubscriptionTier, OrganizationUsage, TierFeatureFlag } from '@prisma/client';
 import { injectable, inject } from 'tsyringe';
 
 type DbClient = PrismaClient | Prisma.TransactionClient;
@@ -32,37 +32,37 @@ export interface StripeSubscriptionSyncUpdate {
 
 @injectable()
 export class SubscriptionRepository {
-  constructor(@inject(PrismaClient) private prisma: PrismaClient) {}
+  constructor(@inject(PrismaClient) private prisma: PrismaClient) { }
 
   private getClient(tx?: DbClient): DbClient {
     return tx ?? this.prisma;
   }
 
-  async findByOrganizationId(organizationId: string, tx?: DbClient): Promise<any | null> {
+  async findByOrganizationId(organizationId: string, tx?: DbClient): Promise<SubscriptionTier | null> {
     return this.getClient(tx).subscriptionTier.findFirst({
       where: { organizationId },
       orderBy: { createdAt: 'desc' },
     });
   }
 
-  async findLatestByOrganizationId(organizationId: string, tx?: DbClient): Promise<any | null> {
+  async findLatestByOrganizationId(organizationId: string, tx?: DbClient): Promise<SubscriptionTier | null> {
     return this.findByOrganizationId(organizationId, tx);
   }
 
-  async create(data: any, tx?: DbClient): Promise<any> {
+  async create(data: Prisma.SubscriptionTierCreateInput, tx?: DbClient): Promise<SubscriptionTier> {
     return this.getClient(tx).subscriptionTier.create({
       data,
     });
   }
 
-  async update(id: number, data: any, tx?: DbClient): Promise<any> {
+  async update(id: number, data: Prisma.SubscriptionTierUpdateInput, tx?: DbClient): Promise<SubscriptionTier> {
     return this.getClient(tx).subscriptionTier.update({
       where: { id },
       data,
     });
   }
 
-  async updateStripeCustomerId(id: number, stripeCustomerId: string, tx?: DbClient): Promise<any> {
+  async updateStripeCustomerId(id: number, stripeCustomerId: string, tx?: DbClient): Promise<SubscriptionTier> {
     return this.update(id, { stripeCustomerId }, tx);
   }
 
@@ -103,13 +103,13 @@ export class SubscriptionRepository {
     });
   }
 
-  async findUsageByOrganizationId(organizationId: string, tx?: DbClient): Promise<any | null> {
+  async findUsageByOrganizationId(organizationId: string, tx?: DbClient): Promise<OrganizationUsage | null> {
     return this.getClient(tx).organizationUsage.findUnique({
       where: { organizationId },
     });
   }
 
-  async getOrCreateUsage(organizationId: string, tx?: DbClient): Promise<any> {
+  async getOrCreateUsage(organizationId: string, tx?: DbClient): Promise<OrganizationUsage> {
     return this.getClient(tx).organizationUsage.upsert({
       where: { organizationId },
       create: {
@@ -126,20 +126,20 @@ export class SubscriptionRepository {
     });
   }
 
-  async createUsage(data: any, tx?: DbClient): Promise<any> {
+  async createUsage(data: Prisma.OrganizationUsageCreateInput, tx?: DbClient): Promise<OrganizationUsage> {
     return this.getClient(tx).organizationUsage.create({
       data,
     });
   }
 
-  async updateUsage(organizationId: string, data: any, tx?: DbClient): Promise<any> {
+  async updateUsage(organizationId: string, data: Prisma.OrganizationUsageUpdateInput, tx?: DbClient): Promise<OrganizationUsage> {
     return this.getClient(tx).organizationUsage.update({
       where: { organizationId },
       data,
     });
   }
 
-  async findTierFeatureFlag(tierLevel: string, featureKey: string): Promise<any | null> {
+  async findTierFeatureFlag(tierLevel: string, featureKey: string): Promise<TierFeatureFlag | null> {
     return this.prisma.tierFeatureFlag.findUnique({
       where: {
         tierLevel_featureKey: {

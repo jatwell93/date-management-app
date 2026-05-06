@@ -1,4 +1,4 @@
-import { Prisma, PrismaClient } from '@prisma/client';
+import { Prisma, PrismaClient, MetricsSnapshot, WebhookMetrics } from '@prisma/client';
 import { injectable, inject } from 'tsyringe';
 
 export interface MetricsSnapshotInput {
@@ -30,14 +30,14 @@ export type SubscriptionTierDistributionRecord = {
 
 @injectable()
 export class AnalyticsRepository {
-  constructor(@inject(PrismaClient) private prisma: PrismaClient) {}
+  constructor(@inject(PrismaClient) private prisma: PrismaClient) { }
 
   async createWebhookMetrics(data: {
     eventType: string;
     totalCount: number;
     failureCount: number;
     date: Date;
-  }): Promise<any> {
+  }): Promise<WebhookMetrics> {
     return this.prisma.webhookMetrics.upsert({
       where: {
         eventType_date: {
@@ -58,19 +58,19 @@ export class AnalyticsRepository {
     });
   }
 
-  async createMetricsSnapshot(data: any): Promise<any> {
+  async createMetricsSnapshot(data: Prisma.MetricsSnapshotCreateInput): Promise<MetricsSnapshot> {
     return this.prisma.metricsSnapshot.create({
       data,
     });
   }
 
-  async findLatestMetricsSnapshot(): Promise<any | null> {
+  async findLatestMetricsSnapshot(): Promise<MetricsSnapshot | null> {
     return this.prisma.metricsSnapshot.findFirst({
       orderBy: { date: 'desc' },
     });
   }
 
-  async findMetricsSnapshotsSince(startDate: Date): Promise<any[]> {
+  async findMetricsSnapshotsSince(startDate: Date): Promise<MetricsSnapshot[]> {
     return this.prisma.metricsSnapshot.findMany({
       where: {
         date: {
@@ -81,7 +81,7 @@ export class AnalyticsRepository {
     });
   }
 
-  async findMetricsSnapshotByDate(date: Date): Promise<any | null> {
+  async findMetricsSnapshotByDate(date: Date): Promise<MetricsSnapshot | null> {
     return this.prisma.metricsSnapshot.findUnique({
       where: { date },
     });
@@ -100,7 +100,7 @@ export class AnalyticsRepository {
     });
   }
 
-  async findWebhookMetricsByDateRange(startDate: Date, endDate: Date): Promise<any[]> {
+  async findWebhookMetricsByDateRange(startDate: Date, endDate: Date): Promise<WebhookMetrics[]> {
     return this.prisma.webhookMetrics.findMany({
       where: {
         date: {
@@ -111,7 +111,7 @@ export class AnalyticsRepository {
     });
   }
 
-  async findWebhookMetricsSince(startDate: Date): Promise<any[]> {
+  async findWebhookMetricsSince(startDate: Date): Promise<WebhookMetrics[]> {
     return this.prisma.webhookMetrics.findMany({
       where: {
         date: {
