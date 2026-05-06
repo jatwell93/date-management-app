@@ -7,6 +7,7 @@ import { AnalyticsService } from '../services/analytics.service';
 import { ApplicationMonitoringService } from '../services/application.monitoring.service';
 import { DatabaseMonitoringService } from '../services/database.monitoring.service';
 import { resetDiContainer } from '../di/container';
+import { closeDb } from '../database';
 import { resetOrgCounter } from './helpers/test-factories';
 
 const prisma = new PrismaClient();
@@ -257,4 +258,5 @@ afterEach(() => {
 afterAll(async () => {
   stopBackgroundServices();
   await prisma.$disconnect();
+  closeDb();
 });

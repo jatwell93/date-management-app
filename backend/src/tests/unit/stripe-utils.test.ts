@@ -1,37 +1,42 @@
-import Stripe from 'stripe';
-import { envConfig } from '../../config/environment';
-import { getStripeClient, isStripeConfigured, resetStripeClient } from '../../utils/stripe';
+function loadStripeUtils() {
+  jest.resetModules();
 
-jest.mock('stripe', () => {
-  return jest.fn().mockImplementation((secretKey: string, options: unknown) => ({
+  const StripeConstructor = jest.fn().mockImplementation((secretKey: string, options: unknown) => ({
     secretKey,
     options,
   }));
-});
+
+  jest.doMock('stripe', () => StripeConstructor);
+
+  const { envConfig } =
+    require('../../config/environment') as typeof import('../../config/environment');
+  const stripeUtils = require('../../utils/stripe') as typeof import('../../utils/stripe');
+
+  return {
+    StripeConstructor,
+    envConfig,
+    ...stripeUtils,
+  };
+}
 
 describe('stripe utils', () => {
-  const originalStripeSecret = envConfig.STRIPE_SECRET_KEY;
-
-  beforeEach(() => {
-    resetStripeClient();
-    envConfig.STRIPE_SECRET_KEY = 'sk_test_abcdefghijklmnopqrstuvwxyz';
-    jest.clearAllMocks();
-  });
-
-  afterAll(() => {
-    envConfig.STRIPE_SECRET_KEY = originalStripeSecret;
-    resetStripeClient();
+  afterEach(() => {
+    jest.dontMock('stripe');
   });
 
   it('creates and returns a singleton Stripe client', () => {
+    const { StripeConstructor, envConfig, getStripeClient } = loadStripeUtils();
+    envConfig.STRIPE_SECRET_KEY = 'sk_test_abcdefghijklmnopqrstuvwxyz';
+
     const first = getStripeClient();
     const second = getStripeClient();
 
     expect(first).toBe(second);
-    expect(Stripe).toHaveBeenCalledTimes(1);
+    expect(StripeConstructor).toHaveBeenCalledTimes(1);
   });
 
   it('throws when STRIPE_SECRET_KEY is missing', () => {
+    const { envConfig, getStripeClient } = loadStripeUtils();
     envConfig.STRIPE_SECRET_KEY = undefined;
 
     expect(() => getStripeClient()).toThrow(
@@ -40,6 +45,7 @@ describe('stripe utils', () => {
   });
 
   it('throws when STRIPE_SECRET_KEY does not look like a secret key', () => {
+    const { envConfig, getStripeClient } = loadStripeUtils();
     envConfig.STRIPE_SECRET_KEY = 'pk_test_public_key';
 
     expect(() => getStripeClient()).toThrow(
@@ -48,6 +54,8 @@ describe('stripe utils', () => {
   });
 
   it('reports Stripe configuration status accurately', () => {
+    const { envConfig, isStripeConfigured } = loadStripeUtils();
+
     envConfig.STRIPE_SECRET_KEY = 'sk_test_configured';
     expect(isStripeConfigured()).toBe(true);
 
@@ -59,11 +67,14 @@ describe('stripe utils', () => {
   });
 
   it('creates a fresh client after reset', () => {
+    const { StripeConstructor, envConfig, getStripeClient, resetStripeClient } = loadStripeUtils();
+    envConfig.STRIPE_SECRET_KEY = 'sk_test_abcdefghijklmnopqrstuvwxyz';
+
     const first = getStripeClient();
     resetStripeClient();
     const second = getStripeClient();
 
     expect(first).not.toBe(second);
-    expect(Stripe).toHaveBeenCalledTimes(2);
+    expect(StripeConstructor).toHaveBeenCalledTimes(2);
   });
 });

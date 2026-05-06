@@ -11,3 +11,4 @@ const mockDb = {
 
 export const getDb = jest.fn(() => mockDb);
 export const releaseDb = jest.fn();
+export const closeDb = jest.fn(() => mockDb.close());

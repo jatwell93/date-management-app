@@ -600,7 +600,7 @@ describe('subscription.routes', () => {
   describe('POST /subscription/create-portal-session', () => {
     it('returns 400 when returnUrl is invalid', async () => {
       mockValidateRedirectUrl.mockImplementation(() => {
-        throw new Error('returnUrl is not a valid URL');
+        throw new Error('returnUrl is not a valid URL: not-a-url');
       });
 
       const response = await request(app)

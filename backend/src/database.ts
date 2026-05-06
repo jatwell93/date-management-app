@@ -4,7 +4,7 @@ import { Logger } from './utils/logger';
 
 export type DB = InstanceType<typeof Database>;
 
-let db: DB;
+let db: DB | undefined;
 
 /**
  * Verify TLS/SSL configuration for database connections
@@ -50,6 +50,13 @@ export function getDb(): DB {
 
 export function releaseDb(_db: DB): void {
   // better-sqlite3 doesn't have connection pooling, so this is a no-op
+}
+
+export function closeDb(): void {
+  if (db) {
+    db.close();
+    db = undefined;
+  }
 }
 
 export async function initDatabase() {

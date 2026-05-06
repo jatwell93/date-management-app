@@ -183,7 +183,8 @@ export class InventoryController {
       res.status(201).json(newInventoryItem);
     } catch (error: unknown) {
       if (error instanceof Error && error.message === 'Location does not exist') {
-        throw new ValidationError('Location does not exist');
+        next(new ValidationError('Location does not exist'));
+        return;
       }
       next(error);
     }
