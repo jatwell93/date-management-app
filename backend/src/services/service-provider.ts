@@ -6,6 +6,7 @@ import { getDb, type DB } from '../database';
 import { AnalyticsService } from './analytics.service';
 import { SQLiteAnalyticsAdapter } from '../adapters/analytics/SQLiteAnalyticsAdapter';
 import { ReportService } from './report.service';
+import { DashboardService } from './dashboard.service';
 import { AuthService } from './auth.service';
 import { CSVParserService } from './csv-parser.service';
 import { StorageQuotaService } from './storage-quota.service';
@@ -15,6 +16,7 @@ import { SubscriptionService } from './subscription.service';
 import { getOrganizationId, TEST_AUTH_BYPASS_ORG_ID } from '../utils/auth-bypass';
 import { UploadRepository } from '../repositories/upload.repository';
 import { StorageQuotaRepository } from '../repositories/storage-quota.repository';
+import { ReportRepository } from '../repositories/report.repository';
 
 export interface ServiceProviderConfig {
   organizationId?: string;
@@ -34,9 +36,11 @@ export class ServiceProvider {
   private uploadService?: UploadService;
   private analyticsService?: AnalyticsService;
   private reportService?: ReportService;
+  private dashboardService?: DashboardService;
   private subscriptionService?: SubscriptionService;
   private uploadRepository?: UploadRepository;
   private storageQuotaRepository?: StorageQuotaRepository;
+  private reportRepository?: ReportRepository;
 
   constructor(config: ServiceProviderConfig = {}) {
     this.organizationId = getOrganizationId(config.organizationId);
@@ -138,6 +142,20 @@ export class ServiceProvider {
       this.reportService = new ReportService(this.db);
     }
     return this.reportService;
+  }
+
+  getReportRepository(): ReportRepository {
+    if (!this.reportRepository) {
+      this.reportRepository = new ReportRepository(this.db);
+    }
+    return this.reportRepository;
+  }
+
+  getDashboardService(): DashboardService {
+    if (!this.dashboardService) {
+      this.dashboardService = new DashboardService(this.getReportRepository());
+    }
+    return this.dashboardService;
   }
 
   getSubscriptionService(): SubscriptionService {

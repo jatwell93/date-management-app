@@ -1,13 +1,15 @@
 import { DashboardService } from '../../services/dashboard.service';
-import { getDb } from '../../database';
-
-jest.mock('../../database');
+import { ReportRepository } from '../../repositories/report.repository';
 
 describe('DashboardService', () => {
   let dashboardService: DashboardService;
+  let reportRepository: jest.Mocked<Pick<ReportRepository, 'getDashboardData'>>;
 
   beforeEach(() => {
-    dashboardService = new DashboardService();
+    reportRepository = {
+      getDashboardData: jest.fn(),
+    };
+    dashboardService = new DashboardService(reportRepository);
   });
 
   afterEach(() => {
@@ -22,27 +24,11 @@ describe('DashboardService', () => {
       recentActivity: [],
     };
 
-    const mockStatement = {
-      get: jest
-        .fn()
-        .mockReturnValueOnce({ count: 100 })
-        .mockReturnValueOnce({ count: 10 })
-        .mockReturnValueOnce({ count: 5 }),
-      all: jest.fn().mockReturnValueOnce([]),
-    };
-
-    const mockDb = {
-      prepare: jest.fn(() => mockStatement),
-    };
-
-    (getDb as jest.Mock).mockReturnValue(mockDb);
+    reportRepository.getDashboardData.mockReturnValue(mockDashboardData);
 
     const dashboardData = await dashboardService.getDashboardData();
 
     expect(dashboardData).toEqual(mockDashboardData);
-    expect(getDb).toHaveBeenCalledTimes(1);
-    expect(mockDb.prepare).toHaveBeenCalledTimes(4);
-    expect(mockStatement.get).toHaveBeenCalledTimes(3);
-    expect(mockStatement.all).toHaveBeenCalledTimes(1);
+    expect(reportRepository.getDashboardData).toHaveBeenCalledTimes(1);
   });
 });

@@ -2,16 +2,19 @@ import express from 'express';
 import request from 'supertest';
 
 const mockGetDashboardData = jest.fn();
-const MockDashboardService = jest.fn().mockImplementation(() => ({
+const mockGetDashboardService = jest.fn(() => ({
   getDashboardData: (...args: unknown[]) => mockGetDashboardData(...args),
+}));
+const MockServiceProvider = jest.fn().mockImplementation(() => ({
+  getDashboardService: mockGetDashboardService,
 }));
 
 jest.mock('../../middleware/auth.middleware', () => ({
   authenticateToken: (_req: unknown, _res: unknown, next: () => void) => next(),
 }));
 
-jest.mock('../../services/dashboard.service', () => ({
-  DashboardService: MockDashboardService,
+jest.mock('../../services/service-provider', () => ({
+  ServiceProvider: MockServiceProvider,
 }));
 
 import dashboardRouter from '../../routes/dashboard.routes';
@@ -46,7 +49,8 @@ describe('dashboard.routes', () => {
       totalInventoryItems: 34,
       totalValue: 567.89,
     });
-    expect(MockDashboardService).toHaveBeenCalledTimes(1);
+    expect(MockServiceProvider).toHaveBeenCalledTimes(1);
+    expect(mockGetDashboardService).toHaveBeenCalledTimes(1);
   });
 
   it('forwards service errors to error middleware on GET /dashboard', async () => {

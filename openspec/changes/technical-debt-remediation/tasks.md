@@ -46,6 +46,7 @@
 - [ ] 6.3 Add repository tests for the model-specific query paths that were extracted from services.
 - [ ] 6.4 Confirm the repository layer can be injected through the composition root and mocked cleanly in tests.
 - [ ] 6.5 Remove duplicate query code from services after repository coverage is in place.
+- [x] 6.6 Move dashboard summary SQLite reads into `ReportRepository` and wire `DashboardService` through `ServiceProvider`.
 
 ## 7. Type Safety and Error Handling
 
