@@ -48,6 +48,7 @@
 - [ ] 6.5 Remove duplicate query code from services after repository coverage is in place.
 - [x] 6.6 Move dashboard summary SQLite reads into `ReportRepository` and wire `DashboardService` through `ServiceProvider`.
 - [x] 6.7 Move SaaS metrics snapshot and webhook metric persistence paths into `AnalyticsRepository`.
+- [x] 6.8 Move remaining SaaS metrics subscription and usage read paths into `AnalyticsRepository`.
 
 ## 7. Type Safety and Error Handling
 

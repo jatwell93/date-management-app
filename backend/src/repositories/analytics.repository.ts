@@ -1,4 +1,4 @@
-import { PrismaClient } from '@prisma/client';
+import { Prisma, PrismaClient } from '@prisma/client';
 import { injectable, inject } from 'tsyringe';
 
 export interface MetricsSnapshotInput {
@@ -12,6 +12,21 @@ export interface MetricsSnapshotInput {
   totalRevenueCents: number;
   tierDistribution: Record<string, number>;
 }
+
+export type TrialConversionRecord = Pick<
+  Prisma.SubscriptionTierGetPayload<Record<string, never>>,
+  'status' | 'stripeSubscriptionId'
+>;
+
+export type SubscriptionTierLevelRecord = Pick<
+  Prisma.SubscriptionTierGetPayload<Record<string, never>>,
+  'tierLevel'
+>;
+
+export type SubscriptionTierDistributionRecord = {
+  tierLevel: string;
+  _count: number;
+};
 
 @injectable()
 export class AnalyticsRepository {
@@ -134,6 +149,94 @@ export class AnalyticsRepository {
         date,
         totalCount: 1,
         failureCount: success ? 0 : 1,
+      },
+    });
+  }
+
+  async findTrialsEndedBetween(startDate: Date, endDate: Date): Promise<TrialConversionRecord[]> {
+    return this.prisma.subscriptionTier.findMany({
+      where: {
+        trialEndDate: {
+          lte: endDate,
+          gte: startDate,
+        },
+      },
+      select: {
+        stripeSubscriptionId: true,
+        status: true,
+      },
+    });
+  }
+
+  async findActivePaidSubscriptionTierLevels(): Promise<SubscriptionTierLevelRecord[]> {
+    return this.prisma.subscriptionTier.findMany({
+      where: {
+        status: 'active',
+        stripeSubscriptionId: { not: null },
+      },
+      select: {
+        tierLevel: true,
+      },
+    });
+  }
+
+  async sumActiveOrganizationUsers(): Promise<number> {
+    const activeUsers = await this.prisma.organizationUsage.aggregate({
+      _sum: { activeUsers: true },
+    });
+
+    return activeUsers._sum.activeUsers ?? 0;
+  }
+
+  async countActiveSubscriptions(): Promise<number> {
+    return this.prisma.subscriptionTier.count({
+      where: { status: 'active' },
+    });
+  }
+
+  async countActiveSubscriptionsCreatedSince(startDate: Date): Promise<number> {
+    return this.prisma.subscriptionTier.count({
+      where: {
+        status: 'active',
+        createdAt: { gte: startDate },
+      },
+    });
+  }
+
+  async countCanceledSubscriptionsUpdatedSince(startDate: Date): Promise<number> {
+    return this.prisma.subscriptionTier.count({
+      where: {
+        status: 'canceled',
+        updatedAt: { gte: startDate },
+      },
+    });
+  }
+
+  async groupSubscriptionTiersByTierLevel(): Promise<SubscriptionTierDistributionRecord[]> {
+    const groupByTierLevel = this.prisma.subscriptionTier.groupBy as unknown as (args: {
+      by: ['tierLevel'];
+      _count: true;
+    }) => Promise<SubscriptionTierDistributionRecord[]>;
+
+    return groupByTierLevel({
+      by: ['tierLevel'],
+      _count: true,
+    });
+  }
+
+  async countTrialsEndingSince(startDate: Date): Promise<number> {
+    return this.prisma.subscriptionTier.count({
+      where: {
+        trialEndDate: { gte: startDate },
+      },
+    });
+  }
+
+  async countPaidSubscriptionsCreatedSince(startDate: Date): Promise<number> {
+    return this.prisma.subscriptionTier.count({
+      where: {
+        stripeSubscriptionId: { not: null },
+        createdAt: { gte: startDate },
       },
     });
   }

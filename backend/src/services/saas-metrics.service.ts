@@ -74,18 +74,7 @@ export class SaasMetricsService {
     const thirtyDaysAgo = new Date();
     thirtyDaysAgo.setDate(thirtyDaysAgo.getDate() - 30);
 
-    // Get trials that ended in the last 30 days
-    const endedTrials = await this.prisma.subscriptionTier.findMany({
-      where: {
-        trialEndDate: {
-          lte: new Date(),
-          gte: thirtyDaysAgo,
-        },
-      },
-      include: {
-        organization: true,
-      },
-    });
+    const endedTrials = await this.analyticsRepo.findTrialsEndedBetween(thirtyDaysAgo, new Date());
 
     if (endedTrials.length === 0) return 0;
 
@@ -109,13 +98,7 @@ export class SaasMetricsService {
    * Formula: Total MRR / Active Users
    */
   async calculateAvgRevenuePerUser(): Promise<number> {
-    // Get total monthly recurring revenue
-    const activeSubscriptions = await this.prisma.subscriptionTier.findMany({
-      where: {
-        status: 'active',
-        stripeSubscriptionId: { not: null },
-      },
-    });
+    const activeSubscriptions = await this.analyticsRepo.findActivePaidSubscriptionTierLevels();
 
     const totalMRR = activeSubscriptions.reduce((sum, sub) => {
       // Use standardized tier pricing
@@ -123,12 +106,7 @@ export class SaasMetricsService {
       return sum + (TIER_PRICES[tier] || 0);
     }, 0);
 
-    // Get active users count
-    const activeUsers = await this.prisma.organizationUsage.aggregate({
-      _sum: { activeUsers: true },
-    });
-
-    const totalActiveUsers = activeUsers._sum.activeUsers || 0;
+    const totalActiveUsers = await this.analyticsRepo.sumActiveOrganizationUsers();
 
     if (totalActiveUsers === 0) return 0;
 
@@ -158,28 +136,11 @@ export class SaasMetricsService {
     // Try to get snapshot from 30 days ago for accurate starting point
     const previousSnapshot = await this.analyticsRepo.findMetricsSnapshotByDate(thirtyDaysAgo);
 
-    // Get current active subscriptions
-    const currentActive = await this.prisma.subscriptionTier.count({
-      where: { status: 'active' },
-    });
-
-    // Get new subscriptions (conversions) in the last 30 days
-    const newSubscriptions = await this.prisma.subscriptionTier.count({
-      where: {
-        status: 'active',
-        createdAt: { gte: thirtyDaysAgo },
-      },
-    });
-
-    // Get churned customers in period
-    const churnedCustomers = await this.prisma.subscriptionTier.count({
-      where: {
-        status: 'canceled',
-        updatedAt: {
-          gte: thirtyDaysAgo,
-        },
-      },
-    });
+    const [currentActive, newSubscriptions, churnedCustomers] = await Promise.all([
+      this.analyticsRepo.countActiveSubscriptions(),
+      this.analyticsRepo.countActiveSubscriptionsCreatedSince(thirtyDaysAgo),
+      this.analyticsRepo.countCanceledSubscriptionsUpdatedSince(thirtyDaysAgo),
+    ]);
 
     let customersAtStart: number;
 
@@ -307,10 +268,7 @@ export class SaasMetricsService {
    * Get tier distribution
    */
   async getTierDistribution(): Promise<Record<string, number>> {
-    const distribution = await this.prisma.subscriptionTier.groupBy({
-      by: ['tierLevel'],
-      _count: true,
-    });
+    const distribution = await this.analyticsRepo.groupSubscriptionTiersByTierLevel();
 
     const result: Record<string, number> = {};
     distribution.forEach((d) => {
@@ -342,31 +300,15 @@ export class SaasMetricsService {
     ]);
 
     // Get additional metrics
-    const totalActiveSubscriptions = await this.prisma.subscriptionTier.count({
-      where: { status: 'active' },
-    });
+    const totalActiveSubscriptions = await this.analyticsRepo.countActiveSubscriptions();
 
     const thirtyDaysAgo = new Date();
     thirtyDaysAgo.setDate(thirtyDaysAgo.getDate() - 30);
 
     const [newTrials, conversions, churns] = await Promise.all([
-      this.prisma.subscriptionTier.count({
-        where: {
-          trialEndDate: { gte: thirtyDaysAgo },
-        },
-      }),
-      this.prisma.subscriptionTier.count({
-        where: {
-          stripeSubscriptionId: { not: null },
-          createdAt: { gte: thirtyDaysAgo },
-        },
-      }),
-      this.prisma.subscriptionTier.count({
-        where: {
-          status: 'canceled',
-          updatedAt: { gte: thirtyDaysAgo },
-        },
-      }),
+      this.analyticsRepo.countTrialsEndingSince(thirtyDaysAgo),
+      this.analyticsRepo.countPaidSubscriptionsCreatedSince(thirtyDaysAgo),
+      this.analyticsRepo.countCanceledSubscriptionsUpdatedSince(thirtyDaysAgo),
     ]);
 
     return {
