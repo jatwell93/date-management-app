@@ -156,9 +156,7 @@ export class SaasMetricsService {
     thirtyDaysAgo.setHours(0, 0, 0, 0);
 
     // Try to get snapshot from 30 days ago for accurate starting point
-    const previousSnapshot = await this.prisma.metricsSnapshot.findUnique({
-      where: { date: thirtyDaysAgo },
-    });
+    const previousSnapshot = await this.analyticsRepo.findMetricsSnapshotByDate(thirtyDaysAgo);
 
     // Get current active subscriptions
     const currentActive = await this.prisma.subscriptionTier.count({
@@ -225,13 +223,7 @@ export class SaasMetricsService {
     const today = new Date();
     today.setHours(0, 0, 0, 0);
 
-    const webhookMetrics = await this.prisma.webhookMetrics.findMany({
-      where: {
-        date: {
-          gte: today,
-        },
-      },
-    });
+    const webhookMetrics = await this.analyticsRepo.findWebhookMetricsSince(today);
 
     if (webhookMetrics.length === 0) return 0;
 
@@ -258,12 +250,7 @@ export class SaasMetricsService {
     const startOfDay = new Date();
     startOfDay.setUTCHours(0, 0, 0, 0);
 
-    const result = await this.prisma.webhookMetrics.findMany({
-      where: {
-        date: { gte: startOfDay },
-      },
-      select: { failureCount: true },
-    });
+    const result = await this.analyticsRepo.findWebhookMetricsSince(startOfDay);
 
     return result.reduce((total, row) => total + row.failureCount, 0);
   }
@@ -279,12 +266,8 @@ export class SaasMetricsService {
     const twoHoursAgo = new Date(now.getTime() - 2 * 60 * 60 * 1000);
 
     const [currentHourCount, previousHourCount] = await Promise.all([
-      this.prisma.processedWebhookEvent.count({
-        where: { processedAt: { gte: oneHourAgo } },
-      }),
-      this.prisma.processedWebhookEvent.count({
-        where: { processedAt: { gte: twoHoursAgo, lt: oneHourAgo } },
-      }),
+      this.analyticsRepo.countProcessedWebhookEventsBetween(oneHourAgo, now),
+      this.analyticsRepo.countProcessedWebhookEventsBetween(twoHoursAgo, oneHourAgo),
     ]);
 
     if (previousHourCount === 0) {
@@ -419,17 +402,7 @@ export class SaasMetricsService {
       tierDistribution: metrics.tierDistribution,
     };
 
-    await this.prisma.metricsSnapshot.upsert({
-      where: { date },
-      update: {
-        ...snapshot,
-        tierDistribution: JSON.stringify(metrics.tierDistribution),
-      },
-      create: {
-        ...snapshot,
-        tierDistribution: JSON.stringify(metrics.tierDistribution),
-      },
-    });
+    await this.analyticsRepo.upsertMetricsSnapshot(snapshot);
 
     Logger.info('Daily metrics snapshot stored', { date: date.toISOString() });
   }
@@ -523,23 +496,6 @@ export class SaasMetricsService {
     const today = new Date();
     today.setHours(0, 0, 0, 0);
 
-    await this.prisma.webhookMetrics.upsert({
-      where: {
-        eventType_date: {
-          eventType,
-          date: today,
-        },
-      },
-      update: {
-        totalCount: { increment: 1 },
-        failureCount: success ? undefined : { increment: 1 },
-      },
-      create: {
-        eventType,
-        date: today,
-        totalCount: 1,
-        failureCount: success ? 0 : 1,
-      },
-    });
+    await this.analyticsRepo.incrementWebhookMetrics(eventType, success, today);
   }
 }
