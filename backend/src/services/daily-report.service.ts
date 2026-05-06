@@ -4,6 +4,7 @@ import { getDefaultDatabaseClient } from '../database/database-factory';
 import { SaasMetricsService, SaasMetrics } from './saas-metrics.service';
 import { EmailService } from './email.service';
 import { ALERT_THRESHOLDS } from '../types/subscription';
+import { AnalyticsRepository } from '../repositories/analytics.repository';
 
 export interface DailyReport {
   date: Date;
@@ -43,15 +44,18 @@ export class DailyReportService {
   private prisma: PrismaClient;
   private saasMetricsService: SaasMetricsService;
   private emailService: EmailService;
+  private analyticsRepo: AnalyticsRepository;
 
   constructor(
     prismaClient?: PrismaClient,
     saasMetricsService?: SaasMetricsService,
     emailService?: EmailService,
+    analyticsRepo?: AnalyticsRepository,
   ) {
     this.prisma = prismaClient ?? getDefaultDatabaseClient();
     this.saasMetricsService = saasMetricsService ?? new SaasMetricsService(this.prisma);
     this.emailService = emailService ?? new EmailService(this.prisma);
+    this.analyticsRepo = analyticsRepo ?? new AnalyticsRepository(this.prisma);
   }
 
   /**
@@ -74,17 +78,13 @@ export class DailyReportService {
       const previousDate = new Date(reportDate);
       previousDate.setDate(previousDate.getDate() - 1);
 
-      const previousSnapshot = await this.prisma.metricsSnapshot.findUnique({
-        where: { date: previousDate },
-      });
+      const previousSnapshot = await this.analyticsRepo.findMetricsSnapshotByDate(previousDate);
 
       // Get metrics from 7 days ago for trend analysis
       const weekAgoDate = new Date(reportDate);
       weekAgoDate.setDate(weekAgoDate.getDate() - 7);
 
-      const weekAgoSnapshot = await this.prisma.metricsSnapshot.findUnique({
-        where: { date: weekAgoDate },
-      });
+      const weekAgoSnapshot = await this.analyticsRepo.findMetricsSnapshotByDate(weekAgoDate);
 
       // Calculate summary
       const summary = {

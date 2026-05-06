@@ -49,6 +49,7 @@
 - [x] 6.6 Move dashboard summary SQLite reads into `ReportRepository` and wire `DashboardService` through `ServiceProvider`.
 - [x] 6.7 Move SaaS metrics snapshot and webhook metric persistence paths into `AnalyticsRepository`.
 - [x] 6.8 Move remaining SaaS metrics subscription and usage read paths into `AnalyticsRepository`.
+- [x] 6.9 Move daily report metrics snapshot comparison reads into `AnalyticsRepository`.
 
 ## 7. Type Safety and Error Handling
 
