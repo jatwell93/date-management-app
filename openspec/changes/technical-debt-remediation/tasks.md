@@ -72,13 +72,19 @@
 - [ ] 8.5 Verify backend coverage and changed-test runs complete within the intended feedback budget.
   - Changed-test verification passes within budget: 76 targeted tests across inventory routes, Stripe utils, and subscription routes completed in 17.291s.
   - Full coverage still needs follow-up: `npm run test:coverage -- --runInBand --silent --coverageReporters=text-summary` passed tests up to 148/150 suites but hit Node heap OOM after 616.4s during coverage collection.
+  - Follow-up attempts on 2026-05-07 did not produce an acceptable full-suite coverage lane: `--coverageProvider=babel` timed out after 904s, `--workerIdleMemoryLimit=512MB` timed out after 904s, and the corrected fast-lane coverage regex timed out after 604s. The narrower services/controllers/contracts coverage slice completed in 105.091s with 121/121 tests passing but cannot satisfy global source thresholds alone.
 - [x] 8.6 Record the final coverage/runtime result so the next implementation wave has a clear before/after comparison.
   - Coverage before OOM reported global 81.93% statements, 73.46% branches, 84.04% functions, 81.93% lines; full coverage runtime is still outside target due V8 coverage heap pressure.
 
 ## 9. DevOps and Release Readiness
 
-- [ ] 9.1 Reconfirm the development, test, and production runtime matrix against the current docs and environment files so the refactor does not drift from SQLite/local storage in dev and Neon/R2/Workers in production.
-- [ ] 9.2 Update the backend deployment and environment documentation to match the current production model and remove stale PM2/SQLite deployment guidance.
-- [ ] 9.3 Verify the CI coverage for backend tests, secrets scanning, workers deployment guardrails, and unchanged frontend/pages deployment paths.
-- [ ] 9.4 Add a release-readiness checklist for local dev, `test:dev`, `test:prod`, `test:both`, production smoke tests, and rollback verification.
-- [ ] 9.5 Confirm the worker deployment constraints remain intact after the backend refactor, including required secrets, allowed production origin values, and production bundle checks.
+- [x] 9.1 Reconfirm the development, test, and production runtime matrix against the current docs and environment files so the refactor does not drift from SQLite/local storage in dev and Neon/R2/Workers in production.
+  - Reconciled `backend/.env.example`, `frontend/.env.example`, `workers/wrangler.toml`, Workers docs, and backend docs: local/dev remains SQLite plus local storage; production remains Neon PostgreSQL, R2, Cloudflare Workers, and Pages/frontend static deployment.
+- [x] 9.2 Update the backend deployment and environment documentation to match the current production model and remove stale PM2/SQLite deployment guidance.
+  - Replaced stale PM2/Nginx/production-SQLite deployment guidance with Workers/Neon/R2 deployment, rollback, runtime matrix, and troubleshooting guidance.
+- [x] 9.3 Verify the CI coverage for backend tests, secrets scanning, workers deployment guardrails, and unchanged frontend/pages deployment paths.
+  - Reviewed `.github/workflows/backend-test.yml`, `secrets-scan.yml`, `workers-deploy.yml`, `frontend-test.yml`, and `pages-deploy.yml`; CI still covers backend test/coverage, secret scanning, Workers type/build/deploy guardrails, frontend tests, and Pages deploy guardrails.
+- [x] 9.4 Add a release-readiness checklist for local dev, `test:dev`, `test:prod`, `test:both`, production smoke tests, and rollback verification.
+  - Added the release-readiness checklist to `backend/docs/deployment.md`.
+- [x] 9.5 Confirm the worker deployment constraints remain intact after the backend refactor, including required secrets, allowed production origin values, and production bundle checks.
+  - Confirmed `workers/wrangler.toml` keeps production R2, Hyperdrive, KV, Analytics, and required secret comments; `workers-deploy.yml` blocks non-prod Clerk keys and non-canonical production frontend origins; `workers/README.md` now documents Clerk webhook/secret requirements, `WORKERS_SENTRY_DSN`, production CORS origin constraints, and bundle measurement before deploy.

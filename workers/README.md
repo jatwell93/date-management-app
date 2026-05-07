@@ -90,13 +90,15 @@ Secrets are encrypted and set via CLI. Never commit secrets to git.
 # Set production secrets
 wrangler secret put NEON_CONNECTION_STRING --env production
 wrangler secret put JWT_SECRET --env production
+wrangler secret put CLERK_SECRET_KEY --env production
+wrangler secret put CLERK_WEBHOOK_SECRET --env production
 wrangler secret put R2_ACCOUNT_ID --env production
 wrangler secret put R2_ACCESS_KEY_ID --env production
 wrangler secret put R2_SECRET_ACCESS_KEY --env production
 wrangler secret put R2_BUCKET_NAME --env production
 
 # Optional: Sentry error monitoring
-wrangler secret put SENTRY_DSN --env production
+wrangler secret put WORKERS_SENTRY_DSN --env production
 ```
 
 ### R2 Bucket Bindings
@@ -167,14 +169,17 @@ const handler = adaptExpressHandler(async (req, res) => {
 
 ### CORS
 
-Production CORS restricts to specific frontend domains:
+Production CORS restricts to the static allowlist plus `FRONTEND_URL`; non-production allows dynamic preview origins where tests cover that behavior:
 
 ```typescript
 // Configured in cors.middleware.ts
-const allowedOrigins = ['https://yourdomain.com', 'https://www.yourdomain.com'];
+const allowedOrigins = [
+  'https://date-management-status.pages.dev',
+  process.env.FRONTEND_URL,
+];
 ```
 
-Update these values before deploying to production.
+Set `FRONTEND_URL` before production deploy. Do not rely on dynamic preview origins in production.
 
 ### Rate Limiting
 
@@ -219,7 +224,11 @@ Testing with Miniflare (local Workers runtime):
 
 ### Bundle Size
 
-Workers scripts have a 1MB limit. Current bundle size: **TBD** (measure after full route integration).
+Workers scripts have a 1MB limit. Measure the bundle before production deploy with:
+
+```bash
+npm run build
+```
 
 **Optimization strategies** if bundle exceeds 800KB:
 
