@@ -61,12 +61,19 @@
 
 ## 8. Test Suite Hygiene
 
-- [ ] 8.1 Update test setup to work with the new composition root and injected dependencies.
-- [ ] 8.2 Fix open handles, forced exits, and async cleanup issues in the backend coverage path.
-- [ ] 8.3 Remove or repair skipped backend tests that are now expected to pass under the migrated architecture.
-- [ ] 8.4 Add or adjust regression tests around the migrated seams so the new architecture is protected.
+- [x] 8.1 Update test setup to work with the new composition root and injected dependencies.
+  - Updated migrated route tests to register DI/container seams directly, including inventory and subscription route coverage.
+- [x] 8.2 Fix open handles, forced exits, and async cleanup issues in the backend coverage path.
+  - Added `closeDb()` teardown for the legacy better-sqlite3 handle and removed Jest `forceExit`; targeted suites now exit without the forced-exit warning.
+- [x] 8.3 Remove or repair skipped backend tests that are now expected to pass under the migrated architecture.
+  - Audited backend skips on 2026-05-07: remaining skips are environment-gated suites only (`Neon PostgreSQL`, multi-tenant load, R2 storage, upload load).
+- [x] 8.4 Add or adjust regression tests around the migrated seams so the new architecture is protected.
+  - Added DI composition-root coverage and ServiceProvider repository-backed seam caching coverage; repaired migrated inventory route seam coverage.
 - [ ] 8.5 Verify backend coverage and changed-test runs complete within the intended feedback budget.
-- [ ] 8.6 Record the final coverage/runtime result so the next implementation wave has a clear before/after comparison.
+  - Changed-test verification passes within budget: 76 targeted tests across inventory routes, Stripe utils, and subscription routes completed in 17.291s.
+  - Full coverage still needs follow-up: `npm run test:coverage -- --runInBand --silent --coverageReporters=text-summary` passed tests up to 148/150 suites but hit Node heap OOM after 616.4s during coverage collection.
+- [x] 8.6 Record the final coverage/runtime result so the next implementation wave has a clear before/after comparison.
+  - Coverage before OOM reported global 81.93% statements, 73.46% branches, 84.04% functions, 81.93% lines; full coverage runtime is still outside target due V8 coverage heap pressure.
 
 ## 9. DevOps and Release Readiness
 
