@@ -8,6 +8,7 @@ import {
   useLocation,
   useNavigate,
 } from 'react-router-dom';
+import * as Sentry from '@sentry/react';
 import { ClerkSignInPage, ClerkSignUpPage } from './components/ClerkAuthPage';
 import { OnboardingPage } from './pages/OnboardingPage';
 import { SettingsPage } from './pages/SettingsPage';
@@ -22,6 +23,8 @@ import { StoreAreaManagementPage } from './pages/StoreAreaManagementPage';
 import { CSVUploadPage } from './pages/CSVUploadPage';
 import { DetailedExpiryReportPage } from './pages/DetailedExpiryReportPage';
 import ExpiredItemsPage from './pages/ExpiredItemsPage';
+import { SubscriptionSettingsPage } from './pages/SubscriptionSettingsPage';
+import { UserProfile } from '@clerk/clerk-react';
 import { StorageQuotaWarning } from './components/StorageQuotaWarning';
 import { TrialBanner } from './components/TrialBanner';
 import { TrialUpgradeFlow } from './components/TrialUpgradeFlow';
@@ -73,7 +76,6 @@ function AppContent({
     isLoading: isAuthLoading,
     isLoggedIn: hasSession,
     isFullySignedIn,
-    hasOrganization,
     userId,
     userName,
     userRole,
@@ -83,6 +85,25 @@ function AppContent({
   } = useAuthContext();
   const isLoggedIn = hasSession && isFullySignedIn;
   const { isBootstrapped, isBootstrapping, bootstrapError, bootstrapResult } = useOrgBootstrap();
+
+  // Task 1.1: Debug role propagation timing
+  useEffect(() => {
+    let timeoutId: ReturnType<typeof setTimeout> | undefined;
+    if (isBootstrapping) {
+      timeoutId = setTimeout(() => {
+        if (isBootstrapping) {
+          Sentry.captureMessage(
+            '[Bootstrap] Organization bootstrap is taking longer than 2 seconds...',
+            'warning',
+          );
+        }
+      }, 2000);
+    }
+    return () => {
+      if (timeoutId) clearTimeout(timeoutId);
+    };
+  }, [isBootstrapping]);
+
   const isCurrentBootstrapResult = bootstrapResult?.userId === userId;
   const hasCurrentUserBootstrapRole = isCurrentBootstrapResult && !!bootstrapResult?.role;
   const effectiveUserRole = hasCurrentUserBootstrapRole ? bootstrapResult.role : userRole;
@@ -339,6 +360,36 @@ function AppContent({
                     </DropdownMenu>
                   </li>
                   <li>
+                    <DropdownMenu>
+                      <DropdownMenuTrigger className="hover:opacity-90 transition-opacity focus:outline-none bg-transparent border-none cursor-pointer">
+                        Account
+                      </DropdownMenuTrigger>
+                      <DropdownMenuContent className="bg-white text-gray-800 border border-gray-200 rounded-md shadow-lg p-1 mt-1">
+                        <DropdownMenuItem asChild>
+                          <Link
+                            to="/profile"
+                            className="block px-4 py-2 hover:bg-gray-100 rounded-sm transition-colors"
+                          >
+                            Profile
+                          </Link>
+                        </DropdownMenuItem>
+                        <DropdownMenuItem asChild>
+                          <Link
+                            to="/subscription"
+                            className="block px-4 py-2 hover:bg-gray-100 rounded-sm transition-colors"
+                          >
+                            Billing
+                          </Link>
+                        </DropdownMenuItem>
+                      </DropdownMenuContent>
+                    </DropdownMenu>
+                  </li>
+                  <li>
+                    <Link to="/subscription" className="hover:opacity-90 transition-opacity">
+                      Billing
+                    </Link>
+                  </li>
+                  <li>
                     <Link to="/markdown-calculator" className="hover:opacity-90 transition-opacity">
                       Markdown Calculator
                     </Link>
@@ -471,6 +522,15 @@ function AppContent({
                   </li>
                   <li>
                     <Link
+                      to="/subscription"
+                      className="block hover:opacity-90 transition-opacity"
+                      onClick={() => setIsMobileMenuOpen(false)}
+                    >
+                      Billing
+                    </Link>
+                  </li>
+                  <li>
+                    <Link
                       to="/upgrade"
                       className="block hover:opacity-90 transition-opacity"
                       onClick={() => setIsMobileMenuOpen(false)}
@@ -572,31 +632,11 @@ function AppContent({
                 />
                 <Route
                   path="/onboarding"
-                  element={
-                    isLoggedIn ? (
-                      hasOrganization ? (
-                        <Navigate to="/scan" />
-                      ) : (
-                        <OnboardingPage />
-                      )
-                    ) : (
-                      <Navigate to="/login" />
-                    )
-                  }
+                  element={isLoggedIn ? <OnboardingPage /> : <Navigate to="/login" />}
                 />
                 <Route
                   path="/onboarding/*"
-                  element={
-                    isLoggedIn ? (
-                      hasOrganization ? (
-                        <Navigate to="/scan" />
-                      ) : (
-                        <OnboardingPage />
-                      )
-                    ) : (
-                      <Navigate to="/login" />
-                    )
-                  }
+                  element={isLoggedIn ? <OnboardingPage /> : <Navigate to="/login" />}
                 />
                 <Route
                   path="/settings"
@@ -676,18 +716,42 @@ function AppContent({
                     isLoggedIn ? <MarkdownCalculator token={token} /> : <Navigate to="/login" />
                   }
                 />
+                <Route
+                  path="/profile"
+                  element={
+                    isLoggedIn ? (
+                      <UserProfile routing="path" path="/profile" />
+                    ) : (
+                      <Navigate to="/login" />
+                    )
+                  }
+                />
+                <Route
+                  path="/profile/*"
+                  element={
+                    isLoggedIn ? (
+                      <UserProfile routing="path" path="/profile" />
+                    ) : (
+                      <Navigate to="/login" />
+                    )
+                  }
+                />
+                <Route
+                  path="/subscription"
+                  element={
+                    isLoggedIn ? (
+                      <SubscriptionSettingsPage token={token} />
+                    ) : (
+                      <Navigate to="/login" />
+                    )
+                  }
+                />
                 {effectiveUserRole &&
                   hasPermission(effectiveUserRole, PERMISSIONS.MANAGE_MEMBERS) && (
                     <>
                       <Route
                         path="/user-management"
-                        element={
-                          isLoggedIn ? (
-                            <UserManagementPage token={token} />
-                          ) : (
-                            <Navigate to="/login" />
-                          )
-                        }
+                        element={isLoggedIn ? <UserManagementPage /> : <Navigate to="/login" />}
                       />
                       <Route
                         path="/store-area-management"
@@ -736,32 +800,13 @@ function AppContent({
               />
               <Route
                 path="/onboarding"
-                element={
-                  isLoggedIn ? (
-                    hasOrganization ? (
-                      <Navigate to="/scan" />
-                    ) : (
-                      <OnboardingPage />
-                    )
-                  ) : (
-                    <Navigate to="/login" />
-                  )
-                }
+                element={isLoggedIn ? <OnboardingPage /> : <Navigate to="/login" />}
               />
               <Route
                 path="/onboarding/*"
-                element={
-                  isLoggedIn ? (
-                    hasOrganization ? (
-                      <Navigate to="/scan" />
-                    ) : (
-                      <OnboardingPage />
-                    )
-                  ) : (
-                    <Navigate to="/login" />
-                  )
-                }
+                element={isLoggedIn ? <OnboardingPage /> : <Navigate to="/login" />}
               />
+
               <Route
                 path="/settings"
                 element={
@@ -830,14 +875,38 @@ function AppContent({
                   isLoggedIn ? <MarkdownCalculator token={token} /> : <Navigate to="/login" />
                 }
               />
+              <Route
+                path="/profile"
+                element={
+                  isLoggedIn ? (
+                    <UserProfile routing="path" path="/profile" />
+                  ) : (
+                    <Navigate to="/login" />
+                  )
+                }
+              />
+              <Route
+                path="/profile/*"
+                element={
+                  isLoggedIn ? (
+                    <UserProfile routing="path" path="/profile" />
+                  ) : (
+                    <Navigate to="/login" />
+                  )
+                }
+              />
+              <Route
+                path="/subscription"
+                element={
+                  isLoggedIn ? <SubscriptionSettingsPage token={token} /> : <Navigate to="/login" />
+                }
+              />
               {effectiveUserRole &&
                 hasPermission(effectiveUserRole, PERMISSIONS.MANAGE_MEMBERS) && (
                   <>
                     <Route
                       path="/user-management"
-                      element={
-                        isLoggedIn ? <UserManagementPage token={token} /> : <Navigate to="/login" />
-                      }
+                      element={isLoggedIn ? <UserManagementPage /> : <Navigate to="/login" />}
                     />
                     <Route
                       path="/store-area-management"
