@@ -2357,7 +2357,9 @@ async function handleCreateInventoryItem(
   // Log deprecation warnings whenever deprecated snake_case fields are present
   const deprecatedFields = getDeprecatedSnakeCaseFields(body);
   if (deprecatedFields.length > 0) {
-    console.warn(`DEPRECATION: snake_case fields are deprecated. Please migrate: ${deprecatedFields.join(', ')}`);
+    console.warn(
+      `DEPRECATION: snake_case fields are deprecated. Please migrate: ${deprecatedFields.join(', ')}`,
+    );
   }
 
   if (productId === undefined || !Number.isInteger(productId) || productId < 1) {

@@ -1,15 +1,22 @@
 import { Router, Response, RequestHandler } from 'express';
 import { clerkAuth, ClerkAuthRequest } from '../middleware/clerk-auth.middleware';
+import { authenticateToken, AuthRequest, requireManager } from '../middleware/auth.middleware';
 import { standardLimiter } from '../middleware/rateLimiter';
 import { validateRequest } from '../middleware/validateRequest';
 import { organizationBootstrapSchema } from '../schemas';
 import { OrgBootstrapService } from '../services/org-bootstrap.service';
+import { SeedService } from '../services/seed.service';
 import { isBaseError } from '../errors';
 
 const router = Router();
 const bootstrapService = new OrgBootstrapService();
+const seedService = new SeedService();
 const clerkAuthHandler: RequestHandler = (req, res, next) =>
   clerkAuth(req as ClerkAuthRequest, res, next);
+const authenticateTokenHandler: RequestHandler = (req, res, next) =>
+  authenticateToken(req as AuthRequest, res, next);
+const requireManagerHandler: RequestHandler = (req, res, next) =>
+  requireManager(req as AuthRequest, res, next);
 
 /**
  * POST /api/organization/bootstrap
@@ -74,6 +81,42 @@ router.post(
       }
 
       console.error('[org-bootstrap] Bootstrap failed:', error);
+      return res.status(500).json({ message: 'Internal server error' });
+    }
+  },
+);
+
+/**
+ * POST /api/organization/seed-demo-data
+ *
+ * Seeds the organization with sample products and store areas.
+ * Used during onboarding for a "Load Demo Data" experience.
+ *
+ * Requires: Valid session token (via authenticateToken) + Admin/Manager role
+ */
+router.post(
+  '/seed-demo-data',
+  authenticateTokenHandler,
+  requireManagerHandler,
+  standardLimiter,
+  async (req, res: Response) => {
+    try {
+      const authReq = req as AuthRequest;
+      const organizationId = authReq.organizationId;
+
+      if (!organizationId) {
+        return res.status(400).json({ message: 'Organization context missing' });
+      }
+
+      const result = await seedService.seedDemoData(organizationId);
+
+      return res.status(200).json(result);
+    } catch (error) {
+      if (isBaseError(error)) {
+        return res.status(error.statusCode).json({ message: error.message, code: error.code });
+      }
+
+      console.error('[org-bootstrap] Seeding failed:', error);
       return res.status(500).json({ message: 'Internal server error' });
     }
   },
