@@ -1,20 +1,29 @@
 ## 0. Planning Guardrails
 
-- [ ] 0.1 Lock the initial migration order for the backend areas that matter most so the implementation sequence stays explicit.
-- [ ] 0.2 Capture baseline metrics for the work being changed, including coverage runtime, skipped tests, and the route/service areas being touched.
-- [ ] 0.3 Record the invariants that must not change during the refactor: external route contracts, database provider support, and production behavior.
+- [x] 0.1 Lock the initial migration order for the backend areas that matter most so the implementation sequence stays explicit.
+  - Migration order is captured in the proposal/design and later task sequencing: controller/service decomposition first, repository slices next, test hygiene, then DevOps readiness.
+- [x] 0.2 Capture baseline metrics for the work being changed, including coverage runtime, skipped tests, and the route/service areas being touched.
+  - Baseline and follow-up evidence is recorded in this checklist: targeted route regression runtime, skipped-test audit, full coverage OOM at 616.4s, and follow-up coverage timeout attempts.
+- [x] 0.3 Record the invariants that must not change during the refactor: external route contracts, database provider support, and production behavior.
+  - Invariants are recorded in `proposal.md`, `design.md`, and the refreshed runtime docs: route contracts stay stable, dev/test remains SQLite/local storage, and production remains Workers/Neon/R2/Pages.
 
 ## 1. Baseline and Wiring
 
-- [ ] 1.1 Map the current route-to-controller-to-service flow for the highest-impact backend areas and confirm the first slice to migrate.
-- [ ] 1.2 Add the DI and reflection dependencies needed for container-based wiring.
-- [ ] 1.3 Create the backend composition root and register the shared Prisma client.
-- [ ] 1.4 Register the first pass of repositories and services in the composition root without changing external route behavior.
-- [ ] 1.5 Add shared domain error types and a structured logger entry point for backend-wide use.
+- [x] 1.1 Map the current route-to-controller-to-service flow for the highest-impact backend areas and confirm the first slice to migrate.
+  - Reconfirmed with `codemap .` and `codemap --deps`: high-impact backend routes now include product, inventory, subscription, webhook, upload, dashboard, and report seams.
+- [x] 1.2 Add the DI and reflection dependencies needed for container-based wiring.
+  - `backend/package.json` includes `tsyringe` and `reflect-metadata`.
+- [x] 1.3 Create the backend composition root and register the shared Prisma client.
+  - `backend/src/di/container.ts` imports `reflect-metadata`, initializes the tsyringe container, and registers the shared `PrismaClient`.
+- [x] 1.4 Register the first pass of repositories and services in the composition root without changing external route behavior.
+  - `backend/src/di/container.ts` registers the current repository set plus product, inventory, subscription, and Stripe factories; route contracts remain delegated through existing route files.
+- [x] 1.5 Add shared domain error types and a structured logger entry point for backend-wide use.
+  - `backend/src/errors/index.ts` defines shared domain/HTTP errors, and `backend/src/utils/logger.ts` provides structured logger methods.
 
 ## 2. Controller Migration
 
-- [ ] 2.1 Introduce controller modules for the highest-traffic route groups and move request/response handling out of routes.
+- [x] 2.1 Introduce controller modules for the highest-traffic route groups and move request/response handling out of routes.
+  - Controller modules exist for inventory, product, subscription, webhook, upload, and database backup; migrated product/inventory/subscription/webhook routes delegate to controller factories.
 - [ ] 2.2 Add controller unit tests for the migrated route groups, covering success, validation-failure, and dependency-error responses.
 - [ ] 2.3 Update the remaining route files to delegate to controllers instead of calling services directly.
 - [ ] 2.4 Verify the route layer is thin by removing any leftover domain logic from route handlers and keeping response shapes stable.
@@ -41,10 +50,13 @@
 
 ## 6. Repository Layer
 
-- [ ] 6.1 Add repositories for the core models that still query Prisma directly from services.
+- [x] 6.1 Add repositories for the core models that still query Prisma directly from services.
+  - Repository modules now cover analytics, inventory, job locks, org audit, organization, product, report, storage quota, store area, subscription, upload, and user.
 - [ ] 6.2 Migrate service read/write operations to the new repositories and remove routine Prisma calls from business logic.
-- [ ] 6.3 Add repository tests for the model-specific query paths that were extracted from services.
-- [ ] 6.4 Confirm the repository layer can be injected through the composition root and mocked cleanly in tests.
+- [x] 6.3 Add repository tests for the model-specific query paths that were extracted from services.
+  - Repository unit tests exist for analytics, inventory, job lock, org audit, organization, product, report, storage quota, store area, subscription, upload, and user repositories.
+- [x] 6.4 Confirm the repository layer can be injected through the composition root and mocked cleanly in tests.
+  - `di-container.test.ts` covers repository resolution from the composition root, and ServiceProvider seam tests cover repository-backed caching/mocking paths.
 - [ ] 6.5 Remove duplicate query code from services after repository coverage is in place.
 - [x] 6.6 Move dashboard summary SQLite reads into `ReportRepository` and wire `DashboardService` through `ServiceProvider`.
 - [x] 6.7 Move SaaS metrics snapshot and webhook metric persistence paths into `AnalyticsRepository`.
