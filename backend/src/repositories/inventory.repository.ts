@@ -3,7 +3,7 @@ import { injectable, inject } from 'tsyringe';
 
 @injectable()
 export class InventoryRepository {
-  constructor(@inject(PrismaClient) private prisma: PrismaClient) { }
+  constructor(@inject(PrismaClient) private prisma: PrismaClient) {}
 
   async findAll(organizationId: string): Promise<InventoryItem[]> {
     return this.prisma.inventoryItem.findMany({
@@ -56,7 +56,11 @@ export class InventoryRepository {
     });
   }
 
-  async update(id: number, organizationId: string, data: Prisma.InventoryItemUncheckedUpdateInput): Promise<InventoryItem> {
+  async update(
+    id: number,
+    organizationId: string,
+    data: Prisma.InventoryItemUncheckedUpdateInput,
+  ): Promise<InventoryItem> {
     return this.prisma.inventoryItem.update({
       where: {
         id,

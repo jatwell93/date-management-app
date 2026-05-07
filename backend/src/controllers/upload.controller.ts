@@ -4,12 +4,13 @@ import { Logger } from '../utils/logger';
 import { UploadService } from '../services/upload.service';
 import { UploadImportType } from '../types/upload.types';
 import { UploadRepository } from '../repositories/upload.repository';
+import { ServiceProvider } from '../services/service-provider';
 
 export class UploadController {
   constructor(
     private uploadService: UploadService,
     private uploadRepository: UploadRepository,
-  ) { }
+  ) {}
 
   /**
    * Initiate upload: determine strategy (Direct vs Presigned)
@@ -25,15 +26,17 @@ export class UploadController {
 
       const result = importType
         ? await this.uploadService.initiateUpload(
-          filename,
-          Number(fileSize),
-          contentType,
-          importType,
-        )
+            filename,
+            Number(fileSize),
+            contentType,
+            importType,
+          )
         : await this.uploadService.initiateUpload(filename, Number(fileSize), contentType);
       res.json(result);
     } catch (error) {
-      Logger.error('Initiate upload error', { error: error instanceof Error ? error.message : String(error) });
+      Logger.error('Initiate upload error', {
+        error: error instanceof Error ? error.message : String(error),
+      });
       if (error instanceof Error && error.message.includes('exceeds maximum')) {
         res.status(400).json({ error: error.message });
         return;
@@ -69,12 +72,12 @@ export class UploadController {
 
       const uploadResult = importType
         ? await this.uploadService.handleDirectUpload(
-          buffer,
-          originalname,
-          mimetype,
-          req.userId,
-          importType,
-        )
+            buffer,
+            originalname,
+            mimetype,
+            req.userId,
+            importType,
+          )
         : await this.uploadService.handleDirectUpload(buffer, originalname, mimetype, req.userId);
 
       const normalizedResult =
@@ -99,7 +102,9 @@ export class UploadController {
 
       res.json({ message: 'File uploaded and processing started', key: normalizedResult.key });
     } catch (error) {
-      Logger.error('Direct upload error', { error: error instanceof Error ? error.message : String(error) });
+      Logger.error('Direct upload error', {
+        error: error instanceof Error ? error.message : String(error),
+      });
       res.status(500).json({ error: error instanceof Error ? error.message : 'Unknown error' });
     }
   }
@@ -140,7 +145,9 @@ export class UploadController {
 
       res.json({ message: 'Upload completed and processing started' });
     } catch (error) {
-      Logger.error('Complete upload error', { error: error instanceof Error ? error.message : String(error) });
+      Logger.error('Complete upload error', {
+        error: error instanceof Error ? error.message : String(error),
+      });
       if (error instanceof Error && error.message.startsWith('Access denied:')) {
         res.status(403).json({ error: error.message });
         return;
@@ -194,7 +201,9 @@ export class UploadController {
         try {
           columnsUsedData = JSON.parse(upload.columnsUsed);
         } catch (parseError) {
-          Logger.warn('Failed to parse upload.columnsUsed', { error: parseError instanceof Error ? parseError.message : String(parseError) });
+          Logger.warn('Failed to parse upload.columnsUsed', {
+            error: parseError instanceof Error ? parseError.message : String(parseError),
+          });
           // Return empty array as fallback for malformed JSON
           columnsUsedData = undefined;
         }
@@ -217,8 +226,18 @@ export class UploadController {
         columnsIgnored: upload.columnsIgnored,
       });
     } catch (error) {
-      Logger.error('Upload status error', { error: error instanceof Error ? error.message : String(error) });
+      Logger.error('Upload status error', {
+        error: error instanceof Error ? error.message : String(error),
+      });
       res.status(500).json({ error: error instanceof Error ? error.message : 'Unknown error' });
     }
   }
+}
+
+export function createUploadControllerForRequest(req: AuthRequest): UploadController {
+  const serviceProvider = new ServiceProvider({ organizationId: req.organizationId });
+  return new UploadController(
+    serviceProvider.getUploadService(),
+    serviceProvider.getUploadRepository(),
+  );
 }

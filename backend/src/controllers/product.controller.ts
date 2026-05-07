@@ -25,7 +25,7 @@ export class ProductController {
     private productServiceFactory: (orgId: string) => ProductService,
     private productRepository: ProductRepository,
     private subscriptionRepository: SubscriptionRepository,
-  ) { }
+  ) {}
 
   private getService(req: AuthRequest): ProductService {
     if (!req.organizationId) {

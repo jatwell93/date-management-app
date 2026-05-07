@@ -98,7 +98,9 @@ export class SchedulerService {
             expiryDate: item.expiry_date,
           }));
 
-          Logger.debug(`Processing ${inventoryItems.length} inventory items for organization ${org.id}...`);
+          Logger.debug(
+            `Processing ${inventoryItems.length} inventory items for organization ${org.id}...`,
+          );
 
           orgResult.total = inventoryItems.length;
 
@@ -107,7 +109,10 @@ export class SchedulerService {
             await inventoryService.bulkUpdateMarkdownStatuses(inventoryItems);
           } catch (error) {
             // If bulk update fails, fall back to individual updates with retry
-            Logger.warn(`Bulk update failed for organization ${org.id}, falling back to individual updates:`, { error: error instanceof Error ? error.message : String(error) });
+            Logger.warn(
+              `Bulk update failed for organization ${org.id}, falling back to individual updates:`,
+              { error: error instanceof Error ? error.message : String(error) },
+            );
 
             for (const item of inventoryItems) {
               const itemError = await this.retryMarkdownUpdateForItem(inventoryService, item);
@@ -121,7 +126,10 @@ export class SchedulerService {
 
           // Log organization summary
           if (orgResult.failed > 0) {
-            Logger.warn(`Organization ${org.id} completed with ${orgResult.failed}/${orgResult.total} failures`, { errors: orgResult.errors.slice(0, 3) });
+            Logger.warn(
+              `Organization ${org.id} completed with ${orgResult.failed}/${orgResult.total} failures`,
+              { errors: orgResult.errors.slice(0, 3) },
+            );
           }
         } catch (error) {
           const errorMessage = error instanceof Error ? error.message : String(error);
@@ -140,22 +148,33 @@ export class SchedulerService {
       const successRate =
         totalItems > 0 ? (((totalItems - totalFailed) / totalItems) * 100).toFixed(1) : '100';
 
-      Logger.info('Markdown update summary', { organizations: organizations.length, totalItems, totalFailed, successRate: `${successRate}%` });
+      Logger.info('Markdown update summary', {
+        organizations: organizations.length,
+        totalItems,
+        totalFailed,
+        successRate: `${successRate}%`,
+      });
 
       if (totalFailed > 0) {
-        Logger.warn(`${totalFailed} items failed to update. Check logs for details.`, { totalFailed });
+        Logger.warn(`${totalFailed} items failed to update. Check logs for details.`, {
+          totalFailed,
+        });
 
         // Optionally send alert for high failure rates
         const failureRate = totalFailed / totalItems;
         if (failureRate > 0.1) {
           // More than 10% failure rate
-          Logger.error(`High failure rate detected (${(failureRate * 100).toFixed(1)}%). Consider manual intervention.`);
+          Logger.error(
+            `High failure rate detected (${(failureRate * 100).toFixed(1)}%). Consider manual intervention.`,
+          );
         }
       }
 
       Logger.info('Completed scheduled markdown updates for all organizations.');
     } catch (error) {
-      Logger.error('Error in scheduled markdown update process', { error: error instanceof Error ? error.message : String(error) });
+      Logger.error('Error in scheduled markdown update process', {
+        error: error instanceof Error ? error.message : String(error),
+      });
     }
   }
 
@@ -165,7 +184,9 @@ export class SchedulerService {
       const backupPath = await this.databaseBackupService.createBackup();
       Logger.info(`Database backup completed: ${backupPath}`);
     } catch (error) {
-      Logger.error('Error in scheduled database backup process', { error: error instanceof Error ? error.message : String(error) });
+      Logger.error('Error in scheduled database backup process', {
+        error: error instanceof Error ? error.message : String(error),
+      });
     }
   }
 }

@@ -434,7 +434,9 @@ export class ProductService {
           }),
         )
         .on('error', (error) => {
-          Logger.error('CSV parsing error', { error: error instanceof Error ? error.message : String(error) });
+          Logger.error('CSV parsing error', {
+            error: error instanceof Error ? error.message : String(error),
+          });
           errors.push(`CSV parsing error: ${error.message}`);
           reject({ imported, updated, errors });
         })
@@ -614,7 +616,9 @@ export class ProductService {
 
             resolve({ imported, updated, errors });
           } catch (finalError: unknown) {
-            Logger.error('Error in final processing', { error: finalError instanceof Error ? finalError.message : String(finalError) });
+            Logger.error('Error in final processing', {
+              error: finalError instanceof Error ? finalError.message : String(finalError),
+            });
             const finalErrorMessage =
               finalError instanceof Error ? finalError.message : 'Unknown error';
             errors.push(`Final processing error: ${finalErrorMessage}`);

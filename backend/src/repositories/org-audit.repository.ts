@@ -15,7 +15,7 @@ export interface OrgAuditQueryOptions {
 
 @injectable()
 export class OrgAuditRepository {
-  constructor(@inject(PrismaClient) private prisma: PrismaClient) { }
+  constructor(@inject(PrismaClient) private prisma: PrismaClient) {}
 
   private getClient(client?: DbClient): DbClient {
     return client ?? this.prisma;
@@ -39,7 +39,10 @@ export class OrgAuditRepository {
     });
   }
 
-  async findByOrganization(organizationId: string, options?: OrgAuditQueryOptions): Promise<OrgAuditLog[]> {
+  async findByOrganization(
+    organizationId: string,
+    options?: OrgAuditQueryOptions,
+  ): Promise<OrgAuditLog[]> {
     const where: Record<string, unknown> = { organizationId };
 
     if (options?.eventType) {

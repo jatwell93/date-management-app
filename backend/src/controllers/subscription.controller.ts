@@ -79,7 +79,7 @@ export class SubscriptionController {
     private subscriptionRepository: SubscriptionRepository,
     @inject('StripeClientFactory')
     private stripeClientFactory: () => ReturnType<typeof getStripeClient>,
-  ) { }
+  ) {}
 
   async getTrialStatus(req: Request, res: Response): Promise<void> {
     try {
@@ -117,21 +117,23 @@ export class SubscriptionController {
         isTrialExpired: subscription?.status === 'TRIALING' && isTrialExpired,
         subscription: subscription
           ? {
-            status: subscription.status as SubscriptionTierResponse['status'],
-            tierLevel: subscription.tierLevel,
-            trialEndDate: subscription.trialEndDate?.toISOString() || null,
-            trialStartedAt: subscription.trialStartedAt?.toISOString() || null,
-            trialConvertedAt: subscription.trialConvertedAt?.toISOString() || null,
-            daysRemaining,
-            billingCycle: subscription.billingCycle || null,
-          }
+              status: subscription.status as SubscriptionTierResponse['status'],
+              tierLevel: subscription.tierLevel,
+              trialEndDate: subscription.trialEndDate?.toISOString() || null,
+              trialStartedAt: subscription.trialStartedAt?.toISOString() || null,
+              trialConvertedAt: subscription.trialConvertedAt?.toISOString() || null,
+              daysRemaining,
+              billingCycle: subscription.billingCycle || null,
+            }
           : null,
         tierLimits: limits,
       };
 
       res.json(response);
     } catch (error) {
-      Logger.error('Error fetching trial status', { error: error instanceof Error ? error.message : String(error) });
+      Logger.error('Error fetching trial status', {
+        error: error instanceof Error ? error.message : String(error),
+      });
       if (error instanceof NotFoundError || error instanceof AuthenticationError) {
         throw error;
       }
@@ -180,7 +182,9 @@ export class SubscriptionController {
         },
       });
     } catch (error: unknown) {
-      Logger.error('Error converting trial', { error: error instanceof Error ? error.message : String(error) });
+      Logger.error('Error converting trial', {
+        error: error instanceof Error ? error.message : String(error),
+      });
       if (
         error instanceof ValidationError ||
         error instanceof NotFoundError ||
@@ -260,7 +264,9 @@ export class SubscriptionController {
 
       res.json({ sessionId: session.id, url: session.url });
     } catch (error: unknown) {
-      Logger.error('Error creating checkout session', { error: error instanceof Error ? error.message : String(error) });
+      Logger.error('Error creating checkout session', {
+        error: error instanceof Error ? error.message : String(error),
+      });
       if (
         error instanceof ValidationError ||
         error instanceof NotFoundError ||
@@ -311,7 +317,9 @@ export class SubscriptionController {
 
       res.json({ url: session.url });
     } catch (error: unknown) {
-      Logger.error('Error creating portal session', { error: error instanceof Error ? error.message : String(error) });
+      Logger.error('Error creating portal session', {
+        error: error instanceof Error ? error.message : String(error),
+      });
       if (
         error instanceof ValidationError ||
         error instanceof NotFoundError ||

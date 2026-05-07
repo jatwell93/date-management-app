@@ -35,9 +35,12 @@ interface ErrorWithCode {
 }
 
 const log = {
-  info: (message: string, data?: Record<string, unknown>) => Logger.info(`[WEBHOOK] ${message}`, data),
-  warn: (message: string, data?: Record<string, unknown>) => Logger.warn(`[WEBHOOK] ${message}`, data),
-  error: (message: string, data?: Record<string, unknown>) => Logger.error(`[WEBHOOK] ${message}`, data),
+  info: (message: string, data?: Record<string, unknown>) =>
+    Logger.info(`[WEBHOOK] ${message}`, data),
+  warn: (message: string, data?: Record<string, unknown>) =>
+    Logger.warn(`[WEBHOOK] ${message}`, data),
+  error: (message: string, data?: Record<string, unknown>) =>
+    Logger.error(`[WEBHOOK] ${message}`, data),
 };
 
 @injectable()
@@ -859,7 +862,7 @@ export class WebhookService {
       TIER_LIMITS[newTierLevel].max_skus !== null &&
       (TIER_LIMITS[oldTier.tierLevel as TierLevel].max_skus === null ||
         (TIER_LIMITS[newTierLevel].max_skus as number) <
-        (TIER_LIMITS[oldTier.tierLevel as TierLevel].max_skus as number))
+          (TIER_LIMITS[oldTier.tierLevel as TierLevel].max_skus as number))
     );
   }
 

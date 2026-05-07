@@ -1,21 +1,12 @@
-import { Router, Response, NextFunction } from 'express';
-import { ServiceProvider } from '../services/service-provider';
+import { Router } from 'express';
 import { authenticateToken, AuthRequest } from '../middleware/auth.middleware';
+import { createDashboardController } from '../controllers/dashboard.controller';
 
 const router = Router();
+const dashboardController = createDashboardController();
 
-function getDashboardServiceForRequest(req: AuthRequest) {
-  return new ServiceProvider({ organizationId: req.organizationId }).getDashboardService();
-}
-
-router.get('/', authenticateToken, async (req: AuthRequest, res: Response, next: NextFunction) => {
-  try {
-    const dashboardService = getDashboardServiceForRequest(req);
-    const dashboardData = await dashboardService.getDashboardData();
-    res.json(dashboardData);
-  } catch (error) {
-    next(error);
-  }
-});
+router.get('/', authenticateToken, (req: AuthRequest, res, next) =>
+  dashboardController.getDashboardData(req, res, next),
+);
 
 export default router;

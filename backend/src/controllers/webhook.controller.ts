@@ -33,13 +33,21 @@ function sendWebhookError(res: Response, message: string, statusCode = 400): voi
   if (statusCode >= 500) {
     Sentry.captureMessage(`Webhook server error: ${message}`, {
       level: 'error',
-      tags: { component: 'webhook', error_type: 'server_error', status_code: statusCode.toString() },
+      tags: {
+        component: 'webhook',
+        error_type: 'server_error',
+        status_code: statusCode.toString(),
+      },
       extra: { message, timestamp: new Date().toISOString() },
     });
   } else if (statusCode >= 400) {
     Sentry.captureMessage(`Webhook client error: ${message}`, {
       level: 'warning',
-      tags: { component: 'webhook', error_type: 'client_error', status_code: statusCode.toString() },
+      tags: {
+        component: 'webhook',
+        error_type: 'client_error',
+        status_code: statusCode.toString(),
+      },
       extra: { message, timestamp: new Date().toISOString() },
     });
   }
@@ -73,7 +81,7 @@ export class WebhookController {
   constructor(
     private webhookService: WebhookService,
     private clerkWebhookService: ClerkWebhookService,
-  ) { }
+  ) {}
 
   /**
    * Handle Stripe webhook events
@@ -232,10 +240,13 @@ export class WebhookController {
       const startTs = Date.now();
 
       if (!isNew) {
-        Logger.info('[CLERK_WEBHOOK] Duplicate webhook event, returning success without reprocessing', {
-          eventId: svixEventId,
-          eventType,
-        });
+        Logger.info(
+          '[CLERK_WEBHOOK] Duplicate webhook event, returning success without reprocessing',
+          {
+            eventId: svixEventId,
+            eventType,
+          },
+        );
 
         // record idempotency skip metric
         monitor.recordWebhookEvent(eventType, 0, 'skipped');

@@ -5,13 +5,7 @@ const mockInitiate = jest.fn();
 const mockDirect = jest.fn();
 const mockComplete = jest.fn();
 const mockStatus = jest.fn();
-
-const mockGetUploadService = jest.fn();
-const mockGetUploadRepository = jest.fn();
-const mockServiceProviderCtor = jest.fn().mockImplementation(() => ({
-  getUploadService: mockGetUploadService,
-  getUploadRepository: mockGetUploadRepository,
-}));
+const mockCreateUploadControllerForRequest = jest.fn();
 
 const mockCheckUsageLimit = jest
   .fn()
@@ -43,19 +37,9 @@ jest.mock('../../middleware/validateRequest', () => ({
   validateRequest: (...args: unknown[]) => mockValidateRequest(...args),
 }));
 
-jest.mock('../../services/service-provider', () => ({
-  ServiceProvider: function ServiceProvider(...args: unknown[]) {
-    return mockServiceProviderCtor(...args);
-  },
-}));
-
 jest.mock('../../controllers/upload.controller', () => ({
-  UploadController: jest.fn().mockImplementation(() => ({
-    initiate: (...args: unknown[]) => mockInitiate(...args),
-    direct: (...args: unknown[]) => mockDirect(...args),
-    complete: (...args: unknown[]) => mockComplete(...args),
-    status: (...args: unknown[]) => mockStatus(...args),
-  })),
+  createUploadControllerForRequest: (...args: unknown[]) =>
+    mockCreateUploadControllerForRequest(...args),
 }));
 
 import uploadRouter from '../../routes/upload.routes';
@@ -77,9 +61,7 @@ describe('upload.routes', () => {
     mockDirect.mockReset();
     mockComplete.mockReset();
     mockStatus.mockReset();
-    mockGetUploadService.mockReset();
-    mockGetUploadRepository.mockReset();
-    mockServiceProviderCtor.mockClear();
+    mockCreateUploadControllerForRequest.mockReset();
     mockValidateRequest.mockClear();
 
     mockInitiate.mockImplementation(async (_req: any, res: express.Response) => {
@@ -98,8 +80,12 @@ describe('upload.routes', () => {
       res.status(200).json({ route: 'status' });
     });
 
-    mockGetUploadService.mockReturnValue({});
-    mockGetUploadRepository.mockReturnValue({});
+    mockCreateUploadControllerForRequest.mockReturnValue({
+      initiate: (...args: unknown[]) => mockInitiate(...args),
+      direct: (...args: unknown[]) => mockDirect(...args),
+      complete: (...args: unknown[]) => mockComplete(...args),
+      status: (...args: unknown[]) => mockStatus(...args),
+    });
   });
 
   it('registers storage usage guard for upload write endpoints', () => {
@@ -118,8 +104,9 @@ describe('upload.routes', () => {
 
     expect(response.status).toBe(200);
     expect(response.body).toEqual({ route: 'initiate' });
-    expect(mockServiceProviderCtor).toHaveBeenCalledWith({ organizationId: 'org-alpha' });
-    expect(mockGetUploadService).toHaveBeenCalledTimes(1);
+    expect(mockCreateUploadControllerForRequest).toHaveBeenCalledWith(
+      expect.objectContaining({ organizationId: 'org-alpha' }),
+    );
     expect(mockInitiate).toHaveBeenCalledTimes(1);
   });
 
@@ -133,7 +120,9 @@ describe('upload.routes', () => {
 
     expect(response.status).toBe(200);
     expect(response.body).toEqual({ route: 'direct' });
-    expect(mockServiceProviderCtor).toHaveBeenCalledWith({ organizationId: 'org-alpha' });
+    expect(mockCreateUploadControllerForRequest).toHaveBeenCalledWith(
+      expect.objectContaining({ organizationId: 'org-alpha' }),
+    );
     expect(mockDirect).toHaveBeenCalledTimes(1);
   });
 
@@ -160,7 +149,9 @@ describe('upload.routes', () => {
 
     expect(response.status).toBe(200);
     expect(response.body).toEqual({ route: 'complete' });
-    expect(mockServiceProviderCtor).toHaveBeenCalledWith({ organizationId: 'org-alpha' });
+    expect(mockCreateUploadControllerForRequest).toHaveBeenCalledWith(
+      expect.objectContaining({ organizationId: 'org-alpha' }),
+    );
     expect(mockComplete).toHaveBeenCalledTimes(1);
   });
 
@@ -174,7 +165,9 @@ describe('upload.routes', () => {
 
     expect(response.status).toBe(200);
     expect(response.body).toEqual({ route: 'status' });
-    expect(mockServiceProviderCtor).toHaveBeenCalledWith({ organizationId: 'org-alpha' });
+    expect(mockCreateUploadControllerForRequest).toHaveBeenCalledWith(
+      expect.objectContaining({ organizationId: 'org-alpha' }),
+    );
     expect(mockStatus).toHaveBeenCalledTimes(1);
   });
 });

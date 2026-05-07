@@ -11,6 +11,8 @@ import { WebhookController } from '../controllers/webhook.controller';
 import { ProductController } from '../controllers/product.controller';
 import { SubscriptionController } from '../controllers/subscription.controller';
 import { InventoryController } from '../controllers/inventory.controller';
+import { StoreAreaController } from '../controllers/store-area.controller';
+import { StorageQuotaController } from '../controllers/storage-quota.controller';
 import { getDiContainer } from './container';
 
 /**
@@ -40,6 +42,14 @@ export function createSubscriptionController(): SubscriptionController {
  */
 export function createInventoryController(): InventoryController {
   return getDiContainer().resolve(InventoryController);
+}
+
+export function createStoreAreaController(): StoreAreaController {
+  return getDiContainer().resolve(StoreAreaController);
+}
+
+export function createStorageQuotaController(): StorageQuotaController {
+  return getDiContainer().resolve(StorageQuotaController);
 }
 
 /**

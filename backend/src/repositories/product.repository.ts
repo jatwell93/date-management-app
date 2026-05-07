@@ -7,7 +7,7 @@ type DbClient = PrismaClient | Prisma.TransactionClient;
 
 @injectable()
 export class ProductRepository {
-  constructor(@inject(PrismaClient) private prisma: PrismaClient) { }
+  constructor(@inject(PrismaClient) private prisma: PrismaClient) {}
 
   private getClient(tx?: DbClient): DbClient {
     return tx ?? this.prisma;
@@ -35,7 +35,11 @@ export class ProductRepository {
     });
   }
 
-  async findByBarcode(barcode: string, organizationId: string, tx?: DbClient): Promise<Product | null> {
+  async findByBarcode(
+    barcode: string,
+    organizationId: string,
+    tx?: DbClient,
+  ): Promise<Product | null> {
     return this.getClient(tx).product.findUnique({
       where: {
         organizationId_barcode: {
@@ -90,7 +94,12 @@ export class ProductRepository {
     });
   }
 
-  async update(id: number, organizationId: string, data: Prisma.ProductUncheckedUpdateInput, tx?: DbClient): Promise<Product> {
+  async update(
+    id: number,
+    organizationId: string,
+    data: Prisma.ProductUncheckedUpdateInput,
+    tx?: DbClient,
+  ): Promise<Product> {
     return this.getClient(tx).product.update({
       where: {
         id,

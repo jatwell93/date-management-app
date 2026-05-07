@@ -30,7 +30,7 @@ export type SubscriptionTierDistributionRecord = {
 
 @injectable()
 export class AnalyticsRepository {
-  constructor(@inject(PrismaClient) private prisma: PrismaClient) { }
+  constructor(@inject(PrismaClient) private prisma: PrismaClient) {}
 
   async createWebhookMetrics(data: {
     eventType: string;

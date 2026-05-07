@@ -5,6 +5,8 @@ import { getDefaultDatabaseClient } from '../database/database-factory';
 import { ProductService } from '../services/product.service';
 import { InventoryService } from '../services/inventory.service';
 import { SubscriptionService } from '../services/subscription.service';
+import { StoreAreaService } from '../services/store-area.service';
+import { StorageQuotaService } from '../services/storage-quota.service';
 import { getStripeClient } from '../utils/stripe';
 import { ProductRepository } from '../repositories/product.repository';
 import { InventoryRepository } from '../repositories/inventory.repository';
@@ -78,6 +80,14 @@ export function initializeDiContainer(): void {
       const productRepo = container.resolve(ProductRepository);
       return new InventoryService(orgId, prisma, inventoryRepo, productRepo);
     },
+  });
+
+  container.register('StoreAreaServiceFactory', {
+    useValue: (orgId?: string) => new StoreAreaService(orgId),
+  });
+
+  container.register('StorageQuotaServiceFactory', {
+    useValue: (organizationId?: string) => new StorageQuotaService(organizationId),
   });
 
   initialized = true;

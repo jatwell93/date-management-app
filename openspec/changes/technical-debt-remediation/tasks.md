@@ -24,10 +24,25 @@
 
 - [x] 2.1 Introduce controller modules for the highest-traffic route groups and move request/response handling out of routes.
   - Controller modules exist for inventory, product, subscription, webhook, upload, and database backup; migrated product/inventory/subscription/webhook routes delegate to controller factories.
-- [ ] 2.2 Add controller unit tests for the migrated route groups, covering success, validation-failure, and dependency-error responses.
-  - Added direct migrated-controller coverage for ProductController, InventoryController, and SubscriptionController success, validation/auth failure, and dependency-error paths. Remaining direct coverage should still cover WebhookController and any route groups not already protected by focused controller tests.
+- [x] 2.2 Add controller unit tests for the migrated route groups, covering success, validation-failure, and dependency-error responses.
+  - Added direct migrated-controller coverage for ProductController, InventoryController, SubscriptionController, and WebhookController success, validation/auth/header failure, non-recoverable/dependency-error, and conflict paths. UploadController and DatabaseBackupController are protected by existing focused controller tests.
 - [ ] 2.3 Update the remaining route files to delegate to controllers instead of calling services directly.
+  - Progress: migrated `store-area.routes.ts` to delegate request/response handling to `StoreAreaController`, with the service factory moved into the controller module so the route no longer constructs or calls `StoreAreaService` directly.
+  - Progress: migrated `storage-quota.routes.ts` to delegate quota and can-upload request/response handling to `StorageQuotaController`; the route no longer constructs or calls `StorageQuotaService` directly and retains only controller dispatch plus route-specific 500 response mapping.
+  - Progress: migrated `dashboard.routes.ts` to delegate dashboard response handling to `DashboardController`; the route no longer resolves `DashboardService` directly and preserves the existing dashboard payload/error forwarding contract.
+  - Progress: migrated `expired-item.routes.ts` to delegate list, process, and expired-loss report response handling to `ExpiredItemController`; the route no longer constructs or calls `ExpiredItemService` directly and retains only middleware plus route-specific 500 response mapping.
+  - Progress: migrated `report.routes.ts` to delegate report response handling, update-statuses command response, and items-by-user query validation to `ReportController`; the route no longer constructs or calls `ReportService` directly.
+  - Progress: migrated `health.routes.ts` to delegate health, readiness, process metrics, database metrics, database health, recent-alert response handling, and tier-flag validation state to `HealthController`; the route now retains middleware plus controller dispatch.
+  - Progress: migrated `upload.routes.ts` to delegate per-request `ServiceProvider` and `UploadController` construction through `createUploadControllerForRequest`; the route now retains middleware, multer configuration, and controller dispatch.
+  - Remaining direct route/service seams from the latest audit: admin metrics, org bootstrap, organization invite, and user routes.
 - [ ] 2.4 Verify the route layer is thin by removing any leftover domain logic from route handlers and keeping response shapes stable.
+  - Progress: `store-area.routes.ts` now retains middleware and controller delegation only while preserving the existing Store Area route response contract under the focused route suite.
+  - Progress: `storage-quota.routes.ts` now delegates validation/access/quota decisions to `StorageQuotaController` while preserving the existing Storage Quota response contract under the focused route suite.
+  - Progress: `dashboard.routes.ts` now retains middleware and controller delegation only while preserving the existing Dashboard route response contract under the focused route suite.
+  - Progress: `expired-item.routes.ts` now retains middleware and controller delegation only while preserving the existing Expired Item list/process/report response contract under the focused route suite.
+  - Progress: `report.routes.ts` now retains middleware, feature gating, and controller delegation only while preserving the existing report endpoint response contracts under the focused route suite.
+  - Progress: `health.routes.ts` now retains middleware and controller delegation only while preserving the existing health/readiness/metrics/database-health/recent-alert response contracts under the focused route suite.
+  - Progress: `upload.routes.ts` now retains middleware, multer setup, validation, rate limiting, and controller factory dispatch only while preserving the existing upload route response contract under the focused route suite.
 
 ## 3. Service Decomposition Wave 1
 

@@ -50,7 +50,7 @@ export class UploadService {
     private csvParser: CSVParserService,
     private storageQuotaService: StorageQuotaService,
     private uploadRepository = getDiContainer().resolve(UploadRepository),
-  ) { }
+  ) {}
 
   /**
    * Determine upload strategy and generate necessary credentials/URLs
@@ -141,7 +141,9 @@ export class UploadService {
       try {
         metadata = await this.storage.getMetadata(key);
       } catch (error) {
-        Logger.warn('Failed to read upload metadata', { error: error instanceof Error ? error.message : String(error) });
+        Logger.warn('Failed to read upload metadata', {
+          error: error instanceof Error ? error.message : String(error),
+        });
       }
     }
 
@@ -272,7 +274,10 @@ export class UploadService {
       } catch (err) {
         const code = (err as NodeJS.ErrnoException).code;
         if (code !== 'ENOENT' && code !== 'EPERM') {
-          Logger.error('Failed to cleanup temp file', { tempPath, error: (err as NodeJS.ErrnoException).message });
+          Logger.error('Failed to cleanup temp file', {
+            tempPath,
+            error: (err as NodeJS.ErrnoException).message,
+          });
         }
       }
     }
@@ -340,7 +345,9 @@ export class UploadService {
       // Update storage quota (mark as deleted and decrement usage)
       await this.storageQuotaService.markUploadDeleted(this.organizationId, key);
     } catch (error) {
-      Logger.error(`Failed to delete upload ${key}`, { error: error instanceof Error ? error.message : String(error) });
+      Logger.error(`Failed to delete upload ${key}`, {
+        error: error instanceof Error ? error.message : String(error),
+      });
       throw error;
     }
   }

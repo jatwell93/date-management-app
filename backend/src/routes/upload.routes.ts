@@ -2,23 +2,12 @@ import express from 'express';
 import multer from 'multer';
 import { authenticateToken, AuthRequest } from '../middleware/auth.middleware';
 import { checkUsageLimit } from '../middleware/feature-gate.middleware';
-import { UploadController } from '../controllers/upload.controller';
-import { ServiceProvider } from '../services/service-provider';
+import { createUploadControllerForRequest } from '../controllers/upload.controller';
 import { validateRequest } from '../middleware/validateRequest';
 import { uploadInitiateSchema, uploadCompleteSchema } from '../schemas';
 import { uploadLimiter, presignedUrlLimiter } from '../middleware/rateLimiter';
 
 const router = express.Router();
-
-// Helper function to get services with organization context
-function getServicesForRequest(req: AuthRequest) {
-  const serviceProvider = new ServiceProvider({ organizationId: req.organizationId });
-  const uploadController = new UploadController(
-    serviceProvider.getUploadService(),
-    serviceProvider.getUploadRepository(),
-  );
-  return { uploadController };
-}
 
 // Configure Multer for direct uploads (MemoryStorage for small files)
 // Task 5.4: Configure file upload size limit (10MB)
@@ -44,7 +33,7 @@ router.post(
   presignedUrlLimiter, // Rate limit presigned URL generation at authenticated user level
   validateRequest(uploadInitiateSchema),
   (req: AuthRequest, res) => {
-    const { uploadController } = getServicesForRequest(req);
+    const uploadController = createUploadControllerForRequest(req);
     return uploadController.initiate(req, res);
   },
 );
@@ -60,7 +49,7 @@ router.post(
   uploadLimiter,
   upload.single('file'),
   (req: AuthRequest, res) => {
-    const { uploadController } = getServicesForRequest(req);
+    const uploadController = createUploadControllerForRequest(req);
     return uploadController.direct(req, res);
   },
 );
@@ -76,7 +65,7 @@ router.post(
   uploadLimiter,
   validateRequest(uploadCompleteSchema),
   (req: AuthRequest, res) => {
-    const { uploadController } = getServicesForRequest(req);
+    const uploadController = createUploadControllerForRequest(req);
     return uploadController.complete(req, res);
   },
 );
@@ -86,7 +75,7 @@ router.post(
  * Get upload status for progress tracking
  */
 router.get('/status/:key', authenticateToken, uploadLimiter, (req: AuthRequest, res) => {
-  const { uploadController } = getServicesForRequest(req);
+  const uploadController = createUploadControllerForRequest(req);
   return uploadController.status(req, res);
 });
 

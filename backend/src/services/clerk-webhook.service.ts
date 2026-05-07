@@ -23,9 +23,12 @@ import { injectable, inject } from 'tsyringe';
 import { Logger } from '../utils/logger';
 
 const log = {
-  info: (message: string, data?: Record<string, unknown>) => Logger.info(`[CLERK_WEBHOOK] ${message}`, data),
-  warn: (message: string, data?: Record<string, unknown>) => Logger.warn(`[CLERK_WEBHOOK] ${message}`, data),
-  error: (message: string, data?: Record<string, unknown>) => Logger.error(`[CLERK_WEBHOOK] ${message}`, data),
+  info: (message: string, data?: Record<string, unknown>) =>
+    Logger.info(`[CLERK_WEBHOOK] ${message}`, data),
+  warn: (message: string, data?: Record<string, unknown>) =>
+    Logger.warn(`[CLERK_WEBHOOK] ${message}`, data),
+  error: (message: string, data?: Record<string, unknown>) =>
+    Logger.error(`[CLERK_WEBHOOK] ${message}`, data),
 };
 
 interface ClerkWebhookEvent {
@@ -576,7 +579,6 @@ export class ClerkWebhookService {
       // Don't throw - user is created, we can retry subscription later
     }
   }
-
 }
 
 // Export singleton instance
