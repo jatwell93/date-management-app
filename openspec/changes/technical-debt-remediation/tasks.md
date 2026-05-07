@@ -25,6 +25,7 @@
 - [x] 2.1 Introduce controller modules for the highest-traffic route groups and move request/response handling out of routes.
   - Controller modules exist for inventory, product, subscription, webhook, upload, and database backup; migrated product/inventory/subscription/webhook routes delegate to controller factories.
 - [ ] 2.2 Add controller unit tests for the migrated route groups, covering success, validation-failure, and dependency-error responses.
+  - Added direct migrated-controller coverage for ProductController, InventoryController, and SubscriptionController success, validation/auth failure, and dependency-error paths. Remaining direct coverage should still cover WebhookController and any route groups not already protected by focused controller tests.
 - [ ] 2.3 Update the remaining route files to delegate to controllers instead of calling services directly.
 - [ ] 2.4 Verify the route layer is thin by removing any leftover domain logic from route handlers and keeping response shapes stable.
 
