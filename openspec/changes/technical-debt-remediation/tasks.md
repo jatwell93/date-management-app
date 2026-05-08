@@ -34,7 +34,9 @@
   - Progress: migrated `report.routes.ts` to delegate report response handling, update-statuses command response, and items-by-user query validation to `ReportController`; the route no longer constructs or calls `ReportService` directly.
   - Progress: migrated `health.routes.ts` to delegate health, readiness, process metrics, database metrics, database health, recent-alert response handling, and tier-flag validation state to `HealthController`; the route now retains middleware plus controller dispatch.
   - Progress: migrated `upload.routes.ts` to delegate per-request `ServiceProvider` and `UploadController` construction through `createUploadControllerForRequest`; the route now retains middleware, multer configuration, and controller dispatch.
-  - Remaining direct route/service seams from the latest audit: admin metrics, org bootstrap, organization invite, and user routes.
+  - Progress: migrated `user.routes.ts` to delegate user CRUD request/response handling, id validation, organization ownership checks, and create payload shaping to `UserController`; the route now retains middleware plus controller dispatch.
+  - Progress: migrated `org-bootstrap.routes.ts` to delegate Clerk bootstrap defaults, bootstrap/seed response handling, and BaseError translation to `OrgBootstrapController`; the route now retains auth, rate limiting, validation, and controller dispatch.
+  - Remaining direct route/service seams from the latest audit: admin metrics and organization invite routes.
 - [ ] 2.4 Verify the route layer is thin by removing any leftover domain logic from route handlers and keeping response shapes stable.
   - Progress: `store-area.routes.ts` now retains middleware and controller delegation only while preserving the existing Store Area route response contract under the focused route suite.
   - Progress: `storage-quota.routes.ts` now delegates validation/access/quota decisions to `StorageQuotaController` while preserving the existing Storage Quota response contract under the focused route suite.
@@ -43,6 +45,8 @@
   - Progress: `report.routes.ts` now retains middleware, feature gating, and controller delegation only while preserving the existing report endpoint response contracts under the focused route suite.
   - Progress: `health.routes.ts` now retains middleware and controller delegation only while preserving the existing health/readiness/metrics/database-health/recent-alert response contracts under the focused route suite.
   - Progress: `upload.routes.ts` now retains middleware, multer setup, validation, rate limiting, and controller factory dispatch only while preserving the existing upload route response contract under the focused route suite.
+  - Progress: `user.routes.ts` now retains middleware and controller delegation only while preserving the existing user CRUD response contract under the focused route suite.
+  - Progress: `org-bootstrap.routes.ts` now retains middleware and controller delegation only while preserving bootstrap and seed response handling under direct controller coverage.
 
 ## 3. Service Decomposition Wave 1
 

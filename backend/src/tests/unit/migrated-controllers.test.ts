@@ -9,6 +9,8 @@ import { DashboardController } from '../../controllers/dashboard.controller';
 import { ExpiredItemController } from '../../controllers/expired-item.controller';
 import { ReportController } from '../../controllers/report.controller';
 import { HealthController } from '../../controllers/health.controller';
+import { UserController } from '../../controllers/user.controller';
+import { OrgBootstrapController } from '../../controllers/org-bootstrap.controller';
 import { AuthRequest } from '../../middleware/auth.middleware';
 import { ClerkAuthRequest } from '../../middleware/clerk-auth.middleware';
 import {
@@ -1071,6 +1073,177 @@ describe('migrated controllers', () => {
         timestamp: '2026-05-08T00:00:00.000Z',
         error: 'Failed to retrieve database metrics: metrics unavailable',
       });
+    });
+  });
+
+  describe('UserController', () => {
+    it('returns users through the organization-scoped service', async () => {
+      const users = [{ id: 1, organizationId: 'org-1', role: 'admin' }];
+      const getUsers = jest.fn().mockResolvedValue(users);
+      const serviceFactory = jest.fn().mockReturnValue({ getUsers });
+      const controller = new UserController(serviceFactory);
+      const req = { organizationId: 'org-1' } as AuthRequest;
+      const res = createResponse();
+      const next = createNext();
+
+      await controller.getUsers(req, res, next);
+
+      expect(serviceFactory).toHaveBeenCalledWith('org-1');
+      expect(getUsers).toHaveBeenCalledWith();
+      expect(res.json).toHaveBeenCalledWith(users);
+      expect(next).not.toHaveBeenCalled();
+    });
+
+    it('returns validation responses for invalid user ids before loading the service', async () => {
+      const serviceFactory = jest.fn();
+      const controller = new UserController(serviceFactory);
+      const req = {
+        params: { id: 'not-a-number' },
+        organizationId: 'org-1',
+      } as unknown as AuthRequest;
+      const res = createResponse();
+      const next = createNext();
+
+      await controller.getUserById(req, res, next);
+
+      expect(serviceFactory).not.toHaveBeenCalled();
+      expect(res.status).toHaveBeenCalledWith(400);
+      expect(res.json).toHaveBeenCalledWith({ message: 'Invalid user id' });
+      expect(next).not.toHaveBeenCalled();
+    });
+
+    it('blocks access to users from another organization', async () => {
+      const getUserById = jest.fn().mockResolvedValue({ id: 2, organizationId: 'org-2' });
+      const controller = new UserController(jest.fn().mockReturnValue({ getUserById }));
+      const req = { params: { id: '2' }, organizationId: 'org-1' } as unknown as AuthRequest;
+      const res = createResponse();
+      const next = createNext();
+
+      await controller.getUserById(req, res, next);
+
+      expect(getUserById).toHaveBeenCalledWith(2);
+      expect(res.status).toHaveBeenCalledWith(403);
+      expect(res.json).toHaveBeenCalledWith({
+        message: 'Access denied: User belongs to different organization',
+      });
+      expect(next).not.toHaveBeenCalled();
+    });
+
+    it('creates users only when pin, role, and organization context are present', async () => {
+      const createdUser = { id: 3, organizationId: 'org-1', role: 'team_member' };
+      const createUser = jest.fn().mockResolvedValue(createdUser);
+      const controller = new UserController(jest.fn().mockReturnValue({ createUser }));
+      const req = {
+        body: { pin: '1234', role: 'team_member' },
+        organizationId: 'org-1',
+      } as AuthRequest;
+      const res = createResponse();
+      const next = createNext();
+
+      await controller.createUser(req, res, next);
+
+      expect(createUser).toHaveBeenCalledWith({
+        pin: '1234',
+        role: 'team_member',
+        organizationId: 'org-1',
+      });
+      expect(res.status).toHaveBeenCalledWith(201);
+      expect(res.json).toHaveBeenCalledWith(createdUser);
+      expect(next).not.toHaveBeenCalled();
+    });
+
+    it('passes unexpected user service failures to error middleware', async () => {
+      const error = new Error('user backend unavailable');
+      const controller = new UserController(
+        jest.fn().mockReturnValue({ getUsers: jest.fn().mockRejectedValue(error) }),
+      );
+      const req = { organizationId: 'org-1' } as AuthRequest;
+      const res = createResponse();
+      const next = createNext();
+
+      await controller.getUsers(req, res, next);
+
+      expect(next).toHaveBeenCalledWith(error);
+      expect(res.json).not.toHaveBeenCalled();
+    });
+  });
+
+  describe('OrgBootstrapController', () => {
+    it('bootstraps Clerk users with generated organization defaults', async () => {
+      const bootstrap = jest.fn().mockResolvedValue({
+        userId: 7,
+        organizationId: 'org-1',
+        role: 'admin',
+        isNewOrg: true,
+        isNewUser: true,
+        isFirstAdmin: true,
+      });
+      const controller = new OrgBootstrapController(
+        { bootstrap } as never,
+        { seedDemoData: jest.fn() } as never,
+        () => 1777777777000,
+      );
+      const req = {
+        auth: { userId: 'clerk-user-1', email: 'admin@example.com', username: 'admin' },
+        body: {},
+        ip: '127.0.0.1',
+      } as ClerkAuthRequest;
+      const res = createResponse();
+
+      await controller.bootstrap(req, res);
+
+      expect(bootstrap).toHaveBeenCalledWith({
+        clerkUserId: 'clerk-user-1',
+        clerkOrganizationId: 'clerk-org-clerk-user-1-1777777777000',
+        organizationName: "admin's Organization",
+        organizationSlug: 'admin-1777777777000',
+        email: 'admin@example.com',
+        username: 'admin',
+        clerkMembershipRole: null,
+        ipAddress: '127.0.0.1',
+      });
+      expect(res.status).toHaveBeenCalledWith(201);
+      expect(res.json).toHaveBeenCalledWith({
+        userId: 7,
+        organizationId: 'org-1',
+        role: 'admin',
+        isNewOrg: true,
+        isNewUser: true,
+        isFirstAdmin: true,
+      });
+    });
+
+    it('rejects bootstrap requests without Clerk authentication context', async () => {
+      const bootstrap = jest.fn();
+      const controller = new OrgBootstrapController(
+        { bootstrap } as never,
+        { seedDemoData: jest.fn() } as never,
+      );
+      const req = { auth: {}, body: {} } as ClerkAuthRequest;
+      const res = createResponse();
+
+      await controller.bootstrap(req, res);
+
+      expect(bootstrap).not.toHaveBeenCalled();
+      expect(res.status).toHaveBeenCalledWith(401);
+      expect(res.json).toHaveBeenCalledWith({ message: 'Authentication required' });
+    });
+
+    it('seeds demo data for the authenticated organization', async () => {
+      const seedResult = { productsCreated: 2, storeAreasCreated: 1 };
+      const seedDemoData = jest.fn().mockResolvedValue(seedResult);
+      const controller = new OrgBootstrapController(
+        { bootstrap: jest.fn() } as never,
+        { seedDemoData } as never,
+      );
+      const req = { organizationId: 'org-1' } as AuthRequest;
+      const res = createResponse();
+
+      await controller.seedDemoData(req, res);
+
+      expect(seedDemoData).toHaveBeenCalledWith('org-1');
+      expect(res.status).toHaveBeenCalledWith(200);
+      expect(res.json).toHaveBeenCalledWith(seedResult);
     });
   });
 });
