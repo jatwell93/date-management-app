@@ -19,6 +19,8 @@ import { OrgAuditRepository } from '../repositories/org-audit.repository';
 import { UploadRepository } from '../repositories/upload.repository';
 import { StorageQuotaRepository } from '../repositories/storage-quota.repository';
 import { JobLockRepository } from '../repositories/job-lock.repository';
+import { OrganizationInviteRepository } from '../repositories/organization-invite.repository';
+import { RefreshTokenRepository } from '../repositories/refresh-token.repository';
 
 let initialized = false;
 
@@ -53,6 +55,8 @@ export function initializeDiContainer(): void {
   container.registerSingleton(UploadRepository);
   container.registerSingleton(StorageQuotaRepository);
   container.registerSingleton(JobLockRepository);
+  container.registerSingleton(OrganizationInviteRepository);
+  container.registerSingleton(RefreshTokenRepository);
 
   container.register(SubscriptionService, {
     useFactory: (dependencyContainer) =>

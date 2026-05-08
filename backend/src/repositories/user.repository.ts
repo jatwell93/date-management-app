@@ -23,7 +23,7 @@ export interface CreateClerkUserRecordParams {
 
 @injectable()
 export class UserRepository {
-  constructor(@inject(PrismaClient) private prisma: PrismaClient) {}
+  constructor(@inject(PrismaClient) private prisma: PrismaClient) { }
 
   async findIdsByOrganization(organizationId: string): Promise<Array<{ id: number }>> {
     return this.prisma.user.findMany({
@@ -48,6 +48,12 @@ export class UserRepository {
       where: {
         organizationId,
       },
+    });
+  }
+
+  async countByOrganization(organizationId: string): Promise<number> {
+    return this.prisma.user.count({
+      where: { organizationId },
     });
   }
 

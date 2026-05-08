@@ -14,6 +14,7 @@ import { getDefaultDatabaseClient } from '../database/database-factory';
 import { Logger } from '../utils/logger';
 import * as Sentry from '@sentry/node';
 import { injectable, inject } from 'tsyringe';
+import { OrganizationRepository } from '../repositories/organization.repository';
 
 const TEMPLATE_IDS = {
   trialEndingSoon: 'd-916668c6137341c292fad8cf219cb0ee',
@@ -44,9 +45,11 @@ function toTemplateRecord(value: unknown): Record<string, unknown> | undefined {
 @injectable()
 export class EmailService {
   private prisma: PrismaClient;
+  private orgRepo: OrganizationRepository;
 
-  constructor(@inject(PrismaClient) prismaClient?: PrismaClient) {
+  constructor(@inject(PrismaClient) prismaClient?: PrismaClient, orgRepo?: OrganizationRepository) {
     this.prisma = prismaClient ?? getDefaultDatabaseClient();
+    this.orgRepo = orgRepo ?? new OrganizationRepository(this.prisma);
 
     if (envConfig.SENDGRID_API_KEY) {
       sgMail.setApiKey(envConfig.SENDGRID_API_KEY);
@@ -69,18 +72,7 @@ export class EmailService {
       }
 
       // Query organization details
-      const organization = await this.prisma.organization.findUnique({
-        where: { id: organizationId },
-        select: {
-          id: true,
-          name: true,
-          contactEmail: true,
-          users: {
-            take: 1,
-            select: { id: true },
-          },
-        },
-      });
+      const organization = await this.orgRepo.findWithContactDetails(organizationId);
 
       if (!organization || !organization.contactEmail || !organization.users[0]) {
         Logger.error('Organization, contact email, or user not found for trial reminder', {
@@ -110,13 +102,11 @@ export class EmailService {
       await sgMail.send(msg);
 
       // Log trial_reminder_sent event
-      await this.prisma.auditLog.create({
-        data: {
-          organizationId,
-          action: 'trial_reminder_sent',
-          userId: organization.users[0].id,
-          changeDescription: `Trial reminder sent: ${daysRemaining} days remaining`,
-        },
+      await this.createAuditLog({
+        organizationId,
+        action: 'trial_reminder_sent',
+        userId: organization.users[0].id,
+        changeDescription: `Trial reminder sent: ${daysRemaining} days remaining`,
       });
 
       Logger.info('Trial reminder email sent', { organizationId, daysRemaining, userEmail });
@@ -165,13 +155,11 @@ export class EmailService {
       await sgMail.send(msg);
 
       if (params.invitedByUserId) {
-        await this.prisma.auditLog.create({
-          data: {
-            organizationId: params.organizationId,
-            action: 'organization_invite_sent',
-            userId: params.invitedByUserId,
-            changeDescription: `Invite sent to ${params.toEmail}`,
-          },
+        await this.createAuditLog({
+          organizationId: params.organizationId,
+          action: 'organization_invite_sent',
+          userId: params.invitedByUserId,
+          changeDescription: `Invite sent to ${params.toEmail}`,
         });
       }
 
@@ -211,18 +199,7 @@ export class EmailService {
       }
 
       // Query organization details
-      const organization = await this.prisma.organization.findUnique({
-        where: { id: organizationId },
-        select: {
-          id: true,
-          name: true,
-          contactEmail: true,
-          users: {
-            take: 1,
-            select: { id: true },
-          },
-        },
-      });
+      const organization = await this.orgRepo.findWithContactDetails(organizationId);
 
       if (!organization || !organization.contactEmail || !organization.users[0]) {
         Logger.error('Organization, contact email, or user not found for dunning email', {
@@ -252,13 +229,11 @@ export class EmailService {
       await sgMail.send(msg);
 
       // Log dunning_email_sent event
-      await this.prisma.auditLog.create({
-        data: {
-          organizationId,
-          action: 'dunning_email_sent',
-          userId: organization.users[0].id,
-          changeDescription: `Dunning email sent for failed payment`,
-        },
+      await this.createAuditLog({
+        organizationId,
+        action: 'dunning_email_sent',
+        userId: organization.users[0].id,
+        changeDescription: `Dunning email sent for failed payment`,
       });
 
       Logger.info('Dunning email sent', { organizationId, userEmail });
@@ -295,18 +270,7 @@ export class EmailService {
       }
 
       // Query organization details
-      const organization = await this.prisma.organization.findUnique({
-        where: { id: organizationId },
-        select: {
-          id: true,
-          name: true,
-          contactEmail: true,
-          users: {
-            take: 1,
-            select: { id: true },
-          },
-        },
-      });
+      const organization = await this.orgRepo.findWithContactDetails(organizationId);
 
       if (!organization || !organization.contactEmail || !organization.users[0]) {
         Logger.error('Organization, contact email, or user not found for downgrade warning', {
@@ -340,13 +304,11 @@ export class EmailService {
       await sgMail.send(msg);
 
       // Log downgrade_warning_sent event
-      await this.prisma.auditLog.create({
-        data: {
-          organizationId,
-          action: 'downgrade_warning_sent',
-          userId: organization.users[0].id,
-          changeDescription: `Downgrade warning sent: ${currentUsage} items vs ${newLimit} limit`,
-        },
+      await this.createAuditLog({
+        organizationId,
+        action: 'downgrade_warning_sent',
+        userId: organization.users[0].id,
+        changeDescription: `Downgrade warning sent: ${currentUsage} items vs ${newLimit} limit`,
       });
 
       Logger.info('Downgrade warning email sent', {
@@ -499,18 +461,7 @@ export class EmailService {
       }
 
       // Query organization details
-      const organization = await this.prisma.organization.findUnique({
-        where: { id: organizationId },
-        select: {
-          id: true,
-          name: true,
-          contactEmail: true,
-          users: {
-            take: 1,
-            select: { id: true },
-          },
-        },
-      });
+      const organization = await this.orgRepo.findWithContactDetails(organizationId);
 
       if (!organization || !organization.contactEmail || !organization.users[0]) {
         Logger.error('Organization, contact email, or user not found for payment failed email', {
@@ -551,13 +502,11 @@ The Inventory Manager Team`,
       await sgMail.send(msg);
 
       // Log payment_failed_email_sent event
-      await this.prisma.auditLog.create({
-        data: {
-          organizationId,
-          action: 'payment_failed_email_sent',
-          userId: organization.users[0].id,
-          changeDescription: `Payment failed email sent for intent ${paymentIntentId}: ${errorMessage}`,
-        },
+      await this.createAuditLog({
+        organizationId,
+        action: 'payment_failed_email_sent',
+        userId: organization.users[0].id,
+        changeDescription: `Payment failed email sent for intent ${paymentIntentId}: ${errorMessage}`,
       });
 
       Logger.info('Payment failed email sent', {
@@ -578,6 +527,15 @@ The Inventory Manager Team`,
       });
       throw error;
     }
+  }
+
+  private async createAuditLog(data: {
+    organizationId: string;
+    action: string;
+    userId: number;
+    changeDescription: string;
+  }): Promise<void> {
+    await this.prisma.auditLog.create({ data });
   }
 }
 

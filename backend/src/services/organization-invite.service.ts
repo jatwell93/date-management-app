@@ -8,6 +8,9 @@ import { TIER_LIMITS, TierLevel } from '../types/subscription';
 import { RoleValue, isValidRole } from '../constants/roles';
 import { OrgAuditService } from './org-audit.service';
 import { AUDIT_EVENT_TYPES } from '../constants/roles';
+import { OrganizationInviteRepository } from '../repositories/organization-invite.repository';
+import { SubscriptionRepository } from '../repositories/subscription.repository';
+import { UserRepository } from '../repositories/user.repository';
 
 export type InviteStatus = 'PENDING' | 'ACCEPTED' | 'EXPIRED' | 'REVOKED';
 
@@ -33,11 +36,17 @@ export class OrganizationInviteService {
   private prisma: PrismaClient;
   private nowProvider: () => Date;
   private auditService: OrgAuditService;
+  private inviteRepo: OrganizationInviteRepository;
+  private subscriptionRepo: SubscriptionRepository;
+  private userRepo: UserRepository;
 
-  constructor(prismaClient?: PrismaClient, nowProvider?: () => Date) {
+  constructor(prismaClient?: PrismaClient, nowProvider?: () => Date, inviteRepo?: OrganizationInviteRepository) {
     this.prisma = prismaClient ?? getDefaultDatabaseClient();
     this.nowProvider = nowProvider ?? (() => new Date());
     this.auditService = new OrgAuditService(this.prisma);
+    this.inviteRepo = inviteRepo ?? new OrganizationInviteRepository(this.prisma);
+    this.subscriptionRepo = new SubscriptionRepository(this.prisma);
+    this.userRepo = new UserRepository(this.prisma);
   }
 
   async createInvite(params: CreateInviteParams) {
@@ -61,14 +70,10 @@ export class OrganizationInviteService {
       throw new ConflictError('User already exists for this organization');
     }
 
-    const existingInvite = await this.prisma.organizationInvite.findFirst({
-      where: {
-        organizationId: params.organizationId,
-        email: normalizedEmail,
-        status: 'PENDING',
-      },
-      select: { id: true },
-    });
+    const existingInvite = await this.inviteRepo.findPendingByOrgAndEmail(
+      params.organizationId,
+      normalizedEmail,
+    );
 
     if (existingInvite) {
       throw new ConflictError('Invite already pending for this email');
@@ -80,18 +85,16 @@ export class OrganizationInviteService {
     const tokenHash = await bcrypt.hash(plainToken, BCRYPT_COST);
     const expiresAt = new Date(this.nowProvider().getTime() + 7 * 24 * 60 * 60 * 1000);
 
-    const invite = await this.prisma.organizationInvite.create({
-      data: {
-        id: inviteId,
-        organizationId: params.organizationId,
-        email: normalizedEmail,
-        role: params.role,
-        inviteTokenHash: tokenHash,
-        inviteTokenExpiresAt: expiresAt,
-        status: 'PENDING',
-        expiresAt,
-        invitedByUserId: params.invitedByUserId,
-      },
+    const invite = await this.inviteRepo.create({
+      id: inviteId,
+      organizationId: params.organizationId,
+      email: normalizedEmail,
+      role: params.role,
+      inviteTokenHash: tokenHash,
+      inviteTokenExpiresAt: expiresAt,
+      status: 'PENDING',
+      expiresAt,
+      invitedByUserId: params.invitedByUserId,
     });
 
     try {
@@ -123,22 +126,11 @@ export class OrganizationInviteService {
   }
 
   async listPendingInvites(organizationId: string) {
-    return this.prisma.organizationInvite.findMany({
-      where: {
-        organizationId,
-        status: 'PENDING',
-      },
-      orderBy: { createdAt: 'desc' },
-    });
+    return this.inviteRepo.listPendingByOrg(organizationId);
   }
 
   async revokeInvite(organizationId: string, inviteId: string, actorUserId?: number) {
-    const invite = await this.prisma.organizationInvite.findFirst({
-      where: {
-        id: inviteId,
-        organizationId,
-      },
-    });
+    const invite = await this.inviteRepo.findByIdAndOrg(inviteId, organizationId);
 
     if (!invite) {
       throw new NotFoundError('Invite not found');
@@ -148,9 +140,9 @@ export class OrganizationInviteService {
       throw new ValidationError('Only pending invites can be revoked');
     }
 
-    const revoked = await this.prisma.organizationInvite.update({
-      where: { id: inviteId },
-      data: { status: 'REVOKED', inviteTokenHash: null },
+    const revoked = await this.inviteRepo.update(inviteId, {
+      status: 'REVOKED',
+      inviteTokenHash: null,
     });
 
     try {
@@ -170,13 +162,7 @@ export class OrganizationInviteService {
   }
 
   async resendInvite(organizationId: string, inviteId: string, actorUserId?: number) {
-    const invite = await this.prisma.organizationInvite.findFirst({
-      where: {
-        id: inviteId,
-        organizationId,
-        status: 'PENDING',
-      },
-    });
+    const invite = await this.inviteRepo.findPendingByIdAndOrg(inviteId, organizationId);
 
     if (!invite) {
       throw new NotFoundError('Pending invite not found');
@@ -187,13 +173,10 @@ export class OrganizationInviteService {
     const tokenHash = await bcrypt.hash(plainToken, BCRYPT_COST);
     const expiresAt = new Date(this.nowProvider().getTime() + 7 * 24 * 60 * 60 * 1000);
 
-    const updated = await this.prisma.organizationInvite.update({
-      where: { id: inviteId },
-      data: {
-        inviteTokenHash: tokenHash,
-        inviteTokenExpiresAt: expiresAt,
-        expiresAt,
-      },
+    const updated = await this.inviteRepo.update(inviteId, {
+      inviteTokenHash: tokenHash,
+      inviteTokenExpiresAt: expiresAt,
+      expiresAt,
     });
 
     try {
@@ -300,10 +283,7 @@ export class OrganizationInviteService {
   }
 
   private async ensureWithinUserLimit(organizationId: string) {
-    const subscription = await this.prisma.subscriptionTier.findFirst({
-      where: { organizationId },
-      orderBy: { createdAt: 'desc' },
-    });
+    const subscription = await this.subscriptionRepo.findByOrganizationId(organizationId);
 
     if (!subscription) {
       throw new NotFoundError('Organization subscription not configured');
@@ -316,16 +296,9 @@ export class OrganizationInviteService {
       return;
     }
 
-    const [activeUsers, pendingInvites] = await this.prisma.$transaction([
-      this.prisma.user.count({
-        where: { organizationId },
-      }),
-      this.prisma.organizationInvite.count({
-        where: {
-          organizationId,
-          status: 'PENDING',
-        },
-      }),
+    const [activeUsers, pendingInvites] = await Promise.all([
+      this.userRepo.countByOrganization(organizationId),
+      this.inviteRepo.countPendingByOrg(organizationId),
     ]);
 
     if (activeUsers + pendingInvites >= maxUsers) {
@@ -337,12 +310,7 @@ export class OrganizationInviteService {
     const inviteId = this.parseInviteToken(token);
 
     if (inviteId) {
-      const candidate = await this.prisma.organizationInvite.findFirst({
-        where: {
-          id: inviteId,
-          status: 'PENDING',
-        },
-      });
+      const candidate = await this.inviteRepo.findPendingById(inviteId);
 
       if (!candidate?.inviteTokenHash) {
         return null;
@@ -353,13 +321,9 @@ export class OrganizationInviteService {
     }
 
     // Backward-compatibility fallback for previously issued token format.
-    const pendingInvites = await this.prisma.organizationInvite.findMany({
-      where: {
-        status: 'PENDING',
-      },
-      orderBy: { createdAt: 'desc' },
-      take: LEGACY_TOKEN_FALLBACK_MAX_CANDIDATES,
-    });
+    const pendingInvites = await this.inviteRepo.findRecentPending(
+      LEGACY_TOKEN_FALLBACK_MAX_CANDIDATES,
+    );
 
     for (const candidate of pendingInvites) {
       if (candidate.inviteTokenHash && (await bcrypt.compare(token, candidate.inviteTokenHash))) {
@@ -387,18 +351,7 @@ export class OrganizationInviteService {
   }
 
   private async markInviteAsExpired(inviteId: string) {
-    const result = await this.prisma.organizationInvite.updateMany({
-      where: {
-        id: inviteId,
-        status: 'PENDING',
-      },
-      data: {
-        status: 'EXPIRED',
-        inviteTokenHash: null,
-      },
-    });
-
-    return result.count;
+    return this.inviteRepo.markExpired(inviteId);
   }
 
   private parseInviteToken(token: string): string | null {

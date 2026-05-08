@@ -7,12 +7,48 @@ type OrganizationUpdate = Partial<Pick<Organization, 'name' | 'slug'>>;
 
 @injectable()
 export class OrganizationRepository {
-  constructor(@inject(PrismaClient) private prisma: PrismaClient) {}
+  constructor(@inject(PrismaClient) private prisma: PrismaClient) { }
 
   async findById(id: string): Promise<OrganizationRecord | null> {
     return this.prisma.organization.findUnique({
       where: { id },
     });
+  }
+
+  async findWithContactDetails(
+    id: string,
+  ): Promise<{
+    id: string;
+    name: string;
+    contactEmail: string | null;
+    users: { id: number }[];
+  } | null> {
+    return this.prisma.organization.findUnique({
+      where: { id },
+      select: {
+        id: true,
+        name: true,
+        contactEmail: true,
+        users: {
+          take: 1,
+          select: { id: true },
+        },
+      },
+    });
+  }
+
+  async findByClerkOrganizationId(clerkOrganizationId: string): Promise<OrganizationRecord | null> {
+    return this.prisma.organization.findUnique({
+      where: { clerkOrganizationId },
+    });
+  }
+
+  async create(data: {
+    clerkOrganizationId: string;
+    name: string;
+    slug: string;
+  }): Promise<OrganizationRecord> {
+    return this.prisma.organization.create({ data });
   }
 
   async findCreationLockById(id: string): Promise<{ isCreationLocked: boolean } | null> {

@@ -7,6 +7,8 @@ import { AuthenticationError, InternalError } from '../errors';
 import { TierLevel, SubscriptionStatus } from '../types/subscription';
 import { envConfig } from '../config/environment';
 import crypto from 'crypto';
+import { RefreshTokenRepository } from '../repositories/refresh-token.repository';
+import { SubscriptionRepository } from '../repositories/subscription.repository';
 
 export interface TokenPair {
   accessToken: string;
@@ -34,9 +36,13 @@ export class AuthService {
   private prisma: PrismaClient;
   private readonly ACCESS_TOKEN_EXPIRY = '1h';
   private readonly REFRESH_TOKEN_EXPIRY = '7d';
+  private refreshTokenRepo: RefreshTokenRepository;
+  private subscriptionRepo: SubscriptionRepository;
 
   constructor(prismaClient?: PrismaClient) {
     this.prisma = prismaClient ?? getDefaultDatabaseClient();
+    this.refreshTokenRepo = new RefreshTokenRepository(this.prisma);
+    this.subscriptionRepo = new SubscriptionRepository(this.prisma);
   }
 
   // Validate PIN strength: 4-6 digits, not too predictable
@@ -257,13 +263,7 @@ export class AuthService {
       expiresAt.setDate(expiresAt.getDate() + 7); // 7 days from now
 
       // Store refresh token in database
-      await this.prisma.refreshToken.create({
-        data: {
-          userId,
-          token: refreshToken,
-          expiresAt,
-        },
-      });
+      await this.refreshTokenRepo.create({ userId, token: refreshToken, expiresAt });
 
       Logger.info('Auth service: Generated token pair', { userId });
       return { accessToken, refreshToken };
@@ -297,10 +297,7 @@ export class AuthService {
   async refreshAccessToken(refreshToken: string): Promise<string> {
     try {
       // Find refresh token in database
-      const storedToken = await this.prisma.refreshToken.findUnique({
-        where: { token: refreshToken },
-        include: { user: true },
-      });
+      const storedToken = await this.refreshTokenRepo.findByTokenWithUser(refreshToken);
 
       if (!storedToken) {
         Logger.warn('Auth service: Refresh token not found');
@@ -310,7 +307,7 @@ export class AuthService {
       // Check if token is expired
       if (storedToken.expiresAt < new Date()) {
         // Clean up expired token
-        await this.prisma.refreshToken.delete({ where: { id: storedToken.id } });
+        await this.refreshTokenRepo.delete(storedToken.id);
         Logger.warn('Auth service: Refresh token expired', { userId: storedToken.userId });
         throw new AuthenticationError('Refresh token expired');
       }
@@ -325,10 +322,9 @@ export class AuthService {
       const secret = envConfig.JWT_SECRET;
 
       // Fetch current tierLevel from subscription to ensure token has latest tier
-      const subscription = await this.prisma.subscriptionTier.findFirst({
-        where: { organizationId: storedToken.user.organizationId },
-        orderBy: { createdAt: 'desc' },
-      });
+      const subscription = await this.subscriptionRepo.findByOrganizationId(
+        storedToken.user.organizationId!,
+      );
       const tierLevel = subscription?.tierLevel as TierLevel | undefined;
 
       const accessToken = jwt.sign(
@@ -360,19 +356,14 @@ export class AuthService {
    */
   async revokeRefreshToken(refreshToken: string): Promise<void> {
     try {
-      const storedToken = await this.prisma.refreshToken.findUnique({
-        where: { token: refreshToken },
-      });
+      const storedToken = await this.refreshTokenRepo.findByToken(refreshToken);
 
       if (!storedToken) {
         Logger.warn('Auth service: Attempt to revoke non-existent token');
         return; // Silently succeed if token doesn't exist
       }
 
-      await this.prisma.refreshToken.update({
-        where: { id: storedToken.id },
-        data: { revokedAt: new Date() },
-      });
+      await this.refreshTokenRepo.revoke(storedToken.id);
 
       Logger.info('Auth service: Refresh token revoked', { userId: storedToken.userId });
     } catch (error) {
@@ -388,14 +379,10 @@ export class AuthService {
    */
   async cleanupExpiredTokens(): Promise<number> {
     try {
-      const result = await this.prisma.refreshToken.deleteMany({
-        where: {
-          expiresAt: { lt: new Date() },
-        },
-      });
+      const count = await this.refreshTokenRepo.deleteExpired();
 
-      Logger.info('Auth service: Cleaned up expired tokens', { count: result.count });
-      return result.count;
+      Logger.info('Auth service: Cleaned up expired tokens', { count });
+      return count;
     } catch (error) {
       Logger.error('Auth service: Error cleaning up expired tokens', {
         error: error instanceof Error ? error.message : 'Unknown error',

@@ -3,6 +3,7 @@ import { getDefaultDatabaseClient } from '../database/database-factory';
 import { ROLES, normalizeRole, RoleValue } from '../constants/roles';
 import { OrgAuditService } from './org-audit.service';
 import { AUDIT_EVENT_TYPES } from '../constants/roles';
+import { OrganizationRepository } from '../repositories/organization.repository';
 
 export interface BootstrapParams {
   clerkUserId: string;
@@ -41,27 +42,25 @@ export interface BootstrapResult {
 export class OrgBootstrapService {
   private prisma: PrismaClient;
   private auditService: OrgAuditService;
+  private orgRepo: OrganizationRepository;
 
   constructor(prismaClient?: PrismaClient) {
     this.prisma = prismaClient ?? getDefaultDatabaseClient();
     this.auditService = new OrgAuditService(this.prisma);
+    this.orgRepo = new OrganizationRepository(this.prisma);
   }
 
   async bootstrap(params: BootstrapParams): Promise<BootstrapResult> {
     // Step 1: Find or create the organization
-    let org = await this.prisma.organization.findUnique({
-      where: { clerkOrganizationId: params.clerkOrganizationId },
-    });
+    let org = await this.orgRepo.findByClerkOrganizationId(params.clerkOrganizationId);
 
     const isNewOrg = !org;
 
     if (!org) {
-      org = await this.prisma.organization.create({
-        data: {
-          clerkOrganizationId: params.clerkOrganizationId,
-          name: params.organizationName,
-          slug: params.organizationSlug,
-        },
+      org = await this.orgRepo.create({
+        clerkOrganizationId: params.clerkOrganizationId,
+        name: params.organizationName,
+        slug: params.organizationSlug,
       });
     }
 
