@@ -58,15 +58,12 @@ export class OrganizationInviteService {
 
     await this.ensureWithinUserLimit(params.organizationId);
 
-    const existingUser = await this.prisma.user.findFirst({
-      where: {
-        organizationId: params.organizationId,
-        email: normalizedEmail,
-      },
-      select: { id: true },
-    });
+    const userExists = await this.userRepo.existsByOrgAndEmail(
+      params.organizationId,
+      normalizedEmail,
+    );
 
-    if (existingUser) {
+    if (userExists) {
       throw new ConflictError('User already exists for this organization');
     }
 

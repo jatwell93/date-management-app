@@ -322,9 +322,15 @@ export class AuthService {
       const secret = envConfig.JWT_SECRET;
 
       // Fetch current tierLevel from subscription to ensure token has latest tier
-      const subscription = await this.subscriptionRepo.findByOrganizationId(
-        storedToken.user.organizationId!,
-      );
+      const userOrgId = storedToken.user.organizationId;
+      if (!userOrgId) {
+        Logger.error('Auth service: User has no organization assigned', {
+          userId: storedToken.userId,
+        });
+        throw new AuthenticationError('User organization not configured');
+      }
+
+      const subscription = await this.subscriptionRepo.findByOrganizationId(userOrgId);
       const tierLevel = subscription?.tierLevel as TierLevel | undefined;
 
       const accessToken = jwt.sign(

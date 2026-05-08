@@ -51,6 +51,17 @@ export class UserRepository {
     });
   }
 
+  async existsByOrgAndEmail(
+    organizationId: string,
+    email: string,
+  ): Promise<boolean> {
+    const user = await this.prisma.user.findFirst({
+      where: { organizationId, email },
+      select: { id: true },
+    });
+    return user !== null;
+  }
+
   async countByOrganization(organizationId: string): Promise<number> {
     return this.prisma.user.count({
       where: { organizationId },

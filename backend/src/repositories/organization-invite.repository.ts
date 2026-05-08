@@ -1,5 +1,7 @@
 import { PrismaClient, Prisma } from '@prisma/client';
 import { injectable, inject } from 'tsyringe';
+import type { RoleValue } from '../constants/roles';
+import type { InviteStatus } from '../services/organization-invite.service';
 
 type DbClient = PrismaClient | Prisma.TransactionClient;
 
@@ -7,16 +9,16 @@ export interface InviteCreateData {
   id: string;
   organizationId: string;
   email: string;
-  role: string;
+  role: RoleValue;
   inviteTokenHash: string;
   inviteTokenExpiresAt: Date;
-  status: string;
+  status: InviteStatus;
   expiresAt: Date;
   invitedByUserId: number;
 }
 
 export interface InviteUpdateData {
-  status?: string;
+  status?: InviteStatus;
   inviteTokenHash?: string | null;
   inviteTokenExpiresAt?: Date;
   expiresAt?: Date;
