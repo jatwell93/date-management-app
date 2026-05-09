@@ -115,6 +115,32 @@ describe('OrgBootstrapService', () => {
       });
       expect(orgs).toHaveLength(1);
     });
+
+    it('returns the persisted user organization when existing user bootstraps from a different Clerk org context', async () => {
+      const firstParams = makeParams({
+        clerkUserId: `clerk_existing_${Date.now()}`,
+        clerkOrganizationId: `clerk_org_existing_${Date.now()}`,
+        organizationName: 'Existing User Org',
+        organizationSlug: `existing-user-org-${Date.now()}`,
+      });
+      const first = await service.bootstrap(firstParams);
+
+      const second = await service.bootstrap(
+        makeParams({
+          clerkUserId: firstParams.clerkUserId,
+          clerkOrganizationId: `clerk_org_new_context_${Date.now()}`,
+          organizationName: 'New Context Org',
+          organizationSlug: `new-context-org-${Date.now()}`,
+        }),
+      );
+
+      const persistedUser = await prisma.user.findUnique({ where: { id: first.userId } });
+
+      expect(second.userId).toBe(first.userId);
+      expect(second.organizationId).toBe(persistedUser!.organizationId);
+      expect(second.organizationId).toBe(first.organizationId);
+      expect(second.isNewUser).toBe(false);
+    });
   });
 
   describe('second user bootstrap (non-admin)', () => {

@@ -73,7 +73,7 @@ export class OrgBootstrapService {
     if (existingUser) {
       return {
         userId: existingUser.id,
-        organizationId: org.id,
+        organizationId: existingUser.organizationId ?? org.id,
         role: existingUser.role as RoleValue,
         isNewOrg,
         isNewUser: false,
