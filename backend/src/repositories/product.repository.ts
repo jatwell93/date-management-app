@@ -2,6 +2,10 @@ import { PrismaClient, Prisma, Product } from '@prisma/client';
 import { injectable, inject } from 'tsyringe';
 
 type ProductWithCount = Product & { _count: { inventoryItems: number } };
+export interface ProductIdentifierLookup {
+  bySku: Product | null;
+  byBarcode: Product | null;
+}
 
 type DbClient = PrismaClient | Prisma.TransactionClient;
 
@@ -61,13 +65,46 @@ export class ProductRepository {
     barcode: string,
     organizationId: string,
     tx?: DbClient,
-  ): Promise<Product | null> {
-    return this.getClient(tx).product.findFirst({
+  ): Promise<ProductIdentifierLookup> {
+    const client = this.getClient(tx);
+    const bySku = await client.product.findUnique({
       where: {
-        organizationId,
-        OR: [{ sku }, { barcode }],
+        organizationId_sku: {
+          organizationId,
+          sku,
+        },
       },
     });
+    const byBarcode = await client.product.findUnique({
+      where: {
+        organizationId_barcode: {
+          organizationId,
+          barcode,
+        },
+      },
+    });
+
+    return {
+      bySku,
+      byBarcode,
+    };
+  }
+
+  async findFirstBySkuOrBarcode(
+    sku: string,
+    barcode: string,
+    organizationId: string,
+    tx?: DbClient,
+  ): Promise<Product | null> {
+    const { bySku, byBarcode } = await this.findBySkuOrBarcode(sku, barcode, organizationId, tx);
+
+    if (bySku && byBarcode && bySku.id !== byBarcode.id) {
+      throw new Error(
+        `Duplicate identifiers detected: SKU ${sku} exists in product ${bySku.id} and barcode ${barcode} exists in product ${byBarcode.id}. This will cause data integrity issues.`,
+      );
+    }
+
+    return bySku ?? byBarcode;
   }
 
   async create(data: Prisma.ProductUncheckedCreateInput, tx?: DbClient): Promise<Product> {

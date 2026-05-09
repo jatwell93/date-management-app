@@ -20,6 +20,7 @@ import * as os from 'os';
 
 const mockPrisma = {
   product: {
+    findUnique: jest.fn(),
     findFirst: jest.fn(),
     create: jest.fn(),
     update: jest.fn(),
@@ -42,6 +43,7 @@ describe('CSV Parser Edge Cases', () => {
 
   beforeEach(() => {
     jest.clearAllMocks();
+    (mockPrisma.product.findUnique as jest.Mock).mockResolvedValue(null);
     (mockPrisma.product.findFirst as jest.Mock).mockResolvedValue(null);
     (mockPrisma.product.create as jest.Mock).mockResolvedValue({ id: 1 });
     (mockPrisma.product.update as jest.Mock).mockResolvedValue({ id: 1 });

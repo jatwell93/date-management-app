@@ -898,7 +898,7 @@ export class CSVParserService extends EventEmitter {
       async (tx) => {
         for (const row of batch as ParsedRow[]) {
           // Check if product exists by SKU or barcode
-          const existing = await this.productRepo.findBySkuOrBarcode(
+          const existing = await this.productRepo.findFirstBySkuOrBarcode(
             row.sku,
             row.barcode,
             this.organizationId,

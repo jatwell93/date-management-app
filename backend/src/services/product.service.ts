@@ -953,11 +953,20 @@ export class ProductService {
   }
 
   private async getProductBySkuOrBarcode(sku: string, barcode: string): Promise<Product | null> {
-    const prismaProduct = await this.productRepo.findBySkuOrBarcode(
+    const { bySku, byBarcode } = await this.productRepo.findBySkuOrBarcode(
       sku,
       barcode,
       this.organizationId,
     );
+
+    if (bySku && byBarcode && bySku.id !== byBarcode.id) {
+      throw new Error(
+        `Duplicate identifiers detected: SKU ${sku} exists in product ${bySku.id} and barcode ${barcode} exists in product ${byBarcode.id}. This will cause data integrity issues.`,
+      );
+    }
+
+    const prismaProduct = bySku ?? byBarcode;
+
     if (!prismaProduct) {
       return null;
     }

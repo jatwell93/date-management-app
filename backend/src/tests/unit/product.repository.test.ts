@@ -58,6 +58,22 @@ describe('ProductRepository', () => {
     });
   });
 
+  it('rejects ambiguous SKU and barcode matches to different products', async () => {
+    const barcodeRecord = {
+      ...productRecord,
+      id: 2,
+      sku: 'SKU-2',
+      barcode: 'BAR-2',
+    };
+    prisma.product.findUnique
+      .mockResolvedValueOnce(productRecord)
+      .mockResolvedValueOnce(barcodeRecord);
+
+    await expect(
+      repository.findFirstBySkuOrBarcode('SKU-1', 'BAR-2', organizationId),
+    ).rejects.toThrow('Duplicate identifiers detected');
+  });
+
   it('finds excess products for deletion priority within an organization', async () => {
     prisma.product.findMany.mockResolvedValue([productRecord]);
 

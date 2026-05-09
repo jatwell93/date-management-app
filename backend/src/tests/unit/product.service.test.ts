@@ -162,19 +162,14 @@ describe('ProductService with organizationId', () => {
         updatedAt: new Date(),
       };
 
-      mockPrisma.product.findUnique.mockResolvedValue(mockProduct);
+      mockPrisma.product.findFirst.mockResolvedValue(mockProduct);
 
       const product = await productService.getProductByBarcode('123456789');
 
       expect(product).not.toBeNull();
       expect(product?.barcode).toBe('123456789');
-      expect(mockPrisma.product.findUnique).toHaveBeenCalledWith({
-        where: {
-          organizationId_barcode: {
-            organizationId,
-            barcode: '123456789',
-          },
-        },
+      expect(mockPrisma.product.findFirst).toHaveBeenCalledWith({
+        where: { barcode: '123456789', organizationId },
       });
     });
   });
