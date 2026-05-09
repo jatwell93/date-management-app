@@ -27,6 +27,11 @@ import { getTierLimits, TierLimits } from './webhook-subscription.helpers';
 import { dispatchStripeWebhookEvent } from './webhook-event-dispatcher';
 import { injectable, inject } from 'tsyringe';
 import { Logger } from '../utils/logger';
+import { OrganizationRepository } from '../repositories/organization.repository';
+import { SubscriptionRepository } from '../repositories/subscription.repository';
+import { ProcessedWebhookEventRepository } from '../repositories/processed-webhook-event.repository';
+import { TrialEventRepository } from '../repositories/trial-event.repository';
+import { AuditLogRepository } from '../repositories/audit-log.repository';
 
 import { DEFAULT_LIMITS } from '../constants/default-limits';
 
@@ -50,12 +55,22 @@ export class WebhookService {
   private subscriptionService: SubscriptionService;
   private emailService: EmailService;
   private signatureVerifier: StripeWebhookSignatureService;
+  private orgRepo: OrganizationRepository;
+  private subscriptionRepo: SubscriptionRepository;
+  private processedEventRepo: ProcessedWebhookEventRepository;
+  private trialEventRepo: TrialEventRepository;
+  private auditLogRepo: AuditLogRepository;
 
   constructor(
     @inject(PrismaClient) prismaClient?: PrismaClient,
     subscriptionService?: SubscriptionService,
     emailService?: EmailService,
     signatureVerifier?: StripeWebhookSignatureService,
+    orgRepo?: OrganizationRepository,
+    subscriptionRepo?: SubscriptionRepository,
+    processedEventRepo?: ProcessedWebhookEventRepository,
+    trialEventRepo?: TrialEventRepository,
+    auditLogRepo?: AuditLogRepository,
   ) {
     this.prisma = prismaClient ?? getDefaultDatabaseClient();
     this.subscriptionService = subscriptionService ?? new SubscriptionService(this.prisma);
@@ -66,6 +81,12 @@ export class WebhookService {
         envConfig.STRIPE_SECRET_KEY,
         envConfig.STRIPE_WEBHOOK_SECRET,
       );
+    this.orgRepo = orgRepo ?? new OrganizationRepository(this.prisma);
+    this.subscriptionRepo = subscriptionRepo ?? new SubscriptionRepository(this.prisma);
+    this.processedEventRepo =
+      processedEventRepo ?? new ProcessedWebhookEventRepository(this.prisma);
+    this.trialEventRepo = trialEventRepo ?? new TrialEventRepository(this.prisma);
+    this.auditLogRepo = auditLogRepo ?? new AuditLogRepository(this.prisma);
 
     if (envConfig.STRIPE_SECRET_KEY) {
       this.stripe = new Stripe(envConfig.STRIPE_SECRET_KEY, {
@@ -93,9 +114,7 @@ export class WebhookService {
    * Uses database for persistent idempotency checking.
    */
   async isNewEvent(eventId: string): Promise<boolean> {
-    const existing = await this.prisma.processedWebhookEvent.findUnique({
-      where: { id: eventId },
-    });
+    const existing = await this.processedEventRepo.findById(eventId);
     return !existing;
   }
 
@@ -107,13 +126,7 @@ export class WebhookService {
    */
   async markEventProcessed(eventId: string, eventType: string): Promise<void> {
     try {
-      await this.prisma.processedWebhookEvent.create({
-        data: {
-          id: eventId,
-          eventType,
-          processedAt: new Date(),
-        },
-      });
+      await this.processedEventRepo.create(eventId, eventType);
     } catch (error: unknown) {
       const prismaErrorCode =
         error && typeof error === 'object' && 'code' in error
@@ -191,9 +204,7 @@ export class WebhookService {
       }
 
       // Verify organization exists
-      const organization = await this.prisma.organization.findUnique({
-        where: { id: organizationId },
-      });
+      const organization = await this.orgRepo.findById(organizationId);
 
       if (!organization) {
         const err = new NotFoundError(`Organization ${organizationId} not found`);
@@ -265,8 +276,8 @@ export class WebhookService {
 
       // Create subscription_tiers and update usage limits in transaction
       await this.prisma.$transaction(async (tx) => {
-        await tx.subscriptionTier.create({
-          data: {
+        await this.subscriptionRepo.create(
+          {
             organizationId,
             tierLevel,
             stripeSubscriptionId: subscription.id,
@@ -277,40 +288,42 @@ export class WebhookService {
                 : 'monthly',
             trialEndDate: subscription.trial_end ? new Date(subscription.trial_end * 1000) : null,
           },
-        });
+          tx,
+        );
 
         // Update organization_usage limits based on tier
         const limits = TIER_LIMITS[tierLevel];
-        await tx.organizationUsage.upsert({
-          where: { organizationId },
-          update: {
+        await this.subscriptionRepo.upsertUsage(
+          organizationId,
+          {
             maxSkus: limits.max_skus || 999999,
             maxUsers: limits.max_users || 999999,
+            maxInventoryItems: limits.max_inventory_items || 999999,
           },
-          create: {
+          {
             organizationId,
             maxSkus: limits.max_skus || 999999,
             maxUsers: limits.max_users || 999999,
             activeUsers: 0,
             totalSkus: 0,
+            totalInventoryItems: 0,
             storageUsedBytes: 0,
           },
-        });
+          tx,
+        );
 
         // Clear creation lock if org was previously locked (new subscription covers usage)
-        await tx.organization.update({
-          where: { id: organizationId },
-          data: { isCreationLocked: false },
-        });
+        await this.orgRepo.updateById(organizationId, { isCreationLocked: false }, tx);
 
         // Log audit event
-        await tx.auditLog.create({
-          data: {
+        await this.auditLogRepo.create(
+          {
             organizationId,
             action: 'subscription_created',
             changeDescription: `Subscription created: ${tierLevel} tier`,
           },
-        });
+          tx,
+        );
       });
 
       // Instantly invalidate auth cache to apply tier changes
@@ -403,30 +416,30 @@ export class WebhookService {
       // Update in transaction
       await this.prisma.$transaction(async (tx) => {
         // Set status to canceled and downgrade to starter
-        await tx.subscriptionTier.updateMany({
-          where: { organizationId },
-          data: {
+        await this.subscriptionRepo.updateManyByOrganizationId(
+          organizationId,
+          {
             status: SubscriptionStatus.CANCELED,
             tierLevel: 'starter',
             trialEndDate: null,
           },
-        });
+          tx,
+        );
 
         // Update usage limits to Starter tier
         const starterLimits = TIER_LIMITS.starter;
-        await tx.organizationUsage.update({
-          where: { organizationId },
-          data: {
+        await this.subscriptionRepo.updateUsage(
+          organizationId,
+          {
             maxSkus: starterLimits.max_skus || 500,
             maxUsers: starterLimits.max_users || 1,
             maxInventoryItems: starterLimits.max_inventory_items || 5000,
           },
-        });
+          tx,
+        );
 
         // Apply creation lock if usage exceeds Starter limits
-        const usage = await tx.organizationUsage.findUnique({
-          where: { organizationId },
-        });
+        const usage = await this.subscriptionRepo.findUsageByOrganizationId(organizationId, tx);
 
         if (usage) {
           const isOverSkuLimit = usage.totalSkus > (starterLimits.max_skus || 500);
@@ -434,10 +447,7 @@ export class WebhookService {
             usage.totalInventoryItems > (starterLimits.max_inventory_items || 5000);
 
           if (isOverSkuLimit || isOverInventoryLimit) {
-            await tx.organization.update({
-              where: { id: organizationId },
-              data: { isCreationLocked: true },
-            });
+            await this.orgRepo.updateById(organizationId, { isCreationLocked: true }, tx);
 
             log.warn('Creation lock applied on subscription cancellation', {
               organizationId,
@@ -456,13 +466,14 @@ export class WebhookService {
         }
 
         // Log audit event
-        await tx.auditLog.create({
-          data: {
+        await this.auditLogRepo.create(
+          {
             organizationId,
             action: 'subscription_canceled',
             changeDescription: `Subscription canceled, downgraded to Starter tier`,
           },
-        });
+          tx,
+        );
       });
 
       const duration = Date.now() - start;
@@ -540,32 +551,31 @@ export class WebhookService {
       const organizationId = await this.validateWebhookMetadata(invoice.customer as string);
 
       // Determine if this is the FIRST failure (transition) or a retry
-      const currentTier = await this.prisma.subscriptionTier.findFirst({
-        where: { organizationId },
-        select: { status: true, pastDueSince: true },
-      });
+      const currentTier = await this.subscriptionRepo.findByOrganizationId(organizationId);
 
       const isFirstFailure = currentTier?.status !== SubscriptionStatus.PAST_DUE;
 
       // Update subscription status to past_due
       await this.prisma.$transaction(async (tx) => {
-        await tx.subscriptionTier.updateMany({
-          where: { organizationId },
-          data: {
+        await this.subscriptionRepo.updateManyByOrganizationId(
+          organizationId,
+          {
             status: SubscriptionStatus.PAST_DUE,
             // Only set pastDueSince on first transition — do NOT reset on Stripe retries
             ...(isFirstFailure ? { pastDueSince: new Date() } : {}),
           },
-        });
+          tx,
+        );
 
         // Log dunning event
-        await tx.auditLog.create({
-          data: {
+        await this.auditLogRepo.create(
+          {
             organizationId,
             action: 'payment_failed',
             changeDescription: `Invoice ${invoice.id} payment failed: ${invoice.amount_due} cents (attempt ${isFirstFailure ? 1 : 'retry'})`,
           },
-        });
+          tx,
+        );
       });
 
       // Queue dunning email (non-blocking)
@@ -655,12 +665,10 @@ export class WebhookService {
       // Find subscription by customer and update status to ACTIVE
       await this.prisma.$transaction(async (tx) => {
         // Find the TRIALING subscription for this organization
-        const subscription = await tx.subscriptionTier.findFirst({
-          where: {
-            organizationId,
-            status: SubscriptionStatus.TRIALING,
-          },
-        });
+        const subscription = await this.subscriptionRepo.findTrialingByOrganizationId(
+          organizationId,
+          tx,
+        );
 
         if (!subscription) {
           log.warn(
@@ -674,18 +682,19 @@ export class WebhookService {
         }
 
         // Update status to ACTIVE and clear pastDueSince (recovery from past_due)
-        await tx.subscriptionTier.update({
-          where: { id: subscription.id },
-          data: {
+        await this.subscriptionRepo.update(
+          subscription.id,
+          {
             status: SubscriptionStatus.ACTIVE,
             trialConvertedAt: new Date(),
             pastDueSince: null,
           },
-        });
+          tx,
+        );
 
         // Log trial conversion event
-        await tx.trialEvent.create({
-          data: {
+        await this.trialEventRepo.create(
+          {
             organizationId,
             eventType: 'payment_confirmed',
             metadata: JSON.stringify({
@@ -693,16 +702,18 @@ export class WebhookService {
               amount: paymentIntent.amount,
             }),
           },
-        });
+          tx,
+        );
 
         // Log audit event
-        await tx.auditLog.create({
-          data: {
+        await this.auditLogRepo.create(
+          {
             organizationId,
             action: 'trial_converted',
             changeDescription: `Trial converted to paid subscription via payment intent ${paymentIntent.id}`,
           },
-        });
+          tx,
+        );
       });
 
       const duration = Date.now() - start;
@@ -748,17 +759,15 @@ export class WebhookService {
       const organizationId = await this.validateWebhookMetadata(paymentIntent.customer as string);
 
       // Log failure event
-      await this.prisma.trialEvent.create({
-        data: {
-          organizationId,
-          eventType: 'payment_failed',
-          metadata: JSON.stringify({
-            paymentIntentId: paymentIntent.id,
-            amount: paymentIntent.amount,
-            error: paymentIntent.last_payment_error?.message,
-            errorCode: paymentIntent.last_payment_error?.code,
-          }),
-        },
+      await this.trialEventRepo.create({
+        organizationId,
+        eventType: 'payment_failed',
+        metadata: JSON.stringify({
+          paymentIntentId: paymentIntent.id,
+          amount: paymentIntent.amount,
+          error: paymentIntent.last_payment_error?.message,
+          errorCode: paymentIntent.last_payment_error?.code,
+        }),
       });
 
       // Send alert email to admin
@@ -847,9 +856,7 @@ export class WebhookService {
    * Get the old subscription tier for an organization
    */
   private async getOldSubscriptionTier(organizationId: string) {
-    return await this.prisma.subscriptionTier.findFirst({
-      where: { organizationId },
-    });
+    return await this.subscriptionRepo.findByOrganizationId(organizationId);
   }
 
   /**
@@ -888,13 +895,14 @@ export class WebhookService {
       await this.handleCreationLock(tx, organizationId, limits, isDowngrade);
 
       // Log audit event
-      await tx.auditLog.create({
-        data: {
+      await this.auditLogRepo.create(
+        {
           organizationId,
           action: 'subscription_updated',
           changeDescription: `Subscription updated to ${newTierLevel} tier`,
         },
-      });
+        tx,
+      );
     });
   }
 
@@ -907,10 +915,7 @@ export class WebhookService {
     subscription: Stripe.Subscription,
     newTierLevel: TierLevel,
   ): Promise<void> {
-    const existingTier = await tx.subscriptionTier.findFirst({
-      where: { organizationId },
-      select: { id: true },
-    });
+    const existingTier = await this.subscriptionRepo.findByOrganizationId(organizationId, tx);
 
     const subscriptionData = {
       tierLevel: newTierLevel,
@@ -922,17 +927,15 @@ export class WebhookService {
     };
 
     if (existingTier) {
-      await tx.subscriptionTier.update({
-        where: { id: existingTier.id },
-        data: subscriptionData,
-      });
+      await this.subscriptionRepo.update(existingTier.id, subscriptionData, tx);
     } else {
-      await tx.subscriptionTier.create({
-        data: {
+      await this.subscriptionRepo.create(
+        {
           organizationId,
           ...subscriptionData,
         },
-      });
+        tx,
+      );
     }
   }
 
@@ -944,14 +947,14 @@ export class WebhookService {
     organizationId: string,
     limits: TierLimits,
   ): Promise<void> {
-    await tx.organizationUsage.upsert({
-      where: { organizationId },
-      update: {
+    await this.subscriptionRepo.upsertUsage(
+      organizationId,
+      {
         maxSkus: limits.max_skus ?? DEFAULT_LIMITS.UNLIMITED_SKUS,
         maxUsers: limits.max_users ?? DEFAULT_LIMITS.UNLIMITED_USERS,
         maxInventoryItems: limits.max_inventory_items ?? DEFAULT_LIMITS.UNLIMITED_INVENTORY_ITEMS,
       },
-      create: {
+      {
         organizationId,
         activeUsers: 0,
         totalSkus: 0,
@@ -961,7 +964,8 @@ export class WebhookService {
         maxUsers: limits.max_users ?? DEFAULT_LIMITS.UNLIMITED_USERS,
         maxInventoryItems: limits.max_inventory_items ?? DEFAULT_LIMITS.UNLIMITED_INVENTORY_ITEMS,
       },
-    });
+      tx,
+    );
   }
 
   /**
@@ -975,17 +979,12 @@ export class WebhookService {
   ): Promise<void> {
     if (!isDowngrade) {
       // Clear lock on upgrade
-      await tx.organization.update({
-        where: { id: organizationId },
-        data: { isCreationLocked: false },
-      });
+      await this.orgRepo.updateById(organizationId, { isCreationLocked: false }, tx);
       return;
     }
 
     // Check usage on downgrade
-    const usage = await tx.organizationUsage.findUnique({
-      where: { organizationId },
-    });
+    const usage = await this.subscriptionRepo.findUsageByOrganizationId(organizationId, tx);
 
     if (!usage) return;
 
@@ -994,10 +993,7 @@ export class WebhookService {
       limits.max_inventory_items !== null && usage.totalInventoryItems > limits.max_inventory_items;
 
     if (isOverSkuLimit || isOverInventoryLimit) {
-      await tx.organization.update({
-        where: { id: organizationId },
-        data: { isCreationLocked: true },
-      });
+      await this.orgRepo.updateById(organizationId, { isCreationLocked: true }, tx);
 
       log.warn('Creation lock applied on tier downgrade', {
         organizationId,
@@ -1097,19 +1093,17 @@ export class WebhookService {
       await this.updateUsageLimitsFromCheckout(tx, organizationId, checkoutData.limits);
 
       // Unlock creation
-      await tx.organization.update({
-        where: { id: organizationId },
-        data: { isCreationLocked: false },
-      });
+      await this.orgRepo.updateById(organizationId, { isCreationLocked: false }, tx);
 
       // Log audit event
-      await tx.auditLog.create({
-        data: {
+      await this.auditLogRepo.create(
+        {
           organizationId,
           action: 'trial_converted',
           changeDescription: `Trial converted to paid subscription (${checkoutData.tierLevel})`,
         },
-      });
+        tx,
+      );
     });
   }
 
@@ -1125,12 +1119,10 @@ export class WebhookService {
       tierLevel: TierLevel;
     },
   ): Promise<void> {
-    await tx.subscriptionTier.updateMany({
-      where: {
-        organizationId,
-        stripeSubscriptionId: session.subscription as string,
-      },
-      data: {
+    await this.subscriptionRepo.updateManyByOrganizationIdAndStripeSubscriptionId(
+      organizationId,
+      session.subscription as string,
+      {
         tierLevel: checkoutData.tierLevel,
         trialEndDate: null, // Clear trial end date
         status: SubscriptionStatus.ACTIVE, // Set to active
@@ -1139,7 +1131,8 @@ export class WebhookService {
             ? 'annual'
             : 'monthly',
       },
-    });
+      tx,
+    );
   }
 
   /**
@@ -1150,14 +1143,14 @@ export class WebhookService {
     organizationId: string,
     limits: TierLimits,
   ): Promise<void> {
-    await tx.organizationUsage.upsert({
-      where: { organizationId },
-      update: {
+    await this.subscriptionRepo.upsertUsage(
+      organizationId,
+      {
         maxSkus: limits.max_skus ?? DEFAULT_LIMITS.UNLIMITED_SKUS,
         maxUsers: limits.max_users ?? DEFAULT_LIMITS.UNLIMITED_USERS,
         maxInventoryItems: limits.max_inventory_items ?? DEFAULT_LIMITS.UNLIMITED_INVENTORY_ITEMS,
       },
-      create: {
+      {
         organizationId,
         maxSkus: limits.max_skus ?? DEFAULT_LIMITS.UNLIMITED_SKUS,
         maxUsers: limits.max_users ?? DEFAULT_LIMITS.UNLIMITED_USERS,
@@ -1167,7 +1160,8 @@ export class WebhookService {
         totalInventoryItems: 0,
         storageUsedBytes: 0,
       },
-    });
+      tx,
+    );
   }
 }
 

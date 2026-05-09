@@ -65,11 +65,8 @@ router.post(
   (req: AuthRequest, res, next) => controller.resendInvite(req, res, next),
 );
 
-router.delete(
-  '/',
-  authenticateToken,
-  requireOrgRole('admin'),
-  (req: AuthRequest, res, next) => controller.deleteOrganization(req, res, next),
+router.delete('/', authenticateToken, requireOrgRole('admin'), (req: AuthRequest, res, next) =>
+  controller.deleteOrganization(req, res, next),
 );
 
 export default router;

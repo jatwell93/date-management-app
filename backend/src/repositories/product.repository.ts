@@ -40,13 +40,8 @@ export class ProductRepository {
     organizationId: string,
     tx?: DbClient,
   ): Promise<Product | null> {
-    return this.getClient(tx).product.findUnique({
-      where: {
-        organizationId_barcode: {
-          organizationId,
-          barcode,
-        },
-      },
+    return this.getClient(tx).product.findFirst({
+      where: { barcode, organizationId },
     });
   }
 
@@ -66,26 +61,13 @@ export class ProductRepository {
     barcode: string,
     organizationId: string,
     tx?: DbClient,
-  ): Promise<{ bySku: Product | null; byBarcode: Product | null }> {
-    const client = this.getClient(tx);
-    const bySku = await client.product.findUnique({
+  ): Promise<Product | null> {
+    return this.getClient(tx).product.findFirst({
       where: {
-        organizationId_sku: {
-          organizationId,
-          sku,
-        },
+        organizationId,
+        OR: [{ sku }, { barcode }],
       },
     });
-    const byBarcode = await client.product.findUnique({
-      where: {
-        organizationId_barcode: {
-          organizationId,
-          barcode,
-        },
-      },
-    });
-
-    return { bySku, byBarcode };
   }
 
   async create(data: Prisma.ProductUncheckedCreateInput, tx?: DbClient): Promise<Product> {

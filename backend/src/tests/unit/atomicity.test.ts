@@ -27,6 +27,25 @@ describe('Usage Counter Atomicity Tests', () => {
           totalInventoryItems: 10,
         }),
       },
+      inventoryItem: {
+        create: jest.fn(),
+        update: jest.fn(),
+        delete: jest.fn(),
+        findFirst: jest.fn(),
+        findMany: jest.fn(),
+        findUnique: jest.fn(),
+      },
+      storeArea: {
+        findFirst: jest.fn(),
+        findUnique: jest.fn(),
+        create: jest.fn(),
+      },
+      auditLog: {
+        create: jest.fn(),
+      },
+      user: {
+        findFirst: jest.fn(),
+      },
       $transaction: jest.fn((callback) => callback(mockPrisma)),
     };
     productService = new ProductService(mockPrisma as unknown as PrismaClient, organizationId);
@@ -436,7 +455,7 @@ describe('Usage Counter Atomicity Tests', () => {
       expect(result).toBe(true);
       expect(mockPrisma.$transaction).toHaveBeenCalled();
       expect(mockPrisma.inventoryItem.delete).toHaveBeenCalledWith({
-        where: { id: 1 },
+        where: { id: 1, organizationId: 'org-123' },
       });
       expect(mockPrisma.organizationUsage.update).toHaveBeenCalledWith({
         where: { organizationId },
@@ -610,7 +629,7 @@ describe('Usage Counter Atomicity Tests', () => {
       expect(result).toBe(true);
       expect(mockPrisma.$transaction).toHaveBeenCalled();
       expect(mockPrisma.inventoryItem.delete).toHaveBeenCalledWith({
-        where: { id: 1 },
+        where: { id: 1, organizationId: 'org-123' },
       });
       // organizationUsage.update should NOT be called when counter is 0
       expect(mockPrisma.organizationUsage.update).not.toHaveBeenCalledWith({

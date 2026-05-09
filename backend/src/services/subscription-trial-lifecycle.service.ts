@@ -8,17 +8,31 @@ import { Logger } from '../utils/logger';
 import { getPriceIdForTier } from './subscription-billing.helpers';
 import { buildTrialSubscriptionSetup } from './subscription-trial.helpers';
 import { getErrorMessage, mapPrismaSubscriptionTierToModel } from './subscription-mapping.helpers';
+import { OrganizationRepository } from '../repositories/organization.repository';
+import { SubscriptionRepository } from '../repositories/subscription.repository';
+import { TrialEventRepository } from '../repositories/trial-event.repository';
 
 export class SubscriptionTrialLifecycleService {
+  private prisma: PrismaClient;
+  private orgRepo: OrganizationRepository;
+  private subscriptionRepo: SubscriptionRepository;
+  private trialEventRepo: TrialEventRepository;
+
   constructor(
-    private readonly prisma: PrismaClient,
+    prismaClient: PrismaClient,
     private readonly stripe: Stripe,
-  ) {}
+    orgRepo?: OrganizationRepository,
+    subscriptionRepo?: SubscriptionRepository,
+    trialEventRepo?: TrialEventRepository,
+  ) {
+    this.prisma = prismaClient;
+    this.orgRepo = orgRepo ?? new OrganizationRepository(prismaClient);
+    this.subscriptionRepo = subscriptionRepo ?? new SubscriptionRepository(prismaClient);
+    this.trialEventRepo = trialEventRepo ?? new TrialEventRepository(prismaClient);
+  }
 
   async createTrialSubscription(organizationId: string, trialDays: number = 14): Promise<void> {
-    const organization = await this.prisma.organization.findUnique({
-      where: { id: organizationId },
-    });
+    const organization = await this.orgRepo.findById(organizationId);
 
     if (!organization) {
       throw new NotFoundError(`Organization ${organizationId} not found`);
@@ -37,13 +51,9 @@ export class SubscriptionTrialLifecycleService {
       new Date(),
     );
 
-    await this.prisma.subscriptionTier.create({
-      data: trialSetup.subscriptionTierData,
-    });
+    await this.subscriptionRepo.create(trialSetup.subscriptionTierData);
 
-    await this.prisma.organizationUsage.create({
-      data: trialSetup.organizationUsageData,
-    });
+    await this.subscriptionRepo.createUsage(trialSetup.organizationUsageData);
 
     await this.logTrialEvent(organizationId, 'trial_started', {
       trialDays,
@@ -68,24 +78,10 @@ export class SubscriptionTrialLifecycleService {
     const now = new Date();
     const fourteenDaysFromNow = new Date(now.getTime() + 14 * 24 * 60 * 60 * 1000);
 
-    const expiringTrials = await this.prisma.subscriptionTier.findMany({
-      where: {
-        status: SubscriptionStatus.TRIALING,
-        trialEndDate: {
-          gte: now,
-          lte: fourteenDaysFromNow,
-        },
-      },
-      include: {
-        organization: {
-          select: {
-            id: true,
-            name: true,
-            contactEmail: true,
-          },
-        },
-      },
-    });
+    const expiringTrials = await this.subscriptionRepo.findTrialingExpiringBefore(
+      fourteenDaysFromNow,
+      now,
+    );
 
     const results: Array<{
       organizationId: string;
@@ -109,15 +105,11 @@ export class SubscriptionTrialLifecycleService {
 
       if (![10, 5, 2].includes(daysRemaining)) continue;
 
-      const existingEvent = await this.prisma.trialEvent.findFirst({
-        where: {
-          organizationId: trial.organizationId,
-          eventType: 'trial_reminder_sent',
-          occurredAt: {
-            gte: new Date(now.getTime() - 24 * 60 * 60 * 1000),
-          },
-        },
-      });
+      const existingEvent = await this.trialEventRepo.findRecentByOrganizationAndType(
+        trial.organizationId,
+        'trial_reminder_sent',
+        new Date(now.getTime() - 24 * 60 * 60 * 1000),
+      );
 
       if (existingEvent) continue;
 
@@ -138,31 +130,18 @@ export class SubscriptionTrialLifecycleService {
     eventType: string,
     metadata: Record<string, unknown> = {},
   ): Promise<void> {
-    await this.prisma.trialEvent.create({
-      data: {
-        organizationId,
-        eventType,
-        metadata: JSON.stringify(metadata),
-        occurredAt: new Date(),
-      },
+    await this.trialEventRepo.create({
+      organizationId,
+      eventType,
+      metadata: JSON.stringify(metadata),
+      occurredAt: new Date(),
     });
   }
 
   async downgradeExpiredTrials(): Promise<number> {
     const now = new Date();
 
-    const expiredTrials = await this.prisma.subscriptionTier.findMany({
-      where: {
-        status: SubscriptionStatus.TRIALING,
-        trialEndDate: {
-          lt: now,
-        },
-      },
-      select: {
-        id: true,
-        organizationId: true,
-      },
-    });
+    const expiredTrials = await this.subscriptionRepo.findExpiredTrials(now);
 
     if (expiredTrials.length === 0) {
       return 0;
@@ -173,23 +152,25 @@ export class SubscriptionTrialLifecycleService {
     for (const trial of expiredTrials) {
       try {
         await this.prisma.$transaction(async (tx) => {
-          await tx.subscriptionTier.update({
-            where: { id: trial.id },
-            data: {
+          await this.subscriptionRepo.update(
+            trial.id,
+            {
               status: SubscriptionStatus.ACTIVE,
               tierLevel: 'starter',
               stripeSubscriptionId: null,
             },
-          });
+            tx,
+          );
 
-          await tx.trialEvent.create({
-            data: {
+          await this.trialEventRepo.create(
+            {
               organizationId: trial.organizationId,
               eventType: 'trial_expired',
               metadata: JSON.stringify({ downgradedTo: 'starter' }),
               occurredAt: new Date(),
             },
-          });
+            tx,
+          );
         });
 
         downgradedCount++;
@@ -207,15 +188,7 @@ export class SubscriptionTrialLifecycleService {
     stripePaymentMethodId: string,
     billingCycle: BillingCycle,
   ): Promise<SubscriptionTier> {
-    const trial = await this.prisma.subscriptionTier.findFirst({
-      where: {
-        organizationId,
-        status: SubscriptionStatus.TRIALING,
-      },
-      include: {
-        organization: true,
-      },
-    });
+    const trial = await this.subscriptionRepo.findTrialingByOrganizationId(organizationId);
 
     if (!trial) {
       throw new NotFoundError(`No active trial found for organization ${organizationId}`);
@@ -236,18 +209,19 @@ export class SubscriptionTrialLifecycleService {
       });
 
       const updated = await this.prisma.$transaction(async (tx) => {
-        const updatedTier = await tx.subscriptionTier.update({
-          where: { id: trial.id },
-          data: {
+        const updatedTier = await this.subscriptionRepo.update(
+          trial.id,
+          {
             status: SubscriptionStatus.ACTIVE,
             stripeSubscriptionId: stripeSubscription.id,
             trialConvertedAt: new Date(),
             billingCycle,
           },
-        });
+          tx,
+        );
 
-        await tx.trialEvent.create({
-          data: {
+        await this.trialEventRepo.create(
+          {
             organizationId,
             eventType: 'trial_converted',
             metadata: JSON.stringify({
@@ -256,7 +230,8 @@ export class SubscriptionTrialLifecycleService {
             }),
             occurredAt: new Date(),
           },
-        });
+          tx,
+        );
 
         return updatedTier;
       });
@@ -299,17 +274,7 @@ export class SubscriptionTrialLifecycleService {
   > {
     const yesterday = new Date(Date.now() - 24 * 60 * 60 * 1000);
 
-    const events = await this.prisma.trialEvent.findMany({
-      where: {
-        eventType: 'trial_expired',
-        occurredAt: {
-          gte: yesterday,
-        },
-      },
-      orderBy: {
-        occurredAt: 'desc',
-      },
-    });
+    const events = await this.trialEventRepo.findRecentByType('trial_expired', yesterday);
 
     const results: Array<{
       organizationId: string;
@@ -318,10 +283,7 @@ export class SubscriptionTrialLifecycleService {
     }> = [];
 
     for (const event of events) {
-      const org = await this.prisma.organization.findUnique({
-        where: { id: event.organizationId },
-        select: { name: true, contactEmail: true },
-      });
+      const org = await this.orgRepo.findByIdSelect(event.organizationId);
 
       if (org) {
         results.push({

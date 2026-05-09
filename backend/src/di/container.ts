@@ -21,6 +21,10 @@ import { StorageQuotaRepository } from '../repositories/storage-quota.repository
 import { JobLockRepository } from '../repositories/job-lock.repository';
 import { OrganizationInviteRepository } from '../repositories/organization-invite.repository';
 import { RefreshTokenRepository } from '../repositories/refresh-token.repository';
+import { ClerkWebhookEventRepository } from '../repositories/clerk-webhook-event.repository';
+import { ProcessedWebhookEventRepository } from '../repositories/processed-webhook-event.repository';
+import { TrialEventRepository } from '../repositories/trial-event.repository';
+import { AuditLogRepository } from '../repositories/audit-log.repository';
 
 let initialized = false;
 
@@ -57,6 +61,10 @@ export function initializeDiContainer(): void {
   container.registerSingleton(JobLockRepository);
   container.registerSingleton(OrganizationInviteRepository);
   container.registerSingleton(RefreshTokenRepository);
+  container.registerSingleton(ClerkWebhookEventRepository);
+  container.registerSingleton(ProcessedWebhookEventRepository);
+  container.registerSingleton(TrialEventRepository);
+  container.registerSingleton(AuditLogRepository);
 
   container.register(SubscriptionService, {
     useFactory: (dependencyContainer) =>
@@ -82,7 +90,20 @@ export function initializeDiContainer(): void {
       const prisma = container.resolve(PrismaClient);
       const inventoryRepo = container.resolve(InventoryRepository);
       const productRepo = container.resolve(ProductRepository);
-      return new InventoryService(orgId, prisma, inventoryRepo, productRepo);
+      const subscriptionRepo = container.resolve(SubscriptionRepository);
+      const userRepo = container.resolve(UserRepository);
+      const auditLogRepo = container.resolve(AuditLogRepository);
+      const storeAreaRepo = container.resolve(StoreAreaRepository);
+      return new InventoryService(
+        orgId,
+        prisma,
+        inventoryRepo,
+        productRepo,
+        subscriptionRepo,
+        userRepo,
+        auditLogRepo,
+        storeAreaRepo,
+      );
     },
   });
 

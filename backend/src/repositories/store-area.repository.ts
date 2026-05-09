@@ -3,20 +3,29 @@ import { injectable, inject } from 'tsyringe';
 import { StoreArea } from '../models/store-area.model';
 
 type StoreAreaRecord = Prisma.StoreAreaGetPayload<Record<string, never>>;
+type DbClient = PrismaClient | Prisma.TransactionClient;
 
 @injectable()
 export class StoreAreaRepository {
   constructor(@inject(PrismaClient) private prisma: PrismaClient) {}
 
-  async findAll(organizationId: string): Promise<StoreAreaRecord[]> {
-    return this.prisma.storeArea.findMany({
+  private getClient(tx?: DbClient): DbClient {
+    return tx ?? this.prisma;
+  }
+
+  async findAll(organizationId: string, tx?: DbClient): Promise<StoreAreaRecord[]> {
+    return this.getClient(tx).storeArea.findMany({
       where: { organizationId },
       orderBy: { name: 'asc' },
     });
   }
 
-  async findById(id: number, organizationId: string): Promise<StoreAreaRecord | null> {
-    return this.prisma.storeArea.findFirst({
+  async findById(
+    id: number,
+    organizationId: string,
+    tx?: DbClient,
+  ): Promise<StoreAreaRecord | null> {
+    return this.getClient(tx).storeArea.findFirst({
       where: { id, organizationId },
     });
   }
@@ -38,6 +47,60 @@ export class StoreAreaRepository {
         subDepartment: subDepartment ?? null,
         organizationId,
       },
+    });
+  }
+
+  async getOrCreateByName(
+    name: string,
+    organizationId: string,
+    tx?: DbClient,
+  ): Promise<{ id: number }> {
+    const existing = await this.getClient(tx).storeArea.findFirst({
+      where: { name, organizationId },
+      select: { id: true },
+    });
+
+    if (existing) {
+      return existing;
+    }
+
+    const created = await this.getClient(tx).storeArea.create({
+      data: {
+        organizationId,
+        name,
+        subDepartment: null,
+      },
+      select: { id: true },
+    });
+
+    return created;
+  }
+
+  async findByNameAndSubDepartmentWithTransaction(
+    name: string,
+    subDepartment: string,
+    organizationId: string,
+    tx: DbClient,
+  ): Promise<any | null> {
+    return this.getClient(tx).storeArea.findUnique({
+      where: {
+        organizationId_name_subDepartment: {
+          organizationId,
+          name,
+          subDepartment,
+        },
+      },
+    });
+  }
+
+  async createWithTransaction(
+    organizationId: string,
+    name: string,
+    subDepartment: string,
+    tx: DbClient,
+  ): Promise<any> {
+    return this.getClient(tx).storeArea.create({
+      data: { organizationId, name, subDepartment },
     });
   }
 

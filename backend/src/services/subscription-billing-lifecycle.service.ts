@@ -11,12 +11,28 @@ import {
   getErrorMessage,
   mapPrismaSubscriptionTierToModel,
 } from './subscription-mapping.helpers';
+import { OrganizationRepository } from '../repositories/organization.repository';
+import { SubscriptionRepository } from '../repositories/subscription.repository';
+import { AuditLogRepository } from '../repositories/audit-log.repository';
 
 export class SubscriptionBillingLifecycleService {
+  private prisma: PrismaClient;
+  private orgRepo: OrganizationRepository;
+  private subscriptionRepo: SubscriptionRepository;
+  private auditLogRepo: AuditLogRepository;
+
   constructor(
-    private readonly prisma: PrismaClient,
+    prismaClient: PrismaClient,
     private readonly stripe: Stripe,
-  ) {}
+    orgRepo?: OrganizationRepository,
+    subscriptionRepo?: SubscriptionRepository,
+    auditLogRepo?: AuditLogRepository,
+  ) {
+    this.prisma = prismaClient;
+    this.orgRepo = orgRepo ?? new OrganizationRepository(prismaClient);
+    this.subscriptionRepo = subscriptionRepo ?? new SubscriptionRepository(prismaClient);
+    this.auditLogRepo = auditLogRepo ?? new AuditLogRepository(prismaClient);
+  }
 
   async createSubscription(
     organizationId: string,
@@ -24,9 +40,7 @@ export class SubscriptionBillingLifecycleService {
     billingCycle: BillingCycle,
   ): Promise<SubscriptionTier> {
     try {
-      const organization = await this.prisma.organization.findUnique({
-        where: { id: organizationId },
-      });
+      const organization = await this.orgRepo.findById(organizationId);
 
       if (!organization) {
         throw new NotFoundError(`Organization ${organizationId} not found`);
@@ -52,17 +66,15 @@ export class SubscriptionBillingLifecycleService {
 
       const tierLevel = extractTierFromPrice(stripeSubscription);
 
-      const subscriptionTier = await this.prisma.subscriptionTier.create({
-        data: {
-          organizationId,
-          tierLevel,
-          stripeSubscriptionId: stripeSubscription.id,
-          status: mapStripeSubscriptionStatusToLocal(stripeSubscription.status),
-          billingCycle,
-          trialEndDate: stripeSubscription.trial_end
-            ? new Date(stripeSubscription.trial_end * 1000)
-            : null,
-        },
+      const subscriptionTier = await this.subscriptionRepo.create({
+        organizationId,
+        tierLevel,
+        stripeSubscriptionId: stripeSubscription.id,
+        status: mapStripeSubscriptionStatusToLocal(stripeSubscription.status),
+        billingCycle,
+        trialEndDate: stripeSubscription.trial_end
+          ? new Date(stripeSubscription.trial_end * 1000)
+          : null,
       });
 
       Logger.info(
@@ -106,9 +118,7 @@ export class SubscriptionBillingLifecycleService {
 
   async updateSubscription(organizationId: string, newPriceId: string): Promise<SubscriptionTier> {
     try {
-      const subscriptionTier = await this.prisma.subscriptionTier.findFirst({
-        where: { organizationId },
-      });
+      const subscriptionTier = await this.subscriptionRepo.findByOrganizationId(organizationId);
 
       if (!subscriptionTier || !subscriptionTier.stripeSubscriptionId) {
         throw new NotFoundError(`No subscription found for organization ${organizationId}`);
@@ -138,12 +148,9 @@ export class SubscriptionBillingLifecycleService {
 
       const newTierLevel = extractTierFromPrice(updatedSubscription);
 
-      const updated = await this.prisma.subscriptionTier.update({
-        where: { id: subscriptionTier.id },
-        data: {
-          tierLevel: newTierLevel,
-          status: mapStripeSubscriptionStatusToLocal(updatedSubscription.status),
-        },
+      const updated = await this.subscriptionRepo.update(subscriptionTier.id, {
+        tierLevel: newTierLevel,
+        status: mapStripeSubscriptionStatusToLocal(updatedSubscription.status),
       });
 
       Logger.info(`Updated subscription for organization ${organizationId} to ${newTierLevel}`);
@@ -166,9 +173,7 @@ export class SubscriptionBillingLifecycleService {
 
   async cancelSubscription(organizationId: string): Promise<SubscriptionTier> {
     try {
-      const subscriptionTier = await this.prisma.subscriptionTier.findFirst({
-        where: { organizationId },
-      });
+      const subscriptionTier = await this.subscriptionRepo.findByOrganizationId(organizationId);
 
       if (!subscriptionTier || !subscriptionTier.stripeSubscriptionId) {
         throw new NotFoundError(`No subscription found for organization ${organizationId}`);
@@ -181,11 +186,8 @@ export class SubscriptionBillingLifecycleService {
         },
       );
 
-      const updated = await this.prisma.subscriptionTier.update({
-        where: { id: subscriptionTier.id },
-        data: {
-          status: mapStripeSubscriptionStatusToLocal(canceledSubscription.status),
-        },
+      const updated = await this.subscriptionRepo.update(subscriptionTier.id, {
+        status: mapStripeSubscriptionStatusToLocal(canceledSubscription.status),
       });
 
       Logger.info(`Canceled subscription ${subscriptionTier.stripeSubscriptionId} at period end`);
@@ -208,9 +210,7 @@ export class SubscriptionBillingLifecycleService {
 
   async reactivateSubscription(organizationId: string): Promise<SubscriptionTier> {
     try {
-      const subscriptionTier = await this.prisma.subscriptionTier.findFirst({
-        where: { organizationId },
-      });
+      const subscriptionTier = await this.subscriptionRepo.findByOrganizationId(organizationId);
 
       if (!subscriptionTier || !subscriptionTier.stripeSubscriptionId) {
         throw new NotFoundError(`No subscription found for organization ${organizationId}`);
@@ -223,11 +223,8 @@ export class SubscriptionBillingLifecycleService {
         },
       );
 
-      const updated = await this.prisma.subscriptionTier.update({
-        where: { id: subscriptionTier.id },
-        data: {
-          status: mapStripeSubscriptionStatusToLocal(reactivatedSubscription.status),
-        },
+      const updated = await this.subscriptionRepo.update(subscriptionTier.id, {
+        status: mapStripeSubscriptionStatusToLocal(reactivatedSubscription.status),
       });
 
       Logger.info(
@@ -255,9 +252,7 @@ export class SubscriptionBillingLifecycleService {
     stripeSubscription: Stripe.Subscription,
   ): Promise<SubscriptionTier> {
     try {
-      const subscriptionTier = await this.prisma.subscriptionTier.findFirst({
-        where: { organizationId },
-      });
+      const subscriptionTier = await this.subscriptionRepo.findByOrganizationId(organizationId);
 
       if (!subscriptionTier) {
         throw new NotFoundError(`No subscription found for organization ${organizationId}`);
@@ -265,16 +260,13 @@ export class SubscriptionBillingLifecycleService {
 
       const tierLevel = extractTierFromPrice(stripeSubscription);
 
-      const updated = await this.prisma.subscriptionTier.update({
-        where: { id: subscriptionTier.id },
-        data: {
-          tierLevel,
-          status: mapStripeSubscriptionStatusToLocal(stripeSubscription.status),
-          trialEndDate: stripeSubscription.trial_end
-            ? new Date(stripeSubscription.trial_end * 1000)
-            : null,
-          stripeSubscriptionId: stripeSubscription.id,
-        },
+      const updated = await this.subscriptionRepo.update(subscriptionTier.id, {
+        tierLevel,
+        status: mapStripeSubscriptionStatusToLocal(stripeSubscription.status),
+        trialEndDate: stripeSubscription.trial_end
+          ? new Date(stripeSubscription.trial_end * 1000)
+          : null,
+        stripeSubscriptionId: stripeSubscription.id,
       });
 
       Logger.info(`Synced subscription state for organization ${organizationId}`);
@@ -294,17 +286,7 @@ export class SubscriptionBillingLifecycleService {
   async downgradeExpiredPastDue(): Promise<number> {
     const sevenDaysAgo = new Date(Date.now() - 7 * 24 * 60 * 60 * 1000);
 
-    const expiredPastDue = await this.prisma.subscriptionTier.findMany({
-      where: {
-        status: SubscriptionStatus.PAST_DUE,
-        pastDueSince: { lte: sevenDaysAgo },
-      },
-      select: {
-        id: true,
-        organizationId: true,
-        pastDueSince: true,
-      },
-    });
+    const expiredPastDue = await this.subscriptionRepo.findPastDueExpired(sevenDaysAgo);
 
     if (expiredPastDue.length === 0) {
       return 0;
@@ -316,27 +298,30 @@ export class SubscriptionBillingLifecycleService {
     for (const tier of expiredPastDue) {
       try {
         await this.prisma.$transaction(async (tx) => {
-          await tx.subscriptionTier.updateMany({
-            where: { organizationId: tier.organizationId },
-            data: {
+          await this.subscriptionRepo.updateManyByOrganizationId(
+            tier.organizationId,
+            {
               status: SubscriptionStatus.ACTIVE,
               tierLevel: 'starter',
               pastDueSince: null,
             },
-          });
+            tx,
+          );
 
-          await tx.organizationUsage.update({
-            where: { organizationId: tier.organizationId },
-            data: {
+          await this.subscriptionRepo.updateUsage(
+            tier.organizationId,
+            {
               maxSkus: starterLimits.max_skus ?? 500,
               maxUsers: starterLimits.max_users ?? 1,
               maxInventoryItems: starterLimits.max_inventory_items ?? 5000,
             },
-          });
+            tx,
+          );
 
-          const usage = await tx.organizationUsage.findUnique({
-            where: { organizationId: tier.organizationId },
-          });
+          const usage = await this.subscriptionRepo.findUsageByOrganizationId(
+            tier.organizationId,
+            tx,
+          );
 
           const isOverSkuLimit =
             starterLimits.max_skus !== null && usage && usage.totalSkus > starterLimits.max_skus;
@@ -352,10 +337,7 @@ export class SubscriptionBillingLifecycleService {
             usage.activeUsers > starterLimits.max_users;
 
           if (isOverSkuLimit || isOverInventoryLimit || isOverUserLimit) {
-            await tx.organization.update({
-              where: { id: tier.organizationId },
-              data: { isCreationLocked: true },
-            });
+            await this.orgRepo.updateById(tier.organizationId, { isCreationLocked: true }, tx);
 
             Logger.warn('Creation lock applied after dunning downgrade', {
               organizationId: tier.organizationId,
@@ -366,13 +348,14 @@ export class SubscriptionBillingLifecycleService {
             });
           }
 
-          await tx.auditLog.create({
-            data: {
+          await this.auditLogRepo.create(
+            {
               organizationId: tier.organizationId,
               action: 'dunning_downgrade',
               changeDescription: `Dunning auto-downgrade to Starter after 7-day past_due grace period. SKUs: ${usage?.totalSkus ?? 0}, InventoryItems: ${usage?.totalInventoryItems ?? 0}`,
             },
-          });
+            tx,
+          );
         });
 
         Sentry.captureMessage(

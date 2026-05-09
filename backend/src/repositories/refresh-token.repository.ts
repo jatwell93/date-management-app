@@ -27,7 +27,10 @@ export class RefreshTokenRepository {
     });
   }
 
-  async findByTokenWithUser(token: string, client?: DbClient): Promise<RefreshTokenWithUser | null> {
+  async findByTokenWithUser(
+    token: string,
+    client?: DbClient,
+  ): Promise<RefreshTokenWithUser | null> {
     return this.getClient(client).refreshToken.findUnique({
       where: { token },
       include: { user: true },

@@ -18,12 +18,20 @@ describe('InventoryService', () => {
       },
       product: {
         findFirst: jest.fn(),
+        findUnique: jest.fn(),
+        create: jest.fn(),
+        update: jest.fn(),
       },
       storeArea: {
         findFirst: jest.fn(),
+        findUnique: jest.fn(),
+        create: jest.fn(),
       },
       user: {
         findFirst: jest.fn(),
+        findUnique: jest.fn(),
+        update: jest.fn(),
+        updateMany: jest.fn(),
       },
       auditLog: {
         create: jest.fn(),
@@ -35,9 +43,59 @@ describe('InventoryService', () => {
         update: jest.fn(),
         findUnique: jest.fn(),
       },
+      subscriptionTier: {
+        findFirst: jest.fn(),
+        update: jest.fn(),
+      },
       $transaction: jest.fn((callback) => callback(mockPrisma)),
     };
-    inventoryService = new InventoryService(organizationId, mockPrisma as unknown as PrismaClient);
+    inventoryService = new InventoryService(
+      organizationId,
+      mockPrisma as unknown as PrismaClient,
+      {
+        findFirst: mockPrisma.inventoryItem.findFirst,
+        findAll: mockPrisma.inventoryItem.findMany,
+        findById: mockPrisma.inventoryItem.findUnique,
+        findByProductId: mockPrisma.inventoryItem.findMany,
+        findRecentByProductId: mockPrisma.inventoryItem.findMany,
+        findByLocationId: mockPrisma.inventoryItem.findMany,
+        findByOrganizationIdAndId: mockPrisma.inventoryItem.findFirst,
+        findManyByIds: mockPrisma.inventoryItem.findMany,
+        findUniqueWithProduct: mockPrisma.inventoryItem.findUnique,
+        updateManyByIds: jest.fn((items) => Promise.all(items.map(item => mockPrisma.inventoryItem.update({ where: { id: item.id }, data: { status: item.status } })))),
+        create: mockPrisma.inventoryItem.create,
+        update: mockPrisma.inventoryItem.update,
+        delete: mockPrisma.inventoryItem.delete,
+      } as any,
+      {
+        findById: mockPrisma.product.findUnique,
+        findBySku: mockPrisma.product.findFirst,
+        create: mockPrisma.product.create,
+        update: mockPrisma.product.update,
+      } as any,
+      {
+        findUsageByOrganizationId: mockPrisma.organizationUsage.findUnique,
+        updateUsage: mockPrisma.organizationUsage.update,
+      } as any,
+      {
+        findById: mockPrisma.user.findFirst,
+        findByEmailAndOrganizationId: mockPrisma.user.findFirst,
+        createClerkUser: mockPrisma.user.create,
+        updateManyByClerkUserId: mockPrisma.user.updateMany,
+        findFirstByClerkUserIdAndOrganizationId: mockPrisma.user.findFirst,
+        softDeleteById: mockPrisma.user.update,
+        findByClerkUserIdSelectEmail: mockPrisma.user.findFirst,
+        findUniqueByClerkUserId: mockPrisma.user.findUnique,
+        findAdminByOrganizationId: mockPrisma.user.findFirst,
+        findRecentTrialUserByEmail: mockPrisma.user.findFirst,
+      } as any,
+      {
+        create: mockPrisma.auditLog.create,
+      } as any,
+      {
+        findById: mockPrisma.storeArea.findFirst,
+      } as any,
+    );
   });
 
   afterEach(() => {
@@ -180,7 +238,7 @@ describe('InventoryService', () => {
         },
       });
       expect(mockPrisma.inventoryItem.update).toHaveBeenCalledWith({
-        where: { id: 1 },
+        where: { id: 1, organizationId },
         data: { status: 'Markdown 1' },
       });
       expect(mockPrisma.auditLog.create).toHaveBeenCalledWith({
@@ -499,7 +557,7 @@ describe('InventoryService', () => {
         },
       });
       expect(mockPrisma.inventoryItem.delete).toHaveBeenCalledWith({
-        where: { id: 1 },
+        where: { id: 1, organizationId },
       });
       expect(mockPrisma.organizationUsage.update).toHaveBeenCalledWith({
         where: { organizationId },
@@ -540,7 +598,7 @@ describe('InventoryService', () => {
         },
       });
       expect(mockPrisma.inventoryItem.update).toHaveBeenCalledWith({
-        where: { id: 1 },
+        where: { id: 1, organizationId },
         data: { status: 'Expired' },
       });
     });

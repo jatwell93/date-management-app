@@ -2,12 +2,17 @@ import { Prisma, PrismaClient } from '@prisma/client';
 import { injectable, inject } from 'tsyringe';
 import { Organization } from '../models/organization.model';
 
+type DbClient = PrismaClient | Prisma.TransactionClient;
 type OrganizationRecord = Prisma.OrganizationGetPayload<Record<string, never>>;
 type OrganizationUpdate = Partial<Pick<Organization, 'name' | 'slug'>>;
 
 @injectable()
 export class OrganizationRepository {
-  constructor(@inject(PrismaClient) private prisma: PrismaClient) { }
+  constructor(@inject(PrismaClient) private prisma: PrismaClient) {}
+
+  private getClient(tx?: DbClient): DbClient {
+    return tx ?? this.prisma;
+  }
 
   async findById(id: string): Promise<OrganizationRecord | null> {
     return this.prisma.organization.findUnique({
@@ -15,9 +20,14 @@ export class OrganizationRepository {
     });
   }
 
-  async findWithContactDetails(
-    id: string,
-  ): Promise<{
+  async findByIdSelect(id: string): Promise<{ name: string; contactEmail: string | null } | null> {
+    return this.prisma.organization.findUnique({
+      where: { id },
+      select: { name: true, contactEmail: true },
+    });
+  }
+
+  async findWithContactDetails(id: string): Promise<{
     id: string;
     name: string;
     contactEmail: string | null;
@@ -51,6 +61,20 @@ export class OrganizationRepository {
     return this.prisma.organization.create({ data });
   }
 
+  async createDefaultOrganization(data: {
+    name: string;
+    slug: string;
+    contactEmail?: string;
+  }): Promise<OrganizationRecord> {
+    return this.prisma.organization.create({
+      data: {
+        name: data.name,
+        slug: data.slug,
+        contactEmail: data.contactEmail ?? null,
+      },
+    });
+  }
+
   async findCreationLockById(id: string): Promise<{ isCreationLocked: boolean } | null> {
     return this.prisma.organization.findUnique({
       where: { id },
@@ -65,6 +89,17 @@ export class OrganizationRepository {
         ...(updates.name !== undefined && { name: updates.name }),
         ...(updates.slug !== undefined && { slug: updates.slug }),
       },
+    });
+  }
+
+  async updateById(
+    id: string,
+    data: { isCreationLocked?: boolean; name?: string; slug?: string },
+    tx?: DbClient,
+  ): Promise<OrganizationRecord> {
+    return this.getClient(tx).organization.update({
+      where: { id },
+      data,
     });
   }
 

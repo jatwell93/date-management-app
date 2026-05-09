@@ -7,6 +7,10 @@ import { injectable, inject } from 'tsyringe';
 
 import { InventoryRepository } from '../repositories/inventory.repository';
 import { ProductRepository } from '../repositories/product.repository';
+import { SubscriptionRepository } from '../repositories/subscription.repository';
+import { UserRepository } from '../repositories/user.repository';
+import { AuditLogRepository } from '../repositories/audit-log.repository';
+import { StoreAreaRepository } from '../repositories/store-area.repository';
 import {
   calculateInventoryMarkdownPrice,
   calculateInventoryMarkdownStatus,
@@ -29,6 +33,11 @@ export class InventoryService {
   private prisma: PrismaClient;
   private organizationId: string;
   private inventoryRepo: InventoryRepository;
+  private subscriptionRepo: SubscriptionRepository;
+  private userRepo: UserRepository;
+  private auditLogRepo: AuditLogRepository;
+  private storeAreaRepo: StoreAreaRepository;
+  private productRepo: ProductRepository;
 
   // Markdown thresholds in days
   private static readonly MARKDOWN_THRESHOLDS = INVENTORY_MARKDOWN_THRESHOLDS;
@@ -39,17 +48,29 @@ export class InventoryService {
    * @param prismaClient - Optional PrismaClient for testing/custom configurations
    * @param inventoryRepo - Optional InventoryRepository
    * @param productRepo - Optional ProductRepository
+   * @param subscriptionRepo - Optional SubscriptionRepository
+   * @param userRepo - Optional UserRepository
+   * @param auditLogRepo - Optional AuditLogRepository
+   * @param storeAreaRepo - Optional StoreAreaRepository
    */
   constructor(
     @inject('OrganizationId') organizationId?: string,
     @inject(PrismaClient) prismaClient?: PrismaClient,
     @inject(InventoryRepository) inventoryRepo?: InventoryRepository,
     @inject(ProductRepository) productRepo?: ProductRepository,
+    @inject(SubscriptionRepository) subscriptionRepo?: SubscriptionRepository,
+    @inject(UserRepository) userRepo?: UserRepository,
+    @inject(AuditLogRepository) auditLogRepo?: AuditLogRepository,
+    @inject(StoreAreaRepository) storeAreaRepo?: StoreAreaRepository,
   ) {
     this.organizationId = getOrganizationId(organizationId);
     this.prisma = prismaClient ?? getDefaultDatabaseClient();
     this.inventoryRepo = inventoryRepo ?? new InventoryRepository(this.prisma);
-    void productRepo;
+    this.productRepo = productRepo ?? new ProductRepository(this.prisma);
+    this.subscriptionRepo = subscriptionRepo ?? new SubscriptionRepository(this.prisma);
+    this.userRepo = userRepo ?? new UserRepository(this.prisma);
+    this.auditLogRepo = auditLogRepo ?? new AuditLogRepository(this.prisma);
+    this.storeAreaRepo = storeAreaRepo ?? new StoreAreaRepository(this.prisma);
   }
 
   /**
@@ -112,10 +133,7 @@ export class InventoryService {
       await this.validateProductOwnership(productId, tx);
       await this.validateLocationOwnership(locationId, tx);
 
-      const usage = await tx.organizationUsage.findUnique({
-        where: { organizationId: this.organizationId },
-        select: { totalInventoryItems: true, maxInventoryItems: true },
-      });
+      const usage = await this.subscriptionRepo.findUsageByOrganizationId(this.organizationId, tx);
 
       if (usage?.maxInventoryItems !== null && usage?.maxInventoryItems !== undefined) {
         if (usage.totalInventoryItems >= usage.maxInventoryItems) {
@@ -128,22 +146,24 @@ export class InventoryService {
 
       const calculatedStatus = item.status || (await this.calculateMarkdownStatus(expiryDate));
 
-      const newItem = await tx.inventoryItem.create({
-        data: {
+      const newItem = await this.inventoryRepo.create(
+        {
           organizationId: this.organizationId,
           productId: item.productId,
           expiryDate: new Date(expiryDate),
           locationId: item.locationId,
           status: calculatedStatus,
         },
-      });
+        tx,
+      );
 
-      await tx.organizationUsage.update({
-        where: { organizationId: this.organizationId },
-        data: {
+      await this.subscriptionRepo.updateUsage(
+        this.organizationId,
+        {
           totalInventoryItems: { increment: 1 },
         },
-      });
+        tx,
+      );
 
       const changeDescription = `Inventory item created with expiry date ${expiryDate} and status ${calculatedStatus}.`;
       await this.createAuditLogInTransaction(tx, userId, newItem.id, changeDescription);
@@ -168,9 +188,11 @@ export class InventoryService {
 
     try {
       const result = await this.prisma.$transaction(async (tx) => {
-        const existingItem = await tx.inventoryItem.findFirst({
-          where: { id, organizationId: this.organizationId },
-        });
+        const existingItem = await this.inventoryRepo.findByOrganizationIdAndId(
+          id,
+          this.organizationId,
+          tx,
+        );
         if (!existingItem) {
           return null;
         }
@@ -186,15 +208,17 @@ export class InventoryService {
           ? await this.calculateMarkdownStatus(item.expiryDate)
           : item.status;
 
-        const updatedItem = await tx.inventoryItem.update({
-          where: { id },
-          data: {
+        const updatedItem = await this.inventoryRepo.update(
+          id,
+          this.organizationId,
+          {
             ...(item.productId !== undefined && { productId: item.productId }),
             ...(item.expiryDate !== undefined && { expiryDate: new Date(item.expiryDate) }),
             ...(item.locationId !== undefined && { locationId: item.locationId }),
             ...(statusUpdate !== undefined && { status: statusUpdate }),
           },
-        });
+          tx,
+        );
 
         const changeDescription = this.formatChangeDescription(item);
         await this.createAuditLogInTransaction(tx, userId, id, changeDescription);
@@ -214,9 +238,11 @@ export class InventoryService {
   async deleteInventoryItem(id: number, userId: number): Promise<boolean> {
     try {
       await this.prisma.$transaction(async (tx) => {
-        const existingItem = await tx.inventoryItem.findFirst({
-          where: { id, organizationId: this.organizationId },
-        });
+        const existingItem = await this.inventoryRepo.findByOrganizationIdAndId(
+          id,
+          this.organizationId,
+          tx,
+        );
         if (!existingItem) {
           throw new Error('Inventory item not found');
         }
@@ -228,9 +254,7 @@ export class InventoryService {
           `Inventory item with ID ${id} deleted.`,
         );
 
-        await tx.inventoryItem.delete({
-          where: { id },
-        });
+        await this.inventoryRepo.delete(id, this.organizationId, tx);
 
         await this.decrementInventoryCount(tx);
       });
@@ -255,12 +279,7 @@ export class InventoryService {
       throw new Error('Inventory item not found or does not belong to this organization');
     }
 
-    const user = await this.prisma.user.findFirst({
-      where: {
-        id: user_id,
-        organizationId: this.organizationId,
-      },
-    });
+    const user = await this.userRepo.findById(user_id, this.organizationId);
     if (!user) {
       throw new Error('User not found or does not belong to this organization');
     }
@@ -308,10 +327,7 @@ export class InventoryService {
     }
 
     const status = this.calculateMarkdownStatusInternal(expiryDate);
-    await this.prisma.inventoryItem.update({
-      where: { id: itemId },
-      data: { status },
-    });
+    await this.inventoryRepo.update(itemId, this.organizationId, { status });
   }
 
   async bulkUpdateMarkdownStatuses(
@@ -326,25 +342,21 @@ export class InventoryService {
       const batch = items.slice(i, i + batchSize);
       await this.prisma.$transaction(async (tx) => {
         const itemIds = batch.map((item) => item.id);
-        const existingItems = await tx.inventoryItem.findMany({
-          where: {
-            id: { in: itemIds },
-            organizationId: this.organizationId,
-          },
-          select: { id: true },
-        });
+        const existingItems = await this.inventoryRepo.findManyByIds(
+          itemIds,
+          this.organizationId,
+          tx,
+        );
         const existingItemIds = new Set(existingItems.map((item) => item.id));
 
-        await Promise.all(
-          batch
-            .filter((item) => existingItemIds.has(item.id))
-            .map((item) =>
-              tx.inventoryItem.update({
-                where: { id: item.id },
-                data: { status: this.calculateMarkdownStatusInternal(item.expiryDate) },
-              }),
-            ),
-        );
+        const updates = batch
+          .filter((item) => existingItemIds.has(item.id))
+          .map((item) => ({
+            id: item.id,
+            status: this.calculateMarkdownStatusInternal(item.expiryDate),
+          }));
+
+        await this.inventoryRepo.updateManyByIds(updates, tx);
       });
     }
   }
@@ -353,17 +365,9 @@ export class InventoryService {
    * Calculate markdown price for an inventory item based on its expiry date
    */
   async calculateMarkdownPrice(id: number): Promise<number | null> {
-    const item = await this.prisma.inventoryItem.findUnique({
-      where: {
-        id,
-        organizationId: this.organizationId,
-      },
-      include: {
-        product: true,
-      },
-    });
+    const item = await this.inventoryRepo.findUniqueWithProduct(id, this.organizationId);
 
-    if (!item || !item.product) {
+    if (!item || !item.product || item.product.costPrice === null) {
       return null;
     }
 
@@ -377,12 +381,8 @@ export class InventoryService {
   ): Promise<void> {
     const resource =
       resourceType === 'product'
-        ? await client.product.findFirst({
-            where: { id: resourceId, organizationId: this.organizationId },
-          })
-        : await client.storeArea.findFirst({
-            where: { id: resourceId, organizationId: this.organizationId },
-          });
+        ? await this.productRepo.findById(resourceId, this.organizationId, client)
+        : await this.storeAreaRepo.findById(resourceId, this.organizationId, client);
 
     if (!resource) {
       const resourceTypeName = resourceType === 'storeArea' ? 'Location' : 'Product';
@@ -411,16 +411,19 @@ export class InventoryService {
   }
 
   private async decrementInventoryCount(client: DbClient): Promise<void> {
-    const currentUsage = await client.organizationUsage.findUnique({
-      where: { organizationId: this.organizationId },
-      select: { totalInventoryItems: true },
-    });
+    const currentUsage = await this.subscriptionRepo.findUsageByOrganizationId(
+      this.organizationId,
+      client,
+    );
 
     if (currentUsage && currentUsage.totalInventoryItems > 0) {
-      await client.organizationUsage.update({
-        where: { organizationId: this.organizationId },
-        data: { totalInventoryItems: { decrement: 1 } },
-      });
+      await this.subscriptionRepo.updateUsage(
+        this.organizationId,
+        {
+          totalInventoryItems: { decrement: 1 },
+        },
+        client,
+      );
     }
   }
 
@@ -453,25 +456,21 @@ export class InventoryService {
     inventoryItemId: number,
     changeDescription: string,
   ): Promise<void> {
-    const user = await client.user.findFirst({
-      where: {
-        id: userId,
-        organizationId: this.organizationId,
-      },
-    });
+    const user = await this.userRepo.findById(userId, this.organizationId, client);
     if (!user) {
       throw new Error('User not found or does not belong to this organization');
     }
 
-    await client.auditLog.create({
-      data: {
+    await this.auditLogRepo.create(
+      {
         organizationId: this.organizationId,
         userId,
         inventoryItemId,
         action: 'inventory_changed',
         changeDescription,
       },
-    });
+      client,
+    );
   }
 
   private async createAuditLogInTransaction(

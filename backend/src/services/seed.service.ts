@@ -1,6 +1,9 @@
 import { PrismaClient } from '@prisma/client';
 import { getDefaultDatabaseClient } from '../database/database-factory';
 import { Logger } from '../utils/logger';
+import { StoreAreaRepository } from '../repositories/store-area.repository';
+import { ProductRepository } from '../repositories/product.repository';
+import { InventoryRepository } from '../repositories/inventory.repository';
 
 export interface SeedResult {
   success: boolean;
@@ -11,9 +14,15 @@ export interface SeedResult {
 
 export class SeedService {
   private prisma: PrismaClient;
+  private storeAreaRepo: StoreAreaRepository;
+  private productRepo: ProductRepository;
+  private inventoryRepo: InventoryRepository;
 
   constructor(prismaClient?: PrismaClient) {
     this.prisma = prismaClient ?? getDefaultDatabaseClient();
+    this.storeAreaRepo = new StoreAreaRepository(this.prisma);
+    this.productRepo = new ProductRepository(this.prisma);
+    this.inventoryRepo = new InventoryRepository(this.prisma);
   }
 
   async seedDemoData(organizationId: string): Promise<SeedResult> {
@@ -28,19 +37,19 @@ export class SeedService {
 
         const areaResults = await Promise.all(
           areas.map(async (area) => {
-            const existing = await tx.storeArea.findUnique({
-              where: {
-                organizationId_name_subDepartment: {
-                  organizationId,
-                  name: area.name,
-                  subDepartment: area.subDepartment,
-                },
-              },
-            });
+            const existing = await this.storeAreaRepo.findByNameAndSubDepartmentWithTransaction(
+              area.name,
+              area.subDepartment,
+              organizationId,
+              tx,
+            );
             if (existing) return { record: existing, created: false };
-            const record = await tx.storeArea.create({
-              data: { organizationId, name: area.name, subDepartment: area.subDepartment },
-            });
+            const record = await this.storeAreaRepo.createWithTransaction(
+              organizationId,
+              area.name,
+              area.subDepartment,
+              tx,
+            );
             return { record, created: true };
           }),
         );
@@ -112,23 +121,22 @@ export class SeedService {
         let inventoryItemsCreatedCount = 0;
 
         for (const p of products) {
-          const existingProduct = await tx.product.findUnique({
-            where: { organizationId_sku: { organizationId, sku: p.sku } },
-          });
+          const existingProduct = await this.productRepo.findBySku(p.sku, organizationId, tx);
 
           let product;
           if (existingProduct) {
             product = existingProduct;
           } else {
-            product = await tx.product.create({
-              data: {
+            product = await this.productRepo.create(
+              {
                 organizationId,
                 name: p.name,
                 sku: p.sku,
                 barcode: p.barcode,
                 costPrice: p.costPrice,
               },
-            });
+              tx,
+            );
             productsCreatedCount++;
           }
 
@@ -139,24 +147,26 @@ export class SeedService {
           expiryDate.setMonth(expiryDate.getMonth() + monthsToAdd);
 
           // Check if inventory item already exists for this product in this location
-          const existingItem = await tx.inventoryItem.findFirst({
-            where: {
+          const existingItem = await this.inventoryRepo.findFirst(
+            {
               organizationId,
               productId: product.id,
               locationId: createdAreas[p.areaIndex].id,
             },
-          });
+            tx,
+          );
 
           if (!existingItem) {
-            await tx.inventoryItem.create({
-              data: {
+            await this.inventoryRepo.create(
+              {
                 organizationId,
                 productId: product.id,
                 locationId: createdAreas[p.areaIndex].id,
                 expiryDate,
                 status: 'Normal',
               },
-            });
+              tx,
+            );
             inventoryItemsCreatedCount++;
           }
         }

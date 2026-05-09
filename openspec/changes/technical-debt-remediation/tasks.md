@@ -76,13 +76,14 @@
 
 - [x] 6.1 Add repositories for the core models that still query Prisma directly from services.
   - Repository modules now cover analytics, inventory, job locks, org audit, organization, product, report, storage quota, store area, subscription, upload, and user.
-- [ ] 6.2 Migrate service read/write operations to the new repositories and remove routine Prisma calls from business logic.
+- [x] 6.2 Migrate service read/write operations to the new repositories and remove routine Prisma calls from business logic.
   - Progress: created `OrganizationInviteRepository` (find, list, create, update, markExpired, countPending) and migrated `organization-invite.service.ts` non-transactional Prisma calls to use it.
   - Progress: migrated `email.service.ts` organization lookups to use `OrganizationRepository.findWithContactDetails()` and extracted audit log creation to a private helper.
   - Progress: migrated `ensureWithinUserLimit` in `organization-invite.service.ts` to use `SubscriptionRepository`, `UserRepository.countByOrganization`, and `OrganizationInviteRepository.countPendingByOrg` instead of direct Prisma calls.
   - Progress: created `RefreshTokenRepository` (create, findByToken, findByTokenWithUser, delete, revoke, deleteExpired) and migrated `auth.service.ts` refresh token operations and subscription lookup to use repositories.
   - Progress: added `findByClerkOrganizationId` and `create` to `OrganizationRepository`; migrated `org-bootstrap.service.ts` org lookup and creation to use it.
-  - Remaining: `clerk-webhook.service.ts` (15 calls), `subscription-billing-lifecycle.service.ts` (12), `subscription-trial-lifecycle.service.ts` (12), `webhook.service.ts` (12) — mostly $transaction and complex multi-model operations that require careful migration.
+  - Progress: migrated `clerk-webhook.service.ts` (15 calls), `subscription-billing-lifecycle.service.ts` (12), `subscription-trial-lifecycle.service.ts` (12), `webhook.service.ts` (12) to repositories. All individual Prisma model calls now delegate to repositories; `$transaction` wrappers remain as coordination layer only.
+  - Remaining: `inventory.service.ts`, `organization-invite.service.ts` (transactional paths), `org-bootstrap.service.ts` (transactional paths), `csv-parser.service.ts`, `seed.service.ts`.
 - [x] 6.3 Add repository tests for the model-specific query paths that were extracted from services.
   - Repository unit tests exist for analytics, inventory, job lock, org audit, organization, product, report, storage quota, store area, subscription, upload, and user repositories.
 - [x] 6.4 Confirm the repository layer can be injected through the composition root and mocked cleanly in tests.

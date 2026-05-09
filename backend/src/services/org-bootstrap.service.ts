@@ -4,6 +4,7 @@ import { ROLES, normalizeRole, RoleValue } from '../constants/roles';
 import { OrgAuditService } from './org-audit.service';
 import { AUDIT_EVENT_TYPES } from '../constants/roles';
 import { OrganizationRepository } from '../repositories/organization.repository';
+import { UserRepository } from '../repositories/user.repository';
 
 export interface BootstrapParams {
   clerkUserId: string;
@@ -43,11 +44,13 @@ export class OrgBootstrapService {
   private prisma: PrismaClient;
   private auditService: OrgAuditService;
   private orgRepo: OrganizationRepository;
+  private userRepo: UserRepository;
 
-  constructor(prismaClient?: PrismaClient) {
+  constructor(prismaClient?: PrismaClient, userRepo?: UserRepository) {
     this.prisma = prismaClient ?? getDefaultDatabaseClient();
     this.auditService = new OrgAuditService(this.prisma);
     this.orgRepo = new OrganizationRepository(this.prisma);
+    this.userRepo = userRepo ?? new UserRepository(this.prisma);
   }
 
   async bootstrap(params: BootstrapParams): Promise<BootstrapResult> {
@@ -65,31 +68,21 @@ export class OrgBootstrapService {
     }
 
     // Step 2: Check if this user already exists (idempotent)
-    const existingUser = await this.prisma.user.findUnique({
-      where: { clerkUserId: params.clerkUserId },
-    });
+    const existingUser = await this.userRepo.findUniqueByClerkUserId(params.clerkUserId);
 
     if (existingUser) {
-      // User already bootstrapped — return existing state
       return {
         userId: existingUser.id,
-        organizationId: existingUser.organizationId,
-        role: normalizeRole(existingUser.role),
-        isNewOrg: false,
+        organizationId: org.id,
+        role: existingUser.role as RoleValue,
+        isNewOrg,
         isNewUser: false,
         isFirstAdmin: false,
       };
     }
 
     // Step 3: Check if an active admin exists for this org
-    const activeAdmin = await this.prisma.user.findFirst({
-      where: {
-        organizationId: org.id,
-        role: ROLES.ADMIN,
-        deletedAt: null,
-      },
-      select: { id: true },
-    });
+    const activeAdmin = await this.userRepo.findAdminByOrganizationId(org.id);
 
     // Step 4: Determine role
     let assignedRole: RoleValue;
@@ -107,15 +100,16 @@ export class OrgBootstrapService {
     // Step 5: Create user record within transaction
     const result = await this.prisma.$transaction(
       async (tx) => {
-        const newUser = await tx.user.create({
-          data: {
+        const newUser = await this.userRepo.createClerkUser(
+          {
             organizationId: org.id,
             clerkUserId: params.clerkUserId,
             email: params.email.trim().toLowerCase(),
             username: params.username ?? null,
             role: assignedRole,
           },
-        });
+          tx,
+        );
 
         return {
           userId: newUser.id,

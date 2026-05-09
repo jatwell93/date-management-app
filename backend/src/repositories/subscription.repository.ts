@@ -61,7 +61,10 @@ export class SubscriptionRepository {
     return this.findByOrganizationId(organizationId, tx);
   }
 
-  async create(data: Prisma.SubscriptionTierCreateInput, tx?: DbClient): Promise<SubscriptionTier> {
+  async create(
+    data: Prisma.SubscriptionTierUncheckedCreateInput,
+    tx?: DbClient,
+  ): Promise<SubscriptionTier> {
     return this.getClient(tx).subscriptionTier.create({
       data,
     });
@@ -74,6 +77,17 @@ export class SubscriptionRepository {
   ): Promise<SubscriptionTier> {
     return this.getClient(tx).subscriptionTier.update({
       where: { id },
+      data,
+    });
+  }
+
+  async updateManyByOrganizationId(
+    organizationId: string,
+    data: Prisma.SubscriptionTierUpdateInput,
+    tx?: DbClient,
+  ): Promise<{ count: number }> {
+    return this.getClient(tx).subscriptionTier.updateMany({
+      where: { organizationId },
       data,
     });
   }
@@ -132,6 +146,83 @@ export class SubscriptionRepository {
     });
   }
 
+  async findPastDueExpired(
+    cutoffDate: Date,
+    tx?: DbClient,
+  ): Promise<Array<{ id: number; organizationId: string; pastDueSince: Date | null }>> {
+    return this.getClient(tx).subscriptionTier.findMany({
+      where: {
+        status: 'past_due',
+        pastDueSince: { lte: cutoffDate },
+      },
+      select: {
+        id: true,
+        organizationId: true,
+        pastDueSince: true,
+      },
+    });
+  }
+
+  async findTrialingExpiringBefore(
+    beforeDate: Date,
+    afterDate: Date,
+    tx?: DbClient,
+  ): Promise<
+    Array<{
+      id: number;
+      organizationId: string;
+      trialEndDate: Date | null;
+      organization: { id: string; name: string; contactEmail: string | null };
+    }>
+  > {
+    return this.getClient(tx).subscriptionTier.findMany({
+      where: {
+        status: 'trialing',
+        trialEndDate: {
+          gte: afterDate,
+          lte: beforeDate,
+        },
+      },
+      include: {
+        organization: {
+          select: {
+            id: true,
+            name: true,
+            contactEmail: true,
+          },
+        },
+      },
+    });
+  }
+
+  async findTrialingByOrganizationId(
+    organizationId: string,
+    tx?: DbClient,
+  ): Promise<SubscriptionTier | null> {
+    return this.getClient(tx).subscriptionTier.findFirst({
+      where: {
+        organizationId,
+        status: 'trialing',
+      },
+    });
+  }
+
+  async findExpiredTrials(
+    beforeDate: Date,
+    tx?: DbClient,
+  ): Promise<Array<{ id: number; organizationId: string }>> {
+    return this.getClient(tx).subscriptionTier.findMany({
+      where: {
+        status: 'trialing',
+        trialEndDate: { lt: beforeDate },
+      },
+      select: {
+        id: true,
+        organizationId: true,
+      },
+    });
+  }
+
   async getOrCreateUsage(organizationId: string, tx?: DbClient): Promise<OrganizationUsage> {
     return this.getClient(tx).organizationUsage.upsert({
       where: { organizationId },
@@ -150,7 +241,7 @@ export class SubscriptionRepository {
   }
 
   async createUsage(
-    data: Prisma.OrganizationUsageCreateInput,
+    data: Prisma.OrganizationUsageUncheckedCreateInput,
     tx?: DbClient,
   ): Promise<OrganizationUsage> {
     return this.getClient(tx).organizationUsage.create({
@@ -165,6 +256,31 @@ export class SubscriptionRepository {
   ): Promise<OrganizationUsage> {
     return this.getClient(tx).organizationUsage.update({
       where: { organizationId },
+      data,
+    });
+  }
+
+  async upsertUsage(
+    organizationId: string,
+    update: Prisma.OrganizationUsageUpdateInput,
+    create: Prisma.OrganizationUsageUncheckedCreateInput,
+    tx?: DbClient,
+  ): Promise<OrganizationUsage> {
+    return this.getClient(tx).organizationUsage.upsert({
+      where: { organizationId },
+      update,
+      create,
+    });
+  }
+
+  async updateManyByOrganizationIdAndStripeSubscriptionId(
+    organizationId: string,
+    stripeSubscriptionId: string,
+    data: Prisma.SubscriptionTierUpdateInput,
+    tx?: DbClient,
+  ): Promise<{ count: number }> {
+    return this.getClient(tx).subscriptionTier.updateMany({
+      where: { organizationId, stripeSubscriptionId },
       data,
     });
   }

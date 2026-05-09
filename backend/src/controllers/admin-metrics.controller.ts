@@ -177,11 +177,7 @@ export class AdminMetricsController {
     }
   }
 
-  async getRevenueProjections(
-    req: AuthRequest,
-    res: Response,
-    next: NextFunction,
-  ): Promise<void> {
+  async getRevenueProjections(req: AuthRequest, res: Response, next: NextFunction): Promise<void> {
     try {
       // Get last 90 days of metrics snapshots
       const ninetyDaysAgo = new Date();

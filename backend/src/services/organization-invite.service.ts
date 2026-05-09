@@ -40,7 +40,11 @@ export class OrganizationInviteService {
   private subscriptionRepo: SubscriptionRepository;
   private userRepo: UserRepository;
 
-  constructor(prismaClient?: PrismaClient, nowProvider?: () => Date, inviteRepo?: OrganizationInviteRepository) {
+  constructor(
+    prismaClient?: PrismaClient,
+    nowProvider?: () => Date,
+    inviteRepo?: OrganizationInviteRepository,
+  ) {
     this.prisma = prismaClient ?? getDefaultDatabaseClient();
     this.nowProvider = nowProvider ?? (() => new Date());
     this.auditService = new OrgAuditService(this.prisma);
@@ -225,39 +229,39 @@ export class OrganizationInviteService {
     await this.ensureWithinUserLimit(invite.organizationId);
 
     const result = await this.prisma.$transaction(async (tx) => {
-      const existingUser = await tx.user.findFirst({
-        where: {
-          organizationId: invite.organizationId,
-          email: normalizedEmail,
-        },
-        select: { id: true },
-      });
+      const existingUser = await this.userRepo.findByEmailAndOrganizationId(
+        normalizedEmail,
+        invite.organizationId,
+        tx,
+      );
 
       if (existingUser) {
         throw new ConflictError('User already exists for this organization');
       }
 
       // Use canonical role directly (no legacy mapping needed)
-      const createdUser = await tx.user.create({
-        data: {
+      const createdUser = await this.userRepo.createClerkUser(
+        {
           organizationId: invite.organizationId,
           clerkUserId: params.clerkUserId,
           email: normalizedEmail,
           username: params.username ?? null,
           role: invite.role,
         },
-      });
+        tx,
+      );
 
       // Mark invite as accepted and clear token hash (one-time use)
       const now = this.nowProvider();
-      const updatedInvite = await tx.organizationInvite.update({
-        where: { id: invite.id },
-        data: {
+      const updatedInvite = await this.inviteRepo.update(
+        invite.id,
+        {
           status: 'ACCEPTED',
           acceptedAt: now,
           inviteTokenHash: null,
         },
-      });
+        tx,
+      );
 
       return { invite: updatedInvite, user: createdUser };
     });

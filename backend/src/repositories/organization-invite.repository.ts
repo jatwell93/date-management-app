@@ -27,17 +27,13 @@ export interface InviteUpdateData {
 
 @injectable()
 export class OrganizationInviteRepository {
-  constructor(@inject(PrismaClient) private prisma: PrismaClient) { }
+  constructor(@inject(PrismaClient) private prisma: PrismaClient) {}
 
   private getClient(client?: DbClient): DbClient {
     return client ?? this.prisma;
   }
 
-  async findPendingByOrgAndEmail(
-    organizationId: string,
-    email: string,
-    client?: DbClient,
-  ) {
+  async findPendingByOrgAndEmail(organizationId: string, email: string, client?: DbClient) {
     return this.getClient(client).organizationInvite.findFirst({
       where: {
         organizationId,
