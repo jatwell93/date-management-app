@@ -1,4 +1,5 @@
 import cron from 'node-cron';
+import { Logger } from '../utils/logger';
 import { InventoryService } from './inventory.service';
 import { getDb } from '../database';
 import { DatabaseBackupService } from './database.backup.service';
@@ -38,21 +39,21 @@ export class SchedulerService {
   // Initialize scheduled tasks
   static initialize() {
     if (process.env.DISABLE_SCHEDULER_JOBS === 'true') {
-      console.log('Scheduler jobs are disabled by DISABLE_SCHEDULER_JOBS');
+      Logger.info('Scheduler jobs are disabled by DISABLE_SCHEDULER_JOBS');
       return;
     }
 
     // Schedule the markdown update to run daily at 2:00 AM
     // This is a good time when system load is typically low
     cron.schedule('0 2 * * *', () => {
-      console.log('Running scheduled markdown updates...');
+      Logger.info('Running scheduled markdown updates...');
       this.updateAllInventoryMarkdownStatuses();
     });
 
     // Schedule database backups to run daily at 1:00 AM
     // This is a good time when system load is typically low
     cron.schedule('0 1 * * *', () => {
-      console.log('Running scheduled database backup...');
+      Logger.info('Running scheduled database backup...');
       this.createDatabaseBackup();
     });
 
@@ -77,7 +78,7 @@ export class SchedulerService {
         id: string;
       }>;
 
-      console.log(`Processing markdown updates for ${organizations.length} organizations...`);
+      Logger.info(`Processing markdown updates for ${organizations.length} organizations...`);
 
       const orgResults: Array<{ orgId: string; total: number; failed: number; errors: string[] }> =
         [];
@@ -97,7 +98,7 @@ export class SchedulerService {
             expiryDate: item.expiry_date,
           }));
 
-          console.log(
+          Logger.debug(
             `Processing ${inventoryItems.length} inventory items for organization ${org.id}...`,
           );
 
@@ -108,15 +109,15 @@ export class SchedulerService {
             await inventoryService.bulkUpdateMarkdownStatuses(inventoryItems);
           } catch (error) {
             // If bulk update fails, fall back to individual updates with retry
-            console.warn(
+            Logger.warn(
               `Bulk update failed for organization ${org.id}, falling back to individual updates:`,
-              error,
+              { error: error instanceof Error ? error.message : String(error) },
             );
 
             for (const item of inventoryItems) {
               const itemError = await this.retryMarkdownUpdateForItem(inventoryService, item);
               if (itemError) {
-                console.error(itemError);
+                Logger.error(itemError);
                 orgResult.errors.push(itemError);
                 orgResult.failed++;
               }
@@ -125,16 +126,15 @@ export class SchedulerService {
 
           // Log organization summary
           if (orgResult.failed > 0) {
-            console.warn(
+            Logger.warn(
               `Organization ${org.id} completed with ${orgResult.failed}/${orgResult.total} failures`,
+              { errors: orgResult.errors.slice(0, 3) },
             );
-            // Log first few errors for debugging
-            orgResult.errors.slice(0, 3).forEach((error) => console.warn(`  - ${error}`));
           }
         } catch (error) {
           const errorMessage = error instanceof Error ? error.message : String(error);
           const orgError = `Critical error processing organization ${org.id}: ${errorMessage}`;
-          console.error(orgError);
+          Logger.error(orgError);
           orgResult.errors.push(orgError);
           orgResult.failed = orgResult.total; // Mark all as failed
         }
@@ -148,28 +148,33 @@ export class SchedulerService {
       const successRate =
         totalItems > 0 ? (((totalItems - totalFailed) / totalItems) * 100).toFixed(1) : '100';
 
-      console.log(`\nMarkdown update summary:`);
-      console.log(`- Total organizations: ${organizations.length}`);
-      console.log(`- Total items processed: ${totalItems}`);
-      console.log(`- Total failures: ${totalFailed}`);
-      console.log(`- Success rate: ${successRate}%`);
+      Logger.info('Markdown update summary', {
+        organizations: organizations.length,
+        totalItems,
+        totalFailed,
+        successRate: `${successRate}%`,
+      });
 
       if (totalFailed > 0) {
-        console.warn(`\n${totalFailed} items failed to update. Check logs for details.`);
+        Logger.warn(`${totalFailed} items failed to update. Check logs for details.`, {
+          totalFailed,
+        });
 
         // Optionally send alert for high failure rates
         const failureRate = totalFailed / totalItems;
         if (failureRate > 0.1) {
           // More than 10% failure rate
-          console.error(
+          Logger.error(
             `High failure rate detected (${(failureRate * 100).toFixed(1)}%). Consider manual intervention.`,
           );
         }
       }
 
-      console.log('Completed scheduled markdown updates for all organizations.');
+      Logger.info('Completed scheduled markdown updates for all organizations.');
     } catch (error) {
-      console.error('Error in scheduled markdown update process:', error);
+      Logger.error('Error in scheduled markdown update process', {
+        error: error instanceof Error ? error.message : String(error),
+      });
     }
   }
 
@@ -177,9 +182,11 @@ export class SchedulerService {
   static async createDatabaseBackup() {
     try {
       const backupPath = await this.databaseBackupService.createBackup();
-      console.log(`Database backup completed: ${backupPath}`);
+      Logger.info(`Database backup completed: ${backupPath}`);
     } catch (error) {
-      console.error('Error in scheduled database backup process:', error);
+      Logger.error('Error in scheduled database backup process', {
+        error: error instanceof Error ? error.message : String(error),
+      });
     }
   }
 }

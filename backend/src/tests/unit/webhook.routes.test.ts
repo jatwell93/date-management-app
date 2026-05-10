@@ -2,33 +2,26 @@ import express from 'express';
 import request from 'supertest';
 import webhookRouter from '../../routes/webhook.routes';
 import { ConflictError, NotFoundError } from '../../errors';
+import { WebhookController } from '../../controllers/webhook.controller';
 
 const mockRecordWebhookEvent = jest.fn();
 
-jest.mock('../../services/webhook.service', () => ({
-  webhookService: {
-    verifySignature: jest.fn(),
-    isNewEvent: jest.fn(),
-    handleEvent: jest.fn(),
-    markEventProcessed: jest.fn(),
-    sendSuccess: jest.fn((res: any) => res.status(200).json({ received: true })),
-    sendError: jest.fn((res: any, message: string, statusCode = 400) =>
-      res.status(statusCode).json({ error: message }),
-    ),
-  },
-}));
+const webhookService = {
+  verifySignature: jest.fn(),
+  isNewEvent: jest.fn(),
+  handleEvent: jest.fn(),
+  markEventProcessed: jest.fn(),
+};
 
-jest.mock('../../services/clerk-webhook.service', () => ({
-  clerkWebhookService: {
-    verifySignature: jest.fn(),
-    isNewEvent: jest.fn(),
-    handleEvent: jest.fn(),
-    markEventProcessed: jest.fn(),
-    sendSuccess: jest.fn((res: any) => res.status(200).json({ received: true })),
-    sendError: jest.fn((res: any, message: string, statusCode = 400) =>
-      res.status(statusCode).json({ error: message }),
-    ),
-  },
+const clerkWebhookService = {
+  verifySignature: jest.fn(),
+  isNewEvent: jest.fn(),
+  handleEvent: jest.fn(),
+  markEventProcessed: jest.fn(),
+};
+
+jest.mock('../../di/services', () => ({
+  createWebhookController: jest.fn(),
 }));
 
 jest.mock('../../services/application.monitoring.service', () => ({
@@ -39,26 +32,13 @@ jest.mock('../../services/application.monitoring.service', () => ({
   },
 }));
 
-const { webhookService } = jest.requireMock('../../services/webhook.service') as {
-  webhookService: {
-    verifySignature: jest.Mock;
-    isNewEvent: jest.Mock;
-    handleEvent: jest.Mock;
-    markEventProcessed: jest.Mock;
-    sendSuccess: jest.Mock;
-    sendError: jest.Mock;
-  };
-};
+jest.mock('@sentry/node', () => ({
+  captureMessage: jest.fn(),
+  captureException: jest.fn(),
+}));
 
-const { clerkWebhookService } = jest.requireMock('../../services/clerk-webhook.service') as {
-  clerkWebhookService: {
-    verifySignature: jest.Mock;
-    isNewEvent: jest.Mock;
-    handleEvent: jest.Mock;
-    markEventProcessed: jest.Mock;
-    sendSuccess: jest.Mock;
-    sendError: jest.Mock;
-  };
+const { createWebhookController } = jest.requireMock('../../di/services') as {
+  createWebhookController: jest.Mock;
 };
 
 describe('webhook.routes Stripe error handling', () => {
@@ -67,6 +47,10 @@ describe('webhook.routes Stripe error handling', () => {
 
   beforeEach(() => {
     jest.clearAllMocks();
+
+    createWebhookController.mockReturnValue(
+      new WebhookController(webhookService as any, clerkWebhookService as any),
+    );
 
     webhookService.verifySignature.mockReturnValue({
       id: 'evt_test_1',
@@ -157,8 +141,7 @@ describe('webhook.routes Stripe error handling', () => {
 
     expect(response.status).toBe(200);
     expect(response.body).toEqual({ received: true });
-    expect(webhookService.sendSuccess).toHaveBeenCalled();
-    expect(webhookService.sendError).not.toHaveBeenCalled();
+    expect(webhookService.handleEvent).toHaveBeenCalled();
   });
 
   it('returns 500 for transient processing errors so Stripe retries', async () => {
@@ -172,11 +155,6 @@ describe('webhook.routes Stripe error handling', () => {
 
     expect(response.status).toBe(500);
     expect(response.body).toEqual({ error: 'Error processing webhook event' });
-    expect(webhookService.sendError).toHaveBeenCalledWith(
-      expect.anything(),
-      'Error processing webhook event',
-      500,
-    );
     expect(mockRecordWebhookEvent).toHaveBeenCalledWith(
       'customer.subscription.updated',
       expect.any(Number),
@@ -217,6 +195,10 @@ describe('webhook.routes Clerk error handling', () => {
 
   beforeEach(() => {
     jest.clearAllMocks();
+
+    createWebhookController.mockReturnValue(
+      new WebhookController(webhookService as any, clerkWebhookService as any),
+    );
 
     clerkWebhookService.verifySignature.mockReturnValue({
       type: 'user.created',
@@ -325,11 +307,6 @@ describe('webhook.routes Clerk error handling', () => {
 
     expect(response.status).toBe(409);
     expect(response.body).toEqual({ error: 'Email already registered' });
-    expect(clerkWebhookService.sendError).toHaveBeenCalledWith(
-      expect.anything(),
-      'Email already registered',
-      409,
-    );
   });
 
   it('returns 500 for transient Clerk processing errors', async () => {

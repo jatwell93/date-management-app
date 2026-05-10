@@ -26,6 +26,10 @@ import { Logger } from '../utils/logger';
 import { getOrganizationId } from '../utils/auth-bypass';
 import { UploadImportType, UploadImportTypeValue } from '../types/upload.types';
 import { parseExpiryImportDate } from './expiry-import-date-parser';
+import { InventoryRepository } from '../repositories/inventory.repository';
+import { ProductRepository } from '../repositories/product.repository';
+import { SubscriptionRepository } from '../repositories/subscription.repository';
+import { StoreAreaRepository } from '../repositories/store-area.repository';
 
 // ============================================================================
 // Types & Interfaces
@@ -205,6 +209,10 @@ export class CSVParserService extends EventEmitter {
   private prisma: PrismaClient;
   private options: Required<CSVParserOptions>;
   private organizationId: string;
+  private inventoryRepo: InventoryRepository;
+  private productRepo: ProductRepository;
+  private subscriptionRepo: SubscriptionRepository;
+  private storeAreaRepo: StoreAreaRepository;
 
   /**
    * Constructor with optional dependency injection
@@ -222,6 +230,10 @@ export class CSVParserService extends EventEmitter {
       maxFileSize: options.maxFileSize ?? 10 * 1024 * 1024, // 10MB
       organizationId: this.organizationId,
     };
+    this.inventoryRepo = new InventoryRepository(this.prisma);
+    this.productRepo = new ProductRepository(this.prisma);
+    this.subscriptionRepo = new SubscriptionRepository(this.prisma);
+    this.storeAreaRepo = new StoreAreaRepository(this.prisma);
   }
 
   /**
@@ -815,8 +827,8 @@ export class CSVParserService extends EventEmitter {
             const product = await this.getOrCreateExpiryProduct(tx, row);
             const [dayStart, dayEnd] = this.getUtcDayRange(row.usedByDate);
 
-            const existingInventory = await tx.inventoryItem.findFirst({
-              where: {
+            const existingInventory = await this.inventoryRepo.findFirst(
+              {
                 organizationId: this.organizationId,
                 productId: product.id,
                 expiryDate: {
@@ -824,8 +836,8 @@ export class CSVParserService extends EventEmitter {
                   lte: dayEnd,
                 },
               },
-              select: { id: true },
-            });
+              tx,
+            );
 
             if (existingInventory) {
               merged++;
@@ -835,29 +847,36 @@ export class CSVParserService extends EventEmitter {
             const departmentName = row.department ?? CSVParserService.UNALLOCATED_DEPARTMENT_NAME;
             let locationId = departmentIdCache.get(departmentName);
             if (locationId === undefined) {
-              locationId = await this.getOrCreateStoreAreaByName(tx, departmentName);
+              const locationResult = await this.storeAreaRepo.getOrCreateByName(
+                departmentName,
+                this.organizationId,
+                tx,
+              );
+              locationId = locationResult.id;
               departmentIdCache.set(departmentName, locationId);
             }
 
-            await tx.inventoryItem.create({
-              data: {
+            await this.inventoryRepo.create(
+              {
                 organizationId: this.organizationId,
                 productId: product.id,
                 expiryDate: dayStart,
                 locationId,
                 status: this.calculateInventoryStatus(dayStart),
               },
-            });
+              tx,
+            );
             imported++;
           }
 
           if (imported > 0) {
-            await tx.organizationUsage.updateMany({
-              where: { organizationId: this.organizationId },
-              data: {
+            await this.subscriptionRepo.updateUsage(
+              this.organizationId,
+              {
                 totalInventoryItems: { increment: imported },
               },
-            });
+              tx,
+            );
           }
         },
         {
@@ -879,36 +898,38 @@ export class CSVParserService extends EventEmitter {
       async (tx) => {
         for (const row of batch as ParsedRow[]) {
           // Check if product exists by SKU or barcode
-          const existing = await tx.product.findFirst({
-            where: {
-              organizationId: this.organizationId,
-              OR: [{ sku: row.sku }, { barcode: row.barcode }],
-            },
-          });
+          const existing = await this.productRepo.findFirstBySkuOrBarcode(
+            row.sku,
+            row.barcode,
+            this.organizationId,
+            tx,
+          );
 
           if (existing) {
             // Update existing product
-            await tx.product.update({
-              where: { id: existing.id },
-              data: {
+            await this.productRepo.update(
+              existing.id,
+              this.organizationId,
+              {
                 name: row.name,
                 costPrice: row.costPrice,
-                // Update barcode if it changed
                 barcode: row.barcode,
               },
-            });
+              tx,
+            );
             updated++;
           } else {
             // Create new product
-            await tx.product.create({
-              data: {
+            await this.productRepo.create(
+              {
                 organizationId: this.organizationId,
                 sku: row.sku,
                 name: row.name,
                 barcode: row.barcode,
                 costPrice: row.costPrice,
               },
-            });
+              tx,
+            );
             imported++;
           }
         }
@@ -957,13 +978,7 @@ export class CSVParserService extends EventEmitter {
     tx: Prisma.TransactionClient,
     row: ExpiryParsedRow,
   ): Promise<{ id: number }> {
-    const existing = await tx.product.findFirst({
-      where: {
-        organizationId: this.organizationId,
-        sku: row.sku,
-      },
-      select: { id: true },
-    });
+    const existing = await this.productRepo.findBySku(row.sku, this.organizationId, tx);
 
     if (existing) {
       return existing;
@@ -972,16 +987,17 @@ export class CSVParserService extends EventEmitter {
     const barcode = await this.createUniqueImportBarcode(tx, row.sku);
     const productName = row.itemDescription?.trim() ? row.itemDescription.trim() : row.sku;
 
-    return tx.product.create({
-      data: {
+    return this.productRepo.create(
+      {
         organizationId: this.organizationId,
         sku: row.sku,
         name: productName,
         barcode,
         costPrice: 0,
+        notes: 'Created during expiry list import',
       },
-      select: { id: true },
-    });
+      tx,
+    );
   }
 
   private async createUniqueImportBarcode(
@@ -994,13 +1010,7 @@ export class CSVParserService extends EventEmitter {
     let suffix = 1;
 
     while (true) {
-      const exists = await tx.product.findFirst({
-        where: {
-          organizationId: this.organizationId,
-          barcode: candidate,
-        },
-        select: { id: true },
-      });
+      const exists = await this.productRepo.findByBarcode(candidate, this.organizationId, tx);
 
       if (!exists) {
         return candidate;

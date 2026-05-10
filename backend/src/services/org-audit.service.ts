@@ -1,6 +1,7 @@
-import { PrismaClient } from '@prisma/client';
+import { PrismaClient, Prisma } from '@prisma/client';
 import { getDefaultDatabaseClient } from '../database/database-factory';
 import { AuditEventType, AUDIT_EVENT_TYPES } from '../constants/roles';
+import { OrgAuditRepository, OrgAuditQueryOptions } from '../repositories/org-audit.repository';
 
 export interface OrgAuditEntry {
   organizationId: string;
@@ -18,78 +19,28 @@ export interface OrgAuditEntry {
 
 export class OrgAuditService {
   private prisma: PrismaClient;
+  private orgAuditRepo: OrgAuditRepository;
 
-  constructor(prismaClient?: PrismaClient) {
+  constructor(prismaClient?: PrismaClient, orgAuditRepo?: OrgAuditRepository) {
     this.prisma = prismaClient ?? getDefaultDatabaseClient();
+    this.orgAuditRepo = orgAuditRepo ?? new OrgAuditRepository(this.prisma);
   }
 
   /**
    * Emit audit event using a specific Prisma client (e.g., from a transaction)
    */
-  async emitWithClient(entry: OrgAuditEntry, client: PrismaClient): Promise<void> {
-    await client.orgAuditLog.create({
-      data: {
-        organizationId: entry.organizationId,
-        eventType: entry.eventType,
-        actorUserId: entry.actorUserId ?? null,
-        actorOrganizationId: entry.actorOrganizationId ?? null,
-        targetUserId: entry.targetUserId ?? null,
-        targetOrganizationId: entry.targetOrganizationId ?? null,
-        oldRole: entry.oldRole ?? null,
-        newRole: entry.newRole ?? null,
-        inviteId: entry.inviteId ?? null,
-        ipAddress: entry.ipAddress ?? null,
-        metadata: entry.metadata ? JSON.stringify(entry.metadata) : null,
-      },
-    });
+  async emitWithClient(
+    entry: OrgAuditEntry,
+    client: PrismaClient | Prisma.TransactionClient,
+  ): Promise<void> {
+    await this.orgAuditRepo.create(entry, client);
   }
 
   async emit(entry: OrgAuditEntry): Promise<void> {
-    await this.prisma.orgAuditLog.create({
-      data: {
-        organizationId: entry.organizationId,
-        eventType: entry.eventType,
-        actorUserId: entry.actorUserId ?? null,
-        actorOrganizationId: entry.actorOrganizationId ?? null,
-        targetUserId: entry.targetUserId ?? null,
-        targetOrganizationId: entry.targetOrganizationId ?? null,
-        oldRole: entry.oldRole ?? null,
-        newRole: entry.newRole ?? null,
-        inviteId: entry.inviteId ?? null,
-        ipAddress: entry.ipAddress ?? null,
-        metadata: entry.metadata ? JSON.stringify(entry.metadata) : null,
-      },
-    });
+    await this.orgAuditRepo.create(entry);
   }
 
-  async getByOrganization(
-    organizationId: string,
-    options?: {
-      eventType?: AuditEventType;
-      from?: Date;
-      to?: Date;
-      limit?: number;
-      offset?: number;
-    },
-  ) {
-    const where: Record<string, unknown> = { organizationId };
-
-    if (options?.eventType) {
-      where.eventType = options.eventType;
-    }
-
-    if (options?.from || options?.to) {
-      where.createdAt = {
-        ...(options.from && { gte: options.from }),
-        ...(options.to && { lte: options.to }),
-      };
-    }
-
-    return this.prisma.orgAuditLog.findMany({
-      where,
-      orderBy: { createdAt: 'desc' },
-      take: options?.limit ?? 50,
-      skip: options?.offset ?? 0,
-    });
+  async getByOrganization(organizationId: string, options?: OrgAuditQueryOptions) {
+    return this.orgAuditRepo.findByOrganization(organizationId, options);
   }
 }

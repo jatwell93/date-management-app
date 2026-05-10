@@ -1,3 +1,6 @@
+// Enable decorators for dependency injection
+import 'reflect-metadata';
+
 try {
   // Optional instrumentation (Sentry/analytics). Safe to skip if missing.
   // eslint-disable-next-line @typescript-eslint/no-var-requires
@@ -34,6 +37,7 @@ import { authenticateToken } from './middleware/auth.middleware';
 import { errorHandler } from './middleware/error.middleware';
 import { corsMiddleware } from './middleware/cors';
 import { globalLimiter } from './middleware/rateLimiter';
+import { initializeDiContainer, registerApplicationServices } from './di';
 import { SchedulerService } from './services/scheduler.service';
 import { DatabaseMonitoringService } from './services/database.monitoring.service';
 import { ApplicationMonitoringService } from './services/application.monitoring.service';
@@ -53,6 +57,10 @@ if (envConfig.ENABLE_CUSTOM_ORG_INVITES) {
 
 const app = express();
 const port = envConfig.PORT;
+
+// Initialize Dependency Injection container and register all services
+initializeDiContainer();
+registerApplicationServices();
 
 // Required when running behind reverse proxies/tunnels (ngrok, nginx, cloud load balancers)
 // so middleware like express-rate-limit can safely use X-Forwarded-For.

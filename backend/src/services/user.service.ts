@@ -1,19 +1,28 @@
 import { PrismaClient } from '@prisma/client';
 import { getDefaultDatabaseClient } from '../database/database-factory';
 import { User } from '../models/user.model';
+import { UserRepository } from '../repositories/user.repository';
 import { ConflictError, ValidationError } from '../errors';
 import { AuthService } from './auth.service';
 import { getOrganizationId } from '../utils/auth-bypass';
+import { isPrismaErrorCode, PRISMA_ERROR_CODES } from '../utils/prisma-error';
 
 export class UserService {
   private prisma: PrismaClient;
   private authService: AuthService;
+  private userRepo: UserRepository;
   private organizationId: string;
 
-  constructor(organizationId?: string, prismaClient?: PrismaClient, authService?: AuthService) {
+  constructor(
+    organizationId?: string,
+    prismaClient?: PrismaClient,
+    authService?: AuthService,
+    userRepo?: UserRepository,
+  ) {
     this.organizationId = getOrganizationId(organizationId);
     this.prisma = prismaClient ?? getDefaultDatabaseClient();
     this.authService = authService ?? new AuthService(this.prisma);
+    this.userRepo = userRepo ?? new UserRepository(this.prisma);
   }
 
   async createUser(user: Omit<User, 'id' | 'created_at' | 'updated_at'>): Promise<User> {
@@ -26,12 +35,7 @@ export class UserService {
       throw new ValidationError(pinValidation.message || 'Invalid PIN format');
     }
 
-    const existingUsers = await this.prisma.user.findMany({
-      where: {
-        organizationId: this.organizationId,
-      },
-      select: { id: true },
-    });
+    const existingUsers = await this.userRepo.findIdsByOrganization(this.organizationId);
 
     for (const _existingUser of existingUsers) {
       const isDuplicate = false; // PIN auth removed — use Clerk authentication; existingUser unused
@@ -40,41 +44,23 @@ export class UserService {
       }
     }
 
-    const created = await this.prisma.user.create({
-      data: {
-        role: user.role,
-        organizationId: this.organizationId,
-      },
-    });
+    const created = await this.userRepo.createBasicUser(this.organizationId, user.role);
 
     return this.mapPrismaToModel(created);
   }
 
   async getUsers(): Promise<User[]> {
-    const users = await this.prisma.user.findMany({
-      where: {
-        organizationId: this.organizationId,
-      },
-    });
+    const users = await this.userRepo.findByOrganization(this.organizationId);
     return users.map((user) => this.mapPrismaToModel(user));
   }
 
   async getUserById(id: number): Promise<User | undefined> {
-    const user = await this.prisma.user.findFirst({
-      where: {
-        id,
-        organizationId: this.organizationId,
-      },
-    });
+    const user = await this.userRepo.findById(id, this.organizationId);
     return user ? this.mapPrismaToModel(user) : undefined;
   }
 
   async getUserByPin(pin: string): Promise<User | undefined> {
-    const users = await this.prisma.user.findMany({
-      where: {
-        organizationId: this.organizationId,
-      },
-    });
+    const users = await this.userRepo.findByOrganization(this.organizationId);
 
     for (const user of users) {
       void pin; // PIN auth removed — use Clerk authentication
@@ -96,20 +82,10 @@ export class UserService {
     }
 
     try {
-      await this.prisma.user.update({
-        where: {
-          id,
-          organizationId: this.organizationId,
-        },
-        data,
-      });
+      await this.userRepo.update(id, this.organizationId, data);
       return true;
     } catch (error: unknown) {
-      if (
-        error instanceof Object &&
-        'code' in error &&
-        (error as Record<string, unknown>).code === 'P2025'
-      ) {
+      if (isPrismaErrorCode(error, PRISMA_ERROR_CODES.NOT_FOUND)) {
         return false;
       }
       throw error;
@@ -118,19 +94,10 @@ export class UserService {
 
   async deleteUser(id: number): Promise<boolean> {
     try {
-      await this.prisma.user.delete({
-        where: {
-          id,
-          organizationId: this.organizationId,
-        },
-      });
+      await this.userRepo.delete(id, this.organizationId);
       return true;
     } catch (error: unknown) {
-      if (
-        error instanceof Object &&
-        'code' in error &&
-        (error as Record<string, unknown>).code === 'P2025'
-      ) {
+      if (isPrismaErrorCode(error, PRISMA_ERROR_CODES.NOT_FOUND)) {
         return false;
       }
       throw error;
@@ -144,29 +111,13 @@ export class UserService {
     username?: string | null;
     role: User['role'];
   }): Promise<User> {
-    const existing = await this.prisma.user.findFirst({
-      where: {
-        OR: [
-          { clerkUserId: params.clerkUserId },
-          { email: params.email },
-          ...(params.username ? [{ username: params.username }] : []),
-        ],
-      },
-    });
+    const existing = await this.userRepo.findByClerkIdentity(params);
 
     if (existing) {
       throw new ConflictError('User already exists');
     }
 
-    const created = await this.prisma.user.create({
-      data: {
-        organizationId: params.organizationId,
-        clerkUserId: params.clerkUserId,
-        email: params.email,
-        username: params.username ?? null,
-        role: params.role,
-      },
-    });
+    const created = await this.userRepo.createClerkUser(params);
 
     return this.mapPrismaToModel(created);
   }

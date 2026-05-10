@@ -6,8 +6,9 @@ import { CSVParserService, RowError } from './csv-parser.service';
 import { envConfig } from '../config/environment';
 import { StorageQuotaService } from './storage-quota.service';
 import { Logger } from '../utils/logger';
-import { getDefaultDatabaseClient } from '../database/database-factory';
-import { UploadImportType, UploadImportTypeValue, UploadStatus } from '../types/upload.types';
+import { UploadImportType, UploadImportTypeValue } from '../types/upload.types';
+import { UploadRepository } from '../repositories/upload.repository';
+import { getDiContainer } from '../di/container';
 
 export interface InitiateUploadResponse {
   strategy: 'direct' | 'presigned';
@@ -48,6 +49,7 @@ export class UploadService {
     private storage: StorageProvider,
     private csvParser: CSVParserService,
     private storageQuotaService: StorageQuotaService,
+    private uploadRepository = getDiContainer().resolve(UploadRepository),
   ) {}
 
   /**
@@ -139,7 +141,9 @@ export class UploadService {
       try {
         metadata = await this.storage.getMetadata(key);
       } catch (error) {
-        console.warn('Failed to read upload metadata:', error);
+        Logger.warn('Failed to read upload metadata', {
+          error: error instanceof Error ? error.message : String(error),
+        });
       }
     }
 
@@ -196,20 +200,15 @@ export class UploadService {
 
       // Best-effort status update: parsing success should not fail if status row is missing.
       try {
-        const prisma = getDefaultDatabaseClient();
-        await prisma.upload.updateMany({
-          where: { fileKey: key },
-          data: {
-            status: UploadStatus.COMPLETED,
-            rowsProcessed: parseResult.imported + parseResult.updated + parseResult.skipped,
-            rowsTotal: parseResult.total,
-            rowsImported: parseResult.imported,
-            rowsUpdated: parseResult.updated,
-            rowsSkipped: parseResult.skipped,
-            rowErrorCount: parseResult.errors.length,
-            columnsUsed: JSON.stringify(parseResult.columnsUsed || []),
-            columnsIgnored: parseResult.columnsIgnored || 0,
-          },
+        await this.uploadRepository.markCompleted(key, {
+          rowsProcessed: parseResult.imported + parseResult.updated + parseResult.skipped,
+          rowsTotal: parseResult.total,
+          rowsImported: parseResult.imported,
+          rowsUpdated: parseResult.updated,
+          rowsSkipped: parseResult.skipped,
+          rowErrorCount: parseResult.errors.length,
+          columnsUsed: JSON.stringify(parseResult.columnsUsed || []),
+          columnsIgnored: parseResult.columnsIgnored || 0,
         });
       } catch (statusUpdateError) {
         Logger.warn('Failed to update upload status after successful parsing', {
@@ -221,11 +220,7 @@ export class UploadService {
         });
         // Set status to FAILED to avoid inconsistent COMPLETED status without metrics
         try {
-          const prisma = getDefaultDatabaseClient();
-          await prisma.upload.updateMany({
-            where: { fileKey: key },
-            data: { status: UploadStatus.FAILED },
-          });
+          await this.uploadRepository.markFailed(key);
         } catch (failedUpdateError) {
           Logger.error('Failed to set upload status to FAILED after status update error', {
             uploadKey: key,
@@ -254,18 +249,7 @@ export class UploadService {
 
       // Update database status to 'failed' so frontend polling can detect the error
       try {
-        const prisma = getDefaultDatabaseClient();
-        await prisma.upload.updateMany({
-          where: { fileKey: key },
-          data: {
-            status: UploadStatus.FAILED,
-            errorMessage: errorMessage,
-            rowsImported: 0,
-            rowsUpdated: 0,
-            rowsSkipped: 0,
-            rowErrorCount: 0,
-          },
-        });
+        await this.uploadRepository.markFailed(key, errorMessage);
       } catch (updateError) {
         Logger.error('Failed to update upload status to failed', {
           uploadKey: key,
@@ -290,7 +274,10 @@ export class UploadService {
       } catch (err) {
         const code = (err as NodeJS.ErrnoException).code;
         if (code !== 'ENOENT' && code !== 'EPERM') {
-          console.error('Failed to cleanup temp file', tempPath, err);
+          Logger.error('Failed to cleanup temp file', {
+            tempPath,
+            error: (err as NodeJS.ErrnoException).message,
+          });
         }
       }
     }
@@ -358,7 +345,9 @@ export class UploadService {
       // Update storage quota (mark as deleted and decrement usage)
       await this.storageQuotaService.markUploadDeleted(this.organizationId, key);
     } catch (error) {
-      console.error(`Failed to delete upload ${key}:`, error);
+      Logger.error(`Failed to delete upload ${key}`, {
+        error: error instanceof Error ? error.message : String(error),
+      });
       throw error;
     }
   }

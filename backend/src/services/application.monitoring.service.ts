@@ -2,6 +2,7 @@ import { Logger } from '../utils/logger';
 import { Request, Response, NextFunction } from 'express';
 import { EventEmitter } from 'events';
 import { SaasMetricsService, SaasMetrics } from './saas-metrics.service';
+import { injectable, singleton, inject } from 'tsyringe';
 
 // Define application alert types
 export enum ApplicationAlertType {
@@ -86,11 +87,14 @@ export interface ApplicationMonitoringConfig {
  * Application Monitoring Service
  * Provides monitoring, metrics collection, and alerting for application performance
  */
+@injectable()
+@singleton()
 export class ApplicationMonitoringService extends EventEmitter {
   private static instance: ApplicationMonitoringService;
   private config: ApplicationMonitoringConfig;
   private isMonitoring: boolean = false;
   private monitoringInterval?: NodeJS.Timeout;
+  private monitoringRunId: number = 0;
   private saasMetricsService: SaasMetricsService;
 
   // Metrics store
@@ -130,7 +134,7 @@ export class ApplicationMonitoringService extends EventEmitter {
   // Store request start times for performance tracking
   private requestStartTimes = new Map<string, number>();
 
-  private constructor() {
+  constructor(@inject(SaasMetricsService) saasMetricsService?: SaasMetricsService) {
     super();
     // Set default configuration
     this.config = {
@@ -156,7 +160,7 @@ export class ApplicationMonitoringService extends EventEmitter {
     };
 
     // Initialize SaaS metrics service
-    this.saasMetricsService = new SaasMetricsService();
+    this.saasMetricsService = saasMetricsService ?? new SaasMetricsService();
 
     // Note: Graceful shutdown handlers moved to application bootstrap (src/index.ts)
     // to ensure proper separation of concerns and prevent monitoring from controlling
@@ -199,20 +203,12 @@ export class ApplicationMonitoringService extends EventEmitter {
     }
 
     this.isMonitoring = true;
+    const runId = ++this.monitoringRunId;
     Logger.info('Application monitoring started');
 
-    // Perform initial metrics collection
-    void this.collectMetrics();
-
     // Set up periodic monitoring
-    this.monitoringInterval = setInterval(async () => {
-      try {
-        await this.collectMetrics();
-      } catch (error) {
-        Logger.error('Error during application monitoring', {
-          error: error instanceof Error ? error.message : 'Unknown error',
-        });
-      }
+    this.monitoringInterval = setInterval(() => {
+      void this.collectMonitoringMetrics(runId);
     }, this.config.checkInterval);
 
     if (typeof this.monitoringInterval.unref === 'function') {
@@ -235,6 +231,8 @@ export class ApplicationMonitoringService extends EventEmitter {
       clearInterval(this.monitoringInterval);
       this.monitoringInterval = undefined;
     }
+
+    this.monitoringRunId++;
 
     // Clean up request start times map
     this.requestStartTimes.clear();
@@ -514,7 +512,30 @@ export class ApplicationMonitoringService extends EventEmitter {
    * Collect metrics from the application
    */
   public async collectMetrics(): Promise<ApplicationMetrics> {
+    return this.collectMetricsInternal();
+  }
+
+  private async collectMonitoringMetrics(runId: number): Promise<void> {
+    try {
+      await this.collectMetricsInternal(runId);
+    } catch (error) {
+      if (this.isActiveMonitoringRun(runId)) {
+        Logger.error('Error during application monitoring', {
+          error: error instanceof Error ? error.message : 'Unknown error',
+        });
+      }
+    }
+  }
+
+  private isActiveMonitoringRun(runId: number): boolean {
+    return this.isMonitoring && runId === this.monitoringRunId;
+  }
+
+  private async collectMetricsInternal(monitoringRunId?: number): Promise<ApplicationMetrics> {
     const startTime = Date.now();
+    const isMonitoringRun = monitoringRunId !== undefined;
+    const isStoppedMonitoringRun = () =>
+      isMonitoringRun && !this.isActiveMonitoringRun(monitoringRunId);
 
     try {
       // Update timestamp
@@ -527,9 +548,15 @@ export class ApplicationMonitoringService extends EventEmitter {
       try {
         this.metrics.saas = await this.saasMetricsService.getSaasMetrics();
       } catch (error) {
-        Logger.error('Failed to collect SaaS metrics', {
-          error: error instanceof Error ? error.message : 'Unknown error',
-        });
+        if (!isStoppedMonitoringRun()) {
+          Logger.error('Failed to collect SaaS metrics', {
+            error: error instanceof Error ? error.message : 'Unknown error',
+          });
+        }
+      }
+
+      if (isStoppedMonitoringRun()) {
+        return this.metrics;
       }
 
       if (this.config.enableLogging) {
@@ -542,10 +569,12 @@ export class ApplicationMonitoringService extends EventEmitter {
       return this.metrics;
     } catch (error) {
       const duration = Date.now() - startTime;
-      Logger.error('Failed to collect application metrics', {
-        duration,
-        error: error instanceof Error ? error.message : 'Unknown error',
-      });
+      if (!isStoppedMonitoringRun()) {
+        Logger.error('Failed to collect application metrics', {
+          duration,
+          error: error instanceof Error ? error.message : 'Unknown error',
+        });
+      }
 
       throw error;
     }

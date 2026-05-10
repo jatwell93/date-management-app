@@ -21,12 +21,37 @@ const mockStorageQuotaService = {
   markUploadDeleted: jest.fn().mockResolvedValue(undefined),
 } as unknown as jest.Mocked<StorageQuotaService>;
 
+const mockUploadRepository = {
+  markCompleted: jest.fn().mockResolvedValue(undefined),
+  markFailed: jest.fn().mockResolvedValue(undefined),
+};
+const mockGetDefaultDatabaseClient = jest.fn();
+
 jest.mock('../../config/environment', () => ({
   envConfig: {
     NODE_ENV: 'development',
     MAX_UPLOAD_SIZE_BYTES: 10 * 1024 * 1024, // 10MB
     DIRECT_UPLOAD_THRESHOLD_BYTES: 2 * 1024 * 1024, // 2MB
   },
+}));
+
+jest.mock('../../database/database-factory', () => ({
+  getDefaultDatabaseClient: () => mockGetDefaultDatabaseClient(),
+}));
+
+jest.mock('../../di/container', () => ({
+  getDiContainer: () => ({
+    resolve: (token: unknown) => {
+      const tokenName =
+        typeof token === 'function' && 'name' in token ? (token as { name: string }).name : token;
+
+      if (tokenName === 'UploadRepository') {
+        return mockUploadRepository;
+      }
+
+      throw new Error(`Unexpected DI token: ${String(tokenName)}`);
+    },
+  }),
 }));
 
 // Mock fs to avoid actual file I/O during tests
@@ -48,6 +73,32 @@ describe('UploadService', () => {
       mockCsvParserService,
       mockStorageQuotaService,
     );
+  });
+
+  it('resolves the default upload repository from DI without using the database factory', async () => {
+    const filename = 'test.csv';
+    const key = `uploads/${organizationId}/${filename}`;
+    const mockBuffer = Buffer.from('header1,header2\nval1,val2');
+    mockStorageProvider.exists.mockResolvedValue(true);
+    mockStorageProvider.download.mockResolvedValue(mockBuffer);
+    (mockCsvParserService.processFile as jest.Mock).mockResolvedValue({
+      imported: 1,
+      updated: 0,
+      skipped: 0,
+      total: 1,
+      errors: [],
+    });
+
+    await uploadService.completeUpload(key, 1);
+
+    expect(mockUploadRepository.markCompleted).toHaveBeenCalledWith(
+      key,
+      expect.objectContaining({
+        rowsProcessed: 1,
+        rowsTotal: 1,
+      }),
+    );
+    expect(mockGetDefaultDatabaseClient).not.toHaveBeenCalled();
   });
 
   describe('initiateUpload', () => {

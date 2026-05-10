@@ -7,7 +7,7 @@ This document describes the database abstraction layer using Prisma ORM for cros
 The database abstraction provides a unified interface for database operations, allowing the application to seamlessly switch between:
 
 - **Development/Test**: SQLite (local file database)
-- **Production**: MySQL with PlanetScale (serverless)
+- **Production**: Neon PostgreSQL (managed PostgreSQL, optionally reached from Workers through Hyperdrive)
 
 ## Architecture
 
@@ -33,22 +33,22 @@ The database abstraction provides a unified interface for database operations, a
           │                               │
           ▼                               ▼
 ┌──────────────────────┐       ┌──────────────────────┐
-│       SQLite         │       │   PlanetScale/MySQL  │
+│       SQLite         │       │   Neon PostgreSQL    │
 │    (Development)     │       │    (Production)      │
 │                      │       │                      │
 │  - Local file        │       │  - Serverless        │
-│  - No setup needed   │       │  - Connection pooling│
+│  - No setup needed   │       │  - SSL required      │
 └──────────────────────┘       └──────────────────────┘
 ```
 
 ## Schema Files
 
-The project maintains two Prisma schema files:
+The active generated client is based on the SQLite development schema in `prisma/schema.prisma`. Production PostgreSQL compatibility is represented by the production schema and Neon migration workflow.
 
-| File                        | Provider | Use Case                    |
-| --------------------------- | -------- | --------------------------- |
-| `schema.prisma`             | SQLite   | Development, testing        |
-| `schema.planetscale.prisma` | MySQL    | Production with PlanetScale |
+| File                       | Provider   | Use Case             |
+| -------------------------- | ---------- | -------------------- |
+| `schema.prisma`            | SQLite     | Development, testing |
+| `production/schema.prisma` | PostgreSQL | Production with Neon |
 
 ### Switching Schemas
 
@@ -61,7 +61,7 @@ npx prisma generate
 **For Production:**
 
 ```bash
-npx prisma generate --schema=./prisma/schema.planetscale.prisma
+npx prisma generate --schema=./prisma/production/schema.prisma
 ```
 
 ## Usage
@@ -209,7 +209,9 @@ DATABASE_URL=file:./database.sqlite
 ```bash
 # .env
 NODE_ENV=production
-DATABASE_URL=mysql://user:password@host/database?sslaccept=strict
+DATABASE_PROVIDER=postgresql
+DATABASE_URL=postgresql://user:password@host/database?sslmode=require
+NEON_CONNECTION_STRING=postgresql://user:password@host/database?sslmode=require
 ```
 
 ## Migrations
@@ -227,22 +229,22 @@ npx prisma migrate dev
 npx prisma migrate reset
 ```
 
-### Production (PlanetScale)
+### Production (Neon PostgreSQL)
 
-PlanetScale uses a branch-based workflow:
+Use Neon branches or a disposable production-like database for migration verification:
 
 ```bash
-# Create a development branch
-pscale branch create date-management-prod feature-branch
+# Verify the target connection string is available
+npm run verify:neon
 
-# Apply schema changes
-pscale deploy-request create date-management-prod feature-branch
+# Apply the production schema/migration workflow for the selected Neon branch
+npm run migrate:prod
 
-# After approval, deploy to main
-pscale deploy-request deploy date-management-prod <deploy-request-id>
+# Validate production-like test compatibility when credentials are available
+npm run test:prod
 ```
 
-See `docs/database-migrations.md` for detailed workflow.
+See `docs/database-migration-guide.md` and the root `docs/neon-workflow.md` for detailed workflow.
 
 ## Indexes
 
@@ -305,7 +307,7 @@ describe('Integration Tests', () => {
 
 ## Performance Considerations
 
-1. **Connection Pooling**: PlanetScale handles connection pooling automatically
+1. **Connection Management**: Neon is the production database; Workers deployments use the configured connection secret and Hyperdrive binding where enabled
 2. **Query Optimization**: Use `select` to limit returned fields
 3. **Batch Operations**: Use `createMany` for bulk inserts
 4. **Indexes**: Ensure queries use indexed columns in WHERE clauses

@@ -2,8 +2,10 @@ import { PrismaClient } from '@prisma/client';
 import { Logger } from '../utils/logger';
 import { getDefaultDatabaseClient } from '../database/database-factory';
 import { SubscriptionService } from './subscription.service';
+import { AnalyticsRepository } from '../repositories/analytics.repository';
 import * as Sentry from '@sentry/node';
 import { ALERT_THRESHOLDS, TIER_PRICES, validateAlertThresholds } from '../types/subscription';
+import { injectable, singleton, inject } from 'tsyringe';
 
 export interface SaasMetrics {
   trialConversionRate: number;
@@ -42,18 +44,23 @@ export interface SaasAlertThresholds {
  * SaaS Metrics Service
  * Calculates and tracks business metrics for the SaaS monetization model
  */
+@injectable()
+@singleton()
 export class SaasMetricsService {
   private prisma: PrismaClient;
   private subscriptionService: SubscriptionService;
+  private analyticsRepo: AnalyticsRepository;
   private alertThresholds: SaasAlertThresholds;
 
   constructor(
-    prismaClient?: PrismaClient,
+    @inject(PrismaClient) prismaClient?: PrismaClient,
     subscriptionService?: SubscriptionService,
+    @inject(AnalyticsRepository) analyticsRepo?: AnalyticsRepository,
     customThresholds?: Partial<typeof ALERT_THRESHOLDS>,
   ) {
     this.prisma = prismaClient ?? getDefaultDatabaseClient();
     this.subscriptionService = subscriptionService ?? new SubscriptionService(this.prisma);
+    this.analyticsRepo = analyticsRepo ?? new AnalyticsRepository(this.prisma);
 
     // Validate and set alert thresholds
     this.alertThresholds = validateAlertThresholds(customThresholds || {});
@@ -67,18 +74,7 @@ export class SaasMetricsService {
     const thirtyDaysAgo = new Date();
     thirtyDaysAgo.setDate(thirtyDaysAgo.getDate() - 30);
 
-    // Get trials that ended in the last 30 days
-    const endedTrials = await this.prisma.subscriptionTier.findMany({
-      where: {
-        trialEndDate: {
-          lte: new Date(),
-          gte: thirtyDaysAgo,
-        },
-      },
-      include: {
-        organization: true,
-      },
-    });
+    const endedTrials = await this.analyticsRepo.findTrialsEndedBetween(thirtyDaysAgo, new Date());
 
     if (endedTrials.length === 0) return 0;
 
@@ -102,13 +98,7 @@ export class SaasMetricsService {
    * Formula: Total MRR / Active Users
    */
   async calculateAvgRevenuePerUser(): Promise<number> {
-    // Get total monthly recurring revenue
-    const activeSubscriptions = await this.prisma.subscriptionTier.findMany({
-      where: {
-        status: 'active',
-        stripeSubscriptionId: { not: null },
-      },
-    });
+    const activeSubscriptions = await this.analyticsRepo.findActivePaidSubscriptionTierLevels();
 
     const totalMRR = activeSubscriptions.reduce((sum, sub) => {
       // Use standardized tier pricing
@@ -116,12 +106,7 @@ export class SaasMetricsService {
       return sum + (TIER_PRICES[tier] || 0);
     }, 0);
 
-    // Get active users count
-    const activeUsers = await this.prisma.organizationUsage.aggregate({
-      _sum: { activeUsers: true },
-    });
-
-    const totalActiveUsers = activeUsers._sum.activeUsers || 0;
+    const totalActiveUsers = await this.analyticsRepo.sumActiveOrganizationUsers();
 
     if (totalActiveUsers === 0) return 0;
 
@@ -149,32 +134,13 @@ export class SaasMetricsService {
     thirtyDaysAgo.setHours(0, 0, 0, 0);
 
     // Try to get snapshot from 30 days ago for accurate starting point
-    const previousSnapshot = await this.prisma.metricsSnapshot.findUnique({
-      where: { date: thirtyDaysAgo },
-    });
+    const previousSnapshot = await this.analyticsRepo.findMetricsSnapshotByDate(thirtyDaysAgo);
 
-    // Get current active subscriptions
-    const currentActive = await this.prisma.subscriptionTier.count({
-      where: { status: 'active' },
-    });
-
-    // Get new subscriptions (conversions) in the last 30 days
-    const newSubscriptions = await this.prisma.subscriptionTier.count({
-      where: {
-        status: 'active',
-        createdAt: { gte: thirtyDaysAgo },
-      },
-    });
-
-    // Get churned customers in period
-    const churnedCustomers = await this.prisma.subscriptionTier.count({
-      where: {
-        status: 'canceled',
-        updatedAt: {
-          gte: thirtyDaysAgo,
-        },
-      },
-    });
+    const [currentActive, newSubscriptions, churnedCustomers] = await Promise.all([
+      this.analyticsRepo.countActiveSubscriptions(),
+      this.analyticsRepo.countActiveSubscriptionsCreatedSince(thirtyDaysAgo),
+      this.analyticsRepo.countCanceledSubscriptionsUpdatedSince(thirtyDaysAgo),
+    ]);
 
     let customersAtStart: number;
 
@@ -218,13 +184,7 @@ export class SaasMetricsService {
     const today = new Date();
     today.setHours(0, 0, 0, 0);
 
-    const webhookMetrics = await this.prisma.webhookMetrics.findMany({
-      where: {
-        date: {
-          gte: today,
-        },
-      },
-    });
+    const webhookMetrics = await this.analyticsRepo.findWebhookMetricsSince(today);
 
     if (webhookMetrics.length === 0) return 0;
 
@@ -251,12 +211,7 @@ export class SaasMetricsService {
     const startOfDay = new Date();
     startOfDay.setUTCHours(0, 0, 0, 0);
 
-    const result = await this.prisma.webhookMetrics.findMany({
-      where: {
-        date: { gte: startOfDay },
-      },
-      select: { failureCount: true },
-    });
+    const result = await this.analyticsRepo.findWebhookMetricsSince(startOfDay);
 
     return result.reduce((total, row) => total + row.failureCount, 0);
   }
@@ -272,12 +227,8 @@ export class SaasMetricsService {
     const twoHoursAgo = new Date(now.getTime() - 2 * 60 * 60 * 1000);
 
     const [currentHourCount, previousHourCount] = await Promise.all([
-      this.prisma.processedWebhookEvent.count({
-        where: { processedAt: { gte: oneHourAgo } },
-      }),
-      this.prisma.processedWebhookEvent.count({
-        where: { processedAt: { gte: twoHoursAgo, lt: oneHourAgo } },
-      }),
+      this.analyticsRepo.countProcessedWebhookEventsBetween(oneHourAgo, now),
+      this.analyticsRepo.countProcessedWebhookEventsBetween(twoHoursAgo, oneHourAgo),
     ]);
 
     if (previousHourCount === 0) {
@@ -317,10 +268,7 @@ export class SaasMetricsService {
    * Get tier distribution
    */
   async getTierDistribution(): Promise<Record<string, number>> {
-    const distribution = await this.prisma.subscriptionTier.groupBy({
-      by: ['tierLevel'],
-      _count: true,
-    });
+    const distribution = await this.analyticsRepo.groupSubscriptionTiersByTierLevel();
 
     const result: Record<string, number> = {};
     distribution.forEach((d) => {
@@ -352,31 +300,15 @@ export class SaasMetricsService {
     ]);
 
     // Get additional metrics
-    const totalActiveSubscriptions = await this.prisma.subscriptionTier.count({
-      where: { status: 'active' },
-    });
+    const totalActiveSubscriptions = await this.analyticsRepo.countActiveSubscriptions();
 
     const thirtyDaysAgo = new Date();
     thirtyDaysAgo.setDate(thirtyDaysAgo.getDate() - 30);
 
     const [newTrials, conversions, churns] = await Promise.all([
-      this.prisma.subscriptionTier.count({
-        where: {
-          trialEndDate: { gte: thirtyDaysAgo },
-        },
-      }),
-      this.prisma.subscriptionTier.count({
-        where: {
-          stripeSubscriptionId: { not: null },
-          createdAt: { gte: thirtyDaysAgo },
-        },
-      }),
-      this.prisma.subscriptionTier.count({
-        where: {
-          status: 'canceled',
-          updatedAt: { gte: thirtyDaysAgo },
-        },
-      }),
+      this.analyticsRepo.countTrialsEndingSince(thirtyDaysAgo),
+      this.analyticsRepo.countPaidSubscriptionsCreatedSince(thirtyDaysAgo),
+      this.analyticsRepo.countCanceledSubscriptionsUpdatedSince(thirtyDaysAgo),
     ]);
 
     return {
@@ -412,17 +344,7 @@ export class SaasMetricsService {
       tierDistribution: metrics.tierDistribution,
     };
 
-    await this.prisma.metricsSnapshot.upsert({
-      where: { date },
-      update: {
-        ...snapshot,
-        tierDistribution: JSON.stringify(metrics.tierDistribution),
-      },
-      create: {
-        ...snapshot,
-        tierDistribution: JSON.stringify(metrics.tierDistribution),
-      },
-    });
+    await this.analyticsRepo.upsertMetricsSnapshot(snapshot);
 
     Logger.info('Daily metrics snapshot stored', { date: date.toISOString() });
   }
@@ -516,23 +438,6 @@ export class SaasMetricsService {
     const today = new Date();
     today.setHours(0, 0, 0, 0);
 
-    await this.prisma.webhookMetrics.upsert({
-      where: {
-        eventType_date: {
-          eventType,
-          date: today,
-        },
-      },
-      update: {
-        totalCount: { increment: 1 },
-        failureCount: success ? undefined : { increment: 1 },
-      },
-      create: {
-        eventType,
-        date: today,
-        totalCount: 1,
-        failureCount: success ? 0 : 1,
-      },
-    });
+    await this.analyticsRepo.incrementWebhookMetrics(eventType, success, today);
   }
 }

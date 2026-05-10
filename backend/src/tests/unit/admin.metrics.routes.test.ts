@@ -5,14 +5,15 @@ const mockGetSaasMetrics = jest.fn();
 const mockGetApplicationMetrics = jest.fn();
 const mockGroupBy = jest.fn();
 const mockFindMany = jest.fn();
-
-const mockPrisma = {
-  subscriptionTier: {
-    groupBy: (...args: unknown[]) => mockGroupBy(...args),
-  },
-  metricsSnapshot: {
-    findMany: (...args: unknown[]) => mockFindMany(...args),
-  },
+const mockResolve = jest.fn();
+const mockGetDefaultDatabaseClient = jest.fn(() => {
+  throw new Error('admin metrics routes must resolve repositories through DI');
+});
+const mockSubscriptionRepository = {
+  groupSubscriptionCountsByTierAndStatus: (...args: unknown[]) => mockGroupBy(...args),
+};
+const mockAnalyticsRepository = {
+  findMetricsSnapshotsSince: (...args: unknown[]) => mockFindMany(...args),
 };
 
 jest.mock('../../middleware/requireOrgRole', () => ({
@@ -41,7 +42,21 @@ jest.mock('../../services/saas-metrics.service', () => ({
 }));
 
 jest.mock('../../database/database-factory', () => ({
-  getDefaultDatabaseClient: () => mockPrisma,
+  getDefaultDatabaseClient: () => mockGetDefaultDatabaseClient(),
+}));
+
+jest.mock('../../di/container', () => ({
+  getDiContainer: () => ({
+    resolve: (...args: unknown[]) => mockResolve(...args),
+  }),
+}));
+
+jest.mock('../../repositories/subscription.repository', () => ({
+  SubscriptionRepository: class SubscriptionRepository {},
+}));
+
+jest.mock('../../repositories/analytics.repository', () => ({
+  AnalyticsRepository: class AnalyticsRepository {},
 }));
 
 jest.mock('../../utils/logger', () => ({
@@ -117,6 +132,11 @@ describe('admin.metrics.routes', () => {
 
     mockGroupBy.mockResolvedValue([]);
     mockFindMany.mockResolvedValue([]);
+    mockResolve.mockImplementation((token) => {
+      if (token.name === 'SubscriptionRepository') return mockSubscriptionRepository;
+      if (token.name === 'AnalyticsRepository') return mockAnalyticsRepository;
+      throw new Error(`Unexpected token: ${token.name}`);
+    });
   });
 
   it('returns dashboard metrics with normalized revenue values', async () => {

@@ -9,8 +9,14 @@ import {
 } from '../../middleware/feature-gate.middleware';
 import { AuthRequest } from '../../middleware/auth.middleware';
 import { getDefaultDatabaseClient } from '../../database/database-factory';
+import { getDiContainer } from '../../di/container';
+import { OrganizationRepository } from '../../repositories/organization.repository';
+import { SubscriptionRepository } from '../../repositories/subscription.repository';
 
 jest.mock('../../database/database-factory');
+jest.mock('../../di/container', () => ({
+  getDiContainer: jest.fn(),
+}));
 
 // Mock Logger
 jest.mock('../../utils/logger', () => ({
@@ -76,6 +82,23 @@ describe('Feature Gating Middleware', () => {
     } as any;
 
     (getDefaultDatabaseClient as jest.Mock).mockReturnValue(prisma);
+    (getDiContainer as jest.Mock).mockReturnValue({
+      resolve: jest.fn((token) => {
+        if (token === SubscriptionRepository) {
+          return {
+            getOrCreateUsage: prisma.organizationUsage!.upsert,
+            findLatestByOrganizationId: prisma.subscriptionTier!.findFirst,
+            findTierFeatureFlag: prisma.tierFeatureFlag!.findUnique,
+          };
+        }
+        if (token === OrganizationRepository) {
+          return {
+            findCreationLockById: prisma.organization!.findUnique,
+          };
+        }
+        throw new Error(`Unexpected token ${String(token)}`);
+      }),
+    });
   });
 
   afterEach(() => {

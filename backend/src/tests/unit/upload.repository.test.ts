@@ -1,0 +1,97 @@
+import { UploadRepository } from '../../repositories/upload.repository';
+import { UploadStatus } from '../../types/upload.types';
+
+describe('UploadRepository', () => {
+  let prisma: {
+    upload: {
+      findUnique: jest.Mock;
+      updateMany: jest.Mock;
+    };
+  };
+  let repository: UploadRepository;
+
+  beforeEach(() => {
+    prisma = {
+      upload: {
+        findUnique: jest.fn(),
+        updateMany: jest.fn(),
+      },
+    };
+    repository = new UploadRepository(prisma as never);
+  });
+
+  it('finds upload status fields by file key', async () => {
+    const upload = { fileKey: 'uploads/org-1/file.csv', status: UploadStatus.PROCESSING };
+    prisma.upload.findUnique.mockResolvedValue(upload);
+
+    const result = await repository.findStatusByFileKey(upload.fileKey);
+
+    expect(result).toBe(upload);
+    expect(prisma.upload.findUnique).toHaveBeenCalledWith({
+      where: { fileKey: upload.fileKey },
+      select: {
+        status: true,
+        uploadProgress: true,
+        processingMessage: true,
+        errorMessage: true,
+        rowsProcessed: true,
+        rowsTotal: true,
+        rowsImported: true,
+        rowsUpdated: true,
+        rowsSkipped: true,
+        rowErrorCount: true,
+        columnsUsed: true,
+        columnsIgnored: true,
+        organizationId: true,
+      },
+    });
+  });
+
+  it('marks an upload completed with processing metrics', async () => {
+    prisma.upload.updateMany.mockResolvedValue({ count: 1 });
+
+    await repository.markCompleted('uploads/org-1/file.csv', {
+      rowsProcessed: 3,
+      rowsTotal: 4,
+      rowsImported: 1,
+      rowsUpdated: 1,
+      rowsSkipped: 1,
+      rowErrorCount: 1,
+      columnsUsed: '["sku"]',
+      columnsIgnored: 2,
+    });
+
+    expect(prisma.upload.updateMany).toHaveBeenCalledWith({
+      where: { fileKey: 'uploads/org-1/file.csv' },
+      data: {
+        status: UploadStatus.COMPLETED,
+        rowsProcessed: 3,
+        rowsTotal: 4,
+        rowsImported: 1,
+        rowsUpdated: 1,
+        rowsSkipped: 1,
+        rowErrorCount: 1,
+        columnsUsed: '["sku"]',
+        columnsIgnored: 2,
+      },
+    });
+  });
+
+  it('marks an upload failed with optional error details', async () => {
+    prisma.upload.updateMany.mockResolvedValue({ count: 1 });
+
+    await repository.markFailed('uploads/org-1/file.csv', 'parse failed');
+
+    expect(prisma.upload.updateMany).toHaveBeenCalledWith({
+      where: { fileKey: 'uploads/org-1/file.csv' },
+      data: {
+        status: UploadStatus.FAILED,
+        errorMessage: 'parse failed',
+        rowsImported: 0,
+        rowsUpdated: 0,
+        rowsSkipped: 0,
+        rowErrorCount: 0,
+      },
+    });
+  });
+});

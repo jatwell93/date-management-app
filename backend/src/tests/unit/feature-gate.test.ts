@@ -1,9 +1,19 @@
 import { checkUsageLimit } from '../../middleware/feature-gate.middleware';
 import { getDefaultDatabaseClient } from '../../database/database-factory';
+import { getDiContainer } from '../../di/container';
+import { OrganizationRepository } from '../../repositories/organization.repository';
+import { SubscriptionRepository } from '../../repositories/subscription.repository';
 
 jest.mock('../../database/database-factory');
+jest.mock('../../di/container', () => ({
+  getDiContainer: jest.fn(),
+}));
 
 describe('feature-gate middleware', () => {
+  beforeEach(() => {
+    jest.clearAllMocks();
+  });
+
   it('returns 403 with creation_locked message for POST when org isCreationLocked=true', async () => {
     const mockPrisma = {
       organizationUsage: {
@@ -28,6 +38,22 @@ describe('feature-gate middleware', () => {
     } as any;
 
     (getDefaultDatabaseClient as jest.Mock).mockReturnValue(mockPrisma);
+    (getDiContainer as jest.Mock).mockReturnValue({
+      resolve: jest.fn((token) => {
+        if (token === SubscriptionRepository) {
+          return {
+            getOrCreateUsage: mockPrisma.organizationUsage.upsert,
+            findLatestByOrganizationId: mockPrisma.subscriptionTier.findFirst,
+          };
+        }
+        if (token === OrganizationRepository) {
+          return {
+            findCreationLockById: mockPrisma.organization.findUnique,
+          };
+        }
+        throw new Error(`Unexpected token ${String(token)}`);
+      }),
+    });
 
     const req = {
       organizationId: 'org-123',
@@ -55,6 +81,61 @@ describe('feature-gate middleware', () => {
     expect(next).not.toHaveBeenCalled();
   });
 
+  it('checks usage limits through repositories instead of the default database client', async () => {
+    const subscriptionRepository = {
+      getOrCreateUsage: jest.fn().mockResolvedValue({
+        organizationId: 'org-123',
+        activeUsers: 0,
+        maxUsers: 1,
+        totalSkus: 100,
+        maxSkus: 500,
+        totalInventoryItems: 100,
+        storageUsedBytes: 0,
+      }),
+      findLatestByOrganizationId: jest.fn(),
+    };
+    const organizationRepository = {
+      findCreationLockById: jest.fn().mockResolvedValue({ isCreationLocked: false }),
+    };
+
+    (getDiContainer as jest.Mock).mockReturnValue({
+      resolve: jest.fn((token) => {
+        if (token === SubscriptionRepository) return subscriptionRepository;
+        if (token === OrganizationRepository) return organizationRepository;
+        throw new Error(`Unexpected token ${String(token)}`);
+      }),
+    });
+    (getDefaultDatabaseClient as jest.Mock).mockImplementation(() => {
+      throw new Error('default database client should not be used');
+    });
+
+    const req = {
+      organizationId: 'org-123',
+      tierLevel: 'starter',
+      userId: 1,
+      ip: '127.0.0.1',
+      get: jest.fn(),
+      headers: {},
+      path: '/products',
+      method: 'POST',
+    } as any;
+
+    const res = {
+      status: jest.fn().mockReturnThis(),
+      json: jest.fn(),
+      locals: {},
+    } as any;
+
+    const next = jest.fn();
+
+    await checkUsageLimit('max_skus')(req, res, next);
+
+    expect(subscriptionRepository.getOrCreateUsage).toHaveBeenCalledWith('org-123');
+    expect(organizationRepository.findCreationLockById).toHaveBeenCalledWith('org-123');
+    expect(getDefaultDatabaseClient).not.toHaveBeenCalled();
+    expect(next).toHaveBeenCalled();
+  });
+
   it('allows PUT when org isCreationLocked=true so customers can reduce usage', async () => {
     const mockPrisma = {
       organizationUsage: {
@@ -79,6 +160,22 @@ describe('feature-gate middleware', () => {
     } as any;
 
     (getDefaultDatabaseClient as jest.Mock).mockReturnValue(mockPrisma);
+    (getDiContainer as jest.Mock).mockReturnValue({
+      resolve: jest.fn((token) => {
+        if (token === SubscriptionRepository) {
+          return {
+            getOrCreateUsage: mockPrisma.organizationUsage.upsert,
+            findLatestByOrganizationId: mockPrisma.subscriptionTier.findFirst,
+          };
+        }
+        if (token === OrganizationRepository) {
+          return {
+            findCreationLockById: mockPrisma.organization.findUnique,
+          };
+        }
+        throw new Error(`Unexpected token ${String(token)}`);
+      }),
+    });
 
     const req = {
       organizationId: 'org-123',

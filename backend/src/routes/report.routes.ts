@@ -1,30 +1,17 @@
 import { Router, Response, NextFunction } from 'express';
-import validator from 'validator';
-import { ServiceProvider } from '../services/service-provider';
+import { createReportController } from '../controllers/report.controller';
 import { authenticateToken, AuthRequest } from '../middleware/auth.middleware';
 import { requireFeature } from '../middleware/feature-gate.middleware';
 
 const router = Router();
-
-// Helper function to get services with organization context
-function getServicesForRequest(req: AuthRequest) {
-  const serviceProvider = new ServiceProvider({ organizationId: req.organizationId });
-  const reportService = serviceProvider.getReportService();
-  return { reportService };
-}
+const reportController = createReportController();
 
 // GET /reports/expiry - Get monthly expiry report (FR-004)
 router.get(
   '/expiry',
   authenticateToken,
   async (req: AuthRequest, res: Response, next: NextFunction) => {
-    try {
-      const { reportService } = getServicesForRequest(req);
-      const report = await reportService.getMonthlyExpiryReport();
-      res.json(report);
-    } catch (error) {
-      next(error);
-    }
+    await reportController.getMonthlyExpiryReport(req, res, next);
   },
 );
 
@@ -33,13 +20,7 @@ router.get(
   '/expiry-overall',
   authenticateToken,
   async (req: AuthRequest, res: Response, next: NextFunction) => {
-    try {
-      const { reportService } = getServicesForRequest(req);
-      const report = await reportService.getOverallExpiryReport();
-      res.json(report);
-    } catch (error) {
-      next(error);
-    }
+    await reportController.getOverallExpiryReport(req, res, next);
   },
 );
 
@@ -48,13 +29,7 @@ router.get(
   '/expiry-details',
   authenticateToken,
   async (req: AuthRequest, res: Response, next: NextFunction) => {
-    try {
-      const { reportService } = getServicesForRequest(req);
-      const report = await reportService.getDetailedExpiryReport();
-      res.json(report);
-    } catch (error) {
-      next(error);
-    }
+    await reportController.getDetailedExpiryReport(req, res, next);
   },
 );
 
@@ -63,13 +38,7 @@ router.get(
   '/monthly-markdown',
   authenticateToken,
   async (req: AuthRequest, res: Response, next: NextFunction) => {
-    try {
-      const { reportService } = getServicesForRequest(req);
-      const report = await reportService.getMonthlyMarkdownReport();
-      res.json(report);
-    } catch (error) {
-      next(error);
-    }
+    await reportController.getMonthlyMarkdownReport(req, res, next);
   },
 );
 
@@ -78,13 +47,7 @@ router.post(
   '/update-statuses',
   authenticateToken,
   async (req: AuthRequest, res: Response, next: NextFunction) => {
-    try {
-      const { reportService } = getServicesForRequest(req);
-      await reportService.updateAllMarkdownStatuses();
-      res.json({ message: 'All inventory markdown statuses updated successfully.' });
-    } catch (error) {
-      next(error);
-    }
+    await reportController.updateAllMarkdownStatuses(req, res, next);
   },
 );
 
@@ -93,13 +56,7 @@ router.get(
   '/usage',
   authenticateToken,
   async (req: AuthRequest, res: Response, next: NextFunction) => {
-    try {
-      const { reportService } = getServicesForRequest(req);
-      const report = await reportService.getUsageReport();
-      res.json(report);
-    } catch (error) {
-      next(error);
-    }
+    await reportController.getUsageReport(req, res, next);
   },
 );
 
@@ -108,13 +65,7 @@ router.get(
   '/daily-usage',
   authenticateToken,
   async (req: AuthRequest, res: Response, next: NextFunction) => {
-    try {
-      const { reportService } = getServicesForRequest(req);
-      const report = await reportService.getDailyUsageReport();
-      res.json(report);
-    } catch (error) {
-      next(error);
-    }
+    await reportController.getDailyUsageReport(req, res, next);
   },
 );
 
@@ -123,13 +74,7 @@ router.get(
   '/loss-by-sku',
   authenticateToken,
   async (req: AuthRequest, res: Response, next: NextFunction) => {
-    try {
-      const { reportService } = getServicesForRequest(req);
-      const report = await reportService.getLossBySkuReport();
-      res.json(report);
-    } catch (error) {
-      next(error);
-    }
+    await reportController.getLossBySkuReport(req, res, next);
   },
 );
 
@@ -138,13 +83,7 @@ router.get(
   '/loss-by-department',
   authenticateToken,
   async (req: AuthRequest, res: Response, next: NextFunction) => {
-    try {
-      const { reportService } = getServicesForRequest(req);
-      const report = await reportService.getLossByDepartmentReport();
-      res.json(report);
-    } catch (error) {
-      next(error);
-    }
+    await reportController.getLossByDepartmentReport(req, res, next);
   },
 );
 
@@ -153,17 +92,7 @@ router.get(
   '/items-by-user',
   authenticateToken,
   async (req: AuthRequest, res: Response, next: NextFunction) => {
-    try {
-      const timeFrame = req.query.timeFrame as string | undefined;
-      if (timeFrame && !validator.isInt(timeFrame, { min: 1, max: 3650 })) {
-        return res.status(400).json({ message: 'Invalid timeFrame value' });
-      }
-      const { reportService } = getServicesForRequest(req);
-      const report = await reportService.getItemsByUserReport(timeFrame);
-      res.json(report);
-    } catch (error) {
-      next(error);
-    }
+    await reportController.getItemsByUserReport(req, res, next);
   },
 );
 
@@ -172,13 +101,7 @@ router.get(
   '/items-by-date',
   authenticateToken,
   async (req: AuthRequest, res: Response, next: NextFunction) => {
-    try {
-      const { reportService } = getServicesForRequest(req);
-      const report = await reportService.getItemsByDateReport();
-      res.json(report);
-    } catch (error) {
-      next(error);
-    }
+    await reportController.getItemsByDateReport(req, res, next);
   },
 );
 
@@ -188,13 +111,7 @@ router.get(
   authenticateToken,
   requireFeature('advanced_analytics'),
   async (req: AuthRequest, res: Response, next: NextFunction) => {
-    try {
-      const { reportService } = getServicesForRequest(req);
-      const analytics = await reportService.getDashboardAnalytics();
-      res.json(analytics);
-    } catch (error) {
-      next(error);
-    }
+    await reportController.getDashboardAnalytics(req, res, next);
   },
 );
 

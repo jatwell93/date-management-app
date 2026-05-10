@@ -17,6 +17,7 @@ import * as os from 'os';
 
 // Mock PrismaClient
 const mockTransaction = jest.fn();
+const mockProductFindUnique = jest.fn();
 const mockProductFindFirst = jest.fn();
 const mockProductCreate = jest.fn();
 const mockProductUpdate = jest.fn();
@@ -25,10 +26,12 @@ const mockInventoryCreate = jest.fn();
 const mockStoreAreaFindFirst = jest.fn();
 const mockStoreAreaCreate = jest.fn();
 const mockOrganizationUsageUpdateMany = jest.fn();
+const mockOrganizationUsageUpdate = jest.fn();
 
 const mockPrisma = {
   $transaction: mockTransaction,
   product: {
+    findUnique: mockProductFindUnique,
     findFirst: mockProductFindFirst,
     create: mockProductCreate,
     update: mockProductUpdate,
@@ -43,6 +46,7 @@ const mockPrisma = {
   },
   organizationUsage: {
     updateMany: mockOrganizationUsageUpdateMany,
+    update: mockOrganizationUsageUpdate,
   },
 } as unknown as PrismaClient;
 
@@ -70,6 +74,7 @@ describe('CSVParserService', () => {
     mockTransaction.mockImplementation(async (callback) => {
       await callback({
         product: {
+          findUnique: mockProductFindUnique,
           findFirst: mockProductFindFirst,
           create: mockProductCreate,
           update: mockProductUpdate,
@@ -84,9 +89,11 @@ describe('CSVParserService', () => {
         },
         organizationUsage: {
           updateMany: mockOrganizationUsageUpdateMany,
+          update: mockOrganizationUsageUpdate,
         },
       });
     });
+    mockProductFindUnique.mockResolvedValue(null);
     mockProductFindFirst.mockResolvedValue(null); // No existing products by default
     mockProductCreate.mockResolvedValue({ id: 1 });
     mockProductUpdate.mockResolvedValue({ id: 1 });
@@ -95,6 +102,7 @@ describe('CSVParserService', () => {
     mockStoreAreaFindFirst.mockResolvedValue({ id: 10 });
     mockStoreAreaCreate.mockResolvedValue({ id: 10 });
     mockOrganizationUsageUpdateMany.mockResolvedValue({ count: 1 });
+    mockOrganizationUsageUpdate.mockResolvedValue({ organizationId: 'org-123' });
   });
 
   /**
@@ -420,9 +428,10 @@ describe('CSVParserService', () => {
     });
 
     it('should handle updates for existing products', async () => {
-      // Mock findFirst to return existing product for first row
-      mockProductFindFirst.mockResolvedValueOnce({ id: 1, sku: 'SKU001' });
-      mockProductFindFirst.mockResolvedValue(null);
+      mockProductFindUnique
+        .mockResolvedValueOnce({ id: 1, sku: 'SKU001' })
+        .mockResolvedValueOnce(null)
+        .mockResolvedValue(null);
 
       const filePath = createTestCSV(
         'update-test.csv',

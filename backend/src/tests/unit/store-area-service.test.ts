@@ -1,5 +1,6 @@
 import { PrismaClient } from '@prisma/client';
 import { StoreAreaService } from '../../services/store-area.service';
+import { StoreAreaRepository } from '../../repositories/store-area.repository';
 
 describe('StoreAreaService - findUnique fix', () => {
   let prisma: PrismaClient;
@@ -85,5 +86,43 @@ describe('StoreAreaService - findUnique fix', () => {
   it('should return null for non-existent ID', async () => {
     const result = await service.getStoreAreaById(99999);
     expect(result).toBeNull();
+  });
+});
+
+describe('StoreAreaService repository injection', () => {
+  const organizationId = 'org-1';
+  const now = new Date('2026-01-01T00:00:00.000Z');
+
+  it('uses the injected repository for store area reads', async () => {
+    const repository = {
+      findAll: jest.fn().mockResolvedValue([
+        {
+          id: 1,
+          organizationId,
+          name: 'Front Counter',
+          subDepartment: null,
+          lastChecked: now,
+          createdAt: now,
+          updatedAt: now,
+        },
+      ]),
+    } as unknown as StoreAreaRepository;
+
+    const service = new StoreAreaService(organizationId, {} as PrismaClient, repository);
+
+    const results = await service.getAllStoreAreas();
+
+    expect(repository.findAll).toHaveBeenCalledWith(organizationId);
+    expect(results).toEqual([
+      {
+        id: 1,
+        organizationId,
+        name: 'Front Counter',
+        subDepartment: undefined,
+        lastChecked: now.toISOString(),
+        createdAt: now.toISOString(),
+        updatedAt: now.toISOString(),
+      },
+    ]);
   });
 });

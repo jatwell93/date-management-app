@@ -1,53 +1,28 @@
 import { PrismaClient } from '@prisma/client';
+import { Logger } from '../utils/logger';
 import { getDefaultDatabaseClient } from '../database/database-factory';
 import { getOrganizationId } from '../utils/auth-bypass';
 import { Product } from '../models/product.model';
 import { parse } from 'csv-parse';
 import * as XLSX from 'xlsx';
 import fs from 'fs';
-import * as path from 'path';
 import { isPrismaNotFound } from '../utils/prisma-error';
+import {
+  detectProductImportFileType,
+  getProductImportCsvColumnState,
+  getProductImportCsvRowValues,
+  getProductImportCsvUnexpectedColumns,
+  getProductImportXlsxColumnState,
+  getProductImportXlsxRowValues,
+  getProductImportXlsxUnexpectedColumns,
+  findColumnByAlternatives,
+  findColumnIndexByAlternatives,
+} from './product-import.helpers';
 
-// Helper function to detect file type by content
-async function detectFileType(
-  filePath: string,
-  originalFilename?: string,
-): Promise<'csv' | 'xls' | 'xlsx'> {
-  // First check by original filename if provided
-  if (originalFilename) {
-    const ext = path.extname(originalFilename).toLowerCase();
-    if (ext === '.xlsx') return 'xlsx';
-    if (ext === '.xls') return 'xls';
-  }
+import { injectable, inject } from 'tsyringe';
+import { ProductRepository } from '../repositories/product.repository';
+import { SubscriptionRepository } from '../repositories/subscription.repository';
 
-  // If we have the extension in the path, use it
-  const pathExt = path.extname(filePath).toLowerCase();
-  if (pathExt === '.xlsx') return 'xlsx';
-  if (pathExt === '.xls') return 'xls';
-
-  // If no extension in path (e.g., multer temp files without extension),
-  // try to detect by file header
-  try {
-    const fileHandle = await fs.promises.open(filePath, 'r');
-    const buffer = Buffer.alloc(4);
-    await fileHandle.read(buffer, 0, buffer.length, 0);
-    await fileHandle.close();
-
-    const header = buffer.toString('binary');
-    if (header.startsWith('PK')) {
-      // ZIP file header (XLSX files are ZIP archives)
-      return 'xlsx';
-    }
-    // For XLS, we could also check for BIFF header, but it's more complex
-    // For now, default to CSV if extension is unknown
-  } catch (e) {
-    console.error('Error reading file header for type detection:', e);
-  }
-
-  return 'csv'; // Default fallback
-}
-
-// ... rest of the file remains the same
 export function extractCostValue(costStr: string): number | null {
   // Remove common currency symbols and formatting
   let cleanedStr = costStr.trim();
@@ -226,18 +201,30 @@ export function extractCostValueEnhanced(costStr: string): number | null {
   return isNegative ? -value : value;
 }
 
+@injectable()
 export class ProductService {
   private prisma: PrismaClient;
   private organizationId: string;
+  private productRepo: ProductRepository;
+  private subscriptionRepo: SubscriptionRepository;
 
   /**
    * Constructor with optional dependency injection
    * @param prismaClient - Optional PrismaClient for testing/custom configurations
    * @param organizationId - Organization ID for tenant filtering (optional in tests)
+   * @param productRepo - Optional ProductRepository
+   * @param subscriptionRepo - Optional SubscriptionRepository
    */
-  constructor(prismaClient?: PrismaClient, organizationId?: string) {
+  constructor(
+    @inject(PrismaClient) prismaClient?: PrismaClient,
+    @inject('OrganizationId') organizationId?: string,
+    @inject(ProductRepository) productRepo?: ProductRepository,
+    @inject(SubscriptionRepository) subscriptionRepo?: SubscriptionRepository,
+  ) {
     this.prisma = prismaClient ?? getDefaultDatabaseClient();
     this.organizationId = getOrganizationId(organizationId);
+    this.productRepo = productRepo ?? new ProductRepository(this.prisma);
+    this.subscriptionRepo = subscriptionRepo ?? new SubscriptionRepository(this.prisma);
   }
 
   // Expose parser for tests that reference it via ProductService["extractCostValueEnhanced"]
@@ -245,47 +232,22 @@ export class ProductService {
     return extractCostValueEnhanced(costStr);
   }
   async getAllProducts(limit?: number, offset?: number): Promise<Product[]> {
-    const products = await this.prisma.product.findMany({
-      where: {
-        organizationId: this.organizationId,
-      },
-      ...(limit !== undefined && { take: limit }),
-      ...(offset !== undefined && { skip: offset }),
-    });
+    const products = await this.productRepo.findAll(this.organizationId, limit, offset);
     return products.map(this.mapPrismaToModel);
   }
 
   async getProductById(id: number): Promise<Product | null> {
-    const product = await this.prisma.product.findUnique({
-      where: {
-        id,
-        organizationId: this.organizationId,
-      },
-    });
+    const product = await this.productRepo.findById(id, this.organizationId);
     return product ? this.mapPrismaToModel(product) : null;
   }
 
   async getProductByBarcode(barcode: string): Promise<Product | null> {
-    const product = await this.prisma.product.findUnique({
-      where: {
-        organizationId_barcode: {
-          organizationId: this.organizationId,
-          barcode,
-        },
-      },
-    });
+    const product = await this.productRepo.findByBarcode(barcode, this.organizationId);
     return product ? this.mapPrismaToModel(product) : null;
   }
 
   async getProductBySku(sku: string): Promise<Product | null> {
-    const product = await this.prisma.product.findUnique({
-      where: {
-        organizationId_sku: {
-          organizationId: this.organizationId,
-          sku,
-        },
-      },
-    });
+    const product = await this.productRepo.findBySku(sku, this.organizationId);
     return product ? this.mapPrismaToModel(product) : null;
   }
 
@@ -294,9 +256,7 @@ export class ProductService {
   ): Promise<Product> {
     const result = await this.prisma.$transaction(async (tx) => {
       // Atomic check-and-increment to prevent TOCTOU race conditions
-      const usage = await tx.organizationUsage.findUnique({
-        where: { organizationId: this.organizationId },
-      });
+      const usage = await this.subscriptionRepo.findUsageByOrganizationId(this.organizationId, tx);
 
       if (!usage) {
         throw new Error('Organization usage record not found');
@@ -307,23 +267,25 @@ export class ProductService {
         throw new Error(`SKU limit reached for this organization (${usage.maxSkus} max)`);
       }
 
-      const newProduct = await tx.product.create({
-        data: {
+      const newProduct = await this.productRepo.create(
+        {
           barcode: product.barcode,
           sku: product.sku,
           name: product.name,
           costPrice: product.costPrice,
           organizationId: this.organizationId,
         },
-      });
+        tx,
+      );
 
       // Increment organization usage counter atomically
-      await tx.organizationUsage.update({
-        where: { organizationId: this.organizationId },
-        data: {
+      await this.subscriptionRepo.updateUsage(
+        this.organizationId,
+        {
           totalSkus: { increment: 1 },
         },
-      });
+        tx,
+      );
 
       return newProduct;
     });
@@ -340,13 +302,11 @@ export class ProductService {
     }
 
     try {
-      const updatedProduct = await this.prisma.product.update({
-        where: {
-          id,
-          organizationId: this.organizationId,
-        },
-        data: this.buildProductUpdateData(product),
-      });
+      const updatedProduct = await this.productRepo.update(
+        id,
+        this.organizationId,
+        this.buildProductUpdateData(product),
+      );
       return this.mapPrismaToModel(updatedProduct);
     } catch (error: unknown) {
       return this.handlePrismaNotFound(error);
@@ -381,20 +341,16 @@ export class ProductService {
     try {
       await this.prisma.$transaction(async (tx) => {
         // Delete the product
-        await tx.product.delete({
-          where: {
-            id,
-            organizationId: this.organizationId,
-          },
-        });
+        await this.productRepo.delete(id, this.organizationId, tx);
 
         // Decrement organization usage counter
-        await tx.organizationUsage.update({
-          where: { organizationId: this.organizationId },
-          data: {
+        await this.subscriptionRepo.updateUsage(
+          this.organizationId,
+          {
             totalSkus: { decrement: 1 },
           },
-        });
+          tx,
+        );
       });
 
       return true;
@@ -437,7 +393,7 @@ export class ProductService {
     filePath: string,
     originalFilename?: string,
   ): Promise<{ imported: number; updated: number; errors: string[] }> {
-    const fileType = await detectFileType(filePath, originalFilename);
+    const fileType = await detectProductImportFileType(filePath, originalFilename);
 
     if (fileType === 'xlsx' || fileType === 'xls') {
       return this.processXLSXUpload(filePath);
@@ -478,7 +434,9 @@ export class ProductService {
           }),
         )
         .on('error', (error) => {
-          console.error('CSV parsing error:', error);
+          Logger.error('CSV parsing error', {
+            error: error instanceof Error ? error.message : String(error),
+          });
           errors.push(`CSV parsing error: ${error.message}`);
           reject({ imported, updated, errors });
         })
@@ -489,46 +447,13 @@ export class ProductService {
           const rowProcessingPromise = (async () => {
             try {
               // Find the correct column for each field based on alternatives
-              const skuHeader = this.findColumnByAlternatives(row, [
-                'SKU',
-                'Item Code',
-                'Reorder Number',
-                'Product Code',
-                'Item Number',
-              ]);
-              const nameHeader = this.findColumnByAlternatives(row, [
-                'Name',
-                'Item Description',
-                'Product Name',
-                'Description',
-                'Item Name',
-              ]);
-              const costHeader = this.findColumnByAlternatives(row, [
-                'Cost',
-                'Cost Price',
-                'Unit Cost',
-                'Cost ex',
-                'Price',
-                'Unit Price',
-                'Cost inc',
-                'Selling Price',
-                'Retail Price',
-              ]);
-              const barcodeHeader = this.findColumnByAlternatives(row, [
-                'Barcode',
-                'Alias',
-                'EAN',
-                'UPC',
-                'GTIN',
-                'Product Barcode',
-                'Barcode Number',
-              ]);
+              const columnState = getProductImportCsvColumnState(row);
 
               // Validate required fields - check if headers exist before accessing
-              const sku = skuHeader ? row[skuHeader]?.toString()?.trim() : null;
-              const name = nameHeader ? row[nameHeader]?.toString()?.trim() : null;
-              const costStr = costHeader ? row[costHeader]?.toString()?.trim() : null;
-              const barcode = barcodeHeader ? row[barcodeHeader]?.toString()?.trim() : null;
+              const { sku, name, costStr, barcode } = getProductImportCsvRowValues(
+                row,
+                columnState,
+              );
 
               // Check if all required fields are present
               if (!sku) {
@@ -590,25 +515,25 @@ export class ProductService {
               }
 
               // Verify that all required fields were found
-              if (!skuHeader) {
+              if (!columnState.skuHeader) {
                 errors.push(
                   `Row ${recordCount}: Could not find required column - SKU (alternatives: SKU, Item Code, Reorder Number, Product Code, Item Number)`,
                 );
                 return;
               }
-              if (!nameHeader) {
+              if (!columnState.nameHeader) {
                 errors.push(
                   `Row ${recordCount}: Could not find required column - Name (alternatives: Name, Item Description, Product Name, Description, Item Name)`,
                 );
                 return;
               }
-              if (!costHeader) {
+              if (!columnState.costHeader) {
                 errors.push(
                   `Row ${recordCount}: Could not find required column - Cost (alternatives: Cost, Cost Price, Unit Cost, Cost ex, Price, Unit Price, Cost inc, Selling Price, Retail Price)`,
                 );
                 return;
               }
-              if (!barcodeHeader) {
+              if (!columnState.barcodeHeader) {
                 errors.push(
                   `Row ${recordCount}: Could not find required column - Barcode (alternatives: Barcode, Alias, EAN, UPC, GTIN, Product Barcode, Barcode Number)`,
                 );
@@ -616,34 +541,7 @@ export class ProductService {
               }
 
               // Check for unexpected columns (not in our required or alternative columns list)
-              const allowedHeaders = [
-                skuHeader,
-                nameHeader,
-                costHeader,
-                barcodeHeader,
-                ...['SKU', 'Item Code', 'Reorder Number', 'Product Code', 'Item Number'],
-                ...['Name', 'Item Description', 'Product Name', 'Description', 'Item Name'],
-                ...[
-                  'Cost',
-                  'Cost Price',
-                  'Unit Cost',
-                  'Cost ex',
-                  'Price',
-                  'Unit Price',
-                  'Cost inc',
-                  'Selling Price',
-                  'Retail Price',
-                ],
-                ...['Barcode', 'Alias', 'EAN', 'UPC', 'GTIN', 'Product Barcode', 'Barcode Number'],
-              ]
-                .map((header) => header?.toLowerCase())
-                .filter(Boolean);
-
-              const allowedColumns = new Set(allowedHeaders);
-
-              const unexpectedColumns = Object.keys(row).filter(
-                (col) => !allowedColumns.has(col.toLowerCase()),
-              );
+              const unexpectedColumns = getProductImportCsvUnexpectedColumns(row, columnState);
 
               if (unexpectedColumns.length > 0) {
                 errors.push(
@@ -700,7 +598,7 @@ export class ProductService {
               }
             } catch (error: unknown) {
               const errorMessage = error instanceof Error ? error.message : 'Unknown error';
-              console.error(`Error processing row ${recordCount}:`, error);
+              Logger.error(`Error processing row ${recordCount}`, { error: errorMessage });
               errors.push(`Row ${recordCount}: Unexpected error processing data - ${errorMessage}`);
             }
           })();
@@ -718,7 +616,9 @@ export class ProductService {
 
             resolve({ imported, updated, errors });
           } catch (finalError: unknown) {
-            console.error('Error in final processing:', finalError);
+            Logger.error('Error in final processing', {
+              error: finalError instanceof Error ? finalError.message : String(finalError),
+            });
             const finalErrorMessage =
               finalError instanceof Error ? finalError.message : 'Unknown error';
             errors.push(`Final processing error: ${finalErrorMessage}`);
@@ -760,50 +660,24 @@ export class ProductService {
         if (header) headerMap[header.toString().trim()] = index;
       });
 
-      // Find the required column indices based on alternatives
-      const skuColIndex = this.findColumnIndexByAlternatives(
-        headers as (string | null | undefined)[],
-        ['SKU', 'Item Code', 'Reorder Number', 'Product Code', 'Item Number'],
-      );
-      const nameColIndex = this.findColumnIndexByAlternatives(
-        headers as (string | null | undefined)[],
-        ['Name', 'Item Description', 'Product Name', 'Description', 'Item Name'],
-      );
-      const costColIndex = this.findColumnIndexByAlternatives(
-        headers as (string | null | undefined)[],
-        [
-          'Cost',
-          'Cost Price',
-          'Unit Cost',
-          'Cost ex',
-          'Price',
-          'Unit Price',
-          'Cost inc',
-          'Selling Price',
-          'Retail Price',
-        ],
-      );
-      const barcodeColIndex = this.findColumnIndexByAlternatives(
-        headers as (string | null | undefined)[],
-        ['Barcode', 'Alias', 'EAN', 'UPC', 'GTIN', 'Product Barcode', 'Barcode Number'],
-      );
+      const columnState = getProductImportXlsxColumnState(headers as (string | null | undefined)[]);
 
       // Validate required columns exist
-      if (skuColIndex === null) {
+      if (columnState.skuColIndex === null) {
         errors.push(
           'Missing required column for SKU. Acceptable alternatives: SKU, Item Code, Reorder Number, Product Code, Item Number. Column headers are case-insensitive and leading/trailing spaces are ignored.',
         );
         return { imported, updated, errors };
       }
 
-      if (nameColIndex === null) {
+      if (columnState.nameColIndex === null) {
         errors.push(
           'Missing required column for Name. Acceptable alternatives: Name, Item Description, Product Name, Description, Item Name. Column headers are case-insensitive and leading/trailing spaces are ignored.',
         );
         return { imported, updated, errors };
       }
 
-      if (costColIndex === null) {
+      if (columnState.costColIndex === null) {
         errors.push(
           'Missing required column for Cost. Acceptable alternatives: Cost, Cost Price, Unit Cost, Cost ex, Price, Unit Price, Cost inc, Selling Price, Retail Price. Column headers are case-insensitive and leading/trailing spaces are ignored.',
         );
@@ -811,35 +685,7 @@ export class ProductService {
       }
 
       // Check for unexpected columns (not in our required or alternative columns list)
-      const allowedHeaders = [
-        skuColIndex !== null ? headers[skuColIndex] : null,
-        nameColIndex !== null ? headers[nameColIndex] : null,
-        costColIndex !== null ? headers[costColIndex] : null,
-        barcodeColIndex !== null ? headers[barcodeColIndex] : null,
-        ...['SKU', 'Item Code', 'Reorder Number', 'Product Code', 'Item Number'],
-        ...['Name', 'Item Description', 'Product Name', 'Description', 'Item Name'],
-        ...[
-          'Cost',
-          'Cost Price',
-          'Unit Cost',
-          'Cost ex',
-          'Price',
-          'Unit Price',
-          'Cost inc',
-          'Selling Price',
-          'Retail Price',
-        ],
-        ...['Barcode', 'Alias', 'EAN', 'UPC', 'GTIN', 'Product Barcode', 'Barcode Number'],
-      ]
-        .filter((header): header is string => header !== null && header !== undefined)
-        .map((header) => header.toLowerCase());
-
-      const allowedColumns = new Set(allowedHeaders);
-
-      const unexpectedColumns = headers.filter((header, _index) => {
-        if (!header) return false;
-        return !allowedColumns.has(header.toString().toLowerCase());
-      });
+      const unexpectedColumns = getProductImportXlsxUnexpectedColumns(headers, columnState);
 
       if (unexpectedColumns.length > 0) {
         errors.push(`Unexpected columns found - ${unexpectedColumns.join(', ')}`);
@@ -867,24 +713,7 @@ export class ProductService {
 
         try {
           // Get values from the appropriate columns
-          const sku =
-            skuColIndex !== null && skuColIndex < row.length && row[skuColIndex] !== undefined
-              ? row[skuColIndex]?.toString()?.trim()
-              : null;
-          const name =
-            nameColIndex !== null && nameColIndex < row.length && row[nameColIndex] !== undefined
-              ? row[nameColIndex]?.toString()?.trim()
-              : null;
-          const costStr =
-            costColIndex !== null && costColIndex < row.length && row[costColIndex] !== undefined
-              ? row[costColIndex]?.toString()?.trim()
-              : null;
-          const barcode =
-            barcodeColIndex !== null &&
-            barcodeColIndex < row.length &&
-            row[barcodeColIndex] !== undefined
-              ? row[barcodeColIndex]?.toString()?.trim()
-              : null;
+          const { sku, name, costStr, barcode } = getProductImportXlsxRowValues(row, columnState);
 
           // Check if all required fields are present
           if (!sku) {
@@ -1038,9 +867,7 @@ export class ProductService {
       errors.push(`Error processing XLSX file: ${(error as Error).message}`);
     }
 
-    console.log(
-      `XLSX processing complete: ${imported} imported, ${updated} updated, ${errors.length} errors`,
-    );
+    Logger.info('XLSX processing complete', { imported, updated, errors: errors.length });
     return { imported, updated, errors };
   }
 
@@ -1049,17 +876,7 @@ export class ProductService {
     headers: (string | null | undefined)[],
     alternatives: string[],
   ): number | null {
-    for (let i = 0; i < headers.length; i++) {
-      const header = headers[i];
-      if (!header) continue;
-      const cleanHeader = header.toString().trim().toLowerCase();
-      for (const alt of alternatives) {
-        if (cleanHeader === alt.toLowerCase()) {
-          return i;
-        }
-      }
-    }
-    return null;
+    return findColumnIndexByAlternatives(headers, alternatives);
   }
   private async validateCSVStructure(filePath: string): Promise<{
     isValid: boolean;
@@ -1092,62 +909,28 @@ export class ProductService {
         .on('data', (row: Record<string, unknown>, idx: number) => {
           // Check headers on the first row (idx is the row index, starting from 0)
           if (typeof idx === 'number' && idx === 0) {
-            // Find the required columns using alternative names
-            const skuHeader = this.findColumnByAlternatives(row, [
-              'SKU',
-              'Item Code',
-              'Reorder Number',
-              'Product Code',
-              'Item Number',
-            ]);
-            const nameHeader = this.findColumnByAlternatives(row, [
-              'Name',
-              'Item Description',
-              'Product Name',
-              'Description',
-              'Item Name',
-            ]);
-            const costHeader = this.findColumnByAlternatives(row, [
-              'Cost',
-              'Cost Price',
-              'Unit Cost',
-              'Cost ex',
-              'Price',
-              'Unit Price',
-              'Cost inc',
-              'Selling Price',
-              'Retail Price',
-            ]);
-            const barcodeHeader = this.findColumnByAlternatives(row, [
-              'Barcode',
-              'Alias',
-              'EAN',
-              'UPC',
-              'GTIN',
-              'Product Barcode',
-              'Barcode Number',
-            ]);
+            const columnState = getProductImportCsvColumnState(row);
 
             // Check if all required columns are present
-            if (!skuHeader) {
+            if (!columnState.skuHeader) {
               errors.push(
                 `Missing required column header for SKU. Acceptable alternatives: SKU, Item Code, Reorder Number, Product Code, Item Number. Column headers are case-insensitive and leading/trailing spaces are ignored.`,
               );
               isValid = false;
             }
-            if (!nameHeader) {
+            if (!columnState.nameHeader) {
               errors.push(
                 `Missing required column header for Name. Acceptable alternatives: Name, Item Description, Product Name, Description, Item Name. Column headers are case-insensitive and leading/trailing spaces are ignored.`,
               );
               isValid = false;
             }
-            if (!costHeader) {
+            if (!columnState.costHeader) {
               errors.push(
                 `Missing required column header for Cost. Acceptable alternatives: Cost, Cost Price, Unit Cost, Cost ex, Price, Unit Price, Cost inc, Selling Price, Retail Price. Column headers are case-insensitive and leading/trailing spaces are ignored.`,
               );
               isValid = false;
             }
-            if (!barcodeHeader) {
+            if (!columnState.barcodeHeader) {
               errors.push(
                 `Missing required column header for Barcode. Acceptable alternatives: Barcode, Alias, EAN, UPC, GTIN, Product Barcode, Barcode Number. Column headers are case-insensitive and leading/trailing spaces are ignored.`,
               );
@@ -1166,48 +949,37 @@ export class ProductService {
     row: Record<string, unknown>,
     alternatives: string[],
   ): string | null {
-    const headers = Object.keys(row);
-
-    for (const alt of alternatives) {
-      // Case insensitive search
-      const foundHeader = headers.find((header) => header.toLowerCase() === alt.toLowerCase());
-      if (foundHeader) {
-        return foundHeader;
-      }
-    }
-
-    return null;
+    return findColumnByAlternatives(row, alternatives);
   }
 
   private async getProductBySkuOrBarcode(sku: string, barcode: string): Promise<Product | null> {
-    // Check for products by SKU and barcode independently within the organization
-    const bySku = await this.prisma.product.findUnique({
-      where: {
-        organizationId_sku: {
-          organizationId: this.organizationId,
-          sku,
-        },
-      },
-    });
+    const { bySku, byBarcode } = await this.productRepo.findBySkuOrBarcode(
+      sku,
+      barcode,
+      this.organizationId,
+    );
 
-    const byBarcode = await this.prisma.product.findUnique({
-      where: {
-        organizationId_barcode: {
-          organizationId: this.organizationId,
-          barcode,
-        },
-      },
-    });
-
-    // If both match different products, this is an error case
     if (bySku && byBarcode && bySku.id !== byBarcode.id) {
       throw new Error(
         `Duplicate identifiers detected: SKU ${sku} exists in product ${bySku.id} and barcode ${barcode} exists in product ${byBarcode.id}. This will cause data integrity issues.`,
       );
     }
 
-    // Return the product found by either SKU or barcode (or null if neither)
-    const product = bySku || byBarcode;
-    return product ? this.mapPrismaToModel(product) : null;
+    const prismaProduct = bySku ?? byBarcode;
+
+    if (!prismaProduct) {
+      return null;
+    }
+
+    return {
+      id: prismaProduct.id,
+      organizationId: prismaProduct.organizationId,
+      barcode: prismaProduct.barcode,
+      sku: prismaProduct.sku,
+      name: prismaProduct.name,
+      costPrice: prismaProduct.costPrice,
+      createdAt: prismaProduct.createdAt.toISOString(),
+      updatedAt: prismaProduct.updatedAt.toISOString(),
+    };
   }
 }

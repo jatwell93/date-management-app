@@ -137,6 +137,6 @@ head_sampling_rate = 1
 # - R2_ACCESS_KEY_ID (R2 API access key)
 # - R2_SECRET_ACCESS_KEY (R2 API secret key)
 # - R2_BUCKET_NAME (R2 bucket name, e.g., csv-uploads-prod)
-# - SENTRY_DSN (optional, Sentry error monitoring)
+# - WORKERS_SENTRY_DSN (optional, Sentry error monitoring)
 #
 # Example: wrangler secret put NEON_CONNECTION_STRING --env production

@@ -1,353 +1,243 @@
-/**
- * Analytics Repository
- *
- * Data access layer for analytics events and user sessions.
- * Handles all database operations for analytics tracking.
- *
- * Task 8.2: Create analytics repository with dependency injection
- */
+import { Prisma, PrismaClient, MetricsSnapshot, WebhookMetrics } from '@prisma/client';
+import { injectable, inject } from 'tsyringe';
 
-import Database from 'better-sqlite3';
-import {
-  AnalyticsEvent,
-  AnalyticsEventType,
-  UserSession,
-  AnalyticsMetrics,
-} from '../services/analytics.service';
-import { Logger } from '../utils/logger';
+export interface MetricsSnapshotInput {
+  date: Date;
+  trialConversionRate: number;
+  avgRevenuePerUser: number;
+  churnRate: number;
+  totalTrials: number;
+  totalConversions: number;
+  totalChurn: number;
+  totalRevenueCents: number;
+  tierDistribution: Record<string, number>;
+}
 
+export type TrialConversionRecord = Pick<
+  Prisma.SubscriptionTierGetPayload<Record<string, never>>,
+  'status' | 'stripeSubscriptionId'
+>;
+
+export type SubscriptionTierLevelRecord = Pick<
+  Prisma.SubscriptionTierGetPayload<Record<string, never>>,
+  'tierLevel'
+>;
+
+export type SubscriptionTierDistributionRecord = {
+  tierLevel: string;
+  _count: number;
+};
+
+@injectable()
 export class AnalyticsRepository {
-  constructor(private db: InstanceType<typeof Database>) {}
+  constructor(@inject(PrismaClient) private prisma: PrismaClient) {}
 
-  /**
-   * Initialize analytics tables if they don't exist
-   */
-  initializeTables(): void {
-    try {
-      // Create analytics_events table
-      this.db.exec(`
-        CREATE TABLE IF NOT EXISTS analytics_events (
-          id INTEGER PRIMARY KEY AUTOINCREMENT,
-          user_id INTEGER,
-          session_id TEXT,
-          event_type TEXT NOT NULL,
-          event_category TEXT NOT NULL,
-          event_action TEXT NOT NULL,
-          event_label TEXT,
-          event_value INTEGER,
-          user_agent TEXT,
-          ip_address TEXT,
-          timestamp DATETIME DEFAULT CURRENT_TIMESTAMP,
-          metadata TEXT
-        )
-      `);
-
-      // Create user_sessions table
-      this.db.exec(`
-        CREATE TABLE IF NOT EXISTS user_sessions (
-          id INTEGER PRIMARY KEY AUTOINCREMENT,
-          user_id INTEGER NOT NULL,
-          session_id TEXT NOT NULL UNIQUE,
-          start_time DATETIME DEFAULT CURRENT_TIMESTAMP,
-          end_time DATETIME,
-          duration INTEGER,
-          pages_viewed INTEGER DEFAULT 0,
-          actions_taken INTEGER DEFAULT 0,
-          is_pwa BOOLEAN DEFAULT FALSE
-        )
-      `);
-
-      // Create indexes for performance
-      this.db.exec(
-        'CREATE INDEX IF NOT EXISTS idx_analytics_events_timestamp ON analytics_events(timestamp)',
-      );
-      this.db.exec(
-        'CREATE INDEX IF NOT EXISTS idx_analytics_events_user_id ON analytics_events(user_id)',
-      );
-      this.db.exec(
-        'CREATE INDEX IF NOT EXISTS idx_analytics_events_event_type ON analytics_events(event_type)',
-      );
-      this.db.exec(
-        'CREATE INDEX IF NOT EXISTS idx_user_sessions_user_id ON user_sessions(user_id)',
-      );
-      this.db.exec(
-        'CREATE INDEX IF NOT EXISTS idx_user_sessions_session_id ON user_sessions(session_id)',
-      );
-    } catch (error) {
-      Logger.error('Failed to initialize analytics tables', {
-        error: error instanceof Error ? error.message : 'Unknown error',
-      });
-    }
+  async createWebhookMetrics(data: {
+    eventType: string;
+    totalCount: number;
+    failureCount: number;
+    date: Date;
+  }): Promise<WebhookMetrics> {
+    return this.prisma.webhookMetrics.upsert({
+      where: {
+        eventType_date: {
+          eventType: data.eventType,
+          date: data.date,
+        },
+      },
+      update: {
+        totalCount: { increment: data.totalCount },
+        failureCount: { increment: data.failureCount },
+      },
+      create: {
+        eventType: data.eventType,
+        totalCount: data.totalCount,
+        failureCount: data.failureCount,
+        date: data.date,
+      },
+    });
   }
 
-  /**
-   * Store a batch of events to the database
-   */
-  storeEventsBatch(events: AnalyticsEvent[]): void {
-    // Note: better-sqlite3 doesn't support transactions the same way as sqlite3
-    // For now, we'll insert events one by one
-    const stmt = this.db.prepare(`
-      INSERT INTO analytics_events (
-        user_id,
-        session_id,
-        event_type,
-        event_category,
-        event_action,
-        event_label,
-        event_value,
-        user_agent,
-        ip_address,
-        timestamp,
-        metadata
-      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-    `);
-
-    for (const event of events) {
-      stmt.run(
-        event.userId || null,
-        event.sessionId || null,
-        event.eventType,
-        event.eventCategory,
-        event.eventAction,
-        event.eventLabel || null,
-        event.eventValue || null,
-        event.userAgent || null,
-        event.ipAddress || null,
-        event.timestamp.toISOString(),
-        event.metadata ? JSON.stringify(event.metadata) : null,
-      );
-    }
+  async createMetricsSnapshot(data: Prisma.MetricsSnapshotCreateInput): Promise<MetricsSnapshot> {
+    return this.prisma.metricsSnapshot.create({
+      data,
+    });
   }
 
-  /**
-   * Start a new user session
-   */
-  startSession(session: Omit<UserSession, 'id' | 'startTime'>, sessionId: string): string {
-    const stmt = this.db.prepare(`
-      INSERT INTO user_sessions (
-        user_id, 
-        session_id, 
-        start_time, 
-        is_pwa
-      ) VALUES (?, ?, ?, ?)
-    `);
-
-    stmt.run(session.userId, sessionId, new Date().toISOString(), session.isPWA || false);
-
-    return sessionId;
+  async findLatestMetricsSnapshot(): Promise<MetricsSnapshot | null> {
+    return this.prisma.metricsSnapshot.findFirst({
+      orderBy: { date: 'desc' },
+    });
   }
 
-  /**
-   * End a user session
-   */
-  endSession(sessionId: string): void {
-    // Get the session to calculate duration
-    const sessionStmt = this.db.prepare(`
-      SELECT start_time FROM user_sessions 
-      WHERE session_id = ?
-    `);
-    const session = sessionStmt.get(sessionId) as { start_time: string } | undefined;
-
-    if (session) {
-      const startTime = new Date(session.start_time);
-      const duration = Math.floor((Date.now() - startTime.getTime()) / 1000); // in seconds
-
-      const stmt = this.db.prepare(`
-        UPDATE user_sessions 
-        SET end_time = ?, duration = ?
-        WHERE session_id = ?
-      `);
-
-      stmt.run(new Date().toISOString(), duration, sessionId);
-    }
+  async findMetricsSnapshotsSince(startDate: Date): Promise<MetricsSnapshot[]> {
+    return this.prisma.metricsSnapshot.findMany({
+      where: {
+        date: {
+          gte: startDate,
+        },
+      },
+      orderBy: { date: 'asc' },
+    });
   }
 
-  /**
-   * Get analytics metrics
-   */
-  getMetrics(): AnalyticsMetrics {
-    // Calculate daily active users (DAU)
-    const yesterday = new Date();
-    yesterday.setDate(yesterday.getDate() - 1);
-    const dauResult = this.db
-      .prepare(
-        `
-      SELECT COUNT(DISTINCT user_id) as dau
-      FROM analytics_events
-      WHERE timestamp >= ?
-    `,
-      )
-      .get(yesterday.toISOString()) as { dau: number } | undefined;
+  async findMetricsSnapshotByDate(date: Date): Promise<MetricsSnapshot | null> {
+    return this.prisma.metricsSnapshot.findUnique({
+      where: { date },
+    });
+  }
 
-    // Calculate weekly active users (WAU)
-    const weekAgo = new Date();
-    weekAgo.setDate(weekAgo.getDate() - 7);
-    const wauResult = this.db
-      .prepare(
-        `
-      SELECT COUNT(DISTINCT user_id) as wau
-      FROM analytics_events
-      WHERE timestamp >= ?
-    `,
-      )
-      .get(weekAgo.toISOString()) as { wau: number } | undefined;
-
-    // Calculate monthly active users (MAU)
-    const monthAgo = new Date();
-    monthAgo.setMonth(monthAgo.getMonth() - 1);
-    const mauResult = this.db
-      .prepare(
-        `
-      SELECT COUNT(DISTINCT user_id) as mau
-      FROM analytics_events
-      WHERE timestamp >= ?
-    `,
-      )
-      .get(monthAgo.toISOString()) as { mau: number } | undefined;
-
-    // Get total sessions
-    const totalSessionsResult = this.db
-      .prepare(
-        `
-      SELECT COUNT(*) as total
-      FROM user_sessions
-    `,
-      )
-      .get() as { total: number } | undefined;
-
-    // Calculate average session duration
-    const avgDurationResult = this.db
-      .prepare(
-        `
-      SELECT AVG(duration) as avg_duration
-      FROM user_sessions
-      WHERE duration IS NOT NULL
-    `,
-      )
-      .get() as { avg_duration: number } | undefined;
-
-    // Get top events
-    const topEventsResult = this.db
-      .prepare(
-        `
-      SELECT event_type, COUNT(*) as count
-      FROM analytics_events
-      GROUP BY event_type
-      ORDER BY count DESC
-      LIMIT 5
-    `,
-      )
-      .all() as Array<{ event_type: AnalyticsEventType; count: number }>;
-
-    // Calculate user retention (simplified)
-    const retentionResult = this.db
-      .prepare(
-        `
-      SELECT 
-        (COUNT(CASE WHEN days_since_first > 1 THEN 1 END) * 100.0 / COUNT(*)) as retention_rate
-      FROM (
-        SELECT 
-          user_id,
-          julianday(MAX(timestamp)) - julianday(MIN(timestamp)) as days_since_first
-        FROM analytics_events
-        GROUP BY user_id
-      )
-    `,
-      )
-      .get() as { retention_rate: number } | undefined;
-
-    // Calculate PWA installation rate
-    const totalUsers = this.db
-      .prepare(
-        `
-      SELECT COUNT(DISTINCT user_id) as total
-      FROM analytics_events
-    `,
-      )
-      .get() as { total: number } | undefined;
-
-    const pwaUsers = this.db
-      .prepare(
-        `
-      SELECT COUNT(DISTINCT user_id) as pwa_count
-      FROM user_sessions
-      WHERE is_pwa = TRUE
-    `,
-      )
-      .get() as { pwa_count: number } | undefined;
-
-    // Calculate offline usage rate
-    const offlineEvents = this.db
-      .prepare(
-        `
-      SELECT COUNT(*) as offline_count
-      FROM analytics_events
-      WHERE event_type = 'OFFLINE_SYNC'
-    `,
-      )
-      .get() as { offline_count: number } | undefined;
-
-    // Construct metrics object
-    const metrics: AnalyticsMetrics = {
-      dailyActiveUsers: dauResult?.dau || 0,
-      weeklyActiveUsers: wauResult?.wau || 0,
-      monthlyActiveUsers: mauResult?.mau || 0,
-      totalSessions: totalSessionsResult?.total || 0,
-      averageSessionDuration: avgDurationResult?.avg_duration || 0,
-      topEvents: topEventsResult.map((item) => ({
-        eventType: item.event_type,
-        count: item.count,
-      })),
-      userRetention: retentionResult?.retention_rate || 0,
-      pwaInstallationRate: totalUsers?.total
-        ? ((pwaUsers?.pwa_count || 0) * 100) / totalUsers.total
-        : 0,
-      offlineUsageRate: totalUsers?.total
-        ? ((offlineEvents?.offline_count || 0) * 100) / totalUsers.total
-        : 0,
+  async upsertMetricsSnapshot(snapshot: MetricsSnapshotInput): Promise<void> {
+    const data = {
+      ...snapshot,
+      tierDistribution: JSON.stringify(snapshot.tierDistribution),
     };
 
-    return metrics;
-  }
-
-  /**
-   * Clean old analytics data based on retention period
-   */
-  cleanOldData(retentionPeriod: number): void {
-    const retentionDate = new Date();
-    retentionDate.setDate(retentionDate.getDate() - retentionPeriod);
-
-    const stmt = this.db.prepare(`
-      DELETE FROM analytics_events
-      WHERE timestamp < ?
-    `);
-
-    stmt.run(retentionDate.toISOString());
-
-    Logger.info('Old analytics data cleaned', {
-      retentionPeriod,
-      cleanupDate: retentionDate.toISOString(),
+    await this.prisma.metricsSnapshot.upsert({
+      where: { date: snapshot.date },
+      update: data,
+      create: data,
     });
   }
 
-  /**
-   * Export analytics data for analysis
-   */
-  exportData(startDate: Date, endDate: Date): AnalyticsEvent[] {
-    const stmt = this.db.prepare(`
-      SELECT * FROM analytics_events
-      WHERE timestamp >= ? AND timestamp <= ?
-      ORDER BY timestamp DESC
-    `);
+  async findWebhookMetricsByDateRange(startDate: Date, endDate: Date): Promise<WebhookMetrics[]> {
+    return this.prisma.webhookMetrics.findMany({
+      where: {
+        date: {
+          gte: startDate,
+          lte: endDate,
+        },
+      },
+    });
+  }
 
-    const results = stmt.all(startDate.toISOString(), endDate.toISOString()) as AnalyticsEvent[];
+  async findWebhookMetricsSince(startDate: Date): Promise<WebhookMetrics[]> {
+    return this.prisma.webhookMetrics.findMany({
+      where: {
+        date: {
+          gte: startDate,
+        },
+      },
+    });
+  }
 
-    Logger.info('Analytics data exported', {
-      startDate: startDate.toISOString(),
-      endDate: endDate.toISOString(),
-      recordCount: results.length,
+  async countProcessedWebhookEventsBetween(startDate: Date, endDate: Date): Promise<number> {
+    return this.prisma.processedWebhookEvent.count({
+      where: {
+        processedAt: {
+          gte: startDate,
+          lt: endDate,
+        },
+      },
+    });
+  }
+
+  async incrementWebhookMetrics(eventType: string, success: boolean, date: Date): Promise<void> {
+    await this.prisma.webhookMetrics.upsert({
+      where: {
+        eventType_date: {
+          eventType,
+          date,
+        },
+      },
+      update: {
+        totalCount: { increment: 1 },
+        failureCount: success ? undefined : { increment: 1 },
+      },
+      create: {
+        eventType,
+        date,
+        totalCount: 1,
+        failureCount: success ? 0 : 1,
+      },
+    });
+  }
+
+  async findTrialsEndedBetween(startDate: Date, endDate: Date): Promise<TrialConversionRecord[]> {
+    return this.prisma.subscriptionTier.findMany({
+      where: {
+        trialEndDate: {
+          lte: endDate,
+          gte: startDate,
+        },
+      },
+      select: {
+        stripeSubscriptionId: true,
+        status: true,
+      },
+    });
+  }
+
+  async findActivePaidSubscriptionTierLevels(): Promise<SubscriptionTierLevelRecord[]> {
+    return this.prisma.subscriptionTier.findMany({
+      where: {
+        status: 'active',
+        stripeSubscriptionId: { not: null },
+      },
+      select: {
+        tierLevel: true,
+      },
+    });
+  }
+
+  async sumActiveOrganizationUsers(): Promise<number> {
+    const activeUsers = await this.prisma.organizationUsage.aggregate({
+      _sum: { activeUsers: true },
     });
 
-    return results;
+    return activeUsers._sum.activeUsers ?? 0;
+  }
+
+  async countActiveSubscriptions(): Promise<number> {
+    return this.prisma.subscriptionTier.count({
+      where: { status: 'active' },
+    });
+  }
+
+  async countActiveSubscriptionsCreatedSince(startDate: Date): Promise<number> {
+    return this.prisma.subscriptionTier.count({
+      where: {
+        status: 'active',
+        createdAt: { gte: startDate },
+      },
+    });
+  }
+
+  async countCanceledSubscriptionsUpdatedSince(startDate: Date): Promise<number> {
+    return this.prisma.subscriptionTier.count({
+      where: {
+        status: 'canceled',
+        updatedAt: { gte: startDate },
+      },
+    });
+  }
+
+  async groupSubscriptionTiersByTierLevel(): Promise<SubscriptionTierDistributionRecord[]> {
+    const groupByTierLevel = this.prisma.subscriptionTier.groupBy as unknown as (args: {
+      by: ['tierLevel'];
+      _count: true;
+    }) => Promise<SubscriptionTierDistributionRecord[]>;
+
+    return groupByTierLevel({
+      by: ['tierLevel'],
+      _count: true,
+    });
+  }
+
+  async countTrialsEndingSince(startDate: Date): Promise<number> {
+    return this.prisma.subscriptionTier.count({
+      where: {
+        trialEndDate: { gte: startDate },
+      },
+    });
+  }
+
+  async countPaidSubscriptionsCreatedSince(startDate: Date): Promise<number> {
+    return this.prisma.subscriptionTier.count({
+      where: {
+        stripeSubscriptionId: { not: null },
+        createdAt: { gte: startDate },
+      },
+    });
   }
 }

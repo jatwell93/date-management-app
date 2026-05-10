@@ -90,6 +90,19 @@ export interface DashboardAnalytics {
   upcomingExpiry: number;
 }
 
+export interface DashboardActivity {
+  id: number;
+  description: string;
+  timestamp: string;
+}
+
+export interface DashboardData {
+  totalProducts: number;
+  expiringSoon: number;
+  markdownItems: number;
+  recentActivity: DashboardActivity[];
+}
+
 export class ReportRepository {
   constructor(private db: InstanceType<typeof Database>) {}
 
@@ -255,6 +268,35 @@ export class ReportRepository {
       expiredItems: expiredItems.count,
       markdownItems: markdownItems.count,
       upcomingExpiry: upcomingExpiry.count,
+    };
+  }
+
+  getDashboardData(): DashboardData {
+    const totalProductsResult = this.db.prepare('SELECT COUNT(*) as count FROM products').get() as {
+      count: number;
+    };
+
+    const expiringSoonResult = this.db
+      .prepare(
+        `SELECT COUNT(*) as count FROM inventory_items WHERE expiry_date <= date('now', '+90 day') AND status = 'Normal'`,
+      )
+      .get() as { count: number };
+
+    const markdownItemsResult = this.db
+      .prepare(`SELECT COUNT(*) as count FROM inventory_items WHERE status LIKE 'Markdown%'`)
+      .get() as { count: number };
+
+    const recentActivityResult = this.db
+      .prepare(
+        'SELECT id, change_description as description, created_at as timestamp FROM audit_log ORDER BY created_at DESC LIMIT 5',
+      )
+      .all() as DashboardActivity[];
+
+    return {
+      totalProducts: totalProductsResult.count,
+      expiringSoon: expiringSoonResult.count,
+      markdownItems: markdownItemsResult.count,
+      recentActivity: recentActivityResult,
     };
   }
 

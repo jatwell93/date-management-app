@@ -2,9 +2,9 @@
 
 **Node.js/Express/TypeScript Development Guide**
 
-**Version:** 1.2.3  
+**Version:** 1.2.4
 **Status:** Canonical guide for AI-assisted Node/Express/TypeScript development  
-**Last Updated:** February 2026
+**Last Updated:** May 2026
 
 ---
 
@@ -19,13 +19,13 @@
 7. **Quality & Testing**
 8. **Memory Management**
 9. **Security Code Review**
-10. **Troubleshooting**
+10. **Best Practices**
 
 ---
 
 ### Note on SKILLS/AGENTS
 
-SKILLs and AGENTS live in .github/ for VSCode and .agents/ for Windsurf and can should be used when the work needs specific knowledge that a skill or agent contains
+SKILLs should be used when the work needs specific knowledge that a skill or agent contains e.g. working on Stripe webhooks? Invoke the Stripe skill. Using git trees? Use the git skill.md
 
 ### Note on MCP
 
@@ -46,14 +46,13 @@ SKILLs and AGENTS live in .github/ for VSCode and .agents/ for Windsurf and can 
 
 ### The Four Sacred Rules (Express/TypeScript-Specific)
 
-- **Approval Gates**: No commits without explicit user approval
-- **Sandbox First**: All work in feature branches, never `main`/`master`
-- **Citations**: Always `src/path/file.ts:42` (single line) or `src/path/file.ts:42-58` (range)
+- **Sandbox First**: All work in feature branches, never `main`
+- **Citations**: Always `src/path/file.ts:42` (single line) or `src/path/file.ts:42-58` (range) when referring to errors/fixes
 - **No Mock Data**: Never fake/simulated data in production; test fixtures are OK
 - **No Secrets**: Never hardcode API keys, passwords, or credentials
 - **TDD Mandatory**: Tests written before production code
-- **Code Quality**: Must pass `npm run lint`, `npm test`, and `ubs .` before commit
-- **Task Tracking**: Use OpenSpec workflows for ALL work—no markdown TODOs
+- **Code Quality**: Must pass `npm run lint`, `npm test`, and `doppler run -- cs delta`
+- **Task Tracking**: Use OpenSpec workflows for ALL work —- no outside markdown TODOs files
 
 ---
 
@@ -297,16 +296,24 @@ Use `codemap` for a quick check of the project structure:
 
 ```bash
 codemap .               # Project structure
-codemap --deps          # How files connect
+codemap --deps .        # How files connect
 codemap --diff          # What changed vs main
 codemap --diff --ref branch  # Changes vs specific branch
 ```
 
-# Agentlens Integration
+Other useful commands
+
+```bash
+codemap handoff .  # Save layered handoff for cross-agent continuation
+codemap context    # Universal JSON context for any AI tool
+codemap serve      # HTTP API for non-MCP integrations
+```
+
+### Agentlens Integration
 
 This project uses **agentlens** for AI-optimized documentation.
 
-## Reading Protocol
+#### Reading Protocol
 
 Follow this order to understand the codebase efficiently:
 
@@ -359,12 +366,9 @@ Follow this order to understand the codebase efficiently:
 
 **Every Session (Mandatory):**
 
-1. Output compliance statement (Section 1)
-2. Load AGENTS.md
-3. Load relevant documentation (see below)
-4. Run `git standup -d 7` and check the project's commits over the past seven (7) days
-5. Identify environment (development/test/staging/production)
-6. Check OpenSpec changes: `openspec list` (see active work)
+1. Load AGENTS.md
+2. Run `git standup -d 7` and check the project's commits over the past seven (7) days
+3. Identify environment (development/test/staging/production)
 
 **Quick Bug Fix (< 30 min):**
 
@@ -389,10 +393,6 @@ Follow this order to understand the codebase efficiently:
 - Review existing patterns in codebase
 - Check OpenSpec: `openspec list` and review `openspec/project.md`
 
-**Package-Specific Work:**
-
-- Load `packages.md` when working with Express middleware, authentication, testing libraries, etc.
-
 ### Session Question Protocol
 
 Before starting work, clarify:
@@ -405,31 +405,9 @@ Before starting work, clarify:
 
 ---
 
-## 4. Project Structure
+## 4. State Machine
 
-### Documentation Standards
-
-**README.md** should include:
-
-- What this project does
-- Local setup (Node version, npm/yarn, DB setup)
-- How to run tests (`npm test`)
-- How to run server (`npm run dev`)
-- Key architecture decisions
-- Contributing guidelines
-
-**docs/architecture.md** should include:
-
-- System components (routes, controllers, services, background jobs)
-- Key data flows (e.g., user signup flow)
-- External integrations
-- Performance considerations
-
----
-
-## 5. State Machine
-
-`PLAN → BUILD → QA → APPROVAL → APPLY → DOCS → END  ↓       ↓                   ↓ (fail/changes/major changes needed)`
+`PLAN → BUILD → QA → APPROVAL → APPLY → DOCS → END  OR ↓ (fail/changes/major changes needed)`
 
 ### States: PLAN → BUILD → QA → APPROVAL → APPLY → DOCS
 
@@ -451,7 +429,9 @@ Before starting work, clarify:
 **Required Content (in `proposal.md`):**
 
 ```markdown
-# Proposal: [Feature/Fix Name]
+# EXAMPLE
+
+## Proposal: [Feature/Fix Name]
 
 ## Analysis -
 
@@ -491,14 +471,13 @@ codemap --deps          # How files connect
 ```
 
 2.  **Read Tasks:** Review `openspec/changes/<change-id>/tasks.md`.
-3.  **Branch (REQUIRED):** `git checkout -b feature/<change-id>`
+3.  **Branch (REQUIRED):** `git checkout -b feature/<change-id>` # if not already done
 4.  **Loop through Tasks:**
     - Mark task "In Progress" in `tasks.md` (mentally or via status if applicable).
     - **RED Phase:** Write failing tests.
     - **GREEN Phase:** Implement code.
     - **Refactor:** Clean up.
     - Mark task `[x]` in `tasks.md`.
-5.  **Scans:** Run tests and UBS.
 
 #### TDD Phases
 
@@ -535,24 +514,7 @@ export const usersService = {
 
 ### QA State
 
-**In:** BUILD presented **Out:** Test results, UBS reults, Linter **Exit:** Tests pass OR user waiver
-
-**Execute:**
-
-#### UBS (Ultimate Bug Scanner)
-
-Flags likely bugs early. Use before every commit.
-
-```bash
-ubs <changed-files> # Specific files (1s) [RECOMMENDED]
-ubs $(git diff --name-only) # Staged files
-ubs --only=ts,js,tsx src/ # Language filter
-```
-
-**PASS**: No critical results found.
-**FAIL**: Critical warnings: [list out findings and plan of action]
-
-- ✅ Linter: clean
+**In:** BUILD presented **Out:** Test results cs delta results, Linter **Exit:** Tests pass OR user waiver
 
 ---
 
@@ -579,7 +541,7 @@ Before committing, verify:
 - ✅ DI used for dependencies
 - ✅ No hardcoded config (use environment)
 - ✅ Linter: clean
-- ✅ UBS: passed without 'Critical'
+- ✅ `cs delta` feedback addressed
 - ✅ OpenSpec: completed task marked in `tasks.md`  
   **Please review. Reply with:** - "approved" / "looks good" → push to git - "change X" → Back to BUILD - "revert" → Discard all
 ```
@@ -609,28 +571,6 @@ Refs: <change-id>"
 3. User creates a pull request via GitHub
 4. User raises any findings from CodeSense check
 5. After PR approval and merge, confirm success
-
----
-
-### DOCS State (Archive)
-
-**In:** APPLY succeeded **Out:** Change archived & Documentation updated
-
-**Actions:**
-
-1.  Confirm OpenSpec up to do `list`:
-2.  Store Memory: Use `node scripts/mem-log.js` to log what was accomplished:
-
-    ```bash
-    node scripts/mem-log.js FEATURE "Feature Title" "What was changed and why"
-    # Or for fixes:
-    node scripts/mem-log.js FIX "Fix Title" "Problem and solution"
-    # Or for architectural decisions:
-    node scripts/mem-log.js ARCHITECTURE "Decision Title" "Choice and rationale"
-    ```
-
-3.  Update `README.md` or `docs/` if architecture changed.
-4.  Validate state: `openspec validate --strict`.
 
 ---
 
@@ -746,7 +686,7 @@ export const usersService = {
 
 Before marking task complete, run all (must pass):
 
-```
+```bash
 # Run all tests
 npm run test:coverage                     # Expected: high level of quality coverage
 
@@ -818,7 +758,6 @@ node scripts/mem-log.js DECISION "State Management" "Using React Context instead
 
 # Recalling context before a task
 node scripts/mem-recall.js "authentication"
-node scripts/mem-recall.js "expired items"
 ```
 
 ## Memvid Memory Protocol
@@ -836,12 +775,6 @@ Store memories using `node scripts/mem-log.js` on ANY of:
 - **Pattern discovered** → reusable approach
 - **Feature completed** → what was built and why
 - **Error resolved** → error message + fix
-
-### Search Tips
-
-- Lexical search is **case-aware** — capitalize key terms (e.g., "Controllers" not "controllers")
-- Use specific terms from your codebase
-- Check `memvid timeline project-memory.mv2` to see all stored memories
 
 Do NOT wait to be asked. Memory storage should happen as you work.
 
@@ -894,7 +827,7 @@ router.put('/:id', authenticateUser, usersController.update);
 
 **Anti-Pattern:**
 
-```
+```typescript
 // DONT DO THIS
 export const usersController = {
   async update(req: Request, res: Response) {
@@ -902,7 +835,7 @@ export const usersController = {
     const sql = `UPDATE users SET email = '${req.body.email}' WHERE id = ${req.params.id}`;
     await db.run(sql);
     res.json({ success: true });
-  }
+  },
 };
 ```
 
@@ -914,38 +847,9 @@ Must pass before merge:
 2.  ✅ Linter clean (`npm run lint`)
 3.  ✅ Security checklist passed
 4.  ✅ No hardcoded secrets
-5.  ✅ Follows Express/TypeScript conventions
+5.  ✅ `doppler run -- cs delta` findings actioned? Why/Why not?
 6.  ✅ Comments explain why, not what
 7.  ✅ OpenSpec validation passed (`openspec validate --all`)
-
----
-
-## 10. Troubleshooting
-
-### Agent Stuck Protocol
-
-**Condition:** Same error three consecutive attempts
-
-**Response:**
-
-1.  **Diagnose**: Root cause of error, not symptom
-2.  **Load more context**: Relevant controllers, services, existing patterns
-3.  **Propose alternative**: Different technical approach
-4.  **Request help**: Ask user for clarification or direction
-
-### Common Issues
-
-| Problem                 | Symptom                                | Solution                                                                                        |
-| ----------------------- | -------------------------------------- | ----------------------------------------------------------------------------------------------- |
-| **Test Failures**       | `npm test` returns non-zero            | Read error message, check test expectations, verify test data setup/mocks                       |
-| **Linter Errors**       | `npm run lint` fails                   | Run linter with auto-fix, resolve remaining manually                                            |
-| **UBS False Positives** | UBS flags something that's not a bug   | Check context, ignore if safe, document why in code comment                                     |
-| **Database Issues**     | Connection or query errors             | Check SQLite3 connection string, verify migrations run, check file permissions                  |
-| **TypeScript Errors**   | `tsc` compilation fails                | Check types, imports, and `tsconfig.json` settings                                              |
-| **Dependency Issues**   | Package not found error                | Run `npm install` or `yarn install`, verify `package.json` and `package-lock.json` committed    |
-| **State Issues**        | Tests pass individually, fail together | Check test isolation, use `beforeEach`/`afterEach` hooks, avoid shared state                    |
-| **Performance**         | Endpoint slow                          | Profile with logging, check N+1 queries, add database indexes                                   |
-| **OpenSpec Validation** | `openspec validate` fails              | Check delta spec format, ensure scenarios use `####` headers, verify SHALL/MUST in requirements |
 
 ---
 

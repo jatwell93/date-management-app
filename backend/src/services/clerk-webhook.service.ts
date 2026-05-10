@@ -10,29 +10,30 @@
  * 3. Handle idempotently (check event ID, process, store)
  */
 
-import { Response } from 'express';
 import { PrismaClient } from '@prisma/client';
-import { envConfig } from '../config/environment';
 import { getDefaultDatabaseClient } from '../database/database-factory';
 import { SubscriptionService } from './subscription.service';
-import { Webhook } from 'svix';
 import * as Sentry from '@sentry/node';
 import { ApplicationMonitoringService } from './application.monitoring.service';
 import { ConflictError } from '../errors';
 import { isPrismaErrorCode, PRISMA_ERROR_CODES } from '../utils/prisma-error';
 import { ROLES, normalizeRole } from '../constants/roles';
+import { ClerkWebhookSignatureService } from './clerk-webhook-signature.service';
+import { injectable, inject } from 'tsyringe';
+import { Logger } from '../utils/logger';
+import { OrganizationRepository } from '../repositories/organization.repository';
+import { UserRepository } from '../repositories/user.repository';
+import { SubscriptionRepository } from '../repositories/subscription.repository';
+import { ClerkWebhookEventRepository } from '../repositories/clerk-webhook-event.repository';
+import { TrialEventRepository } from '../repositories/trial-event.repository';
 
-// Simple logging utility
 const log = {
-  info: (message: string, data?: Record<string, unknown>) => {
-    console.log(`[CLERK_WEBHOOK] ${message}`, data ? JSON.stringify(data) : '');
-  },
-  warn: (message: string, data?: Record<string, unknown>) => {
-    console.warn(`[CLERK_WEBHOOK] ${message}`, data ? JSON.stringify(data) : '');
-  },
-  error: (message: string, data?: Record<string, unknown>) => {
-    console.error(`[CLERK_WEBHOOK] ${message}`, data ? JSON.stringify(data) : '');
-  },
+  info: (message: string, data?: Record<string, unknown>) =>
+    Logger.info(`[CLERK_WEBHOOK] ${message}`, data),
+  warn: (message: string, data?: Record<string, unknown>) =>
+    Logger.warn(`[CLERK_WEBHOOK] ${message}`, data),
+  error: (message: string, data?: Record<string, unknown>) =>
+    Logger.error(`[CLERK_WEBHOOK] ${message}`, data),
 };
 
 interface ClerkWebhookEvent {
@@ -80,42 +81,45 @@ interface ClerkMembershipPayload {
   role?: string;
 }
 
+@injectable()
 export class ClerkWebhookService {
   private prisma: PrismaClient;
   private subscriptionService: SubscriptionService;
   private monitor: ApplicationMonitoringService;
+  private signatureVerifier: ClerkWebhookSignatureService;
+  private orgRepo: OrganizationRepository;
+  private userRepo: UserRepository;
+  private subscriptionRepo: SubscriptionRepository;
+  private clerkEventRepo: ClerkWebhookEventRepository;
+  private trialEventRepo: TrialEventRepository;
 
-  constructor(prismaClient?: PrismaClient, subscriptionService?: SubscriptionService) {
+  constructor(
+    @inject(PrismaClient) prismaClient?: PrismaClient,
+    subscriptionService?: SubscriptionService,
+    signatureVerifier?: ClerkWebhookSignatureService,
+    orgRepo?: OrganizationRepository,
+    userRepo?: UserRepository,
+    subscriptionRepo?: SubscriptionRepository,
+    clerkEventRepo?: ClerkWebhookEventRepository,
+    trialEventRepo?: TrialEventRepository,
+  ) {
     this.prisma = prismaClient ?? getDefaultDatabaseClient();
     this.subscriptionService = subscriptionService ?? new SubscriptionService(this.prisma);
     this.monitor = ApplicationMonitoringService.getInstance();
+    this.signatureVerifier =
+      signatureVerifier ?? new ClerkWebhookSignatureService(process.env.CLERK_WEBHOOK_SECRET);
+    this.orgRepo = orgRepo ?? new OrganizationRepository(this.prisma);
+    this.userRepo = userRepo ?? new UserRepository(this.prisma);
+    this.subscriptionRepo = subscriptionRepo ?? new SubscriptionRepository(this.prisma);
+    this.clerkEventRepo = clerkEventRepo ?? new ClerkWebhookEventRepository(this.prisma);
+    this.trialEventRepo = trialEventRepo ?? new TrialEventRepository(this.prisma);
   }
 
   /**
    * Verify Clerk webhook signature using Svix
    */
   verifySignature(payload: Buffer, headers: Record<string, string>): unknown {
-    if (!envConfig.CLERK_WEBHOOK_SECRET) {
-      throw new Error('CLERK_WEBHOOK_SECRET is not configured');
-    }
-
-    const wh = new Webhook(envConfig.CLERK_WEBHOOK_SECRET);
-
-    // Get the svix-specific headers
-    const svixId = headers['svix-id'];
-    const svixTimestamp = headers['svix-timestamp'];
-    const svixSignature = headers['svix-signature'];
-
-    if (!svixId || !svixTimestamp || !svixSignature) {
-      throw new Error('Missing required Svix headers');
-    }
-
-    // Verify the webhook
-    return wh.verify(payload.toString(), {
-      'svix-id': svixId,
-      'svix-timestamp': svixTimestamp,
-      'svix-signature': svixSignature,
-    });
+    return this.signatureVerifier.verifySignature(payload, headers);
   }
 
   /**
@@ -123,9 +127,7 @@ export class ClerkWebhookService {
    */
   async isNewEvent(eventId: string): Promise<boolean> {
     try {
-      const existingEvent = await this.prisma.clerkWebhookEvent.findUnique({
-        where: { id: eventId },
-      });
+      const existingEvent = await this.clerkEventRepo.findById(eventId);
       return !existingEvent;
     } catch (error) {
       log.error('Error checking webhook event idempotency', { eventId, error });
@@ -139,13 +141,7 @@ export class ClerkWebhookService {
    */
   async markEventProcessed(eventId: string, eventType: string): Promise<void> {
     try {
-      await this.prisma.clerkWebhookEvent.create({
-        data: {
-          id: eventId,
-          eventType,
-          processedAt: new Date(),
-        },
-      });
+      await this.clerkEventRepo.create(eventId, eventType);
     } catch (error) {
       log.error('Error marking webhook event as processed', { eventId, eventType, error });
       // Don't throw - this is cleanup, the main event already succeeded
@@ -215,9 +211,7 @@ export class ClerkWebhookService {
       }
 
       // Check if user already exists
-      const existingUser = await this.prisma.user.findUnique({
-        where: { clerkUserId: id },
-      });
+      const existingUser = await this.userRepo.findUniqueByClerkUserId(id);
 
       if (existingUser) {
         log.info('User already exists, skipping creation', { clerkUserId: id });
@@ -239,16 +233,12 @@ export class ClerkWebhookService {
       }
 
       // Create user
-      const user = await this.prisma.user.create({
-        data: {
-          clerkUserId: id,
-          email: primaryEmail,
-          username: username || primaryEmail.split('@')[0],
-          organizationId,
-          role: orgMembership?.role === 'admin' ? ROLES.ADMIN : ROLES.TEAM_MEMBER,
-          createdAt: new Date(),
-          updatedAt: new Date(),
-        },
+      const user = await this.userRepo.createClerkUser({
+        clerkUserId: id,
+        email: primaryEmail,
+        username: username || primaryEmail.split('@')[0],
+        organizationId,
+        role: orgMembership?.role === 'admin' ? ROLES.ADMIN : ROLES.TEAM_MEMBER,
       });
 
       log.info('User created successfully', {
@@ -299,13 +289,10 @@ export class ClerkWebhookService {
       )?.email_address;
 
       // Update user record
-      await this.prisma.user.updateMany({
-        where: { clerkUserId: id },
-        data: {
-          email: primaryEmail,
-          username: username || primaryEmail?.split('@')[0],
-          updatedAt: new Date(),
-        },
+      await this.userRepo.updateManyByClerkUserId(id, {
+        email: primaryEmail,
+        username: username || primaryEmail?.split('@')[0],
+        updatedAt: new Date(),
       });
 
       log.info('User updated successfully', { clerkUserId: id, email: primaryEmail });
@@ -372,13 +359,10 @@ export class ClerkWebhookService {
       const appRole = normalizeRole(role === 'org:admin' ? ROLES.ADMIN : ROLES.TEAM_MEMBER);
 
       // Link user to organization
-      const updated = await this.prisma.user.updateMany({
-        where: { clerkUserId },
-        data: {
-          organizationId: org.id,
-          role: appRole,
-          updatedAt: new Date(),
-        },
+      const updated = await this.userRepo.updateManyByClerkUserId(clerkUserId, {
+        organizationId: org.id,
+        role: appRole,
+        updatedAt: new Date(),
       });
 
       if (updated.count === 0) {
@@ -392,10 +376,7 @@ export class ClerkWebhookService {
       }
 
       // Ensure trial subscription exists for the organization
-      const user = await this.prisma.user.findFirst({
-        where: { clerkUserId },
-        select: { email: true },
-      });
+      const user = await this.userRepo.findByClerkUserIdSelectEmail(clerkUserId);
       await this.ensureTrialSubscription(org.id, user?.email ?? '');
     } catch (error) {
       log.error('Error handling organizationMembership.created', {
@@ -427,10 +408,7 @@ export class ClerkWebhookService {
 
       // Soft delete user when removed from organization (preserve audit history)
       // First find the organization by clerkOrganizationId
-      const org = await this.prisma.organization.findUnique({
-        where: { clerkOrganizationId: clerkOrgId },
-        select: { id: true },
-      });
+      const org = await this.orgRepo.findByClerkOrganizationId(clerkOrgId ?? '');
 
       if (!org) {
         log.error('Organization not found for clerk org id', { clerkOrgId });
@@ -439,9 +417,7 @@ export class ClerkWebhookService {
 
       // Now update user directly using organizationId
       // Find the user first to get their ID
-      const user = await this.prisma.user.findFirst({
-        where: { clerkUserId, organizationId: org.id },
-      });
+      const user = await this.userRepo.findFirstByClerkUserIdAndOrganizationId(clerkUserId, org.id);
 
       if (!user) {
         log.warn('User not found for soft delete', { clerkUserId, organizationId: org.id });
@@ -449,10 +425,7 @@ export class ClerkWebhookService {
       }
 
       // Soft delete the user using update (not updateMany) to trigger foreign key constraints
-      await this.prisma.user.update({
-        where: { id: user.id },
-        data: { deletedAt: new Date() },
-      });
+      await this.userRepo.softDeleteById(user.id);
 
       log.info('User unlinked from organization', { clerkUserId, clerkOrgId });
     } catch (error) {
@@ -475,22 +448,16 @@ export class ClerkWebhookService {
     clerkOrg: ClerkOrganizationPayload,
   ): Promise<{ id: string }> {
     // Check if organization already exists
-    let org = await this.prisma.organization.findUnique({
-      where: { clerkOrganizationId: clerkOrg.id },
-    });
+    let org = await this.orgRepo.findByClerkOrganizationId(clerkOrg.id);
 
     if (!org) {
       // Create new organization
-      org = await this.prisma.organization.create({
-        data: {
-          clerkOrganizationId: clerkOrg.id,
-          name: clerkOrg.name || 'Default Organization',
-          slug: (clerkOrg.slug || clerkOrg.name || clerkOrg.id)
-            .toLowerCase()
-            .replace(/[^a-z0-9-]/g, '-'),
-          createdAt: new Date(),
-          updatedAt: new Date(),
-        },
+      org = await this.orgRepo.create({
+        clerkOrganizationId: clerkOrg.id,
+        name: clerkOrg.name || 'Default Organization',
+        slug: (clerkOrg.slug || clerkOrg.name || clerkOrg.id)
+          .toLowerCase()
+          .replace(/[^a-z0-9-]/g, '-'),
       });
     }
 
@@ -507,14 +474,10 @@ export class ClerkWebhookService {
     const orgName = email.split('@')[0] + "'s Organization";
     const slug = `${email.split('@')[0]}-${Date.now()}`.toLowerCase().replace(/[^a-z0-9-]/g, '-');
 
-    const org = await this.prisma.organization.create({
-      data: {
-        name: orgName,
-        slug: slug,
-        contactEmail: email,
-        createdAt: new Date(),
-        updatedAt: new Date(),
-      },
+    const org = await this.orgRepo.createDefaultOrganization({
+      name: orgName,
+      slug,
+      contactEmail: email,
     });
 
     log.info('Created default organization for new user', {
@@ -533,9 +496,7 @@ export class ClerkWebhookService {
   private async ensureTrialSubscription(organizationId: string, email: string): Promise<void> {
     try {
       // Check if subscription already exists
-      const existingSubscription = await this.prisma.subscriptionTier.findFirst({
-        where: { organizationId },
-      });
+      const existingSubscription = await this.subscriptionRepo.findByOrganizationId(organizationId);
 
       if (existingSubscription) {
         log.info('Subscription already exists for organization', { organizationId });
@@ -547,25 +508,11 @@ export class ClerkWebhookService {
       const ninetyDaysAgo = new Date(Date.now() - 90 * 24 * 60 * 60 * 1000);
       const thirtyDaysAgo = new Date(Date.now() - 30 * 24 * 60 * 60 * 1000);
 
-      const recentTrialUser = await this.prisma.user.findFirst({
-        where: {
-          email,
-          createdAt: { gte: ninetyDaysAgo },
-          organization: {
-            subscriptionTiers: {
-              some: {
-                status: 'trialing',
-                // Allow if trial ended more than 30 days ago
-                OR: [
-                  { trialEndDate: { gte: new Date() } }, // Still trialing
-                  { trialEndDate: { gte: thirtyDaysAgo } }, // Trial ended recently
-                ],
-              },
-            },
-          },
-        },
-        include: { organization: { include: { subscriptionTiers: true } } },
-      });
+      const recentTrialUser = await this.userRepo.findRecentTrialUserByEmail(
+        email,
+        ninetyDaysAgo,
+        thirtyDaysAgo,
+      );
 
       if (recentTrialUser) {
         log.warn('Trial abuse detected: email used for trial in last 90 days', {
@@ -594,20 +541,6 @@ export class ClerkWebhookService {
       log.error('Error creating trial subscription', { organizationId, error });
       // Don't throw - user is created, we can retry subscription later
     }
-  }
-
-  /**
-   * Send success response
-   */
-  sendSuccess(res: Response): void {
-    res.status(200).json({ received: true });
-  }
-
-  /**
-   * Send error response
-   */
-  sendError(res: Response, message: string, statusCode: number = 400): void {
-    res.status(statusCode).json({ error: message });
   }
 }
 

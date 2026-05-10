@@ -1,5 +1,6 @@
 import express from 'express';
 import request from 'supertest';
+import { isBaseError } from '../../errors';
 
 const mockGetAllInventoryItems = jest.fn();
 const mockGetInventoryItemById = jest.fn();
@@ -52,6 +53,7 @@ jest.mock('../../services/inventory.service', () => ({
     createInventoryItem: (...args: unknown[]) => mockCreateInventoryItem(...args),
     updateInventoryItem: (...args: unknown[]) => mockUpdateInventoryItem(...args),
     deleteInventoryItem: (...args: unknown[]) => mockDeleteInventoryItem(...args),
+    logTransaction: (...args: unknown[]) => mockLogTransaction(...args),
   })),
 }));
 
@@ -61,17 +63,29 @@ jest.mock('../../services/product.service', () => ({
   })),
 }));
 
-jest.mock('../../controllers/inventory.controller', () => ({
-  logTransaction: (...args: unknown[]) => mockLogTransaction(...args),
-}));
-
 import inventoryRouter from '../../routes/inventory.routes';
+const actualDi = jest.requireActual('../../di/container') as typeof import('../../di/container');
 
 describe('inventory.routes', () => {
   const app = express();
 
   app.use(express.json());
   app.use('/inventory-items', inventoryRouter);
+  app.use(
+    (
+      error: Error & { statusCode?: number },
+      _req: express.Request,
+      res: express.Response,
+      _next: express.NextFunction,
+    ) => {
+      if (isBaseError(error)) {
+        res.status(error.statusCode).json({ message: error.message });
+        return;
+      }
+
+      res.status(error.statusCode ?? 500).json({ message: 'Internal server error' });
+    },
+  );
 
   beforeEach(() => {
     jest.clearAllMocks();
@@ -110,9 +124,34 @@ describe('inventory.routes', () => {
     mockDeleteInventoryItem.mockResolvedValue(true);
     mockGetProductByBarcode.mockResolvedValue({ id: 10 });
 
-    mockLogTransaction.mockImplementation((_req: any, res: any) => {
-      res.status(201).json({ message: 'Transaction logged' });
-    });
+    mockLogTransaction.mockResolvedValue(123);
+
+    const diContainer = actualDi.getDiContainer();
+    diContainer.registerInstance(
+      'InventoryServiceFactory',
+      () =>
+        ({
+          getAllInventoryItems: (...args: unknown[]) => mockGetAllInventoryItems(...args),
+          getInventoryItemById: (...args: unknown[]) => mockGetInventoryItemById(...args),
+          getInventoryItemsByProductId: (...args: unknown[]) =>
+            mockGetInventoryItemsByProductId(...args),
+          getRecentInventoryItemsByProductId: (...args: unknown[]) =>
+            mockGetRecentInventoryItemsByProductId(...args),
+          getInventoryItemsByLocationId: (...args: unknown[]) =>
+            mockGetInventoryItemsByLocationId(...args),
+          createInventoryItem: (...args: unknown[]) => mockCreateInventoryItem(...args),
+          updateInventoryItem: (...args: unknown[]) => mockUpdateInventoryItem(...args),
+          deleteInventoryItem: (...args: unknown[]) => mockDeleteInventoryItem(...args),
+          logTransaction: (...args: unknown[]) => mockLogTransaction(...args),
+        }) as never,
+    );
+    diContainer.registerInstance(
+      'ProductServiceFactory',
+      () =>
+        ({
+          getProductByBarcode: (...args: unknown[]) => mockGetProductByBarcode(...args),
+        }) as never,
+    );
   });
 
   describe('GET /inventory-items', () => {
@@ -626,7 +665,10 @@ describe('inventory.routes', () => {
         .send({ itemId: 1, action: 'ADJUST', quantity: 2 });
 
       expect(response.status).toBe(201);
-      expect(response.body).toEqual({ message: 'Transaction logged' });
+      expect(response.body).toEqual({
+        message: 'Transaction logged successfully',
+        transactionId: 123,
+      });
       expect(mockLogTransaction).toHaveBeenCalledTimes(1);
     });
   });

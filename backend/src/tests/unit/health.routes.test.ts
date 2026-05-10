@@ -5,7 +5,8 @@ const mockGetDb = jest.fn();
 const mockReleaseDb = jest.fn();
 const mockGetDatabaseMetrics = jest.fn();
 const mockValidateTierFeatureFlags = jest.fn();
-const mockGetDefaultDatabaseClient = jest.fn();
+const mockSubscriptionRepository = {};
+const mockResolve = jest.fn();
 
 jest.mock('../../database', () => ({
   getDb: (...args: unknown[]) => mockGetDb(...args),
@@ -24,8 +25,10 @@ jest.mock('../../utils/validate-tier-flags', () => ({
   validateTierFeatureFlags: (...args: unknown[]) => mockValidateTierFeatureFlags(...args),
 }));
 
-jest.mock('../../database/database-factory', () => ({
-  getDefaultDatabaseClient: (...args: unknown[]) => mockGetDefaultDatabaseClient(...args),
+jest.mock('../../di/container', () => ({
+  getDiContainer: () => ({
+    resolve: (...args: unknown[]) => mockResolve(...args),
+  }),
 }));
 
 jest.mock('../../middleware/auth.middleware', () => ({
@@ -91,7 +94,7 @@ describe('health.routes', () => {
     };
 
     mockGetDb.mockReturnValue(db);
-    mockGetDefaultDatabaseClient.mockReturnValue({});
+    mockResolve.mockReturnValue(mockSubscriptionRepository);
     mockGetDatabaseMetrics.mockReturnValue({ queryCount: 100, slowQueries: 2 });
     mockValidateTierFeatureFlags.mockResolvedValue(validTierResult);
 
@@ -106,6 +109,7 @@ describe('health.routes', () => {
     expect(response.body.services.database).toBe('healthy');
     expect(response.body.services.tierFeatureFlags).toBe('configured');
     expect(response.body.tierFlags.flagCounts.starter).toBe(8);
+    expect(mockValidateTierFeatureFlags).toHaveBeenCalledWith(mockSubscriptionRepository);
     expect(mockReleaseDb).toHaveBeenCalledWith(db);
   });
 

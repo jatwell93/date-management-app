@@ -4,6 +4,7 @@ import { PrismaClient } from '@prisma/client';
 const mockXlsxReadFile = jest.fn();
 const mockXlsxSheetToJson = jest.fn();
 const mockCsvParse = jest.fn();
+const realXlsx = jest.requireActual<typeof import('xlsx')>('xlsx');
 
 jest.mock('xlsx', () => ({
   readFile: (...args: unknown[]) => mockXlsxReadFile(...args),
@@ -26,6 +27,14 @@ describe('ProductService with organizationId', () => {
   let productService: ProductService;
   let mockPrisma: any;
   const organizationId = 'org-123';
+
+  const writeXlsxFixture = (filePath: string, rows: unknown[][]) => {
+    fs.mkdirSync('/tmp', { recursive: true });
+    const workbook = realXlsx.utils.book_new();
+    const worksheet = realXlsx.utils.aoa_to_sheet(rows);
+    realXlsx.utils.book_append_sheet(workbook, worksheet, 'Sheet1');
+    realXlsx.writeFile(workbook, filePath);
+  };
 
   beforeEach(() => {
     mockPrisma = {
@@ -153,19 +162,14 @@ describe('ProductService with organizationId', () => {
         updatedAt: new Date(),
       };
 
-      mockPrisma.product.findUnique.mockResolvedValue(mockProduct);
+      mockPrisma.product.findFirst.mockResolvedValue(mockProduct);
 
       const product = await productService.getProductByBarcode('123456789');
 
       expect(product).not.toBeNull();
       expect(product?.barcode).toBe('123456789');
-      expect(mockPrisma.product.findUnique).toHaveBeenCalledWith({
-        where: {
-          organizationId_barcode: {
-            organizationId,
-            barcode: '123456789',
-          },
-        },
+      expect(mockPrisma.product.findFirst).toHaveBeenCalledWith({
+        where: { barcode: '123456789', organizationId },
       });
     });
   });
@@ -511,6 +515,7 @@ describe('ProductService with organizationId', () => {
 
   describe('XLSX upload processing paths', () => {
     it('returns validation error when workbook has no data rows', async () => {
+      writeXlsxFixture('/tmp/no-data.xlsx', [['SKU', 'Name', 'Cost', 'Barcode']]);
       mockXlsxReadFile.mockReturnValue({
         SheetNames: ['Sheet1'],
         Sheets: { Sheet1: {} },
@@ -525,6 +530,10 @@ describe('ProductService with organizationId', () => {
     });
 
     it('returns header validation error when SKU column is missing', async () => {
+      writeXlsxFixture('/tmp/missing-sku.xlsx', [
+        ['Name', 'Cost', 'Barcode'],
+        ['Product A', '10.00', '111'],
+      ]);
       mockXlsxReadFile.mockReturnValue({
         SheetNames: ['Sheet1'],
         Sheets: { Sheet1: {} },
@@ -542,6 +551,10 @@ describe('ProductService with organizationId', () => {
     });
 
     it('returns unexpected-columns error when headers include unsupported fields', async () => {
+      writeXlsxFixture('/tmp/unexpected-column.xlsx', [
+        ['SKU', 'Name', 'Cost', 'Barcode', 'Unexpected Column'],
+        ['SKU-1', 'Product A', '10.00', '111', 'oops'],
+      ]);
       mockXlsxReadFile.mockReturnValue({
         SheetNames: ['Sheet1'],
         Sheets: { Sheet1: {} },
@@ -559,6 +572,11 @@ describe('ProductService with organizationId', () => {
     });
 
     it('updates existing product and creates new product from XLSX rows', async () => {
+      writeXlsxFixture('/tmp/success.xlsx', [
+        ['SKU', 'Name', 'Cost', 'Barcode'],
+        ['SKU-1', 'Existing Product Updated', '11.00', 'BAR-1'],
+        ['SKU-2', 'New Product', '12.50', 'BAR-2'],
+      ]);
       mockXlsxReadFile.mockReturnValue({
         SheetNames: ['Sheet1'],
         Sheets: { Sheet1: {} },
@@ -609,6 +627,52 @@ describe('ProductService with organizationId', () => {
   });
 
   describe('private lookup helpers', () => {
+    it('delegates combined SKU/barcode lookup to the product repository', async () => {
+      const byBarcode = {
+        id: 22,
+        organizationId,
+        sku: 'SKU-22',
+        barcode: 'BAR-22',
+        name: 'By Barcode',
+        costPrice: 22,
+        notes: '',
+        createdAt: new Date('2026-01-01T00:00:00.000Z'),
+        updatedAt: new Date('2026-01-02T00:00:00.000Z'),
+      };
+      const productRepo = {
+        findBySkuOrBarcode: jest.fn().mockResolvedValue({
+          bySku: null,
+          byBarcode,
+        }),
+      };
+      const service = new ProductService(
+        mockPrisma as unknown as PrismaClient,
+        organizationId,
+        productRepo as never,
+      );
+
+      mockPrisma.product.findUnique.mockRejectedValue(new Error('service should use repository'));
+
+      const result = await (service as any).getProductBySkuOrBarcode('SKU-MISSING', 'BAR-22');
+
+      expect(productRepo.findBySkuOrBarcode).toHaveBeenCalledWith(
+        'SKU-MISSING',
+        'BAR-22',
+        organizationId,
+      );
+      expect(mockPrisma.product.findUnique).not.toHaveBeenCalled();
+      expect(result).toEqual({
+        id: 22,
+        organizationId,
+        sku: 'SKU-22',
+        barcode: 'BAR-22',
+        name: 'By Barcode',
+        costPrice: 22,
+        createdAt: '2026-01-01T00:00:00.000Z',
+        updatedAt: '2026-01-02T00:00:00.000Z',
+      });
+    });
+
     it('throws duplicate identifier error when SKU and barcode match different products', async () => {
       mockPrisma.product.findUnique
         .mockResolvedValueOnce({

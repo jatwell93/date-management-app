@@ -12,11 +12,10 @@ export const PRISMA_ERROR_CODES = {
 /**
  * Type guard to check if an error is a Prisma error
  */
-export function isPrismaError(error: unknown): error is { code: string; message: string } {
+export function isPrismaError(error: unknown): error is { code: string; message?: string } {
   return (
     error instanceof Object &&
     'code' in error &&
-    'message' in error &&
     typeof (error as Record<string, unknown>).code === 'string'
   );
 }
