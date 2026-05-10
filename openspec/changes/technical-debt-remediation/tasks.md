@@ -90,6 +90,7 @@
   - `di-container.test.ts` covers repository resolution from the composition root, and ServiceProvider seam tests cover repository-backed caching/mocking paths.
 - [ ] 6.5 Remove duplicate query code from services after repository coverage is in place.
   - Progress: removed duplicate subscription lookup and user/invite counting from `organization-invite.service.ts` by delegating to existing repositories; removed 4 duplicate org lookups and 5 audit log creations from `email.service.ts`.
+  - Progress: addressed useful PR 126 CodeScene findings by extracting shared ProductController lookup/update/upload helpers, flattening product import column matching, and replacing branch-heavy billing/webhook dispatch helpers with focused lookup helpers.
 - [x] 6.6 Move dashboard summary SQLite reads into `ReportRepository` and wire `DashboardService` through `ServiceProvider`.
 - [x] 6.7 Move SaaS metrics snapshot and webhook metric persistence paths into `AnalyticsRepository`.
 - [x] 6.8 Move remaining SaaS metrics subscription and usage read paths into `AnalyticsRepository`.
@@ -115,6 +116,7 @@
   - Added DI composition-root coverage and ServiceProvider repository-backed seam caching coverage; repaired migrated inventory route seam coverage.
 - [ ] 8.5 Verify backend coverage and changed-test runs complete within the intended feedback budget.
   - Changed-test verification passes within budget: 76 targeted tests across inventory routes, Stripe utils, and subscription routes completed in 17.291s.
+  - PR 126 CodeScene follow-up targeted verification: `npm test -- --runInBand src/tests/unit/inventory.service.test.ts src/tests/unit/subscription-billing.helpers.test.ts src/tests/unit/migrated-controllers.test.ts` completed with 75/75 tests passing in 16.172s; `npm run type-check` passed; `npm run lint` exited 0 with 25 pre-existing warnings outside the touched helper cleanup.
   - Full coverage still needs follow-up: `npm run test:coverage -- --runInBand --silent --coverageReporters=text-summary` passed tests up to 148/150 suites but hit Node heap OOM after 616.4s during coverage collection.
   - Follow-up attempts on 2026-05-07 did not produce an acceptable full-suite coverage lane: `--coverageProvider=babel` timed out after 904s, `--workerIdleMemoryLimit=512MB` timed out after 904s, and the corrected fast-lane coverage regex timed out after 604s. The narrower services/controllers/contracts coverage slice completed in 105.091s with 121/121 tests passing but cannot satisfy global source thresholds alone.
 - [x] 8.6 Record the final coverage/runtime result so the next implementation wave has a clear before/after comparison.
