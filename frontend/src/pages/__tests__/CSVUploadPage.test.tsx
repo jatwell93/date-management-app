@@ -9,6 +9,14 @@ import {
   type ColumnValidationResult,
 } from '../../utils/csvValidator';
 
+// Mock react-router-dom
+const mockNavigate = jest.fn();
+const mockSearchParams = new URLSearchParams();
+jest.mock('react-router-dom', () => ({
+  useSearchParams: () => [mockSearchParams],
+  useNavigate: () => mockNavigate,
+}));
+
 jest.mock('../../lib/api.service', () => ({
   buildApiUrl: (route: string) => `https://api.test${route}`,
 }));

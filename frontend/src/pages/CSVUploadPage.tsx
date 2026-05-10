@@ -1,4 +1,5 @@
 import React, { useState } from 'react';
+import { useSearchParams, useNavigate } from 'react-router-dom';
 import * as Sentry from '@sentry/react';
 import * as XLSX from 'xlsx';
 import {
@@ -51,6 +52,15 @@ export const CSVUploadPage: React.FC<{
   token: string | null;
   defaultImportType?: UploadImportType;
 }> = ({ token, defaultImportType = 'product-catalog' }) => {
+  const [searchParams] = useSearchParams();
+  const navigate = useNavigate();
+  const rawReturnUrl = searchParams.get('return');
+  // Only allow safe in-app paths: must start with a single '/' and must not contain a protocol or '//'
+  const returnUrl =
+    rawReturnUrl && /^\/[^/]/.test(rawReturnUrl) && !rawReturnUrl.includes('://')
+      ? rawReturnUrl
+      : null;
+
   const fileInputId = 'csv-upload-file-input';
   const [importType, setImportType] = useState<UploadImportType>(defaultImportType);
   const [selectedFile, setSelectedFile] = useState<File | null>(null);
@@ -1025,6 +1035,21 @@ export const CSVUploadPage: React.FC<{
                 </ul>
               </div>
             )}
+
+            {uploadResult.success &&
+              typeof returnUrl === 'string' &&
+              returnUrl.startsWith('/') &&
+              !returnUrl.startsWith('//') &&
+              !/^[a-zA-Z][a-zA-Z\d+\-.]*:/.test(returnUrl) && (
+                <div className="mt-6 pt-4 border-t border-inventory-success-200">
+                  <button
+                    onClick={() => navigate(returnUrl)}
+                    className="w-full py-2 bg-inventory-success-600 text-white rounded-md font-semibold hover:bg-inventory-success-700 transition"
+                  >
+                    Continue to next step
+                  </button>
+                </div>
+              )}
           </div>
         )}
       </div>

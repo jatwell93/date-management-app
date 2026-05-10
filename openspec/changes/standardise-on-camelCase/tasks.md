@@ -1,9 +1,11 @@
 # Standardize on camelCase Field Names
 
 ## Overview
+
 This document outlines the long-term plan to standardize all API field names to camelCase format, eliminating the current dual-support for both camelCase and snake_case conventions.
 
 ## Current State
+
 - Frontend interfaces use camelCase (`productId`, `expiryDate`, `locationId`)
 - Backend supports both camelCase and snake_case for backward compatibility
 - Deprecation warnings are logged for snake_case usage
@@ -12,6 +14,7 @@ This document outlines the long-term plan to standardize all API field names to 
 ## Migration Tasks
 
 ### Phase 1: Preparation and Planning
+
 - [ ] **Audit all snake_case usage across the codebase**
   - Search for `product_id`, `expiry_date`, `location_id` in all files
   - Document all locations where snake_case is still used
@@ -28,6 +31,7 @@ This document outlines the long-term plan to standardize all API field names to 
   - Set up alerts for unexpected snake_case usage
 
 ### Phase 2: Internal Standardization
+
 - [ ] **Update all internal code to use camelCase exclusively**
   - Frontend: Already complete ✅
   - Backend: Update all internal references to use camelCase
@@ -45,6 +49,7 @@ This document outlines the long-term plan to standardize all API field names to 
   - Improve API documentation with clear field naming guidelines
 
 ### Phase 3: External Migration Support
+
 - [ ] **Implement versioned API endpoints**
   - Create `/v2/` endpoints that only accept camelCase
   - Maintain `/v1/` endpoints with backward compatibility during transition
@@ -61,6 +66,7 @@ This document outlines the long-term plan to standardize all API field names to 
   - Provide clear migration deadlines in error messages
 
 ### Phase 4: Cleanup and Removal
+
 - [ ] **Remove snake_case support completely**
   - Remove backward compatibility code from `index-minimal.ts`
   - Delete snake_case field mapping logic
@@ -79,23 +85,27 @@ This document outlines the long-term plan to standardize all API field names to 
 ## Implementation Details
 
 ### Files to Update
+
 - `workers/src/index-minimal.ts` - Remove snake_case backward compatibility
 - `backend/src/handlers/inventory.ts` - Update field handling
 - All API documentation - Update to show camelCase only
 - Integration tests - Verify snake_case rejection
 
 ### Monitoring Requirements
+
 - Track deprecation warning frequency
 - Monitor API client versions and field naming usage
 - Set up alerts for unexpected snake_case usage after deadline
 
 ### Risk Mitigation
+
 - Gradual phase-out approach to avoid breaking changes
 - Clear communication with external API users
 - Comprehensive testing before each phase
 - Rollback plan for each phase
 
 ## Success Criteria
+
 - [ ] All internal code uses camelCase exclusively
 - [ ] No deprecation warnings in production for 30 days
 - [ ] External API users have migrated to camelCase
@@ -104,6 +114,7 @@ This document outlines the long-term plan to standardize all API field names to 
 - [ ] Tests pass with camelCase-only implementation
 
 ## Timeline
+
 - **Phase 1**: 2 weeks (Audit and planning)
 - **Phase 2**: 4 weeks (Internal standardization)
 - **Phase 3**: 8 weeks (External migration support)
@@ -111,12 +122,14 @@ This document outlines the long-term plan to standardize all API field names to 
 - **Total**: 16 weeks (4 months)
 
 ## Dependencies
+
 - External API user cooperation for migration
 - Sufficient testing coverage for changes
 - Documentation updates completed in parallel
 - Monitoring infrastructure in place
 
 ## Notes
+
 - This migration aligns with modern JavaScript/TypeScript conventions
 - CamelCase is already the standard in the frontend codebase
 - Removing dual support will reduce maintenance overhead
