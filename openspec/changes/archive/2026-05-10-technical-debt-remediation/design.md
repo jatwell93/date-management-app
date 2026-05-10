@@ -129,6 +129,88 @@ Rollback strategy:
 - Land each major slice behind focused test coverage before moving on to the next layer.
 - If DI wiring introduces instability, temporarily keep a narrow factory path for a single slice while the rest of the architecture remains migrated.
 
+## Detailed Wave Plan
+
+### Wave 1: Product Import and CSV Parsing
+
+The product import path is the highest-risk area in the current CodeScene data. `processCSVUploadInternal` and `processXLSXUpload` both combine file-format detection, row validation, duplicate handling, batch accounting, and response shaping. The first pass should extract pure row-level helpers and then isolate batch orchestration so that file parsing failures no longer share the same control path as persistence.
+
+Recommended sequence:
+
+1. Extract pure mappers for product rows and expiry rows so the parsing logic returns normalized values instead of mutating upload state inline.
+2. Move file-format detection and worksheet selection into a small dispatcher that chooses the parser, not the import workflow.
+3. Keep row validation and batch coordination in a dedicated orchestration service with explicit inputs and outputs.
+4. Preserve the current success, partial-failure, and error payload shapes until the new test coverage is in place.
+
+Validation targets:
+
+- malformed header and missing-column rejection
+- duplicate SKU and barcode detection
+- CSV/XLSX parity for success cases
+- row-level rejection behavior for expiry imports
+- unchanged import summary counts and error arrays
+
+### Wave 2: Webhook Lifecycle
+
+The webhook service has already had repository access cleaned up, but the event handlers are still too dense. `handleSubscriptionCreated`, `handleSubscriptionDeleted`, `handlePaymentIntentSucceeded`, `handlePaymentIntentFailed`, `handleCreationLock`, and `validateWebhookMetadata` should be separated by event family so the side effects, status transitions, and idempotency checks can be reasoned about independently.
+
+Recommended sequence:
+
+1. Extract metadata validation into one helper that only validates request context and returns a typed metadata object.
+2. Split subscription creation and deletion into separate handlers with shared transaction helpers.
+3. Split payment success and payment failure into dedicated event handlers so lock handling and billing state changes are not interleaved.
+4. Keep idempotency and creation-lock logic in small shared helpers that are called by the event handlers instead of embedded inside them.
+
+Validation targets:
+
+- missing metadata rejection
+- duplicate event replay rejection
+- creation-lock enforcement
+- subscription status transition coverage
+- payment failure and payment success replay coverage
+
+### Wave 3: Excess-Product Export
+
+`ProductController.exportExcess` still performs business-rule math that belongs in the service layer. The controller should only resolve request context, ask a service for an excess-product view model, and serialize JSON or CSV. Moving the SKU-limit logic out of the controller will make the API easier to test and reduce future regressions when tier rules change.
+
+Recommended sequence:
+
+1. Move SKU-limit and excess-count calculations into a service method that accepts organization context and returns a structured export model.
+2. Move CSV row formatting into a dedicated serializer so the controller no longer owns export formatting.
+3. Keep the controller as a thin adapter that chooses response format and delegates all domain logic.
+4. Preserve the current JSON and CSV response payloads for unlimited tiers, within-limit tiers, and over-limit tiers.
+
+Validation targets:
+
+- unlimited tier returns zero excess products
+- within-limit organizations return the current limit metadata without product rows
+- over-limit organizations return the same counts and row shape as today
+- JSON and CSV export output stays contract-compatible
+
+### Wave 4: Inventory Hardening
+
+Inventory is lower risk than the import and webhook paths, but it still has type-safety and branch-complexity problems. The remaining `any`-typed Prisma mapping path should be replaced with a concrete payload type, and the update/error branches should be flattened into named helpers so schema drift is visible at compile time.
+
+Recommended sequence:
+
+1. Replace the `any` mapping with a Prisma payload type or a guarded adapter type that matches the generated schema.
+2. Extract markdown and update-condition checks into named helpers so the update method stays short.
+3. Keep error translation centralized so HTTP status mapping stays unchanged.
+4. Add a narrow regression test that fails on schema drift or bad payload mapping.
+
+Validation targets:
+
+- `tsc` or backend type-check passes after the type change
+- inventory update and markdown edge cases keep the same status mapping
+- schema-sensitive mapping fails in compile-time checks instead of at runtime
+
+## Recommended Answers to Open Questions
+
+- Migrate the most entangled service areas first: product import, CSV parsing, and webhook processing. They have the highest regression cost and the strongest CodeScene evidence.
+- Roll out repositories in the same order as service decomposition so each new repository immediately backs a reduced service surface.
+- Formalize DTOs now for row import and webhook payload boundaries, then defer broader DTO cleanup until the service splits are complete.
+- Keep long-running integration coverage for cross-tenant boundaries, webhook idempotency, and upload pipelines; move the rest toward targeted unit tests and focused regression tests.
+
 ## Open Questions
 
 - Which route groups should be migrated first: the highest-traffic user flows, or the most entangled service areas?
