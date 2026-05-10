@@ -24,15 +24,6 @@ const mockPrisma = {
   },
 };
 
-const mockProductRepository = {
-  findExcessProductsByOrganization: jest.fn(),
-};
-
-const mockSubscriptionRepository = {
-  findByOrganizationId: jest.fn(),
-  findUsageByOrganizationId: jest.fn(),
-};
-
 const mockProductService = {
   getAllProducts: jest.fn(),
   getProductByBarcode: jest.fn(),
@@ -42,6 +33,7 @@ const mockProductService = {
   updateProduct: jest.fn(),
   deleteProduct: jest.fn(),
   processCSVUpload: jest.fn(),
+  getExcessProductsView: jest.fn(),
 };
 
 const MockProductService = jest.fn().mockImplementation(() => mockProductService);
@@ -98,15 +90,13 @@ jest.mock('../../di/services', () => ({
 }));
 
 import productRouter from '../../routes/product.routes';
-import { BaseError } from '../../errors';
+import { BaseError, NotFoundError } from '../../errors';
 import { ProductController } from '../../controllers/product.controller';
 
 describe('product.routes organization guards', () => {
   beforeAll(() => {
     mockProductController = new ProductController(
       () => mockProductService as any,
-      mockProductRepository as any,
-      mockSubscriptionRepository as any,
     );
     mockProductController.uploadCsv = async (req: any, res: any, next: any) => {
       try {
@@ -194,22 +184,6 @@ describe('product.routes organization guards', () => {
         _count: { inventoryItems: 3 },
       },
     ]);
-    mockSubscriptionRepository.findByOrganizationId.mockResolvedValue({
-      tierLevel: 'professional',
-    });
-    mockSubscriptionRepository.findUsageByOrganizationId.mockResolvedValue({ totalSkus: 2005 });
-    mockProductRepository.findExcessProductsByOrganization.mockResolvedValue([
-      {
-        id: 1,
-        sku: 'SKU-1',
-        name: 'Excess Product 1',
-        barcode: '1111111111111',
-        costPrice: 10.5,
-        createdAt: new Date('2026-02-01T00:00:00.000Z'),
-        _count: { inventoryItems: 3 },
-      },
-    ]);
-
     mockProductService.getAllProducts.mockResolvedValue([]);
     mockProductService.getProductByBarcode.mockResolvedValue(null);
     mockProductService.getProductBySku.mockResolvedValue(null);
@@ -305,11 +279,13 @@ describe('product.routes organization guards', () => {
 
     expect(response.status).toBe(401);
     expect(response.body).toEqual({ message: 'Organization context missing' });
-    expect(mockSubscriptionRepository.findByOrganizationId).not.toHaveBeenCalled();
+    expect(mockProductService.getExcessProductsView).not.toHaveBeenCalled();
   });
 
   it('returns 404 on export-excess when subscription is missing', async () => {
-    mockSubscriptionRepository.findByOrganizationId.mockResolvedValue(null);
+    mockProductService.getExcessProductsView.mockRejectedValue(
+      new NotFoundError('Subscription not found'),
+    );
 
     const response = await request(app).get('/products/export-excess').set('x-org-id', 'org-1');
 
@@ -318,30 +294,64 @@ describe('product.routes organization guards', () => {
   });
 
   it('returns unlimited response on export-excess for premium tier', async () => {
-    mockSubscriptionRepository.findByOrganizationId.mockResolvedValue({ tierLevel: 'premium' });
+    mockProductService.getExcessProductsView.mockResolvedValue({
+      tier: 'premium',
+      maxSkus: null,
+      currentSkus: 0,
+      excessCount: 0,
+      products: [],
+    });
 
     const response = await request(app).get('/products/export-excess').set('x-org-id', 'org-1');
 
     expect(response.status).toBe(200);
     expect(response.body).toEqual({
-      message: 'Current tier has unlimited SKUs',
-      excessCount: 0,
+      metadata: {
+        organizationId: 'org-1',
+        tier: 'premium',
+        maxSkus: null,
+        currentSkus: 0,
+        excessCount: 0,
+      },
       products: [],
     });
   });
 
   it('returns within-limits response on export-excess when no overage exists', async () => {
-    mockSubscriptionRepository.findUsageByOrganizationId.mockResolvedValue({ totalSkus: 2000 });
+    mockProductService.getExcessProductsView.mockResolvedValue({
+      tier: 'professional',
+      maxSkus: 2000,
+      currentSkus: 2000,
+      excessCount: 0,
+      products: [],
+    });
 
     const response = await request(app).get('/products/export-excess').set('x-org-id', 'org-1');
 
     expect(response.status).toBe(200);
-    expect(response.body.message).toBe('Organization is within SKU limits');
-    expect(response.body.excessCount).toBe(0);
+    expect(response.body.metadata.excessCount).toBe(0);
     expect(response.body.products).toEqual([]);
   });
 
   it('returns JSON excess products payload on export-excess', async () => {
+    mockProductService.getExcessProductsView.mockResolvedValue({
+      tier: 'professional',
+      maxSkus: 2000,
+      currentSkus: 2005,
+      excessCount: 5,
+      products: [
+        {
+          id: 1,
+          sku: 'SKU-1',
+          name: 'Excess Product 1',
+          barcode: '1111111111111',
+          costPrice: 10.5,
+          createdAt: '2026-02-01T00:00:00.000Z',
+          inventoryCount: 3,
+        },
+      ],
+    });
+
     const response = await request(app).get('/products/export-excess').set('x-org-id', 'org-1');
 
     expect(response.status).toBe(200);
@@ -352,6 +362,24 @@ describe('product.routes organization guards', () => {
   });
 
   it('returns CSV excess products payload when Accept header requests csv', async () => {
+    mockProductService.getExcessProductsView.mockResolvedValue({
+      tier: 'professional',
+      maxSkus: 2000,
+      currentSkus: 2005,
+      excessCount: 5,
+      products: [
+        {
+          id: 1,
+          sku: 'SKU-1',
+          name: 'Excess Product 1',
+          barcode: '1111111111111',
+          costPrice: 10.5,
+          createdAt: '2026-02-01T00:00:00.000Z',
+          inventoryCount: 3,
+        },
+      ],
+    });
+
     const response = await request(app)
       .get('/products/export-excess')
       .set('x-org-id', 'org-1')
@@ -367,7 +395,7 @@ describe('product.routes organization guards', () => {
   });
 
   it('returns 500 on export-excess when data retrieval throws', async () => {
-    mockSubscriptionRepository.findByOrganizationId.mockRejectedValue(
+    mockProductService.getExcessProductsView.mockRejectedValue(
       new Error('tier lookup failed'),
     );
 

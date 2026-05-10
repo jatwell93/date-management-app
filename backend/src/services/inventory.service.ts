@@ -24,6 +24,17 @@ export interface CreateInventoryItemInput {
   status?: InventoryItem['status'];
 }
 
+type InventoryItemRaw = {
+  id: number;
+  productId: number;
+  organizationId: string | null;
+  expiryDate: Date;
+  locationId: number;
+  status: string;
+  createdAt: Date;
+  updatedAt: Date;
+};
+
 type DbClient = PrismaClient | Prisma.TransactionClient;
 type InventoryStatus = InventoryItem['status'];
 type InventoryTransactionInput = Omit<ItemTransaction, 'id' | 'transaction_date'>;
@@ -139,7 +150,7 @@ export class InventoryService {
         if (usage.totalInventoryItems >= usage.maxInventoryItems) {
           throw new Error(
             `Cannot create inventory item: maximum limit of ${usage.maxInventoryItems} inventory items reached. ` +
-              `Current usage: ${usage.totalInventoryItems}.`,
+            `Current usage: ${usage.totalInventoryItems}.`,
           );
         }
       }
@@ -485,14 +496,14 @@ export class InventoryService {
   /**
    * Map Prisma model to legacy InventoryItem interface
    */
-  private mapPrismaToModel(item: any): InventoryItem {
+  private mapPrismaToModel(item: InventoryItemRaw): InventoryItem {
     return {
       id: item.id,
       productId: item.productId,
       organizationId: item.organizationId ?? this.organizationId,
       expiryDate: item.expiryDate.toISOString(),
       locationId: item.locationId,
-      status: item.status,
+      status: item.status as InventoryItem['status'],
       createdAt: item.createdAt.toISOString(),
       updatedAt: item.updatedAt.toISOString(),
     };

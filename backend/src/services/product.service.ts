@@ -7,6 +7,7 @@ import { parse } from 'csv-parse';
 import * as XLSX from 'xlsx';
 import fs from 'fs';
 import { isPrismaNotFound } from '../utils/prisma-error';
+import { NotFoundError } from '../errors';
 import {
   detectProductImportFileType,
   getProductImportCsvColumnState,
@@ -22,6 +23,7 @@ import {
 import { injectable, inject } from 'tsyringe';
 import { ProductRepository } from '../repositories/product.repository';
 import { SubscriptionRepository } from '../repositories/subscription.repository';
+import { TIER_LIMITS, TierLevel } from '../types/subscription';
 
 export function extractCostValue(costStr: string): number | null {
   // Remove common currency symbols and formatting
@@ -386,6 +388,78 @@ export class ProductService {
       costPrice: product.costPrice,
       createdAt: product.createdAt.toISOString(),
       updatedAt: product.updatedAt.toISOString(),
+    };
+  }
+
+  async getExcessProductsView(organizationId: string): Promise<{
+    tier: TierLevel;
+    maxSkus: number | null;
+    currentSkus: number;
+    excessCount: number;
+    products: Array<{
+      id: number;
+      sku: string;
+      name: string;
+      barcode: string;
+      costPrice: number;
+      createdAt: string;
+      inventoryCount: number;
+    }>;
+  }> {
+    const subscription = await this.subscriptionRepo.findByOrganizationId(organizationId);
+
+    if (!subscription) {
+      throw new NotFoundError('Subscription not found');
+    }
+
+    const tierLevel = subscription.tierLevel as TierLevel;
+    const maxSkus = TIER_LIMITS[tierLevel].max_skus;
+
+    if (maxSkus === null) {
+      return {
+        tier: tierLevel,
+        maxSkus: null,
+        currentSkus: 0,
+        excessCount: 0,
+        products: [],
+      };
+    }
+
+    const usage = await this.subscriptionRepo.findUsageByOrganizationId(organizationId);
+    const currentCount = usage?.totalSkus || 0;
+    const excessCount = currentCount - maxSkus;
+
+    if (excessCount <= 0) {
+      return {
+        tier: tierLevel,
+        maxSkus,
+        currentSkus: currentCount,
+        excessCount: 0,
+        products: [],
+      };
+    }
+
+    const excessProducts = await this.productRepo.findExcessProductsByOrganization(
+      organizationId,
+      maxSkus,
+    );
+
+    const products = excessProducts.map((p) => ({
+      id: p.id,
+      sku: p.sku,
+      name: p.name,
+      barcode: p.barcode,
+      costPrice: p.costPrice,
+      createdAt: p.createdAt.toISOString(),
+      inventoryCount: p._count.inventoryItems,
+    }));
+
+    return {
+      tier: tierLevel,
+      maxSkus,
+      currentSkus: currentCount,
+      excessCount,
+      products,
     };
   }
 

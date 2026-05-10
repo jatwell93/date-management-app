@@ -237,19 +237,7 @@ export class WebhookService {
    * Extract tier level from subscription's price metadata
    */
   private extractTierFromPrice(subscription: Stripe.Subscription): TierLevel {
-    const price = subscription.items.data[0]?.price;
-    if (!price) {
-      log.warn('No price found in subscription, defaulting to starter');
-      return 'starter';
-    }
-
-    const tier = (price.metadata?.tier as TierLevel) || 'starter';
-    if (!Object.keys(TIER_LIMITS).includes(tier)) {
-      log.warn(`Unknown tier ${tier} from price metadata, using starter`);
-      return 'starter';
-    }
-
-    return tier;
+    return extractTierFromSubscriptionPrice(subscription);
   }
 
   /**
@@ -869,7 +857,7 @@ export class WebhookService {
       TIER_LIMITS[newTierLevel].max_skus !== null &&
       (TIER_LIMITS[oldTier.tierLevel as TierLevel].max_skus === null ||
         (TIER_LIMITS[newTierLevel].max_skus as number) <
-          (TIER_LIMITS[oldTier.tierLevel as TierLevel].max_skus as number))
+        (TIER_LIMITS[oldTier.tierLevel as TierLevel].max_skus as number))
     );
   }
 
@@ -978,40 +966,29 @@ export class WebhookService {
     isDowngrade: boolean,
   ): Promise<void> {
     if (!isDowngrade) {
-      // Clear lock on upgrade
       await this.orgRepo.updateById(organizationId, { isCreationLocked: false }, tx);
       return;
     }
 
-    // Check usage on downgrade
-    const usage = await this.subscriptionRepo.findUsageByOrganizationId(organizationId, tx);
+    const result = await applyCreationLockIfNeeded(
+      organizationId,
+      limits,
+      tx,
+      {
+        orgRepo: this.orgRepo,
+        subscriptionRepo: this.subscriptionRepo,
+        emailService: this.emailService,
+      },
+    );
 
-    if (!usage) return;
-
-    const isOverSkuLimit = limits.max_skus !== null && usage.totalSkus > limits.max_skus;
-    const isOverInventoryLimit =
-      limits.max_inventory_items !== null && usage.totalInventoryItems > limits.max_inventory_items;
-
-    if (isOverSkuLimit || isOverInventoryLimit) {
-      await this.orgRepo.updateById(organizationId, { isCreationLocked: true }, tx);
-
+    if (result.lockApplied) {
       log.warn('Creation lock applied on tier downgrade', {
         organizationId,
-        currentSkus: usage.totalSkus,
-        currentInventoryItems: usage.totalInventoryItems,
-        newSkuLimit: limits.max_skus,
-        newInventoryLimit: limits.max_inventory_items,
+        currentSkus: result.currentSkus,
+        currentInventoryItems: result.currentInventoryItems,
+        newSkuLimit: result.skuLimit,
+        newInventoryLimit: result.inventoryLimit,
       });
-
-      // Send SKU warning email only when the SKU limit is the one exceeded
-      // (limits.max_skus may be null when only isOverInventoryLimit triggered this block)
-      if (isOverSkuLimit && limits.max_skus !== null) {
-        await this.emailService.sendDowngradeWarningEmail(
-          organizationId,
-          usage.totalSkus,
-          limits.max_skus,
-        );
-      }
     }
   }
 
@@ -1163,6 +1140,85 @@ export class WebhookService {
       tx,
     );
   }
+}
+
+// ============================================================================
+// Standalone Helper Functions (independently testable)
+// ============================================================================
+
+export function extractTierFromSubscriptionPrice(subscription: Stripe.Subscription): TierLevel {
+  const price = subscription.items.data[0]?.price;
+  if (!price) {
+    log.warn('No price found on subscription, defaulting to starter', {
+      subscriptionId: subscription.id,
+    });
+    return 'starter';
+  }
+
+  const tier = (price.metadata?.tier as TierLevel) || 'starter';
+  if (!Object.keys(TIER_LIMITS).includes(tier)) {
+    log.warn('Unknown tier in price metadata, defaulting to starter', {
+      subscriptionId: subscription.id,
+      priceId: price.id,
+      tier,
+    });
+    return 'starter';
+  }
+
+  return tier;
+}
+
+export interface CreationLockDeps {
+  orgRepo: OrganizationRepository;
+  subscriptionRepo: SubscriptionRepository;
+  emailService: EmailService;
+}
+
+export interface CreationLockResult {
+  lockApplied: boolean;
+  currentSkus?: number;
+  currentInventoryItems?: number;
+  skuLimit?: number | null;
+  inventoryLimit?: number | null;
+}
+
+export async function applyCreationLockIfNeeded(
+  organizationId: string,
+  limits: TierLimits,
+  tx: Prisma.TransactionClient,
+  deps: CreationLockDeps,
+): Promise<CreationLockResult> {
+  const usage = await deps.subscriptionRepo.findUsageByOrganizationId(organizationId, tx);
+
+  if (!usage) {
+    return { lockApplied: false };
+  }
+
+  const isOverSkuLimit = limits.max_skus !== null && usage.totalSkus > limits.max_skus;
+  const isOverInventoryLimit =
+    limits.max_inventory_items !== null && usage.totalInventoryItems > limits.max_inventory_items;
+
+  if (isOverSkuLimit || isOverInventoryLimit) {
+    await deps.orgRepo.updateById(organizationId, { isCreationLocked: true }, tx);
+
+    if (isOverSkuLimit && limits.max_skus !== null) {
+      await deps.emailService.sendDowngradeWarningEmail(
+        organizationId,
+        usage.totalSkus,
+        limits.max_skus,
+      );
+    }
+
+    return {
+      lockApplied: true,
+      currentSkus: usage.totalSkus,
+      currentInventoryItems: usage.totalInventoryItems,
+      skuLimit: limits.max_skus,
+      inventoryLimit: limits.max_inventory_items,
+    };
+  }
+
+  return { lockApplied: false };
 }
 
 export const webhookService = new WebhookService();
