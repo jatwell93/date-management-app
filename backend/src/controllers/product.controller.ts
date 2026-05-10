@@ -18,6 +18,14 @@ import { injectable, inject } from 'tsyringe';
 import { ProductRepository } from '../repositories/product.repository';
 import { SubscriptionRepository } from '../repositories/subscription.repository';
 
+type ProductUpdateData = Partial<
+  Omit<Product, 'id' | 'createdAt' | 'updatedAt' | 'organizationId'>
+>;
+type SafeUploadFile = {
+  safeFilePath: string;
+  originalFilename: string;
+};
+
 @injectable()
 export class ProductController {
   constructor(
@@ -43,6 +51,116 @@ export class ProductController {
     next(error);
   }
 
+  private parseProductId(req: AuthRequest): number {
+    const id = Number.parseInt(req.params.id, 10);
+    if (Number.isNaN(id)) {
+      throw new ValidationError('Invalid product id');
+    }
+    return id;
+  }
+
+  private assertProductBelongsToOrganization(product: Product, req: AuthRequest): void {
+    if (product.organizationId !== req.organizationId) {
+      throw new AuthorizationError('Access denied: Product belongs to different organization');
+    }
+  }
+
+  private async getExistingProduct(
+    productService: ProductService,
+    id: number,
+    req: AuthRequest,
+  ): Promise<Product> {
+    const product = await productService.getProductById(id);
+    if (!product) {
+      throw new NotFoundError('Product not found');
+    }
+
+    this.assertProductBelongsToOrganization(product, req);
+    return product;
+  }
+
+  private buildProductUpdateData(req: AuthRequest): ProductUpdateData {
+    const { barcode, sku, name, costPrice } = req.body;
+    return {
+      ...(barcode !== undefined ? { barcode } : {}),
+      ...(sku !== undefined ? { sku } : {}),
+      ...(name !== undefined ? { name } : {}),
+      ...(costPrice !== undefined ? { costPrice } : {}),
+    };
+  }
+
+  private async getProductByLookup(
+    req: AuthRequest,
+    lookupValue: string,
+    lookup: (service: ProductService, value: string) => Promise<Product | null>,
+  ): Promise<Product> {
+    const product = await lookup(this.getService(req), lookupValue);
+    if (!product) {
+      throw new NotFoundError('Product not found');
+    }
+    return product;
+  }
+
+  private getSafeUploadedFile(req: AuthRequest): SafeUploadFile {
+    if (!req.file) {
+      throw new ValidationError('No file provided', [
+        {
+          field: 'file',
+          message: 'Please select a CSV, XLSX, or XLS file to upload.',
+        },
+      ]);
+    }
+
+    const uploadDir = path.dirname(req.file.path);
+    const safeFilePath = path.resolve(uploadDir, path.basename(req.file.path));
+    if (!safeFilePath.startsWith(uploadDir + path.sep)) {
+      throw new ValidationError('Invalid file path');
+    }
+    return { safeFilePath, originalFilename: req.file.originalname };
+  }
+
+  private sendExcessProductsCsv(
+    res: Response,
+    organizationId: string,
+    products: Array<Record<string, string | number>>,
+  ): void {
+    const headers = ['id', 'sku', 'name', 'barcode', 'costPrice', 'createdAt', 'inventoryCount'];
+    const csvRows = [
+      headers.join(','),
+      ...products.map((product) =>
+        headers.map((header) => escapeCSVValue(product[header])).join(','),
+      ),
+    ];
+
+    res.setHeader('Content-Type', 'text/csv');
+    res.setHeader(
+      'Content-Disposition',
+      `attachment; filename="excess-products-${organizationId}.csv"`,
+    );
+    res.send(csvRows.join('\n'));
+  }
+
+  private buildUploadResponse(result: { imported: number; updated: number; errors: string[] }): {
+    success: boolean;
+    message: string;
+    imported: number;
+    updated: number;
+    errors?: string[];
+  } {
+    const responseObj = {
+      success: result.errors.length === 0,
+      message:
+        result.errors.length > 0
+          ? `CSV processed with ${result.errors.length} error(s). See 'errors' field for details.`
+          : 'CSV processed successfully',
+      imported: result.imported,
+      updated: result.updated,
+      ...(result.errors.length > 0 ? { errors: result.errors } : {}),
+    };
+
+    return responseObj;
+  }
+
   async getAllProducts(req: AuthRequest, res: Response, next: NextFunction): Promise<void> {
     try {
       const productService = this.getService(req);
@@ -55,14 +173,9 @@ export class ProductController {
 
   async getProductByBarcode(req: AuthRequest, res: Response, next: NextFunction): Promise<void> {
     try {
-      const { barcode } = req.params;
-      const productService = this.getService(req);
-      const product = await productService.getProductByBarcode(barcode);
-
-      if (!product) {
-        throw new NotFoundError('Product not found');
-      }
-
+      const product = await this.getProductByLookup(req, req.params.barcode, (service, barcode) =>
+        service.getProductByBarcode(barcode),
+      );
       res.json(product);
     } catch (error) {
       this.handleRouteError(error, res, next);
@@ -71,14 +184,9 @@ export class ProductController {
 
   async getProductBySku(req: AuthRequest, res: Response, next: NextFunction): Promise<void> {
     try {
-      const { sku } = req.params;
-      const productService = this.getService(req);
-      const product = await productService.getProductBySku(sku);
-
-      if (!product) {
-        throw new NotFoundError('Product not found');
-      }
-
+      const product = await this.getProductByLookup(req, req.params.sku, (service, sku) =>
+        service.getProductBySku(sku),
+      );
       res.json(product);
     } catch (error) {
       this.handleRouteError(error, res, next);
@@ -87,21 +195,8 @@ export class ProductController {
 
   async getProductById(req: AuthRequest, res: Response, next: NextFunction): Promise<void> {
     try {
-      const id = Number.parseInt(req.params.id, 10);
-      if (Number.isNaN(id)) {
-        throw new ValidationError('Invalid product id');
-      }
       const productService = this.getService(req);
-      const product = await productService.getProductById(id);
-
-      if (!product) {
-        throw new NotFoundError('Product not found');
-      }
-
-      // Validate product belongs to user's organization
-      if (product.organizationId !== req.organizationId) {
-        throw new AuthorizationError('Access denied: Product belongs to different organization');
-      }
+      const product = await this.getExistingProduct(productService, this.parseProductId(req), req);
 
       res.json(product);
     } catch (error) {
@@ -131,31 +226,14 @@ export class ProductController {
 
   async updateProduct(req: AuthRequest, res: Response, next: NextFunction): Promise<void> {
     try {
-      const id = Number.parseInt(req.params.id, 10);
-      if (Number.isNaN(id)) {
-        throw new ValidationError('Invalid product id');
-      }
-      const { barcode, sku, name, costPrice } = req.body;
-
+      const id = this.parseProductId(req);
       const productService = this.getService(req);
-      const existingProduct = await productService.getProductById(id);
-      if (!existingProduct) {
-        throw new NotFoundError('Product not found');
-      }
-      if (existingProduct.organizationId !== req.organizationId) {
-        throw new AuthorizationError('Access denied: Product belongs to different organization');
-      }
+      await this.getExistingProduct(productService, id, req);
 
-      // Build update object
-      const updateData: Partial<
-        Omit<Product, 'id' | 'createdAt' | 'updatedAt' | 'organizationId'>
-      > = {};
-      if (barcode !== undefined) updateData.barcode = barcode;
-      if (sku !== undefined) updateData.sku = sku;
-      if (name !== undefined) updateData.name = name;
-      if (costPrice !== undefined) updateData.costPrice = costPrice;
-
-      const updatedProduct = await productService.updateProduct(id, updateData);
+      const updatedProduct = await productService.updateProduct(
+        id,
+        this.buildProductUpdateData(req),
+      );
 
       if (!updatedProduct) {
         throw new NotFoundError('Product not found');
@@ -169,19 +247,9 @@ export class ProductController {
 
   async deleteProduct(req: AuthRequest, res: Response, next: NextFunction): Promise<void> {
     try {
-      const id = Number.parseInt(req.params.id, 10);
-      if (Number.isNaN(id)) {
-        throw new ValidationError('Invalid product id');
-      }
-
+      const id = this.parseProductId(req);
       const productService = this.getService(req);
-      const existingProduct = await productService.getProductById(id);
-      if (!existingProduct) {
-        throw new NotFoundError('Product not found');
-      }
-      if (existingProduct.organizationId !== req.organizationId) {
-        throw new AuthorizationError('Access denied: Product belongs to different organization');
-      }
+      await this.getExistingProduct(productService, id, req);
 
       const deleted = await productService.deleteProduct(id);
 
@@ -255,32 +323,9 @@ export class ProductController {
         inventoryCount: p._count.inventoryItems,
       }));
 
-      // Determine response format based on Accept header
       const acceptHeader = req.get('Accept') || '';
       if (acceptHeader.includes('text/csv') || req.query.format === 'csv') {
-        // CSV response
-        const headers = [
-          'id',
-          'sku',
-          'name',
-          'barcode',
-          'costPrice',
-          'createdAt',
-          'inventoryCount',
-        ];
-        const csvRows = [
-          headers.join(','),
-          ...products.map((p) =>
-            headers.map((h) => escapeCSVValue(p[h as keyof typeof p])).join(','),
-          ),
-        ];
-
-        res.setHeader('Content-Type', 'text/csv');
-        res.setHeader(
-          'Content-Disposition',
-          `attachment; filename="excess-products-${organizationId}.csv"`,
-        );
-        res.send(csvRows.join('\n'));
+        this.sendExcessProductsCsv(res, organizationId, products);
         return;
       }
 
@@ -302,48 +347,11 @@ export class ProductController {
 
   async uploadCsv(req: AuthRequest, res: Response, next: NextFunction): Promise<void> {
     try {
-      if (!req.file) {
-        throw new ValidationError('No file provided', [
-          {
-            field: 'file',
-            message: 'Please select a CSV, XLSX, or XLS file to upload.',
-          },
-        ]);
-      }
-
-      // Normalize and validate the uploaded file path
-      const uploadDir = path.dirname(req.file.path);
-      const safeFilePath = path.resolve(uploadDir, path.basename(req.file.path));
-      if (!safeFilePath.startsWith(uploadDir + path.sep)) {
-        throw new ValidationError('Invalid file path');
-      }
-
-      // Process the uploaded file
+      const { safeFilePath, originalFilename } = this.getSafeUploadedFile(req);
       const productService = this.getService(req);
-      const result = await productService.processCSVUpload(safeFilePath, req.file.originalname);
+      const result = await productService.processCSVUpload(safeFilePath, originalFilename);
 
-      // Send response
-      const responseObj: {
-        success: boolean;
-        message: string;
-        imported: number;
-        updated: number;
-        errors?: string[];
-      } = {
-        success: result.errors.length === 0,
-        message:
-          result.errors.length > 0
-            ? `CSV processed with ${result.errors.length} error(s). See 'errors' field for details.`
-            : 'CSV processed successfully',
-        imported: result.imported,
-        updated: result.updated,
-      };
-
-      if (result.errors.length > 0) {
-        responseObj.errors = result.errors;
-      }
-
-      res.json(responseObj);
+      res.json(this.buildUploadResponse(result));
     } catch (error: unknown) {
       this.handleRouteError(error, res, next);
     } finally {

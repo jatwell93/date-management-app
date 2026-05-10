@@ -1,158 +1,188 @@
 import { InventoryService } from '../../services/inventory.service';
 import { PrismaClient } from '@prisma/client';
 
+function createMockPrisma() {
+  const mockPrisma = {
+    inventoryItem: {
+      create: jest.fn(),
+      update: jest.fn(),
+      findUnique: jest.fn(),
+      findMany: jest.fn(),
+      findFirst: jest.fn(),
+      delete: jest.fn(),
+    },
+    product: {
+      findFirst: jest.fn(),
+      findUnique: jest.fn(),
+      create: jest.fn(),
+      update: jest.fn(),
+    },
+    storeArea: {
+      findFirst: jest.fn(),
+      findUnique: jest.fn(),
+      create: jest.fn(),
+    },
+    user: {
+      findFirst: jest.fn(),
+      findUnique: jest.fn(),
+      update: jest.fn(),
+      updateMany: jest.fn(),
+    },
+    auditLog: {
+      create: jest.fn(),
+    },
+    itemTransaction: {
+      create: jest.fn(),
+    },
+    organizationUsage: {
+      update: jest.fn(),
+      findUnique: jest.fn(),
+    },
+    subscriptionTier: {
+      findFirst: jest.fn(),
+      update: jest.fn(),
+    },
+    $transaction: jest.fn((callback) => callback(mockPrisma)),
+  };
+
+  return mockPrisma;
+}
+
+function createInventoryRepositoryMock(mockPrisma: any) {
+  return {
+    findFirst: jest.fn((where) => mockPrisma.inventoryItem.findFirst({ where })),
+    findAll: jest.fn((orgId) =>
+      mockPrisma.inventoryItem.findMany({ where: { organizationId: orgId } }),
+    ),
+    findById: jest.fn((id, orgId) =>
+      mockPrisma.inventoryItem.findFirst({ where: { id, organizationId: orgId } }),
+    ),
+    findByProductId: jest.fn((productId, orgId) =>
+      mockPrisma.inventoryItem.findMany({
+        where: { productId, organizationId: orgId },
+      }),
+    ),
+    findRecentByProductId: jest.fn((productId, orgId, limit) =>
+      mockPrisma.inventoryItem.findMany({
+        where: { productId, organizationId: orgId },
+        orderBy: { createdAt: 'desc' },
+        take: limit,
+      }),
+    ),
+    findByLocationId: jest.fn((locationId, orgId) =>
+      mockPrisma.inventoryItem.findMany({
+        where: { locationId, organizationId: orgId },
+      }),
+    ),
+    findByOrganizationIdAndId: jest.fn((id, orgId) =>
+      mockPrisma.inventoryItem.findFirst({ where: { id, organizationId: orgId } }),
+    ),
+    findManyByIds: jest.fn((ids, orgId) =>
+      mockPrisma.inventoryItem.findMany({
+        where: { id: { in: ids }, organizationId: orgId },
+        select: { id: true },
+      }),
+    ),
+    findUniqueWithProduct: jest.fn((id, orgId) =>
+      mockPrisma.inventoryItem.findUnique({
+        where: { id, organizationId: orgId },
+        include: { product: { select: { costPrice: true } } },
+      }),
+    ),
+    updateManyByIds: jest.fn((items) =>
+      Promise.all(
+        items.map((item) =>
+          mockPrisma.inventoryItem.update({
+            where: { id: item.id },
+            data: { status: item.status },
+          }),
+        ),
+      ),
+    ),
+    create: jest.fn((data) => mockPrisma.inventoryItem.create({ data })),
+    update: jest.fn((id, orgId, data) =>
+      mockPrisma.inventoryItem.update({ where: { id, organizationId: orgId }, data }),
+    ),
+    delete: jest.fn((id, orgId) =>
+      mockPrisma.inventoryItem.delete({ where: { id, organizationId: orgId } }),
+    ),
+  };
+}
+
+function createProductRepositoryMock(mockPrisma: any) {
+  return {
+    findById: jest.fn((id, orgId) =>
+      mockPrisma.product.findFirst({ where: { id, organizationId: orgId } }),
+    ),
+    findBySku: jest.fn((sku, orgId) =>
+      mockPrisma.product.findFirst({ where: { sku, organizationId: orgId } }),
+    ),
+    create: jest.fn((data) => mockPrisma.product.create({ data })),
+    update: jest.fn((id, orgId, data) =>
+      mockPrisma.product.update({ where: { id, organizationId: orgId }, data }),
+    ),
+  };
+}
+
+function createInventoryService(organizationId: string, mockPrisma: any): InventoryService {
+  return new InventoryService(
+    organizationId,
+    mockPrisma as unknown as PrismaClient,
+    createInventoryRepositoryMock(mockPrisma) as any,
+    createProductRepositoryMock(mockPrisma) as any,
+    {
+      findUsageByOrganizationId: jest.fn((orgId) =>
+        mockPrisma.organizationUsage.findUnique({ where: { organizationId: orgId } }),
+      ),
+      updateUsage: jest.fn((orgId, data) =>
+        mockPrisma.organizationUsage.update({ where: { organizationId: orgId }, data }),
+      ),
+    } as any,
+    {
+      findById: jest.fn((id, orgId) =>
+        mockPrisma.user.findFirst({ where: { id, organizationId: orgId } }),
+      ),
+      findByEmailAndOrganizationId: mockPrisma.user.findFirst,
+      createClerkUser: mockPrisma.user.create,
+      updateManyByClerkUserId: mockPrisma.user.updateMany,
+      findFirstByClerkUserIdAndOrganizationId: mockPrisma.user.findFirst,
+      softDeleteById: mockPrisma.user.update,
+      findByClerkUserIdSelectEmail: mockPrisma.user.findFirst,
+      findUniqueByClerkUserId: mockPrisma.user.findUnique,
+      findAdminByOrganizationId: mockPrisma.user.findFirst,
+      findRecentTrialUserByEmail: mockPrisma.user.findFirst,
+    } as any,
+    {
+      create: jest.fn((data) => mockPrisma.auditLog.create({ data })),
+    } as any,
+    {
+      findById: jest.fn((id, orgId) =>
+        mockPrisma.storeArea.findFirst({ where: { id, organizationId: orgId } }),
+      ),
+    } as any,
+  );
+}
+
+function createRepositoryDelegationService(
+  organizationId: string,
+  mockPrisma: any,
+  inventoryRepo: Record<string, jest.Mock>,
+): InventoryService {
+  return new InventoryService(
+    organizationId,
+    mockPrisma as unknown as PrismaClient,
+    inventoryRepo as never,
+  );
+}
+
 describe('InventoryService', () => {
   let inventoryService: InventoryService;
   let mockPrisma: any;
   const organizationId = 'org-123';
 
   beforeEach(() => {
-    mockPrisma = {
-      inventoryItem: {
-        create: jest.fn(),
-        update: jest.fn(),
-        findUnique: jest.fn(),
-        findMany: jest.fn(),
-        findFirst: jest.fn(),
-        delete: jest.fn(),
-      },
-      product: {
-        findFirst: jest.fn(),
-        findUnique: jest.fn(),
-        create: jest.fn(),
-        update: jest.fn(),
-      },
-      storeArea: {
-        findFirst: jest.fn(),
-        findUnique: jest.fn(),
-        create: jest.fn(),
-      },
-      user: {
-        findFirst: jest.fn(),
-        findUnique: jest.fn(),
-        update: jest.fn(),
-        updateMany: jest.fn(),
-      },
-      auditLog: {
-        create: jest.fn(),
-      },
-      itemTransaction: {
-        create: jest.fn(),
-      },
-      organizationUsage: {
-        update: jest.fn(),
-        findUnique: jest.fn(),
-      },
-      subscriptionTier: {
-        findFirst: jest.fn(),
-        update: jest.fn(),
-      },
-      $transaction: jest.fn((callback) => callback(mockPrisma)),
-    };
-    inventoryService = new InventoryService(
-      organizationId,
-      mockPrisma as unknown as PrismaClient,
-      {
-        findFirst: jest.fn((where) => mockPrisma.inventoryItem.findFirst({ where })),
-        findAll: jest.fn((orgId) =>
-          mockPrisma.inventoryItem.findMany({ where: { organizationId: orgId } }),
-        ),
-        findById: jest.fn((id, orgId) =>
-          mockPrisma.inventoryItem.findFirst({ where: { id, organizationId: orgId } }),
-        ),
-        findByProductId: jest.fn((productId, orgId) =>
-          mockPrisma.inventoryItem.findMany({
-            where: { productId, organizationId: orgId },
-          }),
-        ),
-        findRecentByProductId: jest.fn((productId, orgId, limit) =>
-          mockPrisma.inventoryItem.findMany({
-            where: { productId, organizationId: orgId },
-            orderBy: { createdAt: 'desc' },
-            take: limit,
-          }),
-        ),
-        findByLocationId: jest.fn((locationId, orgId) =>
-          mockPrisma.inventoryItem.findMany({
-            where: { locationId, organizationId: orgId },
-          }),
-        ),
-        findByOrganizationIdAndId: jest.fn((id, orgId) =>
-          mockPrisma.inventoryItem.findFirst({ where: { id, organizationId: orgId } }),
-        ),
-        findManyByIds: jest.fn((ids, orgId) =>
-          mockPrisma.inventoryItem.findMany({
-            where: { id: { in: ids }, organizationId: orgId },
-            select: { id: true },
-          }),
-        ),
-        findUniqueWithProduct: jest.fn((id, orgId) =>
-          mockPrisma.inventoryItem.findUnique({
-            where: { id, organizationId: orgId },
-            include: { product: { select: { costPrice: true } } },
-          }),
-        ),
-        updateManyByIds: jest.fn((items) =>
-          Promise.all(
-            items.map((item) =>
-              mockPrisma.inventoryItem.update({
-                where: { id: item.id },
-                data: { status: item.status },
-              }),
-            ),
-          ),
-        ),
-        create: jest.fn((data) => mockPrisma.inventoryItem.create({ data })),
-        update: jest.fn((id, orgId, data) =>
-          mockPrisma.inventoryItem.update({ where: { id, organizationId: orgId }, data }),
-        ),
-        delete: jest.fn((id, orgId) =>
-          mockPrisma.inventoryItem.delete({ where: { id, organizationId: orgId } }),
-        ),
-      } as any,
-      {
-        findById: jest.fn((id, orgId) =>
-          mockPrisma.product.findFirst({ where: { id, organizationId: orgId } }),
-        ),
-        findBySku: jest.fn((sku, orgId) =>
-          mockPrisma.product.findFirst({ where: { sku, organizationId: orgId } }),
-        ),
-        create: jest.fn((data) => mockPrisma.product.create({ data })),
-        update: jest.fn((id, orgId, data) =>
-          mockPrisma.product.update({ where: { id, organizationId: orgId }, data }),
-        ),
-      } as any,
-      {
-        findUsageByOrganizationId: jest.fn((orgId) =>
-          mockPrisma.organizationUsage.findUnique({ where: { organizationId: orgId } }),
-        ),
-        updateUsage: jest.fn((orgId, data) =>
-          mockPrisma.organizationUsage.update({ where: { organizationId: orgId }, data }),
-        ),
-      } as any,
-      {
-        findById: jest.fn((id, orgId) =>
-          mockPrisma.user.findFirst({ where: { id, organizationId: orgId } }),
-        ),
-        findByEmailAndOrganizationId: mockPrisma.user.findFirst,
-        createClerkUser: mockPrisma.user.create,
-        updateManyByClerkUserId: mockPrisma.user.updateMany,
-        findFirstByClerkUserIdAndOrganizationId: mockPrisma.user.findFirst,
-        softDeleteById: mockPrisma.user.update,
-        findByClerkUserIdSelectEmail: mockPrisma.user.findFirst,
-        findUniqueByClerkUserId: mockPrisma.user.findUnique,
-        findAdminByOrganizationId: mockPrisma.user.findFirst,
-        findRecentTrialUserByEmail: mockPrisma.user.findFirst,
-      } as any,
-      {
-        create: jest.fn((data) => mockPrisma.auditLog.create({ data })),
-      } as any,
-      {
-        findById: jest.fn((id, orgId) =>
-          mockPrisma.storeArea.findFirst({ where: { id, organizationId: orgId } }),
-        ),
-      } as any,
-    );
+    mockPrisma = createMockPrisma();
+    inventoryService = createInventoryService(organizationId, mockPrisma);
   });
 
   afterEach(() => {
@@ -340,11 +370,7 @@ describe('InventoryService', () => {
           },
         ]),
       };
-      const service = new InventoryService(
-        organizationId,
-        mockPrisma as unknown as PrismaClient,
-        inventoryRepo as never,
-      );
+      const service = createRepositoryDelegationService(organizationId, mockPrisma, inventoryRepo);
 
       mockPrisma.inventoryItem.findMany.mockRejectedValue(
         new Error('service should use repository'),
@@ -402,11 +428,7 @@ describe('InventoryService', () => {
           updatedAt: new Date('2026-01-02T00:00:00.000Z'),
         }),
       };
-      const service = new InventoryService(
-        organizationId,
-        mockPrisma as unknown as PrismaClient,
-        inventoryRepo as never,
-      );
+      const service = createRepositoryDelegationService(organizationId, mockPrisma, inventoryRepo);
 
       mockPrisma.inventoryItem.findFirst.mockRejectedValue(
         new Error('service should use repository'),
@@ -429,11 +451,7 @@ describe('InventoryService', () => {
       const inventoryRepo = {
         findByProductId: jest.fn().mockResolvedValue([]),
       };
-      const service = new InventoryService(
-        organizationId,
-        mockPrisma as unknown as PrismaClient,
-        inventoryRepo as never,
-      );
+      const service = createRepositoryDelegationService(organizationId, mockPrisma, inventoryRepo);
 
       mockPrisma.inventoryItem.findMany.mockRejectedValue(
         new Error('service should use repository'),
@@ -478,11 +496,7 @@ describe('InventoryService', () => {
       const inventoryRepo = {
         findRecentByProductId: jest.fn().mockResolvedValue([]),
       };
-      const service = new InventoryService(
-        organizationId,
-        mockPrisma as unknown as PrismaClient,
-        inventoryRepo as never,
-      );
+      const service = createRepositoryDelegationService(organizationId, mockPrisma, inventoryRepo);
 
       mockPrisma.inventoryItem.findMany.mockRejectedValue(
         new Error('service should use repository'),
@@ -529,11 +543,7 @@ describe('InventoryService', () => {
       const inventoryRepo = {
         findByLocationId: jest.fn().mockResolvedValue([]),
       };
-      const service = new InventoryService(
-        organizationId,
-        mockPrisma as unknown as PrismaClient,
-        inventoryRepo as never,
-      );
+      const service = createRepositoryDelegationService(organizationId, mockPrisma, inventoryRepo);
 
       mockPrisma.inventoryItem.findMany.mockRejectedValue(
         new Error('service should use repository'),

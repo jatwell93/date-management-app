@@ -39,37 +39,17 @@ export interface ProductImportRowValues {
   barcode: string | null;
 }
 
-function getAllowedHeaders(headers: Array<string | null | undefined>): Set<string> {
-  return new Set(
-    headers
-      .filter((header): header is string => header !== null && header !== undefined)
-      .map((header) => header.toLowerCase()),
-  );
+function normalizeCellValue(value: unknown): string | null {
+  return value !== undefined && value !== null ? value.toString().trim() : null;
 }
 
 function readRowValue(
   row: unknown[] | Record<string, unknown>,
   key: string | number | null,
 ): string | null {
-  if (key === null) {
-    return null;
-  }
-
-  if (Array.isArray(row)) {
-    if (typeof key !== 'number') {
-      return null;
-    }
-
-    const value = row[key];
-    return value !== undefined && value !== null ? value.toString().trim() : null;
-  }
-
-  if (typeof key !== 'string') {
-    return null;
-  }
-
-  const value = row[key];
-  return value !== undefined && value !== null ? value.toString().trim() : null;
+  if (key === null) return null;
+  if (Array.isArray(row)) return typeof key === 'number' ? normalizeCellValue(row[key]) : null;
+  return typeof key === 'string' ? normalizeCellValue(row[key]) : null;
 }
 
 function getAllowedProductImportHeaderValues(): string[] {
@@ -165,18 +145,12 @@ export function findColumnIndexByAlternatives(
   headers: (string | null | undefined)[],
   alternatives: string[],
 ): number | null {
-  for (let i = 0; i < headers.length; i++) {
-    const header = headers[i];
-    if (!header) continue;
-    const cleanHeader = header.toString().trim().toLowerCase();
-    for (const alt of alternatives) {
-      if (cleanHeader === alt.toLowerCase()) {
-        return i;
-      }
-    }
-  }
+  const normalizedAlternatives = new Set(alternatives.map((alt) => alt.toLowerCase()));
+  const columnIndex = headers.findIndex((header) =>
+    header ? normalizedAlternatives.has(header.toString().trim().toLowerCase()) : false,
+  );
 
-  return null;
+  return columnIndex === -1 ? null : columnIndex;
 }
 
 export function getProductImportCsvColumnState(
@@ -213,23 +187,35 @@ export function getProductImportCsvRowValues(
   row: Record<string, unknown>,
   state: ProductImportCsvColumnState,
 ): ProductImportRowValues {
-  return {
-    sku: readRowValue(row, state.skuHeader),
-    name: readRowValue(row, state.nameHeader),
-    costStr: readRowValue(row, state.costHeader),
-    barcode: readRowValue(row, state.barcodeHeader),
-  };
+  return getProductImportRowValues(row, {
+    sku: state.skuHeader,
+    name: state.nameHeader,
+    costStr: state.costHeader,
+    barcode: state.barcodeHeader,
+  });
 }
 
 export function getProductImportXlsxRowValues(
   row: unknown[],
   state: ProductImportXlsxColumnState,
 ): ProductImportRowValues {
+  return getProductImportRowValues(row, {
+    sku: state.skuColIndex,
+    name: state.nameColIndex,
+    costStr: state.costColIndex,
+    barcode: state.barcodeColIndex,
+  });
+}
+
+function getProductImportRowValues(
+  row: unknown[] | Record<string, unknown>,
+  keys: Record<keyof ProductImportRowValues, string | number | null>,
+): ProductImportRowValues {
   return {
-    sku: readRowValue(row, state.skuColIndex),
-    name: readRowValue(row, state.nameColIndex),
-    costStr: readRowValue(row, state.costColIndex),
-    barcode: readRowValue(row, state.barcodeColIndex),
+    sku: readRowValue(row, keys.sku),
+    name: readRowValue(row, keys.name),
+    costStr: readRowValue(row, keys.costStr),
+    barcode: readRowValue(row, keys.barcode),
   };
 }
 

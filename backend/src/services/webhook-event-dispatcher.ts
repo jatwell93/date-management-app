@@ -16,32 +16,30 @@ export async function dispatchStripeWebhookEvent(
   event: Stripe.Event,
   handlers: StripeWebhookEventHandlers,
 ): Promise<void> {
-  switch (event.type) {
-    case 'customer.subscription.created':
-      await handlers.handleSubscriptionCreated(event.data.object as Stripe.Subscription);
-      return;
-    case 'customer.subscription.updated':
-      await handlers.handleSubscriptionUpdated(event.data.object as Stripe.Subscription);
-      return;
-    case 'customer.subscription.deleted':
-      await handlers.handleSubscriptionDeleted(event.data.object as Stripe.Subscription);
-      return;
-    case 'checkout.session.completed':
-      await handlers.handleCheckoutSessionCompleted(event.data.object as Stripe.Checkout.Session);
-      return;
-    case 'invoice.payment_failed':
-      await handlers.handleInvoicePaymentFailed(event.data.object as Stripe.Invoice);
-      return;
-    case 'customer.subscription.trial_will_end':
-      await handlers.handleTrialWillEnd(event.data.object as Stripe.Subscription);
-      return;
-    case 'payment_intent.succeeded':
-      await handlers.handlePaymentIntentSucceeded(event.data.object as Stripe.PaymentIntent);
-      return;
-    case 'payment_intent.payment_failed':
-      await handlers.handlePaymentIntentFailed(event.data.object as Stripe.PaymentIntent);
-      return;
-    default:
-      handlers.handleUnhandledEvent(event.type);
+  const dispatchers: Record<string, () => Promise<void>> = {
+    'customer.subscription.created': () =>
+      handlers.handleSubscriptionCreated(event.data.object as Stripe.Subscription),
+    'customer.subscription.updated': () =>
+      handlers.handleSubscriptionUpdated(event.data.object as Stripe.Subscription),
+    'customer.subscription.deleted': () =>
+      handlers.handleSubscriptionDeleted(event.data.object as Stripe.Subscription),
+    'checkout.session.completed': () =>
+      handlers.handleCheckoutSessionCompleted(event.data.object as Stripe.Checkout.Session),
+    'invoice.payment_failed': () =>
+      handlers.handleInvoicePaymentFailed(event.data.object as Stripe.Invoice),
+    'customer.subscription.trial_will_end': () =>
+      handlers.handleTrialWillEnd(event.data.object as Stripe.Subscription),
+    'payment_intent.succeeded': () =>
+      handlers.handlePaymentIntentSucceeded(event.data.object as Stripe.PaymentIntent),
+    'payment_intent.payment_failed': () =>
+      handlers.handlePaymentIntentFailed(event.data.object as Stripe.PaymentIntent),
+  };
+
+  const dispatch = dispatchers[event.type];
+  if (dispatch) {
+    await dispatch();
+    return;
   }
+
+  handlers.handleUnhandledEvent(event.type);
 }

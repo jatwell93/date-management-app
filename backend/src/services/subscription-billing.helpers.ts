@@ -2,6 +2,11 @@ import Stripe from 'stripe';
 import { BillingCycle, SubscriptionStatus, TierLevel } from '../types/subscription';
 import { Logger } from '../utils/logger';
 
+interface TierPriceIds {
+  monthly: string;
+  annual: string;
+}
+
 export function mapStripeSubscriptionStatusToLocal(
   stripeStatus: Stripe.Subscription.Status | string,
 ): SubscriptionStatus {
@@ -22,7 +27,19 @@ export function mapStripeSubscriptionStatusToLocal(
 }
 
 export function getPriceIdForTier(tierLevel: TierLevel, billingCycle: BillingCycle): string {
-  const prices: Record<string, { monthly: string; annual: string }> = {
+  const prices = getConfiguredStripePrices();
+
+  const tierPrices = prices[tierLevel] || prices.professional;
+
+  if (!prices[tierLevel]) {
+    Logger.warn(`Unknown tier ${tierLevel} for Stripe price lookup, using professional fallback`);
+  }
+
+  return billingCycle === BillingCycle.ANNUAL ? tierPrices.annual : tierPrices.monthly;
+}
+
+function getConfiguredStripePrices(): Record<string, TierPriceIds> {
+  return {
     professional: {
       monthly: process.env.STRIPE_PROFESSIONAL_MONTHLY_PRICE_ID || 'price_professional_monthly',
       annual: process.env.STRIPE_PROFESSIONAL_ANNUAL_PRICE_ID || 'price_professional_annual',
@@ -36,12 +53,4 @@ export function getPriceIdForTier(tierLevel: TierLevel, billingCycle: BillingCyc
       annual: process.env.STRIPE_CONCIERGE_ANNUAL_PRICE_ID || 'price_concierge_annual',
     },
   };
-
-  const tierPrices = prices[tierLevel] || prices.professional;
-
-  if (!prices[tierLevel]) {
-    Logger.warn(`Unknown tier ${tierLevel} for Stripe price lookup, using professional fallback`);
-  }
-
-  return billingCycle === BillingCycle.ANNUAL ? tierPrices.annual : tierPrices.monthly;
 }
