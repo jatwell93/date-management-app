@@ -62,7 +62,16 @@ describe('InventoryService', () => {
         findByOrganizationIdAndId: mockPrisma.inventoryItem.findFirst,
         findManyByIds: mockPrisma.inventoryItem.findMany,
         findUniqueWithProduct: mockPrisma.inventoryItem.findUnique,
-        updateManyByIds: jest.fn((items) => Promise.all(items.map(item => mockPrisma.inventoryItem.update({ where: { id: item.id }, data: { status: item.status } })))),
+        updateManyByIds: jest.fn((items) =>
+          Promise.all(
+            items.map((item) =>
+              mockPrisma.inventoryItem.update({
+                where: { id: item.id },
+                data: { status: item.status },
+              }),
+            ),
+          ),
+        ),
         create: mockPrisma.inventoryItem.create,
         update: mockPrisma.inventoryItem.update,
         delete: mockPrisma.inventoryItem.delete,

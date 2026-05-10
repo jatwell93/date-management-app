@@ -127,10 +127,7 @@ describe('ApplicationMonitoringService', () => {
     service.stopMonitoring(true);
 
     expect(saasMetricsService.getSaasMetrics).not.toHaveBeenCalled();
-    expect(debugSpy).not.toHaveBeenCalledWith(
-      'Application metrics collected',
-      expect.any(Object),
-    );
+    expect(debugSpy).not.toHaveBeenCalledWith('Application metrics collected', expect.any(Object));
 
     debugSpy.mockRestore();
   });

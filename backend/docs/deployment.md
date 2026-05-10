@@ -8,13 +8,13 @@ This guide intentionally does not describe PM2, Nginx, or a production SQLite fi
 
 ## Runtime Matrix
 
-| Environment | API runtime | Database | Storage | Primary verification |
-| --- | --- | --- | --- | --- |
-| Local development | Express via `ts-node` | SQLite file from `DATABASE_URL=file:...` | Local filesystem via `STORAGE_PROVIDER=local` | `npm run test:dev --prefix backend` |
-| Backend test | Jest with `NODE_ENV=test` | SQLite test database by default | Local/test doubles | `npm run test --prefix backend` |
-| Production-like backend test | Jest Neon config | Neon PostgreSQL via `DATABASE_URL` or `NEON_CONNECTION_STRING` | R2-capable configuration | `npm run test:prod --prefix backend` |
-| Workers development | Cloudflare Workers dev runtime | Neon/Hyperdrive binding when enabled | R2 dev bucket binding; local provider defaults in vars | `npm test --prefix workers` |
-| Production | Cloudflare Workers | Neon PostgreSQL through Hyperdrive/secret connection string | Cloudflare R2 production bucket | Workers deploy checks, health endpoint, and smoke tests |
+| Environment                  | API runtime                    | Database                                                       | Storage                                                | Primary verification                                    |
+| ---------------------------- | ------------------------------ | -------------------------------------------------------------- | ------------------------------------------------------ | ------------------------------------------------------- |
+| Local development            | Express via `ts-node`          | SQLite file from `DATABASE_URL=file:...`                       | Local filesystem via `STORAGE_PROVIDER=local`          | `npm run test:dev --prefix backend`                     |
+| Backend test                 | Jest with `NODE_ENV=test`      | SQLite test database by default                                | Local/test doubles                                     | `npm run test --prefix backend`                         |
+| Production-like backend test | Jest Neon config               | Neon PostgreSQL via `DATABASE_URL` or `NEON_CONNECTION_STRING` | R2-capable configuration                               | `npm run test:prod --prefix backend`                    |
+| Workers development          | Cloudflare Workers dev runtime | Neon/Hyperdrive binding when enabled                           | R2 dev bucket binding; local provider defaults in vars | `npm test --prefix workers`                             |
+| Production                   | Cloudflare Workers             | Neon PostgreSQL through Hyperdrive/secret connection string    | Cloudflare R2 production bucket                        | Workers deploy checks, health endpoint, and smoke tests |
 
 ## Required Configuration
 
@@ -129,13 +129,13 @@ Non-secret Workers variables and bindings live in [workers/wrangler.toml](../../
 
 ## Troubleshooting
 
-| Issue | Likely cause | Check |
-| --- | --- | --- |
-| Worker deploy fails | Wrangler configuration or missing secret | `workers/wrangler.toml`, `wrangler secret list --env production` |
-| Database connection errors | Neon URL/Hyperdrive secret mismatch | `NEON_CONNECTION_STRING`, Hyperdrive binding, Neon console status |
-| Upload failures | R2 credentials or bucket binding mismatch | `CSV_UPLOADS` binding, R2 bucket name, R2 access key scope |
-| CORS failures | Production origin not allowed | Workers/backend CORS vars and allowed origin configuration |
-| Local tests use wrong database | `DATABASE_URL` overrides SQLite default | `backend/src/tests/setup-env.ts`, `.env`, shell environment |
+| Issue                          | Likely cause                              | Check                                                             |
+| ------------------------------ | ----------------------------------------- | ----------------------------------------------------------------- |
+| Worker deploy fails            | Wrangler configuration or missing secret  | `workers/wrangler.toml`, `wrangler secret list --env production`  |
+| Database connection errors     | Neon URL/Hyperdrive secret mismatch       | `NEON_CONNECTION_STRING`, Hyperdrive binding, Neon console status |
+| Upload failures                | R2 credentials or bucket binding mismatch | `CSV_UPLOADS` binding, R2 bucket name, R2 access key scope        |
+| CORS failures                  | Production origin not allowed             | Workers/backend CORS vars and allowed origin configuration        |
+| Local tests use wrong database | `DATABASE_URL` overrides SQLite default   | `backend/src/tests/setup-env.ts`, `.env`, shell environment       |
 
 ## Maintenance
 

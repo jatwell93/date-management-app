@@ -173,10 +173,7 @@ Production CORS restricts to the static allowlist plus `FRONTEND_URL`; non-produ
 
 ```typescript
 // Configured in cors.middleware.ts
-const allowedOrigins = [
-  'https://date-management-status.pages.dev',
-  process.env.FRONTEND_URL,
-];
+const allowedOrigins = ['https://date-management-status.pages.dev', process.env.FRONTEND_URL];
 ```
 
 Set `FRONTEND_URL` before production deploy. Do not rely on dynamic preview origins in production.

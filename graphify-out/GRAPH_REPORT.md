@@ -1,15 +1,18 @@
-# Graph Report - date-management-app  (2026-05-03)
+# Graph Report - date-management-app (2026-05-03)
 
 ## Corpus Check
+
 - 553 files · ~1,534,981 words
 - Verdict: corpus is large enough that graph structure adds value.
 
 ## Summary
+
 - 2003 nodes · 2923 edges · 79 communities detected
 - Extraction: 94% EXTRACTED · 6% INFERRED · 0% AMBIGUOUS · INFERRED: 167 edges (avg confidence: 0.8)
 - Token cost: 0 input · 0 output
 
 ## Community Hubs (Navigation)
+
 - [[_COMMUNITY_Community 0|Community 0]]
 - [[_COMMUNITY_Community 1|Community 1]]
 - [[_COMMUNITY_Community 2|Community 2]]
@@ -91,6 +94,7 @@
 - [[_COMMUNITY_Community 119|Community 119]]
 
 ## God Nodes (most connected - your core abstractions)
+
 1. `getDefaultDatabaseClient()` - 78 edges
 2. `fetch()` - 50 edges
 3. `Logger` - 46 edges
@@ -103,336 +107,417 @@
 10. `InventoryService` - 27 edges
 
 ## Surprising Connections (you probably didn't know these)
-- `checkFeature()` --calls--> `getDefaultDatabaseClient()`  [INFERRED]
+
+- `checkFeature()` --calls--> `getDefaultDatabaseClient()` [INFERRED]
   backend\src\middleware\feature-gate.middleware.ts → backend\src\database\database-factory.ts
-- `createRouter()` --calls--> `createUploadRoleMiddleware()`  [INFERRED]
+- `createRouter()` --calls--> `createUploadRoleMiddleware()` [INFERRED]
   workers\src\index.ts → workers\src\middleware\require-role.middleware.ts
-- `createItemTransaction()` --calls--> `getDb()`  [INFERRED]
+- `createItemTransaction()` --calls--> `getDb()` [INFERRED]
   backend\src\models\item-transaction.model.ts → backend\src\database.ts
-- `createWorkersDatabase()` --calls--> `createDatabaseClient()`  [INFERRED]
+- `createWorkersDatabase()` --calls--> `createDatabaseClient()` [INFERRED]
   workers\src\index.ts → backend\src\database\database-factory.ts
-- `initializeDiContainer()` --calls--> `getDefaultDatabaseClient()`  [INFERRED]
+- `initializeDiContainer()` --calls--> `getDefaultDatabaseClient()` [INFERRED]
   backend\src\di\container.ts → backend\src\database\database-factory.ts
 
 ## Communities
 
 ### Community 0 - "Community 0"
+
 Cohesion: 0.02
 Nodes (76): ManageSubscriptionButton(), MarkdownCalculator(), fetchData(), TrialBanner(), fetchTrialStatus(), handleUpgrade(), ApiService, buildApiUrl() (+68 more)
 
 ### Community 1 - "Community 1"
+
 Cohesion: 0.02
 Nodes (37): UploadController, createDatabaseClient(), detectEnvironment(), disconnectDatabase(), getDatabaseProvider(), getDatabaseUrl(), getDefaultDatabaseClient(), getLogOptions() (+29 more)
 
 ### Community 2 - "Community 2"
+
 Cohesion: 0.06
 Nodes (89): createWorkersDatabase(), appendVaryHeader(), applyRateLimitHeaders(), authenticateApiRequest(), authenticateClerkRequest(), authenticateRequest(), canManageUsers(), checkRateLimit() (+81 more)
 
 ### Community 3 - "Community 3"
+
 Cohesion: 0.03
 Nodes (16): resolveUnlimitedLimit(), InventoryController, DailyReportEmailJob, startDunningJob(), extractTierFromStripeSubscription(), normalizeStatus(), runStripeSyncJob(), startStripeSyncJob() (+8 more)
 
 ### Community 4 - "Community 4"
+
 Cohesion: 0.03
 Nodes (39): addUserIdHeader(), authenticateRequest(), createAuthMiddleware(), createJWT(), extractToken(), getPublicEndpoints(), isPublicEndpoint(), unauthorized() (+31 more)
 
 ### Community 5 - "Community 5"
+
 Cohesion: 0.04
 Nodes (18): ClerkSignInPage(), ClerkSignUpPage(), ClerkAuthProvider(), useAuthContext(), HandheldScanToolbar(), HandheldProvider(), useHandheldDetectionContext(), useHandheldDetection() (+10 more)
 
 ### Community 6 - "Community 6"
+
 Cohesion: 0.04
 Nodes (24): canUpload(), hasEqualOrHigherRole(), hasPermission(), isValidRole(), normalizeRole(), getDiContainer(), initializeDiContainer(), createInventoryController() (+16 more)
 
 ### Community 7 - "Community 7"
+
 Cohesion: 0.07
 Nodes (11): validateDataConsistency(), validateReferentialIntegrity(), UpdateMarkdownStatusesMigration, createItemTransaction(), DashboardService, DatabaseMonitoringService, ExpiredItemService, SchedulerService (+3 more)
 
 ### Community 8 - "Community 8"
+
 Cohesion: 0.07
 Nodes (17): ProductController, AuthenticationError, AuthorizationError, BaseError, ConflictError, InternalError, isBaseError(), NotFoundError (+9 more)
 
 ### Community 9 - "Community 9"
+
 Cohesion: 0.06
 Nodes (9): MockStorageProvider, TestStorageProvider, ServiceProvider, createStorageProvider(), detectEnvironment(), getDefaultLocalPath(), getDefaultStorageProvider(), getStorageProviderType() (+1 more)
 
 ### Community 10 - "Community 10"
+
 Cohesion: 0.09
 Nodes (3): invalidateSubscriptionCache(), dispatchStripeWebhookEvent(), WebhookService
 
 ### Community 11 - "Community 11"
+
 Cohesion: 0.11
 Nodes (14): detectProductImportFileType(), findColumnByAlternatives(), findColumnIndexByAlternatives(), getAllowedProductImportHeadersFromCsvState(), getAllowedProductImportHeadersFromXlsxState(), getAllowedProductImportHeaderValues(), getProductImportCsvColumnState(), getProductImportCsvRowValues() (+6 more)
 
 ### Community 12 - "Community 12"
+
 Cohesion: 0.11
 Nodes (15): getDashboardData(), countProducts(), createProduct(), deleteProduct(), getProductByBarcode(), getProductById(), getProducts(), countStoreAreas() (+7 more)
 
 ### Community 13 - "Community 13"
+
 Cohesion: 0.07
 Nodes (2): PrismaAnalyticsAdapter, SQLiteAnalyticsAdapter
 
 ### Community 14 - "Community 14"
+
 Cohesion: 0.11
 Nodes (5): CSVParserService, isValidDateParts(), normalizeYear(), parseExpiryImportDate(), toIsoDate()
 
 ### Community 15 - "Community 15"
+
 Cohesion: 0.12
 Nodes (24): authenticateToken(), extractTokenFromRequest(), getAuthorizedParties(), getTierVersion(), handleAuthError(), hasRequiredTokenFields(), isBillingCycle(), isTierLevel() (+16 more)
 
 ### Community 16 - "Community 16"
+
 Cohesion: 0.12
 Nodes (6): hasActiveStripeAccessWindow(), getPriceIdForTier(), mapStripeSubscriptionStatusToLocal(), getErrorMessage(), SubscriptionService, buildTrialSubscriptionSetup()
 
 ### Community 17 - "Community 17"
+
 Cohesion: 0.12
 Nodes (1): InventoryService
 
 ### Community 18 - "Community 18"
+
 Cohesion: 0.16
 Nodes (2): SaasMetricsService, validateAlertThresholds()
 
 ### Community 19 - "Community 19"
+
 Cohesion: 0.24
 Nodes (15): countSourceRows(), createSqliteTable(), ensureDirFor(), fetchTableRows(), getTimestamp(), insertRows(), listColumns(), listPrimaryKeyColumns() (+7 more)
 
 ### Community 20 - "Community 20"
+
 Cohesion: 0.16
 Nodes (1): ApplicationMonitoringService
 
 ### Community 21 - "Community 21"
+
 Cohesion: 0.19
 Nodes (7): SubscriptionController, getStripeClient(), isStripeConfigured(), resetStripeClient(), validateStripeConfig(), validateRedirectUrl(), validateStripePriceId()
 
 ### Community 22 - "Community 22"
+
 Cohesion: 0.15
 Nodes (1): AnalyticsService
 
 ### Community 23 - "Community 23"
+
 Cohesion: 0.42
 Nodes (13): addSearchBox(), addSortIndicators(), enableUI(), getNthColumn(), getTable(), getTableBody(), getTableHeader(), loadColumns() (+5 more)
 
 ### Community 24 - "Community 24"
+
 Cohesion: 0.22
 Nodes (1): ClerkWebhookService
 
 ### Community 25 - "Community 25"
+
 Cohesion: 0.36
 Nodes (13): addSearchBox(), addSortIndicators(), enableUI(), getNthColumn(), getTable(), getTableBody(), getTableHeader(), loadColumns() (+5 more)
 
 ### Community 26 - "Community 26"
+
 Cohesion: 0.13
 Nodes (1): ReportService
 
 ### Community 27 - "Community 27"
+
 Cohesion: 0.14
 Nodes (3): CameraScanner(), useHardwareScan(), triggerHaptic()
 
 ### Community 28 - "Community 28"
+
 Cohesion: 0.14
 Nodes (1): ReportRepository
 
 ### Community 29 - "Community 29"
+
 Cohesion: 0.16
 Nodes (1): AuthService
 
 ### Community 30 - "Community 30"
+
 Cohesion: 0.5
 Nodes (10): a(), B(), c(), D(), g(), i(), k(), o() (+2 more)
 
 ### Community 31 - "Community 31"
+
 Cohesion: 0.19
 Nodes (2): DailyMetricsJob, HourlyWebhookCheckJob
 
 ### Community 32 - "Community 32"
+
 Cohesion: 0.44
 Nodes (10): a(), B(), c(), D(), g(), i(), k(), o() (+2 more)
 
 ### Community 33 - "Community 33"
+
 Cohesion: 0.29
 Nodes (1): ProductRepository
 
 ### Community 34 - "Community 34"
+
 Cohesion: 0.32
 Nodes (8): authenticateWorkerRequest(), extractJWTFromHeader(), extractOrganizationId(), isSubscriptionStatus(), isTierLevel(), querySubscriptionTier(), validateOrganizationStatus(), verifyJWT()
 
 ### Community 35 - "Community 35"
+
 Cohesion: 0.51
 Nodes (10): checkOrganizationWebhooks(), checkRecentWebhookHealth(), checkWebhookEvent(), formatDate(), logSection(), logStatus(), logSubsection(), parseArguments() (+2 more)
 
 ### Community 36 - "Community 36"
+
 Cohesion: 0.35
 Nodes (8): fail(), normalizeNodeEnv(), parseNumber(), resolveCorsOrigin(), resolveFrontendUrl(), resolveJwtSecret(), setWorkerConfig(), validateEnvironment()
 
 ### Community 37 - "Community 37"
+
 Cohesion: 0.33
 Nodes (10): detectCrossTenantAccess(), extractOrganizationIdFromRequest(), getFromBody(), getFromParams(), getFromQuery(), handleCrossTenantViolation(), handleTenantAccessViolation(), isAccessAllowed() (+2 more)
 
 ### Community 38 - "Community 38"
+
 Cohesion: 0.18
 Nodes (1): StoreAreaModel
 
 ### Community 39 - "Community 39"
+
 Cohesion: 0.18
 Nodes (1): InventoryRepository
 
 ### Community 40 - "Community 40"
+
 Cohesion: 0.29
 Nodes (1): LocalStorageProvider
 
 ### Community 41 - "Community 41"
+
 Cohesion: 0.2
 Nodes (2): assertSupportedDatabaseUrl(), isCiRuntime()
 
 ### Community 42 - "Community 42"
+
 Cohesion: 0.2
 Nodes (1): InventoryItemModel
 
 ### Community 43 - "Community 43"
+
 Cohesion: 0.38
 Nodes (1): SubscriptionRepository
 
 ### Community 44 - "Community 44"
+
 Cohesion: 0.22
 Nodes (1): R2StorageProvider
 
 ### Community 46 - "Community 46"
+
 Cohesion: 0.36
 Nodes (5): globalSetup(), enterOtpCode(), signInAsManager(), signUpAsManager(), getOtpFromMailinator()
 
 ### Community 47 - "Community 47"
+
 Cohesion: 0.56
 Nodes (8): error(), exec(), info(), log(), main(), step(), success(), warn()
 
 ### Community 48 - "Community 48"
+
 Cohesion: 0.31
 Nodes (1): UploadService
 
 ### Community 49 - "Community 49"
+
 Cohesion: 0.22
 Nodes (1): InMemoryStorageProvider
 
 ### Community 51 - "Community 51"
+
 Cohesion: 0.25
 Nodes (1): InMemoryStorageProvider
 
 ### Community 52 - "Community 52"
+
 Cohesion: 0.25
 Nodes (2): ErrorBoundary, renderWarning()
 
 ### Community 53 - "Community 53"
+
 Cohesion: 0.5
 Nodes (7): countInventoryItems(), createInventoryItem(), deleteInventoryItem(), getConnectionString(), getExpiringItems(), getInventoryItemById(), getInventoryItems()
 
 ### Community 54 - "Community 54"
+
 Cohesion: 0.43
 Nodes (6): checkFeatureAccess(), checkUsageLimit(), enforceUsageLimit(), formatFeatureUpgradeCTA(), formatUsageLimitCTA(), requireFeatureAccess()
 
 ### Community 55 - "Community 55"
+
 Cohesion: 0.71
 Nodes (4): goToNext(), goToPrevious(), makeCurrent(), toggleClass()
 
 ### Community 56 - "Community 56"
+
 Cohesion: 0.38
 Nodes (3): isClerkWebhookEventPayload(), isNonRecoverableStripeWebhookError(), WebhookController
 
 ### Community 57 - "Community 57"
+
 Cohesion: 0.29
 Nodes (1): AnalyticsRepository
 
 ### Community 58 - "Community 58"
+
 Cohesion: 0.29
 Nodes (3): FileNotFoundError, FileSizeLimitError, StorageProviderError
 
 ### Community 59 - "Community 59"
+
 Cohesion: 0.43
 Nodes (5): createMockMiddleware(), createSubscriptions(), seedFeatureFlags(), setupTestApp(), setupTestData()
 
 ### Community 61 - "Community 61"
+
 Cohesion: 0.29
 Nodes (3): GS1ParseError, HandheldError, HardwareScanError
 
 ### Community 62 - "Community 62"
+
 Cohesion: 0.73
 Nodes (4): goToNext(), goToPrevious(), makeCurrent(), toggleClass()
 
 ### Community 63 - "Community 63"
+
 Cohesion: 0.6
 Nodes (5): analyzeMemoryGrowth(), generateTestCSV(), getMemorySnapshot(), main(), processCSVWithMemoryTracking()
 
 ### Community 64 - "Community 64"
+
 Cohesion: 0.33
 Nodes (1): MockPointerEvent
 
 ### Community 65 - "Community 65"
+
 Cohesion: 0.53
 Nodes (4): displayResults(), ensureMemvidAvailable(), retrieveContext(), runMemvid()
 
 ### Community 66 - "Community 66"
+
 Cohesion: 0.7
 Nodes (4): main(), question(), seedTierFlags(), verifyMigration()
 
 ### Community 67 - "Community 67"
+
 Cohesion: 0.4
 Nodes (1): AuditLogModel
 
 ### Community 68 - "Community 68"
+
 Cohesion: 0.6
 Nodes (4): escapeHtml(), escapeHtmlString(), extractCostValueEnhanced(), normalizeNumericString()
 
 ### Community 69 - "Community 69"
+
 Cohesion: 0.5
 Nodes (2): register(), registerValidSW()
 
 ### Community 70 - "Community 70"
+
 Cohesion: 0.5
 Nodes (1): ClerkWebhookSignatureService
 
 ### Community 71 - "Community 71"
+
 Cohesion: 0.5
 Nodes (1): StripeWebhookSignatureService
 
 ### Community 73 - "Community 73"
+
 Cohesion: 0.83
 Nodes (3): retryWithBackoff(), withApiRetry(), withDatabaseRetry()
 
 ### Community 76 - "Community 76"
+
 Cohesion: 0.83
 Nodes (3): ensureMemvidAvailable(), escapeForShell(), logMemory()
 
 ### Community 78 - "Community 78"
+
 Cohesion: 1.0
 Nodes (2): auditOrganizationIds(), main()
 
 ### Community 79 - "Community 79"
+
 Cohesion: 1.0
 Nodes (2): backfillRoles(), normalizeRole()
 
 ### Community 80 - "Community 80"
+
 Cohesion: 1.0
 Nodes (2): main(), question()
 
 ### Community 81 - "Community 81"
+
 Cohesion: 1.0
 Nodes (2): main(), question()
 
 ### Community 82 - "Community 82"
+
 Cohesion: 1.0
 Nodes (2): printSummary(), runTests()
 
 ### Community 83 - "Community 83"
+
 Cohesion: 0.67
 Nodes (1): generateSKU()
 
 ### Community 87 - "Community 87"
+
 Cohesion: 1.0
 Nodes (2): generate(), htmlSnippet()
 
 ### Community 119 - "Community 119"
+
 Cohesion: 1.0
 Nodes (1): Database
 
 ## Knowledge Gaps
+
 - **1 isolated node(s):** `Database`
   These have ≤1 connection - possible missing edges or undocumented components.
 - **Thin community `Community 13`** (32 nodes): `PrismaAnalyticsAdapter`, `.cleanupOldData()`, `.constructor()`, `.endSession()`, `.getActiveUserCount()`, `.getEventCountByType()`, `.getMetrics()`, `.initialize()`, `.isAvailable()`, `.logPendingModels()`, `.startSession()`, `.storeEventsBatch()`, `.updateSession()`, `SQLiteAnalyticsAdapter`, `.cleanupOldData()`, `.constructor()`, `.endSession()`, `.getActiveUserCount()`, `.getEventCountByType()`, `.getMetrics()`, `.initialize()`, `.isAvailable()`, `.startSession()`, `.storeEventsBatch()`, `.updateSession()`, `PrismaAnalyticsAdapter.ts`, `SQLiteAnalyticsAdapter.ts`, `index.ts`, `analytics-adapter.test.ts`, `isFrontendIndexAvailable()`, `shutdown()`, `startServer()`
@@ -509,6 +594,7 @@ Nodes (1): Database
   Too small to be a meaningful cluster - may be noise or needs more connections extracted.
 
 ## Suggested Questions
+
 _Questions this graph is uniquely positioned to answer:_
 
 - **Why does `getDefaultDatabaseClient()` connect `Community 1` to `Community 3`, `Community 6`, `Community 8`, `Community 9`, `Community 10`, `Community 14`, `Community 15`, `Community 16`, `Community 48`, `Community 18`, `Community 21`, `Community 24`, `Community 59`, `Community 29`, `Community 31`?**

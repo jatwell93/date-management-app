@@ -302,6 +302,7 @@ codemap --diff --ref branch  # Changes vs specific branch
 ```
 
 Other useful commands
+
 ```bash
 codemap handoff .  # Save layered handoff for cross-agent continuation
 codemap context    # Universal JSON context for any AI tool
@@ -364,6 +365,7 @@ Follow this order to understand the codebase efficiently:
 ### Load Priority Based on Task Complexity
 
 **Every Session (Mandatory):**
+
 1. Load AGENTS.md
 2. Run `git standup -d 7` and check the project's commits over the past seven (7) days
 3. Identify environment (development/test/staging/production)
@@ -390,7 +392,6 @@ Follow this order to understand the codebase efficiently:
 - Load decision logs (if exists)
 - Review existing patterns in codebase
 - Check OpenSpec: `openspec list` and review `openspec/project.md`
-
 
 ### Session Question Protocol
 
@@ -428,7 +429,8 @@ Before starting work, clarify:
 **Required Content (in `proposal.md`):**
 
 ```markdown
-# EXAMPLE 
+# EXAMPLE
+
 ## Proposal: [Feature/Fix Name]
 
 ## Analysis -
@@ -833,7 +835,7 @@ export const usersController = {
     const sql = `UPDATE users SET email = '${req.body.email}' WHERE id = ${req.params.id}`;
     await db.run(sql);
     res.json({ success: true });
-  }
+  },
 };
 ```
 

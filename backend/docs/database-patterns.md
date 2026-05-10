@@ -45,10 +45,10 @@ The database abstraction provides a unified interface for database operations, a
 
 The active generated client is based on the SQLite development schema in `prisma/schema.prisma`. Production PostgreSQL compatibility is represented by the production schema and Neon migration workflow.
 
-| File                        | Provider | Use Case                    |
-| --------------------------- | -------- | --------------------------- |
-| `schema.prisma`             | SQLite   | Development, testing        |
-| `production/schema.prisma`  | PostgreSQL | Production with Neon       |
+| File                       | Provider   | Use Case             |
+| -------------------------- | ---------- | -------------------- |
+| `schema.prisma`            | SQLite     | Development, testing |
+| `production/schema.prisma` | PostgreSQL | Production with Neon |
 
 ### Switching Schemas
 
