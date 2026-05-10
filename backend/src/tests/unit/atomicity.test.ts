@@ -323,6 +323,7 @@ describe('Usage Counter Atomicity Tests', () => {
         },
         product: {
           findFirst: jest.fn(),
+          findUnique: jest.fn(),
         },
         storeArea: {
           findFirst: jest.fn(),
@@ -367,7 +368,7 @@ describe('Usage Counter Atomicity Tests', () => {
       };
 
       // Mock product and location validation
-      mockPrisma.product.findFirst.mockResolvedValue({ id: 1, organizationId });
+      mockPrisma.product.findUnique.mockResolvedValue({ id: 1, organizationId });
       mockPrisma.storeArea.findFirst.mockResolvedValue({ id: 1, organizationId });
       mockPrisma.inventoryItem.create.mockResolvedValue(mockCreatedItem);
       mockPrisma.user.findFirst.mockResolvedValue({ id: 1, organizationId });
@@ -408,7 +409,7 @@ describe('Usage Counter Atomicity Tests', () => {
       };
 
       // Mock product and location validation to pass
-      mockPrisma.product.findFirst.mockResolvedValue({ id: 1, organizationId });
+      mockPrisma.product.findUnique.mockResolvedValue({ id: 1, organizationId });
       mockPrisma.storeArea.findFirst.mockResolvedValue({ id: 1, organizationId });
       // Mock item creation failure
       const error = new Error('Database constraint violation');
@@ -497,7 +498,7 @@ describe('Usage Counter Atomicity Tests', () => {
       };
 
       // Mock product and location validation for both items
-      mockPrisma.product.findFirst
+      mockPrisma.product.findUnique
         .mockResolvedValueOnce({ id: 1, organizationId })
         .mockResolvedValueOnce({ id: 2, organizationId });
       mockPrisma.storeArea.findFirst
@@ -564,7 +565,7 @@ describe('Usage Counter Atomicity Tests', () => {
       };
 
       // Setup mocks for concurrent operations
-      mockPrisma.product.findFirst.mockResolvedValue({ id: 1, organizationId });
+      mockPrisma.product.findUnique.mockResolvedValue({ id: 1, organizationId });
       mockPrisma.storeArea.findFirst.mockResolvedValue({ id: 1, organizationId });
       mockPrisma.user.findFirst.mockResolvedValue({ id: 1, organizationId });
       mockPrisma.inventoryItem.create.mockResolvedValue(mockCreatedItem);
@@ -646,7 +647,7 @@ describe('Usage Counter Atomicity Tests', () => {
       };
 
       // Mock product and location validation
-      mockPrisma.product.findFirst.mockResolvedValue({ id: 1, organizationId });
+      mockPrisma.product.findUnique.mockResolvedValue({ id: 1, organizationId });
       mockPrisma.storeArea.findFirst.mockResolvedValue({ id: 1, organizationId });
 
       // Mock usage limit reached
