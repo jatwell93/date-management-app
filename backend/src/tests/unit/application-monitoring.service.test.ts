@@ -2,6 +2,7 @@ import {
   ApplicationMonitoringService,
   ApplicationAlertType,
 } from '../../services/application.monitoring.service';
+import { Logger } from '../../utils/logger';
 
 jest.mock('../../services/saas-metrics.service', () => ({
   SaasMetricsService: jest.fn().mockImplementation(() => ({
@@ -111,5 +112,26 @@ describe('ApplicationMonitoringService', () => {
     await service.collectMetrics();
 
     expect(alerts).toContain(ApplicationAlertType.HIGH_ERROR_RATE);
+  });
+
+  it('does not start background metrics collection before the first interval', () => {
+    const saasMetricsService = {
+      getSaasMetrics: jest.fn().mockResolvedValue(undefined),
+      storeDailyMetrics: jest.fn().mockResolvedValue(undefined),
+      recordWebhookMetrics: jest.fn().mockResolvedValue(undefined),
+    };
+    const debugSpy = jest.spyOn(Logger, 'debug').mockImplementation(() => undefined);
+
+    service = new ApplicationMonitoringService(saasMetricsService as any);
+    service.startMonitoring();
+    service.stopMonitoring(true);
+
+    expect(saasMetricsService.getSaasMetrics).not.toHaveBeenCalled();
+    expect(debugSpy).not.toHaveBeenCalledWith(
+      'Application metrics collected',
+      expect.any(Object),
+    );
+
+    debugSpy.mockRestore();
   });
 });
