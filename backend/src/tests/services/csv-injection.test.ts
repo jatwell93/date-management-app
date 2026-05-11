@@ -1,198 +1,158 @@
 /**
  * Tests for CSV Injection Prevention (Phase 13 Security Hardening)
  *
- * Tests the sanitizeValue method in CSVParserService to ensure:
- * - Dangerous prefixes are escaped with backslash
- * - Safe values pass through unchanged
- * - Multiple injection attempts are handled
- * - Empty cells are handled correctly
+ * Verifies product row validation neutralizes spreadsheet formula injection by
+ * prefixing dangerous cell values with an apostrophe.
  */
 
-import { CSVParserService } from '../../services/csv-parser.service';
-import { PrismaClient } from '@prisma/client';
+import { validateProductRowStrictly } from '../../services/csv-parser.service';
 
 describe('CSV Injection Prevention', () => {
-  let csvParser: CSVParserService;
+  const productHeaderMap = new Map<string, string>([
+    ['sku', 'SKU'],
+    ['name', 'Name'],
+    ['barcode', 'Barcode'],
+    ['cost', 'Cost'],
+  ]);
 
-  beforeEach(() => {
-    // Create parser with mock Prisma client (we're only testing sanitization)
-    const mockPrisma = {} as PrismaClient;
-    csvParser = new CSVParserService(mockPrisma);
-  });
+  type SanitizedProductField = 'sku' | 'name' | 'barcode';
 
-  describe('sanitizeValue - Dangerous Characters', () => {
-    it('should escape leading equals sign with backslash', () => {
-      // Access private method via type assertion for testing
-      const sanitize = (csvParser as any).sanitizeValue.bind(csvParser);
+  function parseProductField(value: string, field: SanitizedProductField = 'sku'): string {
+    const record: Record<string, string> = {
+      SKU: 'SAFE-SKU',
+      Name: 'Safe Product',
+      Barcode: '123456789',
+      Cost: '12.99',
+    };
+    const header = productHeaderMap.get(field);
+    if (!header) {
+      throw new Error(`Missing header mapping for ${field}`);
+    }
 
-      const result = sanitize('=SUM(A1:A10)');
-      expect(result).toBe("'=SUM(A1:A10)");
-    });
+    record[header] = value;
 
-    it('should escape leading plus sign with backslash', () => {
-      const sanitize = (csvParser as any).sanitizeValue.bind(csvParser);
+    const result = validateProductRowStrictly(record, 1, productHeaderMap, new Set());
 
-      const result = sanitize('+1234567890');
-      expect(result).toBe("'+1234567890");
-    });
+    expect(result.errors).toEqual([]);
+    expect(result.row).not.toBeNull();
 
-    it('should escape leading minus sign with backslash', () => {
-      const sanitize = (csvParser as any).sanitizeValue.bind(csvParser);
+    return result.row![field];
+  }
 
-      const result = sanitize('-cmd|calc');
-      expect(result).toBe("'-cmd|calc");
-    });
-
-    it('should escape leading at sign with backslash', () => {
-      const sanitize = (csvParser as any).sanitizeValue.bind(csvParser);
-
-      const result = sanitize('@SUM(A1:A10)');
-      expect(result).toBe("'@SUM(A1:A10)");
-    });
-
-    it('should escape leading tab character with backslash', () => {
-      const sanitize = (csvParser as any).sanitizeValue.bind(csvParser);
-
-      const result = sanitize('\tmalicious');
-      expect(result).toBe("'\tmalicious");
-    });
-
-    it('should escape leading carriage return with backslash', () => {
-      const sanitize = (csvParser as any).sanitizeValue.bind(csvParser);
-
-      const result = sanitize('\rmalicious');
-      expect(result).toBe("'\rmalicious");
+  describe('dangerous leading characters', () => {
+    it.each([
+      ['equals sign', '=SUM(A1:A10)', "'=SUM(A1:A10)"],
+      ['plus sign', '+1234567890', "'+1234567890"],
+      ['minus sign', '-cmd|calc', "'-cmd|calc"],
+      ['at sign', '@SUM(A1:A10)', "'@SUM(A1:A10)"],
+      ['tab-prefixed formula', '\t=A1', "'=A1"],
+      ['carriage-return-prefixed formula', '\r=A1', "'=A1"],
+    ])('escapes a leading %s with an apostrophe', (_label, value, expected) => {
+      expect(parseProductField(value)).toBe(expected);
     });
   });
 
-  describe('sanitizeValue - Safe Values', () => {
-    it('should not modify cells with safe content', () => {
-      const sanitize = (csvParser as any).sanitizeValue.bind(csvParser);
-
-      expect(sanitize('Normal Product Name')).toBe('Normal Product Name');
-      expect(sanitize('SKU-12345')).toBe('SKU-12345');
-      expect(sanitize('987654321')).toBe('987654321');
-      expect(sanitize('Product (with parentheses)')).toBe('Product (with parentheses)');
+  describe('safe values', () => {
+    it('does not modify safe product fields', () => {
+      expect(parseProductField('Normal Product Name', 'name')).toBe('Normal Product Name');
+      expect(parseProductField('SKU-12345')).toBe('SKU-12345');
+      expect(parseProductField('987654321', 'barcode')).toBe('987654321');
+      expect(parseProductField('Product (with parentheses)', 'name')).toBe(
+        'Product (with parentheses)',
+      );
     });
 
-    it('should not modify cells with dangerous characters in middle', () => {
-      const sanitize = (csvParser as any).sanitizeValue.bind(csvParser);
-
-      // Dangerous characters are only a problem at the start
-      expect(sanitize('Price: $10.99 = value')).toBe('Price: $10.99 = value');
-      expect(sanitize('Total: 5+3')).toBe('Total: 5+3');
-      expect(sanitize('Range: 10-20')).toBe('Range: 10-20');
-      expect(sanitize('Email: user@example.com')).toBe('Email: user@example.com');
-    });
-
-    it('should handle empty strings', () => {
-      const sanitize = (csvParser as any).sanitizeValue.bind(csvParser);
-
-      expect(sanitize('')).toBe('');
-    });
-
-    it('should handle whitespace-only strings', () => {
-      const sanitize = (csvParser as any).sanitizeValue.bind(csvParser);
-
-      expect(sanitize('   ')).toBe('   ');
+    it('does not modify dangerous characters that are not leading characters', () => {
+      expect(parseProductField('Price: $10.99 = value', 'name')).toBe('Price: $10.99 = value');
+      expect(parseProductField('Total: 5+3', 'name')).toBe('Total: 5+3');
+      expect(parseProductField('Range: 10-20', 'name')).toBe('Range: 10-20');
+      expect(parseProductField('Email: user@example.com', 'name')).toBe('Email: user@example.com');
     });
   });
 
-  describe('sanitizeValue - Edge Cases', () => {
-    it('should only escape the first dangerous character', () => {
-      const sanitize = (csvParser as any).sanitizeValue.bind(csvParser);
-
-      // Only the first = should be escaped, not subsequent ones
-      const result = sanitize('=SUM(A1)=5');
-      expect(result).toBe("'=SUM(A1)=5");
+  describe('edge cases', () => {
+    it('only escapes the first dangerous character', () => {
+      expect(parseProductField('=SUM(A1)=5')).toBe("'=SUM(A1)=5");
     });
 
-    it('should handle formulas with multiple cells', () => {
-      const sanitize = (csvParser as any).sanitizeValue.bind(csvParser);
-
-      const result = sanitize('=A1+B2-C3');
-      expect(result).toBe("'=A1+B2-C3");
+    it('handles formulas with multiple cells', () => {
+      expect(parseProductField('=A1+B2-C3')).toBe("'=A1+B2-C3");
     });
 
-    it('should handle command injection attempts', () => {
-      const sanitize = (csvParser as any).sanitizeValue.bind(csvParser);
-
-      expect(sanitize('=cmd|"/c calc"')).toBe('\'=cmd|"/c calc"');
-      expect(sanitize('-2+3+cmd|"/c calc"')).toBe('\'-2+3+cmd|"/c calc"');
-      expect(sanitize('+cmd|"/c calc"')).toBe('\'+cmd|"/c calc"');
-      expect(sanitize('@cmd|"/c calc"')).toBe('\'@cmd|"/c calc"');
+    it('handles command injection attempts', () => {
+      expect(parseProductField('=cmd|"/c calc"')).toBe('\'=cmd|"/c calc"');
+      expect(parseProductField('-2+3+cmd|"/c calc"')).toBe('\'-2+3+cmd|"/c calc"');
+      expect(parseProductField('+cmd|"/c calc"')).toBe('\'+cmd|"/c calc"');
+      expect(parseProductField('@cmd|"/c calc"')).toBe('\'@cmd|"/c calc"');
     });
 
-    it('should handle DDE (Dynamic Data Exchange) injection attempts', () => {
-      const sanitize = (csvParser as any).sanitizeValue.bind(csvParser);
-
-      expect(sanitize('=cmd|"/c powershell"!A1')).toBe('\'=cmd|"/c powershell"!A1');
-      expect(sanitize('+DDE("cmd";"/c calc";"!A0")')).toBe('\'+DDE("cmd";"/c calc";"!A0")');
+    it('handles DDE injection attempts', () => {
+      expect(parseProductField('=cmd|"/c powershell"!A1')).toBe('\'=cmd|"/c powershell"!A1');
+      expect(parseProductField('+DDE("cmd";"/c calc";"!A0")')).toBe(
+        '\'+DDE("cmd";"/c calc";"!A0")',
+      );
     });
 
-    it('should handle hyperlink injection attempts', () => {
-      const sanitize = (csvParser as any).sanitizeValue.bind(csvParser);
-
-      expect(sanitize('=HYPERLINK("http://evil.com","Click here")')).toBe(
+    it('handles hyperlink injection attempts', () => {
+      expect(parseProductField('=HYPERLINK("http://evil.com","Click here")')).toBe(
         '\'=HYPERLINK("http://evil.com","Click here")',
       );
     });
 
-    it('should handle cells with extended characters safely', () => {
-      const sanitize = (csvParser as any).sanitizeValue.bind(csvParser);
-
-      expect(sanitize('Cafe Muller')).toBe('Cafe Muller');
-      expect(sanitize('=JP_TEST')).toBe("'=JP_TEST");
+    it('handles cells with extended characters safely', () => {
+      expect(parseProductField('Cafe Muller', 'name')).toBe('Cafe Muller');
+      expect(parseProductField('=JP_TEST')).toBe("'=JP_TEST");
     });
 
-    it('should handle cells with special CSV characters', () => {
-      const sanitize = (csvParser as any).sanitizeValue.bind(csvParser);
-
-      // Commas, quotes, newlines within cells are valid CSV
-      expect(sanitize('Product, Description')).toBe('Product, Description');
-      expect(sanitize('Product "Name"')).toBe('Product "Name"');
+    it('handles cells with special CSV characters', () => {
+      expect(parseProductField('Product, Description', 'name')).toBe('Product, Description');
+      expect(parseProductField('Product "Name"', 'name')).toBe('Product "Name"');
     });
   });
 
-  describe('sanitizeValue - Multiple Injection Attempts', () => {
-    it('should handle array of injection attempts', () => {
-      const sanitize = (csvParser as any).sanitizeValue.bind(csvParser);
-
+  describe('multiple injection attempts', () => {
+    it('prefixes each dangerous value with an apostrophe and preserves the original value', () => {
       const injectionAttempts = [
-        '=1+1',
-        '+1+1',
-        '-1+1',
-        '@SUM(A1:A10)',
-        '\t=A1',
-        '\r=A1',
-        '=HYPERLINK("http://evil.com")',
-        '=cmd|"/c calc"',
-        '+DDE("cmd")',
-        '-2+3+cmd|"/c calc"',
+        ['=1+1', "'=1+1"],
+        ['+1+1', "'+1+1"],
+        ['-1+1', "'-1+1"],
+        ['@SUM(A1:A10)', "'@SUM(A1:A10)"],
+        ['\t=A1', "'=A1"],
+        ['\r=A1', "'=A1"],
+        ['=HYPERLINK("http://evil.com")', '\'=HYPERLINK("http://evil.com")'],
+        ['=cmd|"/c calc"', '\'=cmd|"/c calc"'],
+        ['+DDE("cmd")', '\'+DDE("cmd")'],
+        ['-2+3+cmd|"/c calc"', '\'-2+3+cmd|"/c calc"'],
       ];
 
-      injectionAttempts.forEach((attempt) => {
-        const result = sanitize(attempt);
-        // All should start with apostrophe escape
+      injectionAttempts.forEach(([attempt, expected]) => {
+        const result = parseProductField(attempt);
         expect(result.startsWith("'")).toBe(true);
-        // Original injection attempt should be preserved after apostrophe
-        expect(result.substring(1)).toBe(attempt);
+        expect(result).toBe(expected);
       });
     });
   });
 
-  describe('CSV Parsing Integration', () => {
-    it('should apply sanitization during row parsing', async () => {
-      // This would require a more complete integration test with actual CSV files
-      // For now, we verify the sanitization is applied to sku, name, and barcode fields
+  describe('row parsing behavior', () => {
+    it('applies sanitization to sku, name, and barcode fields', () => {
+      const result = validateProductRowStrictly(
+        {
+          SKU: '=SKU_FORMULA',
+          Name: '+NAME_FORMULA',
+          Barcode: '@BARCODE_FORMULA',
+          Cost: '12.99',
+        },
+        1,
+        productHeaderMap,
+        new Set(),
+      );
 
-      // Note: The actual parseRow method calls sanitizeValue on sku, name, and barcode
-      // This is verified by checking the implementation at:
-      // - Line 436: const sku = this.sanitizeValue(rawSku!.trim());
-      // - Line 437: const name = this.sanitizeValue(rawName!.trim());
-      // - Line 438: const barcode = this.sanitizeValue(rawBarcode!.trim());
-
-      expect(true).toBe(true); // Placeholder for integration test
+      expect(result.errors).toEqual([]);
+      expect(result.row).toMatchObject({
+        sku: "'=SKU_FORMULA",
+        name: "'+NAME_FORMULA",
+        barcode: "'@BARCODE_FORMULA",
+      });
     });
   });
 });
