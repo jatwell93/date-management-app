@@ -3,7 +3,6 @@ import { ProductService } from '../services/product.service';
 import { Logger } from '../utils/logger';
 import { AuthRequest } from '../middleware/auth.middleware';
 import { Product } from '../models/product.model';
-import { TIER_LIMITS, TierLevel } from '../types/subscription';
 import { escapeCSVValue } from '../utils/csv';
 import * as path from 'path';
 import fs from 'fs';
@@ -15,8 +14,6 @@ import {
   isBaseError,
 } from '../errors';
 import { injectable, inject } from 'tsyringe';
-import { ProductRepository } from '../repositories/product.repository';
-import { SubscriptionRepository } from '../repositories/subscription.repository';
 
 type ProductUpdateData = Partial<
   Omit<Product, 'id' | 'createdAt' | 'updatedAt' | 'organizationId'>
@@ -31,9 +28,8 @@ export class ProductController {
   constructor(
     @inject('ProductServiceFactory')
     private productServiceFactory: (orgId: string) => ProductService,
-    private productRepository: ProductRepository,
-    private subscriptionRepository: SubscriptionRepository,
-  ) {}
+  ) {
+  }
 
   private getService(req: AuthRequest): ProductService {
     if (!req.organizationId) {
@@ -271,74 +267,24 @@ export class ProductController {
         throw new AuthenticationError('Organization context missing');
       }
 
-      const subscription = await this.subscriptionRepository.findByOrganizationId(organizationId);
-
-      if (!subscription) {
-        throw new NotFoundError('Subscription not found');
-      }
-
-      const tierLevel = subscription.tierLevel as TierLevel;
-      const maxSkus = TIER_LIMITS[tierLevel].max_skus;
-
-      // Unlimited tier - no excess products
-      if (maxSkus === null) {
-        res.json({
-          message: 'Current tier has unlimited SKUs',
-          excessCount: 0,
-          products: [],
-        });
-        return;
-      }
-
-      const usage = await this.subscriptionRepository.findUsageByOrganizationId(organizationId);
-
-      const currentCount = usage?.totalSkus || 0;
-      const excessCount = currentCount - maxSkus;
-
-      if (excessCount <= 0) {
-        res.json({
-          message: 'Organization is within SKU limits',
-          tier: tierLevel,
-          maxSkus,
-          currentSkus: currentCount,
-          excessCount: 0,
-          products: [],
-        });
-        return;
-      }
-
-      const excessProducts = await this.productRepository.findExcessProductsByOrganization(
-        organizationId,
-        maxSkus,
-      );
-
-      // Format response
-      const products = excessProducts.map((p) => ({
-        id: p.id,
-        sku: p.sku,
-        name: p.name,
-        barcode: p.barcode,
-        costPrice: p.costPrice,
-        createdAt: p.createdAt.toISOString(),
-        inventoryCount: p._count.inventoryItems,
-      }));
+      const productService = this.getService(req);
+      const view = await productService.getExcessProductsView(organizationId);
 
       const acceptHeader = req.get('Accept') || '';
       if (acceptHeader.includes('text/csv') || req.query.format === 'csv') {
-        this.sendExcessProductsCsv(res, organizationId, products);
+        this.sendExcessProductsCsv(res, organizationId, view.products);
         return;
       }
 
-      // JSON response
       res.json({
         metadata: {
           organizationId,
-          tier: tierLevel,
-          maxSkus,
-          currentSkus: currentCount,
-          excessCount,
+          tier: view.tier,
+          maxSkus: view.maxSkus,
+          currentSkus: view.currentSkus,
+          excessCount: view.excessCount,
         },
-        products,
+        products: view.products,
       });
     } catch (error) {
       this.handleRouteError(error, res, next);

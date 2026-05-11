@@ -29,11 +29,11 @@ jest.mock('@sentry/node', () => ({
 }));
 
 jest.mock('../../services/webhook.service', () => ({
-  WebhookService: class WebhookService {},
+  WebhookService: class WebhookService { },
 }));
 
 jest.mock('../../services/clerk-webhook.service', () => ({
-  ClerkWebhookService: class ClerkWebhookService {},
+  ClerkWebhookService: class ClerkWebhookService { },
 }));
 
 type MockResponse = Response & {
@@ -69,7 +69,7 @@ describe('migrated controllers', () => {
     it('creates a product through the organization-scoped service', async () => {
       const createProduct = jest.fn().mockResolvedValue(product);
       const serviceFactory = jest.fn().mockReturnValue({ createProduct });
-      const controller = new ProductController(serviceFactory, {} as never, {} as never);
+      const controller = new ProductController(serviceFactory);
       const req = {
         organizationId: 'org-1',
         body: {
@@ -98,7 +98,7 @@ describe('migrated controllers', () => {
 
     it('returns a validation response when required product fields are missing', async () => {
       const serviceFactory = jest.fn();
-      const controller = new ProductController(serviceFactory, {} as never, {} as never);
+      const controller = new ProductController(serviceFactory);
       const req = { organizationId: 'org-1', body: { sku: 'SKU-1' } } as AuthRequest;
       const res = createResponse();
       const next = createNext();
@@ -117,8 +117,6 @@ describe('migrated controllers', () => {
         jest.fn().mockReturnValue({
           getAllProducts: jest.fn().mockRejectedValue(error),
         }),
-        {} as never,
-        {} as never,
       );
       const req = { organizationId: 'org-1' } as AuthRequest;
       const res = createResponse();

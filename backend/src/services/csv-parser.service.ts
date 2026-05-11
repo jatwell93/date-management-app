@@ -503,37 +503,6 @@ export class CSVParserService extends EventEmitter {
   }
 
   /**
-   * Extract a field value from a record using the header map
-   */
-  private extractField(
-    record: Record<string, string>,
-    headerMap: Map<string, string>,
-    fieldName: string,
-  ): string | undefined {
-    const header = headerMap.get(fieldName);
-    return header ? record[header] : undefined;
-  }
-
-  /**
-   * Validate that a required field is present and non-empty
-   */
-  private validateRequiredField(
-    value: string | undefined,
-    fieldName: string,
-    rowNumber: number,
-  ): RowError | null {
-    if (!value || value.trim() === '') {
-      return {
-        rowNumber,
-        field: fieldName,
-        value: value || '',
-        message: `${fieldName.charAt(0).toUpperCase() + fieldName.slice(1)} is required and cannot be empty`,
-      };
-    }
-    return null;
-  }
-
-  /**
    * Parse and validate a single row
    */
   private parseProductRow(
@@ -542,66 +511,7 @@ export class CSVParserService extends EventEmitter {
     headerMap: Map<string, string>,
     seenSkus: Set<string>,
   ): { row: ParsedRow | null; errors: RowError[] } {
-    const errors: RowError[] = [];
-
-    // Extract values using header map
-    const rawSku = this.extractField(record, headerMap, 'sku');
-    const rawName = this.extractField(record, headerMap, 'name');
-    const rawBarcode = this.extractField(record, headerMap, 'barcode');
-    const rawCost = this.extractField(record, headerMap, 'cost');
-
-    // Validate required fields
-    const requiredFields = [
-      { value: rawSku, name: 'sku' },
-      { value: rawName, name: 'name' },
-      { value: rawBarcode, name: 'barcode' },
-      { value: rawCost, name: 'cost' },
-    ];
-
-    for (const field of requiredFields) {
-      const error = this.validateRequiredField(field.value, field.name, rowNumber);
-      if (error) {
-        errors.push(error);
-      }
-    }
-
-    // Early return if required fields missing
-    if (errors.length > 0) {
-      return { row: null, errors };
-    }
-
-    // Sanitize values (CSV injection protection)
-    const sku = this.sanitizeValue(rawSku?.trim() || '');
-    const name = this.sanitizeValue(rawName?.trim() || '');
-    const barcode = this.sanitizeValue(rawBarcode?.trim() || '');
-
-    // Parse cost value
-    const costPrice = this.parseCostValue(rawCost?.trim() || '');
-    if (costPrice === null) {
-      errors.push({
-        rowNumber,
-        field: 'cost',
-        value: rawCost || '',
-        message: 'Invalid cost format. Expected numeric value (e.g., "12.99", "$12.99")',
-      });
-      return { row: null, errors };
-    }
-
-    // Check for duplicate SKU within this file
-    if (seenSkus.has(sku.toLowerCase())) {
-      errors.push({
-        rowNumber,
-        field: 'sku',
-        value: sku,
-        message: `Duplicate SKU found in file (first occurrence will be used)`,
-      });
-      return { row: null, errors };
-    }
-
-    return {
-      row: { sku, name, barcode, costPrice, rowNumber },
-      errors,
-    };
+    return validateProductRowStrictly(record, rowNumber, headerMap, seenSkus);
   }
 
   private parseExpiryRow(
@@ -609,190 +519,7 @@ export class CSVParserService extends EventEmitter {
     rowNumber: number,
     headerMap: Map<string, string>,
   ): { row: ExpiryParsedRow | null; errors: RowError[] } {
-    const errors: RowError[] = [];
-
-    const rawSku = this.extractField(record, headerMap, 'sku');
-    const rawItemDescription = this.extractField(record, headerMap, 'itemDescription');
-    const rawUsedByDate = this.extractField(record, headerMap, 'usedByDate');
-    const rawDepartment = this.extractField(record, headerMap, 'department');
-    const rawValues = {
-      sku: rawSku?.trim() || '',
-      itemDescription: rawItemDescription?.trim() || '',
-      usedByDate: rawUsedByDate?.trim() || '',
-      department: rawDepartment?.trim() || '',
-    };
-
-    const requiredFields = [
-      { value: rawSku, name: 'sku' },
-      { value: rawUsedByDate, name: 'usedByDate' },
-    ];
-
-    for (const field of requiredFields) {
-      const error = this.validateRequiredField(field.value, field.name, rowNumber);
-      if (error) {
-        errors.push({
-          ...error,
-          reasonCode: 'missing-required-field',
-          rawValues,
-        });
-      }
-    }
-
-    if (errors.length > 0) {
-      return { row: null, errors };
-    }
-
-    const sku = this.sanitizeValue(rawSku?.trim() || '');
-    const itemDescription = rawItemDescription ? this.sanitizeValue(rawItemDescription.trim()) : '';
-    const usedByInput = rawUsedByDate?.trim() || '';
-    const parsedDate = parseExpiryImportDate(usedByInput);
-
-    if (!parsedDate.ok || !parsedDate.isoDate) {
-      errors.push({
-        rowNumber,
-        field: 'usedByDate',
-        value: usedByInput,
-        message: `${parsedDate.errorCode}: ${parsedDate.errorMessage}`,
-        reasonCode: parsedDate.errorCode,
-        rawValues,
-      });
-      return { row: null, errors };
-    }
-
-    const departmentRaw = rawDepartment?.trim();
-    const department =
-      departmentRaw && departmentRaw !== '' ? this.sanitizeValue(departmentRaw) : undefined;
-
-    return {
-      row: {
-        sku,
-        itemDescription,
-        usedByDate: parsedDate.isoDate,
-        department,
-        rowNumber,
-      },
-      errors,
-    };
-  }
-
-  /**
-   * Sanitize a string value to prevent CSV injection
-   * Uses single quote prefix for dangerous prefixes (Excel treats as literal)
-   */
-  private sanitizeValue(value: string): string {
-    let sanitized = value;
-
-    // Escape dangerous prefixes with single quote (Excel treats as literal)
-    for (const prefix of CSV_INJECTION_PREFIXES) {
-      if (sanitized.startsWith(prefix)) {
-        // Prefix with single quote to neutralize formula injection
-        sanitized = "'" + sanitized;
-        break;
-      }
-    }
-
-    return sanitized;
-  }
-
-  /**
-   * Check if a cost string has invalid letter/digit mixing
-   */
-  private hasInvalidLetterMixing(value: string): boolean {
-    const hasCurrencyCodePrefix = /^[A-Z]{3,4}\s+[\d]/i.test(value);
-    const hasLettersMixedWithDigits = /[a-zA-Z]/.test(value.replace(/^[A-Z]{3,4}\s+/i, ''));
-    return hasLettersMixedWithDigits && !hasCurrencyCodePrefix;
-  }
-
-  /**
-   * Extract value from accounting-style parentheses notation: "(12.34)" -> "12.34", isNegative=true
-   */
-  private extractFromParentheses(value: string): { cleaned: string; isNegative: boolean } {
-    if (value.includes('(') && value.includes(')')) {
-      const match = value.match(/\(([^)]+)\)/);
-      if (match) {
-        return { cleaned: match[1], isNegative: true };
-      }
-    }
-    return { cleaned: value, isNegative: false };
-  }
-
-  /**
-   * Strip currency codes and symbols from a value
-   */
-  private stripCurrencySymbols(value: string): string {
-    let cleaned = value;
-    cleaned = cleaned.replace(/^[A-Z]{3,4}\s+/i, ''); // Currency codes like "USD ", "EUR "
-    cleaned = cleaned.replace(/[\s$€£¥₹₽₪₨₩₦₡₫Є₴₵₸₺₼₾₯]/g, '');
-    return cleaned;
-  }
-
-  /**
-   * Normalize decimal separators (handle US vs European formats)
-   */
-  private normalizeDecimalSeparator(value: string): string {
-    const lastDot = value.lastIndexOf('.');
-    const lastComma = value.lastIndexOf(',');
-
-    if (lastDot > lastComma) {
-      // US format: dots are decimal, commas are thousands
-      return value.replace(/,/g, '');
-    } else if (lastComma > lastDot) {
-      // European format: commas are decimal, dots are thousands
-      return value.replace(/\./g, '').replace(',', '.');
-    } else if (lastComma !== -1 && lastDot === -1) {
-      // Only comma - check if it's decimal separator (1-2 digits after)
-      if (value.match(/,\d{1,2}$/)) {
-        return value.replace(',', '.');
-      }
-      return value.replace(/,/g, '');
-    }
-    // No separators or both absent
-    return value;
-  }
-
-  /**
-   * Parse a cost string into a number, handling various formats
-   */
-  private parseCostValue(costStr: string): number | null {
-    let cleaned = costStr.trim();
-
-    // Early rejection for invalid letter/digit mixing
-    if (this.hasInvalidLetterMixing(cleaned)) {
-      return null;
-    }
-
-    // Handle accounting-style parentheses: "(12.34)" = -12.34
-    const parenthesesResult = this.extractFromParentheses(cleaned);
-    cleaned = parenthesesResult.cleaned;
-    let isNegative = parenthesesResult.isNegative;
-
-    // Strip currency codes and symbols
-    cleaned = this.stripCurrencySymbols(cleaned);
-
-    // Handle leading negative sign
-    if (cleaned.startsWith('-')) {
-      isNegative = true;
-      cleaned = cleaned.substring(1);
-    }
-
-    // Reject if letters remain after stripping currency
-    if (/[a-zA-Z]/.test(cleaned)) {
-      return null;
-    }
-
-    // Normalize decimal separators (US vs European)
-    cleaned = this.normalizeDecimalSeparator(cleaned);
-
-    // Final validation: should only contain digits, dots, commas, spaces
-    if (!/^-?[\d,.\s]*$/.test(cleaned)) {
-      return null;
-    }
-
-    // Remove any remaining non-numeric characters except decimal point
-    cleaned = cleaned.replace(/[^\d.]/g, '');
-
-    const value = parseFloat(cleaned);
-    return Number.isNaN(value) ? null : isNegative ? -value : value;
+    return validateExpiryRowStrictly(record, rowNumber, headerMap);
   }
 
   /**
@@ -1063,6 +790,257 @@ export class CSVParserService extends EventEmitter {
     };
     this.emit('progress', event);
   }
+}
+
+// ============================================================================
+// Pure Helper Functions (no side effects, no service state)
+// ============================================================================
+
+function pureExtractField(
+  record: Record<string, string>,
+  headerMap: Map<string, string>,
+  fieldName: string,
+): string | undefined {
+  const header = headerMap.get(fieldName);
+  return header ? record[header] : undefined;
+}
+
+function pureValidateRequiredField(
+  value: string | undefined,
+  fieldName: string,
+  rowNumber: number,
+): RowError | null {
+  if (!value || value.trim() === '') {
+    return {
+      rowNumber,
+      field: fieldName,
+      value: value || '',
+      message: `${fieldName.charAt(0).toUpperCase() + fieldName.slice(1)} is required and cannot be empty`,
+    };
+  }
+  return null;
+}
+
+function pureSanitizeValue(value: string): string {
+  let sanitized = value;
+  for (const prefix of CSV_INJECTION_PREFIXES) {
+    if (sanitized.startsWith(prefix)) {
+      sanitized = "'" + sanitized;
+      break;
+    }
+  }
+  return sanitized;
+}
+
+function pureHasInvalidLetterMixing(value: string): boolean {
+  const hasCurrencyCodePrefix = /^[A-Z]{3,4}\s+[\d]/i.test(value);
+  const hasLettersMixedWithDigits = /[a-zA-Z]/.test(value.replace(/^[A-Z]{3,4}\s+/i, ''));
+  return hasLettersMixedWithDigits && !hasCurrencyCodePrefix;
+}
+
+function pureExtractFromParentheses(value: string): { cleaned: string; isNegative: boolean } {
+  if (value.includes('(') && value.includes(')')) {
+    const match = value.match(/\(([^)]+)\)/);
+    if (match) {
+      return { cleaned: match[1], isNegative: true };
+    }
+  }
+  return { cleaned: value, isNegative: false };
+}
+
+function pureStripCurrencySymbols(value: string): string {
+  let cleaned = value;
+  cleaned = cleaned.replace(/^[A-Z]{3,4}\s+/i, '');
+  cleaned = cleaned.replace(/[\s$€£¥₹₽₪₨₩₦₡₫Є₴₵₸₺₼₾₯]/g, '');
+  return cleaned;
+}
+
+function pureNormalizeDecimalSeparator(value: string): string {
+  const lastDot = value.lastIndexOf('.');
+  const lastComma = value.lastIndexOf(',');
+
+  if (lastDot > lastComma) {
+    return value.replace(/,/g, '');
+  } else if (lastComma > lastDot) {
+    return value.replace(/\./g, '').replace(',', '.');
+  } else if (lastComma !== -1 && lastDot === -1) {
+    if (value.match(/,\d{1,2}$/)) {
+      return value.replace(',', '.');
+    }
+    return value.replace(/,/g, '');
+  }
+  return value;
+}
+
+function pureParseCostValue(costStr: string): number | null {
+  let cleaned = costStr.trim();
+
+  if (pureHasInvalidLetterMixing(cleaned)) {
+    return null;
+  }
+
+  const parenthesesResult = pureExtractFromParentheses(cleaned);
+  cleaned = parenthesesResult.cleaned;
+  let isNegative = parenthesesResult.isNegative;
+
+  cleaned = pureStripCurrencySymbols(cleaned);
+
+  if (cleaned.startsWith('-')) {
+    isNegative = true;
+    cleaned = cleaned.substring(1);
+  }
+
+  if (/[a-zA-Z]/.test(cleaned)) {
+    return null;
+  }
+
+  cleaned = pureNormalizeDecimalSeparator(cleaned);
+
+  if (!/^-?[\d.,\s]*$/.test(cleaned)) {
+    return null;
+  }
+
+  cleaned = cleaned.replace(/[^\d.]/g, '');
+
+  const value = parseFloat(cleaned);
+  return Number.isNaN(value) ? null : isNegative ? -value : value;
+}
+
+// ============================================================================
+// Pure Row Validators (no side effects, no service state)
+// ============================================================================
+
+export function validateProductRowStrictly(
+  record: Record<string, string>,
+  rowNumber: number,
+  headerMap: Map<string, string>,
+  seenSkus: Set<string>,
+): { row: ParsedRow | null; errors: RowError[] } {
+  const errors: RowError[] = [];
+
+  const rawSku = pureExtractField(record, headerMap, 'sku');
+  const rawName = pureExtractField(record, headerMap, 'name');
+  const rawBarcode = pureExtractField(record, headerMap, 'barcode');
+  const rawCost = pureExtractField(record, headerMap, 'cost');
+
+  const requiredFields = [
+    { value: rawSku, name: 'sku' },
+    { value: rawName, name: 'name' },
+    { value: rawBarcode, name: 'barcode' },
+    { value: rawCost, name: 'cost' },
+  ];
+
+  for (const field of requiredFields) {
+    const error = pureValidateRequiredField(field.value, field.name, rowNumber);
+    if (error) {
+      errors.push(error);
+    }
+  }
+
+  if (errors.length > 0) {
+    return { row: null, errors };
+  }
+
+  const sku = pureSanitizeValue(rawSku?.trim() || '');
+  const name = pureSanitizeValue(rawName?.trim() || '');
+  const barcode = pureSanitizeValue(rawBarcode?.trim() || '');
+
+  const costPrice = pureParseCostValue(rawCost?.trim() || '');
+  if (costPrice === null) {
+    errors.push({
+      rowNumber,
+      field: 'cost',
+      value: rawCost || '',
+      message: 'Invalid cost format. Expected numeric value (e.g., "12.99", "$12.99")',
+    });
+    return { row: null, errors };
+  }
+
+  if (seenSkus.has(sku.toLowerCase())) {
+    errors.push({
+      rowNumber,
+      field: 'sku',
+      value: sku,
+      message: `Duplicate SKU found in file (first occurrence will be used)`,
+    });
+    return { row: null, errors };
+  }
+
+  return {
+    row: { sku, name, barcode, costPrice, rowNumber },
+    errors,
+  };
+}
+
+export function validateExpiryRowStrictly(
+  record: Record<string, string>,
+  rowNumber: number,
+  headerMap: Map<string, string>,
+): { row: ExpiryParsedRow | null; errors: RowError[] } {
+  const errors: RowError[] = [];
+
+  const rawSku = pureExtractField(record, headerMap, 'sku');
+  const rawItemDescription = pureExtractField(record, headerMap, 'itemDescription');
+  const rawUsedByDate = pureExtractField(record, headerMap, 'usedByDate');
+  const rawDepartment = pureExtractField(record, headerMap, 'department');
+  const rawValues = {
+    sku: rawSku?.trim() || '',
+    itemDescription: rawItemDescription?.trim() || '',
+    usedByDate: rawUsedByDate?.trim() || '',
+    department: rawDepartment?.trim() || '',
+  };
+
+  const requiredFields = [
+    { value: rawSku, name: 'sku' },
+    { value: rawUsedByDate, name: 'usedByDate' },
+  ];
+
+  for (const field of requiredFields) {
+    const error = pureValidateRequiredField(field.value, field.name, rowNumber);
+    if (error) {
+      errors.push({
+        ...error,
+        reasonCode: 'missing-required-field',
+        rawValues,
+      });
+    }
+  }
+
+  if (errors.length > 0) {
+    return { row: null, errors };
+  }
+
+  const sku = pureSanitizeValue(rawSku?.trim() || '');
+  const itemDescription = rawItemDescription ? pureSanitizeValue(rawItemDescription.trim()) : '';
+  const usedByInput = rawUsedByDate?.trim() || '';
+  const parsedDate = parseExpiryImportDate(usedByInput);
+
+  if (!parsedDate.ok || !parsedDate.isoDate) {
+    errors.push({
+      rowNumber,
+      field: 'usedByDate',
+      value: usedByInput,
+      message: `${parsedDate.errorCode}: ${parsedDate.errorMessage}`,
+      reasonCode: parsedDate.errorCode,
+      rawValues,
+    });
+    return { row: null, errors };
+  }
+
+  const departmentRaw = rawDepartment?.trim();
+  const department =
+    departmentRaw && departmentRaw !== '' ? pureSanitizeValue(departmentRaw) : undefined;
+
+  return {
+    row: {
+      sku,
+      itemDescription,
+      usedByDate: parsedDate.isoDate,
+      department,
+      rowNumber,
+    },
+    errors,
+  };
 }
 
 // Export singleton factory for convenience
