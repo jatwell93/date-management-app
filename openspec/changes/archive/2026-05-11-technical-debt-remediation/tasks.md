@@ -257,9 +257,10 @@ This section details the four highest-risk hotspots (identified by Code Health s
 3. Move CSV serialization into a dedicated helper: `formatExcessProductsAsCSV(products: Product[]): string` (in `utils/csv.ts` or new `csv-formatter.ts`).
 4. Reduce controller's `exportExcess` to: fetch view → choose JSON or CSV format → serialize and send.
 5. Preserve current response shapes:
-   - Unlimited tier: `{ message: 'Current tier has unlimited SKUs', excessCount: 0, products: [] }`.
-   - Within limit: `{ message: 'Organization is within SKU limits', excessCount: 0, products: [] }`.
-   - Over limit (JSON): `{ message: '...', excessCount: N, products: [...] }`.
+   - JSON responses use top-level `{ metadata, products }`.
+   - Unlimited tier: `{ metadata: { message: 'Current tier has unlimited SKUs', excessCount: 0, ... }, products: [] }`.
+   - Within limit: `{ metadata: { message: 'Organization is within SKU limits', excessCount: 0, ... }, products: [] }`.
+   - Over limit (JSON): `{ metadata: { message: '...', excessCount: N, ... }, products: [...] }`.
    - Over limit (CSV): CSV file download with same columns as product list.
 
 **Test coverage to add** (additive, narrow suites):

@@ -414,19 +414,19 @@ export class ProductService {
 
     const tierLevel = subscription.tierLevel as TierLevel;
     const maxSkus = TIER_LIMITS[tierLevel].max_skus;
+    const usage = await this.subscriptionRepo.findUsageByOrganizationId(organizationId);
+    const currentCount = usage?.totalSkus || 0;
 
     if (maxSkus === null) {
       return {
         tier: tierLevel,
         maxSkus: null,
-        currentSkus: 0,
+        currentSkus: currentCount,
         excessCount: 0,
         products: [],
       };
     }
 
-    const usage = await this.subscriptionRepo.findUsageByOrganizationId(organizationId);
-    const currentCount = usage?.totalSkus || 0;
     const excessCount = currentCount - maxSkus;
 
     if (excessCount <= 0) {
