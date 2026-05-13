@@ -312,6 +312,30 @@ describe('ScanPage Integration', () => {
     });
   });
 
+  it('keeps unknown barcode lookup failures recoverable on the scan page', async () => {
+    (apiService.get as jest.Mock).mockImplementation((url) => {
+      if (url === '/store-areas') return Promise.resolve(mockStoreAreas);
+      if (url.includes('/products/')) return Promise.reject(new Error('Network request failed'));
+      return Promise.resolve([]);
+    });
+
+    render(
+      <HandheldProvider>
+        <ScanPage token={mockToken} />
+      </HandheldProvider>,
+    );
+
+    await waitFor(() => {
+      expect(screen.getByTestId('mock-scanner')).toBeInTheDocument();
+    });
+
+    userEvent.click(screen.getByTestId('trigger-scan'));
+
+    expect(await screen.findByRole('alert')).toHaveTextContent('Error: Network request failed');
+    expect(screen.getByTestId('scan-page-main')).toBeInTheDocument();
+    expect(screen.getByTestId('mock-scanner')).toBeInTheDocument();
+  });
+
   it('submits inventory item successfully when online', async () => {
     render(
       <HandheldProvider>
