@@ -90,7 +90,10 @@ export function UpgradeModal({ isOpen, onClose, onSelectPlan, currentTier }: Upg
 
   return (
     <Dialog open={isOpen} onOpenChange={onClose}>
-      <DialogContent className="max-w-6xl max-h-[90vh] overflow-y-auto">
+      <DialogContent
+        data-testid="upgrade-modal-content"
+        className="w-[calc(100vw-2rem)] max-w-[calc(100vw-2rem)] max-h-[90vh] overflow-y-auto p-4 sm:p-6 sm:max-w-2xl lg:max-w-6xl"
+      >
         <DialogHeader>
           <DialogTitle>Upgrade Your Plan</DialogTitle>
           <DialogDescription>
@@ -120,7 +123,7 @@ export function UpgradeModal({ isOpen, onClose, onSelectPlan, currentTier }: Upg
         </div>
 
         {/* Tier Cards */}
-        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
+        <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-4 gap-4">
           {tiers.map((tier) => {
             const isCurrentTier = tier === currentTier;
             const isConcierge = tier === 'concierge';

@@ -22,6 +22,7 @@ jest.mock('../../middleware/clerk-auth.middleware', () => ({
 
 jest.mock('../../middleware/rateLimiter', () => ({
   trialConversionLimiter: (_req: any, _res: any, next: any) => next(),
+  checkoutSessionLimiter: (_req: any, _res: any, next: any) => next(),
 }));
 
 jest.mock('../../database/database-factory', () => ({

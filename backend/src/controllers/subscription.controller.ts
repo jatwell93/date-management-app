@@ -79,7 +79,7 @@ export class SubscriptionController {
     private subscriptionRepository: SubscriptionRepository,
     @inject('StripeClientFactory')
     private stripeClientFactory: () => ReturnType<typeof getStripeClient>,
-  ) {}
+  ) { }
 
   async getTrialStatus(req: Request, res: Response): Promise<void> {
     try {
@@ -114,17 +114,19 @@ export class SubscriptionController {
 
       const response: TrialStatusResponse = {
         isInTrial: subscription?.status === 'TRIALING' && !isTrialExpired,
-        isTrialExpired: subscription?.status === 'TRIALING' && isTrialExpired,
+        isTrialExpired:
+          (subscription?.status === 'TRIALING' && isTrialExpired) ||
+          subscription?.status === 'EXPIRED',
         subscription: subscription
           ? {
-              status: subscription.status as SubscriptionTierResponse['status'],
-              tierLevel: subscription.tierLevel,
-              trialEndDate: subscription.trialEndDate?.toISOString() || null,
-              trialStartedAt: subscription.trialStartedAt?.toISOString() || null,
-              trialConvertedAt: subscription.trialConvertedAt?.toISOString() || null,
-              daysRemaining,
-              billingCycle: subscription.billingCycle || null,
-            }
+            status: subscription.status as SubscriptionTierResponse['status'],
+            tierLevel: subscription.tierLevel,
+            trialEndDate: subscription.trialEndDate?.toISOString() || null,
+            trialStartedAt: subscription.trialStartedAt?.toISOString() || null,
+            trialConvertedAt: subscription.trialConvertedAt?.toISOString() || null,
+            daysRemaining,
+            billingCycle: subscription.billingCycle || null,
+          }
           : null,
         tierLimits: limits,
       };

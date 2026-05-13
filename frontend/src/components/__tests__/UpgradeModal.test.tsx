@@ -101,6 +101,23 @@ describe('UpgradeModal', () => {
     expect(mockOnClose).toHaveBeenCalled();
   });
 
+  it('keeps modal content constrained to the mobile viewport so close remains reachable', () => {
+    render(
+      <UpgradeModal
+        isOpen={true}
+        onClose={mockOnClose}
+        onSelectPlan={mockOnSelectPlan}
+        currentTier="starter"
+      />,
+    );
+
+    expect(screen.getByTestId('upgrade-modal-content')).toHaveClass(
+      'w-[calc(100vw-2rem)]',
+      'max-w-[calc(100vw-2rem)]',
+      'lg:max-w-6xl',
+    );
+  });
+
   it('does not render when isOpen is false', () => {
     const { container } = render(
       <UpgradeModal
