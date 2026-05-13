@@ -16,7 +16,7 @@ let mockOrgBootstrapState = {
   isBootstrapped: true,
   isBootstrapping: false,
   bootstrapError: null as string | null,
-  bootstrapResult: null as { userId: string; role: string } | null,
+  bootstrapResult: null as { userId: number; role: string; organizationId?: string } | null,
   retry: jest.fn(),
 };
 
@@ -61,7 +61,7 @@ const mockSignedInContext = (overrides = {}) => {
     isLoading: false,
     isLoggedIn: true,
     isFullySignedIn: true,
-    userId: 'user-1',
+    userId: 1,
     userName: 'Test User',
     userRole: 'admin',
     updateBootstrapRole: jest.fn(),
@@ -151,6 +151,33 @@ describe('App navigation', () => {
     const nav = screen.getByRole('navigation');
     expect(within(nav).queryByText('CSV Upload')).not.toBeInTheDocument();
   });
+
+  it('uses the current bootstrap role when Clerk token does not include a numeric user id', () => {
+    const updateBootstrapRole = jest.fn();
+    mockSignedInContext({
+      userId: null,
+      userRole: null,
+      updateBootstrapRole,
+    });
+    mockOrgBootstrapState = {
+      isBootstrapped: true,
+      isBootstrapping: false,
+      bootstrapError: null,
+      bootstrapResult: {
+        userId: 1,
+        role: 'admin',
+        organizationId: 'org_expect',
+      },
+      retry: jest.fn(),
+    };
+
+    render(<App />);
+
+    const nav = screen.getByRole('navigation');
+    expect(within(nav).getByText('CSV Upload')).toBeInTheDocument();
+    expect(within(nav).getByText('User Management')).toBeInTheDocument();
+    expect(updateBootstrapRole).toHaveBeenCalledWith('admin');
+  });
 });
 
 describe('App loading state', () => {
@@ -180,6 +207,55 @@ describe('App account routes', () => {
     expect(profileShell).toHaveClass('mx-auto');
     expect(profileShell).toHaveClass('max-w-5xl');
     expect(within(profileShell).getByTestId('clerk-user-profile')).toBeInTheDocument();
+  });
+});
+
+describe('App Expect QA diagnostics', () => {
+  const originalQaStatusFlag = process.env.REACT_APP_EXPECT_QA_STATUS;
+
+  afterEach(() => {
+    process.env.REACT_APP_EXPECT_QA_STATUS = originalQaStatusFlag;
+  });
+
+  it('does not render QA diagnostics unless explicitly enabled', () => {
+    delete process.env.REACT_APP_EXPECT_QA_STATUS;
+    mockSignedInContext({ userRole: 'admin' });
+
+    render(<App />);
+
+    expect(screen.queryByTestId('expect-qa-status')).not.toBeInTheDocument();
+  });
+
+  it('renders Clerk and bootstrap state for Expect when enabled outside production', () => {
+    process.env.REACT_APP_EXPECT_QA_STATUS = 'true';
+    mockSignedInContext({
+      userId: 42,
+      userName: 'Expect Admin',
+      userRole: 'admin',
+      token: 'test-token',
+      hasOrganization: true,
+    });
+    mockOrgBootstrapState = {
+      isBootstrapped: true,
+      isBootstrapping: false,
+      bootstrapError: null,
+      bootstrapResult: {
+        userId: 42,
+        role: 'team_member',
+        organizationId: 'org_expect',
+      },
+      retry: jest.fn(),
+    };
+
+    render(<App />);
+
+    expect(screen.getByTestId('expect-qa-status')).toBeInTheDocument();
+    expect(screen.getByTestId('expect-qa-frontend-role')).toHaveTextContent('admin');
+    expect(screen.getByTestId('expect-qa-backend-role')).toHaveTextContent('team_member');
+    expect(screen.getByTestId('expect-qa-organization-id')).toHaveTextContent('org_expect');
+    expect(screen.getByTestId('expect-qa-bootstrap-status')).toHaveTextContent('ready');
+    expect(screen.getByTestId('expect-qa-token')).toHaveTextContent('present');
+    expect(screen.getByTestId('expect-qa-api-base-url')).toHaveTextContent('http://localhost:3001');
   });
 });
 

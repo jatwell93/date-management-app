@@ -44,7 +44,7 @@ import { HandheldProvider, useHandheldDetectionContext } from './contexts/Handhe
 import { useOrgBootstrap } from './hooks/useOrgBootstrap';
 import { hasPermission, PERMISSIONS } from './constants/roles';
 import { HandheldLayout } from './layouts/HandheldLayout';
-import { API_AUTH_UNAUTHORIZED_EVENT } from './lib/api.service';
+import { API_AUTH_UNAUTHORIZED_EVENT, API_BASE_URL } from './lib/api.service';
 import './globals.css';
 import './styles/handheld.css';
 
@@ -91,6 +91,78 @@ function ProfilePage() {
   );
 }
 
+function isExpectQaStatusEnabled() {
+  return process.env.NODE_ENV !== 'production' && process.env.REACT_APP_EXPECT_QA_STATUS === 'true';
+}
+
+interface ExpectQaStatusProps {
+  isLoggedIn: boolean;
+  isFullySignedIn: boolean;
+  hasOrganization: boolean;
+  userId: number | null;
+  userName: string | null;
+  frontendRole: string | null;
+  backendRole: string | null;
+  organizationId: string | null;
+  bootstrapStatus: 'ready' | 'loading' | 'error' | 'pending';
+  bootstrapError: string | null;
+  hasToken: boolean;
+}
+
+function ExpectQaStatus({
+  isLoggedIn,
+  isFullySignedIn,
+  hasOrganization,
+  userId,
+  userName,
+  frontendRole,
+  backendRole,
+  organizationId,
+  bootstrapStatus,
+  bootstrapError,
+  hasToken,
+}: ExpectQaStatusProps) {
+  if (!isExpectQaStatusEnabled()) {
+    return null;
+  }
+
+  return (
+    <section
+      aria-label="Expect QA auth diagnostics"
+      data-testid="expect-qa-status"
+      className="fixed bottom-3 right-3 z-50 max-w-sm rounded-md border border-amber-300 bg-amber-50 p-3 text-xs text-amber-950 shadow-lg"
+    >
+      <div className="font-semibold">Expect QA</div>
+      <dl className="mt-2 grid grid-cols-[auto_1fr] gap-x-2 gap-y-1">
+        <dt>logged-in:</dt>
+        <dd data-testid="expect-qa-logged-in">{isLoggedIn ? 'yes' : 'no'}</dd>
+        <dt>fully-signed-in:</dt>
+        <dd data-testid="expect-qa-fully-signed-in">{isFullySignedIn ? 'yes' : 'no'}</dd>
+        <dt>has-organization:</dt>
+        <dd data-testid="expect-qa-has-organization">{hasOrganization ? 'yes' : 'no'}</dd>
+        <dt>user-id:</dt>
+        <dd data-testid="expect-qa-user-id">{userId ?? 'none'}</dd>
+        <dt>user-name:</dt>
+        <dd data-testid="expect-qa-user-name">{userName ?? 'none'}</dd>
+        <dt>frontend-role:</dt>
+        <dd data-testid="expect-qa-frontend-role">{frontendRole ?? 'none'}</dd>
+        <dt>backend-role:</dt>
+        <dd data-testid="expect-qa-backend-role">{backendRole ?? 'none'}</dd>
+        <dt>organization-id:</dt>
+        <dd data-testid="expect-qa-organization-id">{organizationId ?? 'none'}</dd>
+        <dt>bootstrap:</dt>
+        <dd data-testid="expect-qa-bootstrap-status">{bootstrapStatus}</dd>
+        <dt>bootstrap-error:</dt>
+        <dd data-testid="expect-qa-bootstrap-error">{bootstrapError ?? 'none'}</dd>
+        <dt>token:</dt>
+        <dd data-testid="expect-qa-token">{hasToken ? 'present' : 'missing'}</dd>
+        <dt>api-base-url:</dt>
+        <dd data-testid="expect-qa-api-base-url">{API_BASE_URL}</dd>
+      </dl>
+    </section>
+  );
+}
+
 // Component that uses handheld context for conditional rendering
 function AppContent({
   isMobileMenuOpen,
@@ -103,6 +175,7 @@ function AppContent({
     isLoading: isAuthLoading,
     isLoggedIn: hasSession,
     isFullySignedIn,
+    hasOrganization,
     userId,
     userName,
     userRole,
@@ -131,21 +204,21 @@ function AppContent({
     };
   }, [isBootstrapping]);
 
-  const isCurrentBootstrapResult = bootstrapResult?.userId === userId;
-  const hasCurrentUserBootstrapRole = isCurrentBootstrapResult && !!bootstrapResult?.role;
+  const hasCurrentUserBootstrapRole = isBootstrapped && !!bootstrapResult?.role;
   const effectiveUserRole = hasCurrentUserBootstrapRole ? bootstrapResult.role : userRole;
+  const bootstrapStatus = isBootstrapping
+    ? 'loading'
+    : bootstrapError
+      ? 'error'
+      : isBootstrapped
+        ? 'ready'
+        : 'pending';
 
   useEffect(() => {
     if (hasCurrentUserBootstrapRole) {
       updateBootstrapRole(bootstrapResult.role);
     }
-  }, [
-    bootstrapResult?.role,
-    bootstrapResult?.userId,
-    hasCurrentUserBootstrapRole,
-    updateBootstrapRole,
-    userId,
-  ]);
+  }, [bootstrapResult?.role, hasCurrentUserBootstrapRole, updateBootstrapRole]);
   const { isHandheld } = useHandheldDetectionContext();
   const location = useLocation();
   const navigate = useNavigate();
@@ -263,6 +336,19 @@ function AppContent({
         <StorageQuotaWarning userId={userId} token={token} subscriptionTier="free" />
       )}
       {isLoggedIn && token && <TrialBanner token={token} />}
+      <ExpectQaStatus
+        isLoggedIn={isLoggedIn}
+        isFullySignedIn={isFullySignedIn}
+        hasOrganization={hasOrganization}
+        userId={userId}
+        userName={userName}
+        frontendRole={userRole}
+        backendRole={bootstrapResult?.role ?? null}
+        organizationId={bootstrapResult?.organizationId ?? null}
+        bootstrapStatus={bootstrapStatus}
+        bootstrapError={bootstrapError}
+        hasToken={!!token}
+      />
       {isLoggedIn && !isHandheld && (
         <nav className="bg-primary text-primary-foreground p-4 shadow-md">
           <div className="container mx-auto">
