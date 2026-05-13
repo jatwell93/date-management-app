@@ -124,6 +124,22 @@ describe('email.service', () => {
     });
   });
 
+  it('sendEmail sends a text fallback when no body content is provided', async () => {
+    const service = new EmailService(mockPrisma as any);
+
+    await service.sendEmail({
+      to: 'a@test.local',
+      subject: 'Hello',
+    });
+
+    expect(mockedSgMail.send).toHaveBeenCalledWith({
+      to: 'a@test.local',
+      from: 'noreply@test.local',
+      subject: 'Hello',
+      text: 'Hello',
+    });
+  });
+
   it('sendBulkEmail uses templateId and dynamic template data', async () => {
     const service = new EmailService(mockPrisma as any);
 
