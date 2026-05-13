@@ -706,7 +706,9 @@ export const CSVUploadPage: React.FC<{
   return (
     <div className="max-w-4xl mx-auto">
       <h1 className="text-2xl font-bold mb-6">
-        {isExpiryImport ? 'Expiry List Import (CSV/XLSX/XLS)' : 'Product Upload (CSV/XLSX/XLS)'}
+        {isExpiryImport
+          ? 'Expiry List Import (CSV/XLSX/XLS)'
+          : 'Product Catalog Upload (CSV/XLSX/XLS)'}
       </h1>
 
       <div className="bg-white p-6 rounded-lg shadow-md">
@@ -720,7 +722,7 @@ export const CSVUploadPage: React.FC<{
                 : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
             }`}
           >
-            Product Upload
+            Product Catalog
           </button>
           <button
             type="button"
@@ -800,10 +802,13 @@ export const CSVUploadPage: React.FC<{
           ) : (
             <ul className="list-disc pl-5 space-y-1 text-sm text-inventory-primary-700">
               <li>
-                Required columns: <code className="bg-inventory-primary-100 px-1 rounded">SKU</code>
-                , <code className="bg-inventory-primary-100 px-1 rounded">Name</code>,{' '}
-                <code className="bg-inventory-primary-100 px-1 rounded">Cost</code>,{' '}
-                <code className="bg-inventory-primary-100 px-1 rounded">Barcode</code>
+                Required columns: SKU, Name, Cost, Barcode{' '}
+                <span className="text-xs">
+                  (<code className="bg-inventory-primary-100 px-1 rounded">SKU</code>,{' '}
+                  <code className="bg-inventory-primary-100 px-1 rounded">Name</code>,{' '}
+                  <code className="bg-inventory-primary-100 px-1 rounded">Cost</code>,{' '}
+                  <code className="bg-inventory-primary-100 px-1 rounded">Barcode</code>)
+                </span>
               </li>
               <li>
                 Column names are case-insensitive and can include common variations (e.g., "Product

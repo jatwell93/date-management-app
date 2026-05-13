@@ -63,7 +63,7 @@ describe('CSVUploadPage expiry import', () => {
   it('switches to expiry mode UX with template actions', async () => {
     render(<CSVUploadPage token="test-token" />);
 
-    expect(screen.getByText('Product Upload (CSV/XLSX/XLS)')).toBeInTheDocument();
+    expect(screen.getByText('Product Catalog Upload (CSV/XLSX/XLS)')).toBeInTheDocument();
 
     userEvent.click(screen.getByRole('button', { name: 'Expiry List Import' }));
 
@@ -72,6 +72,17 @@ describe('CSVUploadPage expiry import', () => {
     expect(screen.getByRole('button', { name: 'Download CSV Template' })).toBeInTheDocument();
     expect(screen.getByRole('button', { name: 'Download XLSX Template' })).toBeInTheDocument();
     expect(screen.getByRole('button', { name: 'Download XLS Template' })).toBeInTheDocument();
+  });
+
+  it('makes product catalog CSV/XLS/XLSX upload requirements clear', () => {
+    render(<CSVUploadPage token="test-token" />);
+
+    expect(screen.getByText('Product Catalog Upload (CSV/XLSX/XLS)')).toBeInTheDocument();
+    expect(screen.getByLabelText('CSV/XLSX/XLS File')).toHaveAttribute(
+      'accept',
+      expect.stringContaining('.xlsx'),
+    );
+    expect(screen.getByText(/Required columns: SKU, Name, Cost, Barcode/i)).toBeInTheDocument();
   });
 
   it('shows rejected row details after direct expiry upload response', async () => {
