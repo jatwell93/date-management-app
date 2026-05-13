@@ -64,6 +64,33 @@ const checkForceHandheldQueryParam = () => {
 
 // Legacy JWT helpers removed - use ClerkAuthProvider context instead
 
+function ExpiryLoadingState({ message }: { message: string }) {
+  return (
+    <div className="min-h-screen bg-background text-foreground flex items-center justify-center px-4">
+      <div className="text-center max-w-sm">
+        <div
+          aria-hidden="true"
+          className="mx-auto mb-4 flex h-12 w-12 items-center justify-center rounded-full border border-primary/30 bg-primary/10 text-primary"
+        >
+          <div className="h-6 w-3 rounded-full border-2 border-current border-t-transparent animate-spin" />
+        </div>
+        <p className="font-medium text-foreground">{message}</p>
+        <p className="text-sm text-muted-foreground mt-1">Preparing dates and stock records</p>
+      </div>
+    </div>
+  );
+}
+
+function ProfilePage() {
+  return (
+    <div data-testid="profile-shell" className="mx-auto w-full max-w-5xl px-4 py-6">
+      <div className="flex justify-center">
+        <UserProfile routing="path" path="/profile" />
+      </div>
+    </div>
+  );
+}
+
 // Component that uses handheld context for conditional rendering
 function AppContent({
   isMobileMenuOpen,
@@ -194,26 +221,12 @@ function AppContent({
   // Show loading state while Clerk auth is still initializing so protected
   // routes don't flash-redirect to /login on page refresh.
   if (isAuthLoading) {
-    return (
-      <div className="min-h-screen bg-background text-foreground flex items-center justify-center">
-        <div className="text-center">
-          <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-primary mx-auto mb-4"></div>
-          <p className="text-muted-foreground">Loading...</p>
-        </div>
-      </div>
-    );
+    return <ExpiryLoadingState message="Checking expiry workspace" />;
   }
 
   // Show loading state while bootstrap is in progress.
   if (isBootstrapping) {
-    return (
-      <div className="min-h-screen bg-background text-foreground flex items-center justify-center">
-        <div className="text-center">
-          <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-primary mx-auto mb-4"></div>
-          <p className="text-muted-foreground">Loading your workspace…</p>
-        </div>
-      </div>
-    );
+    return <ExpiryLoadingState message="Checking expiry workspace" />;
   }
 
   // Show error state if bootstrap failed.
@@ -309,11 +322,6 @@ function AppContent({
                     </Link>
                   </li>
                   <li>
-                    <Link to="/sentry-test" className="hover:opacity-90 transition-opacity">
-                      Sentry Test
-                    </Link>
-                  </li>
-                  <li>
                     <Link to="/dashboard" className="hover:opacity-90 transition-opacity">
                       Dashboard
                     </Link>
@@ -385,11 +393,6 @@ function AppContent({
                     </DropdownMenu>
                   </li>
                   <li>
-                    <Link to="/subscription" className="hover:opacity-90 transition-opacity">
-                      Billing
-                    </Link>
-                  </li>
-                  <li>
                     <Link to="/markdown-calculator" className="hover:opacity-90 transition-opacity">
                       Markdown Calculator
                     </Link>
@@ -459,15 +462,6 @@ function AppContent({
                   </li>
                   <li>
                     <Link
-                      to="/sentry-test"
-                      className="block hover:opacity-90 transition-opacity"
-                      onClick={() => setIsMobileMenuOpen(false)}
-                    >
-                      Sentry Test
-                    </Link>
-                  </li>
-                  <li>
-                    <Link
                       to="/dashboard"
                       className="block hover:opacity-90 transition-opacity"
                       onClick={() => setIsMobileMenuOpen(false)}
@@ -518,6 +512,20 @@ function AppContent({
                       onClick={() => setIsMobileMenuOpen(false)}
                     >
                       Markdown Calculator
+                    </Link>
+                  </li>
+                  <li className="border-t border-gray-600 pt-2 mt-2">
+                    <div className="text-xs font-semibold uppercase tracking-wide opacity-75">
+                      Account
+                    </div>
+                  </li>
+                  <li>
+                    <Link
+                      to="/profile"
+                      className="block hover:opacity-90 transition-opacity"
+                      onClick={() => setIsMobileMenuOpen(false)}
+                    >
+                      Profile
                     </Link>
                   </li>
                   <li>
@@ -718,23 +726,11 @@ function AppContent({
                 />
                 <Route
                   path="/profile"
-                  element={
-                    isLoggedIn ? (
-                      <UserProfile routing="path" path="/profile" />
-                    ) : (
-                      <Navigate to="/login" />
-                    )
-                  }
+                  element={isLoggedIn ? <ProfilePage /> : <Navigate to="/login" />}
                 />
                 <Route
                   path="/profile/*"
-                  element={
-                    isLoggedIn ? (
-                      <UserProfile routing="path" path="/profile" />
-                    ) : (
-                      <Navigate to="/login" />
-                    )
-                  }
+                  element={isLoggedIn ? <ProfilePage /> : <Navigate to="/login" />}
                 />
                 <Route
                   path="/subscription"
@@ -877,23 +873,11 @@ function AppContent({
               />
               <Route
                 path="/profile"
-                element={
-                  isLoggedIn ? (
-                    <UserProfile routing="path" path="/profile" />
-                  ) : (
-                    <Navigate to="/login" />
-                  )
-                }
+                element={isLoggedIn ? <ProfilePage /> : <Navigate to="/login" />}
               />
               <Route
                 path="/profile/*"
-                element={
-                  isLoggedIn ? (
-                    <UserProfile routing="path" path="/profile" />
-                  ) : (
-                    <Navigate to="/login" />
-                  )
-                }
+                element={isLoggedIn ? <ProfilePage /> : <Navigate to="/login" />}
               />
               <Route
                 path="/subscription"

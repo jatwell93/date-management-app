@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react';
+import { useCallback, useEffect, useState } from 'react';
 import * as Sentry from '@sentry/react';
 import { SubscriptionDashboard } from '../components/SubscriptionDashboard';
 import { UpgradeModal } from '../components/UpgradeModal';
@@ -18,17 +18,22 @@ export function SubscriptionSettingsPage({ token }: SubscriptionSettingsPageProp
   const [subscription, setSubscription] = useState<SubscriptionData | null>(null);
   const [usage, setUsage] = useState<UsageData | null>(null);
   const [cancelLoading, setCancelLoading] = useState(false);
+  const [billingLoadError, setBillingLoadError] = useState<string | null>(null);
+  const [billingLoading, setBillingLoading] = useState(false);
 
-  useEffect(() => {
-    if (!token) {
-      setSubscription(null);
-      setUsage(null);
-      return;
-    }
+  const loadSubscriptionData = useCallback(
+    async (isMounted: () => boolean = () => true) => {
+      if (!token) {
+        setSubscription(null);
+        setUsage(null);
+        setBillingLoadError(null);
+        setBillingLoading(false);
+        return;
+      }
 
-    let isMounted = true;
+      setBillingLoading(true);
+      setBillingLoadError(null);
 
-    const loadSubscriptionData = async () => {
       try {
         const [subscriptionRes, usageRes] = await Promise.all([
           fetch(buildApiUrl('/subscription/current'), {
@@ -48,32 +53,45 @@ export function SubscriptionSettingsPage({ token }: SubscriptionSettingsPageProp
           usageRes.json(),
         ]);
 
-        if (!isMounted) {
+        if (!isMounted()) {
           return;
         }
 
         setSubscription(subscriptionData);
         setUsage(usageData);
+        setBillingLoadError(null);
       } catch (error) {
         Sentry.captureException(error, {
           tags: { feature: 'subscription-settings' },
         });
 
-        if (!isMounted) {
+        if (!isMounted()) {
           return;
         }
 
         setSubscription(null);
         setUsage(null);
+        setBillingLoadError(
+          'Your subscription details could not be loaded. Retry the billing data or contact support if this continues.',
+        );
+      } finally {
+        if (isMounted()) {
+          setBillingLoading(false);
+        }
       }
-    };
+    },
+    [token],
+  );
 
-    loadSubscriptionData();
+  useEffect(() => {
+    let isMounted = true;
+
+    loadSubscriptionData(() => isMounted);
 
     return () => {
       isMounted = false;
     };
-  }, [token]);
+  }, [loadSubscriptionData]);
 
   const handleUpgrade = () => {
     setShowUpgradeModal(true);
@@ -183,6 +201,20 @@ export function SubscriptionSettingsPage({ token }: SubscriptionSettingsPageProp
       </div>
 
       <div className="space-y-6">
+        {billingLoadError && (
+          <Card className="border-destructive/40 bg-destructive/5">
+            <CardHeader>
+              <CardTitle>Unable to load billing settings</CardTitle>
+              <CardDescription>{billingLoadError}</CardDescription>
+            </CardHeader>
+            <CardContent>
+              <Button onClick={() => loadSubscriptionData()} disabled={billingLoading}>
+                {billingLoading ? 'Retrying...' : 'Retry billing data'}
+              </Button>
+            </CardContent>
+          </Card>
+        )}
+
         {/* Main Subscription Dashboard */}
         <SubscriptionDashboard token={token} onUpgrade={handleUpgrade} />
 

@@ -48,6 +48,18 @@ interface UploadResponse {
   columnsIgnored?: number;
 }
 
+interface LastUploadSummary {
+  fileName: string;
+  importType: UploadImportType;
+  status: 'completed';
+  importedCount: number;
+  updatedCount: number;
+  rejectedCount: number;
+  processedCount: number;
+}
+
+const LAST_UPLOAD_SUMMARY_KEY = 'csvUpload:lastUploadSummary';
+
 export const CSVUploadPage: React.FC<{
   token: string | null;
   defaultImportType?: UploadImportType;
@@ -72,6 +84,19 @@ export const CSVUploadPage: React.FC<{
   const [progressMessage, setProgressMessage] = useState<string>('');
   const [columnValidation, setColumnValidation] = useState<ColumnValidationResult | null>(null);
   const [rowEstimate, setRowEstimate] = useState<RowEstimate | null>(null);
+  const [lastUploadSummary, setLastUploadSummary] = useState<LastUploadSummary | null>(() => {
+    const storedSummary = localStorage.getItem(LAST_UPLOAD_SUMMARY_KEY);
+    if (!storedSummary) {
+      return null;
+    }
+
+    try {
+      return JSON.parse(storedSummary) as LastUploadSummary;
+    } catch (_error) {
+      localStorage.removeItem(LAST_UPLOAD_SUMMARY_KEY);
+      return null;
+    }
+  });
 
   const logUploadMetric = (event: string, data: Record<string, unknown>) => {
     if (process.env.NODE_ENV === 'test') {
@@ -150,6 +175,27 @@ export const CSVUploadPage: React.FC<{
         ? (summary.rejectedRows as RejectedRowDetail[])
         : undefined,
     };
+  };
+
+  const recordCompletedUpload = (
+    result: UploadResponse,
+    completedFileName: string,
+    completedImportType: UploadImportType,
+  ) => {
+    setUploadResult(result);
+
+    const summary: LastUploadSummary = {
+      fileName: completedFileName,
+      importType: completedImportType,
+      status: 'completed',
+      importedCount: result.importedCount ?? 0,
+      updatedCount: result.updatedCount ?? result.mergedCount ?? 0,
+      rejectedCount: result.rejectedCount ?? result.skippedCount ?? 0,
+      processedCount: result.processedCount ?? result.totalCount ?? 0,
+    };
+
+    setLastUploadSummary(summary);
+    localStorage.setItem(LAST_UPLOAD_SUMMARY_KEY, JSON.stringify(summary));
   };
 
   const triggerFileDownload = (blob: Blob, filename: string) => {
@@ -345,7 +391,11 @@ export const CSVUploadPage: React.FC<{
     }
   };
 
-  const pollUploadStatus = async (key: string) => {
+  const pollUploadStatus = async (
+    key: string,
+    completedFileName: string,
+    completedImportType: UploadImportType,
+  ) => {
     const maxAttempts = 30; // 30 seconds max
     const pollInterval = 1000; // 1 second
     const nonRetryableStatusCodes = new Set([400, 401, 403, 404]);
@@ -392,7 +442,11 @@ export const CSVUploadPage: React.FC<{
         const statusData = await statusRes.json();
 
         if (statusData.status === 'complete' || statusData.status === 'completed') {
-          setUploadResult(toUploadResultFromSummary(statusData));
+          recordCompletedUpload(
+            toUploadResultFromSummary(statusData),
+            completedFileName,
+            completedImportType,
+          );
           return;
         } else if (statusData.status === 'failed') {
           setUploadResult({
@@ -523,7 +577,7 @@ export const CSVUploadPage: React.FC<{
           uploadKey = directData.key || key; // Use key from response if available
 
           if (isExpiryImport && directData.importedCount !== undefined) {
-            setUploadResult(toUploadResultFromSummary(directData));
+            recordCompletedUpload(toUploadResultFromSummary(directData), file.name, importType);
             setUploadProgress(0);
             setProgressMessage('');
 
@@ -569,7 +623,7 @@ export const CSVUploadPage: React.FC<{
 
         const completeData = await completeRes.json();
         if (isExpiryImport && completeData.importedCount !== undefined) {
-          setUploadResult(toUploadResultFromSummary(completeData));
+          recordCompletedUpload(toUploadResultFromSummary(completeData), file.name, importType);
 
           logUploadMetric('upload_complete', {
             fileSize: fileToUpload.size,
@@ -586,7 +640,7 @@ export const CSVUploadPage: React.FC<{
       }
 
       // Poll for processing completion
-      await pollUploadStatus(uploadKey);
+      await pollUploadStatus(uploadKey, file.name, importType);
 
       logUploadMetric('upload_complete', {
         fileSize: fileToUpload.size,
@@ -686,6 +740,34 @@ export const CSVUploadPage: React.FC<{
             ? 'Upload a CSV, XLSX, or XLS file containing SKU, optional item description, and used-by date data to import expiry list records.'
             : 'Upload a CSV, XLSX, or XLS file containing product information (SKU, Name, Cost, Barcode) to update your product database.'}
         </p>
+
+        <div className="mb-6 p-4 bg-gray-50 rounded-md border border-gray-200">
+          <h3 className="text-lg font-medium text-gray-800 mb-2">Last uploaded file</h3>
+          {lastUploadSummary ? (
+            <div className="grid gap-1 text-sm text-gray-700 sm:grid-cols-2">
+              <p className="font-medium text-gray-900">{lastUploadSummary.fileName}</p>
+              <p>
+                {lastUploadSummary.importType === 'expiry-list' ? 'Expiry list' : 'Product catalog'}
+              </p>
+              <p>Completed</p>
+              <p>
+                {lastUploadSummary.importType === 'expiry-list'
+                  ? 'Rows imported'
+                  : 'Products imported'}
+                : {lastUploadSummary.importedCount}
+              </p>
+              <p>
+                {lastUploadSummary.importType === 'expiry-list'
+                  ? 'Rows merged'
+                  : 'Products updated'}
+                : {lastUploadSummary.updatedCount}
+              </p>
+              <p>Rows rejected: {lastUploadSummary.rejectedCount}</p>
+            </div>
+          ) : (
+            <p className="text-sm text-gray-600">No completed uploads yet.</p>
+          )}
+        </div>
 
         {/* Column name and format guidelines */}
         <div className="mb-6 p-4 bg-inventory-primary-50 rounded-md">
