@@ -1,5 +1,5 @@
 import { Request, Response, NextFunction } from 'express';
-import { verifyToken } from '@clerk/backend';
+import { createClerkClient, verifyToken } from '@clerk/backend';
 import { envConfig } from '../config/environment';
 
 const CLERK_DEV_ORIGINS = ['http://localhost:3002', 'http://127.0.0.1:3002'];
@@ -42,6 +42,11 @@ export interface ClerkTokenPayload {
   exp: number;
 }
 
+interface ClerkUserIdentity {
+  email?: string;
+  username?: string;
+}
+
 /**
  * Extended Request with Clerk user context
  */
@@ -63,6 +68,27 @@ export interface ClerkAuthRequest extends Request {
  */
 import type { RequestHandler } from 'express';
 export type ClerkAuthHandler = RequestHandler;
+
+async function getClerkUserIdentity(userId: string): Promise<ClerkUserIdentity> {
+  const clerkClient = createClerkClient({ secretKey: envConfig.CLERK_SECRET_KEY });
+  const user = await clerkClient.users.getUser(userId);
+
+  return {
+    email: user.primaryEmailAddress?.emailAddress,
+    username: user.username ?? undefined,
+  };
+}
+
+async function resolveClerkIdentity(decoded: ClerkTokenPayload): Promise<ClerkUserIdentity> {
+  if (decoded.email) {
+    return {
+      email: decoded.email,
+      username: decoded.username,
+    };
+  }
+
+  return getClerkUserIdentity(decoded.sub);
+}
 
 /**
  * Clerk Authentication Middleware
@@ -104,17 +130,19 @@ export const clerkAuth = async (req: ClerkAuthRequest, res: Response, next: Next
       authorizedParties: getAuthorizedParties(),
     })) as unknown as ClerkTokenPayload;
 
+    const identity = await resolveClerkIdentity(decoded);
+
     // Attach Clerk user context to request
     req.auth = {
       userId: decoded.sub,
-      email: decoded.email,
-      username: decoded.username,
+      email: identity.email,
+      username: identity.username,
       organizationId: decoded.org_id,
     };
 
     // Backwards compatibility
     req.userId = decoded.sub;
-    req.userEmail = decoded.email;
+    req.userEmail = identity.email;
 
     next();
   } catch (error) {
@@ -155,10 +183,12 @@ export const clerkAuthOptional = async (
       authorizedParties: getAuthorizedParties(),
     })) as unknown as ClerkTokenPayload;
 
+    const identity = await resolveClerkIdentity(decoded);
+
     req.auth = {
       userId: decoded.sub,
-      email: decoded.email,
-      username: decoded.username,
+      email: identity.email,
+      username: identity.username,
       organizationId: decoded.org_id,
     };
   } catch (error) {
