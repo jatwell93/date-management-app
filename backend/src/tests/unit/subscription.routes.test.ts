@@ -22,6 +22,7 @@ jest.mock('../../middleware/clerk-auth.middleware', () => ({
 
 jest.mock('../../middleware/rateLimiter', () => ({
   trialConversionLimiter: (_req: any, _res: any, next: any) => next(),
+  checkoutSessionLimiter: (_req: any, _res: any, next: any) => next(),
 }));
 
 jest.mock('../../database/database-factory', () => ({
@@ -209,31 +210,35 @@ describe('subscription.routes', () => {
       });
     });
 
-    it('returns active trial status with remaining days', async () => {
-      mockFindUnique.mockResolvedValue({
-        organization: {
-          subscriptionTiers: [
-            {
-              status: 'TRIALING',
-              tierLevel: 'professional',
-              trialEndDate: new Date(Date.now() + 3 * 24 * 60 * 60 * 1000),
-              trialStartedAt: new Date('2026-04-01T00:00:00.000Z'),
-              trialConvertedAt: null,
-              billingCycle: 'monthly',
-            },
-          ],
-        },
-      });
+    it.each(['TRIALING', 'trialing', 'Trialing'])(
+      'returns active trial status when DB status is "%s"',
+      async (dbStatus) => {
+        mockFindUnique.mockResolvedValue({
+          organization: {
+            subscriptionTiers: [
+              {
+                status: dbStatus,
+                tierLevel: 'professional',
+                trialEndDate: new Date(Date.now() + 3 * 24 * 60 * 60 * 1000),
+                trialStartedAt: new Date('2026-04-01T00:00:00.000Z'),
+                trialConvertedAt: null,
+                billingCycle: 'monthly',
+              },
+            ],
+          },
+        });
 
-      const response = await request(app)
-        .get('/subscription/trial-status')
-        .set('x-clerk-user-id', 'user_123');
+        const response = await request(app)
+          .get('/subscription/trial-status')
+          .set('x-clerk-user-id', 'user_123');
 
-      expect(response.status).toBe(200);
-      expect(response.body.isInTrial).toBe(true);
-      expect(response.body.isTrialExpired).toBe(false);
-      expect(response.body.subscription.daysRemaining).toBeGreaterThanOrEqual(1);
-    });
+        expect(response.status).toBe(200);
+        expect(response.body.isInTrial).toBe(true);
+        expect(response.body.isTrialExpired).toBe(false);
+        expect(response.body.subscription.status).toBe('trialing');
+        expect(response.body.subscription.daysRemaining).toBeGreaterThanOrEqual(1);
+      },
+    );
 
     it('returns expired trial status when trial end date is in the past', async () => {
       mockFindUnique.mockResolvedValue({
@@ -309,7 +314,7 @@ describe('subscription.routes', () => {
 
       expect(response.status).toBe(200);
       expect(response.body.subscription).toEqual({
-        status: 'ACTIVE',
+        status: 'active',
         tierLevel: 'custom-enterprise',
         trialEndDate: null,
         trialStartedAt: null,

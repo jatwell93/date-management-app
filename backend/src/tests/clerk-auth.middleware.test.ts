@@ -120,6 +120,38 @@ describe('Clerk Auth Middleware', () => {
       expect(mockRes.status).not.toHaveBeenCalled(); // No error
     });
 
+    it('should hydrate email from Clerk user when token has no email claim', async () => {
+      const mockToken = 'valid_token_without_email';
+      mockReq.headers = {
+        authorization: `Bearer ${mockToken}`,
+      };
+
+      const mockDecoded = {
+        sub: 'user_clerk_123',
+        org_id: 'org_clerk_123',
+      };
+      const getUser = jest.fn().mockResolvedValue({
+        primaryEmailAddress: { emailAddress: 'hydrated@example.com' },
+        username: 'hydrated-user',
+      });
+
+      (ClerkBackend.verifyToken as jest.Mock).mockResolvedValue(mockDecoded);
+      (ClerkBackend.createClerkClient as jest.Mock).mockReturnValue({
+        users: { getUser },
+      });
+
+      await clerkAuth(mockReq as ClerkAuthRequest, mockRes as Response, mockNext);
+
+      expect(getUser).toHaveBeenCalledWith('user_clerk_123');
+      expect(mockReq.auth).toEqual({
+        userId: 'user_clerk_123',
+        email: 'hydrated@example.com',
+        username: 'hydrated-user',
+        organizationId: 'org_clerk_123',
+      });
+      expect(mockNext).toHaveBeenCalled();
+    });
+
     it('should reject request with invalid token', async () => {
       mockReq.headers = {
         authorization: 'Bearer invalid_token',
@@ -138,7 +170,7 @@ describe('Clerk Auth Middleware', () => {
       expect(mockNext).not.toHaveBeenCalled();
     });
 
-    it('should handle tokens without optional email/username fields', async () => {
+    it('should hydrate identity for tokens without optional email/username fields', async () => {
       mockReq.headers = {
         authorization: 'Bearer minimal_token',
       };
@@ -149,12 +181,20 @@ describe('Clerk Auth Middleware', () => {
       };
 
       (ClerkBackend.verifyToken as jest.Mock).mockResolvedValue(mockDecoded);
+      (ClerkBackend.createClerkClient as jest.Mock).mockReturnValue({
+        users: {
+          getUser: jest.fn().mockResolvedValue({
+            primaryEmailAddress: { emailAddress: 'minimal@example.com' },
+            username: undefined,
+          }),
+        },
+      });
 
       await clerkAuth(mockReq as ClerkAuthRequest, mockRes as Response, mockNext);
 
       expect(mockReq.auth).toEqual({
         userId: 'user_clerk_minimal',
-        email: undefined,
+        email: 'minimal@example.com',
         username: undefined,
         organizationId: undefined,
       });

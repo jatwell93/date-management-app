@@ -2,6 +2,7 @@ import React from 'react';
 import { render, screen, waitFor } from '@testing-library/react';
 import { ClerkProvider } from '@clerk/clerk-react';
 import { ClerkAuthProvider, useAuthContext } from '../components/ClerkAuthProvider';
+import { ClerkSignInPage, ClerkSignUpPage } from '../components/ClerkAuthPage';
 
 const mockUseUser = jest.fn();
 const mockUseAuth = jest.fn();
@@ -16,6 +17,8 @@ jest.mock('@sentry/react', () => ({
 
 jest.mock('@clerk/clerk-react', () => ({
   ClerkProvider: ({ children }: { children: React.ReactNode }) => <>{children}</>,
+  SignIn: () => <div>Mock Clerk Sign In</div>,
+  SignUp: () => <div>Mock Clerk Sign Up</div>,
   useUser: () => mockUseUser(),
   useAuth: () => mockUseAuth(),
   useOrganization: () => mockUseOrganization(),
@@ -118,5 +121,21 @@ describe('Clerk Integration Setup', () => {
         email: 'test@example.com',
       }),
     );
+  });
+});
+
+describe('Clerk auth pages', () => {
+  it('constrains the sign-in shell on mobile viewports', () => {
+    render(<ClerkSignInPage />);
+
+    expect(screen.getByTestId('clerk-auth-shell')).toHaveClass('overflow-x-hidden', 'px-4');
+    expect(screen.getByTestId('clerk-auth-card')).toHaveClass('max-w-full');
+  });
+
+  it('constrains the sign-up shell on mobile viewports', () => {
+    render(<ClerkSignUpPage />);
+
+    expect(screen.getByTestId('clerk-auth-shell')).toHaveClass('overflow-x-hidden', 'px-4');
+    expect(screen.getByTestId('clerk-auth-card')).toHaveClass('max-w-full');
   });
 });

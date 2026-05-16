@@ -221,6 +221,31 @@ export const presignedUrlLimiter = rateLimit({
 });
 
 /**
+ * Checkout session rate limiter: 10 requests per hour
+ * Used for /create-checkout-session endpoint to prevent Stripe API abuse
+ */
+export const checkoutSessionLimiter = rateLimit({
+  windowMs: 60 * 60 * 1000, // 1 hour
+  max: 10, // Limit each IP to 10 requests per windowMs
+  message: 'Too many checkout attempts, please try again later.',
+  statusCode: 429,
+  skipSuccessfulRequests: false,
+  skipFailedRequests: false,
+  handler: (req: Request, res: Response) => {
+    Logger.warn('Rate limit exceeded (checkout session)', {
+      ip: (req.headers['x-forwarded-for'] as string) || req.ip,
+      endpoint: req.path,
+      method: req.method,
+    });
+    res.status(429).json({
+      code: 'RATE_LIMIT_EXCEEDED',
+      message: 'Too many checkout attempts, please try again later.',
+      retryAfter: getRetryAfterIso(req),
+    });
+  },
+});
+
+/**
  * Trial conversion rate limiter: 5 requests per hour
  * Used for /convert-trial endpoint to prevent rapid re-submits
  */

@@ -1,11 +1,10 @@
 import { useState, useEffect } from 'react';
-import { useNavigate } from 'react-router-dom';
 import { Button } from './ui/button';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from './ui/card';
 import { buildApiUrl } from '../lib/api.service';
 
 interface SubscriptionTierResponse {
-  status: 'ACTIVE' | 'TRIALING' | 'EXPIRED' | 'CANCELED';
+  status: 'active' | 'trialing' | 'expired' | 'canceled';
   tierLevel: string;
   trialEndDate: string | null;
   trialStartedAt: string | null;
@@ -30,112 +29,71 @@ interface TrialUpgradeFlowProps {
   token: string | null;
 }
 
-export function TrialUpgradeFlow({ token }: TrialUpgradeFlowProps) {
-  const [trialStatus, setTrialStatus] = useState<TrialStatusResponse | null>(null);
-  const [loading, setLoading] = useState(true);
-  const [converting, setConverting] = useState(false);
-  const [error, setError] = useState<string | null>(null);
-  const navigate = useNavigate();
+interface ActivePlanCardProps {
+  tierLevel: string;
+  billingCycle: string | null;
+}
 
-  useEffect(() => {
-    if (!token) {
-      setLoading(false);
-      return;
+function ActivePlanCard({ tierLevel, billingCycle }: ActivePlanCardProps) {
+  const planName = `${tierLevel.charAt(0).toUpperCase()}${tierLevel.slice(1)}`;
+
+  return (
+    <Card className="w-full max-w-md">
+      <CardHeader>
+        <CardTitle>{planName} plan active</CardTitle>
+        <CardDescription>
+          Your current paid plan is active
+          {billingCycle ? ` and billed ${billingCycle}` : ''}.
+        </CardDescription>
+      </CardHeader>
+      <CardContent>
+        <p className="text-sm text-muted-foreground">
+          Manage payment methods, invoices, and plan changes from Billing under Account.
+        </p>
+      </CardContent>
+    </Card>
+  );
+}
+
+interface UpgradeCardProps {
+  isInTrial: boolean;
+  isTrialExpired: boolean;
+  status: SubscriptionTierResponse['status'] | undefined;
+  daysRemaining: number;
+  tierLimits: TrialStatusResponse['tierLimits'];
+  error: string | null;
+  converting: boolean;
+  onUpgrade: (billingCycle: 'monthly' | 'annual') => void;
+}
+
+function UpgradeCard({
+  isInTrial,
+  isTrialExpired,
+  status,
+  daysRemaining,
+  tierLimits,
+  error,
+  converting,
+  onUpgrade,
+}: UpgradeCardProps) {
+  function getDescription(): string {
+    if (isInTrial && daysRemaining > 0) {
+      return `${daysRemaining} day${daysRemaining === 1 ? '' : 's'} remaining`;
     }
-
-    const fetchTrialStatus = async () => {
-      try {
-        const response = await fetch(buildApiUrl('/subscription/trial-status'), {
-          headers: {
-            Authorization: `Bearer ${token}`,
-          },
-        });
-
-        if (!response.ok) {
-          throw new Error('Failed to fetch trial status');
-        }
-
-        const data = await response.json();
-        setTrialStatus(data);
-      } catch (err) {
-        setError(err instanceof Error ? err.message : 'Unknown error');
-      } finally {
-        setLoading(false);
-      }
-    };
-
-    fetchTrialStatus();
-  }, [token]);
-
-  const handleUpgrade = async (billingCycle: 'monthly' | 'annual') => {
-    if (!token || !trialStatus?.isInTrial) return;
-
-    setConverting(true);
-    setError(null);
-
-    try {
-      const response = await fetch(buildApiUrl('/subscription/convert-trial'), {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          Authorization: `Bearer ${token}`,
-        },
-        body: JSON.stringify({
-          paymentMethodId: 'pm_mock_for_testing',
-          billingCycle,
-        }),
-      });
-
-      if (!response.ok) {
-        const data = await response.json();
-        throw new Error(data.error || 'Failed to convert trial');
-      }
-
-      const data = await response.json();
-
-      if (data.success) {
-        navigate('/settings?upgraded=true');
-      }
-    } catch (err) {
-      setError(err instanceof Error ? err.message : 'Failed to upgrade');
-    } finally {
-      setConverting(false);
+    if (isTrialExpired || status === 'expired') {
+      return 'Trial expired. Upgrade to restore full access.';
     }
-  };
-
-  if (loading || !token) {
-    return null;
-  }
-
-  if (!trialStatus) {
-    return (
-      <Card className="w-full max-w-md">
-        <CardContent className="py-8 text-center text-muted-foreground">
-          Unable to load trial status
-        </CardContent>
-      </Card>
-    );
-  }
-
-  const { isInTrial, subscription, tierLimits } = trialStatus;
-  const daysRemaining = subscription?.daysRemaining ?? 0;
-
-  if (!isInTrial) {
-    return null;
+    return 'Upgrade to Professional when you need more capacity.';
   }
 
   return (
     <Card className="w-full max-w-md">
       <CardHeader>
         <CardTitle className="flex items-center gap-2">
-          <span className="w-3 h-3 rounded-full bg-blue-500 animate-pulse" />
-          Professional Trial
+          {isInTrial && <span className="w-3 h-3 rounded-full bg-blue-500 animate-pulse" />}
+          {isInTrial ? 'Professional Trial' : 'Starter plan'}
         </CardTitle>
-        <CardDescription>
-          {daysRemaining > 0
-            ? `${daysRemaining} day${daysRemaining === 1 ? '' : 's'} remaining`
-            : 'Trial expired'}
-        </CardDescription>
+        <CardDescription>{getDescription()}</CardDescription>
       </CardHeader>
       <CardContent className="space-y-6">
         <div className="space-y-3">
@@ -186,13 +144,13 @@ export function TrialUpgradeFlow({ token }: TrialUpgradeFlowProps) {
         )}
 
         <div className="flex gap-3">
-          <Button className="flex-1" onClick={() => handleUpgrade('monthly')} disabled={converting}>
+          <Button className="flex-1" onClick={() => onUpgrade('monthly')} disabled={converting}>
             {converting ? 'Processing...' : 'Upgrade Monthly'}
           </Button>
           <Button
             className="flex-1"
             variant="outline"
-            onClick={() => handleUpgrade('annual')}
+            onClick={() => onUpgrade('annual')}
             disabled={converting}
           >
             {converting ? 'Processing...' : 'Upgrade Annual'}
@@ -204,5 +162,130 @@ export function TrialUpgradeFlow({ token }: TrialUpgradeFlowProps) {
         </p>
       </CardContent>
     </Card>
+  );
+}
+
+export function TrialUpgradeFlow({ token }: TrialUpgradeFlowProps) {
+  const [trialStatus, setTrialStatus] = useState<TrialStatusResponse | null>(null);
+  const [loading, setLoading] = useState(true);
+  const [converting, setConverting] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+
+  useEffect(() => {
+    if (!token) {
+      setLoading(false);
+      return;
+    }
+
+    const fetchTrialStatus = async () => {
+      try {
+        const response = await fetch(buildApiUrl('/subscription/trial-status'), {
+          headers: {
+            Authorization: `Bearer ${token}`,
+          },
+        });
+
+        if (!response.ok) {
+          throw new Error('Failed to fetch trial status');
+        }
+
+        const data = await response.json();
+        setTrialStatus(data);
+      } catch (err) {
+        setError(err instanceof Error ? err.message : 'Unknown error');
+      } finally {
+        setLoading(false);
+      }
+    };
+
+    fetchTrialStatus();
+  }, [token]);
+
+  const handleUpgrade = async (billingCycle: 'monthly' | 'annual') => {
+    if (!token || !trialStatus) return;
+
+    setConverting(true);
+    setError(null);
+
+    try {
+      const priceIds = {
+        monthly: process.env.REACT_APP_STRIPE_PRICE_PROFESSIONAL_MONTHLY,
+        annual: process.env.REACT_APP_STRIPE_PRICE_PROFESSIONAL_ANNUAL,
+      };
+      const priceId = priceIds[billingCycle];
+
+      if (!priceId) {
+        throw new Error('Price configuration not found. Please contact support.');
+      }
+
+      const response = await fetch(buildApiUrl('/subscription/create-checkout-session'), {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${token}`,
+        },
+        body: JSON.stringify({
+          priceId,
+          successUrl: `${window.location.origin}/settings?upgraded=true`,
+          cancelUrl: `${window.location.origin}/upgrade`,
+        }),
+      });
+
+      if (!response.ok) {
+        const data = await response.json();
+        throw new Error(data.error || 'Failed to convert trial');
+      }
+
+      const data = await response.json();
+
+      if (typeof data.url === 'string') {
+        window.open(data.url, '_self', 'noopener');
+      } else {
+        throw new Error('Unable to start checkout. Please try again.');
+      }
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Failed to upgrade');
+    } finally {
+      setConverting(false);
+    }
+  };
+
+  if (loading || !token) {
+    return null;
+  }
+
+  if (!trialStatus) {
+    return (
+      <Card className="w-full max-w-md">
+        <CardContent className="py-8 text-center text-muted-foreground">
+          Unable to load trial status
+        </CardContent>
+      </Card>
+    );
+  }
+
+  const { isInTrial, isTrialExpired, subscription, tierLimits } = trialStatus;
+  const daysRemaining = subscription?.daysRemaining ?? 0;
+  const tierLevel = subscription?.tierLevel?.toLowerCase() || 'starter';
+  const status = subscription?.status;
+  const isActivePaidPlan = status === 'active' && tierLevel !== 'starter';
+
+  if (isActivePaidPlan) {
+    return (
+      <ActivePlanCard tierLevel={tierLevel} billingCycle={subscription?.billingCycle ?? null} />
+    );
+  }
+
+  return (
+    <UpgradeCard
+      isInTrial={isInTrial}
+      isTrialExpired={isTrialExpired}
+      status={status}
+      daysRemaining={daysRemaining}
+      tierLimits={tierLimits}
+      error={error}
+      converting={converting}
+      onUpgrade={handleUpgrade}
+    />
   );
 }

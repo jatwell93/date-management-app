@@ -1,6 +1,6 @@
 import { Router, Request, Response, NextFunction, RequestHandler } from 'express';
 import { clerkAuth } from '../middleware/clerk-auth.middleware';
-import { trialConversionLimiter } from '../middleware/rateLimiter';
+import { trialConversionLimiter, checkoutSessionLimiter } from '../middleware/rateLimiter';
 import { createSubscriptionController } from '../di/services';
 
 const router = Router();
@@ -35,6 +35,7 @@ router.post(
 // Create Stripe Checkout Session for subscription upgrade
 router.post(
   '/create-checkout-session',
+  checkoutSessionLimiter,
   clerkAuth as unknown as RequestHandler,
   async (req: Request, res: Response, next: NextFunction) => {
     try {

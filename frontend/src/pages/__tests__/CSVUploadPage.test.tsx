@@ -45,6 +45,7 @@ describe('CSVUploadPage expiry import', () => {
   beforeEach(() => {
     fetchMock.resetMocks();
     jest.clearAllMocks();
+    localStorage.clear();
 
     (validateCSVColumns as jest.Mock).mockResolvedValue(validColumns);
     (estimateRowCount as jest.Mock).mockReturnValue(null);
@@ -62,7 +63,7 @@ describe('CSVUploadPage expiry import', () => {
   it('switches to expiry mode UX with template actions', async () => {
     render(<CSVUploadPage token="test-token" />);
 
-    expect(screen.getByText('Product Upload (CSV/XLSX/XLS)')).toBeInTheDocument();
+    expect(screen.getByText('Product Catalog Upload (CSV/XLSX/XLS)')).toBeInTheDocument();
 
     userEvent.click(screen.getByRole('button', { name: 'Expiry List Import' }));
 
@@ -71,6 +72,17 @@ describe('CSVUploadPage expiry import', () => {
     expect(screen.getByRole('button', { name: 'Download CSV Template' })).toBeInTheDocument();
     expect(screen.getByRole('button', { name: 'Download XLSX Template' })).toBeInTheDocument();
     expect(screen.getByRole('button', { name: 'Download XLS Template' })).toBeInTheDocument();
+  });
+
+  it('makes product catalog CSV/XLS/XLSX upload requirements clear', () => {
+    render(<CSVUploadPage token="test-token" />);
+
+    expect(screen.getByText('Product Catalog Upload (CSV/XLSX/XLS)')).toBeInTheDocument();
+    expect(screen.getByLabelText('CSV/XLSX/XLS File')).toHaveAttribute(
+      'accept',
+      expect.stringContaining('.xlsx'),
+    );
+    expect(screen.getByText(/Required columns: SKU, Name, Cost, Barcode/i)).toBeInTheDocument();
   });
 
   it('shows rejected row details after direct expiry upload response', async () => {
@@ -120,9 +132,9 @@ describe('CSVUploadPage expiry import', () => {
     userEvent.click(screen.getByRole('button', { name: 'Upload Expiry List' }));
 
     expect(await screen.findByText('Upload Successful!')).toBeInTheDocument();
-    expect(screen.getByText('Rows imported: 1')).toBeInTheDocument();
+    expect(screen.getAllByText('Rows imported: 1').length).toBeGreaterThan(0);
     expect(screen.getByText('Rows merged: 1')).toBeInTheDocument();
-    expect(screen.getByText('Rows rejected: 1')).toBeInTheDocument();
+    expect(screen.getAllByText('Rows rejected: 1').length).toBeGreaterThan(0);
     expect(screen.getByText('Rejected rows')).toBeInTheDocument();
     expect(
       screen.getByText(
@@ -170,6 +182,90 @@ describe('CSVUploadPage expiry import', () => {
     await waitFor(() => {
       expect(fetchMock).toHaveBeenCalledTimes(4);
     });
+  });
+
+  it('shows the most recent product catalog upload summary after completion', async () => {
+    const productColumns: ColumnValidationResult = {
+      isValid: true,
+      missingColumns: [],
+      importType: 'product-catalog',
+      foundColumns: {
+        sku: 'SKU',
+        name: 'Name',
+        cost: 'Cost',
+        barcode: 'Barcode',
+      },
+      suggestions: {},
+    };
+    (validateCSVColumns as jest.Mock).mockResolvedValue(productColumns);
+
+    fetchMock
+      .mockResponseOnce(
+        JSON.stringify({
+          strategy: 'direct',
+          uploadUrl: '/api/upload/direct',
+          method: 'POST',
+          key: 'uploads/org-123/products.csv',
+        }),
+      )
+      .mockResponseOnce(
+        JSON.stringify({
+          key: 'uploads/org-123/products.csv',
+        }),
+      )
+      .mockResponseOnce(
+        JSON.stringify({
+          status: 'complete',
+          importedCount: 3,
+          updatedCount: 1,
+          skippedCount: 0,
+          processedCount: 4,
+          totalCount: 4,
+        }),
+      );
+
+    render(<CSVUploadPage token="test-token" />);
+
+    expect(screen.getByText('No completed uploads yet.')).toBeInTheDocument();
+
+    const fileInput = screen.getByLabelText('CSV/XLSX/XLS File') as HTMLInputElement;
+    const file = new File(['SKU,Name,Barcode,Cost\nSKU-1,Milk,123,12.99'], 'products.csv', {
+      type: 'text/csv',
+    });
+
+    fireEvent.change(fileInput, { target: { files: [file] } });
+    userEvent.click(screen.getByRole('button', { name: 'Upload CSV/XLSX/XLS' }));
+
+    expect(await screen.findByText('Product catalog')).toBeInTheDocument();
+    expect(screen.getByText('Last uploaded file')).toBeInTheDocument();
+    expect(screen.getAllByText('products.csv').length).toBeGreaterThan(0);
+    expect(screen.getByText('Completed')).toBeInTheDocument();
+    expect(screen.getAllByText('Products imported: 3').length).toBeGreaterThan(0);
+    expect(screen.getAllByText('Products updated: 1').length).toBeGreaterThan(0);
+  });
+
+  it('restores the last-upload summary from local storage on page load', () => {
+    localStorage.setItem(
+      'csvUpload:lastUploadSummary',
+      JSON.stringify({
+        fileName: 'previous-products.csv',
+        importType: 'product-catalog',
+        status: 'completed',
+        importedCount: 12,
+        updatedCount: 2,
+        rejectedCount: 1,
+        processedCount: 15,
+      }),
+    );
+
+    render(<CSVUploadPage token="test-token" />);
+
+    expect(screen.getByText('Last uploaded file')).toBeInTheDocument();
+    expect(screen.getByText('previous-products.csv')).toBeInTheDocument();
+    expect(screen.getByText('Product catalog')).toBeInTheDocument();
+    expect(screen.getByText('Products imported: 12')).toBeInTheDocument();
+    expect(screen.getByText('Products updated: 2')).toBeInTheDocument();
+    expect(screen.getByText('Rows rejected: 1')).toBeInTheDocument();
   });
 
   it('downloads CSV, XLSX, and XLS templates', async () => {

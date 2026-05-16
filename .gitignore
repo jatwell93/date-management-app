@@ -55,6 +55,7 @@ Thumbs.db
 .specify/
 .vscode/
 .windsurf/
+.codex/
 specs/
 .quint/
 prompts/
@@ -64,6 +65,7 @@ agents/
 go-to-market-docs/
 .agentlens/
 brand-identity-pharma-apps/
+brand-identity/
 
 # Real pharmacy data with sensitive pricing
 backend/src/tests/fixtures/real-pharmacy-products.csv

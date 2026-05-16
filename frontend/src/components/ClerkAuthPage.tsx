@@ -3,8 +3,11 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from './ui/
 
 export function ClerkSignUpPage() {
   return (
-    <div className="flex items-center justify-center min-h-screen bg-gray-100">
-      <div className="w-full max-w-md">
+    <div
+      data-testid="clerk-auth-shell"
+      className="flex items-center justify-center min-h-screen bg-gray-100 overflow-x-hidden px-4"
+    >
+      <div data-testid="clerk-auth-card" className="w-full max-w-full sm:max-w-md">
         <Card className="mb-4">
           <CardHeader>
             <CardTitle className="text-2xl font-bold text-center">Date Management App</CardTitle>
@@ -23,8 +26,11 @@ export function ClerkSignUpPage() {
 
 export function ClerkSignInPage() {
   return (
-    <div className="flex items-center justify-center min-h-screen bg-gray-100">
-      <div className="w-full max-w-md">
+    <div
+      data-testid="clerk-auth-shell"
+      className="flex items-center justify-center min-h-screen bg-gray-100 overflow-x-hidden px-4"
+    >
+      <div data-testid="clerk-auth-card" className="w-full max-w-full sm:max-w-md">
         <Card>
           <CardHeader>
             <CardTitle className="text-2xl font-bold text-center">Date Management App</CardTitle>

@@ -8,6 +8,7 @@ export type TierLevel = 'starter' | 'professional' | 'premium' | 'concierge';
 export enum SubscriptionStatus {
   ACTIVE = 'active',
   CANCELED = 'canceled',
+  EXPIRED = 'expired',
   PAST_DUE = 'past_due',
   TRIALING = 'trialing',
 }

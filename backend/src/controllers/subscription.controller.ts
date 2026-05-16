@@ -1,7 +1,7 @@
-import { Request, Response, RequestHandler } from 'express';
+import { Request, Response } from 'express';
 import { ClerkAuthRequest } from '../middleware/clerk-auth.middleware';
 import { SubscriptionService } from '../services/subscription.service';
-import { BillingCycle } from '../types/subscription';
+import { BillingCycle, SubscriptionStatus } from '../types/subscription';
 import { getStripeClient } from '../utils/stripe';
 import { validateRedirectUrl, validateStripePriceId } from '../utils/url-validator';
 import { injectable, inject } from 'tsyringe';
@@ -11,7 +11,7 @@ import { UserRepository } from '../repositories/user.repository';
 import { SubscriptionRepository } from '../repositories/subscription.repository';
 
 interface SubscriptionTierResponse {
-  status: 'ACTIVE' | 'TRIALING' | 'EXPIRED' | 'CANCELED';
+  status: `${SubscriptionStatus}`;
   tierLevel: string;
   trialEndDate: string | null;
   trialStartedAt: string | null;
@@ -79,7 +79,7 @@ export class SubscriptionController {
     private subscriptionRepository: SubscriptionRepository,
     @inject('StripeClientFactory')
     private stripeClientFactory: () => ReturnType<typeof getStripeClient>,
-  ) {}
+  ) { }
 
   async getTrialStatus(req: Request, res: Response): Promise<void> {
     try {
@@ -98,11 +98,12 @@ export class SubscriptionController {
       // Get the most recent subscription tier
       const subscription = user.organization.subscriptionTiers?.[0] ?? null;
       const now = new Date();
+      const subscriptionStatus = subscription?.status?.toLowerCase();
 
       let daysRemaining: number | null = null;
       let isTrialExpired = false;
 
-      if (subscription?.status === 'TRIALING' && subscription.trialEndDate) {
+      if (subscriptionStatus === SubscriptionStatus.TRIALING && subscription.trialEndDate) {
         const trialEnd = new Date(subscription.trialEndDate);
         const diffTime = trialEnd.getTime() - now.getTime();
         daysRemaining = Math.ceil(diffTime / (1000 * 60 * 60 * 24));
@@ -113,18 +114,20 @@ export class SubscriptionController {
       const limits = TIER_LIMITS[tierKey as keyof typeof TIER_LIMITS] || TIER_LIMITS.starter;
 
       const response: TrialStatusResponse = {
-        isInTrial: subscription?.status === 'TRIALING' && !isTrialExpired,
-        isTrialExpired: subscription?.status === 'TRIALING' && isTrialExpired,
+        isInTrial: subscriptionStatus === SubscriptionStatus.TRIALING && !isTrialExpired,
+        isTrialExpired:
+          (subscriptionStatus === SubscriptionStatus.TRIALING && isTrialExpired) ||
+          subscriptionStatus === SubscriptionStatus.EXPIRED,
         subscription: subscription
           ? {
-              status: subscription.status as SubscriptionTierResponse['status'],
-              tierLevel: subscription.tierLevel,
-              trialEndDate: subscription.trialEndDate?.toISOString() || null,
-              trialStartedAt: subscription.trialStartedAt?.toISOString() || null,
-              trialConvertedAt: subscription.trialConvertedAt?.toISOString() || null,
-              daysRemaining,
-              billingCycle: subscription.billingCycle || null,
-            }
+            status: subscriptionStatus as SubscriptionTierResponse['status'],
+            tierLevel: subscription.tierLevel,
+            trialEndDate: subscription.trialEndDate?.toISOString() || null,
+            trialStartedAt: subscription.trialStartedAt?.toISOString() || null,
+            trialConvertedAt: subscription.trialConvertedAt?.toISOString() || null,
+            daysRemaining,
+            billingCycle: subscription.billingCycle || null,
+          }
           : null,
         tierLimits: limits,
       };

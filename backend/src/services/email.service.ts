@@ -8,6 +8,7 @@
  */
 
 import sgMail from '@sendgrid/mail';
+import type { MailDataRequired } from '@sendgrid/mail';
 import { PrismaClient } from '@prisma/client';
 import { envConfig } from '../config/environment';
 import { getDefaultDatabaseClient } from '../database/database-factory';
@@ -349,14 +350,16 @@ export class EmailService {
       }
 
       const fromEmail = envConfig.SENDGRID_FROM_EMAIL || 'noreply@yourdomain.com';
-      const msg: Parameters<typeof sgMail.send>[0] = {
+      const msg: MailDataRequired = {
         to: params.to,
         from: fromEmail,
         subject: params.subject,
+        ...(params.html ? { html: params.html } : { text: params.text ?? params.subject }),
       };
 
-      if (params.html) msg.html = params.html;
-      if (params.text) msg.text = params.text;
+      if (params.html && params.text) {
+        msg.text = params.text;
+      }
 
       await sgMail.send(msg);
 

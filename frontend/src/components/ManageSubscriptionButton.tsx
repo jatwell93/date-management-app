@@ -17,11 +17,13 @@ export function ManageSubscriptionButton({
   className,
 }: ManageSubscriptionButtonProps) {
   const [loading, setLoading] = useState(false);
+  const [error, setError] = useState<string | null>(null);
 
   const handleManageBilling = async () => {
     if (!token) return;
 
     setLoading(true);
+    setError(null);
     try {
       const response = await fetch(buildApiUrl('/subscription/create-portal-session'), {
         method: 'POST',
@@ -44,21 +46,29 @@ export function ManageSubscriptionButton({
       Sentry.captureException(error, {
         tags: { feature: 'billing-portal' },
       });
-      alert('Failed to open billing portal. Please try again.');
+      setError('Unable to open billing portal. Please try again.');
     } finally {
       setLoading(false);
     }
   };
 
   return (
-    <Button
-      variant={variant}
-      size={size}
-      onClick={handleManageBilling}
-      disabled={loading || !token}
-      className={className}
-    >
-      {loading ? 'Loading...' : 'Manage Billing'}
-    </Button>
+    <>
+      <Button
+        variant={variant}
+        size={size}
+        onClick={handleManageBilling}
+        disabled={loading || !token}
+        className={className}
+        aria-describedby={error ? 'manage-subscription-error' : undefined}
+      >
+        {loading ? 'Loading...' : 'Manage Billing'}
+      </Button>
+      {error && (
+        <p id="manage-subscription-error" role="alert" className="mt-2 text-sm text-destructive">
+          {error}
+        </p>
+      )}
+    </>
   );
 }

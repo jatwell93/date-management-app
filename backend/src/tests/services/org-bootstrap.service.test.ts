@@ -20,9 +20,13 @@ function makeParams(overrides: Partial<BootstrapParams> = {}): BootstrapParams {
 
 describe('OrgBootstrapService', () => {
   let service: OrgBootstrapService;
+  let subscriptionService: { createTrialSubscription: jest.Mock };
 
   beforeEach(() => {
-    service = new OrgBootstrapService(prisma);
+    subscriptionService = {
+      createTrialSubscription: jest.fn().mockResolvedValue(undefined),
+    };
+    service = new OrgBootstrapService(prisma, undefined, subscriptionService);
   });
 
   describe('first user bootstrap (admin assignment)', () => {
@@ -51,6 +55,16 @@ describe('OrgBootstrapService', () => {
       expect(user!.role).toBe(ROLES.ADMIN);
       expect(user!.email).toBe(params.email.toLowerCase());
       expect(user!.clerkUserId).toBe(params.clerkUserId);
+    });
+
+    it('creates a trial subscription for a newly bootstrapped organization', async () => {
+      const params = makeParams();
+      const result = await service.bootstrap(params);
+
+      expect(subscriptionService.createTrialSubscription).toHaveBeenCalledWith(
+        result.organizationId,
+        14,
+      );
     });
 
     it('emits audit log entry for admin bootstrap', async () => {

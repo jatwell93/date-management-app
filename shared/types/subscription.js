@@ -16,6 +16,7 @@ var SubscriptionStatus;
 (function (SubscriptionStatus) {
   SubscriptionStatus['ACTIVE'] = 'active';
   SubscriptionStatus['CANCELED'] = 'canceled';
+  SubscriptionStatus['EXPIRED'] = 'expired';
   SubscriptionStatus['PAST_DUE'] = 'past_due';
   SubscriptionStatus['TRIALING'] = 'trialing';
 })(SubscriptionStatus || (exports.SubscriptionStatus = SubscriptionStatus = {}));
