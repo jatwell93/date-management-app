@@ -1,0 +1,123 @@
+/*
+ * PharmIQ Design Tokens — CSS Custom Properties
+ * Source: design-tokens.json (PharmIQ Brand Guidelines v2.0)
+ * Status: pending-source-verification
+ *
+ * Import order: design-tokens.css → semantic layer → component styles
+ */
+
+:root {
+  /* ── Brand Colors ────────────────────────────────────────── */
+  --brand-teal: #0F766E;
+  --brand-sky-blue: #0EA5E9;
+  --brand-amber: #D97706;
+  --brand-green: #10B981;
+  --brand-red: #DC2626;
+  --brand-navy: #0F172A;
+  --brand-sky-light: #F0F9FF;
+
+  /* ── Dark Canvas ─────────────────────────────────────────── */
+  --canvas-dark: #070E1A;
+
+  /* ── Atmospheric Glows (light-mode only) ──────────────────── */
+  /* Intentionally NOT overridden in .dark — on dark canvas, the background
+     itself provides depth. Glows are designed for light surfaces only. */
+  --glow-teal: radial-gradient(ellipse at 50% 0%, rgba(15, 118, 110, 0.15) 0%, transparent 70%);
+  --glow-amber: radial-gradient(ellipse at 50% 0%, rgba(217, 119, 6, 0.10) 0%, transparent 70%);
+
+  /* ── Hairline Borders ────────────────────────────────────── */
+  --border-hairline: rgba(15, 23, 42, 0.08);
+
+  /* ── Surface Ladder (Light) ──────────────────────────────── */
+  --surface-1: #FFFFFF;
+  --surface-2: #F8FAFC;
+  --surface-3: #F1F5F9;
+  --surface-4: #E2E8F0;
+
+  /* ── Typography — Font Family ────────────────────────────── */
+  --font-display: 'Fraunces', Georgia, serif;
+  --font-heading: 'Outfit', 'Inter', sans-serif;
+  --font-body: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+  --font-eyebrow: 'Outfit', 'Inter', sans-serif;
+  --font-code: 'Source Code Pro', Menlo, Monaco, Consolas, 'Courier New', monospace;
+
+  /* ── Typography — Scale ──────────────────────────────────── */
+  --font-size-xs: 0.75rem;
+  --font-size-sm: 0.875rem;
+  --font-size-base: 1rem;
+  --font-size-lg: 1.125rem;
+  --font-size-xl: 1.25rem;
+  --font-size-2xl: 1.5rem;
+  --font-size-3xl: 1.875rem;
+  --font-size-4xl: 2.25rem;
+  --font-size-5xl: 3rem;
+
+  /* ── Typography — Weight ─────────────────────────────────── */
+  --font-weight-normal: 400;
+  --font-weight-medium: 500;
+  --font-weight-semibold: 600;
+  --font-weight-bold: 700;
+
+  /* ── Typography — Line Height ────────────────────────────── */
+  --line-height-tight: 1.25;
+  --line-height-normal: 1.5;
+  --line-height-relaxed: 1.75;
+
+  /* ── Typography — Letter Spacing ─────────────────────────── */
+  --tracking-tight: -0.025em;
+  --tracking-normal: 0em;
+  --tracking-wide: 0.05em;
+  --tracking-eyebrow: 0.1em;
+
+  /* ── Spacing (8px base grid) ─────────────────────────────── */
+  --space-0: 0px;
+  --space-0-5: 4px;
+  --space-1: 8px;
+  --space-1-5: 12px;
+  --space-2: 16px;
+  --space-3: 24px;
+  --space-4: 32px;
+  --space-5: 40px;
+  --space-6: 48px;
+  --space-8: 64px;
+  --space-10: 80px;
+  --space-12: 96px;
+
+  /* ── Radius ──────────────────────────────────────────────── */
+  --radius-none: 0px;
+  --radius-sm: 4px;
+  --radius-md: 6px;
+  --radius-DEFAULT: 8px;
+  --radius-lg: 12px;
+  --radius-xl: 16px;
+  --radius-2xl: 24px;
+  --radius-full: 9999px;
+
+  /* ── Elevation ───────────────────────────────────────────── */
+  --shadow-sm: 0 1px 2px 0 rgba(0, 0, 0, 0.05);
+  --shadow-DEFAULT: 0 1px 3px 0 rgba(0, 0, 0, 0.1), 0 1px 2px -1px rgba(0, 0, 0, 0.1);
+  --shadow-md: 0 4px 6px -1px rgba(0, 0, 0, 0.1), 0 2px 4px -2px rgba(0, 0, 0, 0.1);
+  --shadow-lg: 0 10px 15px -3px rgba(0, 0, 0, 0.1), 0 4px 6px -4px rgba(0, 0, 0, 0.1);
+  --shadow-xl: 0 20px 25px -5px rgba(0, 0, 0, 0.1), 0 8px 10px -6px rgba(0, 0, 0, 0.1);
+
+  /* ── Motion ──────────────────────────────────────────────── */
+  --duration-instant: 0ms;
+  --duration-fast: 150ms;
+  --duration-normal: 250ms;
+  --duration-slow: 350ms;
+  --ease-in: cubic-bezier(0.4, 0, 1, 1);
+  --ease-out: cubic-bezier(0, 0, 0.2, 1);
+  --ease-in-out: cubic-bezier(0.4, 0, 0.2, 1);
+  --ease-spring: cubic-bezier(0.34, 1.56, 0.64, 1);
+}
+
+.dark {
+  /* ── Hairline Borders (Dark) ─────────────────────────────── */
+  --border-hairline: rgba(255, 255, 255, 0.08);
+
+  /* ── Surface Ladder (Dark) ───────────────────────────────── */
+  --surface-1: #0F172A;
+  --surface-2: #1E293B;
+  --surface-3: #334155;
+  --surface-4: #475569;
+}
