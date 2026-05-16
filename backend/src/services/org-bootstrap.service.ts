@@ -5,6 +5,9 @@ import { OrgAuditService } from './org-audit.service';
 import { AUDIT_EVENT_TYPES } from '../constants/roles';
 import { OrganizationRepository } from '../repositories/organization.repository';
 import { UserRepository } from '../repositories/user.repository';
+import { SubscriptionRepository } from '../repositories/subscription.repository';
+import { SubscriptionService } from './subscription.service';
+import { Logger } from '../utils/logger';
 
 export interface BootstrapParams {
   clerkUserId: string;
@@ -45,12 +48,21 @@ export class OrgBootstrapService {
   private auditService: OrgAuditService;
   private orgRepo: OrganizationRepository;
   private userRepo: UserRepository;
+  private subscriptionService: Pick<SubscriptionService, 'createTrialSubscription'>;
+  private subscriptionRepo: SubscriptionRepository;
 
-  constructor(prismaClient?: PrismaClient, userRepo?: UserRepository) {
+  constructor(
+    prismaClient?: PrismaClient,
+    userRepo?: UserRepository,
+    subscriptionService?: Pick<SubscriptionService, 'createTrialSubscription'>,
+    subscriptionRepo?: SubscriptionRepository,
+  ) {
     this.prisma = prismaClient ?? getDefaultDatabaseClient();
     this.auditService = new OrgAuditService(this.prisma);
     this.orgRepo = new OrganizationRepository(this.prisma);
     this.userRepo = userRepo ?? new UserRepository(this.prisma);
+    this.subscriptionService = subscriptionService ?? new SubscriptionService(this.prisma);
+    this.subscriptionRepo = subscriptionRepo ?? new SubscriptionRepository(this.prisma);
   }
 
   async bootstrap(params: BootstrapParams): Promise<BootstrapResult> {
@@ -71,9 +83,12 @@ export class OrgBootstrapService {
     const existingUser = await this.userRepo.findUniqueByClerkUserId(params.clerkUserId);
 
     if (existingUser) {
+      const organizationId = existingUser.organizationId ?? org.id;
+      await this.ensureTrialSubscription(organizationId);
+
       return {
         userId: existingUser.id,
-        organizationId: existingUser.organizationId ?? org.id,
+        organizationId,
         role: existingUser.role as RoleValue,
         isNewOrg,
         isNewUser: false,
@@ -123,7 +138,16 @@ export class OrgBootstrapService {
       { timeout: 15000 },
     );
 
-    // Step 6: Audit log (outside transaction to avoid SQLite deadlock)
+    await this.emitBootstrapAudit(result, params);
+    await this.ensureTrialSubscription(result.organizationId);
+
+    return result;
+  }
+
+  private async emitBootstrapAudit(
+    result: BootstrapResult,
+    params: BootstrapParams,
+  ): Promise<void> {
     try {
       await this.auditService.emit({
         organizationId: result.organizationId,
@@ -144,7 +168,26 @@ export class OrgBootstrapService {
     } catch {
       // Audit failure should not block bootstrap
     }
+  }
 
-    return result;
+  private async ensureTrialSubscription(organizationId: string): Promise<void> {
+    const existingSubscription = await this.subscriptionRepo.findByOrganizationId(organizationId);
+
+    if (existingSubscription) {
+      return;
+    }
+
+    try {
+      await this.subscriptionService.createTrialSubscription(organizationId, 14);
+    } catch (error) {
+      const alreadyCreated = await this.subscriptionRepo.findByOrganizationId(organizationId);
+      if (alreadyCreated) {
+        Logger.info(
+          `Trial subscription already exists for organization ${organizationId} (concurrent creation)`,
+        );
+        return;
+      }
+      throw error;
+    }
   }
 }
