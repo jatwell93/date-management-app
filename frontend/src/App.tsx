@@ -42,7 +42,7 @@ import { offlineStorage as _offlineStorage } from './lib/offline-storage';
 import { ToastProvider } from './components/ui/toast-provider';
 import { HandheldProvider, useHandheldDetectionContext } from './contexts/HandheldContext';
 import { useOrgBootstrap } from './hooks/useOrgBootstrap';
-import { hasPermission, PERMISSIONS } from './constants/roles';
+import { hasPermission, PERMISSIONS, RoleValue } from './constants/roles';
 import { HandheldLayout } from './layouts/HandheldLayout';
 import { API_AUTH_UNAUTHORIZED_EVENT, API_BASE_URL } from './lib/api.service';
 import './globals.css';
@@ -160,6 +160,117 @@ function ExpectQaStatus({
         <dd data-testid="expect-qa-api-base-url">{API_BASE_URL}</dd>
       </dl>
     </section>
+  );
+}
+
+interface AppRoutesProps {
+  isLoggedIn: boolean;
+  effectiveUserRole: RoleValue | null;
+  token: string | null;
+}
+
+function renderSignedInElement(isLoggedIn: boolean, element: React.ReactNode) {
+  return isLoggedIn ? element : <Navigate to="/login" />;
+}
+
+function renderAdminElement(
+  isLoggedIn: boolean,
+  effectiveUserRole: RoleValue | null,
+  element: React.ReactNode,
+) {
+  if (!isLoggedIn) {
+    return <Navigate to="/login" />;
+  }
+
+  if (!effectiveUserRole || !hasPermission(effectiveUserRole, PERMISSIONS.MANAGE_MEMBERS)) {
+    return <Navigate to="/scan" />;
+  }
+
+  return element;
+}
+
+function AppRoutes({ isLoggedIn, effectiveUserRole, token }: AppRoutesProps) {
+  const hasAdminPermissions =
+    !!effectiveUserRole && hasPermission(effectiveUserRole, PERMISSIONS.MANAGE_MEMBERS);
+
+  return (
+    <Routes>
+      <Route path="/login/*" element={isLoggedIn ? <Navigate to="/scan" /> : <ClerkSignInPage />} />
+      <Route
+        path="/sign-up/*"
+        element={isLoggedIn ? <Navigate to="/scan" /> : <ClerkSignUpPage />}
+      />
+      <Route path="/onboarding" element={renderSignedInElement(isLoggedIn, <OnboardingPage />)} />
+      <Route path="/onboarding/*" element={renderSignedInElement(isLoggedIn, <OnboardingPage />)} />
+      <Route
+        path="/settings"
+        element={renderAdminElement(isLoggedIn, effectiveUserRole, <SettingsPage />)}
+      />
+      <Route
+        path="/settings/*"
+        element={renderAdminElement(isLoggedIn, effectiveUserRole, <SettingsPage />)}
+      />
+      <Route
+        path="/upgrade"
+        element={renderSignedInElement(isLoggedIn, <TrialUpgradeFlow token={token} />)}
+      />
+      <Route path="/scan" element={renderSignedInElement(isLoggedIn, <ScanPage token={token} />)} />
+      <Route path="/sentry-test" element={renderSignedInElement(isLoggedIn, <SentryTest />)} />
+      <Route
+        path="/dashboard"
+        element={renderSignedInElement(isLoggedIn, <DashboardPage token={token} />)}
+      />
+      <Route
+        path="/reports"
+        element={renderSignedInElement(isLoggedIn, <ReportsPage token={token} />)}
+      />
+      <Route
+        path="/detailed-expiry-report"
+        element={renderSignedInElement(isLoggedIn, <DetailedExpiryReportPage token={token} />)}
+      />
+      <Route
+        path="/expired-items"
+        element={renderSignedInElement(isLoggedIn, <ExpiredItemsPage token={token} />)}
+      />
+      <Route
+        path="/usage-report"
+        element={renderSignedInElement(isLoggedIn, <UsageReportPage token={token} />)}
+      />
+      <Route
+        path="/markdown-calculator"
+        element={renderSignedInElement(isLoggedIn, <MarkdownCalculator token={token} />)}
+      />
+      <Route path="/profile" element={renderSignedInElement(isLoggedIn, <ProfilePage />)} />
+      <Route path="/profile/*" element={renderSignedInElement(isLoggedIn, <ProfilePage />)} />
+      <Route
+        path="/subscription"
+        element={renderSignedInElement(isLoggedIn, <SubscriptionSettingsPage token={token} />)}
+      />
+      {hasAdminPermissions && (
+        <>
+          <Route
+            path="/user-management"
+            element={renderSignedInElement(isLoggedIn, <UserManagementPage />)}
+          />
+          <Route
+            path="/store-area-management"
+            element={renderSignedInElement(isLoggedIn, <StoreAreaManagementPage token={token} />)}
+          />
+          <Route
+            path="/csv-upload"
+            element={renderSignedInElement(isLoggedIn, <CSVUploadPage token={token} />)}
+          />
+          <Route
+            path="/expiry-import"
+            element={renderSignedInElement(
+              isLoggedIn,
+              <CSVUploadPage token={token} defaultImportType="expiry-list" />,
+            )}
+          />
+        </>
+      )}
+      <Route path="*" element={<Navigate to="/login" />} />
+    </Routes>
   );
 }
 
@@ -715,299 +826,22 @@ function AppContent({
         >
           <main className="p-4 max-w-7xl mx-auto">
             <ErrorBoundary>
-              <Routes>
-                <Route
-                  path="/login/*"
-                  element={isLoggedIn ? <Navigate to="/scan" /> : <ClerkSignInPage />}
-                />
-                <Route
-                  path="/sign-up/*"
-                  element={isLoggedIn ? <Navigate to="/scan" /> : <ClerkSignUpPage />}
-                />
-                <Route
-                  path="/onboarding"
-                  element={isLoggedIn ? <OnboardingPage /> : <Navigate to="/login" />}
-                />
-                <Route
-                  path="/onboarding/*"
-                  element={isLoggedIn ? <OnboardingPage /> : <Navigate to="/login" />}
-                />
-                <Route
-                  path="/settings"
-                  element={
-                    isLoggedIn &&
-                    effectiveUserRole &&
-                    hasPermission(effectiveUserRole, PERMISSIONS.MANAGE_MEMBERS) ? (
-                      <SettingsPage />
-                    ) : isLoggedIn ? (
-                      <Navigate to="/scan" />
-                    ) : (
-                      <Navigate to="/login" />
-                    )
-                  }
-                />
-                <Route
-                  path="/settings/*"
-                  element={
-                    isLoggedIn &&
-                    effectiveUserRole &&
-                    hasPermission(effectiveUserRole, PERMISSIONS.MANAGE_MEMBERS) ? (
-                      <SettingsPage />
-                    ) : isLoggedIn ? (
-                      <Navigate to="/scan" />
-                    ) : (
-                      <Navigate to="/login" />
-                    )
-                  }
-                />
-                <Route
-                  path="/upgrade"
-                  element={
-                    isLoggedIn ? <TrialUpgradeFlow token={token} /> : <Navigate to="/login" />
-                  }
-                />
-                <Route
-                  path="/scan"
-                  element={isLoggedIn ? <ScanPage token={token} /> : <Navigate to="/login" />}
-                />
-                <Route
-                  path="/sentry-test"
-                  element={isLoggedIn ? <SentryTest /> : <Navigate to="/login" />}
-                />
-                <Route
-                  path="/dashboard"
-                  element={isLoggedIn ? <DashboardPage token={token} /> : <Navigate to="/login" />}
-                />
-                <Route
-                  path="/reports"
-                  element={isLoggedIn ? <ReportsPage token={token} /> : <Navigate to="/login" />}
-                />
-                <Route
-                  path="/detailed-expiry-report"
-                  element={
-                    isLoggedIn ? (
-                      <DetailedExpiryReportPage token={token} />
-                    ) : (
-                      <Navigate to="/login" />
-                    )
-                  }
-                />
-                <Route
-                  path="/expired-items"
-                  element={
-                    isLoggedIn ? <ExpiredItemsPage token={token} /> : <Navigate to="/login" />
-                  }
-                />
-                <Route
-                  path="/usage-report"
-                  element={
-                    isLoggedIn ? <UsageReportPage token={token} /> : <Navigate to="/login" />
-                  }
-                />
-                <Route
-                  path="/markdown-calculator"
-                  element={
-                    isLoggedIn ? <MarkdownCalculator token={token} /> : <Navigate to="/login" />
-                  }
-                />
-                <Route
-                  path="/profile"
-                  element={isLoggedIn ? <ProfilePage /> : <Navigate to="/login" />}
-                />
-                <Route
-                  path="/profile/*"
-                  element={isLoggedIn ? <ProfilePage /> : <Navigate to="/login" />}
-                />
-                <Route
-                  path="/subscription"
-                  element={
-                    isLoggedIn ? (
-                      <SubscriptionSettingsPage token={token} />
-                    ) : (
-                      <Navigate to="/login" />
-                    )
-                  }
-                />
-                {effectiveUserRole &&
-                  hasPermission(effectiveUserRole, PERMISSIONS.MANAGE_MEMBERS) && (
-                    <>
-                      <Route
-                        path="/user-management"
-                        element={isLoggedIn ? <UserManagementPage /> : <Navigate to="/login" />}
-                      />
-                      <Route
-                        path="/store-area-management"
-                        element={
-                          isLoggedIn ? (
-                            <StoreAreaManagementPage token={token} />
-                          ) : (
-                            <Navigate to="/login" />
-                          )
-                        }
-                      />
-                      <Route
-                        path="/csv-upload"
-                        element={
-                          isLoggedIn ? <CSVUploadPage token={token} /> : <Navigate to="/login" />
-                        }
-                      />
-                      <Route
-                        path="/expiry-import"
-                        element={
-                          isLoggedIn ? (
-                            <CSVUploadPage token={token} defaultImportType="expiry-list" />
-                          ) : (
-                            <Navigate to="/login" />
-                          )
-                        }
-                      />
-                    </>
-                  )}
-                <Route path="*" element={<Navigate to="/login" />} />
-              </Routes>
+              <AppRoutes
+                isLoggedIn={isLoggedIn}
+                effectiveUserRole={effectiveUserRole}
+                token={token}
+              />
             </ErrorBoundary>
           </main>
         </HandheldLayout>
       ) : (
         <main className="p-4 max-w-7xl mx-auto">
           <ErrorBoundary>
-            <Routes>
-              <Route
-                path="/login/*"
-                element={isLoggedIn ? <Navigate to="/scan" /> : <ClerkSignInPage />}
-              />
-              <Route
-                path="/sign-up/*"
-                element={isLoggedIn ? <Navigate to="/scan" /> : <ClerkSignUpPage />}
-              />
-              <Route
-                path="/onboarding"
-                element={isLoggedIn ? <OnboardingPage /> : <Navigate to="/login" />}
-              />
-              <Route
-                path="/onboarding/*"
-                element={isLoggedIn ? <OnboardingPage /> : <Navigate to="/login" />}
-              />
-
-              <Route
-                path="/settings"
-                element={
-                  isLoggedIn &&
-                  effectiveUserRole &&
-                  hasPermission(effectiveUserRole, PERMISSIONS.MANAGE_MEMBERS) ? (
-                    <SettingsPage />
-                  ) : isLoggedIn ? (
-                    <Navigate to="/scan" />
-                  ) : (
-                    <Navigate to="/login" />
-                  )
-                }
-              />
-              <Route
-                path="/settings/*"
-                element={
-                  isLoggedIn &&
-                  effectiveUserRole &&
-                  hasPermission(effectiveUserRole, PERMISSIONS.MANAGE_MEMBERS) ? (
-                    <SettingsPage />
-                  ) : isLoggedIn ? (
-                    <Navigate to="/scan" />
-                  ) : (
-                    <Navigate to="/login" />
-                  )
-                }
-              />
-              <Route
-                path="/upgrade"
-                element={isLoggedIn ? <TrialUpgradeFlow token={token} /> : <Navigate to="/login" />}
-              />
-              <Route
-                path="/scan"
-                element={isLoggedIn ? <ScanPage token={token} /> : <Navigate to="/login" />}
-              />
-              <Route
-                path="/sentry-test"
-                element={isLoggedIn ? <SentryTest /> : <Navigate to="/login" />}
-              />
-              <Route
-                path="/dashboard"
-                element={isLoggedIn ? <DashboardPage token={token} /> : <Navigate to="/login" />}
-              />
-              <Route
-                path="/reports"
-                element={isLoggedIn ? <ReportsPage token={token} /> : <Navigate to="/login" />}
-              />
-              <Route
-                path="/detailed-expiry-report"
-                element={
-                  isLoggedIn ? <DetailedExpiryReportPage token={token} /> : <Navigate to="/login" />
-                }
-              />
-              <Route
-                path="/expired-items"
-                element={isLoggedIn ? <ExpiredItemsPage token={token} /> : <Navigate to="/login" />}
-              />
-              <Route
-                path="/usage-report"
-                element={isLoggedIn ? <UsageReportPage token={token} /> : <Navigate to="/login" />}
-              />
-              <Route
-                path="/markdown-calculator"
-                element={
-                  isLoggedIn ? <MarkdownCalculator token={token} /> : <Navigate to="/login" />
-                }
-              />
-              <Route
-                path="/profile"
-                element={isLoggedIn ? <ProfilePage /> : <Navigate to="/login" />}
-              />
-              <Route
-                path="/profile/*"
-                element={isLoggedIn ? <ProfilePage /> : <Navigate to="/login" />}
-              />
-              <Route
-                path="/subscription"
-                element={
-                  isLoggedIn ? <SubscriptionSettingsPage token={token} /> : <Navigate to="/login" />
-                }
-              />
-              {effectiveUserRole &&
-                hasPermission(effectiveUserRole, PERMISSIONS.MANAGE_MEMBERS) && (
-                  <>
-                    <Route
-                      path="/user-management"
-                      element={isLoggedIn ? <UserManagementPage /> : <Navigate to="/login" />}
-                    />
-                    <Route
-                      path="/store-area-management"
-                      element={
-                        isLoggedIn ? (
-                          <StoreAreaManagementPage token={token} />
-                        ) : (
-                          <Navigate to="/login" />
-                        )
-                      }
-                    />
-                    <Route
-                      path="/csv-upload"
-                      element={
-                        isLoggedIn ? <CSVUploadPage token={token} /> : <Navigate to="/login" />
-                      }
-                    />
-                    <Route
-                      path="/expiry-import"
-                      element={
-                        isLoggedIn ? (
-                          <CSVUploadPage token={token} defaultImportType="expiry-list" />
-                        ) : (
-                          <Navigate to="/login" />
-                        )
-                      }
-                    />
-                  </>
-                )}
-              <Route path="*" element={<Navigate to="/login" />} />
-            </Routes>
+            <AppRoutes
+              isLoggedIn={isLoggedIn}
+              effectiveUserRole={effectiveUserRole}
+              token={token}
+            />
           </ErrorBoundary>
         </main>
       )}

@@ -53,21 +53,22 @@ export function ManageSubscriptionButton({
   };
 
   return (
-    <div className="space-y-2">
+    <>
       <Button
         variant={variant}
         size={size}
         onClick={handleManageBilling}
         disabled={loading || !token}
         className={className}
+        aria-describedby={error ? 'manage-subscription-error' : undefined}
       >
         {loading ? 'Loading...' : 'Manage Billing'}
       </Button>
       {error && (
-        <p role="alert" className="text-sm text-destructive">
+        <p id="manage-subscription-error" role="alert" className="mt-2 text-sm text-destructive">
           {error}
         </p>
       )}
-    </div>
+    </>
   );
 }

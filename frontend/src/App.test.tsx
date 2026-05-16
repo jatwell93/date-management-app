@@ -1,6 +1,7 @@
 import { fireEvent, render, screen, waitFor, within } from '@testing-library/react';
 import { API_AUTH_UNAUTHORIZED_EVENT } from './lib/api.service';
 import { useAuthContext } from './components/ClerkAuthProvider';
+import type { RoleValue } from './constants/roles';
 
 jest.mock('react-router-dom');
 
@@ -16,7 +17,7 @@ let mockOrgBootstrapState = {
   isBootstrapped: true,
   isBootstrapping: false,
   bootstrapError: null as string | null,
-  bootstrapResult: null as { userId: number; role: string; organizationId?: string } | null,
+  bootstrapResult: null as { userId: number; role: RoleValue; organizationId?: string } | null,
   retry: jest.fn(),
 };
 
@@ -72,6 +73,7 @@ const mockSignedInContext = (overrides = {}) => {
 };
 
 beforeEach(() => {
+  window.history.pushState({}, '', '/');
   mockOrgBootstrapState = {
     isBootstrapped: true,
     isBootstrapping: false,

@@ -2,17 +2,11 @@
   "mcpServers": {
     "quint-code": {
       "command": "C:\\Users\\josha\\.local\\bin\\quint-code.exe",
-      "args": [
-        "serve"
-      ],
+      "args": ["serve"],
       "cwd": "c:\\Users\\josha\\date-management-app",
       "env": {
         "QUINT_PROJECT_ROOT": "c:\\Users\\josha\\date-management-app"
       }
-    },
-    "expect": {
-      "command": "C:\\Users\\josha\\AppData\\Roaming\\npm\\expect-mcp.cmd",
-      "args": []
     }
   }
 }

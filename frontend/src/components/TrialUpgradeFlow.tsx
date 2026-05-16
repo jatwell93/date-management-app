@@ -4,7 +4,7 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from './ui/
 import { buildApiUrl } from '../lib/api.service';
 
 interface SubscriptionTierResponse {
-  status: 'ACTIVE' | 'TRIALING' | 'EXPIRED' | 'CANCELED';
+  status: 'active' | 'trialing' | 'expired' | 'canceled';
   tierLevel: string;
   trialEndDate: string | null;
   trialStartedAt: string | null;
@@ -80,7 +80,7 @@ function UpgradeCard({
     if (isInTrial && daysRemaining > 0) {
       return `${daysRemaining} day${daysRemaining === 1 ? '' : 's'} remaining`;
     }
-    if (isTrialExpired || status === 'EXPIRED') {
+    if (isTrialExpired || status === 'expired') {
       return 'Trial expired. Upgrade to restore full access.';
     }
     return 'Upgrade to Professional when you need more capacity.';
@@ -268,7 +268,7 @@ export function TrialUpgradeFlow({ token }: TrialUpgradeFlowProps) {
   const daysRemaining = subscription?.daysRemaining ?? 0;
   const tierLevel = subscription?.tierLevel?.toLowerCase() || 'starter';
   const status = subscription?.status;
-  const isActivePaidPlan = status === 'ACTIVE' && tierLevel !== 'starter';
+  const isActivePaidPlan = status === 'active' && tierLevel !== 'starter';
 
   if (isActivePaidPlan) {
     return (
