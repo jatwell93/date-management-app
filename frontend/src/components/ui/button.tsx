@@ -5,21 +5,27 @@ import { cva, type VariantProps } from 'class-variance-authority';
 import { cn } from '../../lib/utils';
 
 const buttonVariants = cva(
-  "inline-flex items-center justify-center gap-2 whitespace-nowrap rounded-md text-sm font-medium transition-all disabled:pointer-events-none disabled:opacity-50 [&_svg]:pointer-events-none [&_svg:not([class*='size-'])]:size-4 shrink-0 [&_svg]:shrink-0 outline-none focus-visible:border-ring focus-visible:ring-ring/50 focus-visible:ring-[3px] aria-invalid:ring-destructive/20 dark:aria-invalid:ring-destructive/40 aria-invalid:border-destructive",
+  "inline-flex items-center justify-center gap-2 whitespace-nowrap rounded-md text-sm font-medium transition-all disabled:pointer-events-none disabled:opacity-50 [&_svg]:pointer-events-none [&_svg:not([class*='size-'])]:size-4 shrink-0 [&_svg]:shrink-0 outline-none focus-visible:border-semantic-primary focus-visible:ring-semantic-primary/50 focus-visible:ring-[3px] aria-invalid:ring-semantic-critical/20 dark:aria-invalid:ring-semantic-critical/40 aria-invalid:border-semantic-critical",
   {
     variants: {
       variant: {
-        default: 'bg-primary text-primary-foreground hover:bg-primary/90',
+        default:
+          'bg-semantic-primary text-semantic-primary-foreground hover:bg-semantic-primary-hover active:bg-semantic-primary-active',
         destructive:
-          'bg-destructive text-destructive-foreground hover:bg-destructive/90 focus-visible:ring-destructive/20 dark:focus-visible:ring-destructive/40 dark:bg-destructive/60',
+          'bg-semantic-critical text-semantic-critical-foreground hover:bg-semantic-critical-hover active:bg-semantic-critical-active focus-visible:ring-semantic-critical/20 dark:focus-visible:ring-semantic-critical/40',
         outline:
-          'border border-input bg-background text-foreground shadow-xs hover:bg-accent hover:text-accent-foreground dark:bg-input/30 dark:border-input dark:hover:bg-input/50',
-        secondary: 'bg-secondary text-secondary-foreground hover:bg-secondary/80',
-        ghost: 'hover:bg-accent hover:text-accent-foreground dark:hover:bg-accent/50',
-        link: 'text-primary underline-offset-4 hover:underline',
-        success: 'bg-inventory-success-500 text-white hover:bg-inventory-success-600',
-        warning: 'bg-inventory-warning-500 text-white hover:bg-inventory-warning-600',
-        error: 'bg-inventory-error-500 text-white hover:bg-inventory-error-600',
+          'border border-input bg-semantic-surface-1 text-semantic-text-primary shadow-xs hover:bg-semantic-surface-2 dark:bg-semantic-surface-2 dark:hover:bg-semantic-surface-3',
+        secondary:
+          'bg-semantic-secondary text-semantic-secondary-foreground hover:bg-semantic-secondary-hover active:bg-semantic-secondary-active',
+        ghost:
+          'text-semantic-text-primary hover:bg-semantic-surface-2 hover:text-semantic-text-primary dark:hover:bg-semantic-surface-3',
+        link: 'text-semantic-secondary underline-offset-4 hover:underline',
+        success:
+          'bg-semantic-success text-semantic-success-foreground hover:bg-semantic-success-hover active:bg-semantic-success-active',
+        warning:
+          'bg-semantic-warning text-semantic-warning-foreground hover:bg-semantic-warning-hover active:bg-semantic-warning-active',
+        error:
+          'bg-semantic-critical text-semantic-critical-foreground hover:bg-semantic-critical-hover active:bg-semantic-critical-active',
       },
       size: {
         default: 'h-9 px-4 py-2 has-[>svg]:px-3',

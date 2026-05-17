@@ -89,7 +89,7 @@ export function DataTable<TData, TValue>({
                     <th
                       key={header.id}
                       className={cn(
-                        'h-12 px-4 text-left align-middle font-medium text-slate-500 dark:text-slate-400 [&:has([role=checkbox])]:pr-0 min-w-[120px] first:min-w-[100px] last:min-w-[140px]',
+                        'h-12 px-4 text-left align-middle font-medium text-semantic-text-secondary [&:has([role=checkbox])]:pr-0 min-w-[120px] first:min-w-[100px] last:min-w-[140px]',
                         header.column.getCanSort() && 'cursor-pointer select-none',
                       )}
                       onClick={header.column.getToggleSortingHandler()}
@@ -112,7 +112,7 @@ export function DataTable<TData, TValue>({
               table.getRowModel().rows.map((row) => (
                 <tr
                   key={row.id}
-                  className="border-t transition-colors hover:bg-slate-500/50 data-[state=selected]:bg-slate-100 dark:data-[state=selected]:bg-slate-800"
+                  className="border-t transition-colors hover:bg-semantic-surface-2 data-[state=selected]:bg-semantic-surface-3"
                 >
                   {row.getVisibleCells().map((cell) => (
                     <td
@@ -136,7 +136,7 @@ export function DataTable<TData, TValue>({
       </div>
       {pagination && (
         <div className="flex items-center justify-between space-x-2 py-4 overflow-x-auto">
-          <div className="flex-1 text-sm text-slate-500 dark:text-slate-400">
+          <div className="flex-1 text-sm text-semantic-text-secondary">
             Showing{' '}
             {table.getState().pagination.pageIndex * table.getState().pagination.pageSize + 1} to{' '}
             {Math.min(

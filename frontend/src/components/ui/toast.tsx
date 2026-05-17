@@ -27,14 +27,14 @@ const Toast: React.FC<ToastProps> = ({ message, type, isVisible, onClose }) => {
   const getToastStyle = () => {
     switch (type) {
       case 'success':
-        return 'bg-inventory-success-500';
+        return 'bg-semantic-success';
       case 'error':
-        return 'bg-inventory-error-500';
+        return 'bg-semantic-critical';
       case 'warning':
-        return 'bg-inventory-warning-500';
+        return 'bg-semantic-warning';
       case 'info':
       default:
-        return 'bg-inventory-primary-500';
+        return 'bg-semantic-secondary';
     }
   };
 
