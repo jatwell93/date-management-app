@@ -174,7 +174,7 @@ export function StoreAreaManagementPage({ token }: StoreAreaManagementPageProps)
           )}
 
           <div className="mb-6">
-            <h3 className="text-lg font-semibold mb-2">Add New Store Area</h3>
+            <h3 className="text-lg font-semibold font-heading mb-2">Add New Store Area</h3>
             <div className="flex space-x-2 mb-2">
               <Input
                 type="text"
@@ -194,7 +194,7 @@ export function StoreAreaManagementPage({ token }: StoreAreaManagementPageProps)
             </div>
           </div>
 
-          <h3 className="text-lg font-semibold mb-2">Existing Store Areas</h3>
+          <h3 className="text-lg font-semibold font-heading mb-2">Existing Store Areas</h3>
           {storeAreas.length === 0 ? (
             <p className="text-center text-semantic-text-tertiary">No store areas found.</p>
           ) : (

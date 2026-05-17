@@ -105,7 +105,9 @@ export function Scanner({
           <div
             className={`flex justify-between items-center mb-2 ${isHandheld ? 'px-3 py-2' : ''}`}
           >
-            <h3 className={`text-lg font-semibold text-foreground ${isHandheld ? 'text-xl' : ''}`}>
+            <h3
+              className={`text-lg font-semibold font-heading text-foreground ${isHandheld ? 'text-xl' : ''}`}
+            >
               Camera Scanner
             </h3>
             <button

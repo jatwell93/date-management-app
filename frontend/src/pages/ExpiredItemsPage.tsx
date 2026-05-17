@@ -330,33 +330,33 @@ const ExpiredItemsPage: React.FC<ExpiredItemsPageProps> = ({ token }) => {
 
   return (
     <div className="container mx-auto px-4 py-8">
-      <h1 className="text-3xl font-bold mb-6">Expired Items</h1>
+      <h1 className="text-3xl font-bold font-heading mb-6">Expired Items</h1>
 
       <Table>
         <TableHeader>
           <TableRow>
-            <TableHead className="text-left text-xs font-medium text-muted-foreground uppercase tracking-wider">
+            <TableHead className="text-left text-xs font-semibold font-eyebrow text-muted-foreground uppercase tracking-wider">
               SKU
             </TableHead>
-            <TableHead className="text-left text-xs font-medium text-muted-foreground uppercase tracking-wider">
+            <TableHead className="text-left text-xs font-semibold font-eyebrow text-muted-foreground uppercase tracking-wider">
               Product Name
             </TableHead>
-            <TableHead className="text-left text-xs font-medium text-muted-foreground uppercase tracking-wider">
+            <TableHead className="text-left text-xs font-semibold font-eyebrow text-muted-foreground uppercase tracking-wider">
               Location
             </TableHead>
-            <TableHead className="text-left text-xs font-medium text-muted-foreground uppercase tracking-wider">
+            <TableHead className="text-left text-xs font-semibold font-eyebrow text-muted-foreground uppercase tracking-wider">
               Expiry Date
             </TableHead>
-            <TableHead className="text-left text-xs font-medium text-muted-foreground uppercase tracking-wider">
+            <TableHead className="text-left text-xs font-semibold font-eyebrow text-muted-foreground uppercase tracking-wider">
               Cost Price
             </TableHead>
-            <TableHead className="text-left text-xs font-medium text-muted-foreground uppercase tracking-wider">
+            <TableHead className="text-left text-xs font-semibold font-eyebrow text-muted-foreground uppercase tracking-wider">
               Quantity Available
             </TableHead>
-            <TableHead className="text-left text-xs font-medium text-muted-foreground uppercase tracking-wider">
+            <TableHead className="text-left text-xs font-semibold font-eyebrow text-muted-foreground uppercase tracking-wider">
               Status
             </TableHead>
-            <TableHead className="text-left text-xs font-medium text-muted-foreground uppercase tracking-wider">
+            <TableHead className="text-left text-xs font-semibold font-eyebrow text-muted-foreground uppercase tracking-wider">
               Actions
             </TableHead>
           </TableRow>
@@ -492,7 +492,9 @@ const ExpiredItemsPage: React.FC<ExpiredItemsPageProps> = ({ token }) => {
           />
           <div className="relative z-10 bg-background rounded-lg shadow-lg w-11/12 max-w-md p-6">
             <div className="flex justify-between items-center mb-4">
-              <h3 className="text-lg font-semibold text-foreground">Process Expired Item</h3>
+              <h3 className="text-lg font-semibold font-heading text-foreground">
+                Process Expired Item
+              </h3>
               <button
                 onClick={() => {
                   setIsModalOpen(false);

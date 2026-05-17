@@ -66,23 +66,23 @@ const ExpiredLossReport: React.FC<ExpiredLossReportProps> = ({ token }) => {
 
   return (
     <div className="container mx-auto px-4 py-8">
-      <h2 className="text-2xl font-bold mb-6">Expired Item Loss Report</h2>
+      <h2 className="text-2xl font-bold font-heading mb-6">Expired Item Loss Report</h2>
 
       <div className="grid grid-cols-1 md:grid-cols-2 gap-8">
         {/* Losses by SKU */}
         <div className="border rounded-lg shadow-sm overflow-hidden">
-          <h3 className="text-xl font-semibold p-4 bg-muted">Financial Loss by SKU</h3>
+          <h3 className="text-xl font-semibold font-heading p-4 bg-muted">Financial Loss by SKU</h3>
           <div className="overflow-x-auto">
             <Table>
               <TableHeader>
                 <TableRow>
-                  <TableHead className="text-left text-xs font-medium text-muted-foreground uppercase tracking-wider">
+                  <TableHead className="text-left text-xs font-semibold font-eyebrow text-muted-foreground uppercase tracking-wider">
                     SKU
                   </TableHead>
-                  <TableHead className="text-left text-xs font-medium text-muted-foreground uppercase tracking-wider">
+                  <TableHead className="text-left text-xs font-semibold font-eyebrow text-muted-foreground uppercase tracking-wider">
                     Product Name
                   </TableHead>
-                  <TableHead className="text-left text-xs font-medium text-muted-foreground uppercase tracking-wider">
+                  <TableHead className="text-left text-xs font-semibold font-eyebrow text-muted-foreground uppercase tracking-wider">
                     Total Loss
                   </TableHead>
                 </TableRow>
@@ -108,15 +108,17 @@ const ExpiredLossReport: React.FC<ExpiredLossReportProps> = ({ token }) => {
 
         {/* Losses by Store Area */}
         <div className="border rounded-lg shadow-sm overflow-hidden">
-          <h3 className="text-xl font-semibold p-4 bg-muted">Financial Loss by Store Area</h3>
+          <h3 className="text-xl font-semibold font-heading p-4 bg-muted">
+            Financial Loss by Store Area
+          </h3>
           <div className="overflow-x-auto">
             <Table>
               <TableHeader>
                 <TableRow>
-                  <TableHead className="text-left text-xs font-medium text-muted-foreground uppercase tracking-wider">
+                  <TableHead className="text-left text-xs font-semibold font-eyebrow text-muted-foreground uppercase tracking-wider">
                     Location Name
                   </TableHead>
-                  <TableHead className="text-left text-xs font-medium text-muted-foreground uppercase tracking-wider">
+                  <TableHead className="text-left text-xs font-semibold font-eyebrow text-muted-foreground uppercase tracking-wider">
                     Total Loss
                   </TableHead>
                 </TableRow>

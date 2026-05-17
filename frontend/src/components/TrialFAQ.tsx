@@ -177,7 +177,7 @@ export function TrialFAQ({ daysRemaining, isExpired, trigger = 'button' }: Trial
 export function TrialFAQInline() {
   return (
     <div className="space-y-4">
-      <h3 className="text-lg font-semibold flex items-center gap-2">
+      <h3 className="text-lg font-semibold font-heading flex items-center gap-2">
         <HelpCircle className="h-5 w-5" />
         Frequently Asked Questions
       </h3>

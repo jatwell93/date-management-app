@@ -10,7 +10,9 @@ export function ClerkSignUpPage() {
       <div data-testid="clerk-auth-card" className="w-full max-w-full sm:max-w-md">
         <Card className="mb-4">
           <CardHeader>
-            <CardTitle className="text-2xl font-bold text-center">Date Management App</CardTitle>
+            <CardTitle className="text-3xl font-bold text-center font-display">
+              Date Management App
+            </CardTitle>
             <CardDescription className="text-center">
               Manage inventory dates and compliance in one place.
             </CardDescription>
@@ -33,7 +35,9 @@ export function ClerkSignInPage() {
       <div data-testid="clerk-auth-card" className="w-full max-w-full sm:max-w-md">
         <Card>
           <CardHeader>
-            <CardTitle className="text-2xl font-bold text-center">Date Management App</CardTitle>
+            <CardTitle className="text-3xl font-bold text-center font-display">
+              Date Management App
+            </CardTitle>
             <CardDescription className="text-center">
               Manage inventory dates and compliance in one place.
             </CardDescription>

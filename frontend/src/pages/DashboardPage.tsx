@@ -79,7 +79,7 @@ export function DashboardPage({ token }: DashboardPageProps) {
           <CardTitle>Total Products</CardTitle>
         </CardHeader>
         <CardContent>
-          <p className="text-3xl font-bold">{stats?.totalProducts ?? 0}</p>
+          <p className="text-3xl font-bold font-heading">{stats?.totalProducts ?? 0}</p>
         </CardContent>
       </Card>
 
@@ -88,7 +88,7 @@ export function DashboardPage({ token }: DashboardPageProps) {
           <CardTitle>Inventory Items</CardTitle>
         </CardHeader>
         <CardContent>
-          <p className="text-3xl font-bold">{stats?.totalInventoryItems ?? 0}</p>
+          <p className="text-3xl font-bold font-heading">{stats?.totalInventoryItems ?? 0}</p>
         </CardContent>
       </Card>
 
@@ -97,7 +97,9 @@ export function DashboardPage({ token }: DashboardPageProps) {
           <CardTitle>Expiring Soon</CardTitle>
         </CardHeader>
         <CardContent>
-          <p className="text-3xl font-bold text-semantic-warning">{stats?.expiringItems ?? 0}</p>
+          <p className="text-3xl font-bold font-heading text-semantic-warning">
+            {stats?.expiringItems ?? 0}
+          </p>
         </CardContent>
       </Card>
 
@@ -106,7 +108,9 @@ export function DashboardPage({ token }: DashboardPageProps) {
           <CardTitle>Low Stock</CardTitle>
         </CardHeader>
         <CardContent>
-          <p className="text-3xl font-bold text-semantic-critical">{stats?.lowStockItems ?? 0}</p>
+          <p className="text-3xl font-bold font-heading text-semantic-critical">
+            {stats?.lowStockItems ?? 0}
+          </p>
         </CardContent>
       </Card>
 

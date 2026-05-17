@@ -410,7 +410,9 @@ export function ScanPage({ token }: ScanPageProps) {
       >
         {!isHandheld && (
           <CardHeader className="bg-muted/50 border-b border-border">
-            <CardTitle className="text-2xl font-bold text-center">Inventory Scan</CardTitle>
+            <CardTitle className="text-2xl font-bold font-heading text-center">
+              Inventory Scan
+            </CardTitle>
           </CardHeader>
         )}
         <CardContent className={isHandheld ? 'p-0 h-full' : 'p-6'}>

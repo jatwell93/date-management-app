@@ -37,7 +37,7 @@ export function UserManagementPage() {
   return (
     <div className="max-w-4xl mx-auto py-8 px-4">
       <div className="mb-6">
-        <h1 className="text-2xl font-bold text-semantic-text-primary">Team Members</h1>
+        <h1 className="text-2xl font-bold font-heading text-semantic-text-primary">Team Members</h1>
         <p className="mt-1 text-semantic-text-secondary">
           Manage your organization members and their roles.
         </p>

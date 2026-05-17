@@ -104,23 +104,25 @@ export function ReportsPage({ token }: ReportsPageProps) {
           ) : overallReportData ? (
             <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mb-6">
               <div className="bg-semantic-secondary-muted p-4 rounded-lg text-center">
-                <p className="text-2xl font-bold">{overallReportData.total_expiring}</p>
+                <p className="text-2xl font-bold font-heading">
+                  {overallReportData.total_expiring}
+                </p>
                 <p className="text-sm text-semantic-text-secondary">Total Items</p>
               </div>
               <div className="bg-semantic-critical-muted p-4 rounded-lg text-center">
-                <p className="text-2xl font-bold text-semantic-critical">
+                <p className="text-2xl font-bold font-heading text-semantic-critical">
                   {overallReportData.expired_count}
                 </p>
                 <p className="text-sm text-semantic-text-secondary">Expired Items</p>
               </div>
               <div className="bg-semantic-warning-muted p-4 rounded-lg text-center">
-                <p className="text-2xl font-bold text-semantic-warning">
+                <p className="text-2xl font-bold font-heading text-semantic-warning">
                   {overallReportData.total_markdown}
                 </p>
                 <p className="text-sm text-semantic-text-secondary">Markdown Items</p>
               </div>
               <div className="bg-semantic-success-muted p-4 rounded-lg text-center">
-                <p className="text-2xl font-bold text-semantic-success">
+                <p className="text-2xl font-bold font-heading text-semantic-success">
                   {overallReportData.total_expiring -
                     overallReportData.expired_count -
                     overallReportData.total_markdown}
