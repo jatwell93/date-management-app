@@ -67,18 +67,14 @@ const RULES = [
 
 /* ── File exclusions ──────────────────────────────────────────── */
 
-const EXCLUDED_PATTERNS = [
-  '**/node_modules/**',
-  '**/__tests__/**',
-  '**/*.test.*',
-  '**/*.spec.*',
-  '**/theme/**',           // Token definition files are allowed to use raw values
-  '**/design-tokens.*',
-  '**/tailwind.config.*',
-  '**/globals.css',
-  '**/index.css',
-  '**/*.d.ts',
+const EXCLUDED_PATH_SEGMENTS = ['node_modules/', '__tests__/'];
+const EXCLUDED_FILE_PATTERNS = [
+  /\.(test|spec)\.[^/]+$/,
+  /design-tokens/,
+  /tailwind\.config/,
+  /\.d\.ts$/,
 ];
+const EXCLUDED_FILE_NAMES = new Set(['globals.css', 'index.css', 'tailwind-output.css']);
 
 /* ── Scanner ──────────────────────────────────────────────────── */
 
@@ -115,31 +111,26 @@ const VALID_EXTENSIONS = new Set(['.tsx', '.jsx', '.ts', '.css', '.html']);
 
 function isExcluded(filePath) {
   const rel = path.relative(SRC_DIR, filePath).replace(/\\/g, '/');
-  if (rel.includes('node_modules/')) return true;
-  if (rel.includes('__tests__/')) return true;
-  if (/\.(test|spec)\.[^/]+$/.test(rel)) return true;
-  if (rel.startsWith('theme/')) return true;
-  if (rel.includes('design-tokens')) return true;
-  if (rel.includes('tailwind.config')) return true;
-  if (rel === 'globals.css' || rel === 'index.css' || rel === 'tailwind-output.css') return true;
-  if (rel.endsWith('.d.ts')) return true;
-  return false;
+  const isInExcludedSegment = EXCLUDED_PATH_SEGMENTS.some((segment) => rel.includes(segment));
+  const matchesExcludedPattern = EXCLUDED_FILE_PATTERNS.some((pattern) => pattern.test(rel));
+
+  return (
+    isInExcludedSegment ||
+    rel.startsWith('theme/') ||
+    matchesExcludedPattern ||
+    EXCLUDED_FILE_NAMES.has(rel)
+  );
 }
 
 function walkDir(dir) {
-  let results = [];
   const entries = fs.readdirSync(dir, { withFileTypes: true });
-  for (const entry of entries) {
+  return entries.flatMap((entry) => {
     const fullPath = path.join(dir, entry.name);
-    if (entry.isDirectory()) {
-      results = results.concat(walkDir(fullPath));
-    } else if (entry.isFile() && VALID_EXTENSIONS.has(path.extname(entry.name))) {
-      if (!isExcluded(fullPath)) {
-        results.push(fullPath);
-      }
-    }
-  }
-  return results;
+    if (entry.isDirectory()) return walkDir(fullPath);
+    if (!entry.isFile()) return [];
+    if (!VALID_EXTENSIONS.has(path.extname(entry.name))) return [];
+    return isExcluded(fullPath) ? [] : [fullPath];
+  });
 }
 
 function getComponentFiles() {
@@ -153,10 +144,74 @@ function formatViolation(v) {
   return `  ${icon} ${v.file}:${v.line}:${v.column} — ${v.description}\n    Match: ${v.match}\n    Fix: ${v.suggestion}`;
 }
 
-function groupBySeverity(violations) {
+function summarizeViolations(violations) {
   const errors = violations.filter((v) => v.severity === 'error');
   const warnings = violations.filter((v) => v.severity === 'warning');
-  return { errors, warnings };
+  return { errors, warnings, total: violations.length };
+}
+
+function buildBaseline(violations) {
+  const { errors, warnings, total } = summarizeViolations(violations);
+  return {
+    timestamp: new Date().toISOString(),
+    totalViolations: total,
+    errors: errors.length,
+    warnings: warnings.length,
+    byRule: violations.reduce((counts, violation) => {
+      counts[violation.ruleId] = (counts[violation.ruleId] || 0) + 1;
+      return counts;
+    }, {}),
+  };
+}
+
+function getBaselineDelta(baseline, violations) {
+  return violations.length - baseline.totalViolations;
+}
+
+function printReport(files, violations) {
+  const { errors, warnings, total } = summarizeViolations(violations);
+
+  console.log('\n🔍 Token Compliance Report');
+  console.log('═'.repeat(50));
+  console.log(`Files scanned: ${files.length}`);
+  console.log(`Errors: ${errors.length}`);
+  console.log(`Warnings: ${warnings.length}`);
+  console.log(`Total violations: ${total}`);
+
+  if (total === 0) return;
+
+  console.log('\n── Violations ──\n');
+  for (const violation of violations) {
+    console.log(formatViolation(violation));
+  }
+}
+
+function saveBaseline(violations) {
+  const baseline = buildBaseline(violations);
+  fs.writeFileSync(BASELINE_FILE, JSON.stringify(baseline, null, 2));
+  console.log(`\n✅ Baseline saved to ${path.relative(process.cwd(), BASELINE_FILE)}`);
+  console.log(`   Total baseline violations: ${baseline.totalViolations}`);
+}
+
+function printBaselineComparison(baseline, violations) {
+  const delta = getBaselineDelta(baseline, violations);
+  console.log(`\n── Baseline Comparison ──`);
+  console.log(`Baseline: ${baseline.totalViolations} violations (${baseline.timestamp})`);
+  console.log(`Current:  ${violations.length} violations`);
+  console.log(`Delta:    ${delta > 0 ? '+' : ''}${delta}`);
+
+  return delta;
+}
+
+function exitForBaselineDelta(delta) {
+  if (delta > 0) {
+    console.log(`\n❌ FAIL: ${delta} new violation(s) introduced above baseline.`);
+    console.log('   Fix new violations or update baseline with: node scripts/check-token-compliance.js --baseline');
+    process.exit(1);
+  }
+
+  console.log('\n✅ PASS: No new violations above baseline.');
+  process.exit(0);
 }
 
 /* ── Main ─────────────────────────────────────────────────────── */
@@ -164,75 +219,34 @@ function groupBySeverity(violations) {
 function main() {
   const args = process.argv.slice(2);
   const isBaseline = args.includes('--baseline');
-  const showSuggestions = args.includes('--fix-suggestions');
 
   const files = getComponentFiles();
-  let allViolations = [];
+  const allViolations = files.flatMap((file) => scanFile(file));
+  printReport(files, allViolations);
 
-  for (const file of files) {
-    const violations = scanFile(file);
-    allViolations = allViolations.concat(violations);
-  }
-
-  const { errors, warnings } = groupBySeverity(allViolations);
-
-  // Output report
-  console.log('\n🔍 Token Compliance Report');
-  console.log('═'.repeat(50));
-  console.log(`Files scanned: ${files.length}`);
-  console.log(`Errors: ${errors.length}`);
-  console.log(`Warnings: ${warnings.length}`);
-  console.log(`Total violations: ${allViolations.length}`);
-
-  if (allViolations.length > 0) {
-    console.log('\n── Violations ──\n');
-    for (const v of allViolations) {
-      console.log(formatViolation(v));
-    }
-  }
-
-  // Baseline mode: save current count
   if (isBaseline) {
-    const baseline = {
-      timestamp: new Date().toISOString(),
-      totalViolations: allViolations.length,
-      errors: errors.length,
-      warnings: warnings.length,
-      byRule: {},
-    };
-    for (const v of allViolations) {
-      baseline.byRule[v.ruleId] = (baseline.byRule[v.ruleId] || 0) + 1;
-    }
-    fs.writeFileSync(BASELINE_FILE, JSON.stringify(baseline, null, 2));
-    console.log(`\n✅ Baseline saved to ${path.relative(process.cwd(), BASELINE_FILE)}`);
-    console.log(`   Total baseline violations: ${allViolations.length}`);
+    saveBaseline(allViolations);
     process.exit(0);
-    return;
   }
 
-  // CI mode: compare against baseline
-  if (fs.existsSync(BASELINE_FILE)) {
-    const baseline = JSON.parse(fs.readFileSync(BASELINE_FILE, 'utf-8'));
-    const newViolations = allViolations.length - baseline.totalViolations;
-    console.log(`\n── Baseline Comparison ──`);
-    console.log(`Baseline: ${baseline.totalViolations} violations (${baseline.timestamp})`);
-    console.log(`Current:  ${allViolations.length} violations`);
-    console.log(`Delta:    ${newViolations > 0 ? '+' : ''}${newViolations}`);
-
-    if (newViolations > 0) {
-      console.log(`\n❌ FAIL: ${newViolations} new violation(s) introduced above baseline.`);
-      console.log('   Fix new violations or update baseline with: node scripts/check-token-compliance.js --baseline');
-      process.exit(1);
-    } else {
-      console.log('\n✅ PASS: No new violations above baseline.');
-      process.exit(0);
-    }
-  } else {
+  if (!fs.existsSync(BASELINE_FILE)) {
     console.log('\n⚠ No baseline found. Run with --baseline to set initial baseline.');
     console.log('  node scripts/check-token-compliance.js --baseline');
-    // Don't fail without a baseline — just report
     process.exit(0);
   }
+
+  const baseline = JSON.parse(fs.readFileSync(BASELINE_FILE, 'utf-8'));
+  const delta = printBaselineComparison(baseline, allViolations);
+  exitForBaselineDelta(delta);
 }
 
-main();
+if (require.main === module) {
+  main();
+}
+
+module.exports = {
+  buildBaseline,
+  getBaselineDelta,
+  isExcluded,
+  summarizeViolations,
+};
