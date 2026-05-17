@@ -11,7 +11,7 @@ Primary QA uses real Clerk sessions. Backend auth bypass is only a fallback for 
 Run the backend on `localhost:3001`:
 
 ```powershell
-doppler run --project auth-backend -- npm run dev --prefix backend
+doppler run --project date-management --config dev -- npm run dev --prefix backend
 ```
 
 Run the frontend on `localhost:3002` with the Expect diagnostics panel enabled:
@@ -19,10 +19,24 @@ Run the frontend on `localhost:3002` with the Expect diagnostics panel enabled:
 ```powershell
 $env:REACT_APP_EXPECT_QA_STATUS='true'
 $env:REACT_APP_API_URL='http://localhost:3001'
-doppler run --project auth-frontend -- npm start --prefix frontend
+doppler run --project date-management --config dev -- npm start --prefix frontend
 ```
 
 If you are not using Doppler for a session, set the same variables in the appropriate `.env` files instead. Do not commit local secret files.
+
+`npm start` rebuilds the generated Tailwind stylesheet before launching the frontend dev server, so
+local startup cannot silently reuse stale token utilities from an older `tailwind-output.css`.
+
+The examples above assume you run them from the repository root. If you are already inside
+`frontend/`, omit the npm prefix and run:
+
+```powershell
+doppler run --project date-management --config dev -- npm start
+```
+
+Use `--config dev` for the Doppler environment name. `--prefix` is an npm flag for the package
+directory, so `--prefix frontend` means “run the command in `frontend/`”; it is not the Doppler
+environment selector.
 
 ## Clerk Users
 

@@ -11,6 +11,8 @@ describe('phase 2 semantic UI primitives', () => {
   it('uses semantic intent tokens for button variants', () => {
     expect(buttonVariants({ variant: 'default' })).toContain('bg-semantic-primary');
     expect(buttonVariants({ variant: 'secondary' })).toContain('bg-semantic-secondary');
+    expect(buttonVariants({ variant: 'neutral' })).toContain('bg-semantic-surface-3');
+    expect(buttonVariants({ variant: 'neutral' })).toContain('text-semantic-text-primary');
     expect(buttonVariants({ variant: 'success' })).toContain('bg-semantic-success');
     expect(buttonVariants({ variant: 'warning' })).toContain('bg-semantic-warning');
     expect(buttonVariants({ variant: 'error' })).toContain('bg-semantic-critical');
@@ -56,6 +58,17 @@ describe('phase 2 semantic UI primitives', () => {
   it('keeps shared button rendering available after token migration', () => {
     render(<Button>Continue</Button>);
     expect(screen.getByRole('button', { name: 'Continue' })).toBeInTheDocument();
+  });
+
+  it('keeps disabled shared buttons readable with semantic tokens', () => {
+    render(<Button disabled>Continue</Button>);
+
+    expect(screen.getByRole('button', { name: 'Continue' })).toHaveClass(
+      'disabled:bg-semantic-surface-4',
+    );
+    expect(screen.getByRole('button', { name: 'Continue' })).toHaveClass(
+      'disabled:text-semantic-text-tertiary',
+    );
   });
 
   it('provides semantic badge variants for shared status labels', () => {

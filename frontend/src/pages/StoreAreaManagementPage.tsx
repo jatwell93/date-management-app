@@ -167,10 +167,10 @@ export function StoreAreaManagementPage({ token }: StoreAreaManagementPageProps)
         </CardHeader>
         <CardContent>
           {error && (
-            <p className="text-inventory-error-500 text-sm text-center mt-4">Error: {error}</p>
+            <p className="text-semantic-critical text-sm text-center mt-4">Error: {error}</p>
           )}
           {successMessage && (
-            <p className="text-inventory-success-500 text-sm text-center mt-4">{successMessage}</p>
+            <p className="text-semantic-success text-sm text-center mt-4">{successMessage}</p>
           )}
 
           <div className="mb-6">
@@ -196,7 +196,7 @@ export function StoreAreaManagementPage({ token }: StoreAreaManagementPageProps)
 
           <h3 className="text-lg font-semibold mb-2">Existing Store Areas</h3>
           {storeAreas.length === 0 ? (
-            <p className="text-center text-gray-500">No store areas found.</p>
+            <p className="text-center text-semantic-text-tertiary">No store areas found.</p>
           ) : (
             <Table>
               <TableHeader>

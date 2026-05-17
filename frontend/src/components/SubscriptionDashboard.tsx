@@ -23,10 +23,10 @@ function ProgressBar({ label, current, limit, formatValue }: ProgressBarProps) {
   const isWarning = percentage >= 80 && percentage < 95;
   const isDanger = percentage >= 95;
   const progressBarColorClass = isDanger
-    ? 'bg-red-600'
+    ? 'bg-semantic-critical'
     : isWarning
-      ? 'bg-amber-500'
-      : 'bg-blue-600';
+      ? 'bg-semantic-warning'
+      : 'bg-semantic-secondary';
 
   const displayCurrent = formatValue ? formatValue(current) : current.toLocaleString();
   const displayLimit = isUnlimited
@@ -43,7 +43,7 @@ function ProgressBar({ label, current, limit, formatValue }: ProgressBarProps) {
           {displayCurrent} / {displayLimit}
         </span>
       </div>
-      <div className="w-full bg-gray-200 rounded-full h-2.5 dark:bg-gray-700">
+      <div className="w-full bg-semantic-surface-3 rounded-full h-2.5 dark:bg-semantic-surface-4">
         <div
           className={`h-2.5 rounded-full transition-all ${progressBarColorClass}`}
           style={{ width: `${isUnlimited ? 0 : percentage}%` }}
@@ -124,7 +124,7 @@ export function SubscriptionDashboard({ token, onUpgrade }: SubscriptionDashboar
     return (
       <Card>
         <CardContent className="py-8 text-center">
-          <p className="text-red-600">Unable to load subscription data</p>
+          <p className="text-semantic-critical">Unable to load subscription data</p>
           {error && <p className="text-sm text-muted-foreground mt-2">{error}</p>}
         </CardContent>
       </Card>
@@ -132,10 +132,13 @@ export function SubscriptionDashboard({ token, onUpgrade }: SubscriptionDashboar
   }
 
   const tierColors = {
-    starter: 'bg-gray-100 text-gray-800 border-gray-300',
-    professional: 'bg-blue-100 text-blue-800 border-blue-300',
-    premium: 'bg-purple-100 text-purple-800 border-purple-300',
-    concierge: 'bg-amber-100 text-amber-800 border-amber-300',
+    starter: 'bg-semantic-surface-2 text-semantic-text-primary border-hairline',
+    professional:
+      'bg-semantic-secondary-muted text-semantic-secondary-muted-foreground border-semantic-secondary-muted',
+    premium:
+      'bg-semantic-success-muted text-semantic-success-muted-foreground border-semantic-success-muted',
+    concierge:
+      'bg-semantic-warning-muted text-semantic-warning-muted-foreground border-semantic-warning-muted',
   };
 
   const tierDisplayName =
@@ -167,7 +170,7 @@ export function SubscriptionDashboard({ token, onUpgrade }: SubscriptionDashboar
               )}
               {subscription.status === 'trialing' && <span>Trial period active</span>}
               {subscription.status === 'past_due' && (
-                <span className="text-red-600">Payment past due</span>
+                <span className="text-semantic-critical">Payment past due</span>
               )}
               {subscription.status === 'canceled' && (
                 <span className="text-muted-foreground">Subscription canceled</span>

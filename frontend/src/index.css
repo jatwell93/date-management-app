@@ -1,7 +1,7 @@
 /*
- * Tailwind CLI input file.
+ * Tailwind pipeline entrypoint.
+ * Source: src/index.css. Generated output: src/tailwind-output.css.
  * Custom properties and theme tokens are defined in globals.css (imported by App.tsx).
- * This file is only used as the input for `npx tailwindcss -i src/index.css -o src/tailwind-output.css`.
  */
 
 @tailwind base;

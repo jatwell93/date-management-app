@@ -10,6 +10,7 @@ import {
   TableHeader,
   TableRow,
 } from '../components/ui/table';
+import { Button } from '../components/ui/button';
 import {
   validateCSVColumns,
   estimateRowCount,
@@ -711,15 +712,15 @@ export const CSVUploadPage: React.FC<{
           : 'Product Catalog Upload (CSV/XLSX/XLS)'}
       </h1>
 
-      <div className="bg-white p-6 rounded-lg shadow-md">
+      <div className="bg-semantic-surface-1 p-6 rounded-lg shadow-md">
         <div className="mb-5 flex flex-wrap gap-2">
           <button
             type="button"
             onClick={() => handleImportTypeChange('product-catalog')}
             className={`px-3 py-2 rounded-md text-sm font-medium transition-colors ${
               importType === 'product-catalog'
-                ? 'bg-inventory-primary-600 text-white'
-                : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
+                ? 'bg-semantic-primary text-white'
+                : 'bg-semantic-surface-2 text-semantic-text-secondary hover:bg-semantic-surface-3'
             }`}
           >
             Product Catalog
@@ -729,25 +730,27 @@ export const CSVUploadPage: React.FC<{
             onClick={() => handleImportTypeChange('expiry-list')}
             className={`px-3 py-2 rounded-md text-sm font-medium transition-colors ${
               importType === 'expiry-list'
-                ? 'bg-inventory-primary-600 text-white'
-                : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
+                ? 'bg-semantic-primary text-white'
+                : 'bg-semantic-surface-2 text-semantic-text-secondary hover:bg-semantic-surface-3'
             }`}
           >
             Expiry List Import
           </button>
         </div>
 
-        <p className="mb-4 text-gray-700">
+        <p className="mb-4 text-semantic-text-secondary">
           {isExpiryImport
             ? 'Upload a CSV, XLSX, or XLS file containing SKU, optional item description, and used-by date data to import expiry list records.'
             : 'Upload a CSV, XLSX, or XLS file containing product information (SKU, Name, Cost, Barcode) to update your product database.'}
         </p>
 
-        <div className="mb-6 p-4 bg-gray-50 rounded-md border border-gray-200">
-          <h3 className="text-lg font-medium text-gray-800 mb-2">Last uploaded file</h3>
+        <div className="mb-6 p-4 bg-semantic-surface-2 rounded-md border border-hairline">
+          <h3 className="text-lg font-medium text-semantic-text-primary mb-2">
+            Last uploaded file
+          </h3>
           {lastUploadSummary ? (
-            <div className="grid gap-1 text-sm text-gray-700 sm:grid-cols-2">
-              <p className="font-medium text-gray-900">{lastUploadSummary.fileName}</p>
+            <div className="grid gap-1 text-sm text-semantic-text-secondary sm:grid-cols-2">
+              <p className="font-medium text-semantic-text-primary">{lastUploadSummary.fileName}</p>
               <p>
                 {lastUploadSummary.importType === 'expiry-list' ? 'Expiry list' : 'Product catalog'}
               </p>
@@ -767,47 +770,52 @@ export const CSVUploadPage: React.FC<{
               <p>Rows rejected: {lastUploadSummary.rejectedCount}</p>
             </div>
           ) : (
-            <p className="text-sm text-gray-600">No completed uploads yet.</p>
+            <p className="text-sm text-semantic-text-secondary">No completed uploads yet.</p>
           )}
         </div>
 
         {/* Column name and format guidelines */}
-        <div className="mb-6 p-4 bg-inventory-primary-50 rounded-md">
-          <h3 className="text-lg font-medium text-inventory-primary-800 mb-2">Format Guidelines</h3>
+        <div className="mb-6 p-4 bg-semantic-primary-muted rounded-md">
+          <h3 className="text-lg font-medium text-semantic-primary-muted-foreground mb-2">
+            Format Guidelines
+          </h3>
           {isExpiryImport ? (
-            <ul className="list-disc pl-5 space-y-1 text-sm text-inventory-primary-700">
+            <ul className="list-disc pl-5 space-y-1 text-sm text-semantic-primary-muted-foreground">
               <li>
-                Required columns: <code className="bg-inventory-primary-100 px-1 rounded">SKU</code>
-                , <code className="bg-inventory-primary-100 px-1 rounded">Used-By Date</code>
+                Required columns:{' '}
+                <code className="bg-semantic-primary-muted px-1 rounded">SKU</code>,{' '}
+                <code className="bg-semantic-primary-muted px-1 rounded">Used-By Date</code>
               </li>
               <li>
                 Optional columns:{' '}
-                <code className="bg-inventory-primary-100 px-1 rounded">Item Description</code>,{' '}
-                <code className="bg-inventory-primary-100 px-1 rounded">Department</code>
+                <code className="bg-semantic-primary-muted px-1 rounded">Item Description</code>,{' '}
+                <code className="bg-semantic-primary-muted px-1 rounded">Department</code>
               </li>
               <li>
-                Accepted date formats: <code className="bg-blue-100 px-1 rounded">dd/mm/yy</code>,{' '}
-                <code className="bg-blue-100 px-1 rounded">dd/mm/yyyy</code>,{' '}
-                <code className="bg-blue-100 px-1 rounded">mm/yy</code>,{' '}
-                <code className="bg-blue-100 px-1 rounded">mm/yyyy</code>,{' '}
-                <code className="bg-blue-100 px-1 rounded">mm-yy</code>,{' '}
-                <code className="bg-blue-100 px-1 rounded">mm-yyyy</code>
+                Accepted date formats:{' '}
+                <code className="bg-semantic-secondary-muted px-1 rounded">dd/mm/yy</code>,{' '}
+                <code className="bg-semantic-secondary-muted px-1 rounded">dd/mm/yyyy</code>,{' '}
+                <code className="bg-semantic-secondary-muted px-1 rounded">mm/yy</code>,{' '}
+                <code className="bg-semantic-secondary-muted px-1 rounded">mm/yyyy</code>,{' '}
+                <code className="bg-semantic-secondary-muted px-1 rounded">mm-yy</code>,{' '}
+                <code className="bg-semantic-secondary-muted px-1 rounded">mm-yyyy</code>
               </li>
               <li>
-                Rejected examples: <code className="bg-red-100 px-1 rounded">12/12</code>{' '}
-                (ambiguous), <code className="bg-red-100 px-1 rounded">Dec/2026</code> (month names
-                unsupported)
+                Rejected examples:{' '}
+                <code className="bg-semantic-critical-muted px-1 rounded">12/12</code> (ambiguous),{' '}
+                <code className="bg-semantic-critical-muted px-1 rounded">Dec/2026</code> (month
+                names unsupported)
               </li>
             </ul>
           ) : (
-            <ul className="list-disc pl-5 space-y-1 text-sm text-inventory-primary-700">
+            <ul className="list-disc pl-5 space-y-1 text-sm text-semantic-primary-muted-foreground">
               <li>
                 Required columns: SKU, Name, Cost, Barcode{' '}
                 <span className="text-xs">
-                  (<code className="bg-inventory-primary-100 px-1 rounded">SKU</code>,{' '}
-                  <code className="bg-inventory-primary-100 px-1 rounded">Name</code>,{' '}
-                  <code className="bg-inventory-primary-100 px-1 rounded">Cost</code>,{' '}
-                  <code className="bg-inventory-primary-100 px-1 rounded">Barcode</code>)
+                  (<code className="bg-semantic-primary-muted px-1 rounded">SKU</code>,{' '}
+                  <code className="bg-semantic-primary-muted px-1 rounded">Name</code>,{' '}
+                  <code className="bg-semantic-primary-muted px-1 rounded">Cost</code>,{' '}
+                  <code className="bg-semantic-primary-muted px-1 rounded">Barcode</code>)
                 </span>
               </li>
               <li>
@@ -816,17 +824,20 @@ export const CSVUploadPage: React.FC<{
               </li>
               <li>
                 Cost format: Use decimal numbers like{' '}
-                <code className="bg-blue-100 px-1 rounded">1.99</code> or{' '}
-                <code className="bg-blue-100 px-1 rounded">19.99</code> (no currency symbols)
+                <code className="bg-semantic-secondary-muted px-1 rounded">1.99</code> or{' '}
+                <code className="bg-semantic-secondary-muted px-1 rounded">19.99</code> (no currency
+                symbols)
               </li>
             </ul>
           )}
         </div>
 
         {isExpiryImport && (
-          <div className="mb-6 p-4 bg-gray-50 rounded-md border border-gray-200">
-            <h3 className="text-lg font-medium text-gray-800 mb-2">Download Import Templates</h3>
-            <p className="text-sm text-gray-600 mb-3">
+          <div className="mb-6 p-4 bg-semantic-surface-2 rounded-md border border-hairline">
+            <h3 className="text-lg font-medium text-semantic-text-primary mb-2">
+              Download Import Templates
+            </h3>
+            <p className="text-sm text-semantic-text-secondary mb-3">
               Templates include required fields, accepted date examples, and rejected-format
               guidance.
             </p>
@@ -834,21 +845,21 @@ export const CSVUploadPage: React.FC<{
               <button
                 type="button"
                 onClick={() => downloadExpiryTemplate('csv')}
-                className="px-3 py-2 rounded-md bg-inventory-primary-600 text-white text-sm font-medium hover:bg-inventory-primary-700"
+                className="px-3 py-2 rounded-md bg-semantic-primary text-white text-sm font-medium hover:bg-semantic-primary-hover"
               >
                 Download CSV Template
               </button>
               <button
                 type="button"
                 onClick={() => downloadExpiryTemplate('xlsx')}
-                className="px-3 py-2 rounded-md bg-inventory-primary-600 text-white text-sm font-medium hover:bg-inventory-primary-700"
+                className="px-3 py-2 rounded-md bg-semantic-primary text-white text-sm font-medium hover:bg-semantic-primary-hover"
               >
                 Download XLSX Template
               </button>
               <button
                 type="button"
                 onClick={() => downloadExpiryTemplate('xls')}
-                className="px-3 py-2 rounded-md bg-inventory-primary-600 text-white text-sm font-medium hover:bg-inventory-primary-700"
+                className="px-3 py-2 rounded-md bg-semantic-primary text-white text-sm font-medium hover:bg-semantic-primary-hover"
               >
                 Download XLS Template
               </button>
@@ -858,7 +869,10 @@ export const CSVUploadPage: React.FC<{
 
         <form onSubmit={handleSubmit}>
           <div className="mb-4">
-            <label htmlFor={fileInputId} className="block text-sm font-medium text-gray-700 mb-2">
+            <label
+              htmlFor={fileInputId}
+              className="block text-sm font-medium text-semantic-text-secondary mb-2"
+            >
               CSV/XLSX/XLS File
             </label>
             <div className="flex items-center">
@@ -867,18 +881,20 @@ export const CSVUploadPage: React.FC<{
                 type="file"
                 accept=".csv,text/csv,.xlsx,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet,.xls,application/vnd.ms-excel"
                 onChange={handleFileChange}
-                className="block w-full text-sm text-gray-500
+                className="block w-full text-sm text-semantic-text-tertiary
                   file:mr-4 file:py-2 file:px-4
                   file:rounded-md file:border-0
                   file:text-sm file:font-semibold
-                  file:bg-inventory-primary-50 file:text-inventory-primary-700
-                  hover:file:bg-inventory-primary-100"
+                  file:bg-semantic-primary-muted file:text-semantic-primary-muted-foreground
+                  hover:file:bg-semantic-primary-muted"
               />
               {fileName && (
-                <span className="ml-4 text-sm text-gray-600 truncate max-w-xs">{fileName}</span>
+                <span className="ml-4 text-sm text-semantic-text-secondary truncate max-w-xs">
+                  {fileName}
+                </span>
               )}
             </div>
-            <p className="mt-2 text-sm text-gray-500">
+            <p className="mt-2 text-sm text-semantic-text-tertiary">
               {isExpiryImport
                 ? 'The file should include SKU and Used-By Date columns. When the Department column is omitted, items are assigned to Unallocated.'
                 : 'The CSV/XLSX/XLS file should contain columns: SKU, Name, Cost, and Barcode (in that order).'}
@@ -923,12 +939,14 @@ export const CSVUploadPage: React.FC<{
 
           {/* Column Validation Warning */}
           {columnValidation && !columnValidation.isValid && (
-            <div className="mb-4 p-4 bg-yellow-50 border border-yellow-200 rounded-md">
-              <h4 className="font-semibold text-yellow-800 mb-2">⚠️ Column Validation Warning</h4>
-              <div className="text-sm text-yellow-700 whitespace-pre-line">
+            <div className="mb-4 p-4 bg-semantic-warning-muted border border-semantic-warning-muted rounded-md">
+              <h4 className="font-semibold text-semantic-warning-muted-foreground mb-2">
+                ⚠️ Column Validation Warning
+              </h4>
+              <div className="text-sm text-semantic-warning-muted-foreground whitespace-pre-line">
                 {formatColumnValidationError(columnValidation)}
               </div>
-              <p className="text-xs text-yellow-600 mt-2">
+              <p className="text-xs text-semantic-warning mt-2">
                 Upload will be blocked until column names are corrected.
               </p>
             </div>
@@ -936,8 +954,8 @@ export const CSVUploadPage: React.FC<{
 
           {/* Column Validation Success */}
           {columnValidation && columnValidation.isValid && selectedFile && (
-            <div className="mb-4 p-3 bg-green-50 border border-green-200 rounded-md">
-              <p className="text-sm text-green-800">
+            <div className="mb-4 p-3 bg-semantic-success-muted border border-semantic-success-muted rounded-md">
+              <p className="text-sm text-semantic-success-muted-foreground">
                 ✓ All required columns found:{' '}
                 {Object.values(columnValidation.foundColumns).join(', ')}
               </p>
@@ -946,10 +964,14 @@ export const CSVUploadPage: React.FC<{
 
           {/* Row Estimate Warning */}
           {rowEstimate && rowEstimate.showWarning && (
-            <div className="mb-4 p-4 bg-blue-50 border border-blue-200 rounded-md">
-              <h4 className="font-semibold text-blue-800 mb-1">ℹ️ Large File Detected</h4>
-              <p className="text-sm text-blue-700">{rowEstimate.warningMessage}</p>
-              <p className="text-xs text-blue-600 mt-1">
+            <div className="mb-4 p-4 bg-semantic-secondary-muted border border-semantic-secondary-muted rounded-md">
+              <h4 className="font-semibold text-semantic-secondary-muted-foreground mb-1">
+                ℹ️ Large File Detected
+              </h4>
+              <p className="text-sm text-semantic-secondary-muted-foreground">
+                {rowEstimate.warningMessage}
+              </p>
+              <p className="text-xs text-semantic-secondary mt-1">
                 The upload will proceed normally, but please be patient during processing.
               </p>
             </div>
@@ -958,12 +980,16 @@ export const CSVUploadPage: React.FC<{
           {isUploading && (
             <div className="mb-4">
               <div className="flex items-center justify-between mb-1">
-                <span className="text-sm font-medium text-gray-700">{progressMessage}</span>
-                <span className="text-sm font-medium text-gray-700">{uploadProgress}%</span>
+                <span className="text-sm font-medium text-semantic-text-secondary">
+                  {progressMessage}
+                </span>
+                <span className="text-sm font-medium text-semantic-text-secondary">
+                  {uploadProgress}%
+                </span>
               </div>
-              <div className="w-full bg-gray-200 rounded-full h-2.5">
+              <div className="w-full bg-semantic-surface-3 rounded-full h-2.5">
                 <div
-                  className="bg-inventory-primary-600 h-2.5 rounded-full transition-all duration-300 ease-in-out"
+                  className="bg-semantic-primary h-2.5 rounded-full transition-all duration-300 ease-in-out"
                   style={{ width: `${uploadProgress}%` }}
                 ></div>
               </div>
@@ -971,35 +997,27 @@ export const CSVUploadPage: React.FC<{
           )}
 
           <div className="flex items-center space-x-4">
-            <button
+            <Button
               type="submit"
               disabled={isUploading || !selectedFile}
-              className={`px-4 py-2 rounded-md text-white font-medium ${
-                isUploading || !selectedFile
-                  ? 'bg-gray-400 cursor-not-allowed'
-                  : 'bg-inventory-primary-600 hover:bg-inventory-primary-700'
-              }`}
+              className="px-4 py-2 font-medium"
             >
               {isUploading
                 ? 'Uploading...'
                 : isExpiryImport
                   ? 'Upload Expiry List'
                   : 'Upload CSV/XLSX/XLS'}
-            </button>
+            </Button>
 
-            <button
-              type="button"
-              onClick={handleReset}
-              className="px-4 py-2 bg-gray-200 text-gray-700 rounded-md hover:bg-gray-300"
-            >
+            <Button type="button" onClick={handleReset} variant="neutral" className="px-4 py-2">
               Reset
-            </button>
+            </Button>
           </div>
         </form>
 
         {uploadResult && (
           <div
-            className={`mt-6 p-4 rounded-md ${uploadResult.success ? 'bg-inventory-success-50 text-inventory-success-800' : 'bg-inventory-error-50 text-inventory-error-800'}`}
+            className={`mt-6 p-4 rounded-md ${uploadResult.success ? 'bg-semantic-success-muted text-semantic-success-muted-foreground' : 'bg-semantic-critical-muted text-semantic-critical-muted-foreground'}`}
           >
             <h3 className="font-bold mb-2">
               {uploadResult.success ? 'Upload Successful!' : 'Upload Failed'}
@@ -1043,7 +1061,7 @@ export const CSVUploadPage: React.FC<{
             {isExpiryImport &&
               uploadResult.rejectedRows &&
               uploadResult.rejectedRows.length > 0 && (
-                <div className="mt-3 p-3 bg-white bg-opacity-60 rounded border border-inventory-error-200">
+                <div className="mt-3 p-3 bg-semantic-surface-1 bg-opacity-60 rounded border border-semantic-critical-muted">
                   <p className="text-sm font-medium mb-2">Rejected rows</p>
                   <div className="space-y-2">
                     {uploadResult.rejectedRows.map((row) => (
@@ -1064,13 +1082,13 @@ export const CSVUploadPage: React.FC<{
 
             {/* Column Usage Summary */}
             {uploadResult.columnsUsed && uploadResult.columnsUsed.length > 0 && (
-              <div className="mt-3 p-3 bg-white bg-opacity-50 rounded border border-inventory-success-200">
+              <div className="mt-3 p-3 bg-semantic-surface-1 bg-opacity-50 rounded border border-semantic-success-muted">
                 <p className="text-sm font-medium">Column Summary:</p>
                 <p className="text-sm">
                   ✓ Used: <span className="font-mono">{uploadResult.columnsUsed.join(', ')}</span>
                 </p>
                 {uploadResult.columnsIgnored !== undefined && uploadResult.columnsIgnored > 0 && (
-                  <p className="text-sm text-inventory-success-700">
+                  <p className="text-sm text-semantic-success-muted-foreground">
                     ℹ️ Ignored {uploadResult.columnsIgnored} extra column
                     {uploadResult.columnsIgnored > 1 ? 's' : ''}
                   </p>
@@ -1089,10 +1107,12 @@ export const CSVUploadPage: React.FC<{
                           {error} -{' '}
                           <button
                             type="button"
-                            className="text-inventory-primary-600 hover:underline"
+                            className="text-semantic-primary hover:underline"
                             onClick={() => {
                               document
-                                .querySelector('h3.text-lg.font-medium.text-inventory-primary-800')
+                                .querySelector(
+                                  'h3.text-lg.font-medium.text-semantic-primary-muted-foreground',
+                                )
                                 ?.scrollIntoView({ behavior: 'smooth' });
                             }}
                           >
@@ -1104,10 +1124,12 @@ export const CSVUploadPage: React.FC<{
                           {error} -{' '}
                           <button
                             type="button"
-                            className="text-inventory-primary-600 hover:underline"
+                            className="text-semantic-primary hover:underline"
                             onClick={() => {
                               document
-                                .querySelector('h3.text-lg.font-medium.text-inventory-primary-800')
+                                .querySelector(
+                                  'h3.text-lg.font-medium.text-semantic-primary-muted-foreground',
+                                )
                                 ?.scrollIntoView({ behavior: 'smooth' });
                             }}
                           >
@@ -1128,10 +1150,10 @@ export const CSVUploadPage: React.FC<{
               returnUrl.startsWith('/') &&
               !returnUrl.startsWith('//') &&
               !/^[a-zA-Z][a-zA-Z\d+\-.]*:/.test(returnUrl) && (
-                <div className="mt-6 pt-4 border-t border-inventory-success-200">
+                <div className="mt-6 pt-4 border-t border-semantic-success-muted">
                   <button
                     onClick={() => navigate(returnUrl)}
-                    className="w-full py-2 bg-inventory-success-600 text-white rounded-md font-semibold hover:bg-inventory-success-700 transition"
+                    className="w-full py-2 bg-semantic-success text-white rounded-md font-semibold hover:bg-semantic-success-hover transition"
                   >
                     Continue to next step
                   </button>

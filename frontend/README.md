@@ -154,7 +154,8 @@ npm install
 npm start
 ```
 
-Opens [http://localhost:3000](http://localhost:3000) with hot reload.
+Rebuilds the generated Tailwind stylesheet, then opens [http://localhost:3002](http://localhost:3002)
+with hot reload.
 
 ### Testing
 
