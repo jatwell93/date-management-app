@@ -43,6 +43,7 @@
     "xlsx": "^0.18.5"
   },
   "scripts": {
+    "prestart": "npm run tailwind:build",
     "start": "set PORT=3002 && craco start",
     "build": "craco build",
     "test": "craco test",
