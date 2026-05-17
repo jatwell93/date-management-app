@@ -14,13 +14,13 @@
 
 ## 1. Wave 1 — Navigation Shell & Token Compliance Infrastructure
 
-- [ ] 1.1 Migrate navigation shell (header, sidebar, footer) in `frontend/src/App.tsx` to use semantic tokens. Replace all `inventory-*` Tailwind classes and hardcoded color references with `semantic-*` equivalents. Apply primary teal for navigation/CTAs/selection states.
-- [ ] 1.2 Update `frontend/src/components/LoginPage.tsx` and `frontend/src/components/ClerkAuthPage.tsx` to use semantic tokens for all styling.
-- [ ] 1.3 Implement ESLint rule or custom lint script (`frontend/scripts/check-token-compliance.js`) that scans component files for non-token styling patterns: hardcoded hex colors in `style` attributes, `className` strings containing raw hex, and direct `inventory-*` class usage where semantic tokens exist. Rule must report file, line, and suggested token replacement.
-- [ ] 1.4 Add the compliance check to CI pipeline (GitHub Actions workflow or pre-commit hook via `lint-staged`). All PRs must pass check before merge. Zero new non-token styles mergeable.
-- [ ] 1.5 Create `frontend/TOKENS_COMPLIANCE_GUIDE.md` explaining the compliance rule, approved token references, and exceptions process for cases where raw values are necessary (e.g., third-party library overrides).
-- [ ] 1.6 Run compliance check against existing codebase. Document current non-compliance count as baseline. Do not fix all at once — waves will address incrementally.
-- [ ] 1.7 Add component-level tests: create `frontend/src/components/__tests__/semantic-tokens.test.ts` verifying token exports match design-tokens.json values, semantic token mappings resolve to correct brand tokens, and dark mode variants apply correctly.
+- [x] 1.1 Migrate navigation shell (header, sidebar, footer) in `frontend/src/App.tsx` to use semantic tokens. Replace all `inventory-*` Tailwind classes and hardcoded color references with `semantic-*` equivalents. Apply primary teal for navigation/CTAs/selection states.
+- [x] 1.2 Update `frontend/src/components/LoginPage.tsx` and `frontend/src/components/ClerkAuthPage.tsx` to use semantic tokens for all styling.
+- [x] 1.3 Implement ESLint rule or custom lint script (`frontend/scripts/check-token-compliance.js`) that scans component files for non-token styling patterns: hardcoded hex colors in `style` attributes, `className` strings containing raw hex, and direct `inventory-*` class usage where semantic tokens exist. Rule must report file, line, and suggested token replacement.
+- [x] 1.4 Add the compliance check to CI pipeline (GitHub Actions workflow or pre-commit hook via `lint-staged`). All PRs must pass check before merge. Zero new non-token styles mergeable.
+- [x] 1.5 Create `frontend/TOKENS_COMPLIANCE_GUIDE.md` explaining the compliance rule, approved token references, and exceptions process for cases where raw values are necessary (e.g., third-party library overrides).
+- [x] 1.6 Run compliance check against existing codebase. Document current non-compliance count as baseline. Do not fix all at once — waves will address incrementally.
+- [x] 1.7 Add component-level tests: create `frontend/src/components/__tests__/semantic-tokens.test.ts` verifying token exports match design-tokens.json values, semantic token mappings resolve to correct brand tokens, and dark mode variants apply correctly.
 - [ ] 1.8 Visual regression verification for Wave 1: capture before/after screenshots of navigation shell (header, sidebar, footer) and login/auth pages. Target <5% pixel difference. Design owner sign-off required before proceeding to Wave 2.
 
 ## 2. Wave 2 — Forms, Buttons, Alerts, Badges

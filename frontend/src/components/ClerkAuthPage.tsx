@@ -5,7 +5,7 @@ export function ClerkSignUpPage() {
   return (
     <div
       data-testid="clerk-auth-shell"
-      className="flex items-center justify-center min-h-screen bg-gray-100 overflow-x-hidden px-4"
+      className="flex items-center justify-center min-h-screen bg-background overflow-x-hidden px-4"
     >
       <div data-testid="clerk-auth-card" className="w-full max-w-full sm:max-w-md">
         <Card className="mb-4">
@@ -28,7 +28,7 @@ export function ClerkSignInPage() {
   return (
     <div
       data-testid="clerk-auth-shell"
-      className="flex items-center justify-center min-h-screen bg-gray-100 overflow-x-hidden px-4"
+      className="flex items-center justify-center min-h-screen bg-background overflow-x-hidden px-4"
     >
       <div data-testid="clerk-auth-card" className="w-full max-w-full sm:max-w-md">
         <Card>

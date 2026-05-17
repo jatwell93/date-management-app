@@ -528,11 +528,11 @@ function AppContent({
                       <DropdownMenuTrigger className="hover:opacity-90 transition-opacity focus:outline-none bg-transparent border-none cursor-pointer">
                         Reports
                       </DropdownMenuTrigger>
-                      <DropdownMenuContent className="bg-white text-gray-800 border border-gray-200 rounded-md shadow-lg p-1 mt-1">
+                      <DropdownMenuContent className="bg-popover text-popover-foreground border border-border rounded-md shadow-lg p-1 mt-1">
                         <DropdownMenuItem asChild>
                           <Link
                             to="/reports"
-                            className="block px-4 py-2 hover:bg-gray-100 rounded-sm transition-colors"
+                            className="block px-4 py-2 hover:bg-accent rounded-sm transition-colors"
                           >
                             Overview Reports
                           </Link>
@@ -540,7 +540,7 @@ function AppContent({
                         <DropdownMenuItem asChild>
                           <Link
                             to="/detailed-expiry-report"
-                            className="block px-4 py-2 hover:bg-gray-100 rounded-sm transition-colors"
+                            className="block px-4 py-2 hover:bg-accent rounded-sm transition-colors"
                           >
                             Detailed Expiry Report
                           </Link>
@@ -548,7 +548,7 @@ function AppContent({
                         <DropdownMenuItem asChild>
                           <Link
                             to="/expired-items"
-                            className="block px-4 py-2 hover:bg-gray-100 rounded-sm transition-colors"
+                            className="block px-4 py-2 hover:bg-accent rounded-sm transition-colors"
                           >
                             Expired Items
                           </Link>
@@ -556,7 +556,7 @@ function AppContent({
                         <DropdownMenuItem asChild>
                           <Link
                             to="/usage-report"
-                            className="block px-4 py-2 hover:bg-gray-100 rounded-sm transition-colors"
+                            className="block px-4 py-2 hover:bg-accent rounded-sm transition-colors"
                           >
                             Usage Report
                           </Link>
@@ -569,11 +569,11 @@ function AppContent({
                       <DropdownMenuTrigger className="hover:opacity-90 transition-opacity focus:outline-none bg-transparent border-none cursor-pointer">
                         Account
                       </DropdownMenuTrigger>
-                      <DropdownMenuContent className="bg-white text-gray-800 border border-gray-200 rounded-md shadow-lg p-1 mt-1">
+                      <DropdownMenuContent className="bg-popover text-popover-foreground border border-border rounded-md shadow-lg p-1 mt-1">
                         <DropdownMenuItem asChild>
                           <Link
                             to="/profile"
-                            className="block px-4 py-2 hover:bg-gray-100 rounded-sm transition-colors"
+                            className="block px-4 py-2 hover:bg-accent rounded-sm transition-colors"
                           >
                             Profile
                           </Link>
@@ -581,7 +581,7 @@ function AppContent({
                         <DropdownMenuItem asChild>
                           <Link
                             to="/subscription"
-                            className="block px-4 py-2 hover:bg-gray-100 rounded-sm transition-colors"
+                            className="block px-4 py-2 hover:bg-accent rounded-sm transition-colors"
                           >
                             Billing
                           </Link>
@@ -702,7 +702,7 @@ function AppContent({
                       Usage Report
                     </Link>
                   </li>
-                  <li className="border-t border-gray-600 pt-2 mt-2">
+                  <li className="border-t border-border pt-2 mt-2">
                     <Link
                       to="/markdown-calculator"
                       className="block hover:opacity-90 transition-opacity"
@@ -711,7 +711,7 @@ function AppContent({
                       Markdown Calculator
                     </Link>
                   </li>
-                  <li className="border-t border-gray-600 pt-2 mt-2">
+                  <li className="border-t border-border pt-2 mt-2">
                     <div className="text-xs font-semibold uppercase tracking-wide opacity-75">
                       Account
                     </div>
