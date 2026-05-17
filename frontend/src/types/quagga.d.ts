@@ -4,6 +4,7 @@ declare module 'quagga' {
     start(): void;
     stop(): void;
     onDetected(callback: (data: unknown) => void): void;
+    offDetected(callback: (data: unknown) => void): void;
     onProcessed(callback: (data: unknown) => void): void;
     Result: unknown;
   }
