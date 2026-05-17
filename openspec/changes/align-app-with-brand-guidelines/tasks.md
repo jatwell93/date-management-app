@@ -96,3 +96,5 @@
 - [ ] 7.9 Create `frontend/TOKEN_MIGRATION_STRATEGY.md` if not created in 0.9: document migration phases, codemod commands for bulk replacement, rollback procedure if issues arise, and timeline for removing deprecated `inventory-*` tokens.
 - [ ] 7.10 Final documentation sync: ensure all created docs (`SEMANTIC_COLORS_REFERENCE.md`, `TOKENS_COMPLIANCE_GUIDE.md`, `AMBER_USAGE_GUIDE.md`, `scanner-brand-exceptions.md`, `docs/voice-audit.md`, `TOKEN_MIGRATION_STRATEGY.md`) are consistent with each other and with the implemented code. Update any discrepancies.
 - [ ] 7.11 Verify design owner sign-off is recorded for all 4 waves (Wave 1: Task 1.8, Wave 2: Task 2.7, Wave 3: Task 3.6, Wave 4: Task 4.10) and for amber restraint review (Task 6.2). Compile sign-off log.
+- [ ] 7.12 Use `/expect` to have the AI agent run UI validation with Expect + Playwright and confirm brand updates are accurate and error-free.
+- [ ] 7.13 Run `npx -y --verbose react-doctor@latest .` and action all findings before rollout sign-off.
