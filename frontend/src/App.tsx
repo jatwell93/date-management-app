@@ -47,6 +47,7 @@ import { HandheldLayout } from './layouts/HandheldLayout';
 import { API_AUTH_UNAUTHORIZED_EVENT, API_BASE_URL } from './lib/api.service';
 import './globals.css';
 import './styles/handheld.css';
+import './theme/scanner-adaptation.css';
 
 // Helper function to check for forceHandheld query parameter
 const checkForceHandheldQueryParam = () => {
@@ -95,6 +96,41 @@ function isExpectQaStatusEnabled() {
   return process.env.NODE_ENV !== 'production' && process.env.REACT_APP_EXPECT_QA_STATUS === 'true';
 }
 
+function useExpectQaPanelState() {
+  const [isCompactViewport, setIsCompactViewport] = useState(
+    typeof window !== 'undefined' ? window.innerWidth < 640 : false,
+  );
+  const [isExpanded, setIsExpanded] = useState(
+    typeof window !== 'undefined' ? window.innerWidth >= 640 : true,
+  );
+
+  useEffect(() => {
+    const handleResize = () => {
+      const compact = window.innerWidth < 640;
+      setIsCompactViewport(compact);
+      setIsExpanded(!compact);
+    };
+
+    window.addEventListener('resize', handleResize);
+    return () => window.removeEventListener('resize', handleResize);
+  }, []);
+
+  return { isCompactViewport, isExpanded, setIsExpanded };
+}
+
+function ExpectQaToggle({ onOpen }: { onOpen: () => void }) {
+  return (
+    <button
+      type="button"
+      aria-label="Open QA diagnostics"
+      onClick={onOpen}
+      className="fixed bottom-3 left-3 z-50 rounded-full border border-amber-300 bg-amber-50 px-3 py-2 text-xs font-semibold text-amber-950 shadow-lg"
+    >
+      QA
+    </button>
+  );
+}
+
 interface ExpectQaStatusProps {
   isLoggedIn: boolean;
   isFullySignedIn: boolean;
@@ -122,8 +158,14 @@ function ExpectQaStatus({
   bootstrapError,
   hasToken,
 }: ExpectQaStatusProps) {
+  const { isCompactViewport, isExpanded, setIsExpanded } = useExpectQaPanelState();
+
   if (!isExpectQaStatusEnabled()) {
     return null;
+  }
+
+  if (isCompactViewport && !isExpanded) {
+    return <ExpectQaToggle onOpen={() => setIsExpanded(true)} />;
   }
 
   return (
@@ -132,7 +174,19 @@ function ExpectQaStatus({
       data-testid="expect-qa-status"
       className="fixed bottom-3 right-3 z-50 max-w-sm rounded-md border border-amber-300 bg-amber-50 p-3 text-xs text-amber-950 shadow-lg"
     >
-      <div className="font-semibold">Expect QA</div>
+      <div className="flex items-center justify-between gap-3">
+        <div className="font-semibold">Expect QA</div>
+        {isCompactViewport && (
+          <button
+            type="button"
+            aria-label="Close QA diagnostics"
+            onClick={() => setIsExpanded(false)}
+            className="rounded border border-amber-300 px-2 py-1 font-semibold"
+          >
+            Close
+          </button>
+        )}
+      </div>
       <dl className="mt-2 grid grid-cols-[auto_1fr] gap-x-2 gap-y-1">
         <dt>logged-in:</dt>
         <dd data-testid="expect-qa-logged-in">{isLoggedIn ? 'yes' : 'no'}</dd>

@@ -259,6 +259,22 @@ describe('App Expect QA diagnostics', () => {
     expect(screen.getByTestId('expect-qa-token')).toHaveTextContent('present');
     expect(screen.getByTestId('expect-qa-api-base-url')).toHaveTextContent('http://localhost:3001');
   });
+
+  it('collapses QA diagnostics behind a toggle on narrow screens', () => {
+    process.env.REACT_APP_EXPECT_QA_STATUS = 'true';
+    window.innerWidth = 480;
+    mockSignedInContext({ userRole: 'admin' });
+
+    render(<App />);
+
+    expect(screen.queryByTestId('expect-qa-status')).not.toBeInTheDocument();
+    expect(screen.getByRole('button', { name: /Open QA diagnostics/i })).toHaveClass('left-3');
+
+    fireEvent.click(screen.getByRole('button', { name: /Open QA diagnostics/i }));
+
+    expect(screen.getByTestId('expect-qa-status')).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: /Close QA diagnostics/i })).toBeInTheDocument();
+  });
 });
 
 export {};

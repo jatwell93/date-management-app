@@ -2,6 +2,9 @@
  * Handheld Styling for PDT Devices
  * Optimizes UI for 5" screens (≤600×900px) including typography, touch targets, and spacing
  * Used by Zebra TC21-HC, CipherLab RS36, Honeywell CT45 XP, and similar devices
+ *
+ * Deprecated for scanner-specific behavior: use `theme/scanner-adaptation.css`
+ * for scan-surface touch targets, focus rings, motion, and scanner layout rules.
  */
 
 @media (max-width: 600px) and (max-height: 900px) {

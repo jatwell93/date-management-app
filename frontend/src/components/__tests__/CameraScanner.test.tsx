@@ -138,7 +138,7 @@ describe('CameraScanner', () => {
     render(<CameraScanner onDetected={mockOnDetected} />);
 
     // Verify error and retry button
-    const retryButton = screen.getByText(/Try Again/i);
+    const retryButton = screen.getByRole('button', { name: /Try Again/i });
     expect(retryButton).toBeInTheDocument();
 
     // Clear mocks to track calls during reset

@@ -1,5 +1,6 @@
 import { useState } from 'react';
 import { CameraScanner } from './CameraScanner';
+import { ScannerState, ScannerStateIndicator } from './ScannerStateIndicator';
 import { useHardwareScan } from '../hooks/useHardwareScan';
 import { HardwareScanResult } from '../types/handheld';
 
@@ -19,6 +20,7 @@ export function Scanner({
 }: ScannerProps) {
   const [input, setInput] = useState('');
   const [useCamera, setUseCamera] = useState(defaultMode === 'camera');
+  const [scannerState, setScannerState] = useState<ScannerState>('ready');
 
   // Initialize hardware scan hook - converts barcode string to HardwareScanResult
   useHardwareScan(
@@ -29,6 +31,7 @@ export function Scanner({
         source: 'hardware',
       };
       onScan(result);
+      setScannerState('scanned');
     },
     { timingThreshold: 50 },
   );
@@ -46,6 +49,7 @@ export function Scanner({
         source: 'manual',
       };
       onScan(result);
+      setScannerState('scanned');
       setInput('');
     }
   };
@@ -57,6 +61,7 @@ export function Scanner({
       source: 'camera',
     };
     onScan(result);
+    setScannerState('scanned');
     // ✓ Only return to text input if NOT in continuous mode (fixes 17.6)
     if (!continuous) {
       setUseCamera(false);
@@ -64,7 +69,8 @@ export function Scanner({
   };
 
   return (
-    <div className={isHandheld ? 'h-full flex flex-col' : ''}>
+    <div className={isHandheld ? 'h-full flex flex-col scanner-context' : ''}>
+      {!useCamera && <ScannerStateIndicator state={scannerState} />}
       {!useCamera ? (
         <form onSubmit={handleFormSubmit} className={isHandheld ? 'flex-1 flex flex-col p-3' : ''}>
           <input
@@ -115,6 +121,8 @@ export function Scanner({
           <div className={isHandheld ? 'flex-1 camera-scanner-fullscreen' : ''}>
             <CameraScanner
               onDetected={handleScan}
+              onScannerReady={() => setScannerState('ready')}
+              onScannerReset={() => setScannerState('ready')}
               isHandheld={isHandheld}
               continuous={continuous} // ✓ Pass continuous mode (fixes 17.6)
             />

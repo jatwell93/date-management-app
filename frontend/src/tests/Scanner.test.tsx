@@ -65,6 +65,7 @@ describe('Scanner', () => {
     render(<Scanner onScan={mockOnScan} />);
     expect(screen.getByPlaceholderText(/Scan barcode or enter manually/i)).toBeInTheDocument();
     expect(screen.getByRole('button', { name: /Submit/i })).toBeInTheDocument();
+    expect(screen.getByTestId('scanner-state-indicator')).toBeInTheDocument();
   });
 
   it('calls onScan with the entered barcode when button is clicked', () => {
@@ -83,6 +84,7 @@ describe('Scanner', () => {
       }),
     );
     expect(screen.getByPlaceholderText(/Scan barcode or enter manually/i)).toHaveValue(''); // Input should be cleared
+    expect(screen.getByText(/Item scanned/i)).toBeInTheDocument();
   });
 
   it('calls onScan with the entered barcode when form is submitted', () => {
@@ -125,6 +127,7 @@ describe('Scanner', () => {
       render(<Scanner onScan={mockOnScan} defaultMode="camera" />);
       expect(screen.getAllByText(/Camera Scanner/i).length).toBeGreaterThan(0);
       expect(screen.getByRole('button', { name: /Use Text Input/i })).toBeInTheDocument();
+      expect(screen.queryByTestId('scanner-state-indicator')).not.toBeInTheDocument();
     });
   });
 

@@ -3,6 +3,7 @@ import Quagga from 'quagga';
 import * as Sentry from '@sentry/react';
 import { triggerHaptic } from '../lib/haptic';
 import { TIMING_CONSTANTS } from '../config/handheld'; // ✓ Import constants (fixes 17.9)
+import { ScannerStateIndicator, ScannerState } from './ScannerStateIndicator';
 
 interface CameraScannerProps {
   onDetected: (code: string) => void;
@@ -21,6 +22,7 @@ export function CameraScanner({
 }: CameraScannerProps) {
   const videoRef = useRef<HTMLDivElement>(null);
   const [error, setError] = useState<string | null>(null);
+  const [scannerState, setScannerState] = useState<ScannerState>('ready');
   const recentScansRef = useRef<Set<string>>(new Set());
 
   // Debounce utility to track recent barcode scans (last 2 seconds)
@@ -77,10 +79,12 @@ export function CameraScanner({
             tags: { feature: 'camera-scanner' },
           });
           setError('Error accessing camera. Please ensure you have granted camera permissions.');
+          setScannerState('error');
           return;
         }
 
         Quagga.start();
+        setScannerState('scanning');
         onScannerReady?.();
       },
     );
@@ -98,10 +102,12 @@ export function CameraScanner({
 
       // Skip duplicate barcodes within 2-second window
       if (isDuplicateScan(barcode)) {
+        setScannerState('warning');
         return;
       }
 
       onDetected(barcode);
+      setScannerState('scanned');
 
       // Only stop the scanner after detection if not in continuous mode
       // Wait 1 second before stopping to allow UI updates (fixes 17.9)
@@ -126,6 +132,7 @@ export function CameraScanner({
 
   const handleResetScanner = () => {
     setError(null); // Clear any error when resetting
+    setScannerState('ready');
     if (Quagga) {
       Quagga.stop();
     }
@@ -139,17 +146,20 @@ export function CameraScanner({
 
   if (error) {
     return (
-      <div className={`camera-scanner ${isHandheld ? 'h-full flex flex-col' : ''}`}>
+      <div className={`camera-scanner ${isHandheld ? 'h-full flex flex-col scanner-context' : ''}`}>
+        <ScannerStateIndicator state={scannerState} />
         <div
-          className={`w-full bg-gray-200 flex items-center justify-center rounded border border-dashed ${
+          className={`w-full bg-muted flex items-center justify-center rounded border border-dashed ${
             isHandheld ? 'flex-1 min-h-[300px]' : 'h-64'
           }`}
         >
           <div className="text-center p-4">
-            <p className={`text-red-500 font-medium mb-2 ${isHandheld ? 'text-lg' : ''}`}>
+            <p className={`text-semantic-critical font-medium mb-2 ${isHandheld ? 'text-lg' : ''}`}>
               Camera Error
             </p>
-            <p className={`text-gray-600 ${isHandheld ? 'text-base' : 'text-sm'}`}>{error}</p>
+            <p className={`text-semantic-text-secondary ${isHandheld ? 'text-base' : 'text-sm'}`}>
+              {error}
+            </p>
             <button
               type="button"
               onClick={handleResetScanner}
@@ -166,7 +176,8 @@ export function CameraScanner({
   }
 
   return (
-    <div className={`camera-scanner ${isHandheld ? 'h-full flex flex-col' : ''}`}>
+    <div className={`camera-scanner ${isHandheld ? 'h-full flex flex-col scanner-context' : ''}`}>
+      <ScannerStateIndicator state={scannerState} />
       <div
         ref={videoRef}
         className={`w-full bg-black flex items-center justify-center rounded ${

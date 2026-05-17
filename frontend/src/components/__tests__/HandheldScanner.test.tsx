@@ -103,6 +103,7 @@ describe('HandheldScanner', () => {
     // Check for handheld-specific classes
     const handheldScanner = container.firstChild;
     expect(handheldScanner).toHaveClass('handheld-scanner');
+    expect(handheldScanner).toHaveClass('scanner-context');
   });
 
   it('passes onScan prop to Scanner component', () => {

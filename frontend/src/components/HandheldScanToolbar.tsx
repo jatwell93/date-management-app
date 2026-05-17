@@ -29,28 +29,30 @@ export const HandheldScanToolbar: React.FC<HandheldScanToolbarProps> = ({
   const getSyncStatusColor = () => {
     switch (syncStatus) {
       case 'syncing':
-        return 'text-blue-600';
+        return 'text-semantic-secondary';
       case 'synced':
-        return 'text-green-600';
+        return 'text-semantic-success';
       case 'offline':
-        return 'text-yellow-600';
+        return 'text-semantic-warning';
       case 'failed':
-        return 'text-red-600';
+        return 'text-semantic-critical';
       default:
-        return 'text-gray-600';
+        return 'text-semantic-text-secondary';
     }
   };
 
   return (
     <div
       data-testid="handheld-scan-toolbar"
-      className="handheld-scan-toolbar sticky top-0 bg-white border-b border-gray-200 shadow-sm z-40"
+      className="handheld-scan-toolbar scanner-context sticky top-0 bg-semantic-surface-1 border-b border-border shadow-sm z-40"
     >
       <div className="px-4 py-3">
         {/* Top row: User name and sync status */}
         <div className="flex justify-between items-center mb-3">
           <div className="flex items-center space-x-2">
-            {userName && <span className="text-sm font-medium text-gray-900">{userName}</span>}
+            {userName && (
+              <span className="text-sm font-medium text-semantic-text-primary">{userName}</span>
+            )}
             <div className={`text-sm font-medium ${getSyncStatusColor()}`}>
               {getSyncStatusText()}
             </div>
@@ -58,7 +60,7 @@ export const HandheldScanToolbar: React.FC<HandheldScanToolbarProps> = ({
           <button
             type="button"
             onClick={onSettingsClick}
-            className="p-2 text-gray-600 hover:text-gray-900 hover:bg-gray-100 rounded-lg min-h-[44px] min-w-[44px] flex items-center justify-center"
+            className="p-2 text-semantic-text-secondary hover:text-semantic-text-primary hover:bg-semantic-surface-2 rounded-lg min-h-[48px] min-w-[48px] flex items-center justify-center focus-visible:outline-none"
             aria-label="Settings"
           >
             <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -81,7 +83,10 @@ export const HandheldScanToolbar: React.FC<HandheldScanToolbarProps> = ({
         {/* Bottom row: Sync controls */}
         <div className="flex items-center space-x-3">
           <div className="flex-1">
-            <label htmlFor="sync-strategy" className="block text-xs font-medium text-gray-700 mb-1">
+            <label
+              htmlFor="sync-strategy"
+              className="block text-xs font-medium text-semantic-text-secondary mb-1"
+            >
               Sync Strategy
             </label>
             <select
@@ -89,7 +94,7 @@ export const HandheldScanToolbar: React.FC<HandheldScanToolbarProps> = ({
               data-testid="sync-strategy-selector"
               value={syncStrategy}
               onChange={(e) => setSyncStrategy(e.target.value as SyncStrategy)}
-              className="w-full px-3 py-2 text-sm border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500 min-h-[44px]"
+              className="w-full px-3 py-2 text-sm border border-border rounded-md bg-semantic-surface-1 text-semantic-text-primary min-h-[48px]"
             >
               <option value="real-time">Real-time</option>
               <option value="batch">Batch (10 min)</option>
@@ -102,10 +107,10 @@ export const HandheldScanToolbar: React.FC<HandheldScanToolbarProps> = ({
             data-testid="sync-now-button"
             onClick={onSyncNow}
             disabled={queueLength === 0}
-            className={`px-4 py-2 text-sm font-medium rounded-md min-h-[44px] min-w-[80px] ${
+            className={`px-4 py-2 text-sm font-medium rounded-md min-h-[48px] min-w-[80px] ${
               queueLength > 0
-                ? 'bg-blue-600 hover:bg-blue-700 text-white focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-offset-2'
-                : 'bg-gray-300 text-gray-500 cursor-not-allowed'
+                ? 'bg-semantic-primary hover:bg-semantic-primary-hover text-semantic-primary-foreground'
+                : 'bg-semantic-surface-3 text-semantic-text-muted cursor-not-allowed'
             }`}
           >
             Sync Now
