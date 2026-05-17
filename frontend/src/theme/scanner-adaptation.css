@@ -45,6 +45,7 @@
   flex-wrap: wrap;
 }
 
+.scanner-context.handheld-scanner,
 .scanner-context .handheld-scanner {
   height: 100%;
   width: 100%;
@@ -52,6 +53,7 @@
   flex-direction: column;
 }
 
+.scanner-context[class*='handheld-scan-toolbar'],
 .scanner-context [class*='handheld-scan-toolbar'] {
   min-height: 60px;
 }
