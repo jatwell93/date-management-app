@@ -25,12 +25,12 @@
 
 ## 2. Wave 2 — Forms, Buttons, Alerts, Badges
 
-- [ ] 2.1 Migrate form input components (`input.tsx`, `select.tsx`, `form.tsx`, `label.tsx`) in `frontend/src/components/ui/` to use semantic tokens. This covers all spec-enumerated form input types (text, select, checkbox, radio, textarea) — verify each input type renders correctly via `form.tsx` and `input.tsx` variants. Ensure focus rings use semantic-primary (teal). Verify visual parity with pre-migration appearance.
-- [ ] 2.2 Migrate button component (`button.tsx`) to use semantic tokens for all variants: primary (teal bg), secondary (sky blue), destructive (red), ghost/muted. Ensure hover/active/disabled states use semantic tokens.
-- [ ] 2.3 Migrate alert/notification components (`alert-dialog.tsx`, `toast.tsx`, `toast-provider.tsx`) to use semantic tokens. Map alert variants: info → sky blue, success → green, warning → amber, error → red.
-- [ ] 2.4 Add badge component (if not existing) or update badge-like patterns to use semantic tokens with variants: active (green), inactive (muted), pending (amber), success (green), error (red).
-- [ ] 2.5 Migrate `dialog.tsx` and `dropdown-menu.tsx` to use semantic tokens for backgrounds, borders, and interactive states.
-- [ ] 2.6 Migrate remaining UI components (`card.tsx`, `table.tsx`, `data-table.tsx`, `data-table-column-header.tsx`) to use semantic tokens.
+- [x] 2.1 Migrate form input components (`input.tsx`, `select.tsx`, `form.tsx`, `label.tsx`) in `frontend/src/components/ui/` to use semantic tokens. This covers all spec-enumerated form input types (text, select, checkbox, radio, textarea) — verify each input type renders correctly via `form.tsx` and `input.tsx` variants. Ensure focus rings use semantic-primary (teal). Verify visual parity with pre-migration appearance.
+- [x] 2.2 Migrate button component (`button.tsx`) to use semantic tokens for all variants: primary (teal bg), secondary (sky blue), destructive (red), ghost/muted. Ensure hover/active/disabled states use semantic tokens.
+- [x] 2.3 Migrate alert/notification components (`alert-dialog.tsx`, `toast.tsx`, `toast-provider.tsx`) to use semantic tokens. Map alert variants: info → sky blue, success → green, warning → amber, error → red.
+- [x] 2.4 Add badge component (if not existing) or update badge-like patterns to use semantic tokens with variants: active (green), inactive (muted), pending (amber), success (green), error (red).
+- [x] 2.5 Migrate `dialog.tsx` and `dropdown-menu.tsx` to use semantic tokens for backgrounds, borders, and interactive states.
+- [x] 2.6 Migrate remaining UI components (`card.tsx`, `table.tsx`, `data-table.tsx`, `data-table-column-header.tsx`) to use semantic tokens.
 - [ ] 2.7 Visual regression verification: compare screenshots of all Wave 2 components pre/post migration. Target <5% pixel difference. Design owner sign-off required.
 
 ## 3. Wave 3 — Dashboard Cards, Tables, Charts & Data Visualization
@@ -96,3 +96,5 @@
 - [ ] 7.9 Create `frontend/TOKEN_MIGRATION_STRATEGY.md` if not created in 0.9: document migration phases, codemod commands for bulk replacement, rollback procedure if issues arise, and timeline for removing deprecated `inventory-*` tokens.
 - [ ] 7.10 Final documentation sync: ensure all created docs (`SEMANTIC_COLORS_REFERENCE.md`, `TOKENS_COMPLIANCE_GUIDE.md`, `AMBER_USAGE_GUIDE.md`, `scanner-brand-exceptions.md`, `docs/voice-audit.md`, `TOKEN_MIGRATION_STRATEGY.md`) are consistent with each other and with the implemented code. Update any discrepancies.
 - [ ] 7.11 Verify design owner sign-off is recorded for all 4 waves (Wave 1: Task 1.8, Wave 2: Task 2.7, Wave 3: Task 3.6, Wave 4: Task 4.10) and for amber restraint review (Task 6.2). Compile sign-off log.
+- [ ] 7.12 Use `/expect` to have the AI agent run UI validation with Expect + Playwright and confirm brand updates are accurate and error-free.
+- [ ] 7.13 Run `npx -y --verbose react-doctor@latest .` and action all findings before rollout sign-off.
