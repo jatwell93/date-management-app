@@ -1,0 +1,136 @@
+{
+  "_meta": {
+    "source": "PharmIQ Brand Guidelines v2.0",
+    "status": "pending-source-verification",
+    "note": "Values from spec.md — awaiting official token artifact delivery for checksum verification"
+  },
+  "colors": {
+    "brand": {
+      "teal": "#0F766E",
+      "sky-blue": "#0EA5E9",
+      "amber": "#D97706",
+      "green": "#10B981",
+      "red": "#DC2626",
+      "navy": "#0F172A",
+      "sky-light": "#F0F9FF"
+    },
+    "dark": {
+      "canvas-dark": "#070E1A"
+    },
+    "atmospheric": {
+      "teal-glow": "radial-gradient(ellipse at 50% 0%, rgba(15,118,110,0.15) 0%, transparent 70%)",
+      "amber-glow": "radial-gradient(ellipse at 50% 0%, rgba(217,119,6,0.10) 0%, transparent 70%)"
+    },
+    "border": {
+      "hairline-light": "rgba(15,23,42,0.08)",
+      "hairline-dark": "rgba(255,255,255,0.08)"
+    },
+    "surface": {
+      "light": {
+        "surface-1": "#FFFFFF",
+        "surface-2": "#F8FAFC",
+        "surface-3": "#F1F5F9",
+        "surface-4": "#E2E8F0"
+      },
+      "dark": {
+        "surface-1": "#0F172A",
+        "surface-2": "#1E293B",
+        "surface-3": "#334155",
+        "surface-4": "#475569"
+      }
+    }
+  },
+  "typography": {
+    "font-family": {
+      "display": "'Fraunces', Georgia, serif",
+      "heading": "'Outfit', 'Inter', sans-serif",
+      "body": "'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif",
+      "eyebrow": "'Outfit', 'Inter', sans-serif",
+      "code": "'Source Code Pro', Menlo, Monaco, Consolas, 'Courier New', monospace"
+    },
+    "font-weight": {
+      "normal": 400,
+      "medium": 500,
+      "semibold": 600,
+      "bold": 700
+    },
+    "font-size": {
+      "xs": "0.75rem",
+      "sm": "0.875rem",
+      "base": "1rem",
+      "lg": "1.125rem",
+      "xl": "1.25rem",
+      "2xl": "1.5rem",
+      "3xl": "1.875rem",
+      "4xl": "2.25rem",
+      "5xl": "3rem"
+    },
+    "line-height": {
+      "tight": 1.25,
+      "normal": 1.5,
+      "relaxed": 1.75
+    },
+    "letter-spacing": {
+      "tight": "-0.025em",
+      "normal": "0em",
+      "wide": "0.05em",
+      "eyebrow": "0.1em"
+    },
+    "eyebrow": {
+      "font-family": "'Outfit', 'Inter', sans-serif",
+      "font-weight": 600,
+      "text-transform": "uppercase",
+      "letter-spacing": "0.1em",
+      "font-size": "0.75rem"
+    }
+  },
+  "spacing": {
+    "base": 8,
+    "unit": "px",
+    "scale": {
+      "0": "0px",
+      "0.5": "4px",
+      "1": "8px",
+      "1.5": "12px",
+      "2": "16px",
+      "3": "24px",
+      "4": "32px",
+      "5": "40px",
+      "6": "48px",
+      "8": "64px",
+      "10": "80px",
+      "12": "96px"
+    }
+  },
+  "radius": {
+    "none": "0px",
+    "sm": "4px",
+    "md": "6px",
+    "DEFAULT": "8px",
+    "lg": "12px",
+    "xl": "16px",
+    "2xl": "24px",
+    "full": "9999px"
+  },
+  "elevation": {
+    "sm": "0 1px 2px 0 rgba(0,0,0,0.05)",
+    "DEFAULT": "0 1px 3px 0 rgba(0,0,0,0.1), 0 1px 2px -1px rgba(0,0,0,0.1)",
+    "md": "0 4px 6px -1px rgba(0,0,0,0.1), 0 2px 4px -2px rgba(0,0,0,0.1)",
+    "lg": "0 10px 15px -3px rgba(0,0,0,0.1), 0 4px 6px -4px rgba(0,0,0,0.1)",
+    "xl": "0 20px 25px -5px rgba(0,0,0,0.1), 0 8px 10px -6px rgba(0,0,0,0.1)"
+  },
+  "motion": {
+    "duration": {
+      "instant": "0ms",
+      "fast": "150ms",
+      "normal": "250ms",
+      "slow": "350ms"
+    },
+    "easing": {
+      "ease-in": "cubic-bezier(0.4, 0, 1, 1)",
+      "ease-out": "cubic-bezier(0, 0, 0.2, 1)",
+      "ease-in-out": "cubic-bezier(0.4, 0, 0.2, 1)",
+      "spring": "cubic-bezier(0.34, 1.56, 0.64, 1)"
+    }
+  }
+}

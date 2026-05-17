@@ -1,0 +1,11 @@
+{
+  "timestamp": "2026-05-16T09:57:17.523Z",
+  "totalViolations": 169,
+  "errors": 0,
+  "warnings": 169,
+  "byRule": {
+    "hardcoded-gray-class": 93,
+    "hardcoded-white-class": 4,
+    "inventory-class-usage": 72
+  }
+}

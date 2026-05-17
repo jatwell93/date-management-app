@@ -1,3 +1,11 @@
+/*
+ * PharmIQ Tailwind Configuration
+ * Semantic colors are derived from design-tokens.json (single source of truth).
+ * Do NOT hardcode hex values here — update design-tokens.json instead.
+ */
+const tokens = require('./src/theme/design-tokens.json');
+const brand = tokens.colors.brand;
+
 /** @type {import('tailwindcss').Config} */
 module.exports = {
   darkMode: ['class'],
@@ -12,6 +20,12 @@ module.exports = {
       },
     },
     extend: {
+      fontFamily: {
+        display: ["'Fraunces'", 'Georgia', 'serif'],
+        heading: ["'Outfit'", "'Inter'", 'sans-serif'],
+        body: ["'Inter'", '-apple-system', 'BlinkMacSystemFont', "'Segoe UI'", 'sans-serif'],
+        eyebrow: ["'Outfit'", "'Inter'", 'sans-serif'],
+      },
       colors: {
         border: 'hsl(var(--border))',
         input: 'hsl(var(--input))',
@@ -50,7 +64,72 @@ module.exports = {
           DEFAULT: 'hsl(var(--card))',
           foreground: 'hsl(var(--card-foreground))',
         },
-        // Custom colors for the inventory app
+
+        /* ── Semantic Tokens (derived from design-tokens.json) ── */
+        'semantic-primary': {
+          DEFAULT: brand.teal,
+          foreground: '#FFFFFF',
+          hover: '#115E59',
+          active: '#134E4A',
+          muted: '#CCFBF1',
+          'muted-foreground': brand.teal,
+        },
+        'semantic-secondary': {
+          DEFAULT: brand['sky-blue'],
+          foreground: '#FFFFFF',
+          hover: '#0284C7',
+          active: '#0369A1',
+          muted: brand['sky-light'],
+          'muted-foreground': '#0369A1',
+        },
+        'semantic-warning': {
+          DEFAULT: brand.amber,
+          foreground: '#FFFFFF',
+          hover: '#B45309',
+          active: '#92400E',
+          muted: '#FEF3C7',
+          'muted-foreground': '#92400E',
+        },
+        'semantic-success': {
+          DEFAULT: brand.green,
+          foreground: '#FFFFFF',
+          hover: '#059669',
+          active: '#047857',
+          muted: '#D1FAE5',
+          'muted-foreground': '#047857',
+        },
+        'semantic-critical': {
+          DEFAULT: brand.red,
+          foreground: '#FFFFFF',
+          hover: '#B91C1C',
+          active: '#991B1B',
+          muted: '#FEE2E2',
+          'muted-foreground': '#991B1B',
+        },
+        'semantic-surface': {
+          1: 'var(--surface-1)',
+          2: 'var(--surface-2)',
+          3: 'var(--surface-3)',
+          4: 'var(--surface-4)',
+        },
+        'semantic-text': {
+          primary: 'var(--text-primary)',
+          secondary: 'var(--text-secondary)',
+          tertiary: 'var(--text-tertiary)',
+          muted: 'var(--text-muted)',
+          inverse: 'var(--text-inverse)',
+        },
+        'semantic-data-viz': {
+          1: brand.teal,
+          2: brand['sky-blue'],
+          3: brand.amber,
+          4: brand.green,
+          5: brand.red,
+          6: brand.navy,
+        },
+
+        /* ── DEPRECATED: inventory-* colors ────────────────── */
+        /* These will be removed after wave migration. Use semantic-* instead. */
         inventory: {
           primary: {
             50: '#f0f9ff',
@@ -125,6 +204,13 @@ module.exports = {
             900: '#171717',
           },
         },
+      },
+      borderColor: {
+        hairline: 'var(--border-hairline)',
+      },
+      backgroundColor: {
+        'teal-glow': 'var(--glow-teal)',
+        'amber-glow': 'var(--glow-amber)',
       },
       borderRadius: {
         lg: 'var(--radius)',

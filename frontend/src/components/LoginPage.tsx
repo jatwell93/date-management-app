@@ -45,8 +45,8 @@ export function LoginPage({ onLogin }: LoginPageProps) {
   };
 
   return (
-    <div className="flex items-center justify-center min-h-screen bg-gray-100">
-      <div className="p-8 bg-white rounded shadow-md w-96">
+    <div className="flex items-center justify-center min-h-screen bg-background">
+      <div className="p-8 bg-card text-card-foreground rounded shadow-md w-96">
         <h2 className="text-2xl font-bold mb-6 text-center">Login</h2>
         <Form {...form}>
           <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-4">
@@ -63,7 +63,7 @@ export function LoginPage({ onLogin }: LoginPageProps) {
                 </FormItem>
               )}
             />
-            {error && <p className="text-inventory-error-500 text-sm text-center">{error}</p>}
+            {error && <p className="text-semantic-critical text-sm text-center">{error}</p>}
             <Button type="submit" className="w-full">
               Login
             </Button>
