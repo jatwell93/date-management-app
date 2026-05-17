@@ -3,6 +3,7 @@ import Quagga from 'quagga';
 import * as Sentry from '@sentry/react';
 import { triggerHaptic } from '../lib/haptic';
 import { TIMING_CONSTANTS } from '../config/handheld'; // ✓ Import constants (fixes 17.9)
+import { ScannerStateIndicator, ScannerState } from './ScannerStateIndicator';
 
 interface CameraScannerProps {
   onDetected: (code: string) => void;
@@ -10,6 +11,32 @@ interface CameraScannerProps {
   onScannerReset?: () => void;
   continuous?: boolean;
   isHandheld?: boolean;
+}
+
+function getScannerContainerClassName(isHandheld: boolean) {
+  return `camera-scanner ${isHandheld ? 'h-full flex flex-col scanner-context' : ''}`;
+}
+
+function ResetScannerButton({
+  isHandheld,
+  label,
+  onClick,
+}: {
+  isHandheld: boolean;
+  label: string;
+  onClick: () => void;
+}) {
+  return (
+    <button
+      type="button"
+      onClick={onClick}
+      className={`px-4 py-2 bg-primary hover:bg-primary/90 text-primary-foreground rounded ${
+        isHandheld ? 'py-3 text-lg min-h-[48px]' : ''
+      }`}
+    >
+      {label}
+    </button>
+  );
 }
 
 export function CameraScanner({
@@ -21,7 +48,9 @@ export function CameraScanner({
 }: CameraScannerProps) {
   const videoRef = useRef<HTMLDivElement>(null);
   const [error, setError] = useState<string | null>(null);
+  const [scannerState, setScannerState] = useState<ScannerState>('ready');
   const recentScansRef = useRef<Set<string>>(new Set());
+  const detectedHandlerRef = useRef<((data: unknown) => void) | null>(null);
 
   // Debounce utility to track recent barcode scans (last 2 seconds)
   const isDuplicateScan = useCallback((barcode: string): boolean => {
@@ -77,15 +106,17 @@ export function CameraScanner({
             tags: { feature: 'camera-scanner' },
           });
           setError('Error accessing camera. Please ensure you have granted camera permissions.');
+          setScannerState('error');
           return;
         }
 
         Quagga.start();
+        setScannerState('scanning');
         onScannerReady?.();
       },
     );
 
-    Quagga.onDetected((data: unknown) => {
+    const detectedHandler = (data: unknown) => {
       const code = (data as { codeResult?: { code?: string } })?.codeResult?.code;
       if (!code) {
         return;
@@ -98,10 +129,12 @@ export function CameraScanner({
 
       // Skip duplicate barcodes within 2-second window
       if (isDuplicateScan(barcode)) {
+        setScannerState('warning');
         return;
       }
 
       onDetected(barcode);
+      setScannerState('scanned');
 
       // Only stop the scanner after detection if not in continuous mode
       // Wait 1 second before stopping to allow UI updates (fixes 17.9)
@@ -110,7 +143,10 @@ export function CameraScanner({
           Quagga.stop();
         }, 1000);
       }
-    });
+    };
+
+    detectedHandlerRef.current = detectedHandler;
+    Quagga.onDetected(detectedHandler);
   }, [onDetected, onScannerReady, continuous, isDuplicateScan]);
 
   useEffect(() => {
@@ -118,6 +154,10 @@ export function CameraScanner({
 
     // Cleanup function
     return () => {
+      if (detectedHandlerRef.current) {
+        Quagga.offDetected(detectedHandlerRef.current);
+        detectedHandlerRef.current = null;
+      }
       if (Quagga) {
         Quagga.stop();
       }
@@ -126,6 +166,11 @@ export function CameraScanner({
 
   const handleResetScanner = () => {
     setError(null); // Clear any error when resetting
+    setScannerState('ready');
+    if (detectedHandlerRef.current) {
+      Quagga.offDetected(detectedHandlerRef.current);
+      detectedHandlerRef.current = null;
+    }
     if (Quagga) {
       Quagga.stop();
     }
@@ -139,26 +184,27 @@ export function CameraScanner({
 
   if (error) {
     return (
-      <div className={`camera-scanner ${isHandheld ? 'h-full flex flex-col' : ''}`}>
+      <div className={getScannerContainerClassName(isHandheld)}>
+        <ScannerStateIndicator state={scannerState} />
         <div
-          className={`w-full bg-gray-200 flex items-center justify-center rounded border border-dashed ${
+          className={`w-full bg-muted flex items-center justify-center rounded border border-dashed ${
             isHandheld ? 'flex-1 min-h-[300px]' : 'h-64'
           }`}
         >
           <div className="text-center p-4">
-            <p className={`text-red-500 font-medium mb-2 ${isHandheld ? 'text-lg' : ''}`}>
+            <p className={`text-semantic-critical font-medium mb-2 ${isHandheld ? 'text-lg' : ''}`}>
               Camera Error
             </p>
-            <p className={`text-gray-600 ${isHandheld ? 'text-base' : 'text-sm'}`}>{error}</p>
-            <button
-              type="button"
-              onClick={handleResetScanner}
-              className={`mt-4 px-4 py-2 bg-primary hover:bg-primary/90 text-primary-foreground rounded ${
-                isHandheld ? 'py-3 text-lg min-h-[48px]' : ''
-              }`}
-            >
-              Try Again
-            </button>
+            <p className={`text-semantic-text-secondary ${isHandheld ? 'text-base' : 'text-sm'}`}>
+              {error}
+            </p>
+            <div className="mt-4">
+              <ResetScannerButton
+                isHandheld={isHandheld}
+                label="Try Again"
+                onClick={handleResetScanner}
+              />
+            </div>
           </div>
         </div>
       </div>
@@ -166,7 +212,8 @@ export function CameraScanner({
   }
 
   return (
-    <div className={`camera-scanner ${isHandheld ? 'h-full flex flex-col' : ''}`}>
+    <div className={getScannerContainerClassName(isHandheld)}>
+      <ScannerStateIndicator state={scannerState} />
       <div
         ref={videoRef}
         className={`w-full bg-black flex items-center justify-center rounded ${
@@ -185,15 +232,13 @@ export function CameraScanner({
           )}
         </div>
       </div>
-      <button
-        type="button"
-        onClick={handleResetScanner}
-        className={`mt-2 px-4 py-2 bg-primary hover:bg-primary/90 text-primary-foreground rounded ${
-          isHandheld ? 'py-3 text-lg min-h-[48px]' : ''
-        }`}
-      >
-        Reset Scanner
-      </button>
+      <div className="mt-2">
+        <ResetScannerButton
+          isHandheld={isHandheld}
+          label="Reset Scanner"
+          onClick={handleResetScanner}
+        />
+      </div>
     </div>
   );
 }

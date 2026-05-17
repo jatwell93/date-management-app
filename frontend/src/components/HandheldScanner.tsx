@@ -16,7 +16,7 @@ export const HandheldScanner: React.FC<HandheldScannerProps> = ({
   const scannerDefaultMode = isHandheld ? 'camera' : defaultMode || 'text';
 
   return (
-    <div className={`handheld-scanner ${className}`}>
+    <div className={`handheld-scanner scanner-context ${className}`}>
       <Scanner
         onScan={onScan}
         defaultMode={scannerDefaultMode}

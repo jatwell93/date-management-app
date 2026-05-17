@@ -124,6 +124,15 @@ describe('CameraScanner', () => {
     expect(Quagga.stop).toHaveBeenCalled();
   });
 
+  it('unsubscribes the detected handler on unmount', () => {
+    const { unmount } = render(<CameraScanner onDetected={mockOnDetected} />);
+    const detectedHandler = (Quagga.onDetected as jest.Mock).mock.calls[0][0];
+
+    unmount();
+
+    expect(Quagga.offDetected).toHaveBeenCalledWith(detectedHandler);
+  });
+
   it('resets scanner when retry button is clicked', () => {
     jest.useFakeTimers();
 
@@ -138,7 +147,7 @@ describe('CameraScanner', () => {
     render(<CameraScanner onDetected={mockOnDetected} />);
 
     // Verify error and retry button
-    const retryButton = screen.getByText(/Try Again/i);
+    const retryButton = screen.getByRole('button', { name: /Try Again/i });
     expect(retryButton).toBeInTheDocument();
 
     // Clear mocks to track calls during reset
@@ -149,6 +158,7 @@ describe('CameraScanner', () => {
 
     // Verity stop called immediately
     expect(Quagga.stop).toHaveBeenCalled();
+    expect(Quagga.offDetected).toHaveBeenCalled();
 
     // 3. Fast forward for timeout
     act(() => {

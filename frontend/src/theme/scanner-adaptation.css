@@ -1,0 +1,82 @@
+/**
+ * Zebra scanner adaptation profile.
+ * Applies only inside `.scanner-context` so scanner-specific exceptions stay explicit.
+ */
+
+.scanner-context {
+  --scanner-focus-ring: var(--semantic-primary);
+}
+
+.scanner-context button,
+.scanner-context [role='button'],
+.scanner-context input[type='button'],
+.scanner-context input[type='submit'],
+.scanner-context input[type='reset'] {
+  min-height: 48px;
+  min-width: 48px;
+}
+
+.scanner-context button:focus-visible,
+.scanner-context input:focus-visible,
+.scanner-context select:focus-visible,
+.scanner-context textarea:focus-visible,
+.scanner-context a:focus-visible {
+  outline: 3px solid var(--scanner-focus-ring);
+  outline-offset: 2px;
+}
+
+.scanner-context .scanner-state-scanning {
+  animation: scanner-pulse 900ms ease-in-out infinite;
+}
+
+.scanner-context .camera-scanner {
+  height: 100%;
+}
+
+.scanner-context .camera-scanner-fullscreen .camera-scanner {
+  height: calc(100vh - 80px) !important;
+}
+
+.scanner-context [class*='scan-controls'],
+.scanner-context [class*='scanner-footer'] {
+  padding: 12px;
+  gap: 8px;
+  display: flex;
+  flex-wrap: wrap;
+}
+
+.scanner-context.handheld-scanner,
+.scanner-context .handheld-scanner {
+  height: 100%;
+  width: 100%;
+  display: flex;
+  flex-direction: column;
+}
+
+.scanner-context[class*='handheld-scan-toolbar'],
+.scanner-context [class*='handheld-scan-toolbar'] {
+  min-height: 60px;
+}
+
+@keyframes scanner-pulse {
+  0%,
+  100% {
+    transform: scale(1);
+    opacity: 1;
+  }
+
+  50% {
+    transform: scale(1.01);
+    opacity: 0.92;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .scanner-context *,
+  .scanner-context *::before,
+  .scanner-context *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+  }
+}

@@ -188,6 +188,18 @@ describe('HandheldScanToolbar', () => {
     expect(toolbar).toHaveClass('handheld-scan-toolbar');
   });
 
+  it('uses scanner adaptation classes for touch targets and focus treatment', () => {
+    render(
+      <HandheldProvider>
+        <HandheldScanToolbar {...defaultProps} queueLength={1} />
+      </HandheldProvider>,
+    );
+
+    expect(screen.getByTestId('handheld-scan-toolbar')).toHaveClass('scanner-context');
+    expect(screen.getByRole('button', { name: /settings/i })).toHaveClass('min-h-[48px]');
+    expect(screen.getByTestId('sync-now-button')).toHaveClass('min-h-[48px]');
+  });
+
   it('positions as sticky toolbar with proper z-index', () => {
     const { container } = render(
       <HandheldProvider>
