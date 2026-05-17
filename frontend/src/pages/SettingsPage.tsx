@@ -5,8 +5,10 @@ export function SettingsPage() {
   return (
     <div className="max-w-4xl mx-auto py-8 px-4">
       <div className="mb-6">
-        <h1 className="text-2xl font-bold text-gray-900">Organisation Settings</h1>
-        <p className="mt-1 text-gray-600">Manage your organisation profile, members, and roles.</p>
+        <h1 className="text-2xl font-bold text-semantic-text-primary">Organisation Settings</h1>
+        <p className="mt-1 text-semantic-text-secondary">
+          Manage your organisation profile, members, and roles.
+        </p>
       </div>
       <Card>
         <CardHeader>

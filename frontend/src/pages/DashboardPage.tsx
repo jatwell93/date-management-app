@@ -67,7 +67,9 @@ export function DashboardPage({ token }: DashboardPageProps) {
   }
 
   if (error) {
-    return <div className="container mx-auto p-4 text-center text-red-500">Error: {error}</div>;
+    return (
+      <div className="container mx-auto p-4 text-center text-semantic-critical">Error: {error}</div>
+    );
   }
 
   return (
@@ -95,7 +97,7 @@ export function DashboardPage({ token }: DashboardPageProps) {
           <CardTitle>Expiring Soon</CardTitle>
         </CardHeader>
         <CardContent>
-          <p className="text-3xl font-bold text-orange-500">{stats?.expiringItems ?? 0}</p>
+          <p className="text-3xl font-bold text-semantic-warning">{stats?.expiringItems ?? 0}</p>
         </CardContent>
       </Card>
 
@@ -104,7 +106,7 @@ export function DashboardPage({ token }: DashboardPageProps) {
           <CardTitle>Low Stock</CardTitle>
         </CardHeader>
         <CardContent>
-          <p className="text-3xl font-bold text-red-500">{stats?.lowStockItems ?? 0}</p>
+          <p className="text-3xl font-bold text-semantic-critical">{stats?.lowStockItems ?? 0}</p>
         </CardContent>
       </Card>
 
@@ -120,7 +122,7 @@ export function DashboardPage({ token }: DashboardPageProps) {
               {recentActivity.map((activity) => (
                 <li key={activity.id} className="mb-2 pb-2 border-b last:border-b-0">
                   <p className="text-sm">{activity.description}</p>
-                  <p className="text-xs text-gray-500">{activity.timestamp}</p>
+                  <p className="text-xs text-semantic-text-tertiary">{activity.timestamp}</p>
                 </li>
               ))}
             </ul>

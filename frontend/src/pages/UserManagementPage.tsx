@@ -37,14 +37,16 @@ export function UserManagementPage() {
   return (
     <div className="max-w-4xl mx-auto py-8 px-4">
       <div className="mb-6">
-        <h1 className="text-2xl font-bold text-gray-900">Team Members</h1>
-        <p className="mt-1 text-gray-600">Manage your organization members and their roles.</p>
+        <h1 className="text-2xl font-bold text-semantic-text-primary">Team Members</h1>
+        <p className="mt-1 text-semantic-text-secondary">
+          Manage your organization members and their roles.
+        </p>
       </div>
 
       {!isLoaded || !organization ? (
         <Card>
           <CardContent className="pt-6">
-            <p className="text-center text-gray-500">Loading organization...</p>
+            <p className="text-center text-semantic-text-tertiary">Loading organization...</p>
           </CardContent>
         </Card>
       ) : (
@@ -57,7 +59,7 @@ export function UserManagementPage() {
           </CardHeader>
           <CardContent>
             {isFetchingMembers ? (
-              <p className="text-center text-gray-500">Loading members...</p>
+              <p className="text-center text-semantic-text-tertiary">Loading members...</p>
             ) : members.length > 0 ? (
               <div className="overflow-x-auto">
                 <table className="w-full text-sm">
@@ -71,7 +73,7 @@ export function UserManagementPage() {
                   </thead>
                   <tbody>
                     {members.map((membership) => (
-                      <tr key={membership.id} className="border-b hover:bg-gray-50">
+                      <tr key={membership.id} className="border-b hover:bg-semantic-surface-2">
                         <td className="py-2 px-4">
                           {membership.publicUserData?.firstName}{' '}
                           {membership.publicUserData?.lastName}
@@ -87,7 +89,9 @@ export function UserManagementPage() {
                 </table>
               </div>
             ) : (
-              <p className="text-center text-gray-500">No members found in this organization.</p>
+              <p className="text-center text-semantic-text-tertiary">
+                No members found in this organization.
+              </p>
             )}
           </CardContent>
         </Card>

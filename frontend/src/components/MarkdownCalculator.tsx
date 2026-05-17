@@ -135,10 +135,10 @@ export function MarkdownCalculator({ token }: MarkdownCalculatorProps) {
             <p className="text-sm text-muted-foreground">Last scanned: {scannedInput}</p>
           )}
 
-          {error && <p className="text-sm text-red-500">{error}</p>}
+          {error && <p className="text-sm text-semantic-critical">{error}</p>}
 
           {productDetails && (
-            <div className="mt-4 p-4 border rounded-md bg-gray-50">
+            <div className="mt-4 p-4 border rounded-md bg-semantic-surface-2">
               <p className="font-semibold">Scanned Product:</p>
               <p>
                 <strong>Name:</strong> {productDetails.name}
@@ -176,7 +176,7 @@ export function MarkdownCalculator({ token }: MarkdownCalculatorProps) {
               />
             </div>
             <Button onClick={calculateMarkdown}>Calculate Markdown</Button>
-            <div className="mt-4 p-4 border rounded-md bg-gray-50">
+            <div className="mt-4 p-4 border rounded-md bg-semantic-surface-2">
               <p>
                 <strong>Status:</strong> {markdownStatus}
               </p>

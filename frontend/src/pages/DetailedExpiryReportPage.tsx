@@ -75,9 +75,11 @@ export function DetailedExpiryReportPage({ token }: DetailedExpiryReportPageProp
           );
 
           return (
-            <div className={`min-w-[140px] ${daysToExpiry <= 0 ? 'text-red-600 font-bold' : ''}`}>
+            <div
+              className={`min-w-[140px] ${daysToExpiry <= 0 ? 'text-semantic-critical font-bold' : ''}`}
+            >
               {new Date(row.original.expiryDate).toLocaleDateString()}
-              <div className="text-xs text-gray-500">
+              <div className="text-xs text-semantic-text-tertiary">
                 {daysToExpiry > 0 ? `${daysToExpiry} days left` : 'Expired'}
               </div>
             </div>
@@ -297,14 +299,14 @@ export function DetailedExpiryReportPage({ token }: DetailedExpiryReportPageProp
               <Button
                 onClick={() => handleDelete(row.original.inventoryId)}
                 size="sm"
-                className="bg-inventory-error-600 hover:bg-inventory-error-700 text-white text-xs flex-shrink-0 min-w-[70px]"
+                className="bg-semantic-critical hover:bg-semantic-critical-hover text-white text-xs flex-shrink-0 min-w-[70px]"
               >
                 Confirm Delete
               </Button>
               <Button
                 onClick={cancelDelete}
                 size="sm"
-                className="bg-inventory-neutral-500 hover:bg-inventory-neutral-600 text-white text-xs flex-shrink-0 min-w-[60px]"
+                className="bg-semantic-surface-4 hover:bg-semantic-text-tertiary text-white text-xs flex-shrink-0 min-w-[60px]"
               >
                 Cancel
               </Button>
@@ -323,7 +325,7 @@ export function DetailedExpiryReportPage({ token }: DetailedExpiryReportPageProp
                 disabled={saving}
                 size="sm"
                 variant="default"
-                className="min-w-[50px] bg-inventory-success-600 hover:bg-inventory-success-700 text-white font-medium disabled:bg-inventory-neutral-400"
+                className="min-w-[50px] bg-semantic-success hover:bg-semantic-success-hover text-white font-medium disabled:bg-semantic-surface-4"
               >
                 {saving ? '...' : 'Save'}
               </Button>
@@ -332,7 +334,7 @@ export function DetailedExpiryReportPage({ token }: DetailedExpiryReportPageProp
                 disabled={saving}
                 size="sm"
                 variant="secondary"
-                className="min-w-[50px] bg-inventory-neutral-500 hover:bg-inventory-neutral-600 text-white font-medium"
+                className="min-w-[50px] bg-semantic-surface-4 hover:bg-semantic-text-tertiary text-white font-medium"
               >
                 Cancel
               </Button>
@@ -346,7 +348,7 @@ export function DetailedExpiryReportPage({ token }: DetailedExpiryReportPageProp
               onClick={() => handleEdit(row.original)}
               size="sm"
               variant="default"
-              className="min-w-[50px] bg-inventory-primary-600 hover:bg-inventory-primary-700 text-white font-medium"
+              className="min-w-[50px] bg-semantic-primary hover:bg-semantic-primary-hover text-white font-medium"
             >
               Edit
             </Button>
@@ -354,7 +356,7 @@ export function DetailedExpiryReportPage({ token }: DetailedExpiryReportPageProp
               onClick={() => confirmDelete(row.original.inventoryId)}
               size="sm"
               variant="destructive"
-              className="min-w-[50px] bg-inventory-error-600 hover:bg-inventory-error-700 text-white font-medium"
+              className="min-w-[50px] bg-semantic-critical hover:bg-semantic-critical-hover text-white font-medium"
             >
               Delete
             </Button>
@@ -419,9 +421,7 @@ export function DetailedExpiryReportPage({ token }: DetailedExpiryReportPageProp
 
   if (error) {
     return (
-      <div className="container mx-auto p-4 text-center text-inventory-error-500">
-        Error: {error}
-      </div>
+      <div className="container mx-auto p-4 text-center text-semantic-critical">Error: {error}</div>
     );
   }
 
@@ -533,7 +533,7 @@ export function DetailedExpiryReportPage({ token }: DetailedExpiryReportPageProp
               <p className="text-center">No expiry items found in the next 90 days.</p>
             )}
             {/* Mobile notification */}
-            <div className="mt-6 p-3 bg-yellow-50 border border-yellow-200 rounded-lg text-center text-sm text-yellow-700 md:hidden">
+            <div className="mt-6 p-3 bg-semantic-warning-muted border border-semantic-warning-muted rounded-lg text-center text-sm text-semantic-warning-muted-foreground md:hidden">
               <p>
                 <strong>Note:</strong> This report is best viewed on a desktop device. For better
                 mobile experience, use the Scan Page or Markdown Calculator.

@@ -16,6 +16,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from '../components/ui/select';
+import { semanticDataViz } from '../theme/semantic-tokens';
 
 // Import Chart.js components
 import {
@@ -141,7 +142,9 @@ export function UsageReportPage({ token }: UsageReportPageProps) {
   }
 
   if (error) {
-    return <div className="container mx-auto p-4 text-center text-red-500">Error: {error}</div>;
+    return (
+      <div className="container mx-auto p-4 text-center text-semantic-critical">Error: {error}</div>
+    );
   }
 
   // Prepare chart data for Items by User
@@ -151,8 +154,8 @@ export function UsageReportPage({ token }: UsageReportPageProps) {
       {
         label: 'Items Added',
         data: itemsByUser?.map((item) => item.itemCount) || [],
-        backgroundColor: 'rgba(74, 222, 128, 0.5)', // Green
-        borderColor: 'rgba(74, 222, 128, 1)',
+        backgroundColor: semanticDataViz.series4,
+        borderColor: semanticDataViz.series1,
         borderWidth: 1,
       },
     ],
@@ -166,8 +169,8 @@ export function UsageReportPage({ token }: UsageReportPageProps) {
         label: 'Items Added',
         data: itemsByDate?.map((item) => item.itemCount) || [],
         fill: false,
-        borderColor: 'rgb(53, 162, 235)',
-        backgroundColor: 'rgba(53, 162, 235, 0.5)',
+        borderColor: semanticDataViz.series2,
+        backgroundColor: semanticDataViz.series2,
         tension: 0.1,
       },
     ],
@@ -244,7 +247,9 @@ export function UsageReportPage({ token }: UsageReportPageProps) {
                 }}
               />
             ) : (
-              <div className="text-center py-4 text-gray-500">No user data available</div>
+              <div className="text-center py-4 text-semantic-text-tertiary">
+                No user data available
+              </div>
             )}
           </CardContent>
         </Card>
@@ -271,7 +276,9 @@ export function UsageReportPage({ token }: UsageReportPageProps) {
                 }}
               />
             ) : (
-              <div className="text-center py-4 text-gray-500">No date data available</div>
+              <div className="text-center py-4 text-semantic-text-tertiary">
+                No date data available
+              </div>
             )}
           </CardContent>
         </Card>

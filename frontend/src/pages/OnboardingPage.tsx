@@ -102,14 +102,14 @@ function Step1({ onNext }: StepProps) {
       </CardHeader>
       <CardContent className="space-y-4">
         {error && (
-          <div className="bg-red-50 border border-red-200 text-red-600 px-4 py-3 rounded-md text-sm mb-4">
+          <div className="bg-semantic-critical-muted border border-semantic-critical-muted text-semantic-critical px-4 py-3 rounded-md text-sm mb-4">
             {error}
           </div>
         )}
 
         <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
           {/* CSV Upload Option */}
-          <div className="border-2 border-dashed border-gray-300 rounded-lg p-6 hover:border-blue-500 hover:bg-blue-50 transition cursor-pointer">
+          <div className="border-2 border-dashed border-hairline rounded-lg p-6 hover:border-semantic-primary hover:bg-semantic-secondary-muted transition cursor-pointer">
             <button
               onClick={handleCSVUpload}
               disabled={isLoading}
@@ -117,7 +117,7 @@ function Step1({ onNext }: StepProps) {
             >
               <div className="flex items-center justify-center mb-3">
                 <svg
-                  className="w-8 h-8 text-blue-600"
+                  className="w-8 h-8 text-semantic-secondary"
                   fill="none"
                   stroke="currentColor"
                   viewBox="0 0 24 24"
@@ -130,15 +130,15 @@ function Step1({ onNext }: StepProps) {
                   />
                 </svg>
               </div>
-              <h3 className="font-semibold text-gray-900">Upload CSV File</h3>
-              <p className="text-sm text-gray-600 mt-2">
+              <h3 className="font-semibold text-semantic-text-primary">Upload CSV File</h3>
+              <p className="text-sm text-semantic-text-secondary mt-2">
                 Import your existing product catalog from a CSV file
               </p>
             </button>
           </div>
 
           {/* Demo Data Option */}
-          <div className="border-2 border-dashed border-gray-300 rounded-lg p-6 hover:border-green-500 hover:bg-green-50 transition cursor-pointer relative">
+          <div className="border-2 border-dashed border-hairline rounded-lg p-6 hover:border-semantic-success hover:bg-semantic-success-muted transition cursor-pointer relative">
             <button
               onClick={handleDemoData}
               disabled={isLoading}
@@ -146,10 +146,10 @@ function Step1({ onNext }: StepProps) {
             >
               <div className="flex items-center justify-center mb-3">
                 {isLoading ? (
-                  <Loader2 className="w-8 h-8 text-green-600 animate-spin" />
+                  <Loader2 className="w-8 h-8 text-semantic-success animate-spin" />
                 ) : (
                   <svg
-                    className="w-8 h-8 text-green-600"
+                    className="w-8 h-8 text-semantic-success"
                     fill="none"
                     stroke="currentColor"
                     viewBox="0 0 24 24"
@@ -163,17 +163,17 @@ function Step1({ onNext }: StepProps) {
                   </svg>
                 )}
               </div>
-              <h3 className="font-semibold text-gray-900">
+              <h3 className="font-semibold text-semantic-text-primary">
                 {isLoading ? 'Seeding Data...' : 'Load Demo Data'}
               </h3>
-              <p className="text-sm text-gray-600 mt-2">
+              <p className="text-sm text-semantic-text-secondary mt-2">
                 Get started quickly with sample pharmacy products
               </p>
             </button>
           </div>
         </div>
 
-        <div className="text-sm text-gray-500 text-center mt-6">
+        <div className="text-sm text-semantic-text-tertiary text-center mt-6">
           You can change your catalog settings anytime in Settings
         </div>
       </CardContent>
@@ -236,7 +236,7 @@ function Step2(_props: StepProps) {
         </CardTitle>
       </CardHeader>
       <CardContent className="space-y-6">
-        <p className="text-center text-gray-600 text-lg leading-relaxed">
+        <p className="text-center text-semantic-text-secondary text-lg leading-relaxed">
           {currentSlide.description}
         </p>
 
@@ -247,7 +247,7 @@ function Step2(_props: StepProps) {
               key={index}
               onClick={() => setSlideIndex(index)}
               className={`w-2 h-2 rounded-full transition ${
-                index === slideIndex ? 'bg-blue-600 w-8' : 'bg-gray-300'
+                index === slideIndex ? 'bg-semantic-secondary w-8' : 'bg-semantic-surface-4'
               }`}
               aria-label={`Go to slide ${index + 1}`}
             />
@@ -344,12 +344,12 @@ export function OnboardingPage() {
   const isLastStep = currentStep === MAX_STEP;
 
   return (
-    <div className="flex items-center justify-center min-h-screen bg-gray-100">
+    <div className="flex items-center justify-center min-h-screen bg-semantic-surface-2">
       <div className="w-full max-w-2xl px-4">
         {/* Header */}
         <div className="mb-6 text-center">
-          <h1 className="text-3xl font-bold text-gray-900">{stepConfig.title}</h1>
-          <p className="mt-2 text-gray-600">{stepConfig.description}</p>
+          <h1 className="text-3xl font-bold text-semantic-text-primary">{stepConfig.title}</h1>
+          <p className="mt-2 text-semantic-text-secondary">{stepConfig.description}</p>
         </div>
 
         {/* Progress Indicator */}
@@ -358,7 +358,7 @@ export function OnboardingPage() {
             <div
               key={step}
               className={`h-2 flex-1 rounded-full transition ${
-                step <= currentStep ? 'bg-blue-600' : 'bg-gray-300'
+                step <= currentStep ? 'bg-semantic-secondary' : 'bg-semantic-surface-4'
               }`}
             />
           ))}
@@ -373,7 +373,9 @@ export function OnboardingPage() {
         />
 
         {/* Step Counter */}
-        <div className="text-center text-sm text-gray-500 mt-6">Step {currentStep + 1} of 3</div>
+        <div className="text-center text-sm text-semantic-text-tertiary mt-6">
+          Step {currentStep + 1} of 3
+        </div>
       </div>
     </div>
   );

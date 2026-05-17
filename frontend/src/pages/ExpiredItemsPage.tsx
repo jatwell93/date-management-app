@@ -325,7 +325,7 @@ const ExpiredItemsPage: React.FC<ExpiredItemsPageProps> = ({ token }) => {
   }
 
   if (error) {
-    return <div className="text-center py-10 text-red-500">{error}</div>;
+    return <div className="text-center py-10 text-semantic-critical">{error}</div>;
   }
 
   return (
@@ -442,7 +442,9 @@ const ExpiredItemsPage: React.FC<ExpiredItemsPageProps> = ({ token }) => {
                 }}
               />
             ) : (
-              <div className="text-center py-4 text-gray-500">No loss data available</div>
+              <div className="text-center py-4 text-semantic-text-tertiary">
+                No loss data available
+              </div>
             )}
           </CardContent>
         </Card>
@@ -469,7 +471,7 @@ const ExpiredItemsPage: React.FC<ExpiredItemsPageProps> = ({ token }) => {
                 }}
               />
             ) : (
-              <div className="text-center py-4 text-gray-500">
+              <div className="text-center py-4 text-semantic-text-tertiary">
                 No department loss data available
               </div>
             )}

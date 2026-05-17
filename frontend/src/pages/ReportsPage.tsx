@@ -87,7 +87,9 @@ export function ReportsPage({ token }: ReportsPageProps) {
   }
 
   if (error) {
-    return <div className="container mx-auto p-4 text-center text-red-500">Error: {error}</div>;
+    return (
+      <div className="container mx-auto p-4 text-center text-semantic-critical">Error: {error}</div>
+    );
   }
 
   return (
@@ -101,27 +103,29 @@ export function ReportsPage({ token }: ReportsPageProps) {
             <div className="text-center">Loading overall report...</div>
           ) : overallReportData ? (
             <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mb-6">
-              <div className="bg-blue-50 p-4 rounded-lg text-center">
+              <div className="bg-semantic-secondary-muted p-4 rounded-lg text-center">
                 <p className="text-2xl font-bold">{overallReportData.total_expiring}</p>
-                <p className="text-sm text-gray-600">Total Items</p>
+                <p className="text-sm text-semantic-text-secondary">Total Items</p>
               </div>
-              <div className="bg-red-50 p-4 rounded-lg text-center">
-                <p className="text-2xl font-bold text-red-600">{overallReportData.expired_count}</p>
-                <p className="text-sm text-gray-600">Expired Items</p>
+              <div className="bg-semantic-critical-muted p-4 rounded-lg text-center">
+                <p className="text-2xl font-bold text-semantic-critical">
+                  {overallReportData.expired_count}
+                </p>
+                <p className="text-sm text-semantic-text-secondary">Expired Items</p>
               </div>
-              <div className="bg-yellow-50 p-4 rounded-lg text-center">
-                <p className="text-2xl font-bold text-yellow-600">
+              <div className="bg-semantic-warning-muted p-4 rounded-lg text-center">
+                <p className="text-2xl font-bold text-semantic-warning">
                   {overallReportData.total_markdown}
                 </p>
-                <p className="text-sm text-gray-600">Markdown Items</p>
+                <p className="text-sm text-semantic-text-secondary">Markdown Items</p>
               </div>
-              <div className="bg-green-50 p-4 rounded-lg text-center">
-                <p className="text-2xl font-bold text-green-600">
+              <div className="bg-semantic-success-muted p-4 rounded-lg text-center">
+                <p className="text-2xl font-bold text-semantic-success">
                   {overallReportData.total_expiring -
                     overallReportData.expired_count -
                     overallReportData.total_markdown}
                 </p>
-                <p className="text-sm text-gray-600">Active Items</p>
+                <p className="text-sm text-semantic-text-secondary">Active Items</p>
               </div>
             </div>
           ) : (

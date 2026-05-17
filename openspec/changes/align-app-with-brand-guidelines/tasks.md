@@ -35,13 +35,14 @@
 
 ## 3. Wave 3 — Dashboard Cards, Tables, Charts & Data Visualization
 
-- [ ] 3.1 Migrate dashboard card layout in `frontend/src/pages/DashboardPage.tsx` to use semantic tokens. Apply surface tokens for card backgrounds, text tokens for hierarchy, and primary token for key metrics highlights.
-- [ ] 3.2 Migrate table surfaces in `frontend/src/pages/` — `ExpiredItemsPage.tsx`, `DetailedExpiryReportPage.tsx`, `UsageReportPage.tsx`, `StoreAreaManagementPage.tsx`, `UserManagementPage.tsx` — to use semantic tokens for headers, rows, and state indicators (active/inactive/pending/error).
-- [ ] 3.3 Migrate chart and data visualization surfaces: `ExpiredLossReport.tsx`, `MarkdownCalculator.tsx`, `SubscriptionDashboard.tsx` — apply secondary (sky blue) for data viz, primary (teal) for emphasis, and ensure data-viz semantic tokens are used for chart series colors. Verify colorblind-accessible palette.
-- [ ] 3.4 Migrate `CSVUploadPage.tsx` to use semantic tokens for upload states (drag-over, uploading, success, error).
-- [ ] 3.5 Migrate remaining page components: `ReportsPage.tsx`, `SettingsPage.tsx`, `SubscriptionSettingsPage.tsx`, `OnboardingPage.tsx` to use semantic tokens.
+- [x] 3.1 Migrate dashboard card layout in `frontend/src/pages/DashboardPage.tsx` to use semantic tokens. Apply surface tokens for card backgrounds, text tokens for hierarchy, and primary token for key metrics highlights.
+- [x] 3.2 Migrate table surfaces in `frontend/src/pages/` — `ExpiredItemsPage.tsx`, `DetailedExpiryReportPage.tsx`, `UsageReportPage.tsx`, `StoreAreaManagementPage.tsx`, `UserManagementPage.tsx` — to use semantic tokens for headers, rows, and state indicators (active/inactive/pending/error).
+- [x] 3.3 Migrate chart and data visualization surfaces: `ExpiredLossReport.tsx`, `MarkdownCalculator.tsx`, `SubscriptionDashboard.tsx` — apply secondary (sky blue) for data viz, primary (teal) for emphasis, and ensure data-viz semantic tokens are used for chart series colors. Verify colorblind-accessible palette.
+- [x] 3.4 Migrate `CSVUploadPage.tsx` to use semantic tokens for upload states (drag-over, uploading, success, error).
+- [x] 3.5 Migrate remaining page components: `ReportsPage.tsx`, `SettingsPage.tsx`, `SubscriptionSettingsPage.tsx`, `OnboardingPage.tsx` to use semantic tokens.
 - [ ] 3.6 Visual regression verification for Wave 3: screenshot comparison <5% pixel difference. Design owner sign-off required.
-- [ ] 3.7 Spacing audit: verify all Wave 1-3 surfaces use the 8px base grid spacing system from `design-tokens.json`. Grep/lint for non-standard spacing values (odd pixel values, non-multiples of 4/8) in migrated components. Document any approved exceptions.
+- [x] 3.7 Spacing audit: verify all Wave 1-3 surfaces use the 8px base grid spacing system from `design-tokens.json`. Grep/lint for non-standard spacing values (odd pixel values, non-multiples of 4/8) in migrated components. Document any approved exceptions.
+  - Approved exceptions retained in `DetailedExpiryReportPage.tsx` and `UsageReportPage.tsx` for data-table minimum widths (`50px`, `60px`, `70px`, `100px`, `120px`, `140px`, `160px`, `180px`, `200px`) because they constrain dense tabular columns rather than spacing gaps and preserve existing responsive table behavior.
 
 ## 4. Wave 4 — Zebra Scanner Brand Adaptations & Scan State Feedback
 
