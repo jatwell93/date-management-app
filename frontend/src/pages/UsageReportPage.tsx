@@ -155,7 +155,7 @@ export function UsageReportPage({ token }: UsageReportPageProps) {
         label: 'Items Added',
         data: itemsByUser?.map((item) => item.itemCount) || [],
         backgroundColor: semanticDataViz.series4,
-        borderColor: semanticDataViz.series1,
+        borderColor: semanticDataViz.series4,
         borderWidth: 1,
       },
     ],

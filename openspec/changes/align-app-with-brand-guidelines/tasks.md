@@ -43,6 +43,7 @@
 - [ ] 3.6 Visual regression verification for Wave 3: screenshot comparison <5% pixel difference. Design owner sign-off required.
 - [x] 3.7 Spacing audit: verify all Wave 1-3 surfaces use the 8px base grid spacing system from `design-tokens.json`. Grep/lint for non-standard spacing values (odd pixel values, non-multiples of 4/8) in migrated components. Document any approved exceptions.
   - Approved exceptions retained in `DetailedExpiryReportPage.tsx` and `UsageReportPage.tsx` for data-table minimum widths (`50px`, `60px`, `70px`, `100px`, `120px`, `140px`, `160px`, `180px`, `200px`) because they constrain dense tabular columns rather than spacing gaps and preserve existing responsive table behavior.
+- [x] 3.8 Review hardening: promote reusable neutral/disabled button semantics into the shared `Button` primitive, update Wave 3 button call sites to consume them, align `UsageReportPage` data-viz border/fill tokens, strengthen legacy `inventory-*` utility detection, and keep frontend startup/docs behavior cross-platform and accurate after PR review.
 
 ## 4. Wave 4 — Zebra Scanner Brand Adaptations & Scan State Feedback
 

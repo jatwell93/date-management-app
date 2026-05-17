@@ -1,7 +1,7 @@
 /*
- * Tailwind CLI input file.
+ * Tailwind pipeline entrypoint.
+ * Source: src/index.css. Generated output: src/tailwind-output.css.
  * Custom properties and theme tokens are defined in globals.css (imported by App.tsx).
- * This file is only used as the input for `npx tailwindcss -i src/index.css -o src/tailwind-output.css`.
  */
 
 *, ::before, ::after {
@@ -2835,10 +2835,6 @@ code {
   background-color: var(--surface-4);
 }
 
-.hover\:bg-semantic-text-tertiary:hover {
-  background-color: var(--text-tertiary);
-}
-
 .hover\:bg-semantic-warning-hover:hover {
   --tw-bg-opacity: 1;
   background-color: rgb(180 83 9 / var(--tw-bg-opacity, 1));
@@ -2969,6 +2965,10 @@ code {
   background-color: rgb(4 120 87 / var(--tw-bg-opacity, 1));
 }
 
+.active\:bg-semantic-surface-4:active {
+  background-color: var(--surface-4);
+}
+
 .active\:bg-semantic-warning-active:active {
   --tw-bg-opacity: 1;
   background-color: rgb(146 64 14 / var(--tw-bg-opacity, 1));
@@ -2984,6 +2984,10 @@ code {
 
 .disabled\:bg-semantic-surface-4:disabled {
   background-color: var(--surface-4);
+}
+
+.disabled\:text-semantic-text-tertiary:disabled {
+  color: var(--text-tertiary);
 }
 
 .disabled\:opacity-50:disabled {

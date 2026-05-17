@@ -5,7 +5,7 @@ import { cva, type VariantProps } from 'class-variance-authority';
 import { cn } from '../../lib/utils';
 
 const buttonVariants = cva(
-  "inline-flex items-center justify-center gap-2 whitespace-nowrap rounded-md text-sm font-medium transition-all disabled:pointer-events-none disabled:opacity-50 [&_svg]:pointer-events-none [&_svg:not([class*='size-'])]:size-4 shrink-0 [&_svg]:shrink-0 outline-none focus-visible:border-semantic-primary focus-visible:ring-semantic-primary/50 focus-visible:ring-[3px] aria-invalid:ring-semantic-critical/20 dark:aria-invalid:ring-semantic-critical/40 aria-invalid:border-semantic-critical",
+  "inline-flex items-center justify-center gap-2 whitespace-nowrap rounded-md text-sm font-medium transition-all disabled:pointer-events-none disabled:bg-semantic-surface-4 disabled:text-semantic-text-tertiary [&_svg]:pointer-events-none [&_svg:not([class*='size-'])]:size-4 shrink-0 [&_svg]:shrink-0 outline-none focus-visible:border-semantic-primary focus-visible:ring-semantic-primary/50 focus-visible:ring-[3px] aria-invalid:ring-semantic-critical/20 dark:aria-invalid:ring-semantic-critical/40 aria-invalid:border-semantic-critical",
   {
     variants: {
       variant: {
@@ -17,6 +17,8 @@ const buttonVariants = cva(
           'border border-input bg-semantic-surface-1 text-semantic-text-primary shadow-xs hover:bg-semantic-surface-2 dark:bg-semantic-surface-2 dark:hover:bg-semantic-surface-3',
         secondary:
           'bg-semantic-secondary text-semantic-secondary-foreground hover:bg-semantic-secondary-hover active:bg-semantic-secondary-active',
+        neutral:
+          'bg-semantic-surface-3 text-semantic-text-primary hover:bg-semantic-surface-4 active:bg-semantic-surface-4',
         ghost:
           'text-semantic-text-primary hover:bg-semantic-surface-2 hover:text-semantic-text-primary dark:hover:bg-semantic-surface-3',
         link: 'text-semantic-secondary underline-offset-4 hover:underline',

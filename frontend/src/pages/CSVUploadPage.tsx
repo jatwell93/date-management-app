@@ -10,6 +10,7 @@ import {
   TableHeader,
   TableRow,
 } from '../components/ui/table';
+import { Button } from '../components/ui/button';
 import {
   validateCSVColumns,
   estimateRowCount,
@@ -996,29 +997,21 @@ export const CSVUploadPage: React.FC<{
           )}
 
           <div className="flex items-center space-x-4">
-            <button
+            <Button
               type="submit"
               disabled={isUploading || !selectedFile}
-              className={`px-4 py-2 rounded-md text-white font-medium ${
-                isUploading || !selectedFile
-                  ? 'bg-semantic-surface-4 cursor-not-allowed'
-                  : 'bg-semantic-primary hover:bg-semantic-primary-hover'
-              }`}
+              className="px-4 py-2 font-medium"
             >
               {isUploading
                 ? 'Uploading...'
                 : isExpiryImport
                   ? 'Upload Expiry List'
                   : 'Upload CSV/XLSX/XLS'}
-            </button>
+            </Button>
 
-            <button
-              type="button"
-              onClick={handleReset}
-              className="px-4 py-2 bg-semantic-surface-3 text-semantic-text-secondary rounded-md hover:bg-semantic-surface-4"
-            >
+            <Button type="button" onClick={handleReset} variant="neutral" className="px-4 py-2">
               Reset
-            </button>
+            </Button>
           </div>
         </form>
 

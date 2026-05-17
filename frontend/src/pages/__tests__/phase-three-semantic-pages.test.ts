@@ -24,7 +24,9 @@ const readSource = (relativeFile: (typeof phaseThreeFiles)[number]) =>
 describe('phase 3 semantic page surfaces', () => {
   it('removes legacy inventory token classes from migrated wave 3 surfaces', () => {
     phaseThreeFiles.forEach((file) => {
-      expect(readSource(file)).not.toMatch(/className=(?:`|"|')[^`"']*inventory-/);
+      expect(readSource(file)).not.toMatch(
+        /(?:bg|text|border|hover:bg|focus-visible:ring|file:bg)-inventory-/,
+      );
     });
   });
 

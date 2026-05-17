@@ -44,7 +44,7 @@
   },
   "scripts": {
     "prestart": "npm run tailwind:build",
-    "start": "set PORT=3002 && craco start",
+    "start": "cross-env PORT=3002 craco start",
     "build": "craco build",
     "test": "craco test",
     "test:coverage": "craco test --coverage --watchAll=false",

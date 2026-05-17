@@ -299,14 +299,16 @@ export function DetailedExpiryReportPage({ token }: DetailedExpiryReportPageProp
               <Button
                 onClick={() => handleDelete(row.original.inventoryId)}
                 size="sm"
-                className="bg-semantic-critical hover:bg-semantic-critical-hover text-white text-xs flex-shrink-0 min-w-[70px]"
+                variant="destructive"
+                className="text-xs flex-shrink-0 min-w-[70px]"
               >
                 Confirm Delete
               </Button>
               <Button
                 onClick={cancelDelete}
                 size="sm"
-                className="bg-semantic-surface-4 hover:bg-semantic-text-tertiary text-white text-xs flex-shrink-0 min-w-[60px]"
+                variant="neutral"
+                className="text-xs flex-shrink-0 min-w-[60px]"
               >
                 Cancel
               </Button>
@@ -324,8 +326,8 @@ export function DetailedExpiryReportPage({ token }: DetailedExpiryReportPageProp
                 onClick={handleSaveEdit}
                 disabled={saving}
                 size="sm"
-                variant="default"
-                className="min-w-[50px] bg-semantic-success hover:bg-semantic-success-hover text-white font-medium disabled:bg-semantic-surface-4"
+                variant="success"
+                className="min-w-[50px] font-medium"
               >
                 {saving ? '...' : 'Save'}
               </Button>
@@ -333,8 +335,8 @@ export function DetailedExpiryReportPage({ token }: DetailedExpiryReportPageProp
                 onClick={handleCancelEdit}
                 disabled={saving}
                 size="sm"
-                variant="secondary"
-                className="min-w-[50px] bg-semantic-surface-4 hover:bg-semantic-text-tertiary text-white font-medium"
+                variant="neutral"
+                className="min-w-[50px] font-medium"
               >
                 Cancel
               </Button>
@@ -348,7 +350,7 @@ export function DetailedExpiryReportPage({ token }: DetailedExpiryReportPageProp
               onClick={() => handleEdit(row.original)}
               size="sm"
               variant="default"
-              className="min-w-[50px] bg-semantic-primary hover:bg-semantic-primary-hover text-white font-medium"
+              className="min-w-[50px] font-medium"
             >
               Edit
             </Button>
@@ -356,7 +358,7 @@ export function DetailedExpiryReportPage({ token }: DetailedExpiryReportPageProp
               onClick={() => confirmDelete(row.original.inventoryId)}
               size="sm"
               variant="destructive"
-              className="min-w-[50px] bg-semantic-critical hover:bg-semantic-critical-hover text-white font-medium"
+              className="min-w-[50px] font-medium"
             >
               Delete
             </Button>
