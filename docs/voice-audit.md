@@ -21,11 +21,11 @@
 
 | Page | Key Strings | Classification | Matches Spec? |
 |------|------------|----------------|---------------|
-| `DashboardPage.tsx` | "Total Items", "Expiring Soon", "Expired Items", "Low Stock" | Owner — outcome metrics | ✅ Yes |
+| `DashboardPage.tsx` | "Total Products", "Inventory Items", "Expiring Soon", "Low Stock" | Owner — outcome metrics | ✅ Yes |
 | `ReportsPage.tsx` | "Reports", stat cards with totals/averages | Owner — business insight | ✅ Yes |
 | `ExpiredLossReport.tsx` | "Expired Item Loss Report", "Financial Loss by SKU", "Financial Loss by Store Area" | Owner — margin/loss language | ✅ Yes |
 | `SubscriptionSettingsPage.tsx` | "Subscription & Billing", plan tier names, pricing | Owner — account management | ✅ Yes |
-| `UserManagementPage.tsx` | "User Management", role labels | Owner — team oversight | ✅ Yes |
+| `UserManagementPage.tsx` | "Team Members", "Organization Members", role labels | Owner — team oversight | ✅ Yes |
 | `SettingsPage.tsx` | "Organisation Settings", "Manage your organisation profile, members, and roles." | Owner — org management | ✅ Yes |
 | `DetailedExpiryReportPage.tsx` | Column headers (Product, SKU, Expiry Date, Days Until Expiry, Status, Quantity, Unit Price, Total Value) | Owner — financial detail | ✅ Yes |
 | `UsageReportPage.tsx` | Usage metrics, date range filters | Owner — operational insight | ✅ Yes |
