@@ -348,7 +348,9 @@ export function OnboardingPage() {
       <div className="w-full max-w-2xl px-4">
         {/* Header */}
         <div className="mb-6 text-center">
-          <h1 className="text-3xl font-bold text-semantic-text-primary">{stepConfig.title}</h1>
+          <h1 className="text-3xl font-bold font-heading text-semantic-text-primary">
+            {stepConfig.title}
+          </h1>
           <p className="mt-2 text-semantic-text-secondary">{stepConfig.description}</p>
         </div>
 

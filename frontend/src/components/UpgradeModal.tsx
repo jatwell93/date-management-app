@@ -153,10 +153,10 @@ export function UpgradeModal({ isOpen, onClose, onSelectPlan, currentTier }: Upg
                   </CardTitle>
                   <CardDescription>
                     {isConcierge ? (
-                      <span className="text-2xl font-bold">Contact Sales</span>
+                      <span className="text-2xl font-bold font-heading">Contact Sales</span>
                     ) : (
                       <>
-                        <span className="text-3xl font-bold">${monthlyPrice}</span>
+                        <span className="text-3xl font-bold font-heading">${monthlyPrice}</span>
                         <span className="text-sm text-muted-foreground">/month</span>
                         {billingCycle === 'annual' && annualBilledAmount !== undefined && (
                           <div className="text-xs text-muted-foreground mt-1">
@@ -205,7 +205,7 @@ export function UpgradeModal({ isOpen, onClose, onSelectPlan, currentTier }: Upg
 
         {/* Feature Comparison Table (Desktop) */}
         <div className="hidden lg:block mt-8">
-          <h3 className="text-lg font-semibold mb-4">Feature Comparison</h3>
+          <h3 className="text-lg font-semibold font-heading mb-4">Feature Comparison</h3>
           <div className="overflow-x-auto">
             <table className="w-full border-collapse">
               <thead>

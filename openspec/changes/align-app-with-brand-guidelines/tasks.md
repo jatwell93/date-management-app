@@ -72,11 +72,11 @@
 
 ## 5. Audience-Specific Typography & Voice
 
-- [ ] 5.1 Add brand font packages to `frontend/package.json`: `@fontsource/fraunces`, `@fontsource/outfit`, `@fontsource/inter` (or equivalent self-hosted font imports). Configure font loading with `font-display: swap` to avoid FOIT. Fraunces for display (48px+), Outfit for headings/UI, Inter for body text.
-- [ ] 5.2 Refactor `frontend/tailwind.config.js` font-family definitions: add `font-display` (Fraunces), `font-heading` (Outfit), `font-body` (Inter) for all contexts (brand v2.0 unified). Add `font-eyebrow` (Outfit 600, uppercase, tracking-wide) for eyebrow text. Update `globals.css` body font-family to use Inter as default.
-- [ ] 5.3 Apply unified brand typography: update all pages to use Fraunces for display text (48px+ hero only), Outfit for headings/UI components, Inter for body text. Add eyebrow text (Outfit 600 uppercase) where section headers are needed. Verify font stacks in browser DevTools.
-- [ ] 5.4 Verify typography in browser DevTools: load dashboard → confirm Fraunces (display), Outfit (headings), Inter (body); load scanner screen → confirm same stack (Outfit + Inter). Check that eyebrow text uses uppercase with slight tracking.
-- [ ] 5.5 Create `docs/voice-audit.md` documenting the messaging audit findings: list of all user-facing strings reviewed, classification as owner/worker context, whether language matches spec (margins/outcomes for owner, direct utility for worker), and any mismatches fixed.
+- [x] 5.1 Add brand font packages to `frontend/package.json`: `@fontsource/fraunces`, `@fontsource/outfit`, `@fontsource/inter` (or equivalent self-hosted font imports). Configure font loading with `font-display: swap` to avoid FOIT. Fraunces for display (48px+), Outfit for headings/UI, Inter for body text.
+- [x] 5.2 Refactor `frontend/tailwind.config.js` font-family definitions: add `font-display` (Fraunces), `font-heading` (Outfit), `font-body` (Inter) for all contexts (brand v2.0 unified). Add `font-eyebrow` (Outfit 600, uppercase, tracking-wide) for eyebrow text. Update `globals.css` body font-family to use Inter as default.
+- [x] 5.3 Apply unified brand typography: update all pages to use Fraunces for display text (48px+ hero only), Outfit for headings/UI components, Inter for body text. Add eyebrow text (Outfit 600 uppercase) where section headers are needed. Verify font stacks in browser DevTools.
+- [x] 5.4 Verify typography in browser DevTools: load dashboard → confirm Fraunces (display), Outfit (headings), Inter (body); load scanner screen → confirm same stack (Outfit + Inter). Check that eyebrow text uses uppercase with slight tracking.
+- [x] 5.5 Create `docs/voice-audit.md` documenting the messaging audit findings: list of all user-facing strings reviewed, classification as owner/worker context, whether language matches spec (margins/outcomes for owner, direct utility for worker), and any mismatches fixed.
 
 ## 6. Amber Restraint Enforcement
 

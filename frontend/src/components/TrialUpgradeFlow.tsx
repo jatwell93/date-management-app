@@ -115,11 +115,11 @@ function UpgradeCard({
         </div>
 
         <div className="space-y-3">
-          <h4 className="text-sm font-medium">Upgrade to Professional</h4>
+          <h4 className="text-sm font-medium font-heading">Upgrade to Professional</h4>
           <div className="grid grid-cols-2 gap-3">
             <div className="p-3 border rounded-lg space-y-1">
               <p className="font-semibold">Monthly</p>
-              <p className="text-2xl font-bold">
+              <p className="text-2xl font-bold font-heading">
                 $29<span className="text-sm font-normal text-muted-foreground">/mo</span>
               </p>
               <p className="text-xs text-muted-foreground">Billed monthly</p>
@@ -129,7 +129,7 @@ function UpgradeCard({
                 Save 30%
               </div>
               <p className="font-semibold">Annual</p>
-              <p className="text-2xl font-bold">
+              <p className="text-2xl font-bold font-heading">
                 $19<span className="text-sm font-normal text-muted-foreground">/mo</span>
               </p>
               <p className="text-xs text-muted-foreground">Billed $228 yearly</p>
