@@ -87,7 +87,7 @@ export function TrialBanner({ token }: TrialBannerProps) {
         <Card
           className={
             isUrgent
-              ? 'bg-amber-50 border-amber-200 dark:bg-amber-950/30 dark:border-amber-800'
+              ? 'bg-semantic-warning-muted border-semantic-warning-muted'
               : 'bg-blue-50 border-blue-200 dark:bg-blue-950/30 dark:border-blue-800'
           }
         >
@@ -95,13 +95,15 @@ export function TrialBanner({ token }: TrialBannerProps) {
             <div className="flex items-center justify-between flex-wrap gap-3">
               <div className="flex items-center gap-3">
                 <div
-                  className={`w-2 h-2 rounded-full ${isUrgent ? 'bg-amber-500' : 'bg-blue-500'}`}
+                  className={`w-2 h-2 rounded-full ${
+                    isUrgent ? 'bg-semantic-warning' : 'bg-blue-500'
+                  }`}
                 />
                 <div>
                   <p
                     className={`text-sm font-medium ${
                       isUrgent
-                        ? 'text-amber-800 dark:text-amber-200'
+                        ? 'text-semantic-warning-muted-foreground'
                         : 'text-blue-800 dark:text-blue-200'
                     }`}
                   >
@@ -111,9 +113,7 @@ export function TrialBanner({ token }: TrialBannerProps) {
                   </p>
                   <p
                     className={`text-xs ${
-                      isUrgent
-                        ? 'text-amber-600 dark:text-amber-300'
-                        : 'text-blue-600 dark:text-blue-300'
+                      isUrgent ? 'text-semantic-warning' : 'text-blue-600 dark:text-blue-300'
                     }`}
                   >
                     Upgrade now to keep all {tierLimits.maxProducts} products and{' '}
@@ -126,7 +126,7 @@ export function TrialBanner({ token }: TrialBannerProps) {
                 onClick={() => navigate('/upgrade')}
                 className={
                   isUrgent
-                    ? 'bg-amber-600 hover:bg-amber-700 text-white'
+                    ? 'bg-semantic-warning hover:bg-semantic-warning-hover text-semantic-warning-foreground'
                     : 'bg-blue-600 hover:bg-blue-700 text-white'
                 }
               >

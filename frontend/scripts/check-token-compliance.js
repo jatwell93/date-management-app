@@ -49,6 +49,15 @@ const RULES = [
     severity: 'warning',
   },
   {
+    id: 'amber-restraint-usage',
+    description: 'Raw amber utility or deprecated warning token bypasses semantic-warning policy',
+    pattern:
+      /(?:bg|text|border|ring|outline|from|to|via)-(?:amber-\d+|inventory-warning-\d+)/g,
+    suggestion:
+      'Use semantic-warning tokens only in approved warning/emphasis contexts (see AMBER_USAGE_GUIDE.md)',
+    severity: 'error',
+  },
+  {
     id: 'hardcoded-gray-class',
     description: 'Hardcoded Tailwind gray class (use semantic token)',
     // Matches bg-gray-*, text-gray-*, border-gray-* etc.
@@ -80,6 +89,10 @@ const EXCLUDED_FILE_NAMES = new Set(['globals.css', 'index.css', 'tailwind-outpu
 
 function scanFile(filePath) {
   const content = fs.readFileSync(filePath, 'utf-8');
+  return scanContent(content, path.relative(SRC_DIR, filePath));
+}
+
+function scanContent(content, file = '<inline>') {
   const lines = content.split('\n');
   const violations = [];
 
@@ -91,7 +104,7 @@ function scanFile(filePath) {
       rule.pattern.lastIndex = 0;
       while ((match = rule.pattern.exec(line)) !== null) {
         violations.push({
-          file: path.relative(SRC_DIR, filePath),
+          file,
           line: i + 1,
           column: match.index + 1,
           ruleId: rule.id,
@@ -248,5 +261,6 @@ module.exports = {
   buildBaseline,
   getBaselineDelta,
   isExcluded,
+  scanContent,
   summarizeViolations,
 };

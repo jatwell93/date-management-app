@@ -80,10 +80,10 @@
 
 ## 6. Amber Restraint Enforcement
 
-- [ ] 6.1 Create grep script or extend compliance check to detect all amber (`#D97706` / `amber-*` / `inventory-warning-*`) color usages. Verify each usage falls within approved contexts: warning alert states, emphasis badges (pending), form validation warnings, scan-state "pending" feedback.
-- [ ] 6.2 Fix any amber usages outside approved contexts: replace decorative amber backgrounds/borders with appropriate semantic tokens (primary, secondary, or surface). Ensure amber does NOT appear in: decorative backgrounds/borders, secondary buttons, charts (unless explicit warning indicator), navigation/headers.
-- [ ] 6.3 Create `frontend/AMBER_USAGE_GUIDE.md` documenting approved amber usage contexts and exceptions process for future cases.
-- [ ] 6.4 Add amber restraint check to CI pipeline alongside token compliance check. Zero amber decorative usage allowed in merged code.
+- [x] 6.1 Create grep script or extend compliance check to detect all amber (`#D97706` / `amber-*` / `inventory-warning-*`) color usages. Verify each usage falls within approved contexts: warning alert states, emphasis badges (pending), form validation warnings, scan-state "pending" feedback.
+- [x] 6.2 Fix any amber usages outside approved contexts: replace decorative amber backgrounds/borders with appropriate semantic tokens (primary, secondary, or surface). Ensure amber does NOT appear in: decorative backgrounds/borders, secondary buttons, charts (unless explicit warning indicator), navigation/headers.
+- [x] 6.3 Create `frontend/AMBER_USAGE_GUIDE.md` documenting approved amber usage contexts and exceptions process for future cases.
+- [x] 6.4 Add amber restraint check to CI pipeline alongside token compliance check. Zero amber decorative usage allowed in merged code.
 
 ## 7. Validation, Documentation & Rollout Readiness
 

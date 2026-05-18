@@ -73,17 +73,21 @@ export function UsageWarning({
       className={`${
         isUrgent
           ? 'bg-red-50 border-red-200 dark:bg-red-950/30 dark:border-red-800'
-          : 'bg-amber-50 border-amber-200 dark:bg-amber-950/30 dark:border-amber-800'
+          : 'bg-semantic-warning-muted border-semantic-warning-muted'
       }`}
     >
       <CardContent className="py-3 px-4">
         <div className="flex items-center justify-between flex-wrap gap-3">
           <div className="flex items-center gap-3 flex-1">
-            <div className={`w-2 h-2 rounded-full ${isUrgent ? 'bg-red-500' : 'bg-amber-500'}`} />
+            <div
+              className={`w-2 h-2 rounded-full ${isUrgent ? 'bg-red-500' : 'bg-semantic-warning'}`}
+            />
             <div className="flex-1">
               <p
                 className={`text-sm font-medium ${
-                  isUrgent ? 'text-red-800 dark:text-red-200' : 'text-amber-800 dark:text-amber-200'
+                  isUrgent
+                    ? 'text-red-800 dark:text-red-200'
+                    : 'text-semantic-warning-muted-foreground'
                 }`}
               >
                 {isUrgent ? 'Critical: ' : 'Warning: '}
@@ -91,7 +95,7 @@ export function UsageWarning({
               </p>
               <p
                 className={`text-xs ${
-                  isUrgent ? 'text-red-600 dark:text-red-300' : 'text-amber-600 dark:text-amber-300'
+                  isUrgent ? 'text-red-600 dark:text-red-300' : 'text-semantic-warning'
                 }`}
               >
                 Using {displayCurrent} of {displayLimit} ({displayRemaining} remaining)
@@ -106,7 +110,7 @@ export function UsageWarning({
                 className={
                   isUrgent
                     ? 'bg-red-600 hover:bg-red-700 text-white'
-                    : 'bg-amber-600 hover:bg-amber-700 text-white'
+                    : 'bg-semantic-warning hover:bg-semantic-warning-hover text-semantic-warning-foreground'
                 }
               >
                 Upgrade

@@ -2,6 +2,7 @@ const path = require('path');
 
 const {
   isExcluded,
+  scanContent,
   summarizeViolations,
   buildBaseline,
   getBaselineDelta,
@@ -57,6 +58,44 @@ describe('check-token-compliance helpers', () => {
 
     it('computes delta from a previous baseline', () => {
       expect(getBaselineDelta({ totalViolations: 5 }, violations)).toBe(-2);
+    });
+  });
+
+  describe('amber restraint scanning', () => {
+    it('flags raw amber utility classes and deprecated inventory warning tokens', () => {
+      const violations = scanContent(`
+        <div className="bg-amber-50 border-amber-200 text-amber-800" />
+        <div className="bg-inventory-warning-500" />
+      `);
+
+      expect(violations).toEqual(
+        expect.arrayContaining([
+          expect.objectContaining({
+            ruleId: 'amber-restraint-usage',
+            match: 'bg-amber-50',
+          }),
+          expect.objectContaining({
+            ruleId: 'amber-restraint-usage',
+            match: 'border-amber-200',
+          }),
+          expect.objectContaining({
+            ruleId: 'amber-restraint-usage',
+            match: 'text-amber-800',
+          }),
+          expect.objectContaining({
+            ruleId: 'amber-restraint-usage',
+            match: 'bg-inventory-warning-500',
+          }),
+        ]),
+      );
+    });
+
+    it('does not flag approved semantic warning tokens', () => {
+      expect(
+        scanContent(`
+          <div className="bg-semantic-warning-muted text-semantic-warning-muted-foreground" />
+        `),
+      ).toEqual([]);
     });
   });
 });
