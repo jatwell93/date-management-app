@@ -1,3 +1,6 @@
+/* eslint-env node */
+/* global require, process */
+
 const path = require('path');
 
 const {
@@ -7,6 +10,7 @@ const {
   summarizeViolations,
   buildBaseline,
   getBaselineDelta,
+  parseBaselineContent,
 } = require('../../scripts/check-token-compliance');
 
 describe('check-token-compliance helpers', () => {
@@ -59,6 +63,12 @@ describe('check-token-compliance helpers', () => {
 
     it('computes delta from a previous baseline', () => {
       expect(getBaselineDelta({ totalViolations: 5 }, violations)).toBe(-2);
+    });
+
+    it('reports malformed baseline JSON with a clear error', () => {
+      expect(() => parseBaselineContent('{bad json')).toThrow(
+        'Token compliance baseline is malformed JSON',
+      );
     });
   });
 

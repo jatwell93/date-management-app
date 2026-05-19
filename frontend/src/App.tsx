@@ -864,9 +864,15 @@ function AppContent({
         <HandheldLayout
           userName={userName || undefined}
           syncStatus={isOnline ? 'synced' : 'offline'}
-          onSyncNow={async () => {
-            await synchronizeOfflineData(token);
-            await refreshPendingQueueCount();
+          onSyncNow={() => {
+            void (async () => {
+              await synchronizeOfflineData(token);
+              await refreshPendingQueueCount();
+            })().catch((error: unknown) => {
+              Sentry.captureException(error, {
+                tags: { feature: 'handheld-sync' },
+              });
+            });
           }}
           onSettingsClick={() => {
             // TODO: Implement settings navigation

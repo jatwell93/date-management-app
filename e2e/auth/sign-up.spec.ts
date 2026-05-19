@@ -1,4 +1,5 @@
 import { test, expect } from '@playwright/test';
+import { randomUUID } from 'crypto';
 import { getOtpFromMailinator } from '../helpers/mailinator';
 
 /**
@@ -14,7 +15,7 @@ import { getOtpFromMailinator } from '../helpers/mailinator';
 
 const TEST_EMAIL = `e2e-signup-${Date.now()}@mailinator.com`;
 const TEST_USERNAME = `e2euser${Date.now()}`;
-const TEST_PASSWORD = 'E2eTest#2026!Secure';
+const TEST_PASSWORD = `E2e-${randomUUID()}-Aa1!`;
 
 test.describe('Sign-up flow', () => {
   test('new user can sign up and reach /scan', async ({ page }) => {

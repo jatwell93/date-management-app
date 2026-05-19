@@ -1,4 +1,16 @@
 import { test, expect } from '@playwright/test';
+import { randomUUID } from 'crypto';
+
+function requireE2EEnv(name: string): string {
+  const value = process.env[name];
+  if (!value) {
+    throw new Error(`${name} is required for sign-in E2E flows`);
+  }
+  return value;
+}
+
+const MANAGER_EMAIL = process.env.E2E_MANAGER_EMAIL || 'testclerk2026b@mailinator.com';
+const MANAGER_PASSWORD = requireE2EEnv('E2E_MANAGER_PASSWORD');
 
 /**
  * E2E: Sign-in flow
@@ -17,10 +29,8 @@ test.describe('Sign-in flow', () => {
     await page
       .getByLabel(/email|username/i)
       .first()
-      .fill('testclerk2026b@mailinator.com');
-    await page
-      .locator('input[name="password"], input[id="password-field"]')
-      .fill('Xk9#mPqL2026$vN!');
+      .fill(MANAGER_EMAIL);
+    await page.locator('input[name="password"], input[id="password-field"]').fill(MANAGER_PASSWORD);
     await page.locator('button[data-localization-key="formButtonPrimary"]').click();
 
     await expect(page).toHaveURL(/\/scan|\/onboarding/, { timeout: 15000 });
@@ -35,7 +45,7 @@ test.describe('Sign-in flow', () => {
       .fill('notauser@mailinator.com');
     await page
       .locator('input[name="password"], input[id="password-field"]')
-      .fill('WrongPassword123!');
+      .fill(`Invalid-${randomUUID()}-Aa1!`);
     await page.locator('button[data-localization-key="formButtonPrimary"]').click();
 
     await expect(page.getByText(/invalid|incorrect|error/i)).toBeVisible({ timeout: 8000 });

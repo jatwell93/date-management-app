@@ -274,12 +274,23 @@ export async function authenticateWorkerRequest(
     };
   }
 
+  if (!subscription) {
+    return {
+      userId: decodedToken.userId,
+      organizationId,
+      tierLevel: 'starter',
+      subscription: {} as SubscriptionTierData,
+      isValid: false,
+      error: `No subscription found for organization ${organizationId}`,
+    };
+  }
+
   // All validations passed
   return {
     userId: decodedToken.userId,
     organizationId,
-    tierLevel: subscription!.tierLevel,
-    subscription: subscription!,
+    tierLevel: subscription.tierLevel,
+    subscription,
     isValid: true,
   };
 }

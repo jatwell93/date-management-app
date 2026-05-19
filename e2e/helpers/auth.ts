@@ -1,9 +1,22 @@
-import { Page, BrowserContext, expect } from '@playwright/test';
+import { Page } from '@playwright/test';
+import { randomUUID } from 'crypto';
 import path from 'path';
 import { getOtpFromMailinator } from './mailinator';
 
+function requireE2EEnv(name: string): string {
+  const value = process.env[name];
+  if (!value) {
+    throw new Error(`${name} is required for authenticated E2E flows`);
+  }
+  return value;
+}
+
+function createE2ETestPassword(): string {
+  return `E2e-${randomUUID()}-Aa1!`;
+}
+
 export const MANAGER_EMAIL = 'testclerk2026b@team403684.testinator.email';
-export const MANAGER_PASSWORD = 'Xk9#mPqL2026$vN!';
+export const MANAGER_PASSWORD = requireE2EEnv('E2E_MANAGER_PASSWORD');
 
 export const AUTH_STATE_PATH = path.join(__dirname, '..', '.auth', 'manager.json');
 
@@ -27,7 +40,7 @@ async function enterOtpCode(page: Page, otp: string): Promise<void> {
 export async function signUpAsManager(page: Page): Promise<void> {
   const testEmail = `e2e-manager-${Date.now()}@team403684.testinator.email`;
   const testUsername = `e2emanager${Date.now()}`;
-  const testPassword = 'E2eTest#2026!Secure';
+  const testPassword = createE2ETestPassword();
 
   await page.goto('/sign-up');
 

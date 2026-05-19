@@ -74,7 +74,7 @@ async function main() {
   step(currentStep, TOTAL_STEPS, 'Checking Node.js version');
   try {
     const nodeVersion = process.version;
-    const majorVersion = parseInt(nodeVersion.slice(1).split('.')[0]);
+    const majorVersion = parseInt(nodeVersion.slice(1).split('.')[0], 10);
 
     if (majorVersion >= 18) {
       success(`Node.js ${nodeVersion} (✓ meets requirement ≥18)`);

@@ -171,17 +171,19 @@ export class DatabaseMonitoringService extends EventEmitter {
     Logger.info('Database monitoring started');
 
     // Perform initial metrics collection
-    void this.collectMetrics();
+    void this.collectMetrics().catch((error: unknown) => {
+      Logger.error('Error during initial database monitoring', {
+        error: error instanceof Error ? error.message : 'Unknown error',
+      });
+    });
 
     // Set up periodic monitoring
-    this.monitoringInterval = setInterval(async () => {
-      try {
-        await this.collectMetrics();
-      } catch (error) {
+    this.monitoringInterval = setInterval(() => {
+      void this.collectMetrics().catch((error: unknown) => {
         Logger.error('Error during database monitoring', {
           error: error instanceof Error ? error.message : 'Unknown error',
         });
-      }
+      });
     }, this.config.checkInterval);
 
     if (typeof this.monitoringInterval.unref === 'function') {
