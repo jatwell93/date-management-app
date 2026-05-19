@@ -71,7 +71,7 @@ function ExpiryLoadingState({ message }: { message: string }) {
       <div className="text-center max-w-sm">
         <div
           aria-hidden="true"
-          className="mx-auto mb-4 flex h-12 w-12 items-center justify-center rounded-full border border-primary/30 bg-primary/10 text-primary"
+          className="mx-auto mb-4 flex size-12 items-center justify-center rounded-full border border-primary/30 bg-primary/10 text-primary"
         >
           <div className="h-6 w-3 rounded-full border-2 border-current border-t-transparent animate-spin" />
         </div>
@@ -385,7 +385,7 @@ function AppContent({
     }
   }, [bootstrapResult?.role, hasCurrentUserBootstrapRole, updateBootstrapRole]);
   const { isHandheld } = useHandheldDetectionContext();
-  const location = useLocation();
+  const { pathname } = useLocation();
   const navigate = useNavigate();
   const [isOnline, setIsOnline] = useState<boolean>(navigator.onLine);
   const [pendingQueueCount, setPendingQueueCount] = useState(0);
@@ -445,16 +445,11 @@ function AppContent({
 
   // Redirect handheld devices to /scan by default (only when logged in)
   useEffect(() => {
-    if (
-      isHandheld &&
-      isLoggedIn &&
-      location.pathname !== '/scan' &&
-      !location.pathname.startsWith('/login')
-    ) {
+    if (isHandheld && isLoggedIn && pathname !== '/scan' && !pathname.startsWith('/login')) {
       // Use React Router navigation instead of full page reload
       navigate('/scan', { replace: true });
     }
-  }, [isHandheld, isLoggedIn, location.pathname, navigate]);
+  }, [isHandheld, isLoggedIn, pathname, navigate]);
 
   // Show loading state while Clerk auth is still initializing so protected
   // routes don't flash-redirect to /login on page refresh.
@@ -519,7 +514,7 @@ function AppContent({
           <div className="container mx-auto">
             {/* Top-level container for the navigation elements */}
             <div className="flex items-center justify-between">
-              <div className="flex items-center space-x-4">
+              <div className="flex items-center gap-4">
                 <Link to="/scan" className="font-semibold hover:opacity-90 transition-opacity">
                   <h1 className="text-xl">Inventory Manager</h1>
                 </Link>
@@ -532,7 +527,7 @@ function AppContent({
                 >
                   {isMobileMenuOpen ? (
                     <svg
-                      className="w-6 h-6"
+                      className="size-6"
                       fill="none"
                       stroke="currentColor"
                       viewBox="0 0 24 24"
@@ -547,7 +542,7 @@ function AppContent({
                     </svg>
                   ) : (
                     <svg
-                      className="w-6 h-6"
+                      className="size-6"
                       fill="none"
                       stroke="currentColor"
                       viewBox="0 0 24 24"
@@ -564,9 +559,9 @@ function AppContent({
                 </button>
               </div>
 
-              <div className="flex items-center space-x-2">
+              <div className="flex items-center gap-2">
                 {/* Desktop Navigation - moved inside the right-aligned div */}
-                <ul className="hidden md:flex space-x-6">
+                <ul className="hidden md:flex gap-6">
                   <li>
                     <Link to="/scan" className="hover:opacity-90 transition-opacity">
                       Scan

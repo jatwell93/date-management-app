@@ -5,7 +5,7 @@ export function SettingsPage() {
   return (
     <div className="max-w-4xl mx-auto py-8 px-4">
       <div className="mb-6">
-        <h1 className="text-2xl font-bold font-heading text-semantic-text-primary">
+        <h1 className="text-2xl font-semibold font-heading text-semantic-text-primary">
           Organisation Settings
         </h1>
         <p className="mt-1 text-semantic-text-secondary">

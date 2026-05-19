@@ -51,7 +51,7 @@ describe('ReportsPage', () => {
     const tokenValue = randomUUID();
     render(<ReportsPage token={tokenValue} />);
 
-    expect(screen.getByText(/Loading reports.../i)).toBeInTheDocument();
+    expect(screen.getByText(/Loading reports…/i)).toBeInTheDocument();
 
     expect(await screen.findByText(/Monthly Expiry Report/i)).toBeInTheDocument();
     // Use getAllByText since the month appears multiple times (in month and latest_expiry_date columns)

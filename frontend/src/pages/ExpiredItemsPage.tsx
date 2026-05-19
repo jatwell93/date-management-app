@@ -321,7 +321,7 @@ const ExpiredItemsPage: React.FC<ExpiredItemsPageProps> = ({ token }) => {
   };
 
   if (loading) {
-    return <div className="text-center py-10">Loading expired items...</div>;
+    return <div className="text-center py-10">Loading expired items…</div>;
   }
 
   if (error) {
@@ -330,7 +330,7 @@ const ExpiredItemsPage: React.FC<ExpiredItemsPageProps> = ({ token }) => {
 
   return (
     <div className="container mx-auto px-4 py-8">
-      <h1 className="text-3xl font-bold font-heading mb-6">Expired Items</h1>
+      <h1 className="text-3xl font-semibold font-heading mb-6">Expired Items</h1>
 
       <Table>
         <TableHeader>
@@ -386,7 +386,7 @@ const ExpiredItemsPage: React.FC<ExpiredItemsPageProps> = ({ token }) => {
                 {item.status}
               </TableCell>
               <TableCell className="whitespace-nowrap text-sm">
-                <div className="flex space-x-2">
+                <div className="flex gap-2">
                   <Button
                     onClick={() => handleAction(item, 'sold_through')}
                     variant="outline"
@@ -426,7 +426,7 @@ const ExpiredItemsPage: React.FC<ExpiredItemsPageProps> = ({ token }) => {
           </CardHeader>
           <CardContent>
             {chartsLoading ? (
-              <div className="text-center py-8">Loading chart data...</div>
+              <div className="text-center py-8">Loading chart data…</div>
             ) : lossBySkuData && lossBySkuData.length > 0 ? (
               <Bar
                 data={lossBySkuChartData}
@@ -455,7 +455,7 @@ const ExpiredItemsPage: React.FC<ExpiredItemsPageProps> = ({ token }) => {
           </CardHeader>
           <CardContent>
             {chartsLoading ? (
-              <div className="text-center py-8">Loading chart data...</div>
+              <div className="text-center py-8">Loading chart data…</div>
             ) : lossByDepartmentData && lossByDepartmentData.length > 0 ? (
               <Bar
                 data={lossByDepartmentChartData}
@@ -482,8 +482,10 @@ const ExpiredItemsPage: React.FC<ExpiredItemsPageProps> = ({ token }) => {
       {/* Process Expired Item Dialog */}
       {isModalOpen && selectedItem && action && (
         <div className="fixed inset-0 z-50 flex items-center justify-center">
-          <div
-            className="fixed inset-0 bg-black/50 backdrop-blur-sm"
+          <button
+            type="button"
+            aria-label="Close process expired item dialog"
+            className="fixed inset-0 bg-semantic-canvas/50 backdrop-blur-sm"
             onClick={() => {
               setIsModalOpen(false);
               setSelectedItem(null);
@@ -527,10 +529,14 @@ const ExpiredItemsPage: React.FC<ExpiredItemsPageProps> = ({ token }) => {
 
             {action === 'expired' && (
               <div className="mb-4">
-                <label className="block text-sm font-medium text-foreground mb-1">
+                <label
+                  htmlFor="units-discarded"
+                  className="block text-sm font-medium text-foreground mb-1"
+                >
                   Units to Discard
                 </label>
                 <input
+                  id="units-discarded"
                   type="number"
                   min="1"
                   max={selectedItem.quantityAvailable}
@@ -550,7 +556,7 @@ const ExpiredItemsPage: React.FC<ExpiredItemsPageProps> = ({ token }) => {
               </div>
             )}
 
-            <div className="mt-6 flex justify-end space-x-2">
+            <div className="mt-6 flex justify-end gap-2">
               <Button
                 variant="outline"
                 onClick={() => {

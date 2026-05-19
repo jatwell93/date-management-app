@@ -57,7 +57,7 @@ const ExpiredLossReport: React.FC<ExpiredLossReportProps> = ({ token }) => {
   }, [token]);
 
   if (loading) {
-    return <div className="text-center py-10">Loading expired losses report...</div>;
+    return <div className="text-center py-10">Loading expired losses report…</div>;
   }
 
   if (error) {
@@ -66,7 +66,7 @@ const ExpiredLossReport: React.FC<ExpiredLossReportProps> = ({ token }) => {
 
   return (
     <div className="container mx-auto px-4 py-8">
-      <h2 className="text-2xl font-bold font-heading mb-6">Expired Item Loss Report</h2>
+      <h2 className="text-2xl font-semibold font-heading mb-6">Expired Item Loss Report</h2>
 
       <div className="grid grid-cols-1 md:grid-cols-2 gap-8">
         {/* Losses by SKU */}

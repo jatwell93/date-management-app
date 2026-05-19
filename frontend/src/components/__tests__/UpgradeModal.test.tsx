@@ -66,7 +66,7 @@ describe('UpgradeModal', () => {
     );
 
     const professionalCard = screen.getByTestId('tier-card-professional');
-    expect(professionalCard).toHaveClass('border-blue-500');
+    expect(professionalCard).toHaveClass('border-semantic-primary');
   });
 
   it('calls onSelectPlan when upgrade button clicked', () => {

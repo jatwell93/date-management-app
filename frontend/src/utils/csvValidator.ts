@@ -6,6 +6,10 @@
 
 export type UploadImportType = 'product-catalog' | 'expiry-list';
 
+function escapeRegExp(value: string): string {
+  return value.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+}
+
 // Column name alternatives matching backend parser contracts
 const PRODUCT_REQUIRED_COLUMNS = {
   sku: [
@@ -136,6 +140,7 @@ export async function validateCSVColumns(
     foundColumns: {},
     suggestions: {},
   };
+  const headerIndexByName = new Map(headersLower.map((header, index) => [header, index]));
 
   // Check each required field
   for (const [fieldName, alternatives] of Object.entries(requiredColumns)) {
@@ -143,9 +148,9 @@ export async function validateCSVColumns(
 
     for (const alt of alternatives) {
       const altLower = alt.toLowerCase();
-      const matchIndex = headersLower.indexOf(altLower);
+      const matchIndex = headerIndexByName.get(altLower);
 
-      if (matchIndex !== -1) {
+      if (matchIndex !== undefined) {
         result.foundColumns[fieldName] = headers[matchIndex];
         found = true;
         break;
@@ -157,9 +162,13 @@ export async function validateCSVColumns(
       result.missingColumns.push(fieldName);
 
       // Suggest close matches (simple fuzzy match)
-      const suggestions = headers.filter(
-        (h) => h.toLowerCase().includes(fieldName) || fieldName.includes(h.toLowerCase()),
-      );
+      const fieldNameLower = fieldName.toLowerCase();
+      const fieldNamePattern = new RegExp(escapeRegExp(fieldNameLower));
+      const suggestions = headers.filter((h) => {
+        const headerLower = h.toLowerCase();
+        const headerPattern = new RegExp(escapeRegExp(headerLower));
+        return fieldNamePattern.test(headerLower) || headerPattern.test(fieldNameLower);
+      });
 
       if (suggestions.length > 0) {
         result.suggestions[fieldName] = suggestions;

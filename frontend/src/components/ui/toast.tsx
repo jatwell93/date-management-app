@@ -48,12 +48,12 @@ const Toast: React.FC<ToastProps> = ({ message, type, isVisible, onClose }) => {
         }`}
       >
         <div
-          className={`${getToastStyle()} text-white px-4 py-3 rounded-md shadow-lg flex items-center`}
+          className={`${getToastStyle()} text-semantic-text-inverse px-4 py-3 rounded-md shadow-lg flex items-center`}
         >
           <span>{message}</span>
           <button
             onClick={onClose}
-            className="ml-4 text-white hover:text-white/80 focus:outline-none"
+            className="ml-4 text-semantic-text-inverse hover:text-semantic-text-inverse/80 focus:outline-none"
           >
             &times;
           </button>

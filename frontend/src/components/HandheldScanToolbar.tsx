@@ -49,7 +49,7 @@ export const HandheldScanToolbar: React.FC<HandheldScanToolbarProps> = ({
       <div className="px-4 py-3">
         {/* Top row: User name and sync status */}
         <div className="flex justify-between items-center mb-3">
-          <div className="flex items-center space-x-2">
+          <div className="flex items-center gap-2">
             {userName && (
               <span className="text-sm font-medium text-semantic-text-primary">{userName}</span>
             )}
@@ -63,7 +63,7 @@ export const HandheldScanToolbar: React.FC<HandheldScanToolbarProps> = ({
             className="p-2 text-semantic-text-secondary hover:text-semantic-text-primary hover:bg-semantic-surface-2 rounded-lg min-h-[48px] min-w-[48px] flex items-center justify-center focus-visible:outline-none"
             aria-label="Settings"
           >
-            <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <svg className="size-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
               <path
                 strokeLinecap="round"
                 strokeLinejoin="round"
@@ -81,7 +81,7 @@ export const HandheldScanToolbar: React.FC<HandheldScanToolbarProps> = ({
         </div>
 
         {/* Bottom row: Sync controls */}
-        <div className="flex items-center space-x-3">
+        <div className="flex items-center gap-3">
           <div className="flex-1">
             <label
               htmlFor="sync-strategy"

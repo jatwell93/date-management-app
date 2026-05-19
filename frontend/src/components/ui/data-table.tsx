@@ -135,7 +135,7 @@ export function DataTable<TData, TValue>({
         </table>
       </div>
       {pagination && (
-        <div className="flex items-center justify-between space-x-2 py-4 overflow-x-auto">
+        <div className="flex items-center justify-between gap-2 py-4 overflow-x-auto">
           <div className="flex-1 text-sm text-semantic-text-secondary">
             Showing{' '}
             {table.getState().pagination.pageIndex * table.getState().pagination.pageSize + 1} to{' '}
@@ -145,7 +145,7 @@ export function DataTable<TData, TValue>({
             )}{' '}
             of {table.getFilteredRowModel().rows.length} entries
           </div>
-          <div className="flex items-center space-x-2 overflow-x-auto">
+          <div className="flex items-center gap-2 overflow-x-auto">
             <Button
               variant="outline"
               size="sm"

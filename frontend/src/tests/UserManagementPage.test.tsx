@@ -64,7 +64,7 @@ describe('UserManagementPage', () => {
 
     // Wait for members to load
     await waitFor(() => {
-      expect(screen.queryByText('Loading members...')).not.toBeInTheDocument();
+      expect(screen.queryByText('Loading members…')).not.toBeInTheDocument();
     });
 
     const table = screen.getByRole('table');
@@ -93,7 +93,7 @@ describe('UserManagementPage', () => {
     });
 
     render(<UserManagementPage />);
-    expect(screen.getByText('Loading organization...')).toBeInTheDocument();
+    expect(screen.getByText('Loading organization…')).toBeInTheDocument();
   });
 
   test('shows empty state when no members found', async () => {

@@ -5,6 +5,7 @@
  */
 const tokens = require('./src/theme/design-tokens.json');
 const brand = tokens.colors.brand;
+const dark = tokens.colors.dark;
 
 /** @type {import('tailwindcss').Config} */
 module.exports = {
@@ -112,6 +113,7 @@ module.exports = {
           3: 'var(--surface-3)',
           4: 'var(--surface-4)',
         },
+        'semantic-canvas': dark['canvas-dark'],
         'semantic-text': {
           primary: 'var(--text-primary)',
           secondary: 'var(--text-secondary)',

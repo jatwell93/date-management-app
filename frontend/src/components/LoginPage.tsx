@@ -47,7 +47,7 @@ export function LoginPage({ onLogin }: LoginPageProps) {
   return (
     <div className="flex items-center justify-center min-h-screen bg-background">
       <div className="p-8 bg-card text-card-foreground rounded shadow-md w-96">
-        <h2 className="text-2xl font-bold font-heading mb-6 text-center">Login</h2>
+        <h2 className="text-2xl font-semibold font-heading mb-6 text-center">Login</h2>
         <Form {...form}>
           <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-4">
             <FormField

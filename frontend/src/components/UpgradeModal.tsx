@@ -116,7 +116,7 @@ export function UpgradeModal({ isOpen, onClose, onSelectPlan, currentTier }: Upg
             size="sm"
           >
             Annual
-            <span className="ml-2 text-xs bg-green-500 text-white px-2 py-0.5 rounded-full">
+            <span className="ml-2 text-xs bg-semantic-success text-semantic-success-foreground px-2 py-0.5 rounded-full">
               Save 17%
             </span>
           </Button>
@@ -138,11 +138,11 @@ export function UpgradeModal({ isOpen, onClose, onSelectPlan, currentTier }: Upg
                 key={tier}
                 data-tier={tier}
                 data-testid={`tier-card-${tier}`}
-                className={`relative ${isCurrentTier ? 'border-blue-500 border-2' : ''}`}
+                className={`relative ${isCurrentTier ? 'border-semantic-primary border-2' : ''}`}
               >
                 {isCurrentTier && (
                   <div className="absolute -top-3 left-1/2 transform -translate-x-1/2">
-                    <span className="bg-blue-500 text-white text-xs px-3 py-1 rounded-full">
+                    <span className="bg-semantic-primary text-semantic-primary-foreground text-xs px-3 py-1 rounded-full">
                       Current Plan
                     </span>
                   </div>
@@ -182,12 +182,12 @@ export function UpgradeModal({ isOpen, onClose, onSelectPlan, currentTier }: Upg
                         <li key={feature.name} className="flex items-start gap-2">
                           {typeof value === 'boolean' ? (
                             value ? (
-                              <span className="text-green-500">✓</span>
+                              <span className="text-semantic-success">✓</span>
                             ) : (
-                              <span className="text-gray-300">✗</span>
+                              <span className="text-semantic-text-muted">✗</span>
                             )
                           ) : (
-                            <span className="text-blue-500">•</span>
+                            <span className="text-semantic-secondary">•</span>
                           )}
                           <span className="flex-1">
                             <strong>{feature.name}:</strong>{' '}
@@ -220,7 +220,7 @@ export function UpgradeModal({ isOpen, onClose, onSelectPlan, currentTier }: Upg
               </thead>
               <tbody>
                 {TIER_FEATURES.map((feature) => (
-                  <tr key={feature.name} className="border-b hover:bg-gray-50">
+                  <tr key={feature.name} className="border-b hover:bg-semantic-surface-2">
                     <td className="p-3 font-medium">{feature.name}</td>
                     {tiers.map((tier) => {
                       const value = feature[tier];
@@ -228,9 +228,9 @@ export function UpgradeModal({ isOpen, onClose, onSelectPlan, currentTier }: Upg
                         <td key={tier} className="text-center p-3">
                           {typeof value === 'boolean' ? (
                             value ? (
-                              <span className="text-green-500 text-xl">✓</span>
+                              <span className="text-semantic-success text-xl">✓</span>
                             ) : (
-                              <span className="text-gray-300 text-xl">✗</span>
+                              <span className="text-semantic-text-muted text-xl">✗</span>
                             )
                           ) : (
                             <span className="font-semibold">{value}</span>

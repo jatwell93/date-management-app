@@ -73,6 +73,8 @@ The compliance checker (`scripts/check-token-compliance.js`) detects these patte
 ### Errors (block merge)
 - **Hardcoded hex in `style` attributes** — `style={{ color: '#0F766E' }}`
 - **Hardcoded hex in `className` via Tailwind arbitrary values** — `className="bg-[#0F766E]"`
+- **Hardcoded Tailwind color utilities** — `bg-blue-500`, `text-white`, `text-red-600`, `border-green-200`
+- **Raw amber utilities** — `bg-amber-50`, `text-amber-800`, `fill-amber-500`
 
 ### Warnings (tracked against baseline)
 - **Deprecated `inventory-*` classes** — `text-inventory-error-500`, `bg-inventory-primary-600`
@@ -143,4 +145,4 @@ Some cases legitimately require raw color values:
 - The baseline tracks the **total count** of existing violations
 - New violations above baseline **block merge** in CI
 - After each migration wave, re-run `npm run token-compliance:baseline` to update
-- Goal: reduce baseline to 0 by end of Wave 4
+- Current Phase 7 baseline: **0 violations**. New hardcoded colors, deprecated `inventory-*` classes, raw amber utilities, and hardcoded gray/white utilities should be treated as rollout blockers unless explicitly documented as approved exceptions.

@@ -6,7 +6,7 @@
  * Scans frontend component files for non-token styling patterns:
  * - Hardcoded hex colors in style attributes or className strings
  * - Direct inventory-* class usage where semantic tokens exist
- * - Hardcoded Tailwind gray-* classes (should use semantic/shadcn tokens)
+ * - Hardcoded Tailwind color utilities (should use semantic/shadcn tokens)
  *
  * Exit code 0 = no NEW violations (baseline violations are counted but allowed)
  * Exit code 1 = new violations found above baseline
@@ -42,6 +42,28 @@ const COLOR_UTILITY_PREFIXES = [
   'via',
 ];
 const COLOR_UTILITY_PATTERN = COLOR_UTILITY_PREFIXES.join('|');
+const RAW_TAILWIND_COLOR_NAMES = [
+  'black',
+  'blue',
+  'cyan',
+  'green',
+  'indigo',
+  'neutral',
+  'pink',
+  'purple',
+  'red',
+  'rose',
+  'sky',
+  'slate',
+  'stone',
+  'teal',
+  'violet',
+  'white',
+  'yellow',
+  'zinc',
+].join('|');
+const TAILWIND_VARIANT_PATTERN =
+  '(?:(?:active|dark|disabled|focus|focus-visible|group-hover|hover|lg|md|sm|xl|2xl):)*';
 
 const RULES = [
   {
@@ -88,6 +110,17 @@ const RULES = [
     severity: 'warning',
   },
   {
+    id: 'hardcoded-tailwind-color-class',
+    description: 'Hardcoded Tailwind color utility (use semantic token)',
+    pattern: new RegExp(
+      `(?:^|[\\s"'\\\`])(${TAILWIND_VARIANT_PATTERN}(?:${COLOR_UTILITY_PATTERN})-(?:${RAW_TAILWIND_COLOR_NAMES})(?:-\\d{2,3}|\\/\\d{1,3})?)(?=[\\s"'\\\`])`,
+      'g',
+    ),
+    suggestion:
+      'Replace raw Tailwind color utilities with semantic tokens (e.g., bg-semantic-primary, text-semantic-critical, text-semantic-primary-foreground)',
+    severity: 'error',
+  },
+  {
     id: 'hardcoded-white-class',
     description: 'Hardcoded bg-white class (use semantic token)',
     pattern: /\bbg-white\b/g,
@@ -125,14 +158,16 @@ function scanContent(content, file = '<inline>') {
       // Reset regex lastIndex for global patterns
       rule.pattern.lastIndex = 0;
       while ((match = rule.pattern.exec(line)) !== null) {
+        const matchedText = match[1] || match[0];
+        const columnOffset = match[1] ? match[0].length - matchedText.length : 0;
         violations.push({
           file,
           line: i + 1,
-          column: match.index + 1,
+          column: match.index + columnOffset + 1,
           ruleId: rule.id,
           severity: rule.severity,
           description: rule.description,
-          match: match[0],
+          match: matchedText,
           suggestion: rule.suggestion,
         });
       }

@@ -88,15 +88,15 @@ export function TrialBanner({ token }: TrialBannerProps) {
           className={
             isUrgent
               ? 'bg-semantic-warning-muted border-semantic-warning-muted'
-              : 'bg-blue-50 border-blue-200 dark:bg-blue-950/30 dark:border-blue-800'
+              : 'bg-semantic-secondary-muted border-semantic-secondary-muted'
           }
         >
           <CardContent className="py-3 px-4">
             <div className="flex items-center justify-between flex-wrap gap-3">
               <div className="flex items-center gap-3">
                 <div
-                  className={`w-2 h-2 rounded-full ${
-                    isUrgent ? 'bg-semantic-warning' : 'bg-blue-500'
+                  className={`size-2 rounded-full ${
+                    isUrgent ? 'bg-semantic-warning' : 'bg-semantic-secondary'
                   }`}
                 />
                 <div>
@@ -104,7 +104,7 @@ export function TrialBanner({ token }: TrialBannerProps) {
                     className={`text-sm font-medium ${
                       isUrgent
                         ? 'text-semantic-warning-muted-foreground'
-                        : 'text-blue-800 dark:text-blue-200'
+                        : 'text-semantic-secondary-muted-foreground'
                     }`}
                   >
                     {isUrgent
@@ -113,7 +113,7 @@ export function TrialBanner({ token }: TrialBannerProps) {
                   </p>
                   <p
                     className={`text-xs ${
-                      isUrgent ? 'text-semantic-warning' : 'text-blue-600 dark:text-blue-300'
+                      isUrgent ? 'text-semantic-warning' : 'text-semantic-secondary'
                     }`}
                   >
                     Upgrade now to keep all {tierLimits.maxProducts} products and{' '}
@@ -127,7 +127,7 @@ export function TrialBanner({ token }: TrialBannerProps) {
                 className={
                   isUrgent
                     ? 'bg-semantic-warning-hover hover:bg-semantic-warning-active text-semantic-warning-foreground'
-                    : 'bg-blue-600 hover:bg-blue-700 text-white'
+                    : 'bg-semantic-primary hover:bg-semantic-primary-hover text-semantic-primary-foreground'
                 }
               >
                 Upgrade Now
@@ -142,16 +142,16 @@ export function TrialBanner({ token }: TrialBannerProps) {
   if (isTrialExpired) {
     return (
       <div className="w-full mb-4">
-        <Card className="bg-gray-50 border-gray-200 dark:bg-gray-950/30 dark:border-gray-800">
+        <Card className="bg-semantic-surface-2 border-semantic-surface-4">
           <CardContent className="py-3 px-4">
             <div className="flex items-center justify-between flex-wrap gap-3">
               <div className="flex items-center gap-3">
-                <div className="w-2 h-2 rounded-full bg-gray-500" />
+                <div className="size-2 rounded-full bg-semantic-text-tertiary" />
                 <div>
-                  <p className="text-sm font-medium text-gray-800 dark:text-gray-200">
+                  <p className="text-sm font-medium text-semantic-text-primary">
                     You're on the Starter plan (trial expired)
                   </p>
-                  <p className="text-xs text-gray-600 dark:text-gray-400">
+                  <p className="text-xs text-semantic-text-secondary">
                     Limited to {tierLimits.maxProducts} products and {tierLimits.maxUsers} user
                   </p>
                 </div>
@@ -172,17 +172,17 @@ export function TrialBanner({ token }: TrialBannerProps) {
 
     return (
       <div className="w-full mb-4">
-        <Card className="bg-green-50 border-green-200 dark:bg-green-950/30 dark:border-green-800">
+        <Card className="bg-semantic-success-muted border-semantic-success-muted">
           <CardContent className="py-3 px-4">
             <div className="flex items-center justify-between flex-wrap gap-3">
               <div className="flex items-center gap-3">
-                <div className="w-2 h-2 rounded-full bg-green-500 animate-pulse" />
+                <div className="size-2 rounded-full bg-semantic-success animate-pulse" />
                 <div>
-                  <p className="text-sm font-medium text-green-800 dark:text-green-200">
+                  <p className="text-sm font-medium text-semantic-success-muted-foreground">
                     Active subscription: {tierLevel.charAt(0).toUpperCase() + tierLevel.slice(1)} (
                     {price})
                   </p>
-                  <p className="text-xs text-green-600 dark:text-green-300">
+                  <p className="text-xs text-semantic-success">
                     {tierLimits.maxProducts} products,{' '}
                     {tierLimits.maxUsers === -1 ? 'unlimited' : tierLimits.maxUsers} users
                   </p>

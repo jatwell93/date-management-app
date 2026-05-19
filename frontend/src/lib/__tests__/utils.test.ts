@@ -8,9 +8,12 @@ import {
 describe('utils', () => {
   describe('cn', () => {
     it('should merge class names correctly', () => {
-      const result = cn('text-red-500', 'bg-blue-500', { 'p-4': true, 'm-2': false });
-      expect(result).toContain('text-red-500');
-      expect(result).toContain('bg-blue-500');
+      const result = cn('text-semantic-critical', 'bg-semantic-secondary', {
+        'p-4': true,
+        'm-2': false,
+      });
+      expect(result).toContain('text-semantic-critical');
+      expect(result).toContain('bg-semantic-secondary');
       expect(result).toContain('p-4');
       expect(result).not.toContain('m-2');
     });

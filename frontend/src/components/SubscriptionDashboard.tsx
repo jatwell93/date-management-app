@@ -114,7 +114,7 @@ export function SubscriptionDashboard({ token, onUpgrade }: SubscriptionDashboar
     return (
       <Card>
         <CardContent className="py-8 text-center">
-          <p className="text-muted-foreground">Loading subscription data...</p>
+          <p className="text-muted-foreground">Loading subscription data…</p>
         </CardContent>
       </Card>
     );
