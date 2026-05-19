@@ -25,7 +25,7 @@ const buttonVariants = cva(
         success:
           'bg-semantic-success text-semantic-success-foreground hover:bg-semantic-success-hover active:bg-semantic-success-active',
         warning:
-          'bg-semantic-warning text-semantic-warning-foreground hover:bg-semantic-warning-hover active:bg-semantic-warning-active',
+          'bg-semantic-warning-hover text-semantic-warning-foreground hover:bg-semantic-warning-active active:bg-semantic-warning-active',
         error:
           'bg-semantic-critical text-semantic-critical-foreground hover:bg-semantic-critical-hover active:bg-semantic-critical-active',
       },

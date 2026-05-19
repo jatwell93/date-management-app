@@ -1,6 +1,7 @@
 const path = require('path');
 
 const {
+  getComplianceFailure,
   isExcluded,
   scanContent,
   summarizeViolations,
@@ -66,6 +67,7 @@ describe('check-token-compliance helpers', () => {
       const violations = scanContent(`
         <div className="bg-amber-50 border-amber-200 text-amber-800" />
         <div className="bg-inventory-warning-500" />
+        <svg className="fill-amber-500 stroke-amber-700" />
       `);
 
       expect(violations).toEqual(
@@ -86,8 +88,37 @@ describe('check-token-compliance helpers', () => {
             ruleId: 'amber-restraint-usage',
             match: 'bg-inventory-warning-500',
           }),
+          expect.objectContaining({
+            ruleId: 'amber-restraint-usage',
+            match: 'fill-amber-500',
+          }),
+          expect.objectContaining({
+            ruleId: 'amber-restraint-usage',
+            match: 'stroke-amber-700',
+          }),
         ]),
       );
+    });
+
+    it('blocks amber restraint errors even when total violations do not exceed baseline', () => {
+      const baseline = {
+        totalViolations: 169,
+        errors: 0,
+      };
+      const violations = [
+        ...Array.from({ length: 168 }, () => ({
+          severity: 'warning',
+          ruleId: 'hardcoded-gray-class',
+        })),
+        ...scanContent('<div className="bg-amber-50" />'),
+      ];
+
+      expect(getComplianceFailure(baseline, violations)).toMatchObject({
+        shouldFail: true,
+        newErrors: 1,
+        amberErrors: 1,
+        delta: 0,
+      });
     });
 
     it('does not flag approved semantic warning tokens', () => {

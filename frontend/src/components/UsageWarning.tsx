@@ -110,7 +110,7 @@ export function UsageWarning({
                 className={
                   isUrgent
                     ? 'bg-red-600 hover:bg-red-700 text-white'
-                    : 'bg-semantic-warning hover:bg-semantic-warning-hover text-semantic-warning-foreground'
+                    : 'bg-semantic-warning-hover hover:bg-semantic-warning-active text-semantic-warning-foreground'
                 }
               >
                 Upgrade

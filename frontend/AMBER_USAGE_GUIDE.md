@@ -26,14 +26,14 @@ Use semantic tokens instead of raw amber utilities:
 
 | Need | Use |
 | --- | --- |
-| Strong warning emphasis | `bg-semantic-warning`, `text-semantic-warning-foreground` |
+| Strong warning emphasis | `bg-semantic-warning-hover`, `text-semantic-warning-foreground` |
 | Muted warning surface | `bg-semantic-warning-muted`, `border-semantic-warning-muted` |
 | Warning text | `text-semantic-warning` |
 | Text on muted warning surface | `text-semantic-warning-muted-foreground` |
 
 ## Enforcement
 
-`npm run token-compliance` now blocks raw amber utility usage and deprecated `inventory-warning-*` classes in frontend source files. The existing frontend CI workflow runs that command on every PR, so amber restraint is enforced alongside the broader semantic-token policy.
+`npm run token-compliance` now blocks raw amber utility usage and deprecated `inventory-warning-*` classes in frontend source files. Amber restraint violations fail independently of the broader baseline count, so a raw amber utility cannot be hidden by reducing unrelated warnings. The existing frontend CI workflow runs that command on every PR, so amber restraint is enforced alongside the broader semantic-token policy.
 
 ## Exceptions
 

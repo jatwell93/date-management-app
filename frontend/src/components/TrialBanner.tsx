@@ -126,7 +126,7 @@ export function TrialBanner({ token }: TrialBannerProps) {
                 onClick={() => navigate('/upgrade')}
                 className={
                   isUrgent
-                    ? 'bg-semantic-warning hover:bg-semantic-warning-hover text-semantic-warning-foreground'
+                    ? 'bg-semantic-warning-hover hover:bg-semantic-warning-active text-semantic-warning-foreground'
                     : 'bg-blue-600 hover:bg-blue-700 text-white'
                 }
               >
