@@ -220,7 +220,7 @@ export function CameraScanner({
           isHandheld ? 'flex-1' : 'h-64'
         }`}
       >
-        <div className="text-semantic-text-inverse text-center">
+        <div className="text-semantic-canvas-foreground text-center">
           <p className={isHandheld ? 'text-lg' : ''}>Camera feed will appear here</p>
           <p className={`mt-2 ${isHandheld ? 'text-base' : 'text-sm'}`}>
             Point your camera at a barcode

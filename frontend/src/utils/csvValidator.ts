@@ -140,7 +140,12 @@ export async function validateCSVColumns(
     foundColumns: {},
     suggestions: {},
   };
-  const headerIndexByName = new Map(headersLower.map((header, index) => [header, index]));
+  const headerIndexByName = new Map<string, number>();
+  headersLower.forEach((header, index) => {
+    if (!headerIndexByName.has(header)) {
+      headerIndexByName.set(header, index);
+    }
+  });
 
   // Check each required field
   for (const [fieldName, alternatives] of Object.entries(requiredColumns)) {

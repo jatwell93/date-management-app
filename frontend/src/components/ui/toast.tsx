@@ -38,6 +38,20 @@ const Toast: React.FC<ToastProps> = ({ message, type, isVisible, onClose }) => {
     }
   };
 
+  const getToastTextStyle = () => {
+    switch (type) {
+      case 'success':
+        return 'text-semantic-success-foreground';
+      case 'error':
+        return 'text-semantic-critical-foreground';
+      case 'warning':
+        return 'text-semantic-warning-foreground';
+      case 'info':
+      default:
+        return 'text-semantic-secondary-foreground';
+    }
+  };
+
   if (!show) return null;
 
   return (
@@ -48,12 +62,12 @@ const Toast: React.FC<ToastProps> = ({ message, type, isVisible, onClose }) => {
         }`}
       >
         <div
-          className={`${getToastStyle()} text-semantic-text-inverse px-4 py-3 rounded-md shadow-lg flex items-center`}
+          className={`${getToastStyle()} ${getToastTextStyle()} px-4 py-3 rounded-md shadow-lg flex items-center`}
         >
           <span>{message}</span>
           <button
             onClick={onClose}
-            className="ml-4 text-semantic-text-inverse hover:text-semantic-text-inverse/80 focus:outline-none"
+            className="ml-4 opacity-100 transition-opacity hover:opacity-80 focus:outline-none"
           >
             &times;
           </button>

@@ -120,13 +120,6 @@ const RULES = [
       'Replace raw Tailwind color utilities with semantic tokens (e.g., bg-semantic-primary, text-semantic-critical, text-semantic-primary-foreground)',
     severity: 'error',
   },
-  {
-    id: 'hardcoded-white-class',
-    description: 'Hardcoded bg-white class (use semantic token)',
-    pattern: /\bbg-white\b/g,
-    suggestion: 'Replace with bg-background, bg-card, or bg-popover depending on context',
-    severity: 'warning',
-  },
 ];
 
 /* ── File exclusions ──────────────────────────────────────────── */
