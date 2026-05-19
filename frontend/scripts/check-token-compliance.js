@@ -1,4 +1,6 @@
 #!/usr/bin/env node
+/* eslint-env node */
+/* global require, __dirname, console, process, module */
 
 /**
  * Token Compliance Checker
@@ -87,16 +89,14 @@ const RULES = [
     description: 'Deprecated inventory-* Tailwind class',
     // Matches bg-inventory-*, text-inventory-*, border-inventory-*, etc.
     pattern: /(?:bg|text|border|ring|outline|from|to|via)-inventory-[a-z]+-\d+/g,
-    suggestion: 'Replace with semantic-* equivalent (e.g., text-inventory-error-500 → text-semantic-critical)',
+    suggestion:
+      'Replace with semantic-* equivalent (e.g., text-inventory-error-500 → text-semantic-critical)',
     severity: 'warning',
   },
   {
     id: 'amber-restraint-usage',
     description: 'Raw amber utility or deprecated warning token bypasses semantic-warning policy',
-    pattern: new RegExp(
-      `(?:${COLOR_UTILITY_PATTERN})-(?:amber-\\d+|inventory-warning-\\d+)`,
-      'g',
-    ),
+    pattern: new RegExp(`(?:${COLOR_UTILITY_PATTERN})-(?:amber-\\d+|inventory-warning-\\d+)`, 'g'),
     suggestion:
       'Use semantic-warning tokens only in approved warning/emphasis contexts (see AMBER_USAGE_GUIDE.md)',
     severity: 'error',
@@ -106,7 +106,8 @@ const RULES = [
     description: 'Hardcoded Tailwind gray class (use semantic token)',
     // Matches bg-gray-*, text-gray-*, border-gray-* etc.
     pattern: /(?:bg|text|border|ring|outline|from|to|via)-gray-\d+/g,
-    suggestion: 'Replace with semantic token (e.g., bg-gray-100 → bg-background or bg-muted, text-gray-800 → text-foreground)',
+    suggestion:
+      'Replace with semantic token (e.g., bg-gray-100 → bg-background or bg-muted, text-gray-800 → text-foreground)',
     severity: 'warning',
   },
   {
@@ -231,6 +232,16 @@ function getBaselineDelta(baseline, violations) {
   return violations.length - baseline.totalViolations;
 }
 
+function parseBaselineContent(content) {
+  try {
+    return JSON.parse(content);
+  } catch (error) {
+    throw new Error(
+      `Token compliance baseline is malformed JSON: ${error instanceof Error ? error.message : String(error)}`,
+    );
+  }
+}
+
 function getComplianceFailure(baseline, violations) {
   const { errors } = summarizeViolations(violations);
   const delta = getBaselineDelta(baseline, violations);
@@ -292,7 +303,9 @@ function exitForComplianceFailure(failure) {
     if (failure.amberErrors > 0) {
       console.log(`\n❌ FAIL: ${failure.amberErrors} amber restraint violation(s) found.`);
     }
-    console.log('   Fix new violations or update baseline with: node scripts/check-token-compliance.js --baseline');
+    console.log(
+      '   Fix new violations or update baseline with: node scripts/check-token-compliance.js --baseline',
+    );
     process.exit(1);
   }
 
@@ -321,7 +334,7 @@ function main() {
     process.exit(0);
   }
 
-  const baseline = JSON.parse(fs.readFileSync(BASELINE_FILE, 'utf-8'));
+  const baseline = parseBaselineContent(fs.readFileSync(BASELINE_FILE, 'utf-8'));
   printBaselineComparison(baseline, allViolations);
   exitForComplianceFailure(getComplianceFailure(baseline, allViolations));
 }
@@ -334,6 +347,7 @@ module.exports = {
   buildBaseline,
   getComplianceFailure,
   getBaselineDelta,
+  parseBaselineContent,
   isExcluded,
   scanContent,
   summarizeViolations,

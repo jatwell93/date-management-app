@@ -191,7 +191,7 @@ export function validateOrganizationStatus(
   if (!subscription) {
     return {
       isValid: false,
-      error: 'Organization subscription not configured',
+      error: `No subscription found for organization ${organizationId}`,
     };
   }
 
@@ -263,7 +263,7 @@ export async function authenticateWorkerRequest(
   const subscription = await querySubscriptionTier(organizationId, dbClient);
   const statusValidation = validateOrganizationStatus(subscription, organizationId);
 
-  if (!statusValidation.isValid) {
+  if (!statusValidation.isValid || !subscription) {
     return {
       userId: decodedToken.userId,
       organizationId,
@@ -278,8 +278,8 @@ export async function authenticateWorkerRequest(
   return {
     userId: decodedToken.userId,
     organizationId,
-    tierLevel: subscription!.tierLevel,
-    subscription: subscription!,
+    tierLevel: subscription.tierLevel,
+    subscription,
     isValid: true,
   };
 }

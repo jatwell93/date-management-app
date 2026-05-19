@@ -218,7 +218,7 @@ describe('validateOrganizationStatus', () => {
 
     // Assert
     expect(result.isValid).toBe(false);
-    expect(result.error).toContain('not configured');
+    expect(result.error).toContain(`No subscription found for organization ${TEST_ORG_ID}`);
   });
 
   it('should accept trialing subscription', () => {
@@ -397,7 +397,7 @@ describe('authenticateWorkerRequest', () => {
 
     // Assert
     expect(context.isValid).toBe(false);
-    expect(context.error).toContain('not configured');
+    expect(context.error).toContain(`No subscription found for organization ${TEST_ORG_ID}`);
   });
 
   it('should reject request with canceled subscription', async () => {

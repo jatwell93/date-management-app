@@ -7,7 +7,10 @@ module.exports = {
       userContext.vars.email = 'loadtest@example.com';
     }
     if (!userContext.vars.password) {
-      userContext.vars.password = process.env.TEST_PASSWORD || 'LoadTest123!';
+      if (!process.env.TEST_PASSWORD) {
+        return done(new Error('TEST_PASSWORD is required for load test scenarios'));
+      }
+      userContext.vars.password = process.env.TEST_PASSWORD;
     }
     return done();
   },

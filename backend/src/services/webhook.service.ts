@@ -100,6 +100,14 @@ export class WebhookService {
     }
   }
 
+  private getStripeClient(): Stripe {
+    if (!this.stripe) {
+      throw new Error('Stripe client is not configured');
+    }
+
+    return this.stripe;
+  }
+
   /**
    * Verify Stripe webhook signature
    *
@@ -185,7 +193,7 @@ export class WebhookService {
   private async validateWebhookMetadata(customerId: string): Promise<string> {
     const monitor = ApplicationMonitoringService.getInstance();
     try {
-      const customer = await this.stripe!.customers.retrieve(customerId);
+      const customer = await this.getStripeClient().customers.retrieve(customerId);
 
       if (customer.deleted) {
         const err = new NotFoundError('Customer has been deleted');
@@ -857,7 +865,7 @@ export class WebhookService {
       TIER_LIMITS[newTierLevel].max_skus !== null &&
       (TIER_LIMITS[oldTier.tierLevel as TierLevel].max_skus === null ||
         (TIER_LIMITS[newTierLevel].max_skus as number) <
-        (TIER_LIMITS[oldTier.tierLevel as TierLevel].max_skus as number))
+          (TIER_LIMITS[oldTier.tierLevel as TierLevel].max_skus as number))
     );
   }
 
@@ -970,16 +978,11 @@ export class WebhookService {
       return;
     }
 
-    const result = await applyCreationLockIfNeeded(
-      organizationId,
-      limits,
-      tx,
-      {
-        orgRepo: this.orgRepo,
-        subscriptionRepo: this.subscriptionRepo,
-        emailService: this.emailService,
-      },
-    );
+    const result = await applyCreationLockIfNeeded(organizationId, limits, tx, {
+      orgRepo: this.orgRepo,
+      subscriptionRepo: this.subscriptionRepo,
+      emailService: this.emailService,
+    });
 
     if (result.lockApplied) {
       log.warn('Creation lock applied on tier downgrade', {
@@ -1036,7 +1039,7 @@ export class WebhookService {
       throw new Error('checkout.session.completed missing subscription id');
     }
 
-    const stripeSubscriptionResponse = await this.stripe!.subscriptions.retrieve(
+    const stripeSubscriptionResponse = await this.getStripeClient().subscriptions.retrieve(
       session.subscription,
     );
     const stripeSubscription = stripeSubscriptionResponse as Stripe.Subscription;
