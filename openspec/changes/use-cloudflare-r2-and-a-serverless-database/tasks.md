@@ -509,7 +509,7 @@
   - **Completed:** Full test suite passing in development mode
   - **Production mode:** Documented and ready for CI/CD
 - [x] 11.14 Use tech-debt-remediation-plan agent to create detailed plan at half-way point
-  - **Completed:** Tech debt documented in `docs/tech-debt.md`
+  - **Completed:** Technical debt follow-up tracked in OpenSpec archived/current change records.
 - [x] 11.15 Update README.md to reflect current state
   - **Completed:** README documents local dev, R2/Neon setup
 
@@ -574,7 +574,7 @@
   - **Log format leverages Cloudflare Workers native JSON logging**
   - **Ready for:** Cloudflare Logpush/Analytics Engine ingestion
 
-- [x] 12.10 Document monitoring setup in `docs/monitoring.md`
+- [x] 12.10 Document monitoring setup in `docs/monitoring-and-alerting.md`
   - **Completed:** Comprehensive monitoring documentation (SaaS work)
 
 - [x] 12.11 Fix Logger any types → Record<string, unknown>

@@ -41,8 +41,6 @@ npm run migrate:status
 
 ## Testing: Dual Environment Strategy
 
-### Phase 11 Enhancement: Test in Both SQLite and PostgreSQL
-
 This project supports testing against **two databases** to ensure compatibility across environments:
 
 | Environment     | Database            | Use Case                      | Command             |
@@ -297,11 +295,6 @@ npm run test:coverage && npm run lint && ubs .
 
 ## Deployment & Production
 
-### Deployment Phases
-
-1. **Phase 11 (Current)**: Dual environment testing, R2 setup — ✅ Complete
-2. **Phase 12-20**: Features, monitoring, optimization
-
 ### Production Deployment
 
 For complete deployment guide, see:
@@ -370,16 +363,16 @@ For operational runbooks, see [docs/operational-runbooks.md](./docs/operational-
 
 ## Documentation
 
-| Document                                                                     | Purpose                                                    |
-| ---------------------------------------------------------------------------- | ---------------------------------------------------------- |
-| [docs/database-patterns.md](./docs/database-patterns.md)                     | Database architecture, Prisma patterns, query optimization |
-| [docs/storage-patterns.md](./docs/storage-patterns.md)                       | Local vs. R2 storage, presigned URLs, multipart uploads    |
-| [docs/deployment.md](./docs/deployment.md)                                   | CI/CD, environment setup, production config                |
-| [docs/monitoring-alerting.md](./docs/monitoring-alerting.md)                 | Sentry, error tracking, observability                      |
-| [docs/operational-runbooks.md](./docs/operational-runbooks.md)               | Production procedures, incident response                   |
-| [../docs/testing-both-environments.md](../docs/testing-both-environments.md) | Dual DB testing, strategies                                |
-| [../docs/workers-deployment.md](../docs/workers-deployment.md)               | Cloudflare Workers, edge compute                           |
-| [tech-debt.md](../tech-debt.md)                                              | Technical debt remediation plan (Phases 12-20)             |
+| Document                                                                             | Purpose                                                    |
+| ------------------------------------------------------------------------------------ | ---------------------------------------------------------- |
+| [docs/database-patterns.md](./docs/database-patterns.md)                             | Database architecture, Prisma patterns, query optimization |
+| [docs/storage-patterns.md](./docs/storage-patterns.md)                               | Local vs. R2 storage, presigned URLs, multipart uploads    |
+| [docs/deployment.md](./docs/deployment.md)                                           | CI/CD, environment setup, production config                |
+| [docs/monitoring-alerting.md](./docs/monitoring-alerting.md)                         | Sentry, error tracking, observability                      |
+| [docs/operational-runbooks.md](./docs/operational-runbooks.md)                       | Production procedures, incident response                   |
+| [../docs/testing-both-environments.md](../docs/testing-both-environments.md)         | Dual DB testing, strategies                                |
+| [../docs/workers-deployment.md](../docs/workers-deployment.md)                       | Cloudflare Workers, edge compute                           |
+| [../docs/DOCUMENTATION_QUICK_REFERENCE.md](../docs/DOCUMENTATION_QUICK_REFERENCE.md) | Project-wide documentation index                           |
 
 ---
 
@@ -417,53 +410,6 @@ For operational runbooks, see [docs/operational-runbooks.md](./docs/operational-
 
 ---
 
-## Phase 11 Completion Summary
-
-**What's New in Phase 11:**
-
-✅ **Dual Environment Testing**
-
-- SQLite for fast development iteration
-- PostgreSQL (Neon) for production-like testing
-- `npm run test:both` runs comprehensive suite
-
-✅ **Cloudflare R2 Storage**
-
-- Local filesystem development
-- Production-ready R2 integration
-- Presigned URL support
-
-✅ **Workers Deployment**
-
-- Edge compute for performance
-- Local Miniflare testing
-- Production deployment pipeline
-
-✅ **Quality Assurance**
-
-- 37 test suites, 297 tests passing (SQLite)
-- 0 critical security issues (UBS scan)
-- 125 linting errors fixed
-- All code formatted and type-safe
-
-For detailed Phase 11 accomplishments, see [tech-debt.md](../tech-debt.md#-implementation-roadmap-phases-12-20)
-
----
-
-## Next Steps: Technical Debt Remediation (Phases 12-20)
-
-Phase 11 completed infrastructure work. Phase 12+ focuses on:
-
-1. **Service Refactoring** — Complete Prisma adoption across all services
-2. **Type Safety** — Eliminate 59 `any` types
-3. **Test Coverage** — Expand from 57% → 85% coverage
-4. **Error Handling** — Consistent error responses
-5. **Performance** — Optimize complex services
-
-Detailed roadmap: See [tech-debt.md](../tech-debt.md) (comprehensive remediation plan)
-
----
-
 ## Getting Help
 
 - **Local Development**: Check [.env.example](./.env.example) for all config options
@@ -471,7 +417,7 @@ Detailed roadmap: See [tech-debt.md](../tech-debt.md) (comprehensive remediation
 - **Database**: See [docs/database-patterns.md](./docs/database-patterns.md)
 - **Storage**: See [docs/storage-patterns.md](./docs/storage-patterns.md)
 - **Production**: See [docs/deployment.md](./docs/deployment.md)
-- **Technical Debt**: See [../tech-debt.md](../tech-debt.md)
+- **Documentation Index**: See [../docs/DOCUMENTATION_QUICK_REFERENCE.md](../docs/DOCUMENTATION_QUICK_REFERENCE.md)
 
 ---
 
