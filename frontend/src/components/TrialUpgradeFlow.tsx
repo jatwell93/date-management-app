@@ -90,7 +90,9 @@ function UpgradeCard({
     <Card className="w-full max-w-md">
       <CardHeader>
         <CardTitle className="flex items-center gap-2">
-          {isInTrial && <span className="w-3 h-3 rounded-full bg-blue-500 animate-pulse" />}
+          {isInTrial && (
+            <span className="size-3 rounded-full bg-semantic-secondary animate-pulse" />
+          )}
           {isInTrial ? 'Professional Trial' : 'Starter plan'}
         </CardTitle>
         <CardDescription>{getDescription()}</CardDescription>
@@ -125,7 +127,7 @@ function UpgradeCard({
               <p className="text-xs text-muted-foreground">Billed monthly</p>
             </div>
             <div className="p-3 border rounded-lg space-y-1 relative">
-              <div className="absolute -top-2 -right-2 bg-green-500 text-white text-xs px-2 py-0.5 rounded-full">
+              <div className="absolute -top-2 -right-2 bg-semantic-success text-semantic-success-foreground text-xs px-2 py-0.5 rounded-full">
                 Save 30%
               </div>
               <p className="font-semibold">Annual</p>
@@ -138,8 +140,8 @@ function UpgradeCard({
         </div>
 
         {error && (
-          <div className="p-3 bg-red-50 border border-red-200 rounded-md">
-            <p className="text-sm text-red-600">{error}</p>
+          <div className="p-3 bg-semantic-critical-muted border border-semantic-critical-muted rounded-md">
+            <p className="text-sm text-semantic-critical">{error}</p>
           </div>
         )}
 

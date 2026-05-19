@@ -46,7 +46,7 @@ describe('UsageReportPage', () => {
     const tokenValue = 'test-session-value';
     render(<UsageReportPage token={tokenValue} />);
 
-    expect(screen.getByText(/Loading usage report.../i)).toBeInTheDocument();
+    expect(screen.getByText(/Loading usage report…/i)).toBeInTheDocument();
 
     // Wait for content to load - the component shows "Items Added by User" and "Daily User Activity Report"
     expect(await screen.findByText(/Items Added by User/i)).toBeInTheDocument();

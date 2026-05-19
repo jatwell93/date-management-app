@@ -216,17 +216,17 @@ export function CameraScanner({
       <ScannerStateIndicator state={scannerState} />
       <div
         ref={videoRef}
-        className={`w-full bg-black flex items-center justify-center rounded ${
+        className={`w-full bg-semantic-canvas flex items-center justify-center rounded ${
           isHandheld ? 'flex-1' : 'h-64'
         }`}
       >
-        <div className="text-white text-center">
+        <div className="text-semantic-canvas-foreground text-center">
           <p className={isHandheld ? 'text-lg' : ''}>Camera feed will appear here</p>
           <p className={`mt-2 ${isHandheld ? 'text-base' : 'text-sm'}`}>
             Point your camera at a barcode
           </p>
           {continuous && (
-            <p className={`mt-1 text-yellow-300 ${isHandheld ? 'text-sm' : 'text-xs'}`}>
+            <p className={`mt-1 text-semantic-warning-muted ${isHandheld ? 'text-sm' : 'text-xs'}`}>
               Continuous scan mode
             </p>
           )}

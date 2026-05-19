@@ -175,7 +175,7 @@ export function StoreAreaManagementPage({ token }: StoreAreaManagementPageProps)
 
           <div className="mb-6">
             <h3 className="text-lg font-semibold font-heading mb-2">Add New Store Area</h3>
-            <div className="flex space-x-2 mb-2">
+            <div className="flex gap-2 mb-2">
               <Input
                 type="text"
                 placeholder="Area Name"

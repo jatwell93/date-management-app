@@ -706,7 +706,7 @@ export const CSVUploadPage: React.FC<{
 
   return (
     <div className="max-w-4xl mx-auto">
-      <h1 className="text-2xl font-bold font-heading mb-6">
+      <h1 className="text-2xl font-semibold font-heading mb-6">
         {isExpiryImport
           ? 'Expiry List Import (CSV/XLSX/XLS)'
           : 'Product Catalog Upload (CSV/XLSX/XLS)'}
@@ -719,7 +719,7 @@ export const CSVUploadPage: React.FC<{
             onClick={() => handleImportTypeChange('product-catalog')}
             className={`px-3 py-2 rounded-md text-sm font-medium transition-colors ${
               importType === 'product-catalog'
-                ? 'bg-semantic-primary text-white'
+                ? 'bg-semantic-primary text-semantic-primary-foreground'
                 : 'bg-semantic-surface-2 text-semantic-text-secondary hover:bg-semantic-surface-3'
             }`}
           >
@@ -730,7 +730,7 @@ export const CSVUploadPage: React.FC<{
             onClick={() => handleImportTypeChange('expiry-list')}
             className={`px-3 py-2 rounded-md text-sm font-medium transition-colors ${
               importType === 'expiry-list'
-                ? 'bg-semantic-primary text-white'
+                ? 'bg-semantic-primary text-semantic-primary-foreground'
                 : 'bg-semantic-surface-2 text-semantic-text-secondary hover:bg-semantic-surface-3'
             }`}
           >
@@ -845,21 +845,21 @@ export const CSVUploadPage: React.FC<{
               <button
                 type="button"
                 onClick={() => downloadExpiryTemplate('csv')}
-                className="px-3 py-2 rounded-md bg-semantic-primary text-white text-sm font-medium hover:bg-semantic-primary-hover"
+                className="px-3 py-2 rounded-md bg-semantic-primary text-semantic-primary-foreground text-sm font-medium hover:bg-semantic-primary-hover"
               >
                 Download CSV Template
               </button>
               <button
                 type="button"
                 onClick={() => downloadExpiryTemplate('xlsx')}
-                className="px-3 py-2 rounded-md bg-semantic-primary text-white text-sm font-medium hover:bg-semantic-primary-hover"
+                className="px-3 py-2 rounded-md bg-semantic-primary text-semantic-primary-foreground text-sm font-medium hover:bg-semantic-primary-hover"
               >
                 Download XLSX Template
               </button>
               <button
                 type="button"
                 onClick={() => downloadExpiryTemplate('xls')}
-                className="px-3 py-2 rounded-md bg-semantic-primary text-white text-sm font-medium hover:bg-semantic-primary-hover"
+                className="px-3 py-2 rounded-md bg-semantic-primary text-semantic-primary-foreground text-sm font-medium hover:bg-semantic-primary-hover"
               >
                 Download XLS Template
               </button>
@@ -996,7 +996,7 @@ export const CSVUploadPage: React.FC<{
             </div>
           )}
 
-          <div className="flex items-center space-x-4">
+          <div className="flex items-center gap-4">
             <Button
               type="submit"
               disabled={isUploading || !selectedFile}
@@ -1019,7 +1019,7 @@ export const CSVUploadPage: React.FC<{
           <div
             className={`mt-6 p-4 rounded-md ${uploadResult.success ? 'bg-semantic-success-muted text-semantic-success-muted-foreground' : 'bg-semantic-critical-muted text-semantic-critical-muted-foreground'}`}
           >
-            <h3 className="font-bold mb-2">
+            <h3 className="font-semibold mb-2">
               {uploadResult.success ? 'Upload Successful!' : 'Upload Failed'}
             </h3>
 
@@ -1153,7 +1153,7 @@ export const CSVUploadPage: React.FC<{
                 <div className="mt-6 pt-4 border-t border-semantic-success-muted">
                   <button
                     onClick={() => navigate(returnUrl)}
-                    className="w-full py-2 bg-semantic-success text-white rounded-md font-semibold hover:bg-semantic-success-hover transition"
+                    className="w-full py-2 bg-semantic-success text-semantic-success-foreground rounded-md font-semibold hover:bg-semantic-success-hover transition"
                   >
                     Continue to next step
                   </button>

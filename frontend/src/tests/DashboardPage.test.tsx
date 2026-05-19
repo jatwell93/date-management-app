@@ -36,7 +36,7 @@ describe('DashboardPage', () => {
     const tokenValue = 'test-session-value';
     render(<DashboardPage token={tokenValue} />);
 
-    expect(screen.getByText(/Loading dashboard.../i)).toBeInTheDocument();
+    expect(screen.getByText(/Loading dashboard…/i)).toBeInTheDocument();
 
     expect(await screen.findByText(/Total Products/i)).toBeInTheDocument();
     expect(screen.getByText('100')).toBeInTheDocument();

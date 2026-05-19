@@ -19,56 +19,56 @@ interface TrialFAQProps {
 const faqData = [
   {
     id: 'what-happens',
-    icon: <Clock className="w-4 h-4" />,
+    icon: <Clock className="size-4" />,
     question: 'What happens when my trial expires?',
     answer:
       'Your account automatically converts to the free Starter tier. You keep all your data, but new creations are blocked if you exceed Starter limits (500 SKUs, 1 user). You can upgrade at any time to restore full access.',
   },
   {
     id: 'data-loss',
-    icon: <AlertTriangle className="w-4 h-4" />,
+    icon: <AlertTriangle className="size-4" />,
     question: 'Will I lose my data?',
     answer:
       'No. Your products, inventory, and all data remain fully accessible. You can view, update, and export everything. Only adding NEW items is blocked if you are over the Starter tier limits.',
   },
   {
     id: 'creation-lock',
-    icon: <Lock className="w-4 h-4" />,
+    icon: <Lock className="size-4" />,
     question: 'What is a creation lock?',
     answer:
       'A creation lock prevents adding new products, inventory items, or users when your usage exceeds your tier limits. It is automatically removed when you upgrade or reduce usage to within limits.',
   },
   {
     id: 'upgrade-anytime',
-    icon: <CreditCard className="w-4 h-4" />,
+    icon: <CreditCard className="size-4" />,
     question: 'Can I upgrade after my trial expires?',
     answer:
       'Yes! You can upgrade at any time - even after expiration. Once you upgrade, all features are immediately restored and any creation lock is removed.',
   },
   {
     id: 'reminders',
-    icon: <Mail className="w-4 h-4" />,
+    icon: <Mail className="size-4" />,
     question: 'When will I receive reminder emails?',
     answer:
       'We send reminder emails at 10, 5, and 2 days before your trial expires. These include upgrade links and information about what happens after expiration.',
   },
   {
     id: 'grace-period',
-    icon: <Clock className="w-4 h-4" />,
+    icon: <Clock className="size-4" />,
     question: 'Is there a grace period after expiration?',
     answer:
       'Yes, you have a 48-hour grace period after expiration to add a payment method without any interruption. During this time, all Professional tier features remain available.',
   },
   {
     id: 'export-data',
-    icon: <Lock className="w-4 h-4" />,
+    icon: <Lock className="size-4" />,
     question: 'Can I export my data before the trial ends?',
     answer:
       'Yes! You can export your products anytime from Settings → Export Data, or use the API endpoint GET /api/products/export-excess to create a backup.',
   },
   {
     id: 'limits',
-    icon: <AlertTriangle className="w-4 h-4" />,
+    icon: <AlertTriangle className="size-4" />,
     question: 'What are the Starter tier limits?',
     answer:
       'The Starter tier includes: 500 SKUs (products), 1 user, 5,000 inventory items, and 1 GB storage. If you have more than this when your trial expires, a creation lock will be applied.',
@@ -82,8 +82,8 @@ export function TrialFAQ({ daysRemaining, isExpired, trigger = 'button' }: Trial
     switch (trigger) {
       case 'icon':
         return (
-          <Button variant="ghost" size="icon" className="h-8 w-8">
-            <HelpCircle className="h-4 w-4" />
+          <Button variant="ghost" size="icon" className="size-8">
+            <HelpCircle className="size-4" />
           </Button>
         );
       case 'link':
@@ -95,7 +95,7 @@ export function TrialFAQ({ daysRemaining, isExpired, trigger = 'button' }: Trial
       default:
         return (
           <Button variant="outline" size="sm" className="gap-2">
-            <HelpCircle className="h-4 w-4" />
+            <HelpCircle className="size-4" />
             Trial FAQ
           </Button>
         );
@@ -131,7 +131,7 @@ export function TrialFAQ({ daysRemaining, isExpired, trigger = 'button' }: Trial
       <DialogContent className="max-w-2xl max-h-[80vh] overflow-y-auto">
         <DialogHeader>
           <DialogTitle className="flex items-center gap-2">
-            <HelpCircle className="h-5 w-5" />
+            <HelpCircle className="size-5" />
             {headerContent.title}
           </DialogTitle>
           <DialogDescription>{headerContent.description}</DialogDescription>
@@ -178,7 +178,7 @@ export function TrialFAQInline() {
   return (
     <div className="space-y-4">
       <h3 className="text-lg font-semibold font-heading flex items-center gap-2">
-        <HelpCircle className="h-5 w-5" />
+        <HelpCircle className="size-5" />
         Frequently Asked Questions
       </h3>
 

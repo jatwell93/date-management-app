@@ -5,11 +5,18 @@
  */
 const tokens = require('./src/theme/design-tokens.json');
 const brand = tokens.colors.brand;
+const dark = tokens.colors.dark;
+const surface = tokens.colors.surface;
 
 /** @type {import('tailwindcss').Config} */
 module.exports = {
   darkMode: ['class'],
-  content: ['./src/**/*.{js,jsx,ts,tsx}', './public/index.html'],
+  content: [
+    './src/**/*.{js,jsx,ts,tsx}',
+    '!./src/**/*.{test,spec}.{js,jsx,ts,tsx}',
+    '!./src/**/__tests__/**/*.{js,jsx,ts,tsx}',
+    './public/index.html',
+  ],
   prefix: '',
   theme: {
     container: {
@@ -112,6 +119,8 @@ module.exports = {
           3: 'var(--surface-3)',
           4: 'var(--surface-4)',
         },
+        'semantic-canvas': dark['canvas-dark'],
+        'semantic-canvas-foreground': surface.light['surface-1'],
         'semantic-text': {
           primary: 'var(--text-primary)',
           secondary: 'var(--text-secondary)',

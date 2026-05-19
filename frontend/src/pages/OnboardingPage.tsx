@@ -117,7 +117,7 @@ function Step1({ onNext }: StepProps) {
             >
               <div className="flex items-center justify-center mb-3">
                 <svg
-                  className="w-8 h-8 text-semantic-secondary"
+                  className="size-8 text-semantic-secondary"
                   fill="none"
                   stroke="currentColor"
                   viewBox="0 0 24 24"
@@ -146,10 +146,10 @@ function Step1({ onNext }: StepProps) {
             >
               <div className="flex items-center justify-center mb-3">
                 {isLoading ? (
-                  <Loader2 className="w-8 h-8 text-semantic-success animate-spin" />
+                  <Loader2 className="size-8 text-semantic-success animate-spin" />
                 ) : (
                   <svg
-                    className="w-8 h-8 text-semantic-success"
+                    className="size-8 text-semantic-success"
                     fill="none"
                     stroke="currentColor"
                     viewBox="0 0 24 24"
@@ -246,7 +246,7 @@ function Step2(_props: StepProps) {
             <button
               key={index}
               onClick={() => setSlideIndex(index)}
-              className={`w-2 h-2 rounded-full transition ${
+              className={`size-2 rounded-full transition ${
                 index === slideIndex ? 'bg-semantic-secondary w-8' : 'bg-semantic-surface-4'
               }`}
               aria-label={`Go to slide ${index + 1}`}
@@ -348,7 +348,7 @@ export function OnboardingPage() {
       <div className="w-full max-w-2xl px-4">
         {/* Header */}
         <div className="mb-6 text-center">
-          <h1 className="text-3xl font-bold font-heading text-semantic-text-primary">
+          <h1 className="text-3xl font-semibold font-heading text-semantic-text-primary">
             {stepConfig.title}
           </h1>
           <p className="mt-2 text-semantic-text-secondary">{stepConfig.description}</p>

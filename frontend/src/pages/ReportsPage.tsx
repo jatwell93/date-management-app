@@ -83,7 +83,7 @@ export function ReportsPage({ token }: ReportsPageProps) {
   }, [token]);
 
   if (loading) {
-    return <div className="container mx-auto p-4 text-center">Loading reports...</div>;
+    return <div className="container mx-auto p-4 text-center">Loading reports…</div>;
   }
 
   if (error) {
@@ -100,7 +100,7 @@ export function ReportsPage({ token }: ReportsPageProps) {
         </CardHeader>
         <CardContent>
           {overallLoading ? (
-            <div className="text-center">Loading overall report...</div>
+            <div className="text-center">Loading overall report…</div>
           ) : overallReportData ? (
             <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mb-6">
               <div className="bg-semantic-secondary-muted p-4 rounded-lg text-center">
@@ -156,7 +156,7 @@ export function ReportsPage({ token }: ReportsPageProps) {
             </a>
           </div>
           {loading ? (
-            <div className="text-center">Loading monthly report...</div>
+            <div className="text-center">Loading monthly report…</div>
           ) : reportData && reportData.length > 0 ? (
             <Table>
               <TableHeader>

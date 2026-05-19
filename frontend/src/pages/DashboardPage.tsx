@@ -63,7 +63,7 @@ export function DashboardPage({ token }: DashboardPageProps) {
   }, [token]);
 
   if (loading) {
-    return <div className="container mx-auto p-4 text-center">Loading dashboard...</div>;
+    return <div className="container mx-auto p-4 text-center">Loading dashboard…</div>;
   }
 
   if (error) {

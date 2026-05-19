@@ -423,7 +423,7 @@ export function ScanPage({ token }: ScanPageProps) {
           )}
           {error && (
             <div
-              className="bg-inventory-error-50 border border-inventory-error-400 text-inventory-error-800 px-4 py-3 rounded relative text-center mt-4"
+              className="bg-semantic-critical-muted border border-semantic-critical text-semantic-critical-muted-foreground px-4 py-3 rounded relative text-center mt-4"
               role="alert"
             >
               <span className="block sm:inline">Error: {error}</span>
@@ -431,7 +431,7 @@ export function ScanPage({ token }: ScanPageProps) {
           )}
           {successMessage && (
             <div
-              className="bg-inventory-success-50 border border-inventory-success-400 text-inventory-success-800 px-4 py-3 rounded relative text-center mt-4"
+              className="bg-semantic-success-muted border border-semantic-success text-semantic-success-muted-foreground px-4 py-3 rounded relative text-center mt-4"
               role="alert"
             >
               <span className="block sm:inline">{successMessage}</span>
@@ -516,7 +516,7 @@ export function ScanPage({ token }: ScanPageProps) {
                   </p>
 
                   {markdownPrice !== null && (
-                    <p className="text-yellow-500 font-semibold mt-1">
+                    <p className="text-semantic-warning font-semibold mt-1">
                       Markdown Price (20% off): ${markdownPrice.toFixed(2)}
                     </p>
                   )}

@@ -69,6 +69,8 @@
 | `semantic-surface-2` | `#F8FAFC` | `#1E293B` | Card backgrounds, elevated surfaces |
 | `semantic-surface-3` | `#F1F5F9` | `#334155` | Nested containers, table headers |
 | `semantic-surface-4` | `#E2E8F0` | `#475569` | Borders, dividers, disabled backgrounds |
+| `semantic-canvas` | `#070E1A` | `#070E1A` | Scanner camera placeholder canvas and modal overlays with opacity modifiers |
+| `semantic-canvas-foreground` | `#FFFFFF` | `#FFFFFF` | Text rendered directly on the dark scanner canvas |
 
 ### 7. `semantic-text` — Text Hierarchy
 

@@ -63,6 +63,38 @@ describe('check-token-compliance helpers', () => {
   });
 
   describe('amber restraint scanning', () => {
+    it('flags non-semantic Tailwind color utilities beyond amber and gray', () => {
+      const violations = scanContent(`
+        <button className="bg-blue-500 hover:bg-blue-600 text-white" />
+        <p className="text-red-600 border-green-200" />
+      `);
+
+      expect(violations).toEqual(
+        expect.arrayContaining([
+          expect.objectContaining({
+            ruleId: 'hardcoded-tailwind-color-class',
+            match: 'bg-blue-500',
+          }),
+          expect.objectContaining({
+            ruleId: 'hardcoded-tailwind-color-class',
+            match: 'hover:bg-blue-600',
+          }),
+          expect.objectContaining({
+            ruleId: 'hardcoded-tailwind-color-class',
+            match: 'text-white',
+          }),
+          expect.objectContaining({
+            ruleId: 'hardcoded-tailwind-color-class',
+            match: 'text-red-600',
+          }),
+          expect.objectContaining({
+            ruleId: 'hardcoded-tailwind-color-class',
+            match: 'border-green-200',
+          }),
+        ]),
+      );
+    });
+
     it('flags raw amber utility classes and deprecated inventory warning tokens', () => {
       const violations = scanContent(`
         <div className="bg-amber-50 border-amber-200 text-amber-800" />

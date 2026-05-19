@@ -37,7 +37,9 @@ export function UserManagementPage() {
   return (
     <div className="max-w-4xl mx-auto py-8 px-4">
       <div className="mb-6">
-        <h1 className="text-2xl font-bold font-heading text-semantic-text-primary">Team Members</h1>
+        <h1 className="text-2xl font-semibold font-heading text-semantic-text-primary">
+          Team Members
+        </h1>
         <p className="mt-1 text-semantic-text-secondary">
           Manage your organization members and their roles.
         </p>
@@ -46,7 +48,7 @@ export function UserManagementPage() {
       {!isLoaded || !organization ? (
         <Card>
           <CardContent className="pt-6">
-            <p className="text-center text-semantic-text-tertiary">Loading organization...</p>
+            <p className="text-center text-semantic-text-tertiary">Loading organization…</p>
           </CardContent>
         </Card>
       ) : (
@@ -59,7 +61,7 @@ export function UserManagementPage() {
           </CardHeader>
           <CardContent>
             {isFetchingMembers ? (
-              <p className="text-center text-semantic-text-tertiary">Loading members...</p>
+              <p className="text-center text-semantic-text-tertiary">Loading members…</p>
             ) : members.length > 0 ? (
               <div className="overflow-x-auto">
                 <table className="w-full text-sm">

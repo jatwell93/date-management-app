@@ -138,7 +138,7 @@ export function UsageReportPage({ token }: UsageReportPageProps) {
   }, [token, timeFrame]);
 
   if (loading) {
-    return <div className="container mx-auto p-4 text-center">Loading usage report...</div>;
+    return <div className="container mx-auto p-4 text-center">Loading usage report…</div>;
   }
 
   if (error) {
@@ -231,7 +231,7 @@ export function UsageReportPage({ token }: UsageReportPageProps) {
           </CardHeader>
           <CardContent>
             {chartsLoading ? (
-              <div className="text-center py-8">Loading chart data...</div>
+              <div className="text-center py-8">Loading chart data…</div>
             ) : itemsByUser && itemsByUser.length > 0 ? (
               <Bar
                 data={itemsByUserChartData}
@@ -260,7 +260,7 @@ export function UsageReportPage({ token }: UsageReportPageProps) {
           </CardHeader>
           <CardContent>
             {chartsLoading ? (
-              <div className="text-center py-8">Loading chart data...</div>
+              <div className="text-center py-8">Loading chart data…</div>
             ) : itemsByDate && itemsByDate.length > 0 ? (
               <Line
                 data={itemsByDateChartData}

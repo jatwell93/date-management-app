@@ -329,7 +329,7 @@ export function DetailedExpiryReportPage({ token }: DetailedExpiryReportPageProp
                 variant="success"
                 className="min-w-[50px] font-medium"
               >
-                {saving ? '...' : 'Save'}
+                {saving ? '…' : 'Save'}
               </Button>
               <Button
                 onClick={handleCancelEdit}
@@ -416,9 +416,7 @@ export function DetailedExpiryReportPage({ token }: DetailedExpiryReportPageProp
   }, [token]);
 
   if (loading) {
-    return (
-      <div className="container mx-auto p-4 text-center">Loading detailed expiry report...</div>
-    );
+    return <div className="container mx-auto p-4 text-center">Loading detailed expiry report…</div>;
   }
 
   if (error) {

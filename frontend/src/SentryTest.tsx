@@ -65,21 +65,21 @@ const SentryTest: React.FC = () => {
 
   return (
     <div className="p-6 max-w-2xl mx-auto">
-      <h2 className="text-2xl font-bold mb-4">Sentry Integration Test</h2>
+      <h2 className="text-2xl font-semibold mb-4">Sentry Integration Test</h2>
 
       <div className="space-y-4">
         <div>
           <h3 className="text-lg font-semibold mb-2">Frontend Tests (@sentry/react)</h3>
-          <div className="space-x-2">
+          <div className="flex flex-wrap gap-2">
             <button
               onClick={triggerFrontendError}
-              className="px-4 py-2 bg-blue-500 text-white rounded hover:bg-blue-600"
+              className="px-4 py-2 bg-semantic-secondary text-semantic-secondary-foreground rounded hover:bg-semantic-secondary-hover"
             >
               Trigger Handled Error
             </button>
             <button
               onClick={triggerUnhandledError}
-              className="px-4 py-2 bg-red-500 text-white rounded hover:bg-red-600"
+              className="px-4 py-2 bg-semantic-critical text-semantic-critical-foreground rounded hover:bg-semantic-critical-hover"
             >
               Trigger Unhandled Error
             </button>
@@ -90,20 +90,20 @@ const SentryTest: React.FC = () => {
           <h3 className="text-lg font-semibold mb-2">Workers Tests (@sentry/cloudflare)</h3>
           <button
             onClick={testWorkersError}
-            className="px-4 py-2 bg-green-500 text-white rounded hover:bg-green-600"
+            className="px-4 py-2 bg-semantic-success text-semantic-success-foreground rounded hover:bg-semantic-success-hover"
           >
             Test Workers Error
           </button>
         </div>
 
         {error && (
-          <div className="mt-4 p-4 bg-yellow-100 border border-yellow-400 rounded">
-            <p className="text-yellow-800">{error}</p>
+          <div className="mt-4 p-4 bg-semantic-warning-muted border border-semantic-warning-muted rounded">
+            <p className="text-semantic-warning-muted-foreground">{error}</p>
           </div>
         )}
       </div>
 
-      <div className="mt-8 p-4 bg-gray-100 rounded">
+      <div className="mt-8 p-4 bg-semantic-surface-2 rounded">
         <h3 className="text-lg font-semibold mb-2">How to Verify:</h3>
         <ol className="list-decimal list-inside space-y-1 text-sm">
           <li>Click buttons to trigger errors</li>

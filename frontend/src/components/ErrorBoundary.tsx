@@ -44,7 +44,7 @@ class ErrorBoundary extends React.Component<Props, State> {
       return (
         <div className="min-h-screen flex items-center justify-center bg-background p-4">
           <div className="max-w-md w-full bg-card text-card-foreground p-6 rounded-lg shadow-md text-center">
-            <h2 className="text-2xl font-bold font-heading mb-4">Something went wrong</h2>
+            <h2 className="text-2xl font-semibold font-heading mb-4">Something went wrong</h2>
             <p className="text-muted-foreground mb-4">
               We're sorry, but something went wrong. Please try refreshing the page or contact
               support if the issue persists.

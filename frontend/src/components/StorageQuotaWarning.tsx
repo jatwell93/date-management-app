@@ -120,7 +120,12 @@ export const StorageQuotaWarning: React.FC<StorageQuotaWarningProps> = ({
 
   return (
     <div className="storage-quota-warning">
-      <div className="storage-quota-warning__overlay" onClick={handleDismiss} />
+      <button
+        type="button"
+        className="storage-quota-warning__overlay"
+        onClick={handleDismiss}
+        aria-label="Dismiss storage quota warning"
+      />
 
       <div className="storage-quota-warning__modal">
         <div className="storage-quota-warning__header">
