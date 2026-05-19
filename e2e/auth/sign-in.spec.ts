@@ -1,16 +1,6 @@
 import { test, expect } from '@playwright/test';
 import { randomUUID } from 'crypto';
-
-function requireE2EEnv(name: string): string {
-  const value = process.env[name];
-  if (!value) {
-    throw new Error(`${name} is required for sign-in E2E flows`);
-  }
-  return value;
-}
-
-const MANAGER_EMAIL = process.env.E2E_MANAGER_EMAIL || 'testclerk2026b@mailinator.com';
-const MANAGER_PASSWORD = requireE2EEnv('E2E_MANAGER_PASSWORD');
+import { MANAGER_EMAIL, MANAGER_PASSWORD } from '../helpers/auth';
 
 /**
  * E2E: Sign-in flow

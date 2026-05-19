@@ -680,28 +680,44 @@ export class ProductService {
           processingPromises.push(rowProcessingPromise);
         })
         .on('end', () => {
-          void (async () => {
-            try {
-              // Wait for all row processing promises to complete
-              await Promise.all(processingPromises);
-
-              if (recordCount === 0) {
-                errors.push('CSV file is empty or contains no valid records');
-              }
-
-              resolve({ imported, updated, errors });
-            } catch (finalError: unknown) {
-              Logger.error('Error in final processing', {
-                error: finalError instanceof Error ? finalError.message : String(finalError),
-              });
-              const finalErrorMessage =
-                finalError instanceof Error ? finalError.message : 'Unknown error';
-              errors.push(`Final processing error: ${finalErrorMessage}`);
-              reject({ imported, updated, errors });
-            }
-          })();
+          void this.finalizeCSVUploadProcessing(
+            processingPromises,
+            recordCount,
+            errors,
+            () => ({ imported, updated }),
+            resolve,
+            reject,
+          );
         });
     });
+  }
+
+  private async finalizeCSVUploadProcessing(
+    processingPromises: Promise<void>[],
+    recordCount: number,
+    errors: string[],
+    getCounts: () => { imported: number; updated: number },
+    resolve: (result: { imported: number; updated: number; errors: string[] }) => void,
+    reject: (reason?: unknown) => void,
+  ): Promise<void> {
+    try {
+      await Promise.all(processingPromises);
+
+      if (recordCount === 0) {
+        errors.push('CSV file is empty or contains no valid records');
+      }
+
+      const { imported, updated } = getCounts();
+      resolve({ imported, updated, errors });
+    } catch (finalError: unknown) {
+      Logger.error('Error in final processing', {
+        error: finalError instanceof Error ? finalError.message : String(finalError),
+      });
+      const finalErrorMessage = finalError instanceof Error ? finalError.message : 'Unknown error';
+      errors.push(`Final processing error: ${finalErrorMessage}`);
+      const { imported, updated } = getCounts();
+      reject({ imported, updated, errors });
+    }
   }
 
   private async processXLSXUpload(

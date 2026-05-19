@@ -15,7 +15,8 @@ function createE2ETestPassword(): string {
   return `E2e-${randomUUID()}-Aa1!`;
 }
 
-export const MANAGER_EMAIL = 'testclerk2026b@team403684.testinator.email';
+export const MANAGER_EMAIL =
+  process.env.E2E_MANAGER_EMAIL || 'testclerk2026b@team403684.testinator.email';
 export const MANAGER_PASSWORD = requireE2EEnv('E2E_MANAGER_PASSWORD');
 
 export const AUTH_STATE_PATH = path.join(__dirname, '..', '.auth', 'manager.json');

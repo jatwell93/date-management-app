@@ -82,6 +82,20 @@ function ExpiryLoadingState({ message }: { message: string }) {
   );
 }
 
+function runHandledHandheldSync(
+  token: string | null,
+  refreshPendingQueueCount: () => Promise<void>,
+): void {
+  void (async () => {
+    await synchronizeOfflineData(token);
+    await refreshPendingQueueCount();
+  })().catch((error: unknown) => {
+    Sentry.captureException(error, {
+      tags: { feature: 'handheld-sync' },
+    });
+  });
+}
+
 function ProfilePage() {
   return (
     <div data-testid="profile-shell" className="mx-auto w-full max-w-5xl px-4 py-6">
@@ -864,16 +878,7 @@ function AppContent({
         <HandheldLayout
           userName={userName || undefined}
           syncStatus={isOnline ? 'synced' : 'offline'}
-          onSyncNow={() => {
-            void (async () => {
-              await synchronizeOfflineData(token);
-              await refreshPendingQueueCount();
-            })().catch((error: unknown) => {
-              Sentry.captureException(error, {
-                tags: { feature: 'handheld-sync' },
-              });
-            });
-          }}
+          onSyncNow={() => runHandledHandheldSync(token, refreshPendingQueueCount)}
           onSettingsClick={() => {
             // TODO: Implement settings navigation
           }}
