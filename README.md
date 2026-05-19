@@ -124,4 +124,6 @@ Key references:
 
 ## License
 
-Apache-2.0
+Licensing is currently defined per workspace package rather than by a single root license file.
+Check each package's `license` field and accompanying documentation for the applicable terms.
+This README does not claim a repository-wide Apache-2.0 license until the root `LICENSE` file and package metadata are aligned.
