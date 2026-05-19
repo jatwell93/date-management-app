@@ -277,8 +277,8 @@ export function SubscriptionSettingsPage({ token }: SubscriptionSettingsPageProp
               </CardHeader>
               <CardContent>
                 <div className="space-y-4">
-                  <div className="p-4 bg-amber-50 border border-amber-200 rounded-lg dark:bg-amber-950/30 dark:border-amber-800">
-                    <p className="text-sm text-amber-800 dark:text-amber-200">
+                  <div className="p-4 bg-semantic-warning-muted border border-semantic-warning-muted rounded-lg">
+                    <p className="text-sm text-semantic-warning-muted-foreground">
                       <strong>Note:</strong> If you cancel, you'll retain access to your current
                       plan until the end of your billing period. After that, you'll be downgraded to
                       the Starter plan.

@@ -15,6 +15,7 @@ describe('phase 2 semantic UI primitives', () => {
     expect(buttonVariants({ variant: 'neutral' })).toContain('text-semantic-text-primary');
     expect(buttonVariants({ variant: 'success' })).toContain('bg-semantic-success');
     expect(buttonVariants({ variant: 'warning' })).toContain('bg-semantic-warning');
+    expect(buttonVariants({ variant: 'warning' })).toContain('bg-semantic-warning-hover');
     expect(buttonVariants({ variant: 'error' })).toContain('bg-semantic-critical');
   });
 

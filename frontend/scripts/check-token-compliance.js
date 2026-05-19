@@ -23,6 +23,26 @@ const BASELINE_FILE = path.resolve(__dirname, '..', '.token-compliance-baseline.
 
 /* ── Patterns to detect ───────────────────────────────────────── */
 
+const COLOR_UTILITY_PREFIXES = [
+  'accent',
+  'bg',
+  'border',
+  'caret',
+  'decoration',
+  'divide',
+  'fill',
+  'from',
+  'outline',
+  'placeholder',
+  'ring',
+  'shadow',
+  'stroke',
+  'text',
+  'to',
+  'via',
+];
+const COLOR_UTILITY_PATTERN = COLOR_UTILITY_PREFIXES.join('|');
+
 const RULES = [
   {
     id: 'hardcoded-hex-style',
@@ -47,6 +67,17 @@ const RULES = [
     pattern: /(?:bg|text|border|ring|outline|from|to|via)-inventory-[a-z]+-\d+/g,
     suggestion: 'Replace with semantic-* equivalent (e.g., text-inventory-error-500 → text-semantic-critical)',
     severity: 'warning',
+  },
+  {
+    id: 'amber-restraint-usage',
+    description: 'Raw amber utility or deprecated warning token bypasses semantic-warning policy',
+    pattern: new RegExp(
+      `(?:${COLOR_UTILITY_PATTERN})-(?:amber-\\d+|inventory-warning-\\d+)`,
+      'g',
+    ),
+    suggestion:
+      'Use semantic-warning tokens only in approved warning/emphasis contexts (see AMBER_USAGE_GUIDE.md)',
+    severity: 'error',
   },
   {
     id: 'hardcoded-gray-class',
@@ -80,6 +111,10 @@ const EXCLUDED_FILE_NAMES = new Set(['globals.css', 'index.css', 'tailwind-outpu
 
 function scanFile(filePath) {
   const content = fs.readFileSync(filePath, 'utf-8');
+  return scanContent(content, path.relative(SRC_DIR, filePath));
+}
+
+function scanContent(content, file = '<inline>') {
   const lines = content.split('\n');
   const violations = [];
 
@@ -91,7 +126,7 @@ function scanFile(filePath) {
       rule.pattern.lastIndex = 0;
       while ((match = rule.pattern.exec(line)) !== null) {
         violations.push({
-          file: path.relative(SRC_DIR, filePath),
+          file,
           line: i + 1,
           column: match.index + 1,
           ruleId: rule.id,
@@ -168,6 +203,21 @@ function getBaselineDelta(baseline, violations) {
   return violations.length - baseline.totalViolations;
 }
 
+function getComplianceFailure(baseline, violations) {
+  const { errors } = summarizeViolations(violations);
+  const delta = getBaselineDelta(baseline, violations);
+  const baselineErrors = baseline.errors || 0;
+  const newErrors = Math.max(0, errors.length - baselineErrors);
+  const amberErrors = errors.filter((violation) => violation.ruleId === 'amber-restraint-usage');
+
+  return {
+    shouldFail: delta > 0 || newErrors > 0 || amberErrors.length > 0,
+    delta,
+    newErrors,
+    amberErrors: amberErrors.length,
+  };
+}
+
 function printReport(files, violations) {
   const { errors, warnings, total } = summarizeViolations(violations);
 
@@ -203,9 +253,17 @@ function printBaselineComparison(baseline, violations) {
   return delta;
 }
 
-function exitForBaselineDelta(delta) {
-  if (delta > 0) {
-    console.log(`\n❌ FAIL: ${delta} new violation(s) introduced above baseline.`);
+function exitForComplianceFailure(failure) {
+  if (failure.shouldFail) {
+    if (failure.delta > 0) {
+      console.log(`\n❌ FAIL: ${failure.delta} new violation(s) introduced above baseline.`);
+    }
+    if (failure.newErrors > 0) {
+      console.log(`\n❌ FAIL: ${failure.newErrors} new error-level violation(s) introduced.`);
+    }
+    if (failure.amberErrors > 0) {
+      console.log(`\n❌ FAIL: ${failure.amberErrors} amber restraint violation(s) found.`);
+    }
     console.log('   Fix new violations or update baseline with: node scripts/check-token-compliance.js --baseline');
     process.exit(1);
   }
@@ -236,8 +294,8 @@ function main() {
   }
 
   const baseline = JSON.parse(fs.readFileSync(BASELINE_FILE, 'utf-8'));
-  const delta = printBaselineComparison(baseline, allViolations);
-  exitForBaselineDelta(delta);
+  printBaselineComparison(baseline, allViolations);
+  exitForComplianceFailure(getComplianceFailure(baseline, allViolations));
 }
 
 if (require.main === module) {
@@ -246,7 +304,9 @@ if (require.main === module) {
 
 module.exports = {
   buildBaseline,
+  getComplianceFailure,
   getBaselineDelta,
   isExcluded,
+  scanContent,
   summarizeViolations,
 };

@@ -124,7 +124,7 @@ function ExpectQaToggle({ onOpen }: { onOpen: () => void }) {
       type="button"
       aria-label="Open QA diagnostics"
       onClick={onOpen}
-      className="fixed bottom-3 left-3 z-50 rounded-full border border-amber-300 bg-amber-50 px-3 py-2 text-xs font-semibold text-amber-950 shadow-lg"
+      className="fixed bottom-3 left-3 z-50 rounded-full border border-semantic-warning-muted bg-semantic-warning-muted px-3 py-2 text-xs font-semibold text-semantic-warning-muted-foreground shadow-lg"
     >
       QA
     </button>
@@ -172,7 +172,7 @@ function ExpectQaStatus({
     <section
       aria-label="Expect QA auth diagnostics"
       data-testid="expect-qa-status"
-      className="fixed bottom-3 right-3 z-50 max-w-sm rounded-md border border-amber-300 bg-amber-50 p-3 text-xs text-amber-950 shadow-lg"
+      className="fixed bottom-3 right-3 z-50 max-w-sm rounded-md border border-semantic-warning-muted bg-semantic-warning-muted p-3 text-xs text-semantic-warning-muted-foreground shadow-lg"
     >
       <div className="flex items-center justify-between gap-3">
         <div className="font-semibold">Expect QA</div>
@@ -181,7 +181,7 @@ function ExpectQaStatus({
             type="button"
             aria-label="Close QA diagnostics"
             onClick={() => setIsExpanded(false)}
-            className="rounded border border-amber-300 px-2 py-1 font-semibold"
+            className="rounded border border-semantic-warning-muted px-2 py-1 font-semibold"
           >
             Close
           </button>
