@@ -1,8 +1,8 @@
 # Performance Documentation
 
-**Last Updated:** March 7, 2026  
+**Last Updated:** May 19, 2026  
 **Cloudflare Workers Deployment:** `date-management-api-dev.date-management-app.workers.dev`  
-**Status:** Development environment baselines established, production pending Phase 15 deployment
+**Status:** Development environment baselines established; refresh baselines after each production infrastructure change.
 
 ---
 
@@ -70,7 +70,7 @@
 
 ## Cold Start Performance
 
-**Task Reference:** 17.4 - Test Workers cold start times  
+**OpenSpec Reference:** Workers cold start validation  
 **Test Date:** March 7, 2026  
 **Deployment:** `date-management-api-dev.date-management-app.workers.dev`
 
@@ -113,7 +113,7 @@
 
 ## Bundle Size Optimization
 
-**Task Reference:** 17.5 - Optimize Workers bundle size  
+**OpenSpec Reference:** Workers bundle size optimization  
 **Test Date:** March 7, 2026  
 **CI Enforcement:** `.github/workflows/workers-bundle-size-check.yml`
 
@@ -156,7 +156,7 @@ minify: true; // esbuild minification enabled
 
 ## Response Compression
 
-**Task Reference:** 17.6 - Add compression to API responses  
+**OpenSpec Reference:** API response compression  
 **Test Date:** March 7, 2026  
 **Implementation:** `workers/src/index-minimal.ts`
 
@@ -216,7 +216,7 @@ curl -I \
 
 ## Load Testing Results
 
-**Task Reference:** 17.8 - Run load tests and verify p95 <200ms  
+**OpenSpec Reference:** Load testing and p95 verification  
 **Test Date:** March 7, 2026  
 **Target:** `date-management-api-dev.date-management-app.workers.dev`
 
@@ -300,7 +300,7 @@ node analyze-load-test.js
 
 ## CSV Processing Benchmarks
 
-**Task Reference:** 17.9 - Profile CSV parsing for 10,000-line files  
+**OpenSpec Reference:** CSV parsing profile for 10,000-line files  
 **Test Date:** March 7, 2026  
 **Implementation:** Streaming CSV parser with validation
 
@@ -442,7 +442,7 @@ node analyze-load-test.js
 
 ### Immediate Actions (Post-MVP)
 
-1. **Query Result Caching (Task 17.3 - Deferred)**
+1. **Query Result Caching**
    - **Tool:** Workers KV (key-value store)
    - **Strategy:** Cache frequently accessed data (products, dashboard stats)
    - **TTL:** 5-60 minutes depending on data freshness requirements
@@ -451,7 +451,7 @@ node analyze-load-test.js
 2. **Database Index Tuning**
    - **Current:** Basic indexes on `expiryDate`, `storeArea`, `SKU`
    - **Opportunity:** Add composite indexes for common query patterns
-   - **Tool:** PgHero (Task 17.11 - Deferred) for index recommendations
+   - **Tool:** PgHero or Neon query insights for index recommendations
    - **Action:** Analyze slow queries after 2-4 weeks production data
 
 3. **CSV Batch Processing Optimization**
@@ -713,7 +713,7 @@ npm test
 
 ## Appendix: Performance Test Evidence
 
-### Task 17.4: Cold Start Measurement
+### Cold Start Measurement
 
 **Date:** March 7, 2026  
 **Command:** `curl -w "%{time_starttransfer}\n" -s -o /dev/null <URL> && sleep 35`  
@@ -733,7 +733,7 @@ npm test
 - p95: 295.85ms
 - Max: 295.85ms
 
-### Task 17.5: Bundle Size Optimization
+### Bundle Size Optimization
 
 **Date:** March 7, 2026  
 **Before:**
@@ -752,7 +752,7 @@ $ ls -lh workers/dist/index.js
 
 **CI Workflow:** `.github/workflows/workers-bundle-size-check.yml`
 
-### Task 17.6: Compression Validation
+### Compression Validation
 
 **Date:** March 7, 2026  
 **With gzip:**
@@ -770,7 +770,7 @@ $ curl -I https://date-management-api-dev.date-management-app.workers.dev/api/he
 # No Content-Encoding header (uncompressed)
 ```
 
-### Task 17.8: Load Test Results
+### Load Test Results
 
 **Date:** March 7, 2026  
 **Sample Size:** 100 concurrent requests  
@@ -794,7 +794,7 @@ p99:         191.40 ms
 ✅ PASS: p95 latency is under 200ms target
 ```
 
-### Task 17.9: CSV Processing Benchmarks
+### CSV Processing Benchmarks
 
 **Date:** March 7, 2026  
 **Test Data:** Real pharmacy CSV (7,649 rows)
@@ -825,7 +825,7 @@ p99:         191.40 ms
 
 **Update Triggers:**
 
-- Production deployment (Phase 15)
+- Production deployment or infrastructure changes
 - Infrastructure changes (database, Workers, R2)
 - Performance regressions or improvements
 - New optimization implementations
@@ -833,7 +833,7 @@ p99:         191.40 ms
 
 **Related Documentation:**
 
-- [Monitoring & Alerting](./monitoring.md)
+- [Monitoring & Alerting](./monitoring-and-alerting.md)
 - [Cloudflare Infrastructure Setup](./cloudflare-setup.md)
 - [Testing Guide](./TESTING.md)
 - [Rollback Procedures](./rollback-procedure.md)
