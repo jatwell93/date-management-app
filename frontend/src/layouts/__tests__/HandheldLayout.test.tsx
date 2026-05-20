@@ -108,7 +108,7 @@ describe('HandheldLayout', () => {
     expect(screen.queryByTestId('handheld-scan-toolbar')).not.toBeInTheDocument();
   });
 
-  it('applies full viewport height styling for handheld devices', () => {
+  it('uses dynamic viewport height for handheld devices', () => {
     mockUseHandheldDetectionContext.mockReturnValue({
       isHandheld: true,
       detectionResult: {
@@ -128,7 +128,7 @@ describe('HandheldLayout', () => {
     );
 
     const layout = container.firstChild;
-    expect(layout).toHaveClass('h-screen');
+    expect(layout).toHaveClass('h-dvh');
     expect(layout).toHaveClass('flex');
     expect(layout).toHaveClass('flex-col');
   });

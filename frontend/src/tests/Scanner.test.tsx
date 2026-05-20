@@ -1,5 +1,5 @@
 import React from 'react';
-import { render, screen, fireEvent, act } from '@testing-library/react';
+import { render, screen, fireEvent, act, waitFor } from '@testing-library/react';
 import { Scanner } from '../components/Scanner';
 import '@testing-library/jest-dom';
 
@@ -11,10 +11,18 @@ import Quagga from 'quagga';
 
 // Add the CameraScanner mock here
 jest.mock('../components/CameraScanner', () => ({
-  CameraScanner: ({ onDetected }: { onDetected: (barcode: string) => void }) => (
+  CameraScanner: ({
+    onDetected,
+    disabled,
+  }: {
+    onDetected: (barcode: string) => void;
+    disabled?: boolean;
+  }) => (
     <div>
       <div>Camera Scanner</div>
-      <button onClick={() => onDetected('CAMERA_SCAN_123')}>Trigger Scan</button>
+      <button disabled={disabled} onClick={() => onDetected('CAMERA_SCAN_123')}>
+        Trigger Scan
+      </button>
     </div>
   ),
 }));
@@ -63,18 +71,50 @@ describe('Scanner', () => {
 
   it('renders the scanner input and button', () => {
     render(<Scanner onScan={mockOnScan} />);
-    expect(screen.getByPlaceholderText(/Scan barcode or enter manually/i)).toBeInTheDocument();
-    expect(screen.getByRole('button', { name: /Submit/i })).toBeInTheDocument();
+    expect(screen.getByLabelText(/Barcode or SKU/i)).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: /Use barcode/i })).toBeInTheDocument();
     expect(screen.getByTestId('scanner-state-indicator')).toBeInTheDocument();
+  });
+
+  it('disables manual, camera, and hardware scan entry points when disabled', () => {
+    let capturedOnScanCallback: ((barcode: string) => void) | null = null;
+    mockUseHardwareScan.mockImplementation((cb) => {
+      capturedOnScanCallback = cb;
+    });
+
+    render(<Scanner onScan={mockOnScan} disabled />);
+
+    const input = screen.getByLabelText(/Barcode or SKU/i);
+    expect(input).toBeDisabled();
+    expect(screen.getByRole('button', { name: /Use barcode/i })).toBeDisabled();
+    expect(screen.getByRole('button', { name: /Use Camera/i })).toBeDisabled();
+
+    fireEvent.change(input, { target: { value: '12345' } });
+    fireEvent.click(screen.getByRole('button', { name: /Use barcode/i }));
+
+    act(() => {
+      if (capturedOnScanCallback) {
+        capturedOnScanCallback('987654321');
+      }
+    });
+
+    expect(mockOnScan).not.toHaveBeenCalled();
+  });
+
+  it('keeps camera scan controls disabled in camera mode when disabled', async () => {
+    render(<Scanner onScan={mockOnScan} defaultMode="camera" disabled />);
+
+    expect(screen.getByRole('button', { name: /Use Text Input/i })).toBeDisabled();
+    expect(await screen.findByRole('button', { name: /Trigger Scan/i })).toBeDisabled();
   });
 
   it('calls onScan with the entered barcode when button is clicked', () => {
     render(<Scanner onScan={mockOnScan} />);
 
-    fireEvent.change(screen.getByPlaceholderText(/Scan barcode or enter manually/i), {
+    fireEvent.change(screen.getByLabelText(/Barcode or SKU/i), {
       target: { value: '12345' },
     });
-    fireEvent.click(screen.getByRole('button', { name: /Submit/i }));
+    fireEvent.click(screen.getByRole('button', { name: /Use barcode/i }));
 
     expect(mockOnScan).toHaveBeenCalledWith(
       expect.objectContaining({
@@ -83,14 +123,14 @@ describe('Scanner', () => {
         timestamp: expect.any(Number),
       }),
     );
-    expect(screen.getByPlaceholderText(/Scan barcode or enter manually/i)).toHaveValue(''); // Input should be cleared
+    expect(screen.getByLabelText(/Barcode or SKU/i)).toHaveValue(''); // Input should be cleared
     expect(screen.getByText(/Item scanned/i)).toBeInTheDocument();
   });
 
   it('calls onScan with the entered barcode when form is submitted', () => {
     render(<Scanner onScan={mockOnScan} />);
 
-    const input = screen.getByPlaceholderText(/Scan barcode or enter manually/i);
+    const input = screen.getByLabelText(/Barcode or SKU/i);
     fireEvent.change(input, {
       target: { value: '67890' },
     });
@@ -106,26 +146,28 @@ describe('Scanner', () => {
         timestamp: expect.any(Number),
       }),
     );
-    expect(screen.getByPlaceholderText(/Scan barcode or enter manually/i)).toHaveValue(''); // Input should be cleared
+    expect(screen.getByLabelText(/Barcode or SKU/i)).toHaveValue(''); // Input should be cleared
   });
 
   it('does not call onScan if barcode is empty', () => {
     render(<Scanner onScan={mockOnScan} />);
 
-    fireEvent.click(screen.getByRole('button', { name: /Submit/i }));
+    fireEvent.click(screen.getByRole('button', { name: /Use barcode/i }));
     expect(mockOnScan).not.toHaveBeenCalled();
   });
 
   describe('defaultMode prop', () => {
     it('starts in text mode by default', () => {
       render(<Scanner onScan={mockOnScan} />);
-      expect(screen.getByPlaceholderText(/Scan barcode or enter manually/i)).toBeInTheDocument();
+      expect(screen.getByLabelText(/Barcode or SKU/i)).toBeInTheDocument();
       expect(screen.getByRole('button', { name: /Use Camera/i })).toBeInTheDocument();
     });
 
-    it('starts in camera mode when defaultMode="camera"', () => {
+    it('starts in camera mode when defaultMode="camera"', async () => {
       render(<Scanner onScan={mockOnScan} defaultMode="camera" />);
-      expect(screen.getAllByText(/Camera Scanner/i).length).toBeGreaterThan(0);
+      await waitFor(() => {
+        expect(screen.getAllByText(/Camera Scanner/i).length).toBeGreaterThan(0);
+      });
       expect(screen.getByRole('button', { name: /Use Text Input/i })).toBeInTheDocument();
       expect(screen.queryByTestId('scanner-state-indicator')).not.toBeInTheDocument();
     });
@@ -167,21 +209,24 @@ describe('Scanner', () => {
   });
 
   describe('camera mode switching', () => {
-    it('switches to camera mode when Use Camera button is clicked', () => {
+    it('switches to camera mode when Use Camera button is clicked', async () => {
       render(<Scanner onScan={mockOnScan} />);
 
       fireEvent.click(screen.getByRole('button', { name: /Use Camera/i }));
 
-      expect(screen.getAllByText(/Camera Scanner/i).length).toBeGreaterThan(0);
+      await waitFor(() => {
+        expect(screen.getAllByText(/Camera Scanner/i).length).toBeGreaterThan(0);
+      });
       expect(screen.getByRole('button', { name: /Use Text Input/i })).toBeInTheDocument();
     });
 
-    it('switches back to text mode when Use Text Input button is clicked', () => {
+    it('switches back to text mode when Use Text Input button is clicked', async () => {
       render(<Scanner onScan={mockOnScan} defaultMode="camera" />);
 
+      await screen.findByRole('button', { name: /Trigger Scan/i });
       fireEvent.click(screen.getByRole('button', { name: /Use Text Input/i }));
 
-      expect(screen.getByPlaceholderText(/Scan barcode or enter manually/i)).toBeInTheDocument();
+      expect(screen.getByLabelText(/Barcode or SKU/i)).toBeInTheDocument();
       expect(screen.getByRole('button', { name: /Use Camera/i })).toBeInTheDocument();
     });
   });

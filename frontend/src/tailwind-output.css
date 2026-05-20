@@ -935,6 +935,10 @@ video {
   height: auto;
 }
 
+.h-dvh {
+  height: 100dvh;
+}
+
 .h-full {
   height: 100%;
 }
@@ -943,16 +947,16 @@ video {
   height: 1px;
 }
 
-.h-screen {
-  height: 100vh;
-}
-
 .max-h-\[80vh\] {
   max-height: 80vh;
 }
 
 .max-h-\[90vh\] {
   max-height: 90vh;
+}
+
+.min-h-0 {
+  min-height: 0px;
 }
 
 .min-h-20 {
@@ -1629,10 +1633,6 @@ video {
   background-color: hsl(var(--primary) / 0.1);
 }
 
-.bg-secondary {
-  background-color: hsl(var(--secondary));
-}
-
 .bg-semantic-canvas {
   --tw-bg-opacity: 1;
   background-color: rgb(7 14 26 / var(--tw-bg-opacity, 1));
@@ -2027,10 +2027,6 @@ video {
 
 .text-primary-foreground {
   color: hsl(var(--primary-foreground));
-}
-
-.text-secondary-foreground {
-  color: hsl(var(--secondary-foreground));
 }
 
 .text-semantic-canvas-foreground {
@@ -2504,10 +2500,6 @@ code {
 
 .hover\:bg-primary\/90:hover {
   background-color: hsl(var(--primary) / 0.9);
-}
-
-.hover\:bg-secondary\/80:hover {
-  background-color: hsl(var(--secondary) / 0.8);
 }
 
 .hover\:bg-semantic-critical-hover:hover {
