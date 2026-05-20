@@ -158,14 +158,14 @@ The webhook handler follows these principles:
 
 ### Current Event Handlers
 
-| Event                                  | Status | Handler                               |
-| -------------------------------------- | ------ | ------------------------------------- |
-| `customer.subscription.created`        | TODO   | Create subscription_tiers record      |
-| `customer.subscription.updated`        | TODO   | Update tier_level, current_period_end |
-| `customer.subscription.deleted`        | TODO   | Downgrade to Starter tier             |
-| `checkout.session.completed`           | TODO   | Mark trial_completed                  |
-| `invoice.payment_failed`               | TODO   | Set status=past_due, trigger dunning  |
-| `customer.subscription.trial_will_end` | TODO   | Send reminder email                   |
+| Event                                  | Status | Handler                                        |
+| -------------------------------------- | ------ | ---------------------------------------------- |
+| `customer.subscription.created`        | Done   | Create subscription tier and usage records     |
+| `customer.subscription.updated`        | Done   | Sync tier, status, period, and downgrade state |
+| `customer.subscription.deleted`        | Done   | Cancel subscription and downgrade access       |
+| `checkout.session.completed`           | Done   | Mark trial conversion                          |
+| `invoice.payment_failed`               | Done   | Set `past_due`, audit, and queue dunning flow  |
+| `customer.subscription.trial_will_end` | Done   | Queue trial reminder flow                      |
 
 See [`backend/src/services/webhook.service.ts`](../backend/src/services/webhook.service.ts) for implementation details.
 
@@ -191,8 +191,7 @@ See [`backend/src/services/webhook.service.ts`](../backend/src/services/webhook.
 ### Getting 5xx errors?
 
 - 500: Error processing webhook (handler threw exception)
-- Check backend logs for detailed error message
-- TODO: Implement error queue for failed webhooks
+- Check backend logs, Sentry, and webhook metrics for the event ID and handler failure.
 
 ### ngrok URL keeps changing?
 
@@ -212,20 +211,10 @@ Once you have a production domain:
 
 ---
 
-## Next Steps
-
-- **Task 8.11:** Add `STRIPE_WEBHOOK_SECRET` to `.env` file ✅ (done above)
-- **Task 9.1-9.9:** Implement Stripe Subscription Service
-- **Task 10.1-10.12:** Complete webhook handlers (currently TODOs in webhook.service.ts)
-- **Task 11.1-11.9:** Implement Trial System
-- **Task 12.1-12.8:** Build Subscription Management UI
-
----
-
 ## References
 
 - [Stripe Webhooks Docs](https://stripe.com/docs/webhooks)
 - [ngrok Documentation](https://ngrok.com/docs)
 - [localtunnel GitHub](https://github.com/localtunnel/localtunnel)
-- [webhook-handler-patterns skill](../../AGENTS.md#webhook-handler-patterns)
-- [stripe-webhooks skill](../../AGENTS.md#stripe-webhooks)
+- [Stripe Integration](stripe-integration.md)
+- [Webhook Troubleshooting](webhook-troubleshooting.md)

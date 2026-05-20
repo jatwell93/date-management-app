@@ -357,7 +357,7 @@ for await (const row of csvStream) {
 - Current limit: 30 seconds CPU per request
 - CSV processing: ~1MB per second throughput
 - Max file: ~30MB safely processable
-- Users uploading >30MB: Add to roadmap for Phase 20 (batch processing)
+- Users uploading >30MB: capture follow-up work in OpenSpec for queued or batched processing.
 
 ### Workers Deployment Checklist
 
