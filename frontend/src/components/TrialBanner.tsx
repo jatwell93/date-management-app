@@ -1,5 +1,6 @@
 import { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
+import { X } from 'lucide-react';
 import { Button } from './ui/button';
 import { Card, CardContent } from './ui/card';
 import { buildApiUrl } from '../lib/api.service';
@@ -34,6 +35,7 @@ export function TrialBanner({ token }: TrialBannerProps) {
   const [trialStatus, setTrialStatus] = useState<TrialStatusResponse | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const [dismissed, setDismissed] = useState(false);
   const navigate = useNavigate();
 
   useEffect(() => {
@@ -66,7 +68,7 @@ export function TrialBanner({ token }: TrialBannerProps) {
     fetchTrialStatus();
   }, [token]);
 
-  if (loading || !token) {
+  if (dismissed || loading || !token) {
     return null;
   }
 
@@ -87,12 +89,12 @@ export function TrialBanner({ token }: TrialBannerProps) {
         <Card
           className={
             isUrgent
-              ? 'bg-semantic-warning-muted border-semantic-warning-muted'
-              : 'bg-semantic-secondary-muted border-semantic-secondary-muted'
+              ? 'bg-semantic-warning-muted border-semantic-warning-muted py-0 rounded-md'
+              : 'bg-semantic-secondary-muted border-semantic-secondary-muted py-0 rounded-md'
           }
         >
-          <CardContent className="py-3 px-4">
-            <div className="flex items-center justify-between flex-wrap gap-3">
+          <CardContent className="py-2 px-4">
+            <div className="flex items-center justify-between gap-3">
               <div className="flex items-center gap-3">
                 <div
                   className={`size-2 rounded-full ${
@@ -132,6 +134,18 @@ export function TrialBanner({ token }: TrialBannerProps) {
               >
                 Upgrade Now
               </Button>
+              <button
+                type="button"
+                aria-label="Dismiss trial message"
+                onClick={() => setDismissed(true)}
+                className={`inline-flex size-8 cursor-pointer items-center justify-center rounded-md outline-none transition-colors focus-visible:border-semantic-primary focus-visible:ring-[3px] focus-visible:ring-semantic-primary/50 ${
+                  isUrgent
+                    ? 'text-semantic-warning-muted-foreground hover:bg-semantic-warning/10'
+                    : 'text-semantic-secondary-muted-foreground hover:bg-semantic-secondary/10'
+                }`}
+              >
+                <X className="size-4" aria-hidden="true" />
+              </button>
             </div>
           </CardContent>
         </Card>

@@ -9,6 +9,7 @@ import {
   useNavigate,
 } from 'react-router-dom';
 import * as Sentry from '@sentry/react';
+import { ChevronDown, LogOut, Menu, X } from 'lucide-react';
 import { ClerkSignInPage, ClerkSignUpPage } from './components/ClerkAuthPage';
 import { OnboardingPage } from './pages/OnboardingPage';
 import { SettingsPage } from './pages/SettingsPage';
@@ -398,7 +399,8 @@ function AppContent({
       updateBootstrapRole(bootstrapResult.role);
     }
   }, [bootstrapResult?.role, hasCurrentUserBootstrapRole, updateBootstrapRole]);
-  const { isHandheld } = useHandheldDetectionContext();
+  const { isHandheld, detectionResult } = useHandheldDetectionContext();
+  const usesHandheldShell = isHandheld && detectionResult?.method !== 'dimensions';
   const { pathname } = useLocation();
   const navigate = useNavigate();
   const [isOnline, setIsOnline] = useState<boolean>(navigator.onLine);
@@ -457,13 +459,13 @@ function AppContent({
     };
   }, [isLoggedIn, refreshPendingQueueCount]);
 
-  // Redirect handheld devices to /scan by default (only when logged in)
+  // Redirect dedicated scanner devices to /scan by default (only when logged in).
   useEffect(() => {
-    if (isHandheld && isLoggedIn && pathname !== '/scan' && !pathname.startsWith('/login')) {
+    if (usesHandheldShell && isLoggedIn && pathname !== '/scan' && !pathname.startsWith('/login')) {
       // Use React Router navigation instead of full page reload
       navigate('/scan', { replace: true });
     }
-  }, [isHandheld, isLoggedIn, pathname, navigate]);
+  }, [usesHandheldShell, isLoggedIn, pathname, navigate]);
 
   // Show loading state while Clerk auth is still initializing so protected
   // routes don't flash-redirect to /login on page refresh.
@@ -523,358 +525,226 @@ function AppContent({
         bootstrapError={bootstrapError}
         hasToken={!!token}
       />
-      {isLoggedIn && !isHandheld && (
-        <nav className="bg-primary text-primary-foreground p-4 shadow-md">
-          <div className="container mx-auto">
-            {/* Top-level container for the navigation elements */}
-            <div className="flex items-center justify-between">
-              <div className="flex items-center gap-4">
-                <Link to="/scan" className="font-semibold hover:opacity-90 transition-opacity">
-                  <h1 className="text-xl">Inventory Manager</h1>
-                </Link>
+      {isLoggedIn && !usesHandheldShell && (
+        <nav className="border-b border-semantic-primary-hover/30 bg-semantic-primary text-semantic-primary-foreground shadow-sm">
+          <div className="mx-auto max-w-7xl px-4">
+            <div
+              className="flex min-h-20 items-center justify-between gap-4"
+              data-testid="app-nav-shell-row"
+            >
+              <Link
+                to="/scan"
+                className="font-heading text-lg font-semibold leading-tight hover:opacity-90 focus:outline-none focus:ring-2 focus:ring-semantic-primary-foreground/70"
+              >
+                Inventory Manager
+              </Link>
 
-                {/* Mobile menu button */}
-                <button
-                  className="md:hidden text-primary-foreground focus:outline-none p-2 hover:bg-primary-foreground/10 rounded-md transition-colors"
-                  onClick={() => setIsMobileMenuOpen(!isMobileMenuOpen)}
-                  aria-label="Toggle mobile menu"
-                >
-                  {isMobileMenuOpen ? (
-                    <svg
-                      className="size-6"
-                      fill="none"
-                      stroke="currentColor"
-                      viewBox="0 0 24 24"
-                      xmlns="http://www.w3.org/2000/svg"
+              <ul className="hidden items-center gap-1 lg:flex" aria-label="Primary navigation">
+                <li data-testid="desktop-primary-nav-item" data-nav-label="Scan">
+                  <Link
+                    to="/scan"
+                    className={`rounded-md px-3 py-2 text-sm font-medium transition-colors ${
+                      pathname === '/scan'
+                        ? 'bg-semantic-primary-foreground text-semantic-primary'
+                        : 'hover:bg-semantic-primary-hover'
+                    }`}
+                  >
+                    Scan
+                  </Link>
+                </li>
+                <li data-testid="desktop-primary-nav-item" data-nav-label="Dashboard">
+                  <Link
+                    to="/dashboard"
+                    className={`rounded-md px-3 py-2 text-sm font-medium transition-colors ${
+                      pathname === '/dashboard'
+                        ? 'bg-semantic-primary-foreground text-semantic-primary'
+                        : 'hover:bg-semantic-primary-hover'
+                    }`}
+                  >
+                    Dashboard
+                  </Link>
+                </li>
+                <li data-testid="desktop-primary-nav-item" data-nav-label="Reports">
+                  <DropdownMenu>
+                    <DropdownMenuTrigger className="inline-flex cursor-pointer items-center gap-1 rounded-md px-3 py-2 text-sm font-medium transition-colors hover:bg-semantic-primary-hover focus:outline-none focus:ring-2 focus:ring-semantic-primary-foreground/70">
+                      Reports
+                      <ChevronDown className="size-4" aria-hidden="true" />
+                    </DropdownMenuTrigger>
+                    <DropdownMenuContent align="end" className="min-w-56">
+                      <DropdownMenuItem asChild>
+                        <Link to="/reports">Overview Reports</Link>
+                      </DropdownMenuItem>
+                      <DropdownMenuItem asChild>
+                        <Link to="/detailed-expiry-report">Detailed Expiry Report</Link>
+                      </DropdownMenuItem>
+                      <DropdownMenuItem asChild>
+                        <Link to="/expired-items">Expired Items</Link>
+                      </DropdownMenuItem>
+                      <DropdownMenuItem asChild>
+                        <Link to="/usage-report">Usage Report</Link>
+                      </DropdownMenuItem>
+                    </DropdownMenuContent>
+                  </DropdownMenu>
+                </li>
+                <li data-testid="desktop-primary-nav-item" data-nav-label="Manage">
+                  <DropdownMenu>
+                    <DropdownMenuTrigger className="inline-flex cursor-pointer items-center gap-1 rounded-md px-3 py-2 text-sm font-medium transition-colors hover:bg-semantic-primary-hover focus:outline-none focus:ring-2 focus:ring-semantic-primary-foreground/70">
+                      Manage
+                      <ChevronDown className="size-4" aria-hidden="true" />
+                    </DropdownMenuTrigger>
+                    <DropdownMenuContent
+                      align="end"
+                      className="min-w-56"
+                      data-testid="desktop-manage-menu"
                     >
-                      <path
-                        strokeLinecap="round"
-                        strokeLinejoin="round"
-                        strokeWidth="2"
-                        d="M6 18L18 6M6 6l12 12"
-                      ></path>
-                    </svg>
-                  ) : (
-                    <svg
-                      className="size-6"
-                      fill="none"
-                      stroke="currentColor"
-                      viewBox="0 0 24 24"
-                      xmlns="http://www.w3.org/2000/svg"
-                    >
-                      <path
-                        strokeLinecap="round"
-                        strokeLinejoin="round"
-                        strokeWidth="2"
-                        d="M4 6h16M4 12h16M4 18h16"
-                      ></path>
-                    </svg>
-                  )}
-                </button>
-              </div>
+                      <DropdownMenuItem asChild>
+                        <Link to="/markdown-calculator">Markdown Calculator</Link>
+                      </DropdownMenuItem>
+                      {effectiveUserRole &&
+                        hasPermission(effectiveUserRole, PERMISSIONS.MANAGE_MEMBERS) && (
+                          <>
+                            <DropdownMenuItem asChild>
+                              <Link to="/csv-upload">CSV Upload</Link>
+                            </DropdownMenuItem>
+                            <DropdownMenuItem asChild>
+                              <Link to="/expiry-import">Expiry Import</Link>
+                            </DropdownMenuItem>
+                            <DropdownMenuItem asChild>
+                              <Link to="/store-area-management">Store Areas</Link>
+                            </DropdownMenuItem>
+                            <DropdownMenuItem asChild>
+                              <Link to="/user-management">User Management</Link>
+                            </DropdownMenuItem>
+                          </>
+                        )}
+                    </DropdownMenuContent>
+                  </DropdownMenu>
+                </li>
+                <li data-testid="desktop-primary-nav-item" data-nav-label="Account">
+                  <DropdownMenu>
+                    <DropdownMenuTrigger className="inline-flex cursor-pointer items-center gap-1 rounded-md px-3 py-2 text-sm font-medium transition-colors hover:bg-semantic-primary-hover focus:outline-none focus:ring-2 focus:ring-semantic-primary-foreground/70">
+                      Account
+                      <ChevronDown className="size-4" aria-hidden="true" />
+                    </DropdownMenuTrigger>
+                    <DropdownMenuContent align="end" className="min-w-48">
+                      <DropdownMenuItem asChild>
+                        <Link to="/profile">Profile</Link>
+                      </DropdownMenuItem>
+                      <DropdownMenuItem asChild>
+                        <Link to="/subscription">Billing</Link>
+                      </DropdownMenuItem>
+                      {effectiveUserRole &&
+                        hasPermission(effectiveUserRole, PERMISSIONS.MANAGE_MEMBERS) && (
+                          <DropdownMenuItem asChild>
+                            <Link to="/settings">Settings</Link>
+                          </DropdownMenuItem>
+                        )}
+                      <DropdownMenuItem variant="destructive" asChild>
+                        <button type="button" onClick={handleLogout} className="w-full">
+                          <LogOut className="size-4" aria-hidden="true" />
+                          Logout
+                        </button>
+                      </DropdownMenuItem>
+                    </DropdownMenuContent>
+                  </DropdownMenu>
+                </li>
+              </ul>
 
-              <div className="flex items-center gap-2">
-                {/* Desktop Navigation - moved inside the right-aligned div */}
-                <ul className="hidden md:flex gap-6">
-                  <li>
-                    <Link to="/scan" className="hover:opacity-90 transition-opacity">
-                      Scan
+              <button
+                type="button"
+                className="inline-flex size-11 cursor-pointer items-center justify-center rounded-md text-semantic-primary-foreground transition-colors hover:bg-semantic-primary-hover focus:outline-none focus:ring-2 focus:ring-semantic-primary-foreground/70 lg:hidden"
+                onClick={() => setIsMobileMenuOpen(!isMobileMenuOpen)}
+                aria-label={isMobileMenuOpen ? 'Close navigation menu' : 'Open navigation menu'}
+                aria-expanded={isMobileMenuOpen}
+              >
+                {isMobileMenuOpen ? (
+                  <X className="size-5" aria-hidden="true" />
+                ) : (
+                  <Menu className="size-5" aria-hidden="true" />
+                )}
+              </button>
+            </div>
+
+            {isMobileMenuOpen && (
+              <div className="border-t border-semantic-primary-foreground/20 py-3 lg:hidden">
+                <div className="grid gap-1">
+                  {[
+                    { to: '/scan', label: 'Scan' },
+                    { to: '/dashboard', label: 'Dashboard' },
+                    { to: '/reports', label: 'Reports' },
+                    { to: '/detailed-expiry-report', label: 'Detailed Expiry Report' },
+                    { to: '/expired-items', label: 'Expired Items' },
+                    { to: '/usage-report', label: 'Usage Report' },
+                    { to: '/markdown-calculator', label: 'Markdown Calculator' },
+                  ].map((item) => (
+                    <Link
+                      key={item.to}
+                      to={item.to}
+                      className="rounded-md px-3 py-2 text-sm font-medium transition-colors hover:bg-semantic-primary-hover"
+                      onClick={() => setIsMobileMenuOpen(false)}
+                    >
+                      {item.label}
                     </Link>
-                  </li>
-                  <li>
-                    <Link to="/dashboard" className="hover:opacity-90 transition-opacity">
-                      Dashboard
-                    </Link>
-                  </li>
-                  <li>
-                    <DropdownMenu>
-                      <DropdownMenuTrigger className="hover:opacity-90 transition-opacity focus:outline-none bg-transparent border-none cursor-pointer">
-                        Reports
-                      </DropdownMenuTrigger>
-                      <DropdownMenuContent className="bg-popover text-popover-foreground border border-border rounded-md shadow-lg p-1 mt-1">
-                        <DropdownMenuItem asChild>
-                          <Link
-                            to="/reports"
-                            className="block px-4 py-2 hover:bg-accent rounded-sm transition-colors"
-                          >
-                            Overview Reports
-                          </Link>
-                        </DropdownMenuItem>
-                        <DropdownMenuItem asChild>
-                          <Link
-                            to="/detailed-expiry-report"
-                            className="block px-4 py-2 hover:bg-accent rounded-sm transition-colors"
-                          >
-                            Detailed Expiry Report
-                          </Link>
-                        </DropdownMenuItem>
-                        <DropdownMenuItem asChild>
-                          <Link
-                            to="/expired-items"
-                            className="block px-4 py-2 hover:bg-accent rounded-sm transition-colors"
-                          >
-                            Expired Items
-                          </Link>
-                        </DropdownMenuItem>
-                        <DropdownMenuItem asChild>
-                          <Link
-                            to="/usage-report"
-                            className="block px-4 py-2 hover:bg-accent rounded-sm transition-colors"
-                          >
-                            Usage Report
-                          </Link>
-                        </DropdownMenuItem>
-                      </DropdownMenuContent>
-                    </DropdownMenu>
-                  </li>
-                  <li>
-                    <DropdownMenu>
-                      <DropdownMenuTrigger className="hover:opacity-90 transition-opacity focus:outline-none bg-transparent border-none cursor-pointer">
-                        Account
-                      </DropdownMenuTrigger>
-                      <DropdownMenuContent className="bg-popover text-popover-foreground border border-border rounded-md shadow-lg p-1 mt-1">
-                        <DropdownMenuItem asChild>
-                          <Link
-                            to="/profile"
-                            className="block px-4 py-2 hover:bg-accent rounded-sm transition-colors"
-                          >
-                            Profile
-                          </Link>
-                        </DropdownMenuItem>
-                        <DropdownMenuItem asChild>
-                          <Link
-                            to="/subscription"
-                            className="block px-4 py-2 hover:bg-accent rounded-sm transition-colors"
-                          >
-                            Billing
-                          </Link>
-                        </DropdownMenuItem>
-                      </DropdownMenuContent>
-                    </DropdownMenu>
-                  </li>
-                  <li>
-                    <Link to="/markdown-calculator" className="hover:opacity-90 transition-opacity">
-                      Markdown Calculator
-                    </Link>
-                  </li>
+                  ))}
                   {effectiveUserRole &&
                     hasPermission(effectiveUserRole, PERMISSIONS.MANAGE_MEMBERS) && (
                       <>
-                        <li>
+                        <div className="mt-2 border-t border-semantic-primary-foreground/20 px-3 pt-3 text-xs font-semibold uppercase tracking-wide text-semantic-primary-foreground/75">
+                          Manage
+                        </div>
+                        {[
+                          { to: '/csv-upload', label: 'CSV Upload' },
+                          { to: '/expiry-import', label: 'Expiry Import' },
+                          { to: '/store-area-management', label: 'Store Areas' },
+                          { to: '/user-management', label: 'User Management' },
+                          { to: '/settings', label: 'Settings' },
+                        ].map((item) => (
                           <Link
-                            to="/user-management"
-                            className="hover:opacity-90 transition-opacity"
+                            key={item.to}
+                            to={item.to}
+                            className="rounded-md px-3 py-2 text-sm font-medium transition-colors hover:bg-semantic-primary-hover"
+                            onClick={() => setIsMobileMenuOpen(false)}
                           >
-                            User Management
+                            {item.label}
                           </Link>
-                        </li>
-                        <li>
-                          <Link
-                            to="/store-area-management"
-                            className="hover:opacity-90 transition-opacity"
-                          >
-                            Store Areas
-                          </Link>
-                        </li>
-                        <li>
-                          <Link to="/csv-upload" className="hover:opacity-90 transition-opacity">
-                            CSV Upload
-                          </Link>
-                        </li>
-                        <li>
-                          <Link to="/expiry-import" className="hover:opacity-90 transition-opacity">
-                            Expiry Import
-                          </Link>
-                        </li>
-                        <li>
-                          <Link to="/settings" className="hover:opacity-90 transition-opacity">
-                            Settings
-                          </Link>
-                        </li>
+                        ))}
                       </>
                     )}
-                </ul>
-
-                {/* Desktop Logout button */}
-                <div className="hidden md:block">
+                  <div className="mt-2 border-t border-semantic-primary-foreground/20 px-3 pt-3 text-xs font-semibold uppercase tracking-wide text-semantic-primary-foreground/75">
+                    Account
+                  </div>
+                  {[
+                    { to: '/profile', label: 'Profile' },
+                    { to: '/subscription', label: 'Billing' },
+                  ].map((item) => (
+                    <Link
+                      key={item.to}
+                      to={item.to}
+                      className="rounded-md px-3 py-2 text-sm font-medium transition-colors hover:bg-semantic-primary-hover"
+                      onClick={() => setIsMobileMenuOpen(false)}
+                    >
+                      {item.label}
+                    </Link>
+                  ))}
                   <button
-                    onClick={handleLogout}
-                    className="px-4 py-2 bg-destructive text-destructive-foreground rounded-md hover:opacity-90 transition-opacity"
+                    type="button"
+                    onClick={() => {
+                      handleLogout();
+                      setIsMobileMenuOpen(false);
+                    }}
+                    className="mt-1 flex cursor-pointer items-center gap-2 rounded-md px-3 py-2 text-left text-sm font-medium text-semantic-critical-muted transition-colors hover:bg-semantic-primary-hover"
                   >
+                    <LogOut className="size-4" aria-hidden="true" />
                     Logout
                   </button>
                 </div>
-              </div>
-            </div>
-
-            {/* Mobile Navigation Menu - only visible when the hamburger is clicked */}
-            {isMobileMenuOpen && (
-              <div className="md:hidden mt-4 py-4 bg-primary text-primary-foreground rounded-md shadow-lg">
-                <ul className="space-y-4">
-                  <li>
-                    <Link
-                      to="/scan"
-                      className="block hover:opacity-90 transition-opacity"
-                      onClick={() => setIsMobileMenuOpen(false)}
-                    >
-                      Scan
-                    </Link>
-                  </li>
-                  <li>
-                    <Link
-                      to="/dashboard"
-                      className="block hover:opacity-90 transition-opacity"
-                      onClick={() => setIsMobileMenuOpen(false)}
-                    >
-                      Dashboard
-                    </Link>
-                  </li>
-                  <li>
-                    <Link
-                      to="/reports"
-                      className="block hover:opacity-90 transition-opacity"
-                      onClick={() => setIsMobileMenuOpen(false)}
-                    >
-                      Overview Reports
-                    </Link>
-                  </li>
-                  <li>
-                    <Link
-                      to="/detailed-expiry-report"
-                      className="block hover:opacity-90 transition-opacity"
-                      onClick={() => setIsMobileMenuOpen(false)}
-                    >
-                      Detailed Expiry Report
-                    </Link>
-                  </li>
-                  <li>
-                    <Link
-                      to="/expired-items"
-                      className="block hover:opacity-90 transition-opacity"
-                      onClick={() => setIsMobileMenuOpen(false)}
-                    >
-                      Expired Items
-                    </Link>
-                  </li>
-                  <li>
-                    <Link
-                      to="/usage-report"
-                      className="block hover:opacity-90 transition-opacity"
-                      onClick={() => setIsMobileMenuOpen(false)}
-                    >
-                      Usage Report
-                    </Link>
-                  </li>
-                  <li className="border-t border-border pt-2 mt-2">
-                    <Link
-                      to="/markdown-calculator"
-                      className="block hover:opacity-90 transition-opacity"
-                      onClick={() => setIsMobileMenuOpen(false)}
-                    >
-                      Markdown Calculator
-                    </Link>
-                  </li>
-                  <li className="border-t border-border pt-2 mt-2">
-                    <div className="text-xs font-semibold uppercase tracking-wide opacity-75">
-                      Account
-                    </div>
-                  </li>
-                  <li>
-                    <Link
-                      to="/profile"
-                      className="block hover:opacity-90 transition-opacity"
-                      onClick={() => setIsMobileMenuOpen(false)}
-                    >
-                      Profile
-                    </Link>
-                  </li>
-                  <li>
-                    <Link
-                      to="/subscription"
-                      className="block hover:opacity-90 transition-opacity"
-                      onClick={() => setIsMobileMenuOpen(false)}
-                    >
-                      Billing
-                    </Link>
-                  </li>
-                  <li>
-                    <Link
-                      to="/upgrade"
-                      className="block hover:opacity-90 transition-opacity"
-                      onClick={() => setIsMobileMenuOpen(false)}
-                    >
-                      Upgrade
-                    </Link>
-                  </li>
-                  {effectiveUserRole &&
-                    hasPermission(effectiveUserRole, PERMISSIONS.MANAGE_MEMBERS) && (
-                      <>
-                        <li>
-                          <Link
-                            to="/user-management"
-                            className="block hover:opacity-90 transition-opacity"
-                            onClick={() => setIsMobileMenuOpen(false)}
-                          >
-                            User Management
-                          </Link>
-                        </li>
-                        <li>
-                          <Link
-                            to="/store-area-management"
-                            className="block hover:opacity-90 transition-opacity"
-                            onClick={() => setIsMobileMenuOpen(false)}
-                          >
-                            Store Areas
-                          </Link>
-                        </li>
-                        <li>
-                          <Link
-                            to="/csv-upload"
-                            className="block hover:opacity-90 transition-opacity"
-                            onClick={() => setIsMobileMenuOpen(false)}
-                          >
-                            CSV Upload
-                          </Link>
-                        </li>
-                        <li>
-                          <Link
-                            to="/expiry-import"
-                            className="block hover:opacity-90 transition-opacity"
-                            onClick={() => setIsMobileMenuOpen(false)}
-                          >
-                            Expiry Import
-                          </Link>
-                        </li>
-                        <li>
-                          <Link
-                            to="/settings"
-                            className="block hover:opacity-90 transition-opacity"
-                            onClick={() => setIsMobileMenuOpen(false)}
-                          >
-                            Settings
-                          </Link>
-                        </li>
-                      </>
-                    )}
-                  <li>
-                    <button
-                      onClick={() => {
-                        handleLogout();
-                        setIsMobileMenuOpen(false);
-                      }}
-                      className="w-full text-left px-4 py-2 bg-destructive text-destructive-foreground rounded-md hover:opacity-90 transition-opacity"
-                    >
-                      Logout
-                    </button>
-                  </li>
-                </ul>
               </div>
             )}
           </div>
         </nav>
       )}
 
-      {isHandheld ? (
+      {usesHandheldShell ? (
         <HandheldLayout
           userName={userName || undefined}
           syncStatus={isOnline ? 'synced' : 'offline'}

@@ -1,7 +1,7 @@
 # Graph Report - date-management-app  (2026-05-19)
 
 ## Corpus Check
-- 614 files · ~1,511,961 words
+- 614 files · ~1,516,942 words
 - Verdict: corpus is large enough that graph structure adds value.
 
 ## Summary
