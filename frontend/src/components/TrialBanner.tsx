@@ -138,7 +138,7 @@ export function TrialBanner({ token }: TrialBannerProps) {
                 type="button"
                 aria-label="Dismiss trial message"
                 onClick={() => setDismissed(true)}
-                className={`inline-flex size-8 cursor-pointer items-center justify-center rounded-md outline-none transition-colors focus-visible:border-semantic-primary focus-visible:ring-[3px] focus-visible:ring-semantic-primary/50 ${
+                className={`inline-flex size-8 cursor-pointer items-center justify-center rounded-md outline-none transition-colors focus-visible:outline-none focus-visible:border-semantic-primary focus-visible:ring-[3px] focus-visible:ring-semantic-primary/50 ${
                   isUrgent
                     ? 'text-semantic-warning-muted-foreground hover:bg-semantic-warning/10'
                     : 'text-semantic-secondary-muted-foreground hover:bg-semantic-secondary/10'
