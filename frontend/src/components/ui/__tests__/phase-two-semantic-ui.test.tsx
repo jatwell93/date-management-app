@@ -59,11 +59,15 @@ describe('phase 2 semantic UI primitives', () => {
   it('keeps shared button rendering available after token migration', () => {
     render(<Button>Continue</Button>);
     expect(screen.getByRole('button', { name: 'Continue' })).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'Continue' })).toHaveClass('cursor-pointer');
   });
 
   it('keeps disabled shared buttons readable with semantic tokens', () => {
     render(<Button disabled>Continue</Button>);
 
+    expect(screen.getByRole('button', { name: 'Continue' })).toHaveClass(
+      'disabled:cursor-not-allowed',
+    );
     expect(screen.getByRole('button', { name: 'Continue' })).toHaveClass(
       'disabled:bg-semantic-surface-4',
     );

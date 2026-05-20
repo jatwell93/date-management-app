@@ -49,8 +49,16 @@ jest.mock('./components/ui/dropdown-menu', () => ({
   DropdownMenuTrigger: ({ children }: { children: React.ReactNode }) => (
     <button type="button">{children}</button>
   ),
-  DropdownMenuContent: ({ children }: { children: React.ReactNode }) => (
-    <div role="menu">{children}</div>
+  DropdownMenuContent: ({
+    children,
+    ...props
+  }: {
+    children: React.ReactNode;
+    [key: string]: unknown;
+  }) => (
+    <div role="menu" {...props}>
+      {children}
+    </div>
   ),
   DropdownMenuItem: ({ children }: { children: React.ReactNode }) => <div>{children}</div>,
 }));
@@ -121,9 +129,27 @@ describe('App navigation', () => {
 
     render(<App />);
 
-    fireEvent.click(screen.getByLabelText('Toggle mobile menu'));
+    fireEvent.click(screen.getByLabelText('Open navigation menu'));
 
     expect(screen.queryByText('Sentry Test')).not.toBeInTheDocument();
+  });
+
+  it('keeps desktop primary navigation focused on core pharmacy workflows', () => {
+    mockSignedInContext({ userRole: 'admin' });
+
+    render(<App />);
+
+    expect(screen.getByRole('navigation')).toHaveClass('bg-semantic-primary');
+    expect(screen.getByTestId('app-nav-shell-row')).toHaveClass('min-h-20');
+
+    const primaryItems = screen.getAllByTestId('desktop-primary-nav-item');
+    expect(primaryItems.map((item) => item.getAttribute('data-nav-label'))).toEqual([
+      'Scan',
+      'Dashboard',
+      'Reports',
+      'Manage',
+      'Account',
+    ]);
   });
 
   it('keeps Billing inside Account navigation without a standalone top-level tab', () => {
@@ -134,6 +160,19 @@ describe('App navigation', () => {
     const nav = screen.getByRole('navigation');
     expect(within(nav).getByText('Account')).toBeInTheDocument();
     expect(within(nav).getAllByText('Billing')).toHaveLength(1);
+  });
+
+  it('groups admin catalog and setup tools under Manage navigation', () => {
+    mockSignedInContext({ userRole: 'admin' });
+
+    render(<App />);
+
+    const manageMenu = screen.getByTestId('desktop-manage-menu');
+    expect(within(manageMenu).getByText('Markdown Calculator')).toBeInTheDocument();
+    expect(within(manageMenu).getByText('CSV Upload')).toBeInTheDocument();
+    expect(within(manageMenu).getByText('Expiry Import')).toBeInTheDocument();
+    expect(within(manageMenu).getByText('Store Areas')).toBeInTheDocument();
+    expect(within(manageMenu).getByText('User Management')).toBeInTheDocument();
   });
 
   it('exposes catalog upload navigation for admin users', () => {

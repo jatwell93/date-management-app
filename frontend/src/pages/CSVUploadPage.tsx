@@ -845,21 +845,21 @@ export const CSVUploadPage: React.FC<{
               <button
                 type="button"
                 onClick={() => downloadExpiryTemplate('csv')}
-                className="px-3 py-2 rounded-md bg-semantic-primary text-semantic-primary-foreground text-sm font-medium hover:bg-semantic-primary-hover"
+                className="cursor-pointer px-3 py-2 rounded-md bg-semantic-primary text-semantic-primary-foreground text-sm font-medium hover:bg-semantic-primary-hover"
               >
                 Download CSV Template
               </button>
               <button
                 type="button"
                 onClick={() => downloadExpiryTemplate('xlsx')}
-                className="px-3 py-2 rounded-md bg-semantic-primary text-semantic-primary-foreground text-sm font-medium hover:bg-semantic-primary-hover"
+                className="cursor-pointer px-3 py-2 rounded-md bg-semantic-primary text-semantic-primary-foreground text-sm font-medium hover:bg-semantic-primary-hover"
               >
                 Download XLSX Template
               </button>
               <button
                 type="button"
                 onClick={() => downloadExpiryTemplate('xls')}
-                className="px-3 py-2 rounded-md bg-semantic-primary text-semantic-primary-foreground text-sm font-medium hover:bg-semantic-primary-hover"
+                className="cursor-pointer px-3 py-2 rounded-md bg-semantic-primary text-semantic-primary-foreground text-sm font-medium hover:bg-semantic-primary-hover"
               >
                 Download XLS Template
               </button>
@@ -882,10 +882,12 @@ export const CSVUploadPage: React.FC<{
                 accept=".csv,text/csv,.xlsx,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet,.xls,application/vnd.ms-excel"
                 onChange={handleFileChange}
                 className="block w-full text-sm text-semantic-text-tertiary
+                  cursor-pointer
                   file:mr-4 file:py-2 file:px-4
                   file:rounded-md file:border-0
                   file:text-sm file:font-semibold
                   file:bg-semantic-primary-muted file:text-semantic-primary-muted-foreground
+                  file:cursor-pointer
                   hover:file:bg-semantic-primary-muted"
               />
               {fileName && (
@@ -1107,7 +1109,7 @@ export const CSVUploadPage: React.FC<{
                           {error} -{' '}
                           <button
                             type="button"
-                            className="text-semantic-primary hover:underline"
+                            className="cursor-pointer text-semantic-primary hover:underline"
                             onClick={() => {
                               document
                                 .querySelector(
@@ -1124,7 +1126,7 @@ export const CSVUploadPage: React.FC<{
                           {error} -{' '}
                           <button
                             type="button"
-                            className="text-semantic-primary hover:underline"
+                            className="cursor-pointer text-semantic-primary hover:underline"
                             onClick={() => {
                               document
                                 .querySelector(
@@ -1153,7 +1155,7 @@ export const CSVUploadPage: React.FC<{
                 <div className="mt-6 pt-4 border-t border-semantic-success-muted">
                   <button
                     onClick={() => navigate(returnUrl)}
-                    className="w-full py-2 bg-semantic-success text-semantic-success-foreground rounded-md font-semibold hover:bg-semantic-success-hover transition"
+                    className="w-full cursor-pointer py-2 bg-semantic-success text-semantic-success-foreground rounded-md font-semibold hover:bg-semantic-success-hover transition"
                   >
                     Continue to next step
                   </button>
