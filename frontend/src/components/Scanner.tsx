@@ -1,8 +1,10 @@
-import { useState } from 'react';
-import { CameraScanner } from './CameraScanner';
+import { Suspense, lazy, useState } from 'react';
 import { ScannerState, ScannerStateIndicator } from './ScannerStateIndicator';
 import { useHardwareScan } from '../hooks/useHardwareScan';
 import { HardwareScanResult } from '../types/handheld';
+import { Button } from './ui/button';
+import { Input } from './ui/input';
+import { Label } from './ui/label';
 
 interface ScannerProps {
   onScan: (result: HardwareScanResult) => void;
@@ -12,10 +14,28 @@ interface ScannerProps {
   isHandheld?: boolean;
 }
 
+const CameraScanner = lazy(() =>
+  import('./CameraScanner').then((module) => ({ default: module.CameraScanner })),
+);
+
+function CameraScannerLoadingState({ isHandheld }: { isHandheld: boolean }) {
+  return (
+    <div
+      role="status"
+      className={`w-full bg-semantic-canvas text-semantic-canvas-foreground flex items-center justify-center rounded ${
+        isHandheld ? 'flex-1 min-h-[300px]' : 'h-64'
+      }`}
+    >
+      <span className={isHandheld ? 'text-lg' : 'text-sm'}>Preparing camera scanner</span>
+    </div>
+  );
+}
+
 export function Scanner({
   onScan,
   defaultMode = 'text',
   continuous = false, // ✓ Added default (fixes 17.6)
+  disabled = false,
   isHandheld = false,
 }: ScannerProps) {
   const [input, setInput] = useState('');
@@ -25,6 +45,10 @@ export function Scanner({
   // Initialize hardware scan hook - converts barcode string to HardwareScanResult
   useHardwareScan(
     (barcode) => {
+      if (disabled) {
+        return;
+      }
+
       const result: HardwareScanResult = {
         barcode: barcode,
         timestamp: Date.now(),
@@ -42,7 +66,7 @@ export function Scanner({
 
   const handleFormSubmit = (e: React.FormEvent) => {
     e.preventDefault();
-    if (input.trim()) {
+    if (!disabled && input.trim()) {
       const result: HardwareScanResult = {
         barcode: input.trim(),
         timestamp: Date.now(),
@@ -55,6 +79,10 @@ export function Scanner({
   };
 
   const handleScan = (code: string) => {
+    if (disabled) {
+      return;
+    }
+
     const result: HardwareScanResult = {
       barcode: code,
       timestamp: Date.now(),
@@ -73,31 +101,40 @@ export function Scanner({
       {!useCamera && <ScannerStateIndicator state={scannerState} />}
       {!useCamera ? (
         <form onSubmit={handleFormSubmit} className={isHandheld ? 'flex-1 flex flex-col p-3' : ''}>
-          <input
+          <Label
+            htmlFor="scanner-barcode-input"
+            className={`mb-2 block ${isHandheld ? 'text-base' : ''}`}
+          >
+            Barcode or SKU
+          </Label>
+          <Input
+            id="scanner-barcode-input"
             type="text"
             value={input}
             onChange={handleInputChange}
-            placeholder="Scan barcode or enter manually"
-            className={`border p-2 rounded w-full mb-2 ${isHandheld ? 'text-lg py-3' : ''}`}
+            disabled={disabled}
+            placeholder="Scan or type barcode/SKU"
+            className={`mb-3 ${isHandheld ? 'h-12 text-lg' : ''}`}
           />
           <div className={`flex gap-2 ${isHandheld ? 'mt-auto' : ''}`}>
-            <button
+            <Button
               type="submit"
-              className={`flex-1 px-4 py-2 bg-primary hover:bg-primary/90 text-primary-foreground rounded ${
-                isHandheld ? 'py-4 text-lg min-h-[48px]' : ''
-              }`}
+              disabled={disabled}
+              size={isHandheld ? 'lg' : 'default'}
+              className={`flex-1 ${isHandheld ? 'min-h-[48px] text-lg' : ''}`}
             >
-              Submit
-            </button>
-            <button
+              Use barcode
+            </Button>
+            <Button
               type="button"
+              disabled={disabled}
               onClick={() => setUseCamera(true)}
-              className={`flex-1 px-4 py-2 bg-secondary hover:bg-secondary/80 text-secondary-foreground rounded ${
-                isHandheld ? 'py-4 text-lg min-h-[48px]' : ''
-              }`}
+              variant="secondary"
+              size={isHandheld ? 'lg' : 'default'}
+              className={`flex-1 ${isHandheld ? 'min-h-[48px] text-lg' : ''}`}
             >
               Use Camera
-            </button>
+            </Button>
           </div>
         </form>
       ) : (
@@ -110,24 +147,28 @@ export function Scanner({
             >
               Camera Scanner
             </h3>
-            <button
+            <Button
               type="button"
+              disabled={disabled}
               onClick={() => setUseCamera(false)}
-              className={`px-4 py-2 bg-secondary hover:bg-secondary/80 text-secondary-foreground rounded ${
-                isHandheld ? 'py-3 text-lg min-h-[48px]' : ''
-              }`}
+              variant="secondary"
+              size={isHandheld ? 'lg' : 'default'}
+              className={isHandheld ? 'min-h-[48px] text-lg' : ''}
             >
               Use Text Input
-            </button>
+            </Button>
           </div>
           <div className={isHandheld ? 'flex-1 camera-scanner-fullscreen' : ''}>
-            <CameraScanner
-              onDetected={handleScan}
-              onScannerReady={() => setScannerState('ready')}
-              onScannerReset={() => setScannerState('ready')}
-              isHandheld={isHandheld}
-              continuous={continuous} // ✓ Pass continuous mode (fixes 17.6)
-            />
+            <Suspense fallback={<CameraScannerLoadingState isHandheld={isHandheld} />}>
+              <CameraScanner
+                onDetected={handleScan}
+                onScannerReady={() => setScannerState('ready')}
+                onScannerReset={() => setScannerState('ready')}
+                isHandheld={isHandheld}
+                disabled={disabled}
+                continuous={continuous} // ✓ Pass continuous mode (fixes 17.6)
+              />
+            </Suspense>
           </div>
         </div>
       )}

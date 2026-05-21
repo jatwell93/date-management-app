@@ -4,12 +4,14 @@ import * as Sentry from '@sentry/react';
 import { triggerHaptic } from '../lib/haptic';
 import { TIMING_CONSTANTS } from '../config/handheld'; // ✓ Import constants (fixes 17.9)
 import { ScannerStateIndicator, ScannerState } from './ScannerStateIndicator';
+import { Button } from './ui/button';
 
 interface CameraScannerProps {
   onDetected: (code: string) => void;
   onScannerReady?: () => void;
   onScannerReset?: () => void;
   continuous?: boolean;
+  disabled?: boolean;
   isHandheld?: boolean;
 }
 
@@ -20,22 +22,24 @@ function getScannerContainerClassName(isHandheld: boolean) {
 function ResetScannerButton({
   isHandheld,
   label,
+  disabled,
   onClick,
 }: {
   isHandheld: boolean;
   label: string;
+  disabled?: boolean;
   onClick: () => void;
 }) {
   return (
-    <button
+    <Button
       type="button"
+      disabled={disabled}
       onClick={onClick}
-      className={`px-4 py-2 bg-primary hover:bg-primary/90 text-primary-foreground rounded ${
-        isHandheld ? 'py-3 text-lg min-h-[48px]' : ''
-      }`}
+      size={isHandheld ? 'lg' : 'default'}
+      className={isHandheld ? 'min-h-[48px] text-lg' : ''}
     >
       {label}
-    </button>
+    </Button>
   );
 }
 
@@ -44,6 +48,7 @@ export function CameraScanner({
   onScannerReady,
   onScannerReset,
   continuous = false,
+  disabled = false,
   isHandheld = false,
 }: CameraScannerProps) {
   const videoRef = useRef<HTMLDivElement>(null);
@@ -117,6 +122,10 @@ export function CameraScanner({
     );
 
     const detectedHandler = (data: unknown) => {
+      if (disabled) {
+        return;
+      }
+
       const code = (data as { codeResult?: { code?: string } })?.codeResult?.code;
       if (!code) {
         return;
@@ -147,7 +156,7 @@ export function CameraScanner({
 
     detectedHandlerRef.current = detectedHandler;
     Quagga.onDetected(detectedHandler);
-  }, [onDetected, onScannerReady, continuous, isDuplicateScan]);
+  }, [onDetected, onScannerReady, continuous, disabled, isDuplicateScan]);
 
   useEffect(() => {
     initScanner();
@@ -202,6 +211,7 @@ export function CameraScanner({
               <ResetScannerButton
                 isHandheld={isHandheld}
                 label="Try Again"
+                disabled={disabled}
                 onClick={handleResetScanner}
               />
             </div>
@@ -221,9 +231,9 @@ export function CameraScanner({
         }`}
       >
         <div className="text-semantic-canvas-foreground text-center">
-          <p className={isHandheld ? 'text-lg' : ''}>Camera feed will appear here</p>
+          <p className={isHandheld ? 'text-lg' : ''}>Camera starts after permission is granted</p>
           <p className={`mt-2 ${isHandheld ? 'text-base' : 'text-sm'}`}>
-            Point your camera at a barcode
+            Aim at the product barcode
           </p>
           {continuous && (
             <p className={`mt-1 text-semantic-warning-muted ${isHandheld ? 'text-sm' : 'text-xs'}`}>
@@ -236,6 +246,7 @@ export function CameraScanner({
         <ResetScannerButton
           isHandheld={isHandheld}
           label="Reset Scanner"
+          disabled={disabled}
           onClick={handleResetScanner}
         />
       </div>

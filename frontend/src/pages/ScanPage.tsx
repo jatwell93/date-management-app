@@ -70,6 +70,12 @@ interface RecentInventoryItem {
   updatedAt: string;
 }
 
+function formatExpiryDateForCopy(expiryDate: string): string {
+  return new Date(expiryDate).toLocaleDateString('en-AU', {
+    timeZone: 'Australia/Sydney',
+  });
+}
+
 export function ScanPage({ token }: ScanPageProps) {
   const { isHandheld } = useHandheldDetectionContext();
   const [scannedBarcode, setScannedBarcode] = useState<string | null>(null);
@@ -214,7 +220,7 @@ export function ScanPage({ token }: ScanPageProps) {
     resetScanState(rawBarcode);
 
     if (!token) {
-      setError('Authentication token is missing.');
+      setError('Sign in again before scanning inventory.');
       return;
     }
 
@@ -245,7 +251,7 @@ export function ScanPage({ token }: ScanPageProps) {
 
   const handleAddNewProduct = async () => {
     if (!token || !scannedBarcode || !newProductName || !newProductSKU || !newProductCostPrice) {
-      setError('Please fill all new product details.');
+      setError('Enter product name, SKU, and cost price before creating the product.');
       return;
     }
 
@@ -261,7 +267,7 @@ export function ScanPage({ token }: ScanPageProps) {
         token,
       );
       setProductDetails(newProduct);
-      setSuccessMessage('New product added successfully! Now add inventory details.');
+      setSuccessMessage('Product created. Add expiry details next.');
       setShowNewProductForm(false);
       setNewProductName('');
       setNewProductSKU('');
@@ -277,7 +283,7 @@ export function ScanPage({ token }: ScanPageProps) {
 
   const handleSubmit = async () => {
     if (!token || !productDetails || !expiryDate || !selectedLocationId) {
-      setError('Please fill all product and inventory details including location.');
+      setError('Select an expiry date and location before saving this item.');
       return;
     }
 
@@ -301,7 +307,7 @@ export function ScanPage({ token }: ScanPageProps) {
       try {
         const key = `pending-inventory-item-${Date.now()}`;
         await offlineStorage.setItem(key, inventoryItem);
-        setSuccessMessage('Offline: Inventory item saved for synchronization.');
+        setSuccessMessage('Offline: expiry item queued for sync.');
         setScannedBarcode(null);
         setProductDetails(null);
         setExpiryDate('');
@@ -331,7 +337,7 @@ export function ScanPage({ token }: ScanPageProps) {
         token,
       );
 
-      setSuccessMessage('Inventory item added successfully!');
+      setSuccessMessage('Expiry item saved to inventory.');
       setScannedBarcode(null);
       setProductDetails(null);
       setExpiryDate('');
@@ -359,7 +365,7 @@ export function ScanPage({ token }: ScanPageProps) {
 
     try {
       await apiService.delete(`/inventory-items/${itemToDelete}`, token);
-      setSuccessMessage('Inventory entry deleted successfully!');
+      setSuccessMessage('Expiry entry deleted.');
       setAlertDialogOpen(false);
       setItemToDelete(null);
       // Refresh recent entries if we have product details
@@ -381,23 +387,28 @@ export function ScanPage({ token }: ScanPageProps) {
 
   const _handleSyncNow = async () => {
     if (!token) {
-      setError('Authentication token is missing.');
+      setError('Sign in again before syncing inventory.');
       return;
     }
 
     try {
       setError(null);
       await synchronizeOfflineData(token);
-      setSuccessMessage('Sync completed successfully!');
+      setSuccessMessage('Inventory sync complete.');
       setTimeout(() => setSuccessMessage(null), 3000);
     } catch (err: unknown) {
       if (err instanceof Error) {
-        setError(`Sync failed: ${err.message}`);
+        setError(`Inventory sync failed: ${err.message}`);
       } else {
-        setError('Sync failed: An unknown error occurred');
+        setError('Inventory sync failed. Try again when the connection is stable.');
       }
     }
   };
+
+  const entryPendingDelete =
+    itemToDelete === null
+      ? null
+      : recentEntries?.find((entry) => entry.id === itemToDelete) || null;
 
   const renderContent = () => (
     <div className={isHandheld ? 'h-full w-full p-0' : 'container mx-auto p-4 max-w-3xl'}>
@@ -440,10 +451,10 @@ export function ScanPage({ token }: ScanPageProps) {
           {scannedBarcode && !productDetails && !error && !successMessage && showNewProductForm && (
             <div className="mt-6 p-4 border rounded-md bg-muted">
               <p className="text-center font-semibold text-foreground">
-                Product not found for barcode: {scannedBarcode}
+                No catalog match for barcode {scannedBarcode}
               </p>
               <p className="text-center text-sm mb-4 text-muted-foreground">
-                Please add new product details:
+                Create a product record before adding expiry stock.
               </p>
               <div className="space-y-4">
                 <div>
@@ -485,11 +496,8 @@ export function ScanPage({ token }: ScanPageProps) {
                     placeholder="Enter cost price"
                   />
                 </div>
-                <Button
-                  onClick={handleAddNewProduct}
-                  className="w-full bg-primary hover:bg-primary/90 text-primary-foreground"
-                >
-                  Add New Product
+                <Button onClick={handleAddNewProduct} className="w-full">
+                  Create product
                 </Button>
               </div>
             </div>
@@ -554,11 +562,8 @@ export function ScanPage({ token }: ScanPageProps) {
                     </SelectContent>
                   </Select>
                 </div>
-                <Button
-                  onClick={handleSubmit}
-                  className="w-full bg-primary hover:bg-primary/90 text-primary-foreground"
-                >
-                  Confirm & Save
+                <Button onClick={handleSubmit} className="w-full">
+                  Save expiry item
                 </Button>
               </div>
             </div>
@@ -596,20 +601,25 @@ export function ScanPage({ token }: ScanPageProps) {
                           size="sm"
                           onClick={() => handleDeleteRecentEntry(entry.id)}
                         >
-                          Delete
+                          Delete entry
                         </Button>
                       </AlertDialogTrigger>
                       <AlertDialogContent>
                         <AlertDialogHeader>
-                          <AlertDialogTitle>Are you absolutely sure?</AlertDialogTitle>
+                          <AlertDialogTitle>Delete expiry entry?</AlertDialogTitle>
                           <AlertDialogDescription>
-                            This action cannot be undone. This will permanently delete the inventory
-                            entry.
+                            {entryPendingDelete
+                              ? `This removes the ${formatExpiryDateForCopy(
+                                  entryPendingDelete.expiryDate,
+                                )} expiry entry for ${productDetails.name}. This cannot be undone.`
+                              : 'This removes the selected expiry entry. This cannot be undone.'}
                           </AlertDialogDescription>
                         </AlertDialogHeader>
                         <AlertDialogFooter>
                           <AlertDialogCancel>Cancel</AlertDialogCancel>
-                          <AlertDialogAction onClick={confirmDelete}>Continue</AlertDialogAction>
+                          <AlertDialogAction onClick={confirmDelete}>
+                            Delete entry
+                          </AlertDialogAction>
                         </AlertDialogFooter>
                       </AlertDialogContent>
                     </AlertDialog>
