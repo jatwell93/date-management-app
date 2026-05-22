@@ -141,7 +141,7 @@
     "autoprefixer": "^10.4.21",
     "cross-env": "^10.1.0",
     "eslint-config-prettier": "^10.1.8",
-    "eslint-plugin-prettier": "^5.5.4",
+    "eslint-plugin-prettier": "^5.5.5",
     "husky": "^9.1.7",
     "jest-fetch-mock": "^3.0.3",
     "lint-staged": "^16.4.0",
