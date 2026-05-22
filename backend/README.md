@@ -6,7 +6,7 @@ Complete Node.js/Express backend with support for SQLite (development) and Neon 
 
 ### Prerequisites
 
-- **Node.js** ≥18.x
+- **Node.js** ≥22.x
 - **npm** ≥9.x
 - **SQLite3** (optional, for local development)
 
@@ -352,7 +352,7 @@ See [docs/workers-deployment.md](../docs/workers-deployment.md) for:
 | ------------------------------ | ------------------------- | ------------------------------------------------------------------ |
 | **Tests Failing (SQLite)**     | `npm run test:dev` fails  | Check `.env` has `DATABASE_PATH=./database.sqlite`; run migrations |
 | **Tests Failing (PostgreSQL)** | `npm run test:prod` fails | Verify `NEON_CONNECTION_STRING` in `.env`; ensure database exists  |
-| **Build Errors**               | `npm run build` fails     | Run `npm install`; check Node.js version ≥18.x                     |
+| **Build Errors**               | `npm run build` fails     | Run `npm install`; check Node.js version ≥22.x                     |
 | **Port Already In Use**        | Server won't start        | Change `PORT` in `.env` or kill existing process                   |
 | **Database Locked**            | SQLite errors             | Close other connections; restart server                            |
 | **R2 Upload Fails**            | Storage provider error    | Check R2 credentials and bucket name in `.env`                     |
