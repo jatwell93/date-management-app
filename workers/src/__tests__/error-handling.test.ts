@@ -18,8 +18,10 @@ describe('Workers Error Handling', () => {
     it('should handle database connection timeout gracefully', async () => {
       /**
        * SCENARIO: Database connection takes >30s
-       * EXPECTED: Retry logic attempts 3 times, then returns 502/504
+       * EXPECTED: Retry logic attempts 3 times, then throws the last error
        * VERIFIES: withNeonRetry is active and properly configured
+       *
+       * NOTE: 502/504 mapping happens at the handler/HTTP response layer.
        */
 
       let attemptCount = 0;
@@ -96,23 +98,21 @@ describe('Workers Error Handling', () => {
   });
 
   describe('Malformed Request Handling', () => {
-    it('should handle invalid organizationId gracefully', async () => {
-      /**
-       * SCENARIO: organizationId is empty string or null
-       * EXPECTED: Return empty result or error, not SQL injection
-       * VERIFIES: Parameterized queries prevent injection
-       */
+    it.skipIf(!testEnv.NEON_CONNECTION_STRING)(
+      'should handle invalid organizationId gracefully',
+      async () => {
+        /**
+         * SCENARIO: organizationId is empty string or null
+         * EXPECTED: Return empty result or error, not SQL injection
+         * VERIFIES: Parameterized queries prevent injection
+         */
 
-      const invalidOrgId = '';
-      try {
+        const invalidOrgId = '';
         const result = await getProducts(testEnv, invalidOrgId);
 
-        // Should return empty array or throw validation error
-        expect(Array.isArray(result) || result instanceof Error).toBe(true);
-      } catch (error) {
-        expect(error).toBeDefined();
-      }
-    });
+        expect(result).toEqual([]);
+      },
+    );
 
     it('should reject malformed JSON in POST body', async () => {
       /**
@@ -236,23 +236,24 @@ describe('Workers Error Handling', () => {
   });
 
   describe('Concurrent Request Handling', () => {
-    it('should handle parallel getProducts requests', async () => {
-      /**
-       * SCENARIO: 10 concurrent getProducts requests
-       * EXPECTED: All succeed without connection pool overflow
-       * VERIFIES: Connection pooling works correctly
-       */
+    it.skipIf(!testEnv.NEON_CONNECTION_STRING)(
+      'should handle parallel getProducts requests',
+      async () => {
+        /**
+         * SCENARIO: 10 concurrent getProducts requests
+         * EXPECTED: All succeed without connection pool overflow
+         * VERIFIES: Connection pooling works correctly
+         */
 
-      const promises = Array.from({ length: 10 }, () =>
-        getProducts(testEnv, testOrgId).catch((error) => error),
-      );
+        const promises = Array.from({ length: 10 }, () => getProducts(testEnv, testOrgId));
 
-      const results = await Promise.all(promises);
+        const results = await Promise.all(promises);
 
-      // All should complete
-      expect(results).toHaveLength(10);
-      expect(results.every((r) => Array.isArray(r) || r instanceof Error)).toBe(true);
-    });
+        // All should complete
+        expect(results).toHaveLength(10);
+        expect(results.every((r) => Array.isArray(r))).toBe(true);
+      },
+    );
 
     it('should handle concurrent creates without race conditions', async () => {
       /**
