@@ -31,21 +31,28 @@ interface DashboardResponse {
   recentActivity?: DashboardActivityEntry[];
 }
 
+const dashboardCountFormatter = new Intl.NumberFormat('en-AU');
+const activityTimestampFormatter = new Intl.DateTimeFormat('en-AU', {
+  dateStyle: 'medium',
+  timeStyle: 'short',
+});
+
 function formatDashboardCount(value: number | undefined): string {
-  return new Intl.NumberFormat('en-AU').format(value ?? 0);
+  return dashboardCountFormatter.format(value ?? 0);
 }
 
-function formatActivityTimestamp(timestamp: string): string {
+function parseActivityTimestamp(timestamp: string): Date | null {
   const activityDate = new Date(timestamp);
 
   if (Number.isNaN(activityDate.getTime())) {
-    return 'Time not available';
+    return null;
   }
 
-  return new Intl.DateTimeFormat('en-AU', {
-    dateStyle: 'medium',
-    timeStyle: 'short',
-  }).format(activityDate);
+  return activityDate;
+}
+
+function formatActivityTimestamp(activityDate: Date): string {
+  return activityTimestampFormatter.format(activityDate);
 }
 
 export function DashboardPage({ token }: DashboardPageProps) {
@@ -247,20 +254,30 @@ export function DashboardPage({ token }: DashboardPageProps) {
               </p>
             ) : (
               <ul aria-label="Recent dashboard activity">
-                {recentActivity.map((activity) => (
-                  <li
-                    key={`${activity.id}-${activity.timestamp}`}
-                    className="mb-2 min-w-0 border-b pb-2 last:border-b-0"
-                  >
-                    <p className="break-words text-sm">{activity.description}</p>
-                    <time
-                      dateTime={activity.timestamp}
-                      className="text-xs text-semantic-text-tertiary"
+                {recentActivity.map((activity) => {
+                  const activityDate = parseActivityTimestamp(activity.timestamp);
+
+                  return (
+                    <li
+                      key={`${activity.id}-${activity.timestamp}`}
+                      className="mb-2 min-w-0 border-b pb-2 last:border-b-0"
                     >
-                      {formatActivityTimestamp(activity.timestamp)}
-                    </time>
-                  </li>
-                ))}
+                      <p className="break-words text-sm">{activity.description}</p>
+                      {activityDate ? (
+                        <time
+                          dateTime={activity.timestamp}
+                          className="text-xs text-semantic-text-tertiary"
+                        >
+                          {formatActivityTimestamp(activityDate)}
+                        </time>
+                      ) : (
+                        <span className="text-xs text-semantic-text-tertiary">
+                          Time not available
+                        </span>
+                      )}
+                    </li>
+                  );
+                })}
               </ul>
             )}
           </CardContent>

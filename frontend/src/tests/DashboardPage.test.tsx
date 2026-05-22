@@ -122,6 +122,30 @@ describe('DashboardPage', () => {
     ).toBeInTheDocument();
   });
 
+  it('does not render an invalid activity timestamp as a time element', async () => {
+    (apiService.get as jest.Mock).mockResolvedValue({
+      stats: {
+        totalProducts: 0,
+        totalInventoryItems: 0,
+        expiringItems: 0,
+        lowStockItems: 0,
+      },
+      recentActivity: [
+        {
+          id: 1,
+          description: 'Imported shelf count',
+          timestamp: 'not-a-date',
+        },
+      ],
+    });
+
+    renderDashboard('test-session-value');
+
+    const fallbackTimestamp = await screen.findByText('Time not available');
+    expect(fallbackTimestamp.tagName).toBe('SPAN');
+    expect(fallbackTimestamp).not.toHaveAttribute('dateTime');
+  });
+
   it('displays an error message if token is missing', async () => {
     renderDashboard(null);
 
