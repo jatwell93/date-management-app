@@ -41,7 +41,7 @@ Complete guide for developing and testing the Date Management App across local d
 
 ### Prerequisites
 
-- Node.js 18+
+- Node.js 22+
 - npm 9+
 - Git
 

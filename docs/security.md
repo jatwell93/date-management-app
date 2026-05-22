@@ -2,8 +2,8 @@
 
 This document describes the security measures implemented in the Date Management Application to protect user data, prevent attacks, and ensure safe operation in production environments.
 
-**Last Updated**: February 9, 2026  
-**Status**: Active — All measures implemented and tested
+**Last Updated**: May 23, 2026  
+**Status**: Active - security controls implemented with documented dependency exceptions
 
 ---
 
@@ -20,8 +20,9 @@ This document describes the security measures implemented in the Date Management
 9. [Error Handling](#error-handling)
 10. [Secrets & Credentials Management](#secrets--credentials-management)
 11. [Edge Compute Security (Workers)](#edge-compute-security-workers)
-12. [Best Practices for Developers](#best-practices-for-developers)
-13. [Security Reporting](#security-reporting)
+12. [NPM Supply-Chain Security](#npm-supply-chain-security)
+13. [Best Practices for Developers](#best-practices-for-developers)
+14. [Security Reporting](#security-reporting)
 
 ---
 
@@ -729,6 +730,82 @@ if (PUBLIC_ENDPOINTS.includes(url.pathname)) {
 
 ---
 
+## NPM Supply-Chain Security
+
+### Current Controls
+
+The repository uses deterministic npm lockfiles for each package boundary:
+
+- Root: `package-lock.json`
+- Backend: `backend/package-lock.json`
+- Frontend: `frontend/package-lock.json`
+- Workers: `workers/package-lock.json`
+
+GitHub Actions installs dependencies with `npm ci`, and the security workflow runs:
+
+```bash
+npm run security:npm-supply-chain
+```
+
+This check validates all package manifests and lockfiles for blocked dependency sources:
+
+- Git dependencies such as `git+ssh:` and `github:`
+- Remote tarball dependencies
+- Local `file:` and `link:` dependencies
+- Floating `*` and `latest` dependency declarations
+- Lockfile entries resolved outside `https://registry.npmjs.org`
+
+### NPM Defaults
+
+The committed `.npmrc` keeps package changes deterministic and quiet:
+
+```ini
+package-lock=true
+save-exact=true
+fund=false
+audit=false
+engine-strict=true
+legacy-peer-deps=false
+```
+
+`audit=false` only disables implicit audit noise during installs. Explicit audit commands remain required during security work.
+
+Use install scripts sparingly. For lockfile-only dependency changes, prefer:
+
+```bash
+npm install <package>@<version> --package-lock-only --ignore-scripts
+```
+
+Do not set global `ignore-scripts=true` for this repo without a separate migration plan. The backend currently depends on native packages such as SQLite and bcrypt that require install-time build hooks in normal development installs.
+
+### Dependabot
+
+Dependabot is configured for the root, backend, frontend, workers, and GitHub Actions package ecosystems. Review dependency PRs by package boundary and avoid mixing unrelated runtime and tooling updates unless the advisory requires coordinated remediation.
+
+### Accepted Dependency Risks
+
+| Package area | Current status | Mitigation |
+| ------------ | -------------- | ---------- |
+| `xlsx` in backend/frontend | npm audit reports known high severity advisories and no fixed npm release. | Keep file upload limits, input validation, and CSV injection controls active. Treat XLSX replacement as follow-up work before broadening spreadsheet import features. |
+| CRA/react-scripts in frontend | Several transitive build-tool advisories remain because CRA 5 has no clean patched path. | Do not expose dev server publicly. Prefer a separate frontend build-tool migration proposal over risky forced transitive changes. |
+| `quagga` in frontend | Pulls old request/form-data paths through image loading dependencies. | Keep scanner use local/browser-only and evaluate replacement during scanner dependency remediation. |
+
+### Developer Workflow
+
+Before committing dependency changes:
+
+```bash
+npm run security:npm-supply-chain
+npm audit --audit-level=low
+npm audit --audit-level=low --prefix backend
+npm audit --audit-level=low --prefix frontend
+npm audit --audit-level=low --prefix workers
+```
+
+If a vulnerability cannot be resolved safely, document the advisory, affected package boundary, mitigation, and follow-up path in OpenSpec and this security guide.
+
+---
+
 ## Best Practices for Developers
 
 ### 1. Never Commit Secrets
@@ -823,6 +900,9 @@ ubs src/
 # Secrets scanning
 npm run secrets-scan
 
+# NPM dependency source policy
+npm run security:npm-supply-chain
+
 # TypeScript compilation
 npm run build
 ```
@@ -870,7 +950,8 @@ Include:
 
 **Monthly**:
 
-- `npm audit` to check dependency vulnerabilities
+- `npm audit --audit-level=low` in the root, backend, frontend, and workers packages
+- `npm run security:npm-supply-chain` to check dependency sources
 - Review error logs for suspicious patterns
 - Verify rate limiter effectiveness
 
@@ -917,6 +998,7 @@ Sentry alerts on:
 - [OWASP Top 10](https://owasp.org/www-project-top-ten/)
 - [Express.js Security Best Practices](https://expressjs.com/en/advanced/best-practice-security.html)
 - [Node.js Security Checklist](https://blog.risingstack.com/node-js-security-checklist/)
+- [NPM Security Best Practices](https://github.com/lirantal/npm-security-best-practices)
 - [git-secrets Documentation](https://github.com/awslabs/git-secrets)
 - [CORS by MDN](https://developer.mozilla.org/en-US/docs/Web/HTTP/CORS)
 - [JWT Best Practices](https://tools.ietf.org/html/rfc8949)

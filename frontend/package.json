@@ -45,6 +45,9 @@
     "web-vitals": "^2.1.4",
     "xlsx": "^0.18.5"
   },
+  "overrides": {
+    "js-cookie": "3.0.7"
+  },
   "scripts": {
     "prestart": "npm run tailwind:build",
     "start": "cross-env PORT=3002 craco start",

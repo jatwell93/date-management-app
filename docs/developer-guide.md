@@ -24,7 +24,7 @@
 
 **Prerequisites:**
 
-- Node.js ≥18.x
+- Node.js ≥22.x
 - npm ≥9.x
 - Git
 
