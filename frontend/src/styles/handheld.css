@@ -212,6 +212,13 @@
     display: none !important;
   }
 
+  /* Dashboard action links remain visible in responsive app views. */
+  a.dashboard-action-link[href] {
+    display: inline-flex !important;
+    flex-shrink: 1;
+    min-width: 0;
+  }
+
   /* ============================================
      5. FULL-SCREEN SCAN AREA
      ============================================ */
