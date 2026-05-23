@@ -186,11 +186,11 @@ export function DetailedExpiryReportPage({ token }: DetailedExpiryReportPageProp
     };
   }, [token]);
 
-  const handleSaveEdit = useCallback(async () => {
-    if (!editingItem) return;
+  const handleSaveEdit = useCallback(async (): Promise<boolean> => {
+    if (!editingItem) return true;
     if (!token) {
       setActionError('Authentication token is missing.');
-      return;
+      return false;
     }
     setSaving(true);
     setActionError(null);
@@ -207,10 +207,12 @@ export function DetailedExpiryReportPage({ token }: DetailedExpiryReportPageProp
       setReportData(updatedData);
       setEditingItem(null);
       showToast('Item updated successfully.', 'success');
+      return true;
     } catch (err: unknown) {
       setActionError(
         err instanceof Error ? err.message : 'Failed to update item. Please try again.',
       );
+      return false;
     } finally {
       setSaving(false);
     }
@@ -219,10 +221,8 @@ export function DetailedExpiryReportPage({ token }: DetailedExpiryReportPageProp
   const handleEdit = useCallback(
     async (item: DetailedExpiryReportItem) => {
       if (editingItem && editingItem.inventoryId !== item.inventoryId) {
-        try {
-          await handleSaveEdit();
-        } catch {
-          // Save failed — keep editing the current row, don't switch
+        const saved = await handleSaveEdit();
+        if (!saved) {
           return;
         }
       }
@@ -279,291 +279,317 @@ export function DetailedExpiryReportPage({ token }: DetailedExpiryReportPageProp
   }, []);
 
   // Define columns for the data table
-  const columns: ColumnDef<DetailedExpiryReportItem>[] = useMemo(() => [
-    {
-      accessorKey: 'expiryDate',
-      header: ({ column }) => <DataTableColumnHeader column={column} title="Expiry Date" />,
-      cell: ({ row }) => {
-        const isEditing = editingItem && editingItem.inventoryId === row.original.inventoryId;
+  const columns: ColumnDef<DetailedExpiryReportItem>[] = useMemo(
+    () => [
+      {
+        accessorKey: 'expiryDate',
+        header: ({ column }) => <DataTableColumnHeader column={column} title="Expiry Date" />,
+        cell: ({ row }) => {
+          const isEditing = editingItem && editingItem.inventoryId === row.original.inventoryId;
 
-        if (isEditing) {
-          return (
-            <div className="min-w-[140px]">
-              <Input
-                type="date"
-                value={editingItem.expiryDate}
-                onChange={(e) =>
-                  setEditingItem({
-                    ...editingItem,
-                    expiryDate: e.target.value,
-                  })
-                }
-                className="w-full"
-                disabled={saving}
-              />
-            </div>
-          );
-        }
-
-        const daysToExpiry = getDaysToExpiry(row.original.expiryDate);
-        return (
-          <div
-            className={`min-w-[140px] ${daysToExpiry !== null && daysToExpiry <= 0 ? 'text-semantic-critical font-bold' : ''}`}
-          >
-            {formatExpiryDate(row.original.expiryDate)}
-            <div className="text-xs text-semantic-text-tertiary">
-              {daysToExpiry === null
-                ? ''
-                : daysToExpiry > 0
-                  ? `${daysToExpiry} days left`
-                  : 'Expired'}
-            </div>
-          </div>
-        );
-      },
-    },
-    {
-      accessorKey: 'productName',
-      header: ({ column }) => <DataTableColumnHeader column={column} title="Product Name" />,
-      cell: ({ row }) => (
-        <div
-          className="font-medium min-w-[160px] max-w-[200px] truncate"
-          title={row.original.productName}
-        >
-          {row.original.productName}
-        </div>
-      ),
-    },
-    {
-      accessorKey: 'sku',
-      header: ({ column }) => <DataTableColumnHeader column={column} title="SKU" />,
-      cell: ({ row }) => (
-        <div className="min-w-[100px] max-w-[140px] truncate" title={row.original.sku}>
-          {row.original.sku}
-        </div>
-      ),
-    },
-    {
-      accessorKey: 'costPrice',
-      header: ({ column }) => <DataTableColumnHeader column={column} title="Cost Price" />,
-      cell: ({ row }) => (
-        <div className="min-w-[100px] tabular-nums">
-          {currencyFormatter.format(row.original.costPrice)}
-        </div>
-      ),
-    },
-    {
-      accessorKey: 'daysToExpiry',
-      header: ({ column }) => <DataTableColumnHeader column={column} title="Days to Expiry" />,
-      cell: ({ row }) => {
-        const isEditing = editingItem && editingItem.inventoryId === row.original.inventoryId;
-        const daysToExpiry = isEditing
-          ? getDaysToExpiry(editingItem.expiryDate)
-          : getDaysToExpiry(row.original.expiryDate);
-
-        const urgencyClass =
-          daysToExpiry === null
-            ? ''
-            : daysToExpiry <= 0
-              ? 'text-semantic-critical font-bold'
-              : daysToExpiry <= 30
-                ? 'text-semantic-warning font-semibold'
-                : '';
-
-        return (
-          <div className={`min-w-[100px] tabular-nums ${urgencyClass}`}>
-            {daysToExpiry === null ? '—' : daysToExpiry}
-          </div>
-        );
-      },
-    },
-    {
-      accessorKey: 'status',
-      header: ({ column }) => <DataTableColumnHeader column={column} title="Markdown Status" />,
-      cell: ({ row }) => {
-        const isEditing = editingItem && editingItem.inventoryId === row.original.inventoryId;
-        const daysToExpiry = isEditing
-          ? getDaysToExpiry(editingItem.expiryDate)
-          : getDaysToExpiry(row.original.expiryDate);
-        const markdownStatus = getMarkdownStatus(daysToExpiry);
-
-        const statusClass =
-          markdownStatus === 'Expired'
-            ? 'text-semantic-critical'
-            : markdownStatus.startsWith('Markdown')
-              ? 'text-semantic-warning'
-              : 'text-semantic-text-secondary';
-
-        return (
-          <div className={`min-w-[120px] text-sm font-medium ${statusClass}`}>{markdownStatus}</div>
-        );
-      },
-    },
-    {
-      accessorKey: 'markdownPrice',
-      header: ({ column }) => <DataTableColumnHeader column={column} title="Markdown Price" />,
-      cell: ({ row }) => {
-        const isEditing = editingItem && editingItem.inventoryId === row.original.inventoryId;
-        const daysToExpiry = isEditing
-          ? getDaysToExpiry(editingItem.expiryDate)
-          : getDaysToExpiry(row.original.expiryDate);
-        const markdownPrice =
-          daysToExpiry === null
-            ? row.original.costPrice
-            : calculateMarkdownPrice(row.original.costPrice, daysToExpiry);
-
-        return (
-          <div className="min-w-[100px] tabular-nums">
-            {currencyFormatter.format(markdownPrice)}
-          </div>
-        );
-      },
-    },
-    {
-      accessorKey: 'locationName',
-      header: ({ column }) => <DataTableColumnHeader column={column} title="Location" />,
-      cell: ({ row }) => {
-        const isEditing = editingItem && editingItem.inventoryId === row.original.inventoryId;
-
-        if (isEditing) {
-          return (
-            <div className="min-w-[120px]">
-              {storeAreasError ? (
-                <p className="text-xs text-semantic-critical">{storeAreasError}</p>
-              ) : (
-                <Select
-                  value={editingItem.locationId.toString()}
-                  onValueChange={(value) =>
+          if (isEditing) {
+            return (
+              <div className="min-w-[140px]">
+                <Input
+                  type="date"
+                  value={editingItem.expiryDate}
+                  onChange={(e) =>
                     setEditingItem({
                       ...editingItem,
-                      locationId: parseInt(value, 10),
+                      expiryDate: e.target.value,
                     })
                   }
-                  disabled={saving || storeAreas.length === 0}
-                >
-                  <SelectTrigger className="w-full" aria-label="Location">
-                    <SelectValue placeholder={storeAreas.length === 0 ? 'Loading…' : 'Location'} />
-                  </SelectTrigger>
-                  <SelectContent>
-                    {storeAreas.map((area) => (
-                      <SelectItem key={area.id} value={area.id.toString()}>
-                        {area.name}
-                      </SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
-              )}
+                  className="w-full"
+                  disabled={saving}
+                />
+              </div>
+            );
+          }
+
+          const daysToExpiry = getDaysToExpiry(row.original.expiryDate);
+          return (
+            <div
+              className={`min-w-[140px] ${daysToExpiry !== null && daysToExpiry <= 0 ? 'text-semantic-critical font-bold' : ''}`}
+            >
+              {formatExpiryDate(row.original.expiryDate)}
+              <div className="text-xs text-semantic-text-tertiary">
+                {daysToExpiry === null
+                  ? ''
+                  : daysToExpiry > 0
+                    ? `${daysToExpiry} days left`
+                    : 'Expired'}
+              </div>
             </div>
           );
-        }
-
-        return (
-          <div className="min-w-[120px] max-w-[160px] truncate" title={row.original.locationName}>
-            {row.original.locationName}
-          </div>
-        );
+        },
       },
-    },
-    {
-      accessorKey: 'subDepartment',
-      header: ({ column }) => <DataTableColumnHeader column={column} title="Sub-Department" />,
-      cell: ({ row }) => (
-        <div
-          className="min-w-[120px] max-w-[140px] truncate"
-          title={row.original.subDepartment || 'N/A'}
-        >
-          {row.original.subDepartment || 'N/A'}
-        </div>
-      ),
-    },
-    {
-      id: 'actions',
-      header: () => <div className="min-w-[140px]">Actions</div>,
-      cell: ({ row }) => {
-        const rowId = row.original.inventoryId;
-        const isEditing = editingItem && editingItem.inventoryId === rowId;
-        const isPendingDelete = deleteConfirmation === rowId;
-        const anotherRowEditing = editingItem && editingItem.inventoryId !== rowId;
+      {
+        accessorKey: 'productName',
+        header: ({ column }) => <DataTableColumnHeader column={column} title="Product Name" />,
+        cell: ({ row }) => (
+          <div
+            className="font-medium min-w-[160px] max-w-[200px] truncate"
+            title={row.original.productName}
+          >
+            {row.original.productName}
+          </div>
+        ),
+      },
+      {
+        accessorKey: 'sku',
+        header: ({ column }) => <DataTableColumnHeader column={column} title="SKU" />,
+        cell: ({ row }) => (
+          <div className="min-w-[100px] max-w-[140px] truncate" title={row.original.sku}>
+            {row.original.sku}
+          </div>
+        ),
+      },
+      {
+        accessorKey: 'costPrice',
+        header: ({ column }) => <DataTableColumnHeader column={column} title="Cost Price" />,
+        cell: ({ row }) => (
+          <div className="min-w-[100px] tabular-nums">
+            {currencyFormatter.format(row.original.costPrice)}
+          </div>
+        ),
+      },
+      {
+        accessorKey: 'daysToExpiry',
+        header: ({ column }) => <DataTableColumnHeader column={column} title="Days to Expiry" />,
+        cell: ({ row }) => {
+          const isEditing = editingItem && editingItem.inventoryId === row.original.inventoryId;
+          const daysToExpiry = isEditing
+            ? getDaysToExpiry(editingItem.expiryDate)
+            : getDaysToExpiry(row.original.expiryDate);
 
-        if (isPendingDelete) {
+          const urgencyClass =
+            daysToExpiry === null
+              ? ''
+              : daysToExpiry <= 0
+                ? 'text-semantic-critical font-bold'
+                : daysToExpiry <= 30
+                  ? 'text-semantic-warning font-semibold'
+                  : '';
+
+          return (
+            <div className={`min-w-[100px] tabular-nums ${urgencyClass}`}>
+              {daysToExpiry === null ? '—' : daysToExpiry}
+            </div>
+          );
+        },
+      },
+      {
+        accessorKey: 'status',
+        header: ({ column }) => <DataTableColumnHeader column={column} title="Markdown Status" />,
+        cell: ({ row }) => {
+          const isEditing = editingItem && editingItem.inventoryId === row.original.inventoryId;
+          const daysToExpiry = isEditing
+            ? getDaysToExpiry(editingItem.expiryDate)
+            : getDaysToExpiry(row.original.expiryDate);
+          const markdownStatus = getMarkdownStatus(daysToExpiry);
+
+          const statusClass =
+            markdownStatus === 'Expired'
+              ? 'text-semantic-critical'
+              : markdownStatus.startsWith('Markdown')
+                ? 'text-semantic-warning'
+                : 'text-semantic-text-secondary';
+
+          return (
+            <div className={`min-w-[120px] text-sm font-medium ${statusClass}`}>
+              {markdownStatus}
+            </div>
+          );
+        },
+      },
+      {
+        accessorKey: 'markdownPrice',
+        header: ({ column }) => <DataTableColumnHeader column={column} title="Markdown Price" />,
+        cell: ({ row }) => {
+          const isEditing = editingItem && editingItem.inventoryId === row.original.inventoryId;
+          const daysToExpiry = isEditing
+            ? getDaysToExpiry(editingItem.expiryDate)
+            : getDaysToExpiry(row.original.expiryDate);
+          const markdownPrice =
+            daysToExpiry === null
+              ? row.original.costPrice
+              : calculateMarkdownPrice(row.original.costPrice, daysToExpiry);
+
+          return (
+            <div className="min-w-[100px] tabular-nums">
+              {currencyFormatter.format(markdownPrice)}
+            </div>
+          );
+        },
+      },
+      {
+        accessorKey: 'locationName',
+        header: ({ column }) => <DataTableColumnHeader column={column} title="Location" />,
+        cell: ({ row }) => {
+          const isEditing = editingItem && editingItem.inventoryId === row.original.inventoryId;
+
+          if (isEditing) {
+            return (
+              <div className="min-w-[120px]">
+                {storeAreasError ? (
+                  <p className="text-xs text-semantic-critical">{storeAreasError}</p>
+                ) : (
+                  <Select
+                    value={editingItem.locationId.toString()}
+                    onValueChange={(value) =>
+                      setEditingItem({
+                        ...editingItem,
+                        locationId: parseInt(value, 10),
+                      })
+                    }
+                    disabled={saving || storeAreas.length === 0}
+                  >
+                    <SelectTrigger className="w-full" aria-label="Location">
+                      <SelectValue
+                        placeholder={storeAreas.length === 0 ? 'Loading…' : 'Location'}
+                      />
+                    </SelectTrigger>
+                    <SelectContent>
+                      {storeAreas.map((area) => (
+                        <SelectItem key={area.id} value={area.id.toString()}>
+                          {area.name}
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                )}
+              </div>
+            );
+          }
+
+          return (
+            <div className="min-w-[120px] max-w-[160px] truncate" title={row.original.locationName}>
+              {row.original.locationName}
+            </div>
+          );
+        },
+      },
+      {
+        accessorKey: 'subDepartment',
+        header: ({ column }) => <DataTableColumnHeader column={column} title="Sub-Department" />,
+        cell: ({ row }) => (
+          <div
+            className="min-w-[120px] max-w-[140px] truncate"
+            title={row.original.subDepartment || 'N/A'}
+          >
+            {row.original.subDepartment || 'N/A'}
+          </div>
+        ),
+      },
+      {
+        id: 'actions',
+        header: () => <div className="min-w-[140px]">Actions</div>,
+        cell: ({ row }) => {
+          const rowId = row.original.inventoryId;
+          const isEditing = editingItem && editingItem.inventoryId === rowId;
+          const isPendingDelete = deleteConfirmation === rowId;
+          const anotherRowEditing = editingItem && editingItem.inventoryId !== rowId;
+
+          if (isPendingDelete) {
+            return (
+              <div className="flex gap-2 justify-start min-w-[140px]">
+                <Button
+                  onClick={() => handleDelete(rowId)}
+                  disabled={deleting}
+                  size="sm"
+                  variant="destructive"
+                  className="text-xs flex-shrink-0 min-w-[70px]"
+                  aria-busy={deleting}
+                >
+                  {deleting ? 'Deleting…' : 'Confirm delete'}
+                </Button>
+                <Button
+                  onClick={cancelDelete}
+                  disabled={deleting}
+                  size="sm"
+                  variant="neutral"
+                  className="text-xs flex-shrink-0 min-w-[60px]"
+                >
+                  Cancel
+                </Button>
+              </div>
+            );
+          }
+
+          if (isEditing) {
+            return (
+              <div className="flex gap-2 justify-start min-w-[140px]">
+                <Button
+                  onClick={handleSaveEdit}
+                  disabled={saving}
+                  size="sm"
+                  variant="success"
+                  className="min-w-[50px] font-medium"
+                  aria-busy={saving}
+                >
+                  {saving ? 'Saving…' : 'Save'}
+                </Button>
+                <Button
+                  onClick={handleCancelEdit}
+                  disabled={saving}
+                  size="sm"
+                  variant="neutral"
+                  className="min-w-[50px] font-medium"
+                >
+                  Cancel
+                </Button>
+              </div>
+            );
+          }
+
           return (
             <div className="flex gap-2 justify-start min-w-[140px]">
               <Button
-                onClick={() => handleDelete(rowId)}
-                disabled={deleting}
+                onClick={() => handleEdit(row.original)}
+                disabled={!!anotherRowEditing || deleting}
+                size="sm"
+                variant="default"
+                className="min-w-[50px] font-medium"
+              >
+                Edit
+              </Button>
+              <Button
+                onClick={() => confirmDelete(rowId)}
+                disabled={!!editingItem || deleting}
                 size="sm"
                 variant="destructive"
-                className="text-xs flex-shrink-0 min-w-[70px]"
-                aria-busy={deleting}
+                className="min-w-[50px] font-medium"
               >
-                {deleting ? 'Deleting…' : 'Confirm delete'}
-              </Button>
-              <Button
-                onClick={cancelDelete}
-                disabled={deleting}
-                size="sm"
-                variant="neutral"
-                className="text-xs flex-shrink-0 min-w-[60px]"
-              >
-                Cancel
+                Delete
               </Button>
             </div>
           );
-        }
-
-        if (isEditing) {
-          return (
-            <div className="flex gap-2 justify-start min-w-[140px]">
-              <Button
-                onClick={handleSaveEdit}
-                disabled={saving}
-                size="sm"
-                variant="success"
-                className="min-w-[50px] font-medium"
-                aria-busy={saving}
-              >
-                {saving ? 'Saving…' : 'Save'}
-              </Button>
-              <Button
-                onClick={handleCancelEdit}
-                disabled={saving}
-                size="sm"
-                variant="neutral"
-                className="min-w-[50px] font-medium"
-              >
-                Cancel
-              </Button>
-            </div>
-          );
-        }
-
-        return (
-          <div className="flex gap-2 justify-start min-w-[140px]">
-            <Button
-              onClick={() => handleEdit(row.original)}
-              disabled={!!anotherRowEditing || deleting}
-              size="sm"
-              variant="default"
-              className="min-w-[50px] font-medium"
-            >
-              Edit
-            </Button>
-            <Button
-              onClick={() => confirmDelete(rowId)}
-              disabled={!!editingItem || deleting}
-              size="sm"
-              variant="destructive"
-              className="min-w-[50px] font-medium"
-            >
-              Delete
-            </Button>
-          </div>
-        );
+        },
       },
-    },
-  ], [editingItem, saving, deleting, deleteConfirmation, storeAreas, storeAreasError, handleSaveEdit, handleCancelEdit, handleEdit, handleDelete, confirmDelete, cancelDelete]);
+    ],
+    [
+      editingItem,
+      saving,
+      deleting,
+      deleteConfirmation,
+      storeAreas,
+      storeAreasError,
+      handleSaveEdit,
+      handleCancelEdit,
+      handleEdit,
+      handleDelete,
+      confirmDelete,
+      cancelDelete,
+    ],
+  );
 
   const retryControllerRef = useRef<AbortController | null>(null);
+
+  useEffect(() => {
+    return () => {
+      retryControllerRef.current?.abort();
+    };
+  }, []);
 
   const handleRetryFetch = useCallback(() => {
     retryControllerRef.current?.abort();

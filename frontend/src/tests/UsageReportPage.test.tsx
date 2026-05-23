@@ -1,5 +1,5 @@
 import React from 'react';
-import { render, screen, waitFor } from '@testing-library/react';
+import { act, render, screen, waitFor } from '@testing-library/react';
 import { UsageReportPage } from '../pages/UsageReportPage';
 import { apiService } from '../lib/api.service';
 import '@testing-library/jest-dom';
@@ -76,7 +76,11 @@ describe('UsageReportPage', () => {
       new Intl.DateTimeFormat('en-AU', { dateStyle: 'medium' }).format(new Date('2025-01-30')),
     );
 
-    expect(apiService.get).toHaveBeenCalledWith('/reports/daily-usage', tokenValue, expect.any(Object));
+    expect(apiService.get).toHaveBeenCalledWith(
+      '/reports/daily-usage',
+      tokenValue,
+      expect.any(Object),
+    );
   });
 
   it('displays an error message if token is missing', async () => {
@@ -97,5 +101,45 @@ describe('UsageReportPage', () => {
     await waitFor(() => {
       expect(screen.getByRole('alert')).toHaveTextContent(/Failed to load usage report/i);
     });
+  });
+
+  it('keeps chart loading visible until both chart datasets have loaded', async () => {
+    let resolveItemsByDate: (value: Array<{ date: string; itemCount: number }>) => void = () => {};
+    const itemsByDatePromise = new Promise<Array<{ date: string; itemCount: number }>>(
+      (resolve) => {
+        resolveItemsByDate = resolve;
+      },
+    );
+
+    // @ts-expect-error — apiService.get is mocked as jest.fn()
+    apiService.get.mockImplementation((url) => {
+      if (url === '/reports/daily-usage') {
+        return Promise.resolve([]);
+      }
+      if (url.startsWith('/reports/items-by-user')) {
+        return Promise.resolve([{ userId: 1, userName: 'Manager 1', itemCount: 150 }]);
+      }
+      if (url === '/reports/items-by-date') {
+        return itemsByDatePromise;
+      }
+      return Promise.resolve([]);
+    });
+
+    render(<UsageReportPage token="test-session-value" />);
+
+    expect(
+      await screen.findByRole('heading', { name: /Stock Added by Team Member/i, level: 2 }),
+    ).toBeInTheDocument();
+    expect(screen.getAllByText(/Loading chart data/i).length).toBeGreaterThanOrEqual(1);
+    expect(screen.queryByText(/No daily stock additions recorded yet/i)).not.toBeInTheDocument();
+
+    await act(async () => {
+      resolveItemsByDate([{ date: '2025-01-30', itemCount: 20 }]);
+      await itemsByDatePromise;
+    });
+
+    expect(
+      await screen.findByRole('table', { name: /Items added per day summary/i }),
+    ).toBeInTheDocument();
   });
 });

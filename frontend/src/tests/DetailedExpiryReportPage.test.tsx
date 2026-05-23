@@ -1,5 +1,5 @@
 import React from 'react';
-import { render, screen, waitFor } from '@testing-library/react';
+import { fireEvent, render, screen, waitFor } from '@testing-library/react';
 import { DetailedExpiryReportPage } from '../pages/DetailedExpiryReportPage';
 import { apiService } from '../lib/api.service';
 import '@testing-library/jest-dom';
@@ -73,5 +73,58 @@ describe('DetailedExpiryReportPage', () => {
     await waitFor(() => {
       expect(screen.getByRole('alert')).toHaveTextContent(/Authentication token is missing/i);
     });
+  });
+
+  it('keeps the current row in edit mode when saving fails', async () => {
+    // @ts-expect-error — apiService.get is mocked as jest.fn()
+    apiService.get.mockImplementation((url) => {
+      if (url === '/reports/expiry-details') {
+        return Promise.resolve([
+          {
+            inventoryId: 10,
+            expiryDate: '2025-02-01',
+            status: 'Markdown 3',
+            productId: 20,
+            productName: 'First Product',
+            sku: 'SKU-1',
+            costPrice: 12.5,
+            locationId: 2,
+            locationName: 'Front Counter',
+            subDepartment: 'Cold and Flu',
+          },
+          {
+            inventoryId: 11,
+            expiryDate: '2025-03-01',
+            status: 'Markdown 2',
+            productId: 21,
+            productName: 'Second Product',
+            sku: 'SKU-2',
+            costPrice: 15,
+            locationId: 3,
+            locationName: 'Aisle 1',
+            subDepartment: 'Pain Relief',
+          },
+        ]);
+      }
+      if (url === '/store-areas') {
+        return Promise.resolve([
+          { id: 2, name: 'Front Counter' },
+          { id: 3, name: 'Aisle 1' },
+        ]);
+      }
+      return Promise.resolve([]);
+    });
+    // @ts-expect-error — apiService.put is mocked as jest.fn()
+    apiService.put.mockRejectedValue(new Error('Could not save item'));
+
+    render(<DetailedExpiryReportPage token="test-session-value" />);
+
+    const editButtons = await screen.findAllByRole('button', { name: /^Edit$/i });
+    fireEvent.click(editButtons[0]);
+    fireEvent.click(screen.getByRole('button', { name: /^Save$/i }));
+
+    expect(await screen.findByRole('alert')).toHaveTextContent(/Could not save item/i);
+    expect(screen.getByDisplayValue('2025-02-01')).toBeInTheDocument();
+    expect(screen.queryByDisplayValue('2025-03-01')).not.toBeInTheDocument();
   });
 });

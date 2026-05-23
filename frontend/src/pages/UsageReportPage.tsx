@@ -88,9 +88,11 @@ export function UsageReportPage({ token }: UsageReportPageProps) {
   const [usageError, setUsageError] = useState<string | null>(null);
   const [itemsByUser, setItemsByUser] = useState<ItemsByUserReportItem[] | null>(null);
   const [itemsByDate, setItemsByDate] = useState<ItemsByDateReportItem[] | null>(null);
-  const [chartsLoading, setChartsLoading] = useState(true);
+  const [itemsByUserLoading, setItemsByUserLoading] = useState(true);
+  const [itemsByDateLoading, setItemsByDateLoading] = useState(true);
   const [chartsError, setChartsError] = useState<string | null>(null);
   const [timeFrame, setTimeFrame] = useState('all-time');
+  const chartsLoading = itemsByUserLoading || itemsByDateLoading;
 
   useEffect(() => {
     const controller = new AbortController();
@@ -134,7 +136,13 @@ export function UsageReportPage({ token }: UsageReportPageProps) {
     const controller = new AbortController();
 
     const fetchItemsByDate = async () => {
-      if (!token) return;
+      setItemsByDateLoading(true);
+      setChartsError(null);
+
+      if (!token) {
+        setItemsByDateLoading(false);
+        return;
+      }
 
       try {
         const data = await apiService.get<ItemsByDateReportItem[]>(
@@ -144,6 +152,7 @@ export function UsageReportPage({ token }: UsageReportPageProps) {
         );
         if (!controller.signal.aborted) {
           setItemsByDate(data);
+          setChartsError(null);
         }
       } catch (err: unknown) {
         if (controller.signal.aborted) return;
@@ -151,6 +160,10 @@ export function UsageReportPage({ token }: UsageReportPageProps) {
           setChartsError(err.message);
         } else {
           setChartsError('An unknown error occurred when fetching chart data');
+        }
+      } finally {
+        if (!controller.signal.aborted) {
+          setItemsByDateLoading(false);
         }
       }
     };
@@ -164,9 +177,12 @@ export function UsageReportPage({ token }: UsageReportPageProps) {
     const controller = new AbortController();
 
     const fetchItemsByUser = async () => {
+      setItemsByUserLoading(true);
+      setChartsError(null);
+
       if (!token) {
         setChartsError('Authentication token is missing.');
-        setChartsLoading(false);
+        setItemsByUserLoading(false);
         return;
       }
 
@@ -178,6 +194,7 @@ export function UsageReportPage({ token }: UsageReportPageProps) {
         );
         if (!controller.signal.aborted) {
           setItemsByUser(data);
+          setChartsError(null);
         }
       } catch (err: unknown) {
         if (controller.signal.aborted) return;
@@ -188,7 +205,7 @@ export function UsageReportPage({ token }: UsageReportPageProps) {
         }
       } finally {
         if (!controller.signal.aborted) {
-          setChartsLoading(false);
+          setItemsByUserLoading(false);
         }
       }
     };

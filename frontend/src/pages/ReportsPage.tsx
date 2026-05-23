@@ -50,6 +50,9 @@ export function ReportsPage({ token }: ReportsPageProps) {
     const controller = new AbortController();
 
     const fetchReportData = async () => {
+      setLoading(true);
+      setMonthlyError(null);
+
       if (!token) {
         setMonthlyError('Authentication token is missing.');
         setLoading(false);
@@ -64,6 +67,7 @@ export function ReportsPage({ token }: ReportsPageProps) {
         );
         if (!controller.signal.aborted) {
           setReportData(data);
+          setMonthlyError(null);
         }
       } catch (err: unknown) {
         if (controller.signal.aborted) return;
@@ -80,6 +84,9 @@ export function ReportsPage({ token }: ReportsPageProps) {
     };
 
     const fetchOverallReportData = async () => {
+      setOverallLoading(true);
+      setOverallError(null);
+
       if (!token) {
         setOverallError('Authentication token is missing.');
         setOverallLoading(false);
@@ -94,6 +101,7 @@ export function ReportsPage({ token }: ReportsPageProps) {
         );
         if (!controller.signal.aborted) {
           setOverallReportData(data);
+          setOverallError(null);
         }
       } catch (err: unknown) {
         if (controller.signal.aborted) return;
@@ -270,8 +278,8 @@ export function ReportsPage({ token }: ReportsPageProps) {
                     {numberFormatter.format(
                       Math.max(
                         overallReportData.total_expiring -
-                        overallReportData.expired_count -
-                        overallReportData.total_markdown,
+                          overallReportData.expired_count -
+                          overallReportData.total_markdown,
                         0,
                       ),
                     )}
@@ -300,7 +308,7 @@ export function ReportsPage({ token }: ReportsPageProps) {
           <CardTitle className="text-xl">Monthly expiry report</CardTitle>
         </CardHeader>
         <CardContent>
-          <div className="mb-4 flex flex-col gap-2 sm:flex-row">
+          <div className="no-print mb-4 flex flex-col gap-2 sm:flex-row">
             <Button asChild className="flex-1" size="lg">
               <a href="/detailed-expiry-report">Open next 90 days</a>
             </Button>

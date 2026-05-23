@@ -93,4 +93,55 @@ describe('ReportsPage', () => {
       expect(screen.getByRole('alert')).toHaveTextContent(/Failed to load report/i);
     });
   });
+
+  it('clears previous report errors before a successful refetch', async () => {
+    const firstToken = randomUUID();
+    const secondToken = randomUUID();
+
+    // @ts-expect-error — apiService.get is mocked as jest.fn()
+    apiService.get.mockImplementation((url, token) => {
+      if (token === firstToken) {
+        return Promise.reject(new Error('Temporary report failure'));
+      }
+      if (url === '/reports/expiry') {
+        return Promise.resolve([
+          {
+            month: '2025-08',
+            total_expiring: 10,
+            expired_count: 5,
+            markdown1_count: 2,
+            markdown2_count: 1,
+            markdown3_count: 2,
+            total_markdown: 5,
+            latest_expiry_date: '2025-08-31',
+          },
+        ]);
+      }
+      if (url === '/reports/expiry-overall') {
+        return Promise.resolve({
+          month: 'Overall',
+          total_expiring: 100,
+          expired_count: 50,
+          markdown1_count: 20,
+          markdown2_count: 10,
+          markdown3_count: 20,
+          total_markdown: 50,
+          latest_expiry_date: '2025-12-31',
+        });
+      }
+      return Promise.reject(new Error('Unknown URL'));
+    });
+
+    const { rerender } = render(<ReportsPage token={firstToken} />);
+
+    expect(await screen.findByRole('alert')).toHaveTextContent(/Temporary report failure/i);
+
+    rerender(<ReportsPage token={secondToken} />);
+
+    expect(await screen.findByText(/Monthly expiry report/i)).toBeInTheDocument();
+    expect(screen.queryByRole('alert')).not.toBeInTheDocument();
+    expect(screen.getByRole('region', { name: /Expiry stock action summary/i })).toHaveTextContent(
+      /Expired risk/i,
+    );
+  });
 });

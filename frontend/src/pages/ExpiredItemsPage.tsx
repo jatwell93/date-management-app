@@ -245,6 +245,12 @@ const ExpiredItemsPage: React.FC<ExpiredItemsPageProps> = ({ token }) => {
 
   const retryControllerRef = useRef<AbortController | null>(null);
 
+  useEffect(() => {
+    return () => {
+      retryControllerRef.current?.abort();
+    };
+  }, []);
+
   const retryFetchItems = useCallback(async () => {
     if (!token) return;
     retryControllerRef.current?.abort();
@@ -293,8 +299,12 @@ const ExpiredItemsPage: React.FC<ExpiredItemsPageProps> = ({ token }) => {
 
       try {
         const [lossBySkuResult, lossByDeptResult] = await Promise.allSettled([
-          apiService.get<LossBySkuReportItem[]>('/reports/loss-by-sku', token),
-          apiService.get<LossByDepartmentReportItem[]>('/reports/loss-by-department', token),
+          apiService.get<LossBySkuReportItem[]>('/reports/loss-by-sku', token, controller.signal),
+          apiService.get<LossByDepartmentReportItem[]>(
+            '/reports/loss-by-department',
+            token,
+            controller.signal,
+          ),
         ]);
 
         if (controller.signal.aborted) return;
