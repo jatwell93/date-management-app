@@ -1,6 +1,5 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useCallback, useMemo, useRef, lazy, Suspense } from 'react';
 import * as Sentry from '@sentry/react';
-import { useNavigate } from 'react-router-dom';
 import { ExpiredItem } from '../types/inventory';
 import { apiService } from '../lib/api.service';
 import { getExpiredItems, processExpiredItem } from '../services/expiredItemService';
@@ -27,7 +26,7 @@ import {
   TableRow,
 } from '../components/ui/table';
 
-// Import Chart.js components
+// Import Chart.js components — lazy-loaded to keep initial bundle lean
 import {
   Chart as ChartJS,
   CategoryScale,
@@ -38,10 +37,11 @@ import {
   Legend,
   ChartOptions,
 } from 'chart.js';
-import { Bar } from 'react-chartjs-2';
 
 // Register Chart.js components
 ChartJS.register(CategoryScale, LinearScale, BarElement, Title, Tooltip, Legend);
+
+const Bar = lazy(() => import('react-chartjs-2').then((m) => ({ default: m.Bar })));
 
 interface ExpiredItemsPageProps {
   token: string | null;
@@ -59,6 +59,24 @@ interface LossByDepartmentReportItem {
   totalLoss: number;
   count: number;
 }
+
+const currencyFormatter = new Intl.NumberFormat('en-AU', {
+  style: 'currency',
+  currency: 'AUD',
+});
+
+const dateFormatter = new Intl.DateTimeFormat('en-AU', {
+  day: '2-digit',
+  month: 'short',
+  year: 'numeric',
+});
+
+function formatExpiry(raw: string): string {
+  const d = new Date(raw);
+  return Number.isNaN(d.getTime()) ? raw : dateFormatter.format(d);
+}
+
+const SKELETON_ROWS = Array.from({ length: 5 }, (_, i) => i);
 
 const ExpiredItemsPage: React.FC<ExpiredItemsPageProps> = ({ token }) => {
   const [expiredItems, setExpiredItems] = useState<ExpiredItem[]>([]);
@@ -81,27 +99,32 @@ const ExpiredItemsPage: React.FC<ExpiredItemsPageProps> = ({ token }) => {
   >(null);
   const [chartsLoading, setChartsLoading] = useState(true);
   const [chartsError, setChartsError] = useState<string | null>(null);
+  const [isProcessing, setIsProcessing] = useState(false);
+  const [unitsDiscardedError, setUnitsDiscardedError] = useState<string | null>(null);
 
-  const navigate = useNavigate();
+  const toastTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   useEffect(() => {
     if (!token) {
-      // If no token is available, redirect to login
-      navigate('/login');
+      setError('Authentication token is missing.');
+      setLoading(false);
       return;
     }
+
+    const controller = new AbortController();
 
     const fetchExpiredItems = async () => {
       try {
         setLoading(true);
-        const data = await getExpiredItems(token);
-        setExpiredItems(data);
+        const data = await getExpiredItems(token, controller.signal);
+        if (!controller.signal.aborted) {
+          setExpiredItems(data);
+        }
       } catch (err) {
+        if (controller.signal.aborted) return;
         setError('Failed to fetch expired items');
         if (err instanceof Error) {
-          Sentry.captureException(err, {
-            tags: { feature: 'expired-items' },
-          });
+          Sentry.captureException(err, { tags: { feature: 'expired-items' } });
         } else {
           Sentry.captureMessage('Error fetching expired items', {
             level: 'error',
@@ -109,73 +132,77 @@ const ExpiredItemsPage: React.FC<ExpiredItemsPageProps> = ({ token }) => {
           });
         }
       } finally {
-        setLoading(false);
+        if (!controller.signal.aborted) {
+          setLoading(false);
+        }
       }
     };
 
     fetchExpiredItems();
-  }, [token, navigate]);
+    return () => controller.abort();
+  }, [token]);
 
-  const handleAction = (item: ExpiredItem, action: 'sold_through' | 'expired') => {
+  const handleAction = useCallback((item: ExpiredItem, actionType: 'sold_through' | 'expired') => {
     setSelectedItem(item);
-    setAction(action);
-
-    // If action is 'expired', we need to enter units discarded
-    if (action === 'expired') {
-      setUnitsDiscarded(1); // Default to 1
-    } else {
-      setUnitsDiscarded(0);
-    }
-
+    setAction(actionType);
+    setProcessError(null);
+    setUnitsDiscardedError(null);
+    setUnitsDiscarded(actionType === 'expired' ? 1 : 0);
     setIsModalOpen(true);
-  };
+  }, []);
 
-  const showSuccessToast = (message: string) => {
-    setToast({ message, type: 'success' });
+  const handleUnitsDiscardedChange = useCallback((e: React.ChangeEvent<HTMLInputElement>) => {
+    const parsed = parseInt(e.target.value, 10);
+    if (!Number.isNaN(parsed)) {
+      setUnitsDiscarded(parsed);
+      setUnitsDiscardedError(null);
+    } else {
+      setUnitsDiscardedError('Enter a whole number');
+    }
+  }, []);
+
+  const showToast = useCallback((message: string, type: 'success' | 'error') => {
+    setToast({ message, type });
     setIsToastVisible(true);
-    setTimeout(() => setIsToastVisible(false), 3000);
-  };
+    if (toastTimerRef.current) clearTimeout(toastTimerRef.current);
+    toastTimerRef.current = setTimeout(() => setIsToastVisible(false), 3000);
+  }, []);
 
-  const showErrorToast = (message: string) => {
-    setToast({ message, type: 'error' });
-    setIsToastVisible(true);
-    setTimeout(() => setIsToastVisible(false), 3000);
-  };
+  useEffect(() => {
+    return () => {
+      if (toastTimerRef.current) clearTimeout(toastTimerRef.current);
+    };
+  }, []);
 
-  const handleProcessItem = async () => {
+  const handleProcessItem = useCallback(() => {
     if (!selectedItem || !action) return;
 
-    try {
-      setProcessError(null);
+    setProcessError(null);
+    setUnitsDiscardedError(null);
 
-      if (action === 'expired' && (!unitsDiscarded || unitsDiscarded <= 0)) {
-        setProcessError('Units discarded must be a positive number when marking as expired');
+    if (action === 'expired') {
+      if (!unitsDiscarded || unitsDiscarded <= 0) {
+        setUnitsDiscardedError('Must be at least 1');
         return;
       }
-
-      // Show confirmation dialog before processing
-      setIsConfirmDialogOpen(true);
-    } catch (err) {
-      setProcessError('Failed to process expired item');
-      if (err instanceof Error) {
-        Sentry.captureException(err, {
-          tags: { feature: 'expired-items' },
-        });
-      } else {
-        Sentry.captureMessage('Error processing expired item', {
-          level: 'error',
-          tags: { feature: 'expired-items' },
-        });
+      if (unitsDiscarded > selectedItem.quantityAvailable) {
+        setUnitsDiscardedError(
+          `Cannot exceed available quantity (${selectedItem.quantityAvailable})`,
+        );
+        return;
       }
     }
-  };
 
-  const confirmProcessItem = async () => {
-    if (!selectedItem || !action) return;
+    setIsConfirmDialogOpen(true);
+  }, [selectedItem, action, unitsDiscarded]);
+
+  const confirmProcessItem = useCallback(async () => {
+    if (!selectedItem || !action || isProcessing) return;
+
+    setIsProcessing(true);
+    setProcessError(null);
 
     try {
-      setProcessError(null);
-
       const processUnitsDiscarded = action === 'expired' ? unitsDiscarded : 0;
 
       await processExpiredItem(
@@ -187,26 +214,24 @@ const ExpiredItemsPage: React.FC<ExpiredItemsPageProps> = ({ token }) => {
         token,
       );
 
-      // Refresh the expired items list after successful processing
       const data = await getExpiredItems(token);
       setExpiredItems(data);
 
-      // Show success message
-      showSuccessToast(`Item marked as ${action} successfully!`);
+      const label = action === 'expired' ? 'Expired' : 'Sold Through';
+      showToast(`Item marked as ${label} successfully.`, 'success');
 
-      // Close both modals and reset state
       setIsModalOpen(false);
       setIsConfirmDialogOpen(false);
       setSelectedItem(null);
       setAction(null);
     } catch (err) {
-      const errorMessage = 'Failed to process expired item';
+      const errorMessage =
+        err instanceof Error ? err.message : 'Failed to process item. Please try again.';
       setProcessError(errorMessage);
-      showErrorToast(errorMessage);
+      showToast(errorMessage, 'error');
+      setIsConfirmDialogOpen(false);
       if (err instanceof Error) {
-        Sentry.captureException(err, {
-          tags: { feature: 'expired-items' },
-        });
+        Sentry.captureException(err, { tags: { feature: 'expired-items' } });
       } else {
         Sentry.captureMessage('Error processing expired item', {
           level: 'error',
@@ -214,12 +239,57 @@ const ExpiredItemsPage: React.FC<ExpiredItemsPageProps> = ({ token }) => {
         });
       }
     } finally {
-      setIsConfirmDialogOpen(false);
+      setIsProcessing(false);
     }
-  };
+  }, [selectedItem, action, unitsDiscarded, isProcessing, token, showToast]);
+
+  const retryControllerRef = useRef<AbortController | null>(null);
+
+  useEffect(() => {
+    return () => {
+      retryControllerRef.current?.abort();
+    };
+  }, []);
+
+  const retryFetchItems = useCallback(async () => {
+    if (!token) return;
+    retryControllerRef.current?.abort();
+    const controller = new AbortController();
+    retryControllerRef.current = controller;
+    setLoading(true);
+    setError(null);
+    try {
+      const data = await getExpiredItems(token, controller.signal);
+      if (!controller.signal.aborted) {
+        setExpiredItems(data);
+      }
+    } catch (err) {
+      if (controller.signal.aborted) return;
+      setError(
+        err instanceof Error ? err.message : 'Failed to load expired items. Please try again.',
+      );
+      if (err instanceof Error) {
+        Sentry.captureException(err, { tags: { feature: 'expired-items' } });
+      }
+    } finally {
+      if (!controller.signal.aborted) {
+        setLoading(false);
+      }
+    }
+  }, [token]);
+
+  const closeModal = useCallback(() => {
+    setIsModalOpen(false);
+    setSelectedItem(null);
+    setAction(null);
+    setProcessError(null);
+    setUnitsDiscardedError(null);
+  }, []);
 
   // Fetch chart data — failures here should NOT blank out the rest of the page.
   useEffect(() => {
+    const controller = new AbortController();
+
     const fetchChartData = async () => {
       if (!token) {
         setChartsError('Authentication token is missing.');
@@ -228,23 +298,23 @@ const ExpiredItemsPage: React.FC<ExpiredItemsPageProps> = ({ token }) => {
       }
 
       try {
-        // Fetch both chart datasets concurrently. Tolerate per-chart failure.
         const [lossBySkuResult, lossByDeptResult] = await Promise.allSettled([
-          apiService.get<LossBySkuReportItem[]>('/reports/loss-by-sku', token),
-          apiService.get<LossByDepartmentReportItem[]>('/reports/loss-by-department', token),
+          apiService.get<LossBySkuReportItem[]>('/reports/loss-by-sku', token, controller.signal),
+          apiService.get<LossByDepartmentReportItem[]>(
+            '/reports/loss-by-department',
+            token,
+            controller.signal,
+          ),
         ]);
 
-        if (lossBySkuResult.status === 'fulfilled') {
-          setLossBySkuData(lossBySkuResult.value ?? []);
-        } else {
-          setLossBySkuData([]);
-        }
+        if (controller.signal.aborted) return;
 
-        if (lossByDeptResult.status === 'fulfilled') {
-          setLossByDepartmentData(lossByDeptResult.value ?? []);
-        } else {
-          setLossByDepartmentData([]);
-        }
+        setLossBySkuData(
+          lossBySkuResult.status === 'fulfilled' ? (lossBySkuResult.value ?? []) : [],
+        );
+        setLossByDepartmentData(
+          lossByDeptResult.status === 'fulfilled' ? (lossByDeptResult.value ?? []) : [],
+        );
 
         if (lossBySkuResult.status === 'rejected' && lossByDeptResult.status === 'rejected') {
           const reason =
@@ -256,276 +326,437 @@ const ExpiredItemsPage: React.FC<ExpiredItemsPageProps> = ({ token }) => {
           setChartsError(null);
         }
       } finally {
-        setChartsLoading(false);
+        if (!controller.signal.aborted) {
+          setChartsLoading(false);
+        }
       }
     };
 
     fetchChartData();
+    return () => controller.abort();
   }, [token]);
 
-  // Prepare chart data for Loss by SKU
-  const lossBySkuChartData = {
-    labels: lossBySkuData?.map((item) => item.sku) || [],
-    datasets: [
-      {
-        label: 'Total Loss ($)',
-        data: lossBySkuData?.map((item) => item.totalLoss) || [],
-        backgroundColor: 'rgba(239, 68, 68, 0.5)', // Red for losses
-        borderColor: 'rgba(239, 68, 68, 1)',
-        borderWidth: 1,
-      },
-    ],
-  };
+  const lossBySkuChartData = useMemo(
+    () => ({
+      labels: lossBySkuData?.map((item) => item.sku) ?? [],
+      datasets: [
+        {
+          label: 'Total Loss ($)',
+          data: lossBySkuData?.map((item) => item.totalLoss) ?? [],
+          backgroundColor: 'rgba(239, 68, 68, 0.5)',
+          borderColor: 'rgba(239, 68, 68, 1)',
+          borderWidth: 1,
+        },
+      ],
+    }),
+    [lossBySkuData],
+  );
 
-  // Prepare chart data for Loss by Department
-  const lossByDepartmentChartData = {
-    labels: lossByDepartmentData?.map((item) => item.department) || [],
-    datasets: [
-      {
-        label: 'Total Loss ($)',
-        data: lossByDepartmentData?.map((item) => item.totalLoss) || [],
-        backgroundColor: 'rgba(59, 130, 246, 0.5)', // Blue
-        borderColor: 'rgba(59, 130, 246, 1)',
-        borderWidth: 1,
-      },
-    ],
-  };
+  const lossByDepartmentChartData = useMemo(
+    () => ({
+      labels: lossByDepartmentData?.map((item) => item.department) ?? [],
+      datasets: [
+        {
+          label: 'Total Loss ($)',
+          data: lossByDepartmentData?.map((item) => item.totalLoss) ?? [],
+          backgroundColor: 'rgba(59, 130, 246, 0.5)',
+          borderColor: 'rgba(59, 130, 246, 1)',
+          borderWidth: 1,
+        },
+      ],
+    }),
+    [lossByDepartmentData],
+  );
 
-  // FIXED: properly formed chart options with ticks callback and balanced braces
-  const chartOptions: ChartOptions<'bar'> = {
-    responsive: true,
-    plugins: {
-      title: {
-        display: true,
+  const chartOptions = useMemo<ChartOptions<'bar'>>(
+    () => ({
+      responsive: true,
+      plugins: {
+        title: { display: true },
+        legend: { display: false },
       },
-      legend: {
-        display: false,
-      },
-    },
-    scales: {
-      y: {
-        beginAtZero: true,
-        ticks: {
-          // format tick values as dollar amounts
-          callback: (value) => {
-            // Chart.js may pass objects for tick objects; coerce to number when possible
-            const num = typeof value === 'number' ? value : Number(value);
-            if (Number.isFinite(num)) {
-              return `$${num}`;
-            }
-            return `${value}`;
+      scales: {
+        y: {
+          beginAtZero: true,
+          ticks: {
+            callback: (value) => {
+              const num = typeof value === 'number' ? value : Number(value);
+              return Number.isFinite(num) ? `$${num}` : `${value}`;
+            },
           },
         },
       },
-    },
-  };
+    }),
+    [],
+  );
+
+  const skuChartOptions = useMemo<ChartOptions<'bar'>>(
+    () => ({
+      ...chartOptions,
+      plugins: {
+        ...chartOptions.plugins,
+        title: { display: true, text: 'Top SKUs by Total Loss Value' },
+      },
+    }),
+    [chartOptions],
+  );
+
+  const deptChartOptions = useMemo<ChartOptions<'bar'>>(
+    () => ({
+      ...chartOptions,
+      plugins: {
+        ...chartOptions.plugins,
+        title: { display: true, text: 'Losses by Department' },
+      },
+    }),
+    [chartOptions],
+  );
 
   if (loading) {
-    return <div className="text-center py-10">Loading expired items…</div>;
+    return (
+      <div
+        className="container mx-auto px-4 py-8"
+        role="status"
+        aria-live="polite"
+        aria-label="Loading expired items"
+      >
+        <div className="mb-6">
+          <div className="h-8 w-48 rounded-md bg-semantic-surface-3 animate-pulse" />
+          <div className="mt-2 h-4 w-80 rounded bg-semantic-surface-3 animate-pulse" />
+        </div>
+        <div className="rounded-md border overflow-hidden">
+          {SKELETON_ROWS.map((i) => (
+            <div key={i} className="flex gap-4 px-4 py-3 border-b last:border-0">
+              <div className="h-4 w-20 rounded bg-semantic-surface-3 animate-pulse" />
+              <div className="h-4 w-40 rounded bg-semantic-surface-3 animate-pulse" />
+              <div className="h-4 w-28 rounded bg-semantic-surface-3 animate-pulse" />
+              <div className="h-4 w-24 rounded bg-semantic-surface-3 animate-pulse ml-auto" />
+            </div>
+          ))}
+        </div>
+      </div>
+    );
   }
 
   if (error) {
-    return <div className="text-center py-10 text-semantic-critical">{error}</div>;
+    return (
+      <div className="container mx-auto px-4 py-8">
+        <div className="flex flex-col items-center gap-4 py-16 text-center">
+          <p className="text-semantic-critical font-medium">{error}</p>
+          <button
+            onClick={retryFetchItems}
+            className="rounded-md border border-semantic-primary px-4 py-2 text-sm font-medium text-semantic-primary hover:bg-semantic-primary/5 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-semantic-primary transition-colors"
+          >
+            Try again
+          </button>
+        </div>
+      </div>
+    );
   }
 
   return (
     <div className="container mx-auto px-4 py-8">
-      <h1 className="text-3xl font-semibold font-heading mb-6">Expired Items</h1>
+      <header className="mb-6">
+        <div className="flex items-center justify-between">
+          <h1 className="text-3xl font-semibold font-heading">Expired Items</h1>
+          <button
+            onClick={() => window.print()}
+            aria-label="Print this report"
+            className="hidden md:flex items-center gap-2 rounded-md border border-semantic-primary px-3 py-1.5 text-sm font-medium text-semantic-primary hover:bg-semantic-primary/5 transition-colors no-print"
+          >
+            <svg
+              xmlns="http://www.w3.org/2000/svg"
+              width="16"
+              height="16"
+              viewBox="0 0 24 24"
+              fill="none"
+              stroke="currentColor"
+              strokeWidth="2"
+              strokeLinecap="round"
+              strokeLinejoin="round"
+              aria-hidden="true"
+            >
+              <path d="M6 9V2h12v7" />
+              <path d="M6 18H4a2 2 0 0 1-2-2v-5a2 2 0 0 1 2-2h16a2 2 0 0 1 2 2v5a2 2 0 0 1-2 2h-2" />
+              <rect x="6" y="14" width="12" height="8" />
+            </svg>
+            Print Report
+          </button>
+        </div>
+        <p className="mt-2 text-sm text-semantic-text-secondary max-w-2xl">
+          Review and process stock that has reached its expiry date. Processed items are moved to
+          loss reports.
+        </p>
+      </header>
 
-      <Table>
-        <TableHeader>
-          <TableRow>
-            <TableHead className="text-left text-xs font-semibold font-eyebrow text-muted-foreground uppercase tracking-wider">
-              SKU
-            </TableHead>
-            <TableHead className="text-left text-xs font-semibold font-eyebrow text-muted-foreground uppercase tracking-wider">
-              Product Name
-            </TableHead>
-            <TableHead className="text-left text-xs font-semibold font-eyebrow text-muted-foreground uppercase tracking-wider">
-              Location
-            </TableHead>
-            <TableHead className="text-left text-xs font-semibold font-eyebrow text-muted-foreground uppercase tracking-wider">
-              Expiry Date
-            </TableHead>
-            <TableHead className="text-left text-xs font-semibold font-eyebrow text-muted-foreground uppercase tracking-wider">
-              Cost Price
-            </TableHead>
-            <TableHead className="text-left text-xs font-semibold font-eyebrow text-muted-foreground uppercase tracking-wider">
-              Quantity Available
-            </TableHead>
-            <TableHead className="text-left text-xs font-semibold font-eyebrow text-muted-foreground uppercase tracking-wider">
-              Status
-            </TableHead>
-            <TableHead className="text-left text-xs font-semibold font-eyebrow text-muted-foreground uppercase tracking-wider">
-              Actions
-            </TableHead>
-          </TableRow>
-        </TableHeader>
-        <TableBody>
-          {expiredItems.map((item) => (
-            <TableRow key={item.id} className="hover:bg-muted/50">
-              <TableCell className="whitespace-nowrap text-sm text-foreground">
-                {item.sku}
-              </TableCell>
-              <TableCell className="whitespace-nowrap text-sm font-medium text-foreground">
-                {item.productName}
-              </TableCell>
-              <TableCell className="whitespace-nowrap text-sm text-foreground">
-                {item.locationName}
-              </TableCell>
-              <TableCell className="whitespace-nowrap text-sm text-foreground">
-                {item.expiryDate}
-              </TableCell>
-              <TableCell className="whitespace-nowrap text-sm text-foreground">
-                ${item.costPrice.toFixed(2)}
-              </TableCell>
-              <TableCell className="whitespace-nowrap text-sm text-foreground">
-                {item.quantityAvailable}
-              </TableCell>
-              <TableCell className="whitespace-nowrap text-sm text-foreground">
-                {item.status}
-              </TableCell>
-              <TableCell className="whitespace-nowrap text-sm">
-                <div className="flex gap-2">
+      {expiredItems.length === 0 ? (
+        <div className="flex flex-col items-center gap-3 rounded-lg border border-dashed py-16 text-center">
+          <p className="text-semantic-text-secondary text-sm">No expired items found.</p>
+          <p className="text-semantic-text-tertiary text-xs max-w-xs">
+            Items that have reached their expiry date will appear here for processing.
+          </p>
+        </div>
+      ) : (
+        <>
+          {/* Mobile row summary */}
+          <ul className="mb-5 space-y-3 lg:hidden" aria-label="Expired items">
+            {expiredItems.slice(0, 50).map((item) => (
+              <li key={item.id} className="rounded-lg border bg-semantic-surface-1 p-4">
+                <div className="flex items-start justify-between gap-3">
+                  <div className="min-w-0">
+                    <p className="break-words font-medium">{item.productName}</p>
+                    <p className="mt-1 text-sm text-semantic-text-secondary">
+                      <span className="font-mono">{item.sku}</span> · {item.locationName}
+                    </p>
+                  </div>
+                  <span className="shrink-0 rounded-md bg-semantic-critical-muted px-2 py-1 text-xs font-medium text-semantic-critical">
+                    {item.status}
+                  </span>
+                </div>
+                <dl className="mt-3 grid grid-cols-2 gap-3 text-sm">
+                  <div>
+                    <dt className="text-semantic-text-secondary">Expiry</dt>
+                    <dd className="font-medium tabular-nums">{formatExpiry(item.expiryDate)}</dd>
+                  </div>
+                  <div>
+                    <dt className="text-semantic-text-secondary">Available</dt>
+                    <dd className="font-medium tabular-nums">{item.quantityAvailable}</dd>
+                  </div>
+                </dl>
+                <div className="mt-4 flex gap-2">
                   <Button
                     onClick={() => handleAction(item, 'sold_through')}
                     variant="outline"
                     size="sm"
+                    className="flex-1"
+                    disabled={isProcessing}
                   >
-                    Mark as Sold Through
+                    Sold Through
                   </Button>
                   <Button
                     onClick={() => handleAction(item, 'expired')}
                     variant="outline"
                     size="sm"
-                    className="text-destructive border-destructive hover:bg-destructive/10"
+                    className="flex-1 text-semantic-critical border-semantic-critical hover:bg-semantic-critical/10"
+                    disabled={isProcessing}
                   >
-                    Mark as Expired
+                    Expired
                   </Button>
                 </div>
-              </TableCell>
-            </TableRow>
-          ))}
-        </TableBody>
-      </Table>
+              </li>
+            ))}
+          </ul>
 
-      {expiredItems.length === 0 && (
-        <div className="text-center py-10 text-muted-foreground">No expired items found.</div>
+          <div className="hidden lg:block overflow-x-auto rounded-md border">
+            <Table>
+              <TableHeader>
+                <TableRow className="bg-semantic-surface-2 hover:bg-semantic-surface-2">
+                  <TableHead className="text-left text-xs font-semibold font-eyebrow text-semantic-text-secondary uppercase tracking-wider">
+                    SKU
+                  </TableHead>
+                  <TableHead className="text-left text-xs font-semibold font-eyebrow text-semantic-text-secondary uppercase tracking-wider">
+                    Product Name
+                  </TableHead>
+                  <TableHead className="text-left text-xs font-semibold font-eyebrow text-semantic-text-secondary uppercase tracking-wider">
+                    Location
+                  </TableHead>
+                  <TableHead className="text-left text-xs font-semibold font-eyebrow text-semantic-text-secondary uppercase tracking-wider">
+                    Expiry Date
+                  </TableHead>
+                  <TableHead className="text-left text-xs font-semibold font-eyebrow text-semantic-text-secondary uppercase tracking-wider">
+                    Cost Price
+                  </TableHead>
+                  <TableHead className="text-left text-xs font-semibold font-eyebrow text-semantic-text-secondary uppercase tracking-wider">
+                    Qty
+                  </TableHead>
+                  <TableHead className="text-left text-xs font-semibold font-eyebrow text-semantic-text-secondary uppercase tracking-wider">
+                    Status
+                  </TableHead>
+                  <TableHead className="text-left text-xs font-semibold font-eyebrow text-semantic-text-secondary uppercase tracking-wider">
+                    Actions
+                  </TableHead>
+                </TableRow>
+              </TableHeader>
+              <TableBody>
+                {expiredItems.map((item) => (
+                  <TableRow
+                    key={item.id}
+                    className="hover:bg-semantic-surface-2/50 transition-colors"
+                  >
+                    <TableCell className="whitespace-nowrap text-sm text-semantic-text-primary">
+                      {item.sku}
+                    </TableCell>
+                    <TableCell className="whitespace-nowrap text-sm font-medium text-semantic-text-primary">
+                      {item.productName}
+                    </TableCell>
+                    <TableCell className="whitespace-nowrap text-sm text-semantic-text-secondary">
+                      {item.locationName}
+                    </TableCell>
+                    <TableCell className="whitespace-nowrap text-sm tabular-nums text-semantic-text-primary">
+                      {formatExpiry(item.expiryDate)}
+                    </TableCell>
+                    <TableCell className="whitespace-nowrap text-sm text-semantic-text-primary">
+                      {currencyFormatter.format(item.costPrice)}
+                    </TableCell>
+                    <TableCell className="whitespace-nowrap text-sm text-semantic-text-primary">
+                      {item.quantityAvailable}
+                    </TableCell>
+                    <TableCell className="whitespace-nowrap text-sm font-medium text-semantic-critical">
+                      {item.status}
+                    </TableCell>
+                    <TableCell className="whitespace-nowrap text-sm">
+                      <div className="flex gap-2">
+                        <Button
+                          onClick={() => handleAction(item, 'sold_through')}
+                          variant="outline"
+                          size="sm"
+                          disabled={isProcessing}
+                        >
+                          Sold Through
+                        </Button>
+                        <Button
+                          onClick={() => handleAction(item, 'expired')}
+                          variant="outline"
+                          size="sm"
+                          className="text-semantic-critical border-semantic-critical hover:bg-semantic-critical/10"
+                          disabled={isProcessing}
+                        >
+                          Expired
+                        </Button>
+                      </div>
+                    </TableCell>
+                  </TableRow>
+                ))}
+              </TableBody>
+            </Table>
+          </div>
+        </>
       )}
 
       {/* Chart Section */}
       {chartsError && (
-        <div className="mt-6 p-3 rounded-md bg-destructive/10 text-destructive text-sm">
+        <div
+          className="mt-6 p-3 rounded-md bg-destructive/10 text-destructive text-sm"
+          role="alert"
+        >
           {chartsError}
         </div>
       )}
       <div className="grid grid-cols-1 md:grid-cols-2 gap-6 mb-6 mt-8">
         <Card>
           <CardHeader>
-            <CardTitle className="text-center">Worst Loss by SKU</CardTitle>
+            <CardTitle>Worst Loss by SKU</CardTitle>
           </CardHeader>
           <CardContent>
-            {chartsLoading ? (
-              <div className="text-center py-8">Loading chart data…</div>
-            ) : lossBySkuData && lossBySkuData.length > 0 ? (
-              <Bar
-                data={lossBySkuChartData}
-                options={{
-                  ...chartOptions,
-                  plugins: {
-                    ...chartOptions.plugins,
-                    title: {
-                      display: true,
-                      text: 'Top SKUs by Total Loss Value',
-                    },
-                  },
-                }}
-              />
-            ) : (
-              <div className="text-center py-4 text-semantic-text-tertiary">
-                No loss data available
-              </div>
-            )}
+            <div className="min-h-[12rem]">
+              {chartsLoading ? (
+                <div className="space-y-2 py-2" role="status" aria-label="Loading chart">
+                  <div className="h-4 w-3/4 rounded bg-semantic-surface-3 animate-pulse" />
+                  <div className="h-32 w-full rounded bg-semantic-surface-3 animate-pulse" />
+                  <div className="h-4 w-1/2 rounded bg-semantic-surface-3 animate-pulse" />
+                </div>
+              ) : lossBySkuData && lossBySkuData.length > 0 ? (
+                <Suspense
+                  fallback={
+                    <div className="h-48 w-full rounded bg-semantic-surface-3 animate-pulse" />
+                  }
+                >
+                  <Bar data={lossBySkuChartData} options={skuChartOptions} />
+                </Suspense>
+              ) : (
+                <div className="py-8 text-center text-sm text-semantic-text-tertiary">
+                  No loss data available
+                </div>
+              )}
+            </div>
           </CardContent>
         </Card>
 
         <Card>
           <CardHeader>
-            <CardTitle className="text-center">Worst Loss by Department</CardTitle>
+            <CardTitle>Worst Loss by Department</CardTitle>
           </CardHeader>
           <CardContent>
-            {chartsLoading ? (
-              <div className="text-center py-8">Loading chart data…</div>
-            ) : lossByDepartmentData && lossByDepartmentData.length > 0 ? (
-              <Bar
-                data={lossByDepartmentChartData}
-                options={{
-                  ...chartOptions,
-                  plugins: {
-                    ...chartOptions.plugins,
-                    title: {
-                      display: true,
-                      text: 'Losses by Department',
-                    },
-                  },
-                }}
-              />
-            ) : (
-              <div className="text-center py-4 text-semantic-text-tertiary">
-                No department loss data available
-              </div>
-            )}
+            <div className="min-h-[12rem]">
+              {chartsLoading ? (
+                <div className="space-y-2 py-2" role="status" aria-label="Loading chart">
+                  <div className="h-4 w-3/4 rounded bg-semantic-surface-3 animate-pulse" />
+                  <div className="h-32 w-full rounded bg-semantic-surface-3 animate-pulse" />
+                  <div className="h-4 w-1/2 rounded bg-semantic-surface-3 animate-pulse" />
+                </div>
+              ) : lossByDepartmentData && lossByDepartmentData.length > 0 ? (
+                <Suspense
+                  fallback={
+                    <div className="h-48 w-full rounded bg-semantic-surface-3 animate-pulse" />
+                  }
+                >
+                  <Bar data={lossByDepartmentChartData} options={deptChartOptions} />
+                </Suspense>
+              ) : (
+                <div className="py-8 text-center text-sm text-semantic-text-tertiary">
+                  No department loss data available
+                </div>
+              )}
+            </div>
           </CardContent>
         </Card>
       </div>
 
       {/* Process Expired Item Dialog */}
       {isModalOpen && selectedItem && action && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center">
+        <div
+          className="fixed inset-0 z-50 flex items-center justify-center"
+          role="dialog"
+          aria-modal="true"
+          aria-labelledby="process-dialog-title"
+        >
           <button
             type="button"
-            aria-label="Close process expired item dialog"
+            aria-label="Close dialog"
             className="fixed inset-0 bg-semantic-canvas/50 backdrop-blur-sm"
-            onClick={() => {
-              setIsModalOpen(false);
-              setSelectedItem(null);
-              setAction(null);
-            }}
+            onClick={closeModal}
           />
           <div className="relative z-10 bg-background rounded-lg shadow-lg w-11/12 max-w-md p-6">
             <div className="flex justify-between items-center mb-4">
-              <h3 className="text-lg font-semibold font-heading text-foreground">
+              <h3
+                id="process-dialog-title"
+                className="text-lg font-semibold font-heading text-foreground"
+              >
                 Process Expired Item
               </h3>
               <button
-                onClick={() => {
-                  setIsModalOpen(false);
-                  setSelectedItem(null);
-                  setAction(null);
-                }}
-                className="text-muted-foreground hover:text-foreground"
+                onClick={closeModal}
+                aria-label="Close dialog"
+                className="rounded text-muted-foreground hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
               >
-                <span className="text-2xl">&times;</span>
+                <span className="text-2xl" aria-hidden="true">
+                  &times;
+                </span>
               </button>
             </div>
 
-            <div className="mb-4 space-y-2">
-              <p className="text-sm">
-                <span className="font-semibold text-foreground">Product:</span>{' '}
-                {selectedItem.productName}
-              </p>
-              <p className="text-sm">
-                <span className="font-semibold text-foreground">SKU:</span> {selectedItem.sku}
-              </p>
-              <p className="text-sm">
-                <span className="font-semibold text-foreground">Location:</span>{' '}
-                {selectedItem.locationName}
-              </p>
-              <p className="text-sm">
-                <span className="font-semibold text-foreground">Expiry Date:</span>{' '}
-                {selectedItem.expiryDate}
-              </p>
-            </div>
+            <dl className="mb-4 grid grid-cols-2 gap-x-4 gap-y-2 text-sm">
+              <div className="col-span-2">
+                <dt className="text-muted-foreground">Product</dt>
+                <dd className="font-medium break-words">{selectedItem.productName}</dd>
+              </div>
+              <div>
+                <dt className="text-muted-foreground">SKU</dt>
+                <dd className="font-mono">{selectedItem.sku}</dd>
+              </div>
+              <div>
+                <dt className="text-muted-foreground">Location</dt>
+                <dd>{selectedItem.locationName}</dd>
+              </div>
+              <div>
+                <dt className="text-muted-foreground">Expiry Date</dt>
+                <dd className="tabular-nums">{formatExpiry(selectedItem.expiryDate)}</dd>
+              </div>
+              <div>
+                <dt className="text-muted-foreground">Cost Price</dt>
+                <dd className="tabular-nums">{currencyFormatter.format(selectedItem.costPrice)}</dd>
+              </div>
+            </dl>
 
             {action === 'expired' && (
               <div className="mb-4">
@@ -541,37 +772,40 @@ const ExpiredItemsPage: React.FC<ExpiredItemsPageProps> = ({ token }) => {
                   min="1"
                   max={selectedItem.quantityAvailable}
                   value={unitsDiscarded}
-                  onChange={(e) => setUnitsDiscarded(parseInt(e.target.value) || 1)}
+                  onChange={handleUnitsDiscardedChange}
+                  aria-describedby="units-hint units-error"
+                  aria-invalid={!!unitsDiscardedError}
                   className="w-full px-3 py-2 border border-input rounded-md focus:outline-none focus:ring-2 focus:ring-ring focus:border-transparent"
                 />
-                <p className="mt-1 text-xs text-muted-foreground">
+                <p id="units-hint" className="mt-1 text-xs text-muted-foreground">
                   Maximum available: {selectedItem.quantityAvailable}
                 </p>
+                {unitsDiscardedError && (
+                  <p id="units-error" className="mt-1 text-xs text-semantic-critical" role="alert">
+                    {unitsDiscardedError}
+                  </p>
+                )}
               </div>
             )}
 
             {processError && (
-              <div className="mb-4 p-3 bg-destructive/10 text-destructive rounded-md">
+              <div className="mb-4 p-3 bg-semantic-critical-muted text-semantic-critical rounded-md border border-semantic-critical/20">
                 {processError}
               </div>
             )}
 
             <div className="mt-6 flex justify-end gap-2">
-              <Button
-                variant="outline"
-                onClick={() => {
-                  setIsModalOpen(false);
-                  setSelectedItem(null);
-                  setAction(null);
-                }}
-              >
+              <Button variant="outline" onClick={closeModal} disabled={isProcessing}>
                 Cancel
               </Button>
               <Button
                 onClick={handleProcessItem}
-                className={action === 'expired' ? 'bg-destructive hover:bg-destructive/90' : ''}
+                disabled={isProcessing || !!unitsDiscardedError}
+                className={
+                  action === 'expired' ? 'bg-semantic-critical hover:bg-semantic-critical/90' : ''
+                }
               >
-                Confirm {action === 'expired' ? 'Expired' : 'Sold Through'}
+                {action === 'expired' ? 'Mark Expired' : 'Mark Sold Through'}
               </Button>
             </div>
 
@@ -593,7 +827,9 @@ const ExpiredItemsPage: React.FC<ExpiredItemsPageProps> = ({ token }) => {
                   >
                     Cancel
                   </AlertDialogCancel>
-                  <AlertDialogAction onClick={confirmProcessItem}>Continue</AlertDialogAction>
+                  <AlertDialogAction onClick={confirmProcessItem} disabled={isProcessing}>
+                    {isProcessing ? 'Processing…' : 'Confirm'}
+                  </AlertDialogAction>
                 </AlertDialogFooter>
               </AlertDialogContent>
             </AlertDialog>

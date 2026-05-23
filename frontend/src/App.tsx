@@ -39,6 +39,7 @@ import { API_AUTH_UNAUTHORIZED_EVENT, API_BASE_URL } from './lib/api.service';
 import './globals.css';
 import './styles/handheld.css';
 import './theme/scanner-adaptation.css';
+import './theme/print-reports.css';
 
 const DashboardPage = React.lazy(() =>
   import('./pages/DashboardPage').then((module) => ({ default: module.DashboardPage })),

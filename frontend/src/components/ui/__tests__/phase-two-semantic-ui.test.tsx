@@ -1,4 +1,4 @@
-import { render, screen } from '@testing-library/react';
+import { act, render, screen } from '@testing-library/react';
 
 import { Button, buttonVariants } from '../button';
 import { Badge, badgeVariants } from '../badge';
@@ -8,6 +8,9 @@ import { TableFooter, TableRow } from '../table';
 import Toast from '../toast';
 
 describe('phase 2 semantic UI primitives', () => {
+  beforeEach(() => {
+    jest.useRealTimers();
+  });
   it('uses semantic intent tokens for button variants', () => {
     expect(buttonVariants({ variant: 'default' })).toContain('bg-semantic-primary');
     expect(buttonVariants({ variant: 'secondary' })).toContain('bg-semantic-secondary');
@@ -54,6 +57,33 @@ describe('phase 2 semantic UI primitives', () => {
     render(<Toast message={`${type} toast`} type={type} isVisible onClose={() => undefined} />);
 
     expect(screen.getByText(`${type} toast`).parentElement).toHaveClass(className);
+  });
+
+  it('resets the auto-hide timer when visible toast content changes', () => {
+    jest.useFakeTimers();
+    const onClose = jest.fn();
+    const { rerender } = render(
+      <Toast message="First toast" type="success" isVisible onClose={onClose} />,
+    );
+
+    act(() => {
+      jest.advanceTimersByTime(2000);
+    });
+
+    rerender(<Toast message="Second toast" type="error" isVisible onClose={onClose} />);
+
+    act(() => {
+      jest.advanceTimersByTime(1000);
+    });
+
+    expect(onClose).not.toHaveBeenCalled();
+    expect(screen.getByText('Second toast')).toBeInTheDocument();
+
+    act(() => {
+      jest.advanceTimersByTime(2000);
+    });
+
+    expect(onClose).toHaveBeenCalledTimes(1);
   });
 
   it('keeps shared button rendering available after token migration', () => {
