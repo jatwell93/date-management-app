@@ -17,12 +17,13 @@ const Toast: React.FC<ToastProps> = ({ message, type, isVisible, onClose }) => {
       setShow(true);
       const timer = setTimeout(() => {
         setShow(false);
+        onClose();
       }, 3000); // Auto-hide after 3 seconds
       return () => clearTimeout(timer);
     } else {
       setShow(false);
     }
-  }, [isVisible]);
+  }, [isVisible, onClose]);
 
   const getToastStyle = () => {
     switch (type) {
@@ -57,9 +58,8 @@ const Toast: React.FC<ToastProps> = ({ message, type, isVisible, onClose }) => {
   return (
     <div className="fixed bottom-4 right-4 z-50">
       <div
-        className={`transform transition-transform duration-300 ease-in-out ${
-          show ? 'translate-y-0 opacity-100' : 'translate-y-full opacity-0'
-        }`}
+        className={`transform transition-transform duration-300 ease-in-out ${show ? 'translate-y-0 opacity-100' : 'translate-y-full opacity-0'
+          }`}
       >
         <div
           className={`${getToastStyle()} ${getToastTextStyle()} px-4 py-3 rounded-md shadow-lg flex items-center`}

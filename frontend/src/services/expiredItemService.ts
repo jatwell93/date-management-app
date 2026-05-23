@@ -5,7 +5,10 @@ import { ExpiredItem, ProcessExpiredItemRequest, ExpiredItemTransaction } from '
 import { buildApiUrl } from '../lib/api.service';
 
 // Get all expired items
-export const getExpiredItems = async (token: string | null): Promise<ExpiredItem[]> => {
+export const getExpiredItems = async (
+  token: string | null,
+  signal?: AbortSignal,
+): Promise<ExpiredItem[]> => {
   try {
     if (!token) {
       throw new Error('Authentication token not found');
@@ -17,6 +20,7 @@ export const getExpiredItems = async (token: string | null): Promise<ExpiredItem
         'Content-Type': 'application/json',
         Authorization: `Bearer ${token}`,
       },
+      signal,
     });
 
     if (!response.ok) {
@@ -44,6 +48,7 @@ export const getExpiredItems = async (token: string | null): Promise<ExpiredItem
 export const processExpiredItem = async (
   request: ProcessExpiredItemRequest,
   token: string | null,
+  signal?: AbortSignal,
 ): Promise<ExpiredItemTransaction> => {
   try {
     if (!token) {
@@ -57,6 +62,7 @@ export const processExpiredItem = async (
         Authorization: `Bearer ${token}`,
       },
       body: JSON.stringify(request),
+      signal,
     });
 
     if (!response.ok) {
@@ -83,6 +89,7 @@ export const processExpiredItem = async (
 // Get expired losses report
 export const getExpiredLossesReport = async (
   token: string | null,
+  signal?: AbortSignal,
 ): Promise<{
   lossesBySKU: Array<{ sku: string; productName: string; totalLoss: number }>;
   lossesByStoreArea: Array<{ locationName: string; totalLoss: number }>;
@@ -98,6 +105,7 @@ export const getExpiredLossesReport = async (
         'Content-Type': 'application/json',
         Authorization: `Bearer ${token}`,
       },
+      signal,
     });
 
     if (!response.ok) {
