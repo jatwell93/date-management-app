@@ -25,7 +25,7 @@
     "@types/node": "^16.18.126",
     "@types/react": "^19.2.15",
     "@types/react-dom": "^19.2.3",
-    "@types/uuid": "^10.0.0",
+    "@types/uuid": "^11.0.0",
     "chart.js": "^4.5.1",
     "class-variance-authority": "^0.7.1",
     "jwt-decode": "^4.0.0",
