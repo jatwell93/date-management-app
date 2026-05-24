@@ -47,6 +47,7 @@ export function MarkdownCalculator({ token }: MarkdownCalculatorProps) {
     const input = result.barcode;
     setScannedInput(input);
     setProductDetails(null);
+    setMarkdownResult(null);
     setError(null);
     setValidationError(null);
 
