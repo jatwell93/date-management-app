@@ -121,7 +121,7 @@ export function MarkdownCalculator({ token }: MarkdownCalculatorProps) {
     const diffDays = Math.ceil(diffTime / (1000 * 60 * 60 * 24));
 
     let status = 'Normal';
-    let value = 0;
+    let value = parsedCostPrice;
 
     if (diffDays <= 0) {
       status = 'Expired';
