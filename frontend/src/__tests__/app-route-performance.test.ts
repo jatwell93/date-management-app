@@ -21,4 +21,13 @@ describe('App route performance boundaries', () => {
       expect(appSource).toContain(`import('${modulePath}')`);
     });
   });
+
+  it('keeps the markdown calculator route behind the app shell lazy boundary', () => {
+    const appSource = fs.readFileSync(path.join(__dirname, '..', 'App.tsx'), 'utf8');
+
+    expect(appSource).toMatch(
+      /const MarkdownCalculator = React\.lazy\(\(\) =>\s*import\('\.\/components\/MarkdownCalculator'\)/,
+    );
+    expect(appSource).toContain('path="/markdown-calculator"');
+  });
 });

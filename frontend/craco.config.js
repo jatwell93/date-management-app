@@ -15,6 +15,16 @@ module.exports = {
       return webpackConfig;
     },
   },
+  devServer: (devServerConfig) => ({
+    ...devServerConfig,
+    historyApiFallback: {
+      ...(typeof devServerConfig.historyApiFallback === 'object'
+        ? devServerConfig.historyApiFallback
+        : {}),
+      disableDotRule: true,
+      index: '/index.html',
+    },
+  }),
   jest: {
     configure: {
       transformIgnorePatterns: ['node_modules/(?!uuid|react-router|react-router-dom)'],
