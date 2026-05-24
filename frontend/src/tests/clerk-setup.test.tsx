@@ -13,6 +13,8 @@ const mockSentrySetUser = jest.fn();
 jest.mock('@sentry/react', () => ({
   captureException: (...args: unknown[]) => mockSentryCaptureException(...args),
   setUser: (...args: unknown[]) => mockSentrySetUser(...args),
+  reactErrorHandler: () => jest.fn(),
+  ErrorBoundary: ({ children }: { children: React.ReactNode }) => <>{children}</>,
 }));
 
 jest.mock('@clerk/clerk-react', () => ({
@@ -137,5 +139,49 @@ describe('Clerk auth pages', () => {
 
     expect(screen.getByTestId('clerk-auth-shell')).toHaveClass('overflow-x-hidden', 'px-4');
     expect(screen.getByTestId('clerk-auth-card')).toHaveClass('max-w-full');
+  });
+});
+
+describe('Frontend startup configuration guidance', () => {
+  const originalClerkKey = process.env.REACT_APP_CLERK_PUBLISHABLE_KEY;
+
+  afterEach(() => {
+    process.env.REACT_APP_CLERK_PUBLISHABLE_KEY = originalClerkKey;
+    jest.dontMock('react-dom/client');
+    jest.dontMock('../serviceWorkerRegistration');
+    jest.dontMock('../reportWebVitals');
+    jest.dontMock('../App');
+  });
+
+  it('renders recoverable guidance instead of throwing when the Clerk key is missing', () => {
+    const renderSpy = jest.fn();
+    delete process.env.REACT_APP_CLERK_PUBLISHABLE_KEY;
+    document.body.innerHTML = '<div id="root"></div>';
+
+    jest.isolateModules(() => {
+      jest.doMock('react-dom/client', () => ({
+        createRoot: () => ({
+          render: renderSpy,
+        }),
+      }));
+      jest.doMock('../serviceWorkerRegistration', () => ({ register: jest.fn() }));
+      jest.doMock('../reportWebVitals', () => jest.fn());
+      jest.doMock('../App', () => {
+        function MockApp() {
+          return <div>App shell</div>;
+        }
+
+        return MockApp;
+      });
+
+      expect(() => require('../index')).not.toThrow();
+    });
+
+    render(renderSpy.mock.calls[0][0]);
+
+    expect(screen.getByRole('alert')).toHaveTextContent(
+      /Add REACT_APP_CLERK_PUBLISHABLE_KEY to start the app/i,
+    );
+    expect(screen.getByText(/Clerk dashboard API keys/i)).toBeInTheDocument();
   });
 });
