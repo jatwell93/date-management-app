@@ -64,14 +64,164 @@ describe('CSVUploadPage expiry import', () => {
     render(<CSVUploadPage token="test-token" />);
 
     expect(screen.getByText('Product Catalog Upload (CSV/XLSX/XLS)')).toBeInTheDocument();
+    expect(screen.getByRole('tab', { name: 'Product Catalog' })).toHaveAttribute(
+      'aria-selected',
+      'true',
+    );
+    expect(screen.getByRole('tab', { name: 'Expiry List Import' })).toHaveAttribute(
+      'aria-selected',
+      'false',
+    );
 
-    userEvent.click(screen.getByRole('button', { name: 'Expiry List Import' }));
+    userEvent.click(screen.getByRole('tab', { name: 'Expiry List Import' }));
 
     expect(screen.getByText('Expiry List Import (CSV/XLSX/XLS)')).toBeInTheDocument();
+    expect(screen.getByRole('tab', { name: 'Expiry List Import' })).toHaveAttribute(
+      'aria-selected',
+      'true',
+    );
     expect(screen.getByText('Download Import Templates')).toBeInTheDocument();
     expect(screen.getByRole('button', { name: 'Download CSV Template' })).toBeInTheDocument();
     expect(screen.getByRole('button', { name: 'Download XLSX Template' })).toBeInTheDocument();
     expect(screen.getByRole('button', { name: 'Download XLS Template' })).toBeInTheDocument();
+  });
+
+  it('announces column validation failures as alerts', async () => {
+    (validateCSVColumns as jest.Mock).mockResolvedValue({
+      isValid: false,
+      missingColumns: ['usedByDate'],
+      importType: 'expiry-list',
+      foundColumns: {
+        sku: 'SKU',
+      },
+      suggestions: {},
+    });
+
+    render(<CSVUploadPage token="test-token" defaultImportType="expiry-list" />);
+
+    const fileInput = screen.getByLabelText('CSV/XLSX/XLS File') as HTMLInputElement;
+    const file = new File(['SKU,Item Description\nSKU-1,Milk'], 'expiry.csv', {
+      type: 'text/csv',
+    });
+
+    fireEvent.change(fileInput, { target: { files: [file] } });
+
+    expect(await screen.findByRole('alert')).toHaveTextContent('Column validation warning');
+  });
+
+  it('exposes in-flight upload progress to assistive technology', async () => {
+    fetchMock
+      .mockResponseOnce(
+        JSON.stringify({
+          strategy: 'direct',
+          uploadUrl: '/api/upload/direct',
+          method: 'POST',
+          key: 'uploads/org-123/products.csv',
+        }),
+      )
+      .mockImplementationOnce(() => new Promise(() => {}));
+
+    render(<CSVUploadPage token="test-token" />);
+
+    const fileInput = screen.getByLabelText('CSV/XLSX/XLS File') as HTMLInputElement;
+    const file = new File(['SKU,Name,Barcode,Cost\nSKU-1,Milk,123,12.99'], 'products.csv', {
+      type: 'text/csv',
+    });
+
+    fireEvent.change(fileInput, { target: { files: [file] } });
+    userEvent.click(screen.getByRole('button', { name: 'Upload CSV/XLSX/XLS' }));
+
+    const progressbar = await screen.findByRole('progressbar', { name: 'Upload progress' });
+
+    expect(progressbar).toHaveAttribute('aria-valuemin', '0');
+    expect(progressbar).toHaveAttribute('aria-valuemax', '100');
+    expect(progressbar).toHaveAttribute('aria-valuenow', '0');
+    expect(screen.getByRole('status', { name: 'Upload status' })).toHaveTextContent('Uploading');
+  });
+
+  it('uses touch-first responsive controls for handheld uploads', () => {
+    render(<CSVUploadPage token="test-token" defaultImportType="expiry-list" />);
+
+    const activePanel = screen.getByRole('tabpanel', { name: 'Expiry List Import' });
+
+    expect(screen.getByRole('region', { name: 'CSV upload workspace' })).toHaveAttribute(
+      'data-slot',
+      'card',
+    );
+    expect(activePanel).toContainElement(
+      screen.getByRole('button', { name: 'Download CSV Template' }),
+    );
+    expect(activePanel).toContainElement(
+      screen.getByRole('button', { name: 'Upload Expiry List' }),
+    );
+    expect(screen.getByLabelText('CSV/XLSX/XLS File')).toHaveAttribute('data-slot', 'input');
+    expect(screen.getByRole('tablist', { name: 'CSV import type' })).toHaveClass(
+      'overflow-x-auto',
+      'flex-nowrap',
+    );
+    expect(screen.getByRole('tab', { name: 'Product Catalog' })).toHaveClass(
+      'min-h-11',
+      'shrink-0',
+    );
+    expect(screen.getByRole('button', { name: 'Download CSV Template' })).toHaveClass(
+      'min-h-11',
+      'w-full',
+      'sm:w-auto',
+    );
+    expect(screen.getByRole('button', { name: 'Upload Expiry List' })).toHaveClass(
+      'min-h-11',
+      'w-full',
+      'sm:w-auto',
+    );
+    expect(screen.getByRole('button', { name: 'Reset' })).toHaveClass(
+      'min-h-11',
+      'w-full',
+      'sm:w-auto',
+    );
+  });
+
+  it('uses operator-facing progress copy for remote uploads', async () => {
+    fetchMock
+      .mockResponseOnce(
+        JSON.stringify({
+          strategy: 'presigned',
+          uploadUrl: 'https://upload.test/presigned',
+          method: 'PUT',
+          key: 'uploads/org-123/products.csv',
+        }),
+      )
+      .mockImplementationOnce(() => new Promise(() => {}));
+
+    render(<CSVUploadPage token="test-token" />);
+
+    const fileInput = screen.getByLabelText('CSV/XLSX/XLS File') as HTMLInputElement;
+    const file = new File(['SKU,Name,Barcode,Cost\nSKU-1,Milk,123,12.99'], 'products.csv', {
+      type: 'text/csv',
+    });
+
+    fireEvent.change(fileInput, { target: { files: [file] } });
+    userEvent.click(screen.getByRole('button', { name: 'Upload CSV/XLSX/XLS' }));
+
+    expect(await screen.findByRole('status', { name: 'Upload status' })).toHaveTextContent(
+      'Uploading file',
+    );
+  });
+
+  it('keeps uploaded file previews horizontally scrollable on narrow screens', async () => {
+    render(<CSVUploadPage token="test-token" />);
+
+    const fileInput = screen.getByLabelText('CSV/XLSX/XLS File') as HTMLInputElement;
+    const file = new File(['SKU,Name,Barcode,Cost\nSKU-1,Milk,123,12.99'], 'products.csv', {
+      type: 'text/csv',
+    });
+
+    fireEvent.change(fileInput, { target: { files: [file] } });
+
+    const previewRegion = await screen.findByRole('region', { name: 'File preview' });
+    const previewTable = screen.getByRole('table');
+
+    expect(previewRegion).toHaveClass('overflow-x-auto');
+    expect(previewTable).toHaveClass('min-w-max');
   });
 
   it('makes product catalog CSV/XLS/XLSX upload requirements clear', () => {
@@ -131,7 +281,7 @@ describe('CSVUploadPage expiry import', () => {
 
     userEvent.click(screen.getByRole('button', { name: 'Upload Expiry List' }));
 
-    expect(await screen.findByText('Upload Successful!')).toBeInTheDocument();
+    expect(await screen.findByText('Upload successful')).toBeInTheDocument();
     expect(screen.getAllByText('Rows imported: 1').length).toBeGreaterThan(0);
     expect(screen.getByText('Rows merged: 1')).toBeInTheDocument();
     expect(screen.getAllByText('Rows rejected: 1').length).toBeGreaterThan(0);
@@ -176,7 +326,7 @@ describe('CSVUploadPage expiry import', () => {
 
     userEvent.click(screen.getByRole('button', { name: 'Upload CSV/XLSX/XLS' }));
 
-    expect(await screen.findByText('Upload Failed')).toBeInTheDocument();
+    expect(await screen.findByText('Upload failed')).toBeInTheDocument();
     expect(await screen.findByText('Processing failed: Access denied')).toBeInTheDocument();
 
     await waitFor(() => {
