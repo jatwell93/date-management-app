@@ -53,6 +53,11 @@ const storeAreaDateFormatter = new Intl.DateTimeFormat('en-AU', {
   timeStyle: 'short',
 });
 
+const AREA_NAME_MAX_LENGTH = 100;
+const SUB_DEPARTMENT_MAX_LENGTH = 50;
+
+type InvalidField = 'addAreaName' | 'editAreaName' | null;
+
 function normalizeStoreArea(area: StoreAreaApiResponse): StoreArea {
   return {
     id: area.id,
@@ -88,6 +93,7 @@ export function StoreAreaManagementPage({ token }: StoreAreaManagementPageProps)
   const [editedAreaName, setEditedAreaName] = useState<string>('');
   const [editedSubDepartmentName, setEditedSubDepartmentName] = useState<string>('');
   const [error, setError] = useState<string | null>(null);
+  const [invalidField, setInvalidField] = useState<InvalidField>(null);
   const [successMessage, setSuccessMessage] = useState<string | null>(null);
   const [isLoadingAreas, setIsLoadingAreas] = useState<boolean>(false);
   const [isAddingArea, setIsAddingArea] = useState<boolean>(false);
@@ -133,6 +139,7 @@ export function StoreAreaManagementPage({ token }: StoreAreaManagementPageProps)
 
     if (!token || !newAreaName.trim()) {
       setError('Store area name cannot be empty.');
+      setInvalidField('addAreaName');
       setSuccessMessage(null);
       return;
     }
@@ -149,10 +156,12 @@ export function StoreAreaManagementPage({ token }: StoreAreaManagementPageProps)
       );
       setSuccessMessage(`${newAreaName.trim()} added.`);
       setError(null);
+      setInvalidField(null);
       setNewAreaName('');
       setNewSubDepartmentName('');
       fetchStoreAreas();
     } catch (err: unknown) {
+      setInvalidField(null);
       if (err instanceof Error) {
         setError(err.message);
       } else {
@@ -169,6 +178,7 @@ export function StoreAreaManagementPage({ token }: StoreAreaManagementPageProps)
     newSubDepartmentName,
     fetchStoreAreas,
     setError,
+    setInvalidField,
     setSuccessMessage,
     setNewAreaName,
     setNewSubDepartmentName,
@@ -180,6 +190,7 @@ export function StoreAreaManagementPage({ token }: StoreAreaManagementPageProps)
 
     if (!token || !editingArea || !editedAreaName.trim()) {
       setError('Store area name cannot be empty.');
+      setInvalidField('editAreaName');
       setSuccessMessage(null);
       return;
     }
@@ -195,12 +206,14 @@ export function StoreAreaManagementPage({ token }: StoreAreaManagementPageProps)
       );
       setSuccessMessage(`${editedAreaName.trim()} updated.`);
       setError(null);
+      setInvalidField(null);
       setEditingArea(null);
       setEditingDialogKey(null);
       setEditedAreaName('');
       setEditedSubDepartmentName('');
       fetchStoreAreas();
     } catch (err: unknown) {
+      setInvalidField(null);
       if (err instanceof Error) {
         setError(err.message);
       } else {
@@ -218,6 +231,7 @@ export function StoreAreaManagementPage({ token }: StoreAreaManagementPageProps)
     isEditingArea,
     fetchStoreAreas,
     setError,
+    setInvalidField,
     setSuccessMessage,
     setEditingArea,
     setEditedAreaName,
@@ -252,6 +266,7 @@ export function StoreAreaManagementPage({ token }: StoreAreaManagementPageProps)
   );
 
   const openEditDialog = useCallback((area: StoreArea) => {
+    setInvalidField(null);
     setEditingArea(area);
     setEditedAreaName(area.name);
     setEditedSubDepartmentName(area.subDepartment || '');
@@ -273,7 +288,12 @@ export function StoreAreaManagementPage({ token }: StoreAreaManagementPageProps)
       }}
     >
       <DialogTrigger asChild>
-        <Button variant="outline" className={triggerClassName} onClick={() => openEditDialog(area)}>
+        <Button
+          variant="outline"
+          className={triggerClassName}
+          aria-label={`Edit ${area.name}`}
+          onClick={() => openEditDialog(area)}
+        >
           Edit
         </Button>
       </DialogTrigger>
@@ -292,9 +312,15 @@ export function StoreAreaManagementPage({ token }: StoreAreaManagementPageProps)
             <Input
               id="editedAreaName"
               value={editedAreaName}
-              onChange={(e) => setEditedAreaName(e.target.value)}
+              onChange={(e) => {
+                setEditedAreaName(e.target.value);
+                if (invalidField === 'editAreaName' && e.target.value.trim()) {
+                  setInvalidField(null);
+                }
+              }}
+              aria-invalid={invalidField === 'editAreaName'}
               className="sm:col-span-3"
-              maxLength={100}
+              maxLength={AREA_NAME_MAX_LENGTH}
             />
           </div>
           <div className="grid gap-2 sm:grid-cols-4 sm:items-center sm:gap-4">
@@ -306,7 +332,7 @@ export function StoreAreaManagementPage({ token }: StoreAreaManagementPageProps)
               value={editedSubDepartmentName}
               onChange={(e) => setEditedSubDepartmentName(e.target.value)}
               className="sm:col-span-3"
-              maxLength={100}
+              maxLength={SUB_DEPARTMENT_MAX_LENGTH}
             />
           </div>
         </div>
@@ -331,6 +357,7 @@ export function StoreAreaManagementPage({ token }: StoreAreaManagementPageProps)
         <Button
           variant="destructive"
           className={triggerClassName}
+          aria-label={`Delete ${area.name}`}
           disabled={deletingAreaId !== null}
         >
           {deletingAreaId === area.id ? 'Deleting' : 'Delete'}
@@ -385,9 +412,14 @@ export function StoreAreaManagementPage({ token }: StoreAreaManagementPageProps)
                   type="text"
                   placeholder="Dispensary shelf"
                   value={newAreaName}
-                  onChange={(e) => setNewAreaName(e.target.value)}
-                  aria-invalid={error === 'Store area name cannot be empty.'}
-                  maxLength={100}
+                  onChange={(e) => {
+                    setNewAreaName(e.target.value);
+                    if (invalidField === 'addAreaName' && e.target.value.trim()) {
+                      setInvalidField(null);
+                    }
+                  }}
+                  aria-invalid={invalidField === 'addAreaName'}
+                  maxLength={AREA_NAME_MAX_LENGTH}
                 />
               </div>
               <div className="grid gap-1.5">
@@ -398,7 +430,7 @@ export function StoreAreaManagementPage({ token }: StoreAreaManagementPageProps)
                   placeholder="Optional"
                   value={newSubDepartmentName}
                   onChange={(e) => setNewSubDepartmentName(e.target.value)}
-                  maxLength={100}
+                  maxLength={SUB_DEPARTMENT_MAX_LENGTH}
                 />
               </div>
               <Button

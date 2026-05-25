@@ -56,11 +56,12 @@ describe('StoreAreaManagementPage', () => {
     render(<StoreAreaManagementPage token={testSessionToken} />);
 
     expect(screen.getByLabelText(/Area name/i)).toBeInTheDocument();
-    expect(screen.getByLabelText(/Sub-department/i)).toBeInTheDocument();
+    expect(screen.getByLabelText(/Sub-department/i)).toHaveAttribute('maxLength', '50');
 
     fireEvent.click(screen.getByRole('button', { name: /Add location/i }));
 
-    expect(await screen.findByRole('alert')).toHaveTextContent(/store area name cannot be empty/i);
+    expect(await screen.findByText(/store area name cannot be empty/i)).toBeInTheDocument();
+    expect(screen.getByLabelText(/^Area name$/i)).toHaveAttribute('aria-invalid', 'true');
   });
 
   it('uses specific copy for add, save, and delete flows', async () => {
@@ -139,8 +140,12 @@ describe('StoreAreaManagementPage', () => {
     expect(within(mobileRow).getByText('Sub-department')).toBeInTheDocument();
     expect(within(mobileRow).getByText('Last checked')).toBeInTheDocument();
     expect(within(mobileRow).getByText('Not checked')).toBeInTheDocument();
-    expect(within(mobileRow).getByRole('button', { name: /Edit/i })).toHaveClass('min-h-11');
-    expect(within(mobileRow).getByRole('button', { name: /Delete/i })).toHaveClass('min-h-11');
+    expect(
+      within(mobileRow).getByRole('button', { name: /Edit Long Dispensary Overflow Shelf/i }),
+    ).toHaveClass('min-h-11');
+    expect(
+      within(mobileRow).getByRole('button', { name: /Delete Long Dispensary Overflow Shelf/i }),
+    ).toHaveClass('min-h-11');
   });
 
   it('adds a new store area', async () => {
@@ -228,6 +233,10 @@ describe('StoreAreaManagementPage', () => {
     // In Dialog
     const editDialog = screen.getByRole('dialog');
     const editInput = within(editDialog).getByLabelText(/^Area name$/i);
+    expect(within(editDialog).getByLabelText(/^Sub-department$/i)).toHaveAttribute(
+      'maxLength',
+      '50',
+    );
     fireEvent.change(editInput, { target: { value: 'Updated Aisle 1' } });
 
     fireEvent.click(screen.getByRole('button', { name: /Save location/i }));
@@ -241,6 +250,31 @@ describe('StoreAreaManagementPage', () => {
     );
 
     expect(await screen.findByText(/Updated Aisle 1 updated/i)).toBeInTheDocument();
+  });
+
+  it('marks the edit area name invalid without marking the add field invalid', async () => {
+    (apiService.get as jest.Mock).mockResolvedValue([
+      { id: 1, name: 'Aisle 1', last_checked: null },
+    ]);
+
+    render(<StoreAreaManagementPage token={testSessionToken} />);
+
+    await screen.findAllByText(/Aisle 1/i);
+
+    fireEvent.click(screen.getAllByRole('button', { name: /Edit Aisle 1/i })[0]);
+
+    const editDialog = screen.getByRole('dialog');
+    fireEvent.change(within(editDialog).getByLabelText(/^Area name$/i), {
+      target: { value: '' },
+    });
+    fireEvent.click(screen.getByRole('button', { name: /Save location/i }));
+
+    expect(await screen.findByText(/store area name cannot be empty/i)).toBeInTheDocument();
+    expect(within(editDialog).getByLabelText(/^Area name$/i)).toHaveAttribute(
+      'aria-invalid',
+      'true',
+    );
+    expect(screen.getAllByLabelText(/^Area name$/i)[0]).not.toHaveAttribute('aria-invalid', 'true');
   });
 
   it('confirms before deleting a store area', async () => {
