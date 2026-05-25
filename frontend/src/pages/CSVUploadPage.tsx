@@ -178,6 +178,7 @@ export const CSVUploadPage: React.FC<{
         : undefined,
       columnsIgnored:
         typeof summary.columnsIgnored === 'number' ? (summary.columnsIgnored as number) : undefined,
+      errors: Array.isArray(summary.errors) ? (summary.errors as string[]) : undefined,
       rejectedRows: Array.isArray(summary.rejectedRows)
         ? (summary.rejectedRows as RejectedRowDetail[])
         : undefined,
@@ -706,7 +707,7 @@ export const CSVUploadPage: React.FC<{
   };
 
   const scrollToFormatGuidelines = () => {
-    const reduceMotion = window.matchMedia?.('(prefers-reduced-motion: reduce)').matches ?? false;
+    const reduceMotion = window.matchMedia?.('(prefers-reduced-motion: reduce)')?.matches ?? false;
     formatGuidelinesRef.current?.scrollIntoView({
       behavior: reduceMotion ? 'auto' : 'smooth',
       block: 'start',
@@ -741,7 +742,7 @@ export const CSVUploadPage: React.FC<{
               role="tab"
               id="csv-upload-product-catalog-tab"
               aria-selected={importType === 'product-catalog'}
-              aria-controls={productCatalogPanelId}
+              aria-controls={importType === 'product-catalog' ? productCatalogPanelId : undefined}
               onClick={() => handleImportTypeChange('product-catalog')}
               variant={importType === 'product-catalog' ? 'default' : 'neutral'}
               className="min-h-11 shrink-0 px-3 py-2"
@@ -753,7 +754,7 @@ export const CSVUploadPage: React.FC<{
               role="tab"
               id="csv-upload-expiry-list-tab"
               aria-selected={importType === 'expiry-list'}
-              aria-controls={expiryListPanelId}
+              aria-controls={importType === 'expiry-list' ? expiryListPanelId : undefined}
               onClick={() => handleImportTypeChange('expiry-list')}
               variant={importType === 'expiry-list' ? 'default' : 'neutral'}
               className="min-h-11 shrink-0 px-3 py-2"

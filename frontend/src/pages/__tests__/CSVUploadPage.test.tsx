@@ -63,19 +63,25 @@ describe('CSVUploadPage expiry import', () => {
   it('switches to expiry mode UX with template actions', async () => {
     render(<CSVUploadPage token="test-token" />);
 
+    const productCatalogTab = screen.getByRole('tab', { name: 'Product Catalog' });
+    const expiryListTab = screen.getByRole('tab', { name: 'Expiry List Import' });
+
     expect(screen.getByText('Product Catalog Upload (CSV/XLSX/XLS)')).toBeInTheDocument();
-    expect(screen.getByRole('tab', { name: 'Product Catalog' })).toHaveAttribute(
-      'aria-selected',
-      'true',
-    );
-    expect(screen.getByRole('tab', { name: 'Expiry List Import' })).toHaveAttribute(
-      'aria-selected',
-      'false',
-    );
+    expect(productCatalogTab).toHaveAttribute('aria-selected', 'true');
+    expect(productCatalogTab).toHaveAttribute('aria-controls', 'csv-upload-product-catalog-panel');
+    expect(expiryListTab).toHaveAttribute('aria-selected', 'false');
+    expect(expiryListTab).not.toHaveAttribute('aria-controls');
 
     userEvent.click(screen.getByRole('tab', { name: 'Expiry List Import' }));
 
     expect(screen.getByText('Expiry List Import (CSV/XLSX/XLS)')).toBeInTheDocument();
+    expect(screen.getByRole('tab', { name: 'Product Catalog' })).not.toHaveAttribute(
+      'aria-controls',
+    );
+    expect(screen.getByRole('tab', { name: 'Expiry List Import' })).toHaveAttribute(
+      'aria-controls',
+      'csv-upload-expiry-list-panel',
+    );
     expect(screen.getByRole('tab', { name: 'Expiry List Import' })).toHaveAttribute(
       'aria-selected',
       'true',
@@ -110,6 +116,11 @@ describe('CSVUploadPage expiry import', () => {
   });
 
   it('exposes in-flight upload progress to assistive technology', async () => {
+    let resolveUpload!: (response: Response) => void;
+    const uploadRequest = new Promise<Response>((resolve) => {
+      resolveUpload = resolve;
+    });
+
     fetchMock
       .mockResponseOnce(
         JSON.stringify({
@@ -119,7 +130,17 @@ describe('CSVUploadPage expiry import', () => {
           key: 'uploads/org-123/products.csv',
         }),
       )
-      .mockImplementationOnce(() => new Promise(() => {}));
+      .mockImplementationOnce(() => uploadRequest)
+      .mockResponseOnce(
+        JSON.stringify({
+          status: 'complete',
+          importedCount: 1,
+          updatedCount: 0,
+          skippedCount: 0,
+          processedCount: 1,
+          totalCount: 1,
+        }),
+      );
 
     render(<CSVUploadPage token="test-token" />);
 
@@ -137,6 +158,16 @@ describe('CSVUploadPage expiry import', () => {
     expect(progressbar).toHaveAttribute('aria-valuemax', '100');
     expect(progressbar).toHaveAttribute('aria-valuenow', '0');
     expect(screen.getByRole('status', { name: 'Upload status' })).toHaveTextContent('Uploading');
+
+    resolveUpload(
+      new Response(JSON.stringify({ key: 'uploads/org-123/products.csv' }), { status: 200 }),
+    );
+
+    await waitFor(() => {
+      expect(
+        screen.queryByRole('progressbar', { name: 'Upload progress' }),
+      ).not.toBeInTheDocument();
+    });
   });
 
   it('uses touch-first responsive controls for handheld uploads', () => {
@@ -181,6 +212,11 @@ describe('CSVUploadPage expiry import', () => {
   });
 
   it('uses operator-facing progress copy for remote uploads', async () => {
+    let resolveUpload!: (response: Response) => void;
+    const uploadRequest = new Promise<Response>((resolve) => {
+      resolveUpload = resolve;
+    });
+
     fetchMock
       .mockResponseOnce(
         JSON.stringify({
@@ -190,7 +226,18 @@ describe('CSVUploadPage expiry import', () => {
           key: 'uploads/org-123/products.csv',
         }),
       )
-      .mockImplementationOnce(() => new Promise(() => {}));
+      .mockImplementationOnce(() => uploadRequest)
+      .mockResponseOnce(JSON.stringify({ message: 'Upload completed and processing started' }))
+      .mockResponseOnce(
+        JSON.stringify({
+          status: 'complete',
+          importedCount: 1,
+          updatedCount: 0,
+          skippedCount: 0,
+          processedCount: 1,
+          totalCount: 1,
+        }),
+      );
 
     render(<CSVUploadPage token="test-token" />);
 
@@ -205,6 +252,69 @@ describe('CSVUploadPage expiry import', () => {
     expect(await screen.findByRole('status', { name: 'Upload status' })).toHaveTextContent(
       'Uploading file',
     );
+
+    resolveUpload(new Response('', { status: 200 }));
+
+    await waitFor(() => {
+      expect(
+        screen.queryByRole('progressbar', { name: 'Upload progress' }),
+      ).not.toBeInTheDocument();
+    });
+  });
+
+  it('keeps format-guideline links safe when reduced-motion detection is unavailable', async () => {
+    const originalMatchMedia = window.matchMedia;
+    Object.defineProperty(window, 'matchMedia', {
+      configurable: true,
+      value: undefined,
+    });
+
+    try {
+      fetchMock
+        .mockResponseOnce(
+          JSON.stringify({
+            strategy: 'direct',
+            uploadUrl: '/api/upload/direct',
+            method: 'POST',
+            key: 'uploads/org-123/products.csv',
+          }),
+        )
+        .mockResponseOnce(
+          JSON.stringify({
+            key: 'uploads/org-123/products.csv',
+          }),
+        )
+        .mockResponseOnce(
+          JSON.stringify({
+            status: 'complete',
+            importedCount: 0,
+            updatedCount: 0,
+            skippedCount: 1,
+            processedCount: 1,
+            totalCount: 1,
+            errors: ['Invalid column name: Product'],
+          }),
+        );
+
+      render(<CSVUploadPage token="test-token" />);
+
+      const fileInput = screen.getByLabelText('CSV/XLSX/XLS File') as HTMLInputElement;
+      const file = new File(['SKU,Name,Barcode,Cost\nSKU-1,Milk,123,12.99'], 'products.csv', {
+        type: 'text/csv',
+      });
+
+      fireEvent.change(fileInput, { target: { files: [file] } });
+      userEvent.click(screen.getByRole('button', { name: 'Upload CSV/XLSX/XLS' }));
+
+      const guidelineLink = await screen.findByRole('button', { name: 'See format guidelines' });
+
+      expect(() => userEvent.click(guidelineLink)).not.toThrow();
+    } finally {
+      Object.defineProperty(window, 'matchMedia', {
+        configurable: true,
+        value: originalMatchMedia,
+      });
+    }
   });
 
   it('keeps uploaded file previews horizontally scrollable on narrow screens', async () => {
