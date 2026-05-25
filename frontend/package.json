@@ -137,7 +137,7 @@
   },
   "devDependencies": {
     "@craco/craco": "^7.1.0",
-    "@types/xlsx": "^0.0.35",
+    "@types/xlsx": "^0.0.36",
     "autoprefixer": "^10.5.0",
     "cross-env": "^10.1.0",
     "eslint-config-prettier": "^10.1.8",
