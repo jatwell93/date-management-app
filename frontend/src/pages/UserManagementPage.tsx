@@ -1,4 +1,4 @@
-import React, { useCallback, useEffect, useState } from 'react';
+import React, { useCallback, useEffect, useRef, useState } from 'react';
 import { useOrganization } from '@clerk/clerk-react';
 import { Button } from '../components/ui/button';
 import { Badge } from '../components/ui/badge';
@@ -52,48 +52,60 @@ export function UserManagementPage() {
   const [members, setMembers] = useState<MemberRecord[]>([]);
   const [isFetchingMembers, setIsFetchingMembers] = useState(false);
   const [membersError, setMembersError] = useState<string | null>(null);
+  const latestRequestIdRef = useRef(0);
+  const isMountedRef = useRef(true);
 
-  const fetchMembers = useCallback(
-    async (isActive: () => boolean) => {
-      if (!organization) return;
+  useEffect(() => {
+    isMountedRef.current = true;
 
-      setIsFetchingMembers(true);
-      setMembersError(null);
-      try {
-        const result = await organization.getMemberships({ pageSize: 50 });
-        if (!isActive()) return;
-        setMembers(result.data as MemberRecord[]);
-      } catch {
-        if (!isActive()) return;
-        setMembers([]);
-        setMembersError('We could not load team members. Check the connection and try again.');
-      } finally {
-        if (isActive()) {
-          setIsFetchingMembers(false);
-        }
+    return () => {
+      isMountedRef.current = false;
+      latestRequestIdRef.current += 1;
+    };
+  }, []);
+
+  const fetchMembers = useCallback(async () => {
+    if (!organization) return;
+
+    const requestId = latestRequestIdRef.current + 1;
+    latestRequestIdRef.current = requestId;
+    const canUpdate = () => isMountedRef.current && latestRequestIdRef.current === requestId;
+
+    setIsFetchingMembers(true);
+    setMembersError(null);
+    try {
+      const result = await organization.getMemberships({ pageSize: 50 });
+      if (!canUpdate()) return;
+      setMembers(result.data as MemberRecord[]);
+    } catch {
+      if (!canUpdate()) return;
+      setMembers([]);
+      setMembersError('We could not load team members. Check the connection and try again.');
+    } finally {
+      if (canUpdate()) {
+        setIsFetchingMembers(false);
       }
-    },
-    [organization],
-  );
+    }
+  }, [organization]);
 
   useEffect(() => {
     if (!organization) {
+      latestRequestIdRef.current += 1;
       setMembers([]);
       setMembersError(null);
       setIsFetchingMembers(false);
       return undefined;
     }
 
-    let isActive = true;
-    fetchMembers(() => isActive);
+    fetchMembers();
 
     return () => {
-      isActive = false;
+      latestRequestIdRef.current += 1;
     };
   }, [organization, fetchMembers]);
 
   const handleRetryMembers = useCallback(() => {
-    fetchMembers(() => true);
+    fetchMembers();
   }, [fetchMembers]);
 
   return (

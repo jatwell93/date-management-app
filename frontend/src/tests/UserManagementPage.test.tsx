@@ -1,5 +1,5 @@
 import React from 'react';
-import { fireEvent, render, screen, waitFor, within } from '@testing-library/react';
+import { act, fireEvent, render, screen, waitFor, within } from '@testing-library/react';
 import { UserManagementPage } from '../pages/UserManagementPage';
 import { useOrganization } from '@clerk/clerk-react';
 
@@ -11,6 +11,15 @@ jest.mock('@clerk/clerk-react', () => ({
 
 // Mock UI components
 type MockCardProps = React.PropsWithChildren<{ className?: string }>;
+
+function deferred<T>() {
+  let resolve!: (value: T) => void;
+  const promise = new Promise<T>((promiseResolve) => {
+    resolve = promiseResolve;
+  });
+
+  return { promise, resolve };
+}
 
 jest.mock('../components/ui/card', () => ({
   Card: ({ children, className }: MockCardProps) => (
@@ -172,6 +181,82 @@ describe('UserManagementPage', () => {
       expect(screen.getAllByText('Mira Patel').length).toBeGreaterThan(0);
     });
     expect(mockGetMemberships).toHaveBeenCalledTimes(2);
+  });
+
+  test('ignores stale retry responses after the organization changes', async () => {
+    const staleRetry = deferred<{
+      data: Array<{
+        id: string;
+        role: string;
+        createdAt: Date;
+        publicUserData: { firstName: string; lastName: string; identifier: string };
+      }>;
+    }>();
+    const orgAGetMemberships = jest
+      .fn()
+      .mockRejectedValueOnce(new Error('Network unavailable'))
+      .mockReturnValueOnce(staleRetry.promise);
+    const orgBGetMemberships = jest.fn().mockResolvedValue({
+      data: [
+        {
+          id: 'mem_org_b',
+          role: 'admin',
+          createdAt: new Date('2026-01-01'),
+          publicUserData: {
+            firstName: 'Bree',
+            lastName: 'Nguyen',
+            identifier: 'bree@example.com',
+          },
+        },
+      ],
+    });
+
+    (useOrganization as jest.Mock).mockReturnValue({
+      organization: {
+        id: 'org_a',
+        name: 'Org A',
+        getMemberships: orgAGetMemberships,
+      },
+      isLoaded: true,
+    });
+
+    const { rerender } = render(<UserManagementPage />);
+
+    expect(await screen.findByRole('alert')).toBeInTheDocument();
+    fireEvent.click(screen.getByRole('button', { name: /try again/i }));
+
+    (useOrganization as jest.Mock).mockReturnValue({
+      organization: {
+        id: 'org_b',
+        name: 'Org B',
+        getMemberships: orgBGetMemberships,
+      },
+      isLoaded: true,
+    });
+    rerender(<UserManagementPage />);
+
+    expect(await screen.findAllByText('Bree Nguyen')).toHaveLength(2);
+
+    await act(async () => {
+      staleRetry.resolve({
+        data: [
+          {
+            id: 'mem_org_a_stale',
+            role: 'admin',
+            createdAt: new Date('2026-01-01'),
+            publicUserData: {
+              firstName: 'Ari',
+              lastName: 'Stale',
+              identifier: 'ari@example.com',
+            },
+          },
+        ],
+      });
+      await staleRetry.promise;
+    });
+
+    expect(screen.queryByText('Ari Stale')).not.toBeInTheDocument();
+    expect(screen.getAllByText('Bree Nguyen')).toHaveLength(2);
   });
 
   test('renders mobile member summaries that withstand long member details', async () => {
