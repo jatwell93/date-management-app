@@ -4,11 +4,11 @@ The user management page scored 13/20 in the impeccable audit. It is admin-gated
 
 Audit evidence:
 
-- `frontend/src/pages/UserManagementPage.tsx:21` starts the membership request without an unmount guard, so late responses can update state after navigation.
-- `frontend/src/pages/UserManagementPage.tsx:29` converts fetch failures into the same empty state as a valid empty organization.
-- `frontend/src/pages/UserManagementPage.tsx:51` and `frontend/src/pages/UserManagementPage.tsx:64` expose dynamic loading text without announced status semantics.
-- `frontend/src/pages/UserManagementPage.tsx:66` relies on table overflow for all narrow viewport behavior.
-- `frontend/src/tests/UserManagementPage.test.tsx:14` uses `any` in component mocks, leaving lint warnings in the focused test file.
+- `frontend/src/pages/UserManagementPage.tsx` starts the membership request without an unmount guard, so late responses can update state after navigation.
+- `frontend/src/pages/UserManagementPage.tsx` converts fetch failures into the same empty state as a valid empty organization.
+- `frontend/src/pages/UserManagementPage.tsx` exposes dynamic loading text without announced status semantics.
+- `frontend/src/pages/UserManagementPage.tsx` relies on table overflow for all narrow viewport behavior.
+- `frontend/src/tests/UserManagementPage.test.tsx` uses `any` in component mocks, leaving lint warnings in the focused test file.
 
 ## What Changes
 
