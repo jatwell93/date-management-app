@@ -10,7 +10,11 @@ import {
 } from 'react-router-dom';
 import * as Sentry from '@sentry/react';
 import { ChevronDown, LogOut, Menu, X } from 'lucide-react';
-import { ClerkSignInPage, ClerkSignUpPage } from './components/ClerkAuthPage';
+import {
+  ClerkSignInPage,
+  ClerkSignUpPage,
+  responsiveClerkAppearance,
+} from './components/ClerkAuthPage';
 import { OnboardingPage } from './pages/OnboardingPage';
 import { SettingsPage } from './pages/SettingsPage';
 import { useAuthContext } from './components/ClerkAuthProvider';
@@ -135,9 +139,12 @@ function runHandledHandheldSync(
 
 function ProfilePage() {
   return (
-    <div data-testid="profile-shell" className="mx-auto w-full max-w-5xl px-4 py-6">
-      <div className="flex justify-center">
-        <UserProfile routing="path" path="/profile" />
+    <div
+      data-testid="profile-shell"
+      className="profile-color-field mx-auto w-full max-w-5xl overflow-x-hidden px-3 py-4 sm:px-4 sm:py-6"
+    >
+      <div className="clerk-responsive-surface flex w-full justify-center">
+        <UserProfile routing="path" path="/profile" appearance={responsiveClerkAppearance} />
       </div>
     </div>
   );
