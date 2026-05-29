@@ -9,6 +9,8 @@ const mockUseAuth = jest.fn();
 const mockUseOrganization = jest.fn();
 const mockSentryCaptureException = jest.fn();
 const mockSentrySetUser = jest.fn();
+const mockSignIn = jest.fn();
+const mockSignUp = jest.fn();
 
 jest.mock('@sentry/react', () => ({
   captureException: (...args: unknown[]) => mockSentryCaptureException(...args),
@@ -19,8 +21,14 @@ jest.mock('@sentry/react', () => ({
 
 jest.mock('@clerk/clerk-react', () => ({
   ClerkProvider: ({ children }: { children: React.ReactNode }) => <>{children}</>,
-  SignIn: () => <div>Mock Clerk Sign In</div>,
-  SignUp: () => <div>Mock Clerk Sign Up</div>,
+  SignIn: (props: unknown) => {
+    mockSignIn(props);
+    return <div>Mock Clerk Sign In</div>;
+  },
+  SignUp: (props: unknown) => {
+    mockSignUp(props);
+    return <div>Mock Clerk Sign Up</div>;
+  },
   useUser: () => mockUseUser(),
   useAuth: () => mockUseAuth(),
   useOrganization: () => mockUseOrganization(),
@@ -127,11 +135,45 @@ describe('Clerk Integration Setup', () => {
 });
 
 describe('Clerk auth pages', () => {
+  beforeEach(() => {
+    jest.clearAllMocks();
+  });
+
   it('constrains the sign-in shell on mobile viewports', () => {
     render(<ClerkSignInPage />);
 
     expect(screen.getByTestId('clerk-auth-shell')).toHaveClass('overflow-x-hidden', 'px-4');
     expect(screen.getByTestId('clerk-auth-card')).toHaveClass('max-w-full');
+    expect(mockSignIn).toHaveBeenCalledWith(
+      expect.objectContaining({
+        appearance: expect.objectContaining({
+          elements: expect.objectContaining({
+            rootBox: expect.stringContaining('max-w-full'),
+            cardBox: expect.stringContaining('max-w-full'),
+          }),
+        }),
+      }),
+    );
+  });
+
+  it('applies the PharmIQ color palette to Clerk sign-in controls', () => {
+    render(<ClerkSignInPage />);
+
+    expect(mockSignIn).toHaveBeenCalledWith(
+      expect.objectContaining({
+        appearance: expect.objectContaining({
+          variables: expect.objectContaining({
+            colorPrimary: expect.stringContaining('oklch'),
+            colorBackground: expect.stringContaining('oklch'),
+            colorForeground: expect.stringContaining('oklch'),
+          }),
+          elements: expect.objectContaining({
+            formButtonPrimary: expect.stringContaining('bg-semantic-primary'),
+            footerActionLink: expect.stringContaining('text-semantic-primary'),
+          }),
+        }),
+      }),
+    );
   });
 
   it('constrains the sign-up shell on mobile viewports', () => {
@@ -139,6 +181,36 @@ describe('Clerk auth pages', () => {
 
     expect(screen.getByTestId('clerk-auth-shell')).toHaveClass('overflow-x-hidden', 'px-4');
     expect(screen.getByTestId('clerk-auth-card')).toHaveClass('max-w-full');
+    expect(mockSignUp).toHaveBeenCalledWith(
+      expect.objectContaining({
+        appearance: expect.objectContaining({
+          elements: expect.objectContaining({
+            rootBox: expect.stringContaining('max-w-full'),
+            cardBox: expect.stringContaining('max-w-full'),
+          }),
+        }),
+      }),
+    );
+  });
+
+  it('applies the PharmIQ color palette to Clerk sign-up controls', () => {
+    render(<ClerkSignUpPage />);
+
+    expect(mockSignUp).toHaveBeenCalledWith(
+      expect.objectContaining({
+        appearance: expect.objectContaining({
+          variables: expect.objectContaining({
+            colorPrimary: expect.stringContaining('oklch'),
+            colorBackground: expect.stringContaining('oklch'),
+            colorForeground: expect.stringContaining('oklch'),
+          }),
+          elements: expect.objectContaining({
+            formButtonPrimary: expect.stringContaining('bg-semantic-primary'),
+            footerActionLink: expect.stringContaining('text-semantic-primary'),
+          }),
+        }),
+      }),
+    );
   });
 });
 

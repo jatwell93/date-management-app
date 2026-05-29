@@ -9,8 +9,13 @@ jest.mock('./components/ClerkAuthProvider', () => ({
   useAuthContext: jest.fn(),
 }));
 
+const mockUserProfile = jest.fn();
+
 jest.mock('@clerk/clerk-react', () => ({
-  UserProfile: () => <div data-testid="clerk-user-profile">Clerk profile</div>,
+  UserProfile: (props: unknown) => {
+    mockUserProfile(props);
+    return <div data-testid="clerk-user-profile">Clerk profile</div>;
+  },
   OrganizationProfile: () => <div data-testid="clerk-organization-profile">Clerk organization</div>,
 }));
 
@@ -296,6 +301,69 @@ describe('App account routes', () => {
     expect(profileShell).toHaveClass('mx-auto');
     expect(profileShell).toHaveClass('max-w-5xl');
     expect(within(profileShell).getByTestId('clerk-user-profile')).toBeInTheDocument();
+  });
+
+  it('constrains Clerk profile internals for narrow viewports', () => {
+    window.history.pushState({}, '', '/profile');
+    mockSignedInContext();
+
+    render(<App />);
+
+    expect(screen.getByTestId('profile-shell')).toHaveClass('overflow-x-hidden');
+    expect(mockUserProfile).toHaveBeenCalledWith(
+      expect.objectContaining({
+        appearance: expect.objectContaining({
+          elements: expect.objectContaining({
+            rootBox: expect.stringContaining('max-w-full'),
+            cardBox: expect.stringContaining('max-w-full'),
+          }),
+        }),
+      }),
+    );
+  });
+
+  it('passes the PharmIQ color system into the Clerk profile surface', () => {
+    window.history.pushState({}, '', '/profile');
+    mockSignedInContext();
+
+    render(<App />);
+
+    expect(mockUserProfile).toHaveBeenCalledWith(
+      expect.objectContaining({
+        appearance: expect.objectContaining({
+          variables: expect.objectContaining({
+            colorPrimary: expect.stringContaining('oklch'),
+            colorBackground: expect.stringContaining('oklch'),
+            colorForeground: expect.stringContaining('oklch'),
+          }),
+          elements: expect.objectContaining({
+            navbarButton: expect.stringContaining('text-semantic-primary'),
+            formButtonPrimary: expect.stringContaining('bg-semantic-primary'),
+          }),
+        }),
+      }),
+    );
+  });
+
+  it('passes visible focus styles into Clerk profile controls', () => {
+    window.history.pushState({}, '', '/profile');
+    mockSignedInContext();
+
+    render(<App />);
+
+    expect(mockUserProfile).toHaveBeenCalledWith(
+      expect.objectContaining({
+        appearance: expect.objectContaining({
+          elements: expect.objectContaining({
+            navbarButton: expect.stringContaining('focus-visible:ring-semantic-primary'),
+            profileSectionPrimaryButton: expect.stringContaining(
+              'focus-visible:ring-semantic-primary',
+            ),
+            menuButton: expect.stringContaining('focus-visible:ring-semantic-primary'),
+          }),
+        }),
+      }),
+    );
   });
 });
 

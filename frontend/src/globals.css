@@ -36,6 +36,89 @@
   }
 }
 
+@layer components {
+  .profile-color-field {
+    border-radius: var(--radius-lg);
+    background:
+      linear-gradient(
+        180deg,
+        oklch(97.8% 0.018 184 / 0.64) 0%,
+        oklch(99% 0.004 220 / 0) 42%
+      ),
+      oklch(99% 0.004 220);
+  }
+
+  .clerk-responsive-surface {
+    --clerk-pharmiq-border: oklch(88% 0.018 220);
+    --clerk-pharmiq-surface: oklch(99% 0.004 220);
+    --clerk-pharmiq-surface-muted: oklch(96.7% 0.008 220);
+    --clerk-pharmiq-primary-wash: oklch(94.8% 0.038 184);
+    --clerk-pharmiq-text: oklch(22% 0.042 265);
+    --clerk-pharmiq-text-muted: oklch(45% 0.035 256);
+  }
+
+  .clerk-responsive-surface :where(.cl-rootBox, .cl-cardBox) {
+    width: min(100%, calc(100vw - 2rem));
+    max-width: 100%;
+  }
+
+  .clerk-responsive-surface :where(.clerk-pharmiq-card, .cl-cardBox, .cl-card) {
+    border: 1px solid var(--clerk-pharmiq-border) !important;
+    background: var(--clerk-pharmiq-surface) !important;
+    box-shadow: 0 1px 2px oklch(22% 0.042 265 / 0.06) !important;
+  }
+
+  .clerk-responsive-surface
+    :where(.cl-navbar, .cl-profileSection, .cl-scrollBox, .cl-pageScrollBox) {
+    background: var(--clerk-pharmiq-surface) !important;
+  }
+
+  .clerk-responsive-surface :where(.cl-navbar) {
+    border-color: var(--clerk-pharmiq-border) !important;
+  }
+
+  .clerk-responsive-surface
+    :where(.cl-navbarButton.cl-active, .cl-navbarButton[data-active='true'], .cl-menuButton[data-active='true']) {
+    background: var(--clerk-pharmiq-primary-wash) !important;
+    color: oklch(49% 0.094 183) !important;
+  }
+
+  .clerk-responsive-surface :where(.cl-headerTitle, .cl-profileSectionTitleText) {
+    color: var(--clerk-pharmiq-text) !important;
+  }
+
+  .clerk-responsive-surface :where(.cl-headerSubtitle, .cl-profileSectionContent) {
+    color: var(--clerk-pharmiq-text-muted) !important;
+  }
+
+  .clerk-responsive-surface
+    :where(.cl-profileSectionPrimaryButton, .cl-footerActionLink, .cl-menuButton) {
+    color: oklch(49% 0.094 183) !important;
+  }
+
+  .clerk-responsive-surface
+    :where(
+      .cl-navbarButton:focus-visible,
+      .cl-profileSectionPrimaryButton:focus-visible,
+      .cl-menuButton:focus-visible,
+      .cl-footerActionLink:focus-visible
+    ) {
+    outline: 2px solid transparent !important;
+    box-shadow: 0 0 0 3px oklch(49% 0.094 183 / 0.22) !important;
+  }
+
+  .clerk-responsive-surface :where(.cl-formFieldInput:focus, .cl-formFieldInput:focus-visible) {
+    border-color: oklch(49% 0.094 183) !important;
+    box-shadow: 0 0 0 3px oklch(49% 0.094 183 / 0.14) !important;
+  }
+
+  @media (min-width: 640px) {
+    .clerk-responsive-surface :where(.cl-rootBox, .cl-cardBox) {
+      width: 100%;
+    }
+  }
+}
+
 /* ── Light Mode ────────────────────────────────────────────── */
 :root {
   /* shadcn/ui HSL tokens */

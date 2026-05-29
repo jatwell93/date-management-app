@@ -1193,6 +1193,14 @@ video {
   max-width: 56rem;
 }
 
+.max-w-52 {
+  max-width: 13rem;
+}
+
+.max-w-56 {
+  max-width: 14rem;
+}
+
 .max-w-5xl {
   max-width: 64rem;
 }
@@ -1607,6 +1615,10 @@ video {
   overflow-wrap: break-word;
 }
 
+.break-all {
+  word-break: break-all;
+}
+
 .rounded {
   border-radius: 0.25rem;
 }
@@ -1707,6 +1719,10 @@ video {
 
 .border-semantic-critical\/20 {
   border-color: rgb(220 38 38 / 0.2);
+}
+
+.border-semantic-critical\/30 {
+  border-color: rgb(220 38 38 / 0.3);
 }
 
 .border-semantic-primary {
@@ -1811,6 +1827,10 @@ video {
 .bg-semantic-critical-muted {
   --tw-bg-opacity: 1;
   background-color: rgb(254 226 226 / var(--tw-bg-opacity, 1));
+}
+
+.bg-semantic-critical\/10 {
+  background-color: rgb(220 38 38 / 0.1);
 }
 
 .bg-semantic-primary {
@@ -2769,6 +2789,16 @@ code {
   color: hsl(var(--foreground));
 }
 
+.hover\:text-semantic-primary:hover {
+  --tw-text-opacity: 1;
+  color: rgb(15 118 110 / var(--tw-text-opacity, 1));
+}
+
+.hover\:text-semantic-primary-hover:hover {
+  --tw-text-opacity: 1;
+  color: rgb(17 94 89 / var(--tw-text-opacity, 1));
+}
+
 .hover\:text-semantic-text-primary:hover {
   color: var(--text-primary);
 }
@@ -2798,6 +2828,11 @@ code {
 .hover\:file\:bg-semantic-primary-muted::file-selector-button:hover {
   --tw-bg-opacity: 1;
   background-color: rgb(204 251 241 / var(--tw-bg-opacity, 1));
+}
+
+.focus\:border-semantic-primary:focus {
+  --tw-border-opacity: 1;
+  border-color: rgb(15 118 110 / var(--tw-border-opacity, 1));
 }
 
 .focus\:border-transparent:focus {
@@ -2834,6 +2869,10 @@ code {
 
 .focus\:ring-semantic-primary-foreground\/70:focus {
   --tw-ring-color: rgb(255 255 255 / 0.7);
+}
+
+.focus\:ring-semantic-primary\/20:focus {
+  --tw-ring-color: rgb(15 118 110 / 0.2);
 }
 
 .focus\:ring-offset-2:focus {
@@ -2949,6 +2988,11 @@ code {
 .has-\[\>svg\]\:px-4:has(>svg) {
   padding-left: 1rem;
   padding-right: 1rem;
+}
+
+.aria-selected\:text-semantic-primary[aria-selected="true"] {
+  --tw-text-opacity: 1;
+  color: rgb(15 118 110 / var(--tw-text-opacity, 1));
 }
 
 .data-\[disabled\]\:pointer-events-none[data-disabled] {
@@ -3120,6 +3164,10 @@ code {
 @media (min-width: 640px) {
   .sm\:col-span-3 {
     grid-column: span 3 / span 3;
+  }
+
+  .sm\:mb-6 {
+    margin-bottom: 1.5rem;
   }
 
   .sm\:mt-0 {
@@ -3297,6 +3345,11 @@ code {
     font-size: 1.875rem;
     line-height: 2.25rem;
   }
+
+  .sm\:text-base {
+    font-size: 1rem;
+    line-height: 1.5rem;
+  }
 }
 
 @media (min-width: 768px) {
@@ -3394,6 +3447,11 @@ code {
   .lg\:px-6 {
     padding-left: 1.5rem;
     padding-right: 1.5rem;
+  }
+
+  .lg\:py-8 {
+    padding-top: 2rem;
+    padding-bottom: 2rem;
   }
 }
 
