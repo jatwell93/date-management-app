@@ -135,6 +135,10 @@ describe('Clerk Integration Setup', () => {
 });
 
 describe('Clerk auth pages', () => {
+  beforeEach(() => {
+    jest.clearAllMocks();
+  });
+
   it('constrains the sign-in shell on mobile viewports', () => {
     render(<ClerkSignInPage />);
 
