@@ -328,6 +328,11 @@ describe('App account routes', () => {
 
     render(<App />);
 
+    expect(screen.getByTestId('profile-shell')).toHaveClass(
+      'bg-semantic-surface-1',
+      'border-hairline',
+    );
+    expect(screen.getByTestId('profile-shell')).not.toHaveClass('profile-color-field');
     expect(mockUserProfile).toHaveBeenCalledWith(
       expect.objectContaining({
         appearance: expect.objectContaining({

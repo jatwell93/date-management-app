@@ -23,7 +23,14 @@
 /* ── Brand Typography Base ────────────────────────────────── */
 @layer base {
   body {
-    font-family: var(--font-body, 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif);
+    font-family: var(
+      --font-body,
+      'Inter',
+      -apple-system,
+      BlinkMacSystemFont,
+      'Segoe UI',
+      sans-serif
+    );
   }
 
   h1,
@@ -37,24 +44,16 @@
 }
 
 @layer components {
-  .profile-color-field {
-    border-radius: var(--radius-lg);
-    background:
-      linear-gradient(
-        180deg,
-        oklch(97.8% 0.018 184 / 0.64) 0%,
-        oklch(99% 0.004 220 / 0) 42%
-      ),
-      oklch(99% 0.004 220);
-  }
-
   .clerk-responsive-surface {
-    --clerk-pharmiq-border: oklch(88% 0.018 220);
-    --clerk-pharmiq-surface: oklch(99% 0.004 220);
-    --clerk-pharmiq-surface-muted: oklch(96.7% 0.008 220);
-    --clerk-pharmiq-primary-wash: oklch(94.8% 0.038 184);
-    --clerk-pharmiq-text: oklch(22% 0.042 265);
-    --clerk-pharmiq-text-muted: oklch(45% 0.035 256);
+    --clerk-pharmiq-border: var(--border-hairline);
+    --clerk-pharmiq-surface: var(--surface-1);
+    --clerk-pharmiq-surface-muted: var(--surface-2);
+    --clerk-pharmiq-primary: var(--semantic-primary);
+    --clerk-pharmiq-primary-wash: var(--semantic-primary-muted);
+    --clerk-pharmiq-focus-ring: var(--semantic-primary-focus-ring);
+    --clerk-pharmiq-input-ring: var(--semantic-primary-focus-ring-muted);
+    --clerk-pharmiq-text: var(--text-primary);
+    --clerk-pharmiq-text-muted: var(--text-secondary);
   }
 
   .clerk-responsive-surface :where(.cl-rootBox, .cl-cardBox) {
@@ -65,7 +64,7 @@
   .clerk-responsive-surface :where(.clerk-pharmiq-card, .cl-cardBox, .cl-card) {
     border: 1px solid var(--clerk-pharmiq-border) !important;
     background: var(--clerk-pharmiq-surface) !important;
-    box-shadow: 0 1px 2px oklch(22% 0.042 265 / 0.06) !important;
+    box-shadow: var(--shadow-sm) !important;
   }
 
   .clerk-responsive-surface
@@ -78,9 +77,13 @@
   }
 
   .clerk-responsive-surface
-    :where(.cl-navbarButton.cl-active, .cl-navbarButton[data-active='true'], .cl-menuButton[data-active='true']) {
+    :where(
+      .cl-navbarButton.cl-active,
+      .cl-navbarButton[data-active='true'],
+      .cl-menuButton[data-active='true']
+    ) {
     background: var(--clerk-pharmiq-primary-wash) !important;
-    color: oklch(49% 0.094 183) !important;
+    color: var(--clerk-pharmiq-primary) !important;
   }
 
   .clerk-responsive-surface :where(.cl-headerTitle, .cl-profileSectionTitleText) {
@@ -93,7 +96,7 @@
 
   .clerk-responsive-surface
     :where(.cl-profileSectionPrimaryButton, .cl-footerActionLink, .cl-menuButton) {
-    color: oklch(49% 0.094 183) !important;
+    color: var(--clerk-pharmiq-primary) !important;
   }
 
   .clerk-responsive-surface
@@ -104,12 +107,48 @@
       .cl-footerActionLink:focus-visible
     ) {
     outline: 2px solid transparent !important;
-    box-shadow: 0 0 0 3px oklch(49% 0.094 183 / 0.22) !important;
+    box-shadow: 0 0 0 3px var(--clerk-pharmiq-focus-ring) !important;
   }
 
   .clerk-responsive-surface :where(.cl-formFieldInput:focus, .cl-formFieldInput:focus-visible) {
-    border-color: oklch(49% 0.094 183) !important;
-    box-shadow: 0 0 0 3px oklch(49% 0.094 183 / 0.14) !important;
+    border-color: var(--clerk-pharmiq-primary) !important;
+    box-shadow: 0 0 0 3px var(--clerk-pharmiq-input-ring) !important;
+  }
+
+  .settings-clerk-adapter {
+    container-type: inline-size;
+  }
+
+  .settings-clerk-adapter :where(.cl-cardBox, .cl-card) {
+    overflow: hidden;
+  }
+
+  .settings-clerk-adapter :where(.cl-navbar) {
+    min-width: 0;
+    overflow-x: auto;
+    overscroll-behavior-inline: contain;
+    scrollbar-width: thin;
+  }
+
+  .settings-clerk-adapter
+    :where(.cl-navbarButton, .cl-menuButton, .cl-profileSectionPrimaryButton) {
+    min-height: 44px;
+  }
+
+  .settings-clerk-adapter
+    :where(.cl-profileSection, .cl-profileSectionContent, .cl-profileSectionItem) {
+    min-width: 0;
+    overflow-wrap: anywhere;
+  }
+
+  @container (max-width: 520px) {
+    .settings-clerk-adapter :where(.cl-cardBox, .cl-card) {
+      border-radius: var(--radius-md) !important;
+    }
+
+    .settings-clerk-adapter :where(.cl-scrollBox, .cl-pageScrollBox) {
+      max-height: none !important;
+    }
   }
 
   @media (min-width: 640px) {
@@ -144,18 +183,21 @@
   --radius: 0.5rem;
 
   /* Semantic text tokens (light) */
-  --text-primary: #0F172A;
+  --text-primary: #0f172a;
   --text-secondary: #475569;
-  --text-tertiary: #64748B;
-  --text-muted: #94A3B8;
-  --text-inverse: #FFFFFF;
+  --text-tertiary: #64748b;
+  --text-muted: #94a3b8;
+  --text-inverse: #ffffff;
 
   /* Semantic intent tokens (light) — brand-invariant across themes */
-  --semantic-primary: #0F766E;
-  --semantic-warning: #D97706;
-  --semantic-critical: #DC2626;
-  --semantic-success: #10B981;
-  --semantic-secondary: #0EA5E9;
+  --semantic-primary: #0f766e;
+  --semantic-primary-muted: #ccfbf1;
+  --semantic-primary-focus-ring: rgba(15, 118, 110, 0.22);
+  --semantic-primary-focus-ring-muted: rgba(15, 118, 110, 0.14);
+  --semantic-warning: #d97706;
+  --semantic-critical: #dc2626;
+  --semantic-success: #10b981;
+  --semantic-secondary: #0ea5e9;
 
   /* DEPRECATED: inventory-* HSL tokens — use semantic-* instead */
   --inventory-primary-50: 240 100% 97.6%;
@@ -257,11 +299,11 @@
   --radius: 0.5rem;
 
   /* Semantic text tokens (dark) */
-  --text-primary: #F1F5F9;
-  --text-secondary: #CBD5E1;
-  --text-tertiary: #94A3B8;
-  --text-muted: #64748B;
-  --text-inverse: #0F172A;
+  --text-primary: #f1f5f9;
+  --text-secondary: #cbd5e1;
+  --text-tertiary: #94a3b8;
+  --text-muted: #64748b;
+  --text-inverse: #0f172a;
 
   /* DEPRECATED: inventory-* HSL tokens — use semantic-* instead */
   --inventory-primary-50: 204 74.1% 22.3%;
