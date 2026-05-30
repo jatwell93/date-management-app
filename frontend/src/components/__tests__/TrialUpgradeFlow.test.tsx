@@ -4,7 +4,7 @@ import fetchMock from 'jest-fetch-mock';
 import { TrialUpgradeFlow } from '../TrialUpgradeFlow';
 
 jest.mock('../../lib/api.service', () => ({
-  buildApiUrl: (route) => `https://api.test${route}`,
+  buildApiUrl: (route: string) => `https://api.test${route}`,
 }));
 
 describe('TrialUpgradeFlow', () => {

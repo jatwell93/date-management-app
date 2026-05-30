@@ -141,7 +141,7 @@ function ProfilePage() {
   return (
     <div
       data-testid="profile-shell"
-      className="profile-color-field mx-auto w-full max-w-5xl overflow-x-hidden px-3 py-4 sm:px-4 sm:py-6"
+      className="mx-auto w-full max-w-5xl overflow-x-hidden rounded-lg border border-hairline bg-semantic-surface-1 px-3 py-4 sm:px-4 sm:py-6"
     >
       <div className="clerk-responsive-surface flex w-full justify-center">
         <UserProfile routing="path" path="/profile" appearance={responsiveClerkAppearance} />
