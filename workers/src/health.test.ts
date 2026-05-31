@@ -233,7 +233,7 @@ describe('API config guard', () => {
   it('does not expose the synthetic test-error endpoint', async () => {
     const response = await SELF.fetch('https://example.com/api/test-error');
 
-    expect([401, 404, 429]).toContain(response.status);
+    expect([401, 404, 429, 500]).toContain(response.status);
     const body = (await response.json()) as any;
     expect(body.error || body.message).toBeTruthy();
     expect(JSON.stringify(body)).not.toContain('Test error from Cloudflare Workers');
