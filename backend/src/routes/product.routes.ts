@@ -59,7 +59,7 @@ function handleUploadError(error: unknown, res: Response, next: NextFunction): v
 
   if (
     typeof uploadError.message === 'string' &&
-    uploadError.message.startsWith('Invalid file type.')
+    uploadError.message === 'Invalid file type. Only CSV, XLSX, and XLS files are allowed.'
   ) {
     res.status(400).json({ message: uploadError.message });
     return;
