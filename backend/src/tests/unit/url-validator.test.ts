@@ -64,8 +64,17 @@ describe('validateStripePriceId', () => {
   });
 
   afterAll(() => {
-    process.env.STRIPE_PROFESSIONAL_MONTHLY_PRICE_ID = originalProfessionalMonthly;
-    process.env.STRIPE_PROFESSIONAL_ANNUAL_PRICE_ID = originalProfessionalAnnual;
+    if (originalProfessionalMonthly === undefined) {
+      delete process.env.STRIPE_PROFESSIONAL_MONTHLY_PRICE_ID;
+    } else {
+      process.env.STRIPE_PROFESSIONAL_MONTHLY_PRICE_ID = originalProfessionalMonthly;
+    }
+
+    if (originalProfessionalAnnual === undefined) {
+      delete process.env.STRIPE_PROFESSIONAL_ANNUAL_PRICE_ID;
+    } else {
+      process.env.STRIPE_PROFESSIONAL_ANNUAL_PRICE_ID = originalProfessionalAnnual;
+    }
   });
 
   it('accepts configured Stripe price ids', () => {
