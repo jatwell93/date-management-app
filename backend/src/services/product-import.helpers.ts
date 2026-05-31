@@ -404,7 +404,11 @@ function normalizeMixedSeparators(text: string): string {
   return buildDecimalString(text, lastCommaIndex, /\./g);
 }
 
-function buildDecimalString(text: string, separatorIndex: number, thousandsPattern: RegExp): string {
+function buildDecimalString(
+  text: string,
+  separatorIndex: number,
+  thousandsPattern: RegExp,
+): string {
   const integerPart = text.substring(0, separatorIndex).replace(thousandsPattern, '');
   const decimalPart = text.substring(separatorIndex + 1);
   return integerPart + '.' + decimalPart;

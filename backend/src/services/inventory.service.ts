@@ -150,7 +150,7 @@ export class InventoryService {
         if (usage.totalInventoryItems >= usage.maxInventoryItems) {
           throw new Error(
             `Cannot create inventory item: maximum limit of ${usage.maxInventoryItems} inventory items reached. ` +
-            `Current usage: ${usage.totalInventoryItems}.`,
+              `Current usage: ${usage.totalInventoryItems}.`,
           );
         }
       }

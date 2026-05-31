@@ -29,11 +29,11 @@ jest.mock('@sentry/node', () => ({
 }));
 
 jest.mock('../../services/webhook.service', () => ({
-  WebhookService: class WebhookService { },
+  WebhookService: class WebhookService {},
 }));
 
 jest.mock('../../services/clerk-webhook.service', () => ({
-  ClerkWebhookService: class ClerkWebhookService { },
+  ClerkWebhookService: class ClerkWebhookService {},
 }));
 
 type MockResponse = Response & {
