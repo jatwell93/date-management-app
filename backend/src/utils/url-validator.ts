@@ -5,6 +5,7 @@
  */
 
 import { envConfig } from '../config/environment';
+import { getConfiguredStripePriceIds } from '../services/subscription-billing.helpers';
 
 /**
  * Validate that a URL is safe for redirects
@@ -67,8 +68,20 @@ export function validateRedirectUrl(url: string, fieldName: string = 'URL'): voi
   }
 }
 
+export class StripePriceConfigurationError extends Error {
+  constructor(message = 'Stripe price IDs are not configured on the server') {
+    super(message);
+    this.name = 'StripePriceConfigurationError';
+  }
+}
+
+function getAllowedStripePriceIds(): Set<string> {
+  const allowDefaults = envConfig.NODE_ENV === 'development' || envConfig.NODE_ENV === 'test';
+  return new Set(getConfiguredStripePriceIds({ includeDefaults: allowDefaults }));
+}
+
 /**
- * Validate Stripe price ID format
+ * Validate Stripe price ID format and checkout allowlist
  */
 export function validateStripePriceId(priceId: string): void {
   if (!priceId || typeof priceId !== 'string') {
@@ -81,5 +94,19 @@ export function validateStripePriceId(priceId: string): void {
 
   if (priceId.length < 10 || priceId.length > 100) {
     throw new Error('priceId has invalid length');
+  }
+
+  const allowedPriceIds = getAllowedStripePriceIds();
+
+  if (
+    allowedPriceIds.size === 0 &&
+    envConfig.NODE_ENV !== 'development' &&
+    envConfig.NODE_ENV !== 'test'
+  ) {
+    throw new StripePriceConfigurationError();
+  }
+
+  if (!allowedPriceIds.has(priceId)) {
+    throw new Error('priceId is not configured for checkout');
   }
 }

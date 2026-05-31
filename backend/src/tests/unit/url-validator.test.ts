@@ -55,8 +55,37 @@ describe('validateRedirectUrl', () => {
 });
 
 describe('validateStripePriceId', () => {
-  it('accepts valid Stripe price ids', () => {
-    expect(() => validateStripePriceId('price_1234567890abc')).not.toThrow();
+  const originalProfessionalMonthly = process.env.STRIPE_PROFESSIONAL_MONTHLY_PRICE_ID;
+  const originalProfessionalAnnual = process.env.STRIPE_PROFESSIONAL_ANNUAL_PRICE_ID;
+
+  beforeEach(() => {
+    process.env.STRIPE_PROFESSIONAL_MONTHLY_PRICE_ID = 'price_professional_monthly';
+    process.env.STRIPE_PROFESSIONAL_ANNUAL_PRICE_ID = 'price_professional_annual';
+  });
+
+  afterAll(() => {
+    if (originalProfessionalMonthly === undefined) {
+      delete process.env.STRIPE_PROFESSIONAL_MONTHLY_PRICE_ID;
+    } else {
+      process.env.STRIPE_PROFESSIONAL_MONTHLY_PRICE_ID = originalProfessionalMonthly;
+    }
+
+    if (originalProfessionalAnnual === undefined) {
+      delete process.env.STRIPE_PROFESSIONAL_ANNUAL_PRICE_ID;
+    } else {
+      process.env.STRIPE_PROFESSIONAL_ANNUAL_PRICE_ID = originalProfessionalAnnual;
+    }
+  });
+
+  it('accepts configured Stripe price ids', () => {
+    expect(() => validateStripePriceId('price_professional_monthly')).not.toThrow();
+    expect(() => validateStripePriceId('price_professional_annual')).not.toThrow();
+  });
+
+  it('rejects valid-looking Stripe price ids that are not configured', () => {
+    expect(() => validateStripePriceId('price_1234567890abc')).toThrow(
+      'priceId is not configured for checkout',
+    );
   });
 
   it('rejects empty ids', () => {

@@ -6,9 +6,13 @@ const mockUploadMiddleware = jest.fn();
 const mockMulterSingle = jest.fn(() => (req: any, res: any, next: any) => {
   mockUploadMiddleware(req, res, next);
 });
-const mockMulter = jest.fn(() => ({
-  single: mockMulterSingle,
-}));
+let capturedMulterOptions: unknown;
+const mockMulter = jest.fn((options: unknown) => {
+  capturedMulterOptions = options;
+  return {
+    single: mockMulterSingle,
+  };
+});
 
 const mockUnlink = jest.fn();
 
@@ -95,9 +99,7 @@ import { ProductController } from '../../controllers/product.controller';
 
 describe('product.routes organization guards', () => {
   beforeAll(() => {
-    mockProductController = new ProductController(
-      () => mockProductService as any,
-    );
+    mockProductController = new ProductController(() => mockProductService as any);
     mockProductController.uploadCsv = async (req: any, res: any, next: any) => {
       try {
         if (!req.file) {
@@ -201,11 +203,26 @@ describe('product.routes organization guards', () => {
           path: path.resolve('uploads', 'products-upload.csv'),
           originalname: 'products-upload.csv',
         };
+      } else if (mode === 'valid-xlsx') {
+        req.file = {
+          path: path.resolve('uploads', 'products-upload.xlsx'),
+          originalname: 'products-upload.xlsx',
+        };
       } else if (mode === 'invalid-path') {
         req.file = {
           path: path.join('uploads', 'products-upload.csv'),
           originalname: 'products-upload.csv',
         };
+      } else if (mode === 'too-large') {
+        const error = new Error('File too large') as Error & { code?: string };
+        error.code = 'LIMIT_FILE_SIZE';
+        next(error);
+        return;
+      } else if (mode === 'invalid-type-code') {
+        const error = new Error('Multer rejected uploaded file type') as Error & { code?: string };
+        error.code = 'INVALID_PRODUCT_UPLOAD_TYPE';
+        next(error);
+        return;
       }
 
       next();
@@ -395,9 +412,7 @@ describe('product.routes organization guards', () => {
   });
 
   it('returns 500 on export-excess when data retrieval throws', async () => {
-    mockProductService.getExcessProductsView.mockRejectedValue(
-      new Error('tier lookup failed'),
-    );
+    mockProductService.getExcessProductsView.mockRejectedValue(new Error('tier lookup failed'));
 
     const response = await request(app).get('/products/export-excess').set('x-org-id', 'org-1');
 
@@ -612,6 +627,40 @@ describe('product.routes organization guards', () => {
     expect(response.body.message).toBe('No file provided');
   });
 
+  it('configures multer with the default 10MB upload limit', () => {
+    expect(capturedMulterOptions).toEqual(
+      expect.objectContaining({
+        limits: { fileSize: 10 * 1024 * 1024 },
+      }),
+    );
+  });
+
+  it('returns 400 on upload-csv when multer rejects an oversized file', async () => {
+    const response = await request(app)
+      .post('/products/upload-csv')
+      .set('x-org-id', 'org-1')
+      .set('x-upload-mode', 'too-large');
+
+    expect(response.status).toBe(400);
+    expect(response.body).toEqual({
+      message: 'File too large. Maximum upload size is 10MB.',
+    });
+    expect(mockProductService.processCSVUpload).not.toHaveBeenCalled();
+  });
+
+  it('returns a canonical 400 when multer rejects an invalid file type', async () => {
+    const response = await request(app)
+      .post('/products/upload-csv')
+      .set('x-org-id', 'org-1')
+      .set('x-upload-mode', 'invalid-type-code');
+
+    expect(response.status).toBe(400);
+    expect(response.body).toEqual({
+      message: 'Invalid file type. Only CSV, XLSX, and XLS files are allowed.',
+    });
+    expect(mockProductService.processCSVUpload).not.toHaveBeenCalled();
+  });
+
   it('returns 400 on upload-csv when file path fails safety check', async () => {
     const response = await request(app)
       .post('/products/upload-csv')
@@ -643,6 +692,27 @@ describe('product.routes organization guards', () => {
     expect(mockProductService.processCSVUpload).toHaveBeenCalledWith(
       absolutePath,
       'products-upload.csv',
+    );
+  });
+
+  it('returns successful upload summary when XLSX processing succeeds within the limit', async () => {
+    const absolutePath = path.resolve('uploads', 'products-upload.xlsx');
+
+    const response = await request(app)
+      .post('/products/upload-csv')
+      .set('x-org-id', 'org-1')
+      .set('x-upload-mode', 'valid-xlsx');
+
+    expect(response.status).toBe(200);
+    expect(response.body).toEqual({
+      success: true,
+      message: 'CSV processed successfully',
+      imported: 1,
+      updated: 0,
+    });
+    expect(mockProductService.processCSVUpload).toHaveBeenCalledWith(
+      absolutePath,
+      'products-upload.xlsx',
     );
   });
 
