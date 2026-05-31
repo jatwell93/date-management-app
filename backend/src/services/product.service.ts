@@ -18,6 +18,9 @@ import {
   getProductImportXlsxUnexpectedColumns,
   findColumnByAlternatives,
   findColumnIndexByAlternatives,
+  parseProductImportCost,
+  resolveProductImportOperation,
+  validateProductImportRow,
 } from './product-import.helpers';
 
 import { injectable, inject } from 'tsyringe';
@@ -66,141 +69,7 @@ export function extractCostValue(costStr: string): number | null {
 
 // Enhanced helper function to extract numeric value from cost string with flexible formatting
 export function extractCostValueEnhanced(costStr: string): number | null {
-  let cleanedStr = costStr.trim();
-  let isNegative = false;
-
-  // 1. Handle negative values in parentheses first, e.g., "(12.34)" or "$(12.34)"
-  if (cleanedStr.includes('(') && cleanedStr.includes(')')) {
-    const openParenIndex = cleanedStr.lastIndexOf('('); // Use last occurrence to handle cases like "$(12.34)"
-    const closeParenIndex = cleanedStr.indexOf(')', openParenIndex);
-    if (closeParenIndex > openParenIndex) {
-      isNegative = true;
-      // Extract the content inside the parentheses
-      const insideParen = cleanedStr.substring(openParenIndex + 1, closeParenIndex);
-      // Remove the parentheses and what's around them
-      cleanedStr =
-        cleanedStr.substring(0, openParenIndex) +
-        insideParen +
-        cleanedStr.substring(closeParenIndex + 1);
-    }
-  }
-
-  // 2. Remove common currency symbols and codes (this includes currency codes like USD, EUR)
-  // More comprehensive pattern to match currency symbols and codes at start or end
-  cleanedStr = cleanedStr.replace(
-    /([A-Z]{3,4}[\s]*)|([\s]*[A-Z]{3,4})|[\s$€£¥₹₽₪₨₩₦₡₫Є₴₵₸₺₼₾₯]/gi,
-    '',
-  );
-
-  // 3. Normalize spaces (remove all spaces)
-  cleanedStr = cleanedStr.trim().replace(/\s+/g, '');
-
-  // 4. Handle explicit negative sign if not already handled by parentheses
-  if (cleanedStr.startsWith('-')) {
-    isNegative = true;
-    cleanedStr = cleanedStr.substring(1);
-  }
-
-  // 5. Count and analyze separators to determine decimal vs. thousands
-  const dotCount = (cleanedStr.match(/\./g) || []).length;
-  const commaCount = (cleanedStr.match(/,/g) || []).length;
-
-  let normalizedStr = cleanedStr;
-
-  if (dotCount > 1 && commaCount === 0) {
-    // Multiple dots, no commas (e.g. 1.000.000) -> dots are thousands separators
-    // Heuristic: Check last segment length to see if it might be a decimal
-    const lastDotIndex = cleanedStr.lastIndexOf('.');
-    const afterLastDot = cleanedStr.substring(lastDotIndex + 1);
-
-    if (afterLastDot.length === 2) {
-      // Heuristic: 12.34.56 -> 1234.56 (last dot is decimal)
-      // Replace all dots BEFORE the last one
-      const part1 = cleanedStr.substring(0, lastDotIndex).replace(/\./g, '');
-      normalizedStr = part1 + '.' + afterLastDot;
-    } else {
-      // Assume all dots are thousands separators
-      normalizedStr = cleanedStr.replace(/\./g, '');
-    }
-  } else if (commaCount > 1 && dotCount === 0) {
-    // Multiple commas, no dots (e.g. 1,000,000) -> commas are thousands separators
-    normalizedStr = cleanedStr.replace(/,/g, '');
-  } else if (dotCount === 0 && commaCount === 0) {
-    // No separators - just digits
-    normalizedStr = cleanedStr;
-  } else if (dotCount === 1 && commaCount === 0) {
-    // Single dot - US format (decimal)
-    normalizedStr = cleanedStr;
-  } else if (dotCount === 0 && commaCount === 1) {
-    // Single comma - might be European decimal or thousands separator
-    const commaIndex = cleanedStr.lastIndexOf(',');
-    const afterComma = cleanedStr.substring(commaIndex + 1);
-
-    // If after comma is 1-3 digits, it's likely a decimal separator
-    if (/^\d{1,3}$/.test(afterComma)) {
-      // European format: use comma as decimal point
-      normalizedStr = cleanedStr.replace(',', '.');
-    } else {
-      // Thousands separator
-      normalizedStr = cleanedStr.replace(/,/g, '');
-    }
-  } else if (commaCount === 0 && dotCount === 1) {
-    // Single dot - US format (decimal)
-    normalizedStr = cleanedStr;
-  } else if (dotCount === 0 && commaCount === 1) {
-    // Single comma - European format (decimal)
-    normalizedStr = cleanedStr.replace(',', '.');
-  } else {
-    // Multiple separators - rightmost one is decimal separator
-    const lastDotIndex = cleanedStr.lastIndexOf('.');
-    const lastCommaIndex = cleanedStr.lastIndexOf(',');
-
-    // The rightmost separator is the decimal point
-    if (lastDotIndex > lastCommaIndex) {
-      // Last separator is dot: US format (dot is decimal, commas are thousands)
-      const integerPart = cleanedStr.substring(0, lastDotIndex).replace(/,/g, '');
-      const decimalPart = cleanedStr.substring(lastDotIndex + 1);
-      normalizedStr = integerPart + '.' + decimalPart;
-    } else if (lastCommaIndex > lastDotIndex) {
-      // Last separator is comma: European format (comma is decimal, dots are thousands)
-      const integerPart = cleanedStr.substring(0, lastCommaIndex).replace(/\./g, '');
-      const decimalPart = cleanedStr.substring(lastCommaIndex + 1);
-      normalizedStr = integerPart + '.' + decimalPart;
-    } else {
-      // Both have same last index (shouldn't happen in practice with our approach)
-      // Default to keeping original
-      normalizedStr = cleanedStr;
-    }
-  }
-
-  // Handle special case for "1,000" or "1.000" where there's no decimal part
-  if (normalizedStr.match(/^[0-9]+[,.][0-9]{3}$/)) {
-    // This is likely a thousands separator, not a decimal separator
-    normalizedStr = normalizedStr.replace(/[,.]/, '');
-  }
-
-  // 6. Final cleanup to ensure only digits and a single dot remain
-  normalizedStr = normalizedStr.replace(/[^\d.]/g, '');
-
-  // Ensure there's only one decimal point (in case multiple were introduced)
-  const parts = normalizedStr.split('.');
-  if (parts.length > 2) {
-    // If there are multiple decimal points, join all but the last part with no separator,
-    // then add the last part as decimal
-    const integerPart = parts.slice(0, -1).join('');
-    const decimalPart = parts[parts.length - 1];
-    normalizedStr = integerPart + '.' + decimalPart;
-  }
-
-  // Parse the value
-  const value = parseFloat(normalizedStr);
-
-  if (Number.isNaN(value)) {
-    return null;
-  }
-
-  // Apply negative sign if originally detected
-  return isNegative ? -value : value;
+  return parseProductImportCost(costStr);
 }
 
 @injectable()
@@ -516,6 +385,7 @@ export class ProductService {
         })
         .on('data', (row) => {
           recordCount++;
+          const rowNumber = recordCount;
 
           // Create a promise for each row processing to handle async operations properly
           const rowProcessingPromise = (async () => {
@@ -528,110 +398,28 @@ export class ProductService {
                 row,
                 columnState,
               );
+              const validation = validateProductImportRow({
+                rowNumber,
+                values: { sku, name, costStr, barcode },
+                unexpectedColumns: getProductImportCsvUnexpectedColumns(row, columnState),
+              });
 
-              // Check if all required fields are present
-              if (!sku) {
-                errors.push(
-                  `Row ${recordCount}: Missing required field - SKU. Please ensure the column exists and contains a value.`,
-                );
-              }
-              if (!name) {
-                errors.push(
-                  `Row ${recordCount}: Missing required field - Name. Please ensure the column exists and contains a value.`,
-                );
-              }
-              if (!costStr) {
-                errors.push(
-                  `Row ${recordCount}: Missing required field - Cost. Please ensure the column exists and contains a numeric value (e.g., '12.99', '$12.99', or 'EUR 12.99').`,
-                );
-              }
-              if (!barcode) {
-                errors.push(
-                  `Row ${recordCount}: Missing required field - Barcode. Please ensure the column exists and contains a value.`,
-                );
-              }
-
-              // If any required field is missing, skip processing this row
-              if (!sku || !name || !costStr || !barcode) {
+              if (!validation.isValid) {
+                errors.push(...validation.errors);
                 return;
-              }
-
-              // Validate data type for cost (should be a valid number)
-              // Handle cost values with currency symbols using the helper function
-              const cost = extractCostValueEnhanced(costStr);
-              if (cost === null) {
-                errors.push(
-                  `Row ${recordCount}: Invalid cost value - "${costStr}". Cost can be a positive or negative number. Acceptable formats include: '12.99', '$12.99', '€15.50', '(10.99)' for negative values, '1,234.56', '1.234,56' (European format).`,
-                );
-                return;
-              }
-
-              // Additional validations
-              if (sku.length > 100) {
-                errors.push(
-                  `Row ${recordCount}: SKU too long (max 100 characters) - "${sku.substring(0, 50)}...". Please ensure the SKU value is 100 characters or fewer.`,
-                );
-                return;
-              }
-
-              if (name.length > 200) {
-                errors.push(
-                  `Row ${recordCount}: Name too long (max 200 characters) - "${name.substring(0, 50)}...". Please ensure the Name value is 200 characters or fewer.`,
-                );
-                return;
-              }
-
-              if (barcode.length > 100) {
-                errors.push(
-                  `Row ${recordCount}: Barcode too long (max 100 characters) - "${barcode.substring(0, 50)}...". Please ensure the Barcode value is 100 characters or fewer.`,
-                );
-                return;
-              }
-
-              // Verify that all required fields were found
-              if (!columnState.skuHeader) {
-                errors.push(
-                  `Row ${recordCount}: Could not find required column - SKU (alternatives: SKU, Item Code, Reorder Number, Product Code, Item Number)`,
-                );
-                return;
-              }
-              if (!columnState.nameHeader) {
-                errors.push(
-                  `Row ${recordCount}: Could not find required column - Name (alternatives: Name, Item Description, Product Name, Description, Item Name)`,
-                );
-                return;
-              }
-              if (!columnState.costHeader) {
-                errors.push(
-                  `Row ${recordCount}: Could not find required column - Cost (alternatives: Cost, Cost Price, Unit Cost, Cost ex, Price, Unit Price, Cost inc, Selling Price, Retail Price)`,
-                );
-                return;
-              }
-              if (!columnState.barcodeHeader) {
-                errors.push(
-                  `Row ${recordCount}: Could not find required column - Barcode (alternatives: Barcode, Alias, EAN, UPC, GTIN, Product Barcode, Barcode Number)`,
-                );
-                return;
-              }
-
-              // Check for unexpected columns (not in our required or alternative columns list)
-              const unexpectedColumns = getProductImportCsvUnexpectedColumns(row, columnState);
-
-              if (unexpectedColumns.length > 0) {
-                errors.push(
-                  `Row ${recordCount}: Unexpected columns found - ${unexpectedColumns.join(', ')}`,
-                );
-                return; // Skip processing this row if there are unexpected columns
               }
 
               // Check if product already exists (by SKU or Barcode)
               let existingProduct: Product | null = null;
               try {
-                existingProduct = await this.getProductBySkuOrBarcode(sku, barcode);
+                existingProduct = await this.getProductBySkuOrBarcode(
+                  validation.row.sku,
+                  validation.row.barcode,
+                );
               } catch (duplicateError: unknown) {
                 const errorMessage =
                   duplicateError instanceof Error ? duplicateError.message : 'Unknown error';
-                errors.push(`Row ${recordCount}: ${errorMessage}`);
+                errors.push(`Row ${rowNumber}: ${errorMessage}`);
                 return; // Skip processing this row
               }
 
@@ -639,41 +427,41 @@ export class ProductService {
                 // Update existing product
                 try {
                   await this.updateProduct(existingProduct.id, {
-                    barcode,
-                    sku, // Update SKU as well in case it changed
-                    name,
-                    costPrice: cost,
+                    barcode: validation.row.barcode,
+                    sku: validation.row.sku, // Update SKU as well in case it changed
+                    name: validation.row.name,
+                    costPrice: validation.row.cost,
                   });
                   updated++;
                 } catch (updateError: unknown) {
                   const errorMessage =
                     updateError instanceof Error ? updateError.message : 'Unknown error';
                   errors.push(
-                    `Row ${recordCount}: Failed to update existing product (SKU: ${sku}) - ${errorMessage}`,
+                    `Row ${rowNumber}: Failed to update existing product (SKU: ${validation.row.sku}) - ${errorMessage}`,
                   );
                 }
               } else {
                 // Create new product
                 try {
                   await this.createProduct({
-                    barcode,
-                    sku,
-                    name,
-                    costPrice: cost,
+                    barcode: validation.row.barcode,
+                    sku: validation.row.sku,
+                    name: validation.row.name,
+                    costPrice: validation.row.cost,
                   });
                   imported++;
                 } catch (createError: unknown) {
                   const errorMessage =
                     createError instanceof Error ? createError.message : 'Unknown error';
                   errors.push(
-                    `Row ${recordCount}: Failed to create new product (SKU: ${sku}) - ${errorMessage}`,
+                    `Row ${rowNumber}: Failed to create new product (SKU: ${validation.row.sku}) - ${errorMessage}`,
                   );
                 }
               }
             } catch (error: unknown) {
               const errorMessage = error instanceof Error ? error.message : 'Unknown error';
-              Logger.error(`Error processing row ${recordCount}`, { error: errorMessage });
-              errors.push(`Row ${recordCount}: Unexpected error processing data - ${errorMessage}`);
+              Logger.error(`Error processing row ${rowNumber}`, { error: errorMessage });
+              errors.push(`Row ${rowNumber}: Unexpected error processing data - ${errorMessage}`);
             }
           })();
 
@@ -806,130 +594,74 @@ export class ProductService {
         try {
           // Get values from the appropriate columns
           const { sku, name, costStr, barcode } = getProductImportXlsxRowValues(row, columnState);
+          const validation = validateProductImportRow({
+            rowNumber: recordCount,
+            values: { sku, name, costStr, barcode },
+            unexpectedColumns: [],
+          });
 
-          // Check if all required fields are present
-          if (!sku) {
-            errors.push(
-              `Row ${recordCount}: Missing required field - SKU. Please ensure the column exists and contains a value.`,
-            );
-          }
-          if (!name) {
-            errors.push(
-              `Row ${recordCount}: Missing required field - Name. Please ensure the column exists and contains a value.`,
-            );
-          }
-          if (!costStr) {
-            errors.push(
-              `Row ${recordCount}: Missing required field - Cost. Please ensure the column exists and contains a numeric value (e.g., '12.99', '$12.99', or 'EUR 12.99').`,
-            );
-          }
-          if (!barcode) {
-            errors.push(
-              `Row ${recordCount}: Missing required field - Barcode. Please ensure the column exists and contains a value.`,
-            );
-          }
-
-          // If any required field is missing, skip processing this row
-          if (!sku || !name || !costStr || !barcode) {
+          if (!validation.isValid) {
+            errors.push(...validation.errors);
             continue;
           }
 
-          // Validate data type for cost (should be a valid number)
-          // Handle cost values with currency symbols using the helper function
-          const cost = extractCostValueEnhanced(costStr);
-          if (cost === null) {
-            errors.push(
-              `Row ${recordCount}: Invalid cost value - \\\"${costStr}\\\". Cost can be a positive or negative number. Acceptable formats include: '12.99', '$12.99', '€15.50', '(10.99)' for negative values, '1,234.56', '1.234,56' (European format).`,
-            );
-            continue;
+          const operation = resolveProductImportOperation({
+            sku: validation.row.sku,
+            barcode: validation.row.barcode,
+            bySku: productMap.get(validation.row.sku) || null,
+            byBarcode: barcodeMap.get(validation.row.barcode) || null,
+          });
+
+          if (operation.type === 'conflict') {
+            throw new Error(operation.error);
           }
 
-          // Additional validations
-          if (sku.length > 100) {
-            errors.push(
-              `Row ${recordCount}: SKU too long (max 100 characters) - \\\"${sku.substring(0, 50)}...\\\". Please ensure the SKU value is 100 characters or fewer.`,
-            );
-            continue;
-          }
-
-          if (name.length > 200) {
-            errors.push(
-              `Row ${recordCount}: Name too long (max 200 characters) - \\\"${name.substring(0, 50)}...\\\". Please ensure the Name value is 200 characters or fewer.`,
-            );
-            continue;
-          }
-
-          if (barcode.length > 100) {
-            errors.push(
-              `Row ${recordCount}: Barcode too long (max 100 characters) - \\\"${barcode.substring(0, 50)}...\\\". Please ensure the Barcode value is 100 characters or fewer.`,
-            );
-            continue;
-          }
-
-          // Check if a product with this SKU or Barcode already exists using in-memory lookup
-          let existingProduct: Product | null = null;
-
-          if (sku) {
-            existingProduct = productMap.get(sku) || null;
-          }
-
-          if (!existingProduct && barcode) {
-            existingProduct = barcodeMap.get(barcode) || null;
-          }
-
-          // If both SKU and barcode are found but they refer to different products, that's an error
-          const skuProduct = sku ? productMap.get(sku) || null : null;
-          const barcodeProduct = barcode ? barcodeMap.get(barcode) || null : null;
-
-          if (skuProduct && barcodeProduct && skuProduct.id !== barcodeProduct.id) {
-            throw new Error(
-              `Duplicate identifiers detected: SKU ${sku} exists in product ${skuProduct.id} and barcode ${barcode} exists in product ${barcodeProduct.id}. This will cause data integrity issues.`,
-            );
-          }
-
-          if (existingProduct) {
+          if (operation.type === 'update') {
+            const existingProduct = operation.product;
             // Update existing product
             try {
               const updatedProduct = await this.updateProduct(existingProduct.id, {
-                barcode,
-                sku, // Update SKU as well in case it changed
-                name,
-                costPrice: cost,
+                barcode: validation.row.barcode,
+                sku: validation.row.sku, // Update SKU as well in case it changed
+                name: validation.row.name,
+                costPrice: validation.row.cost,
               });
 
               if (updatedProduct) {
                 updated++;
 
                 // Update our in-memory maps for consistency if the SKU changed
-                if (existingProduct.sku !== sku) {
+                if (existingProduct.sku !== validation.row.sku) {
                   productMap.delete(existingProduct.sku);
-                  productMap.set(sku, updatedProduct);
+                  productMap.set(validation.row.sku, updatedProduct);
                 }
 
                 // Update in case the barcode changed too
-                if (existingProduct.barcode !== barcode) {
+                if (existingProduct.barcode !== validation.row.barcode) {
                   barcodeMap.delete(existingProduct.barcode);
-                  barcodeMap.set(barcode, updatedProduct);
+                  barcodeMap.set(validation.row.barcode, updatedProduct);
                 } else {
                   // Update with new record otherwise
-                  barcodeMap.set(barcode, updatedProduct);
+                  barcodeMap.set(validation.row.barcode, updatedProduct);
                 }
               } else {
-                errors.push(`Row ${recordCount}: Failed to update existing product (SKU: ${sku})`);
+                errors.push(
+                  `Row ${recordCount}: Failed to update existing product (SKU: ${validation.row.sku})`,
+                );
               }
             } catch (updateError) {
               errors.push(
-                `Row ${recordCount}: Failed to update existing product (SKU: ${sku}) - ${(updateError as Error).message}`,
+                `Row ${recordCount}: Failed to update existing product (SKU: ${validation.row.sku}) - ${(updateError as Error).message}`,
               );
             }
           } else {
             // Create new product
             try {
               const newProduct = await this.createProduct({
-                barcode,
-                sku,
-                name,
-                costPrice: cost,
+                barcode: validation.row.barcode,
+                sku: validation.row.sku,
+                name: validation.row.name,
+                costPrice: validation.row.cost,
               });
 
               if (newProduct) {
@@ -943,11 +675,13 @@ export class ProductService {
                   barcodeMap.set(newProduct.barcode, newProduct);
                 }
               } else {
-                errors.push(`Row ${recordCount}: Failed to create new product (SKU: ${sku})`);
+                errors.push(
+                  `Row ${recordCount}: Failed to create new product (SKU: ${validation.row.sku})`,
+                );
               }
             } catch (createError) {
               errors.push(
-                `Row ${recordCount}: Failed to create new product (SKU: ${sku}) - ${(createError as Error).message}`,
+                `Row ${recordCount}: Failed to create new product (SKU: ${validation.row.sku}) - ${(createError as Error).message}`,
               );
             }
           }
@@ -1050,18 +784,17 @@ export class ProductService {
       barcode,
       this.organizationId,
     );
+    const operation = resolveProductImportOperation({ sku, barcode, bySku, byBarcode });
 
-    if (bySku && byBarcode && bySku.id !== byBarcode.id) {
-      throw new Error(
-        `Duplicate identifiers detected: SKU ${sku} exists in product ${bySku.id} and barcode ${barcode} exists in product ${byBarcode.id}. This will cause data integrity issues.`,
-      );
+    if (operation.type === 'conflict') {
+      throw new Error(operation.error);
     }
 
-    const prismaProduct = bySku ?? byBarcode;
-
-    if (!prismaProduct) {
+    if (operation.type === 'create') {
       return null;
     }
+
+    const prismaProduct = operation.product;
 
     return {
       id: prismaProduct.id,
