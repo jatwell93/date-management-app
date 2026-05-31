@@ -24,3 +24,7 @@
 - [x] 4.5 Run `npm run security:npm-supply-chain`.
 - [ ] 4.6 Run `openspec validate --all` (ran; this change passes, but unrelated existing changes fail validation).
 - [ ] 4.7 Run `doppler run -- cs delta` when Doppler is available (attempted with user approval; blocked by external data disclosure approval policy).
+
+## 5. Review Follow-up
+
+- [x] 5.1 Restore Stripe checkout route test `process.env` mutations after the suite.

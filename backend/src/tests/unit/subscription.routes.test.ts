@@ -83,6 +83,26 @@ const actualUrlValidator = jest.requireActual(
 
 const configuredMonthlyPriceId = 'price_professional_monthly';
 const configuredAnnualPriceId = 'price_professional_annual';
+const envKeysChangedBySuite = [
+  'FRONTEND_URL',
+  'STRIPE_PROFESSIONAL_MONTHLY_PRICE_ID',
+  'STRIPE_PROFESSIONAL_ANNUAL_PRICE_ID',
+] as const;
+
+const originalEnvValues = Object.fromEntries(
+  envKeysChangedBySuite.map((key) => [key, process.env[key]]),
+) as Record<(typeof envKeysChangedBySuite)[number], string | undefined>;
+
+const restoreEnvValue = (key: (typeof envKeysChangedBySuite)[number]) => {
+  const originalValue = originalEnvValues[key];
+
+  if (originalValue === undefined) {
+    delete process.env[key];
+    return;
+  }
+
+  process.env[key] = originalValue;
+};
 
 describe('subscription.routes', () => {
   const app = express();
@@ -181,6 +201,10 @@ describe('subscription.routes', () => {
         },
       },
     }));
+  });
+
+  afterAll(() => {
+    envKeysChangedBySuite.forEach(restoreEnvValue);
   });
 
   describe('GET /subscription/trial-status', () => {
