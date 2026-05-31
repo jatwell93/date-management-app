@@ -68,7 +68,7 @@
     "node-cron": "^4.2.1",
     "pg": "^8.21.0",
     "prisma": "^5.22.0",
-    "rate-limiter-flexible": "^8.3.0",
+    "rate-limiter-flexible": "^11.1.0",
     "reflect-metadata": "^0.1.14",
     "sqlite": "^5.1.1",
     "sqlite3": "^6.0.1",
