@@ -31,3 +31,5 @@
 - [x] 5.2 Surface missing production Stripe price configuration as a server error instead of client validation.
 - [x] 5.3 Use a stable upload file-type error code with a canonical `400` response message.
 - [x] 5.4 Document the required backend Stripe price environment variables in the proposal.
+- [x] 5.5 Reuse the billing price catalog for checkout price allowlist validation.
+- [x] 5.6 Tighten the Workers `/api/test-error` regression test to require a production-like `404`.

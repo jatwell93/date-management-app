@@ -2,6 +2,7 @@ import { env, SELF } from 'cloudflare:test';
 import { describe, it, expect, vi } from 'vitest';
 import { healthCheck } from './health';
 import {
+  default as worker,
   handleLogin,
   handleOrganizationBootstrap,
   handleRegister,
@@ -231,11 +232,43 @@ describe('API config guard', () => {
   });
 
   it('does not expose the synthetic test-error endpoint', async () => {
-    const response = await SELF.fetch('https://example.com/api/test-error');
+    const productionLikeEnv = {
+      ...env,
+      NODE_ENV: 'production',
+      JWT_SECRET: 'test-secret',
+      STORAGE_PROVIDER: 'r2',
+      MAX_FILE_SIZE: '10485760',
+      CSV_BATCH_SIZE: '100',
+      RATE_LIMIT_WINDOW: '60000',
+      RATE_LIMIT_MAX_REQUESTS: '100',
+      RATE_LIMIT_MAX_AUTHENTICATED: '1000',
+      NEON_CONNECTION_STRING: 'postgresql://user:password@db.example.com/app?sslmode=require',
+      R2_ACCOUNT_ID: 'test',
+      R2_ACCESS_KEY_ID: 'test',
+      R2_SECRET_ACCESS_KEY: 'test',
+      R2_BUCKET_NAME: 'test',
+      CSV_UPLOADS: {
+        list: vi.fn().mockResolvedValue({ objects: [] }),
+      } as unknown as R2Bucket,
+      HYPERDRIVE: {
+        connectionString: 'postgresql://user:password@db.example.com/app?sslmode=require',
+      } as unknown as Hyperdrive,
+    } as Env;
 
-    expect([401, 404, 429, 500]).toContain(response.status);
+    const ctx = {
+      waitUntil: vi.fn(),
+      passThroughOnException: vi.fn(),
+    } as unknown as ExecutionContext;
+
+    const response = await worker.fetch(
+      new Request('https://example.com/api/test-error'),
+      productionLikeEnv,
+      ctx,
+    );
+
+    expect(response.status).toBe(404);
     const body = (await response.json()) as any;
-    expect(body.error || body.message).toBeTruthy();
+    expect(body.error || body.message).toBe('Not Found');
     expect(JSON.stringify(body)).not.toContain('Test error from Cloudflare Workers');
   });
 });

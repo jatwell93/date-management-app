@@ -5,6 +5,7 @@
  */
 
 import { envConfig } from '../config/environment';
+import { getConfiguredStripePriceIds } from '../services/subscription-billing.helpers';
 
 /**
  * Validate that a URL is safe for redirects
@@ -67,24 +68,6 @@ export function validateRedirectUrl(url: string, fieldName: string = 'URL'): voi
   }
 }
 
-const STRIPE_PRICE_ID_ENV_KEYS = [
-  'STRIPE_PROFESSIONAL_MONTHLY_PRICE_ID',
-  'STRIPE_PROFESSIONAL_ANNUAL_PRICE_ID',
-  'STRIPE_PREMIUM_MONTHLY_PRICE_ID',
-  'STRIPE_PREMIUM_ANNUAL_PRICE_ID',
-  'STRIPE_CONCIERGE_MONTHLY_PRICE_ID',
-  'STRIPE_CONCIERGE_ANNUAL_PRICE_ID',
-] as const;
-
-const DEFAULT_STRIPE_PRICE_IDS = [
-  'price_professional_monthly',
-  'price_professional_annual',
-  'price_premium_monthly',
-  'price_premium_annual',
-  'price_concierge_monthly',
-  'price_concierge_annual',
-] as const;
-
 export class StripePriceConfigurationError extends Error {
   constructor(message = 'Stripe price IDs are not configured on the server') {
     super(message);
@@ -94,12 +77,7 @@ export class StripePriceConfigurationError extends Error {
 
 function getAllowedStripePriceIds(): Set<string> {
   const allowDefaults = envConfig.NODE_ENV === 'development' || envConfig.NODE_ENV === 'test';
-  return new Set(
-    [
-      ...STRIPE_PRICE_ID_ENV_KEYS.map((key) => process.env[key]),
-      ...(allowDefaults ? DEFAULT_STRIPE_PRICE_IDS : []),
-    ].filter((priceId): priceId is string => typeof priceId === 'string' && priceId.length > 0),
-  );
+  return new Set(getConfiguredStripePriceIds({ includeDefaults: allowDefaults }));
 }
 
 /**
