@@ -86,10 +86,11 @@ const DEFAULT_STRIPE_PRICE_IDS = [
 ] as const;
 
 function getAllowedStripePriceIds(): Set<string> {
+  const allowDefaults = envConfig.NODE_ENV === 'development' || envConfig.NODE_ENV === 'test';
   return new Set(
     [
       ...STRIPE_PRICE_ID_ENV_KEYS.map((key) => process.env[key]),
-      ...DEFAULT_STRIPE_PRICE_IDS,
+      ...(allowDefaults ? DEFAULT_STRIPE_PRICE_IDS : []),
     ].filter((priceId): priceId is string => typeof priceId === 'string' && priceId.length > 0),
   );
 }
