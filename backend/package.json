@@ -80,7 +80,6 @@
     "zod": "^4.4.3"
   },
   "overrides": {
-    "brace-expansion": "5.0.6",
     "tar": "7.5.15",
     "ws": "8.20.1"
   },

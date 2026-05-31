@@ -154,7 +154,7 @@ describe('product-import helpers', () => {
 
       expect(result.isValid).toBe(false);
       expect(result.errors).toEqual([
-        'Row 12: Invalid cost value - "not-a-cost". Cost can be a positive or negative number. Acceptable formats include: \'12.99\', \'$12.99\', \'€15.50\', \'(10.99)\' for negative values, \'1,234.56\', \'1.234,56\' (European format).',
+        "Row 12: Invalid cost value - \"not-a-cost\". Cost can be a positive or negative number. Acceptable formats include: '12.99', '$12.99', '€15.50', '(10.99)' for negative values, '1,234.56', '1.234,56' (European format).",
         `Row 12: SKU too long (max 100 characters) - "${'S'.repeat(50)}...". Please ensure the SKU value is 100 characters or fewer.`,
         `Row 12: Name too long (max 200 characters) - "${'N'.repeat(50)}...". Please ensure the Name value is 200 characters or fewer.`,
         `Row 12: Barcode too long (max 100 characters) - "${'B'.repeat(50)}...". Please ensure the Barcode value is 100 characters or fewer.`,
