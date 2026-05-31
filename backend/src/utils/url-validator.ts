@@ -85,6 +85,13 @@ const DEFAULT_STRIPE_PRICE_IDS = [
   'price_concierge_annual',
 ] as const;
 
+export class StripePriceConfigurationError extends Error {
+  constructor(message = 'Stripe price IDs are not configured on the server') {
+    super(message);
+    this.name = 'StripePriceConfigurationError';
+  }
+}
+
 function getAllowedStripePriceIds(): Set<string> {
   const allowDefaults = envConfig.NODE_ENV === 'development' || envConfig.NODE_ENV === 'test';
   return new Set(
@@ -118,7 +125,7 @@ export function validateStripePriceId(priceId: string): void {
     envConfig.NODE_ENV !== 'development' &&
     envConfig.NODE_ENV !== 'test'
   ) {
-    throw new Error('Stripe price IDs are not configured on the server');
+    throw new StripePriceConfigurationError();
   }
 
   if (!allowedPriceIds.has(priceId)) {

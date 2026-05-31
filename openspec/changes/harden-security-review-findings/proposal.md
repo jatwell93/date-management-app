@@ -34,5 +34,8 @@ Security review identified three server-side controls that need hardening now: b
 - **Backend billing:** `backend/src/controllers/subscription.controller.ts`, `backend/src/utils/url-validator.ts`, billing tests.
 - **Backend uploads:** `backend/src/routes/product.routes.ts`, product upload tests.
 - **Workers:** `workers/src/index.ts`, Workers tests.
-- **Config:** Uses existing Stripe price environment variables and existing `envConfig.MAX_UPLOAD_SIZE_BYTES`.
+- **Config:** Uses existing `envConfig.MAX_UPLOAD_SIZE_BYTES` and these backend Stripe allowlist variables:
+  `STRIPE_PROFESSIONAL_MONTHLY_PRICE_ID`, `STRIPE_PROFESSIONAL_ANNUAL_PRICE_ID`,
+  `STRIPE_PREMIUM_MONTHLY_PRICE_ID`, `STRIPE_PREMIUM_ANNUAL_PRICE_ID`,
+  `STRIPE_CONCIERGE_MONTHLY_PRICE_ID`, and `STRIPE_CONCIERGE_ANNUAL_PRICE_ID`.
 - **Verification:** backend focused tests, Workers tests/build, lint, supply-chain check, OpenSpec validation, and Doppler CodeSense delta when available.

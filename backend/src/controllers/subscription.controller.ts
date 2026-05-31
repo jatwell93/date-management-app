@@ -3,7 +3,11 @@ import { ClerkAuthRequest } from '../middleware/clerk-auth.middleware';
 import { SubscriptionService } from '../services/subscription.service';
 import { BillingCycle, SubscriptionStatus } from '../types/subscription';
 import { getStripeClient } from '../utils/stripe';
-import { validateRedirectUrl, validateStripePriceId } from '../utils/url-validator';
+import {
+  StripePriceConfigurationError,
+  validateRedirectUrl,
+  validateStripePriceId,
+} from '../utils/url-validator';
 import { injectable, inject } from 'tsyringe';
 import { Logger } from '../utils/logger';
 import { NotFoundError, ValidationError, AuthenticationError, InternalError } from '../errors';
@@ -79,7 +83,7 @@ export class SubscriptionController {
     private subscriptionRepository: SubscriptionRepository,
     @inject('StripeClientFactory')
     private stripeClientFactory: () => ReturnType<typeof getStripeClient>,
-  ) { }
+  ) {}
 
   async getTrialStatus(req: Request, res: Response): Promise<void> {
     try {
@@ -120,14 +124,14 @@ export class SubscriptionController {
           subscriptionStatus === SubscriptionStatus.EXPIRED,
         subscription: subscription
           ? {
-            status: subscriptionStatus as SubscriptionTierResponse['status'],
-            tierLevel: subscription.tierLevel,
-            trialEndDate: subscription.trialEndDate?.toISOString() || null,
-            trialStartedAt: subscription.trialStartedAt?.toISOString() || null,
-            trialConvertedAt: subscription.trialConvertedAt?.toISOString() || null,
-            daysRemaining,
-            billingCycle: subscription.billingCycle || null,
-          }
+              status: subscriptionStatus as SubscriptionTierResponse['status'],
+              tierLevel: subscription.tierLevel,
+              trialEndDate: subscription.trialEndDate?.toISOString() || null,
+              trialStartedAt: subscription.trialStartedAt?.toISOString() || null,
+              trialConvertedAt: subscription.trialConvertedAt?.toISOString() || null,
+              daysRemaining,
+              billingCycle: subscription.billingCycle || null,
+            }
           : null,
         tierLimits: limits,
       };
@@ -225,6 +229,10 @@ export class SubscriptionController {
         validateRedirectUrl(successUrl, 'successUrl');
         validateRedirectUrl(cancelUrl, 'cancelUrl');
       } catch (validationError: unknown) {
+        if (validationError instanceof StripePriceConfigurationError) {
+          throw new InternalError(validationError.message, true);
+        }
+
         throw new ValidationError(
           validationError instanceof Error ? validationError.message : 'Invalid request payload',
         );
@@ -273,7 +281,8 @@ export class SubscriptionController {
       if (
         error instanceof ValidationError ||
         error instanceof NotFoundError ||
-        error instanceof AuthenticationError
+        error instanceof AuthenticationError ||
+        error instanceof InternalError
       ) {
         throw error;
       }

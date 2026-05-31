@@ -218,6 +218,11 @@ describe('product.routes organization guards', () => {
         error.code = 'LIMIT_FILE_SIZE';
         next(error);
         return;
+      } else if (mode === 'invalid-type-code') {
+        const error = new Error('Multer rejected uploaded file type') as Error & { code?: string };
+        error.code = 'INVALID_PRODUCT_UPLOAD_TYPE';
+        next(error);
+        return;
       }
 
       next();
@@ -639,6 +644,19 @@ describe('product.routes organization guards', () => {
     expect(response.status).toBe(400);
     expect(response.body).toEqual({
       message: 'File too large. Maximum upload size is 10MB.',
+    });
+    expect(mockProductService.processCSVUpload).not.toHaveBeenCalled();
+  });
+
+  it('returns a canonical 400 when multer rejects an invalid file type', async () => {
+    const response = await request(app)
+      .post('/products/upload-csv')
+      .set('x-org-id', 'org-1')
+      .set('x-upload-mode', 'invalid-type-code');
+
+    expect(response.status).toBe(400);
+    expect(response.body).toEqual({
+      message: 'Invalid file type. Only CSV, XLSX, and XLS files are allowed.',
     });
     expect(mockProductService.processCSVUpload).not.toHaveBeenCalled();
   });

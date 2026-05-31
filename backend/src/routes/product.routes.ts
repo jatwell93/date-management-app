@@ -11,6 +11,9 @@ import { createProductController } from '../di/services';
 import { envConfig } from '../config/environment';
 
 const router = Router();
+const INVALID_PRODUCT_UPLOAD_TYPE_CODE = 'INVALID_PRODUCT_UPLOAD_TYPE';
+const INVALID_PRODUCT_UPLOAD_TYPE_MESSAGE =
+  'Invalid file type. Only CSV, XLSX, and XLS files are allowed.';
 
 // Configure multer for file uploads - accept CSV, XLSX, and XLS files
 const upload = multer({
@@ -30,7 +33,9 @@ const upload = multer({
     ) {
       cb(null, true);
     } else {
-      cb(new Error('Invalid file type. Only CSV, XLSX, and XLS files are allowed.'));
+      const error = new Error(INVALID_PRODUCT_UPLOAD_TYPE_MESSAGE) as Error & { code?: string };
+      error.code = INVALID_PRODUCT_UPLOAD_TYPE_CODE;
+      cb(error);
     }
   },
 });
@@ -57,11 +62,8 @@ function handleUploadError(error: unknown, res: Response, next: NextFunction): v
     return;
   }
 
-  if (
-    typeof uploadError.message === 'string' &&
-    uploadError.message === 'Invalid file type. Only CSV, XLSX, and XLS files are allowed.'
-  ) {
-    res.status(400).json({ message: uploadError.message });
+  if (uploadError.code === INVALID_PRODUCT_UPLOAD_TYPE_CODE) {
+    res.status(400).json({ message: INVALID_PRODUCT_UPLOAD_TYPE_MESSAGE });
     return;
   }
 

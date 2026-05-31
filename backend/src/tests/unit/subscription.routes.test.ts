@@ -1,6 +1,7 @@
 import express from 'express';
 import request from 'supertest';
 import { BillingCycle } from '../../types/subscription';
+import { envConfig } from '../../config/environment';
 
 const mockFindUnique = jest.fn();
 const mockSubscriptionTierUpdate = jest.fn();
@@ -61,6 +62,8 @@ jest.mock('../../utils/stripe', () => ({
 }));
 
 jest.mock('../../utils/url-validator', () => ({
+  StripePriceConfigurationError: jest.requireActual('../../utils/url-validator')
+    .StripePriceConfigurationError,
   validateRedirectUrl: (...args: unknown[]) => mockValidateRedirectUrl(...args),
   validateStripePriceId: (...args: unknown[]) => mockValidateStripePriceId(...args),
 }));
@@ -83,6 +86,7 @@ const actualUrlValidator = jest.requireActual(
 
 const configuredMonthlyPriceId = 'price_professional_monthly';
 const configuredAnnualPriceId = 'price_professional_annual';
+const originalNodeEnv = envConfig.NODE_ENV;
 const envKeysChangedBySuite = [
   'FRONTEND_URL',
   'STRIPE_PROFESSIONAL_MONTHLY_PRICE_ID',
@@ -123,6 +127,7 @@ describe('subscription.routes', () => {
   beforeEach(() => {
     jest.clearAllMocks();
 
+    envConfig.NODE_ENV = 'test';
     process.env.FRONTEND_URL = 'http://localhost:3000';
     process.env.STRIPE_PROFESSIONAL_MONTHLY_PRICE_ID = configuredMonthlyPriceId;
     process.env.STRIPE_PROFESSIONAL_ANNUAL_PRICE_ID = configuredAnnualPriceId;
@@ -204,6 +209,7 @@ describe('subscription.routes', () => {
   });
 
   afterAll(() => {
+    envConfig.NODE_ENV = originalNodeEnv;
     envKeysChangedBySuite.forEach(restoreEnvValue);
   });
 
@@ -504,6 +510,27 @@ describe('subscription.routes', () => {
 
       expect(response.status).toBe(400);
       expect(response.body).toEqual({ error: 'priceId is not configured for checkout' });
+      expect(mockStripeCheckoutSessionCreate).not.toHaveBeenCalled();
+    });
+
+    it('returns 500 when Stripe checkout price configuration is missing in production', async () => {
+      envConfig.NODE_ENV = 'production';
+      delete process.env.STRIPE_PROFESSIONAL_MONTHLY_PRICE_ID;
+      delete process.env.STRIPE_PROFESSIONAL_ANNUAL_PRICE_ID;
+
+      const response = await request(app)
+        .post('/subscription/create-checkout-session')
+        .set('x-clerk-user-id', 'user_123')
+        .send({
+          priceId: configuredMonthlyPriceId,
+          successUrl: 'http://localhost:3000/success',
+          cancelUrl: 'http://localhost:3000/cancel',
+        });
+
+      expect(response.status).toBe(500);
+      expect(response.body).toEqual({
+        error: 'Stripe price IDs are not configured on the server',
+      });
       expect(mockStripeCheckoutSessionCreate).not.toHaveBeenCalled();
     });
 
