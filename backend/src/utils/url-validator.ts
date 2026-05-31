@@ -111,7 +111,17 @@ export function validateStripePriceId(priceId: string): void {
     throw new Error('priceId has invalid length');
   }
 
-  if (!getAllowedStripePriceIds().has(priceId)) {
+  const allowedPriceIds = getAllowedStripePriceIds();
+
+  if (
+    allowedPriceIds.size === 0 &&
+    envConfig.NODE_ENV !== 'development' &&
+    envConfig.NODE_ENV !== 'test'
+  ) {
+    throw new Error('Stripe price IDs are not configured on the server');
+  }
+
+  if (!allowedPriceIds.has(priceId)) {
     throw new Error('priceId is not configured for checkout');
   }
 }
