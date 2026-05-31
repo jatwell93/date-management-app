@@ -8,12 +8,16 @@ import { validateBusinessRules } from '../middleware/data-integrity.middleware';
 import multer, { FileFilterCallback } from 'multer';
 import { standardLimiter } from '../middleware/rateLimiter';
 import { createProductController } from '../di/services';
+import { envConfig } from '../config/environment';
 
 const router = Router();
 
 // Configure multer for file uploads - accept CSV, XLSX, and XLS files
 const upload = multer({
   dest: 'uploads/',
+  limits: {
+    fileSize: envConfig.MAX_UPLOAD_SIZE_BYTES,
+  },
   fileFilter: (req: Request, file, cb: FileFilterCallback) => {
     // Accept CSV, XLSX, and XLS files
     if (
@@ -30,6 +34,45 @@ const upload = multer({
     }
   },
 });
+
+function formatBytesAsMb(bytes: number): string {
+  const mb = bytes / (1024 * 1024);
+  return Number.isInteger(mb) ? `${mb}MB` : `${mb.toFixed(1)}MB`;
+}
+
+function handleUploadError(error: unknown, res: Response, next: NextFunction): void {
+  if (!error) {
+    next();
+    return;
+  }
+
+  const uploadError = error as { code?: unknown; message?: unknown };
+
+  if (uploadError.code === 'LIMIT_FILE_SIZE') {
+    res.status(400).json({
+      message: `File too large. Maximum upload size is ${formatBytesAsMb(
+        envConfig.MAX_UPLOAD_SIZE_BYTES,
+      )}.`,
+    });
+    return;
+  }
+
+  if (
+    typeof uploadError.message === 'string' &&
+    uploadError.message.startsWith('Invalid file type.')
+  ) {
+    res.status(400).json({ message: uploadError.message });
+    return;
+  }
+
+  next(error);
+}
+
+function uploadSingleFile(req: Request, res: Response, next: NextFunction): void {
+  upload.single('file')(req, res, (error: unknown) => {
+    handleUploadError(error, res, next);
+  });
+}
 
 // GET /products - Get all products for the user's organization
 router.get('/', authenticateToken, async (req: AuthRequest, res: Response, next: NextFunction) => {
@@ -123,7 +166,7 @@ router.post(
   authenticateToken,
   checkUsageLimit('max_skus'),
   standardLimiter,
-  upload.single('file'),
+  uploadSingleFile,
   async (req: AuthRequest, res: Response, next: NextFunction) => {
     const controller = createProductController();
     await controller.uploadCsv(req, res, next);

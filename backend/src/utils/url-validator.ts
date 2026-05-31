@@ -67,8 +67,35 @@ export function validateRedirectUrl(url: string, fieldName: string = 'URL'): voi
   }
 }
 
+const STRIPE_PRICE_ID_ENV_KEYS = [
+  'STRIPE_PROFESSIONAL_MONTHLY_PRICE_ID',
+  'STRIPE_PROFESSIONAL_ANNUAL_PRICE_ID',
+  'STRIPE_PREMIUM_MONTHLY_PRICE_ID',
+  'STRIPE_PREMIUM_ANNUAL_PRICE_ID',
+  'STRIPE_CONCIERGE_MONTHLY_PRICE_ID',
+  'STRIPE_CONCIERGE_ANNUAL_PRICE_ID',
+] as const;
+
+const DEFAULT_STRIPE_PRICE_IDS = [
+  'price_professional_monthly',
+  'price_professional_annual',
+  'price_premium_monthly',
+  'price_premium_annual',
+  'price_concierge_monthly',
+  'price_concierge_annual',
+] as const;
+
+function getAllowedStripePriceIds(): Set<string> {
+  return new Set(
+    [
+      ...STRIPE_PRICE_ID_ENV_KEYS.map((key) => process.env[key]),
+      ...DEFAULT_STRIPE_PRICE_IDS,
+    ].filter((priceId): priceId is string => typeof priceId === 'string' && priceId.length > 0),
+  );
+}
+
 /**
- * Validate Stripe price ID format
+ * Validate Stripe price ID format and checkout allowlist
  */
 export function validateStripePriceId(priceId: string): void {
   if (!priceId || typeof priceId !== 'string') {
@@ -81,5 +108,9 @@ export function validateStripePriceId(priceId: string): void {
 
   if (priceId.length < 10 || priceId.length > 100) {
     throw new Error('priceId has invalid length');
+  }
+
+  if (!getAllowedStripePriceIds().has(priceId)) {
+    throw new Error('priceId is not configured for checkout');
   }
 }

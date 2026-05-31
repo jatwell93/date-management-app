@@ -77,6 +77,12 @@ const actualSubscriptionRepository = jest.requireActual(
 const actualSubscriptionService = jest.requireActual(
   '../../services/subscription.service',
 ) as typeof import('../../services/subscription.service');
+const actualUrlValidator = jest.requireActual(
+  '../../utils/url-validator',
+) as typeof import('../../utils/url-validator');
+
+const configuredMonthlyPriceId = 'price_professional_monthly';
+const configuredAnnualPriceId = 'price_professional_annual';
 
 describe('subscription.routes', () => {
   const app = express();
@@ -98,8 +104,12 @@ describe('subscription.routes', () => {
     jest.clearAllMocks();
 
     process.env.FRONTEND_URL = 'http://localhost:3000';
+    process.env.STRIPE_PROFESSIONAL_MONTHLY_PRICE_ID = configuredMonthlyPriceId;
+    process.env.STRIPE_PROFESSIONAL_ANNUAL_PRICE_ID = configuredAnnualPriceId;
 
-    mockValidateStripePriceId.mockImplementation(() => undefined);
+    mockValidateStripePriceId.mockImplementation((priceId: string) =>
+      actualUrlValidator.validateStripePriceId(priceId),
+    );
     mockValidateRedirectUrl.mockImplementation(() => undefined);
 
     mockFindUnique.mockResolvedValue({
@@ -458,6 +468,21 @@ describe('subscription.routes', () => {
       expect(mockValidateRedirectUrl).not.toHaveBeenCalled();
     });
 
+    it('rejects valid-looking Stripe price IDs that are not backend configured', async () => {
+      const response = await request(app)
+        .post('/subscription/create-checkout-session')
+        .set('x-clerk-user-id', 'user_123')
+        .send({
+          priceId: 'price_attacker_controlled_1234567890',
+          successUrl: 'http://localhost:3000/success',
+          cancelUrl: 'http://localhost:3000/cancel',
+        });
+
+      expect(response.status).toBe(400);
+      expect(response.body).toEqual({ error: 'priceId is not configured for checkout' });
+      expect(mockStripeCheckoutSessionCreate).not.toHaveBeenCalled();
+    });
+
     it('returns 404 when checkout is requested without an organization', async () => {
       mockFindUnique.mockResolvedValue({ organization: null });
 
@@ -465,7 +490,7 @@ describe('subscription.routes', () => {
         .post('/subscription/create-checkout-session')
         .set('x-clerk-user-id', 'user_123')
         .send({
-          priceId: 'price_1234567890',
+          priceId: configuredMonthlyPriceId,
           successUrl: 'http://localhost:3000/success',
           cancelUrl: 'http://localhost:3000/cancel',
         });
@@ -479,7 +504,7 @@ describe('subscription.routes', () => {
         .post('/subscription/create-checkout-session')
         .set('x-clerk-user-id', 'user_123')
         .send({
-          priceId: 'price_1234567890',
+          priceId: configuredMonthlyPriceId,
           successUrl: 'http://localhost:3000/success',
           cancelUrl: 'http://localhost:3000/cancel',
         });
@@ -491,7 +516,28 @@ describe('subscription.routes', () => {
       });
       expect(mockStripeCustomersCreate).not.toHaveBeenCalled();
       expect(mockStripeCheckoutSessionCreate).toHaveBeenCalledWith(
-        expect.objectContaining({ customer: 'cus_existing' }),
+        expect.objectContaining({
+          customer: 'cus_existing',
+          line_items: [{ price: configuredMonthlyPriceId, quantity: 1 }],
+        }),
+      );
+    });
+
+    it('creates checkout session for configured annual Stripe price id', async () => {
+      const response = await request(app)
+        .post('/subscription/create-checkout-session')
+        .set('x-clerk-user-id', 'user_123')
+        .send({
+          priceId: configuredAnnualPriceId,
+          successUrl: 'http://localhost:3000/success',
+          cancelUrl: 'http://localhost:3000/cancel',
+        });
+
+      expect(response.status).toBe(200);
+      expect(mockStripeCheckoutSessionCreate).toHaveBeenCalledWith(
+        expect.objectContaining({
+          line_items: [{ price: configuredAnnualPriceId, quantity: 1 }],
+        }),
       );
     });
 
@@ -513,7 +559,7 @@ describe('subscription.routes', () => {
         .post('/subscription/create-checkout-session')
         .set('x-clerk-user-id', 'user_123')
         .send({
-          priceId: 'price_1234567890',
+          priceId: configuredMonthlyPriceId,
           successUrl: 'http://localhost:3000/success',
           cancelUrl: 'http://localhost:3000/cancel',
         });
@@ -542,7 +588,7 @@ describe('subscription.routes', () => {
         .post('/subscription/create-checkout-session')
         .set('x-clerk-user-id', 'user_123')
         .send({
-          priceId: 'price_1234567890',
+          priceId: configuredMonthlyPriceId,
           successUrl: 'http://localhost:3000/success',
           cancelUrl: 'http://localhost:3000/cancel',
         });
@@ -573,7 +619,7 @@ describe('subscription.routes', () => {
         .post('/subscription/create-checkout-session')
         .set('x-clerk-user-id', 'user_123')
         .send({
-          priceId: 'price_1234567890',
+          priceId: configuredMonthlyPriceId,
           successUrl: 'http://localhost:3000/success',
           cancelUrl: 'http://localhost:3000/cancel',
         });
@@ -592,7 +638,7 @@ describe('subscription.routes', () => {
         .post('/subscription/create-checkout-session')
         .set('x-clerk-user-id', 'user_123')
         .send({
-          priceId: 'price_1234567890',
+          priceId: configuredMonthlyPriceId,
           successUrl: 'http://localhost:3000/success',
           cancelUrl: 'http://localhost:3000/cancel',
         });
