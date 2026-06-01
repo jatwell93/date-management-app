@@ -1,5 +1,5 @@
 /**
- * CSV Validation Utilities
+ * Upload Column Validation Utilities
  *
  * Pre-upload validation to provide better user feedback before processing
  */
@@ -179,7 +179,7 @@ async function readUploadHeaders(file: File): Promise<string[]> {
 }
 
 /**
- * Validate that all required columns are present in CSV headers
+ * Validate that all required columns are present in supported upload headers
  */
 export async function validateCSVColumns(
   file: File,
