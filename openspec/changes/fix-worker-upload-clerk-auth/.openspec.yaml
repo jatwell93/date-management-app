@@ -1,0 +1,4 @@
+schema: 1
+type: change
+id: fix-worker-upload-clerk-auth
+status: active
