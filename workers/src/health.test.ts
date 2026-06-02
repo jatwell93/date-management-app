@@ -1,5 +1,6 @@
 import { env, SELF } from 'cloudflare:test';
 import { describe, it, expect, vi } from 'vitest';
+import { verifyToken } from '@clerk/backend';
 import { healthCheck } from './health';
 import {
   default as worker,
@@ -13,17 +14,15 @@ import {
 import { createWorkersDatabase } from './database';
 import type { Database } from './database';
 import type { Env } from './types/env';
-import { SignJWT } from 'jose';
 
-async function createAuthToken(secret: string, userId: number): Promise<string> {
-  const key = new TextEncoder().encode(secret);
-
-  return await new SignJWT({ userId })
-    .setProtectedHeader({ alg: 'HS256' })
-    .setExpirationTime('15m')
-    .setIssuedAt()
-    .sign(key);
-}
+vi.mock('@clerk/backend', () => ({
+  verifyToken: vi.fn(),
+  createClerkClient: vi.fn(() => ({
+    users: {
+      getUser: vi.fn(),
+    },
+  })),
+}));
 
 describe('Health Check API', () => {
   it('should return API metadata for root path', async () => {
@@ -274,6 +273,8 @@ describe('API config guard', () => {
 });
 
 describe('Upload strategy parity', () => {
+  const mockedVerifyToken = vi.mocked(verifyToken);
+
   const createUploadEnv = (overrides: Partial<Env> = {}): Env => ({
     NODE_ENV: 'development',
     STORAGE_PROVIDER: 'r2',
@@ -298,14 +299,63 @@ describe('Upload strategy parity', () => {
     ...overrides,
   });
 
-  it('returns presigned strategy for files larger than 2MB', async () => {
-    const envForUpload = createUploadEnv();
-    const token = await createAuthToken(envForUpload.JWT_SECRET, 7);
+  const createUploadDb = (userId = 7): Database =>
+    ({
+      sql: vi.fn().mockResolvedValue([
+        {
+          id: userId,
+          organizationId: 'org_test',
+          role: 'admin',
+        },
+      ]),
+    }) as unknown as Database;
+
+  it('returns direct strategy for Clerk-authenticated upload initiation', async () => {
+    mockedVerifyToken.mockResolvedValueOnce({
+      sub: 'user_clerk_7',
+      email: 'uploader@example.com',
+      org_id: 'org_test',
+      org_role: 'org:admin',
+    });
+    const envForUpload = createUploadEnv({ CLERK_SECRET_KEY: 'test-clerk-secret' });
+    const db = createUploadDb(7);
 
     const request = new Request('https://example.com/api/upload/initiate', {
       method: 'POST',
       headers: {
-        Authorization: `Bearer ${token}`,
+        Authorization: 'Bearer clerk-session-token',
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({
+        filename: 'test.csv',
+        fileSize: 1024,
+        contentType: 'text/csv',
+      }),
+    });
+
+    const response = await handleUploadInitiate(request, envForUpload, '/api/upload', db);
+    expect(response.status).toBe(200);
+
+    const body = (await response.json()) as any;
+    expect(body.strategy).toBe('direct');
+    expect(body.method).toBe('POST');
+    expect(body.key).toContain('uploads/user-7/');
+  });
+
+  it('returns presigned strategy for files larger than 2MB', async () => {
+    mockedVerifyToken.mockResolvedValueOnce({
+      sub: 'user_clerk_7',
+      email: 'uploader@example.com',
+      org_id: 'org_test',
+      org_role: 'org:admin',
+    });
+    const envForUpload = createUploadEnv({ CLERK_SECRET_KEY: 'test-clerk-secret' });
+    const db = createUploadDb(7);
+
+    const request = new Request('https://example.com/api/upload/initiate', {
+      method: 'POST',
+      headers: {
+        Authorization: 'Bearer clerk-session-token',
         'Content-Type': 'application/json',
       },
       body: JSON.stringify({
@@ -315,7 +365,7 @@ describe('Upload strategy parity', () => {
       }),
     });
 
-    const response = await handleUploadInitiate(request, envForUpload, '/api/upload');
+    const response = await handleUploadInitiate(request, envForUpload, '/api/upload', db);
     expect(response.status).toBe(200);
 
     const body = (await response.json()) as any;
@@ -326,8 +376,14 @@ describe('Upload strategy parity', () => {
   });
 
   it('returns complete upload status when object exists', async () => {
-    const envForUpload = createUploadEnv();
-    const token = await createAuthToken(envForUpload.JWT_SECRET, 7);
+    mockedVerifyToken.mockResolvedValueOnce({
+      sub: 'user_clerk_7',
+      email: 'uploader@example.com',
+      org_id: 'org_test',
+      org_role: 'org:admin',
+    });
+    const envForUpload = createUploadEnv({ CLERK_SECRET_KEY: 'test-clerk-secret' });
+    const db = createUploadDb(7);
     const key = 'uploads/user-7/1-big.csv';
 
     const request = new Request(
@@ -335,12 +391,12 @@ describe('Upload strategy parity', () => {
       {
         method: 'GET',
         headers: {
-          Authorization: `Bearer ${token}`,
+          Authorization: 'Bearer clerk-session-token',
         },
       },
     );
 
-    const response = await handleUploadStatus(request, envForUpload, key);
+    const response = await handleUploadStatus(request, envForUpload, key, db);
     expect(response.status).toBe(200);
 
     const body = (await response.json()) as any;

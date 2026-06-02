@@ -456,10 +456,15 @@ export default Sentry.withSentry(
           }
 
           const uploadRouteBase = pathname.startsWith('/api/upload') ? '/api/upload' : '/upload';
+          let db: Database | null = null;
+          const getDb = (): Database => {
+            db ||= createWorkersDatabase(env);
+            return db;
+          };
 
           // Workers-native upload endpoints
           if (method === 'POST' && pathname === `${uploadRouteBase}/initiate`) {
-            return finalizeApiResponse(handleUploadInitiate(request, env, uploadRouteBase));
+            return finalizeApiResponse(handleUploadInitiate(request, env, uploadRouteBase, getDb()));
           }
 
           if (method === 'POST' && pathname.startsWith(`${uploadRouteBase}/direct/`)) {
@@ -477,7 +482,7 @@ export default Sentry.withSentry(
                 errorResponse('Invalid key encoding', 400, env, requestOrigin),
               );
             }
-            return finalizeApiResponse(handleUploadDirect(request, env, key));
+            return finalizeApiResponse(handleUploadDirect(request, env, key, getDb()));
           }
 
           if (method === 'PUT' && pathname.startsWith(`${uploadRouteBase}/presigned/`)) {
@@ -518,15 +523,15 @@ export default Sentry.withSentry(
               );
             }
 
-            return finalizeApiResponse(handleUploadStatus(request, env, key));
+            return finalizeApiResponse(handleUploadStatus(request, env, key, getDb()));
           }
 
           if (method === 'POST' && pathname === `${uploadRouteBase}/complete`) {
-            return finalizeApiResponse(handleUploadComplete(request, env));
+            return finalizeApiResponse(handleUploadComplete(request, env, getDb()));
           }
 
           // Initialize database connection for remaining API endpoints
-          const db = createWorkersDatabase(env);
+          db = getDb();
 
           // Route handling
           switch (true) {
@@ -2982,10 +2987,11 @@ export async function handleUploadInitiate(
   request: Request,
   env: Env,
   uploadRouteBase: '/upload' | '/api/upload',
+  db: Database,
 ): Promise<Response> {
-  const auth = await authenticateRequest(request, env);
-  if (!auth) {
-    return errorResponse('Unauthorized', 401, env);
+  const auth = await authenticateApiRequest(request, env, db);
+  if (auth instanceof Response) {
+    return auth;
   }
 
   const body = (await request.json()) as {
@@ -3087,10 +3093,15 @@ async function handleUploadPresigned(
 /**
  * POST /upload/direct/:key and /api/upload/direct/:key
  */
-async function handleUploadDirect(request: Request, env: Env, key: string): Promise<Response> {
-  const auth = await authenticateRequest(request, env);
-  if (!auth) {
-    return errorResponse('Unauthorized', 401, env);
+async function handleUploadDirect(
+  request: Request,
+  env: Env,
+  key: string,
+  db: Database,
+): Promise<Response> {
+  const auth = await authenticateApiRequest(request, env, db);
+  if (auth instanceof Response) {
+    return auth;
   }
 
   // Verify the key belongs to the authenticated user
@@ -3137,10 +3148,10 @@ async function handleUploadDirect(request: Request, env: Env, key: string): Prom
 /**
  * POST /upload/complete and /api/upload/complete
  */
-async function handleUploadComplete(request: Request, env: Env): Promise<Response> {
-  const auth = await authenticateRequest(request, env);
-  if (!auth) {
-    return errorResponse('Unauthorized', 401, env);
+async function handleUploadComplete(request: Request, env: Env, db: Database): Promise<Response> {
+  const auth = await authenticateApiRequest(request, env, db);
+  if (auth instanceof Response) {
+    return auth;
   }
 
   const body = (await request.json()) as { key?: string };
@@ -3167,10 +3178,11 @@ export async function handleUploadStatus(
   request: Request,
   env: Env,
   key: string,
+  db: Database,
 ): Promise<Response> {
-  const auth = await authenticateRequest(request, env);
-  if (!auth) {
-    return errorResponse('Unauthorized', 401, env);
+  const auth = await authenticateApiRequest(request, env, db);
+  if (auth instanceof Response) {
+    return auth;
   }
 
   if (!key.startsWith(`uploads/user-${auth.userId}/`)) {
