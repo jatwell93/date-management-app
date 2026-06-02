@@ -33,10 +33,67 @@ export interface ProductImportXlsxColumnState {
 }
 
 export interface ProductImportRowValues {
-  sku: string | null;
-  name: string | null;
-  costStr: string | null;
-  barcode: string | null;
+  sku: string | null | undefined;
+  name: string | null | undefined;
+  costStr: string | null | undefined;
+  barcode: string | null | undefined;
+}
+
+export interface ValidProductImportRow {
+  sku: string;
+  name: string;
+  costStr: string;
+  barcode: string;
+  cost: number;
+}
+
+export type ProductImportRowValidationResult =
+  | {
+      isValid: true;
+      errors: [];
+      row: ValidProductImportRow;
+    }
+  | {
+      isValid: false;
+      errors: string[];
+    };
+
+export interface ProductImportLookupProduct {
+  id: number;
+  sku: string;
+  barcode: string;
+}
+
+export type ProductImportOperation<TProduct extends ProductImportLookupProduct> =
+  | { type: 'create' }
+  | { type: 'update'; product: TProduct }
+  | { type: 'conflict'; error: string };
+
+export interface ProductImportOperationInput<TProduct extends ProductImportLookupProduct> {
+  sku: string;
+  barcode: string;
+  bySku: TProduct | null;
+  byBarcode: TProduct | null;
+}
+
+interface CostTextState {
+  text: string;
+  isNegative: boolean;
+}
+
+type ProductImportFieldName = 'SKU' | 'Name' | 'Cost' | 'Barcode';
+
+interface ProductImportRequiredField {
+  field: ProductImportFieldName;
+  value: string | null;
+  missingMessage: string;
+}
+
+interface RequiredProductImportValues {
+  sku: string;
+  name: string;
+  costStr: string;
+  barcode: string;
 }
 
 function normalizeCellValue(value: unknown): string | null {
@@ -235,4 +292,353 @@ export function getProductImportXlsxUnexpectedColumns(
   return headers
     .filter((header): header is string => Boolean(header))
     .filter((header) => !allowedColumns.has(header.toLowerCase()));
+}
+
+export function parseProductImportCost(costStr: string): number | null {
+  const prepared = prepareCostText(costStr);
+  const normalized = collapseExtraDecimalPoints(
+    stripNonNumericCostCharacters(normalizeCostSeparators(prepared.text)),
+  );
+  return parsePreparedCostValue(normalized, prepared.isNegative);
+}
+
+function prepareCostText(costStr: string): CostTextState {
+  return extractLeadingNegative(stripCurrencyText(extractParenthesizedNegative(costStr.trim())));
+}
+
+function extractParenthesizedNegative(text: string): CostTextState {
+  const openParenIndex = text.lastIndexOf('(');
+  const closeParenIndex = text.indexOf(')', openParenIndex);
+
+  if (openParenIndex === -1) {
+    return { text, isNegative: false };
+  }
+
+  if (closeParenIndex <= openParenIndex) {
+    return { text, isNegative: false };
+  }
+
+  const insideParen = text.substring(openParenIndex + 1, closeParenIndex);
+  return {
+    text: text.substring(0, openParenIndex) + insideParen + text.substring(closeParenIndex + 1),
+    isNegative: true,
+  };
+}
+
+function stripCurrencyText(state: CostTextState): CostTextState {
+  return {
+    text: state.text
+      .replace(/([A-Z]{3,4}[\s]*)|([\s]*[A-Z]{3,4})|[\s$€£¥₹₽₪₨₩₦₡₫Є₴₵₸₺₼₾₯]/gi, '')
+      .trim()
+      .replace(/\s+/g, ''),
+    isNegative: state.isNegative,
+  };
+}
+
+function extractLeadingNegative(state: CostTextState): CostTextState {
+  if (!state.text.startsWith('-')) {
+    return state;
+  }
+
+  return { text: state.text.substring(1), isNegative: true };
+}
+
+function normalizeCostSeparators(text: string): string {
+  const dotCount = countOccurrences(text, '.');
+  const commaCount = countOccurrences(text, ',');
+
+  if (dotCount > 1 && commaCount === 0) {
+    return normalizeMultipleDots(text);
+  }
+
+  if (commaCount > 1 && dotCount === 0) {
+    return text.replace(/,/g, '');
+  }
+
+  if (dotCount === 0 && commaCount === 1) {
+    return normalizeSingleComma(text);
+  }
+
+  if (dotCount > 0 && commaCount > 0) {
+    return normalizeMixedSeparators(text);
+  }
+
+  return text;
+}
+
+function countOccurrences(text: string, character: string): number {
+  return (text.match(new RegExp(`\\${character}`, 'g')) || []).length;
+}
+
+function normalizeMultipleDots(text: string): string {
+  const lastDotIndex = text.lastIndexOf('.');
+  const afterLastDot = text.substring(lastDotIndex + 1);
+
+  if (afterLastDot.length !== 2) {
+    return text.replace(/\./g, '');
+  }
+
+  const integerPart = text.substring(0, lastDotIndex).replace(/\./g, '');
+  return integerPart + '.' + afterLastDot;
+}
+
+function normalizeSingleComma(text: string): string {
+  const commaIndex = text.lastIndexOf(',');
+  const afterComma = text.substring(commaIndex + 1);
+
+  if (/^\d{1,3}$/.test(afterComma)) {
+    return text.replace(',', '.');
+  }
+
+  return text.replace(/,/g, '');
+}
+
+function normalizeMixedSeparators(text: string): string {
+  const lastDotIndex = text.lastIndexOf('.');
+  const lastCommaIndex = text.lastIndexOf(',');
+
+  if (lastDotIndex > lastCommaIndex) {
+    return buildDecimalString(text, lastDotIndex, /,/g);
+  }
+
+  return buildDecimalString(text, lastCommaIndex, /\./g);
+}
+
+function buildDecimalString(
+  text: string,
+  separatorIndex: number,
+  thousandsPattern: RegExp,
+): string {
+  const integerPart = text.substring(0, separatorIndex).replace(thousandsPattern, '');
+  const decimalPart = text.substring(separatorIndex + 1);
+  return integerPart + '.' + decimalPart;
+}
+
+function stripNonNumericCostCharacters(text: string): string {
+  if (text.match(/^[0-9]+[,.][0-9]{3}$/)) {
+    return text.replace(/[,.]/, '').replace(/[^\d.]/g, '');
+  }
+
+  return text.replace(/[^\d.]/g, '');
+}
+
+function collapseExtraDecimalPoints(text: string): string {
+  const parts = text.split('.');
+
+  if (parts.length <= 2) {
+    return text;
+  }
+
+  const integerPart = parts.slice(0, -1).join('');
+  const decimalPart = parts[parts.length - 1];
+  return integerPart + '.' + decimalPart;
+}
+
+function parsePreparedCostValue(normalizedText: string, isNegative: boolean): number | null {
+  const value = parseFloat(normalizedText);
+
+  if (Number.isNaN(value)) {
+    return null;
+  }
+
+  return isNegative ? -value : value;
+}
+
+export function validateProductImportRow({
+  rowNumber,
+  values,
+  unexpectedColumns,
+}: {
+  rowNumber: number;
+  values: ProductImportRowValues;
+  unexpectedColumns: string[];
+}): ProductImportRowValidationResult {
+  const sku = values.sku?.trim() || null;
+  const name = values.name?.trim() || null;
+  const costStr = values.costStr?.trim() || null;
+  const barcode = values.barcode?.trim() || null;
+  const requiredFields = getProductImportRequiredFields({ sku, name, costStr, barcode });
+  const errors = getMissingRequiredFieldErrors(rowNumber, requiredFields);
+  const requiredValues = toRequiredProductImportValues({ sku, name, costStr, barcode });
+
+  if (!requiredValues) {
+    return { isValid: false, errors };
+  }
+
+  const cost = parseProductImportCost(requiredValues.costStr);
+  errors.push(...getCostValidationErrors(rowNumber, requiredValues.costStr, cost));
+  errors.push(...getProductImportLengthErrors(rowNumber, requiredValues));
+  errors.push(...getUnexpectedColumnErrors(rowNumber, unexpectedColumns));
+
+  if (errors.length > 0 || cost === null) {
+    return { isValid: false, errors };
+  }
+
+  return {
+    isValid: true,
+    errors: [],
+    row: {
+      sku: requiredValues.sku,
+      name: requiredValues.name,
+      costStr: requiredValues.costStr,
+      barcode: requiredValues.barcode,
+      cost,
+    },
+  };
+}
+
+function toRequiredProductImportValues(values: {
+  sku: string | null;
+  name: string | null;
+  costStr: string | null;
+  barcode: string | null;
+}): RequiredProductImportValues | null {
+  if (hasMissingRequiredFields(getProductImportRequiredFields(values))) {
+    return null;
+  }
+
+  return values as RequiredProductImportValues;
+}
+
+function getProductImportRequiredFields({
+  sku,
+  name,
+  costStr,
+  barcode,
+}: {
+  sku: string | null;
+  name: string | null;
+  costStr: string | null;
+  barcode: string | null;
+}): ProductImportRequiredField[] {
+  return [
+    {
+      field: 'SKU',
+      value: sku,
+      missingMessage: 'Please ensure the column exists and contains a value.',
+    },
+    {
+      field: 'Name',
+      value: name,
+      missingMessage: 'Please ensure the column exists and contains a value.',
+    },
+    {
+      field: 'Cost',
+      value: costStr,
+      missingMessage:
+        "Please ensure the column exists and contains a numeric value (e.g., '12.99', '$12.99', or 'EUR 12.99').",
+    },
+    {
+      field: 'Barcode',
+      value: barcode,
+      missingMessage: 'Please ensure the column exists and contains a value.',
+    },
+  ];
+}
+
+function getMissingRequiredFieldErrors(
+  rowNumber: number,
+  fields: ProductImportRequiredField[],
+): string[] {
+  return fields
+    .filter((field) => !field.value)
+    .map(
+      (field) =>
+        `Row ${rowNumber}: Missing required field - ${field.field}. ${field.missingMessage}`,
+    );
+}
+
+function hasMissingRequiredFields(fields: ProductImportRequiredField[]): boolean {
+  return fields.some((field) => !field.value);
+}
+
+function getCostValidationErrors(
+  rowNumber: number,
+  costStr: string,
+  cost: number | null,
+): string[] {
+  if (cost !== null) {
+    return [];
+  }
+
+  return [
+    `Row ${rowNumber}: Invalid cost value - "${costStr}". Cost can be a positive or negative number. Acceptable formats include: '12.99', '$12.99', '€15.50', '(10.99)' for negative values, '1,234.56', '1.234,56' (European format).`,
+  ];
+}
+
+function getProductImportLengthErrors(
+  rowNumber: number,
+  values: { sku: string; name: string; barcode: string },
+): string[] {
+  return [
+    getMaxLengthError(rowNumber, 'SKU', values.sku, 100),
+    getMaxLengthError(rowNumber, 'Name', values.name, 200),
+    getMaxLengthError(rowNumber, 'Barcode', values.barcode, 100),
+  ].filter((error): error is string => Boolean(error));
+}
+
+function getMaxLengthError(
+  rowNumber: number,
+  field: 'SKU' | 'Name' | 'Barcode',
+  value: string,
+  maxLength: number,
+): string | null {
+  if (value.length <= maxLength) {
+    return null;
+  }
+
+  return `Row ${rowNumber}: ${field} too long (max ${maxLength} characters) - "${value.substring(0, 50)}...". Please ensure the ${field} value is ${maxLength} characters or fewer.`;
+}
+
+function getUnexpectedColumnErrors(rowNumber: number, unexpectedColumns: string[]): string[] {
+  if (unexpectedColumns.length === 0) {
+    return [];
+  }
+
+  return [`Row ${rowNumber}: Unexpected columns found - ${unexpectedColumns.join(', ')}`];
+}
+
+export function resolveProductImportOperation<TProduct extends ProductImportLookupProduct>({
+  sku,
+  barcode,
+  bySku,
+  byBarcode,
+}: ProductImportOperationInput<TProduct>): ProductImportOperation<TProduct> {
+  const conflict = getProductImportIdentifierConflict({ sku, barcode, bySku, byBarcode });
+
+  if (conflict) {
+    return {
+      type: 'conflict',
+      error: conflict,
+    };
+  }
+
+  const product = bySku ?? byBarcode;
+
+  if (product) {
+    return { type: 'update', product };
+  }
+
+  return { type: 'create' };
+}
+
+function getProductImportIdentifierConflict<TProduct extends ProductImportLookupProduct>({
+  sku,
+  barcode,
+  bySku,
+  byBarcode,
+}: ProductImportOperationInput<TProduct>): string | null {
+  if (!bySku) {
+    return null;
+  }
+
+  if (!byBarcode) {
+    return null;
+  }
+
+  if (bySku.id === byBarcode.id) {
+    return null;
+  }
+
+  return `Duplicate identifiers detected: SKU ${sku} exists in product ${bySku.id} and barcode ${barcode} exists in product ${byBarcode.id}. This will cause data integrity issues.`;
 }

@@ -9,16 +9,26 @@ const mockUseAuth = jest.fn();
 const mockUseOrganization = jest.fn();
 const mockSentryCaptureException = jest.fn();
 const mockSentrySetUser = jest.fn();
+const mockSignIn = jest.fn();
+const mockSignUp = jest.fn();
 
 jest.mock('@sentry/react', () => ({
   captureException: (...args: unknown[]) => mockSentryCaptureException(...args),
   setUser: (...args: unknown[]) => mockSentrySetUser(...args),
+  reactErrorHandler: () => jest.fn(),
+  ErrorBoundary: ({ children }: { children: React.ReactNode }) => <>{children}</>,
 }));
 
 jest.mock('@clerk/clerk-react', () => ({
   ClerkProvider: ({ children }: { children: React.ReactNode }) => <>{children}</>,
-  SignIn: () => <div>Mock Clerk Sign In</div>,
-  SignUp: () => <div>Mock Clerk Sign Up</div>,
+  SignIn: (props: unknown) => {
+    mockSignIn(props);
+    return <div>Mock Clerk Sign In</div>;
+  },
+  SignUp: (props: unknown) => {
+    mockSignUp(props);
+    return <div>Mock Clerk Sign Up</div>;
+  },
   useUser: () => mockUseUser(),
   useAuth: () => mockUseAuth(),
   useOrganization: () => mockUseOrganization(),
@@ -125,11 +135,45 @@ describe('Clerk Integration Setup', () => {
 });
 
 describe('Clerk auth pages', () => {
+  beforeEach(() => {
+    jest.clearAllMocks();
+  });
+
   it('constrains the sign-in shell on mobile viewports', () => {
     render(<ClerkSignInPage />);
 
     expect(screen.getByTestId('clerk-auth-shell')).toHaveClass('overflow-x-hidden', 'px-4');
     expect(screen.getByTestId('clerk-auth-card')).toHaveClass('max-w-full');
+    expect(mockSignIn).toHaveBeenCalledWith(
+      expect.objectContaining({
+        appearance: expect.objectContaining({
+          elements: expect.objectContaining({
+            rootBox: expect.stringContaining('max-w-full'),
+            cardBox: expect.stringContaining('max-w-full'),
+          }),
+        }),
+      }),
+    );
+  });
+
+  it('applies the PharmIQ color palette to Clerk sign-in controls', () => {
+    render(<ClerkSignInPage />);
+
+    expect(mockSignIn).toHaveBeenCalledWith(
+      expect.objectContaining({
+        appearance: expect.objectContaining({
+          variables: expect.objectContaining({
+            colorPrimary: expect.stringContaining('oklch'),
+            colorBackground: expect.stringContaining('oklch'),
+            colorForeground: expect.stringContaining('oklch'),
+          }),
+          elements: expect.objectContaining({
+            formButtonPrimary: expect.stringContaining('bg-semantic-primary'),
+            footerActionLink: expect.stringContaining('text-semantic-primary'),
+          }),
+        }),
+      }),
+    );
   });
 
   it('constrains the sign-up shell on mobile viewports', () => {
@@ -137,5 +181,79 @@ describe('Clerk auth pages', () => {
 
     expect(screen.getByTestId('clerk-auth-shell')).toHaveClass('overflow-x-hidden', 'px-4');
     expect(screen.getByTestId('clerk-auth-card')).toHaveClass('max-w-full');
+    expect(mockSignUp).toHaveBeenCalledWith(
+      expect.objectContaining({
+        appearance: expect.objectContaining({
+          elements: expect.objectContaining({
+            rootBox: expect.stringContaining('max-w-full'),
+            cardBox: expect.stringContaining('max-w-full'),
+          }),
+        }),
+      }),
+    );
+  });
+
+  it('applies the PharmIQ color palette to Clerk sign-up controls', () => {
+    render(<ClerkSignUpPage />);
+
+    expect(mockSignUp).toHaveBeenCalledWith(
+      expect.objectContaining({
+        appearance: expect.objectContaining({
+          variables: expect.objectContaining({
+            colorPrimary: expect.stringContaining('oklch'),
+            colorBackground: expect.stringContaining('oklch'),
+            colorForeground: expect.stringContaining('oklch'),
+          }),
+          elements: expect.objectContaining({
+            formButtonPrimary: expect.stringContaining('bg-semantic-primary'),
+            footerActionLink: expect.stringContaining('text-semantic-primary'),
+          }),
+        }),
+      }),
+    );
+  });
+});
+
+describe('Frontend startup configuration guidance', () => {
+  const originalClerkKey = process.env.REACT_APP_CLERK_PUBLISHABLE_KEY;
+
+  afterEach(() => {
+    process.env.REACT_APP_CLERK_PUBLISHABLE_KEY = originalClerkKey;
+    jest.dontMock('react-dom/client');
+    jest.dontMock('../serviceWorkerRegistration');
+    jest.dontMock('../reportWebVitals');
+    jest.dontMock('../App');
+  });
+
+  it('renders recoverable guidance instead of throwing when the Clerk key is missing', () => {
+    const renderSpy = jest.fn();
+    delete process.env.REACT_APP_CLERK_PUBLISHABLE_KEY;
+    document.body.innerHTML = '<div id="root"></div>';
+
+    jest.isolateModules(() => {
+      jest.doMock('react-dom/client', () => ({
+        createRoot: () => ({
+          render: renderSpy,
+        }),
+      }));
+      jest.doMock('../serviceWorkerRegistration', () => ({ register: jest.fn() }));
+      jest.doMock('../reportWebVitals', () => jest.fn());
+      jest.doMock('../App', () => {
+        function MockApp() {
+          return <div>App shell</div>;
+        }
+
+        return MockApp;
+      });
+
+      expect(() => require('../index')).not.toThrow();
+    });
+
+    render(renderSpy.mock.calls[0][0]);
+
+    expect(screen.getByRole('alert')).toHaveTextContent(
+      /Add REACT_APP_CLERK_PUBLISHABLE_KEY to start the app/i,
+    );
+    expect(screen.getByText(/Clerk dashboard API keys/i)).toBeInTheDocument();
   });
 });

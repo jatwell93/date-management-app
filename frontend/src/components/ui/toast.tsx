@@ -17,12 +17,13 @@ const Toast: React.FC<ToastProps> = ({ message, type, isVisible, onClose }) => {
       setShow(true);
       const timer = setTimeout(() => {
         setShow(false);
+        onClose();
       }, 3000); // Auto-hide after 3 seconds
       return () => clearTimeout(timer);
     } else {
       setShow(false);
     }
-  }, [isVisible]);
+  }, [isVisible, message, onClose, type]);
 
   const getToastStyle = () => {
     switch (type) {

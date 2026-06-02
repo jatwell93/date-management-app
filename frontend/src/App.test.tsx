@@ -9,8 +9,14 @@ jest.mock('./components/ClerkAuthProvider', () => ({
   useAuthContext: jest.fn(),
 }));
 
+const mockUserProfile = jest.fn();
+
 jest.mock('@clerk/clerk-react', () => ({
-  UserProfile: () => <div data-testid="clerk-user-profile">Clerk profile</div>,
+  UserProfile: (props: unknown) => {
+    mockUserProfile(props);
+    return <div data-testid="clerk-user-profile">Clerk profile</div>;
+  },
+  OrganizationProfile: () => <div data-testid="clerk-organization-profile">Clerk organization</div>,
 }));
 
 let mockOrgBootstrapState = {
@@ -28,7 +34,7 @@ jest.mock('./hooks/useOrgBootstrap', () => ({
 
 // Mock child page components to avoid their imports
 jest.mock('./pages/ScanPage', () => ({
-  ScanPage: () => null,
+  ScanPage: () => <div data-testid="scan-page">Scan page</div>,
 }));
 
 jest.mock('./components/StorageQuotaWarning', () => ({
@@ -39,9 +45,21 @@ jest.mock('./components/TrialBanner', () => ({
   TrialBanner: () => null,
 }));
 
+let mockHandheldContext = {
+  isHandheld: false,
+  detectionResult: null as null | {
+    isHandheld: boolean;
+    method: string;
+    screenWidth: number;
+    screenHeight: number;
+  },
+  syncStrategy: 'real-time',
+  setSyncStrategy: jest.fn(),
+};
+
 jest.mock('./contexts/HandheldContext', () => ({
   HandheldProvider: ({ children }: { children: React.ReactNode }) => children,
-  useHandheldDetectionContext: () => ({ isHandheld: false }),
+  useHandheldDetectionContext: () => mockHandheldContext,
 }));
 
 jest.mock('./components/ui/dropdown-menu', () => ({
@@ -65,6 +83,9 @@ jest.mock('./components/ui/dropdown-menu', () => ({
 
 const App = require('./App').default;
 
+const getMockNavigate = () =>
+  (jest.requireMock('react-router-dom') as { mockNavigate: jest.Mock }).mockNavigate;
+
 const mockSignedInContext = (overrides = {}) => {
   (useAuthContext as jest.Mock).mockReturnValue({
     isLoading: false,
@@ -82,6 +103,12 @@ const mockSignedInContext = (overrides = {}) => {
 
 beforeEach(() => {
   window.history.pushState({}, '', '/');
+  mockHandheldContext = {
+    isHandheld: false,
+    detectionResult: null,
+    syncStrategy: 'real-time',
+    setSyncStrategy: jest.fn(),
+  };
   mockOrgBootstrapState = {
     isBootstrapped: true,
     isBootstrapping: false,
@@ -219,6 +246,32 @@ describe('App navigation', () => {
     expect(within(nav).getByText('User Management')).toBeInTheDocument();
     expect(updateBootstrapRole).toHaveBeenCalledWith('admin');
   });
+
+  it('keeps the handheld shell to one main landmark and routes settings from the scanner toolbar', () => {
+    window.history.pushState({}, '', '/scan');
+    mockHandheldContext = {
+      ...mockHandheldContext,
+      isHandheld: true,
+      detectionResult: {
+        isHandheld: true,
+        method: 'userAgent',
+        screenWidth: 480,
+        screenHeight: 800,
+      },
+    };
+    mockSignedInContext({ userRole: 'admin' });
+
+    render(<App />);
+
+    expect(screen.getAllByRole('main')).toHaveLength(1);
+    expect(screen.getByTestId('handheld-route-shell')).toHaveClass('h-full min-h-0');
+    expect(screen.getByTestId('handheld-route-shell')).not.toHaveClass('p-4');
+    expect(screen.getByTestId('handheld-route-shell')).not.toHaveClass('max-w-7xl');
+
+    fireEvent.click(screen.getByRole('button', { name: /Settings/i }));
+
+    expect(getMockNavigate()).toHaveBeenCalledWith('/settings');
+  });
 });
 
 describe('App loading state', () => {
@@ -248,6 +301,74 @@ describe('App account routes', () => {
     expect(profileShell).toHaveClass('mx-auto');
     expect(profileShell).toHaveClass('max-w-5xl');
     expect(within(profileShell).getByTestId('clerk-user-profile')).toBeInTheDocument();
+  });
+
+  it('constrains Clerk profile internals for narrow viewports', () => {
+    window.history.pushState({}, '', '/profile');
+    mockSignedInContext();
+
+    render(<App />);
+
+    expect(screen.getByTestId('profile-shell')).toHaveClass('overflow-x-hidden');
+    expect(mockUserProfile).toHaveBeenCalledWith(
+      expect.objectContaining({
+        appearance: expect.objectContaining({
+          elements: expect.objectContaining({
+            rootBox: expect.stringContaining('max-w-full'),
+            cardBox: expect.stringContaining('max-w-full'),
+          }),
+        }),
+      }),
+    );
+  });
+
+  it('passes the PharmIQ color system into the Clerk profile surface', () => {
+    window.history.pushState({}, '', '/profile');
+    mockSignedInContext();
+
+    render(<App />);
+
+    expect(screen.getByTestId('profile-shell')).toHaveClass(
+      'bg-semantic-surface-1',
+      'border-hairline',
+    );
+    expect(screen.getByTestId('profile-shell')).not.toHaveClass('profile-color-field');
+    expect(mockUserProfile).toHaveBeenCalledWith(
+      expect.objectContaining({
+        appearance: expect.objectContaining({
+          variables: expect.objectContaining({
+            colorPrimary: expect.stringContaining('oklch'),
+            colorBackground: expect.stringContaining('oklch'),
+            colorForeground: expect.stringContaining('oklch'),
+          }),
+          elements: expect.objectContaining({
+            navbarButton: expect.stringContaining('text-semantic-primary'),
+            formButtonPrimary: expect.stringContaining('bg-semantic-primary'),
+          }),
+        }),
+      }),
+    );
+  });
+
+  it('passes visible focus styles into Clerk profile controls', () => {
+    window.history.pushState({}, '', '/profile');
+    mockSignedInContext();
+
+    render(<App />);
+
+    expect(mockUserProfile).toHaveBeenCalledWith(
+      expect.objectContaining({
+        appearance: expect.objectContaining({
+          elements: expect.objectContaining({
+            navbarButton: expect.stringContaining('focus-visible:ring-semantic-primary'),
+            profileSectionPrimaryButton: expect.stringContaining(
+              'focus-visible:ring-semantic-primary',
+            ),
+            menuButton: expect.stringContaining('focus-visible:ring-semantic-primary'),
+          }),
+        }),
+      }),
+    );
   });
 });
 

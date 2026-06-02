@@ -1,13 +1,19 @@
 /**
- * CSV Validation Utilities
+ * Upload Column Validation Utilities
  *
  * Pre-upload validation to provide better user feedback before processing
  */
+
+import * as XLSX from 'xlsx';
 
 export type UploadImportType = 'product-catalog' | 'expiry-list';
 
 function escapeRegExp(value: string): string {
   return value.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+}
+
+function getFileExtension(fileName: string): string {
+  return fileName.split('.').pop()?.toLowerCase() ?? '';
 }
 
 // Column name alternatives matching backend parser contracts
@@ -122,14 +128,64 @@ async function readCSVHeaders(file: File): Promise<string[]> {
   });
 }
 
+async function readSpreadsheetHeaders(file: File): Promise<string[]> {
+  return new Promise((resolve, reject) => {
+    const reader = new FileReader();
+
+    reader.onload = (e) => {
+      try {
+        const data = new Uint8Array(e.target?.result as ArrayBuffer);
+        const workbook = XLSX.read(data, { type: 'array' });
+        const firstSheetName = workbook.SheetNames[0];
+
+        if (!firstSheetName) {
+          resolve([]);
+          return;
+        }
+
+        const worksheet = workbook.Sheets[firstSheetName];
+        const rows = XLSX.utils.sheet_to_json<unknown[]>(worksheet, {
+          header: 1,
+          blankrows: false,
+        });
+        const headerRow = rows.find(
+          (row) => Array.isArray(row) && row.some((cell) => String(cell ?? '').trim().length > 0),
+        );
+
+        if (!headerRow) {
+          resolve([]);
+          return;
+        }
+
+        resolve(headerRow.map((h) => String(h ?? '').trim()).filter((h) => h.length > 0));
+      } catch (error) {
+        reject(error instanceof Error ? error : new Error('Failed to read spreadsheet headers'));
+      }
+    };
+
+    reader.onerror = () => reject(new Error('Failed to read spreadsheet headers'));
+    reader.readAsArrayBuffer(file);
+  });
+}
+
+async function readUploadHeaders(file: File): Promise<string[]> {
+  const extension = getFileExtension(file.name);
+
+  if (extension === 'xlsx' || extension === 'xls') {
+    return readSpreadsheetHeaders(file);
+  }
+
+  return readCSVHeaders(file);
+}
+
 /**
- * Validate that all required columns are present in CSV headers
+ * Validate that all required columns are present in supported upload headers
  */
 export async function validateCSVColumns(
   file: File,
   importType: UploadImportType = 'product-catalog',
 ): Promise<ColumnValidationResult> {
-  const headers = await readCSVHeaders(file);
+  const headers = await readUploadHeaders(file);
   const headersLower = headers.map((h) => h.toLowerCase());
   const requiredColumns = REQUIRED_COLUMNS_BY_TYPE[importType];
 

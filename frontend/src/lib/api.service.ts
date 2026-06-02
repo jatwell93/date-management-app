@@ -92,16 +92,16 @@ class ApiService {
     return response.json();
   }
 
-  async get<T>(endpoint: string, token?: string): Promise<T> {
+  async get<T>(endpoint: string, token?: string, signal?: AbortSignal): Promise<T> {
     const headers: HeadersInit = {};
     if (token) {
       headers.Authorization = `Bearer ${token}`;
     }
 
-    return this.request<T>(endpoint, { method: 'GET', headers });
+    return this.request<T>(endpoint, { method: 'GET', headers, signal });
   }
 
-  async post<T>(endpoint: string, data: unknown, token?: string): Promise<T> {
+  async post<T>(endpoint: string, data: unknown, token?: string, signal?: AbortSignal): Promise<T> {
     const headers: HeadersInit = {};
     if (token) {
       headers.Authorization = `Bearer ${token}`;
@@ -111,10 +111,11 @@ class ApiService {
       method: 'POST',
       headers,
       body: JSON.stringify(data),
+      signal,
     });
   }
 
-  async put<T>(endpoint: string, data: unknown, token?: string): Promise<T> {
+  async put<T>(endpoint: string, data: unknown, token?: string, signal?: AbortSignal): Promise<T> {
     const headers: HeadersInit = {};
     if (token) {
       headers.Authorization = `Bearer ${token}`;
@@ -124,16 +125,17 @@ class ApiService {
       method: 'PUT',
       headers,
       body: JSON.stringify(data),
+      signal,
     });
   }
 
-  async delete<T>(endpoint: string, token?: string): Promise<T> {
+  async delete<T>(endpoint: string, token?: string, signal?: AbortSignal): Promise<T> {
     const headers: HeadersInit = {};
     if (token) {
       headers.Authorization = `Bearer ${token}`;
     }
 
-    return this.request<T>(endpoint, { method: 'DELETE', headers });
+    return this.request<T>(endpoint, { method: 'DELETE', headers, signal });
   }
 }
 

@@ -24,6 +24,7 @@
     "test:load": "TEST_PASSWORD=LoadTest123! artillery run artillery.yml",
     "test:load:quick": "TEST_PASSWORD=LoadTest123! artillery quick --count 20 --num 100 https://date-management-api-dev.date-management-app.workers.dev/health",
     "test:load:report": "TEST_PASSWORD=LoadTest123! artillery run artillery.yml --output artillery-report.json && artillery report artillery-report.json",
+    "security:npm-supply-chain": "node scripts/check-npm-supply-chain.js",
     "lint": "eslint .",
     "lint:fix": "eslint . --fix",
     "lint:check": "eslint . --max-warnings=0",
@@ -36,11 +37,11 @@
   },
   "devDependencies": {
     "@eslint/js": "^8.57.1",
-    "@playwright/test": "^1.58.2",
-    "@types/node": "^22.7.5",
-    "@typescript-eslint/eslint-plugin": "^8.44.1",
-    "@typescript-eslint/parser": "^8.44.1",
-    "browserstack-local": "^1.5.8",
+    "@playwright/test": "1.60.0",
+    "@types/node": "22.19.19",
+    "@typescript-eslint/eslint-plugin": "8.59.4",
+    "@typescript-eslint/parser": "8.59.4",
+    "browserstack-local": "1.5.13",
     "dotenv": "^17.2.3",
     "eslint": "^8.57.1",
     "eslint-config-prettier": "^10.1.8",
@@ -50,9 +51,9 @@
     "eslint-plugin-react": "^7.37.1",
     "eslint-plugin-react-hooks": "^4.6.2",
     "globals": "^15.14.0",
-    "prettier": "3.8.1",
+    "prettier": "3.8.3",
     "typescript": "^5.6.3",
-    "wrangler": "^4.61.1"
+    "wrangler": "4.94.0"
   },
   "dependencies": {
     "@prisma/client": "^5.22.0",

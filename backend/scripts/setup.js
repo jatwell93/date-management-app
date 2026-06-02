@@ -76,11 +76,11 @@ async function main() {
     const nodeVersion = process.version;
     const majorVersion = parseInt(nodeVersion.slice(1).split('.')[0], 10);
 
-    if (majorVersion >= 18) {
-      success(`Node.js ${nodeVersion} (✓ meets requirement ≥18)`);
+    if (majorVersion >= 22) {
+      success(`Node.js ${nodeVersion} (✓ meets requirement ≥22)`);
     } else {
       error(`Node.js ${nodeVersion} is too old`);
-      error('Please install Node.js 18 or higher from https://nodejs.org/');
+      error('Please install Node.js 22 or higher from https://nodejs.org/');
       process.exit(1);
     }
   } catch (err) {

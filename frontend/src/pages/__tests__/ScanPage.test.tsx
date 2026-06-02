@@ -308,8 +308,11 @@ describe('ScanPage Integration', () => {
     userEvent.click(scanButton);
 
     await waitFor(() => {
-      expect(screen.getByText(/Please add new product details:/i)).toBeInTheDocument();
+      expect(screen.getByText(/No catalog match for barcode 1234567890/i)).toBeInTheDocument();
     });
+    expect(
+      screen.getByText(/Create a product record before adding expiry stock/i),
+    ).toBeInTheDocument();
   });
 
   it('keeps unknown barcode lookup failures recoverable on the scan page', async () => {
@@ -358,7 +361,7 @@ describe('ScanPage Integration', () => {
     fireEvent.change(screen.getByTestId('location-select'), { target: { value: '1' } });
 
     // 4. Submit
-    const submitButton = screen.getByText(/Confirm & Save/i);
+    const submitButton = screen.getByText(/Save expiry item/i);
     userEvent.click(submitButton);
 
     // 5. Verify
@@ -374,7 +377,7 @@ describe('ScanPage Integration', () => {
       );
     });
 
-    expect(await screen.findByText(/Inventory item added successfully/i)).toBeInTheDocument();
+    expect(await screen.findByText(/Expiry item saved to inventory/i)).toBeInTheDocument();
   });
 
   it('saves to offline storage when offline', async () => {
@@ -400,7 +403,7 @@ describe('ScanPage Integration', () => {
     fireEvent.change(screen.getByTestId('location-select'), { target: { value: '1' } });
 
     // 4. Submit
-    const submitButton = screen.getByText(/Confirm & Save/i);
+    const submitButton = screen.getByText(/Save expiry item/i);
     userEvent.click(submitButton);
 
     // 4. Verify Local Storage
@@ -415,7 +418,51 @@ describe('ScanPage Integration', () => {
       expect(apiService.post).not.toHaveBeenCalled();
     });
 
-    expect(await screen.findByText(/Offline: Inventory item saved/i)).toBeInTheDocument();
+    expect(await screen.findByText(/Offline: expiry item queued for sync/i)).toBeInTheDocument();
+  });
+
+  it('uses specific copy when deleting a recent expiry entry', async () => {
+    (apiService.get as jest.Mock).mockImplementation((url) => {
+      if (url === '/store-areas') return Promise.resolve(mockStoreAreas);
+      if (url.includes('/products/by-barcode/1234567890'))
+        return Promise.resolve(mockProductBarcode);
+      if (url.includes('/inventory-items/by-barcode')) return Promise.resolve([]);
+      if (url.includes('/inventory-items/recent/product/101')) {
+        return Promise.resolve([
+          {
+            id: 501,
+            productId: 101,
+            expiryDate: '2025-12-31',
+            locationId: 1,
+            status: 'active',
+            createdAt: '2025-05-01T00:00:00.000Z',
+            updatedAt: '2025-05-01T00:00:00.000Z',
+          },
+        ]);
+      }
+      return Promise.reject(new Error(`Not found call: ${url}`));
+    });
+
+    render(
+      <HandheldProvider>
+        <ScanPage token={mockToken} />
+      </HandheldProvider>,
+    );
+
+    await waitFor(() => expect(apiService.get).toHaveBeenCalledWith('/store-areas', mockToken));
+
+    userEvent.click(screen.getByTestId('trigger-scan'));
+
+    expect(await screen.findByText('Recent Entries')).toBeInTheDocument();
+    userEvent.click(screen.getByRole('button', { name: /Delete entry/i }));
+
+    expect(await screen.findByText('Delete expiry entry?')).toBeInTheDocument();
+    expect(
+      screen.getByText(/This removes the 31\/12\/2025 expiry entry for Test Product Barcode/i),
+    ).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: /Delete entry/i })).toBeInTheDocument();
+    expect(screen.queryByText(/Are you absolutely sure/i)).not.toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: /Continue/i })).not.toBeInTheDocument();
   });
 
   describe('Handheld Integration Tests', () => {
@@ -566,7 +613,7 @@ describe('ScanPage Integration', () => {
       fireEvent.change(screen.getByLabelText(/Expiry Date/i), { target: { value: '2025-12-31' } });
       fireEvent.change(screen.getByTestId('location-select'), { target: { value: '1' } });
 
-      const submitButton = screen.getByText(/Confirm & Save/i);
+      const submitButton = screen.getByText(/Save expiry item/i);
       fireEvent.click(submitButton);
 
       // In manual sync mode, item should be queued
@@ -641,7 +688,9 @@ describe('ScanPage Integration', () => {
 
       // Should show new product form (graceful fallback)
       await waitFor(() => {
-        expect(screen.getByText(/Please add new product details:/i)).toBeInTheDocument();
+        expect(
+          screen.getByText(/Create a product record before adding expiry stock/i),
+        ).toBeInTheDocument();
       });
     });
   });

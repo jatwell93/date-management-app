@@ -11,4 +11,12 @@ describe('scanner adaptation stylesheet', () => {
     expect(scannerAdaptationCss).toContain('.scanner-context.handheld-scanner');
     expect(scannerAdaptationCss).toContain(".scanner-context[class*='handheld-scan-toolbar']");
   });
+
+  it('does not pin handheld camera height to brittle viewport math', () => {
+    expect(scannerAdaptationCss).not.toContain('calc(100vh');
+    expect(scannerAdaptationCss).not.toMatch(
+      /\.scanner-context \.camera-scanner-fullscreen \.camera-scanner\s*{[^}]*!important/s,
+    );
+    expect(scannerAdaptationCss).toContain('min-height: 0');
+  });
 });

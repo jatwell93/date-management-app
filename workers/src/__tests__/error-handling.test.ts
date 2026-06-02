@@ -5,23 +5,11 @@
  * 503 responses, and network failures in Workers handlers.
  */
 
-import { describe, it, expect, beforeEach, vi } from 'vitest';
-import {
-  getProducts,
-  createProduct,
-  getProductById,
-  deleteProduct,
-  Product,
-} from '../handlers/products';
-import {
-  getStoreAreas,
-  createStoreArea,
-  getStoreAreaById,
-  deleteStoreArea,
-  StoreArea,
-} from '../handlers/store-areas';
+import { describe, it, expect } from 'vitest';
+import { getProducts, createProduct } from '../handlers/products';
 import { getDashboardData } from '../handlers/dashboard';
 import { testEnv, createTestOrgId } from './fixtures';
+import { withNeonRetry } from '../utils/db-retry';
 
 describe('Workers Error Handling', () => {
   const testOrgId = createTestOrgId('test-org-error');
@@ -30,21 +18,25 @@ describe('Workers Error Handling', () => {
     it('should handle database connection timeout gracefully', async () => {
       /**
        * SCENARIO: Database connection takes >30s
-       * EXPECTED: Retry logic attempts 3 times, then returns 502/504
+       * EXPECTED: Retry logic attempts 3 times, then throws the last error
        * VERIFIES: withNeonRetry is active and properly configured
+       *
+       * NOTE: 502/504 mapping happens at the handler/HTTP response layer.
        */
 
-      // Mock neon to simulate slow connection
-      const originalEnv = testEnv;
-      const slowEnv = {
-        ...originalEnv,
-        NEON_CONNECTION_STRING: 'postgres://invalid-slow-host:5432/db',
-      };
+      let attemptCount = 0;
 
-      // In real integration test: would timeout and retry
-      // For unit test: verify retry logic is in place
-      const result = await getProducts(originalEnv, testOrgId);
-      expect(Array.isArray(result) || result instanceof Error).toBe(true);
+      await expect(
+        withNeonRetry(
+          async () => {
+            attemptCount++;
+            throw new Error('connection timeout');
+          },
+          { initialDelayMs: 1, maxDelayMs: 1 },
+        ),
+      ).rejects.toThrow('connection timeout');
+
+      expect(attemptCount).toBe(3);
     });
 
     it('should retry transient connection errors', async () => {
@@ -55,36 +47,31 @@ describe('Workers Error Handling', () => {
        */
 
       let attemptCount = 0;
-      vi.mock('@neondatabase/serverless', () => ({
-        neon: vi.fn(() => {
+      const result = await withNeonRetry(
+        async () => {
           attemptCount++;
           if (attemptCount < 3) {
             throw new Error('connection refused');
           }
-          return async (sql) => {
-            return [
-              {
-                id: 1,
-                name: 'Test',
-                barcode: 'TEST-001',
-                description: null,
-                category: null,
-                organization_id: testOrgId,
-                created_at: new Date(),
-                updated_at: new Date(),
-              },
-            ];
-          };
-        }),
-      }));
-
-      const result = await getProducts(testEnv, testOrgId);
+          return [
+            {
+              id: 1,
+              name: 'Test',
+              barcode: 'TEST-001',
+              description: null,
+              category: null,
+              organization_id: testOrgId,
+              created_at: new Date(),
+              updated_at: new Date(),
+            },
+          ];
+        },
+        { initialDelayMs: 1, maxDelayMs: 1 },
+      );
 
       // Verify retry happened
-      expect(attemptCount).toBeGreaterThanOrEqual(1);
-      if (Array.isArray(result)) {
-        expect(result.length).toBeGreaterThan(0);
-      }
+      expect(attemptCount).toBe(3);
+      expect(result.length).toBeGreaterThan(0);
     });
 
     it('should fail gracefully after max retries exceeded', async () => {
@@ -94,38 +81,38 @@ describe('Workers Error Handling', () => {
        * VERIFIES: Retry limit is enforced
        */
 
-      // Mock persistent failure
-      vi.mock('@neondatabase/serverless', () => ({
-        neon: vi.fn(() => {
-          throw new Error('connection refused');
-        }),
-      }));
+      let attemptCount = 0;
 
-      try {
-        await getProducts(testEnv, testOrgId);
-        // If we get here without error, retry limit wasn't hit
-        expect(true).toBe(false); // Should have thrown
-      } catch (error) {
-        // Expected behavior
-        expect(error).toBeDefined();
-      }
+      await expect(
+        withNeonRetry(
+          async () => {
+            attemptCount++;
+            throw new Error('connection refused');
+          },
+          { initialDelayMs: 1, maxDelayMs: 1 },
+        ),
+      ).rejects.toThrow('connection refused');
+
+      expect(attemptCount).toBe(3);
     });
   });
 
   describe('Malformed Request Handling', () => {
-    it('should handle invalid organizationId gracefully', async () => {
-      /**
-       * SCENARIO: organizationId is empty string or null
-       * EXPECTED: Return empty result or error, not SQL injection
-       * VERIFIES: Parameterized queries prevent injection
-       */
+    it.skipIf(!testEnv.NEON_CONNECTION_STRING)(
+      'should handle invalid organizationId gracefully',
+      async () => {
+        /**
+         * SCENARIO: organizationId is empty string or null
+         * EXPECTED: Return empty result or error, not SQL injection
+         * VERIFIES: Parameterized queries prevent injection
+         */
 
-      const invalidOrgId = '';
-      const result = await getProducts(testEnv, invalidOrgId);
+        const invalidOrgId = '';
+        const result = await getProducts(testEnv, invalidOrgId);
 
-      // Should return empty array or throw validation error
-      expect(Array.isArray(result) || result instanceof Error).toBe(true);
-    });
+        expect(result).toEqual([]);
+      },
+    );
 
     it('should reject malformed JSON in POST body', async () => {
       /**
@@ -220,16 +207,20 @@ describe('Workers Error Handling', () => {
 
       let attemptCount = 0;
 
-      const mockSql = async () => {
-        attemptCount++;
-        if (attemptCount === 1) {
-          throw new Error('too many connections');
-        }
-        return [{ count: 5 }];
-      };
+      const result = await withNeonRetry(
+        async () => {
+          attemptCount++;
+          if (attemptCount === 1) {
+            throw new Error('too many connections');
+          }
+          return [{ count: 5 }];
+        },
+        { initialDelayMs: 1, maxDelayMs: 1 },
+      );
 
       // Verify retry happened
-      expect(attemptCount).toBeGreaterThanOrEqual(1);
+      expect(attemptCount).toBe(2);
+      expect(result).toEqual([{ count: 5 }]);
     });
 
     it('should handle Cloudflare R2 temporarily unavailable', async () => {
@@ -245,21 +236,24 @@ describe('Workers Error Handling', () => {
   });
 
   describe('Concurrent Request Handling', () => {
-    it('should handle parallel getProducts requests', async () => {
-      /**
-       * SCENARIO: 10 concurrent getProducts requests
-       * EXPECTED: All succeed without connection pool overflow
-       * VERIFIES: Connection pooling works correctly
-       */
+    it.skipIf(!testEnv.NEON_CONNECTION_STRING)(
+      'should handle parallel getProducts requests',
+      async () => {
+        /**
+         * SCENARIO: 10 concurrent getProducts requests
+         * EXPECTED: All succeed without connection pool overflow
+         * VERIFIES: Connection pooling works correctly
+         */
 
-      const promises = Array.from({ length: 10 }, () => getProducts(testEnv, testOrgId));
+        const promises = Array.from({ length: 10 }, () => getProducts(testEnv, testOrgId));
 
-      const results = await Promise.all(promises);
+        const results = await Promise.all(promises);
 
-      // All should complete
-      expect(results).toHaveLength(10);
-      expect(results.every((r) => Array.isArray(r) || r instanceof Error)).toBe(true);
-    });
+        // All should complete
+        expect(results).toHaveLength(10);
+        expect(results.every((r) => Array.isArray(r))).toBe(true);
+      },
+    );
 
     it('should handle concurrent creates without race conditions', async () => {
       /**

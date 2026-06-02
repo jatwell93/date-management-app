@@ -405,12 +405,6 @@ export default Sentry.withSentry(
         return handleHealthCheck(request, env);
       }
 
-      // Test route for Sentry testing
-      if (url.pathname === '/api/test-error') {
-        // This will trigger a Sentry error in Workers
-        throw new Error('Test error from Cloudflare Workers - this should be captured by Sentry');
-      }
-
       const logger = new WorkersLogger(env);
       const errorHandler = createErrorHandler(env);
 

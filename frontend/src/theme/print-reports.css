@@ -1,0 +1,125 @@
+@media print {
+  /* Hide non-content elements */
+  nav,
+  header:not(main header),
+  footer,
+  button,
+  .no-print,
+  [role='navigation'] {
+    display: none !important;
+  }
+
+  /* Reset layout for print */
+  body,
+  main,
+  .container {
+    width: 100% !important;
+    max-width: none !important;
+    margin: 0 !important;
+    padding: 0 !important;
+    background: white !important;
+    color: black !important;
+  }
+
+  main {
+    display: block !important;
+  }
+
+  main > * + * {
+    margin-top: 1.5rem !important;
+  }
+
+  /* Typography for print */
+  h1 {
+    font-size: 20pt !important;
+    margin-bottom: 10pt !important;
+  }
+
+  h2 {
+    font-size: 16pt !important;
+    margin-bottom: 8pt !important;
+    margin-top: 15pt !important;
+  }
+
+  p,
+  td,
+  dt,
+  dd {
+    font-size: 10pt !important;
+  }
+
+  /* Card resets */
+  .rounded-lg,
+  .border,
+  .shadow-sm {
+    border: none !important;
+    border-bottom: 1px solid #eee !important;
+    box-shadow: none !important;
+    border-radius: 0 !important;
+  }
+
+  /* Table optimizations */
+  table {
+    width: 100% !important;
+    border-collapse: collapse !important;
+    page-break-inside: auto !important;
+  }
+
+  tr {
+    page-break-inside: avoid !important;
+    page-break-after: auto !important;
+  }
+
+  thead {
+    display: table-header-group !important;
+  }
+
+  td,
+  th {
+    border: 1px solid #eee !important;
+    padding: 6pt !important;
+  }
+
+  /* Chart fallback for print */
+  canvas {
+    max-width: 100% !important;
+    height: auto !important;
+  }
+
+  /* Show URLs after links */
+  /* a:after {
+    content: " (" attr(href) ")";
+  } */
+
+  /* Specific section resets */
+  section {
+    page-break-inside: avoid !important;
+    margin-bottom: 20pt !important;
+  }
+
+  /* Force color for print (some browsers hide backgrounds) */
+  .text-semantic-critical {
+    color: #dc2626 !important;
+    font-weight: bold !important;
+  }
+
+  .text-semantic-warning {
+    color: #d97706 !important;
+    font-weight: bold !important;
+  }
+
+  .text-semantic-success {
+    color: #10b981 !important;
+    font-weight: bold !important;
+  }
+
+  .bg-semantic-critical-muted {
+    background-color: #fef2f2 !important;
+    border: 1px solid #fee2e2 !important;
+  }
+
+  .bg-semantic-secondary-muted {
+    background-color: #f8fafc !important;
+    border: 1px solid #f1f5f9 !important;
+  }
+}

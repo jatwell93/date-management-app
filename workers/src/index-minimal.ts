@@ -384,12 +384,6 @@ export default Sentry.withSentry(
       }
 
       try {
-        // Test route for Sentry testing
-        if (pathname === '/api/test-error') {
-          // This will trigger an error that should be captured by Sentry
-          throw new Error('Test error from Cloudflare Workers - this should be captured by Sentry');
-        }
-
         // Health check endpoint (no auth required)
         if (pathname === '/health' || pathname === '/api/health') {
           const healthResponse = await handleHealthCheck(request, env);

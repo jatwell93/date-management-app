@@ -10,21 +10,15 @@ import {
 } from 'react-router-dom';
 import * as Sentry from '@sentry/react';
 import { ChevronDown, LogOut, Menu, X } from 'lucide-react';
-import { ClerkSignInPage, ClerkSignUpPage } from './components/ClerkAuthPage';
+import {
+  ClerkSignInPage,
+  ClerkSignUpPage,
+  responsiveClerkAppearance,
+} from './components/ClerkAuthPage';
 import { OnboardingPage } from './pages/OnboardingPage';
 import { SettingsPage } from './pages/SettingsPage';
 import { useAuthContext } from './components/ClerkAuthProvider';
 import { ScanPage } from './pages/ScanPage';
-import { DashboardPage } from './pages/DashboardPage';
-import { ReportsPage } from './pages/ReportsPage';
-import { UsageReportPage } from './pages/UsageReportPage';
-import { MarkdownCalculator } from './components/MarkdownCalculator';
-import { UserManagementPage } from './pages/UserManagementPage';
-import { StoreAreaManagementPage } from './pages/StoreAreaManagementPage';
-import { CSVUploadPage } from './pages/CSVUploadPage';
-import { DetailedExpiryReportPage } from './pages/DetailedExpiryReportPage';
-import ExpiredItemsPage from './pages/ExpiredItemsPage';
-import { SubscriptionSettingsPage } from './pages/SubscriptionSettingsPage';
 import { UserProfile } from '@clerk/clerk-react';
 import { StorageQuotaWarning } from './components/StorageQuotaWarning';
 import { TrialBanner } from './components/TrialBanner';
@@ -49,6 +43,44 @@ import { API_AUTH_UNAUTHORIZED_EVENT, API_BASE_URL } from './lib/api.service';
 import './globals.css';
 import './styles/handheld.css';
 import './theme/scanner-adaptation.css';
+import './theme/print-reports.css';
+
+const DashboardPage = React.lazy(() =>
+  import('./pages/DashboardPage').then((module) => ({ default: module.DashboardPage })),
+);
+const ReportsPage = React.lazy(() =>
+  import('./pages/ReportsPage').then((module) => ({ default: module.ReportsPage })),
+);
+const UsageReportPage = React.lazy(() =>
+  import('./pages/UsageReportPage').then((module) => ({ default: module.UsageReportPage })),
+);
+const MarkdownCalculator = React.lazy(() =>
+  import('./components/MarkdownCalculator').then((module) => ({
+    default: module.MarkdownCalculator,
+  })),
+);
+const UserManagementPage = React.lazy(() =>
+  import('./pages/UserManagementPage').then((module) => ({ default: module.UserManagementPage })),
+);
+const StoreAreaManagementPage = React.lazy(() =>
+  import('./pages/StoreAreaManagementPage').then((module) => ({
+    default: module.StoreAreaManagementPage,
+  })),
+);
+const CSVUploadPage = React.lazy(() =>
+  import('./pages/CSVUploadPage').then((module) => ({ default: module.CSVUploadPage })),
+);
+const DetailedExpiryReportPage = React.lazy(() =>
+  import('./pages/DetailedExpiryReportPage').then((module) => ({
+    default: module.DetailedExpiryReportPage,
+  })),
+);
+const ExpiredItemsPage = React.lazy(() => import('./pages/ExpiredItemsPage'));
+const SubscriptionSettingsPage = React.lazy(() =>
+  import('./pages/SubscriptionSettingsPage').then((module) => ({
+    default: module.SubscriptionSettingsPage,
+  })),
+);
 
 // Helper function to check for forceHandheld query parameter
 const checkForceHandheldQueryParam = () => {
@@ -83,6 +115,14 @@ function ExpiryLoadingState({ message }: { message: string }) {
   );
 }
 
+function RouteLoadingState() {
+  return (
+    <div role="status" className="py-8 text-center text-sm font-medium text-muted-foreground">
+      Preparing workspace
+    </div>
+  );
+}
+
 function runHandledHandheldSync(
   token: string | null,
   refreshPendingQueueCount: () => Promise<void>,
@@ -99,9 +139,12 @@ function runHandledHandheldSync(
 
 function ProfilePage() {
   return (
-    <div data-testid="profile-shell" className="mx-auto w-full max-w-5xl px-4 py-6">
-      <div className="flex justify-center">
-        <UserProfile routing="path" path="/profile" />
+    <div
+      data-testid="profile-shell"
+      className="mx-auto w-full max-w-5xl overflow-x-hidden rounded-lg border border-hairline bg-semantic-surface-1 px-3 py-4 sm:px-4 sm:py-6"
+    >
+      <div className="clerk-responsive-surface flex w-full justify-center">
+        <UserProfile routing="path" path="/profile" appearance={responsiveClerkAppearance} />
       </div>
     </div>
   );
@@ -263,83 +306,94 @@ function AppRoutes({ isLoggedIn, effectiveUserRole, token }: AppRoutesProps) {
     !!effectiveUserRole && hasPermission(effectiveUserRole, PERMISSIONS.MANAGE_MEMBERS);
 
   return (
-    <Routes>
-      <Route path="/login/*" element={isLoggedIn ? <Navigate to="/scan" /> : <ClerkSignInPage />} />
-      <Route
-        path="/sign-up/*"
-        element={isLoggedIn ? <Navigate to="/scan" /> : <ClerkSignUpPage />}
-      />
-      <Route path="/onboarding" element={renderSignedInElement(isLoggedIn, <OnboardingPage />)} />
-      <Route path="/onboarding/*" element={renderSignedInElement(isLoggedIn, <OnboardingPage />)} />
-      <Route
-        path="/settings"
-        element={renderAdminElement(isLoggedIn, effectiveUserRole, <SettingsPage />)}
-      />
-      <Route
-        path="/settings/*"
-        element={renderAdminElement(isLoggedIn, effectiveUserRole, <SettingsPage />)}
-      />
-      <Route
-        path="/upgrade"
-        element={renderSignedInElement(isLoggedIn, <TrialUpgradeFlow token={token} />)}
-      />
-      <Route path="/scan" element={renderSignedInElement(isLoggedIn, <ScanPage token={token} />)} />
-      <Route path="/sentry-test" element={renderSignedInElement(isLoggedIn, <SentryTest />)} />
-      <Route
-        path="/dashboard"
-        element={renderSignedInElement(isLoggedIn, <DashboardPage token={token} />)}
-      />
-      <Route
-        path="/reports"
-        element={renderSignedInElement(isLoggedIn, <ReportsPage token={token} />)}
-      />
-      <Route
-        path="/detailed-expiry-report"
-        element={renderSignedInElement(isLoggedIn, <DetailedExpiryReportPage token={token} />)}
-      />
-      <Route
-        path="/expired-items"
-        element={renderSignedInElement(isLoggedIn, <ExpiredItemsPage token={token} />)}
-      />
-      <Route
-        path="/usage-report"
-        element={renderSignedInElement(isLoggedIn, <UsageReportPage token={token} />)}
-      />
-      <Route
-        path="/markdown-calculator"
-        element={renderSignedInElement(isLoggedIn, <MarkdownCalculator token={token} />)}
-      />
-      <Route path="/profile" element={renderSignedInElement(isLoggedIn, <ProfilePage />)} />
-      <Route path="/profile/*" element={renderSignedInElement(isLoggedIn, <ProfilePage />)} />
-      <Route
-        path="/subscription"
-        element={renderSignedInElement(isLoggedIn, <SubscriptionSettingsPage token={token} />)}
-      />
-      {hasAdminPermissions && (
-        <>
-          <Route
-            path="/user-management"
-            element={renderSignedInElement(isLoggedIn, <UserManagementPage />)}
-          />
-          <Route
-            path="/store-area-management"
-            element={renderSignedInElement(isLoggedIn, <StoreAreaManagementPage token={token} />)}
-          />
-          <Route
-            path="/csv-upload"
-            element={renderSignedInElement(isLoggedIn, <CSVUploadPage token={token} />)}
-          />
-          <Route
-            path="/expiry-import"
-            element={renderSignedInElement(
-              isLoggedIn,
-              <CSVUploadPage token={token} defaultImportType="expiry-list" />,
-            )}
-          />
-        </>
-      )}
-      <Route path="*" element={<Navigate to="/login" />} />
-    </Routes>
+    <React.Suspense fallback={<RouteLoadingState />}>
+      <Routes>
+        <Route
+          path="/login/*"
+          element={isLoggedIn ? <Navigate to="/scan" /> : <ClerkSignInPage />}
+        />
+        <Route
+          path="/sign-up/*"
+          element={isLoggedIn ? <Navigate to="/scan" /> : <ClerkSignUpPage />}
+        />
+        <Route path="/onboarding" element={renderSignedInElement(isLoggedIn, <OnboardingPage />)} />
+        <Route
+          path="/onboarding/*"
+          element={renderSignedInElement(isLoggedIn, <OnboardingPage />)}
+        />
+        <Route
+          path="/settings"
+          element={renderAdminElement(isLoggedIn, effectiveUserRole, <SettingsPage />)}
+        />
+        <Route
+          path="/settings/*"
+          element={renderAdminElement(isLoggedIn, effectiveUserRole, <SettingsPage />)}
+        />
+        <Route
+          path="/upgrade"
+          element={renderSignedInElement(isLoggedIn, <TrialUpgradeFlow token={token} />)}
+        />
+        <Route
+          path="/scan"
+          element={renderSignedInElement(isLoggedIn, <ScanPage token={token} />)}
+        />
+        <Route path="/sentry-test" element={renderSignedInElement(isLoggedIn, <SentryTest />)} />
+        <Route
+          path="/dashboard"
+          element={renderSignedInElement(isLoggedIn, <DashboardPage token={token} />)}
+        />
+        <Route
+          path="/reports"
+          element={renderSignedInElement(isLoggedIn, <ReportsPage token={token} />)}
+        />
+        <Route
+          path="/detailed-expiry-report"
+          element={renderSignedInElement(isLoggedIn, <DetailedExpiryReportPage token={token} />)}
+        />
+        <Route
+          path="/expired-items"
+          element={renderSignedInElement(isLoggedIn, <ExpiredItemsPage token={token} />)}
+        />
+        <Route
+          path="/usage-report"
+          element={renderSignedInElement(isLoggedIn, <UsageReportPage token={token} />)}
+        />
+        <Route
+          path="/markdown-calculator"
+          element={renderSignedInElement(isLoggedIn, <MarkdownCalculator token={token} />)}
+        />
+        <Route path="/profile" element={renderSignedInElement(isLoggedIn, <ProfilePage />)} />
+        <Route path="/profile/*" element={renderSignedInElement(isLoggedIn, <ProfilePage />)} />
+        <Route
+          path="/subscription"
+          element={renderSignedInElement(isLoggedIn, <SubscriptionSettingsPage token={token} />)}
+        />
+        {hasAdminPermissions && (
+          <>
+            <Route
+              path="/user-management"
+              element={renderSignedInElement(isLoggedIn, <UserManagementPage />)}
+            />
+            <Route
+              path="/store-area-management"
+              element={renderSignedInElement(isLoggedIn, <StoreAreaManagementPage token={token} />)}
+            />
+            <Route
+              path="/csv-upload"
+              element={renderSignedInElement(isLoggedIn, <CSVUploadPage token={token} />)}
+            />
+            <Route
+              path="/expiry-import"
+              element={renderSignedInElement(
+                isLoggedIn,
+                <CSVUploadPage token={token} defaultImportType="expiry-list" />,
+              )}
+            />
+          </>
+        )}
+        <Route path="*" element={<Navigate to="/login" />} />
+      </Routes>
+    </React.Suspense>
   );
 }
 
@@ -750,11 +804,11 @@ function AppContent({
           syncStatus={isOnline ? 'synced' : 'offline'}
           onSyncNow={() => runHandledHandheldSync(token, refreshPendingQueueCount)}
           onSettingsClick={() => {
-            // TODO: Implement settings navigation
+            navigate('/settings');
           }}
           queueLength={pendingQueueCount}
         >
-          <main className="p-4 max-w-7xl mx-auto">
+          <div className="h-full min-h-0" data-testid="handheld-route-shell">
             <ErrorBoundary>
               <AppRoutes
                 isLoggedIn={isLoggedIn}
@@ -762,7 +816,7 @@ function AppContent({
                 token={token}
               />
             </ErrorBoundary>
-          </main>
+          </div>
         </HandheldLayout>
       ) : (
         <main className="p-4 max-w-7xl mx-auto">
