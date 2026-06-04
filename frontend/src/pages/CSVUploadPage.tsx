@@ -565,7 +565,7 @@ export const CSVUploadPage: React.FC<{
           formData.append('file', fileToUpload);
           formData.append('importType', importType);
 
-          const directUrl = uploadUrl.startsWith('http') ? uploadUrl : `${uploadBaseUrl}/direct`;
+          const directUrl = new URL(uploadUrl, `${uploadBaseUrl}/`).toString();
 
           const directRes = await uploadWithRetry(directUrl, {
             method: 'POST',
