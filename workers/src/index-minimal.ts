@@ -3122,8 +3122,9 @@ export async function handleUploadDirect(
     return errorResponse(`File size exceeds maximum limit of ${maxFileSize} bytes`, 400, env);
   }
 
-  // Validate content type (assuming CSV files)
-  if (!fileValue.type || (!fileValue.type.includes('csv') && !fileValue.type.includes('text'))) {
+  const fileType = fileValue.type.toLowerCase();
+  const isCsvFileName = fileValue.name.toLowerCase().endsWith('.csv');
+  if (fileType && !fileType.includes('csv') && !fileType.includes('text') && !isCsvFileName) {
     return errorResponse('Invalid file type. Only CSV files are allowed.', 400, env);
   }
 
@@ -3151,7 +3152,11 @@ export async function handleUploadDirect(
 /**
  * POST /upload/complete and /api/upload/complete
  */
-async function handleUploadComplete(request: Request, env: Env, db: Database): Promise<Response> {
+export async function handleUploadComplete(
+  request: Request,
+  env: Env,
+  db: Database,
+): Promise<Response> {
   const auth = await authenticateApiRequest(request, env, db);
   if (auth instanceof Response) {
     return auth;
@@ -3171,7 +3176,15 @@ async function handleUploadComplete(request: Request, env: Env, db: Database): P
     return errorResponse('Upload not found', 404, env);
   }
 
-  const processingSummary = await processStoredUpload(body.key, auth.organizationId, env, db);
+  let processingSummary: UploadProcessingSummary;
+  try {
+    processingSummary = await processStoredUpload(body.key, auth.organizationId, env, db);
+  } catch (error) {
+    if (error instanceof Error && error.message === 'Upload not found') {
+      return errorResponse('Upload not found', 404, env);
+    }
+    throw error;
+  }
 
   return jsonResponse(
     { message: 'Upload completed and processing started', ...processingSummary },
@@ -3369,28 +3382,19 @@ async function processProductCatalogUpload(
     }
 
     try {
-      const existingProduct =
-        (await db.findProductBySku(organizationId, parsedRow.sku)) ||
-        (await db.findProductByBarcode(organizationId, parsedRow.barcode));
-
-      if (existingProduct) {
-        await updateProductFromUpload(db, organizationId, Number(existingProduct.id), parsedRow);
-        summary.updatedCount += 1;
-      } else {
-        await db.createProduct(organizationId, {
-          barcode: parsedRow.barcode,
-          sku: parsedRow.sku,
-          name: parsedRow.name,
-          costPrice: parsedRow.costPrice,
-          notes: '',
-        });
+      const wasInserted = await upsertProductFromUpload(db, organizationId, parsedRow);
+      if (wasInserted) {
         summary.importedCount += 1;
+      } else {
+        summary.updatedCount += 1;
       }
     } catch (error) {
+      Sentry.captureException(error, {
+        tags: { feature: 'worker-upload', action: 'product-import-row' },
+        extra: { rowNumber },
+      });
       summary.skippedCount += 1;
-      summary.errors.push(
-        `Row ${rowNumber}: ${error instanceof Error ? error.message : 'Product import failed'}`,
-      );
+      summary.errors.push(`Row ${rowNumber}: Product import failed`);
     }
   }
 
@@ -3415,22 +3419,32 @@ function parseProductCatalogRow(
   return { sku, name, barcode, costPrice };
 }
 
-async function updateProductFromUpload(
+async function upsertProductFromUpload(
   db: Database,
   organizationId: string,
-  productId: number,
   row: ProductCatalogRow,
-): Promise<void> {
-  await db.sql`
-    UPDATE products
-    SET barcode = ${row.barcode},
-        sku = ${row.sku},
-        name = ${row.name},
-        cost_price = ${row.costPrice},
-        updated_at = NOW()
-    WHERE organization_id = ${organizationId}
-      AND id = ${productId}
+): Promise<boolean> {
+  const rows = await db.sql`
+    WITH updated AS (
+      UPDATE products
+      SET barcode = ${row.barcode},
+          sku = ${row.sku},
+          name = ${row.name},
+          cost_price = ${row.costPrice},
+          updated_at = NOW()
+      WHERE organization_id = ${organizationId}
+        AND (sku = ${row.sku} OR barcode = ${row.barcode})
+      RETURNING id
+    ),
+    inserted AS (
+      INSERT INTO products (organization_id, barcode, sku, name, cost_price, notes, created_at, updated_at)
+      SELECT ${organizationId}, ${row.barcode}, ${row.sku}, ${row.name}, ${row.costPrice}, '', NOW(), NOW()
+      WHERE NOT EXISTS (SELECT 1 FROM updated)
+      RETURNING id
+    )
+    SELECT EXISTS(SELECT 1 FROM inserted) as inserted
   `;
+  return rows[0]?.inserted === true;
 }
 
 function findHeaderIndex(headers: string[], acceptedNames: string[]): number {
@@ -3452,52 +3466,58 @@ function parseCost(value: string): number | null {
   return Number.isFinite(parsed) ? parsed : null;
 }
 
+interface CsvParserState {
+  records: string[][];
+  record: string[];
+  field: string;
+  inQuotes: boolean;
+}
+
 function parseCsvRecords(text: string): string[][] {
-  const records: string[][] = [];
-  let record: string[] = [];
-  let field = '';
-  let inQuotes = false;
+  const state: CsvParserState = {
+    records: [],
+    record: [],
+    field: '',
+    inQuotes: false,
+  };
+  const content = text.replace(/^\uFEFF/, '');
 
-  for (let index = 0; index < text.length; index += 1) {
-    const char = text[index];
-    const nextChar = text[index + 1];
-
-    if (char === '"') {
-      if (inQuotes && nextChar === '"') {
-        field += '"';
-        index += 1;
-      } else {
-        inQuotes = !inQuotes;
-      }
-      continue;
-    }
-
-    if (char === ',' && !inQuotes) {
-      record.push(field);
-      field = '';
-      continue;
-    }
-
-    if ((char === '\n' || char === '\r') && !inQuotes) {
-      if (char === '\r' && nextChar === '\n') {
-        index += 1;
-      }
-      record.push(field);
-      if (record.some((cell) => cell.trim())) {
-        records.push(record);
-      }
-      record = [];
-      field = '';
-      continue;
-    }
-
-    field += char;
+  for (let index = 0; index < content.length; index += 1) {
+    index += advanceCsvParser(state, content[index], content[index + 1]);
   }
 
-  record.push(field);
-  if (record.some((cell) => cell.trim())) {
-    records.push(record);
+  finishCsvRecord(state);
+  return state.records;
+}
+
+function advanceCsvParser(state: CsvParserState, char: string, nextChar?: string): number {
+  if (char === '"' && state.inQuotes && nextChar === '"') {
+    state.field += '"';
+    return 1;
+  }
+  if (char === '"') {
+    state.inQuotes = !state.inQuotes;
+    return 0;
+  }
+  if (char === ',' && !state.inQuotes) {
+    state.record.push(state.field);
+    state.field = '';
+    return 0;
+  }
+  if ((char === '\n' || char === '\r') && !state.inQuotes) {
+    finishCsvRecord(state);
+    return char === '\r' && nextChar === '\n' ? 1 : 0;
   }
 
-  return records;
+  state.field += char;
+  return 0;
+}
+
+function finishCsvRecord(state: CsvParserState): void {
+  state.record.push(state.field);
+  if (state.record.some((cell) => cell.trim())) {
+    state.records.push(state.record);
+  }
+  state.record = [];
+  state.field = '';
 }

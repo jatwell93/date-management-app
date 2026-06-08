@@ -18,6 +18,7 @@ async function build() {
       mainFields: ['browser', 'module', 'main'],
       sourcemap: true,
       minify: true,
+      drop: ['console'],
 
       // Externalize Node.js native modules that can't run in Workers
       external: [

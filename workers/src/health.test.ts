@@ -7,6 +7,7 @@ import {
   handleLogin,
   handleOrganizationBootstrap,
   handleRegister,
+  handleUploadComplete,
   handleUploadDirect,
   handleUploadInitiate,
   handleUploadStatus,
@@ -313,13 +314,20 @@ describe('Upload strategy parity', () => {
 
   const createProductImportDb = (userId = 7): Database =>
     ({
-      sql: vi.fn().mockResolvedValue([
-        {
-          id: userId,
-          organizationId: 'org_test',
-          role: 'admin',
-        },
-      ]),
+      sql: vi.fn((strings: TemplateStringsArray) => {
+        const query = strings.join('');
+        if (query.includes('FROM users')) {
+          return Promise.resolve([
+            {
+              id: userId,
+              organizationId: 'org_test',
+              role: 'admin',
+            },
+          ]);
+        }
+
+        return Promise.resolve([{ inserted: true }]);
+      }),
       findProductBySku: vi.fn().mockResolvedValue(null),
       findProductByBarcode: vi.fn().mockResolvedValue(null),
       createProduct: vi.fn().mockResolvedValue({
@@ -485,13 +493,8 @@ describe('Upload strategy parity', () => {
     );
 
     expect(directResponse.status).toBe(200);
-    expect(db.createProduct).toHaveBeenCalledWith('org_test', {
-      barcode: 'BAR-1',
-      sku: 'SKU-1',
-      name: 'Milk',
-      costPrice: 12.99,
-      notes: '',
-    });
+    const directBody = (await directResponse.json()) as any;
+    expect(directBody.importedCount).toBe(1);
 
     const statusResponse = await handleUploadStatus(
       new Request(`https://example.com/api/upload/status/${encodeURIComponent(key)}`, {
@@ -513,6 +516,175 @@ describe('Upload strategy parity', () => {
     expect(statusBody.skippedCount).toBe(0);
     expect(statusBody.rowsProcessed).toBe(1);
     expect(statusBody.rowsTotal).toBe(1);
+  });
+
+  it('accepts direct CSV uploads when the browser omits the MIME type', async () => {
+    mockedVerifyToken.mockResolvedValue({
+      sub: 'user_clerk_7',
+      email: 'uploader@example.com',
+      org_id: 'org_test',
+      org_role: 'org:admin',
+    });
+
+    const envForUpload = createUploadEnv({ CLERK_SECRET_KEY: 'test-clerk-secret' });
+    const db = createProductImportDb(7);
+    const key = 'uploads/user-7/1-products.csv';
+    const formData = new FormData();
+    formData.append(
+      'file',
+      new File(['SKU,Name,Barcode,Cost\nSKU-1,Milk,BAR-1,12.99\n'], 'products.csv', {
+        type: '',
+      }),
+    );
+
+    const response = await handleUploadDirect(
+      new Request(`https://example.com/api/upload/direct/${encodeURIComponent(key)}`, {
+        method: 'POST',
+        headers: {
+          Authorization: 'Bearer clerk-session-token',
+        },
+        body: formData,
+      }),
+      envForUpload,
+      key,
+      db,
+    );
+
+    expect(response.status).toBe(200);
+  });
+
+  it('does not expose internal import errors in upload summaries', async () => {
+    mockedVerifyToken.mockResolvedValue({
+      sub: 'user_clerk_7',
+      email: 'uploader@example.com',
+      org_id: 'org_test',
+      org_role: 'org:admin',
+    });
+
+    const envForUpload = createUploadEnv({ CLERK_SECRET_KEY: 'test-clerk-secret' });
+    const db = {
+      ...createProductImportDb(7),
+      sql: vi.fn((strings: TemplateStringsArray) => {
+        const query = strings.join('');
+        if (query.includes('FROM users')) {
+          return Promise.resolve([
+            {
+              id: 7,
+              organizationId: 'org_test',
+              role: 'admin',
+            },
+          ]);
+        }
+
+        return Promise.reject(new Error('SQLSTATE 23505: secret detail'));
+      }),
+    } as unknown as Database;
+    const key = 'uploads/user-7/1-products.csv';
+    const formData = new FormData();
+    formData.append(
+      'file',
+      new File(['SKU,Name,Barcode,Cost\nSKU-1,Milk,BAR-1,12.99\n'], 'products.csv', {
+        type: 'text/csv',
+      }),
+    );
+
+    const response = await handleUploadDirect(
+      new Request(`https://example.com/api/upload/direct/${encodeURIComponent(key)}`, {
+        method: 'POST',
+        headers: {
+          Authorization: 'Bearer clerk-session-token',
+        },
+        body: formData,
+      }),
+      envForUpload,
+      key,
+      db,
+    );
+
+    expect(response.status).toBe(200);
+    const body = (await response.json()) as any;
+    expect(body.errors).toEqual(['Row 2: Product import failed']);
+    expect(JSON.stringify(body)).not.toContain('SQLSTATE');
+    const putOptions = vi.mocked(envForUpload.CSV_UPLOADS.put).mock.calls[0]?.[2];
+    expect(putOptions?.customMetadata?.errors).toBe(
+      JSON.stringify(['Row 2: Product import failed']),
+    );
+    expect(JSON.stringify(putOptions?.customMetadata)).not.toContain('SQLSTATE');
+  });
+
+  it('preserves quoted commas in direct CSV uploads', async () => {
+    mockedVerifyToken.mockResolvedValue({
+      sub: 'user_clerk_7',
+      email: 'uploader@example.com',
+      org_id: 'org_test',
+      org_role: 'org:admin',
+    });
+
+    const envForUpload = createUploadEnv({ CLERK_SECRET_KEY: 'test-clerk-secret' });
+    const db = createProductImportDb(7);
+    const key = 'uploads/user-7/1-products.csv';
+    const formData = new FormData();
+    formData.append(
+      'file',
+      new File(
+        ['SKU,Name,Barcode,Cost\nSKU-1,"Milk, full cream",BAR-1,12.99\n'],
+        'products.csv',
+        { type: 'text/csv' },
+      ),
+    );
+
+    const response = await handleUploadDirect(
+      new Request(`https://example.com/api/upload/direct/${encodeURIComponent(key)}`, {
+        method: 'POST',
+        headers: {
+          Authorization: 'Bearer clerk-session-token',
+        },
+        body: formData,
+      }),
+      envForUpload,
+      key,
+      db,
+    );
+
+    expect(response.status).toBe(200);
+    const productWrite = vi
+      .mocked(db.sql)
+      .mock.calls.find(([strings]) => !strings.join('').includes('FROM users'));
+    expect(productWrite).toBeDefined();
+    expect(productWrite).toContain('Milk, full cream');
+  });
+
+  it('returns 404 when a completed upload disappears before processing', async () => {
+    mockedVerifyToken.mockResolvedValue({
+      sub: 'user_clerk_7',
+      email: 'uploader@example.com',
+      org_id: 'org_test',
+      org_role: 'org:admin',
+    });
+
+    const envForUpload = createUploadEnv({
+      CLERK_SECRET_KEY: 'test-clerk-secret',
+      CSV_UPLOADS: {
+        head: vi.fn().mockResolvedValue({ key: 'uploads/user-7/1-products.csv' }),
+        get: vi.fn().mockResolvedValue(null),
+      } as unknown as R2Bucket,
+    });
+    const db = createProductImportDb(7);
+
+    const response = await handleUploadComplete(
+      new Request('https://example.com/api/upload/complete', {
+        method: 'POST',
+        headers: {
+          Authorization: 'Bearer clerk-session-token',
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({ key: 'uploads/user-7/1-products.csv' }),
+      }),
+      envForUpload,
+      db,
+    );
+
+    expect(response.status).toBe(404);
   });
 });
 

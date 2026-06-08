@@ -164,7 +164,14 @@ export const CSVUploadPage: React.FC<{
   const isExpiryImport = importType === 'expiry-list';
 
   const getUploadAuthHeaders = async (): Promise<Record<string, string>> => {
-    const freshToken = await getToken();
+    let freshToken: string | null = null;
+    try {
+      freshToken = await getToken();
+    } catch (error) {
+      Sentry.captureException(error, {
+        tags: { feature: 'csv-upload', action: 'refresh-upload-token' },
+      });
+    }
     const authToken = freshToken || token;
     return authToken ? { Authorization: `Bearer ${authToken}` } : {};
   };

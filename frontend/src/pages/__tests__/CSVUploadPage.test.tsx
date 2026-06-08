@@ -365,6 +365,56 @@ describe('CSVUploadPage expiry import', () => {
     );
   });
 
+  it('falls back to the existing token when Clerk token refresh fails', async () => {
+    mockGetToken.mockRejectedValue(new Error('Clerk token refresh failed'));
+
+    fetchMock
+      .mockResponseOnce(
+        JSON.stringify({
+          strategy: 'direct',
+          uploadUrl: '/api/upload/direct/uploads%2Fuser-26%2Fproducts.csv',
+          method: 'POST',
+          key: 'uploads/user-26/products.csv',
+        }),
+      )
+      .mockResponseOnce(
+        JSON.stringify({
+          key: 'uploads/user-26/products.csv',
+        }),
+      )
+      .mockResponseOnce(
+        JSON.stringify({
+          status: 'complete',
+          importedCount: 1,
+          updatedCount: 0,
+          skippedCount: 0,
+          processedCount: 1,
+          totalCount: 1,
+        }),
+      );
+
+    render(<CSVUploadPage token="existing-prop-token" />);
+
+    const fileInput = screen.getByLabelText('CSV/XLSX/XLS File') as HTMLInputElement;
+    const file = new File(['SKU,Name,Barcode,Cost\nSKU-1,Milk,123,12.99'], 'products.csv', {
+      type: 'text/csv',
+    });
+
+    fireEvent.change(fileInput, { target: { files: [file] } });
+    userEvent.click(screen.getByRole('button', { name: 'Upload CSV/XLSX/XLS' }));
+
+    await waitFor(() => {
+      expect(fetchMock).toHaveBeenCalledTimes(3);
+    });
+
+    const initiateOptions = fetchMock.mock.calls[0]?.[1] as RequestInit;
+    expect(initiateOptions.headers).toEqual(
+      expect.objectContaining({
+        Authorization: 'Bearer existing-prop-token',
+      }),
+    );
+  });
+
   it('keeps format-guideline links safe when reduced-motion detection is unavailable', async () => {
     const originalMatchMedia = window.matchMedia;
     Object.defineProperty(window, 'matchMedia', {
