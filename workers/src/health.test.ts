@@ -7,6 +7,7 @@ import {
   handleLogin,
   handleOrganizationBootstrap,
   handleRegister,
+  handleUploadDirect,
   handleUploadInitiate,
   handleUploadStatus,
   maybeCompressJsonResponse,
@@ -310,6 +311,27 @@ describe('Upload strategy parity', () => {
       ]),
     }) as unknown as Database;
 
+  const createProductImportDb = (userId = 7): Database =>
+    ({
+      sql: vi.fn().mockResolvedValue([
+        {
+          id: userId,
+          organizationId: 'org_test',
+          role: 'admin',
+        },
+      ]),
+      findProductBySku: vi.fn().mockResolvedValue(null),
+      findProductByBarcode: vi.fn().mockResolvedValue(null),
+      createProduct: vi.fn().mockResolvedValue({
+        id: 101,
+        sku: 'SKU-1',
+        barcode: 'BAR-1',
+        name: 'Milk',
+        costPrice: 12.99,
+        notes: '',
+      }),
+    }) as unknown as Database;
+
   it('returns direct strategy for Clerk-authenticated upload initiation', async () => {
     mockedVerifyToken.mockResolvedValueOnce({
       sub: 'user_clerk_7',
@@ -402,6 +424,95 @@ describe('Upload strategy parity', () => {
     const body = (await response.json()) as any;
     expect(body.status).toBe('complete');
     expect(body.progress).toBe(100);
+  });
+
+  it('reports real product import counts after a direct CSV upload', async () => {
+    mockedVerifyToken.mockResolvedValue({
+      sub: 'user_clerk_7',
+      email: 'uploader@example.com',
+      org_id: 'org_test',
+      org_role: 'org:admin',
+    });
+
+    const storedObjects = new Map<string, { data: ArrayBuffer; customMetadata?: Record<string, string> }>();
+    const envForUpload = createUploadEnv({
+      CLERK_SECRET_KEY: 'test-clerk-secret',
+      CSV_UPLOADS: {
+        put: vi.fn(
+          async (
+            key: string,
+            data: ArrayBuffer,
+            options?: { customMetadata?: Record<string, string> },
+          ) => {
+            storedObjects.set(key, {
+              data,
+              customMetadata: options?.customMetadata,
+            });
+          },
+        ),
+        head: vi.fn(async (key: string) => {
+          const stored = storedObjects.get(key);
+          return stored
+            ? {
+                key,
+                customMetadata: stored.customMetadata,
+              }
+            : null;
+        }),
+      } as unknown as R2Bucket,
+    });
+    const db = createProductImportDb(7);
+    const key = 'uploads/user-7/1-products.csv';
+    const formData = new FormData();
+    formData.append(
+      'file',
+      new File(['SKU,Name,Barcode,Cost\nSKU-1,Milk,BAR-1,12.99\n'], 'products.csv', {
+        type: 'text/csv',
+      }),
+    );
+
+    const directResponse = await handleUploadDirect(
+      new Request(`https://example.com/api/upload/direct/${encodeURIComponent(key)}`, {
+        method: 'POST',
+        headers: {
+          Authorization: 'Bearer clerk-session-token',
+        },
+        body: formData,
+      }),
+      envForUpload,
+      key,
+      db,
+    );
+
+    expect(directResponse.status).toBe(200);
+    expect(db.createProduct).toHaveBeenCalledWith('org_test', {
+      barcode: 'BAR-1',
+      sku: 'SKU-1',
+      name: 'Milk',
+      costPrice: 12.99,
+      notes: '',
+    });
+
+    const statusResponse = await handleUploadStatus(
+      new Request(`https://example.com/api/upload/status/${encodeURIComponent(key)}`, {
+        method: 'GET',
+        headers: {
+          Authorization: 'Bearer clerk-session-token',
+        },
+      }),
+      envForUpload,
+      key,
+      db,
+    );
+    expect(statusResponse.status).toBe(200);
+
+    const statusBody = (await statusResponse.json()) as any;
+    expect(statusBody.status).toBe('complete');
+    expect(statusBody.importedCount).toBe(1);
+    expect(statusBody.updatedCount).toBe(0);
+    expect(statusBody.skippedCount).toBe(0);
+    expect(statusBody.rowsProcessed).toBe(1);
+    expect(statusBody.rowsTotal).toBe(1);
   });
 });
 

@@ -1,4 +1,5 @@
 import React, { useRef, useState } from 'react';
+import { useAuth } from '@clerk/clerk-react';
 import { useSearchParams, useNavigate } from 'react-router-dom';
 import * as Sentry from '@sentry/react';
 import * as XLSX from 'xlsx';
@@ -67,6 +68,7 @@ export const CSVUploadPage: React.FC<{
   token: string | null;
   defaultImportType?: UploadImportType;
 }> = ({ token, defaultImportType = 'product-catalog' }) => {
+  const { getToken } = useAuth();
   const [searchParams] = useSearchParams();
   const navigate = useNavigate();
   const rawReturnUrl = searchParams.get('return');
@@ -160,6 +162,12 @@ export const CSVUploadPage: React.FC<{
   };
 
   const isExpiryImport = importType === 'expiry-list';
+
+  const getUploadAuthHeaders = async (): Promise<Record<string, string>> => {
+    const freshToken = await getToken();
+    const authToken = freshToken || token;
+    return authToken ? { Authorization: `Bearer ${authToken}` } : {};
+  };
 
   const toUploadResultFromSummary = (summary: Record<string, unknown>): UploadResponse => {
     return {
@@ -412,10 +420,9 @@ export const CSVUploadPage: React.FC<{
       try {
         // URL encode the key to handle slashes in the path
         const encodedKey = encodeURIComponent(key);
+        const authHeaders = await getUploadAuthHeaders();
         const statusRes = await fetch(buildApiUrl(`/upload/status/${encodedKey}`), {
-          headers: {
-            Authorization: `Bearer ${token}`,
-          },
+          headers: authHeaders,
         });
 
         if (!statusRes.ok) {
@@ -525,12 +532,13 @@ export const CSVUploadPage: React.FC<{
       // 1. Initiate Upload
       setProgressMessage('Starting upload');
       const uploadBaseUrl = buildApiUrl('/upload');
+      const initiateAuthHeaders = await getUploadAuthHeaders();
 
       const initiateRes = await fetch(`${uploadBaseUrl}/initiate`, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
-          Authorization: `Bearer ${token}`,
+          ...initiateAuthHeaders,
         },
         body: JSON.stringify({
           filename: fileNameToUpload,
@@ -569,9 +577,7 @@ export const CSVUploadPage: React.FC<{
 
           const directRes = await uploadWithRetry(directUrl, {
             method: 'POST',
-            headers: {
-              Authorization: `Bearer ${token}`,
-            },
+            headers: await getUploadAuthHeaders(),
             body: formData,
           });
 
@@ -616,11 +622,12 @@ export const CSVUploadPage: React.FC<{
       // 3. Complete (Trigger Processing)
       if (strategy === 'presigned') {
         setProgressMessage('Processing file');
+        const completeAuthHeaders = await getUploadAuthHeaders();
         const completeRes = await fetch(`${uploadBaseUrl}/complete`, {
           method: 'POST',
           headers: {
             'Content-Type': 'application/json',
-            Authorization: `Bearer ${token}`,
+            ...completeAuthHeaders,
           },
           body: JSON.stringify({ key: uploadKey, importType }),
         });
