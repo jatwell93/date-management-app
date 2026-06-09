@@ -8,6 +8,7 @@ export const PRODUCT_IMPORT_COLUMN_ALTERNATIVES = {
     'Cost',
     'Cost Price',
     'Unit Cost',
+    'Item Cost',
     'Cost ex',
     'Price',
     'Unit Price',

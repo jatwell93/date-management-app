@@ -10,3 +10,4 @@
 - [x] Address PR 226 review feedback and Worker bundle-size gate.
 - [x] Run OpenSpec and targeted Worker verification.
 - [x] Align Worker product headers with the complete normalized frontend/backend alias contract.
+- [x] Add `Item Cost` to the backend parser and documented product-header contract.

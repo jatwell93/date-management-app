@@ -116,7 +116,7 @@ describe('XLSX Upload Functionality Tests', () => {
 
   it('should process XLSX with alternative header names', async () => {
     const jsonData = [
-      ['Item Code', 'Product Name', 'Unit Price', 'GTIN'],
+      ['Item Code', 'Product Name', 'Item Cost', 'GTIN'],
       ['TEST001', 'Product 1', '$12.99', '1234567890123'],
       ['TEST002', 'Product 2', '€15.50', '1234567890124'],
     ];
