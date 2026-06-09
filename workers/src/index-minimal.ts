@@ -3093,7 +3093,7 @@ async function handleUploadPresigned(
 /**
  * POST /upload/direct/:key and /api/upload/direct/:key
  */
-async function handleUploadDirect(
+export async function handleUploadDirect(
   request: Request,
   env: Env,
   key: string,
@@ -3122,23 +3122,27 @@ async function handleUploadDirect(
     return errorResponse(`File size exceeds maximum limit of ${maxFileSize} bytes`, 400, env);
   }
 
-  // Validate content type (assuming CSV files)
-  if (!fileValue.type || (!fileValue.type.includes('csv') && !fileValue.type.includes('text'))) {
+  const fileType = fileValue.type.toLowerCase();
+  const isCsvFileName = fileValue.name.toLowerCase().endsWith('.csv');
+  if (fileType && !fileType.includes('csv') && !fileType.includes('text') && !isCsvFileName) {
     return errorResponse('Invalid file type. Only CSV files are allowed.', 400, env);
   }
 
   const data = await fileValue.arrayBuffer();
+  const processingSummary = await processProductCatalogUpload(data, auth.organizationId, db);
 
   await env.CSV_UPLOADS.put(key, data, {
     httpMetadata: {
       contentType: fileValue.type || 'text/csv',
     },
+    customMetadata: serializeUploadProcessingSummary(processingSummary),
   });
 
   return jsonResponse(
     {
       message: 'File uploaded and processing started',
       key,
+      ...processingSummary,
     },
     200,
     env,
@@ -3148,7 +3152,11 @@ async function handleUploadDirect(
 /**
  * POST /upload/complete and /api/upload/complete
  */
-async function handleUploadComplete(request: Request, env: Env, db: Database): Promise<Response> {
+export async function handleUploadComplete(
+  request: Request,
+  env: Env,
+  db: Database,
+): Promise<Response> {
   const auth = await authenticateApiRequest(request, env, db);
   if (auth instanceof Response) {
     return auth;
@@ -3168,7 +3176,21 @@ async function handleUploadComplete(request: Request, env: Env, db: Database): P
     return errorResponse('Upload not found', 404, env);
   }
 
-  return jsonResponse({ message: 'Upload completed and processing started' }, 200, env);
+  let processingSummary: UploadProcessingSummary;
+  try {
+    processingSummary = await processStoredUpload(body.key, auth.organizationId, env, db);
+  } catch (error) {
+    if (error instanceof Error && error.message === 'Upload not found') {
+      return errorResponse('Upload not found', 404, env);
+    }
+    throw error;
+  }
+
+  return jsonResponse(
+    { message: 'Upload completed and processing started', ...processingSummary },
+    200,
+    env,
+  );
 }
 
 /**
@@ -3194,12 +3216,15 @@ export async function handleUploadStatus(
     return errorResponse('Upload not found', 404, env);
   }
 
+  const processingSummary = parseUploadProcessingSummary(object.customMetadata);
+
   return jsonResponse(
     {
       status: 'complete',
       progress: 100,
       message: 'File uploaded and processed successfully',
       key,
+      ...processingSummary,
     },
     200,
     env,
@@ -3207,3 +3232,292 @@ export async function handleUploadStatus(
 }
 
 export { handleLogin, handleRegister };
+
+type UploadProcessingSummary = {
+  rowsProcessed: number;
+  rowsTotal: number;
+  importedCount: number;
+  updatedCount: number;
+  skippedCount: number;
+  errorCount: number;
+  errors: string[];
+};
+
+type ProductCatalogRow = {
+  sku: string;
+  name: string;
+  barcode: string;
+  costPrice: number;
+};
+
+function emptyUploadProcessingSummary(): UploadProcessingSummary {
+  return {
+    rowsProcessed: 0,
+    rowsTotal: 0,
+    importedCount: 0,
+    updatedCount: 0,
+    skippedCount: 0,
+    errorCount: 0,
+    errors: [],
+  };
+}
+
+function serializeUploadProcessingSummary(
+  summary: UploadProcessingSummary,
+): Record<string, string> {
+  return {
+    rowsProcessed: String(summary.rowsProcessed),
+    rowsTotal: String(summary.rowsTotal),
+    importedCount: String(summary.importedCount),
+    updatedCount: String(summary.updatedCount),
+    skippedCount: String(summary.skippedCount),
+    errorCount: String(summary.errorCount),
+    errors: JSON.stringify(summary.errors),
+  };
+}
+
+function parseUploadProcessingSummary(
+  customMetadata?: Record<string, string>,
+): UploadProcessingSummary {
+  if (!customMetadata) {
+    return emptyUploadProcessingSummary();
+  }
+
+  let errors: string[] = [];
+  try {
+    const parsedErrors = JSON.parse(customMetadata.errors || '[]') as unknown;
+    if (Array.isArray(parsedErrors)) {
+      errors = parsedErrors.filter((error): error is string => typeof error === 'string');
+    }
+  } catch {
+    errors = [];
+  }
+
+  return {
+    rowsProcessed: parseMetadataNumber(customMetadata.rowsProcessed),
+    rowsTotal: parseMetadataNumber(customMetadata.rowsTotal),
+    importedCount: parseMetadataNumber(customMetadata.importedCount),
+    updatedCount: parseMetadataNumber(customMetadata.updatedCount),
+    skippedCount: parseMetadataNumber(customMetadata.skippedCount),
+    errorCount: parseMetadataNumber(customMetadata.errorCount),
+    errors,
+  };
+}
+
+function parseMetadataNumber(value: string | undefined): number {
+  const parsed = Number(value);
+  return Number.isFinite(parsed) && parsed >= 0 ? parsed : 0;
+}
+
+async function processStoredUpload(
+  key: string,
+  organizationId: string,
+  env: Env,
+  db: Database,
+): Promise<UploadProcessingSummary> {
+  if (typeof env.CSV_UPLOADS.get !== 'function') {
+    return emptyUploadProcessingSummary();
+  }
+
+  const object = await env.CSV_UPLOADS.get(key);
+  if (!object) {
+    throw new Error('Upload not found');
+  }
+
+  const data = await object.arrayBuffer();
+  const processingSummary = await processProductCatalogUpload(data, organizationId, db);
+
+  await env.CSV_UPLOADS.put(key, data, {
+    httpMetadata: {
+      contentType: object.httpMetadata?.contentType || 'text/csv',
+    },
+    customMetadata: serializeUploadProcessingSummary(processingSummary),
+  });
+
+  return processingSummary;
+}
+
+async function processProductCatalogUpload(
+  data: ArrayBuffer,
+  organizationId: string,
+  db: Database,
+): Promise<UploadProcessingSummary> {
+  const summary = emptyUploadProcessingSummary();
+  const text = new TextDecoder().decode(data);
+  const records = parseCsvRecords(text);
+
+  if (records.length < 2) {
+    summary.errors.push('No product rows found');
+    summary.errorCount = summary.errors.length;
+    return summary;
+  }
+
+  const headers = records[0].map(normalizeHeader);
+  const columnIndexes = {
+    sku: findHeaderIndex(headers, ['sku', 'itemcode', 'itemid']),
+    name: findHeaderIndex(headers, ['name', 'productname', 'itemdescription', 'description']),
+    barcode: findHeaderIndex(headers, ['barcode', 'bar code', 'gtin', 'ean']),
+    cost: findHeaderIndex(headers, ['cost', 'unitcost', 'unitprice', 'price']),
+  };
+
+  const missingHeaders = Object.entries(columnIndexes)
+    .filter(([, index]) => index === -1)
+    .map(([name]) => name);
+  if (missingHeaders.length > 0) {
+    summary.errors.push(`Missing required column header(s): ${missingHeaders.join(', ')}`);
+    summary.errorCount = summary.errors.length;
+    return summary;
+  }
+
+  const rows = records.slice(1).filter((row) => row.some((cell) => cell.trim()));
+  summary.rowsTotal = rows.length;
+
+  for (const [index, row] of rows.entries()) {
+    const rowNumber = index + 2;
+    const parsedRow = parseProductCatalogRow(row, columnIndexes);
+    if (!parsedRow) {
+      summary.skippedCount += 1;
+      summary.errors.push(`Row ${rowNumber}: Missing required product fields`);
+      continue;
+    }
+
+    try {
+      const wasInserted = await upsertProductFromUpload(db, organizationId, parsedRow);
+      if (wasInserted) {
+        summary.importedCount += 1;
+      } else {
+        summary.updatedCount += 1;
+      }
+    } catch (error) {
+      Sentry.captureException(error, {
+        tags: { feature: 'worker-upload', action: 'product-import-row' },
+        extra: { rowNumber },
+      });
+      summary.skippedCount += 1;
+      summary.errors.push(`Row ${rowNumber}: Product import failed`);
+    }
+  }
+
+  summary.rowsProcessed = summary.importedCount + summary.updatedCount + summary.skippedCount;
+  summary.errorCount = summary.errors.length;
+  return summary;
+}
+
+function parseProductCatalogRow(
+  row: string[],
+  columnIndexes: { sku: number; name: number; barcode: number; cost: number },
+): ProductCatalogRow | null {
+  const sku = (row[columnIndexes.sku] || '').trim();
+  const name = (row[columnIndexes.name] || '').trim();
+  const barcode = (row[columnIndexes.barcode] || '').trim();
+  const costPrice = parseCost((row[columnIndexes.cost] || '').trim());
+
+  if (!sku || !name || !barcode || costPrice === null) {
+    return null;
+  }
+
+  return { sku, name, barcode, costPrice };
+}
+
+async function upsertProductFromUpload(
+  db: Database,
+  organizationId: string,
+  row: ProductCatalogRow,
+): Promise<boolean> {
+  const rows = await db.sql`
+    WITH updated AS (
+      UPDATE products
+      SET barcode = ${row.barcode},
+          sku = ${row.sku},
+          name = ${row.name},
+          cost_price = ${row.costPrice},
+          updated_at = NOW()
+      WHERE organization_id = ${organizationId}
+        AND (sku = ${row.sku} OR barcode = ${row.barcode})
+      RETURNING id
+    ),
+    inserted AS (
+      INSERT INTO products (organization_id, barcode, sku, name, cost_price, notes, created_at, updated_at)
+      SELECT ${organizationId}, ${row.barcode}, ${row.sku}, ${row.name}, ${row.costPrice}, '', NOW(), NOW()
+      WHERE NOT EXISTS (SELECT 1 FROM updated)
+      RETURNING id
+    )
+    SELECT EXISTS(SELECT 1 FROM inserted) as inserted
+  `;
+  return rows[0]?.inserted === true;
+}
+
+function findHeaderIndex(headers: string[], acceptedNames: string[]): number {
+  const accepted = new Set(acceptedNames.map(normalizeHeader));
+  return headers.findIndex((header) => accepted.has(header));
+}
+
+function normalizeHeader(header: string): string {
+  return header.toLowerCase().replace(/[^a-z0-9]/g, '');
+}
+
+function parseCost(value: string): number | null {
+  const normalized = value.replace(/[^0-9.-]/g, '');
+  if (!normalized) {
+    return null;
+  }
+
+  const parsed = Number(normalized);
+  return Number.isFinite(parsed) ? parsed : null;
+}
+
+interface CsvParserState {
+  records: string[][];
+  record: string[];
+  field: string;
+  inQuotes: boolean;
+}
+
+function parseCsvRecords(text: string): string[][] {
+  const state: CsvParserState = {
+    records: [],
+    record: [],
+    field: '',
+    inQuotes: false,
+  };
+  const content = text.replace(/^\uFEFF/, '');
+
+  for (let index = 0; index < content.length; index += 1) {
+    index += advanceCsvParser(state, content[index], content[index + 1]);
+  }
+
+  finishCsvRecord(state);
+  return state.records;
+}
+
+function advanceCsvParser(state: CsvParserState, char: string, nextChar?: string): number {
+  if (char === '"' && state.inQuotes && nextChar === '"') {
+    state.field += '"';
+    return 1;
+  }
+  if (char === '"') {
+    state.inQuotes = !state.inQuotes;
+    return 0;
+  }
+  if (char === ',' && !state.inQuotes) {
+    state.record.push(state.field);
+    state.field = '';
+    return 0;
+  }
+  if ((char === '\n' || char === '\r') && !state.inQuotes) {
+    finishCsvRecord(state);
+    return char === '\r' && nextChar === '\n' ? 1 : 0;
+  }
+
+  state.field += char;
+  return 0;
+}
+
+function finishCsvRecord(state: CsvParserState): void {
+  state.record.push(state.field);
+  if (state.record.some((cell) => cell.trim())) {
+    state.records.push(state.record);
+  }
+  state.record = [];
+  state.field = '';
+}
