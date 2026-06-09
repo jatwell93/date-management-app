@@ -518,6 +518,105 @@ describe('Upload strategy parity', () => {
     expect(statusBody.rowsTotal).toBe(1);
   });
 
+  it('accepts FRED product catalog headers after spreadsheet-to-CSV conversion', async () => {
+    mockedVerifyToken.mockResolvedValue({
+      sub: 'user_clerk_7',
+      email: 'uploader@example.com',
+      org_id: 'org_test',
+      org_role: 'org:admin',
+    });
+
+    const envForUpload = createUploadEnv({ CLERK_SECRET_KEY: 'test-clerk-secret' });
+    const db = createProductImportDb(7);
+    const key = 'uploads/user-7/1-fred-products.csv';
+    const formData = new FormData();
+    formData.append(
+      'file',
+      new File(
+        [
+          'Item Code,Item Description,Cost Ex,Barcode\n' +
+            '619647,A/SEARCH NEB TUBING 2M,7.53,9318766200185\n',
+        ],
+        'fred-products.csv',
+        { type: 'text/csv' },
+      ),
+    );
+
+    const response = await handleUploadDirect(
+      new Request(`https://example.com/api/upload/direct/${encodeURIComponent(key)}`, {
+        method: 'POST',
+        headers: {
+          Authorization: 'Bearer clerk-session-token',
+        },
+        body: formData,
+      }),
+      envForUpload,
+      key,
+      db,
+    );
+
+    expect(response.status).toBe(200);
+    const body = (await response.json()) as any;
+    expect(body.errors).toEqual([]);
+    expect(body.importedCount).toBe(1);
+    expect(body.rowsProcessed).toBe(1);
+    expect(body.rowsTotal).toBe(1);
+  });
+
+  it.each([
+    ['Reorder Number', 'Item Name', 'Cost Price', 'Alias'],
+    ['Product Code', 'Name', 'Item Cost', 'UPC'],
+    ['Item Number', 'Name', 'Cost inc', 'Product Barcode'],
+    ['SKU', 'Name', 'Selling Price', 'Barcode Number'],
+    ['SKU', 'Name', 'Retail Price', 'Barcode'],
+  ])(
+    'accepts normalized product headers %s, %s, %s, and %s',
+    async (skuHeader, nameHeader, costHeader, barcodeHeader) => {
+      mockedVerifyToken.mockResolvedValue({
+        sub: 'user_clerk_7',
+        email: 'uploader@example.com',
+        org_id: 'org_test',
+        org_role: 'org:admin',
+      });
+
+      const envForUpload = createUploadEnv({ CLERK_SECRET_KEY: 'test-clerk-secret' });
+      const db = createProductImportDb(7);
+      const key = `uploads/user-7/${skuHeader.replace(/\s/g, '-')}-products.csv`;
+      const formData = new FormData();
+      formData.append(
+        'file',
+        new File(
+          [
+            `${skuHeader},${nameHeader},${costHeader},${barcodeHeader}\n` +
+              'SKU-ALIAS,Alias Product,12.99,BAR-ALIAS\n',
+          ],
+          'alias-products.csv',
+          { type: 'text/csv' },
+        ),
+      );
+
+      const response = await handleUploadDirect(
+        new Request(`https://example.com/api/upload/direct/${encodeURIComponent(key)}`, {
+          method: 'POST',
+          headers: {
+            Authorization: 'Bearer clerk-session-token',
+          },
+          body: formData,
+        }),
+        envForUpload,
+        key,
+        db,
+      );
+
+      expect(response.status).toBe(200);
+      const body = (await response.json()) as any;
+      expect(body.errors).toEqual([]);
+      expect(body.importedCount).toBe(1);
+      expect(body.rowsProcessed).toBe(1);
+      expect(body.rowsTotal).toBe(1);
+    },
+  );
+
   it('accepts direct CSV uploads when the browser omits the MIME type', async () => {
     mockedVerifyToken.mockResolvedValue({
       sub: 'user_clerk_7',

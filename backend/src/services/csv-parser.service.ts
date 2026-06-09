@@ -154,6 +154,7 @@ const PRODUCT_COLUMN_ALTERNATIVES = {
     'Cost',
     'Cost Price',
     'Unit Cost',
+    'Item Cost',
     'Cost ex',
     'Price',
     'Unit Price',

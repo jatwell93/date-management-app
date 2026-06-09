@@ -160,6 +160,18 @@ describe('CSVParserService', () => {
       expect(result.imported).toBe(1);
     });
 
+    it('should accept Item Cost as a cost header', async () => {
+      const filePath = createTestCSV(
+        'item-cost-header.csv',
+        'Item Code,Item Description,EAN,Item Cost\n' + 'SKU001,Product 1,123456789,12.99\n',
+      );
+
+      const result = await parser.processFile(filePath);
+
+      expect(result.errors.filter((e) => e.field === 'header')).toHaveLength(0);
+      expect(result.imported).toBe(1);
+    });
+
     it('should report missing required headers', async () => {
       const filePath = createTestCSV('missing-headers.csv', 'SKU,Name\n' + 'SKU001,Product 1\n');
 

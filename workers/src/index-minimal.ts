@@ -3250,6 +3250,24 @@ type ProductCatalogRow = {
   costPrice: number;
 };
 
+const PRODUCT_CATALOG_HEADER_ALIASES = {
+  sku: ['sku', 'itemcode', 'reordernumber', 'productcode', 'itemnumber'],
+  name: ['name', 'itemdescription', 'productname', 'description', 'itemname'],
+  cost: [
+    'cost',
+    'costprice',
+    'unitcost',
+    'costex',
+    'price',
+    'unitprice',
+    'costinc',
+    'sellingprice',
+    'retailprice',
+    'itemcost',
+  ],
+  barcode: ['barcode', 'alias', 'ean', 'upc', 'gtin', 'productbarcode', 'barcodenumber'],
+} as const;
+
 function emptyUploadProcessingSummary(): UploadProcessingSummary {
   return {
     rowsProcessed: 0,
@@ -3354,10 +3372,10 @@ async function processProductCatalogUpload(
 
   const headers = records[0].map(normalizeHeader);
   const columnIndexes = {
-    sku: findHeaderIndex(headers, ['sku', 'itemcode', 'itemid']),
-    name: findHeaderIndex(headers, ['name', 'productname', 'itemdescription', 'description']),
-    barcode: findHeaderIndex(headers, ['barcode', 'bar code', 'gtin', 'ean']),
-    cost: findHeaderIndex(headers, ['cost', 'unitcost', 'unitprice', 'price']),
+    sku: findHeaderIndex(headers, PRODUCT_CATALOG_HEADER_ALIASES.sku),
+    name: findHeaderIndex(headers, PRODUCT_CATALOG_HEADER_ALIASES.name),
+    barcode: findHeaderIndex(headers, PRODUCT_CATALOG_HEADER_ALIASES.barcode),
+    cost: findHeaderIndex(headers, PRODUCT_CATALOG_HEADER_ALIASES.cost),
   };
 
   const missingHeaders = Object.entries(columnIndexes)
@@ -3447,7 +3465,7 @@ async function upsertProductFromUpload(
   return rows[0]?.inserted === true;
 }
 
-function findHeaderIndex(headers: string[], acceptedNames: string[]): number {
+function findHeaderIndex(headers: string[], acceptedNames: readonly string[]): number {
   const accepted = new Set(acceptedNames.map(normalizeHeader));
   return headers.findIndex((header) => accepted.has(header));
 }

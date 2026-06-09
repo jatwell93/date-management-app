@@ -33,6 +33,7 @@ Your CSV file must contain the following four columns. You can use alternative n
 - `Cost`
 - `Cost Price`
 - `Unit Cost`
+- `Item Cost`
 - `Cost ex`
 - `Price`
 - `Unit Price`
