@@ -220,6 +220,17 @@ describe('API config guard', () => {
     expect(body.error).toBeTruthy();
   });
 
+  it.each([
+    ['direct', 'POST', '/api/upload/direct/uploads%2Fuser-7%2Fproducts.csv'],
+    ['presigned', 'PUT', '/api/upload/presigned/uploads%2Fuser-7%2Fproducts.csv'],
+    ['complete', 'POST', '/api/upload/complete'],
+    ['error report', 'GET', '/api/upload/error-report/uploads%2Fuser-7%2Fproducts.csv'],
+  ])('routes the %s upload endpoint', async (_name, method, pathname) => {
+    const response = await SELF.fetch(`https://example.com${pathname}`, { method });
+
+    expect(response.status).not.toBe(404);
+  });
+
   it('routes /api/webhooks/clerk and rejects requests without Svix headers', async () => {
     const response = await SELF.fetch('https://example.com/api/webhooks/clerk', {
       method: 'POST',
@@ -591,6 +602,129 @@ describe('Upload strategy parity', () => {
       expect(productQueries).toHaveLength(0);
     },
   );
+
+  it('fails and unlocks a direct catalogue upload when queue enqueueing fails', async () => {
+    mockedVerifyToken.mockResolvedValue({
+      sub: 'user_clerk_7',
+      email: 'uploader@example.com',
+      org_id: 'org_test',
+      org_role: 'org:admin',
+    });
+    const deleteObject = vi.fn().mockResolvedValue(undefined);
+    const envForUpload = createUploadEnv({
+      CLERK_SECRET_KEY: 'test-clerk-secret',
+      CATALOGUE_QUEUE_ENABLED: 'true',
+      CATALOGUE_IMPORT_QUEUE: {
+        send: vi.fn().mockRejectedValue(new Error('queue unavailable')),
+      } as unknown as Queue,
+      CSV_UPLOADS: {
+        put: vi.fn().mockResolvedValue(undefined),
+        delete: deleteObject,
+      } as unknown as R2Bucket,
+    });
+    const db = createProductImportDb(7);
+    vi.mocked(db.sql).mockImplementation((strings: TemplateStringsArray) => {
+      const query = strings.join('');
+      if (query.includes('FROM users')) {
+        return Promise.resolve([{ id: 7, organizationId: 'org_test', role: 'admin' }]) as never;
+      }
+      if (query.includes('FROM subscription_tiers')) {
+        return Promise.resolve([{ tier_level: 'professional' }]) as never;
+      }
+      if (query.includes('INSERT INTO uploads')) {
+        return Promise.resolve([{ id: 42 }]) as never;
+      }
+      return Promise.resolve([]) as never;
+    });
+    const key = 'uploads/user-7/products.csv';
+    const formData = new FormData();
+    formData.append(
+      'file',
+      new File(['SKU,Name,Barcode,Cost\nS1,One,B1,1.00\n'], 'products.csv', {
+        type: 'text/csv',
+      }),
+    );
+
+    const response = await handleUploadDirect(
+      new Request(`https://example.com/api/upload/direct/${encodeURIComponent(key)}`, {
+        method: 'POST',
+        headers: { Authorization: 'Bearer clerk-session-token' },
+        body: formData,
+      }),
+      envForUpload,
+      key,
+      db,
+    );
+
+    expect(response.status).toBe(503);
+    expect(deleteObject).toHaveBeenCalledWith(key);
+    expect(
+      vi.mocked(db.sql).mock.calls.some(([strings]) =>
+        strings.join('').includes("UPDATE uploads SET status = 'failed'"),
+      ),
+    ).toBe(true);
+  });
+
+  it('fails and unlocks a completed presigned upload when queue enqueueing fails', async () => {
+    mockedVerifyToken.mockResolvedValue({
+      sub: 'user_clerk_7',
+      email: 'uploader@example.com',
+      org_id: 'org_test',
+      org_role: 'org:admin',
+    });
+    const deleteObject = vi.fn().mockResolvedValue(undefined);
+    const key = 'uploads/user-7/products.csv';
+    const envForUpload = createUploadEnv({
+      CLERK_SECRET_KEY: 'test-clerk-secret',
+      CATALOGUE_QUEUE_ENABLED: 'true',
+      CATALOGUE_IMPORT_QUEUE: {
+        send: vi.fn().mockRejectedValue(new Error('queue unavailable')),
+      } as unknown as Queue,
+      CSV_UPLOADS: {
+        head: vi.fn().mockResolvedValue({
+          key,
+          size: 100,
+          httpMetadata: { contentType: 'text/csv' },
+        }),
+        delete: deleteObject,
+      } as unknown as R2Bucket,
+    });
+    const db = createProductImportDb(7);
+    vi.mocked(db.sql).mockImplementation((strings: TemplateStringsArray) => {
+      const query = strings.join('');
+      if (query.includes('FROM users')) {
+        return Promise.resolve([{ id: 7, organizationId: 'org_test', role: 'admin' }]) as never;
+      }
+      if (query.includes('FROM subscription_tiers')) {
+        return Promise.resolve([{ tier_level: 'professional' }]) as never;
+      }
+      if (query.includes('INSERT INTO uploads')) {
+        return Promise.resolve([{ id: 43 }]) as never;
+      }
+      return Promise.resolve([]) as never;
+    });
+
+    const response = await handleUploadComplete(
+      new Request('https://example.com/api/upload/complete', {
+        method: 'POST',
+        headers: {
+          Authorization: 'Bearer clerk-session-token',
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({ key }),
+      }),
+      envForUpload,
+      db,
+    );
+
+    expect(response.status).toBe(503);
+    expect(deleteObject).not.toHaveBeenCalled();
+    expect(
+      vi.mocked(db.sql).mock.calls.some(([strings]) =>
+        strings.join('').includes("UPDATE uploads SET status = 'failed'"),
+      ),
+    ).toBe(true);
+  });
 
   it('acknowledges duplicate delivery for an already completed catalogue job', async () => {
     const ack = vi.fn();

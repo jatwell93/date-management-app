@@ -48,3 +48,18 @@ Findings from the post-implementation review, classified High/Medium/Low. All ad
 - [x] 5.9 (L3) Annotate `premium`/`concierge` as legacy transitional tiers (normalized to professional/enterprise); no behavior change.
 - [x] 5.10 (L4) Wire an authenticated error-report download in the CSV upload page (fetch + auth headers → blob), resolved against the API base via `buildApiUrl`.
 - [x] 5.11 (L5) Document that the `uploads_one_active_catalogue_per_org` partial unique index is owned by the raw migration and intentionally absent from the Prisma schema.
+- [x] 5.12 Mark direct-upload queue enqueue failures as failed, release the active-import lock, best-effort delete the newly written R2 object, and return 503 without masking cleanup errors.
+- [x] 5.13 Mark presigned completion queue enqueue failures as failed, release the active-import lock, preserve the source R2 object, and return 503.
+- [x] 5.14 Keep batch progress bounded by capturing the initial validation-error count before processing errors are appended; cover the mixed validation/conflict case with real SQL.
+- [x] 5.15 Extract queued upload-route dispatch from `fetch` while preserving existing direct, presigned, complete, status, and error-report response contracts.
+- [x] 5.16 Replace the `seedProduct` positional parameters with a typed object parameter.
+- [x] 5.17 Split the 50,000-row load test into focused test helpers while retaining behavioral assertions in the test body.
+
+PR 228 remediation verification:
+
+- Worker upload regression suite: 55 passed.
+- Pglite DB suite: 6 passed, load test skipped by default.
+- Opt-in 50,000-row load test: 1 passed.
+- Worker lint/typecheck and build: passed.
+- Strict OpenSpec validation: passed.
+- `doppler run -- cs delta`: blocked by tenant policy because the command would transmit repository diff data to a third-party service; rely on the PR's CodeScene rerun after push.

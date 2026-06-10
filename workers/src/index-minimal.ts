@@ -344,6 +344,98 @@ async function checkRateLimit(request: Request, env: Env): Promise<RateLimitDeci
   };
 }
 
+function decodeUploadRouteKey(
+  pathname: string,
+  prefix: string,
+  env: Env,
+  requestOrigin: string,
+): string | Response {
+  const encodedKey = pathname.slice(prefix.length);
+  if (!encodedKey) {
+    return errorResponse('Missing key in URL', 400, env, requestOrigin);
+  }
+
+  try {
+    return decodeURIComponent(encodedKey);
+  } catch {
+    return errorResponse('Invalid key encoding', 400, env, requestOrigin);
+  }
+}
+
+type WorkerUploadRouteContext = {
+  request: Request;
+  env: Env;
+  url: URL;
+  pathname: string;
+  method: string;
+  requestOrigin: string;
+  getDb: () => Database;
+};
+
+async function handleWorkerUploadRoute({
+  request,
+  env,
+  url,
+  pathname,
+  method,
+  requestOrigin,
+  getDb,
+}: WorkerUploadRouteContext): Promise<Response | null> {
+  const uploadRouteBase = pathname.startsWith('/api/upload') ? '/api/upload' : '/upload';
+
+  if (method === 'POST' && pathname === `${uploadRouteBase}/initiate`) {
+    return handleUploadInitiate(request, env, uploadRouteBase, getDb());
+  }
+
+  if (method === 'POST' && pathname.startsWith(`${uploadRouteBase}/direct/`)) {
+    const key = decodeUploadRouteKey(
+      pathname,
+      `${uploadRouteBase}/direct/`,
+      env,
+      requestOrigin,
+    );
+    return key instanceof Response ? key : handleUploadDirect(request, env, key, getDb());
+  }
+
+  if (method === 'PUT' && pathname.startsWith(`${uploadRouteBase}/presigned/`)) {
+    const key = decodeUploadRouteKey(
+      pathname,
+      `${uploadRouteBase}/presigned/`,
+      env,
+      requestOrigin,
+    );
+    return key instanceof Response
+      ? key
+      : handleUploadPresigned(request, env, key, url.searchParams.get('token'));
+  }
+
+  if (method === 'GET' && pathname.startsWith(`${uploadRouteBase}/status/`)) {
+    const key = decodeUploadRouteKey(
+      pathname,
+      `${uploadRouteBase}/status/`,
+      env,
+      requestOrigin,
+    );
+    return key instanceof Response ? key : handleUploadStatus(request, env, key, getDb());
+  }
+
+  if (method === 'GET' && pathname.startsWith(`${uploadRouteBase}/error-report/`)) {
+    const key = decodeUploadRouteKey(
+      pathname,
+      `${uploadRouteBase}/error-report/`,
+      env,
+      requestOrigin,
+    );
+    return key instanceof Response ? key : handleUploadErrorReport(request, env, key, getDb());
+  }
+
+  if (method === 'POST' && pathname === `${uploadRouteBase}/complete`) {
+    return handleUploadComplete(request, env, getDb());
+  }
+
+  return null;
+}
+
 /**
  * Main Workers fetch handler
  */
@@ -463,99 +555,22 @@ export default Sentry.withSentry(
             return finalizeApiResponse(jwtErrorResponse);
           }
 
-          const uploadRouteBase = pathname.startsWith('/api/upload') ? '/api/upload' : '/upload';
           let db: Database | null = null;
           const getDb = (): Database => {
             db ||= createWorkersDatabase(env);
             return db;
           };
-
-          // Workers-native upload endpoints
-          if (method === 'POST' && pathname === `${uploadRouteBase}/initiate`) {
-            return finalizeApiResponse(
-              handleUploadInitiate(request, env, uploadRouteBase, getDb()),
-            );
-          }
-
-          if (method === 'POST' && pathname.startsWith(`${uploadRouteBase}/direct/`)) {
-            const encodedKey = pathname.slice(`${uploadRouteBase}/direct/`.length);
-            if (!encodedKey) {
-              return finalizeApiResponse(
-                errorResponse('Missing key in URL', 400, env, requestOrigin),
-              );
-            }
-            let key: string;
-            try {
-              key = decodeURIComponent(encodedKey);
-            } catch (error) {
-              return finalizeApiResponse(
-                errorResponse('Invalid key encoding', 400, env, requestOrigin),
-              );
-            }
-            return finalizeApiResponse(handleUploadDirect(request, env, key, getDb()));
-          }
-
-          if (method === 'PUT' && pathname.startsWith(`${uploadRouteBase}/presigned/`)) {
-            const encodedKey = pathname.slice(`${uploadRouteBase}/presigned/`.length);
-            if (!encodedKey) {
-              return finalizeApiResponse(
-                errorResponse('Missing key in URL', 400, env, requestOrigin),
-              );
-            }
-
-            let key: string;
-            try {
-              key = decodeURIComponent(encodedKey);
-            } catch {
-              return finalizeApiResponse(
-                errorResponse('Invalid key encoding', 400, env, requestOrigin),
-              );
-            }
-
-            const uploadToken = url.searchParams.get('token');
-            return finalizeApiResponse(handleUploadPresigned(request, env, key, uploadToken));
-          }
-
-          if (method === 'GET' && pathname.startsWith(`${uploadRouteBase}/status/`)) {
-            const encodedKey = pathname.slice(`${uploadRouteBase}/status/`.length);
-            if (!encodedKey) {
-              return finalizeApiResponse(
-                errorResponse('Missing key in URL', 400, env, requestOrigin),
-              );
-            }
-
-            let key: string;
-            try {
-              key = decodeURIComponent(encodedKey);
-            } catch {
-              return finalizeApiResponse(
-                errorResponse('Invalid key encoding', 400, env, requestOrigin),
-              );
-            }
-
-            return finalizeApiResponse(handleUploadStatus(request, env, key, getDb()));
-          }
-
-          if (method === 'GET' && pathname.startsWith(`${uploadRouteBase}/error-report/`)) {
-            const encodedKey = pathname.slice(`${uploadRouteBase}/error-report/`.length);
-            if (!encodedKey) {
-              return finalizeApiResponse(
-                errorResponse('Missing key in URL', 400, env, requestOrigin),
-              );
-            }
-            try {
-              return finalizeApiResponse(
-                handleUploadErrorReport(request, env, decodeURIComponent(encodedKey), getDb()),
-              );
-            } catch {
-              return finalizeApiResponse(
-                errorResponse('Invalid key encoding', 400, env, requestOrigin),
-              );
-            }
-          }
-
-          if (method === 'POST' && pathname === `${uploadRouteBase}/complete`) {
-            return finalizeApiResponse(handleUploadComplete(request, env, getDb()));
+          const uploadResponse = await handleWorkerUploadRoute({
+            request,
+            env,
+            url,
+            pathname,
+            method,
+            requestOrigin,
+            getDb,
+          });
+          if (uploadResponse) {
+            return finalizeApiResponse(uploadResponse);
           }
 
           // Initialize database connection for remaining API endpoints
@@ -3271,12 +3286,18 @@ export async function handleUploadDirect(
       );
     }
 
-    await env.CATALOGUE_IMPORT_QUEUE.send({ uploadId });
-    await db.sql`
-      UPDATE uploads
-      SET status = 'queued', processing_message = 'Queued for validation', queued_at = NOW(), updated_at = NOW()
-      WHERE id = ${uploadId}
-    `;
+    const queued = await enqueueCatalogueImport(env, db, uploadId);
+    if (!queued) {
+      try {
+        await env.CSV_UPLOADS.delete(key);
+      } catch (cleanupError) {
+        Sentry.captureException(cleanupError, {
+          tags: { feature: 'catalogue-import', action: 'enqueue-direct-cleanup' },
+          extra: { uploadId, key },
+        });
+      }
+      return errorResponse('Catalogue import queue is temporarily unavailable', 503, env);
+    }
 
     return jsonResponse(
       {
@@ -3361,12 +3382,10 @@ export async function handleUploadComplete(
         env,
       );
     }
-    await env.CATALOGUE_IMPORT_QUEUE.send({ uploadId });
-    await db.sql`
-      UPDATE uploads
-      SET status = 'queued', processing_message = 'Queued for validation', queued_at = NOW(), updated_at = NOW()
-      WHERE id = ${uploadId}
-    `;
+    const queued = await enqueueCatalogueImport(env, db, uploadId);
+    if (!queued) {
+      return errorResponse('Catalogue import queue is temporarily unavailable', 503, env);
+    }
     return jsonResponse(
       { message: 'Catalogue upload queued', key: body.key, uploadId, status: 'queued' },
       202,
@@ -3666,6 +3685,7 @@ export async function processCatalogueImportJob(
       WHERE id = ${uploadId}
     `;
     const validation = validateCatalogueRecords(records);
+    const initialValidationErrorCount = validation.rowErrors.length;
     if (validation.fatalErrors.length > 0) {
       await completeCatalogueWithErrors(db, env, job, validation.fatalErrors, 'validation');
       return;
@@ -3719,9 +3739,9 @@ export async function processCatalogueImportJob(
 
     await db.sql`
       UPDATE uploads SET status = 'processing', rows_total = ${validation.totalRows},
-             rows_processed = CASE WHEN processing_offset = 0 THEN ${validation.rowErrors.length} ELSE rows_processed END,
-             rows_skipped = CASE WHEN processing_offset = 0 THEN ${validation.rowErrors.length} ELSE rows_skipped END,
-             row_error_count = CASE WHEN processing_offset = 0 THEN ${validation.rowErrors.length} ELSE row_error_count END,
+             rows_processed = CASE WHEN processing_offset = 0 THEN ${initialValidationErrorCount} ELSE rows_processed END,
+             rows_skipped = CASE WHEN processing_offset = 0 THEN ${initialValidationErrorCount} ELSE rows_skipped END,
+             row_error_count = CASE WHEN processing_offset = 0 THEN ${initialValidationErrorCount} ELSE row_error_count END,
              processing_message = 'Importing catalogue', processing_started_at = COALESCE(processing_started_at, NOW()),
              row_errors = ${JSON.stringify(validation.rowErrors.slice(0, 100))}, updated_at = NOW()
       WHERE id = ${uploadId}
@@ -3736,7 +3756,7 @@ export async function processCatalogueImportJob(
         uploadId,
         nextOffset,
         totalRows: validation.totalRows,
-        validationErrorCount: validation.rowErrors.length,
+        validationErrorCount: initialValidationErrorCount,
       });
       offset = nextOffset;
       validation.rowErrors.push(...outcome.errors);
@@ -3990,6 +4010,37 @@ async function failCatalogueImport(
            processing_message = ${message}, failed_at = NOW(), updated_at = NOW()
     WHERE id = ${uploadId}
   `;
+}
+
+async function enqueueCatalogueImport(env: Env, db: Database, uploadId: number): Promise<boolean> {
+  try {
+    await env.CATALOGUE_IMPORT_QUEUE?.send({ uploadId });
+    await db.sql`
+      UPDATE uploads
+      SET status = 'queued', processing_message = 'Queued for validation', queued_at = NOW(), updated_at = NOW()
+      WHERE id = ${uploadId}
+    `;
+    return true;
+  } catch (error) {
+    Sentry.captureException(error, {
+      tags: { feature: 'catalogue-import', action: 'enqueue' },
+      extra: { uploadId },
+    });
+    try {
+      await failCatalogueImport(
+        db,
+        uploadId,
+        'enqueue',
+        'Catalogue import could not be queued',
+      );
+    } catch (failureUpdateError) {
+      Sentry.captureException(failureUpdateError, {
+        tags: { feature: 'catalogue-import', action: 'enqueue-fail-update' },
+        extra: { uploadId },
+      });
+    }
+    return false;
+  }
 }
 
 async function completeCatalogueWithErrors(

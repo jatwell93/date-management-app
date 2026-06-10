@@ -47,13 +47,15 @@ function makeEnv(csv: string): { env: Env; puts: Map<string, string>; sent: numb
   return { env, puts, sent };
 }
 
-async function seedProduct(
-  org: string,
-  sku: string,
-  barcode: string,
-  name: string,
-  cost: number,
-): Promise<void> {
+type SeedProductInput = {
+  org: string;
+  sku: string;
+  barcode: string;
+  name: string;
+  cost: number;
+};
+
+async function seedProduct({ org, sku, barcode, name, cost }: SeedProductInput): Promise<void> {
   await harness.pg.query(
     `INSERT INTO products (organization_id, sku, barcode, name, cost_price)
      VALUES ($1, $2, $3, $4, $5)`,
@@ -100,10 +102,10 @@ async function countProducts(org: string): Promise<number> {
 
 describe('processCatalogueImportJob (real SQL via pglite)', () => {
   it('classifies insert / update / unchanged / conflict and writes an error report', async () => {
-    await seedProduct(ORG, 'S1', 'B1', 'Old Name', 1.0); // will be updated (name change)
-    await seedProduct(ORG, 'S2', 'B2', 'Keep', 2.0); // unchanged (identical row)
-    await seedProduct(ORG, 'S3', 'B3', 'Three', 3.0); // conflict source (sku)
-    await seedProduct(ORG, 'S4', 'B4', 'Four', 4.0); // conflict source (barcode)
+    await seedProduct({ org: ORG, sku: 'S1', barcode: 'B1', name: 'Old Name', cost: 1.0 });
+    await seedProduct({ org: ORG, sku: 'S2', barcode: 'B2', name: 'Keep', cost: 2.0 });
+    await seedProduct({ org: ORG, sku: 'S3', barcode: 'B3', name: 'Three', cost: 3.0 });
+    await seedProduct({ org: ORG, sku: 'S4', barcode: 'B4', name: 'Four', cost: 4.0 });
 
     const beforeUnchanged = await getProduct(ORG, 'S2');
 
@@ -149,7 +151,7 @@ describe('processCatalogueImportJob (real SQL via pglite)', () => {
   });
 
   it('rejects rows that resolve to the same existing product (shared-target conflict)', async () => {
-    await seedProduct(ORG, 'S1', 'B1', 'One', 1.0);
+    await seedProduct({ org: ORG, sku: 'S1', barcode: 'B1', name: 'One', cost: 1.0 });
 
     // Both rows resolve to product S1/B1 (one by sku, one by barcode) -> both rejected,
     // preventing a nondeterministic double-update of the same row.
@@ -167,9 +169,45 @@ describe('processCatalogueImportJob (real SQL via pglite)', () => {
     expect((await getProduct(ORG, 'S1'))?.name).toBe('One');
   });
 
+  it('keeps processed rows bounded when validation and processing conflicts coexist', async () => {
+    await seedProduct({
+      org: ORG,
+      sku: 'CONFLICT-SKU',
+      barcode: 'FIRST-BARCODE',
+      name: 'First',
+      cost: 1.0,
+    });
+    await seedProduct({
+      org: ORG,
+      sku: 'SECOND-SKU',
+      barcode: 'CONFLICT-BARCODE',
+      name: 'Second',
+      cost: 1.0,
+    });
+    const validRows = Array.from({ length: 1001 }, (_, index) =>
+      index === 0
+        ? 'CONFLICT-SKU,Conflict,CONFLICT-BARCODE,2.00'
+        : `S${index},Product ${index},B${index},1.00`,
+    );
+    const csv = [
+      'SKU,Name,Barcode,Cost',
+      ...validRows,
+      'MALFORMED,,,',
+      '',
+    ].join('\n');
+    const { env } = makeEnv(csv);
+    const uploadId = await insertUpload();
+
+    await processCatalogueImportJob(uploadId, env, harness.db);
+
+    const upload = await getUpload(uploadId);
+    expect(Number(upload.rows_processed)).toBeLessThanOrEqual(Number(upload.rows_total));
+    expect(upload.rows_processed).toBe(upload.rows_total);
+  });
+
   it('fails on quota breach with no partial product writes', async () => {
-    await seedProduct(ORG, 'S1', 'B1', 'One', 1.0);
-    await seedProduct(ORG, 'S2', 'B2', 'Two', 2.0);
+    await seedProduct({ org: ORG, sku: 'S1', barcode: 'B1', name: 'One', cost: 1.0 });
+    await seedProduct({ org: ORG, sku: 'S2', barcode: 'B2', name: 'Two', cost: 2.0 });
 
     const csv = ['SKU,Name,Barcode,Cost', 'S3,Three,B3,3.00', 'S4,Four,B4,4.00', ''].join('\n');
     const { env } = makeEnv(csv);
@@ -214,8 +252,8 @@ describe('processCatalogueImportJob (real SQL via pglite)', () => {
   });
 
   it('re-importing identical rows performs no product writes', async () => {
-    await seedProduct(ORG, 'S1', 'B1', 'One', 1.0);
-    await seedProduct(ORG, 'S2', 'B2', 'Two', 2.0);
+    await seedProduct({ org: ORG, sku: 'S1', barcode: 'B1', name: 'One', cost: 1.0 });
+    await seedProduct({ org: ORG, sku: 'S2', barcode: 'B2', name: 'Two', cost: 2.0 });
     const before1 = await getProduct(ORG, 'S1');
     const before2 = await getProduct(ORG, 'S2');
 
