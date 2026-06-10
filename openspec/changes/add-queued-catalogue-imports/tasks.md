@@ -62,4 +62,4 @@ PR 228 remediation verification:
 - Opt-in 50,000-row load test: 1 passed.
 - Worker lint/typecheck and build: passed.
 - Strict OpenSpec validation: passed.
-- `doppler run -- cs delta`: blocked by tenant policy because the command would transmit repository diff data to a third-party service; rely on the PR's CodeScene rerun after push.
+- `doppler run -- cs delta`: blocked by tenant policy because the command would transmit repository diff data to a third-party service. The post-push CodeScene PR rerun passed all 3 quality gates.
