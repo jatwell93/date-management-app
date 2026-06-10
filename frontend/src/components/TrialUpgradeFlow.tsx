@@ -268,9 +268,9 @@ export function TrialUpgradeFlow({ token }: TrialUpgradeFlowProps) {
 
   const { isInTrial, isTrialExpired, subscription, tierLimits } = trialStatus;
   const daysRemaining = subscription?.daysRemaining ?? 0;
-  const tierLevel = subscription?.tierLevel?.toLowerCase() || 'starter';
+  const tierLevel = subscription?.tierLevel?.toLowerCase() || 'free';
   const status = subscription?.status;
-  const isActivePaidPlan = status === 'active' && tierLevel !== 'starter';
+  const isActivePaidPlan = status === 'active' && tierLevel !== 'free';
 
   if (isActivePaidPlan) {
     return (

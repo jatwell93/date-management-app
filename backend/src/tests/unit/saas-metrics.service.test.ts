@@ -46,7 +46,8 @@ describe('SaasMetricsService', () => {
 
     const result = await service.calculateAvgRevenuePerUser();
 
-    expect(result).toBe(32);
+    // premium ($99) + professional ($99) = $198 over 4 users
+    expect(result).toBe(49.5);
     expect(analyticsRepo.findActivePaidSubscriptionTierLevels).toHaveBeenCalledTimes(1);
     expect(analyticsRepo.sumActiveOrganizationUsers).toHaveBeenCalledTimes(1);
   });

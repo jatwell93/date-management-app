@@ -100,6 +100,15 @@ export function SubscriptionSettingsPage({ token }: SubscriptionSettingsPageProp
   const handleSelectPlan = async (tier: TierLevel, billingCycle: 'monthly' | 'annual') => {
     if (!token) return;
 
+    if (tier === 'free') {
+      setShowUpgradeModal(false);
+      return;
+    }
+    if (tier === 'enterprise') {
+      alert('Enterprise plans are configured by contract. Please contact support.');
+      return;
+    }
+
     try {
       // Map tier to Stripe price ID (these would come from environment or config)
       const priceIds = {
@@ -265,36 +274,34 @@ export function SubscriptionSettingsPage({ token }: SubscriptionSettingsPageProp
         </Card>
 
         {/* Plan Management */}
-        {subscription &&
-          subscription.status === 'active' &&
-          subscription.tierLevel !== 'starter' && (
-            <Card>
-              <CardHeader>
-                <CardTitle>Plan Management</CardTitle>
-                <CardDescription>
-                  Cancel your subscription or make changes to your plan
-                </CardDescription>
-              </CardHeader>
-              <CardContent>
-                <div className="space-y-4">
-                  <div className="p-4 bg-semantic-warning-muted border border-semantic-warning-muted rounded-lg">
-                    <p className="text-sm text-semantic-warning-muted-foreground">
-                      <strong>Note:</strong> If you cancel, you'll retain access to your current
-                      plan until the end of your billing period. After that, you'll be downgraded to
-                      the Starter plan.
-                    </p>
-                  </div>
-                  <Button
-                    variant="destructive"
-                    onClick={handleCancelSubscription}
-                    disabled={cancelLoading}
-                  >
-                    {cancelLoading ? 'Canceling...' : 'Cancel Subscription'}
-                  </Button>
+        {subscription && subscription.status === 'active' && subscription.tierLevel !== 'free' && (
+          <Card>
+            <CardHeader>
+              <CardTitle>Plan Management</CardTitle>
+              <CardDescription>
+                Cancel your subscription or make changes to your plan
+              </CardDescription>
+            </CardHeader>
+            <CardContent>
+              <div className="space-y-4">
+                <div className="p-4 bg-semantic-warning-muted border border-semantic-warning-muted rounded-lg">
+                  <p className="text-sm text-semantic-warning-muted-foreground">
+                    <strong>Note:</strong> If you cancel, you'll retain access to your current plan
+                    until the end of your billing period. After that, you'll be downgraded to the
+                    Starter plan.
+                  </p>
                 </div>
-              </CardContent>
-            </Card>
-          )}
+                <Button
+                  variant="destructive"
+                  onClick={handleCancelSubscription}
+                  disabled={cancelLoading}
+                >
+                  {cancelLoading ? 'Canceling...' : 'Cancel Subscription'}
+                </Button>
+              </div>
+            </CardContent>
+          </Card>
+        )}
 
         {/* Help & Support */}
         <Card>
@@ -321,7 +328,7 @@ export function SubscriptionSettingsPage({ token }: SubscriptionSettingsPageProp
         isOpen={showUpgradeModal}
         onClose={() => setShowUpgradeModal(false)}
         onSelectPlan={handleSelectPlan}
-        currentTier={subscription?.tierLevel || 'starter'}
+        currentTier={subscription?.tierLevel || 'free'}
       />
     </div>
   );

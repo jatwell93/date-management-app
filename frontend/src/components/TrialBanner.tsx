@@ -77,8 +77,8 @@ export function TrialBanner({ token }: TrialBannerProps) {
   }
 
   const { isInTrial, isTrialExpired, subscription, tierLimits } = trialStatus;
-  const tierLevel = subscription?.tierLevel?.toLowerCase() || 'starter';
-  const isPaidTier = tierLevel !== 'starter' && !isInTrial;
+  const tierLevel = subscription?.tierLevel?.toLowerCase() || 'free';
+  const isPaidTier = tierLevel !== 'free' && !isInTrial;
 
   const daysRemaining = subscription?.daysRemaining ?? 0;
   if (isInTrial && daysRemaining > 0) {

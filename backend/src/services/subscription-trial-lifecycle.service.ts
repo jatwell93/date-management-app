@@ -156,7 +156,7 @@ export class SubscriptionTrialLifecycleService {
             trial.id,
             {
               status: SubscriptionStatus.ACTIVE,
-              tierLevel: 'starter',
+              tierLevel: 'free',
               stripeSubscriptionId: null,
             },
             tx,
@@ -166,7 +166,7 @@ export class SubscriptionTrialLifecycleService {
             {
               organizationId: trial.organizationId,
               eventType: 'trial_expired',
-              metadata: JSON.stringify({ downgradedTo: 'starter' }),
+              metadata: JSON.stringify({ downgradedTo: 'free' }),
               occurredAt: new Date(),
             },
             tx,

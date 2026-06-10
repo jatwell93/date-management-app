@@ -15,14 +15,14 @@ describe('UpgradeModal', () => {
         isOpen={true}
         onClose={mockOnClose}
         onSelectPlan={mockOnSelectPlan}
-        currentTier="starter"
+        currentTier="free"
       />,
     );
 
+    expect(screen.getByTestId('tier-card-free')).toBeInTheDocument();
     expect(screen.getByTestId('tier-card-starter')).toBeInTheDocument();
     expect(screen.getByTestId('tier-card-professional')).toBeInTheDocument();
-    expect(screen.getByTestId('tier-card-premium')).toBeInTheDocument();
-    expect(screen.getByTestId('tier-card-concierge')).toBeInTheDocument();
+    expect(screen.getByTestId('tier-card-enterprise')).toBeInTheDocument();
   });
 
   it('displays pricing for each tier', () => {
@@ -31,13 +31,14 @@ describe('UpgradeModal', () => {
         isOpen={true}
         onClose={mockOnClose}
         onSelectPlan={mockOnSelectPlan}
-        currentTier="starter"
+        currentTier="free"
       />,
     );
 
-    expect(screen.getByText(/\$99/)).toBeInTheDocument(); // Starter
-    expect(screen.getByText(/\$249/)).toBeInTheDocument(); // Professional
-    expect(screen.getByText(/\$499/)).toBeInTheDocument(); // Premium
+    expect(screen.getByText(/A\$0/)).toBeInTheDocument();
+    expect(screen.getByText(/A\$39/)).toBeInTheDocument();
+    expect(screen.getByText(/A\$99/)).toBeInTheDocument();
+    expect(screen.getByText(/Contact Sales/)).toBeInTheDocument();
   });
 
   it('shows feature comparison with checkmarks', () => {

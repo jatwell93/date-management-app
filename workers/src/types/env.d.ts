@@ -21,6 +21,10 @@ export interface Env {
   QUERY_MAX_RESULTS?: string; // default: 100
   QUERY_TIMEOUT_MS?: string; // default: 10000
   FRONTEND_URL?: string; // Frontend URL for CORS + Clerk authorizedParties
+  CATALOGUE_QUEUE_ENABLED?: string;
+  ENTERPRISE_MAX_SKUS?: string;
+  ENTERPRISE_MAX_ACTIVE_EXPIRIES?: string;
+  ENTERPRISE_MAX_FILE_SIZE?: string;
 
   // ============================================================================
   // Secrets (Set via wrangler secret put)
@@ -57,6 +61,9 @@ export interface Env {
   // R2 bucket for CSV file uploads
   CSV_UPLOADS: R2Bucket;
 
+  // Queue for durable catalogue import processing
+  CATALOGUE_IMPORT_QUEUE?: Queue<CatalogueImportMessage>;
+
   // ============================================================================
   // Hyperdrive Bindings
   // ============================================================================
@@ -77,6 +84,10 @@ export interface Env {
 
   // Analytics Engine dataset for metrics collection (production only)
   ANALYTICS?: AnalyticsEngineDataset;
+}
+
+export interface CatalogueImportMessage {
+  uploadId: number;
 }
 
 /**

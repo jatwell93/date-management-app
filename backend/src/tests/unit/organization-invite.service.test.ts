@@ -92,7 +92,7 @@ describe('OrganizationInviteService', () => {
 
     it('throws when user limit reached', async () => {
       mockPrisma.subscriptionTier.findFirst.mockResolvedValue({ tierLevel: 'professional' });
-      mockPrisma.user.count.mockResolvedValue(3);
+      mockPrisma.user.count.mockResolvedValue(10); // Professional user limit
       mockPrisma.organizationInvite.count.mockResolvedValue(0);
 
       await expect(

@@ -2,7 +2,7 @@
  * Trial Expiration Job
  *
  * Scheduled job that runs daily to:
- * 1. Downgrade expired trials to starter tier
+ * 1. Downgrade expired trials to the permanent Free tier
  * 2. Send trial reminder emails (10, 5, 2 days before expiry)
  * 3. Send downgrade warning emails
  *
@@ -46,10 +46,10 @@ export async function runTrialExpirationJob(): Promise<void> {
   Logger.info('Starting trial expiration job');
 
   try {
-    // Step 1: Downgrade expired trials to starter tier
+    // Step 1: Downgrade expired trials to the permanent Free tier
     Logger.info('Checking for expired trials to downgrade...');
     const downgradedCount = await subscriptionService.downgradeExpiredTrials();
-    Logger.info(`Downgraded ${downgradedCount} expired trials to starter tier`);
+    Logger.info(`Downgraded ${downgradedCount} expired trials to free tier`);
 
     // Step 2: Send downgrade warning emails to recently downgraded
     if (downgradedCount > 0) {

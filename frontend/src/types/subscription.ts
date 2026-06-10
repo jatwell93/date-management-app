@@ -1,4 +1,10 @@
-export type TierLevel = 'starter' | 'professional' | 'premium' | 'concierge';
+export type TierLevel =
+  | 'free'
+  | 'starter'
+  | 'professional'
+  | 'enterprise'
+  | 'premium'
+  | 'concierge';
 
 export type SubscriptionStatus = 'active' | 'canceled' | 'past_due' | 'trialing';
 
@@ -20,8 +26,10 @@ export interface UsageData {
 
 export interface TierFeature {
   name: string;
+  free: boolean | string;
   starter: boolean | string;
   professional: boolean | string;
+  enterprise: boolean | string;
   premium: boolean | string;
   concierge: boolean | string;
 }

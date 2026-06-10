@@ -290,22 +290,30 @@ describe('validate-tier-flags', () => {
 
   describe('EXPECTED_LIMITS', () => {
     it('should have correct inventory item limits per tier', () => {
+      expect(EXPECTED_LIMITS.free.max_inventory_items).toBe(500);
       expect(EXPECTED_LIMITS.starter.max_inventory_items).toBe(5000);
-      expect(EXPECTED_LIMITS.professional.max_inventory_items).toBe(20000);
-      expect(EXPECTED_LIMITS.premium.max_inventory_items).toBeNull();
-      expect(EXPECTED_LIMITS.concierge.max_inventory_items).toBeNull();
+      expect(EXPECTED_LIMITS.professional.max_inventory_items).toBe(50000);
+      expect(EXPECTED_LIMITS.enterprise.max_inventory_items).toBe(250000);
+      // Legacy tiers normalized to professional/enterprise equivalents
+      expect(EXPECTED_LIMITS.premium.max_inventory_items).toBe(50000);
+      expect(EXPECTED_LIMITS.concierge.max_inventory_items).toBe(250000);
     });
 
     it('should have correct SKU limits per tier', () => {
-      expect(EXPECTED_LIMITS.starter.max_skus).toBe(500);
-      expect(EXPECTED_LIMITS.professional.max_skus).toBe(2000);
-      expect(EXPECTED_LIMITS.premium.max_skus).toBeNull();
-      expect(EXPECTED_LIMITS.concierge.max_skus).toBeNull();
+      expect(EXPECTED_LIMITS.free.max_skus).toBe(500);
+      expect(EXPECTED_LIMITS.starter.max_skus).toBe(5000);
+      expect(EXPECTED_LIMITS.professional.max_skus).toBe(50000);
+      expect(EXPECTED_LIMITS.enterprise.max_skus).toBe(250000);
+      // Legacy tiers normalized to professional/enterprise equivalents
+      expect(EXPECTED_LIMITS.premium.max_skus).toBe(50000);
+      expect(EXPECTED_LIMITS.concierge.max_skus).toBe(250000);
     });
 
     it('should have correct user limits per tier', () => {
-      expect(EXPECTED_LIMITS.starter.max_users).toBe(1);
-      expect(EXPECTED_LIMITS.professional.max_users).toBe(3);
+      expect(EXPECTED_LIMITS.free.max_users).toBe(1);
+      expect(EXPECTED_LIMITS.starter.max_users).toBe(3);
+      expect(EXPECTED_LIMITS.professional.max_users).toBe(10);
+      expect(EXPECTED_LIMITS.enterprise.max_users).toBe(10);
       expect(EXPECTED_LIMITS.premium.max_users).toBe(10);
       expect(EXPECTED_LIMITS.concierge.max_users).toBe(10);
     });

@@ -185,10 +185,13 @@ describe('admin.metrics.routes', () => {
     expect(response.status).toBe(200);
     expect(response.body.tiers.starter.trial).toBe(3);
     expect(response.body.tiers.starter.canceled).toBe(1);
-    expect(response.body.tiers.professional.monthlyRevenue).toBe(58);
-    expect(response.body.tiers.pro.monthlyRevenue).toBe(29);
-    expect(response.body.tiers.enterprise.monthlyRevenue).toBe(299);
-    expect(response.body.totalRevenue).toBe(386);
+    // Professional $99/mo: 2 active = $198
+    expect(response.body.tiers.professional.monthlyRevenue).toBe(198);
+    // Legacy 'pro' maps to professional pricing: 1 active = $99
+    expect(response.body.tiers.pro.monthlyRevenue).toBe(99);
+    // Enterprise is quote-based (TIER_PRICES.enterprise = 0)
+    expect(response.body.tiers.enterprise.monthlyRevenue).toBe(0);
+    expect(response.body.totalRevenue).toBe(297);
     expect(response.body.totalSubscriptions).toBe(8);
   });
 

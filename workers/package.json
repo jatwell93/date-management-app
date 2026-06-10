@@ -15,6 +15,7 @@
     "tail:prod": "wrangler tail --env production",
     "test": "vitest",
     "test:preview": "cross-env RUN_WORKERS_PREVIEW_TESTS=true vitest run src/workers-deployment.test.ts",
+    "test:db": "vitest run --config vitest.node.config.mts",
     "test:workers:integration": "vitest run src/__tests__",
     "test:workers:integration:coverage": "vitest run src/__tests__ --coverage --coverage.provider=istanbul",
     "test:coverage": "vitest --coverage --coverage.provider=istanbul"
@@ -36,6 +37,7 @@
   },
   "devDependencies": {
     "@cloudflare/vitest-pool-workers": "^0.16.9",
+    "@electric-sql/pglite": "^0.5.1",
     "@types/bcryptjs": "^2.4.6",
     "@types/jsonwebtoken": "^9.0.10",
     "@types/node": "^20.19.41",

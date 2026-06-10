@@ -60,7 +60,9 @@ function getAuthorizedParties(): string[] {
 }
 
 const isTierLevel = (value: string): value is TierLevel =>
-  ['starter', 'professional', 'premium', 'concierge'].includes(value as TierLevel);
+  ['free', 'starter', 'professional', 'enterprise', 'premium', 'concierge'].includes(
+    value as TierLevel,
+  );
 
 const isBillingCycle = (value: string): value is BillingCycle =>
   Object.values(BillingCycle).includes(value as BillingCycle);
@@ -438,7 +440,7 @@ function setRequestContext(
     id: decodedToken.userId,
     role: decodedToken.role,
     organizationId: decodedToken.organizationId,
-    tierLevel: dbTierLevel ?? 'starter', // Default to starter if validation failed
+    tierLevel: dbTierLevel ?? 'free',
   };
 }
 

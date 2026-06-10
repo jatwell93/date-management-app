@@ -57,6 +57,7 @@ export function checkFeatureAccess(
   // Map feature keys to tier limits
   // Some features map directly to tier limits, others are tier-based
   const tierFeatureMap: Record<TierLevel, Set<FeatureKey>> = {
+    free: new Set([AVAILABLE_FEATURES.MAX_SKUS, AVAILABLE_FEATURES.MAX_USERS]),
     starter: new Set([AVAILABLE_FEATURES.MAX_SKUS, AVAILABLE_FEATURES.MAX_USERS]),
     professional: new Set([
       AVAILABLE_FEATURES.MAX_SKUS,
@@ -65,6 +66,9 @@ export function checkFeatureAccess(
       AVAILABLE_FEATURES.API_ACCESS,
       AVAILABLE_FEATURES.PRIORITY_SUPPORT,
     ]),
+    // `premium` and `concierge` are LEGACY tiers retained only as a migration bridge.
+    // New tiers are free/starter/professional/enterprise; these map to
+    // professional/enterprise via normalizeLaunchTier. Do not assign new customers here.
     premium: new Set([
       AVAILABLE_FEATURES.MAX_SKUS,
       AVAILABLE_FEATURES.MAX_USERS,
@@ -75,6 +79,15 @@ export function checkFeatureAccess(
       AVAILABLE_FEATURES.CUSTOM_INTEGRATIONS,
     ]),
     concierge: new Set([
+      AVAILABLE_FEATURES.MAX_SKUS,
+      AVAILABLE_FEATURES.MAX_USERS,
+      AVAILABLE_FEATURES.ADVANCED_ANALYTICS,
+      AVAILABLE_FEATURES.API_ACCESS,
+      AVAILABLE_FEATURES.PRIORITY_SUPPORT,
+      AVAILABLE_FEATURES.DEDICATED_SUPPORT,
+      AVAILABLE_FEATURES.CUSTOM_INTEGRATIONS,
+    ]),
+    enterprise: new Set([
       AVAILABLE_FEATURES.MAX_SKUS,
       AVAILABLE_FEATURES.MAX_USERS,
       AVAILABLE_FEATURES.ADVANCED_ANALYTICS,
@@ -234,10 +247,12 @@ export function enforceUsageLimit(limitKey: LimitKey) {
  */
 export function formatFeatureUpgradeCTA(featureKey: FeatureKey, currentTier: TierLevel): string {
   const upgradePaths: Record<TierLevel, string> = {
+    free: 'Upgrade to Starter for larger catalogue limits.',
     starter: 'Upgrade to Professional for advanced features.',
-    professional: 'Upgrade to Premium for enterprise features.',
-    premium: 'Contact us for custom features.',
-    concierge: 'You have access to all features. Contact support for help.',
+    professional: 'Contact us for Enterprise features.',
+    enterprise: 'You have Enterprise access. Contact support for contract changes.',
+    premium: 'Contact us for Enterprise features.',
+    concierge: 'You have Enterprise access. Contact support for contract changes.',
   };
 
   return `Feature '${featureKey}' is not available in ${currentTier} tier. ${upgradePaths[currentTier]}`;
@@ -259,9 +274,11 @@ export function formatUsageLimitCTA(
   currentTier: TierLevel,
 ): string {
   const tierUpgradeMap: Record<TierLevel, string> = {
+    free: 'Upgrade to Starter',
     starter: 'Upgrade to Professional',
-    professional: 'Upgrade to Premium',
-    premium: 'Upgrade to Concierge',
+    professional: 'Upgrade to Enterprise',
+    enterprise: 'Contact support',
+    premium: 'Upgrade to Enterprise',
     concierge: 'Contact support',
   };
 

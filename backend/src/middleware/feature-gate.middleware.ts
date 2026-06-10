@@ -268,12 +268,13 @@ async function calculateTierBasedLimit(
 ): Promise<{ currentUsage: number; limit: number }> {
   const subscriptionTier = await subscriptionRepository.findLatestByOrganizationId(organizationId);
 
-  const tierLevel = (subscriptionTier?.tierLevel as TierLevel) || 'starter';
+  const tierLevel = (subscriptionTier?.tierLevel as TierLevel) || 'free';
   const tierLimit = TIER_LIMITS[tierLevel]?.[limitKey];
 
   if (limitKey === 'max_inventory_items') {
+    const currentUsage = await subscriptionRepository.countActiveExpiryItems(organizationId);
     return {
-      currentUsage: usage.totalInventoryItems,
+      currentUsage,
       limit: resolveUnlimitedLimit(tierLimit, 'UNLIMITED_INVENTORY_ITEMS'),
     };
   }

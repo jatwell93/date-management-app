@@ -9,9 +9,13 @@ import {
   handleRegister,
   handleUploadComplete,
   handleUploadDirect,
+  handleCatalogueImportQueue,
   handleUploadInitiate,
   handleUploadStatus,
   maybeCompressJsonResponse,
+  isCatalogueWithinLimit,
+  takeImportBatch,
+  type ValidatedCatalogueRow,
 } from './index-minimal';
 import { createWorkersDatabase } from './database';
 import type { Database } from './database';
@@ -216,6 +220,17 @@ describe('API config guard', () => {
     expect(body.error).toBeTruthy();
   });
 
+  it.each([
+    ['direct', 'POST', '/api/upload/direct/uploads%2Fuser-7%2Fproducts.csv'],
+    ['presigned', 'PUT', '/api/upload/presigned/uploads%2Fuser-7%2Fproducts.csv'],
+    ['complete', 'POST', '/api/upload/complete'],
+    ['error report', 'GET', '/api/upload/error-report/uploads%2Fuser-7%2Fproducts.csv'],
+  ])('routes the %s upload endpoint', async (_name, method, pathname) => {
+    const response = await SELF.fetch(`https://example.com${pathname}`, { method });
+
+    expect(response.status).not.toBe(404);
+  });
+
   it('routes /api/webhooks/clerk and rejects requests without Svix headers', async () => {
     const response = await SELF.fetch('https://example.com/api/webhooks/clerk', {
       method: 'POST',
@@ -295,6 +310,10 @@ describe('Upload strategy parity', () => {
       head: vi.fn().mockResolvedValue({ key: 'uploads/user-7/1-big.csv' }),
       put: vi.fn().mockResolvedValue(undefined),
     } as unknown as R2Bucket,
+    CATALOGUE_IMPORT_QUEUE: {
+      send: vi.fn().mockResolvedValue(undefined),
+    } as unknown as Queue,
+    CATALOGUE_QUEUE_ENABLED: 'false',
     HYPERDRIVE: {
       connectionString: 'postgres://example',
     } as unknown as Hyperdrive,
@@ -442,7 +461,10 @@ describe('Upload strategy parity', () => {
       org_role: 'org:admin',
     });
 
-    const storedObjects = new Map<string, { data: ArrayBuffer; customMetadata?: Record<string, string> }>();
+    const storedObjects = new Map<
+      string,
+      { data: ArrayBuffer; customMetadata?: Record<string, string> }
+    >();
     const envForUpload = createUploadEnv({
       CLERK_SECRET_KEY: 'test-clerk-secret',
       CSV_UPLOADS: {
@@ -516,6 +538,397 @@ describe('Upload strategy parity', () => {
     expect(statusBody.skippedCount).toBe(0);
     expect(statusBody.rowsProcessed).toBe(1);
     expect(statusBody.rowsTotal).toBe(1);
+  });
+
+  it.each([49, 50, 51])(
+    'queues a %i-row catalogue without row-by-row database subrequests',
+    async (rowCount) => {
+      mockedVerifyToken.mockResolvedValue({
+        sub: 'user_clerk_7',
+        email: 'uploader@example.com',
+        org_id: 'org_test',
+        org_role: 'org:admin',
+      });
+
+      const queue = { send: vi.fn().mockResolvedValue(undefined) } as unknown as Queue;
+      const envForUpload = createUploadEnv({
+        CLERK_SECRET_KEY: 'test-clerk-secret',
+        CATALOGUE_QUEUE_ENABLED: 'true',
+        CATALOGUE_IMPORT_QUEUE: queue,
+      });
+      const db = createProductImportDb(7);
+      vi.mocked(db.sql).mockImplementation((strings: TemplateStringsArray) => {
+        const query = strings.join('');
+        if (query.includes('FROM users')) {
+          return Promise.resolve([{ id: 7, organizationId: 'org_test', role: 'admin' }]) as never;
+        }
+        if (query.includes('FROM subscription_tiers')) {
+          return Promise.resolve([{ tier_level: 'professional' }]) as never;
+        }
+        if (query.includes('INSERT INTO uploads')) {
+          return Promise.resolve([{ id: 42 }]) as never;
+        }
+        return Promise.resolve([]) as never;
+      });
+
+      const rows = Array.from(
+        { length: rowCount },
+        (_, index) => `SKU-${index},Product ${index},BAR-${index},12.99`,
+      );
+      const formData = new FormData();
+      formData.append(
+        'file',
+        new File([`SKU,Name,Barcode,Cost\n${rows.join('\n')}\n`], 'products.csv', {
+          type: 'text/csv',
+        }),
+      );
+
+      const response = await handleUploadDirect(
+        new Request('https://example.com/api/upload/direct/uploads%2Fuser-7%2Fproducts.csv', {
+          method: 'POST',
+          headers: { Authorization: 'Bearer clerk-session-token' },
+          body: formData,
+        }),
+        envForUpload,
+        'uploads/user-7/products.csv',
+        db,
+      );
+
+      expect(response.status).toBe(202);
+      expect(queue.send).toHaveBeenCalledWith({ uploadId: 42 });
+      const productQueries = vi
+        .mocked(db.sql)
+        .mock.calls.filter(([strings]) => strings.join('').includes('UPDATE products'));
+      expect(productQueries).toHaveLength(0);
+    },
+  );
+
+  it('fails and unlocks a direct catalogue upload when queue enqueueing fails', async () => {
+    mockedVerifyToken.mockResolvedValue({
+      sub: 'user_clerk_7',
+      email: 'uploader@example.com',
+      org_id: 'org_test',
+      org_role: 'org:admin',
+    });
+    const deleteObject = vi.fn().mockResolvedValue(undefined);
+    const envForUpload = createUploadEnv({
+      CLERK_SECRET_KEY: 'test-clerk-secret',
+      CATALOGUE_QUEUE_ENABLED: 'true',
+      CATALOGUE_IMPORT_QUEUE: {
+        send: vi.fn().mockRejectedValue(new Error('queue unavailable')),
+      } as unknown as Queue,
+      CSV_UPLOADS: {
+        put: vi.fn().mockResolvedValue(undefined),
+        delete: deleteObject,
+      } as unknown as R2Bucket,
+    });
+    const db = createProductImportDb(7);
+    vi.mocked(db.sql).mockImplementation((strings: TemplateStringsArray) => {
+      const query = strings.join('');
+      if (query.includes('FROM users')) {
+        return Promise.resolve([{ id: 7, organizationId: 'org_test', role: 'admin' }]) as never;
+      }
+      if (query.includes('FROM subscription_tiers')) {
+        return Promise.resolve([{ tier_level: 'professional' }]) as never;
+      }
+      if (query.includes('INSERT INTO uploads')) {
+        return Promise.resolve([{ id: 42 }]) as never;
+      }
+      return Promise.resolve([]) as never;
+    });
+    const key = 'uploads/user-7/products.csv';
+    const formData = new FormData();
+    formData.append(
+      'file',
+      new File(['SKU,Name,Barcode,Cost\nS1,One,B1,1.00\n'], 'products.csv', {
+        type: 'text/csv',
+      }),
+    );
+
+    const response = await handleUploadDirect(
+      new Request(`https://example.com/api/upload/direct/${encodeURIComponent(key)}`, {
+        method: 'POST',
+        headers: { Authorization: 'Bearer clerk-session-token' },
+        body: formData,
+      }),
+      envForUpload,
+      key,
+      db,
+    );
+
+    expect(response.status).toBe(503);
+    expect(deleteObject).toHaveBeenCalledWith(key);
+    expect(
+      vi.mocked(db.sql).mock.calls.some(([strings]) =>
+        strings.join('').includes("UPDATE uploads SET status = 'failed'"),
+      ),
+    ).toBe(true);
+  });
+
+  it('fails and unlocks a completed presigned upload when queue enqueueing fails', async () => {
+    mockedVerifyToken.mockResolvedValue({
+      sub: 'user_clerk_7',
+      email: 'uploader@example.com',
+      org_id: 'org_test',
+      org_role: 'org:admin',
+    });
+    const deleteObject = vi.fn().mockResolvedValue(undefined);
+    const key = 'uploads/user-7/products.csv';
+    const envForUpload = createUploadEnv({
+      CLERK_SECRET_KEY: 'test-clerk-secret',
+      CATALOGUE_QUEUE_ENABLED: 'true',
+      CATALOGUE_IMPORT_QUEUE: {
+        send: vi.fn().mockRejectedValue(new Error('queue unavailable')),
+      } as unknown as Queue,
+      CSV_UPLOADS: {
+        head: vi.fn().mockResolvedValue({
+          key,
+          size: 100,
+          httpMetadata: { contentType: 'text/csv' },
+        }),
+        delete: deleteObject,
+      } as unknown as R2Bucket,
+    });
+    const db = createProductImportDb(7);
+    vi.mocked(db.sql).mockImplementation((strings: TemplateStringsArray) => {
+      const query = strings.join('');
+      if (query.includes('FROM users')) {
+        return Promise.resolve([{ id: 7, organizationId: 'org_test', role: 'admin' }]) as never;
+      }
+      if (query.includes('FROM subscription_tiers')) {
+        return Promise.resolve([{ tier_level: 'professional' }]) as never;
+      }
+      if (query.includes('INSERT INTO uploads')) {
+        return Promise.resolve([{ id: 43 }]) as never;
+      }
+      return Promise.resolve([]) as never;
+    });
+
+    const response = await handleUploadComplete(
+      new Request('https://example.com/api/upload/complete', {
+        method: 'POST',
+        headers: {
+          Authorization: 'Bearer clerk-session-token',
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({ key }),
+      }),
+      envForUpload,
+      db,
+    );
+
+    expect(response.status).toBe(503);
+    expect(deleteObject).not.toHaveBeenCalled();
+    expect(
+      vi.mocked(db.sql).mock.calls.some(([strings]) =>
+        strings.join('').includes("UPDATE uploads SET status = 'failed'"),
+      ),
+    ).toBe(true);
+  });
+
+  it('acknowledges duplicate delivery for an already completed catalogue job', async () => {
+    const ack = vi.fn();
+    const retry = vi.fn();
+    const db = {
+      sql: vi.fn().mockResolvedValue([
+        {
+          id: 42,
+          organizationId: 'org_test',
+          fileKey: 'uploads/user-7/products.csv',
+          status: 'completed',
+          processingOffset: 51,
+          maxSkusSnapshot: 50000,
+        },
+      ]),
+    } as unknown as Database;
+    const envForUpload = createUploadEnv({
+      CSV_UPLOADS: { get: vi.fn() } as unknown as R2Bucket,
+    });
+
+    await handleCatalogueImportQueue(
+      {
+        queue: 'catalogue-imports-dev',
+        messages: [{ body: { uploadId: 42 }, ack, retry }],
+        ackAll: vi.fn(),
+        retryAll: vi.fn(),
+      } as unknown as MessageBatch<unknown>,
+      envForUpload,
+      db,
+    );
+
+    expect(ack).toHaveBeenCalledTimes(1);
+    expect(retry).not.toHaveBeenCalled();
+    expect(envForUpload.CSV_UPLOADS.get).not.toHaveBeenCalled();
+  });
+
+  it('acknowledges malformed queue messages without retrying', async () => {
+    const ack = vi.fn();
+    const retry = vi.fn();
+    const db = { sql: vi.fn() } as unknown as Database;
+    await handleCatalogueImportQueue(
+      {
+        queue: 'catalogue-imports-dev',
+        messages: [{ body: { uploadId: 'invalid' }, ack, retry }],
+        ackAll: vi.fn(),
+        retryAll: vi.fn(),
+      } as unknown as MessageBatch<unknown>,
+      createUploadEnv(),
+      db,
+    );
+    expect(ack).toHaveBeenCalledTimes(1);
+    expect(retry).not.toHaveBeenCalled();
+    expect(db.sql).not.toHaveBeenCalled();
+  });
+
+  it('marks the job failed and acks once the final retry attempt errors (releases lock)', async () => {
+    const ack = vi.fn();
+    const retry = vi.fn();
+    const queries: string[] = [];
+    const db = {
+      sql: vi.fn((strings: TemplateStringsArray) => {
+        const query = strings.join('');
+        queries.push(query);
+        // The failCatalogueImport UPDATE succeeds; everything else (job load) errors,
+        // simulating a job that keeps failing to process.
+        if (query.includes("status = 'failed'")) return Promise.resolve([]);
+        return Promise.reject(new Error('processing boom'));
+      }),
+    } as unknown as Database;
+    const env = createUploadEnv({ CSV_UPLOADS: { get: vi.fn() } as unknown as R2Bucket });
+
+    await handleCatalogueImportQueue(
+      {
+        queue: 'catalogue-imports-dev',
+        messages: [{ body: { uploadId: 42 }, attempts: 5, ack, retry }],
+        ackAll: vi.fn(),
+        retryAll: vi.fn(),
+      } as unknown as MessageBatch<unknown>,
+      env,
+      db,
+    );
+
+    expect(retry).not.toHaveBeenCalled();
+    expect(ack).toHaveBeenCalledTimes(1);
+    expect(queries.some((q) => q.includes("status = 'failed'"))).toBe(true);
+  });
+
+  it('retries (without marking failed) before the final attempt', async () => {
+    const ack = vi.fn();
+    const retry = vi.fn();
+    const queries: string[] = [];
+    const db = {
+      sql: vi.fn((strings: TemplateStringsArray) => {
+        const query = strings.join('');
+        queries.push(query);
+        if (query.includes("status = 'failed'")) return Promise.resolve([]);
+        return Promise.reject(new Error('processing boom'));
+      }),
+    } as unknown as Database;
+    const env = createUploadEnv({ CSV_UPLOADS: { get: vi.fn() } as unknown as R2Bucket });
+
+    await handleCatalogueImportQueue(
+      {
+        queue: 'catalogue-imports-dev',
+        messages: [{ body: { uploadId: 42 }, attempts: 1, ack, retry }],
+        ackAll: vi.fn(),
+        retryAll: vi.fn(),
+      } as unknown as MessageBatch<unknown>,
+      env,
+      db,
+    );
+
+    expect(retry).toHaveBeenCalledTimes(1);
+    expect(ack).not.toHaveBeenCalled();
+    expect(queries.some((q) => q.includes("status = 'failed'"))).toBe(false);
+  });
+
+  it('falls back to R2 metadata status for a synchronous upload when the queue flag is on', async () => {
+    mockedVerifyToken.mockResolvedValueOnce({
+      sub: 'user_clerk_7',
+      email: 'uploader@example.com',
+      org_id: 'org_test',
+      org_role: 'org:admin',
+    });
+    const key = 'uploads/user-7/expiry.csv';
+    // Flag on, but no `uploads` row exists (synchronous expiry-list upload). The handler
+    // must fall through to the R2 head/customMetadata path instead of returning 404.
+    const db = {
+      sql: vi.fn((strings: TemplateStringsArray) => {
+        const query = strings.join('');
+        if (query.includes('FROM users')) {
+          return Promise.resolve([{ id: 7, organizationId: 'org_test', role: 'admin' }]);
+        }
+        return Promise.resolve([]); // no uploads row
+      }),
+    } as unknown as Database;
+    const env = createUploadEnv({
+      CLERK_SECRET_KEY: 'test-clerk-secret',
+      CATALOGUE_QUEUE_ENABLED: 'true',
+      CSV_UPLOADS: {
+        head: vi.fn().mockResolvedValue({ key, customMetadata: {} }),
+      } as unknown as R2Bucket,
+    });
+
+    const response = await handleUploadStatus(
+      new Request(`https://example.com/api/upload/status/${encodeURIComponent(key)}`, {
+        method: 'GET',
+        headers: { Authorization: 'Bearer clerk-session-token' },
+      }),
+      env,
+      key,
+      db,
+    );
+
+    expect(response.status).toBe(200);
+    const body = (await response.json()) as { status: string };
+    expect(body.status).toBe('complete');
+  });
+
+  it.each([500, 5000, 50000])(
+    'batches a generated %i-row catalogue into at most 1,000 rows and 2 MiB',
+    (rowCount) => {
+      const rows: ValidatedCatalogueRow[] = Array.from({ length: rowCount }, (_, index) => ({
+        rowNumber: index + 2,
+        sku: `SKU-${index}`,
+        name: `Product ${index}`,
+        barcode: `BAR-${index}`,
+        costPrice: 12.99,
+      }));
+      let offset = 0;
+      while (offset < rows.length) {
+        const batch = takeImportBatch(rows, offset, rows.length);
+        expect(batch.length).toBeGreaterThan(0);
+        expect(batch.length).toBeLessThanOrEqual(1000);
+        expect(new TextEncoder().encode(JSON.stringify(batch)).byteLength).toBeLessThan(
+          2 * 1024 * 1024,
+        );
+        offset += batch.length;
+      }
+      expect(offset).toBe(rowCount);
+    },
+  );
+
+  it('reduces a batch when serialized rows would exceed 2 MiB', () => {
+    const rows: ValidatedCatalogueRow[] = Array.from({ length: 1000 }, (_, index) => ({
+      rowNumber: index + 2,
+      sku: `SKU-${index}`,
+      name: `Product ${index} ${'x'.repeat(3000)}`,
+      barcode: `BAR-${index}`,
+      costPrice: 12.99,
+    }));
+    const batch = takeImportBatch(rows, 0, rows.length);
+    expect(batch.length).toBeLessThan(1000);
+    expect(new TextEncoder().encode(JSON.stringify(batch)).byteLength).toBeLessThan(
+      2 * 1024 * 1024,
+    );
+  });
+
+  it.each([
+    [49999, 50000, true],
+    [50000, 50000, true],
+    [50001, 50000, false],
+  ])('enforces projected SKU boundary %i/%i', (projected, limit, allowed) => {
+    expect(isCatalogueWithinLimit(projected, limit)).toBe(allowed);
   });
 
   it('accepts FRED product catalog headers after spreadsheet-to-CSV conversion', async () => {
@@ -725,11 +1138,9 @@ describe('Upload strategy parity', () => {
     const formData = new FormData();
     formData.append(
       'file',
-      new File(
-        ['SKU,Name,Barcode,Cost\nSKU-1,"Milk, full cream",BAR-1,12.99\n'],
-        'products.csv',
-        { type: 'text/csv' },
-      ),
+      new File(['SKU,Name,Barcode,Cost\nSKU-1,"Milk, full cream",BAR-1,12.99\n'], 'products.csv', {
+        type: 'text/csv',
+      }),
     );
 
     const response = await handleUploadDirect(

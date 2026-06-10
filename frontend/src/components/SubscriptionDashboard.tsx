@@ -132,6 +132,7 @@ export function SubscriptionDashboard({ token, onUpgrade }: SubscriptionDashboar
   }
 
   const tierColors = {
+    free: 'bg-semantic-surface-2 text-semantic-text-primary border-hairline',
     starter: 'bg-semantic-surface-2 text-semantic-text-primary border-hairline',
     professional:
       'bg-semantic-secondary-muted text-semantic-secondary-muted-foreground border-semantic-secondary-muted',
@@ -139,12 +140,16 @@ export function SubscriptionDashboard({ token, onUpgrade }: SubscriptionDashboar
       'bg-semantic-success-muted text-semantic-success-muted-foreground border-semantic-success-muted',
     concierge:
       'bg-semantic-warning-muted text-semantic-warning-muted-foreground border-semantic-warning-muted',
+    enterprise:
+      'bg-semantic-warning-muted text-semantic-warning-muted-foreground border-semantic-warning-muted',
   };
 
   const tierDisplayName =
     subscription.tierLevel.charAt(0).toUpperCase() + subscription.tierLevel.slice(1);
   const showUpgrade =
-    subscription.tierLevel !== 'premium' && subscription.tierLevel !== 'concierge';
+    subscription.tierLevel !== 'enterprise' &&
+    subscription.tierLevel !== 'premium' &&
+    subscription.tierLevel !== 'concierge';
 
   return (
     <Card>

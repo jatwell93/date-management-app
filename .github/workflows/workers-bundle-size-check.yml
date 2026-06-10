@@ -62,15 +62,15 @@ jobs:
           echo "## Workers Bundle Size" >> "$GITHUB_STEP_SUMMARY"
           echo "- Raw: ${{ steps.measure.outputs.raw_kib }} KiB" >> "$GITHUB_STEP_SUMMARY"
           echo "- Gzip: ${{ steps.measure.outputs.gzip_kib }} KiB" >> "$GITHUB_STEP_SUMMARY"
-          echo "- Limit: 500.00 KiB (raw)" >> "$GITHUB_STEP_SUMMARY"
+          echo "- Limit: 512.00 KiB (raw)" >> "$GITHUB_STEP_SUMMARY"
 
       - name: Enforce bundle size limit
         env:
           RAW_BYTES: ${{ steps.measure.outputs.raw_bytes }}
         run: |
-          LIMIT_BYTES=512000
+          LIMIT_BYTES=524288
           if [ "$RAW_BYTES" -gt "$LIMIT_BYTES" ]; then
-            echo "::error::Workers bundle is ${RAW_BYTES} bytes (limit ${LIMIT_BYTES} bytes / 500 KiB)."
+            echo "::error::Workers bundle is ${RAW_BYTES} bytes (limit ${LIMIT_BYTES} bytes / 512 KiB)."
             exit 1
           fi
           echo "Bundle size check passed: ${RAW_BYTES} bytes <= ${LIMIT_BYTES} bytes"

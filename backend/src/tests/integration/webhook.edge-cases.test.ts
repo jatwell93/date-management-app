@@ -261,7 +261,7 @@ describe('Webhook Edge Cases', () => {
       expect(usage).toBeTruthy();
       expect(auditLog).toBeTruthy();
       expect(tier?.tierLevel).toBe('professional');
-      expect(usage?.maxSkus).toBe(2000); // Professional tier limit
+      expect(usage?.maxSkus).toBe(50000); // Professional tier limit
     });
   });
 
@@ -356,7 +356,7 @@ describe('Webhook Edge Cases', () => {
       const usage = await prisma.organizationUsage.findUnique({
         where: { organizationId: testOrganizationId },
       });
-      expect(usage?.maxSkus).toBe(2000);
+      expect(usage?.maxSkus).toBe(50000);
     });
 
     it('should handle subscription.updated arriving before subscription.created', async () => {
@@ -398,7 +398,7 @@ describe('Webhook Edge Cases', () => {
         where: { organizationId: testOrganizationId },
       });
       expect(usage).toBeTruthy();
-      expect(usage?.maxSkus).toBe(2000);
+      expect(usage?.maxSkus).toBe(50000);
     });
 
     it('should handle subscription.deleted for non-existent subscription', async () => {
@@ -475,15 +475,15 @@ describe('Webhook Edge Cases', () => {
         },
       } as any;
 
-      // Should default to 'starter' tier (handler doesn't throw)
+      // Should default to 'free' tier (handler doesn't throw)
       await (webhookService as any).handleSubscriptionCreated(subscription);
 
-      // Verify it created starter tier
+      // Verify it created free tier
       const tier = await prisma.subscriptionTier.findFirst({
         where: { stripeSubscriptionId: subId },
       });
       expect(tier).toBeDefined();
-      expect(tier?.tierLevel).toBe('starter');
+      expect(tier?.tierLevel).toBe('free');
     });
   });
 

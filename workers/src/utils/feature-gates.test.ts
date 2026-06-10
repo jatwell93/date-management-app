@@ -53,7 +53,7 @@ describe('Feature Gates & Usage Limits (Phase 8B.2)', () => {
     it('returns limitValue for SKU feature', () => {
       const result = checkFeatureAccess('starter', AVAILABLE_FEATURES.MAX_SKUS);
       expect(result.limitValue).toBe(TIER_LIMITS.starter.max_skus);
-      expect(result.limitValue).toBe(500); // From TIER_LIMITS
+      expect(result.limitValue).toBe(5000); // From TIER_LIMITS
     });
 
     it('returns error message when feature not available', () => {
@@ -92,36 +92,37 @@ describe('Feature Gates & Usage Limits (Phase 8B.2)', () => {
 
       expect(result.isWithinLimit).toBe(true);
       expect(result.currentUsage).toBe(250);
-      expect(result.limit).toBe(500); // starter max_skus = 500
-      expect(result.percentageUsed).toBe(50);
+      expect(result.limit).toBe(5000); // starter max_skus = 5000
+      expect(result.percentageUsed).toBe(5);
     });
 
     it('returns false when usage exceeds limit', async () => {
-      mockDbClient.mockResolvedValueOnce([{ count: 600 }]);
+      mockDbClient.mockResolvedValueOnce([{ count: 6000 }]);
 
       const result = await checkUsageLimit('org-1', 'max_skus', 'starter', mockDbClient);
 
       expect(result.isWithinLimit).toBe(false);
-      expect(result.currentUsage).toBe(600);
-      expect(result.limit).toBe(500); // starter max_skus = 500
+      expect(result.currentUsage).toBe(6000);
+      expect(result.limit).toBe(5000); // starter max_skus = 5000
       expect(result.error).toContain('Usage limit exceeded');
     });
 
     it('calculates percentageUsed correctly', async () => {
       mockDbClient.mockResolvedValueOnce([{ total: 5368709120 }]); // 5GB out of 10GB
 
-      const result = await checkUsageLimit('org-1', 'storage_bytes', 'professional', mockDbClient);
+      const result = await checkUsageLimit('org-1', 'storage_bytes', 'starter', mockDbClient);
 
-      expect(result.percentageUsed).toBe(50); // 5GB/10GB = 50%
+      expect(result.percentageUsed).toBe(50); // 5GB/10GB = 50% (Starter storage = 10GB)
     });
 
-    it('handles null limit for unlimited tiers', async () => {
-      // Assuming null limit = unlimited
+    it('handles large fixed limit for enterprise-equivalent tiers', async () => {
+      // No tier is truly unlimited any more; concierge maps to the 250k cap.
+      mockDbClient.mockResolvedValueOnce([{ count: 0 }]);
       const result = await checkUsageLimit('org-1', 'max_skus', 'concierge', mockDbClient);
 
       expect(result.isWithinLimit).toBe(true);
       expect(result.currentUsage).toBe(0);
-      expect(result.limit).toBeNull();
+      expect(result.limit).toBe(250000);
       expect(result.percentageUsed).toBe(0);
     });
 
@@ -225,7 +226,7 @@ describe('Feature Gates & Usage Limits (Phase 8B.2)', () => {
     });
 
     it('middleware blocks creation when at limit', async () => {
-      mockDbClient.mockResolvedValueOnce([{ count: 500 }]); // exactly at limit
+      mockDbClient.mockResolvedValueOnce([{ count: 5000 }]); // exactly at limit (starter max_skus)
 
       const middleware = enforceUsageLimit('max_skus');
       const result = await middleware('org-1', 'starter', mockDbClient);
@@ -235,7 +236,7 @@ describe('Feature Gates & Usage Limits (Phase 8B.2)', () => {
     });
 
     it('middleware returns full result object', async () => {
-      mockDbClient.mockResolvedValueOnce([{ count: 2 }]); // 2 out of 3 for professional max_users
+      mockDbClient.mockResolvedValueOnce([{ count: 2 }]); // 2 out of 10 for professional max_users
 
       const middleware = enforceUsageLimit('max_users');
       const result = await middleware('org-1', 'professional', mockDbClient);
@@ -243,7 +244,7 @@ describe('Feature Gates & Usage Limits (Phase 8B.2)', () => {
       expect(result.result).toEqual({
         isWithinLimit: true,
         currentUsage: 2,
-        limit: 3, // professional max_users = 3
+        limit: 10, // professional max_users = 10
         percentageUsed: expect.any(Number),
       });
     });
@@ -260,7 +261,7 @@ describe('Feature Gates & Usage Limits (Phase 8B.2)', () => {
     it('returns professional upgrade path', () => {
       const msg = formatFeatureUpgradeCTA(AVAILABLE_FEATURES.DEDICATED_SUPPORT, 'professional');
       expect(msg).toContain('professional');
-      expect(msg).toContain('Premium');
+      expect(msg).toContain('Enterprise');
     });
 
     it('returns premium upgrade path', () => {
@@ -291,7 +292,7 @@ describe('Feature Gates & Usage Limits (Phase 8B.2)', () => {
 
     it('returns professional upgrade path for usage limit', () => {
       const msg = formatUsageLimitCTA('max_users', 3, 3, 'professional');
-      expect(msg).toContain('Premium');
+      expect(msg).toContain('Enterprise');
       expect(msg).toContain('3/3');
     });
 
@@ -301,9 +302,9 @@ describe('Feature Gates & Usage Limits (Phase 8B.2)', () => {
       expect(msg).toContain('250/500');
     });
 
-    it('returns concierge support path for premium', () => {
+    it('returns enterprise upgrade path for legacy premium', () => {
       const msg = formatUsageLimitCTA('max_users', 10, 10, 'premium');
-      expect(msg).toContain('Concierge');
+      expect(msg).toContain('Enterprise');
     });
 
     it('returns contact support for concierge tier', () => {
@@ -345,7 +346,7 @@ describe('Feature Gates & Usage Limits (Phase 8B.2)', () => {
     });
 
     it('blocks action when usage exceeded even if feature enabled', async () => {
-      mockDbClient.mockResolvedValueOnce([{ count: 3000 }]); // 3000 exceeds professional max_skus of 2000
+      mockDbClient.mockResolvedValueOnce([{ count: 60000 }]); // 60000 exceeds professional max_skus of 50000
 
       const featureCheck = checkFeatureAccess('professional', AVAILABLE_FEATURES.MAX_SKUS);
       const usageCheck = await checkUsageLimit('org-1', 'max_skus', 'professional', mockDbClient);
@@ -355,7 +356,7 @@ describe('Feature Gates & Usage Limits (Phase 8B.2)', () => {
     });
 
     it('blocks action when both feature disabled and usage exceeded', async () => {
-      mockDbClient.mockResolvedValueOnce([{ count: 500 }]);
+      mockDbClient.mockResolvedValueOnce([{ count: 6000 }]); // exceeds starter max_skus of 5000
 
       const featureCheck = checkFeatureAccess('starter', AVAILABLE_FEATURES.CUSTOM_INTEGRATIONS);
       const usageCheck = await checkUsageLimit('org-1', 'max_skus', 'starter', mockDbClient);

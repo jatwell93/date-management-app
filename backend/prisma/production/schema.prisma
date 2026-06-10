@@ -330,29 +330,44 @@ model ExpiredItemTransaction {
 }
 
 model Upload {
-  id                Int          @id @default(autoincrement())
-  organizationId    String       @map("organization_id")
-  userId            Int          @map("user_id")
-  fileKey           String       @unique @map("file_key")
-  fileName          String       @map("file_name")
-  fileSizeBytes     Int          @map("file_size_bytes")
-  contentType       String?      @map("content_type")
-  status            String       @default("pending") // pending, uploading, processing, completed, failed
-  uploadProgress    Int          @default(0) @map("upload_progress") // 0-100
-  processingMessage String?      @map("processing_message") // Current processing step
-  errorMessage      String?      @map("error_message") // Error details if failed
-  rowsProcessed     Int          @default(0) @map("rows_processed") // CSV rows processed
-  rowsTotal         Int?         @map("rows_total") // Total rows in CSV
-  rowsImported      Int          @default(0) @map("rows_imported") // Rows inserted as new products
-  rowsUpdated       Int          @default(0) @map("rows_updated") // Rows applied as updates
-  rowsSkipped       Int          @default(0) @map("rows_skipped") // Rows skipped due to validation/business errors
-  rowErrorCount     Int          @default(0) @map("row_error_count") // Total row-level errors
-  columnsUsed       String?      @map("columns_used") // JSON array of column names that were used
-  columnsIgnored    Int          @default(0) @map("columns_ignored") // Number of columns ignored
-  createdAt         DateTime     @default(now()) @map("created_at")
-  updatedAt         DateTime     @updatedAt @map("updated_at")
-  user              User         @relation(fields: [userId], references: [id], onDelete: Cascade)
-  organization      Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  id                        Int          @id @default(autoincrement())
+  organizationId            String       @map("organization_id")
+  userId                    Int          @map("user_id")
+  fileKey                   String       @unique @map("file_key")
+  fileName                  String       @map("file_name")
+  fileSizeBytes             Int          @map("file_size_bytes")
+  contentType               String?      @map("content_type")
+  status                    String       @default("pending") // pending, uploading, processing, completed, failed
+  importType                String       @default("product-catalog") @map("import_type")
+  tierSnapshot              String?      @map("tier_snapshot")
+  maxSkusSnapshot           Int?         @map("max_skus_snapshot")
+  maxActiveExpiriesSnapshot Int?         @map("max_active_expiries_snapshot")
+  uploadProgress            Int          @default(0) @map("upload_progress") // 0-100
+  processingMessage         String?      @map("processing_message") // Current processing step
+  errorMessage              String?      @map("error_message") // Error details if failed
+  rowsProcessed             Int          @default(0) @map("rows_processed") // CSV rows processed
+  rowsTotal                 Int?         @map("rows_total") // Total rows in CSV
+  rowsImported              Int          @default(0) @map("rows_imported") // Rows inserted as new products
+  rowsUpdated               Int          @default(0) @map("rows_updated") // Rows applied as updates
+  rowsUnchanged             Int          @default(0) @map("rows_unchanged")
+  rowsSkipped               Int          @default(0) @map("rows_skipped") // Rows skipped due to validation/business errors
+  rowErrorCount             Int          @default(0) @map("row_error_count") // Total row-level errors
+  rowErrors                 String?      @map("row_errors")
+  processingOffset          Int          @default(0) @map("processing_offset")
+  retryCount                Int          @default(0) @map("retry_count")
+  failureCategory           String?      @map("failure_category")
+  errorReportKey            String?      @map("error_report_key")
+  queuedAt                  DateTime?    @map("queued_at")
+  validationStartedAt       DateTime?    @map("validation_started_at")
+  processingStartedAt       DateTime?    @map("processing_started_at")
+  completedAt               DateTime?    @map("completed_at")
+  failedAt                  DateTime?    @map("failed_at")
+  columnsUsed               String?      @map("columns_used") // JSON array of column names that were used
+  columnsIgnored            Int          @default(0) @map("columns_ignored") // Number of columns ignored
+  createdAt                 DateTime     @default(now()) @map("created_at")
+  updatedAt                 DateTime     @updatedAt @map("updated_at")
+  user                      User         @relation(fields: [userId], references: [id], onDelete: Cascade)
+  organization              Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
 
   @@index([organizationId, createdAt])
   @@index([userId, createdAt])
