@@ -28,8 +28,12 @@ name = "date-management-api-prod"
 [env.production.vars]
 NODE_ENV = "production"
 STORAGE_PROVIDER = "r2"
-MAX_FILE_SIZE = "10485760"
-CSV_BATCH_SIZE = "100"
+MAX_FILE_SIZE = "26214400"
+CSV_BATCH_SIZE = "1000"
+CATALOGUE_QUEUE_ENABLED = "false"
+ENTERPRISE_MAX_SKUS = "250000"
+ENTERPRISE_MAX_ACTIVE_EXPIRIES = "250000"
+ENTERPRISE_MAX_FILE_SIZE = "104857600"
 RATE_LIMIT_WINDOW = "60000"
 RATE_LIMIT_MAX_REQUESTS = "5"
 RATE_LIMIT_MAX_AUTHENTICATED = "30"
@@ -41,6 +45,19 @@ QUERY_TIMEOUT_MS = "10000"
 [[env.production.r2_buckets]]
 binding = "CSV_UPLOADS"
 bucket_name = "csv-uploads-prod"
+
+[[env.production.queues.producers]]
+binding = "CATALOGUE_IMPORT_QUEUE"
+queue = "catalogue-imports-prod"
+
+[[env.production.queues.consumers]]
+queue = "catalogue-imports-prod"
+max_batch_size = 1
+max_batch_timeout = 5
+max_retries = 5
+dead_letter_queue = "catalogue-imports-prod-dlq"
+max_concurrency = 1
+retry_delay = 30
 
 # Hyperdrive Configuration (Production)
 [[env.production.hyperdrive]]
@@ -82,12 +99,31 @@ name = "date-management-api-dev"
 [env.development.vars]
 NODE_ENV = "development"
 STORAGE_PROVIDER = "local"
+MAX_FILE_SIZE = "26214400"
+CSV_BATCH_SIZE = "1000"
+CATALOGUE_QUEUE_ENABLED = "true"
+ENTERPRISE_MAX_SKUS = "250000"
+ENTERPRISE_MAX_ACTIVE_EXPIRIES = "250000"
+ENTERPRISE_MAX_FILE_SIZE = "104857600"
 RATE_LIMIT_WINDOW = "60000"
 RATE_LIMIT_MAX_REQUESTS = "5"
 RATE_LIMIT_MAX_AUTHENTICATED = "30"
 MAX_CONCURRENT_CONNECTIONS = "50"
 QUERY_MAX_RESULTS = "100"
 QUERY_TIMEOUT_MS = "10000"
+
+[[env.development.queues.producers]]
+binding = "CATALOGUE_IMPORT_QUEUE"
+queue = "catalogue-imports-dev"
+
+[[env.development.queues.consumers]]
+queue = "catalogue-imports-dev"
+max_batch_size = 1
+max_batch_timeout = 5
+max_retries = 5
+dead_letter_queue = "catalogue-imports-dev-dlq"
+max_concurrency = 1
+retry_delay = 30
 
 # KV namespace binding for distributed rate limiting in development/preview
 # Create via: npx wrangler kv namespace create RATE_LIMITER --env development

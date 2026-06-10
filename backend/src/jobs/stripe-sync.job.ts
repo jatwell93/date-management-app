@@ -23,10 +23,10 @@ let cronJob: ScheduledTask | null = null;
 // Tier extraction — mirrors webhook.service.ts logic
 function extractTierFromStripeSubscription(subscription: Stripe.Subscription): string {
   const price = subscription.items.data[0]?.price;
-  if (!price) return 'starter';
+  if (!price) return 'free';
   const tier = price.metadata?.tier as string | undefined;
-  const validTiers = ['starter', 'professional', 'premium', 'concierge'];
-  return tier && validTiers.includes(tier) ? tier : 'starter';
+  const validTiers = ['free', 'starter', 'professional', 'enterprise', 'premium', 'concierge'];
+  return tier && validTiers.includes(tier) ? tier : 'free';
 }
 
 // Normalize Stripe status to local status string

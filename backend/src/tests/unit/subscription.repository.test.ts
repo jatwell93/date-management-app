@@ -17,6 +17,9 @@ describe('SubscriptionRepository', () => {
       findUnique: jest.Mock;
       upsert: jest.Mock;
     };
+    inventoryItem: {
+      count: jest.Mock;
+    };
   };
   let repository: SubscriptionRepository;
 
@@ -37,8 +40,25 @@ describe('SubscriptionRepository', () => {
         findUnique: jest.fn(),
         upsert: jest.fn(),
       },
+      inventoryItem: {
+        count: jest.fn(),
+      },
     };
     repository = new SubscriptionRepository(prisma as never);
+  });
+
+  it('counts only unresolved active expiry records for quota enforcement', async () => {
+    prisma.inventoryItem.count.mockResolvedValue(17);
+
+    await expect(repository.countActiveExpiryItems('org-123')).resolves.toBe(17);
+    expect(prisma.inventoryItem.count).toHaveBeenCalledWith({
+      where: {
+        organizationId: 'org-123',
+        status: {
+          notIn: ['Processed', 'Completed', 'Discarded', 'Archived', 'Sold Through'],
+        },
+      },
+    });
   });
 
   it('updates a subscription Stripe customer id', async () => {

@@ -17,34 +17,57 @@ export const REQUIRED_FEATURES = [
 ] as const;
 
 /**
- * All tier levels that must have complete feature flag configurations
+ * All tier levels that must have complete feature flag configurations.
+ *
+ * `free`/`starter`/`professional`/`enterprise` are the launch tiers.
+ * `premium`/`concierge` are LEGACY tiers retained only as a migration bridge for
+ * existing records; they normalize to professional/enterprise. Do not assign new
+ * customers to them.
  */
-export const REQUIRED_TIERS = ['starter', 'professional', 'premium', 'concierge'] as const;
+export const REQUIRED_TIERS = [
+  'free',
+  'starter',
+  'professional',
+  'enterprise',
+  // Legacy (transitional) — see note above.
+  'premium',
+  'concierge',
+] as const;
 
 /**
  * Expected limit values for specific features per tier
  * Used for validation warnings (not strict enforcement to allow flexibility)
  */
 export const EXPECTED_LIMITS: Record<string, Record<string, number | null>> = {
-  starter: {
+  free: {
     max_skus: 500,
     max_users: 1,
+    max_inventory_items: 500,
+  },
+  starter: {
+    max_skus: 5000,
+    max_users: 3,
     max_inventory_items: 5000,
   },
   professional: {
-    max_skus: 2000,
-    max_users: 3,
-    max_inventory_items: 20000,
+    max_skus: 50000,
+    max_users: 10,
+    max_inventory_items: 50000,
   },
   premium: {
-    max_skus: null,
+    max_skus: 50000,
     max_users: 10,
-    max_inventory_items: null,
+    max_inventory_items: 50000,
   },
   concierge: {
-    max_skus: null,
+    max_skus: 250000,
     max_users: 10,
-    max_inventory_items: null,
+    max_inventory_items: 250000,
+  },
+  enterprise: {
+    max_skus: 250000,
+    max_users: 10,
+    max_inventory_items: 250000,
   },
 };
 
@@ -131,7 +154,7 @@ function getDefaultTierFeatureConfig(
   feature: Feature,
 ): { enabled: boolean; limitValue: number | null } {
   const limitValue = EXPECTED_LIMITS[tier]?.[feature] ?? null;
-  const enabled = feature.startsWith('max_') || tier !== 'starter';
+  const enabled = feature.startsWith('max_') || tier !== 'free';
   return { enabled, limitValue };
 }
 

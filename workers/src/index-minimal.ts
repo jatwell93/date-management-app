@@ -9,7 +9,7 @@
  * to separate business logic from Node.js-specific code.
  */
 
-import { Env } from './types/env';
+import { CatalogueImportMessage, Env } from './types/env';
 import { handleHealthCheck } from './health';
 import { createWorkersDatabase } from './database';
 import * as Sentry from '@sentry/cloudflare';
@@ -23,6 +23,14 @@ import {
 const COMPRESSION_MIN_BYTES = 1024;
 const DIRECT_UPLOAD_THRESHOLD_BYTES = 2 * 1024 * 1024;
 const PRESIGNED_UPLOAD_TTL_SECONDS = 15 * 60;
+const DEFAULT_IMPORT_BATCH_SIZE = 1000;
+const MAX_IMPORT_BATCH_BYTES = 2 * 1024 * 1024;
+const MAX_ROWS_PER_CHECKPOINT = 10000;
+const STANDARD_MAX_FILE_SIZE = 25 * 1024 * 1024;
+// Must stay aligned with `max_retries` on the catalogue queue consumers in wrangler.toml.
+// After this many delivery attempts we mark the job failed (releasing the one-active-import
+// lock) rather than letting it retry forever and dead-letter while stuck in `processing`.
+const MAX_PROCESSING_ATTEMPTS = 5;
 const CLERK_WEBHOOK_MAX_SKEW_SECONDS = 5 * 60;
 const inMemoryRateLimitStore = new Map<string, { count: number; resetTime: number }>();
 
@@ -464,7 +472,9 @@ export default Sentry.withSentry(
 
           // Workers-native upload endpoints
           if (method === 'POST' && pathname === `${uploadRouteBase}/initiate`) {
-            return finalizeApiResponse(handleUploadInitiate(request, env, uploadRouteBase, getDb()));
+            return finalizeApiResponse(
+              handleUploadInitiate(request, env, uploadRouteBase, getDb()),
+            );
           }
 
           if (method === 'POST' && pathname.startsWith(`${uploadRouteBase}/direct/`)) {
@@ -524,6 +534,24 @@ export default Sentry.withSentry(
             }
 
             return finalizeApiResponse(handleUploadStatus(request, env, key, getDb()));
+          }
+
+          if (method === 'GET' && pathname.startsWith(`${uploadRouteBase}/error-report/`)) {
+            const encodedKey = pathname.slice(`${uploadRouteBase}/error-report/`.length);
+            if (!encodedKey) {
+              return finalizeApiResponse(
+                errorResponse('Missing key in URL', 400, env, requestOrigin),
+              );
+            }
+            try {
+              return finalizeApiResponse(
+                handleUploadErrorReport(request, env, decodeURIComponent(encodedKey), getDb()),
+              );
+            } catch {
+              return finalizeApiResponse(
+                errorResponse('Invalid key encoding', 400, env, requestOrigin),
+              );
+            }
           }
 
           if (method === 'POST' && pathname === `${uploadRouteBase}/complete`) {
@@ -692,8 +720,55 @@ export default Sentry.withSentry(
         }
       }
     },
+    async queue(batch: MessageBatch<unknown>, env: Env): Promise<void> {
+      await handleCatalogueImportQueue(batch, env);
+    },
   },
 );
+
+export async function handleCatalogueImportQueue(
+  batch: MessageBatch<unknown>,
+  env: Env,
+  db: Database = createWorkersDatabase(env),
+): Promise<void> {
+  for (const message of batch.messages) {
+    const body = message.body as Partial<CatalogueImportMessage> | null;
+    if (!body || !Number.isInteger(body.uploadId) || Number(body.uploadId) <= 0) {
+      message.ack();
+      continue;
+    }
+    try {
+      await processCatalogueImportJob(Number(body.uploadId), env, db);
+      message.ack();
+    } catch (error) {
+      Sentry.captureException(error, {
+        tags: { feature: 'catalogue-import', action: 'queue-consumer' },
+        extra: { uploadId: body.uploadId, attempts: message.attempts },
+      });
+      // After the final attempt, mark the job failed and ack so the org's
+      // one-active-import lock is released instead of leaving it stuck in
+      // `processing` once the message dead-letters.
+      if (message.attempts >= MAX_PROCESSING_ATTEMPTS) {
+        try {
+          await failCatalogueImport(
+            db,
+            Number(body.uploadId),
+            'processing',
+            'Catalogue import failed after repeated retries',
+          );
+        } catch (failError) {
+          Sentry.captureException(failError, {
+            tags: { feature: 'catalogue-import', action: 'queue-consumer-fail' },
+            extra: { uploadId: body.uploadId },
+          });
+        }
+        message.ack();
+      } else {
+        message.retry();
+      }
+    }
+  }
+}
 
 // =============================================================================
 // API Handlers (Using Neon serverless driver)
@@ -831,10 +906,15 @@ async function createToken(userId: number, env: Env): Promise<string> {
 /**
  * Create short-lived upload token for presigned strategy
  */
-async function createUploadToken(userId: number, key: string, env: Env): Promise<string> {
+async function createUploadToken(
+  userId: number,
+  key: string,
+  maxFileSize: number,
+  env: Env,
+): Promise<string> {
   const secret = requireJwtSecret(env);
 
-  return await new SignJWT({ userId, key, purpose: 'upload' })
+  return await new SignJWT({ userId, key, maxFileSize, purpose: 'upload' })
     .setProtectedHeader({ alg: 'HS256' })
     .setExpirationTime(`${PRESIGNED_UPLOAD_TTL_SECONDS}s`)
     .setIssuedAt()
@@ -844,7 +924,11 @@ async function createUploadToken(userId: number, key: string, env: Env): Promise
 /**
  * Verify short-lived upload token
  */
-async function verifyUploadToken(token: string, key: string, env: Env): Promise<number | null> {
+async function verifyUploadToken(
+  token: string,
+  key: string,
+  env: Env,
+): Promise<{ userId: number; maxFileSize: number } | null> {
   const secret = requireJwtSecret(env);
 
   try {
@@ -853,6 +937,7 @@ async function verifyUploadToken(token: string, key: string, env: Env): Promise<
     const tokenUserId = Number(payload.userId);
     const tokenKey = typeof payload.key === 'string' ? payload.key : '';
     const tokenPurpose = payload.purpose;
+    const tokenMaxFileSize = Number(payload.maxFileSize);
 
     if (!Number.isFinite(tokenUserId) || tokenUserId <= 0) {
       return null;
@@ -862,7 +947,13 @@ async function verifyUploadToken(token: string, key: string, env: Env): Promise<
       return null;
     }
 
-    return tokenUserId;
+    return {
+      userId: tokenUserId,
+      maxFileSize:
+        Number.isFinite(tokenMaxFileSize) && tokenMaxFileSize > 0
+          ? tokenMaxFileSize
+          : STANDARD_MAX_FILE_SIZE,
+    };
   } catch {
     return null;
   }
@@ -1388,7 +1479,7 @@ async function ensureTrialSubscription(sql: SqlClient, organizationId: string): 
       updated_at
     ) VALUES (
       ${organizationId},
-      'starter',
+      'professional',
       'trialing',
       'monthly',
       NOW(),
@@ -2862,16 +2953,22 @@ const SUBSCRIPTION_TIER_LIMITS: Record<
   string,
   { maxUsers: number; maxProducts: number; maxStoreAreas: number; features: string[] }
 > = {
-  starter: {
+  free: {
     maxUsers: 1,
     maxProducts: 500,
     maxStoreAreas: 3,
     features: ['Basic scanning', 'Expiry tracking', 'Basic reports'],
   },
-  professional: {
-    maxUsers: 10,
+  starter: {
+    maxUsers: 3,
     maxProducts: 5000,
     maxStoreAreas: 20,
+    features: ['Basic scanning', 'Expiry tracking', 'CSV uploads', 'Team management'],
+  },
+  professional: {
+    maxUsers: 10,
+    maxProducts: 50000,
+    maxStoreAreas: 100,
     features: [
       'Advanced scanning',
       'Expiry tracking',
@@ -2882,8 +2979,8 @@ const SUBSCRIPTION_TIER_LIMITS: Record<
     ],
   },
   premium: {
-    maxUsers: 50,
-    maxProducts: 25000,
+    maxUsers: 10,
+    maxProducts: 50000,
     maxStoreAreas: 100,
     features: [
       'All professional features',
@@ -2893,10 +2990,16 @@ const SUBSCRIPTION_TIER_LIMITS: Record<
     ],
   },
   concierge: {
-    maxUsers: -1,
-    maxProducts: -1,
-    maxStoreAreas: -1,
-    features: ['Unlimited everything', 'Dedicated support', 'Custom development'],
+    maxUsers: 10,
+    maxProducts: 250000,
+    maxStoreAreas: 100,
+    features: ['Enterprise fair-use access', 'Dedicated support', 'Custom development'],
+  },
+  enterprise: {
+    maxUsers: 10,
+    maxProducts: 250000,
+    maxStoreAreas: 100,
+    features: ['Enterprise fair-use access', 'Dedicated support', 'Custom development'],
   },
 };
 
@@ -2954,10 +3057,10 @@ async function handleGetTrialStatus(request: Request, db: Database, env: Env): P
     daysRemaining = Math.max(0, Math.ceil(diffTime / MILLISECONDS_PER_DAY));
   }
 
-  const normalizedTierKey = subscription?.tier_level?.trim().toLowerCase() || 'starter';
+  const normalizedTierKey = normalizeLaunchTier(subscription?.tier_level);
   const tierKey = Object.prototype.hasOwnProperty.call(SUBSCRIPTION_TIER_LIMITS, normalizedTierKey)
     ? normalizedTierKey
-    : 'starter';
+    : 'free';
   const tierLimits = SUBSCRIPTION_TIER_LIMITS[tierKey];
 
   const response: TrialStatusResponse = {
@@ -2966,7 +3069,7 @@ async function handleGetTrialStatus(request: Request, db: Database, env: Env): P
     subscription: subscription
       ? {
           status: normalizedStatus,
-          tierLevel: subscription.tier_level || 'starter',
+          tierLevel: normalizedTierKey,
           trialEndDate: subscription.trial_end_date || null,
           trialStartedAt: subscription.trial_started_at || null,
           trialConvertedAt: subscription.trial_converted_at || null,
@@ -2998,13 +3101,16 @@ export async function handleUploadInitiate(
     filename?: string;
     fileSize?: number;
     contentType?: string;
+    importType?: string;
   };
 
   if (!body.filename || typeof body.fileSize !== 'number' || !body.contentType) {
     return errorResponse('Missing required fields: filename, fileSize, contentType', 400, env);
   }
 
-  const maxFileSize = parseInt(env.MAX_FILE_SIZE || '10485760', 10);
+  const queueEnabled = env.CATALOGUE_QUEUE_ENABLED === 'true';
+  const tier = queueEnabled ? await getOrganizationLaunchTier(auth.organizationId, db) : 'free';
+  const maxFileSize = queueEnabled ? getTierFileSizeLimit(tier, env) : STANDARD_MAX_FILE_SIZE;
   if (body.fileSize > maxFileSize) {
     return errorResponse(`File size exceeds maximum limit of ${maxFileSize} bytes`, 400, env);
   }
@@ -3012,7 +3118,7 @@ export async function handleUploadInitiate(
   const key = `uploads/user-${auth.userId}/${Date.now()}-${body.filename}`;
 
   if (body.fileSize > DIRECT_UPLOAD_THRESHOLD_BYTES) {
-    const uploadToken = await createUploadToken(auth.userId, key, env);
+    const uploadToken = await createUploadToken(auth.userId, key, maxFileSize, env);
     const requestUrl = new URL(request.url);
     const uploadUrl = `${requestUrl.origin}${uploadRouteBase}/presigned/${encodeURIComponent(key)}?token=${encodeURIComponent(uploadToken)}`;
 
@@ -3031,7 +3137,9 @@ export async function handleUploadInitiate(
   return jsonResponse(
     {
       strategy: 'direct',
-      uploadUrl: `${uploadRouteBase}/direct/${encodeURIComponent(key)}`,
+      uploadUrl: `${uploadRouteBase}/direct/${encodeURIComponent(key)}?importType=${encodeURIComponent(
+        body.importType === 'expiry-list' ? 'expiry-list' : 'product-catalog',
+      )}`,
       method: 'POST',
       key,
     },
@@ -3053,16 +3161,16 @@ async function handleUploadPresigned(
     return errorResponse('Missing upload token', 401, env);
   }
 
-  const tokenUserId = await verifyUploadToken(uploadToken, key, env);
-  if (!tokenUserId) {
+  const uploadContext = await verifyUploadToken(uploadToken, key, env);
+  if (!uploadContext) {
     return errorResponse('Invalid or expired upload token', 403, env);
   }
 
-  if (!key.startsWith(`uploads/user-${tokenUserId}/`)) {
+  if (!key.startsWith(`uploads/user-${uploadContext.userId}/`)) {
     return errorResponse('Access denied: Upload key does not belong to token user', 403, env);
   }
 
-  const maxFileSize = parseInt(env.MAX_FILE_SIZE || '10485760', 10);
+  const maxFileSize = uploadContext.maxFileSize;
   const contentLengthHeader = request.headers.get('Content-Length');
   if (contentLengthHeader) {
     const contentLength = parseInt(contentLengthHeader, 10);
@@ -3111,13 +3219,17 @@ export async function handleUploadDirect(
 
   const formData = await request.formData();
   const fileValue = formData.get('file') as unknown;
+  const requestedImportType =
+    new URL(request.url).searchParams.get('importType') || String(formData.get('importType') || '');
 
   if (!(fileValue instanceof File)) {
     return errorResponse('No file uploaded', 400, env);
   }
 
   // Re-validate file size and content type
-  const maxFileSize = parseInt(env.MAX_FILE_SIZE || '10485760', 10);
+  const queueEnabled = env.CATALOGUE_QUEUE_ENABLED === 'true';
+  const tier = queueEnabled ? await getOrganizationLaunchTier(auth.organizationId, db) : 'free';
+  const maxFileSize = queueEnabled ? getTierFileSizeLimit(tier, env) : STANDARD_MAX_FILE_SIZE;
   if (fileValue.size > maxFileSize) {
     return errorResponse(`File size exceeds maximum limit of ${maxFileSize} bytes`, 400, env);
   }
@@ -3129,6 +3241,56 @@ export async function handleUploadDirect(
   }
 
   const data = await fileValue.arrayBuffer();
+
+  if (queueEnabled && requestedImportType !== 'expiry-list') {
+    if (!env.CATALOGUE_IMPORT_QUEUE) {
+      return errorResponse('Catalogue import queue is not configured', 503, env);
+    }
+
+    await env.CSV_UPLOADS.put(key, data, {
+      httpMetadata: { contentType: fileValue.type || 'text/csv' },
+    });
+
+    const uploadId = await createQueuedCatalogueUpload({
+      db,
+      organizationId: auth.organizationId,
+      userId: auth.userId,
+      key,
+      fileName: fileValue.name,
+      fileSize: fileValue.size,
+      contentType: fileValue.type || 'text/csv',
+      tier,
+      env,
+    });
+    if (uploadId === null) {
+      await env.CSV_UPLOADS.delete(key);
+      return errorResponse(
+        'An active catalogue import already exists for this organization',
+        409,
+        env,
+      );
+    }
+
+    await env.CATALOGUE_IMPORT_QUEUE.send({ uploadId });
+    await db.sql`
+      UPDATE uploads
+      SET status = 'queued', processing_message = 'Queued for validation', queued_at = NOW(), updated_at = NOW()
+      WHERE id = ${uploadId}
+    `;
+
+    return jsonResponse(
+      {
+        message: 'Catalogue upload queued',
+        key,
+        uploadId,
+        status: 'queued',
+        progress: 0,
+      },
+      202,
+      env,
+    );
+  }
+
   const processingSummary = await processProductCatalogUpload(data, auth.organizationId, db);
 
   await env.CSV_UPLOADS.put(key, data, {
@@ -3162,7 +3324,7 @@ export async function handleUploadComplete(
     return auth;
   }
 
-  const body = (await request.json()) as { key?: string };
+  const body = (await request.json()) as { key?: string; importType?: string };
   if (!body.key) {
     return errorResponse('Missing required field: key', 400, env);
   }
@@ -3174,6 +3336,42 @@ export async function handleUploadComplete(
   const object = await env.CSV_UPLOADS.head(body.key);
   if (!object) {
     return errorResponse('Upload not found', 404, env);
+  }
+
+  if (env.CATALOGUE_QUEUE_ENABLED === 'true' && body.importType !== 'expiry-list') {
+    if (!env.CATALOGUE_IMPORT_QUEUE) {
+      return errorResponse('Catalogue import queue is not configured', 503, env);
+    }
+    const tier = await getOrganizationLaunchTier(auth.organizationId, db);
+    const uploadId = await createQueuedCatalogueUpload({
+      db,
+      organizationId: auth.organizationId,
+      userId: auth.userId,
+      key: body.key,
+      fileName: body.key.split('/').pop() || 'catalogue.csv',
+      fileSize: Number(object.size || 0),
+      contentType: object.httpMetadata?.contentType || 'text/csv',
+      tier,
+      env,
+    });
+    if (uploadId === null) {
+      return errorResponse(
+        'An active catalogue import already exists for this organization',
+        409,
+        env,
+      );
+    }
+    await env.CATALOGUE_IMPORT_QUEUE.send({ uploadId });
+    await db.sql`
+      UPDATE uploads
+      SET status = 'queued', processing_message = 'Queued for validation', queued_at = NOW(), updated_at = NOW()
+      WHERE id = ${uploadId}
+    `;
+    return jsonResponse(
+      { message: 'Catalogue upload queued', key: body.key, uploadId, status: 'queued' },
+      202,
+      env,
+    );
   }
 
   let processingSummary: UploadProcessingSummary;
@@ -3211,6 +3409,52 @@ export async function handleUploadStatus(
     return errorResponse('Access denied: Upload key does not belong to this user', 403, env);
   }
 
+  if (env.CATALOGUE_QUEUE_ENABLED === 'true') {
+    const rows = await db.sql`
+      SELECT id,
+             status,
+             upload_progress as progress,
+             rows_processed as "rowsProcessed",
+             rows_total as "rowsTotal",
+             rows_imported as "importedCount",
+             rows_updated as "updatedCount",
+             rows_unchanged as "unchangedCount",
+             rows_skipped as "skippedCount",
+             row_error_count as "errorCount",
+             processing_message as message,
+             failure_category as "failureCategory",
+             row_errors as errors,
+             error_report_key as "errorReportKey"
+      FROM uploads
+      WHERE file_key = ${key} AND organization_id = ${auth.organizationId}
+      LIMIT 1
+    `;
+    const job = rows[0];
+    // Only queued catalogue imports have an `uploads` row. Synchronous uploads
+    // (e.g. expiry-list) store their result in R2 custom metadata and have no
+    // row here, so fall through to the R2 metadata path instead of 404ing.
+    if (job) {
+      let errors: unknown[] = [];
+      try {
+        errors = typeof job.errors === 'string' ? JSON.parse(job.errors) : [];
+      } catch {
+        errors = [];
+      }
+      return jsonResponse(
+        {
+          ...job,
+          key,
+          errors,
+          errorReportUrl: job.errorReportKey
+            ? `/api/upload/error-report/${encodeURIComponent(key)}`
+            : null,
+        },
+        200,
+        env,
+      );
+    }
+  }
+
   const object = await env.CSV_UPLOADS.head(key);
   if (!object) {
     return errorResponse('Upload not found', 404, env);
@@ -3231,6 +3475,34 @@ export async function handleUploadStatus(
   );
 }
 
+export async function handleUploadErrorReport(
+  request: Request,
+  env: Env,
+  key: string,
+  db: Database,
+): Promise<Response> {
+  const auth = await authenticateApiRequest(request, env, db);
+  if (auth instanceof Response) return auth;
+  const rows = await db.sql`
+    SELECT id, error_report_key as "errorReportKey"
+    FROM uploads
+    WHERE file_key = ${key} AND organization_id = ${auth.organizationId}
+    LIMIT 1
+  `;
+  const reportKey = rows[0]?.errorReportKey;
+  if (!reportKey) return errorResponse('Error report not found', 404, env);
+  const report = await env.CSV_UPLOADS.get(String(reportKey));
+  if (!report) return errorResponse('Error report not found', 404, env);
+  return new Response(report.body, {
+    status: 200,
+    headers: {
+      'Content-Type': report.httpMetadata?.contentType || 'application/json',
+      'Content-Disposition': `attachment; filename="catalogue-import-${encodeURIComponent(String(rows[0]?.id || 'errors'))}.json"`,
+      ...getCorsHeaders(env, request.headers.get('Origin') || ''),
+    },
+  });
+}
+
 export { handleLogin, handleRegister };
 
 type UploadProcessingSummary = {
@@ -3242,6 +3514,503 @@ type UploadProcessingSummary = {
   errorCount: number;
   errors: string[];
 };
+
+type LaunchTier = 'free' | 'starter' | 'professional' | 'enterprise';
+
+const LAUNCH_TIER_LIMITS: Record<LaunchTier, { maxSkus: number; maxActiveExpiries: number }> = {
+  free: { maxSkus: 500, maxActiveExpiries: 500 },
+  starter: { maxSkus: 5000, maxActiveExpiries: 5000 },
+  professional: { maxSkus: 50000, maxActiveExpiries: 50000 },
+  enterprise: { maxSkus: 250000, maxActiveExpiries: 250000 },
+};
+
+export function isCatalogueWithinLimit(projectedSkuCount: number, maxSkus: number): boolean {
+  return projectedSkuCount <= maxSkus;
+}
+
+function normalizeLaunchTier(value: unknown): LaunchTier {
+  const tier = String(value || '')
+    .trim()
+    .toLowerCase();
+  if (tier === 'free') return 'free';
+  if (tier === 'starter') return 'starter';
+  if (tier === 'professional') return 'professional';
+  if (tier === 'enterprise') return 'enterprise';
+  if (tier === 'premium') return 'professional';
+  if (tier === 'concierge') return 'enterprise';
+  return 'free';
+}
+
+async function getOrganizationLaunchTier(
+  organizationId: string,
+  db: Database,
+): Promise<LaunchTier> {
+  const rows = await db.sql`
+    SELECT tier_level
+    FROM subscription_tiers
+    WHERE organization_id = ${organizationId}
+    ORDER BY created_at DESC
+    LIMIT 1
+  `;
+  return normalizeLaunchTier(rows[0]?.tier_level);
+}
+
+// Parse a positive-integer env override, falling back to `fallback` when the value
+// is missing, non-numeric, NaN, or non-positive. Without this guard a misconfigured
+// ENTERPRISE_* var would yield NaN and silently fail every enterprise import
+// (e.g. `count <= NaN` is always false).
+function parsePositiveIntEnv(value: string | undefined, fallback: number): number {
+  const parsed = Number(value);
+  return Number.isFinite(parsed) && parsed > 0 ? Math.floor(parsed) : fallback;
+}
+
+function getTierFileSizeLimit(tier: LaunchTier, env: Env): number {
+  if (tier === 'enterprise') {
+    const configured = parsePositiveIntEnv(env.ENTERPRISE_MAX_FILE_SIZE, 100 * 1024 * 1024);
+    return Math.min(Math.max(configured, STANDARD_MAX_FILE_SIZE), 100 * 1024 * 1024);
+  }
+  return STANDARD_MAX_FILE_SIZE;
+}
+
+async function createQueuedCatalogueUpload(input: {
+  db: Database;
+  organizationId: string;
+  userId: number;
+  key: string;
+  fileName: string;
+  fileSize: number;
+  contentType: string;
+  tier: LaunchTier;
+  env: Env;
+}): Promise<number | null> {
+  const tierLimits = LAUNCH_TIER_LIMITS[input.tier];
+  const maxSkus =
+    input.tier === 'enterprise'
+      ? parsePositiveIntEnv(input.env.ENTERPRISE_MAX_SKUS, tierLimits.maxSkus)
+      : tierLimits.maxSkus;
+  const maxActiveExpiries =
+    input.tier === 'enterprise'
+      ? parsePositiveIntEnv(input.env.ENTERPRISE_MAX_ACTIVE_EXPIRIES, tierLimits.maxActiveExpiries)
+      : tierLimits.maxActiveExpiries;
+  try {
+    const rows = await input.db.sql`
+      INSERT INTO uploads (
+        organization_id, user_id, file_key, file_name, file_size_bytes, content_type,
+        import_type, tier_snapshot, max_skus_snapshot, max_active_expiries_snapshot,
+        status, upload_progress, processing_message, processing_offset, created_at, updated_at
+      )
+      SELECT ${input.organizationId}, ${input.userId}, ${input.key}, ${input.fileName},
+             ${input.fileSize}, ${input.contentType}, 'product-catalog', ${input.tier},
+             ${maxSkus}, ${maxActiveExpiries}, 'pending', 0, 'Preparing catalogue import', 0, NOW(), NOW()
+      WHERE NOT EXISTS (
+        SELECT 1 FROM uploads
+        WHERE organization_id = ${input.organizationId}
+          AND import_type = 'product-catalog'
+          AND status IN ('pending', 'queued', 'validating', 'processing')
+      )
+      RETURNING id
+    `;
+    return rows[0]?.id ? Number(rows[0].id) : null;
+  } catch (error) {
+    if (error instanceof Error && /unique|duplicate|23505/i.test(error.message)) return null;
+    throw error;
+  }
+}
+
+type CatalogueImportJob = {
+  id: number;
+  organizationId: string;
+  fileKey: string;
+  status: string;
+  processingOffset: number;
+  maxSkusSnapshot: number;
+  importedCount: number;
+  updatedCount: number;
+  unchangedCount: number;
+  skippedCount: number;
+  errorCount: number;
+};
+
+export async function processCatalogueImportJob(
+  uploadId: number,
+  env: Env,
+  db: Database,
+): Promise<void> {
+  const rows = await db.sql`
+    SELECT id, organization_id as "organizationId", file_key as "fileKey", status,
+           processing_offset as "processingOffset", max_skus_snapshot as "maxSkusSnapshot",
+           rows_imported as "importedCount", rows_updated as "updatedCount",
+           rows_unchanged as "unchangedCount", rows_skipped as "skippedCount",
+           row_error_count as "errorCount"
+    FROM uploads WHERE id = ${uploadId} LIMIT 1
+  `;
+  const job = rows[0] as CatalogueImportJob | undefined;
+  if (!job || ['completed', 'completed_with_errors', 'failed'].includes(job.status)) return;
+
+  const object = await env.CSV_UPLOADS.get(job.fileKey);
+  if (!object) {
+    await failCatalogueImport(
+      db,
+      uploadId,
+      'source_missing',
+      'Uploaded source file is unavailable',
+    );
+    return;
+  }
+
+  try {
+    const records = parseCsvRecords(new TextDecoder().decode(await object.arrayBuffer()));
+    await db.sql`
+      UPDATE uploads SET status = 'validating', processing_message = 'Validating catalogue',
+             validation_started_at = COALESCE(validation_started_at, NOW()), updated_at = NOW()
+      WHERE id = ${uploadId}
+    `;
+    const validation = validateCatalogueRecords(records);
+    if (validation.fatalErrors.length > 0) {
+      await completeCatalogueWithErrors(db, env, job, validation.fatalErrors, 'validation');
+      return;
+    }
+
+    const startOffset = Number(job.processingOffset || 0);
+    // Identifier-only projection of the rows. The quota and conflict queries only read
+    // sku/barcode, so serializing the full rows (incl. name/costPrice) into jsonb wastes
+    // payload and Worker memory on large catalogues. NOTE: the whole source is still
+    // buffered and parsed in memory (no true streaming yet), so the tier file-size caps
+    // are the practical ceiling here.
+    const identifierRows = validation.rows.map((row) => ({
+      rowNumber: row.rowNumber,
+      sku: row.sku,
+      barcode: row.barcode,
+    }));
+    const serializedIdentifierRows = JSON.stringify(identifierRows);
+
+    // Enforce the post-import SKU quota only on the first pass. On checkpoint resumes
+    // (offset > 0) the quota was already enforced, and recomputing it against products
+    // mutated by earlier checkpoints would be both wasteful and a TOCTOU drift.
+    if (startOffset === 0) {
+      const projectedRows = await db.sql`
+        WITH input AS (
+          SELECT DISTINCT sku, barcode
+          FROM jsonb_to_recordset(${serializedIdentifierRows}::jsonb)
+            AS x(sku text, barcode text)
+        ), projected AS (
+          SELECT p.sku
+          FROM products p
+          WHERE p.organization_id = ${job.organizationId}
+            AND NOT EXISTS (
+              SELECT 1 FROM input i WHERE i.sku = p.sku OR i.barcode = p.barcode
+            )
+          UNION
+          SELECT sku FROM input
+        )
+        SELECT COUNT(*)::int AS count FROM projected
+      `;
+      const projectedCount = Number(projectedRows[0]?.count || 0);
+      if (!isCatalogueWithinLimit(projectedCount, Number(job.maxSkusSnapshot))) {
+        await failCatalogueImport(
+          db,
+          uploadId,
+          'quota',
+          `Catalogue would contain ${projectedCount} SKUs, exceeding the ${job.maxSkusSnapshot} SKU limit`,
+        );
+        return;
+      }
+    }
+
+    await db.sql`
+      UPDATE uploads SET status = 'processing', rows_total = ${validation.totalRows},
+             rows_processed = CASE WHEN processing_offset = 0 THEN ${validation.rowErrors.length} ELSE rows_processed END,
+             rows_skipped = CASE WHEN processing_offset = 0 THEN ${validation.rowErrors.length} ELSE rows_skipped END,
+             row_error_count = CASE WHEN processing_offset = 0 THEN ${validation.rowErrors.length} ELSE row_error_count END,
+             processing_message = 'Importing catalogue', processing_started_at = COALESCE(processing_started_at, NOW()),
+             row_errors = ${JSON.stringify(validation.rowErrors.slice(0, 100))}, updated_at = NOW()
+      WHERE id = ${uploadId}
+    `;
+
+    let offset = startOffset;
+    const checkpointEnd = Math.min(validation.rows.length, offset + MAX_ROWS_PER_CHECKPOINT);
+    while (offset < checkpointEnd) {
+      const batchRows = takeImportBatch(validation.rows, offset, checkpointEnd);
+      const nextOffset = offset + batchRows.length;
+      const outcome = await upsertProductBatch(db, job.organizationId, batchRows, {
+        uploadId,
+        nextOffset,
+        totalRows: validation.totalRows,
+        validationErrorCount: validation.rowErrors.length,
+      });
+      offset = nextOffset;
+      validation.rowErrors.push(...outcome.errors);
+    }
+
+    if (offset < validation.rows.length) {
+      await env.CATALOGUE_IMPORT_QUEUE?.send({ uploadId });
+      return;
+    }
+
+    const finalRows = await db.sql`
+      SELECT rows_skipped as skipped, row_error_count as errors FROM uploads WHERE id = ${uploadId}
+    `;
+    const hasErrors = Number(finalRows[0]?.errors || 0) > 0;
+    const conflictErrors = await findIdentifierConflictErrors(
+      db,
+      job.organizationId,
+      serializedIdentifierRows,
+    );
+    const finalErrors = Array.from(new Set([...validation.rowErrors, ...conflictErrors]));
+    const reportKey = finalErrors.length > 0 ? `upload-errors/${uploadId}.json` : null;
+    if (reportKey) {
+      await env.CSV_UPLOADS.put(reportKey, JSON.stringify(finalErrors), {
+        httpMetadata: { contentType: 'application/json' },
+      });
+    }
+    await db.sql`
+      UPDATE uploads SET status = ${hasErrors ? 'completed_with_errors' : 'completed'},
+             upload_progress = 100, processing_message = ${hasErrors ? 'Import completed with row errors' : 'Import completed'},
+             row_errors = ${JSON.stringify(finalErrors.slice(0, 100))},
+             error_report_key = ${reportKey}, completed_at = NOW(), updated_at = NOW()
+      WHERE id = ${uploadId}
+    `;
+  } catch (error) {
+    await db.sql`
+      UPDATE uploads SET retry_count = retry_count + 1, failure_category = 'processing',
+             error_message = 'Catalogue processing failed and will be retried', updated_at = NOW()
+      WHERE id = ${uploadId}
+    `;
+    throw error;
+  }
+}
+
+export type ValidatedCatalogueRow = ProductCatalogRow & { rowNumber: number };
+
+function validateCatalogueRecords(records: string[][]): {
+  rows: ValidatedCatalogueRow[];
+  rowErrors: string[];
+  fatalErrors: string[];
+  totalRows: number;
+} {
+  const fatalErrors: string[] = [];
+  const rowErrors: string[] = [];
+  if (records.length < 2)
+    return { rows: [], rowErrors, fatalErrors: ['No product rows found'], totalRows: 0 };
+  const headers = records[0].map(normalizeHeader);
+  const indexes = {
+    sku: findHeaderIndex(headers, PRODUCT_CATALOG_HEADER_ALIASES.sku),
+    name: findHeaderIndex(headers, PRODUCT_CATALOG_HEADER_ALIASES.name),
+    barcode: findHeaderIndex(headers, PRODUCT_CATALOG_HEADER_ALIASES.barcode),
+    cost: findHeaderIndex(headers, PRODUCT_CATALOG_HEADER_ALIASES.cost),
+  };
+  const missing = Object.entries(indexes)
+    .filter(([, value]) => value < 0)
+    .map(([key]) => key);
+  if (missing.length > 0)
+    return {
+      rows: [],
+      rowErrors,
+      fatalErrors: [`Missing required column header(s): ${missing.join(', ')}`],
+      totalRows: 0,
+    };
+
+  const seenSkus = new Set<string>();
+  const seenBarcodes = new Set<string>();
+  const parsed: ValidatedCatalogueRow[] = [];
+  let totalRows = 0;
+  records.slice(1).forEach((record, index) => {
+    if (!record.some((cell) => cell.trim())) return;
+    totalRows += 1;
+    const rowNumber = index + 2;
+    const row = parseProductCatalogRow(record, indexes);
+    if (!row) {
+      rowErrors.push(`Row ${rowNumber}: Missing or malformed required product fields`);
+      return;
+    }
+    if (seenSkus.has(row.sku) || seenBarcodes.has(row.barcode)) {
+      rowErrors.push(`Row ${rowNumber}: Duplicate SKU or barcode in upload`);
+      return;
+    }
+    seenSkus.add(row.sku);
+    seenBarcodes.add(row.barcode);
+    parsed.push({ ...row, rowNumber });
+  });
+  return { rows: parsed, rowErrors, fatalErrors, totalRows };
+}
+
+export function takeImportBatch(
+  rows: ValidatedCatalogueRow[],
+  offset: number,
+  end: number,
+): ValidatedCatalogueRow[] {
+  let size = Math.min(DEFAULT_IMPORT_BATCH_SIZE, end - offset);
+  while (size > 1) {
+    const candidate = rows.slice(offset, offset + size);
+    if (new TextEncoder().encode(JSON.stringify(candidate)).byteLength < MAX_IMPORT_BATCH_BYTES)
+      return candidate;
+    size = Math.max(1, Math.floor(size / 2));
+  }
+  return rows.slice(offset, offset + 1);
+}
+
+async function upsertProductBatch(
+  db: Database,
+  organizationId: string,
+  rows: ValidatedCatalogueRow[],
+  checkpoint: {
+    uploadId: number;
+    nextOffset: number;
+    totalRows: number;
+    validationErrorCount: number;
+  },
+): Promise<{
+  importedCount: number;
+  updatedCount: number;
+  unchangedCount: number;
+  rejectedCount: number;
+  errors: string[];
+}> {
+  const result = await db.sql`
+    WITH input AS (
+      SELECT * FROM jsonb_to_recordset(${JSON.stringify(rows)}::jsonb)
+        AS x("rowNumber" int, sku text, name text, barcode text, "costPrice" double precision)
+    ), matched AS (
+      SELECT i.*, sku_match.id AS sku_id, barcode_match.id AS barcode_id
+      FROM input i
+      LEFT JOIN products sku_match ON sku_match.organization_id = ${organizationId} AND sku_match.sku = i.sku
+      LEFT JOIN products barcode_match ON barcode_match.organization_id = ${organizationId} AND barcode_match.barcode = i.barcode
+    ), classified_base AS (
+      SELECT *,
+             (sku_id IS NOT NULL AND barcode_id IS NOT NULL AND sku_id <> barcode_id) AS id_conflict,
+             COALESCE(sku_id, barcode_id) AS product_id
+      FROM matched
+    ), classified AS (
+      -- Reject a row when its sku and barcode resolve to two different existing
+      -- products (id_conflict), AND when two or more input rows resolve to the same
+      -- existing product (shared_target) -- otherwise UPDATE ... FROM would target
+      -- that product from multiple rows nondeterministically and corrupt the counts.
+      SELECT *,
+             (
+               id_conflict
+               OR (
+                 product_id IS NOT NULL
+                 AND COUNT(*) FILTER (WHERE NOT id_conflict)
+                       OVER (PARTITION BY product_id) > 1
+               )
+             ) AS conflict
+      FROM classified_base
+    ), updated AS (
+      UPDATE products p SET sku = c.sku, barcode = c.barcode, name = c.name,
+             cost_price = c."costPrice", updated_at = NOW()
+      FROM classified c
+      WHERE NOT c.conflict AND c.product_id = p.id
+        AND (p.sku IS DISTINCT FROM c.sku OR p.barcode IS DISTINCT FROM c.barcode
+          OR p.name IS DISTINCT FROM c.name OR p.cost_price IS DISTINCT FROM c."costPrice")
+      RETURNING p.id
+    ), inserted AS (
+      INSERT INTO products (organization_id, sku, barcode, name, cost_price, notes, created_at, updated_at)
+      SELECT ${organizationId}, c.sku, c.barcode, c.name, c."costPrice", '', NOW(), NOW()
+      FROM classified c WHERE NOT c.conflict AND c.product_id IS NULL
+      RETURNING id
+    ), counts AS (
+      SELECT (SELECT COUNT(*) FROM inserted)::int AS inserted,
+             (SELECT COUNT(*) FROM updated)::int AS updated,
+             (SELECT COUNT(*) FROM classified WHERE conflict)::int AS rejected,
+             (SELECT COUNT(*) FROM classified)::int -
+               (SELECT COUNT(*) FROM inserted) - (SELECT COUNT(*) FROM updated) -
+               (SELECT COUNT(*) FROM classified WHERE conflict) AS unchanged,
+             COALESCE((SELECT json_agg(json_build_object('rowNumber', "rowNumber",
+               'reason', CASE WHEN id_conflict THEN 'identifier' ELSE 'shared_target' END))
+               FROM classified WHERE conflict), '[]'::json) AS conflicts
+    ), checkpoint AS (
+      UPDATE uploads u
+      SET processing_offset = ${checkpoint.nextOffset},
+          rows_processed = ${checkpoint.nextOffset + checkpoint.validationErrorCount},
+          rows_imported = u.rows_imported + counts.inserted,
+          rows_updated = u.rows_updated + counts.updated,
+          rows_unchanged = u.rows_unchanged + counts.unchanged,
+          rows_skipped = u.rows_skipped + counts.rejected,
+          row_error_count = u.row_error_count + counts.rejected,
+          upload_progress = ${Math.floor(
+            ((checkpoint.nextOffset + checkpoint.validationErrorCount) / checkpoint.totalRows) *
+              100,
+          )},
+          processing_message = ${`Imported ${checkpoint.nextOffset} catalogue rows`},
+          updated_at = NOW()
+      FROM counts
+      WHERE u.id = ${checkpoint.uploadId}
+      RETURNING counts.inserted, counts.updated, counts.rejected, counts.unchanged, counts.conflicts
+    )
+    SELECT * FROM checkpoint
+  `;
+  const summary = result[0] || {};
+  const conflicts = Array.isArray(summary.conflicts) ? summary.conflicts : [];
+  return {
+    importedCount: Number(summary.inserted || 0),
+    updatedCount: Number(summary.updated || 0),
+    unchangedCount: Number(summary.unchanged || 0),
+    rejectedCount: Number(summary.rejected || 0),
+    errors: conflicts.map((conflict: { rowNumber?: number; reason?: string }) =>
+      conflict.reason === 'shared_target'
+        ? `Row ${conflict.rowNumber || '?'}: multiple rows match the same existing product`
+        : `Row ${conflict.rowNumber || '?'}: SKU and barcode identify different existing products`,
+    ),
+  };
+}
+
+async function findIdentifierConflictErrors(
+  db: Database,
+  organizationId: string,
+  serializedIdentifierRows: string,
+): Promise<string[]> {
+  if (!serializedIdentifierRows || serializedIdentifierRows === '[]') return [];
+  const result = await db.sql`
+    WITH input AS (
+      SELECT * FROM jsonb_to_recordset(${serializedIdentifierRows}::jsonb)
+        AS x("rowNumber" int, sku text, barcode text)
+    )
+    SELECT i."rowNumber" as "rowNumber"
+    FROM input i
+    JOIN products sku_match
+      ON sku_match.organization_id = ${organizationId} AND sku_match.sku = i.sku
+    JOIN products barcode_match
+      ON barcode_match.organization_id = ${organizationId} AND barcode_match.barcode = i.barcode
+    WHERE sku_match.id <> barcode_match.id
+    ORDER BY i."rowNumber"
+  `;
+  return result.map(
+    (row) => `Row ${Number(row.rowNumber)}: SKU and barcode identify different existing products`,
+  );
+}
+
+async function failCatalogueImport(
+  db: Database,
+  uploadId: number,
+  category: string,
+  message: string,
+): Promise<void> {
+  await db.sql`
+    UPDATE uploads SET status = 'failed', failure_category = ${category}, error_message = ${message},
+           processing_message = ${message}, failed_at = NOW(), updated_at = NOW()
+    WHERE id = ${uploadId}
+  `;
+}
+
+async function completeCatalogueWithErrors(
+  db: Database,
+  env: Env,
+  job: CatalogueImportJob,
+  errors: string[],
+  category: string,
+): Promise<void> {
+  const reportKey = `upload-errors/${job.id}.json`;
+  await env.CSV_UPLOADS.put(reportKey, JSON.stringify(errors), {
+    httpMetadata: { contentType: 'application/json' },
+  });
+  await db.sql`
+    UPDATE uploads SET status = 'failed', failure_category = ${category},
+           error_message = ${errors[0]}, processing_message = ${errors[0]},
+           row_error_count = ${errors.length}, row_errors = ${JSON.stringify(errors.slice(0, 100))},
+           error_report_key = ${reportKey}, failed_at = NOW(), updated_at = NOW()
+    WHERE id = ${job.id}
+  `;
+}
 
 type ProductCatalogRow = {
   sku: string;

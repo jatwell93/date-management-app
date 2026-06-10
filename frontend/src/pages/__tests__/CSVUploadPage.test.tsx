@@ -657,6 +657,58 @@ describe('CSVUploadPage expiry import', () => {
     expect(screen.getAllByText('Products updated: 1').length).toBeGreaterThan(0);
   });
 
+  it('treats completed-with-errors as terminal and reports unchanged products', async () => {
+    const productColumns: ColumnValidationResult = {
+      isValid: true,
+      missingColumns: [],
+      importType: 'product-catalog',
+      foundColumns: { sku: 'SKU', name: 'Name', cost: 'Cost', barcode: 'Barcode' },
+      suggestions: {},
+    };
+    (validateCSVColumns as jest.Mock).mockResolvedValue(productColumns);
+    fetchMock
+      .mockResponseOnce(
+        JSON.stringify({
+          strategy: 'direct',
+          uploadUrl: '/api/upload/direct',
+          method: 'POST',
+          key: 'uploads/org-123/products.csv',
+        }),
+      )
+      .mockResponseOnce(JSON.stringify({ key: 'uploads/org-123/products.csv', status: 'queued' }), {
+        status: 202,
+      })
+      .mockResponseOnce(
+        JSON.stringify({
+          status: 'completed_with_errors',
+          importedCount: 2,
+          updatedCount: 1,
+          unchangedCount: 4,
+          skippedCount: 1,
+          errorCount: 1,
+          rowsProcessed: 8,
+          rowsTotal: 8,
+        }),
+      );
+
+    render(<CSVUploadPage token="test-token" />);
+    const fileInput = screen.getByLabelText('CSV/XLSX/XLS File') as HTMLInputElement;
+    fireEvent.change(fileInput, {
+      target: {
+        files: [
+          new File(['SKU,Name,Barcode,Cost\nSKU-1,Milk,123,12.99'], 'products.csv', {
+            type: 'text/csv',
+          }),
+        ],
+      },
+    });
+    userEvent.click(screen.getByRole('button', { name: 'Upload CSV/XLSX/XLS' }));
+
+    expect(await screen.findByText('Upload successful')).toBeInTheDocument();
+    expect(screen.getByText('Products unchanged: 4')).toBeInTheDocument();
+    expect(screen.getByText('Errors: 1')).toBeInTheDocument();
+  });
+
   it('restores the last-upload summary from local storage on page load', () => {
     localStorage.setItem(
       'csvUpload:lastUploadSummary',

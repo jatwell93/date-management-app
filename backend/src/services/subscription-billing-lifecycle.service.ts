@@ -292,7 +292,7 @@ export class SubscriptionBillingLifecycleService {
       return 0;
     }
 
-    const starterLimits = TIER_LIMITS.starter;
+    const freeLimits = TIER_LIMITS.free;
     let downgradedCount = 0;
 
     for (const tier of expiredPastDue) {
@@ -302,7 +302,7 @@ export class SubscriptionBillingLifecycleService {
             tier.organizationId,
             {
               status: SubscriptionStatus.ACTIVE,
-              tierLevel: 'starter',
+              tierLevel: 'free',
               pastDueSince: null,
             },
             tx,
@@ -311,9 +311,9 @@ export class SubscriptionBillingLifecycleService {
           await this.subscriptionRepo.updateUsage(
             tier.organizationId,
             {
-              maxSkus: starterLimits.max_skus ?? 500,
-              maxUsers: starterLimits.max_users ?? 1,
-              maxInventoryItems: starterLimits.max_inventory_items ?? 5000,
+              maxSkus: freeLimits.max_skus ?? 500,
+              maxUsers: freeLimits.max_users ?? 1,
+              maxInventoryItems: freeLimits.max_inventory_items ?? 500,
             },
             tx,
           );
@@ -324,17 +324,15 @@ export class SubscriptionBillingLifecycleService {
           );
 
           const isOverSkuLimit =
-            starterLimits.max_skus !== null && usage && usage.totalSkus > starterLimits.max_skus;
+            freeLimits.max_skus !== null && usage && usage.totalSkus > freeLimits.max_skus;
 
           const isOverInventoryLimit =
-            starterLimits.max_inventory_items !== null &&
+            freeLimits.max_inventory_items !== null &&
             usage &&
-            usage.totalInventoryItems > starterLimits.max_inventory_items;
+            usage.totalInventoryItems > freeLimits.max_inventory_items;
 
           const isOverUserLimit =
-            starterLimits.max_users !== null &&
-            usage &&
-            usage.activeUsers > starterLimits.max_users;
+            freeLimits.max_users !== null && usage && usage.activeUsers > freeLimits.max_users;
 
           if (isOverSkuLimit || isOverInventoryLimit || isOverUserLimit) {
             await this.orgRepo.updateById(tier.organizationId, { isCreationLocked: true }, tx);
@@ -343,8 +341,8 @@ export class SubscriptionBillingLifecycleService {
               organizationId: tier.organizationId,
               totalSkus: usage?.totalSkus,
               totalInventoryItems: usage?.totalInventoryItems,
-              starterSkuLimit: starterLimits.max_skus,
-              starterInventoryLimit: starterLimits.max_inventory_items,
+              freeSkuLimit: freeLimits.max_skus,
+              freeInventoryLimit: freeLimits.max_inventory_items,
             });
           }
 
@@ -352,7 +350,7 @@ export class SubscriptionBillingLifecycleService {
             {
               organizationId: tier.organizationId,
               action: 'dunning_downgrade',
-              changeDescription: `Dunning auto-downgrade to Starter after 7-day past_due grace period. SKUs: ${usage?.totalSkus ?? 0}, InventoryItems: ${usage?.totalInventoryItems ?? 0}`,
+              changeDescription: `Dunning auto-downgrade to Free after 7-day past_due grace period. SKUs: ${usage?.totalSkus ?? 0}, InventoryItems: ${usage?.totalInventoryItems ?? 0}`,
             },
             tx,
           );

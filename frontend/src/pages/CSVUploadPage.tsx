@@ -40,6 +40,7 @@ interface UploadResponse {
   message: string;
   importedCount?: number;
   updatedCount?: number;
+  unchangedCount?: number;
   mergedCount?: number;
   rejectedCount?: number;
   errorCount?: number;
@@ -50,6 +51,7 @@ interface UploadResponse {
   errors?: string[];
   columnsUsed?: string[];
   columnsIgnored?: number;
+  errorReportUrl?: string;
 }
 
 interface LastUploadSummary {
@@ -132,7 +134,7 @@ export const CSVUploadPage: React.FC<{
     return 'unknown_error';
   };
 
-  const MAX_UPLOAD_SIZE = 10 * 1024 * 1024;
+  const MAX_UPLOAD_SIZE = 25 * 1024 * 1024;
 
   const isAllowedUploadType = (file: File): boolean => {
     return (
@@ -182,6 +184,7 @@ export const CSVUploadPage: React.FC<{
       message: 'File uploaded and processed successfully',
       importedCount: Number(summary.importedCount ?? 0),
       updatedCount: Number(summary.updatedCount ?? 0),
+      unchangedCount: Number(summary.unchangedCount ?? 0),
       mergedCount: Number(summary.mergedCount ?? summary.updatedCount ?? 0),
       rejectedCount: Number(summary.rejectedCount ?? summary.skippedCount ?? 0),
       errorCount: Number(summary.errorCount ?? 0),
@@ -197,7 +200,35 @@ export const CSVUploadPage: React.FC<{
       rejectedRows: Array.isArray(summary.rejectedRows)
         ? (summary.rejectedRows as RejectedRowDetail[])
         : undefined,
+      errorReportUrl:
+        typeof summary.errorReportUrl === 'string' ? (summary.errorReportUrl as string) : undefined,
     };
+  };
+
+  // The error-report endpoint is authenticated, so a plain anchor href would 401.
+  // Fetch it with the upload auth headers, then trigger a client-side download.
+  const downloadErrorReport = async (reportUrl: string) => {
+    try {
+      const authHeaders = await getUploadAuthHeaders();
+      const res = await fetch(buildApiUrl(reportUrl), { headers: authHeaders });
+      if (!res.ok) {
+        throw new Error(`Failed to download error report (HTTP ${res.status})`);
+      }
+      const blob = await res.blob();
+      const objectUrl = window.URL.createObjectURL(blob);
+      const anchor = document.createElement('a');
+      anchor.href = objectUrl;
+      anchor.download = 'catalogue-import-errors.json';
+      document.body.appendChild(anchor);
+      anchor.click();
+      anchor.remove();
+      window.URL.revokeObjectURL(objectUrl);
+    } catch (error) {
+      // Surface the failure without clobbering the upload summary already on screen.
+      window.alert(
+        error instanceof Error ? error.message : 'Failed to download the error report',
+      );
+    }
   };
 
   const recordCompletedUpload = (
@@ -419,11 +450,11 @@ export const CSVUploadPage: React.FC<{
     completedFileName: string,
     completedImportType: UploadImportType,
   ) => {
-    const maxAttempts = 30; // 30 seconds max
-    const pollInterval = 1000; // 1 second
+    const timeoutAt = Date.now() + 30 * 60 * 1000;
+    let pollInterval = 1000;
     const nonRetryableStatusCodes = new Set([400, 401, 403, 404]);
 
-    for (let attempt = 0; attempt < maxAttempts; attempt++) {
+    while (Date.now() < timeoutAt) {
       try {
         // URL encode the key to handle slashes in the path
         const encodedKey = encodeURIComponent(key);
@@ -463,7 +494,11 @@ export const CSVUploadPage: React.FC<{
 
         const statusData = await statusRes.json();
 
-        if (statusData.status === 'complete' || statusData.status === 'completed') {
+        if (
+          statusData.status === 'complete' ||
+          statusData.status === 'completed' ||
+          statusData.status === 'completed_with_errors'
+        ) {
           recordCompletedUpload(
             toUploadResultFromSummary(statusData),
             completedFileName,
@@ -473,7 +508,7 @@ export const CSVUploadPage: React.FC<{
         } else if (statusData.status === 'failed') {
           setUploadResult({
             success: false,
-            message: statusData.error || 'Processing failed',
+            message: statusData.message || statusData.error || 'Processing failed',
           });
           return;
         }
@@ -483,7 +518,9 @@ export const CSVUploadPage: React.FC<{
         setProgressMessage(statusData.message || 'Processing file');
 
         // Wait before next poll
-        await new Promise((resolve) => setTimeout(resolve, pollInterval));
+        const delayMs = pollInterval;
+        await new Promise((resolve) => setTimeout(resolve, delayMs));
+        pollInterval = Math.min(Math.ceil(pollInterval * 1.5), 15000);
       } catch (error) {
         if (error instanceof Error && error.message.startsWith('Processing failed')) {
           throw error;
@@ -1126,9 +1163,14 @@ export const CSVUploadPage: React.FC<{
                         Rows merged: {uploadResult.mergedCount ?? uploadResult.updatedCount ?? 0}
                       </p>
                     ) : (
-                      uploadResult.updatedCount !== undefined && (
-                        <p>Products updated: {uploadResult.updatedCount}</p>
-                      )
+                      <>
+                        {uploadResult.updatedCount !== undefined && (
+                          <p>Products updated: {uploadResult.updatedCount}</p>
+                        )}
+                        {uploadResult.unchangedCount !== undefined && (
+                          <p>Products unchanged: {uploadResult.unchangedCount}</p>
+                        )}
+                      </>
                     )}
                     {uploadResult.errorCount !== undefined && (
                       <p>Errors: {uploadResult.errorCount}</p>
@@ -1149,6 +1191,16 @@ export const CSVUploadPage: React.FC<{
                       </p>
                     )}
                   </div>
+                )}
+
+                {uploadResult.errorReportUrl && (
+                  <button
+                    type="button"
+                    onClick={() => downloadErrorReport(uploadResult.errorReportUrl as string)}
+                    className="mt-3 text-sm font-medium underline text-semantic-link"
+                  >
+                    Download full error report
+                  </button>
                 )}
 
                 {isExpiryImport &&

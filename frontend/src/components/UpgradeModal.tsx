@@ -16,68 +16,70 @@ interface TierPricing {
   annual: number;
 }
 
-const TIER_PRICING: Record<Exclude<TierLevel, 'concierge'>, TierPricing> = {
-  starter: { monthly: 99, annual: 990 },
-  professional: { monthly: 249, annual: 2490 },
-  premium: { monthly: 499, annual: 4990 },
+type LaunchTier = 'free' | 'starter' | 'professional' | 'enterprise';
+
+const TIER_PRICING: Record<'free' | 'starter' | 'professional', TierPricing> = {
+  free: { monthly: 0, annual: 0 },
+  starter: { monthly: 39, annual: 390 },
+  professional: { monthly: 99, annual: 990 },
 };
 
 const TIER_FEATURES = [
   {
     name: 'Max SKUs',
-    starter: '500',
-    professional: '2,000',
-    premium: 'Unlimited',
-    concierge: 'Unlimited',
+    free: '500',
+    starter: '5,000',
+    professional: '50,000',
+    enterprise: '250,000 default',
   },
   {
     name: 'Max Users',
-    starter: '1',
-    professional: '3',
-    premium: '10',
-    concierge: '10',
+    free: '1',
+    starter: '3',
+    professional: '10',
+    enterprise: 'Contract limit',
   },
   {
-    name: 'Max Inventory Items',
+    name: 'Active expiry entries',
+    free: '500',
     starter: '5,000',
-    professional: 'Unlimited',
-    premium: 'Unlimited',
-    concierge: 'Unlimited',
+    professional: '50,000',
+    enterprise: '250,000 default',
   },
   {
     name: 'Storage',
+    free: '1 GB',
     starter: '10 GB',
-    professional: '50 GB',
-    premium: '200 GB',
-    concierge: '500 GB',
+    professional: '100 GB',
+    enterprise: 'Contract limit',
   },
   {
     name: 'Advanced Analytics',
+    free: false,
     starter: false,
-    professional: false,
-    premium: true,
-    concierge: true,
+    professional: true,
+    enterprise: true,
   },
   {
     name: 'API Access',
-    starter: false,
+    free: false,
+    starter: true,
     professional: true,
-    premium: true,
-    concierge: true,
+    enterprise: true,
   },
   {
     name: 'Priority Support',
+    free: false,
     starter: false,
-    professional: false,
-    premium: true,
-    concierge: true,
+    professional: true,
+    enterprise: true,
   },
   {
     name: 'Dedicated Support',
+    free: false,
     starter: false,
     professional: false,
-    premium: false,
-    concierge: true,
+    enterprise: true,
   },
 ];
 
@@ -86,7 +88,7 @@ export function UpgradeModal({ isOpen, onClose, onSelectPlan, currentTier }: Upg
 
   if (!isOpen) return null;
 
-  const tiers: TierLevel[] = ['starter', 'professional', 'premium', 'concierge'];
+  const tiers: LaunchTier[] = ['free', 'starter', 'professional', 'enterprise'];
 
   return (
     <Dialog open={isOpen} onOpenChange={onClose}>
@@ -126,8 +128,8 @@ export function UpgradeModal({ isOpen, onClose, onSelectPlan, currentTier }: Upg
         <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-4 gap-4">
           {tiers.map((tier) => {
             const isCurrentTier = tier === currentTier;
-            const isConcierge = tier === 'concierge';
-            const pricing = isConcierge ? null : TIER_PRICING[tier];
+            const isEnterprise = tier === 'enterprise';
+            const pricing = isEnterprise ? null : TIER_PRICING[tier];
             const monthlyPrice = pricing
               ? pricing[billingCycle] / (billingCycle === 'annual' ? 12 : 1)
               : null;
@@ -152,15 +154,15 @@ export function UpgradeModal({ isOpen, onClose, onSelectPlan, currentTier }: Upg
                     {tier.charAt(0).toUpperCase() + tier.slice(1)}
                   </CardTitle>
                   <CardDescription>
-                    {isConcierge ? (
+                    {isEnterprise ? (
                       <span className="text-2xl font-bold font-heading">Contact Sales</span>
                     ) : (
                       <>
-                        <span className="text-3xl font-bold font-heading">${monthlyPrice}</span>
+                        <span className="text-3xl font-bold font-heading">A${monthlyPrice}</span>
                         <span className="text-sm text-muted-foreground">/month</span>
                         {billingCycle === 'annual' && annualBilledAmount !== undefined && (
                           <div className="text-xs text-muted-foreground mt-1">
-                            Billed ${annualBilledAmount} annually
+                            Billed A${annualBilledAmount} annually
                           </div>
                         )}
                       </>
@@ -173,7 +175,7 @@ export function UpgradeModal({ isOpen, onClose, onSelectPlan, currentTier }: Upg
                     disabled={isCurrentTier}
                     onClick={() => onSelectPlan(tier, billingCycle)}
                   >
-                    {isCurrentTier ? 'Current Plan' : isConcierge ? 'Contact Us' : 'Upgrade'}
+                    {isCurrentTier ? 'Current Plan' : isEnterprise ? 'Contact Us' : 'Upgrade'}
                   </Button>
                   <ul className="space-y-2 text-sm">
                     {TIER_FEATURES.map((feature) => {
@@ -246,7 +248,7 @@ export function UpgradeModal({ isOpen, onClose, onSelectPlan, currentTier }: Upg
         </div>
 
         <div className="mt-6 text-center text-sm text-muted-foreground">
-          <p>All plans include 14-day free trial. Cancel anytime.</p>
+          <p>No-card 14-day Professional trial. Enterprise access is subject to fair-use limits.</p>
         </div>
       </DialogContent>
     </Dialog>

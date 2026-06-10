@@ -37,16 +37,22 @@ interface TrialStatusResponse {
 }
 
 const TIER_LIMITS = {
-  starter: {
+  free: {
     maxUsers: 1,
     maxProducts: 500,
     maxStoreAreas: 3,
     features: ['Basic scanning', 'Expiry tracking', 'Basic reports'],
   },
-  professional: {
-    maxUsers: 10,
+  starter: {
+    maxUsers: 3,
     maxProducts: 5000,
     maxStoreAreas: 20,
+    features: ['CSV uploads', 'Team management'],
+  },
+  professional: {
+    maxUsers: 10,
+    maxProducts: 50000,
+    maxStoreAreas: 100,
     features: [
       'Advanced scanning',
       'Expiry tracking',
@@ -57,8 +63,8 @@ const TIER_LIMITS = {
     ],
   },
   premium: {
-    maxUsers: 50,
-    maxProducts: 25000,
+    maxUsers: 10,
+    maxProducts: 50000,
     maxStoreAreas: 100,
     features: [
       'All professional features',
@@ -68,10 +74,16 @@ const TIER_LIMITS = {
     ],
   },
   concierge: {
-    maxUsers: -1,
-    maxProducts: -1,
-    maxStoreAreas: -1,
-    features: ['Unlimited everything', 'Dedicated support', 'Custom development'],
+    maxUsers: 10,
+    maxProducts: 250000,
+    maxStoreAreas: 100,
+    features: ['Enterprise fair-use access', 'Dedicated support', 'Custom development'],
+  },
+  enterprise: {
+    maxUsers: 10,
+    maxProducts: 250000,
+    maxStoreAreas: 100,
+    features: ['Enterprise fair-use access', 'Dedicated support', 'Custom development'],
   },
 };
 
@@ -114,8 +126,14 @@ export class SubscriptionController {
         isTrialExpired = daysRemaining < 0;
       }
 
-      const tierKey = subscription?.tierLevel?.toLowerCase() || 'starter';
-      const limits = TIER_LIMITS[tierKey as keyof typeof TIER_LIMITS] || TIER_LIMITS.starter;
+      const rawTierKey = subscription?.tierLevel?.toLowerCase() || 'free';
+      const tierKey =
+        rawTierKey === 'premium'
+          ? 'professional'
+          : rawTierKey === 'concierge'
+            ? 'enterprise'
+            : rawTierKey;
+      const limits = TIER_LIMITS[tierKey as keyof typeof TIER_LIMITS] || TIER_LIMITS.free;
 
       const response: TrialStatusResponse = {
         isInTrial: subscriptionStatus === SubscriptionStatus.TRIALING && !isTrialExpired,

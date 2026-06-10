@@ -260,7 +260,7 @@ describe('Feature Gates & Usage Limits (Phase 8B.2)', () => {
     it('returns professional upgrade path', () => {
       const msg = formatFeatureUpgradeCTA(AVAILABLE_FEATURES.DEDICATED_SUPPORT, 'professional');
       expect(msg).toContain('professional');
-      expect(msg).toContain('Premium');
+      expect(msg).toContain('Enterprise');
     });
 
     it('returns premium upgrade path', () => {
@@ -291,7 +291,7 @@ describe('Feature Gates & Usage Limits (Phase 8B.2)', () => {
 
     it('returns professional upgrade path for usage limit', () => {
       const msg = formatUsageLimitCTA('max_users', 3, 3, 'professional');
-      expect(msg).toContain('Premium');
+      expect(msg).toContain('Enterprise');
       expect(msg).toContain('3/3');
     });
 
@@ -301,9 +301,9 @@ describe('Feature Gates & Usage Limits (Phase 8B.2)', () => {
       expect(msg).toContain('250/500');
     });
 
-    it('returns concierge support path for premium', () => {
+    it('returns enterprise upgrade path for legacy premium', () => {
       const msg = formatUsageLimitCTA('max_users', 10, 10, 'premium');
-      expect(msg).toContain('Concierge');
+      expect(msg).toContain('Enterprise');
     });
 
     it('returns contact support for concierge tier', () => {
