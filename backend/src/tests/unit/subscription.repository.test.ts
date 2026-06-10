@@ -225,7 +225,7 @@ describe('SubscriptionRepository', () => {
         totalSkus: 0,
         maxSkus: 500,
         totalInventoryItems: 0,
-        maxInventoryItems: 5000,
+        maxInventoryItems: 500,
         storageUsedBytes: 0,
       },
       update: {},

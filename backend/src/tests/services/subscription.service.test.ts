@@ -357,9 +357,9 @@ describe('SubscriptionService', () => {
         data: expect.objectContaining({
           organizationId,
           activeUsers: 1,
-          maxUsers: 3,
+          maxUsers: 10,
           totalSkus: 0,
-          maxSkus: 2000,
+          maxSkus: 50000,
         }),
       });
     });
@@ -629,10 +629,10 @@ describe('SubscriptionService', () => {
       const limits = service.getTierLimits('starter' as TierLevel);
 
       expect(limits).toEqual({
-        max_skus: 500,
-        max_users: 1,
+        max_skus: 5000,
+        max_users: 3,
         max_inventory_items: 5000,
-        storage_bytes: 1073741824, // 1GB
+        storage_bytes: 10737418240, // 10GB
       });
     });
 
@@ -640,19 +640,19 @@ describe('SubscriptionService', () => {
       const limits = service.getTierLimits('professional' as TierLevel);
 
       expect(limits).toEqual({
-        max_skus: 2000,
-        max_users: 3,
-        max_inventory_items: 20000,
-        storage_bytes: 10737418240, // 10GB
+        max_skus: 50000,
+        max_users: 10,
+        max_inventory_items: 50000,
+        storage_bytes: 107374182400, // 100GB
       });
     });
 
-    it('should return unlimited SKUs for premium tier', () => {
+    it('should return limits for legacy premium tier', () => {
       const limits = service.getTierLimits('premium' as TierLevel);
 
-      expect(limits.max_skus).toBeNull();
+      expect(limits.max_skus).toBe(50000);
       expect(limits.max_users).toBe(10);
-      expect(limits.max_inventory_items).toBeNull(); // unlimited
+      expect(limits.max_inventory_items).toBe(50000);
       expect(limits.storage_bytes).toBe(107374182400); // 100GB
     });
   });

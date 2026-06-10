@@ -59,13 +59,13 @@ describe('SubscriptionService.downgradeExpiredPastDue', () => {
     expect(prisma.subscriptionTier.updateMany).not.toHaveBeenCalled();
   });
 
-  it('downgrades past_due subscription > 7 days old to Starter', async () => {
+  it('downgrades past_due subscription > 7 days old to Free', async () => {
     prisma.subscriptionTier.findMany.mockResolvedValue([
       { id: 1, organizationId: 'org-abc', pastDueSince: sevenDaysAgo },
     ]);
     prisma.organizationUsage.findUnique.mockResolvedValue({
-      totalSkus: 100, // within Starter limit of 500
-      totalInventoryItems: 200, // within Starter limit of 5000
+      totalSkus: 100, // within Free limit of 500
+      totalInventoryItems: 200, // within Free limit of 500
     });
 
     const count = await service.downgradeExpiredPastDue();
@@ -75,16 +75,16 @@ describe('SubscriptionService.downgradeExpiredPastDue', () => {
       where: { organizationId: 'org-abc' },
       data: {
         status: SubscriptionStatus.ACTIVE,
-        tierLevel: 'starter',
+        tierLevel: 'free',
         pastDueSince: null,
       },
     });
     expect(prisma.organizationUsage.update).toHaveBeenCalledWith({
       where: { organizationId: 'org-abc' },
       data: {
-        maxSkus: TIER_LIMITS.starter.max_skus,
-        maxUsers: TIER_LIMITS.starter.max_users,
-        maxInventoryItems: TIER_LIMITS.starter.max_inventory_items,
+        maxSkus: TIER_LIMITS.free.max_skus,
+        maxUsers: TIER_LIMITS.free.max_users,
+        maxInventoryItems: TIER_LIMITS.free.max_inventory_items,
       },
     });
     expect(prisma.auditLog.create).toHaveBeenCalledWith({
@@ -157,7 +157,7 @@ describe('SubscriptionService.downgradeExpiredPastDue', () => {
       where: { organizationId: 'org-alert' },
       data: {
         status: SubscriptionStatus.ACTIVE,
-        tierLevel: 'starter',
+        tierLevel: 'free',
         pastDueSince: null,
       },
     });

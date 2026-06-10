@@ -278,7 +278,7 @@ describe('WebhookService', () => {
         where: { organizationId },
         data: expect.objectContaining({
           status: SubscriptionStatus.CANCELED,
-          tierLevel: 'starter',
+          tierLevel: 'free',
         }),
       });
       expect(emailService.sendDowngradeWarningEmail).toHaveBeenCalled();

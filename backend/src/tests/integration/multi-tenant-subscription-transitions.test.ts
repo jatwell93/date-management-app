@@ -629,7 +629,7 @@ describe('Multi-Tenant Subscription Transition Tests', () => {
       const usage = await prisma.organizationUsage.findUnique({
         where: { organizationId: orgId },
       });
-      expect(usage?.maxSkus).toBe(2000);
+      expect(usage?.maxSkus).toBe(50000);
 
       // Verify can create 501st product
       const product = await prisma.product.create({
@@ -682,8 +682,8 @@ describe('Multi-Tenant Subscription Transition Tests', () => {
       const usage = await prisma.organizationUsage.findUnique({
         where: { organizationId: orgId },
       });
-      expect(usage?.maxSkus).toBe(2000);
-      expect(usage?.maxUsers).toBe(3);
+      expect(usage?.maxSkus).toBe(50000);
+      expect(usage?.maxUsers).toBe(10);
       expect(usage?.totalSkus).toBe(100); // Existing usage preserved
     });
   });
@@ -702,7 +702,7 @@ describe('Multi-Tenant Subscription Transition Tests', () => {
         },
       });
 
-      // Create 1500 products (within Professional limit, over Starter limit)
+      // Create 1500 products (within Professional limit, over Free limit of 500)
       await prisma.product.createMany({
         data: Array.from({ length: 1500 }, (_, i) => ({
           name: `Product ${i}`,
@@ -725,15 +725,15 @@ describe('Multi-Tenant Subscription Transition Tests', () => {
         },
       });
 
-      // Downgrade to Starter
-      await subscriptionService.updateSubscription(orgId, 'starter');
+      // Downgrade to Free (smallest tier) so the 1500 SKUs are over the new limit
+      await subscriptionService.updateSubscription(orgId, 'free');
 
       // Update limits (simulating production behavior)
       await prisma.organizationUsage.update({
         where: { organizationId: orgId },
         data: {
-          maxSkus: TIER_LIMITS.starter.max_skus ?? 500,
-          maxUsers: TIER_LIMITS.starter.max_users ?? 1,
+          maxSkus: TIER_LIMITS.free.max_skus ?? 500,
+          maxUsers: TIER_LIMITS.free.max_users ?? 1,
         },
       });
 
@@ -743,7 +743,7 @@ describe('Multi-Tenant Subscription Transition Tests', () => {
 
       // Data preserved but over limit
       expect(usage?.totalSkus).toBe(1500);
-      expect(usage?.maxSkus).toBe(500); // New limit
+      expect(usage?.maxSkus).toBe(500); // New limit (Free)
 
       // Products still exist
       const products = await prisma.product.count({
@@ -764,7 +764,7 @@ describe('Multi-Tenant Subscription Transition Tests', () => {
         },
       });
 
-      // Create 600 products (over Starter limit)
+      // Create 600 products (over Free limit of 500)
       await prisma.product.createMany({
         data: Array.from({ length: 600 }, (_, i) => ({
           name: `Product ${i}`,
@@ -786,15 +786,15 @@ describe('Multi-Tenant Subscription Transition Tests', () => {
         },
       });
 
-      // Downgrade
-      await subscriptionService.updateSubscription(orgId, 'starter');
+      // Downgrade to Free (smallest tier) so the 600 SKUs are over the new limit
+      await subscriptionService.updateSubscription(orgId, 'free');
 
       // Update limits
       await prisma.organizationUsage.update({
         where: { organizationId: orgId },
         data: {
-          maxSkus: TIER_LIMITS.starter.max_skus ?? 500,
-          maxUsers: TIER_LIMITS.starter.max_users ?? 1,
+          maxSkus: TIER_LIMITS.free.max_skus ?? 500,
+          maxUsers: TIER_LIMITS.free.max_users ?? 1,
         },
       });
 

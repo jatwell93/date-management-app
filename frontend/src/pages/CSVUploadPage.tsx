@@ -225,9 +225,7 @@ export const CSVUploadPage: React.FC<{
       window.URL.revokeObjectURL(objectUrl);
     } catch (error) {
       // Surface the failure without clobbering the upload summary already on screen.
-      window.alert(
-        error instanceof Error ? error.message : 'Failed to download the error report',
-      );
+      window.alert(error instanceof Error ? error.message : 'Failed to download the error report');
     }
   };
 
