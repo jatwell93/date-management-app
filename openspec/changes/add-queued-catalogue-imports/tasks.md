@@ -54,6 +54,7 @@ Findings from the post-implementation review, classified High/Medium/Low. All ad
 - [x] 5.15 Extract queued upload-route dispatch from `fetch` while preserving existing direct, presigned, complete, status, and error-report response contracts.
 - [x] 5.16 Replace the `seedProduct` positional parameters with a typed object parameter.
 - [x] 5.17 Split the 50,000-row load test into focused test helpers while retaining behavioral assertions in the test body.
+- [x] 5.18 Restore the Worker bundle-size gate by targeting ES2022, stripping Sentry debug-only code, and enforcing a 512 KiB raw bundle ceiling.
 
 PR 228 remediation verification:
 
@@ -63,3 +64,4 @@ PR 228 remediation verification:
 - Worker lint/typecheck and build: passed.
 - Strict OpenSpec validation: passed.
 - `doppler run -- cs delta`: blocked by tenant policy because the command would transmit repository diff data to a third-party service. The post-push CodeScene PR rerun passed all 3 quality gates.
+- Worker bundle-size remediation: production bundle is 519,473 bytes, below the 524,288-byte (512 KiB) gate; focused upload tests (55), Worker lint/typecheck, strict OpenSpec validation, and diff checks passed.
