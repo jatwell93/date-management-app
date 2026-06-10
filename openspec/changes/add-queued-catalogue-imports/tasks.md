@@ -23,8 +23,15 @@
 
 - [x] 4.1 Cover CSV quoting, aliases, currency costs, malformed rows, duplicate identifiers, and conflicts (incl. shared-target). Organization isolation is enforced by org-scoped upsert queries.
 - [x] 4.2 Cover 500, 5,000, and generated 50,000-row batching plus tier boundaries and unchanged re-uploads.
-- [ ] 4.3 Run focused tests, full tests, lint, builds, OpenSpec validation, and security review. (Done: worker + frontend focused tests, worker lint/typecheck, frontend typecheck. Remaining: full suites, builds, OpenSpec validate, security review.)
-- [ ] 4.4 Record development load-test duration, Worker CPU, Neon latency/compute, R2 operations, memory, and retries before production enablement.
+- [x] 4.3 Run focused tests, full tests, lint, builds, OpenSpec validation, and security review.
+  - Full test suites green: backend 1638 passed (9 skipped), workers 296 passed (3 skipped), pglite DB suite 5 passed, frontend CSVUploadPage 17 passed.
+  - Builds pass: workers (`node build.js`), backend (`tsc`), frontend (`craco build`). Worker lint/typecheck and frontend typecheck clean.
+  - `openspec validate add-queued-catalogue-imports` passes.
+  - Security review of the feature diff: no HIGH/MEDIUM findings (parameterized `jsonb_to_recordset` upserts, consistent org-scoping, server-derived R2 keys, signed upload tokens, authenticated org-scoped error-report download).
+  - Also fixed a real prod bug surfaced by the full run: stale compiled `shared/types/subscription.js` (missing free/enterprise) shadowed the `.ts`, undefining `TIER_LIMITS.free` at runtime.
+- [ ] 4.4 Local 50,000-row load test recorded; production telemetry pending dev deploy.
+  - In-process (pglite) full pipeline incl. checkpoint requeue: 50,000 rows → 50 set-based upserts across 5 queue deliveries, 69 total DB statements, 0 retries, status `completed`, ~9.6s wall, ~89 MB heap delta. Proves batching replaces ~50,000 per-row writes with ~50 statements.
+  - STILL REQUIRED before production enablement: capture Worker CPU, Neon compute/latency, R2 operation counts, and peak Worker memory from the development deployment (cannot be measured in-process).
 
 ## 5. Code Review Remediation
 
