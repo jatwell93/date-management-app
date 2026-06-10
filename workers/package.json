@@ -40,7 +40,7 @@
     "@electric-sql/pglite": "^0.5.1",
     "@types/bcryptjs": "^2.4.6",
     "@types/jsonwebtoken": "^9.0.10",
-    "@types/node": "^20.19.41",
+    "@types/node": "^25.9.2",
     "@vitest/coverage-istanbul": "^4.1.7",
     "@vitest/coverage-v8": "^4.1.7",
     "cross-env": "^7.0.3",
