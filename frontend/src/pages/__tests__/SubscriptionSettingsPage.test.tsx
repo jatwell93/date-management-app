@@ -10,7 +10,19 @@ jest.mock('../../components/SubscriptionDashboard', () => ({
 }));
 
 jest.mock('../../components/UpgradeModal', () => ({
-  UpgradeModal: () => null,
+  UpgradeModal: ({ onSelectPlan }: { onSelectPlan: (tier: string, cycle: string) => void }) => (
+    <div>
+      <button type="button" onClick={() => onSelectPlan('starter', 'annual')}>
+        Select Starter Annual
+      </button>
+      <button type="button" onClick={() => onSelectPlan('professional', 'monthly')}>
+        Select Professional Monthly
+      </button>
+      <button type="button" onClick={() => onSelectPlan('enterprise', 'monthly')}>
+        Contact Enterprise Sales
+      </button>
+    </div>
+  ),
 }));
 
 jest.mock('../../components/ManageSubscriptionButton', () => ({
@@ -26,6 +38,11 @@ global.fetch = jest.fn();
 describe('SubscriptionSettingsPage', () => {
   beforeEach(() => {
     jest.clearAllMocks();
+    jest.spyOn(window, 'alert').mockImplementation(() => undefined);
+    process.env.REACT_APP_STRIPE_PRICE_STARTER_MONTHLY = 'price_starter_monthly';
+    process.env.REACT_APP_STRIPE_PRICE_STARTER_ANNUAL = 'price_starter_annual';
+    process.env.REACT_APP_STRIPE_PRICE_PROFESSIONAL_MONTHLY = 'price_professional_monthly';
+    process.env.REACT_APP_STRIPE_PRICE_PROFESSIONAL_ANNUAL = 'price_professional_annual';
   });
 
   it('shows a recoverable error when billing settings fail to load', async () => {
@@ -82,5 +99,57 @@ describe('SubscriptionSettingsPage', () => {
     await waitFor(() => {
       expect(screen.queryByText(/Unable to load billing settings/i)).not.toBeInTheDocument();
     });
+  });
+
+  it('starts Checkout with the Starter annual launch price', async () => {
+    (global.fetch as jest.Mock)
+      .mockResolvedValueOnce({
+        ok: true,
+        json: async () => ({ tierLevel: 'free', status: 'active' }),
+      })
+      .mockResolvedValueOnce({
+        ok: true,
+        json: async () => ({
+          skus: { current: 0, limit: 500 },
+          users: { current: 1, limit: 1 },
+          storage: { current: 0, limit: 1073741824 },
+        }),
+      })
+      .mockResolvedValueOnce({ ok: false, json: async () => ({ error: 'stop after request' }) });
+
+    render(<SubscriptionSettingsPage token="test-token" />);
+    fireEvent.click(await screen.findByRole('button', { name: 'Select Starter Annual' }));
+
+    await waitFor(() => {
+      expect(global.fetch).toHaveBeenCalledWith(
+        expect.stringContaining('/subscription/create-checkout-session'),
+        expect.objectContaining({ body: expect.stringContaining('price_starter_annual') }),
+      );
+    });
+  });
+
+  it('does not start Checkout for Enterprise contact sales', async () => {
+    const alertSpy = window.alert as jest.Mock;
+    (global.fetch as jest.Mock)
+      .mockResolvedValueOnce({
+        ok: true,
+        json: async () => ({ tierLevel: 'free', status: 'active' }),
+      })
+      .mockResolvedValueOnce({
+        ok: true,
+        json: async () => ({
+          skus: { current: 0, limit: 500 },
+          users: { current: 1, limit: 1 },
+          storage: { current: 0, limit: 1073741824 },
+        }),
+      });
+
+    render(<SubscriptionSettingsPage token="test-token" />);
+    fireEvent.click(await screen.findByRole('button', { name: 'Contact Enterprise Sales' }));
+
+    expect(alertSpy).toHaveBeenCalledWith(
+      'Enterprise plans are configured by contract. Please contact support.',
+    );
+    expect(global.fetch).toHaveBeenCalledTimes(2);
   });
 });

@@ -25,6 +25,8 @@
     "test:load:quick": "TEST_PASSWORD=LoadTest123! artillery quick --count 20 --num 100 https://date-management-api-dev.date-management-app.workers.dev/health",
     "test:load:report": "TEST_PASSWORD=LoadTest123! artillery run artillery.yml --output artillery-report.json && artillery report artillery-report.json",
     "security:npm-supply-chain": "node scripts/check-npm-supply-chain.js",
+    "validate:stripe-config": "node scripts/validate-stripe-deployment-config.js",
+    "test:stripe-config": "node --test scripts/validate-stripe-deployment-config.test.js",
     "lint": "eslint .",
     "lint:fix": "eslint . --fix",
     "lint:check": "eslint . --max-warnings=0",

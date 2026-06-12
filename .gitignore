@@ -56,7 +56,7 @@ Thumbs.db
 .vscode/
 .windsurf/
 .codex/
-specs/
+/specs/
 .quint/
 prompts/
 skills/

@@ -23,6 +23,8 @@ describe('UpgradeModal', () => {
     expect(screen.getByTestId('tier-card-starter')).toBeInTheDocument();
     expect(screen.getByTestId('tier-card-professional')).toBeInTheDocument();
     expect(screen.getByTestId('tier-card-enterprise')).toBeInTheDocument();
+    expect(screen.queryByTestId('tier-card-premium')).not.toBeInTheDocument();
+    expect(screen.queryByTestId('tier-card-concierge')).not.toBeInTheDocument();
   });
 
   it('displays pricing for each tier', () => {
@@ -160,5 +162,23 @@ describe('UpgradeModal', () => {
 
     expect(screen.getByText(/Annual/i)).toBeInTheDocument();
     expect(screen.getByText(/Monthly/i)).toBeInTheDocument();
+  });
+
+  it('selects Professional annual billing without exposing Enterprise checkout', () => {
+    render(
+      <UpgradeModal
+        isOpen={true}
+        onClose={mockOnClose}
+        onSelectPlan={mockOnSelectPlan}
+        currentTier="starter"
+      />,
+    );
+
+    fireEvent.click(screen.getByRole('button', { name: /Annual/i }));
+    const professionalCard = screen.getByTestId('tier-card-professional');
+    fireEvent.click(professionalCard.querySelector('button') as HTMLButtonElement);
+
+    expect(mockOnSelectPlan).toHaveBeenCalledWith('professional', 'annual');
+    expect(screen.getByTestId('tier-card-enterprise')).toHaveTextContent('Contact Us');
   });
 });

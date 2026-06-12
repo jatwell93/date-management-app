@@ -101,5 +101,9 @@ jobs:
             fi
           '
 
+      - name: Validate Stripe test launch prices
+        working-directory: .
+        run: doppler run -- node scripts/validate-stripe-deployment-config.js
+
       - name: Deploy production worker
         run: doppler run -- npx wrangler deploy --env production

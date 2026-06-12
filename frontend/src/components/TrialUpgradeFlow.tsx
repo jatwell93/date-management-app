@@ -122,19 +122,19 @@ function UpgradeCard({
             <div className="p-3 border rounded-lg space-y-1">
               <p className="font-semibold">Monthly</p>
               <p className="text-2xl font-bold font-heading">
-                $29<span className="text-sm font-normal text-muted-foreground">/mo</span>
+                A$99<span className="text-sm font-normal text-muted-foreground">/mo</span>
               </p>
               <p className="text-xs text-muted-foreground">Billed monthly</p>
             </div>
             <div className="p-3 border rounded-lg space-y-1 relative">
               <div className="absolute -top-2 -right-2 bg-semantic-success text-semantic-success-foreground text-xs px-2 py-0.5 rounded-full">
-                Save 30%
+                Save 17%
               </div>
               <p className="font-semibold">Annual</p>
               <p className="text-2xl font-bold font-heading">
-                $19<span className="text-sm font-normal text-muted-foreground">/mo</span>
+                A$82.50<span className="text-sm font-normal text-muted-foreground">/mo</span>
               </p>
-              <p className="text-xs text-muted-foreground">Billed $228 yearly</p>
+              <p className="text-xs text-muted-foreground">Billed A$990 yearly</p>
             </div>
           </div>
         </div>
