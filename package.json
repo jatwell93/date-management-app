@@ -58,7 +58,7 @@
     "wrangler": "4.94.0"
   },
   "dependencies": {
-    "@prisma/client": "^5.22.0",
+    "@prisma/client": "^7.8.0",
     "prisma": "^5.22.0"
   }
 }
