@@ -1,3 +1,5 @@
+// Keep REQUIRED_PRICE_KEYS aligned with STRIPE_PRICE_CATALOG in
+// backend/src/services/subscription-billing.helpers.ts.
 const REQUIRED_PRICE_KEYS = [
   'STRIPE_STARTER_MONTHLY_PRICE_ID',
   'STRIPE_STARTER_ANNUAL_PRICE_ID',
@@ -7,41 +9,68 @@ const REQUIRED_PRICE_KEYS = [
 
 const PLACEHOLDER_VALUES = new Set(['fill', 'replace_me', 'price_replace_me']);
 
+function validatePriceKey(key, value) {
+  if (!value) {
+    return { error: `${key} is required`, comparable: false };
+  }
+
+  if (PLACEHOLDER_VALUES.has(value.toLowerCase())) {
+    return { error: `${key} contains a placeholder value`, comparable: false };
+  }
+
+  if (!value.startsWith('price_')) {
+    return { error: `${key} must start with price_`, comparable: true };
+  }
+
+  return { error: null, comparable: true };
+}
+
+function findDuplicatePriceValue(values) {
+  const seen = new Set();
+  for (const value of values) {
+    if (seen.has(value)) {
+      return value;
+    }
+    seen.add(value);
+  }
+  return null;
+}
+
+// LAUNCH GATE: when live-mode Stripe is approved, this check must change to
+// require sk_live_ (see the launch gate in the add-queued-catalogue-imports
+// OpenSpec change). Until then prd intentionally stays on sk_test_.
+function validateSecretKeyMode(config) {
+  const secretKey = config.STRIPE_SECRET_KEY?.trim() || '';
+  if (!secretKey.startsWith('sk_test_')) {
+    return 'STRIPE_SECRET_KEY must use sk_test_ during the pre-launch test-mode rollout';
+  }
+  return null;
+}
+
 function validateStripeDeploymentConfig(config) {
   const errors = [];
-  const prices = [];
+  const comparableValues = [];
 
   for (const key of REQUIRED_PRICE_KEYS) {
     const value = config[key]?.trim() || '';
+    const { error, comparable } = validatePriceKey(key, value);
 
-    if (!value) {
-      errors.push(`${key} is required`);
-      continue;
+    if (error) {
+      errors.push(error);
     }
-
-    if (PLACEHOLDER_VALUES.has(value.toLowerCase())) {
-      errors.push(`${key} contains a placeholder value`);
-      continue;
+    if (comparable) {
+      comparableValues.push(value);
     }
-
-    if (!value.startsWith('price_')) {
-      errors.push(`${key} must start with price_`);
-    }
-
-    prices.push({ key, value });
   }
 
-  const duplicateValues = prices
-    .filter(({ value }, index) => prices.findIndex((price) => price.value === value) !== index)
-    .map(({ value }) => value);
-
-  if (duplicateValues.length > 0) {
-    errors.push(`Stripe launch price IDs must be unique; duplicate: ${duplicateValues[0]}`);
+  const duplicateValue = findDuplicatePriceValue(comparableValues);
+  if (duplicateValue) {
+    errors.push(`Stripe launch price IDs must be unique; duplicate: ${duplicateValue}`);
   }
 
-  const secretKey = config.STRIPE_SECRET_KEY?.trim() || '';
-  if (!secretKey.startsWith('sk_test_')) {
-    errors.push('STRIPE_SECRET_KEY must use sk_test_ during the pre-launch test-mode rollout');
+  const secretKeyError = validateSecretKeyMode(config);
+  if (secretKeyError) {
+    errors.push(secretKeyError);
   }
 
   return errors;

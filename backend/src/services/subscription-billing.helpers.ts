@@ -10,6 +10,8 @@ interface ConfiguredStripePriceOptions {
   includeDefaults?: boolean;
 }
 
+// Keep these env keys aligned with REQUIRED_PRICE_KEYS in
+// scripts/validate-stripe-deployment-config.js.
 const STRIPE_PRICE_CATALOG = {
   starter: {
     monthly: {
@@ -52,6 +54,18 @@ export function mapStripeSubscriptionStatusToLocal(
     default:
       return SubscriptionStatus.ACTIVE;
   }
+}
+
+/**
+ * Map legacy tiers persisted before the launch catalog to their canonical
+ * replacements (premium -> professional, concierge -> enterprise) so that
+ * historical records can flow through launch-tier billing paths. Tiers that
+ * are already canonical pass through unchanged.
+ */
+export function normalizeLegacyTier(tierLevel: TierLevel): TierLevel {
+  if (tierLevel === 'premium') return 'professional';
+  if (tierLevel === 'concierge') return 'enterprise';
+  return tierLevel;
 }
 
 export function getPriceIdForTier(tierLevel: TierLevel, billingCycle: BillingCycle): string {

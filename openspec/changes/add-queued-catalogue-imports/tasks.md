@@ -75,7 +75,7 @@ Findings from the post-implementation review, classified High/Medium/Low. All ad
 
 Operational evidence (June 11, 2026):
 
-- Cloudflare baseline: R2 Paid active; Workers Paid absent. Queues are available on the current account plan, so no paid-plan mutation was required.
+- Cloudflare baseline (recorded before any account changes): R2 Paid active; Workers Paid not yet active. The user subsequently purchased Workers Paid during this change (see final bullet); queue provisioning itself required no scripted plan mutation.
 - Queue state: development and production queues each have one producer and one consumer; both DLQs exist. Production request enqueueing remains disabled by `CATALOGUE_QUEUE_ENABLED=false`.
 - Worker deployments: development `958c3347-6309-4cb0-a1ff-63402b05d4e8`; production `56a1c7ab-17f0-4de7-a65f-cb62b524afe3`. Both health endpoints returned `healthy` after deployment.
 - Stripe test product `prod_TxqPh3Ehm4pu4T` now has exactly four active AUD recurring prices: Starter monthly `price_1Th14MBnbrSGlpmz6kh5LdW6`, Starter annual `price_1Th14NBnbrSGlpmztpL7CoBl`, Professional monthly `price_1Th14OBnbrSGlpmzsSSsSS0N`, and Professional annual `price_1Th14PBnbrSGlpmzCxg7wSnP`.

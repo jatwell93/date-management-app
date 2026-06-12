@@ -1,11 +1,11 @@
 import { PrismaClient } from '@prisma/client';
 import * as Sentry from '@sentry/node';
 import Stripe from 'stripe';
-import { InternalError, NotFoundError } from '../errors';
+import { InternalError, NotFoundError, ValidationError } from '../errors';
 import { SubscriptionTier } from '../models/subscription-tier.model';
 import { BillingCycle, SubscriptionStatus, TierLevel } from '../types/subscription';
 import { Logger } from '../utils/logger';
-import { getPriceIdForTier } from './subscription-billing.helpers';
+import { getPriceIdForTier, normalizeLegacyTier } from './subscription-billing.helpers';
 import { buildTrialSubscriptionSetup } from './subscription-trial.helpers';
 import { getErrorMessage, mapPrismaSubscriptionTierToModel } from './subscription-mapping.helpers';
 import { OrganizationRepository } from '../repositories/organization.repository';
@@ -198,7 +198,16 @@ export class SubscriptionTrialLifecycleService {
       throw new InternalError('No Stripe customer found for this trial');
     }
 
-    const priceId = getPriceIdForTier(trial.tierLevel as TierLevel, billingCycle);
+    // Legacy premium/concierge trials normalize to their launch-tier
+    // replacements; tiers without a Checkout price (free, enterprise) are
+    // rejected as a client error rather than surfacing as a 500.
+    const checkoutTier = normalizeLegacyTier(trial.tierLevel as TierLevel);
+    let priceId: string;
+    try {
+      priceId = getPriceIdForTier(checkoutTier, billingCycle);
+    } catch (error) {
+      throw new ValidationError(getErrorMessage(error));
+    }
 
     try {
       const stripeSubscription = await this.stripe.subscriptions.create({
