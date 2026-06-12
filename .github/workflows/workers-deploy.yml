@@ -39,7 +39,7 @@ jobs:
           cache-dependency-path: workers/package-lock.json
 
       - name: Install Doppler CLI
-        uses: dopplerhq/cli-action@v3
+        uses: dopplerhq/cli-action@v4
 
       - name: Install dependencies
         run: npm ci
