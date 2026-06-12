@@ -29,9 +29,13 @@
   - `openspec validate add-queued-catalogue-imports` passes.
   - Security review of the feature diff: no HIGH/MEDIUM findings (parameterized `jsonb_to_recordset` upserts, consistent org-scoping, server-derived R2 keys, signed upload tokens, authenticated org-scoped error-report download).
   - Also fixed a real prod bug surfaced by the full run: stale compiled `shared/types/subscription.js` (missing free/enterprise) shadowed the `.ts`, undefining `TIER_LIMITS.free` at runtime.
-- [ ] 4.4 Local 50,000-row load test recorded; production telemetry pending dev deploy.
-  - In-process (pglite) full pipeline incl. checkpoint requeue: 50,000 rows → 50 set-based upserts across 5 queue deliveries, 69 total DB statements, 0 retries, status `completed`, ~9.6s wall, ~89 MB heap delta. Proves batching replaces ~50,000 per-row writes with ~50 statements.
-  - STILL REQUIRED before production enablement: capture Worker CPU, Neon compute/latency, R2 operation counts, and peak Worker memory from the development deployment (cannot be measured in-process).
+- [x] 4.4 Local and deployed authenticated 50,000-row telemetry recorded.
+  - In-process (pglite) full pipeline incl. checkpoint requeue: 50,000 rows -> 50 set-based upserts across 5 queue deliveries, 69 total DB statements, 0 retries, status `completed`, 2.638s processing time, 74.5 MB heap delta, and 552.5 MB process RSS. Proves batching replaces ~50,000 per-row writes with ~50 statements.
+  - Development Worker version `958c3347-6309-4cb0-a1ff-63402b05d4e8` is deployed with queue processing enabled and healthy.
+  - Authenticated development import: 50,000 rows completed with 45,000 inserted, 5,000 unchanged, 0 rejected, and 0 retries. Persisted timing was 41.449s queue-to-complete, including 13.542s validation-to-processing and 25.737s processing.
+  - Cloudflare 50,000-row window: 21 Worker invocations, 0 errors, 2.326s aggregate CPU, 539.871ms peak invocation CPU, 68,002,394-byte peak memory, 49.306s aggregate wall time, and 115 subrequests.
+  - Queue telemetry: 5 reads, 4 checkpoint writes, 6 successful deletes (includes the initial delivery), 0 retries, peak lag 9.251s, and peak observed concurrency ~0.91 with configured max concurrency 1.
+  - R2 telemetry: 1 successful put, 1 successful head, and 5 successful gets during the 50,000-row window. Neon provider-level compute consumption was unavailable because no Neon API key is configured; persisted database phase timings above provide the measured database-path latency.
 
 ## 5. Code Review Remediation
 
@@ -55,6 +59,34 @@ Findings from the post-implementation review, classified High/Medium/Low. All ad
 - [x] 5.16 Replace the `seedProduct` positional parameters with a typed object parameter.
 - [x] 5.17 Split the 50,000-row load test into focused test helpers while retaining behavioral assertions in the test body.
 - [x] 5.18 Restore the Worker bundle-size gate by targeting ES2022, stripping Sentry debug-only code, and enforcing a 512 KiB raw bundle ceiling.
+
+## 6. Stripe Test Billing and Queue Operations
+
+- [x] 6.1 Record rollback baselines for Cloudflare subscriptions, Worker deployments, queues/consumers, Stripe test products/prices/subscriptions/webhooks, and Doppler mappings.
+- [x] 6.2 Replace the Checkout catalog with Starter and Professional monthly/annual price keys; retain legacy `premium` to `professional` and `concierge` to `enterprise` normalization only for historical data.
+- [x] 6.3 Update frontend billing selection to expose Free, Starter, Professional, and Enterprise only, with Enterprise contact-sales behavior and correct monthly/annual mappings.
+- [x] 6.4 Add deployment validation for missing, placeholder, malformed, duplicate, or Stripe-mode-mismatched price configuration without requiring live-mode Stripe.
+- [x] 6.5 Add TDD coverage for price resolution, allowlisting, Checkout annual billing, placeholders, frontend selection, and legacy normalization.
+- [x] 6.6 Provision `catalogue-imports-dev`, `catalogue-imports-dev-dlq`, `catalogue-imports-prod`, and `catalogue-imports-prod-dlq`; verify Worker producer/consumer bindings while production processing remains disabled.
+- [x] 6.7 Rebuild the reusable Stripe test product with four AUD recurring prices, archive obsolete active prices after checking legacy subscriptions, and update the enabled test webhook events without rotating its signing secret.
+- [x] 6.8 Populate the four test price IDs in Doppler `dev`, `stg`, and `prd`; verify no placeholder values remain and `prd` continues using test-mode Stripe.
+- [x] 6.9 Deploy development and run authenticated 500-, 5,000-, and 50,000-row imports; verify polling, checkpoints, completion counts, reports, retries, isolation, and capture Worker/Neon/R2/Queue telemetry.
+- [x] 6.10 Deploy production bindings with `CATALOGUE_QUEUE_ENABLED=false`, verify health and rollback readiness, and leave production queue processing disabled pending explicit approval.
+
+Operational evidence (June 11, 2026):
+
+- Cloudflare baseline (recorded before any account changes): R2 Paid active; Workers Paid not yet active. The user subsequently purchased Workers Paid during this change (see final bullet); queue provisioning itself required no scripted plan mutation.
+- Queue state: development and production queues each have one producer and one consumer; both DLQs exist. Production request enqueueing remains disabled by `CATALOGUE_QUEUE_ENABLED=false`.
+- Worker deployments: development `958c3347-6309-4cb0-a1ff-63402b05d4e8`; production `56a1c7ab-17f0-4de7-a65f-cb62b524afe3`. Both health endpoints returned `healthy` after deployment.
+- Stripe test product `prod_TxqPh3Ehm4pu4T` now has exactly four active AUD recurring prices: Starter monthly `price_1Th14MBnbrSGlpmz6kh5LdW6`, Starter annual `price_1Th14NBnbrSGlpmztpL7CoBl`, Professional monthly `price_1Th14OBnbrSGlpmzsSSsSS0N`, and Professional annual `price_1Th14PBnbrSGlpmzCxg7wSnP`.
+- All identified legacy prices had zero subscriptions before archival. Historical prices were archived rather than deleted, and the product default moved to the new Starter monthly price.
+- Enabled test webhook `we_1TI49EBnbrSGlpmz5l1bJ5Qc` preserves its prior events and now also receives `customer.subscription.updated` and `invoice.payment_succeeded`.
+- Doppler `dev`, `stg`, and `prd` contain the four backend and four frontend test price mappings. All three pass `validate-stripe-deployment-config.js`; `prd` remains test mode.
+- Local QA initially exposed the unapplied additive Neon migration (`uploads.import_type` missing). Applied `backend/prisma/migrations/neon/0001_queued_catalogue_imports.sql`, then reran the same upload successfully with `202 Accepted`.
+- Authenticated import results: 500 rows -> 500 inserted; 5,000 rows -> 4,500 inserted and 500 unchanged; 50,000 rows -> 45,000 inserted and 5,000 unchanged. All completed with exact processed counts and zero retries.
+- Organization isolation query found all 50,000 generated products only in the isolated Clerk test organization. A malformed six-row import produced three rejected rows and an authenticated R2 report containing the expected errors.
+- QA cleanup restored the test organization from its temporary Enterprise entitlement to the original Starter record, deleted 50,002 generated products and four upload rows, and removed all five generated R2 objects. Follow-up counts are zero.
+- Cloudflare Workers Paid purchase was confirmed by the user. The account-token subscriptions endpoint returned no rows, so dashboard confirmation remains the billing source of truth; queue operation and paid-limit telemetry were independently verified.
 
 PR 228 remediation verification:
 

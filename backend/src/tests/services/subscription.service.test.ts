@@ -8,7 +8,7 @@ import Stripe from 'stripe';
 import { SubscriptionService } from '../../services/subscription.service';
 import { BillingCycle, SubscriptionStatus, TierLevel } from '../../types/subscription';
 import { SubscriptionTier } from '../../models/subscription-tier.model';
-import { InternalError, NotFoundError } from '../../errors';
+import { InternalError, NotFoundError, ValidationError } from '../../errors';
 
 // Mock Stripe and Prisma
 jest.mock('stripe');
@@ -412,6 +412,67 @@ describe('SubscriptionService', () => {
       expect(result.status).toBe(SubscriptionStatus.ACTIVE);
       expect(result.stripeSubscriptionId).toBe('sub_test123');
       expect(mockPrisma.$transaction).toHaveBeenCalled();
+    });
+
+    it('converts a legacy premium trial at the Professional launch price', async () => {
+      const originalProfessionalMonthly = process.env.STRIPE_PROFESSIONAL_MONTHLY_PRICE_ID;
+      process.env.STRIPE_PROFESSIONAL_MONTHLY_PRICE_ID = 'price_professional_monthly';
+
+      (mockPrisma.subscriptionTier.findFirst as jest.Mock).mockResolvedValueOnce({
+        id: 1,
+        organizationId: 'org-123',
+        tierLevel: 'premium',
+        stripeCustomerId: 'cus_test123',
+        status: SubscriptionStatus.TRIALING,
+      });
+
+      const stripeSubscription = {
+        id: 'sub_test123',
+        status: 'active' as const,
+      } as unknown as Stripe.Subscription;
+      (mockStripe.subscriptions.create as jest.Mock).mockResolvedValueOnce(stripeSubscription);
+      (mockPrisma.$transaction as jest.Mock) = jest.fn((callback) => callback(mockPrisma));
+      (mockPrisma.subscriptionTier.update as jest.Mock).mockResolvedValueOnce({
+        id: 1,
+        organizationId: 'org-123',
+        tierLevel: 'premium',
+        status: SubscriptionStatus.ACTIVE,
+        stripeSubscriptionId: 'sub_test123',
+        trialConvertedAt: new Date(),
+        billingCycle: BillingCycle.MONTHLY,
+      });
+      (mockPrisma.trialEvent.create as jest.Mock).mockResolvedValueOnce({ id: '1' });
+
+      try {
+        await service.convertTrialToPaid('org-123', 'pm_test123', BillingCycle.MONTHLY);
+
+        expect(mockStripe.subscriptions.create).toHaveBeenCalledWith(
+          expect.objectContaining({
+            items: [{ price: 'price_professional_monthly' }],
+          }),
+        );
+      } finally {
+        if (originalProfessionalMonthly === undefined) {
+          delete process.env.STRIPE_PROFESSIONAL_MONTHLY_PRICE_ID;
+        } else {
+          process.env.STRIPE_PROFESSIONAL_MONTHLY_PRICE_ID = originalProfessionalMonthly;
+        }
+      }
+    });
+
+    it('rejects trial conversion for tiers without a Checkout price', async () => {
+      (mockPrisma.subscriptionTier.findFirst as jest.Mock).mockResolvedValueOnce({
+        id: 1,
+        organizationId: 'org-123',
+        tierLevel: 'concierge',
+        stripeCustomerId: 'cus_test123',
+        status: SubscriptionStatus.TRIALING,
+      });
+
+      await expect(
+        service.convertTrialToPaid('org-123', 'pm_test123', BillingCycle.MONTHLY),
+      ).rejects.toThrow(ValidationError);
+      expect(mockStripe.subscriptions.create).not.toHaveBeenCalled();
     });
 
     it('should throw NotFoundError if no TRIALING subscription exists', async () => {

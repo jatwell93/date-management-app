@@ -84,11 +84,15 @@ const actualUrlValidator = jest.requireActual(
   '../../utils/url-validator',
 ) as typeof import('../../utils/url-validator');
 
-const configuredMonthlyPriceId = 'price_professional_monthly';
-const configuredAnnualPriceId = 'price_professional_annual';
+const configuredStarterMonthlyPriceId = 'price_starter_monthly';
+const configuredStarterAnnualPriceId = 'price_starter_annual';
+const configuredProfessionalMonthlyPriceId = 'price_professional_monthly';
+const configuredProfessionalAnnualPriceId = 'price_professional_annual';
 const originalNodeEnv = envConfig.NODE_ENV;
 const envKeysChangedBySuite = [
   'FRONTEND_URL',
+  'STRIPE_STARTER_MONTHLY_PRICE_ID',
+  'STRIPE_STARTER_ANNUAL_PRICE_ID',
   'STRIPE_PROFESSIONAL_MONTHLY_PRICE_ID',
   'STRIPE_PROFESSIONAL_ANNUAL_PRICE_ID',
 ] as const;
@@ -129,8 +133,10 @@ describe('subscription.routes', () => {
 
     envConfig.NODE_ENV = 'test';
     process.env.FRONTEND_URL = 'http://localhost:3000';
-    process.env.STRIPE_PROFESSIONAL_MONTHLY_PRICE_ID = configuredMonthlyPriceId;
-    process.env.STRIPE_PROFESSIONAL_ANNUAL_PRICE_ID = configuredAnnualPriceId;
+    process.env.STRIPE_STARTER_MONTHLY_PRICE_ID = configuredStarterMonthlyPriceId;
+    process.env.STRIPE_STARTER_ANNUAL_PRICE_ID = configuredStarterAnnualPriceId;
+    process.env.STRIPE_PROFESSIONAL_MONTHLY_PRICE_ID = configuredProfessionalMonthlyPriceId;
+    process.env.STRIPE_PROFESSIONAL_ANNUAL_PRICE_ID = configuredProfessionalAnnualPriceId;
 
     mockValidateStripePriceId.mockImplementation((priceId: string) =>
       actualUrlValidator.validateStripePriceId(priceId),
@@ -517,12 +523,14 @@ describe('subscription.routes', () => {
       envConfig.NODE_ENV = 'production';
       delete process.env.STRIPE_PROFESSIONAL_MONTHLY_PRICE_ID;
       delete process.env.STRIPE_PROFESSIONAL_ANNUAL_PRICE_ID;
+      delete process.env.STRIPE_STARTER_MONTHLY_PRICE_ID;
+      delete process.env.STRIPE_STARTER_ANNUAL_PRICE_ID;
 
       const response = await request(app)
         .post('/subscription/create-checkout-session')
         .set('x-clerk-user-id', 'user_123')
         .send({
-          priceId: configuredMonthlyPriceId,
+          priceId: configuredStarterMonthlyPriceId,
           successUrl: 'http://localhost:3000/success',
           cancelUrl: 'http://localhost:3000/cancel',
         });
@@ -541,7 +549,7 @@ describe('subscription.routes', () => {
         .post('/subscription/create-checkout-session')
         .set('x-clerk-user-id', 'user_123')
         .send({
-          priceId: configuredMonthlyPriceId,
+          priceId: configuredStarterMonthlyPriceId,
           successUrl: 'http://localhost:3000/success',
           cancelUrl: 'http://localhost:3000/cancel',
         });
@@ -555,7 +563,7 @@ describe('subscription.routes', () => {
         .post('/subscription/create-checkout-session')
         .set('x-clerk-user-id', 'user_123')
         .send({
-          priceId: configuredMonthlyPriceId,
+          priceId: configuredStarterMonthlyPriceId,
           successUrl: 'http://localhost:3000/success',
           cancelUrl: 'http://localhost:3000/cancel',
         });
@@ -569,7 +577,7 @@ describe('subscription.routes', () => {
       expect(mockStripeCheckoutSessionCreate).toHaveBeenCalledWith(
         expect.objectContaining({
           customer: 'cus_existing',
-          line_items: [{ price: configuredMonthlyPriceId, quantity: 1 }],
+          line_items: [{ price: configuredStarterMonthlyPriceId, quantity: 1 }],
         }),
       );
     });
@@ -579,7 +587,7 @@ describe('subscription.routes', () => {
         .post('/subscription/create-checkout-session')
         .set('x-clerk-user-id', 'user_123')
         .send({
-          priceId: configuredAnnualPriceId,
+          priceId: configuredProfessionalAnnualPriceId,
           successUrl: 'http://localhost:3000/success',
           cancelUrl: 'http://localhost:3000/cancel',
         });
@@ -587,7 +595,7 @@ describe('subscription.routes', () => {
       expect(response.status).toBe(200);
       expect(mockStripeCheckoutSessionCreate).toHaveBeenCalledWith(
         expect.objectContaining({
-          line_items: [{ price: configuredAnnualPriceId, quantity: 1 }],
+          line_items: [{ price: configuredProfessionalAnnualPriceId, quantity: 1 }],
         }),
       );
     });
@@ -610,7 +618,7 @@ describe('subscription.routes', () => {
         .post('/subscription/create-checkout-session')
         .set('x-clerk-user-id', 'user_123')
         .send({
-          priceId: configuredMonthlyPriceId,
+          priceId: configuredProfessionalMonthlyPriceId,
           successUrl: 'http://localhost:3000/success',
           cancelUrl: 'http://localhost:3000/cancel',
         });
@@ -639,7 +647,7 @@ describe('subscription.routes', () => {
         .post('/subscription/create-checkout-session')
         .set('x-clerk-user-id', 'user_123')
         .send({
-          priceId: configuredMonthlyPriceId,
+          priceId: configuredProfessionalMonthlyPriceId,
           successUrl: 'http://localhost:3000/success',
           cancelUrl: 'http://localhost:3000/cancel',
         });
@@ -670,7 +678,7 @@ describe('subscription.routes', () => {
         .post('/subscription/create-checkout-session')
         .set('x-clerk-user-id', 'user_123')
         .send({
-          priceId: configuredMonthlyPriceId,
+          priceId: configuredProfessionalMonthlyPriceId,
           successUrl: 'http://localhost:3000/success',
           cancelUrl: 'http://localhost:3000/cancel',
         });
@@ -689,7 +697,7 @@ describe('subscription.routes', () => {
         .post('/subscription/create-checkout-session')
         .set('x-clerk-user-id', 'user_123')
         .send({
-          priceId: configuredMonthlyPriceId,
+          priceId: configuredProfessionalMonthlyPriceId,
           successUrl: 'http://localhost:3000/success',
           cancelUrl: 'http://localhost:3000/cancel',
         });

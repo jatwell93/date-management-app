@@ -65,6 +65,35 @@ describe('TrialUpgradeFlow', () => {
     );
   });
 
+  it('uses the Professional annual launch price for annual checkout', async () => {
+    fetchMock
+      .mockResponseOnce(JSON.stringify(trialStatus))
+      .mockResponseOnce(JSON.stringify({ url: 'https://checkout.stripe.test/annual' }));
+
+    render(<TrialUpgradeFlow token="test-token" />);
+
+    userEvent.click(await screen.findByRole('button', { name: 'Upgrade Annual' }));
+
+    await waitFor(() => {
+      expect(fetchMock).toHaveBeenCalledWith(
+        'https://api.test/subscription/create-checkout-session',
+        expect.objectContaining({
+          method: 'POST',
+          body: expect.stringContaining('price_professional_annual'),
+        }),
+      );
+    });
+  });
+
+  it('shows the Professional launch pricing in AUD', async () => {
+    fetchMock.mockResponseOnce(JSON.stringify(trialStatus));
+
+    render(<TrialUpgradeFlow token="test-token" />);
+
+    expect(await screen.findByText('A$99')).toBeInTheDocument();
+    expect(screen.getByText('Billed A$990 yearly')).toBeInTheDocument();
+  });
+
   it('lets expired-trial starter users start an upgrade', async () => {
     fetchMock
       .mockResponseOnce(

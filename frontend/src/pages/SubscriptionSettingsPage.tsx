@@ -110,7 +110,6 @@ export function SubscriptionSettingsPage({ token }: SubscriptionSettingsPageProp
     }
 
     try {
-      // Map tier to Stripe price ID (these would come from environment or config)
       const priceIds = {
         starter: {
           monthly: process.env.REACT_APP_STRIPE_PRICE_STARTER_MONTHLY,
@@ -120,17 +119,9 @@ export function SubscriptionSettingsPage({ token }: SubscriptionSettingsPageProp
           monthly: process.env.REACT_APP_STRIPE_PRICE_PROFESSIONAL_MONTHLY,
           annual: process.env.REACT_APP_STRIPE_PRICE_PROFESSIONAL_ANNUAL,
         },
-        premium: {
-          monthly: process.env.REACT_APP_STRIPE_PRICE_PREMIUM_MONTHLY,
-          annual: process.env.REACT_APP_STRIPE_PRICE_PREMIUM_ANNUAL,
-        },
-        concierge: {
-          monthly: process.env.REACT_APP_STRIPE_PRICE_CONCIERGE_MONTHLY,
-          annual: process.env.REACT_APP_STRIPE_PRICE_CONCIERGE_MONTHLY,
-        },
       };
 
-      const priceId = priceIds[tier]?.[billingCycle];
+      const priceId = priceIds[tier as keyof typeof priceIds]?.[billingCycle];
       if (!priceId) {
         alert('Price configuration not found. Please contact support.');
         return;
