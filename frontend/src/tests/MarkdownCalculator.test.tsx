@@ -66,7 +66,7 @@ describe('MarkdownCalculator', () => {
       target: { value: '100' },
     });
 
-    // Set expiry date to 15 days from now (Markdown 3 - 20% off)
+    // Set expiry date to 15 days from now (Markdown 3 - 75% off)
     const futureDate = new Date();
     futureDate.setDate(futureDate.getDate() + 15);
     const dateString = futureDate.toISOString().split('T')[0];
@@ -77,7 +77,7 @@ describe('MarkdownCalculator', () => {
     fireEvent.click(screen.getByRole('button', { name: /Calculate Markdown/i }));
 
     expect(screen.getByText(/Markdown 3/i)).toBeInTheDocument();
-    expect(screen.getByText(/\$80.00/i)).toBeInTheDocument();
+    expect(screen.getByText(/\$25.00/i)).toBeInTheDocument();
   });
 
   it('uses Australian currency formatting for pharmacy markdown values', () => {
@@ -136,7 +136,7 @@ describe('MarkdownCalculator', () => {
 
     const result = screen.getByRole('status', { name: /markdown result/i });
     expect(result).toHaveTextContent(/Markdown 3/i);
-    expect(result).toHaveTextContent(/\$80\.00/i);
+    expect(result).toHaveTextContent(/\$25\.00/i);
   });
 
   it('shows specific validation guidance for missing expiry date', () => {
@@ -189,7 +189,7 @@ describe('MarkdownCalculator', () => {
       name: 'Long pharmacy product name '.repeat(8),
       sku: 'SKU-' + '1234567890'.repeat(6),
       barcode: '9300000000000'.repeat(5),
-      cost_price: 42.5,
+      costPrice: 42.5,
     });
 
     render(<MarkdownCalculator token={mockToken} />);
@@ -201,6 +201,39 @@ describe('MarkdownCalculator', () => {
     expect(productSummary).toHaveTextContent(/Long pharmacy product name/i);
     expect(within(productSummary).getAllByText(/SKU/i).length).toBeGreaterThan(0);
     expect(within(productSummary).getByText(/\$42\.50/i)).toBeInTheDocument();
+  });
+
+  it('lets the user enter cost manually when the catalog product has no cost price', async () => {
+    mockedApiGet.mockResolvedValue({
+      id: 7,
+      name: 'No Cost Product',
+      sku: 'SKU123',
+      barcode: '9300000000001',
+      costPrice: undefined,
+    });
+
+    render(<MarkdownCalculator token={mockToken} />);
+
+    fireEvent.click(screen.getByRole('button', { name: /Scan test product/i }));
+
+    const productSummary = await screen.findByRole('status', { name: /scanned product/i });
+    expect(productSummary).toHaveTextContent(/Not available/i);
+    expect(productSummary).not.toHaveTextContent(/\$NaN/i);
+
+    // Cost input stays editable so the markdown can still be calculated manually.
+    const costInput = screen.getByLabelText(/Cost Price/i);
+    expect(costInput).not.toBeDisabled();
+
+    fireEvent.change(costInput, { target: { value: '100' } });
+    const futureDate = new Date();
+    futureDate.setDate(futureDate.getDate() + 15);
+    fireEvent.change(screen.getByLabelText(/Expiry Date/i), {
+      target: { value: futureDate.toISOString().split('T')[0] },
+    });
+    fireEvent.click(screen.getByRole('button', { name: /Calculate Markdown/i }));
+
+    expect(screen.getByText(/Markdown 3/i)).toBeInTheDocument();
+    expect(screen.getByText(/\$25\.00/i)).toBeInTheDocument();
   });
 
   it('passes handheld scanner intent and uses touch-friendly primary controls', () => {

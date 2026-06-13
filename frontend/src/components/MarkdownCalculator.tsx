@@ -5,6 +5,7 @@ import { Label } from './ui/label';
 import { Button } from './ui/button';
 import { Scanner } from './Scanner';
 import { apiService } from '../lib/api.service';
+import { calculateMarkdownPrice } from '../lib/utils';
 import { HardwareScanResult } from '../types/handheld';
 
 interface MarkdownCalculatorProps {
@@ -16,7 +17,7 @@ interface ProductDetails {
   name: string;
   sku: string;
   barcode: string;
-  cost_price: number;
+  costPrice?: number | null;
 }
 
 interface MarkdownResult {
@@ -38,8 +39,16 @@ export function MarkdownCalculator({ token }: MarkdownCalculatorProps) {
   const [error, setError] = useState<string | null>(null);
   const [validationError, setValidationError] = useState<string | null>(null);
 
+  const hasProductCost =
+    typeof productDetails?.costPrice === 'number' && Number.isFinite(productDetails.costPrice);
+
   const formattedProductCost = useMemo(
-    () => (productDetails ? currencyFormatter.format(productDetails.cost_price) : null),
+    () =>
+      productDetails &&
+      typeof productDetails.costPrice === 'number' &&
+      Number.isFinite(productDetails.costPrice)
+        ? currencyFormatter.format(productDetails.costPrice)
+        : 'Not available',
     [productDetails],
   );
 
@@ -83,7 +92,11 @@ export function MarkdownCalculator({ token }: MarkdownCalculatorProps) {
       }
 
       setProductDetails(product);
-      setCostPrice(String(product.cost_price));
+      if (typeof product.costPrice === 'number' && Number.isFinite(product.costPrice)) {
+        setCostPrice(String(product.costPrice));
+      } else {
+        setCostPrice('');
+      }
     } catch (err: unknown) {
       const message = err instanceof Error ? err.message : '';
       if (message.includes('404')) {
@@ -121,21 +134,19 @@ export function MarkdownCalculator({ token }: MarkdownCalculatorProps) {
     const diffDays = Math.ceil(diffTime / (1000 * 60 * 60 * 24));
 
     let status = 'Normal';
-    let value = parsedCostPrice;
-
     if (diffDays <= 0) {
       status = 'Expired';
-      value = parsedCostPrice;
     } else if (diffDays <= 30) {
       status = 'Markdown 3';
-      value = parsedCostPrice * 0.8;
     } else if (diffDays <= 60) {
       status = 'Markdown 2';
-      value = parsedCostPrice;
     } else if (diffDays <= 90) {
       status = 'Markdown 1';
-      value = parsedCostPrice * 1.2;
     }
+
+    // Expired stock is pulled, not marked down; everything else uses the shared schedule.
+    const value =
+      diffDays <= 0 ? parsedCostPrice : calculateMarkdownPrice(parsedCostPrice, diffDays);
 
     setMarkdownResult({ status, value });
   };
@@ -216,7 +227,7 @@ export function MarkdownCalculator({ token }: MarkdownCalculatorProps) {
                   step="0.01"
                   value={costPrice}
                   onChange={(e) => setCostPrice(e.target.value)}
-                  disabled={!!productDetails}
+                  disabled={hasProductCost}
                   className="min-h-11"
                 />
               </div>
