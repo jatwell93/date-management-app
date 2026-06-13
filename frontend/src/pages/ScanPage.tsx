@@ -14,7 +14,11 @@ import {
   SelectValue,
 } from '../components/ui/select';
 import { offlineStorage } from '../lib/offline-storage';
-import { isWithinMarkdownPeriod, calculateMarkdownPrice } from '../lib/utils';
+import {
+  isWithinMarkdownPeriod,
+  calculateMarkdownPercentage,
+  calculateMarkdownPrice,
+} from '../lib/utils';
 import { apiService } from '../lib/api.service';
 import { parseGS1Barcode } from '../lib/gs1-parser';
 import { synchronizeOfflineData } from '../lib/sync-manager';
@@ -47,7 +51,7 @@ interface ProductDetails {
   name: string;
   sku: string;
   barcode: string;
-  cost_price: number;
+  costPrice?: number | null;
 }
 
 interface InventoryItem {
@@ -91,6 +95,7 @@ export function ScanPage({ token }: ScanPageProps) {
   const [newProductSKU, setNewProductSKU] = useState<string>('');
   const [newProductCostPrice, setNewProductCostPrice] = useState<string>('');
   const [markdownPrice, setMarkdownPrice] = useState<number | null>(null);
+  const [markdownPercentage, setMarkdownPercentage] = useState<number | null>(null);
   const [recentEntries, setRecentEntries] = useState<RecentInventoryItem[] | null>(null);
   const [isAlertDialogOpen, setAlertDialogOpen] = useState(false);
   const [itemToDelete, setItemToDelete] = useState<number | null>(null);
@@ -128,14 +133,19 @@ export function ScanPage({ token }: ScanPageProps) {
       const today = new Date();
       const daysToExpiry = Math.ceil((expiry.getTime() - today.getTime()) / (1000 * 60 * 60 * 24));
 
-      const isMarkdown = isWithinMarkdownPeriod(expiryDate, 90); // Check if within 90 days
-      if (isMarkdown) {
-        setMarkdownPrice(calculateMarkdownPrice(productDetails.cost_price, daysToExpiry));
-      } else {
-        setMarkdownPrice(null);
+      const costPrice = productDetails.costPrice;
+      const isMarkdown = isWithinMarkdownPeriod(expiryDate, 90);
+      if (isMarkdown && typeof costPrice === 'number' && Number.isFinite(costPrice)) {
+        setMarkdownPrice(calculateMarkdownPrice(costPrice, daysToExpiry));
+        setMarkdownPercentage(calculateMarkdownPercentage(daysToExpiry));
+        return;
       }
+
+      setMarkdownPrice(null);
+      setMarkdownPercentage(null);
     } else {
       setMarkdownPrice(null);
+      setMarkdownPercentage(null);
     }
   }, [productDetails, expiryDate]);
 
@@ -147,6 +157,7 @@ export function ScanPage({ token }: ScanPageProps) {
     setSuccessMessage(null);
     setShowNewProductForm(false);
     setMarkdownPrice(null);
+    setMarkdownPercentage(null);
   };
 
   const resolveBarcodeForLookup = (rawBarcode: string): string => {
@@ -262,7 +273,7 @@ export function ScanPage({ token }: ScanPageProps) {
           barcode: scannedBarcode,
           name: newProductName,
           sku: newProductSKU,
-          cost_price: parseFloat(newProductCostPrice),
+          costPrice: parseFloat(newProductCostPrice),
         },
         token,
       );
@@ -315,6 +326,7 @@ export function ScanPage({ token }: ScanPageProps) {
         setSelectedSubDepartment('');
         setError(null);
         setMarkdownPrice(null);
+        setMarkdownPercentage(null);
       } catch (err: unknown) {
         if (err instanceof Error) {
           setError(err.message);
@@ -345,6 +357,7 @@ export function ScanPage({ token }: ScanPageProps) {
       setSelectedSubDepartment('');
       setError(null);
       setMarkdownPrice(null);
+      setMarkdownPercentage(null);
     } catch (err: unknown) {
       if (err instanceof Error) {
         setError(err.message);
@@ -519,13 +532,16 @@ export function ScanPage({ token }: ScanPageProps) {
                 </div>
                 <div>
                   <p className="text-foreground">
-                    <span className="font-medium">Cost Price:</span> $
-                    {productDetails.cost_price?.toFixed(2)}
+                    <span className="font-medium">Cost Price:</span>{' '}
+                    {typeof productDetails.costPrice === 'number' &&
+                    Number.isFinite(productDetails.costPrice)
+                      ? `$${productDetails.costPrice.toFixed(2)}`
+                      : 'Not available'}
                   </p>
 
-                  {markdownPrice !== null && (
+                  {markdownPrice !== null && markdownPercentage !== null && (
                     <p className="text-semantic-warning font-semibold mt-1">
-                      Markdown Price (20% off): ${markdownPrice.toFixed(2)}
+                      Markdown Price ({markdownPercentage}% off): ${markdownPrice.toFixed(2)}
                     </p>
                   )}
                 </div>

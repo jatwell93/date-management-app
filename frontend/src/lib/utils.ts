@@ -14,25 +14,17 @@ export function isWithinMarkdownPeriod(expiryDate: string | null, days: number):
 }
 
 export function calculateMarkdownPrice(costPrice: number, daysToExpiry: number): number {
-  // Apply markdown rules based on days to expiry (from feature requirements)
-  if (daysToExpiry <= 30) {
-    return costPrice * 0.8; // 20% markdown
-  } else if (daysToExpiry <= 60) {
-    return costPrice; // No markdown
-  } else if (daysToExpiry <= 90) {
-    return costPrice * 1.2; // 20% markup
-  } else {
-    return costPrice; // No markdown if outside the window
-  }
+  const markdownPercentage = calculateMarkdownPercentage(daysToExpiry);
+  return costPrice * (1 - markdownPercentage / 100);
 }
 
 export function calculateMarkdownPercentage(daysToExpiry: number): number {
   if (daysToExpiry <= 30) {
-    return -20;
+    return 75;
   } else if (daysToExpiry <= 60) {
-    return 0;
+    return 60;
   } else if (daysToExpiry <= 90) {
-    return 20;
+    return 50;
   } else {
     return 0;
   }
