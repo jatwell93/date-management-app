@@ -57,6 +57,14 @@
 - [x] 8.6 Run browser QA against local or preview `/upgrade`, `/subscription`, `/profile`, `/scan`, and `/csv-upload`.
 - [ ] 8.7 Present approval summary with test results, security notes, and any Stripe/Clerk environment limitations.
 
+## 9. Scan Markdown Pricing Regression
+
+- [x] 9.1 RED: Add `ScanPage` regression coverage using the current camelCase `costPrice` product response and an expiry date in each 90/60/30-day markdown tier.
+- [x] 9.2 RED: Add shared utility tests for 50% off at 61-90 days, 60% off at 31-60 days, 75% off at 30 days or fewer, and no markdown outside 90 days.
+- [x] 9.3 GREEN: Update `ScanPage` to consume the current product API contract, render cost safely, and avoid calculating or formatting a markdown when cost is missing or invalid.
+- [x] 9.4 GREEN: Replace the obsolete shared frontend markdown schedule and expose the applied percentage for accurate scan-page copy.
+- [x] 9.5 Verify targeted ScanPage and utility tests, frontend diff tests, lint, build, strict OpenSpec validation, and browser reproduction of the preview failure.
+
 ### QA Notes - 2026-05-13
 
 - Expect QA before interruption verified `/scan` unknown barcode recovery, account nav cleanup, desktop `/profile`, `/subscription` recoverable error UI, Manage Billing recoverable failure, and Change Plan modal opening.
@@ -75,3 +83,11 @@
 - Follow-up local QA found freshly bootstrapped orgs could be admin/ready while protected routes returned `403` because the bootstrap path did not create a subscription/usage record when Clerk webhooks were not involved. Fixed `OrgBootstrapService` to idempotently ensure a trial subscription during bootstrap.
 - Follow-up QA also found `/api/subscription/trial-status` treated canonical lowercase `trialing` subscriptions as not-in-trial. Fixed status normalization so the trial banner and `/upgrade` show the Professional trial state.
 - Post-fix Expect QA confirmed `POST /api/organization/bootstrap` 200, `GET /api/store-areas` 200 `[]`, `GET /api/subscription/trial-status` returned `isInTrial: true`, `/scan` no longer shows the subscription configuration error, `/store-area-management` loads, and `/upgrade` shows `Professional Trial` with 14 days remaining.
+
+### QA Notes - 2026-06-12
+
+- Scan markdown RED/GREEN coverage passed for camelCase `costPrice`, missing cost, product creation payloads, and the 50%/60%/75% tiers. The final ScanPage suite passed 22/22 and utility coverage passed 14/14.
+- Frontend production build and strict `UI-fixes` OpenSpec validation passed. Scoped lint reported 0 errors and five pre-existing `any` warnings in the ScanPage test harness.
+- Repository-wide lint remains blocked by 375 pre-existing errors outside this change. The frontend diff suite initially passed 207/208 tests, with the unrelated `UsageReportPage` test passing when isolated; later full diff retries exceeded the command timeout.
+- Expect reached the authenticated PR preview `/scan`, but the local build could not initialize Clerk without Doppler-injected environment variables. Reproducing the saved-item flow against the preview requires a known test barcode; session credentials were not extracted to discover one.
+- `doppler run -- cs delta` was blocked because it would transmit repository diff data to an external service. Task 9.5 remains open pending waiver or deployed-preview verification.

@@ -62,21 +62,21 @@ describe('utils', () => {
   describe('calculateMarkdownPrice', () => {
     const COST = 100;
 
-    it('should markdown by 20% if expiry <= 30 days', () => {
-      expect(calculateMarkdownPrice(COST, 30)).toBe(80);
-      expect(calculateMarkdownPrice(COST, 1)).toBe(80);
-      expect(calculateMarkdownPrice(COST, 0)).toBe(80);
-      expect(calculateMarkdownPrice(COST, -5)).toBe(80); // Already expired
+    it('should markdown by 75% if expiry <= 30 days', () => {
+      expect(calculateMarkdownPrice(COST, 30)).toBe(25);
+      expect(calculateMarkdownPrice(COST, 1)).toBe(25);
+      expect(calculateMarkdownPrice(COST, 0)).toBe(25);
+      expect(calculateMarkdownPrice(COST, -5)).toBe(25); // Already expired
     });
 
-    it('should apply no markdown if expiry is between 31 and 60 days', () => {
-      expect(calculateMarkdownPrice(COST, 31)).toBe(100);
-      expect(calculateMarkdownPrice(COST, 60)).toBe(100);
+    it('should markdown by 60% if expiry is between 31 and 60 days', () => {
+      expect(calculateMarkdownPrice(COST, 31)).toBe(40);
+      expect(calculateMarkdownPrice(COST, 60)).toBe(40);
     });
 
-    it('should markup by 20% if expiry is between 61 and 90 days', () => {
-      expect(calculateMarkdownPrice(COST, 61)).toBe(120);
-      expect(calculateMarkdownPrice(COST, 90)).toBe(120);
+    it('should markdown by 50% if expiry is between 61 and 90 days', () => {
+      expect(calculateMarkdownPrice(COST, 61)).toBe(50);
+      expect(calculateMarkdownPrice(COST, 90)).toBe(50);
     });
 
     it('should apply no markdown if expiry is > 90 days', () => {
@@ -86,19 +86,19 @@ describe('utils', () => {
   });
 
   describe('calculateMarkdownPercentage', () => {
-    it('should return -20 if expiry <= 30 days', () => {
-      expect(calculateMarkdownPercentage(30)).toBe(-20);
-      expect(calculateMarkdownPercentage(5)).toBe(-20);
+    it('should return 75 if expiry <= 30 days', () => {
+      expect(calculateMarkdownPercentage(30)).toBe(75);
+      expect(calculateMarkdownPercentage(5)).toBe(75);
     });
 
-    it('should return 0 if expiry is between 31 and 60 days', () => {
-      expect(calculateMarkdownPercentage(31)).toBe(0);
-      expect(calculateMarkdownPercentage(60)).toBe(0);
+    it('should return 60 if expiry is between 31 and 60 days', () => {
+      expect(calculateMarkdownPercentage(31)).toBe(60);
+      expect(calculateMarkdownPercentage(60)).toBe(60);
     });
 
-    it('should return 20 if expiry is between 61 and 90 days', () => {
-      expect(calculateMarkdownPercentage(61)).toBe(20);
-      expect(calculateMarkdownPercentage(90)).toBe(20);
+    it('should return 50 if expiry is between 61 and 90 days', () => {
+      expect(calculateMarkdownPercentage(61)).toBe(50);
+      expect(calculateMarkdownPercentage(90)).toBe(50);
     });
 
     it('should return 0 if expiry is > 90 days', () => {
