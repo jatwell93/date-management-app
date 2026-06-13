@@ -91,3 +91,8 @@
 - Repository-wide lint remains blocked by 375 pre-existing errors outside this change. The frontend diff suite initially passed 207/208 tests, with the unrelated `UsageReportPage` test passing when isolated; later full diff retries exceeded the command timeout.
 - Expect reached the authenticated PR preview `/scan`, but the local build could not initialize Clerk without Doppler-injected environment variables. Reproducing the saved-item flow against the preview requires a known test barcode; session credentials were not extracted to discover one.
 - `doppler run -- cs delta` was blocked because it would transmit repository diff data to an external service. Task 9.5 remains open pending waiver or deployed-preview verification.
+
+### QA Notes - 2026-06-13
+
+- PR 232 review follow-up: extended the markdown contract/schedule fix to the two sibling surfaces flagged in review. `MarkdownCalculator` carried the same legacy `cost_price` field and its own hardcoded 20%/0/+20% schedule; it now consumes camelCase `costPrice`, routes value through the shared `calculateMarkdownPrice`, renders `Not available` for missing cost, and keeps the cost input editable when the catalog has no cost. `DetailedExpiryReportPage` now formats cost and markdown columns through a finite-guard helper so a missing `costPrice` shows `Not available` instead of `$NaN`.
+- Targeted suites passed: `MarkdownCalculator` (12/12, incl. new missing-cost regression), `utils` (14/14), `DetailedExpiryReportPage` (3/3), `ScanPage` (22/22). Scoped lint on the changed files reported 0 errors.

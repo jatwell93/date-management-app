@@ -52,6 +52,10 @@ const currencyFormatter = new Intl.NumberFormat('en-AU', {
 });
 const dateFormatter = new Intl.DateTimeFormat('en-AU', { dateStyle: 'medium' });
 
+function formatCurrencyValue(value: number): string {
+  return Number.isFinite(value) ? currencyFormatter.format(value) : 'Not available';
+}
+
 function getDaysToExpiry(expiryDate: string) {
   const parsedExpiryDate = new Date(expiryDate);
   if (Number.isNaN(parsedExpiryDate.getTime())) {
@@ -349,7 +353,7 @@ export function DetailedExpiryReportPage({ token }: DetailedExpiryReportPageProp
         header: ({ column }) => <DataTableColumnHeader column={column} title="Cost Price" />,
         cell: ({ row }) => (
           <div className="min-w-[100px] tabular-nums">
-            {currencyFormatter.format(row.original.costPrice)}
+            {formatCurrencyValue(row.original.costPrice)}
           </div>
         ),
       },
@@ -416,9 +420,7 @@ export function DetailedExpiryReportPage({ token }: DetailedExpiryReportPageProp
               : calculateMarkdownPrice(row.original.costPrice, daysToExpiry);
 
           return (
-            <div className="min-w-[100px] tabular-nums">
-              {currencyFormatter.format(markdownPrice)}
-            </div>
+            <div className="min-w-[100px] tabular-nums">{formatCurrencyValue(markdownPrice)}</div>
           );
         },
       },
@@ -798,7 +800,7 @@ export function DetailedExpiryReportPage({ token }: DetailedExpiryReportPageProp
                   </div>
                   <div>
                     <dt className="text-semantic-text-secondary">Markdown price</dt>
-                    <dd className="font-medium">{currencyFormatter.format(markdownPrice)}</dd>
+                    <dd className="font-medium">{formatCurrencyValue(markdownPrice)}</dd>
                   </div>
                 </dl>
               </li>
