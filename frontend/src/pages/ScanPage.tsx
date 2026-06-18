@@ -1,5 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import * as Sentry from '@sentry/react';
+import { useAuth } from '@clerk/clerk-react';
 import { Scanner } from '../components/Scanner';
 import { HandheldScanner } from '../components/HandheldScanner';
 import { Card, CardContent, CardHeader, CardTitle } from '../components/ui/card';
@@ -81,6 +82,7 @@ function formatExpiryDateForCopy(expiryDate: string): string {
 }
 
 export function ScanPage({ token }: ScanPageProps) {
+  const { getToken } = useAuth();
   const { isHandheld } = useHandheldDetectionContext();
   const [scannedBarcode, setScannedBarcode] = useState<string | null>(null);
   const [productDetails, setProductDetails] = useState<ProductDetails | null>(null);
@@ -339,6 +341,15 @@ export function ScanPage({ token }: ScanPageProps) {
     }
 
     try {
+      let authToken = token;
+      try {
+        authToken = (await getToken()) || token;
+      } catch (tokenError) {
+        Sentry.captureException(tokenError, {
+          tags: { feature: 'scan-page', action: 'refresh-inventory-token' },
+        });
+      }
+
       await apiService.post(
         '/inventory-items',
         {
@@ -346,7 +357,7 @@ export function ScanPage({ token }: ScanPageProps) {
           expiryDate: expiryDate,
           locationId: parsedLocationId,
         },
-        token,
+        authToken,
       );
 
       setSuccessMessage('Expiry item saved to inventory.');
