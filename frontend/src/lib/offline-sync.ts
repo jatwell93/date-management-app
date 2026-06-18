@@ -31,11 +31,15 @@ const logSyncEvent = (
     return;
   }
 
-  Sentry.captureMessage(message, {
-    level,
-    tags: { feature: 'offline-sync' },
-    extra,
-  });
+  if (level === 'warning' || level === 'error') {
+    Sentry.captureMessage(message, {
+      level,
+      tags: { feature: 'offline-sync' },
+      extra,
+    });
+  } else {
+    console.log(`[offline-sync] ${message}`, extra ?? '');
+  }
 };
 
 class OfflineSyncService {
