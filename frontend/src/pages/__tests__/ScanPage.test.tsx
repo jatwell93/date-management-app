@@ -284,7 +284,7 @@ describe('ScanPage Integration', () => {
         </HandheldProvider>,
       );
 
-      await waitFor(() => expect(screen.getByTestId('mock-scanner')).toBeInTheDocument());
+      await screen.findByTestId('mock-scanner');
       userEvent.click(screen.getByTestId('trigger-scan'));
       await screen.findByText('Test Product Barcode');
 
@@ -324,7 +324,7 @@ describe('ScanPage Integration', () => {
       </HandheldProvider>,
     );
 
-    await waitFor(() => expect(screen.getByTestId('mock-scanner')).toBeInTheDocument());
+    await screen.findByTestId('mock-scanner');
     userEvent.click(screen.getByTestId('trigger-scan'));
     await screen.findByText('Test Product Barcode');
 
@@ -411,7 +411,7 @@ describe('ScanPage Integration', () => {
       </HandheldProvider>,
     );
 
-    await waitFor(() => expect(screen.getByTestId('mock-scanner')).toBeInTheDocument());
+    await screen.findByTestId('mock-scanner');
     userEvent.click(screen.getByTestId('trigger-scan'));
     await screen.findByText(/No catalog match for barcode 1234567890/i);
 
