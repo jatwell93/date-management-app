@@ -46,7 +46,9 @@ function validatePackageJson(packageJsonPath, failures) {
       }
 
       if (blockedSpecPatterns.some((pattern) => pattern.test(spec))) {
-        failures.push(`${relativePath(packageJsonPath)} uses blocked ${field} source ${name}@${spec}`);
+        failures.push(
+          `${relativePath(packageJsonPath)} uses blocked ${field} source ${name}@${spec}`,
+        );
       }
     }
   }
