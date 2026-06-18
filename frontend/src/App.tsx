@@ -138,6 +138,17 @@ function runHandledHandheldSync(
   });
 }
 
+function useHandheldSyncNow(
+  token: string | null,
+  refreshPendingQueueCount: () => Promise<void>,
+): () => void {
+  const getFreshApiToken = useFreshApiToken(token);
+
+  return useCallback(() => {
+    runHandledHandheldSync(() => getFreshApiToken('app-handheld-sync'), refreshPendingQueueCount);
+  }, [getFreshApiToken, refreshPendingQueueCount]);
+}
+
 function ProfilePage() {
   return (
     <div
@@ -418,7 +429,6 @@ function AppContent({
     token,
     handleLogout,
   } = useAuthContext();
-  const getFreshApiToken = useFreshApiToken(token);
   const isLoggedIn = hasSession && isFullySignedIn;
   const { isBootstrapped, isBootstrapping, bootstrapError, bootstrapResult } = useOrgBootstrap();
 
@@ -471,6 +481,7 @@ function AppContent({
       setPendingQueueCount(offlineSyncService.getPendingOperationCount());
     }
   }, []);
+  const handleSyncNow = useHandheldSyncNow(token, refreshPendingQueueCount);
 
   useEffect(() => {
     const handleOnline = () => setIsOnline(true);
@@ -804,12 +815,7 @@ function AppContent({
         <HandheldLayout
           userName={userName || undefined}
           syncStatus={isOnline ? 'synced' : 'offline'}
-          onSyncNow={() =>
-            runHandledHandheldSync(
-              () => getFreshApiToken('app-handheld-sync'),
-              refreshPendingQueueCount,
-            )
-          }
+          onSyncNow={handleSyncNow}
           onSettingsClick={() => {
             navigate('/settings');
           }}

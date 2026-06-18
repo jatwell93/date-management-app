@@ -38,7 +38,12 @@ const logSyncEvent = (
       extra,
     });
   } else {
-    console.log(`[offline-sync] ${message}`, extra ?? '');
+    Sentry.addBreadcrumb({
+      category: 'offline-sync',
+      message,
+      level: 'info',
+      data: extra,
+    });
   }
 };
 

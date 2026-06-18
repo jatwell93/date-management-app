@@ -54,7 +54,7 @@ export async function synchronizeOfflineData(token: OfflineSyncTokenSource) {
       try {
         const authToken = await resolveOfflineSyncToken(token);
         if (!authToken) {
-          return;
+          continue;
         }
         // console.log(`Synchronizing item: ${key}`, item);
         await apiService.post('/inventory-items', item, authToken);
