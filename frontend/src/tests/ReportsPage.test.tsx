@@ -5,6 +5,19 @@ import { ReportsPage } from '../pages/ReportsPage';
 import { apiService } from '../lib/api.service';
 import '@testing-library/jest-dom';
 
+jest.mock('../hooks/useFreshApiToken', () => ({
+  useFreshApiToken: (() => {
+    const callbacks = new Map<string, jest.Mock>();
+    return (token: string | null) => {
+      const key = token ?? '__missing__';
+      if (!callbacks.has(key)) {
+        callbacks.set(key, jest.fn().mockResolvedValue(token || undefined));
+      }
+      return callbacks.get(key);
+    };
+  })(),
+}));
+
 // Mock apiService
 jest.mock('../lib/api.service', () => ({
   apiService: {

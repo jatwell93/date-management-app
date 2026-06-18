@@ -6,6 +6,14 @@ import { MarkdownCalculator } from '../components/MarkdownCalculator';
 import { apiService } from '../lib/api.service';
 import '@testing-library/jest-dom';
 
+const mockGetToken = jest.fn();
+
+jest.mock('@clerk/clerk-react', () => ({
+  useAuth: () => ({
+    getToken: mockGetToken,
+  }),
+}));
+
 const mockScannerProps: Array<{
   onScan: (result: { barcode: string; timestamp: number; source: 'manual' }) => void;
   isHandheld?: boolean;
@@ -49,6 +57,7 @@ describe('MarkdownCalculator', () => {
   beforeEach(() => {
     mockScannerProps.length = 0;
     mockedApiGet.mockReset();
+    mockGetToken.mockResolvedValue(undefined);
   });
 
   it('renders the markdown calculator form', () => {
@@ -201,6 +210,26 @@ describe('MarkdownCalculator', () => {
     expect(productSummary).toHaveTextContent(/Long pharmacy product name/i);
     expect(within(productSummary).getAllByText(/SKU/i).length).toBeGreaterThan(0);
     expect(within(productSummary).getByText(/\$42\.50/i)).toBeInTheDocument();
+  });
+
+  it('refreshes the Clerk token before scanning product details', async () => {
+    mockGetToken.mockResolvedValue('fresh-clerk-token');
+    mockedApiGet.mockResolvedValue({
+      id: 1,
+      name: 'Fresh Token Product',
+      sku: 'SKU123',
+      barcode: '9300000000000',
+      costPrice: 42.5,
+    });
+
+    render(<MarkdownCalculator token="expired-prop-token" />);
+
+    fireEvent.click(screen.getByRole('button', { name: /Scan test product/i }));
+
+    await waitFor(() => {
+      expect(mockGetToken).toHaveBeenCalled();
+      expect(apiService.get).toHaveBeenCalledWith('/products/by-sku/SKU123', 'fresh-clerk-token');
+    });
   });
 
   it('lets the user enter cost manually when the catalog product has no cost price', async () => {

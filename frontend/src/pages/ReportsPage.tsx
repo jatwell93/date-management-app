@@ -11,6 +11,7 @@ import {
 } from '../components/ui/table';
 import { Button } from '../components/ui/button';
 import { apiService } from '../lib/api.service';
+import { useFreshApiToken } from '../hooks/useFreshApiToken';
 
 interface ReportsPageProps {
   token: string | null;
@@ -39,6 +40,7 @@ const SKELETON_ROWS = Array.from({ length: 6 }, (_, i) => i);
 
 export function ReportsPage({ token }: ReportsPageProps) {
   const navigate = useNavigate();
+  const getFreshApiToken = useFreshApiToken(token);
   const [reportData, setReportData] = useState<MonthlyExpiryReportItem[] | null>(null);
   const [overallReportData, setOverallReportData] = useState<MonthlyExpiryReportItem | null>(null);
   const [loading, setLoading] = useState(true);
@@ -60,9 +62,10 @@ export function ReportsPage({ token }: ReportsPageProps) {
       }
 
       try {
+        const authToken = await getFreshApiToken('reports-expiry-monthly');
         const data = await apiService.get<MonthlyExpiryReportItem[]>(
           '/reports/expiry',
-          token,
+          authToken,
           controller.signal,
         );
         if (!controller.signal.aborted) {
@@ -94,9 +97,10 @@ export function ReportsPage({ token }: ReportsPageProps) {
       }
 
       try {
+        const authToken = await getFreshApiToken('reports-expiry-overall');
         const data = await apiService.get<MonthlyExpiryReportItem>(
           '/reports/expiry-overall',
-          token,
+          authToken,
           controller.signal,
         );
         if (!controller.signal.aborted) {
@@ -120,7 +124,7 @@ export function ReportsPage({ token }: ReportsPageProps) {
     fetchReportData();
     fetchOverallReportData();
     return () => controller.abort();
-  }, [token]);
+  }, [token, getFreshApiToken]);
 
   const hasAnyError = monthlyError || overallError;
 

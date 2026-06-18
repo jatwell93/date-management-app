@@ -5,6 +5,14 @@ import { DashboardPage } from '../pages/DashboardPage';
 import { apiService } from '../lib/api.service';
 import '@testing-library/jest-dom';
 
+const mockGetToken = jest.fn();
+
+jest.mock('@clerk/clerk-react', () => ({
+  useAuth: () => ({
+    getToken: mockGetToken,
+  }),
+}));
+
 // Mock apiService
 jest.mock('../lib/api.service', () => ({
   apiService: {
@@ -23,6 +31,7 @@ function renderDashboard(token: string | null) {
 describe('DashboardPage', () => {
   beforeEach(() => {
     jest.clearAllMocks();
+    mockGetToken.mockResolvedValue(undefined);
   });
 
   it('renders dashboard data on successful fetch', async () => {
@@ -162,6 +171,26 @@ describe('DashboardPage', () => {
 
     await waitFor(() => {
       expect(screen.getByRole('alert')).toHaveTextContent(/Failed to load data/i);
+    });
+  });
+
+  it('refreshes the Clerk token before fetching dashboard data', async () => {
+    mockGetToken.mockResolvedValue('fresh-clerk-token');
+    (apiService.get as jest.Mock).mockResolvedValue({
+      stats: {
+        totalProducts: 1,
+        totalInventoryItems: 1,
+        expiringItems: 0,
+        lowStockItems: 0,
+      },
+      recentActivity: [],
+    });
+
+    renderDashboard('expired-prop-token');
+
+    await waitFor(() => {
+      expect(mockGetToken).toHaveBeenCalled();
+      expect(apiService.get).toHaveBeenCalledWith('/dashboard', 'fresh-clerk-token');
     });
   });
 });

@@ -1,6 +1,5 @@
 import React, { useState, useEffect } from 'react';
 import * as Sentry from '@sentry/react';
-import { useAuth } from '@clerk/clerk-react';
 import { Scanner } from '../components/Scanner';
 import { HandheldScanner } from '../components/HandheldScanner';
 import { Card, CardContent, CardHeader, CardTitle } from '../components/ui/card';
@@ -23,6 +22,7 @@ import {
 import { apiService } from '../lib/api.service';
 import { parseGS1Barcode } from '../lib/gs1-parser';
 import { synchronizeOfflineData } from '../lib/sync-manager';
+import { useFreshApiToken } from '../hooks/useFreshApiToken';
 import { useHandheldDetectionContext } from '../contexts/HandheldContext';
 import { HardwareScanResult } from '../types/handheld';
 import {
@@ -82,7 +82,7 @@ function formatExpiryDateForCopy(expiryDate: string): string {
 }
 
 export function ScanPage({ token }: ScanPageProps) {
-  const { getToken } = useAuth();
+  const getFreshApiToken = useFreshApiToken(token);
   const { isHandheld } = useHandheldDetectionContext();
   const [scannedBarcode, setScannedBarcode] = useState<string | null>(null);
   const [productDetails, setProductDetails] = useState<ProductDetails | null>(null);
@@ -116,7 +116,8 @@ export function ScanPage({ token }: ScanPageProps) {
     const fetchStoreAreas = async () => {
       if (!token) return;
       try {
-        const data = await apiService.get<StoreArea[]>('/store-areas', token);
+        const authToken = await getFreshApiToken('scan-store-areas');
+        const data = await apiService.get<StoreArea[]>('/store-areas', authToken);
         setStoreAreas(data);
       } catch (err: unknown) {
         if (err instanceof Error) {
@@ -127,7 +128,7 @@ export function ScanPage({ token }: ScanPageProps) {
       }
     };
     fetchStoreAreas();
-  }, [token]);
+  }, [token, getFreshApiToken]);
 
   useEffect(() => {
     if (productDetails && expiryDate) {
@@ -239,7 +240,8 @@ export function ScanPage({ token }: ScanPageProps) {
 
     try {
       const barcodeToSearch = resolveBarcodeForLookup(rawBarcode);
-      const product = await fetchProductWithFallback(barcodeToSearch, token);
+      const authToken = await getFreshApiToken('scan-product-lookup');
+      const product = await fetchProductWithFallback(barcodeToSearch, authToken || token);
 
       if (!product) {
         setShowNewProductForm(true);
@@ -248,7 +250,7 @@ export function ScanPage({ token }: ScanPageProps) {
 
       setProductDetails(product);
 
-      await loadProductRelatedData(product, token);
+      await loadProductRelatedData(product, authToken || token);
     } catch (err: unknown) {
       if (err instanceof Error) {
         if (err.message.includes('404')) {
@@ -269,6 +271,7 @@ export function ScanPage({ token }: ScanPageProps) {
     }
 
     try {
+      const authToken = await getFreshApiToken('scan-product-create');
       const newProduct = await apiService.post<ProductDetails>(
         '/products',
         {
@@ -277,7 +280,7 @@ export function ScanPage({ token }: ScanPageProps) {
           sku: newProductSKU,
           costPrice: parseFloat(newProductCostPrice),
         },
-        token,
+        authToken,
       );
       setProductDetails(newProduct);
       setSuccessMessage('Product created. Add expiry details next.');
@@ -341,14 +344,7 @@ export function ScanPage({ token }: ScanPageProps) {
     }
 
     try {
-      let authToken = token;
-      try {
-        authToken = (await getToken()) || token;
-      } catch (tokenError) {
-        Sentry.captureException(tokenError, {
-          tags: { feature: 'scan-page', action: 'refresh-inventory-token' },
-        });
-      }
+      const authToken = await getFreshApiToken('scan-inventory-submit');
 
       await apiService.post(
         '/inventory-items',
@@ -388,7 +384,8 @@ export function ScanPage({ token }: ScanPageProps) {
     if (!token || !itemToDelete) return;
 
     try {
-      await apiService.delete(`/inventory-items/${itemToDelete}`, token);
+      const authToken = await getFreshApiToken('scan-recent-entry-delete');
+      await apiService.delete(`/inventory-items/${itemToDelete}`, authToken);
       setSuccessMessage('Expiry entry deleted.');
       setAlertDialogOpen(false);
       setItemToDelete(null);
@@ -396,7 +393,7 @@ export function ScanPage({ token }: ScanPageProps) {
       if (productDetails) {
         const recent: RecentInventoryItem[] = await apiService.get<RecentInventoryItem[]>(
           `/inventory-items/recent/product/${productDetails.id}`,
-          token,
+          authToken,
         );
         setRecentEntries(recent);
       }
@@ -417,7 +414,7 @@ export function ScanPage({ token }: ScanPageProps) {
 
     try {
       setError(null);
-      await synchronizeOfflineData(token);
+      await synchronizeOfflineData(() => getFreshApiToken('scan-offline-sync'));
       setSuccessMessage('Inventory sync complete.');
       setTimeout(() => setSuccessMessage(null), 3000);
     } catch (err: unknown) {

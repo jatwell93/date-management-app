@@ -1,5 +1,6 @@
 import { offlineStorage } from './offline-storage';
 import { apiService } from './api.service';
+import { ClerkTokenGetter, resolveApiToken } from './auth-token';
 
 const PENDING_INVENTORY_ITEMS_PREFIX = 'pending-inventory-item-';
 
@@ -9,7 +10,23 @@ export async function getPendingInventoryItemCount(): Promise<number> {
   return keys.filter((key) => key.startsWith(PENDING_INVENTORY_ITEMS_PREFIX)).length;
 }
 
-export async function synchronizeOfflineData(token: string | null) {
+type OfflineSyncTokenSource = string | null | ClerkTokenGetter;
+
+async function resolveOfflineSyncToken(
+  tokenSource: OfflineSyncTokenSource,
+): Promise<string | undefined> {
+  if (typeof tokenSource === 'function') {
+    return resolveApiToken({
+      fallbackToken: null,
+      getToken: tokenSource,
+      actionTag: 'offline-sync',
+    });
+  }
+
+  return tokenSource || undefined;
+}
+
+export async function synchronizeOfflineData(token: OfflineSyncTokenSource) {
   if (!token) {
     // console.warn("Synchronization skipped: No authentication token available.");
     return;
@@ -35,8 +52,12 @@ export async function synchronizeOfflineData(token: string | null) {
     const item = await offlineStorage.getItem(key);
     if (item) {
       try {
+        const authToken = await resolveOfflineSyncToken(token);
+        if (!authToken) {
+          return;
+        }
         // console.log(`Synchronizing item: ${key}`, item);
-        await apiService.post('/inventory-items', item, token);
+        await apiService.post('/inventory-items', item, authToken);
 
         // console.log(`Successfully synchronized item: ${key}`);
         await offlineStorage.removeItem(key);

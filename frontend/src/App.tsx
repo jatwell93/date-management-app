@@ -37,6 +37,7 @@ import { offlineStorage as _offlineStorage } from './lib/offline-storage';
 import { ToastProvider } from './components/ui/toast-provider';
 import { HandheldProvider, useHandheldDetectionContext } from './contexts/HandheldContext';
 import { useOrgBootstrap } from './hooks/useOrgBootstrap';
+import { useFreshApiToken } from './hooks/useFreshApiToken';
 import { hasPermission, PERMISSIONS, RoleValue } from './constants/roles';
 import { HandheldLayout } from './layouts/HandheldLayout';
 import { API_AUTH_UNAUTHORIZED_EVENT, API_BASE_URL } from './lib/api.service';
@@ -124,11 +125,11 @@ function RouteLoadingState() {
 }
 
 function runHandledHandheldSync(
-  token: string | null,
+  getSyncToken: () => Promise<string | undefined>,
   refreshPendingQueueCount: () => Promise<void>,
 ): void {
   void (async () => {
-    await synchronizeOfflineData(token);
+    await synchronizeOfflineData(getSyncToken);
     await refreshPendingQueueCount();
   })().catch((error: unknown) => {
     Sentry.captureException(error, {
@@ -417,6 +418,7 @@ function AppContent({
     token,
     handleLogout,
   } = useAuthContext();
+  const getFreshApiToken = useFreshApiToken(token);
   const isLoggedIn = hasSession && isFullySignedIn;
   const { isBootstrapped, isBootstrapping, bootstrapError, bootstrapResult } = useOrgBootstrap();
 
@@ -802,7 +804,12 @@ function AppContent({
         <HandheldLayout
           userName={userName || undefined}
           syncStatus={isOnline ? 'synced' : 'offline'}
-          onSyncNow={() => runHandledHandheldSync(token, refreshPendingQueueCount)}
+          onSyncNow={() =>
+            runHandledHandheldSync(
+              () => getFreshApiToken('app-handheld-sync'),
+              refreshPendingQueueCount,
+            )
+          }
           onSettingsClick={() => {
             navigate('/settings');
           }}

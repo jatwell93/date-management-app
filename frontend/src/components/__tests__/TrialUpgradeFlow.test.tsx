@@ -3,6 +3,19 @@ import userEvent from '@testing-library/user-event';
 import fetchMock from 'jest-fetch-mock';
 import { TrialUpgradeFlow } from '../TrialUpgradeFlow';
 
+jest.mock('../../hooks/useFreshApiToken', () => ({
+  useFreshApiToken: (() => {
+    const callbacks = new Map<string, jest.Mock>();
+    return (token: string | null) => {
+      const key = token ?? '__missing__';
+      if (!callbacks.has(key)) {
+        callbacks.set(key, jest.fn().mockResolvedValue(token || undefined));
+      }
+      return callbacks.get(key);
+    };
+  })(),
+}));
+
 jest.mock('../../lib/api.service', () => ({
   buildApiUrl: (route: string) => `https://api.test${route}`,
 }));

@@ -97,6 +97,30 @@ describe('synchronizeOfflineData', () => {
     expect(offlineStorage.removeItem).toHaveBeenCalledWith('pending-inventory-item-2');
   });
 
+  it('can resolve a current token before posting queued inventory', async () => {
+    (offlineStorage.keys as jest.Mock).mockResolvedValueOnce(['pending-inventory-item-1']);
+    (offlineStorage.getItem as jest.Mock).mockResolvedValueOnce({
+      productId: 1,
+      expiryDate: '2026-12-31',
+      locationId: 1,
+    });
+
+    const getToken = jest.fn().mockResolvedValue('fresh-clerk-token');
+
+    await synchronizeOfflineData(getToken);
+
+    expect(getToken).toHaveBeenCalled();
+    expect(apiService.post).toHaveBeenCalledWith(
+      '/inventory-items',
+      {
+        productId: 1,
+        expiryDate: '2026-12-31',
+        locationId: 1,
+      },
+      'fresh-clerk-token',
+    );
+  });
+
   it('should handle failed synchronization gracefully', async () => {
     (offlineStorage.keys as jest.Mock).mockResolvedValueOnce(['pending-inventory-item-1']);
     (offlineStorage.getItem as jest.Mock).mockResolvedValueOnce({

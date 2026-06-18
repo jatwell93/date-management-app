@@ -15,6 +15,7 @@ import { DataTable } from '../components/ui/data-table';
 import { DataTableColumnHeader } from '../components/ui/data-table-column-header';
 import { ColumnDef } from '@tanstack/react-table';
 import Toast from '../components/ui/toast';
+import { useFreshApiToken } from '../hooks/useFreshApiToken';
 
 interface DetailedExpiryReportPageProps {
   token: string | null;
@@ -104,6 +105,7 @@ function TableSkeleton() {
 }
 
 export function DetailedExpiryReportPage({ token }: DetailedExpiryReportPageProps) {
+  const getFreshApiToken = useFreshApiToken(token);
   const [reportData, setReportData] = useState<DetailedExpiryReportItem[] | null>(null);
   const [loading, setLoading] = useState(true);
   const [fetchError, setFetchError] = useState<string | null>(null);
@@ -128,9 +130,10 @@ export function DetailedExpiryReportPage({ token }: DetailedExpiryReportPageProp
         return;
       }
       try {
+        const authToken = await getFreshApiToken('detailed-expiry-report-fetch');
         const data = await apiService.get<DetailedExpiryReportItem[]>(
           '/reports/expiry-details',
-          token,
+          authToken,
           signal,
         );
         if (!signal?.aborted) {
@@ -149,7 +152,7 @@ export function DetailedExpiryReportPage({ token }: DetailedExpiryReportPageProp
         }
       }
     },
-    [token],
+    [token, getFreshApiToken],
   );
 
   useEffect(() => {
@@ -168,9 +171,10 @@ export function DetailedExpiryReportPage({ token }: DetailedExpiryReportPageProp
 
     const fetchStoreAreas = async () => {
       try {
+        const authToken = await getFreshApiToken('detailed-expiry-store-areas');
         const data = await apiService.get<{ id: number; name: string }[]>(
           '/store-areas',
-          token,
+          authToken,
           controller.signal,
         );
         if (!controller.signal.aborted) {
@@ -188,7 +192,7 @@ export function DetailedExpiryReportPage({ token }: DetailedExpiryReportPageProp
     return () => {
       controller.abort();
     };
-  }, [token]);
+  }, [token, getFreshApiToken]);
 
   const handleSaveEdit = useCallback(async (): Promise<boolean> => {
     if (!editingItem) return true;
@@ -199,14 +203,15 @@ export function DetailedExpiryReportPage({ token }: DetailedExpiryReportPageProp
     setSaving(true);
     setActionError(null);
     try {
+      const authToken = await getFreshApiToken('detailed-expiry-update');
       await apiService.put(
         `/inventory-items/${editingItem.inventoryId}`,
         { expiryDate: editingItem.expiryDate, locationId: editingItem.locationId },
-        token,
+        authToken,
       );
       const updatedData = await apiService.get<DetailedExpiryReportItem[]>(
         '/reports/expiry-details',
-        token,
+        authToken,
       );
       setReportData(updatedData);
       setEditingItem(null);
@@ -220,7 +225,7 @@ export function DetailedExpiryReportPage({ token }: DetailedExpiryReportPageProp
     } finally {
       setSaving(false);
     }
-  }, [editingItem, token, showToast]);
+  }, [editingItem, token, getFreshApiToken, showToast]);
 
   const handleEdit = useCallback(
     async (item: DetailedExpiryReportItem) => {
@@ -254,10 +259,11 @@ export function DetailedExpiryReportPage({ token }: DetailedExpiryReportPageProp
       setDeleting(true);
       setActionError(null);
       try {
-        await apiService.delete(`/inventory-items/${inventoryId}`, token);
+        const authToken = await getFreshApiToken('detailed-expiry-delete');
+        await apiService.delete(`/inventory-items/${inventoryId}`, authToken);
         const updatedData = await apiService.get<DetailedExpiryReportItem[]>(
           '/reports/expiry-details',
-          token,
+          authToken,
         );
         setReportData(updatedData);
         setDeleteConfirmation(null);
@@ -270,7 +276,7 @@ export function DetailedExpiryReportPage({ token }: DetailedExpiryReportPageProp
         setDeleting(false);
       }
     },
-    [token, showToast],
+    [token, getFreshApiToken, showToast],
   );
 
   const confirmDelete = useCallback((inventoryId: number) => {

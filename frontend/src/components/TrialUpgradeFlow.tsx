@@ -2,6 +2,7 @@ import { useState, useEffect } from 'react';
 import { Button } from './ui/button';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from './ui/card';
 import { buildApiUrl } from '../lib/api.service';
+import { useFreshApiToken } from '../hooks/useFreshApiToken';
 
 interface SubscriptionTierResponse {
   status: 'active' | 'trialing' | 'expired' | 'canceled';
@@ -168,6 +169,7 @@ function UpgradeCard({
 }
 
 export function TrialUpgradeFlow({ token }: TrialUpgradeFlowProps) {
+  const getFreshApiToken = useFreshApiToken(token);
   const [trialStatus, setTrialStatus] = useState<TrialStatusResponse | null>(null);
   const [loading, setLoading] = useState(true);
   const [converting, setConverting] = useState(false);
@@ -181,9 +183,10 @@ export function TrialUpgradeFlow({ token }: TrialUpgradeFlowProps) {
 
     const fetchTrialStatus = async () => {
       try {
+        const authToken = await getFreshApiToken('trial-upgrade-status');
         const response = await fetch(buildApiUrl('/subscription/trial-status'), {
           headers: {
-            Authorization: `Bearer ${token}`,
+            Authorization: `Bearer ${authToken}`,
           },
         });
 
@@ -201,7 +204,7 @@ export function TrialUpgradeFlow({ token }: TrialUpgradeFlowProps) {
     };
 
     fetchTrialStatus();
-  }, [token]);
+  }, [token, getFreshApiToken]);
 
   const handleUpgrade = async (billingCycle: 'monthly' | 'annual') => {
     if (!token || !trialStatus) return;
@@ -210,6 +213,7 @@ export function TrialUpgradeFlow({ token }: TrialUpgradeFlowProps) {
     setError(null);
 
     try {
+      const authToken = await getFreshApiToken('trial-upgrade-checkout');
       const priceIds = {
         monthly: process.env.REACT_APP_STRIPE_PRICE_PROFESSIONAL_MONTHLY,
         annual: process.env.REACT_APP_STRIPE_PRICE_PROFESSIONAL_ANNUAL,
@@ -224,7 +228,7 @@ export function TrialUpgradeFlow({ token }: TrialUpgradeFlowProps) {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
-          Authorization: `Bearer ${token}`,
+          Authorization: `Bearer ${authToken}`,
         },
         body: JSON.stringify({
           priceId,

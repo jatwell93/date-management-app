@@ -4,6 +4,7 @@ import { X } from 'lucide-react';
 import { Button } from './ui/button';
 import { Card, CardContent } from './ui/card';
 import { buildApiUrl } from '../lib/api.service';
+import { useFreshApiToken } from '../hooks/useFreshApiToken';
 
 interface SubscriptionTierResponse {
   status: 'ACTIVE' | 'TRIALING' | 'EXPIRED' | 'CANCELED';
@@ -32,6 +33,7 @@ interface TrialBannerProps {
 }
 
 export function TrialBanner({ token }: TrialBannerProps) {
+  const getFreshApiToken = useFreshApiToken(token);
   const [trialStatus, setTrialStatus] = useState<TrialStatusResponse | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -46,9 +48,10 @@ export function TrialBanner({ token }: TrialBannerProps) {
 
     const fetchTrialStatus = async () => {
       try {
+        const authToken = await getFreshApiToken('trial-banner-status');
         const response = await fetch(buildApiUrl('/subscription/trial-status'), {
           headers: {
-            Authorization: `Bearer ${token}`,
+            Authorization: `Bearer ${authToken}`,
           },
         });
 
@@ -66,7 +69,7 @@ export function TrialBanner({ token }: TrialBannerProps) {
     };
 
     fetchTrialStatus();
-  }, [token]);
+  }, [token, getFreshApiToken]);
 
   if (dismissed || loading || !token) {
     return null;

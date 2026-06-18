@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import * as Sentry from '@sentry/react';
 import { getExpiredLossesReport } from '../services/expiredItemService';
+import { useFreshApiToken } from '../hooks/useFreshApiToken';
 import {
   Table,
   TableBody,
@@ -15,6 +16,7 @@ interface ExpiredLossReportProps {
 }
 
 const ExpiredLossReport: React.FC<ExpiredLossReportProps> = ({ token }) => {
+  const getFreshApiToken = useFreshApiToken(token);
   const [lossesBySKU, setLossesBySKU] = useState<
     Array<{ sku: string; productName: string; totalLoss: number }>
   >([]);
@@ -33,7 +35,8 @@ const ExpiredLossReport: React.FC<ExpiredLossReportProps> = ({ token }) => {
     const fetchExpiredLosses = async () => {
       try {
         setLoading(true);
-        const data = await getExpiredLossesReport(token);
+        const authToken = await getFreshApiToken('expired-loss-report');
+        const data = await getExpiredLossesReport(authToken || null);
         setLossesBySKU(data.lossesBySKU);
         setLossesByStoreArea(data.lossesByStoreArea);
       } catch (err) {
@@ -54,7 +57,7 @@ const ExpiredLossReport: React.FC<ExpiredLossReportProps> = ({ token }) => {
     };
 
     fetchExpiredLosses();
-  }, [token]);
+  }, [token, getFreshApiToken]);
 
   if (loading) {
     return <div className="text-center py-10">Loading expired losses report…</div>;

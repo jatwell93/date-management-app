@@ -4,6 +4,19 @@ import userEvent from '@testing-library/user-event';
 import { StorageQuotaWarning } from '../StorageQuotaWarning';
 import fetchMock from 'jest-fetch-mock';
 
+jest.mock('../../hooks/useFreshApiToken', () => ({
+  useFreshApiToken: (() => {
+    const callbacks = new Map<string, jest.Mock>();
+    return (token: string | null) => {
+      const key = token ?? '__missing__';
+      if (!callbacks.has(key)) {
+        callbacks.set(key, jest.fn().mockResolvedValue(token || undefined));
+      }
+      return callbacks.get(key);
+    };
+  })(),
+}));
+
 describe('StorageQuotaWarning', () => {
   const mockUserId = 1;
   const mockAuthToken = 'mock-jwt-token';
