@@ -37,6 +37,11 @@ export async function synchronizeOfflineData(token: OfflineSyncTokenSource) {
     return;
   }
 
+  const authToken = await resolveOfflineSyncToken(token);
+  if (!authToken) {
+    return;
+  }
+
   // console.log("Attempting to synchronize offline data...");
   const keys = await offlineStorage.keys();
   const pendingInventoryItemKeys = keys.filter((key) =>
@@ -52,10 +57,6 @@ export async function synchronizeOfflineData(token: OfflineSyncTokenSource) {
     const item = await offlineStorage.getItem(key);
     if (item) {
       try {
-        const authToken = await resolveOfflineSyncToken(token);
-        if (!authToken) {
-          continue;
-        }
         // console.log(`Synchronizing item: ${key}`, item);
         await apiService.post('/inventory-items', item, authToken);
 
