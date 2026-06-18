@@ -7,6 +7,7 @@ import { Scanner } from './Scanner';
 import { apiService } from '../lib/api.service';
 import { calculateMarkdownPrice } from '../lib/utils';
 import { HardwareScanResult } from '../types/handheld';
+import { useFreshApiToken } from '../hooks/useFreshApiToken';
 
 interface MarkdownCalculatorProps {
   token: string | null;
@@ -31,6 +32,7 @@ const currencyFormatter = new Intl.NumberFormat('en-AU', {
 });
 
 export function MarkdownCalculator({ token }: MarkdownCalculatorProps) {
+  const getFreshApiToken = useFreshApiToken(token);
   const [costPrice, setCostPrice] = useState<string>('');
   const [expiryDate, setExpiryDate] = useState<string>('');
   const [markdownResult, setMarkdownResult] = useState<MarkdownResult | null>(null);
@@ -68,7 +70,7 @@ export function MarkdownCalculator({ token }: MarkdownCalculatorProps) {
     try {
       let product: ProductDetails | null = null;
       const isSkuSearch = input.length <= 8;
-      const apiToken = token || undefined;
+      const apiToken = await getFreshApiToken('markdown-product-lookup');
 
       if (isSkuSearch) {
         product = await apiService.get<ProductDetails>(`/products/by-sku/${input}`, apiToken);

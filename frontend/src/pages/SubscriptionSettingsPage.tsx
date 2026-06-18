@@ -8,12 +8,14 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '../co
 import { Button } from '../components/ui/button';
 import { buildApiUrl } from '../lib/api.service';
 import type { TierLevel, SubscriptionData, UsageData } from '../types/subscription';
+import { useFreshApiToken } from '../hooks/useFreshApiToken';
 
 interface SubscriptionSettingsPageProps {
   token: string | null;
 }
 
 export function SubscriptionSettingsPage({ token }: SubscriptionSettingsPageProps) {
+  const getFreshApiToken = useFreshApiToken(token);
   const [showUpgradeModal, setShowUpgradeModal] = useState(false);
   const [subscription, setSubscription] = useState<SubscriptionData | null>(null);
   const [usage, setUsage] = useState<UsageData | null>(null);
@@ -35,12 +37,13 @@ export function SubscriptionSettingsPage({ token }: SubscriptionSettingsPageProp
       setBillingLoadError(null);
 
       try {
+        const authToken = await getFreshApiToken('subscription-settings-load');
         const [subscriptionRes, usageRes] = await Promise.all([
           fetch(buildApiUrl('/subscription/current'), {
-            headers: { Authorization: `Bearer ${token}` },
+            headers: { Authorization: `Bearer ${authToken}` },
           }),
           fetch(buildApiUrl('/organization/usage'), {
-            headers: { Authorization: `Bearer ${token}` },
+            headers: { Authorization: `Bearer ${authToken}` },
           }),
         ]);
 
@@ -80,7 +83,7 @@ export function SubscriptionSettingsPage({ token }: SubscriptionSettingsPageProp
         }
       }
     },
-    [token],
+    [token, getFreshApiToken],
   );
 
   useEffect(() => {
@@ -110,6 +113,7 @@ export function SubscriptionSettingsPage({ token }: SubscriptionSettingsPageProp
     }
 
     try {
+      const authToken = await getFreshApiToken('subscription-settings-checkout');
       const priceIds = {
         starter: {
           monthly: process.env.REACT_APP_STRIPE_PRICE_STARTER_MONTHLY,
@@ -131,7 +135,7 @@ export function SubscriptionSettingsPage({ token }: SubscriptionSettingsPageProp
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
-          Authorization: `Bearer ${token}`,
+          Authorization: `Bearer ${authToken}`,
         },
         body: JSON.stringify({
           priceId,
@@ -165,11 +169,12 @@ export function SubscriptionSettingsPage({ token }: SubscriptionSettingsPageProp
 
     setCancelLoading(true);
     try {
+      const authToken = await getFreshApiToken('subscription-settings-cancel');
       const response = await fetch(buildApiUrl('/subscription/cancel'), {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
-          Authorization: `Bearer ${token}`,
+          Authorization: `Bearer ${authToken}`,
         },
       });
 

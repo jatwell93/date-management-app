@@ -4,6 +4,7 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from './ui/
 import { Button } from './ui/button';
 import { buildApiUrl } from '../lib/api.service';
 import type { SubscriptionData, UsageData } from '../types/subscription';
+import { useFreshApiToken } from '../hooks/useFreshApiToken';
 
 interface SubscriptionDashboardProps {
   token: string | null;
@@ -66,6 +67,7 @@ function formatBytes(bytes: number): string {
 }
 
 export function SubscriptionDashboard({ token, onUpgrade }: SubscriptionDashboardProps) {
+  const getFreshApiToken = useFreshApiToken(token);
   const [subscription, setSubscription] = useState<SubscriptionData | null>(null);
   const [usage, setUsage] = useState<UsageData | null>(null);
   const [loading, setLoading] = useState(true);
@@ -79,12 +81,13 @@ export function SubscriptionDashboard({ token, onUpgrade }: SubscriptionDashboar
 
     const fetchData = async () => {
       try {
+        const authToken = await getFreshApiToken('subscription-dashboard');
         const [subscriptionRes, usageRes] = await Promise.all([
           fetch(buildApiUrl('/subscription/current'), {
-            headers: { Authorization: `Bearer ${token}` },
+            headers: { Authorization: `Bearer ${authToken}` },
           }),
           fetch(buildApiUrl('/organization/usage'), {
-            headers: { Authorization: `Bearer ${token}` },
+            headers: { Authorization: `Bearer ${authToken}` },
           }),
         ]);
 
@@ -108,7 +111,7 @@ export function SubscriptionDashboard({ token, onUpgrade }: SubscriptionDashboar
     };
 
     fetchData();
-  }, [token]);
+  }, [token, getFreshApiToken]);
 
   if (loading) {
     return (

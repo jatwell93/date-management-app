@@ -1,6 +1,19 @@
 import { render, screen, waitFor } from '@testing-library/react';
 import { SubscriptionDashboard } from '../SubscriptionDashboard';
 
+jest.mock('../../hooks/useFreshApiToken', () => ({
+  useFreshApiToken: (() => {
+    const callbacks = new Map<string, jest.Mock>();
+    return (token: string | null) => {
+      const key = token ?? '__missing__';
+      if (!callbacks.has(key)) {
+        callbacks.set(key, jest.fn().mockResolvedValue(token || undefined));
+      }
+      return callbacks.get(key);
+    };
+  })(),
+}));
+
 // Mock API responses
 const mockSubscriptionData = {
   tierLevel: 'professional',

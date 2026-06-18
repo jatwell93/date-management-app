@@ -5,6 +5,19 @@ import type { RoleValue } from './constants/roles';
 
 jest.mock('react-router-dom');
 
+jest.mock('./hooks/useFreshApiToken', () => ({
+  useFreshApiToken: (() => {
+    const callbacks = new Map<string, jest.Mock>();
+    return (token: string | null) => {
+      const key = token ?? '__missing__';
+      if (!callbacks.has(key)) {
+        callbacks.set(key, jest.fn().mockResolvedValue(token || undefined));
+      }
+      return callbacks.get(key);
+    };
+  })(),
+}));
+
 jest.mock('./components/ClerkAuthProvider', () => ({
   useAuthContext: jest.fn(),
 }));

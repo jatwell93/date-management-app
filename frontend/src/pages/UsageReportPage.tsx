@@ -17,6 +17,7 @@ import {
   SelectValue,
 } from '../components/ui/select';
 import { semanticDataViz } from '../theme/semantic-tokens';
+import { useFreshApiToken } from '../hooks/useFreshApiToken';
 
 // Import Chart.js components — lazy-loaded to keep initial bundle lean
 import {
@@ -83,6 +84,7 @@ function formatUserLabel(item: ItemsByUserReportItem) {
 }
 
 export function UsageReportPage({ token }: UsageReportPageProps) {
+  const getFreshApiToken = useFreshApiToken(token);
   const [usageData, setUsageData] = useState<DailyUsageReportItem[] | null>(null);
   const [loading, setLoading] = useState(true);
   const [usageError, setUsageError] = useState<string | null>(null);
@@ -105,9 +107,10 @@ export function UsageReportPage({ token }: UsageReportPageProps) {
       }
 
       try {
+        const authToken = await getFreshApiToken('usage-report-daily');
         const data = await apiService.get<DailyUsageReportItem[]>(
           '/reports/daily-usage',
-          token,
+          authToken,
           controller.signal,
         );
         if (!controller.signal.aborted) {
@@ -129,7 +132,7 @@ export function UsageReportPage({ token }: UsageReportPageProps) {
 
     fetchUsageData();
     return () => controller.abort();
-  }, [token]);
+  }, [token, getFreshApiToken]);
 
   // Fetch items-by-date (independent of timeFrame)
   useEffect(() => {
@@ -145,9 +148,10 @@ export function UsageReportPage({ token }: UsageReportPageProps) {
       }
 
       try {
+        const authToken = await getFreshApiToken('usage-report-items-by-date');
         const data = await apiService.get<ItemsByDateReportItem[]>(
           '/reports/items-by-date',
-          token,
+          authToken,
           controller.signal,
         );
         if (!controller.signal.aborted) {
@@ -170,7 +174,7 @@ export function UsageReportPage({ token }: UsageReportPageProps) {
 
     fetchItemsByDate();
     return () => controller.abort();
-  }, [token]);
+  }, [token, getFreshApiToken]);
 
   // Fetch items-by-user (depends on timeFrame)
   useEffect(() => {
@@ -187,9 +191,10 @@ export function UsageReportPage({ token }: UsageReportPageProps) {
       }
 
       try {
+        const authToken = await getFreshApiToken('usage-report-items-by-user');
         const data = await apiService.get<ItemsByUserReportItem[]>(
           `/reports/items-by-user?timeFrame=${timeFrame}`,
-          token,
+          authToken,
           controller.signal,
         );
         if (!controller.signal.aborted) {
@@ -212,7 +217,7 @@ export function UsageReportPage({ token }: UsageReportPageProps) {
 
     fetchItemsByUser();
     return () => controller.abort();
-  }, [token, timeFrame]);
+  }, [token, timeFrame, getFreshApiToken]);
 
   // Prepare chart data for Items by User
   const itemsByUserChartData = useMemo(

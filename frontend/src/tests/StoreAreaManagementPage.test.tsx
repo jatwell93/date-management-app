@@ -13,6 +13,13 @@ import { apiService } from '../lib/api.service';
 import '@testing-library/jest-dom';
 
 const testSessionToken = randomUUID();
+const mockGetToken = jest.fn();
+
+jest.mock('@clerk/clerk-react', () => ({
+  useAuth: () => ({
+    getToken: mockGetToken,
+  }),
+}));
 
 // Mock apiService
 jest.mock('../lib/api.service', () => ({
@@ -27,6 +34,7 @@ jest.mock('../lib/api.service', () => ({
 describe('StoreAreaManagementPage', () => {
   beforeEach(() => {
     jest.clearAllMocks();
+    mockGetToken.mockResolvedValue(undefined);
   });
 
   it('renders the store area management page and fetches areas', async () => {
@@ -187,6 +195,32 @@ describe('StoreAreaManagementPage', () => {
     expect(await screen.findByRole('status')).toHaveTextContent(/New Area added/i);
   });
 
+  it('refreshes the Clerk token before creating a store area', async () => {
+    mockGetToken.mockResolvedValue('fresh-clerk-token');
+    (apiService.get as jest.Mock).mockResolvedValue([]);
+    (apiService.post as jest.Mock).mockResolvedValue({
+      id: 3,
+      name: 'New Area',
+      last_checked: null,
+    });
+
+    render(<StoreAreaManagementPage token="expired-prop-token" />);
+
+    fireEvent.change(await screen.findByLabelText(/Area name/i), {
+      target: { value: 'New Area' },
+    });
+    fireEvent.click(screen.getByRole('button', { name: /Add location/i }));
+
+    await _waitFor(() => {
+      expect(mockGetToken).toHaveBeenCalled();
+      expect(apiService.post).toHaveBeenCalledWith(
+        '/store-areas',
+        { name: 'New Area', subDepartment: '' },
+        'fresh-clerk-token',
+      );
+    });
+  });
+
   it('prevents duplicate add submissions while saving', async () => {
     (apiService.get as jest.Mock).mockResolvedValue([]);
     let resolvePost: (value: unknown) => void = () => {};
@@ -207,7 +241,7 @@ describe('StoreAreaManagementPage', () => {
     fireEvent.click(addButton);
     fireEvent.click(addButton);
 
-    expect(apiService.post).toHaveBeenCalledTimes(1);
+    await _waitFor(() => expect(apiService.post).toHaveBeenCalledTimes(1));
     expect(addButton).toBeDisabled();
 
     await act(async () => {

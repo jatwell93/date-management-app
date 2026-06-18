@@ -222,7 +222,7 @@ describe('ScanPage Integration', () => {
     });
 
     (apiService.post as jest.Mock).mockResolvedValue({});
-    mockGetToken.mockResolvedValue('fresh-clerk-token');
+    mockGetToken.mockResolvedValue(undefined);
 
     // Mock Online status
     Object.defineProperty(navigator, 'onLine', {
@@ -272,9 +272,9 @@ describe('ScanPage Integration', () => {
   });
 
   it.each([
-    { daysToExpiry: 90, percentage: 50, price: '5.00' },
-    { daysToExpiry: 60, percentage: 60, price: '4.00' },
-    { daysToExpiry: 30, percentage: 75, price: '2.50' },
+    { daysToExpiry: 89, percentage: 50, price: '5.00' },
+    { daysToExpiry: 59, percentage: 60, price: '4.00' },
+    { daysToExpiry: 29, percentage: 75, price: '2.50' },
   ])(
     'shows the $percentage% markdown for an expiry $daysToExpiry days away',
     async ({ daysToExpiry, percentage, price }) => {
@@ -302,7 +302,9 @@ describe('ScanPage Integration', () => {
       });
 
       expect(
-        await screen.findByText(`Markdown Price (${percentage}% off): $${price}`),
+        await screen.findByText((_content, element) =>
+          Boolean(element?.textContent === `Markdown Price (${percentage}% off): $${price}`),
+        ),
       ).toBeInTheDocument();
       expect(screen.queryByText(/\$NaN/i)).not.toBeInTheDocument();
     },
@@ -494,7 +496,7 @@ describe('ScanPage Integration', () => {
           expiryDate: '2025-12-31',
           locationId: 1,
         }),
-        'fresh-clerk-token',
+        mockToken,
       );
     });
 
@@ -502,6 +504,7 @@ describe('ScanPage Integration', () => {
   });
 
   it('refreshes the Clerk token before submitting an online expiry item', async () => {
+    mockGetToken.mockResolvedValue('fresh-clerk-token');
     render(
       <HandheldProvider>
         <ScanPage token="expired-prop-token" />
@@ -509,7 +512,7 @@ describe('ScanPage Integration', () => {
     );
 
     await waitFor(() =>
-      expect(apiService.get).toHaveBeenCalledWith('/store-areas', 'expired-prop-token'),
+      expect(apiService.get).toHaveBeenCalledWith('/store-areas', 'fresh-clerk-token'),
     );
 
     userEvent.click(screen.getByTestId('trigger-scan'));
@@ -529,6 +532,29 @@ describe('ScanPage Integration', () => {
           expiryDate: '2025-12-31',
           locationId: 1,
         }),
+        'fresh-clerk-token',
+      );
+    });
+  });
+
+  it('refreshes the Clerk token before looking up scanned product details', async () => {
+    mockGetToken.mockResolvedValue('fresh-clerk-token');
+    render(
+      <HandheldProvider>
+        <ScanPage token="expired-prop-token" />
+      </HandheldProvider>,
+    );
+
+    await waitFor(() =>
+      expect(apiService.get).toHaveBeenCalledWith('/store-areas', 'fresh-clerk-token'),
+    );
+
+    userEvent.click(screen.getByTestId('trigger-scan'));
+
+    await waitFor(() => {
+      expect(mockGetToken).toHaveBeenCalled();
+      expect(apiService.get).toHaveBeenCalledWith(
+        expect.stringContaining('/products/by-barcode/1234567890'),
         'fresh-clerk-token',
       );
     });

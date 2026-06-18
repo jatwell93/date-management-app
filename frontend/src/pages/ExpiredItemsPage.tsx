@@ -25,6 +25,7 @@ import {
   TableHeader,
   TableRow,
 } from '../components/ui/table';
+import { useFreshApiToken } from '../hooks/useFreshApiToken';
 
 // Import Chart.js components — lazy-loaded to keep initial bundle lean
 import {
@@ -79,6 +80,7 @@ function formatExpiry(raw: string): string {
 const SKELETON_ROWS = Array.from({ length: 5 }, (_, i) => i);
 
 const ExpiredItemsPage: React.FC<ExpiredItemsPageProps> = ({ token }) => {
+  const getFreshApiToken = useFreshApiToken(token);
   const [expiredItems, setExpiredItems] = useState<ExpiredItem[]>([]);
   const [loading, setLoading] = useState<boolean>(true);
   const [error, setError] = useState<string | null>(null);
@@ -116,7 +118,8 @@ const ExpiredItemsPage: React.FC<ExpiredItemsPageProps> = ({ token }) => {
     const fetchExpiredItems = async () => {
       try {
         setLoading(true);
-        const data = await getExpiredItems(token, controller.signal);
+        const authToken = await getFreshApiToken('expired-items-list');
+        const data = await getExpiredItems(authToken || null, controller.signal);
         if (!controller.signal.aborted) {
           setExpiredItems(data);
         }
@@ -140,7 +143,7 @@ const ExpiredItemsPage: React.FC<ExpiredItemsPageProps> = ({ token }) => {
 
     fetchExpiredItems();
     return () => controller.abort();
-  }, [token]);
+  }, [token, getFreshApiToken]);
 
   const handleAction = useCallback((item: ExpiredItem, actionType: 'sold_through' | 'expired') => {
     setSelectedItem(item);
@@ -204,6 +207,7 @@ const ExpiredItemsPage: React.FC<ExpiredItemsPageProps> = ({ token }) => {
 
     try {
       const processUnitsDiscarded = action === 'expired' ? unitsDiscarded : 0;
+      const authToken = await getFreshApiToken('expired-items-process');
 
       await processExpiredItem(
         {
@@ -211,10 +215,10 @@ const ExpiredItemsPage: React.FC<ExpiredItemsPageProps> = ({ token }) => {
           action,
           unitsDiscarded: processUnitsDiscarded,
         },
-        token,
+        authToken || null,
       );
 
-      const data = await getExpiredItems(token);
+      const data = await getExpiredItems(authToken || null);
       setExpiredItems(data);
 
       const label = action === 'expired' ? 'Expired' : 'Sold Through';
@@ -241,7 +245,7 @@ const ExpiredItemsPage: React.FC<ExpiredItemsPageProps> = ({ token }) => {
     } finally {
       setIsProcessing(false);
     }
-  }, [selectedItem, action, unitsDiscarded, isProcessing, token, showToast]);
+  }, [selectedItem, action, unitsDiscarded, isProcessing, getFreshApiToken, showToast]);
 
   const retryControllerRef = useRef<AbortController | null>(null);
 
@@ -259,7 +263,8 @@ const ExpiredItemsPage: React.FC<ExpiredItemsPageProps> = ({ token }) => {
     setLoading(true);
     setError(null);
     try {
-      const data = await getExpiredItems(token, controller.signal);
+      const authToken = await getFreshApiToken('expired-items-retry');
+      const data = await getExpiredItems(authToken || null, controller.signal);
       if (!controller.signal.aborted) {
         setExpiredItems(data);
       }
@@ -276,7 +281,7 @@ const ExpiredItemsPage: React.FC<ExpiredItemsPageProps> = ({ token }) => {
         setLoading(false);
       }
     }
-  }, [token]);
+  }, [token, getFreshApiToken]);
 
   const closeModal = useCallback(() => {
     setIsModalOpen(false);
@@ -298,11 +303,16 @@ const ExpiredItemsPage: React.FC<ExpiredItemsPageProps> = ({ token }) => {
       }
 
       try {
+        const authToken = await getFreshApiToken('expired-items-loss-reports');
         const [lossBySkuResult, lossByDeptResult] = await Promise.allSettled([
-          apiService.get<LossBySkuReportItem[]>('/reports/loss-by-sku', token, controller.signal),
+          apiService.get<LossBySkuReportItem[]>(
+            '/reports/loss-by-sku',
+            authToken,
+            controller.signal,
+          ),
           apiService.get<LossByDepartmentReportItem[]>(
             '/reports/loss-by-department',
-            token,
+            authToken,
             controller.signal,
           ),
         ]);
@@ -334,7 +344,7 @@ const ExpiredItemsPage: React.FC<ExpiredItemsPageProps> = ({ token }) => {
 
     fetchChartData();
     return () => controller.abort();
-  }, [token]);
+  }, [token, getFreshApiToken]);
 
   const lossBySkuChartData = useMemo(
     () => ({

@@ -32,6 +32,7 @@ import {
   AlertDialogTrigger,
 } from '../components/ui/alert-dialog';
 import { apiService } from '../lib/api.service';
+import { useFreshApiToken } from '../hooks/useFreshApiToken';
 
 interface StoreArea {
   id: number;
@@ -85,6 +86,7 @@ function getUnknownErrorMessage(action: string): string {
 }
 
 export function StoreAreaManagementPage({ token }: StoreAreaManagementPageProps) {
+  const getFreshApiToken = useFreshApiToken(token);
   const [storeAreas, setStoreAreas] = useState<StoreArea[]>([]);
   const [newAreaName, setNewAreaName] = useState<string>('');
   const [newSubDepartmentName, setNewSubDepartmentName] = useState<string>('');
@@ -107,7 +109,12 @@ export function StoreAreaManagementPage({ token }: StoreAreaManagementPageProps)
       if (!token) return;
       setIsLoadingAreas(true);
       try {
-        const data = await apiService.get<StoreAreaApiResponse[]>('/store-areas', token, signal);
+        const authToken = await getFreshApiToken('store-areas-list');
+        const data = await apiService.get<StoreAreaApiResponse[]>(
+          '/store-areas',
+          authToken,
+          signal,
+        );
         if (!signal?.aborted) {
           setStoreAreas(data.map(normalizeStoreArea));
           setError(null);
@@ -125,7 +132,7 @@ export function StoreAreaManagementPage({ token }: StoreAreaManagementPageProps)
         }
       }
     },
-    [token, setStoreAreas, setError, setIsLoadingAreas],
+    [token, getFreshApiToken, setStoreAreas, setError, setIsLoadingAreas],
   );
 
   useEffect(() => {
@@ -146,13 +153,14 @@ export function StoreAreaManagementPage({ token }: StoreAreaManagementPageProps)
     addInFlightRef.current = true;
     setIsAddingArea(true);
     try {
+      const authToken = await getFreshApiToken('store-area-create');
       await apiService.post(
         '/store-areas',
         {
           name: newAreaName.trim(),
           subDepartment: newSubDepartmentName.trim(),
         },
-        token,
+        authToken,
       );
       setSuccessMessage(`${newAreaName.trim()} added.`);
       setError(null);
@@ -174,6 +182,7 @@ export function StoreAreaManagementPage({ token }: StoreAreaManagementPageProps)
     }
   }, [
     token,
+    getFreshApiToken,
     newAreaName,
     newSubDepartmentName,
     fetchStoreAreas,
@@ -196,13 +205,14 @@ export function StoreAreaManagementPage({ token }: StoreAreaManagementPageProps)
     }
     setIsEditingArea(true);
     try {
+      const authToken = await getFreshApiToken('store-area-update');
       await apiService.put(
         `/store-areas/${editingArea.id}`,
         {
           name: editedAreaName.trim(),
           subDepartment: editedSubDepartmentName.trim(),
         },
-        token,
+        authToken,
       );
       setSuccessMessage(`${editedAreaName.trim()} updated.`);
       setError(null);
@@ -225,6 +235,7 @@ export function StoreAreaManagementPage({ token }: StoreAreaManagementPageProps)
     }
   }, [
     token,
+    getFreshApiToken,
     editingArea,
     editedAreaName,
     editedSubDepartmentName,
@@ -246,7 +257,8 @@ export function StoreAreaManagementPage({ token }: StoreAreaManagementPageProps)
       }
       setDeletingAreaId(area.id);
       try {
-        await apiService.delete(`/store-areas/${area.id}`, token);
+        const authToken = await getFreshApiToken('store-area-delete');
+        await apiService.delete(`/store-areas/${area.id}`, authToken);
         setSuccessMessage(`${area.name} deleted.`);
         setError(null);
         setDeleteDialogKey(null);
@@ -262,7 +274,15 @@ export function StoreAreaManagementPage({ token }: StoreAreaManagementPageProps)
         setDeletingAreaId(null);
       }
     },
-    [token, deletingAreaId, fetchStoreAreas, setError, setSuccessMessage, setDeletingAreaId],
+    [
+      token,
+      getFreshApiToken,
+      deletingAreaId,
+      fetchStoreAreas,
+      setError,
+      setSuccessMessage,
+      setDeletingAreaId,
+    ],
   );
 
   const openEditDialog = useCallback((area: StoreArea) => {

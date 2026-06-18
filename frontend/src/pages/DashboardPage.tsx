@@ -2,6 +2,7 @@ import React, { useEffect, useState } from 'react';
 import { Card, CardContent, CardHeader, CardTitle } from '../components/ui/card';
 import { buttonVariants } from '../components/ui/button';
 import { apiService } from '../lib/api.service';
+import { useFreshApiToken } from '../hooks/useFreshApiToken';
 
 interface DashboardPageProps {
   token: string | null;
@@ -56,6 +57,7 @@ function formatActivityTimestamp(activityDate: Date): string {
 }
 
 export function DashboardPage({ token }: DashboardPageProps) {
+  const getFreshApiToken = useFreshApiToken(token);
   const [stats, setStats] = useState<DashboardStats | null>(null);
   const [recentActivity, setRecentActivity] = useState<DashboardActivityEntry[]>([]);
   const [loading, setLoading] = useState(true);
@@ -70,7 +72,8 @@ export function DashboardPage({ token }: DashboardPageProps) {
       }
 
       try {
-        const data = await apiService.get<DashboardResponse>('/dashboard', token);
+        const authToken = await getFreshApiToken('dashboard-fetch');
+        const data = await apiService.get<DashboardResponse>('/dashboard', authToken);
         setStats(data?.stats ?? null);
         setRecentActivity(Array.isArray(data?.recentActivity) ? data.recentActivity : []);
       } catch (err: unknown) {
@@ -85,7 +88,7 @@ export function DashboardPage({ token }: DashboardPageProps) {
     };
 
     fetchDashboardData();
-  }, [token]);
+  }, [token, getFreshApiToken]);
 
   if (loading) {
     return (

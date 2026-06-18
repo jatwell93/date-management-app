@@ -4,6 +4,19 @@ import { BrowserRouter } from 'react-router-dom';
 
 import { TrialBanner } from '../TrialBanner';
 
+jest.mock('../../hooks/useFreshApiToken', () => ({
+  useFreshApiToken: (() => {
+    const callbacks = new Map<string, jest.Mock>();
+    return (token: string | null) => {
+      const key = token ?? '__missing__';
+      if (!callbacks.has(key)) {
+        callbacks.set(key, jest.fn().mockResolvedValue(token || undefined));
+      }
+      return callbacks.get(key);
+    };
+  })(),
+}));
+
 const trialStatus = {
   isInTrial: true,
   isTrialExpired: false,

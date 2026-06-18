@@ -98,12 +98,12 @@ function ClerkAuthInner({ children }: { children: React.ReactNode }) {
   }, []);
 
   useEffect(() => {
-    offlineSyncService.setAuthTokenProvider(() => token);
+    offlineSyncService.setAuthTokenProvider(async () => (await getToken()) || token);
 
     return () => {
       offlineSyncService.setAuthTokenProvider(() => null);
     };
-  }, [token]);
+  }, [getToken, token]);
 
   // Handle Clerk authentication state changes
   useEffect(() => {
