@@ -11,6 +11,14 @@ import { offlineStorage } from '../../lib/offline-storage';
 jest.mock('../../lib/api.service');
 jest.mock('../../lib/offline-storage');
 
+const mockGetToken = jest.fn();
+
+jest.mock('@clerk/clerk-react', () => ({
+  useAuth: () => ({
+    getToken: mockGetToken,
+  }),
+}));
+
 // Mock HandheldContext
 const mockHandheldContext = {
   isHandheld: false,
@@ -214,6 +222,7 @@ describe('ScanPage Integration', () => {
     });
 
     (apiService.post as jest.Mock).mockResolvedValue({});
+    mockGetToken.mockResolvedValue('fresh-clerk-token');
 
     // Mock Online status
     Object.defineProperty(navigator, 'onLine', {
@@ -485,11 +494,44 @@ describe('ScanPage Integration', () => {
           expiryDate: '2025-12-31',
           locationId: 1,
         }),
-        mockToken,
+        'fresh-clerk-token',
       );
     });
 
     expect(await screen.findByText(/Expiry item saved to inventory/i)).toBeInTheDocument();
+  });
+
+  it('refreshes the Clerk token before submitting an online expiry item', async () => {
+    render(
+      <HandheldProvider>
+        <ScanPage token="expired-prop-token" />
+      </HandheldProvider>,
+    );
+
+    await waitFor(() =>
+      expect(apiService.get).toHaveBeenCalledWith('/store-areas', 'expired-prop-token'),
+    );
+
+    userEvent.click(screen.getByTestId('trigger-scan'));
+    await screen.findByText('Test Product Barcode');
+
+    fireEvent.change(screen.getByLabelText(/Expiry Date/i), { target: { value: '2025-12-31' } });
+    fireEvent.change(screen.getByTestId('location-select'), { target: { value: '1' } });
+
+    userEvent.click(screen.getByText(/Save expiry item/i));
+
+    await waitFor(() => {
+      expect(mockGetToken).toHaveBeenCalled();
+      expect(apiService.post).toHaveBeenCalledWith(
+        '/inventory-items',
+        expect.objectContaining({
+          productId: 101,
+          expiryDate: '2025-12-31',
+          locationId: 1,
+        }),
+        'fresh-clerk-token',
+      );
+    });
   });
 
   it('saves to offline storage when offline', async () => {
