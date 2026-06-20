@@ -99,13 +99,15 @@ describe('ReportRepository', () => {
     insertInventoryItem(sqliteDate('+45 days'), 'Normal');
     insertInventoryItem(sqliteDate('+75 days'), 'Normal');
     insertInventoryItem(sqliteDate('+100 days'), 'Normal');
+    insertInventoryItem(sqliteDate('+120 days'), 'Normal');
+    insertInventoryItem(sqliteDate('+121 days'), 'Normal');
     insertInventoryItem(sqliteDate('+140 days'), 'Normal');
 
     const report = repository.getOverallExpiryReport();
 
     expect(report.expired_count).toBe(1);
     expect(report.expiry_risk_count).toBe(1);
-    expect(report.next_month_markdown_count).toBe(1);
-    expect(report.active_expiry_stock_count).toBe(5);
+    expect(report.next_month_markdown_count).toBe(2);
+    expect(report.active_expiry_stock_count).toBe(7);
   });
 });

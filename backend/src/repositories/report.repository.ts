@@ -123,7 +123,7 @@ export class ReportRepository {
         SUM(CASE WHEN date(expiry_date) BETWEEN date('now') AND date('now', '+30 days') THEN 1 ELSE 0 END) as markdown3_count,
         SUM(CASE WHEN date(expiry_date) BETWEEN date('now') AND date('now', '+90 days') THEN 1 ELSE 0 END) as total_markdown,
         SUM(CASE WHEN date(expiry_date) BETWEEN date('now') AND date('now', '+30 days') THEN 1 ELSE 0 END) as expiry_risk_count,
-        SUM(CASE WHEN date(expiry_date) BETWEEN date('now', '+91 days') AND date('now', '+121 days') THEN 1 ELSE 0 END) as next_month_markdown_count,
+        SUM(CASE WHEN date(expiry_date) BETWEEN date('now', '+91 days') AND date('now', '+120 days') THEN 1 ELSE 0 END) as next_month_markdown_count,
         SUM(CASE WHEN date(expiry_date) >= date('now') THEN 1 ELSE 0 END) as active_expiry_stock_count,
         MAX(expiry_date) as latest_expiry_date
       FROM inventory_items
@@ -149,7 +149,7 @@ export class ReportRepository {
         SUM(CASE WHEN date(expiry_date) BETWEEN date('now') AND date('now', '+30 days') THEN 1 ELSE 0 END) as markdown3_count,
         SUM(CASE WHEN date(expiry_date) BETWEEN date('now') AND date('now', '+90 days') THEN 1 ELSE 0 END) as total_markdown,
         SUM(CASE WHEN date(expiry_date) BETWEEN date('now') AND date('now', '+30 days') THEN 1 ELSE 0 END) as expiry_risk_count,
-        SUM(CASE WHEN date(expiry_date) BETWEEN date('now', '+91 days') AND date('now', '+121 days') THEN 1 ELSE 0 END) as next_month_markdown_count,
+        SUM(CASE WHEN date(expiry_date) BETWEEN date('now', '+91 days') AND date('now', '+120 days') THEN 1 ELSE 0 END) as next_month_markdown_count,
         SUM(CASE WHEN date(expiry_date) >= date('now') THEN 1 ELSE 0 END) as active_expiry_stock_count,
         MAX(expiry_date) as latest_expiry_date
       FROM inventory_items
