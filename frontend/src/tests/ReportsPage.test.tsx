@@ -96,6 +96,50 @@ describe('ReportsPage', () => {
     expect(apiService.get).toHaveBeenCalledWith('/reports/expiry', tokenValue, expect.any(Object));
   });
 
+  it('renders production-shaped report payloads without visible NaN counts', async () => {
+    // @ts-expect-error — apiService.get is mocked as jest.fn()
+    apiService.get.mockImplementation((url) => {
+      if (url === '/reports/expiry') {
+        return Promise.resolve([
+          {
+            month: '2026-06',
+            total_expiring: '8',
+            expired_count: null,
+            markdown1_count: '2',
+            markdown2_count: '1',
+            markdown3_count: '3',
+            total_markdown: '6',
+            latest_expiry_date: '2026-06-30',
+          },
+        ]);
+      }
+      if (url === '/reports/expiry-overall') {
+        return Promise.resolve({
+          month: 'Overall',
+          total_expiring: '18',
+          expired_count: '4',
+          markdown1_count: '5',
+          markdown2_count: '2',
+          markdown3_count: '3',
+          total_markdown: '10',
+          expiry_risk_count: '3',
+          next_month_markdown_count: null,
+          latest_expiry_date: '2026-10-31',
+        });
+      }
+      return Promise.reject(new Error('Unknown URL'));
+    });
+
+    const tokenValue = randomUUID();
+    render(<ReportsPage token={tokenValue} />);
+
+    expect(await screen.findByText(/Monthly expiry report/i)).toBeInTheDocument();
+    expect(screen.getByRole('region', { name: /Primary expiry decision/i })).toHaveTextContent('3');
+    expect(screen.getByText(/Entering markdown next month/i).parentElement).toHaveTextContent('0');
+    expect(screen.getByText(/Active expiry stock/i).parentElement).toHaveTextContent('0');
+    expect(screen.queryByText(/NaN/i)).not.toBeInTheDocument();
+  });
+
   it('displays an error message if token is missing', async () => {
     render(<ReportsPage token={null} />);
 
