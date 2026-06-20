@@ -18,6 +18,9 @@ export interface MonthlyExpiryReport {
   markdown2_count: number;
   markdown3_count: number;
   total_markdown: number;
+  expiry_risk_count: number;
+  next_month_markdown_count: number;
+  active_expiry_stock_count: number;
   latest_expiry_date: string;
 }
 
@@ -114,14 +117,17 @@ export class ReportRepository {
       `SELECT
         strftime('%Y-%m', expiry_date) as month,
         COUNT(*) as total_expiring,
-        SUM(CASE WHEN status = 'Expired' THEN 1 ELSE 0 END) as expired_count,
-        SUM(CASE WHEN status = 'Markdown 1' THEN 1 ELSE 0 END) as markdown1_count,
-        SUM(CASE WHEN status = 'Markdown 2' THEN 1 ELSE 0 END) as markdown2_count,
-        SUM(CASE WHEN status = 'Markdown 3' THEN 1 ELSE 0 END) as markdown3_count,
-        SUM(CASE WHEN status LIKE 'Markdown%' THEN 1 ELSE 0 END) as total_markdown,
+        SUM(CASE WHEN date(expiry_date) < date('now') THEN 1 ELSE 0 END) as expired_count,
+        SUM(CASE WHEN date(expiry_date) BETWEEN date('now', '+61 days') AND date('now', '+90 days') THEN 1 ELSE 0 END) as markdown1_count,
+        SUM(CASE WHEN date(expiry_date) BETWEEN date('now', '+31 days') AND date('now', '+60 days') THEN 1 ELSE 0 END) as markdown2_count,
+        SUM(CASE WHEN date(expiry_date) BETWEEN date('now') AND date('now', '+30 days') THEN 1 ELSE 0 END) as markdown3_count,
+        SUM(CASE WHEN date(expiry_date) BETWEEN date('now') AND date('now', '+90 days') THEN 1 ELSE 0 END) as total_markdown,
+        SUM(CASE WHEN date(expiry_date) BETWEEN date('now') AND date('now', '+30 days') THEN 1 ELSE 0 END) as expiry_risk_count,
+        SUM(CASE WHEN date(expiry_date) BETWEEN date('now', '+91 days') AND date('now', '+120 days') THEN 1 ELSE 0 END) as next_month_markdown_count,
+        SUM(CASE WHEN date(expiry_date) >= date('now') THEN 1 ELSE 0 END) as active_expiry_stock_count,
         MAX(expiry_date) as latest_expiry_date
       FROM inventory_items
-      WHERE expiry_date IS NOT NULL AND expiry_date != ''
+      WHERE expiry_date IS NOT NULL AND expiry_date != '' AND date(expiry_date) IS NOT NULL
       GROUP BY month
       ORDER BY month DESC
       LIMIT 12`,
@@ -137,14 +143,17 @@ export class ReportRepository {
       `SELECT
         'Overall' as month,
         COUNT(*) as total_expiring,
-        SUM(CASE WHEN status = 'Expired' THEN 1 ELSE 0 END) as expired_count,
-        SUM(CASE WHEN status = 'Markdown 1' THEN 1 ELSE 0 END) as markdown1_count,
-        SUM(CASE WHEN status = 'Markdown 2' THEN 1 ELSE 0 END) as markdown2_count,
-        SUM(CASE WHEN status = 'Markdown 3' THEN 1 ELSE 0 END) as markdown3_count,
-        SUM(CASE WHEN status LIKE 'Markdown%' THEN 1 ELSE 0 END) as total_markdown,
+        SUM(CASE WHEN date(expiry_date) < date('now') THEN 1 ELSE 0 END) as expired_count,
+        SUM(CASE WHEN date(expiry_date) BETWEEN date('now', '+61 days') AND date('now', '+90 days') THEN 1 ELSE 0 END) as markdown1_count,
+        SUM(CASE WHEN date(expiry_date) BETWEEN date('now', '+31 days') AND date('now', '+60 days') THEN 1 ELSE 0 END) as markdown2_count,
+        SUM(CASE WHEN date(expiry_date) BETWEEN date('now') AND date('now', '+30 days') THEN 1 ELSE 0 END) as markdown3_count,
+        SUM(CASE WHEN date(expiry_date) BETWEEN date('now') AND date('now', '+90 days') THEN 1 ELSE 0 END) as total_markdown,
+        SUM(CASE WHEN date(expiry_date) BETWEEN date('now') AND date('now', '+30 days') THEN 1 ELSE 0 END) as expiry_risk_count,
+        SUM(CASE WHEN date(expiry_date) BETWEEN date('now', '+91 days') AND date('now', '+120 days') THEN 1 ELSE 0 END) as next_month_markdown_count,
+        SUM(CASE WHEN date(expiry_date) >= date('now') THEN 1 ELSE 0 END) as active_expiry_stock_count,
         MAX(expiry_date) as latest_expiry_date
       FROM inventory_items
-      WHERE expiry_date IS NOT NULL AND expiry_date != ''`,
+      WHERE expiry_date IS NOT NULL AND expiry_date != '' AND date(expiry_date) IS NOT NULL`,
     );
     return stmt.get() as MonthlyExpiryReport;
   }

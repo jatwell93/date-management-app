@@ -43,6 +43,9 @@ describe('ReportsPage', () => {
             markdown2_count: 1,
             markdown3_count: 2,
             total_markdown: 5,
+            expiry_risk_count: 3,
+            next_month_markdown_count: 7,
+            active_expiry_stock_count: 45,
             latest_expiry_date: '2025-08-31',
           },
         ]);
@@ -56,6 +59,9 @@ describe('ReportsPage', () => {
           markdown2_count: 10,
           markdown3_count: 20,
           total_markdown: 50,
+          expiry_risk_count: 3,
+          next_month_markdown_count: 7,
+          active_expiry_stock_count: 45,
           latest_expiry_date: '2025-12-31',
         });
       }
@@ -72,15 +78,18 @@ describe('ReportsPage', () => {
     expect(screen.getByRole('main', { name: /Expiry reporting workspace/i })).toBeInTheDocument();
     expect(screen.getByText(/Expiry action summary/i)).toBeInTheDocument();
     expect(screen.getByRole('region', { name: /Primary expiry decision/i })).toHaveTextContent(
-      /Expired risk/i,
+      /Expiry risk/i,
     );
     expect(screen.getByRole('region', { name: /Expiry stock action summary/i })).toHaveTextContent(
-      /Expired risk/i,
+      /Expiry risk/i,
     );
-    expect(screen.getByText(/Markdown action/i)).toBeInTheDocument();
+    expect(screen.getByText(/Entering markdown next month/i)).toBeInTheDocument();
     expect(screen.getByText(/Active expiry stock/i)).toBeInTheDocument();
-    expect(screen.getByText(/Next review window/i)).toBeInTheDocument();
+    expect(screen.queryByText(/Next review window/i)).not.toBeInTheDocument();
     expect(screen.queryByText(/^Total Items$/i)).not.toBeInTheDocument();
+    expect(screen.getAllByText(/Markdown 1/i).length).toBeGreaterThan(0);
+    expect(screen.getAllByText(/Markdown 2/i).length).toBeGreaterThan(0);
+    expect(screen.getAllByText(/Markdown 3/i).length).toBeGreaterThan(0);
     // Use getAllByText since the month appears multiple times (in month and latest_expiry_date columns)
     expect(screen.getAllByText(/2025-08/i).length).toBeGreaterThan(0);
 
@@ -126,6 +135,9 @@ describe('ReportsPage', () => {
             markdown2_count: 1,
             markdown3_count: 2,
             total_markdown: 5,
+            expiry_risk_count: 3,
+            next_month_markdown_count: 7,
+            active_expiry_stock_count: 45,
             latest_expiry_date: '2025-08-31',
           },
         ]);
@@ -139,6 +151,9 @@ describe('ReportsPage', () => {
           markdown2_count: 10,
           markdown3_count: 20,
           total_markdown: 50,
+          expiry_risk_count: 3,
+          next_month_markdown_count: 7,
+          active_expiry_stock_count: 45,
           latest_expiry_date: '2025-12-31',
         });
       }
@@ -154,7 +169,7 @@ describe('ReportsPage', () => {
     expect(await screen.findByText(/Monthly expiry report/i)).toBeInTheDocument();
     expect(screen.queryByRole('alert')).not.toBeInTheDocument();
     expect(screen.getByRole('region', { name: /Expiry stock action summary/i })).toHaveTextContent(
-      /Expired risk/i,
+      /Expiry risk/i,
     );
   });
 });
