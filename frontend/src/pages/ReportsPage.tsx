@@ -25,6 +25,9 @@ interface MonthlyExpiryReportItem {
   markdown2_count: number;
   markdown3_count: number;
   total_markdown: number;
+  expiry_risk_count: number;
+  next_month_markdown_count: number;
+  active_expiry_stock_count: number;
   latest_expiry_date: string;
 }
 
@@ -257,21 +260,21 @@ export function ReportsPage({ token }: ReportsPageProps) {
                 role="region"
                 aria-label="Primary expiry decision"
               >
-                <p className="text-sm font-medium text-semantic-critical">Expired risk</p>
+                <p className="text-sm font-medium text-semantic-critical">Expiry risk</p>
                 <p className="mt-2 font-heading text-3xl font-bold text-semantic-critical">
-                  {numberFormatter.format(overallReportData.expired_count)}
+                  {numberFormatter.format(overallReportData.expiry_risk_count)}
                 </p>
                 <p className="mt-2 text-sm text-semantic-critical-muted-foreground">
-                  Remove or reconcile expired stock before the next shelf review.
+                  Review stock expiring in the next 30 days before it becomes unsellable.
                 </p>
               </div>
-              <dl className="grid gap-3 rounded-lg border bg-semantic-secondary-muted p-5 sm:grid-cols-3">
+              <dl className="grid gap-3 rounded-lg border bg-semantic-secondary-muted p-5 sm:grid-cols-2">
                 <div>
                   <dt className="text-sm font-medium text-semantic-text-secondary">
-                    Markdown action
+                    Entering markdown next month
                   </dt>
                   <dd className="mt-1 font-heading text-2xl font-bold text-semantic-warning">
-                    {numberFormatter.format(overallReportData.total_markdown)}
+                    {numberFormatter.format(overallReportData.next_month_markdown_count)}
                   </dd>
                 </div>
                 <div>
@@ -279,22 +282,7 @@ export function ReportsPage({ token }: ReportsPageProps) {
                     Active expiry stock
                   </dt>
                   <dd className="mt-1 font-heading text-2xl font-bold text-semantic-success">
-                    {numberFormatter.format(
-                      Math.max(
-                        overallReportData.total_expiring -
-                          overallReportData.expired_count -
-                          overallReportData.total_markdown,
-                        0,
-                      ),
-                    )}
-                  </dd>
-                </div>
-                <div>
-                  <dt className="text-sm font-medium text-semantic-text-secondary">
-                    Next review window
-                  </dt>
-                  <dd className="mt-1 text-base font-semibold">
-                    {formatReportDate(overallReportData.latest_expiry_date)}
+                    {numberFormatter.format(overallReportData.active_expiry_stock_count)}
                   </dd>
                 </div>
               </dl>
