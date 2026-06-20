@@ -102,7 +102,7 @@ export function ReportsPage({ token }: ReportsPageProps) {
           controller.signal,
         );
         if (!controller.signal.aborted) {
-          setReportData(data.map(normalizeMonthlyExpiryReportItem));
+          setReportData((data ?? []).map(normalizeMonthlyExpiryReportItem));
           setMonthlyError(null);
         }
       } catch (err: unknown) {
@@ -137,7 +137,9 @@ export function ReportsPage({ token }: ReportsPageProps) {
           controller.signal,
         );
         if (!controller.signal.aborted) {
-          setOverallReportData(normalizeMonthlyExpiryReportItem(data));
+          setOverallReportData(
+            data ? normalizeMonthlyExpiryReportItem(data) : null,
+          );
           setOverallError(null);
         }
       } catch (err: unknown) {
