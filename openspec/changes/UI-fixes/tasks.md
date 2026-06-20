@@ -91,10 +91,15 @@
 - [x] 10.3 RED: Add `ReportsPage` coverage for the new summary labels and removal of `Next review window`.
 - [x] 10.4 GREEN: Update `ReportRepository` expiry summary queries to derive report counts from `expiry_date` windows and expose the new summary fields.
 - [x] 10.5 GREEN: Update `ReportsPage` summary cards to use `Expiry risk`, `Entering markdown next month`, and backend-provided active future-stock counts.
-- [ ] 10.6 Verify focused/backend diff/frontend diff tests, lint, build/type-check, strict OpenSpec validation, and browser QA where an authenticated reports session is available.
+- [x] 10.6 RED/GREEN: Align Workers report queries and `MonthlyExpiryReport` shape with the backend expiry-window contract.
+- [ ] 10.7 Verify focused/backend diff/frontend diff tests, lint, build/type-check, strict OpenSpec validation, and browser QA where an authenticated reports session is available.
 
 ### QA Notes - 2026-06-19
 
+- Reviewer follow-up on 2026-06-20 confirmed Workers deployments still returned the old status-derived report shape. Added `workers/src/database.report.node.test.ts` coverage that failed before the fix, then updated `workers/src/database.ts` to return `expiry_risk_count`, `next_month_markdown_count`, and `active_expiry_stock_count` using the same expiry-date windows as the backend.
+- `npx vitest run --config vitest.node.config.mts src/database.report.node.test.ts` passed.
+- `npm run build:types --prefix workers` passed.
+- `npm run test:db --prefix workers` remains blocked in this checkout because `workers/node_modules/@electric-sql/pglite` is not installed; the new focused Workers report test passed in isolation.
 - Focused RED/GREEN coverage passed for `backend/src/tests/unit/report.repository.test.ts` and `frontend/src/tests/ReportsPage.test.tsx`.
 - `npm run test:backend:diff` passed with 21 suites passed, 1 skipped, 143 tests passed, 1 skipped.
 - `npm run test:frontend:diff` passed with 3 suites passed and 31 tests passed.

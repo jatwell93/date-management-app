@@ -198,6 +198,9 @@ export interface MonthlyExpiryReport {
   markdown2_count: number;
   markdown3_count: number;
   total_markdown: number;
+  expiry_risk_count: number;
+  next_month_markdown_count: number;
+  active_expiry_stock_count: number;
   latest_expiry_date: string;
 }
 
@@ -530,11 +533,14 @@ export function createWorkersDatabase(env: Env): Database {
         SELECT
           to_char(expiry_date, 'YYYY-MM') as month,
           COUNT(*)::int as total_expiring,
-          SUM(CASE WHEN status = 'Expired' THEN 1 ELSE 0 END)::int as expired_count,
-          SUM(CASE WHEN status = 'Markdown 1' THEN 1 ELSE 0 END)::int as markdown1_count,
-          SUM(CASE WHEN status = 'Markdown 2' THEN 1 ELSE 0 END)::int as markdown2_count,
-          SUM(CASE WHEN status = 'Markdown 3' THEN 1 ELSE 0 END)::int as markdown3_count,
-          SUM(CASE WHEN status LIKE 'Markdown%' THEN 1 ELSE 0 END)::int as total_markdown,
+          SUM(CASE WHEN expiry_date::date < CURRENT_DATE THEN 1 ELSE 0 END)::int as expired_count,
+          SUM(CASE WHEN expiry_date::date BETWEEN (CURRENT_DATE + INTERVAL '61 days')::date AND (CURRENT_DATE + INTERVAL '90 days')::date THEN 1 ELSE 0 END)::int as markdown1_count,
+          SUM(CASE WHEN expiry_date::date BETWEEN (CURRENT_DATE + INTERVAL '31 days')::date AND (CURRENT_DATE + INTERVAL '60 days')::date THEN 1 ELSE 0 END)::int as markdown2_count,
+          SUM(CASE WHEN expiry_date::date BETWEEN CURRENT_DATE AND (CURRENT_DATE + INTERVAL '30 days')::date THEN 1 ELSE 0 END)::int as markdown3_count,
+          SUM(CASE WHEN expiry_date::date BETWEEN CURRENT_DATE AND (CURRENT_DATE + INTERVAL '90 days')::date THEN 1 ELSE 0 END)::int as total_markdown,
+          SUM(CASE WHEN expiry_date::date BETWEEN CURRENT_DATE AND (CURRENT_DATE + INTERVAL '30 days')::date THEN 1 ELSE 0 END)::int as expiry_risk_count,
+          SUM(CASE WHEN expiry_date::date BETWEEN (CURRENT_DATE + INTERVAL '91 days')::date AND (CURRENT_DATE + INTERVAL '120 days')::date THEN 1 ELSE 0 END)::int as next_month_markdown_count,
+          SUM(CASE WHEN expiry_date::date >= CURRENT_DATE THEN 1 ELSE 0 END)::int as active_expiry_stock_count,
           MAX(expiry_date)::text as latest_expiry_date
         FROM inventory_items
         WHERE expiry_date IS NOT NULL
@@ -549,11 +555,14 @@ export function createWorkersDatabase(env: Env): Database {
         SELECT
           'Overall' as month,
           COUNT(*)::int as total_expiring,
-          SUM(CASE WHEN status = 'Expired' THEN 1 ELSE 0 END)::int as expired_count,
-          SUM(CASE WHEN status = 'Markdown 1' THEN 1 ELSE 0 END)::int as markdown1_count,
-          SUM(CASE WHEN status = 'Markdown 2' THEN 1 ELSE 0 END)::int as markdown2_count,
-          SUM(CASE WHEN status = 'Markdown 3' THEN 1 ELSE 0 END)::int as markdown3_count,
-          SUM(CASE WHEN status LIKE 'Markdown%' THEN 1 ELSE 0 END)::int as total_markdown,
+          SUM(CASE WHEN expiry_date::date < CURRENT_DATE THEN 1 ELSE 0 END)::int as expired_count,
+          SUM(CASE WHEN expiry_date::date BETWEEN (CURRENT_DATE + INTERVAL '61 days')::date AND (CURRENT_DATE + INTERVAL '90 days')::date THEN 1 ELSE 0 END)::int as markdown1_count,
+          SUM(CASE WHEN expiry_date::date BETWEEN (CURRENT_DATE + INTERVAL '31 days')::date AND (CURRENT_DATE + INTERVAL '60 days')::date THEN 1 ELSE 0 END)::int as markdown2_count,
+          SUM(CASE WHEN expiry_date::date BETWEEN CURRENT_DATE AND (CURRENT_DATE + INTERVAL '30 days')::date THEN 1 ELSE 0 END)::int as markdown3_count,
+          SUM(CASE WHEN expiry_date::date BETWEEN CURRENT_DATE AND (CURRENT_DATE + INTERVAL '90 days')::date THEN 1 ELSE 0 END)::int as total_markdown,
+          SUM(CASE WHEN expiry_date::date BETWEEN CURRENT_DATE AND (CURRENT_DATE + INTERVAL '30 days')::date THEN 1 ELSE 0 END)::int as expiry_risk_count,
+          SUM(CASE WHEN expiry_date::date BETWEEN (CURRENT_DATE + INTERVAL '91 days')::date AND (CURRENT_DATE + INTERVAL '120 days')::date THEN 1 ELSE 0 END)::int as next_month_markdown_count,
+          SUM(CASE WHEN expiry_date::date >= CURRENT_DATE THEN 1 ELSE 0 END)::int as active_expiry_stock_count,
           MAX(expiry_date)::text as latest_expiry_date
         FROM inventory_items
         WHERE expiry_date IS NOT NULL
@@ -566,6 +575,9 @@ export function createWorkersDatabase(env: Env): Database {
         markdown2_count: 0,
         markdown3_count: 0,
         total_markdown: 0,
+        expiry_risk_count: 0,
+        next_month_markdown_count: 0,
+        active_expiry_stock_count: 0,
         latest_expiry_date: null,
       }) as MonthlyExpiryReport;
     },
