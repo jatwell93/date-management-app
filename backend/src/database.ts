@@ -11,6 +11,15 @@ interface TableInfoRow {
   name: string;
 }
 
+function hasDatabaseSchemaApi(database: unknown): database is DB {
+  if (!database || typeof database !== 'object') {
+    return false;
+  }
+
+  const candidate = database as Record<string, unknown>;
+  return typeof candidate.exec === 'function' && typeof candidate.prepare === 'function';
+}
+
 /**
  * Verify TLS/SSL configuration for database connections
  * Task 5.2: Add TLS verification check and logging
@@ -70,6 +79,10 @@ function addOrganizationColumnIfMissing(database: DB, tableName: string): void {
 }
 
 function ensureSqliteSchema(database: DB): void {
+  if (!hasDatabaseSchemaApi(database)) {
+    return;
+  }
+
   database.exec(`
     CREATE TABLE IF NOT EXISTS products (
       id INTEGER PRIMARY KEY AUTOINCREMENT,
