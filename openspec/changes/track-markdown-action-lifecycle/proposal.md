@@ -45,6 +45,10 @@ end, and surfaces the key insight the diary cannot: which products only sell onc
 persist a **snapshot** of the computed level on the disposition event (the item is gone/changes
 after sale, so a historical snapshot is required for reporting).
 
+**Added scope (confirmed with user):** reconcile the legacy `inventory-markdown.helpers`
+thresholds (7/14/30 days) to the report/frontend windows (30/60/90) so stored inventory status,
+reports, and disposition snapshots all express the same markdown level for an item.
+
 ## Reuse Strategy
 
 - **Extend, do not rebuild, the disposition path.** Add a nullable `markdown_level` (smallint, 1-3)

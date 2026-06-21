@@ -776,30 +776,30 @@ describe('InventoryService', () => {
       expect(inventoryService.calculateMarkdownStatusSync(expiryDate)).toBe('Expired');
     });
 
-    it('should return "Markdown 3" for dates within the next 7 days', () => {
+    it('should return "Markdown 3" for dates within the next 30 days', () => {
       const date = new Date();
-      date.setDate(date.getDate() + 7);
+      date.setDate(date.getDate() + 30);
       const expiryDate = date.toISOString().split('T')[0];
       expect(inventoryService.calculateMarkdownStatusSync(expiryDate)).toBe('Markdown 3');
     });
 
-    it("should return 'Markdown 2' for dates between 8 and 14 days from now", () => {
+    it("should return 'Markdown 2' for dates between 31 and 60 days from now", () => {
       const date = new Date();
-      date.setDate(date.getDate() + 14);
+      date.setDate(date.getDate() + 60);
       const expiryDate = date.toISOString().split('T')[0];
       expect(inventoryService.calculateMarkdownStatusSync(expiryDate)).toBe('Markdown 2');
     });
 
-    it("should return 'Markdown 1' for dates between 15 and 30 days from now", () => {
+    it("should return 'Markdown 1' for dates between 61 and 90 days from now", () => {
       const date = new Date();
-      date.setDate(date.getDate() + 30);
+      date.setDate(date.getDate() + 90);
       const expiryDate = date.toISOString().split('T')[0];
       expect(inventoryService.calculateMarkdownStatusSync(expiryDate)).toBe('Markdown 1');
     });
 
-    it('should return "Normal" for dates more than 30 days from now', () => {
+    it('should return "Normal" for dates more than 90 days from now', () => {
       const date = new Date();
-      date.setDate(date.getDate() + 31);
+      date.setDate(date.getDate() + 91);
       const expiryDate = date.toISOString().split('T')[0];
       expect(inventoryService.calculateMarkdownStatusSync(expiryDate)).toBe('Normal');
     });

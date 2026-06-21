@@ -3,10 +3,14 @@ import { InventoryItem } from '../models/inventory-item.model';
 export type InventoryMarkdownStatus = InventoryItem['status'];
 export type InventoryMarkdownExpiryDate = string | Date | null | undefined;
 
+// Days-to-expiry thresholds, aligned with the expiry report windows and the
+// frontend markdown logic (Markdown 1 = 61-90 days, Markdown 2 = 31-60,
+// Markdown 3 = 0-30). Previously 7/14/30, which diverged from the reporting
+// windows and the in-store process (first markdown ~3 months out).
 export const INVENTORY_MARKDOWN_THRESHOLDS = {
-  markdown3: 7,
-  markdown2: 14,
-  markdown1: 30,
+  markdown3: 30,
+  markdown2: 60,
+  markdown1: 90,
 } as const;
 
 function daysUntil(expiryDate: InventoryMarkdownExpiryDate, now = new Date()): number | null {

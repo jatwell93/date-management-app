@@ -52,6 +52,19 @@ and expired stock to write off; and SHALL allow recording a disposition inline.
 - **THEN** items appear under the matching action group
 - **AND** the user can record a sold-through or write-off disposition without leaving the view
 
+### Requirement: Markdown level thresholds are consistent across the app
+
+The system SHALL compute markdown levels using one set of days-to-expiry windows
+(Markdown 1 = 61-90 days, Markdown 2 = 31-60, Markdown 3 = 0-30) for stored inventory
+status, the expiry reports, and the disposition snapshot, so the same item is shown at
+the same level everywhere.
+
+#### Scenario: Stored status matches the report window
+
+- **GIVEN** an inventory item 80 days from its used-by date
+- **WHEN** its markdown status is computed for the inventory list
+- **THEN** it is Markdown 1, matching the 61-90 day report window
+
 ### Requirement: Sell-through reporting by markdown level
 
 The reporting page SHALL show how stock sold through across markdown levels so stores can identify
