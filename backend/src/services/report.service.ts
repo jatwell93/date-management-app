@@ -26,9 +26,10 @@ export class ReportService {
   /**
    * Constructor with dependency injection
    * @param db Database instance (injected)
+   * @param organizationId Organization scope for all queries
    */
-  constructor(private db: DB) {
-    this.repository = new ReportRepository(db);
+  constructor(private db: DB, organizationId: string) {
+    this.repository = new ReportRepository(db, organizationId);
   }
   async getMonthlyExpiryReport(): Promise<MonthlyExpiryReport[]> {
     return this.repository.getMonthlyExpiryReport();

@@ -16,3 +16,10 @@ The expiry reporting page SHALL render numeric report fields from `/reports/expi
 - **GIVEN** stock has expiry dates in 0-30, 31-60, 61-90, and 91-120 day windows
 - **WHEN** the report APIs calculate expiry summaries
 - **THEN** the buckets map to Markdown 3, Markdown 2, Markdown 1, and next-month markdown review respectively
+
+#### Scenario: Monthly report table columns
+
+- **GIVEN** the monthly expiry report includes a month for each row
+- **WHEN** the report table renders
+- **THEN** it shows month, total expiring, expired items, total markdown, and latest expiry
+- **AND** it does not show separate Markdown 1, Markdown 2, or Markdown 3 columns

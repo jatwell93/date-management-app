@@ -1209,10 +1209,10 @@ export async function handleOrganizationBootstrap(request: Request, env: Env): P
   const isNewOrg = existingOrg.length === 0;
   const organizationId = isNewOrg
     ? await findOrCreateOrganization(
-        db.sql,
-        { id: finalClerkOrgId, name: finalOrgName, slug: finalOrgSlug },
-        email,
-      )
+      db.sql,
+      { id: finalClerkOrgId, name: finalOrgName, slug: finalOrgSlug },
+      email,
+    )
     : String(existingOrg[0].id);
 
   const existingUser = await db.sql`
@@ -2175,7 +2175,7 @@ async function handleGetDashboard(request: Request, db: Database, env: Env): Pro
     return auth;
   }
 
-  const stats = await db.getDashboardStats();
+  const stats = await db.getDashboardStats(auth.organizationId);
 
   return jsonResponse({ stats }, 200, env);
 }
@@ -2186,7 +2186,7 @@ async function handleGetDashboard(request: Request, db: Database, env: Env): Pro
 async function handleGetExpiryReport(request: Request, db: Database, env: Env): Promise<Response> {
   const auth = await authenticateApiRequest(request, env, db);
   if (auth instanceof Response) return auth;
-  const report = await db.getMonthlyExpiryReport();
+  const report = await db.getMonthlyExpiryReport(auth.organizationId);
   return jsonResponse(report, 200, env);
 }
 
@@ -2200,7 +2200,7 @@ async function handleGetExpiryOverallReport(
 ): Promise<Response> {
   const auth = await authenticateApiRequest(request, env, db);
   if (auth instanceof Response) return auth;
-  const report = await db.getOverallExpiryReport();
+  const report = await db.getOverallExpiryReport(auth.organizationId);
   return jsonResponse(report, 200, env);
 }
 
@@ -2214,7 +2214,7 @@ async function handleGetExpiryDetailsReport(
 ): Promise<Response> {
   const auth = await authenticateApiRequest(request, env, db);
   if (auth instanceof Response) return auth;
-  const report = await db.getDetailedExpiryReport();
+  const report = await db.getDetailedExpiryReport(auth.organizationId);
   return jsonResponse(report, 200, env);
 }
 
@@ -2228,7 +2228,7 @@ async function handleGetDailyUsageReport(
 ): Promise<Response> {
   const auth = await authenticateApiRequest(request, env, db);
   if (auth instanceof Response) return auth;
-  const report = await db.getDailyUsageReport();
+  const report = await db.getDailyUsageReport(auth.organizationId);
   return jsonResponse(report, 200, env);
 }
 
@@ -2244,7 +2244,7 @@ async function handleGetItemsByUserReport(
   if (auth instanceof Response) return auth;
   const url = new URL(request.url);
   const timeFrame = url.searchParams.get('timeFrame') || undefined;
-  const report = await db.getItemsByUserReport(timeFrame);
+  const report = await db.getItemsByUserReport(auth.organizationId, timeFrame);
   return jsonResponse(report, 200, env);
 }
 
@@ -2258,7 +2258,7 @@ async function handleGetItemsByDateReport(
 ): Promise<Response> {
   const auth = await authenticateApiRequest(request, env, db);
   if (auth instanceof Response) return auth;
-  const report = await db.getItemsByDateReport();
+  const report = await db.getItemsByDateReport(auth.organizationId);
   return jsonResponse(report, 200, env);
 }
 
@@ -2272,7 +2272,7 @@ async function handleGetLossBySkuReport(
 ): Promise<Response> {
   const auth = await authenticateApiRequest(request, env, db);
   if (auth instanceof Response) return auth;
-  const report = await db.getLossBySkuReport();
+  const report = await db.getLossBySkuReport(auth.organizationId);
   return jsonResponse(report, 200, env);
 }
 
@@ -2286,7 +2286,7 @@ async function handleGetLossByDepartmentReport(
 ): Promise<Response> {
   const auth = await authenticateApiRequest(request, env, db);
   if (auth instanceof Response) return auth;
-  const report = await db.getLossByDepartmentReport();
+  const report = await db.getLossByDepartmentReport(auth.organizationId);
   return jsonResponse(report, 200, env);
 }
 
@@ -2296,7 +2296,7 @@ async function handleGetLossByDepartmentReport(
 async function handleGetExpiredItems(request: Request, db: Database, env: Env): Promise<Response> {
   const auth = await authenticateApiRequest(request, env, db);
   if (auth instanceof Response) return auth;
-  const items = await db.getExpiredItems();
+  const items = await db.getExpiredItems(auth.organizationId);
   return jsonResponse(items, 200, env);
 }
 
@@ -3045,13 +3045,13 @@ async function handleGetTrialStatus(request: Request, db: Database, env: Env): P
 
   const subscription = subscriptionRows[0] as
     | {
-        status?: string;
-        tier_level?: string;
-        trial_end_date?: string | null;
-        trial_started_at?: string | null;
-        trial_converted_at?: string | null;
-        billing_cycle?: string | null;
-      }
+      status?: string;
+      tier_level?: string;
+      trial_end_date?: string | null;
+      trial_started_at?: string | null;
+      trial_converted_at?: string | null;
+      billing_cycle?: string | null;
+    }
     | undefined;
 
   let daysRemaining: number | null = null;
@@ -3060,8 +3060,8 @@ async function handleGetTrialStatus(request: Request, db: Database, env: Env): P
   const subscriptionStatusRaw = (subscription?.status || 'EXPIRED').toUpperCase();
   const normalizedStatus: 'ACTIVE' | 'TRIALING' | 'EXPIRED' | 'CANCELED' =
     subscriptionStatusRaw === 'ACTIVE' ||
-    subscriptionStatusRaw === 'TRIALING' ||
-    subscriptionStatusRaw === 'CANCELED'
+      subscriptionStatusRaw === 'TRIALING' ||
+      subscriptionStatusRaw === 'CANCELED'
       ? subscriptionStatusRaw
       : 'EXPIRED';
 
@@ -3083,14 +3083,14 @@ async function handleGetTrialStatus(request: Request, db: Database, env: Env): P
     isTrialExpired: normalizedStatus === 'TRIALING' && isTrialExpired,
     subscription: subscription
       ? {
-          status: normalizedStatus,
-          tierLevel: normalizedTierKey,
-          trialEndDate: subscription.trial_end_date || null,
-          trialStartedAt: subscription.trial_started_at || null,
-          trialConvertedAt: subscription.trial_converted_at || null,
-          daysRemaining,
-          billingCycle: subscription.billing_cycle || null,
-        }
+        status: normalizedStatus,
+        tierLevel: normalizedTierKey,
+        trialEndDate: subscription.trial_end_date || null,
+        trialStartedAt: subscription.trial_started_at || null,
+        trialConvertedAt: subscription.trial_converted_at || null,
+        daysRemaining,
+        billingCycle: subscription.billing_cycle || null,
+      }
       : null,
     tierLimits,
   };
@@ -3948,9 +3948,9 @@ async function upsertProductBatch(
           rows_skipped = u.rows_skipped + counts.rejected,
           row_error_count = u.row_error_count + counts.rejected,
           upload_progress = ${Math.floor(
-            ((checkpoint.nextOffset + checkpoint.validationErrorCount) / checkpoint.totalRows) *
-              100,
-          )},
+    ((checkpoint.nextOffset + checkpoint.validationErrorCount) / checkpoint.totalRows) *
+    100,
+  )},
           processing_message = ${`Imported ${checkpoint.nextOffset} catalogue rows`},
           updated_at = NOW()
       FROM counts

@@ -87,9 +87,9 @@ describe('ReportsPage', () => {
     expect(screen.getByText(/Active expiry stock/i)).toBeInTheDocument();
     expect(screen.queryByText(/Next review window/i)).not.toBeInTheDocument();
     expect(screen.queryByText(/^Total Items$/i)).not.toBeInTheDocument();
-    expect(screen.getAllByText(/Markdown 1/i).length).toBeGreaterThan(0);
-    expect(screen.getAllByText(/Markdown 2/i).length).toBeGreaterThan(0);
-    expect(screen.getAllByText(/Markdown 3/i).length).toBeGreaterThan(0);
+    expect(screen.queryByText(/^Markdown 1$/i)).not.toBeInTheDocument();
+    expect(screen.queryByText(/^Markdown 2$/i)).not.toBeInTheDocument();
+    expect(screen.queryByText(/^Markdown 3$/i)).not.toBeInTheDocument();
     // Use getAllByText since the month appears multiple times (in month and latest_expiry_date columns)
     expect(screen.getAllByText(/2025-08/i).length).toBeGreaterThan(0);
 

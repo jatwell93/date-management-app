@@ -15,7 +15,7 @@ describe('ReportService', () => {
     mockDb = {} as Database;
 
     // Create service with mock database
-    reportService = new ReportService(mockDb as Database);
+    reportService = new ReportService(mockDb as Database, 'test-org');
 
     // Create mock repository
     mockRepository = {

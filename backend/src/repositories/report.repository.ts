@@ -107,7 +107,10 @@ export interface DashboardData {
 }
 
 export class ReportRepository {
-  constructor(private db: InstanceType<typeof Database>) {}
+  constructor(
+    private db: InstanceType<typeof Database>,
+    private organizationId: string,
+  ) { }
 
   /**
    * Get monthly expiry report
@@ -128,11 +131,12 @@ export class ReportRepository {
         MAX(expiry_date) as latest_expiry_date
       FROM inventory_items
       WHERE expiry_date IS NOT NULL AND expiry_date != '' AND date(expiry_date) IS NOT NULL
+        AND organization_id = ?
       GROUP BY month
       ORDER BY month DESC
       LIMIT 12`,
     );
-    return stmt.all() as MonthlyExpiryReport[];
+    return stmt.all(this.organizationId) as MonthlyExpiryReport[];
   }
 
   /**
@@ -153,9 +157,10 @@ export class ReportRepository {
         SUM(CASE WHEN date(expiry_date) >= date('now') THEN 1 ELSE 0 END) as active_expiry_stock_count,
         MAX(expiry_date) as latest_expiry_date
       FROM inventory_items
-      WHERE expiry_date IS NOT NULL AND expiry_date != '' AND date(expiry_date) IS NOT NULL`,
+      WHERE expiry_date IS NOT NULL AND expiry_date != '' AND date(expiry_date) IS NOT NULL
+        AND organization_id = ?`,
     );
-    return stmt.get() as MonthlyExpiryReport;
+    return stmt.get(this.organizationId) as MonthlyExpiryReport;
   }
 
   /**
@@ -179,9 +184,10 @@ export class ReportRepository {
       JOIN store_areas sa ON ii.location_id = sa.id
       WHERE ii.expiry_date >= date('now') 
         AND ii.expiry_date <= date('now', '+90 days')
+        AND ii.organization_id = ?
       ORDER BY ii.expiry_date ASC`,
     );
-    return stmt.all() as DetailedExpiryReportItem[];
+    return stmt.all(this.organizationId) as DetailedExpiryReportItem[];
   }
 
   /**
@@ -194,11 +200,11 @@ export class ReportRepository {
         SUM(CASE WHEN status LIKE 'Markdown%' THEN 10.00 ELSE 0 END) as totalMarkdownValue,
         COUNT(*) as itemCount
       FROM inventory_items
-      WHERE status LIKE 'Markdown%'
+      WHERE status LIKE 'Markdown%' AND organization_id = ?
       GROUP BY month
       ORDER BY month DESC`,
     );
-    return stmt.all() as MonthlyMarkdownReport[];
+    return stmt.all(this.organizationId) as MonthlyMarkdownReport[];
   }
 
   /**
@@ -214,10 +220,11 @@ export class ReportRepository {
         COUNT(CASE WHEN al.change_description LIKE '%deleted%' THEN 1 END) as deletions
       FROM audit_log al
       LEFT JOIN users u ON al.user_id = u.id
+      WHERE al.organization_id = ?
       GROUP BY COALESCE(u.role, 'Unknown')
       ORDER BY COALESCE(u.role, 'Unknown')`,
     );
-    return stmt.all() as UsageReport[];
+    return stmt.all(this.organizationId) as UsageReport[];
   }
 
   /**
@@ -235,40 +242,41 @@ export class ReportRepository {
       FROM audit_log al
       LEFT JOIN users u ON al.user_id = u.id
       WHERE date(al.created_at) >= date('now', '-90 days')
+        AND al.organization_id = ?
       GROUP BY date(al.created_at), COALESCE(u.id, al.user_id)
       ORDER BY date(al.created_at) DESC`,
     );
-    return stmt.all() as DailyUsageReportItem[];
+    return stmt.all(this.organizationId) as DailyUsageReportItem[];
   }
 
   /**
    * Get dashboard analytics summary
    */
   getDashboardAnalytics(): DashboardAnalytics {
-    const totalProducts = this.db.prepare('SELECT COUNT(*) as count FROM products').get() as {
+    const totalProducts = this.db.prepare('SELECT COUNT(*) as count FROM products WHERE organization_id = ?').get(this.organizationId) as {
       count: number;
     };
     const totalInventoryItems = this.db
-      .prepare('SELECT COUNT(*) as count FROM inventory_items')
-      .get() as { count: number };
+      .prepare('SELECT COUNT(*) as count FROM inventory_items WHERE organization_id = ?')
+      .get(this.organizationId) as { count: number };
     const activeItems = this.db
-      .prepare("SELECT COUNT(*) as count FROM inventory_items WHERE status != 'Expired'")
-      .get() as { count: number };
+      .prepare("SELECT COUNT(*) as count FROM inventory_items WHERE status != 'Expired' AND organization_id = ?")
+      .get(this.organizationId) as { count: number };
     const expiredItems = this.db
-      .prepare("SELECT COUNT(*) as count FROM inventory_items WHERE status = 'Expired'")
-      .get() as { count: number };
+      .prepare("SELECT COUNT(*) as count FROM inventory_items WHERE status = 'Expired' AND organization_id = ?")
+      .get(this.organizationId) as { count: number };
     const markdownItems = this.db
-      .prepare("SELECT COUNT(*) as count FROM inventory_items WHERE status LIKE 'Markdown%'")
-      .get() as { count: number };
+      .prepare("SELECT COUNT(*) as count FROM inventory_items WHERE status LIKE 'Markdown%' AND organization_id = ?")
+      .get(this.organizationId) as { count: number };
 
     // Get upcoming expiry items (next 30 days)
     const upcomingExpiry = this.db
       .prepare(
         `SELECT COUNT(*) as count FROM inventory_items
        WHERE expiry_date >= date('now') AND expiry_date <= date('now', '+30 days')
-       AND status != 'Expired'`,
+       AND status != 'Expired' AND organization_id = ?`,
       )
-      .get() as { count: number };
+      .get(this.organizationId) as { count: number };
 
     return {
       totalProducts: totalProducts.count,
@@ -281,25 +289,25 @@ export class ReportRepository {
   }
 
   getDashboardData(): DashboardData {
-    const totalProductsResult = this.db.prepare('SELECT COUNT(*) as count FROM products').get() as {
+    const totalProductsResult = this.db.prepare('SELECT COUNT(*) as count FROM products WHERE organization_id = ?').get(this.organizationId) as {
       count: number;
     };
 
     const expiringSoonResult = this.db
       .prepare(
-        `SELECT COUNT(*) as count FROM inventory_items WHERE expiry_date <= date('now', '+90 day') AND status = 'Normal'`,
+        `SELECT COUNT(*) as count FROM inventory_items WHERE expiry_date <= date('now', '+90 day') AND status = 'Normal' AND organization_id = ?`,
       )
-      .get() as { count: number };
+      .get(this.organizationId) as { count: number };
 
     const markdownItemsResult = this.db
-      .prepare(`SELECT COUNT(*) as count FROM inventory_items WHERE status LIKE 'Markdown%'`)
-      .get() as { count: number };
+      .prepare(`SELECT COUNT(*) as count FROM inventory_items WHERE status LIKE 'Markdown%' AND organization_id = ?`)
+      .get(this.organizationId) as { count: number };
 
     const recentActivityResult = this.db
       .prepare(
-        'SELECT id, change_description as description, created_at as timestamp FROM audit_log ORDER BY created_at DESC LIMIT 5',
+        'SELECT id, change_description as description, created_at as timestamp FROM audit_log WHERE organization_id = ? ORDER BY created_at DESC LIMIT 5',
       )
-      .all() as DashboardActivity[];
+      .all(this.organizationId) as DashboardActivity[];
 
     return {
       totalProducts: totalProductsResult.count,
@@ -321,12 +329,12 @@ export class ReportRepository {
         COUNT(*) as count
       FROM inventory_items ii
       JOIN products p ON ii.product_id = p.id
-      WHERE ii.status = 'Expired'
+      WHERE ii.status = 'Expired' AND ii.organization_id = ?
       GROUP BY p.sku, p.name
       ORDER BY totalLoss DESC
       LIMIT 10
     `);
-    return stmt.all() as LossBySkuReportItem[];
+    return stmt.all(this.organizationId) as LossBySkuReportItem[];
   }
 
   /**
@@ -342,18 +350,19 @@ export class ReportRepository {
       JOIN products p ON ii.product_id = p.id
       JOIN store_areas sa ON ii.location_id = sa.id
       WHERE ii.status = 'Expired' AND sa.sub_department IS NOT NULL
+        AND ii.organization_id = ?
       GROUP BY sa.sub_department
       ORDER BY totalLoss DESC
     `);
-    return stmt.all() as LossByDepartmentReportItem[];
+    return stmt.all(this.organizationId) as LossByDepartmentReportItem[];
   }
 
   /**
    * Get items by user report
    */
   getItemsByUserReport(timeFrameDays?: string): ItemsByUserReportItem[] {
-    let whereClause = "WHERE al.change_description LIKE '%created%'";
-    const params: string[] = [];
+    let whereClause = "WHERE al.change_description LIKE '%created%' AND al.organization_id = ?";
+    const params: string[] = [this.organizationId];
 
     if (timeFrameDays && timeFrameDays !== 'all-time') {
       whereClause += ` AND al.created_at >= date('now', '-' || ? || ' days')`;
@@ -386,11 +395,11 @@ export class ReportRepository {
         date(al.created_at) as date,
         COUNT(*) as itemCount
       FROM audit_log al
-      WHERE al.change_description LIKE '%created%'
+      WHERE al.change_description LIKE '%created%' AND al.organization_id = ?
       GROUP BY date(al.created_at)
       ORDER BY date DESC
       LIMIT 30
     `);
-    return stmt.all() as ItemsByDateReportItem[];
+    return stmt.all(this.organizationId) as ItemsByDateReportItem[];
   }
 }

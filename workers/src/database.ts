@@ -36,20 +36,20 @@ export interface Database {
   findStoreAreas(): Promise<StoreArea[]>;
 
   // Dashboard queries
-  getDashboardStats(): Promise<DashboardStats>;
+  getDashboardStats(organizationId: string): Promise<DashboardStats>;
 
   // Report queries
-  getMonthlyExpiryReport(): Promise<MonthlyExpiryReport[]>;
-  getOverallExpiryReport(): Promise<MonthlyExpiryReport>;
-  getDetailedExpiryReport(): Promise<DetailedExpiryReportItem[]>;
-  getDailyUsageReport(): Promise<DailyUsageReportItem[]>;
-  getItemsByUserReport(timeFrameDays?: string): Promise<ItemsByUserReportItem[]>;
-  getItemsByDateReport(): Promise<ItemsByDateReportItem[]>;
-  getLossBySkuReport(): Promise<LossBySkuReportItem[]>;
-  getLossByDepartmentReport(): Promise<LossByDepartmentReportItem[]>;
+  getMonthlyExpiryReport(organizationId: string): Promise<MonthlyExpiryReport[]>;
+  getOverallExpiryReport(organizationId: string): Promise<MonthlyExpiryReport>;
+  getDetailedExpiryReport(organizationId: string): Promise<DetailedExpiryReportItem[]>;
+  getDailyUsageReport(organizationId: string): Promise<DailyUsageReportItem[]>;
+  getItemsByUserReport(organizationId: string, timeFrameDays?: string): Promise<ItemsByUserReportItem[]>;
+  getItemsByDateReport(organizationId: string): Promise<ItemsByDateReportItem[]>;
+  getLossBySkuReport(organizationId: string): Promise<LossBySkuReportItem[]>;
+  getLossByDepartmentReport(organizationId: string): Promise<LossByDepartmentReportItem[]>;
 
   // Expired items queries
-  getExpiredItems(): Promise<ExpiredItemRow[]>;
+  getExpiredItems(organizationId: string): Promise<ExpiredItemRow[]>;
   processExpiredItem(
     inventoryItemId: number,
     userId: number,
@@ -506,17 +506,19 @@ export function createWorkersDatabase(env: Env): Database {
     },
 
     // Dashboard queries
-    async getDashboardStats(): Promise<DashboardStats> {
+    async getDashboardStats(organizationId: string): Promise<DashboardStats> {
       // The schema dropped the legacy `quantity` column in favour of a
       // `status` enum on inventory_items. The DashboardStats `lowStockItems`
       // counter now reflects items flagged as Critical/LowStock.
       const [products, inventory, expiring, lowStock] = await Promise.all([
-        sql`SELECT COUNT(*)::int as count FROM products`,
-        sql`SELECT COUNT(*)::int as count FROM inventory_items`,
+        sql`SELECT COUNT(*)::int as count FROM products WHERE organization_id = ${organizationId}`,
+        sql`SELECT COUNT(*)::int as count FROM inventory_items WHERE organization_id = ${organizationId}`,
         sql`SELECT COUNT(*)::int as count FROM inventory_items
-            WHERE expiry_date IS NOT NULL AND expiry_date <= NOW() + INTERVAL '7 days'`,
+            WHERE expiry_date IS NOT NULL AND expiry_date <= NOW() + INTERVAL '7 days'
+              AND organization_id = ${organizationId}`,
         sql`SELECT COUNT(*)::int as count FROM inventory_items
-            WHERE status IN ('Critical', 'LowStock', 'Low')`,
+            WHERE status IN ('Critical', 'LowStock', 'Low')
+              AND organization_id = ${organizationId}`,
       ]);
 
       return {
@@ -528,44 +530,56 @@ export function createWorkersDatabase(env: Env): Database {
     },
 
     // Report queries
-    async getMonthlyExpiryReport(): Promise<MonthlyExpiryReport[]> {
+    async getMonthlyExpiryReport(organizationId: string): Promise<MonthlyExpiryReport[]> {
       return (await sql`
+        WITH expiry_rows AS (
+          SELECT
+            expiry_date,
+            expiry_date::date - CURRENT_DATE AS days_to_expiry
+          FROM inventory_items
+          WHERE expiry_date IS NOT NULL AND organization_id = ${organizationId}
+        )
         SELECT
           to_char(expiry_date, 'YYYY-MM') as month,
           COUNT(*)::int as total_expiring,
-          SUM(CASE WHEN expiry_date::date < CURRENT_DATE THEN 1 ELSE 0 END)::int as expired_count,
-          SUM(CASE WHEN expiry_date::date BETWEEN (CURRENT_DATE + INTERVAL '61 days')::date AND (CURRENT_DATE + INTERVAL '90 days')::date THEN 1 ELSE 0 END)::int as markdown1_count,
-          SUM(CASE WHEN expiry_date::date BETWEEN (CURRENT_DATE + INTERVAL '31 days')::date AND (CURRENT_DATE + INTERVAL '60 days')::date THEN 1 ELSE 0 END)::int as markdown2_count,
-          SUM(CASE WHEN expiry_date::date BETWEEN CURRENT_DATE AND (CURRENT_DATE + INTERVAL '30 days')::date THEN 1 ELSE 0 END)::int as markdown3_count,
-          SUM(CASE WHEN expiry_date::date BETWEEN CURRENT_DATE AND (CURRENT_DATE + INTERVAL '90 days')::date THEN 1 ELSE 0 END)::int as total_markdown,
-          SUM(CASE WHEN expiry_date::date BETWEEN CURRENT_DATE AND (CURRENT_DATE + INTERVAL '30 days')::date THEN 1 ELSE 0 END)::int as expiry_risk_count,
-          SUM(CASE WHEN expiry_date::date BETWEEN (CURRENT_DATE + INTERVAL '91 days')::date AND (CURRENT_DATE + INTERVAL '120 days')::date THEN 1 ELSE 0 END)::int as next_month_markdown_count,
-          SUM(CASE WHEN expiry_date::date >= CURRENT_DATE THEN 1 ELSE 0 END)::int as active_expiry_stock_count,
+          (COUNT(*) FILTER (WHERE days_to_expiry < 0))::int as expired_count,
+          (COUNT(*) FILTER (WHERE days_to_expiry BETWEEN 61 AND 90))::int as markdown1_count,
+          (COUNT(*) FILTER (WHERE days_to_expiry BETWEEN 31 AND 60))::int as markdown2_count,
+          (COUNT(*) FILTER (WHERE days_to_expiry BETWEEN 0 AND 30))::int as markdown3_count,
+          (COUNT(*) FILTER (WHERE days_to_expiry BETWEEN 0 AND 90))::int as total_markdown,
+          (COUNT(*) FILTER (WHERE days_to_expiry BETWEEN 0 AND 30))::int as expiry_risk_count,
+          (COUNT(*) FILTER (WHERE days_to_expiry BETWEEN 91 AND 120))::int as next_month_markdown_count,
+          (COUNT(*) FILTER (WHERE days_to_expiry >= 0))::int as active_expiry_stock_count,
           MAX(expiry_date)::text as latest_expiry_date
-        FROM inventory_items
-        WHERE expiry_date IS NOT NULL
+        FROM expiry_rows
         GROUP BY to_char(expiry_date, 'YYYY-MM')
         ORDER BY month DESC
         LIMIT 12
       `) as MonthlyExpiryReport[];
     },
 
-    async getOverallExpiryReport(): Promise<MonthlyExpiryReport> {
+    async getOverallExpiryReport(organizationId: string): Promise<MonthlyExpiryReport> {
       const rows = await sql`
+        WITH expiry_rows AS (
+          SELECT
+            expiry_date,
+            expiry_date::date - CURRENT_DATE AS days_to_expiry
+          FROM inventory_items
+          WHERE expiry_date IS NOT NULL AND organization_id = ${organizationId}
+        )
         SELECT
           'Overall' as month,
           COUNT(*)::int as total_expiring,
-          SUM(CASE WHEN expiry_date::date < CURRENT_DATE THEN 1 ELSE 0 END)::int as expired_count,
-          SUM(CASE WHEN expiry_date::date BETWEEN (CURRENT_DATE + INTERVAL '61 days')::date AND (CURRENT_DATE + INTERVAL '90 days')::date THEN 1 ELSE 0 END)::int as markdown1_count,
-          SUM(CASE WHEN expiry_date::date BETWEEN (CURRENT_DATE + INTERVAL '31 days')::date AND (CURRENT_DATE + INTERVAL '60 days')::date THEN 1 ELSE 0 END)::int as markdown2_count,
-          SUM(CASE WHEN expiry_date::date BETWEEN CURRENT_DATE AND (CURRENT_DATE + INTERVAL '30 days')::date THEN 1 ELSE 0 END)::int as markdown3_count,
-          SUM(CASE WHEN expiry_date::date BETWEEN CURRENT_DATE AND (CURRENT_DATE + INTERVAL '90 days')::date THEN 1 ELSE 0 END)::int as total_markdown,
-          SUM(CASE WHEN expiry_date::date BETWEEN CURRENT_DATE AND (CURRENT_DATE + INTERVAL '30 days')::date THEN 1 ELSE 0 END)::int as expiry_risk_count,
-          SUM(CASE WHEN expiry_date::date BETWEEN (CURRENT_DATE + INTERVAL '91 days')::date AND (CURRENT_DATE + INTERVAL '120 days')::date THEN 1 ELSE 0 END)::int as next_month_markdown_count,
-          SUM(CASE WHEN expiry_date::date >= CURRENT_DATE THEN 1 ELSE 0 END)::int as active_expiry_stock_count,
+          (COUNT(*) FILTER (WHERE days_to_expiry < 0))::int as expired_count,
+          (COUNT(*) FILTER (WHERE days_to_expiry BETWEEN 61 AND 90))::int as markdown1_count,
+          (COUNT(*) FILTER (WHERE days_to_expiry BETWEEN 31 AND 60))::int as markdown2_count,
+          (COUNT(*) FILTER (WHERE days_to_expiry BETWEEN 0 AND 30))::int as markdown3_count,
+          (COUNT(*) FILTER (WHERE days_to_expiry BETWEEN 0 AND 90))::int as total_markdown,
+          (COUNT(*) FILTER (WHERE days_to_expiry BETWEEN 0 AND 30))::int as expiry_risk_count,
+          (COUNT(*) FILTER (WHERE days_to_expiry BETWEEN 91 AND 120))::int as next_month_markdown_count,
+          (COUNT(*) FILTER (WHERE days_to_expiry >= 0))::int as active_expiry_stock_count,
           MAX(expiry_date)::text as latest_expiry_date
-        FROM inventory_items
-        WHERE expiry_date IS NOT NULL
+        FROM expiry_rows
       `;
       return (rows[0] || {
         month: 'Overall',
@@ -582,7 +596,7 @@ export function createWorkersDatabase(env: Env): Database {
       }) as MonthlyExpiryReport;
     },
 
-    async getDetailedExpiryReport(): Promise<DetailedExpiryReportItem[]> {
+    async getDetailedExpiryReport(organizationId: string): Promise<DetailedExpiryReportItem[]> {
       return (await sql`
         SELECT
           ii.id as "inventoryId",
@@ -600,11 +614,12 @@ export function createWorkersDatabase(env: Env): Database {
         JOIN store_areas sa ON ii.location_id = sa.id
         WHERE ii.expiry_date >= CURRENT_DATE
           AND ii.expiry_date <= CURRENT_DATE + INTERVAL '90 days'
+          AND ii.organization_id = ${organizationId}
         ORDER BY ii.expiry_date ASC
       `) as DetailedExpiryReportItem[];
     },
 
-    async getDailyUsageReport(): Promise<DailyUsageReportItem[]> {
+    async getDailyUsageReport(organizationId: string): Promise<DailyUsageReportItem[]> {
       return (await sql`
         SELECT
           al.created_at::date::text as date,
@@ -616,12 +631,13 @@ export function createWorkersDatabase(env: Env): Database {
         FROM audit_log al
         LEFT JOIN users u ON al.user_id = u.id
         WHERE al.created_at::date >= CURRENT_DATE - INTERVAL '90 days'
+          AND al.organization_id = ${organizationId}
         GROUP BY al.created_at::date, COALESCE(u.id, al.user_id), COALESCE(u.role, 'Unknown')
         ORDER BY al.created_at::date DESC
       `) as DailyUsageReportItem[];
     },
 
-    async getItemsByUserReport(timeFrameDays?: string): Promise<ItemsByUserReportItem[]> {
+    async getItemsByUserReport(organizationId: string, timeFrameDays?: string): Promise<ItemsByUserReportItem[]> {
       if (timeFrameDays && timeFrameDays !== 'all-time') {
         const days = parseInt(timeFrameDays, 10);
         if (!isNaN(days) && days > 0) {
@@ -634,6 +650,7 @@ export function createWorkersDatabase(env: Env): Database {
             LEFT JOIN users u ON al.user_id = u.id
             WHERE al.change_description LIKE '%created%'
               AND al.created_at >= CURRENT_DATE - make_interval(days => ${days})
+              AND al.organization_id = ${organizationId}
             GROUP BY al.user_id, COALESCE(u.username, u.email, 'Unknown')
             ORDER BY "itemCount" DESC
             LIMIT 10
@@ -649,26 +666,28 @@ export function createWorkersDatabase(env: Env): Database {
         FROM audit_log al
         LEFT JOIN users u ON al.user_id = u.id
         WHERE al.change_description LIKE '%created%'
+          AND al.organization_id = ${organizationId}
         GROUP BY al.user_id, COALESCE(u.username, u.email, 'Unknown')
         ORDER BY "itemCount" DESC
         LIMIT 10
       `) as ItemsByUserReportItem[];
     },
 
-    async getItemsByDateReport(): Promise<ItemsByDateReportItem[]> {
+    async getItemsByDateReport(organizationId: string): Promise<ItemsByDateReportItem[]> {
       return (await sql`
         SELECT
           al.created_at::date::text as date,
           COUNT(*)::int as "itemCount"
         FROM audit_log al
         WHERE al.change_description LIKE '%created%'
+          AND al.organization_id = ${organizationId}
         GROUP BY al.created_at::date
         ORDER BY date DESC
         LIMIT 30
       `) as ItemsByDateReportItem[];
     },
 
-    async getLossBySkuReport(): Promise<LossBySkuReportItem[]> {
+    async getLossBySkuReport(organizationId: string): Promise<LossBySkuReportItem[]> {
       return (await sql`
         SELECT
           COALESCE(p.sku, '') as sku,
@@ -678,13 +697,14 @@ export function createWorkersDatabase(env: Env): Database {
         FROM inventory_items ii
         JOIN products p ON ii.product_id = p.id
         WHERE ii.status = 'Expired'
+          AND ii.organization_id = ${organizationId}
         GROUP BY p.sku, p.name
         ORDER BY "totalLoss" DESC
         LIMIT 10
       `) as LossBySkuReportItem[];
     },
 
-    async getLossByDepartmentReport(): Promise<LossByDepartmentReportItem[]> {
+    async getLossByDepartmentReport(organizationId: string): Promise<LossByDepartmentReportItem[]> {
       return (await sql`
         SELECT
           sa.sub_department as department,
@@ -694,13 +714,14 @@ export function createWorkersDatabase(env: Env): Database {
         JOIN products p ON ii.product_id = p.id
         JOIN store_areas sa ON ii.location_id = sa.id
         WHERE ii.status = 'Expired' AND sa.sub_department IS NOT NULL
+          AND ii.organization_id = ${organizationId}
         GROUP BY sa.sub_department
         ORDER BY "totalLoss" DESC
       `) as LossByDepartmentReportItem[];
     },
 
     // Expired items queries
-    async getExpiredItems(): Promise<ExpiredItemRow[]> {
+    async getExpiredItems(organizationId: string): Promise<ExpiredItemRow[]> {
       return (await sql`
         SELECT
           ii.id,
@@ -716,8 +737,9 @@ export function createWorkersDatabase(env: Env): Database {
         FROM inventory_items ii
         JOIN products p ON ii.product_id = p.id
         JOIN store_areas sa ON ii.location_id = sa.id
-        WHERE ii.expiry_date < CURRENT_DATE
-          OR ii.status IN ('Expired', 'Markdown 1', 'Markdown 2', 'Markdown 3')
+        WHERE (ii.expiry_date < CURRENT_DATE
+          OR ii.status IN ('Expired', 'Markdown 1', 'Markdown 2', 'Markdown 3'))
+          AND ii.organization_id = ${organizationId}
         ORDER BY ii.expiry_date ASC
       `) as ExpiredItemRow[];
     },
