@@ -31,12 +31,42 @@ interface MonthlyExpiryReportItem {
   latest_expiry_date: string;
 }
 
+type RawMonthlyExpiryReportItem = Partial<
+  Omit<MonthlyExpiryReportItem, 'latest_expiry_date' | 'month'>
+> & {
+  month?: string | null;
+  latest_expiry_date?: string | null;
+};
+
 const numberFormatter = new Intl.NumberFormat('en-AU');
 const dateFormatter = new Intl.DateTimeFormat('en-AU', { dateStyle: 'medium' });
 
 function formatReportDate(value: string) {
   const date = new Date(value);
   return Number.isNaN(date.getTime()) ? 'Date not available' : dateFormatter.format(date);
+}
+
+function normalizeReportNumber(value: unknown): number {
+  const numberValue = typeof value === 'number' ? value : Number(value);
+  return Number.isFinite(numberValue) ? numberValue : 0;
+}
+
+function normalizeMonthlyExpiryReportItem(
+  item: RawMonthlyExpiryReportItem,
+): MonthlyExpiryReportItem {
+  return {
+    month: item.month || 'Unknown',
+    total_expiring: normalizeReportNumber(item.total_expiring),
+    expired_count: normalizeReportNumber(item.expired_count),
+    markdown1_count: normalizeReportNumber(item.markdown1_count),
+    markdown2_count: normalizeReportNumber(item.markdown2_count),
+    markdown3_count: normalizeReportNumber(item.markdown3_count),
+    total_markdown: normalizeReportNumber(item.total_markdown),
+    expiry_risk_count: normalizeReportNumber(item.expiry_risk_count),
+    next_month_markdown_count: normalizeReportNumber(item.next_month_markdown_count),
+    active_expiry_stock_count: normalizeReportNumber(item.active_expiry_stock_count),
+    latest_expiry_date: item.latest_expiry_date || '',
+  };
 }
 
 const SKELETON_ROWS = Array.from({ length: 6 }, (_, i) => i);
@@ -66,13 +96,13 @@ export function ReportsPage({ token }: ReportsPageProps) {
 
       try {
         const authToken = await getFreshApiToken('reports-expiry-monthly');
-        const data = await apiService.get<MonthlyExpiryReportItem[]>(
+        const data = await apiService.get<RawMonthlyExpiryReportItem[]>(
           '/reports/expiry',
           authToken,
           controller.signal,
         );
         if (!controller.signal.aborted) {
-          setReportData(data);
+          setReportData((data ?? []).map(normalizeMonthlyExpiryReportItem));
           setMonthlyError(null);
         }
       } catch (err: unknown) {
@@ -101,13 +131,13 @@ export function ReportsPage({ token }: ReportsPageProps) {
 
       try {
         const authToken = await getFreshApiToken('reports-expiry-overall');
-        const data = await apiService.get<MonthlyExpiryReportItem>(
+        const data = await apiService.get<RawMonthlyExpiryReportItem>(
           '/reports/expiry-overall',
           authToken,
           controller.signal,
         );
         if (!controller.signal.aborted) {
-          setOverallReportData(data);
+          setOverallReportData(data ? normalizeMonthlyExpiryReportItem(data) : null);
           setOverallError(null);
         }
       } catch (err: unknown) {
