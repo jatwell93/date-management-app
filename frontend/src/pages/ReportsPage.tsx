@@ -137,9 +137,7 @@ export function ReportsPage({ token }: ReportsPageProps) {
           controller.signal,
         );
         if (!controller.signal.aborted) {
-          setOverallReportData(
-            data ? normalizeMonthlyExpiryReportItem(data) : null,
-          );
+          setOverallReportData(data ? normalizeMonthlyExpiryReportItem(data) : null);
           setOverallError(null);
         }
       } catch (err: unknown) {
