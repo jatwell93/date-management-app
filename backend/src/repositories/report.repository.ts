@@ -110,7 +110,7 @@ export class ReportRepository {
   constructor(
     private db: InstanceType<typeof Database>,
     private organizationId: string,
-  ) { }
+  ) {}
 
   /**
    * Get monthly expiry report
@@ -253,20 +253,28 @@ export class ReportRepository {
    * Get dashboard analytics summary
    */
   getDashboardAnalytics(): DashboardAnalytics {
-    const totalProducts = this.db.prepare('SELECT COUNT(*) as count FROM products WHERE organization_id = ?').get(this.organizationId) as {
+    const totalProducts = this.db
+      .prepare('SELECT COUNT(*) as count FROM products WHERE organization_id = ?')
+      .get(this.organizationId) as {
       count: number;
     };
     const totalInventoryItems = this.db
       .prepare('SELECT COUNT(*) as count FROM inventory_items WHERE organization_id = ?')
       .get(this.organizationId) as { count: number };
     const activeItems = this.db
-      .prepare("SELECT COUNT(*) as count FROM inventory_items WHERE status != 'Expired' AND organization_id = ?")
+      .prepare(
+        "SELECT COUNT(*) as count FROM inventory_items WHERE status != 'Expired' AND organization_id = ?",
+      )
       .get(this.organizationId) as { count: number };
     const expiredItems = this.db
-      .prepare("SELECT COUNT(*) as count FROM inventory_items WHERE status = 'Expired' AND organization_id = ?")
+      .prepare(
+        "SELECT COUNT(*) as count FROM inventory_items WHERE status = 'Expired' AND organization_id = ?",
+      )
       .get(this.organizationId) as { count: number };
     const markdownItems = this.db
-      .prepare("SELECT COUNT(*) as count FROM inventory_items WHERE status LIKE 'Markdown%' AND organization_id = ?")
+      .prepare(
+        "SELECT COUNT(*) as count FROM inventory_items WHERE status LIKE 'Markdown%' AND organization_id = ?",
+      )
       .get(this.organizationId) as { count: number };
 
     // Get upcoming expiry items (next 30 days)
@@ -289,7 +297,9 @@ export class ReportRepository {
   }
 
   getDashboardData(): DashboardData {
-    const totalProductsResult = this.db.prepare('SELECT COUNT(*) as count FROM products WHERE organization_id = ?').get(this.organizationId) as {
+    const totalProductsResult = this.db
+      .prepare('SELECT COUNT(*) as count FROM products WHERE organization_id = ?')
+      .get(this.organizationId) as {
       count: number;
     };
 
@@ -300,7 +310,9 @@ export class ReportRepository {
       .get(this.organizationId) as { count: number };
 
     const markdownItemsResult = this.db
-      .prepare(`SELECT COUNT(*) as count FROM inventory_items WHERE status LIKE 'Markdown%' AND organization_id = ?`)
+      .prepare(
+        `SELECT COUNT(*) as count FROM inventory_items WHERE status LIKE 'Markdown%' AND organization_id = ?`,
+      )
       .get(this.organizationId) as { count: number };
 
     const recentActivityResult = this.db

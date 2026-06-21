@@ -96,6 +96,7 @@ export class MigrationService {
           db.exec(`
             CREATE TABLE IF NOT EXISTS products (
               id INTEGER PRIMARY KEY AUTOINCREMENT,
+              organization_id TEXT NOT NULL DEFAULT 'default-org',
               barcode TEXT UNIQUE NOT NULL,
               sku TEXT UNIQUE NOT NULL,
               name TEXT NOT NULL,
@@ -106,6 +107,7 @@ export class MigrationService {
 
             CREATE TABLE IF NOT EXISTS inventory_items (
               id INTEGER PRIMARY KEY AUTOINCREMENT,
+              organization_id TEXT NOT NULL DEFAULT 'default-org',
               product_id INTEGER NOT NULL,
               expiry_date TEXT NOT NULL,
               location_id INTEGER NOT NULL,
@@ -136,6 +138,7 @@ export class MigrationService {
 
             CREATE TABLE IF NOT EXISTS audit_log (
               id INTEGER PRIMARY KEY AUTOINCREMENT,
+              organization_id TEXT NOT NULL DEFAULT 'default-org',
               user_id INTEGER NOT NULL,
               inventory_item_id INTEGER NOT NULL,
               change_description TEXT NOT NULL,
@@ -356,6 +359,36 @@ export class MigrationService {
           db.exec(`
             DROP TABLE IF EXISTS expired_item_transactions;
           `);
+        },
+      },
+      {
+        id: 8,
+        name: '008-add-organization-id-to-reporting-tables',
+        up: (db: DB) => {
+          const addColumnIfMissing = (tableName: string) => {
+            const tableInfo = db
+              .prepare(`PRAGMA table_info(${tableName})`)
+              .all() as PragmaTableInfoRow[];
+            const hasOrganizationIdColumn = tableInfo.some(
+              (column) => column.name === 'organization_id',
+            );
+
+            if (!hasOrganizationIdColumn) {
+              db.exec(
+                `ALTER TABLE ${tableName} ADD COLUMN organization_id TEXT NOT NULL DEFAULT 'default-org'`,
+              );
+              Logger.info(`Added organization_id column to ${tableName} table`);
+            }
+          };
+
+          addColumnIfMissing('products');
+          addColumnIfMissing('inventory_items');
+          addColumnIfMissing('audit_log');
+        },
+        down: (_db: DB) => {
+          Logger.warn(
+            "Cannot revert 'Add organization_id to reporting tables' migration in SQLite",
+          );
         },
       },
     ];
