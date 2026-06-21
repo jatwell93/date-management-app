@@ -47,6 +47,7 @@ export interface Database {
   getItemsByDateReport(organizationId: string): Promise<ItemsByDateReportItem[]>;
   getLossBySkuReport(organizationId: string): Promise<LossBySkuReportItem[]>;
   getLossByDepartmentReport(organizationId: string): Promise<LossByDepartmentReportItem[]>;
+  getSellThroughByMarkdownLevel(organizationId: string): Promise<SellThroughByLevelItem[]>;
 
   // Expired items queries
   getExpiredItems(organizationId: string): Promise<ExpiredItemRow[]>;
@@ -248,6 +249,11 @@ export interface LossByDepartmentReportItem {
   department: string;
   totalLoss: number;
   count: number;
+}
+
+export interface SellThroughByLevelItem {
+  markdownLevel: number | null;
+  soldCount: number;
 }
 
 export interface ExpiredItemRow {
@@ -734,6 +740,22 @@ export function createWorkersDatabase(env: Env): Database {
         GROUP BY sa.sub_department
         ORDER BY "totalLoss" DESC
       `) as LossByDepartmentReportItem[];
+    },
+
+    async getSellThroughByMarkdownLevel(
+      organizationId: string,
+    ): Promise<SellThroughByLevelItem[]> {
+      // How many items sold through at each markdown depth (null = sold before
+      // reaching a markdown window). Surfaces stock that only moves when reduced.
+      return (await sql`
+        SELECT
+          markdown_level as "markdownLevel",
+          COUNT(*)::int as "soldCount"
+        FROM expired_item_transactions
+        WHERE action = 'sold_through' AND organization_id = ${organizationId}
+        GROUP BY markdown_level
+        ORDER BY markdown_level ASC NULLS LAST
+      `) as SellThroughByLevelItem[];
     },
 
     // Expired items queries

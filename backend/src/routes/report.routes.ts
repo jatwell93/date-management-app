@@ -87,6 +87,15 @@ router.get(
   },
 );
 
+// GET /reports/sell-through - Sell-through counts by markdown level
+router.get(
+  '/sell-through',
+  authenticateToken,
+  async (req: AuthRequest, res: Response, next: NextFunction) => {
+    await reportController.getSellThroughReport(req, res, next);
+  },
+);
+
 // GET /reports/items-by-user - Get items added by user
 router.get(
   '/items-by-user',

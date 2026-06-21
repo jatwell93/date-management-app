@@ -684,6 +684,9 @@ export default Sentry.withSentry(
             case pathname === '/api/reports/loss-by-department' && method === 'GET':
               return finalizeApiResponse(handleGetLossByDepartmentReport(request, db, env));
 
+            case pathname === '/api/reports/sell-through' && method === 'GET':
+              return finalizeApiResponse(handleGetSellThroughReport(request, db, env));
+
             // Expired items endpoints
             case pathname === '/api/expired-items' && method === 'GET':
               return finalizeApiResponse(handleGetExpiredItems(request, db, env));
@@ -2273,6 +2276,20 @@ async function handleGetLossBySkuReport(
   const auth = await authenticateApiRequest(request, env, db);
   if (auth instanceof Response) return auth;
   const report = await db.getLossBySkuReport(auth.organizationId);
+  return jsonResponse(report, 200, env);
+}
+
+/**
+ * GET /api/reports/sell-through
+ */
+async function handleGetSellThroughReport(
+  request: Request,
+  db: Database,
+  env: Env,
+): Promise<Response> {
+  const auth = await authenticateApiRequest(request, env, db);
+  if (auth instanceof Response) return auth;
+  const report = await db.getSellThroughByMarkdownLevel(auth.organizationId);
   return jsonResponse(report, 200, env);
 }
 

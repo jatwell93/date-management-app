@@ -83,4 +83,32 @@ describe('Workers disposition markdown capture (real SQL)', () => {
     expect(txn.markdownLevel).toBeNull();
     expect(txn.action).toBe('expired');
   });
+
+  it('aggregates sell-through counts by markdown level', async () => {
+    const db = createWorkersDatabase({ NEON_CONNECTION_STRING: 'postgres://test' } as Env);
+
+    // Two sold at Markdown 3, one at Markdown 2, one at Markdown 1.
+    for (const [offset, sku] of [
+      [10, 'A'],
+      [20, 'B'],
+      [45, 'C'],
+      [75, 'D'],
+    ] as const) {
+      const id = await seedItem(offset, `ST-${sku}`);
+      await db.processExpiredItem(id, USER_ID, ORG, 'sold_through');
+    }
+    // A write-off must not appear in sell-through counts.
+    const expiredId = await seedItem(-3, 'ST-EXPIRED');
+    await db.processExpiredItem(expiredId, USER_ID, ORG, 'expired', 1);
+
+    const rows = await db.getSellThroughByMarkdownLevel(ORG);
+    const byLevel = new Map(rows.map((r) => [r.markdownLevel, r.soldCount]));
+
+    expect(byLevel.get(3)).toBe(2);
+    expect(byLevel.get(2)).toBe(1);
+    expect(byLevel.get(1)).toBe(1);
+    // Only sold-through rows are counted (the expired write-off is excluded).
+    const total = rows.reduce((sum, r) => sum + r.soldCount, 0);
+    expect(total).toBe(4);
+  });
 });

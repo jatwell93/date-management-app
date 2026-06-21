@@ -14,6 +14,6 @@
 - [x] Add focused frontend tests for grouping and the sold-through action.
 
 ### Phase 3 — Sell-through reporting
-- [ ] Add a sell-through-by-markdown-level report query (workers + backend) reusing loss-report plumbing.
-- [ ] Surface the sell-through report on `ReportsPage` with focused tests.
-- [ ] Run completion checks: `npm run lint`, focused + full tests, `openspec validate --all`.
+- [x] Add a sell-through-by-markdown-level query + route — workers (`/api/reports/sell-through`, real-SQL test) and backend (repository/service/controller/route `/reports/sell-through`, repository test).
+- [x] Surface the sell-through report on `ReportsPage` (new card + fetch) with a focused frontend test.
+- [x] Run completion checks: workers `test:db` (18) + lint, backend report tests + tsc, frontend ReportsPage tests + tsc, `openspec validate`.

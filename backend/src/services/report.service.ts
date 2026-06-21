@@ -8,6 +8,7 @@ import {
   DetailedExpiryReportItem,
   LossBySkuReportItem,
   LossByDepartmentReportItem,
+  SellThroughByLevelItem,
   ItemsByUserReportItem,
   ItemsByDateReportItem,
   DashboardAnalytics,
@@ -72,6 +73,10 @@ export class ReportService {
 
   async getLossByDepartmentReport(): Promise<LossByDepartmentReportItem[]> {
     return this.repository.getLossByDepartmentReport();
+  }
+
+  async getSellThroughByMarkdownLevel(): Promise<SellThroughByLevelItem[]> {
+    return this.repository.getSellThroughByMarkdownLevel();
   }
 
   async getItemsByUserReport(timeFrame?: string): Promise<ItemsByUserReportItem[]> {

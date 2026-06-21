@@ -73,6 +73,11 @@ export interface LossByDepartmentReportItem {
   count: number;
 }
 
+export interface SellThroughByLevelItem {
+  markdownLevel: number | null;
+  soldCount: number;
+}
+
 export interface ItemsByUserReportItem {
   userId: number;
   userName: string;
@@ -367,6 +372,23 @@ export class ReportRepository {
       ORDER BY totalLoss DESC
     `);
     return stmt.all(this.organizationId) as LossByDepartmentReportItem[];
+  }
+
+  /**
+   * Get sell-through counts grouped by the markdown level at which items sold,
+   * surfacing stock that only moves once reduced (NULL = sold before markdown).
+   */
+  getSellThroughByMarkdownLevel(): SellThroughByLevelItem[] {
+    const stmt = this.db.prepare(`
+      SELECT
+        markdown_level as markdownLevel,
+        COUNT(*) as soldCount
+      FROM expired_item_transactions
+      WHERE action = 'sold_through' AND organization_id = ?
+      GROUP BY markdown_level
+      ORDER BY markdown_level ASC
+    `);
+    return stmt.all(this.organizationId) as SellThroughByLevelItem[];
   }
 
   /**

@@ -28,6 +28,17 @@ describe('ReportRepository', () => {
         created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
         updated_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
       );
+      CREATE TABLE expired_item_transactions (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        organization_id TEXT NOT NULL DEFAULT 'test-org',
+        inventory_item_id INTEGER NOT NULL,
+        user_id INTEGER,
+        action TEXT NOT NULL,
+        units_discarded INTEGER,
+        financial_loss REAL,
+        markdown_level INTEGER,
+        transaction_date TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
+      );
     `);
   });
 
@@ -110,5 +121,33 @@ describe('ReportRepository', () => {
     expect(report.expiry_risk_count).toBe(1);
     expect(report.next_month_markdown_count).toBe(2);
     expect(report.active_expiry_stock_count).toBe(7);
+  });
+
+  it('aggregates sell-through counts by markdown level for the organization', () => {
+    const repository = new ReportRepository(db, 'test-org');
+
+    const insertSoldThrough = (markdownLevel: number | null, org = 'test-org') => {
+      db.prepare(
+        "INSERT INTO expired_item_transactions (organization_id, inventory_item_id, action, markdown_level) VALUES (?, 1, 'sold_through', ?)",
+      ).run(org, markdownLevel);
+    };
+
+    insertSoldThrough(3);
+    insertSoldThrough(3);
+    insertSoldThrough(2);
+    insertSoldThrough(1);
+    insertSoldThrough(3, 'other-org'); // excluded by org scoping
+    // A write-off must not be counted as sell-through.
+    db.prepare(
+      "INSERT INTO expired_item_transactions (organization_id, inventory_item_id, action, markdown_level) VALUES ('test-org', 1, 'expired', NULL)",
+    ).run();
+
+    const rows = repository.getSellThroughByMarkdownLevel();
+    const byLevel = new Map(rows.map((row) => [row.markdownLevel, row.soldCount]));
+
+    expect(byLevel.get(3)).toBe(2);
+    expect(byLevel.get(2)).toBe(1);
+    expect(byLevel.get(1)).toBe(1);
+    expect(rows.reduce((sum, row) => sum + row.soldCount, 0)).toBe(4);
   });
 });
