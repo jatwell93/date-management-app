@@ -75,6 +75,24 @@ const SCHEMA_SQL = `
     ON uploads (organization_id)
     WHERE import_type = 'product-catalog'
       AND status IN ('pending', 'queued', 'validating', 'processing');
+
+  CREATE TABLE store_areas (
+    id SERIAL PRIMARY KEY,
+    organization_id TEXT NOT NULL,
+    name TEXT NOT NULL,
+    sub_department TEXT NOT NULL DEFAULT ''
+  );
+
+  CREATE TABLE inventory_items (
+    id SERIAL PRIMARY KEY,
+    organization_id TEXT NOT NULL,
+    product_id INTEGER,
+    location_id INTEGER,
+    expiry_date DATE,
+    status TEXT NOT NULL DEFAULT 'Active',
+    created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+    updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+  );
 `;
 
 /**
@@ -83,7 +101,7 @@ const SCHEMA_SQL = `
  * as a tagged template with interpolated *values* (never identifiers), so a simple
  * `$1..$n` rewrite is faithful to production.
  */
-function createTaggedSql(pg: PGlite) {
+export function createTaggedSql(pg: PGlite) {
   return (async (strings: TemplateStringsArray, ...values: unknown[]) => {
     let text = '';
     strings.forEach((chunk, index) => {

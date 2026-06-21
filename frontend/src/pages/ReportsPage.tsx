@@ -286,7 +286,8 @@ export function ReportsPage({ token }: ReportsPageProps) {
                   {numberFormatter.format(overallReportData.expiry_risk_count)}
                 </p>
                 <p className="mt-2 text-sm text-semantic-critical-muted-foreground">
-                  Review stock expiring in the next 30 days before it becomes unsellable.
+                  Stock expiring within 30 days — apply the deepest reduction (Markdown 3) before it
+                  becomes unsellable.
                 </p>
               </div>
               <dl className="grid gap-3 rounded-lg border bg-semantic-secondary-muted p-5 sm:grid-cols-2">
@@ -297,6 +298,9 @@ export function ReportsPage({ token }: ReportsPageProps) {
                   <dd className="mt-1 font-heading text-2xl font-bold text-semantic-warning">
                     {numberFormatter.format(overallReportData.next_month_markdown_count)}
                   </dd>
+                  <dd className="mt-1 text-xs text-semantic-text-secondary">
+                    Next batch crossing into Markdown 1 (≈3 months out) — line up first reductions.
+                  </dd>
                 </div>
                 <div>
                   <dt className="text-sm font-medium text-semantic-text-secondary">
@@ -304,6 +308,9 @@ export function ReportsPage({ token }: ReportsPageProps) {
                   </dt>
                   <dd className="mt-1 font-heading text-2xl font-bold text-semantic-success">
                     {numberFormatter.format(overallReportData.active_expiry_stock_count)}
+                  </dd>
+                  <dd className="mt-1 text-xs text-semantic-text-secondary">
+                    All stock not yet expired — your live markdown pipeline.
                   </dd>
                 </div>
               </dl>
