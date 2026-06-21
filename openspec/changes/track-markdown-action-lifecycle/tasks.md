@@ -9,9 +9,9 @@
 - [x] Align the stored-status thresholds (`INVENTORY_MARKDOWN_THRESHOLDS` / `InventoryService.MARKDOWN_THRESHOLDS`) from the legacy 7/14/30 days to the report/frontend windows 30/60/90 (Markdown 3/2/1). Updated helper, consistency, service, and create-status tests (118 inventory tests passing). Markdown *price multipliers* in the helper left unchanged (separate concern).
 
 ### Phase 2 — Monthly markdown worklist
-- [ ] Group `DetailedExpiryReportPage` into "New → Markdown 1 this month", "Already reduced — review", and "Expired → write off".
-- [ ] Add inline "Sold through" / "Write off" actions reusing `expiredItemService.processExpiredItem`.
-- [ ] Add focused frontend tests for grouping and disposition actions.
+- [x] Group `DetailedExpiryReportPage` into Apply Markdown 1 (61-90d), Markdown 2 — review (31-60d), and Markdown 3 — urgent (0-30d). (Expired → write off stays on the Expired items page, since the detailed report only returns 0-90 day stock and active stock gets sold-through only.)
+- [x] Add inline "Sold through" action reusing the existing `/expired-items/process` disposition endpoint (markdown level snapshotted server-side).
+- [x] Add focused frontend tests for grouping and the sold-through action.
 
 ### Phase 3 — Sell-through reporting
 - [ ] Add a sell-through-by-markdown-level report query (workers + backend) reusing loss-report plumbing.
