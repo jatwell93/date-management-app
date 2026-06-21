@@ -391,6 +391,26 @@ export class MigrationService {
           );
         },
       },
+      // Snapshot the markdown level at the time of disposition so sell-through
+      // reporting can break down stock by the reduction depth it sold at.
+      {
+        id: 9,
+        name: '009-add-markdown-level-to-expired-item-transactions',
+        up: (db: DB) => {
+          const tableInfo = db
+            .prepare('PRAGMA table_info(expired_item_transactions)')
+            .all() as PragmaTableInfoRow[];
+          const hasMarkdownLevel = tableInfo.some((column) => column.name === 'markdown_level');
+
+          if (!hasMarkdownLevel) {
+            db.exec('ALTER TABLE expired_item_transactions ADD COLUMN markdown_level INTEGER');
+            Logger.info('Added markdown_level column to expired_item_transactions table');
+          }
+        },
+        down: (_db: DB) => {
+          Logger.warn('Cannot revert markdown_level column migration in SQLite');
+        },
+      },
     ];
   }
 

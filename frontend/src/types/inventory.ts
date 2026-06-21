@@ -28,6 +28,7 @@ export interface ExpiredItemTransaction {
   action: 'sold_through' | 'expired';
   unitsDiscarded: number | null;
   financialLoss: number | null;
+  markdownLevel: number | null;
   transactionDate: string;
 }
 

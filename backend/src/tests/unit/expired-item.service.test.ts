@@ -141,9 +141,10 @@ describe('ExpiredItemService', () => {
       expect(result.action).toBe('sold_through');
       expect(result.unitsDiscarded).toBeNull();
       expect(result.financialLoss).toBeNull();
+      expect(result.markdownLevel).toBeNull();
       expect(new Date(result.transactionDate).toString()).not.toBe('Invalid Date');
 
-      expect(insertRun).toHaveBeenCalledWith(3, 7, 'sold_through', null, null);
+      expect(insertRun).toHaveBeenCalledWith(3, 7, 'sold_through', null, null, null);
       expect(auditRun).toHaveBeenCalledWith(7, 3, 'Expired item marked as sold through');
       expect(updateRun).toHaveBeenCalledWith(3);
       expect(mockReleaseDb).toHaveBeenCalledWith(mockDb);
@@ -178,7 +179,8 @@ describe('ExpiredItemService', () => {
       expect(result.id).toBe(9);
       expect(result.unitsDiscarded).toBe(3);
       expect(result.financialLoss).toBe(12);
-      expect(insertRun).toHaveBeenCalledWith(5, 11, 'expired', 3, 12);
+      expect(result.markdownLevel).toBeNull();
+      expect(insertRun).toHaveBeenCalledWith(5, 11, 'expired', 3, 12, null);
       expect(auditRun).toHaveBeenCalledWith(
         11,
         5,
@@ -186,6 +188,38 @@ describe('ExpiredItemService', () => {
       );
       expect(updateRun).toHaveBeenCalledWith(5);
       expect(mockReleaseDb).toHaveBeenCalledWith(mockDb);
+    });
+
+    it('snapshots the markdown level from the item expiry date on sold-through', async () => {
+      // 10 days from expiry => Markdown 3 window (0-30 days) per the report bucketing.
+      const expiryDate = new Date(Date.now() + 10 * 24 * 60 * 60 * 1000)
+        .toISOString()
+        .slice(0, 10);
+      const selectGet = jest
+        .fn()
+        .mockReturnValue({ id: 8, product_id: 10, location_id: 2, costPrice: 2, expiry_date: expiryDate });
+      const insertRun = jest.fn().mockReturnValue({ lastInsertRowid: 55 });
+
+      mockDb.prepare.mockImplementation((sql: string) => {
+        if (sql.includes('SELECT ii.*, p.cost_price as costPrice')) {
+          return { get: selectGet };
+        }
+        if (sql.includes('INSERT INTO expired_item_transactions')) {
+          return { run: insertRun };
+        }
+        if (sql.includes('INSERT INTO audit_log')) {
+          return { run: jest.fn() };
+        }
+        if (sql.includes("UPDATE inventory_items SET status = 'Processed' WHERE id = ?")) {
+          return { run: jest.fn() };
+        }
+        throw new Error(`Unexpected SQL: ${sql}`);
+      });
+
+      const result = await service.processExpiredItem(8, 7, 'sold_through');
+
+      expect(result.markdownLevel).toBe(3);
+      expect(insertRun).toHaveBeenCalledWith(8, 7, 'sold_through', null, null, 3);
     });
   });
 

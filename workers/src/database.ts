@@ -289,7 +289,23 @@ export interface ExpiredItemTransaction {
   userId: number | null;
   unitsDiscarded: number | null;
   financialLoss: number | null;
+  markdownLevel: number | null;
   transactionDate: string;
+}
+
+/**
+ * Markdown level snapshot aligned with the expiry report windows
+ * (Markdown 1 = 61-90 days, Markdown 2 = 31-60, Markdown 3 = 0-30 days to expiry).
+ * Returns null when the item is not within a markdown window (already expired or
+ * more than 90 days out). Kept consistent with getMonthlyExpiryReport's buckets so
+ * sell-through reporting lines up with the on-screen markdown levels.
+ */
+export function reportMarkdownLevel(daysToExpiry: number | null): number | null {
+  if (daysToExpiry === null || daysToExpiry < 0) return null;
+  if (daysToExpiry <= 30) return 3;
+  if (daysToExpiry <= 60) return 2;
+  if (daysToExpiry <= 90) return 1;
+  return null;
 }
 
 /**
@@ -752,17 +768,23 @@ export function createWorkersDatabase(env: Env): Database {
       unitsDiscarded?: number,
     ): Promise<ExpiredItemTransaction> {
       const newStatus = action === 'sold_through' ? 'Sold Through' : 'Expired';
-      const financialLossRows = await sql`
-        SELECT COALESCE(p.cost_price, 0) * ${action === 'expired' ? (unitsDiscarded ?? 0) : 0} as "financialLoss"
+      const itemRows = await sql`
+        SELECT
+          COALESCE(p.cost_price, 0) * ${action === 'expired' ? (unitsDiscarded ?? 0) : 0} as "financialLoss",
+          (ii.expiry_date::date - CURRENT_DATE) as "daysToExpiry"
         FROM inventory_items ii
         JOIN products p ON ii.product_id = p.id
         WHERE ii.id = ${inventoryItemId}
         LIMIT 1
       `;
 
-      if (!financialLossRows[0]) {
+      if (!itemRows[0]) {
         throw new Error(`Inventory item ${inventoryItemId} not found`);
       }
+
+      const daysToExpiry =
+        itemRows[0].daysToExpiry === null ? null : Number(itemRows[0].daysToExpiry);
+      const markdownLevel = reportMarkdownLevel(daysToExpiry);
 
       await sql`
         UPDATE inventory_items
@@ -772,9 +794,9 @@ export function createWorkersDatabase(env: Env): Database {
 
       const rows = await sql`
         INSERT INTO expired_item_transactions
-          (organization_id, inventory_item_id, user_id, action, units_discarded, financial_loss, transaction_date, created_at, updated_at)
+          (organization_id, inventory_item_id, user_id, action, units_discarded, financial_loss, markdown_level, transaction_date, created_at, updated_at)
         VALUES
-          (${organizationId}, ${inventoryItemId}, ${userId}, ${action}, ${unitsDiscarded ?? null}, ${Number(financialLossRows[0].financialLoss) || null}, NOW(), NOW(), NOW())
+          (${organizationId}, ${inventoryItemId}, ${userId}, ${action}, ${unitsDiscarded ?? null}, ${Number(itemRows[0].financialLoss) || null}, ${markdownLevel}, NOW(), NOW(), NOW())
         RETURNING
           id,
           inventory_item_id as "inventoryItemId",
@@ -782,6 +804,7 @@ export function createWorkersDatabase(env: Env): Database {
           action,
           units_discarded as "unitsDiscarded",
           financial_loss as "financialLoss",
+          markdown_level as "markdownLevel",
           transaction_date::text as "transactionDate"
       `;
 

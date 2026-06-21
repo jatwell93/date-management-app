@@ -93,6 +93,20 @@ const SCHEMA_SQL = `
     created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
     updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
   );
+
+  CREATE TABLE expired_item_transactions (
+    id SERIAL PRIMARY KEY,
+    organization_id TEXT NOT NULL,
+    inventory_item_id INTEGER NOT NULL,
+    user_id INTEGER,
+    action TEXT NOT NULL,
+    units_discarded INTEGER,
+    financial_loss DOUBLE PRECISION,
+    markdown_level SMALLINT,
+    transaction_date TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+    created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+    updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+  );
 `;
 
 /**
