@@ -53,6 +53,21 @@ time, after they ship. This change addresses the *class*, not another instance.
 3. No documented convention or PR-checklist rule that says "logic implemented in both backends must
    source shared constants and have a conformance test," so the pattern won't stick.
 
+**Related manifestation — schema/migration triplication (same class, one layer down):**
+The same "one logical change, maintained by hand in N places, with nothing comparing them" pattern
+also appears at the schema layer. A single column change is expressed in **three** places:
+`backend/prisma/schema.prisma` (applied to Neon in production via `npm run migrate:prod` →
+`prisma db push`), a hand-written `backend/prisma/migrations/neon/NNNN_*.sql` (+ `_rollback.sql`)
+intended for the Neon SQL editor, and a runtime migration in `backend/src/migrations/` applied via
+`npm run migrate`. These are three paths to the same end state with no check that they agree — e.g.
+`markdownLevel` from `track-markdown-action-lifecycle` lives in all three
+(`schema.prisma:320`, `neon/0002_add_markdown_level_to_expired_item_transactions.sql`, runtime
+migration id 9). If the hand-written `neon/*.sql` ever disagrees with `schema.prisma`, `prisma db
+push` silently wins and the `.sql` file becomes a lie. This change's **convention pillar** (Phase 3)
+should name this triplication explicitly so dual-backend schema changes are kept in sync the same way
+domain constants are; reconciling or de-duplicating the three migration mechanisms themselves is a
+larger effort left to a follow-up.
+
 **Explicitly out of scope (handled elsewhere / deliberately not done):**
 - Reconciling the markdown **price multipliers** is the sibling change
   `reconcile-markdown-price-multipliers`; this change only provides the shared-constant *home* it

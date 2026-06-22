@@ -25,5 +25,9 @@
 ## Phase 3 — Make the convention stick
 - [ ] 3.1 Add a "dual-backend parity" Golden Rule to `openspec/project.md`.
 - [ ] 3.2 Add a PR-checklist line to `AGENTS.md` (shared constants + conformance test for dual-backend logic).
-- [ ] 3.3 Run completion checks: `npm run lint`, backend jest, `npm run test:db`,
+- [ ] 3.3 Document the schema/migration triplication rule: a single column change kept in sync across
+      `schema.prisma`, `prisma/migrations/neon/*.sql` (+ rollback), and `src/migrations/` (runtime), and
+      note which path is production-authoritative (`prisma db push` via `migrate:prod`). Add to the same
+      Golden Rule / PR checklist.
+- [ ] 3.4 Run completion checks: `npm run lint`, backend jest, `npm run test:db`,
       `openspec validate --all`.

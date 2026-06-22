@@ -59,3 +59,11 @@ SHALL include this rule, so the pattern is applied to future work.
 - **GIVEN** an engineer adding logic that exists in both backends
 - **WHEN** they consult the project conventions or the PR checklist
 - **THEN** the dual-backend parity rule is present and actionable
+
+#### Scenario: Schema changes are kept in sync across migration mechanisms
+
+- **GIVEN** an engineer adding a column expressed in `schema.prisma`, the hand-written
+  `prisma/migrations/neon/*.sql`, and the runtime `src/migrations/` path
+- **WHEN** they consult the project conventions or the PR checklist
+- **THEN** the rule states the three representations must agree and names the
+  production-authoritative path (`prisma db push` via `migrate:prod`)
