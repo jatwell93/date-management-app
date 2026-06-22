@@ -28,6 +28,30 @@ describe('ReportRepository', () => {
         created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
         updated_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
       );
+      CREATE TABLE expired_item_transactions (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        organization_id TEXT NOT NULL DEFAULT 'test-org',
+        inventory_item_id INTEGER NOT NULL,
+        user_id INTEGER,
+        action TEXT NOT NULL,
+        units_discarded INTEGER,
+        financial_loss REAL,
+        markdown_level INTEGER,
+        transaction_date TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
+      );
+      CREATE TABLE products (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        name TEXT NOT NULL DEFAULT 'Test product',
+        sku TEXT,
+        cost_price REAL
+      );
+      CREATE TABLE store_areas (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        name TEXT NOT NULL DEFAULT 'Aisle',
+        sub_department TEXT
+      );
+      INSERT INTO products (id, name, sku, cost_price) VALUES (1, 'Test product', 'SKU1', 10);
+      INSERT INTO store_areas (id, name, sub_department) VALUES (1, 'Aisle 1', 'Dairy');
     `);
   });
 
@@ -110,5 +134,57 @@ describe('ReportRepository', () => {
     expect(report.expiry_risk_count).toBe(1);
     expect(report.next_month_markdown_count).toBe(2);
     expect(report.active_expiry_stock_count).toBe(7);
+  });
+
+  it('aggregates sell-through counts by markdown level for the organization', () => {
+    const repository = new ReportRepository(db, 'test-org');
+
+    const insertSoldThrough = (markdownLevel: number | null, org = 'test-org') => {
+      db.prepare(
+        "INSERT INTO expired_item_transactions (organization_id, inventory_item_id, action, markdown_level) VALUES (?, 1, 'sold_through', ?)",
+      ).run(org, markdownLevel);
+    };
+
+    insertSoldThrough(3);
+    insertSoldThrough(3);
+    insertSoldThrough(2);
+    insertSoldThrough(1);
+    insertSoldThrough(3, 'other-org'); // excluded by org scoping
+    // A write-off must not be counted as sell-through.
+    db.prepare(
+      "INSERT INTO expired_item_transactions (organization_id, inventory_item_id, action, markdown_level) VALUES ('test-org', 1, 'expired', NULL)",
+    ).run();
+
+    const rows = repository.getSellThroughByMarkdownLevel();
+    const byLevel = new Map(rows.map((row) => [row.markdownLevel, row.soldCount]));
+
+    expect(byLevel.get(3)).toBe(2);
+    expect(byLevel.get(2)).toBe(1);
+    expect(byLevel.get(1)).toBe(1);
+    expect(rows.reduce((sum, row) => sum + row.soldCount, 0)).toBe(4);
+  });
+
+  it('excludes sold-through stock from the detailed worklist but keeps urgent day-0 items', () => {
+    const repository = new ReportRepository(db, 'test-org');
+
+    // Active item within the worklist window — should appear.
+    insertInventoryItem(sqliteDate('+20 days'), 'Normal');
+    // Same window but already sold through (SQLite backend marks status 'Processed') —
+    // must NOT reappear after refresh.
+    insertInventoryItem(sqliteDate('+20 days'), 'Processed');
+    // Defensive: the workers backend marks sold-through as 'Sold Through'.
+    insertInventoryItem(sqliteDate('+20 days'), 'Sold Through');
+    // A day-0 item carrying computed 'Expired' status is the most urgent worklist
+    // entry and must still be surfaced (not treated as a write-off).
+    insertInventoryItem(sqliteDate('+0 days'), 'Expired');
+
+    const report = repository.getDetailedExpiryReport();
+    const statuses = report.map((row) => row.status);
+
+    expect(report).toHaveLength(2);
+    expect(statuses).toContain('Normal');
+    expect(statuses).toContain('Expired');
+    expect(statuses).not.toContain('Processed');
+    expect(statuses).not.toContain('Sold Through');
   });
 });

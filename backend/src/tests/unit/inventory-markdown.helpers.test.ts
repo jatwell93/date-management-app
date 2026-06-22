@@ -12,23 +12,23 @@ describe('inventory markdown helpers', () => {
     [null, 'Normal'],
     ['not-a-date', 'Normal'],
     ['2026-05-03T00:00:00.000Z', 'Expired'],
-    ['2026-05-10T00:00:00.000Z', 'Markdown 3'],
-    ['2026-05-17T00:00:00.000Z', 'Markdown 2'],
-    ['2026-06-02T00:00:00.000Z', 'Markdown 1'],
-    ['2026-06-03T00:00:00.000Z', 'Normal'],
+    ['2026-06-02T00:00:00.000Z', 'Markdown 3'], // 30 days
+    ['2026-07-02T00:00:00.000Z', 'Markdown 2'], // 60 days
+    ['2026-08-01T00:00:00.000Z', 'Markdown 1'], // 90 days
+    ['2026-08-02T00:00:00.000Z', 'Normal'], // 91 days
   ])('calculates %s as %s', (expiryDate, expected) => {
     expect(calculateInventoryMarkdownStatus(expiryDate, now)).toBe(expected);
   });
 
   it('calculates markdown prices from the same threshold rules', () => {
-    expect(calculateInventoryMarkdownPrice(10, '2026-05-10T00:00:00.000Z', now)).toBe(8);
-    expect(calculateInventoryMarkdownPrice(10, '2026-05-17T00:00:00.000Z', now)).toBe(10);
-    expect(calculateInventoryMarkdownPrice(10, '2026-06-02T00:00:00.000Z', now)).toBe(12);
-    expect(calculateInventoryMarkdownPrice(10, '2026-06-03T00:00:00.000Z', now)).toBeNull();
+    expect(calculateInventoryMarkdownPrice(10, '2026-06-02T00:00:00.000Z', now)).toBe(8); // 30 days
+    expect(calculateInventoryMarkdownPrice(10, '2026-07-02T00:00:00.000Z', now)).toBe(10); // 60 days
+    expect(calculateInventoryMarkdownPrice(10, '2026-08-01T00:00:00.000Z', now)).toBe(12); // 90 days
+    expect(calculateInventoryMarkdownPrice(10, '2026-08-02T00:00:00.000Z', now)).toBeNull(); // 91 days
   });
 
   it('accepts Date instances from Prisma inventory rows', () => {
-    const expiryDate = new Date('2026-05-10T00:00:00.000Z');
+    const expiryDate = new Date('2026-06-02T00:00:00.000Z'); // 30 days
 
     expect(calculateInventoryMarkdownStatus(expiryDate, now)).toBe('Markdown 3');
     expect(calculateInventoryMarkdownPrice(10, expiryDate, now)).toBe(8);
@@ -36,9 +36,9 @@ describe('inventory markdown helpers', () => {
 
   it('exports the inventory markdown thresholds for service compatibility', () => {
     expect(INVENTORY_MARKDOWN_THRESHOLDS).toEqual({
-      markdown3: 7,
-      markdown2: 14,
-      markdown1: 30,
+      markdown3: 30,
+      markdown2: 60,
+      markdown1: 90,
     });
   });
 });

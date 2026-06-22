@@ -216,4 +216,40 @@ describe('ReportsPage', () => {
       /Expiry risk/i,
     );
   });
+
+  it('renders the sell-through by markdown level report when data is available', async () => {
+    // @ts-expect-error — apiService.get is mocked as jest.fn()
+    apiService.get.mockImplementation((url) => {
+      if (url === '/reports/expiry') {
+        return Promise.resolve([]);
+      }
+      if (url === '/reports/expiry-overall') {
+        return Promise.resolve({
+          month: 'Overall',
+          total_expiring: 0,
+          expired_count: 0,
+          total_markdown: 0,
+          expiry_risk_count: 0,
+          next_month_markdown_count: 0,
+          active_expiry_stock_count: 0,
+          latest_expiry_date: '',
+        });
+      }
+      if (url === '/reports/sell-through') {
+        return Promise.resolve([
+          { markdownLevel: 1, soldCount: 4 },
+          { markdownLevel: 3, soldCount: 9 },
+          { markdownLevel: null, soldCount: 2 },
+        ]);
+      }
+      return Promise.reject(new Error('Unknown URL'));
+    });
+
+    render(<ReportsPage token={randomUUID()} />);
+
+    const section = await screen.findByText(/Sell-through by markdown level/i);
+    expect(section).toBeInTheDocument();
+    expect(screen.getByText(/Markdown 1 \(61–90 days\)/i)).toBeInTheDocument();
+    expect(screen.getByText(/Sold before markdown/i)).toBeInTheDocument();
+  });
 });

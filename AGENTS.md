@@ -850,6 +850,8 @@ Must pass before merge:
 5.  ✅ `doppler run -- cs delta` findings actioned? Why/Why not?
 6.  ✅ Comments explain why, not what
 7.  ✅ OpenSpec validation passed (`openspec validate --all`)
+8.  ✅ Dual-backend logic parity checked: shared values live in `shared/domain/*` and PostgreSQL/pglite vs SQLite conformance tests cover matching rows and order
+9.  ✅ Schema/migration parity checked: `schema.prisma`, `prisma/neon-sql/*.sql` (+ rollback), and `src/migrations/` agree; production path remains `npm run migrate:prod` / `prisma db push`
 
 ---
 

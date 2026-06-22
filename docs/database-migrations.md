@@ -266,7 +266,7 @@ ALTER TABLE products DROP COLUMN new_field;
 Save rollback SQL alongside migrations:
 
 ```
-prisma/migrations/neon/
+prisma/neon-sql/
 ├── 0001_initial.sql
 ├── 0001_initial_rollback.sql  # Reverses 0001
 ├── 0002_add_field.sql

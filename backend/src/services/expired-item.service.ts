@@ -1,5 +1,42 @@
 import { getDb, releaseDb } from '../database';
 import { InventoryItem } from '../models/inventory-item.model';
+import { SQLITE_PROCESSED_STATUS } from '../../../shared/domain/disposition';
+import { getMarkdownLevelForDays } from '../../../shared/domain/markdown';
+
+const MS_PER_DAY = 1000 * 60 * 60 * 24;
+
+/**
+ * Whole days from today until the given expiry date (date-only, UTC-normalised so
+ * results are deterministic regardless of the time of day). Returns null for
+ * missing/invalid dates.
+ */
+function daysToExpiry(expiryDate: string | null | undefined, now = new Date()): number | null {
+  if (!expiryDate) {
+    return null;
+  }
+  const expiry = new Date(expiryDate);
+  if (Number.isNaN(expiry.getTime())) {
+    return null;
+  }
+  const expiryUtc = Date.UTC(expiry.getUTCFullYear(), expiry.getUTCMonth(), expiry.getUTCDate());
+  const nowUtc = Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), now.getUTCDate());
+  return Math.round((expiryUtc - nowUtc) / MS_PER_DAY);
+}
+
+/**
+ * Markdown level snapshot aligned with the expiry report windows
+ * (Markdown 1 = 61-90 days, Markdown 2 = 31-60, Markdown 3 = 0-30 days to expiry).
+ * Returns null when not within a markdown window (already expired or >90 days out).
+ * Note: distinct from inventory-markdown.helpers (7/14/30 day) thresholds; this
+ * matches the reporting windows so sell-through reporting lines up.
+ */
+function reportMarkdownLevel(
+  expiryDate: string | null | undefined,
+  now = new Date(),
+): number | null {
+  const days = daysToExpiry(expiryDate, now);
+  return getMarkdownLevelForDays(days);
+}
 
 export interface ExpiredItem {
   id: number;
@@ -19,6 +56,7 @@ export interface ExpiredItemTransaction {
   action: 'sold_through' | 'expired';
   unitsDiscarded: number | null;
   financialLoss: number | null;
+  markdownLevel: number | null;
   transactionDate: string;
 }
 
@@ -81,7 +119,7 @@ export class ExpiredItemService {
           WHERE ii.id = ?
         `);
         const inventoryItem = itemStmt.get(inventoryItemId) as
-          | (InventoryItem & { costPrice: number })
+          | (InventoryItem & { costPrice: number; expiry_date: string })
           | undefined;
 
         if (!inventoryItem) {
@@ -104,11 +142,15 @@ export class ExpiredItemService {
           financialLoss = unitsDiscarded * inventoryItem.costPrice;
         }
 
+        // Snapshot the markdown level the item was at when dispositioned, so
+        // sell-through reporting can tell at which reduction depth stock moved.
+        const markdownLevel = reportMarkdownLevel(inventoryItem.expiry_date);
+
         // Create the expired item transaction record
         const insertTransactionStmt = db.prepare(`
-          INSERT INTO expired_item_transactions 
-          (inventory_item_id, user_id, action, units_discarded, financial_loss) 
-          VALUES (?, ?, ?, ?, ?)
+          INSERT INTO expired_item_transactions
+          (inventory_item_id, user_id, action, units_discarded, financial_loss, markdown_level)
+          VALUES (?, ?, ?, ?, ?, ?)
         `);
 
         const result = insertTransactionStmt.run(
@@ -117,6 +159,7 @@ export class ExpiredItemService {
           action,
           action === 'expired' ? unitsDiscarded : null,
           financialLoss,
+          markdownLevel,
         ) as {
           lastInsertRowid: number | bigint;
         };
@@ -135,10 +178,8 @@ export class ExpiredItemService {
 
         // Update the inventory item's status to 'Processed' to remove it from the expired list
         // but keep it for reporting purposes.
-        const updateStmt = db.prepare(
-          "UPDATE inventory_items SET status = 'Processed' WHERE id = ?",
-        );
-        updateStmt.run(inventoryItemId);
+        const updateStmt = db.prepare('UPDATE inventory_items SET status = ? WHERE id = ?');
+        updateStmt.run(SQLITE_PROCESSED_STATUS, inventoryItemId);
 
         // Return the created transaction record
         return {
@@ -148,6 +189,7 @@ export class ExpiredItemService {
           action,
           unitsDiscarded: action === 'expired' ? unitsDiscarded || null : null,
           financialLoss,
+          markdownLevel,
           transactionDate: new Date().toISOString(),
         };
       });
@@ -229,6 +271,7 @@ export class ExpiredItemService {
           eit.action,
           eit.units_discarded as unitsDiscarded,
           eit.financial_loss as financialLoss,
+          eit.markdown_level as markdownLevel,
           eit.transaction_date as transactionDate
         FROM expired_item_transactions eit
         ORDER BY eit.transaction_date DESC

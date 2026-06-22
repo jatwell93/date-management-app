@@ -88,6 +88,37 @@ function getMobileBadgeClass(daysToExpiry: number | null): string {
   return 'bg-semantic-success-muted text-semantic-success';
 }
 
+type WorklistGroupKey = 'markdown1' | 'markdown2' | 'markdown3';
+
+// The monthly markdown worklist mirrors the in-store process: items entering the
+// Markdown 1 window get their first reduction, then nearer-dated stock is deepened
+// or recorded as sold through. Write-offs happen on the Expired items page.
+const WORKLIST_GROUPS: ReadonlyArray<{
+  key: WorklistGroupKey;
+  label: string;
+  hint: string;
+}> = [
+  { key: 'markdown1', label: 'Apply Markdown 1', hint: '61–90 days to expiry — first reduction' },
+  {
+    key: 'markdown2',
+    label: 'Markdown 2 — review',
+    hint: '31–60 days — deepen the reduction or record sold through',
+  },
+  {
+    key: 'markdown3',
+    label: 'Markdown 3 — urgent',
+    hint: '0–30 days — record sold through before it expires',
+  },
+];
+
+function worklistGroupForDays(daysToExpiry: number | null): WorklistGroupKey | null {
+  if (daysToExpiry === null || daysToExpiry < 0) return null;
+  if (daysToExpiry <= 30) return 'markdown3';
+  if (daysToExpiry <= 60) return 'markdown2';
+  if (daysToExpiry <= 90) return 'markdown1';
+  return null;
+}
+
 function TableSkeleton() {
   return (
     <div className="animate-pulse space-y-3 p-4" aria-hidden="true">
@@ -113,6 +144,7 @@ export function DetailedExpiryReportPage({ token }: DetailedExpiryReportPageProp
   const [editingItem, setEditingItem] = useState<EditableInventoryItem | null>(null);
   const [saving, setSaving] = useState(false);
   const [deleting, setDeleting] = useState(false);
+  const [soldThroughId, setSoldThroughId] = useState<number | null>(null);
   const [deleteConfirmation, setDeleteConfirmation] = useState<number | null>(null);
   const [storeAreas, setStoreAreas] = useState<{ id: number; name: string }[]>([]);
   const [storeAreasError, setStoreAreasError] = useState<string | null>(null);
@@ -274,6 +306,40 @@ export function DetailedExpiryReportPage({ token }: DetailedExpiryReportPageProp
         );
       } finally {
         setDeleting(false);
+      }
+    },
+    [token, getFreshApiToken, showToast],
+  );
+
+  const handleSoldThrough = useCallback(
+    async (inventoryId: number) => {
+      if (!token) {
+        setActionError('Authentication token is missing.');
+        return;
+      }
+      setSoldThroughId(inventoryId);
+      setActionError(null);
+      try {
+        const authToken = await getFreshApiToken('detailed-expiry-sold-through');
+        // Reuse the existing disposition endpoint; the markdown level at sale is
+        // snapshotted server-side from the item's expiry date.
+        await apiService.post(
+          '/expired-items/process',
+          { inventoryItemId: inventoryId, action: 'sold_through' },
+          authToken,
+        );
+        const updatedData = await apiService.get<DetailedExpiryReportItem[]>(
+          '/reports/expiry-details',
+          authToken,
+        );
+        setReportData(updatedData);
+        showToast('Item recorded as sold through.', 'success');
+      } catch (err: unknown) {
+        setActionError(
+          err instanceof Error ? err.message : 'Failed to record sold through. Please try again.',
+        );
+      } finally {
+        setSoldThroughId(null);
       }
     },
     [token, getFreshApiToken, showToast],
@@ -608,6 +674,21 @@ export function DetailedExpiryReportPage({ token }: DetailedExpiryReportPageProp
     fetchReportData(controller.signal);
   }, [fetchReportData]);
 
+  const worklistGroups = useMemo(() => {
+    const groups: Record<WorklistGroupKey, DetailedExpiryReportItem[]> = {
+      markdown1: [],
+      markdown2: [],
+      markdown3: [],
+    };
+    for (const item of reportData || []) {
+      const group = worklistGroupForDays(getDaysToExpiry(item.expiryDate));
+      if (group) {
+        groups[group].push(item);
+      }
+    }
+    return groups;
+  }, [reportData]);
+
   const expirySummary = useMemo(
     () =>
       (reportData || []).reduce(
@@ -774,6 +855,81 @@ export function DetailedExpiryReportPage({ token }: DetailedExpiryReportPageProp
           </button>
         </div>
       )}
+
+      {hasData ? (
+        <Card className="overflow-hidden">
+          <CardHeader>
+            <CardTitle>
+              <h2 className="text-xl font-semibold">This month&apos;s markdown worklist</h2>
+            </CardTitle>
+            <p className="mt-1 text-sm text-semantic-text-secondary">
+              Work top to bottom: apply the first markdown, then deepen or record sold-through
+              stock.
+            </p>
+          </CardHeader>
+          <CardContent className="space-y-6">
+            {WORKLIST_GROUPS.map(({ key, label, hint }) => {
+              const items = worklistGroups[key];
+              return (
+                <section key={key} aria-label={label}>
+                  <div className="flex items-baseline justify-between gap-3 border-b pb-2">
+                    <h3 className="font-heading text-base font-semibold">{label}</h3>
+                    <span className="text-xs text-semantic-text-secondary">
+                      {numberFormatter.format(items.length)} item{items.length === 1 ? '' : 's'}
+                    </span>
+                  </div>
+                  <p className="mt-1 text-xs text-semantic-text-tertiary">{hint}</p>
+                  {items.length === 0 ? (
+                    <p className="mt-3 text-sm text-semantic-text-secondary">
+                      Nothing in this group right now.
+                    </p>
+                  ) : (
+                    <ul className="mt-3 space-y-2">
+                      {items.map((item) => {
+                        const daysToExpiry = getDaysToExpiry(item.expiryDate);
+                        const markdownPrice =
+                          daysToExpiry === null
+                            ? item.costPrice
+                            : calculateMarkdownPrice(item.costPrice, daysToExpiry);
+                        const isSubmitting = soldThroughId === item.inventoryId;
+                        return (
+                          <li
+                            key={item.inventoryId}
+                            className="flex flex-wrap items-center justify-between gap-3 rounded-lg border bg-semantic-surface-1 p-3"
+                          >
+                            <div className="min-w-0">
+                              <p className="break-words font-medium">{item.productName}</p>
+                              <p className="mt-0.5 text-xs text-semantic-text-secondary">
+                                {item.sku} · {item.locationName} ·{' '}
+                                {daysToExpiry === null ? '—' : `${daysToExpiry} days left`}
+                              </p>
+                            </div>
+                            <div className="flex items-center gap-3">
+                              <span className="tabular-nums text-sm font-medium">
+                                {formatCurrencyValue(markdownPrice)}
+                              </span>
+                              <Button
+                                onClick={() => handleSoldThrough(item.inventoryId)}
+                                disabled={isSubmitting || soldThroughId !== null}
+                                size="sm"
+                                variant="success"
+                                className="text-xs font-medium"
+                                aria-busy={isSubmitting}
+                              >
+                                {isSubmitting ? 'Recording…' : 'Sold through'}
+                              </Button>
+                            </div>
+                          </li>
+                        );
+                      })}
+                    </ul>
+                  )}
+                </section>
+              );
+            })}
+          </CardContent>
+        </Card>
+      ) : null}
 
       {hasData ? (
         <ul className="mb-5 space-y-3 md:hidden" aria-label="Mobile expiry row summary">

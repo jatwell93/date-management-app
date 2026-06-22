@@ -88,6 +88,12 @@ export class ReportController {
     await this.respondWithReport(req, res, next, (service) => service.getLossByDepartmentReport());
   }
 
+  async getSellThroughReport(req: AuthRequest, res: Response, next: NextFunction): Promise<void> {
+    await this.respondWithReport(req, res, next, (service) =>
+      service.getSellThroughByMarkdownLevel(),
+    );
+  }
+
   async getItemsByUserReport(req: AuthRequest, res: Response, next: NextFunction): Promise<void> {
     const timeFrame = req.query.timeFrame as string | undefined;
     if (timeFrame && !validator.isInt(timeFrame, { min: 1, max: 3650 })) {

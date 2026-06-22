@@ -35,6 +35,22 @@ type RawMonthlyExpiryReportItem = Partial<
   latest_expiry_date?: string | null;
 };
 
+interface SellThroughByLevelItem {
+  markdownLevel: number | null;
+  soldCount: number;
+}
+
+const MARKDOWN_LEVEL_LABELS: Record<string, string> = {
+  '1': 'Markdown 1 (61–90 days)',
+  '2': 'Markdown 2 (31–60 days)',
+  '3': 'Markdown 3 (0–30 days)',
+  none: 'Sold before markdown',
+};
+
+function markdownLevelLabel(level: number | null): string {
+  return MARKDOWN_LEVEL_LABELS[level === null ? 'none' : String(level)] ?? `Level ${level}`;
+}
+
 const numberFormatter = new Intl.NumberFormat('en-AU');
 const dateFormatter = new Intl.DateTimeFormat('en-AU', { dateStyle: 'medium' });
 
@@ -70,6 +86,7 @@ export function ReportsPage({ token }: ReportsPageProps) {
   const getFreshApiToken = useFreshApiToken(token);
   const [reportData, setReportData] = useState<MonthlyExpiryReportItem[] | null>(null);
   const [overallReportData, setOverallReportData] = useState<MonthlyExpiryReportItem | null>(null);
+  const [sellThroughData, setSellThroughData] = useState<SellThroughByLevelItem[] | null>(null);
   const [loading, setLoading] = useState(true);
   const [overallLoading, setOverallLoading] = useState(true);
   const [monthlyError, setMonthlyError] = useState<string | null>(null);
@@ -148,8 +165,29 @@ export function ReportsPage({ token }: ReportsPageProps) {
       }
     };
 
+    const fetchSellThroughData = async () => {
+      if (!token) return;
+      try {
+        const authToken = await getFreshApiToken('reports-sell-through');
+        const data = await apiService.get<SellThroughByLevelItem[]>(
+          '/reports/sell-through',
+          authToken,
+          controller.signal,
+        );
+        if (!controller.signal.aborted) {
+          setSellThroughData(data ?? []);
+        }
+      } catch {
+        // Sell-through is a secondary insight; ignore failures rather than blocking the page.
+        if (!controller.signal.aborted) {
+          setSellThroughData([]);
+        }
+      }
+    };
+
     fetchReportData();
     fetchOverallReportData();
+    fetchSellThroughData();
     return () => controller.abort();
   }, [token, getFreshApiToken]);
 
@@ -286,7 +324,8 @@ export function ReportsPage({ token }: ReportsPageProps) {
                   {numberFormatter.format(overallReportData.expiry_risk_count)}
                 </p>
                 <p className="mt-2 text-sm text-semantic-critical-muted-foreground">
-                  Review stock expiring in the next 30 days before it becomes unsellable.
+                  Stock expiring within 30 days — apply the deepest reduction (Markdown 3) before it
+                  becomes unsellable.
                 </p>
               </div>
               <dl className="grid gap-3 rounded-lg border bg-semantic-secondary-muted p-5 sm:grid-cols-2">
@@ -297,6 +336,9 @@ export function ReportsPage({ token }: ReportsPageProps) {
                   <dd className="mt-1 font-heading text-2xl font-bold text-semantic-warning">
                     {numberFormatter.format(overallReportData.next_month_markdown_count)}
                   </dd>
+                  <dd className="mt-1 text-xs text-semantic-text-secondary">
+                    Next batch crossing into Markdown 1 (≈3 months out) — line up first reductions.
+                  </dd>
                 </div>
                 <div>
                   <dt className="text-sm font-medium text-semantic-text-secondary">
@@ -304,6 +346,9 @@ export function ReportsPage({ token }: ReportsPageProps) {
                   </dt>
                   <dd className="mt-1 font-heading text-2xl font-bold text-semantic-success">
                     {numberFormatter.format(overallReportData.active_expiry_stock_count)}
+                  </dd>
+                  <dd className="mt-1 text-xs text-semantic-text-secondary">
+                    All stock not yet expired — your live markdown pipeline.
                   </dd>
                 </div>
               </dl>
@@ -315,6 +360,35 @@ export function ReportsPage({ token }: ReportsPageProps) {
           )}
         </CardContent>
       </Card>
+
+      {sellThroughData && sellThroughData.length > 0 && (
+        <Card>
+          <CardHeader>
+            <CardTitle className="text-xl">Sell-through by markdown level</CardTitle>
+          </CardHeader>
+          <CardContent>
+            <p className="mb-4 text-sm text-semantic-text-secondary">
+              How many items sold at each reduction depth — stock that only moves at deeper
+              markdowns is a candidate for range or ordering review.
+            </p>
+            <dl className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
+              {sellThroughData.map((row) => (
+                <div
+                  key={row.markdownLevel === null ? 'none' : row.markdownLevel}
+                  className="rounded-lg border bg-semantic-surface-1 p-4"
+                >
+                  <dt className="text-sm font-medium text-semantic-text-secondary">
+                    {markdownLevelLabel(row.markdownLevel)}
+                  </dt>
+                  <dd className="mt-1 font-heading text-2xl font-bold">
+                    {numberFormatter.format(row.soldCount)}
+                  </dd>
+                </div>
+              ))}
+            </dl>
+          </CardContent>
+        </Card>
+      )}
 
       <Card>
         <CardHeader>

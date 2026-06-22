@@ -8,6 +8,20 @@
  */
 
 import Database from 'better-sqlite3';
+import { DISPOSITIONED_STATUSES } from '../../../shared/domain/disposition';
+import { MARKDOWN_WINDOWS } from '../../../shared/domain/markdown';
+
+const dispositionedStatusPlaceholders = DISPOSITIONED_STATUSES.map(() => '?').join(', ');
+
+function sqliteWindowClause(minDays: number, maxDays?: number): string {
+  if (maxDays === undefined) {
+    return `date(expiry_date) >= date('now', '+${minDays} days')`;
+  }
+  if (minDays === 0) {
+    return `date(expiry_date) BETWEEN date('now') AND date('now', '+${maxDays} days')`;
+  }
+  return `date(expiry_date) BETWEEN date('now', '+${minDays} days') AND date('now', '+${maxDays} days')`;
+}
 
 // Report interfaces
 export interface MonthlyExpiryReport {
@@ -73,6 +87,11 @@ export interface LossByDepartmentReportItem {
   count: number;
 }
 
+export interface SellThroughByLevelItem {
+  markdownLevel: number | null;
+  soldCount: number;
+}
+
 export interface ItemsByUserReportItem {
   userId: number;
   userName: string;
@@ -121,13 +140,13 @@ export class ReportRepository {
         strftime('%Y-%m', expiry_date) as month,
         COUNT(*) as total_expiring,
         SUM(CASE WHEN date(expiry_date) < date('now') THEN 1 ELSE 0 END) as expired_count,
-        SUM(CASE WHEN date(expiry_date) BETWEEN date('now', '+61 days') AND date('now', '+90 days') THEN 1 ELSE 0 END) as markdown1_count,
-        SUM(CASE WHEN date(expiry_date) BETWEEN date('now', '+31 days') AND date('now', '+60 days') THEN 1 ELSE 0 END) as markdown2_count,
-        SUM(CASE WHEN date(expiry_date) BETWEEN date('now') AND date('now', '+30 days') THEN 1 ELSE 0 END) as markdown3_count,
-        SUM(CASE WHEN date(expiry_date) BETWEEN date('now') AND date('now', '+90 days') THEN 1 ELSE 0 END) as total_markdown,
-        SUM(CASE WHEN date(expiry_date) BETWEEN date('now') AND date('now', '+30 days') THEN 1 ELSE 0 END) as expiry_risk_count,
-        SUM(CASE WHEN date(expiry_date) BETWEEN date('now', '+91 days') AND date('now', '+120 days') THEN 1 ELSE 0 END) as next_month_markdown_count,
-        SUM(CASE WHEN date(expiry_date) >= date('now') THEN 1 ELSE 0 END) as active_expiry_stock_count,
+        SUM(CASE WHEN ${sqliteWindowClause(MARKDOWN_WINDOWS.markdown1.minDays, MARKDOWN_WINDOWS.markdown1.maxDays)} THEN 1 ELSE 0 END) as markdown1_count,
+        SUM(CASE WHEN ${sqliteWindowClause(MARKDOWN_WINDOWS.markdown2.minDays, MARKDOWN_WINDOWS.markdown2.maxDays)} THEN 1 ELSE 0 END) as markdown2_count,
+        SUM(CASE WHEN ${sqliteWindowClause(MARKDOWN_WINDOWS.markdown3.minDays, MARKDOWN_WINDOWS.markdown3.maxDays)} THEN 1 ELSE 0 END) as markdown3_count,
+        SUM(CASE WHEN ${sqliteWindowClause(MARKDOWN_WINDOWS.totalMarkdown.minDays, MARKDOWN_WINDOWS.totalMarkdown.maxDays)} THEN 1 ELSE 0 END) as total_markdown,
+        SUM(CASE WHEN ${sqliteWindowClause(MARKDOWN_WINDOWS.markdown3.minDays, MARKDOWN_WINDOWS.markdown3.maxDays)} THEN 1 ELSE 0 END) as expiry_risk_count,
+        SUM(CASE WHEN ${sqliteWindowClause(MARKDOWN_WINDOWS.nextMonthMarkdown.minDays, MARKDOWN_WINDOWS.nextMonthMarkdown.maxDays)} THEN 1 ELSE 0 END) as next_month_markdown_count,
+        SUM(CASE WHEN ${sqliteWindowClause(MARKDOWN_WINDOWS.activeExpiryStock.minDays)} THEN 1 ELSE 0 END) as active_expiry_stock_count,
         MAX(expiry_date) as latest_expiry_date
       FROM inventory_items
       WHERE expiry_date IS NOT NULL AND expiry_date != '' AND date(expiry_date) IS NOT NULL
@@ -148,13 +167,13 @@ export class ReportRepository {
         'Overall' as month,
         COUNT(*) as total_expiring,
         SUM(CASE WHEN date(expiry_date) < date('now') THEN 1 ELSE 0 END) as expired_count,
-        SUM(CASE WHEN date(expiry_date) BETWEEN date('now', '+61 days') AND date('now', '+90 days') THEN 1 ELSE 0 END) as markdown1_count,
-        SUM(CASE WHEN date(expiry_date) BETWEEN date('now', '+31 days') AND date('now', '+60 days') THEN 1 ELSE 0 END) as markdown2_count,
-        SUM(CASE WHEN date(expiry_date) BETWEEN date('now') AND date('now', '+30 days') THEN 1 ELSE 0 END) as markdown3_count,
-        SUM(CASE WHEN date(expiry_date) BETWEEN date('now') AND date('now', '+90 days') THEN 1 ELSE 0 END) as total_markdown,
-        SUM(CASE WHEN date(expiry_date) BETWEEN date('now') AND date('now', '+30 days') THEN 1 ELSE 0 END) as expiry_risk_count,
-        SUM(CASE WHEN date(expiry_date) BETWEEN date('now', '+91 days') AND date('now', '+120 days') THEN 1 ELSE 0 END) as next_month_markdown_count,
-        SUM(CASE WHEN date(expiry_date) >= date('now') THEN 1 ELSE 0 END) as active_expiry_stock_count,
+        SUM(CASE WHEN ${sqliteWindowClause(MARKDOWN_WINDOWS.markdown1.minDays, MARKDOWN_WINDOWS.markdown1.maxDays)} THEN 1 ELSE 0 END) as markdown1_count,
+        SUM(CASE WHEN ${sqliteWindowClause(MARKDOWN_WINDOWS.markdown2.minDays, MARKDOWN_WINDOWS.markdown2.maxDays)} THEN 1 ELSE 0 END) as markdown2_count,
+        SUM(CASE WHEN ${sqliteWindowClause(MARKDOWN_WINDOWS.markdown3.minDays, MARKDOWN_WINDOWS.markdown3.maxDays)} THEN 1 ELSE 0 END) as markdown3_count,
+        SUM(CASE WHEN ${sqliteWindowClause(MARKDOWN_WINDOWS.totalMarkdown.minDays, MARKDOWN_WINDOWS.totalMarkdown.maxDays)} THEN 1 ELSE 0 END) as total_markdown,
+        SUM(CASE WHEN ${sqliteWindowClause(MARKDOWN_WINDOWS.markdown3.minDays, MARKDOWN_WINDOWS.markdown3.maxDays)} THEN 1 ELSE 0 END) as expiry_risk_count,
+        SUM(CASE WHEN ${sqliteWindowClause(MARKDOWN_WINDOWS.nextMonthMarkdown.minDays, MARKDOWN_WINDOWS.nextMonthMarkdown.maxDays)} THEN 1 ELSE 0 END) as next_month_markdown_count,
+        SUM(CASE WHEN ${sqliteWindowClause(MARKDOWN_WINDOWS.activeExpiryStock.minDays)} THEN 1 ELSE 0 END) as active_expiry_stock_count,
         MAX(expiry_date) as latest_expiry_date
       FROM inventory_items
       WHERE expiry_date IS NOT NULL AND expiry_date != '' AND date(expiry_date) IS NOT NULL
@@ -182,12 +201,21 @@ export class ReportRepository {
       FROM inventory_items ii
       JOIN products p ON ii.product_id = p.id
       JOIN store_areas sa ON ii.location_id = sa.id
-      WHERE ii.expiry_date >= date('now') 
+      WHERE ii.expiry_date >= date('now')
         AND ii.expiry_date <= date('now', '+90 days')
         AND ii.organization_id = ?
-      ORDER BY ii.expiry_date ASC`,
+        -- Exclude items already dispositioned via sold-through so they do not
+        -- reappear in the worklist after refresh. 'Processed' is the SQLite
+        -- backend marker; 'Sold Through' is the workers marker. 'Expired' is
+        -- intentionally NOT excluded: a day-0 item is the most urgent worklist
+        -- entry, and write-offs are already excluded by the date window.
+        AND ii.status NOT IN (${dispositionedStatusPlaceholders})
+      -- ii.id tiebreaker keeps ordering deterministic across engines when two
+      -- items share an expiry_date; without it Postgres and SQLite can break
+      -- the tie differently and the conformance test would drift.
+      ORDER BY ii.expiry_date ASC, ii.id ASC`,
     );
-    return stmt.all(this.organizationId) as DetailedExpiryReportItem[];
+    return stmt.all(this.organizationId, ...DISPOSITIONED_STATUSES) as DetailedExpiryReportItem[];
   }
 
   /**
@@ -367,6 +395,26 @@ export class ReportRepository {
       ORDER BY totalLoss DESC
     `);
     return stmt.all(this.organizationId) as LossByDepartmentReportItem[];
+  }
+
+  /**
+   * Get sell-through counts grouped by the markdown level at which items sold,
+   * surfacing stock that only moves once reduced (NULL = sold before markdown).
+   */
+  getSellThroughByMarkdownLevel(): SellThroughByLevelItem[] {
+    const stmt = this.db.prepare(`
+      SELECT
+        markdown_level as markdownLevel,
+        COUNT(*) as soldCount
+      FROM expired_item_transactions
+      WHERE action = 'sold_through' AND organization_id = ?
+      GROUP BY markdown_level
+      -- NULLS LAST keeps "sold before markdown" (NULL level) at the end and matches
+      -- the workers/Postgres query, so card order is identical across both backends.
+      -- SQLite defaults NULLs first, hence the explicit clause.
+      ORDER BY markdown_level ASC NULLS LAST
+    `);
+    return stmt.all(this.organizationId) as SellThroughByLevelItem[];
   }
 
   /**
