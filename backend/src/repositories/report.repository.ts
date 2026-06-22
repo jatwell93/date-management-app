@@ -392,7 +392,10 @@ export class ReportRepository {
       FROM expired_item_transactions
       WHERE action = 'sold_through' AND organization_id = ?
       GROUP BY markdown_level
-      ORDER BY markdown_level ASC
+      -- NULLS LAST keeps "sold before markdown" (NULL level) at the end and matches
+      -- the workers/Postgres query, so card order is identical across both backends.
+      -- SQLite defaults NULLs first, hence the explicit clause.
+      ORDER BY markdown_level ASC NULLS LAST
     `);
     return stmt.all(this.organizationId) as SellThroughByLevelItem[];
   }
