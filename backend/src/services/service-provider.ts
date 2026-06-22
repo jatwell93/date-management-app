@@ -139,14 +139,14 @@ export class ServiceProvider {
 
   getReportService(): ReportService {
     if (!this.reportService) {
-      this.reportService = new ReportService(this.db);
+      this.reportService = new ReportService(this.db, this.organizationId);
     }
     return this.reportService;
   }
 
   getReportRepository(): ReportRepository {
     if (!this.reportRepository) {
-      this.reportRepository = new ReportRepository(this.db);
+      this.reportRepository = new ReportRepository(this.db, this.organizationId);
     }
     return this.reportRepository;
   }

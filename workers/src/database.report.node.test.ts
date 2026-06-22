@@ -19,10 +19,12 @@ const expectBackendAlignedExpiryQuery = (query: string) => {
   expect(query).toContain('expiry_risk_count');
   expect(query).toContain('next_month_markdown_count');
   expect(query).toContain('active_expiry_stock_count');
-  expect(query).toContain("CURRENT_DATE + INTERVAL '30 days'");
-  expect(query).toContain("CURRENT_DATE + INTERVAL '60 days'");
-  expect(query).toContain("CURRENT_DATE + INTERVAL '90 days'");
-  expect(query).toContain("CURRENT_DATE + INTERVAL '120 days'");
+  expect(query).toContain('expiry_date::date - CURRENT_DATE');
+  expect(query).toContain('COUNT(*) FILTER');
+  expect(query).toContain('days_to_expiry BETWEEN 0 AND 30');
+  expect(query).toContain('days_to_expiry BETWEEN 31 AND 60');
+  expect(query).toContain('days_to_expiry BETWEEN 61 AND 90');
+  expect(query).toContain('days_to_expiry BETWEEN 91 AND 120');
   expect(query).not.toContain("status = 'Markdown 1'");
   expect(query).not.toContain("status LIKE 'Markdown%'");
 };
@@ -35,14 +37,14 @@ describe('Workers report database queries', () => {
       capturedQueries.push(strings.join(''));
       return Promise.resolve([]);
     });
-    vi.spyOn(console, 'log').mockImplementation(() => {});
-    vi.spyOn(console, 'warn').mockImplementation(() => {});
+    vi.spyOn(console, 'log').mockImplementation(() => { });
+    vi.spyOn(console, 'warn').mockImplementation(() => { });
   });
 
   it('keeps monthly expiry report SQL aligned with the backend expiry-window contract', async () => {
     const db = createWorkersDatabase(createEnv());
 
-    await db.getMonthlyExpiryReport();
+    await db.getMonthlyExpiryReport('test-org');
 
     expectBackendAlignedExpiryQuery(capturedQueries[0]);
   });
@@ -50,7 +52,7 @@ describe('Workers report database queries', () => {
   it('returns overall expiry fallback data with the frontend-required summary fields', async () => {
     const db = createWorkersDatabase(createEnv());
 
-    const report = await db.getOverallExpiryReport();
+    const report = await db.getOverallExpiryReport('test-org');
 
     expect(report).toMatchObject({
       expiry_risk_count: 0,

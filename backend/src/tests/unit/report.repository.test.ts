@@ -11,8 +11,8 @@ describe('ReportRepository', () => {
 
   const insertInventoryItem = (expiryDate: string, status = 'Normal') => {
     db.prepare(
-      'INSERT INTO inventory_items (product_id, expiry_date, location_id, status) VALUES (1, ?, 1, ?)',
-    ).run(expiryDate, status);
+      'INSERT INTO inventory_items (product_id, expiry_date, location_id, status, organization_id) VALUES (1, ?, 1, ?, ?)',
+    ).run(expiryDate, status, 'test-org');
   };
 
   beforeEach(() => {
@@ -24,6 +24,7 @@ describe('ReportRepository', () => {
         expiry_date TEXT,
         location_id INTEGER NOT NULL,
         status TEXT NOT NULL DEFAULT 'Normal',
+        organization_id TEXT NOT NULL DEFAULT 'test-org',
         created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
         updated_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
       );
@@ -51,7 +52,7 @@ describe('ReportRepository', () => {
         .mockReturnValueOnce(recentActivityStatement),
     };
 
-    const repository = new ReportRepository(db as never);
+    const repository = new ReportRepository(db as never, 'test-org');
 
     expect(repository.getDashboardData()).toEqual({
       totalProducts: 100,
@@ -67,7 +68,7 @@ describe('ReportRepository', () => {
   });
 
   it('calculates monthly markdown buckets from expiry date windows instead of stored status', () => {
-    const repository = new ReportRepository(db);
+    const repository = new ReportRepository(db, 'test-org');
 
     insertInventoryItem(sqliteDate('-1 day'), 'Markdown 1');
     insertInventoryItem(sqliteDate('+10 days'), 'Normal');
@@ -92,7 +93,7 @@ describe('ReportRepository', () => {
   });
 
   it('returns expiry action summary counts for future stock and next-month markdown review', () => {
-    const repository = new ReportRepository(db);
+    const repository = new ReportRepository(db, 'test-org');
 
     insertInventoryItem(sqliteDate('-1 day'), 'Normal');
     insertInventoryItem(sqliteDate('+10 days'), 'Expired');

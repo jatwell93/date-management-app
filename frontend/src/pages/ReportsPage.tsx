@@ -21,9 +21,6 @@ interface MonthlyExpiryReportItem {
   month: string;
   total_expiring: number;
   expired_count: number;
-  markdown1_count: number;
-  markdown2_count: number;
-  markdown3_count: number;
   total_markdown: number;
   expiry_risk_count: number;
   next_month_markdown_count: number;
@@ -58,9 +55,6 @@ function normalizeMonthlyExpiryReportItem(
     month: item.month || 'Unknown',
     total_expiring: normalizeReportNumber(item.total_expiring),
     expired_count: normalizeReportNumber(item.expired_count),
-    markdown1_count: normalizeReportNumber(item.markdown1_count),
-    markdown2_count: normalizeReportNumber(item.markdown2_count),
-    markdown3_count: normalizeReportNumber(item.markdown3_count),
     total_markdown: normalizeReportNumber(item.total_markdown),
     expiry_risk_count: normalizeReportNumber(item.expiry_risk_count),
     next_month_markdown_count: normalizeReportNumber(item.next_month_markdown_count),
@@ -192,9 +186,6 @@ export function ReportsPage({ token }: ReportsPageProps) {
                 <div className="h-4 w-20 rounded bg-semantic-surface-3 animate-pulse" />
                 <div className="h-4 w-16 rounded bg-semantic-surface-3 animate-pulse ml-auto" />
                 <div className="h-4 w-16 rounded bg-semantic-surface-3 animate-pulse" />
-                <div className="h-4 w-14 rounded bg-semantic-surface-3 animate-pulse" />
-                <div className="h-4 w-14 rounded bg-semantic-surface-3 animate-pulse" />
-                <div className="h-4 w-14 rounded bg-semantic-surface-3 animate-pulse" />
                 <div className="h-4 w-16 rounded bg-semantic-surface-3 animate-pulse" />
                 <div className="h-4 w-24 rounded bg-semantic-surface-3 animate-pulse" />
               </div>
@@ -372,18 +363,6 @@ export function ReportsPage({ token }: ReportsPageProps) {
                         </dd>
                       </div>
                       <div className="flex justify-between border-b border-dashed pb-1">
-                        <dt className="text-semantic-text-secondary">Markdown 1</dt>
-                        <dd>{numberFormatter.format(row.markdown1_count)}</dd>
-                      </div>
-                      <div className="flex justify-between border-b border-dashed pb-1">
-                        <dt className="text-semantic-text-secondary">Markdown 2</dt>
-                        <dd>{numberFormatter.format(row.markdown2_count)}</dd>
-                      </div>
-                      <div className="flex justify-between border-b border-dashed pb-1">
-                        <dt className="text-semantic-text-secondary">Markdown 3</dt>
-                        <dd>{numberFormatter.format(row.markdown3_count)}</dd>
-                      </div>
-                      <div className="flex justify-between border-b border-dashed pb-1">
                         <dt className="text-semantic-text-secondary">Latest Expiry</dt>
                         <dd className="font-medium">{formatReportDate(row.latest_expiry_date)}</dd>
                       </div>
@@ -406,15 +385,6 @@ export function ReportsPage({ token }: ReportsPageProps) {
                         Expired Items
                       </TableHead>
                       <TableHead className="text-right text-xs font-semibold font-eyebrow text-semantic-text-secondary uppercase tracking-wider">
-                        Markdown 1
-                      </TableHead>
-                      <TableHead className="text-right text-xs font-semibold font-eyebrow text-semantic-text-secondary uppercase tracking-wider">
-                        Markdown 2
-                      </TableHead>
-                      <TableHead className="text-right text-xs font-semibold font-eyebrow text-semantic-text-secondary uppercase tracking-wider">
-                        Markdown 3
-                      </TableHead>
-                      <TableHead className="text-right text-xs font-semibold font-eyebrow text-semantic-text-secondary uppercase tracking-wider">
                         Total Markdown
                       </TableHead>
                       <TableHead className="text-xs font-semibold font-eyebrow text-semantic-text-secondary uppercase tracking-wider">
@@ -431,15 +401,6 @@ export function ReportsPage({ token }: ReportsPageProps) {
                         </TableCell>
                         <TableCell className="text-right tabular-nums text-semantic-critical font-bold">
                           {numberFormatter.format(row.expired_count)}
-                        </TableCell>
-                        <TableCell className="text-right tabular-nums">
-                          {numberFormatter.format(row.markdown1_count)}
-                        </TableCell>
-                        <TableCell className="text-right tabular-nums">
-                          {numberFormatter.format(row.markdown2_count)}
-                        </TableCell>
-                        <TableCell className="text-right tabular-nums">
-                          {numberFormatter.format(row.markdown3_count)}
                         </TableCell>
                         <TableCell className="text-right tabular-nums text-semantic-warning font-bold">
                           {numberFormatter.format(row.total_markdown)}
