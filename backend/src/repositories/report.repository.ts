@@ -187,9 +187,15 @@ export class ReportRepository {
       FROM inventory_items ii
       JOIN products p ON ii.product_id = p.id
       JOIN store_areas sa ON ii.location_id = sa.id
-      WHERE ii.expiry_date >= date('now') 
+      WHERE ii.expiry_date >= date('now')
         AND ii.expiry_date <= date('now', '+90 days')
         AND ii.organization_id = ?
+        -- Exclude items already dispositioned via sold-through so they do not
+        -- reappear in the worklist after refresh. 'Processed' is the SQLite
+        -- backend marker; 'Sold Through' is the workers marker. 'Expired' is
+        -- intentionally NOT excluded: a day-0 item is the most urgent worklist
+        -- entry, and write-offs are already excluded by the date window.
+        AND ii.status NOT IN ('Processed', 'Sold Through')
       ORDER BY ii.expiry_date ASC`,
     );
     return stmt.all(this.organizationId) as DetailedExpiryReportItem[];

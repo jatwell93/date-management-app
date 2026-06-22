@@ -39,6 +39,19 @@ describe('ReportRepository', () => {
         markdown_level INTEGER,
         transaction_date TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
       );
+      CREATE TABLE products (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        name TEXT NOT NULL DEFAULT 'Test product',
+        sku TEXT,
+        cost_price REAL
+      );
+      CREATE TABLE store_areas (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        name TEXT NOT NULL DEFAULT 'Aisle',
+        sub_department TEXT
+      );
+      INSERT INTO products (id, name, sku, cost_price) VALUES (1, 'Test product', 'SKU1', 10);
+      INSERT INTO store_areas (id, name, sub_department) VALUES (1, 'Aisle 1', 'Dairy');
     `);
   });
 
@@ -149,5 +162,29 @@ describe('ReportRepository', () => {
     expect(byLevel.get(2)).toBe(1);
     expect(byLevel.get(1)).toBe(1);
     expect(rows.reduce((sum, row) => sum + row.soldCount, 0)).toBe(4);
+  });
+
+  it('excludes sold-through stock from the detailed worklist but keeps urgent day-0 items', () => {
+    const repository = new ReportRepository(db, 'test-org');
+
+    // Active item within the worklist window — should appear.
+    insertInventoryItem(sqliteDate('+20 days'), 'Normal');
+    // Same window but already sold through (SQLite backend marks status 'Processed') —
+    // must NOT reappear after refresh.
+    insertInventoryItem(sqliteDate('+20 days'), 'Processed');
+    // Defensive: the workers backend marks sold-through as 'Sold Through'.
+    insertInventoryItem(sqliteDate('+20 days'), 'Sold Through');
+    // A day-0 item carrying computed 'Expired' status is the most urgent worklist
+    // entry and must still be surfaced (not treated as a write-off).
+    insertInventoryItem(sqliteDate('+0 days'), 'Expired');
+
+    const report = repository.getDetailedExpiryReport();
+    const statuses = report.map((row) => row.status);
+
+    expect(report).toHaveLength(2);
+    expect(statuses).toContain('Normal');
+    expect(statuses).toContain('Expired');
+    expect(statuses).not.toContain('Processed');
+    expect(statuses).not.toContain('Sold Through');
   });
 });

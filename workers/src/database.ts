@@ -637,6 +637,12 @@ export function createWorkersDatabase(env: Env): Database {
         WHERE ii.expiry_date >= CURRENT_DATE
           AND ii.expiry_date <= CURRENT_DATE + INTERVAL '90 days'
           AND ii.organization_id = ${organizationId}
+          -- Exclude items already dispositioned via sold-through so they do not
+          -- reappear in the worklist after refresh. 'Sold Through' is the workers
+          -- marker; 'Processed' is the SQLite backend marker. 'Expired' is
+          -- intentionally NOT excluded: a day-0 item is the most urgent worklist
+          -- entry, and write-offs are already excluded by the date window.
+          AND ii.status NOT IN ('Processed', 'Sold Through')
         ORDER BY ii.expiry_date ASC
       `) as DetailedExpiryReportItem[];
     },
