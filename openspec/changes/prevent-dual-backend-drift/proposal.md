@@ -58,8 +58,9 @@ The same "one logical change, maintained by hand in N places, with nothing compa
 also appears at the schema layer. A single column change is expressed in **three** places:
 `backend/prisma/schema.prisma` (applied to Neon in production via `npm run migrate:prod` →
 `prisma db push`), a hand-written `backend/prisma/migrations/neon/NNNN_*.sql` (+ `_rollback.sql`)
-intended for the Neon SQL editor, and a runtime migration in `backend/src/migrations/` applied via
-`npm run migrate`. These are three paths to the same end state with no check that they agree — e.g.
+intended for the Neon SQL editor, and a runtime migration in `backend/src/migrations/` (intended to run via
+`npm run migrate` — currently a no-op, see symptoms below). These are three paths to the same end
+state with no check that they agree — e.g.
 `markdownLevel` from `track-markdown-action-lifecycle` lives in all three
 (`schema.prisma:320`, `neon/0002_add_markdown_level_to_expired_item_transactions.sql`, runtime
 migration id 9). If the hand-written `neon/*.sql` ever disagrees with `schema.prisma`, `prisma db
@@ -67,6 +68,21 @@ push` silently wins and the `.sql` file becomes a lie. This change's **conventio
 should name this triplication explicitly so dual-backend schema changes are kept in sync the same way
 domain constants are; reconciling or de-duplicating the three migration mechanisms themselves is a
 larger effort left to a follow-up.
+
+**Concrete symptoms observed while diagnosing the markdown_level rollout (2026-06-22):**
+- **The `neon/` folder is inside `prisma/migrations/`**, so Prisma treats it as a phantom migration
+  named `neon` (`prisma migrate status` lists it as "not yet applied"). Running `prisma migrate
+  deploy` would try to apply it and fail. Remediation: move the hand-written Neon SQL out of the
+  Prisma migrations tree (e.g. `prisma/neon-sql/`).
+- **`npm run migrate` is a no-op:** `backend/src/migrations/migrate.ts` exports `runMigrations` but
+  never calls it (no `require.main === module` guard / invocation), so the documented local-sync
+  command silently does nothing. Migrations only actually run when the server boots or the function
+  is invoked directly. Remediation: invoke `runMigrations()` when the file is run as a script.
+- **Two divergent local SQLite files:** the runtime/repository path uses `DATABASE_PATH` →
+  `backend/database.sqlite` (better-sqlite3), while Prisma uses `DATABASE_URL=file:./database.sqlite`
+  → `backend/prisma/database.sqlite`. They drift independently — at diagnosis time the runtime DB
+  was missing `markdown_level` and the Prisma DB still is. Remediation: point both mechanisms at one
+  local file, or document clearly which is authoritative for what.
 
 **Explicitly out of scope (handled elsewhere / deliberately not done):**
 - Reconciling the markdown **price multipliers** is the sibling change

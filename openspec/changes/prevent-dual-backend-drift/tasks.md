@@ -31,3 +31,12 @@
       Golden Rule / PR checklist.
 - [ ] 3.4 Run completion checks: `npm run lint`, backend jest, `npm run test:db`,
       `openspec validate --all`.
+
+## Phase 4 — Migration-mechanism quick wins (concrete remediations found 2026-06-22)
+- [ ] 4.1 Move the hand-written Neon SQL out of `prisma/migrations/` (e.g. to `prisma/neon-sql/`) so
+      Prisma stops treating `neon` as a phantom migration and `prisma migrate deploy` is unblocked.
+- [ ] 4.2 Fix `backend/src/migrations/migrate.ts` to actually invoke `runMigrations()` when run as a
+      script (guard with `require.main === module`), so `npm run migrate` is no longer a no-op.
+- [ ] 4.3 Resolve the two divergent local SQLite files (runtime `DATABASE_PATH` →
+      `backend/database.sqlite` vs Prisma `DATABASE_URL` → `backend/prisma/database.sqlite`): point both
+      at one file or document which is authoritative.
