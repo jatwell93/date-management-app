@@ -42,7 +42,7 @@
     "@eslint/js": "^8.57.1",
     "@playwright/test": "1.60.0",
     "@types/node": "22.19.19",
-    "@typescript-eslint/eslint-plugin": "8.59.4",
+    "@typescript-eslint/eslint-plugin": "8.62.0",
     "@typescript-eslint/parser": "8.59.4",
     "browserstack-local": "1.5.13",
     "dotenv": "^17.2.3",
