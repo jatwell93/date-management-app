@@ -863,7 +863,8 @@ export function DetailedExpiryReportPage({ token }: DetailedExpiryReportPageProp
               <h2 className="text-xl font-semibold">This month&apos;s markdown worklist</h2>
             </CardTitle>
             <p className="mt-1 text-sm text-semantic-text-secondary">
-              Work top to bottom: apply the first markdown, then deepen or record sold-through stock.
+              Work top to bottom: apply the first markdown, then deepen or record sold-through
+              stock.
             </p>
           </CardHeader>
           <CardContent className="space-y-6">
