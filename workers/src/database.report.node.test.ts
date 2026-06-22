@@ -33,12 +33,14 @@ describe('Workers report database queries', () => {
   beforeEach(() => {
     capturedQueries.length = 0;
     sqlMock.mockReset();
-    sqlMock.mockImplementation((strings: TemplateStringsArray) => {
-      capturedQueries.push(strings.join(''));
+    sqlMock.mockImplementation((strings: TemplateStringsArray, ...values: unknown[]) => {
+      capturedQueries.push(
+        strings.reduce((query, chunk, index) => `${query}${chunk}${values[index] ?? ''}`, ''),
+      );
       return Promise.resolve([]);
     });
-    vi.spyOn(console, 'log').mockImplementation(() => { });
-    vi.spyOn(console, 'warn').mockImplementation(() => { });
+    vi.spyOn(console, 'log').mockImplementation(() => {});
+    vi.spyOn(console, 'warn').mockImplementation(() => {});
   });
 
   it('keeps monthly expiry report SQL aligned with the backend expiry-window contract', async () => {

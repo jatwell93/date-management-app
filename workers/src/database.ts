@@ -9,6 +9,12 @@
 
 import { neon, NeonQueryFunction } from '@neondatabase/serverless';
 import type { Env } from './types/env';
+import {
+  DISPOSITIONED_STATUSES,
+  EXPIRED_STATUS,
+  WORKERS_SOLD_THROUGH_STATUS,
+} from '../../shared/domain/disposition';
+import { getMarkdownLevelForDays, MARKDOWN_WINDOWS } from '../../shared/domain/markdown';
 
 // Note: fetchConnectionCache is now always true by default in @neondatabase/serverless
 
@@ -43,7 +49,10 @@ export interface Database {
   getOverallExpiryReport(organizationId: string): Promise<MonthlyExpiryReport>;
   getDetailedExpiryReport(organizationId: string): Promise<DetailedExpiryReportItem[]>;
   getDailyUsageReport(organizationId: string): Promise<DailyUsageReportItem[]>;
-  getItemsByUserReport(organizationId: string, timeFrameDays?: string): Promise<ItemsByUserReportItem[]>;
+  getItemsByUserReport(
+    organizationId: string,
+    timeFrameDays?: string,
+  ): Promise<ItemsByUserReportItem[]>;
   getItemsByDateReport(organizationId: string): Promise<ItemsByDateReportItem[]>;
   getLossBySkuReport(organizationId: string): Promise<LossBySkuReportItem[]>;
   getLossByDepartmentReport(organizationId: string): Promise<LossByDepartmentReportItem[]>;
@@ -307,11 +316,7 @@ export interface ExpiredItemTransaction {
  * sell-through reporting lines up with the on-screen markdown levels.
  */
 export function reportMarkdownLevel(daysToExpiry: number | null): number | null {
-  if (daysToExpiry === null || daysToExpiry < 0) return null;
-  if (daysToExpiry <= 30) return 3;
-  if (daysToExpiry <= 60) return 2;
-  if (daysToExpiry <= 90) return 1;
-  return null;
+  return getMarkdownLevelForDays(daysToExpiry);
 }
 
 /**
@@ -565,13 +570,13 @@ export function createWorkersDatabase(env: Env): Database {
           to_char(expiry_date, 'YYYY-MM') as month,
           COUNT(*)::int as total_expiring,
           (COUNT(*) FILTER (WHERE days_to_expiry < 0))::int as expired_count,
-          (COUNT(*) FILTER (WHERE days_to_expiry BETWEEN 61 AND 90))::int as markdown1_count,
-          (COUNT(*) FILTER (WHERE days_to_expiry BETWEEN 31 AND 60))::int as markdown2_count,
-          (COUNT(*) FILTER (WHERE days_to_expiry BETWEEN 0 AND 30))::int as markdown3_count,
-          (COUNT(*) FILTER (WHERE days_to_expiry BETWEEN 0 AND 90))::int as total_markdown,
-          (COUNT(*) FILTER (WHERE days_to_expiry BETWEEN 0 AND 30))::int as expiry_risk_count,
-          (COUNT(*) FILTER (WHERE days_to_expiry BETWEEN 91 AND 120))::int as next_month_markdown_count,
-          (COUNT(*) FILTER (WHERE days_to_expiry >= 0))::int as active_expiry_stock_count,
+          (COUNT(*) FILTER (WHERE days_to_expiry BETWEEN ${MARKDOWN_WINDOWS.markdown1.minDays} AND ${MARKDOWN_WINDOWS.markdown1.maxDays}))::int as markdown1_count,
+          (COUNT(*) FILTER (WHERE days_to_expiry BETWEEN ${MARKDOWN_WINDOWS.markdown2.minDays} AND ${MARKDOWN_WINDOWS.markdown2.maxDays}))::int as markdown2_count,
+          (COUNT(*) FILTER (WHERE days_to_expiry BETWEEN ${MARKDOWN_WINDOWS.markdown3.minDays} AND ${MARKDOWN_WINDOWS.markdown3.maxDays}))::int as markdown3_count,
+          (COUNT(*) FILTER (WHERE days_to_expiry BETWEEN ${MARKDOWN_WINDOWS.totalMarkdown.minDays} AND ${MARKDOWN_WINDOWS.totalMarkdown.maxDays}))::int as total_markdown,
+          (COUNT(*) FILTER (WHERE days_to_expiry BETWEEN ${MARKDOWN_WINDOWS.markdown3.minDays} AND ${MARKDOWN_WINDOWS.markdown3.maxDays}))::int as expiry_risk_count,
+          (COUNT(*) FILTER (WHERE days_to_expiry BETWEEN ${MARKDOWN_WINDOWS.nextMonthMarkdown.minDays} AND ${MARKDOWN_WINDOWS.nextMonthMarkdown.maxDays}))::int as next_month_markdown_count,
+          (COUNT(*) FILTER (WHERE days_to_expiry >= ${MARKDOWN_WINDOWS.activeExpiryStock.minDays}))::int as active_expiry_stock_count,
           MAX(expiry_date)::text as latest_expiry_date
         FROM expiry_rows
         GROUP BY to_char(expiry_date, 'YYYY-MM')
@@ -593,13 +598,13 @@ export function createWorkersDatabase(env: Env): Database {
           'Overall' as month,
           COUNT(*)::int as total_expiring,
           (COUNT(*) FILTER (WHERE days_to_expiry < 0))::int as expired_count,
-          (COUNT(*) FILTER (WHERE days_to_expiry BETWEEN 61 AND 90))::int as markdown1_count,
-          (COUNT(*) FILTER (WHERE days_to_expiry BETWEEN 31 AND 60))::int as markdown2_count,
-          (COUNT(*) FILTER (WHERE days_to_expiry BETWEEN 0 AND 30))::int as markdown3_count,
-          (COUNT(*) FILTER (WHERE days_to_expiry BETWEEN 0 AND 90))::int as total_markdown,
-          (COUNT(*) FILTER (WHERE days_to_expiry BETWEEN 0 AND 30))::int as expiry_risk_count,
-          (COUNT(*) FILTER (WHERE days_to_expiry BETWEEN 91 AND 120))::int as next_month_markdown_count,
-          (COUNT(*) FILTER (WHERE days_to_expiry >= 0))::int as active_expiry_stock_count,
+          (COUNT(*) FILTER (WHERE days_to_expiry BETWEEN ${MARKDOWN_WINDOWS.markdown1.minDays} AND ${MARKDOWN_WINDOWS.markdown1.maxDays}))::int as markdown1_count,
+          (COUNT(*) FILTER (WHERE days_to_expiry BETWEEN ${MARKDOWN_WINDOWS.markdown2.minDays} AND ${MARKDOWN_WINDOWS.markdown2.maxDays}))::int as markdown2_count,
+          (COUNT(*) FILTER (WHERE days_to_expiry BETWEEN ${MARKDOWN_WINDOWS.markdown3.minDays} AND ${MARKDOWN_WINDOWS.markdown3.maxDays}))::int as markdown3_count,
+          (COUNT(*) FILTER (WHERE days_to_expiry BETWEEN ${MARKDOWN_WINDOWS.totalMarkdown.minDays} AND ${MARKDOWN_WINDOWS.totalMarkdown.maxDays}))::int as total_markdown,
+          (COUNT(*) FILTER (WHERE days_to_expiry BETWEEN ${MARKDOWN_WINDOWS.markdown3.minDays} AND ${MARKDOWN_WINDOWS.markdown3.maxDays}))::int as expiry_risk_count,
+          (COUNT(*) FILTER (WHERE days_to_expiry BETWEEN ${MARKDOWN_WINDOWS.nextMonthMarkdown.minDays} AND ${MARKDOWN_WINDOWS.nextMonthMarkdown.maxDays}))::int as next_month_markdown_count,
+          (COUNT(*) FILTER (WHERE days_to_expiry >= ${MARKDOWN_WINDOWS.activeExpiryStock.minDays}))::int as active_expiry_stock_count,
           MAX(expiry_date)::text as latest_expiry_date
         FROM expiry_rows
       `;
@@ -642,8 +647,11 @@ export function createWorkersDatabase(env: Env): Database {
           -- marker; 'Processed' is the SQLite backend marker. 'Expired' is
           -- intentionally NOT excluded: a day-0 item is the most urgent worklist
           -- entry, and write-offs are already excluded by the date window.
-          AND ii.status NOT IN ('Processed', 'Sold Through')
-        ORDER BY ii.expiry_date ASC
+          AND ii.status <> ALL(${[...DISPOSITIONED_STATUSES]})
+        -- ii.id tiebreaker keeps ordering deterministic across engines when two
+        -- items share an expiry_date; without it Postgres and SQLite can break
+        -- the tie differently and the conformance test would drift.
+        ORDER BY ii.expiry_date ASC, ii.id ASC
       `) as DetailedExpiryReportItem[];
     },
 
@@ -665,7 +673,10 @@ export function createWorkersDatabase(env: Env): Database {
       `) as DailyUsageReportItem[];
     },
 
-    async getItemsByUserReport(organizationId: string, timeFrameDays?: string): Promise<ItemsByUserReportItem[]> {
+    async getItemsByUserReport(
+      organizationId: string,
+      timeFrameDays?: string,
+    ): Promise<ItemsByUserReportItem[]> {
       if (timeFrameDays && timeFrameDays !== 'all-time') {
         const days = parseInt(timeFrameDays, 10);
         if (!isNaN(days) && days > 0) {
@@ -748,9 +759,7 @@ export function createWorkersDatabase(env: Env): Database {
       `) as LossByDepartmentReportItem[];
     },
 
-    async getSellThroughByMarkdownLevel(
-      organizationId: string,
-    ): Promise<SellThroughByLevelItem[]> {
+    async getSellThroughByMarkdownLevel(organizationId: string): Promise<SellThroughByLevelItem[]> {
       // How many items sold through at each markdown depth (null = sold before
       // reaching a markdown window). Surfaces stock that only moves when reduced.
       return (await sql`
@@ -795,7 +804,7 @@ export function createWorkersDatabase(env: Env): Database {
       action: string,
       unitsDiscarded?: number,
     ): Promise<ExpiredItemTransaction> {
-      const newStatus = action === 'sold_through' ? 'Sold Through' : 'Expired';
+      const newStatus = action === 'sold_through' ? WORKERS_SOLD_THROUGH_STATUS : EXPIRED_STATUS;
       const itemRows = await sql`
         SELECT
           COALESCE(p.cost_price, 0) * ${action === 'expired' ? (unitsDiscarded ?? 0) : 0} as "financialLoss",

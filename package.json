@@ -19,6 +19,7 @@
     "test:backend": "npm run test --prefix backend",
     "test:backend:coverage": "npm run test:coverage --prefix backend",
     "test:backend:diff": "npm run test:diff --prefix backend",
+    "test:db": "npm run test:db --prefix workers",
     "test:frontend:coverage": "npm run test:coverage --prefix frontend",
     "test:frontend:diff": "npm run test:diff --prefix frontend",
     "test:load": "TEST_PASSWORD=LoadTest123! artillery run artillery.yml",

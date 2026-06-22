@@ -379,7 +379,7 @@ model Upload {
   @@index([createdAt])
   // NOTE: a partial UNIQUE index `uploads_one_active_catalogue_per_org` (enforcing one
   // active catalogue import per organization) is owned by the raw migration
-  // prisma/migrations/neon/0001_queued_catalogue_imports.sql. Prisma cannot express
+  // prisma/neon-sql/0001_queued_catalogue_imports.sql. Prisma cannot express
   // partial indexes, so it is intentionally absent here — do not let drift tooling drop it.
   @@map("uploads")
 }

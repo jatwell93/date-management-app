@@ -103,8 +103,9 @@ NODE_ENV=development        # development | production | test | staging
 
 # Database selection
 DATABASE_PROVIDER=sqlite    # sqlite (dev) | postgresql (prod)
-DATABASE_PATH=./database.sqlite  # For SQLite
-DATABASE_URL=...           # Neon PostgreSQL connection string (prod)
+DATABASE_PATH=./database.sqlite        # Runtime SQLite file (backend/database.sqlite)
+DATABASE_URL=file:../database.sqlite   # Prisma local SQLite URL, resolved from backend/prisma/
+# DATABASE_URL=...                     # Neon PostgreSQL connection string (prod)
 
 # Storage provider
 STORAGE_PROVIDER=local      # local (dev) | r2 (prod)

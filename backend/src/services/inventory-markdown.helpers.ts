@@ -1,4 +1,5 @@
 import { InventoryItem } from '../models/inventory-item.model';
+import { MARKDOWN_WINDOWS } from '../../../shared/domain/markdown';
 
 export type InventoryMarkdownStatus = InventoryItem['status'];
 export type InventoryMarkdownExpiryDate = string | Date | null | undefined;
@@ -8,9 +9,9 @@ export type InventoryMarkdownExpiryDate = string | Date | null | undefined;
 // Markdown 3 = 0-30). Previously 7/14/30, which diverged from the reporting
 // windows and the in-store process (first markdown ~3 months out).
 export const INVENTORY_MARKDOWN_THRESHOLDS = {
-  markdown3: 30,
-  markdown2: 60,
-  markdown1: 90,
+  markdown3: MARKDOWN_WINDOWS.markdown3.maxDays,
+  markdown2: MARKDOWN_WINDOWS.markdown2.maxDays,
+  markdown1: MARKDOWN_WINDOWS.markdown1.maxDays,
 } as const;
 
 function daysUntil(expiryDate: InventoryMarkdownExpiryDate, now = new Date()): number | null {

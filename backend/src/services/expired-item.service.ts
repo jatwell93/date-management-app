@@ -1,5 +1,7 @@
 import { getDb, releaseDb } from '../database';
 import { InventoryItem } from '../models/inventory-item.model';
+import { SQLITE_PROCESSED_STATUS } from '../../../shared/domain/disposition';
+import { getMarkdownLevelForDays } from '../../../shared/domain/markdown';
 
 const MS_PER_DAY = 1000 * 60 * 60 * 24;
 
@@ -28,21 +30,12 @@ function daysToExpiry(expiryDate: string | null | undefined, now = new Date()): 
  * Note: distinct from inventory-markdown.helpers (7/14/30 day) thresholds; this
  * matches the reporting windows so sell-through reporting lines up.
  */
-function reportMarkdownLevel(expiryDate: string | null | undefined, now = new Date()): number | null {
+function reportMarkdownLevel(
+  expiryDate: string | null | undefined,
+  now = new Date(),
+): number | null {
   const days = daysToExpiry(expiryDate, now);
-  if (days === null || days < 0) {
-    return null;
-  }
-  if (days <= 30) {
-    return 3;
-  }
-  if (days <= 60) {
-    return 2;
-  }
-  if (days <= 90) {
-    return 1;
-  }
-  return null;
+  return getMarkdownLevelForDays(days);
 }
 
 export interface ExpiredItem {
@@ -185,10 +178,8 @@ export class ExpiredItemService {
 
         // Update the inventory item's status to 'Processed' to remove it from the expired list
         // but keep it for reporting purposes.
-        const updateStmt = db.prepare(
-          "UPDATE inventory_items SET status = 'Processed' WHERE id = ?",
-        );
-        updateStmt.run(inventoryItemId);
+        const updateStmt = db.prepare('UPDATE inventory_items SET status = ? WHERE id = ?');
+        updateStmt.run(SQLITE_PROCESSED_STATUS, inventoryItemId);
 
         // Return the created transaction record
         return {

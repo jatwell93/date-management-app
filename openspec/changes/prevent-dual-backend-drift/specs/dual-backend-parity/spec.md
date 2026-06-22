@@ -63,7 +63,7 @@ SHALL include this rule, so the pattern is applied to future work.
 #### Scenario: Schema changes are kept in sync across migration mechanisms
 
 - **GIVEN** an engineer adding a column expressed in `schema.prisma`, the hand-written
-  `prisma/migrations/neon/*.sql`, and the runtime `src/migrations/` path
+  `prisma/neon-sql/*.sql`, and the runtime `src/migrations/` path
 - **WHEN** they consult the project conventions or the PR checklist
 - **THEN** the rule states the three representations must agree and names the
   production-authoritative path (`prisma db push` via `migrate:prod`)

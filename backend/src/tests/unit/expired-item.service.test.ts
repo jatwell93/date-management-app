@@ -1,5 +1,6 @@
 import { getDb, releaseDb } from '../../database';
 import { ExpiredItemService } from '../../services/expired-item.service';
+import { SQLITE_PROCESSED_STATUS } from '../../../../shared/domain/disposition';
 
 jest.mock('../../database', () => ({
   getDb: jest.fn(),
@@ -127,7 +128,7 @@ describe('ExpiredItemService', () => {
         if (sql.includes('INSERT INTO audit_log')) {
           return { run: auditRun };
         }
-        if (sql.includes("UPDATE inventory_items SET status = 'Processed' WHERE id = ?")) {
+        if (sql.includes('UPDATE inventory_items SET status = ? WHERE id = ?')) {
           return { run: updateRun };
         }
         throw new Error(`Unexpected SQL: ${sql}`);
@@ -146,7 +147,7 @@ describe('ExpiredItemService', () => {
 
       expect(insertRun).toHaveBeenCalledWith(3, 7, 'sold_through', null, null, null);
       expect(auditRun).toHaveBeenCalledWith(7, 3, 'Expired item marked as sold through');
-      expect(updateRun).toHaveBeenCalledWith(3);
+      expect(updateRun).toHaveBeenCalledWith(SQLITE_PROCESSED_STATUS, 3);
       expect(mockReleaseDb).toHaveBeenCalledWith(mockDb);
     });
 
@@ -168,7 +169,7 @@ describe('ExpiredItemService', () => {
         if (sql.includes('INSERT INTO audit_log')) {
           return { run: auditRun };
         }
-        if (sql.includes("UPDATE inventory_items SET status = 'Processed' WHERE id = ?")) {
+        if (sql.includes('UPDATE inventory_items SET status = ? WHERE id = ?')) {
           return { run: updateRun };
         }
         throw new Error(`Unexpected SQL: ${sql}`);
@@ -186,18 +187,20 @@ describe('ExpiredItemService', () => {
         5,
         'Expired item marked as discarded, units: 3, financial loss: 12',
       );
-      expect(updateRun).toHaveBeenCalledWith(5);
+      expect(updateRun).toHaveBeenCalledWith(SQLITE_PROCESSED_STATUS, 5);
       expect(mockReleaseDb).toHaveBeenCalledWith(mockDb);
     });
 
     it('snapshots the markdown level from the item expiry date on sold-through', async () => {
       // 10 days from expiry => Markdown 3 window (0-30 days) per the report bucketing.
-      const expiryDate = new Date(Date.now() + 10 * 24 * 60 * 60 * 1000)
-        .toISOString()
-        .slice(0, 10);
-      const selectGet = jest
-        .fn()
-        .mockReturnValue({ id: 8, product_id: 10, location_id: 2, costPrice: 2, expiry_date: expiryDate });
+      const expiryDate = new Date(Date.now() + 10 * 24 * 60 * 60 * 1000).toISOString().slice(0, 10);
+      const selectGet = jest.fn().mockReturnValue({
+        id: 8,
+        product_id: 10,
+        location_id: 2,
+        costPrice: 2,
+        expiry_date: expiryDate,
+      });
       const insertRun = jest.fn().mockReturnValue({ lastInsertRowid: 55 });
 
       mockDb.prepare.mockImplementation((sql: string) => {
@@ -210,7 +213,7 @@ describe('ExpiredItemService', () => {
         if (sql.includes('INSERT INTO audit_log')) {
           return { run: jest.fn() };
         }
-        if (sql.includes("UPDATE inventory_items SET status = 'Processed' WHERE id = ?")) {
+        if (sql.includes('UPDATE inventory_items SET status = ? WHERE id = ?')) {
           return { run: jest.fn() };
         }
         throw new Error(`Unexpected SQL: ${sql}`);
