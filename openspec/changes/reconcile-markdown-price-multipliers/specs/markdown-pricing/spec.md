@@ -6,7 +6,9 @@ The system SHALL compute the reduced price of marked-down stock from one discoun
 the item's cost, so the price shown to staff and customers matches the price any backend path
 computes for the same item. The ladder, keyed to days-to-expiry, is: Markdown 1 (61-90 days) = 50%
 off, Markdown 2 (31-60 days) = 60% off, Markdown 3 (0-30 days) = 75% off; items more than 90 days
-from expiry have no markdown price.
+from expiry have no markdown price. Expired stock (on or past its used-by date) is written off, not
+marked down, and SHALL have no markdown price — the price the system returns MUST agree with the
+markdown status it reports for the same item.
 
 #### Scenario: First markdown reduces, never increases, the price
 
@@ -26,3 +28,10 @@ from expiry have no markdown price.
 - **GIVEN** an item more than 90 days from its used-by date
 - **WHEN** its markdown price is computed
 - **THEN** no markdown price is returned
+
+#### Scenario: Expired stock has no markdown price
+
+- **GIVEN** an item on or past its used-by date (0 or fewer days to expiry)
+- **WHEN** its markdown price is computed on the backend
+- **THEN** no markdown price is returned
+- **AND** this agrees with the item's markdown status being reported as Expired

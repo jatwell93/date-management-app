@@ -65,6 +65,10 @@ export function calculateInventoryMarkdownPrice(
   if (daysDiff === null) {
     return null;
   }
+  // Expired stock is written off, not marked down — mirror calculateInventoryMarkdownStatus.
+  if (daysDiff <= 0) {
+    return null;
+  }
   if (daysDiff <= INVENTORY_MARKDOWN_THRESHOLDS.markdown1) {
     const discountPercentage = getMarkdownDiscountPercentageForDays(daysDiff);
 

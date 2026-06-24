@@ -17,7 +17,8 @@ export const MARKDOWN_DISCOUNT_PERCENTAGES = {
 } as const;
 
 export function getMarkdownLevelForDays(daysToExpiry: number | null): MarkdownLevel | null {
-  if (daysToExpiry === null || daysToExpiry < MARKDOWN_WINDOWS.markdown3.minDays) {
+  // Expired stock (on or past its used-by date) is written off, not marked down.
+  if (daysToExpiry === null || daysToExpiry <= 0) {
     return null;
   }
   if (daysToExpiry <= MARKDOWN_WINDOWS.markdown3.maxDays) {
@@ -33,7 +34,8 @@ export function getMarkdownLevelForDays(daysToExpiry: number | null): MarkdownLe
 }
 
 export function getMarkdownDiscountPercentageForDays(daysToExpiry: number | null): number {
-  if (daysToExpiry === null) {
+  // Expired stock (on or past its used-by date) gets no discount — mirror getMarkdownLevelForDays.
+  if (daysToExpiry === null || daysToExpiry <= 0) {
     return MARKDOWN_DISCOUNT_PERCENTAGES.none;
   }
   if (daysToExpiry <= MARKDOWN_WINDOWS.markdown3.maxDays) {

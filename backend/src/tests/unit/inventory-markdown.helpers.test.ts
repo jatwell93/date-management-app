@@ -3,7 +3,10 @@ import {
   calculateInventoryMarkdownStatus,
   INVENTORY_MARKDOWN_THRESHOLDS,
 } from '../../services/inventory-markdown.helpers';
-import { getMarkdownDiscountPercentageForDays } from '../../../../shared/domain/markdown';
+import {
+  getMarkdownDiscountPercentageForDays,
+  getMarkdownLevelForDays,
+} from '../../../../shared/domain/markdown';
 
 describe('inventory markdown helpers', () => {
   const now = new Date('2026-05-03T00:00:00.000Z');
@@ -26,6 +29,29 @@ describe('inventory markdown helpers', () => {
     expect(calculateInventoryMarkdownPrice(10, '2026-07-02T00:00:00.000Z', now)).toBe(4); // 60 days
     expect(calculateInventoryMarkdownPrice(10, '2026-08-01T00:00:00.000Z', now)).toBe(5); // 90 days
     expect(calculateInventoryMarkdownPrice(10, '2026-08-02T00:00:00.000Z', now)).toBeNull(); // 91 days
+  });
+
+  it('returns no markdown price for expired stock (write-off, not a discount)', () => {
+    // Status and price must agree: an item the status function calls 'Expired'
+    // must not come back with a discounted price.
+    expect(calculateInventoryMarkdownStatus('2026-05-03T00:00:00.000Z', now)).toBe('Expired'); // today (0 days)
+    expect(calculateInventoryMarkdownPrice(10, '2026-05-03T00:00:00.000Z', now)).toBeNull(); // today (0 days)
+    expect(calculateInventoryMarkdownStatus('2026-05-01T00:00:00.000Z', now)).toBe('Expired'); // 2 days ago
+    expect(calculateInventoryMarkdownPrice(10, '2026-05-01T00:00:00.000Z', now)).toBeNull(); // 2 days ago
+  });
+
+  it('gives expired stock no shared discount percentage', () => {
+    expect(getMarkdownDiscountPercentageForDays(-5)).toBe(0);
+  });
+
+  it('treats stock expiring today or later as expired across shared lookups', () => {
+    // Day 0 (expires today) is a write-off, not the deepest markdown — the level and
+    // discount lookups must agree with the Expired status the rest of the app reports.
+    expect(getMarkdownLevelForDays(0)).toBeNull();
+    expect(getMarkdownLevelForDays(-1)).toBeNull();
+    expect(getMarkdownLevelForDays(1)).toBe(3);
+    expect(getMarkdownDiscountPercentageForDays(0)).toBe(0);
+    expect(getMarkdownDiscountPercentageForDays(1)).toBe(75);
   });
 
   it.each([
