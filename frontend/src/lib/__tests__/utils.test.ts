@@ -62,11 +62,41 @@ describe('utils', () => {
   describe('calculateMarkdownPrice', () => {
     const COST = 100;
 
-    it('should markdown by 75% if expiry <= 30 days', () => {
+    it('delegates markdown pricing to the shared domain helper', () => {
+      jest.isolateModules(() => {
+        const calculateMarkdownPriceFromCost = jest.fn().mockReturnValue(12.34);
+        const getMarkdownDiscountPercentageForDays = jest.fn().mockReturnValue(37);
+
+        jest.doMock(
+          '@shared/markdown',
+          () => ({
+            calculateMarkdownPriceFromCost,
+            getMarkdownDiscountPercentageForDays,
+          }),
+          { virtual: true },
+        );
+
+        const {
+          calculateMarkdownPrice: isolatedCalculateMarkdownPrice,
+          calculateMarkdownPercentage: isolatedCalculateMarkdownPercentage,
+        } = require('../utils');
+
+        expect(isolatedCalculateMarkdownPrice(47.25, 12)).toBe(12.34);
+        expect(calculateMarkdownPriceFromCost).toHaveBeenCalledWith(47.25, 12);
+
+        expect(isolatedCalculateMarkdownPercentage(12)).toBe(37);
+        expect(getMarkdownDiscountPercentageForDays).toHaveBeenCalledWith(12);
+      });
+    });
+
+    it('should markdown by 75% if expiry is between 1 and 30 days', () => {
       expect(calculateMarkdownPrice(COST, 30)).toBe(25);
       expect(calculateMarkdownPrice(COST, 1)).toBe(25);
-      expect(calculateMarkdownPrice(COST, 0)).toBe(25);
-      expect(calculateMarkdownPrice(COST, -5)).toBe(25); // Already expired
+    });
+
+    it('should apply no markdown to day-zero or expired stock', () => {
+      expect(calculateMarkdownPrice(COST, 0)).toBe(100);
+      expect(calculateMarkdownPrice(COST, -5)).toBe(100);
     });
 
     it('should markdown by 60% if expiry is between 31 and 60 days', () => {
@@ -83,12 +113,21 @@ describe('utils', () => {
       expect(calculateMarkdownPrice(COST, 91)).toBe(100);
       expect(calculateMarkdownPrice(COST, 100)).toBe(100);
     });
+
+    it('should not round fractional markdown prices', () => {
+      expect(calculateMarkdownPrice(47.25, 12)).toBe(11.8125);
+    });
   });
 
   describe('calculateMarkdownPercentage', () => {
-    it('should return 75 if expiry <= 30 days', () => {
+    it('should return 75 if expiry is between 1 and 30 days', () => {
       expect(calculateMarkdownPercentage(30)).toBe(75);
       expect(calculateMarkdownPercentage(5)).toBe(75);
+    });
+
+    it('should return 0 for day-zero or expired stock', () => {
+      expect(calculateMarkdownPercentage(0)).toBe(0);
+      expect(calculateMarkdownPercentage(-5)).toBe(0);
     });
 
     it('should return 60 if expiry is between 31 and 60 days', () => {

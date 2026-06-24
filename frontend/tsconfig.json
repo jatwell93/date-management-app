@@ -18,8 +18,9 @@
     "jsx": "react-jsx",
     "baseUrl": ".",
     "paths": {
+      "@shared/markdown": ["../shared/domain/markdown.ts"],
       "@/*": ["./src/*"]
     }
   },
-  "include": ["src", "src/global.d.ts"]
+  "include": ["src", "src/global.d.ts", "../shared/domain/markdown.ts"]
 }

@@ -1,5 +1,9 @@
 import { type ClassValue, clsx } from 'clsx';
 import { twMerge } from 'tailwind-merge';
+import {
+  calculateMarkdownPriceFromCost,
+  getMarkdownDiscountPercentageForDays,
+} from '@shared/markdown';
 
 export function cn(...inputs: ClassValue[]) {
   return twMerge(clsx(inputs));
@@ -14,18 +18,9 @@ export function isWithinMarkdownPeriod(expiryDate: string | null, days: number):
 }
 
 export function calculateMarkdownPrice(costPrice: number, daysToExpiry: number): number {
-  const markdownPercentage = calculateMarkdownPercentage(daysToExpiry);
-  return costPrice * (1 - markdownPercentage / 100);
+  return calculateMarkdownPriceFromCost(costPrice, daysToExpiry);
 }
 
 export function calculateMarkdownPercentage(daysToExpiry: number): number {
-  if (daysToExpiry <= 30) {
-    return 75;
-  } else if (daysToExpiry <= 60) {
-    return 60;
-  } else if (daysToExpiry <= 90) {
-    return 50;
-  } else {
-    return 0;
-  }
+  return getMarkdownDiscountPercentageForDays(daysToExpiry);
 }
