@@ -6,6 +6,7 @@ import { Card, CardContent, CardHeader, CardTitle } from '../components/ui/card'
 import { Input } from '../components/ui/input';
 import { Button } from '../components/ui/button';
 import { Label } from '../components/ui/label';
+import { Badge } from '../components/ui/badge';
 import {
   Select,
   SelectContent,
@@ -98,6 +99,7 @@ export function ScanPage({ token }: ScanPageProps) {
   const [newProductCostPrice, setNewProductCostPrice] = useState<string>('');
   const [markdownPrice, setMarkdownPrice] = useState<number | null>(null);
   const [markdownPercentage, setMarkdownPercentage] = useState<number | null>(null);
+  const [isExpiredStock, setIsExpiredStock] = useState<boolean>(false);
   const [recentEntries, setRecentEntries] = useState<RecentInventoryItem[] | null>(null);
   const [isAlertDialogOpen, setAlertDialogOpen] = useState(false);
   const [itemToDelete, setItemToDelete] = useState<number | null>(null);
@@ -137,6 +139,16 @@ export function ScanPage({ token }: ScanPageProps) {
       const daysToExpiry = Math.ceil((expiry.getTime() - today.getTime()) / (1000 * 60 * 60 * 24));
 
       const costPrice = productDetails.costPrice;
+      const isExpired = daysToExpiry <= 0;
+      if (isExpired) {
+        setMarkdownPrice(null);
+        setMarkdownPercentage(null);
+        setIsExpiredStock(true);
+        return;
+      }
+
+      setIsExpiredStock(false);
+
       const isMarkdown = isWithinMarkdownPeriod(expiryDate, 90);
       if (isMarkdown && typeof costPrice === 'number' && Number.isFinite(costPrice)) {
         setMarkdownPrice(calculateMarkdownPrice(costPrice, daysToExpiry));
@@ -146,9 +158,11 @@ export function ScanPage({ token }: ScanPageProps) {
 
       setMarkdownPrice(null);
       setMarkdownPercentage(null);
+      setIsExpiredStock(false);
     } else {
       setMarkdownPrice(null);
       setMarkdownPercentage(null);
+      setIsExpiredStock(false);
     }
   }, [productDetails, expiryDate]);
 
@@ -161,6 +175,7 @@ export function ScanPage({ token }: ScanPageProps) {
     setShowNewProductForm(false);
     setMarkdownPrice(null);
     setMarkdownPercentage(null);
+    setIsExpiredStock(false);
   };
 
   const resolveBarcodeForLookup = (rawBarcode: string): string => {
@@ -332,6 +347,7 @@ export function ScanPage({ token }: ScanPageProps) {
         setError(null);
         setMarkdownPrice(null);
         setMarkdownPercentage(null);
+        setIsExpiredStock(false);
       } catch (err: unknown) {
         if (err instanceof Error) {
           setError(err.message);
@@ -365,6 +381,7 @@ export function ScanPage({ token }: ScanPageProps) {
       setError(null);
       setMarkdownPrice(null);
       setMarkdownPercentage(null);
+      setIsExpiredStock(false);
     } catch (err: unknown) {
       if (err instanceof Error) {
         setError(err.message);
@@ -551,6 +568,11 @@ export function ScanPage({ token }: ScanPageProps) {
                     <p className="text-semantic-warning font-semibold mt-1">
                       Markdown Price ({markdownPercentage}% off): ${markdownPrice.toFixed(2)}
                     </p>
+                  )}
+                  {isExpiredStock && (
+                    <div className="mt-2">
+                      <Badge variant="error">Expired</Badge>
+                    </div>
                   )}
                 </div>
               </div>

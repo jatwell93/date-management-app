@@ -347,6 +347,39 @@ describe('ScanPage Integration', () => {
     expect(screen.queryByText(/\$NaN/i)).not.toBeInTheDocument();
   });
 
+  it.each([
+    { label: 'today', daysOffset: 0 },
+    { label: 'already expired', daysOffset: -1 },
+  ])(
+    'shows an expired badge instead of markdown pricing when stock is $label',
+    async ({ daysOffset }) => {
+      render(
+        <HandheldProvider>
+          <ScanPage token={mockToken} />
+        </HandheldProvider>,
+      );
+
+      await screen.findByTestId('mock-scanner');
+      userEvent.click(screen.getByTestId('trigger-scan'));
+      await screen.findByText('Test Product Barcode');
+
+      const expiry = new Date();
+      expiry.setDate(expiry.getDate() + daysOffset);
+      fireEvent.change(screen.getByLabelText(/Expiry Date/i), {
+        target: {
+          value: [
+            expiry.getFullYear(),
+            String(expiry.getMonth() + 1).padStart(2, '0'),
+            String(expiry.getDate()).padStart(2, '0'),
+          ].join('-'),
+        },
+      });
+
+      expect(await screen.findByText('Expired')).toHaveAttribute('data-slot', 'badge');
+      expect(screen.queryByText(/Markdown Price/i)).not.toBeInTheDocument();
+    },
+  );
+
   it('displays product details after scanning a valid SKU (<=8 chars)', async () => {
     render(
       <HandheldProvider>
