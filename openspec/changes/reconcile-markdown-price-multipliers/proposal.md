@@ -52,22 +52,34 @@ frontend ladder wins because it is the one customers and staff actually see.
 
 ## Reuse Strategy
 
-- **Change the multipliers in place** in `calculateInventoryMarkdownPrice` to mirror
-  `calculateMarkdownPercentage` (x0.25 / x0.40 / x0.50; null when not on markdown), keeping the
-  existing `INVENTORY_MARKDOWN_THRESHOLDS` (30/60/90) the function already uses after Phase 1b. No
-  new function, no signature change.
+- **Change the multipliers in place** in `calculateInventoryMarkdownPrice` to mirror the canonical
+  discount ladder (x0.25 / x0.40 / x0.50; null when not on markdown), keeping the existing
+  `INVENTORY_MARKDOWN_THRESHOLDS` (30/60/90) the function already uses after Phase 1b. No new
+  function, no signature change.
 - **Keep the day-window bucketing** already shared with the reports — only the price factors change.
 - **Update the existing helper unit tests** to assert the correct ladder, and add a guard test that
-  the backend price for a given days-to-expiry equals `cost x (1 - frontendPercentage/100)` at each
-  boundary (30/60/90), so the two definitions cannot silently diverge again.
+  the backend price for a given days-to-expiry equals `cost x (1 - sharedDiscountPercentage/100)` at
+  each boundary (30/60/90), so backend pricing cannot silently diverge from
+  `shared/domain/markdown.ts`.
 - Confirm no other backend path hardcodes the old 0.8/1.0/1.2 factors (workers pricing, if any).
+
+## Deferred Follow-up
+
+Frontend still hardcodes the same 75/60/50/0 discount ladder in `frontend/src/lib/utils.ts`.
+`frontend/src/lib/__tests__/utils.test.ts` already provides the cheap interim value guard for those
+percentages and prices, and the frontend values are currently correct. A direct import from
+`shared/domain/markdown.ts` was verified during implementation but rejected by the CRACO/CRA
+production build because relative imports outside `frontend/src` are blocked. Track the packaging
+work separately in `openspec/changes/package-shared-markdown-pricing-for-frontend/` so this backend
+bugfix can land without silently forgetting the remaining duplication.
 
 ## Implementation Steps
 
-1. Update `calculateInventoryMarkdownPrice` multipliers to 0.25 / 0.40 / 0.50 (Markdown 3/2/1),
-   returning null outside the 0-90 day window.
-2. Update `inventory-markdown.helpers.test.ts` to the corrected expected values and add boundary
-   guards aligning with the frontend percentages (50/60/75% off at 90/60/30 days).
-3. Grep both backends for any other hardcoded markdown price factors; reconcile or document if found.
-4. Run completion checks: backend lint + affected tests + `tsc`, and `openspec validate
+1. Add the discount ladder to `shared/domain/markdown.ts`.
+2. Update `calculateInventoryMarkdownPrice` to derive 0.25 / 0.40 / 0.50 effective multipliers
+   (Markdown 3/2/1) from the shared discount ladder, returning null outside the 0-90 day window.
+3. Update `inventory-markdown.helpers.test.ts` to the corrected expected values and add boundary
+   guards aligning with the shared percentages (50/60/75% off at 90/60/30 days).
+4. Grep both backends for any other hardcoded markdown price factors; reconcile or document if found.
+5. Run completion checks: backend lint + affected tests + `tsc`, and `openspec validate
    reconcile-markdown-price-multipliers --strict`.

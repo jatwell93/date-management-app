@@ -1,5 +1,8 @@
 import { InventoryItem } from '../models/inventory-item.model';
-import { MARKDOWN_WINDOWS } from '../../../shared/domain/markdown';
+import {
+  getMarkdownDiscountPercentageForDays,
+  MARKDOWN_WINDOWS,
+} from '../../../shared/domain/markdown';
 
 export type InventoryMarkdownStatus = InventoryItem['status'];
 export type InventoryMarkdownExpiryDate = string | Date | null | undefined;
@@ -62,14 +65,10 @@ export function calculateInventoryMarkdownPrice(
   if (daysDiff === null) {
     return null;
   }
-  if (daysDiff <= INVENTORY_MARKDOWN_THRESHOLDS.markdown3) {
-    return costPrice * 0.8;
-  }
-  if (daysDiff <= INVENTORY_MARKDOWN_THRESHOLDS.markdown2) {
-    return costPrice;
-  }
   if (daysDiff <= INVENTORY_MARKDOWN_THRESHOLDS.markdown1) {
-    return costPrice * 1.2;
+    const discountPercentage = getMarkdownDiscountPercentageForDays(daysDiff);
+
+    return costPrice * (1 - discountPercentage / 100);
   }
 
   return null;

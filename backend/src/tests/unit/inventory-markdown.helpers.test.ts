@@ -3,6 +3,7 @@ import {
   calculateInventoryMarkdownStatus,
   INVENTORY_MARKDOWN_THRESHOLDS,
 } from '../../services/inventory-markdown.helpers';
+import { getMarkdownDiscountPercentageForDays } from '../../../../shared/domain/markdown';
 
 describe('inventory markdown helpers', () => {
   const now = new Date('2026-05-03T00:00:00.000Z');
@@ -21,17 +22,32 @@ describe('inventory markdown helpers', () => {
   });
 
   it('calculates markdown prices from the same threshold rules', () => {
-    expect(calculateInventoryMarkdownPrice(10, '2026-06-02T00:00:00.000Z', now)).toBe(8); // 30 days
-    expect(calculateInventoryMarkdownPrice(10, '2026-07-02T00:00:00.000Z', now)).toBe(10); // 60 days
-    expect(calculateInventoryMarkdownPrice(10, '2026-08-01T00:00:00.000Z', now)).toBe(12); // 90 days
+    expect(calculateInventoryMarkdownPrice(10, '2026-06-02T00:00:00.000Z', now)).toBe(2.5); // 30 days
+    expect(calculateInventoryMarkdownPrice(10, '2026-07-02T00:00:00.000Z', now)).toBe(4); // 60 days
+    expect(calculateInventoryMarkdownPrice(10, '2026-08-01T00:00:00.000Z', now)).toBe(5); // 90 days
     expect(calculateInventoryMarkdownPrice(10, '2026-08-02T00:00:00.000Z', now)).toBeNull(); // 91 days
   });
+
+  it.each([
+    [30, '2026-06-02T00:00:00.000Z'],
+    [60, '2026-07-02T00:00:00.000Z'],
+    [90, '2026-08-01T00:00:00.000Z'],
+  ])(
+    'matches the shared discount percentage at the %d-day boundary',
+    (daysToExpiry, expiryDate) => {
+      const costPrice = 10;
+      const expectedPrice =
+        costPrice * (1 - getMarkdownDiscountPercentageForDays(daysToExpiry) / 100);
+
+      expect(calculateInventoryMarkdownPrice(costPrice, expiryDate, now)).toBe(expectedPrice);
+    },
+  );
 
   it('accepts Date instances from Prisma inventory rows', () => {
     const expiryDate = new Date('2026-06-02T00:00:00.000Z'); // 30 days
 
     expect(calculateInventoryMarkdownStatus(expiryDate, now)).toBe('Markdown 3');
-    expect(calculateInventoryMarkdownPrice(10, expiryDate, now)).toBe(8);
+    expect(calculateInventoryMarkdownPrice(10, expiryDate, now)).toBe(2.5);
   });
 
   it('exports the inventory markdown thresholds for service compatibility', () => {
