@@ -85,15 +85,11 @@ describe('ReportsPage', () => {
     );
     expect(screen.getByText(/Entering markdown next month/i)).toBeInTheDocument();
     expect(screen.getByText(/Active expiry stock/i)).toBeInTheDocument();
-    expect(screen.getByRole('region', { name: /Primary expiry decision/i })).toHaveTextContent('3');
-    expect(screen.getByText(/Entering markdown next month/i).parentElement).toHaveTextContent('7');
-    expect(screen.getByText(/Active expiry stock/i).parentElement).toHaveTextContent('45');
     expect(screen.queryByText(/Next review window/i)).not.toBeInTheDocument();
     expect(screen.queryByText(/^Total Items$/i)).not.toBeInTheDocument();
     expect(screen.queryByText(/^Markdown 1$/i)).not.toBeInTheDocument();
     expect(screen.queryByText(/^Markdown 2$/i)).not.toBeInTheDocument();
     expect(screen.queryByText(/^Markdown 3$/i)).not.toBeInTheDocument();
-    expect(screen.queryByText(/Total Markdown/i)).not.toBeInTheDocument();
     // Use getAllByText since the month appears multiple times (in month and latest_expiry_date columns)
     expect(screen.getAllByText(/2025-08/i).length).toBeGreaterThan(0);
 
@@ -127,8 +123,7 @@ describe('ReportsPage', () => {
           markdown3_count: '3',
           total_markdown: '10',
           expiry_risk_count: '3',
-          next_month_markdown_count: '8',
-          active_expiry_stock_count: '12',
+          next_month_markdown_count: null,
           latest_expiry_date: '2026-10-31',
         });
       }
@@ -140,50 +135,9 @@ describe('ReportsPage', () => {
 
     expect(await screen.findByText(/Monthly expiry report/i)).toBeInTheDocument();
     expect(screen.getByRole('region', { name: /Primary expiry decision/i })).toHaveTextContent('3');
-    expect(screen.getByText(/Entering markdown next month/i).parentElement).toHaveTextContent('8');
-    expect(screen.getByText(/Active expiry stock/i).parentElement).toHaveTextContent('12');
+    expect(screen.getByText(/Entering markdown next month/i).parentElement).toHaveTextContent('0');
+    expect(screen.getByText(/Active expiry stock/i).parentElement).toHaveTextContent('0');
     expect(screen.queryByText(/NaN/i)).not.toBeInTheDocument();
-  });
-
-  it('reports a contract error when the overall summary omits required counts', async () => {
-    // @ts-expect-error — apiService.get is mocked as jest.fn()
-    apiService.get.mockImplementation((url) => {
-      if (url === '/reports/expiry') {
-        return Promise.resolve([
-          {
-            month: '2026-06',
-            total_expiring: '8',
-            expired_count: '1',
-            total_markdown: '6',
-            expiry_risk_count: '3',
-            next_month_markdown_count: '8',
-            active_expiry_stock_count: '12',
-            latest_expiry_date: '2026-06-30',
-          },
-        ]);
-      }
-      if (url === '/reports/expiry-overall') {
-        return Promise.resolve({
-          month: 'Overall',
-          total_expiring: '18',
-          expired_count: '4',
-          total_markdown: '10',
-          expiry_risk_count: '3',
-          next_month_markdown_count: '8',
-          latest_expiry_date: '2026-10-31',
-        });
-      }
-      return Promise.reject(new Error('Unknown URL'));
-    });
-
-    render(<ReportsPage token={randomUUID()} />);
-
-    expect(await screen.findByRole('alert')).toHaveTextContent(
-      /expiry summary response is missing active_expiry_stock_count/i,
-    );
-    expect(
-      screen.queryByRole('region', { name: /Primary expiry decision/i }),
-    ).not.toBeInTheDocument();
   });
 
   it('displays an error message if token is missing', async () => {

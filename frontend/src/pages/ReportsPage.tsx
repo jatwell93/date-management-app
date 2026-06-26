@@ -53,11 +53,6 @@ function markdownLevelLabel(level: number | null): string {
 
 const numberFormatter = new Intl.NumberFormat('en-AU');
 const dateFormatter = new Intl.DateTimeFormat('en-AU', { dateStyle: 'medium' });
-const REQUIRED_OVERALL_SUMMARY_FIELDS = [
-  'expiry_risk_count',
-  'next_month_markdown_count',
-  'active_expiry_stock_count',
-] as const satisfies readonly (keyof MonthlyExpiryReportItem)[];
 
 function formatReportDate(value: string) {
   const date = new Date(value);
@@ -67,22 +62,6 @@ function formatReportDate(value: string) {
 function normalizeReportNumber(value: unknown): number {
   const numberValue = typeof value === 'number' ? value : Number(value);
   return Number.isFinite(numberValue) ? numberValue : 0;
-}
-
-function normalizeRequiredReportNumber(
-  item: RawMonthlyExpiryReportItem,
-  field: (typeof REQUIRED_OVERALL_SUMMARY_FIELDS)[number],
-): number {
-  if (!Object.prototype.hasOwnProperty.call(item, field) || item[field] === null) {
-    throw new Error(`Expiry summary response is missing ${field}.`);
-  }
-
-  const numberValue = typeof item[field] === 'number' ? item[field] : Number(item[field]);
-  if (!Number.isFinite(numberValue)) {
-    throw new Error(`Expiry summary response has invalid ${field}.`);
-  }
-
-  return numberValue;
 }
 
 function normalizeMonthlyExpiryReportItem(
@@ -97,17 +76,6 @@ function normalizeMonthlyExpiryReportItem(
     next_month_markdown_count: normalizeReportNumber(item.next_month_markdown_count),
     active_expiry_stock_count: normalizeReportNumber(item.active_expiry_stock_count),
     latest_expiry_date: item.latest_expiry_date || '',
-  };
-}
-
-function normalizeOverallExpiryReportItem(
-  item: RawMonthlyExpiryReportItem,
-): MonthlyExpiryReportItem {
-  return {
-    ...normalizeMonthlyExpiryReportItem(item),
-    expiry_risk_count: normalizeRequiredReportNumber(item, 'expiry_risk_count'),
-    next_month_markdown_count: normalizeRequiredReportNumber(item, 'next_month_markdown_count'),
-    active_expiry_stock_count: normalizeRequiredReportNumber(item, 'active_expiry_stock_count'),
   };
 }
 
@@ -180,12 +148,11 @@ export function ReportsPage({ token }: ReportsPageProps) {
           controller.signal,
         );
         if (!controller.signal.aborted) {
-          setOverallReportData(data ? normalizeOverallExpiryReportItem(data) : null);
+          setOverallReportData(data ? normalizeMonthlyExpiryReportItem(data) : null);
           setOverallError(null);
         }
       } catch (err: unknown) {
         if (controller.signal.aborted) return;
-        setOverallReportData(null);
         if (err instanceof Error) {
           setOverallError(err.message);
         } else {
@@ -464,6 +431,12 @@ export function ReportsPage({ token }: ReportsPageProps) {
                         </dd>
                       </div>
                       <div className="flex justify-between border-b border-dashed pb-1">
+                        <dt className="text-semantic-text-secondary">Total Markdown</dt>
+                        <dd className="font-bold text-semantic-warning">
+                          {numberFormatter.format(row.total_markdown)}
+                        </dd>
+                      </div>
+                      <div className="flex justify-between border-b border-dashed pb-1">
                         <dt className="text-semantic-text-secondary">Latest Expiry</dt>
                         <dd className="font-medium">{formatReportDate(row.latest_expiry_date)}</dd>
                       </div>
@@ -485,6 +458,9 @@ export function ReportsPage({ token }: ReportsPageProps) {
                       <TableHead className="text-right text-xs font-semibold font-eyebrow text-semantic-text-secondary uppercase tracking-wider">
                         Expired Items
                       </TableHead>
+                      <TableHead className="text-right text-xs font-semibold font-eyebrow text-semantic-text-secondary uppercase tracking-wider">
+                        Total Markdown
+                      </TableHead>
                       <TableHead className="text-xs font-semibold font-eyebrow text-semantic-text-secondary uppercase tracking-wider">
                         Latest Expiry
                       </TableHead>
@@ -499,6 +475,9 @@ export function ReportsPage({ token }: ReportsPageProps) {
                         </TableCell>
                         <TableCell className="text-right tabular-nums text-semantic-critical font-bold">
                           {numberFormatter.format(row.expired_count)}
+                        </TableCell>
+                        <TableCell className="text-right tabular-nums text-semantic-warning font-bold">
+                          {numberFormatter.format(row.total_markdown)}
                         </TableCell>
                         <TableCell className="tabular-nums">
                           {formatReportDate(row.latest_expiry_date)}
