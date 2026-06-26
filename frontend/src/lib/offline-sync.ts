@@ -31,6 +31,9 @@ const logSyncEvent = (
     return;
   }
 
+  // Only capture warning/error messages as Sentry issues.
+  // Info-level messages (e.g. routine sync lifecycle logs) are recorded as
+  // breadcrumbs so they appear in trace context without generating noisy issues.
   if (level === 'warning' || level === 'error') {
     Sentry.captureMessage(message, {
       level,
