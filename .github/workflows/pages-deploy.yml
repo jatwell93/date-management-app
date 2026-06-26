@@ -34,7 +34,7 @@ jobs:
       CLOUDFLARE_ACCOUNT_ID: 0d7fd66d4292d901c684b723f66be69f
 
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
 
       - name: Setup Node.js
         uses: actions/setup-node@v4
@@ -132,7 +132,7 @@ jobs:
       CLOUDFLARE_ACCOUNT_ID: 0d7fd66d4292d901c684b723f66be69f
 
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
 
       - name: Setup Node.js
         uses: actions/setup-node@v4
