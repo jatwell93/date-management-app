@@ -73,11 +73,16 @@ function normalizeRequiredReportNumber(
   item: RawMonthlyExpiryReportItem,
   field: (typeof REQUIRED_OVERALL_SUMMARY_FIELDS)[number],
 ): number {
-  if (!Object.prototype.hasOwnProperty.call(item, field) || item[field] === null) {
+  const rawValue = item[field];
+  if (
+    !Object.prototype.hasOwnProperty.call(item, field) ||
+    rawValue === null ||
+    rawValue === undefined
+  ) {
     throw new Error(`Expiry summary response is missing ${field}.`);
   }
 
-  const numberValue = typeof item[field] === 'number' ? item[field] : Number(item[field]);
+  const numberValue = typeof rawValue === 'number' ? rawValue : Number(rawValue);
   if (!Number.isFinite(numberValue)) {
     throw new Error(`Expiry summary response has invalid ${field}.`);
   }
