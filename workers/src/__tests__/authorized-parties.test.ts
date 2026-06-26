@@ -84,6 +84,28 @@ describe('getClerkAuthorizedParties', () => {
       expect(parties).toContain('https://expirymate.com.au:8443');
     });
 
+    it('does NOT prepend www to a deeper subdomain host', () => {
+      const parties = getClerkAuthorizedParties(
+        makeEnv({
+          NODE_ENV: 'production',
+          FRONTEND_URL: 'https://staging.expirymate.com.au',
+        }),
+      );
+      expect(parties).toContain('https://staging.expirymate.com.au');
+      expect(parties).not.toContain('https://www.staging.expirymate.com.au');
+    });
+
+    it('does NOT prepend www to a *.pages.dev preview host', () => {
+      const parties = getClerkAuthorizedParties(
+        makeEnv({
+          NODE_ENV: 'development',
+          FRONTEND_URL: 'https://date-management-frontend.pages.dev',
+        }),
+      );
+      expect(parties).toContain('https://date-management-frontend.pages.dev');
+      expect(parties).not.toContain('https://www.date-management-frontend.pages.dev');
+    });
+
     it('does not invent siblings for a malformed FRONTEND_URL', () => {
       const parties = getClerkAuthorizedParties(
         makeEnv({

@@ -1040,14 +1040,37 @@ function getPagesPreviewBaseHost(env: Env): string {
   return DEFAULT_PAGES_PREVIEW_BASE_HOST;
 }
 
+// Multi-label public suffixes we care about. The registrable domain is the
+// single label immediately before one of these (e.g. expirymate in
+// expirymate.com.au). Hosts under single-label TLDs (.com, .dev) use the
+// implicit one-label suffix. This is a deliberately small table rather than a
+// full Public Suffix List, since the only real domains this code sees are
+// expirymate.com.au and *.pages.dev.
+const MULTI_LABEL_PUBLIC_SUFFIXES = ['com.au', 'net.au', 'org.au', 'co.uk', 'org.uk'];
+
+// True only for a bare registrable domain with no subdomain in front
+// (e.g. expirymate.com.au, example.com) — NOT staging.expirymate.com.au or
+// date-management-frontend.pages.dev. Used to decide whether an apex<->www
+// pairing is meaningful.
+function isApexHost(host: string): boolean {
+  let suffixLabels = 1;
+  for (const suffix of MULTI_LABEL_PUBLIC_SUFFIXES) {
+    if (host === suffix || host.endsWith(`.${suffix}`)) {
+      suffixLabels = suffix.split('.').length;
+      break;
+    }
+  }
+  return host.split('.').length === suffixLabels + 1;
+}
+
 // Given a configured frontend URL, return that origin plus its apex/www
 // sibling. The apex (https://expirymate.com.au) and www
 // (https://www.expirymate.com.au) hosts serve the same app, but Clerk sets the
 // session `azp` claim to the exact origin the token was minted from. Only one
 // of them is stored in FRONTEND_URL, so without deriving the sibling, requests
-// from the other host fail verification with a 401. We only ever add the
-// matching apex<->www pair (not arbitrary subdomains), so the allowlist stays
-// tight.
+// from the other host fail verification with a 401. We only ever pair a true
+// apex with its www form (and vice versa) — deeper subdomains and *.pages.dev
+// preview hosts get no derived sibling, so the allowlist stays tight.
 function expandApexAndWwwOrigins(rawUrl: string): string[] {
   let url: URL;
   try {
@@ -1061,12 +1084,13 @@ function expandApexAndWwwOrigins(rawUrl: string): string[] {
   const origins = new Set<string>([`${url.protocol}//${host}${portSuffix}`]);
 
   if (host.startsWith('www.')) {
+    // Strip www. -> apex, but only when the result is a real registrable apex.
     const apex = host.slice(4);
-    // Guard against degenerate inputs like "www." with no registrable domain.
-    if (apex.includes('.')) {
+    if (isApexHost(apex)) {
       origins.add(`${url.protocol}//${apex}${portSuffix}`);
     }
-  } else {
+  } else if (isApexHost(host)) {
+    // Prepend www. only for a bare apex, never for subdomains/preview hosts.
     origins.add(`${url.protocol}//www.${host}${portSuffix}`);
   }
 
