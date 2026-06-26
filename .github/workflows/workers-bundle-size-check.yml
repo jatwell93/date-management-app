@@ -60,17 +60,21 @@ jobs:
       - name: Publish bundle summary
         run: |
           echo "## Workers Bundle Size" >> "$GITHUB_STEP_SUMMARY"
-          echo "- Raw: ${{ steps.measure.outputs.raw_kib }} KiB" >> "$GITHUB_STEP_SUMMARY"
+          echo "- Raw: ${{ steps.measure.outputs.raw_kib }} KiB (informational)" >> "$GITHUB_STEP_SUMMARY"
           echo "- Gzip: ${{ steps.measure.outputs.gzip_kib }} KiB" >> "$GITHUB_STEP_SUMMARY"
-          echo "- Limit: 512.00 KiB (raw)" >> "$GITHUB_STEP_SUMMARY"
+          echo "- Limit: 256.00 KiB (gzip)" >> "$GITHUB_STEP_SUMMARY"
 
       - name: Enforce bundle size limit
         env:
-          RAW_BYTES: ${{ steps.measure.outputs.raw_bytes }}
+          GZIP_BYTES: ${{ steps.measure.outputs.gzip_bytes }}
         run: |
-          LIMIT_BYTES=524288
-          if [ "$RAW_BYTES" -gt "$LIMIT_BYTES" ]; then
-            echo "::error::Workers bundle is ${RAW_BYTES} bytes (limit ${LIMIT_BYTES} bytes / 512 KiB)."
+          # Cloudflare enforces its Worker size limit on the compressed bundle,
+          # so we guard the gzip size rather than raw bytes. 256 KiB gives ample
+          # headroom over the current ~152 KiB while staying well under
+          # Cloudflare's 1 MiB (free) compressed limit.
+          LIMIT_BYTES=262144
+          if [ "$GZIP_BYTES" -gt "$LIMIT_BYTES" ]; then
+            echo "::error::Workers bundle is ${GZIP_BYTES} bytes gzipped (limit ${LIMIT_BYTES} bytes / 256 KiB)."
             exit 1
           fi
-          echo "Bundle size check passed: ${RAW_BYTES} bytes <= ${LIMIT_BYTES} bytes"
+          echo "Bundle size check passed: ${GZIP_BYTES} bytes gzipped <= ${LIMIT_BYTES} bytes"

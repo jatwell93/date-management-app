@@ -19,12 +19,41 @@ import {
   getDeprecatedSnakeCaseFields,
   InventoryItemRequestBody,
 } from './utils/inventory-field-mapping';
+import {
+  applyCorsHeaders,
+  errorResponse,
+  getCorsHeaders,
+  handleOptions,
+  jsonResponse,
+  maybeCompressJsonResponse,
+} from './utils/worker-response';
+import {
+  applyRateLimitHeaders,
+  checkRateLimit,
+  inMemoryRateLimitStore,
+} from './utils/minimal-rate-limit';
+import { handleWorkerUploadRoute } from './upload/upload-router';
+import { resolveMinimalApiRoute, type MinimalApiRoute } from './minimal-api-routes';
+import { parseCsvRecords } from './upload/csv-parser';
+import {
+  findHeaderIndex,
+  normalizeHeader,
+  parseProductCatalogRow,
+  PRODUCT_CATALOG_HEADER_ALIASES,
+  validateCatalogueRecords,
+  type ProductCatalogRow,
+  type ValidatedCatalogueRow,
+} from './upload/catalogue-parser';
+import {
+  parseUploadCompleteBody,
+  processCompletedUploadSync,
+  queueCompletedCatalogueUpload,
+  userOwnsUploadKey,
+} from './upload/upload-handlers';
+import { isCatalogueWithinLimit, takeImportBatch } from './upload/catalogue-import';
 
-const COMPRESSION_MIN_BYTES = 1024;
 const DIRECT_UPLOAD_THRESHOLD_BYTES = 2 * 1024 * 1024;
 const PRESIGNED_UPLOAD_TTL_SECONDS = 15 * 60;
-const DEFAULT_IMPORT_BATCH_SIZE = 1000;
-const MAX_IMPORT_BATCH_BYTES = 2 * 1024 * 1024;
 const MAX_ROWS_PER_CHECKPOINT = 10000;
 const STANDARD_MAX_FILE_SIZE = 25 * 1024 * 1024;
 // Must stay aligned with `max_retries` on the catalogue queue consumers in wrangler.toml.
@@ -32,65 +61,6 @@ const STANDARD_MAX_FILE_SIZE = 25 * 1024 * 1024;
 // lock) rather than letting it retry forever and dead-letter while stuck in `processing`.
 const MAX_PROCESSING_ATTEMPTS = 5;
 const CLERK_WEBHOOK_MAX_SKEW_SECONDS = 5 * 60;
-const inMemoryRateLimitStore = new Map<string, { count: number; resetTime: number }>();
-
-interface RateLimitDecision {
-  allowed: boolean;
-  limit: number;
-  remaining: number;
-  resetTime: number;
-}
-
-/**
- * CORS headers for production
- */
-function getCorsHeaders(env: Env, requestOrigin?: string): HeadersInit {
-  // For development/testing: Allow all origins
-  // In production with real domain, use FRONTEND_URL env var
-  const allowAll = env.NODE_ENV !== 'production' || !env.FRONTEND_URL;
-
-  const allowedOrigin = allowAll
-    ? requestOrigin || '*'
-    : env.FRONTEND_URL || 'http://localhost:3000';
-
-  return {
-    'Access-Control-Allow-Origin': allowedOrigin,
-    'Access-Control-Allow-Methods': 'GET, POST, PUT, PATCH, DELETE, OPTIONS',
-    'Access-Control-Allow-Headers': 'Content-Type, Authorization',
-    'Access-Control-Max-Age': '86400',
-    ...(allowAll ? {} : { 'Access-Control-Allow-Credentials': 'true' }),
-  };
-}
-
-/**
- * Handle CORS preflight requests
- */
-function handleOptions(request: Request, env: Env): Response {
-  const origin = request.headers.get('Origin') || '';
-  return new Response(null, {
-    status: 204,
-    headers: getCorsHeaders(env, origin),
-  });
-}
-
-/**
- * JSON response helper
- */
-function jsonResponse(data: unknown, status = 200, env?: Env, requestOrigin?: string): Response {
-  const headers: HeadersInit = {
-    'Content-Type': 'application/json',
-    ...(env ? getCorsHeaders(env, requestOrigin) : {}),
-  };
-
-  return new Response(JSON.stringify(data), { status, headers });
-}
-
-/**
- * Error response helper
- */
-function errorResponse(message: string, status = 500, env?: Env, requestOrigin?: string): Response {
-  return jsonResponse({ error: message }, status, env, requestOrigin);
-}
 
 // ---- Shared validation helpers ---------------------------------------------
 
@@ -152,289 +122,61 @@ function isUniqueViolation(error: unknown): boolean {
   return false;
 }
 
-function requestSupportsGzip(request: Request): boolean {
-  const acceptEncoding = request.headers.get('Accept-Encoding') || '';
-  return acceptEncoding.toLowerCase().includes('gzip');
-}
+export { maybeCompressJsonResponse };
+export { isCatalogueWithinLimit, takeImportBatch };
+export type { ValidatedCatalogueRow };
 
-function appendVaryHeader(headers: Headers, value: string): void {
-  const existing = headers.get('Vary');
-
-  if (!existing) {
-    headers.set('Vary', value.toLowerCase());
-    return;
-  }
-
-  const values = existing
-    .split(',')
-    .map((v) => v.trim().toLowerCase())
-    .filter((v) => v.length > 0);
-
-  const newValue = value.toLowerCase();
-
-  if (!values.includes(newValue)) {
-    values.push(newValue);
-  }
-
-  headers.set('Vary', values.join(', '));
-}
-
-export async function maybeCompressJsonResponse(
-  request: Request,
-  response: Response,
-): Promise<Response> {
-  if (!requestSupportsGzip(request)) {
-    return response;
-  }
-
-  if (request.method === 'HEAD') {
-    return response;
-  }
-
-  if (!response.body) {
-    return response;
-  }
-
-  if (response.headers.has('Content-Encoding')) {
-    return response;
-  }
-
-  const contentType = response.headers.get('Content-Type') || '';
-  if (!contentType.toLowerCase().includes('application/json')) {
-    return response;
-  }
-
-  const rawBody = await response.arrayBuffer();
-  if (rawBody.byteLength < COMPRESSION_MIN_BYTES) {
-    return new Response(rawBody, {
-      status: response.status,
-      statusText: response.statusText,
-      headers: response.headers,
-    });
-  }
-
-  const stream = new Blob([rawBody]).stream().pipeThrough(new CompressionStream('gzip'));
-  const headers = new Headers(response.headers);
-  headers.set('Content-Encoding', 'gzip');
-  headers.delete('Content-Length');
-  appendVaryHeader(headers, 'Accept-Encoding');
-
-  return new Response(stream, {
-    encodeBody: 'manual',
-    status: response.status,
-    statusText: response.statusText,
-    headers,
-  });
-}
-
-function getClientIp(request: Request): string {
-  return (
-    request.headers.get('CF-Connecting-IP') ||
-    request.headers.get('X-Forwarded-For')?.split(',')[0].trim() ||
-    'unknown'
-  );
-}
-
-function applyRateLimitHeaders(
-  response: Response,
-  decision: RateLimitDecision,
-  retryAfterSeconds?: number,
-): Response {
-  const headers = new Headers(response.headers);
-  headers.set('X-RateLimit-Limit', String(decision.limit));
-  headers.set('X-RateLimit-Remaining', String(decision.remaining));
-  headers.set('X-RateLimit-Reset', new Date(decision.resetTime).toISOString());
-
-  if (retryAfterSeconds !== undefined) {
-    headers.set('Retry-After', String(retryAfterSeconds));
-  }
-
-  return new Response(response.body, {
-    status: response.status,
-    statusText: response.statusText,
-    headers,
-  });
-}
-
-async function checkRateLimit(request: Request, env: Env): Promise<RateLimitDecision> {
-  const windowMs = parseInt(env.RATE_LIMIT_WINDOW || '60000', 10);
-  const maxAnonymous = parseInt(env.RATE_LIMIT_MAX_REQUESTS || '5', 10);
-  const maxAuthenticated = parseInt(env.RATE_LIMIT_MAX_AUTHENTICATED || '30', 10);
-
-  const pathname = new URL(request.url).pathname;
-  const isPresignedUpload = request.method === 'PUT' && pathname.includes('/upload/presigned/');
-  const isAuthenticated = Boolean(request.headers.get('Authorization')) || isPresignedUpload;
-  const limit = isAuthenticated ? maxAuthenticated : maxAnonymous;
-
-  const ip = getClientIp(request);
-  const keyBase = `${isAuthenticated ? 'auth' : 'anon'}:${ip}`;
-
-  const now = Date.now();
-  const currentWindow = Math.floor(now / windowMs);
-  const previousWindow = currentWindow - 1;
-  const currentKey = `ratelimit:${keyBase}:${currentWindow}`;
-  const previousKey = `ratelimit:${keyBase}:${previousWindow}`;
-  const resetTime = (currentWindow + 1) * windowMs;
-
-  if (env.RATE_LIMITER) {
-    const [currentRaw, previousRaw] = await Promise.all([
-      env.RATE_LIMITER.get(currentKey),
-      env.RATE_LIMITER.get(previousKey),
-    ]);
-
-    const currentCount = Number.parseInt(currentRaw || '0', 10) || 0;
-    const previousCount = Number.parseInt(previousRaw || '0', 10) || 0;
-
-    const elapsedInWindow = now - currentWindow * windowMs;
-    const previousWeight = (windowMs - elapsedInWindow) / windowMs;
-    const effectiveCount = currentCount + previousCount * previousWeight;
-
-    if (effectiveCount + 1 > limit) {
-      return {
-        allowed: false,
-        limit,
-        remaining: 0,
-        resetTime,
-      };
-    }
-
-    const nextCurrentCount = currentCount + 1;
-    await env.RATE_LIMITER.put(currentKey, String(nextCurrentCount), {
-      expirationTtl: Math.ceil((windowMs * 2) / 1000),
-    });
-
-    return {
-      allowed: true,
-      limit,
-      remaining: Math.max(0, Math.floor(limit - (effectiveCount + 1))),
-      resetTime,
-    };
-  }
-
-  const existing = inMemoryRateLimitStore.get(keyBase);
-  if (!existing || now > existing.resetTime) {
-    inMemoryRateLimitStore.set(keyBase, {
-      count: 1,
-      resetTime: now + windowMs,
-    });
-
-    return {
-      allowed: true,
-      limit,
-      remaining: limit - 1,
-      resetTime: now + windowMs,
-    };
-  }
-
-  if (existing.count >= limit) {
-    return {
-      allowed: false,
-      limit,
-      remaining: 0,
-      resetTime: existing.resetTime,
-    };
-  }
-
-  existing.count += 1;
-  return {
-    allowed: true,
-    limit,
-    remaining: limit - existing.count,
-    resetTime: existing.resetTime,
-  };
-}
-
-function decodeUploadRouteKey(
-  pathname: string,
-  prefix: string,
-  env: Env,
-  requestOrigin: string,
-): string | Response {
-  const encodedKey = pathname.slice(prefix.length);
-  if (!encodedKey) {
-    return errorResponse('Missing key in URL', 400, env, requestOrigin);
-  }
-
-  try {
-    return decodeURIComponent(encodedKey);
-  } catch {
-    return errorResponse('Invalid key encoding', 400, env, requestOrigin);
-  }
-}
-
-type WorkerUploadRouteContext = {
-  request: Request;
-  env: Env;
-  url: URL;
-  pathname: string;
-  method: string;
-  requestOrigin: string;
-  getDb: () => Database;
-};
-
-async function handleWorkerUploadRoute({
-  request,
-  env,
-  url,
-  pathname,
-  method,
-  requestOrigin,
-  getDb,
-}: WorkerUploadRouteContext): Promise<Response | null> {
-  const uploadRouteBase = pathname.startsWith('/api/upload') ? '/api/upload' : '/upload';
-
-  if (method === 'POST' && pathname === `${uploadRouteBase}/initiate`) {
-    return handleUploadInitiate(request, env, uploadRouteBase, getDb());
-  }
-
-  if (method === 'POST' && pathname.startsWith(`${uploadRouteBase}/direct/`)) {
-    const key = decodeUploadRouteKey(
-      pathname,
-      `${uploadRouteBase}/direct/`,
-      env,
-      requestOrigin,
-    );
-    return key instanceof Response ? key : handleUploadDirect(request, env, key, getDb());
-  }
-
-  if (method === 'PUT' && pathname.startsWith(`${uploadRouteBase}/presigned/`)) {
-    const key = decodeUploadRouteKey(
-      pathname,
-      `${uploadRouteBase}/presigned/`,
-      env,
-      requestOrigin,
-    );
-    return key instanceof Response
-      ? key
-      : handleUploadPresigned(request, env, key, url.searchParams.get('token'));
-  }
-
-  if (method === 'GET' && pathname.startsWith(`${uploadRouteBase}/status/`)) {
-    const key = decodeUploadRouteKey(
-      pathname,
-      `${uploadRouteBase}/status/`,
-      env,
-      requestOrigin,
-    );
-    return key instanceof Response ? key : handleUploadStatus(request, env, key, getDb());
-  }
-
-  if (method === 'GET' && pathname.startsWith(`${uploadRouteBase}/error-report/`)) {
-    const key = decodeUploadRouteKey(
-      pathname,
-      `${uploadRouteBase}/error-report/`,
-      env,
-      requestOrigin,
-    );
-    return key instanceof Response ? key : handleUploadErrorReport(request, env, key, getDb());
-  }
-
-  if (method === 'POST' && pathname === `${uploadRouteBase}/complete`) {
-    return handleUploadComplete(request, env, getDb());
-  }
-
-  return null;
-}
+// Native Worker API route table. Handlers are referenced directly (function
+// declarations are hoisted) so each appears once and the matcher stays a small,
+// testable module. `kind` is omitted for the common `'static'` shape. Order
+// matters only where patterns could overlap.
+const RE_USER_ID = /^\/api\/users\/\d+$/;
+const RE_INVENTORY_ID = /^\/api\/inventory-items\/\d+$/;
+const RE_STORE_AREA_ID = /^\/api\/store-areas\/\d+$/;
+const MINIMAL_API_ROUTES: MinimalApiRoute[] = [
+  ['POST', '/api/auth/login', handleLogin],
+  ['POST', '/api/auth/register', handleRegister],
+  ['GET', '/api/users/me', handleGetCurrentUser],
+  ['GET', '/api/users', handleListUsers],
+  ['POST', '/api/users', handleCreateLegacyUser],
+  ['PUT', /^\/api\/users\/\d+\/reset-pin$/, handleResetUserPin],
+  ['PUT', RE_USER_ID, handleUpdateUser, 'path'],
+  ['DELETE', RE_USER_ID, handleDeleteUser, 'path'],
+  ['GET', '/api/products', handleGetProducts],
+  ['POST', '/api/products', handleCreateProduct],
+  ['GET', /^\/api\/products\/by-barcode\/[^/]+$/, handleGetProductByBarcode, 'path'],
+  ['GET', /^\/api\/products\/by-sku\/[^/]+$/, handleGetProductBySku, 'path'],
+  ['GET', /^\/api\/products\/\d+$/, handleGetProduct, 'path'],
+  ['GET', '/api/inventory-items', handleGetInventory],
+  ['POST', '/api/inventory-items', handleCreateInventoryItem],
+  ['GET', /^\/api\/inventory-items\/by-barcode\/[^/]+$/, handleGetInventoryByBarcode, 'path'],
+  [
+    'GET',
+    /^\/api\/inventory-items\/recent\/product\/\d+$/,
+    handleGetRecentInventoryByProduct,
+    'path',
+  ],
+  ['PUT', RE_INVENTORY_ID, handleUpdateInventoryItem, 'path'],
+  ['DELETE', RE_INVENTORY_ID, handleDeleteInventoryItem, 'path'],
+  ['GET', '/api/store-areas', handleGetStoreAreas],
+  ['POST', '/api/store-areas', handleCreateStoreArea],
+  ['PUT', RE_STORE_AREA_ID, handleUpdateStoreArea, 'path'],
+  ['DELETE', RE_STORE_AREA_ID, handleDeleteStoreArea, 'path'],
+  ['GET', '/api/dashboard', handleGetDashboard],
+  ['GET', '/api/reports/expiry', handleGetExpiryReport],
+  ['GET', '/api/reports/expiry-overall', handleGetExpiryOverallReport],
+  ['GET', '/api/reports/expiry-details', handleGetExpiryDetailsReport],
+  ['GET', '/api/reports/daily-usage', handleGetDailyUsageReport],
+  ['GET', '/api/reports/items-by-user', handleGetItemsByUserReport],
+  ['GET', '/api/reports/items-by-date', handleGetItemsByDateReport],
+  ['GET', '/api/reports/loss-by-sku', handleGetLossBySkuReport],
+  ['GET', '/api/reports/loss-by-department', handleGetLossByDepartmentReport],
+  ['GET', '/api/reports/sell-through', handleGetSellThroughReport],
+  ['GET', '/api/expired-items', handleGetExpiredItems],
+  ['POST', '/api/expired-items/process', handleProcessExpiredItem],
+  ['GET', '/api/subscription/trial-status', handleGetTrialStatus],
+  ['POST', '/api/organization/bootstrap', handleOrganizationBootstrap, 'bootstrap'],
+];
 
 /**
  * Main Workers fetch handler
@@ -454,19 +196,7 @@ export default Sentry.withSentry(
       // that the browser blocks before the developer ever sees the real
       // error message.
       const withCors = (response: Response): Response => {
-        if (response.headers.has('Access-Control-Allow-Origin')) {
-          return response;
-        }
-        const corsHeaders = getCorsHeaders(env, requestOrigin) as Record<string, string>;
-        const merged = new Headers(response.headers);
-        for (const [key, value] of Object.entries(corsHeaders)) {
-          merged.set(key, value);
-        }
-        return new Response(response.body, {
-          status: response.status,
-          statusText: response.statusText,
-          headers: merged,
-        });
+        return applyCorsHeaders(response, env, requestOrigin);
       };
 
       const url = new URL(request.url);
@@ -519,7 +249,7 @@ export default Sentry.withSentry(
 
         // API routes
         if (pathname.startsWith('/api/') || pathname.startsWith('/upload/')) {
-          const rateLimitDecision = await checkRateLimit(request, env);
+          const rateLimitDecision = await checkRateLimit(request, env, inMemoryRateLimitStore);
           const finalizeApiResponse = async (responseLike: Response | Promise<Response>) => {
             const response = await responseLike;
             return maybeCompressJsonResponse(
@@ -568,6 +298,14 @@ export default Sentry.withSentry(
             method,
             requestOrigin,
             getDb,
+            handlers: {
+              handleUploadInitiate,
+              handleUploadDirect,
+              handleUploadPresigned,
+              handleUploadStatus,
+              handleUploadErrorReport,
+              handleUploadComplete,
+            },
           });
           if (uploadResponse) {
             return finalizeApiResponse(uploadResponse);
@@ -576,134 +314,15 @@ export default Sentry.withSentry(
           // Initialize database connection for remaining API endpoints
           db = getDb();
 
-          // Route handling
-          switch (true) {
-            // Auth endpoints
-            case pathname === '/api/auth/login' && method === 'POST':
-              return finalizeApiResponse(handleLogin(request, db, env));
+          const apiRouteResponse = resolveMinimalApiRoute(MINIMAL_API_ROUTES, {
+            request,
+            pathname,
+            method,
+            db,
+            env,
+          });
 
-            case pathname === '/api/auth/register' && method === 'POST':
-              return finalizeApiResponse(handleRegister(request, db, env));
-
-            // User endpoints (require auth)
-            case pathname === '/api/users/me' && method === 'GET':
-              return finalizeApiResponse(handleGetCurrentUser(request, db, env));
-
-            case pathname === '/api/users' && method === 'GET':
-              return finalizeApiResponse(handleListUsers(request, db, env));
-
-            case pathname === '/api/users' && method === 'POST':
-              return finalizeApiResponse(handleCreateLegacyUser(request, db, env));
-
-            case pathname.match(/^\/api\/users\/\d+\/reset-pin$/) && method === 'PUT':
-              return finalizeApiResponse(handleResetUserPin(request, db, env));
-
-            case pathname.match(/^\/api\/users\/\d+$/) && method === 'PUT':
-              return finalizeApiResponse(handleUpdateUser(request, db, env, pathname));
-
-            case pathname.match(/^\/api\/users\/\d+$/) && method === 'DELETE':
-              return finalizeApiResponse(handleDeleteUser(request, db, env, pathname));
-
-            // Products endpoints
-            case pathname === '/api/products' && method === 'GET':
-              return finalizeApiResponse(handleGetProducts(request, db, env));
-
-            case pathname === '/api/products' && method === 'POST':
-              return finalizeApiResponse(handleCreateProduct(request, db, env));
-
-            case pathname.match(/^\/api\/products\/by-barcode\/[^/]+$/) && method === 'GET':
-              return finalizeApiResponse(handleGetProductByBarcode(request, db, env, pathname));
-
-            case pathname.match(/^\/api\/products\/by-sku\/[^/]+$/) && method === 'GET':
-              return finalizeApiResponse(handleGetProductBySku(request, db, env, pathname));
-
-            case pathname.match(/^\/api\/products\/\d+$/) && method === 'GET':
-              return finalizeApiResponse(handleGetProduct(request, db, env, pathname));
-
-            // Inventory endpoints
-            case pathname === '/api/inventory-items' && method === 'GET':
-              return finalizeApiResponse(handleGetInventory(request, db, env));
-
-            case pathname === '/api/inventory-items' && method === 'POST':
-              return finalizeApiResponse(handleCreateInventoryItem(request, db, env));
-
-            case pathname.match(/^\/api\/inventory-items\/by-barcode\/[^/]+$/) && method === 'GET':
-              return finalizeApiResponse(handleGetInventoryByBarcode(request, db, env, pathname));
-
-            case pathname.match(/^\/api\/inventory-items\/recent\/product\/\d+$/) &&
-              method === 'GET':
-              return finalizeApiResponse(
-                handleGetRecentInventoryByProduct(request, db, env, pathname),
-              );
-
-            case pathname.match(/^\/api\/inventory-items\/\d+$/) && method === 'PUT':
-              return finalizeApiResponse(handleUpdateInventoryItem(request, db, env, pathname));
-
-            case pathname.match(/^\/api\/inventory-items\/\d+$/) && method === 'DELETE':
-              return finalizeApiResponse(handleDeleteInventoryItem(request, db, env, pathname));
-
-            // Store areas endpoints
-            case pathname === '/api/store-areas' && method === 'GET':
-              return finalizeApiResponse(handleGetStoreAreas(request, db, env));
-
-            case pathname === '/api/store-areas' && method === 'POST':
-              return finalizeApiResponse(handleCreateStoreArea(request, db, env));
-
-            case pathname.match(/^\/api\/store-areas\/\d+$/) && method === 'PUT':
-              return finalizeApiResponse(handleUpdateStoreArea(request, db, env, pathname));
-
-            case pathname.match(/^\/api\/store-areas\/\d+$/) && method === 'DELETE':
-              return finalizeApiResponse(handleDeleteStoreArea(request, db, env, pathname));
-
-            // Dashboard endpoints
-            case pathname === '/api/dashboard' && method === 'GET':
-              return finalizeApiResponse(handleGetDashboard(request, db, env));
-
-            // Report endpoints
-            case pathname === '/api/reports/expiry' && method === 'GET':
-              return finalizeApiResponse(handleGetExpiryReport(request, db, env));
-
-            case pathname === '/api/reports/expiry-overall' && method === 'GET':
-              return finalizeApiResponse(handleGetExpiryOverallReport(request, db, env));
-
-            case pathname === '/api/reports/expiry-details' && method === 'GET':
-              return finalizeApiResponse(handleGetExpiryDetailsReport(request, db, env));
-
-            case pathname === '/api/reports/daily-usage' && method === 'GET':
-              return finalizeApiResponse(handleGetDailyUsageReport(request, db, env));
-
-            case pathname === '/api/reports/items-by-user' && method === 'GET':
-              return finalizeApiResponse(handleGetItemsByUserReport(request, db, env));
-
-            case pathname === '/api/reports/items-by-date' && method === 'GET':
-              return finalizeApiResponse(handleGetItemsByDateReport(request, db, env));
-
-            case pathname === '/api/reports/loss-by-sku' && method === 'GET':
-              return finalizeApiResponse(handleGetLossBySkuReport(request, db, env));
-
-            case pathname === '/api/reports/loss-by-department' && method === 'GET':
-              return finalizeApiResponse(handleGetLossByDepartmentReport(request, db, env));
-
-            case pathname === '/api/reports/sell-through' && method === 'GET':
-              return finalizeApiResponse(handleGetSellThroughReport(request, db, env));
-
-            // Expired items endpoints
-            case pathname === '/api/expired-items' && method === 'GET':
-              return finalizeApiResponse(handleGetExpiredItems(request, db, env));
-
-            case pathname === '/api/expired-items/process' && method === 'POST':
-              return finalizeApiResponse(handleProcessExpiredItem(request, db, env));
-
-            // Subscription endpoints
-            case pathname === '/api/subscription/trial-status' && method === 'GET':
-              return finalizeApiResponse(handleGetTrialStatus(request, db, env));
-
-            case pathname === '/api/organization/bootstrap' && method === 'POST':
-              return finalizeApiResponse(handleOrganizationBootstrap(request, env));
-
-            default:
-              return finalizeApiResponse(errorResponse('Not Found', 404, env));
-          }
+          return finalizeApiResponse(apiRouteResponse ?? errorResponse('Not Found', 404, env));
         }
 
         return withCors(
@@ -3421,12 +3040,12 @@ export async function handleUploadComplete(
     return auth;
   }
 
-  const body = (await request.json()) as { key?: string; importType?: string };
+  const body = await parseUploadCompleteBody(request);
   if (!body.key) {
     return errorResponse('Missing required field: key', 400, env);
   }
 
-  if (!body.key.startsWith(`uploads/user-${auth.userId}/`)) {
+  if (!userOwnsUploadKey(body.key, auth.userId)) {
     return errorResponse('Access denied: Upload key does not belong to this user', 403, env);
   }
 
@@ -3436,54 +3055,28 @@ export async function handleUploadComplete(
   }
 
   if (env.CATALOGUE_QUEUE_ENABLED === 'true' && body.importType !== 'expiry-list') {
-    if (!env.CATALOGUE_IMPORT_QUEUE) {
-      return errorResponse('Catalogue import queue is not configured', 503, env);
-    }
-    const tier = await getOrganizationLaunchTier(auth.organizationId, db);
-    const uploadId = await createQueuedCatalogueUpload({
+    return queueCompletedCatalogueUpload({
+      env,
       db,
+      key: body.key,
+      object,
       organizationId: auth.organizationId,
       userId: auth.userId,
-      key: body.key,
-      fileName: body.key.split('/').pop() || 'catalogue.csv',
-      fileSize: Number(object.size || 0),
-      contentType: object.httpMetadata?.contentType || 'text/csv',
-      tier,
-      env,
+      deps: {
+        getOrganizationLaunchTier,
+        createQueuedCatalogueUpload,
+        enqueueCatalogueImport,
+      },
     });
-    if (uploadId === null) {
-      return errorResponse(
-        'An active catalogue import already exists for this organization',
-        409,
-        env,
-      );
-    }
-    const queued = await enqueueCatalogueImport(env, db, uploadId);
-    if (!queued) {
-      return errorResponse('Catalogue import queue is temporarily unavailable', 503, env);
-    }
-    return jsonResponse(
-      { message: 'Catalogue upload queued', key: body.key, uploadId, status: 'queued' },
-      202,
-      env,
-    );
   }
 
-  let processingSummary: UploadProcessingSummary;
-  try {
-    processingSummary = await processStoredUpload(body.key, auth.organizationId, env, db);
-  } catch (error) {
-    if (error instanceof Error && error.message === 'Upload not found') {
-      return errorResponse('Upload not found', 404, env);
-    }
-    throw error;
-  }
-
-  return jsonResponse(
-    { message: 'Upload completed and processing started', ...processingSummary },
-    200,
+  return processCompletedUploadSync({
     env,
-  );
+    db,
+    key: body.key,
+    organizationId: auth.organizationId,
+    deps: { processStoredUpload },
+  });
 }
 
 /**
@@ -3618,10 +3211,6 @@ const LAUNCH_TIER_LIMITS: Record<LaunchTier, { maxSkus: number; maxActiveExpirie
   professional: { maxSkus: 50000, maxActiveExpiries: 50000 },
   enterprise: { maxSkus: 250000, maxActiveExpiries: 250000 },
 };
-
-export function isCatalogueWithinLimit(projectedSkuCount: number, maxSkus: number): boolean {
-  return projectedSkuCount <= maxSkus;
-}
 
 function normalizeLaunchTier(value: unknown): LaunchTier {
   const tier = String(value || '')
@@ -3876,75 +3465,6 @@ export async function processCatalogueImportJob(
   }
 }
 
-export type ValidatedCatalogueRow = ProductCatalogRow & { rowNumber: number };
-
-function validateCatalogueRecords(records: string[][]): {
-  rows: ValidatedCatalogueRow[];
-  rowErrors: string[];
-  fatalErrors: string[];
-  totalRows: number;
-} {
-  const fatalErrors: string[] = [];
-  const rowErrors: string[] = [];
-  if (records.length < 2)
-    return { rows: [], rowErrors, fatalErrors: ['No product rows found'], totalRows: 0 };
-  const headers = records[0].map(normalizeHeader);
-  const indexes = {
-    sku: findHeaderIndex(headers, PRODUCT_CATALOG_HEADER_ALIASES.sku),
-    name: findHeaderIndex(headers, PRODUCT_CATALOG_HEADER_ALIASES.name),
-    barcode: findHeaderIndex(headers, PRODUCT_CATALOG_HEADER_ALIASES.barcode),
-    cost: findHeaderIndex(headers, PRODUCT_CATALOG_HEADER_ALIASES.cost),
-  };
-  const missing = Object.entries(indexes)
-    .filter(([, value]) => value < 0)
-    .map(([key]) => key);
-  if (missing.length > 0)
-    return {
-      rows: [],
-      rowErrors,
-      fatalErrors: [`Missing required column header(s): ${missing.join(', ')}`],
-      totalRows: 0,
-    };
-
-  const seenSkus = new Set<string>();
-  const seenBarcodes = new Set<string>();
-  const parsed: ValidatedCatalogueRow[] = [];
-  let totalRows = 0;
-  records.slice(1).forEach((record, index) => {
-    if (!record.some((cell) => cell.trim())) return;
-    totalRows += 1;
-    const rowNumber = index + 2;
-    const row = parseProductCatalogRow(record, indexes);
-    if (!row) {
-      rowErrors.push(`Row ${rowNumber}: Missing or malformed required product fields`);
-      return;
-    }
-    if (seenSkus.has(row.sku) || seenBarcodes.has(row.barcode)) {
-      rowErrors.push(`Row ${rowNumber}: Duplicate SKU or barcode in upload`);
-      return;
-    }
-    seenSkus.add(row.sku);
-    seenBarcodes.add(row.barcode);
-    parsed.push({ ...row, rowNumber });
-  });
-  return { rows: parsed, rowErrors, fatalErrors, totalRows };
-}
-
-export function takeImportBatch(
-  rows: ValidatedCatalogueRow[],
-  offset: number,
-  end: number,
-): ValidatedCatalogueRow[] {
-  let size = Math.min(DEFAULT_IMPORT_BATCH_SIZE, end - offset);
-  while (size > 1) {
-    const candidate = rows.slice(offset, offset + size);
-    if (new TextEncoder().encode(JSON.stringify(candidate)).byteLength < MAX_IMPORT_BATCH_BYTES)
-      return candidate;
-    size = Math.max(1, Math.floor(size / 2));
-  }
-  return rows.slice(offset, offset + 1);
-}
-
 async function upsertProductBatch(
   db: Database,
   organizationId: string,
@@ -4139,31 +3659,6 @@ async function completeCatalogueWithErrors(
   `;
 }
 
-type ProductCatalogRow = {
-  sku: string;
-  name: string;
-  barcode: string;
-  costPrice: number;
-};
-
-const PRODUCT_CATALOG_HEADER_ALIASES = {
-  sku: ['sku', 'itemcode', 'reordernumber', 'productcode', 'itemnumber'],
-  name: ['name', 'itemdescription', 'productname', 'description', 'itemname'],
-  cost: [
-    'cost',
-    'costprice',
-    'unitcost',
-    'costex',
-    'price',
-    'unitprice',
-    'costinc',
-    'sellingprice',
-    'retailprice',
-    'itemcost',
-  ],
-  barcode: ['barcode', 'alias', 'ean', 'upc', 'gtin', 'productbarcode', 'barcodenumber'],
-} as const;
-
 function emptyUploadProcessingSummary(): UploadProcessingSummary {
   return {
     rowsProcessed: 0,
@@ -4317,22 +3812,6 @@ async function processProductCatalogUpload(
   return summary;
 }
 
-function parseProductCatalogRow(
-  row: string[],
-  columnIndexes: { sku: number; name: number; barcode: number; cost: number },
-): ProductCatalogRow | null {
-  const sku = (row[columnIndexes.sku] || '').trim();
-  const name = (row[columnIndexes.name] || '').trim();
-  const barcode = (row[columnIndexes.barcode] || '').trim();
-  const costPrice = parseCost((row[columnIndexes.cost] || '').trim());
-
-  if (!sku || !name || !barcode || costPrice === null) {
-    return null;
-  }
-
-  return { sku, name, barcode, costPrice };
-}
-
 async function upsertProductFromUpload(
   db: Database,
   organizationId: string,
@@ -4359,79 +3838,4 @@ async function upsertProductFromUpload(
     SELECT EXISTS(SELECT 1 FROM inserted) as inserted
   `;
   return rows[0]?.inserted === true;
-}
-
-function findHeaderIndex(headers: string[], acceptedNames: readonly string[]): number {
-  const accepted = new Set(acceptedNames.map(normalizeHeader));
-  return headers.findIndex((header) => accepted.has(header));
-}
-
-function normalizeHeader(header: string): string {
-  return header.toLowerCase().replace(/[^a-z0-9]/g, '');
-}
-
-function parseCost(value: string): number | null {
-  const normalized = value.replace(/[^0-9.-]/g, '');
-  if (!normalized) {
-    return null;
-  }
-
-  const parsed = Number(normalized);
-  return Number.isFinite(parsed) ? parsed : null;
-}
-
-interface CsvParserState {
-  records: string[][];
-  record: string[];
-  field: string;
-  inQuotes: boolean;
-}
-
-function parseCsvRecords(text: string): string[][] {
-  const state: CsvParserState = {
-    records: [],
-    record: [],
-    field: '',
-    inQuotes: false,
-  };
-  const content = text.replace(/^\uFEFF/, '');
-
-  for (let index = 0; index < content.length; index += 1) {
-    index += advanceCsvParser(state, content[index], content[index + 1]);
-  }
-
-  finishCsvRecord(state);
-  return state.records;
-}
-
-function advanceCsvParser(state: CsvParserState, char: string, nextChar?: string): number {
-  if (char === '"' && state.inQuotes && nextChar === '"') {
-    state.field += '"';
-    return 1;
-  }
-  if (char === '"') {
-    state.inQuotes = !state.inQuotes;
-    return 0;
-  }
-  if (char === ',' && !state.inQuotes) {
-    state.record.push(state.field);
-    state.field = '';
-    return 0;
-  }
-  if ((char === '\n' || char === '\r') && !state.inQuotes) {
-    finishCsvRecord(state);
-    return char === '\r' && nextChar === '\n' ? 1 : 0;
-  }
-
-  state.field += char;
-  return 0;
-}
-
-function finishCsvRecord(state: CsvParserState): void {
-  state.record.push(state.field);
-  if (state.record.some((cell) => cell.trim())) {
-    state.records.push(state.record);
-  }
-  state.record = [];
-  state.field = '';
 }
