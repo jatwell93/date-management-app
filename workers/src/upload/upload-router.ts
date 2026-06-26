@@ -3,37 +3,37 @@ import type { Env } from '../types/env';
 import { errorResponse } from '../utils/worker-response';
 
 export type WorkerUploadHandlers = {
-  handleUploadInitiate?: (
+  handleUploadInitiate: (
     request: Request,
     env: Env,
     uploadRouteBase: '/upload' | '/api/upload',
     db: Database,
   ) => Promise<Response>;
-  handleUploadDirect?: (
+  handleUploadDirect: (
     request: Request,
     env: Env,
     key: string,
     db: Database,
   ) => Promise<Response>;
-  handleUploadPresigned?: (
+  handleUploadPresigned: (
     request: Request,
     env: Env,
     key: string,
     uploadToken: string | null,
   ) => Promise<Response>;
-  handleUploadStatus?: (
+  handleUploadStatus: (
     request: Request,
     env: Env,
     key: string,
     db: Database,
   ) => Promise<Response>;
-  handleUploadErrorReport?: (
+  handleUploadErrorReport: (
     request: Request,
     env: Env,
     key: string,
     db: Database,
   ) => Promise<Response>;
-  handleUploadComplete?: (request: Request, env: Env, db: Database) => Promise<Response>;
+  handleUploadComplete: (request: Request, env: Env, db: Database) => Promise<Response>;
 };
 
 export type WorkerUploadRouteContext = {
@@ -78,24 +78,24 @@ export async function handleWorkerUploadRoute({
   const uploadRouteBase = pathname.startsWith('/api/upload') ? '/api/upload' : '/upload';
 
   if (method === 'POST' && pathname === `${uploadRouteBase}/initiate`) {
-    return handlers.handleUploadInitiate?.(request, env, uploadRouteBase, getDb()) ?? null;
+    return handlers.handleUploadInitiate(request, env, uploadRouteBase, getDb());
   }
 
   if (method === 'POST' && pathname.startsWith(`${uploadRouteBase}/direct/`)) {
     const key = decodeUploadRouteKey(pathname, `${uploadRouteBase}/direct/`, env, requestOrigin);
-    return key instanceof Response ? key : handlers.handleUploadDirect?.(request, env, key, getDb()) ?? null;
+    return key instanceof Response ? key : handlers.handleUploadDirect(request, env, key, getDb());
   }
 
   if (method === 'PUT' && pathname.startsWith(`${uploadRouteBase}/presigned/`)) {
     const key = decodeUploadRouteKey(pathname, `${uploadRouteBase}/presigned/`, env, requestOrigin);
     return key instanceof Response
       ? key
-      : handlers.handleUploadPresigned?.(request, env, key, url.searchParams.get('token')) ?? null;
+      : handlers.handleUploadPresigned(request, env, key, url.searchParams.get('token'));
   }
 
   if (method === 'GET' && pathname.startsWith(`${uploadRouteBase}/status/`)) {
     const key = decodeUploadRouteKey(pathname, `${uploadRouteBase}/status/`, env, requestOrigin);
-    return key instanceof Response ? key : handlers.handleUploadStatus?.(request, env, key, getDb()) ?? null;
+    return key instanceof Response ? key : handlers.handleUploadStatus(request, env, key, getDb());
   }
 
   if (method === 'GET' && pathname.startsWith(`${uploadRouteBase}/error-report/`)) {
@@ -107,11 +107,11 @@ export async function handleWorkerUploadRoute({
     );
     return key instanceof Response
       ? key
-      : handlers.handleUploadErrorReport?.(request, env, key, getDb()) ?? null;
+      : handlers.handleUploadErrorReport(request, env, key, getDb());
   }
 
   if (method === 'POST' && pathname === `${uploadRouteBase}/complete`) {
-    return handlers.handleUploadComplete?.(request, env, getDb()) ?? null;
+    return handlers.handleUploadComplete(request, env, getDb());
   }
 
   return null;

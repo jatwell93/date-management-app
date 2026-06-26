@@ -1,5 +1,5 @@
 import { describe, expect, it, vi } from 'vitest';
-import { resolveMinimalApiRoute } from './minimal-api-routes';
+import { resolveMinimalApiRoute, type MinimalApiRouteHandlers } from './minimal-api-routes';
 import type { Database } from './database';
 import type { Env } from './types/env';
 
@@ -16,7 +16,7 @@ describe('minimal API route table', () => {
       method: 'GET',
       db,
       env,
-      handlers: { handleGetProducts },
+      handlers: { handleGetProducts } as unknown as MinimalApiRouteHandlers,
     });
 
     expect(response?.status).toBe(200);
@@ -32,7 +32,7 @@ describe('minimal API route table', () => {
       method: 'PUT',
       db,
       env,
-      handlers: { handleUpdateInventoryItem },
+      handlers: { handleUpdateInventoryItem } as unknown as MinimalApiRouteHandlers,
     });
 
     expect(response?.status).toBe(200);
@@ -51,7 +51,7 @@ describe('minimal API route table', () => {
       method: 'GET',
       db,
       env,
-      handlers: {},
+      handlers: {} as MinimalApiRouteHandlers,
     });
 
     expect(response).toBeNull();

@@ -1,5 +1,5 @@
 import { describe, expect, it, vi } from 'vitest';
-import { handleWorkerUploadRoute } from './upload-router';
+import { handleWorkerUploadRoute, type WorkerUploadHandlers } from './upload-router';
 import type { Env } from '../types/env';
 import type { Database } from '../database';
 
@@ -23,7 +23,7 @@ describe('Worker upload router', () => {
       getDb: () => db,
       handlers: {
         handleUploadComplete,
-      },
+      } as unknown as WorkerUploadHandlers,
     });
 
     expect(response?.status).toBe(200);
@@ -41,7 +41,7 @@ describe('Worker upload router', () => {
       getDb: () => db,
       handlers: {
         handleUploadStatus: vi.fn(),
-      },
+      } as unknown as WorkerUploadHandlers,
     });
 
     expect(response?.status).toBe(400);
