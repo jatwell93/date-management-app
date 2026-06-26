@@ -33,7 +33,7 @@ import {
   inMemoryRateLimitStore,
 } from './utils/minimal-rate-limit';
 import { handleWorkerUploadRoute } from './upload/upload-router';
-import { resolveMinimalApiRoute } from './minimal-api-routes';
+import { resolveMinimalApiRoute, type MinimalApiRoute } from './minimal-api-routes';
 import { parseCsvRecords } from './upload/csv-parser';
 import {
   findHeaderIndex,
@@ -125,6 +125,58 @@ function isUniqueViolation(error: unknown): boolean {
 export { maybeCompressJsonResponse };
 export { isCatalogueWithinLimit, takeImportBatch };
 export type { ValidatedCatalogueRow };
+
+// Native Worker API route table. Handlers are referenced directly (function
+// declarations are hoisted) so each appears once and the matcher stays a small,
+// testable module. `kind` is omitted for the common `'static'` shape. Order
+// matters only where patterns could overlap.
+const RE_USER_ID = /^\/api\/users\/\d+$/;
+const RE_INVENTORY_ID = /^\/api\/inventory-items\/\d+$/;
+const RE_STORE_AREA_ID = /^\/api\/store-areas\/\d+$/;
+const MINIMAL_API_ROUTES: MinimalApiRoute[] = [
+  ['POST', '/api/auth/login', handleLogin],
+  ['POST', '/api/auth/register', handleRegister],
+  ['GET', '/api/users/me', handleGetCurrentUser],
+  ['GET', '/api/users', handleListUsers],
+  ['POST', '/api/users', handleCreateLegacyUser],
+  ['PUT', /^\/api\/users\/\d+\/reset-pin$/, handleResetUserPin],
+  ['PUT', RE_USER_ID, handleUpdateUser, 'path'],
+  ['DELETE', RE_USER_ID, handleDeleteUser, 'path'],
+  ['GET', '/api/products', handleGetProducts],
+  ['POST', '/api/products', handleCreateProduct],
+  ['GET', /^\/api\/products\/by-barcode\/[^/]+$/, handleGetProductByBarcode, 'path'],
+  ['GET', /^\/api\/products\/by-sku\/[^/]+$/, handleGetProductBySku, 'path'],
+  ['GET', /^\/api\/products\/\d+$/, handleGetProduct, 'path'],
+  ['GET', '/api/inventory-items', handleGetInventory],
+  ['POST', '/api/inventory-items', handleCreateInventoryItem],
+  ['GET', /^\/api\/inventory-items\/by-barcode\/[^/]+$/, handleGetInventoryByBarcode, 'path'],
+  [
+    'GET',
+    /^\/api\/inventory-items\/recent\/product\/\d+$/,
+    handleGetRecentInventoryByProduct,
+    'path',
+  ],
+  ['PUT', RE_INVENTORY_ID, handleUpdateInventoryItem, 'path'],
+  ['DELETE', RE_INVENTORY_ID, handleDeleteInventoryItem, 'path'],
+  ['GET', '/api/store-areas', handleGetStoreAreas],
+  ['POST', '/api/store-areas', handleCreateStoreArea],
+  ['PUT', RE_STORE_AREA_ID, handleUpdateStoreArea, 'path'],
+  ['DELETE', RE_STORE_AREA_ID, handleDeleteStoreArea, 'path'],
+  ['GET', '/api/dashboard', handleGetDashboard],
+  ['GET', '/api/reports/expiry', handleGetExpiryReport],
+  ['GET', '/api/reports/expiry-overall', handleGetExpiryOverallReport],
+  ['GET', '/api/reports/expiry-details', handleGetExpiryDetailsReport],
+  ['GET', '/api/reports/daily-usage', handleGetDailyUsageReport],
+  ['GET', '/api/reports/items-by-user', handleGetItemsByUserReport],
+  ['GET', '/api/reports/items-by-date', handleGetItemsByDateReport],
+  ['GET', '/api/reports/loss-by-sku', handleGetLossBySkuReport],
+  ['GET', '/api/reports/loss-by-department', handleGetLossByDepartmentReport],
+  ['GET', '/api/reports/sell-through', handleGetSellThroughReport],
+  ['GET', '/api/expired-items', handleGetExpiredItems],
+  ['POST', '/api/expired-items/process', handleProcessExpiredItem],
+  ['GET', '/api/subscription/trial-status', handleGetTrialStatus],
+  ['POST', '/api/organization/bootstrap', handleOrganizationBootstrap, 'bootstrap'],
+];
 
 /**
  * Main Workers fetch handler
@@ -262,51 +314,12 @@ export default Sentry.withSentry(
           // Initialize database connection for remaining API endpoints
           db = getDb();
 
-          const apiRouteResponse = await resolveMinimalApiRoute({
+          const apiRouteResponse = resolveMinimalApiRoute(MINIMAL_API_ROUTES, {
             request,
             pathname,
             method,
             db,
             env,
-            handlers: {
-              handleLogin,
-              handleRegister,
-              handleGetCurrentUser,
-              handleListUsers,
-              handleCreateLegacyUser,
-              handleResetUserPin,
-              handleUpdateUser,
-              handleDeleteUser,
-              handleGetProducts,
-              handleCreateProduct,
-              handleGetProductByBarcode,
-              handleGetProductBySku,
-              handleGetProduct,
-              handleGetInventory,
-              handleCreateInventoryItem,
-              handleGetInventoryByBarcode,
-              handleGetRecentInventoryByProduct,
-              handleUpdateInventoryItem,
-              handleDeleteInventoryItem,
-              handleGetStoreAreas,
-              handleCreateStoreArea,
-              handleUpdateStoreArea,
-              handleDeleteStoreArea,
-              handleGetDashboard,
-              handleGetExpiryReport,
-              handleGetExpiryOverallReport,
-              handleGetExpiryDetailsReport,
-              handleGetDailyUsageReport,
-              handleGetItemsByUserReport,
-              handleGetItemsByDateReport,
-              handleGetLossBySkuReport,
-              handleGetLossByDepartmentReport,
-              handleGetSellThroughReport,
-              handleGetExpiredItems,
-              handleProcessExpiredItem,
-              handleGetTrialStatus,
-              handleOrganizationBootstrap,
-            },
           });
 
           return finalizeApiResponse(apiRouteResponse ?? errorResponse('Not Found', 404, env));
