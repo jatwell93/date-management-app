@@ -782,13 +782,26 @@ Do not set global `ignore-scripts=true` for this repo without a separate migrati
 
 Dependabot is configured for the root, backend, frontend, workers, and GitHub Actions package ecosystems. Review dependency PRs by package boundary and avoid mixing unrelated runtime and tooling updates unless the advisory requires coordinated remediation.
 
+### Dependabot Remediation Log
+
+**2026-06-27** — Cleared the runtime, edge, and build-tool advisories that had a clean (non-major) patched path, working per package boundary with lockfile-only updates (`--package-lock-only --ignore-scripts`) so no install scripts ran:
+
+| Boundary | Change | Advisories cleared |
+| -------- | ------ | ------------------ |
+| Backend | `multer ^2.0.2 → ^2.2.0` (direct, runtime); `form-data → 4.0.6`, `@opentelemetry/*`, `@sentry/*`, `@babel/core` via audit fix; bumped existing overrides `tar 7.5.15 → 7.5.17` and `ws 8.20.1 → 8.21.0` | multer (high), form-data (high), tar, ws, OpenTelemetry/Sentry (moderate) |
+| Root | `wrangler 4.94.0 → 4.105.0` (clears bundled `undici`/`ws`/`esbuild`/`miniflare`); `js-yaml → 4.3.0` via audit fix | undici (high), ws (high), esbuild (low), js-yaml (moderate) → **0 remaining** |
+| Workers | `esbuild ^0.27.7 → ^0.28.1` (direct); `wrangler`/`vite`/`undici`/`ws`/`miniflare`/`vitest-pool-workers` via audit fix | undici (high), vite (high), ws (high), esbuild (low) → **0 remaining** |
+
+After each change, `npm audit` confirmed the targeted advisories cleared and `npm run security:npm-supply-chain` confirmed the dependency-source policy still passes.
+
 ### Accepted Dependency Risks
 
 | Package area | Current status | Mitigation |
 | ------------ | -------------- | ---------- |
 | `xlsx` in backend/frontend | npm audit reports known high severity advisories and no fixed npm release. | Keep file upload limits, input validation, and CSV injection controls active. Treat XLSX replacement as follow-up work before broadening spreadsheet import features. |
-| CRA/react-scripts in frontend | Several transitive build-tool advisories remain because CRA 5 has no clean patched path. | Do not expose dev server publicly. Prefer a separate frontend build-tool migration proposal over risky forced transitive changes. |
-| `quagga` in frontend | Pulls old request/form-data paths through image loading dependencies. | Keep scanner use local/browser-only and evaluate replacement during scanner dependency remediation. |
+| `jest` / `ts-jest` toolchain in backend/frontend | Moderate advisories (e.g. `js-yaml`, `@jest/*`) remain because npm's only offered "fix" is a breaking downgrade (`jest@25`, `ts-jest@27`) that would break the test suites. | Dev/test-only; never shipped to runtime. Resolve via a deliberate Jest 30 / `ts-jest` upgrade rather than a forced downgrade. |
+| CRA/react-scripts in frontend | Several transitive build-tool advisories remain (including a critical `shell-quote`) because CRA 5 has no clean patched path; npm only offers `react-scripts@0.0.0` non-fixes. | Do not expose dev server publicly. Prefer a separate frontend build-tool (Vite) migration proposal over risky forced transitive changes. |
+| `quagga` in frontend | Pulls old request/form-data/qs paths through image loading dependencies (`form-data`, `request`, `tough-cookie` advisories). | Keep scanner use local/browser-only and evaluate replacement during scanner dependency remediation. |
 
 ### Developer Workflow
 
