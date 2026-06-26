@@ -50,6 +50,74 @@ describe('getClerkAuthorizedParties', () => {
     expect(parties).toContain('https://app.example.com');
   });
 
+  describe('apex/www sibling derivation', () => {
+    it('authorizes the apex host when FRONTEND_URL is the www host', () => {
+      const parties = getClerkAuthorizedParties(
+        makeEnv({
+          NODE_ENV: 'production',
+          FRONTEND_URL: 'https://www.expirymate.com.au',
+        }),
+      );
+      expect(parties).toContain('https://www.expirymate.com.au');
+      expect(parties).toContain('https://expirymate.com.au');
+    });
+
+    it('authorizes the www host when FRONTEND_URL is the apex host', () => {
+      const parties = getClerkAuthorizedParties(
+        makeEnv({
+          NODE_ENV: 'production',
+          FRONTEND_URL: 'https://expirymate.com.au',
+        }),
+      );
+      expect(parties).toContain('https://expirymate.com.au');
+      expect(parties).toContain('https://www.expirymate.com.au');
+    });
+
+    it('preserves a non-default port on both siblings', () => {
+      const parties = getClerkAuthorizedParties(
+        makeEnv({
+          NODE_ENV: 'production',
+          FRONTEND_URL: 'https://www.expirymate.com.au:8443',
+        }),
+      );
+      expect(parties).toContain('https://www.expirymate.com.au:8443');
+      expect(parties).toContain('https://expirymate.com.au:8443');
+    });
+
+    it('does NOT prepend www to a deeper subdomain host', () => {
+      const parties = getClerkAuthorizedParties(
+        makeEnv({
+          NODE_ENV: 'production',
+          FRONTEND_URL: 'https://staging.expirymate.com.au',
+        }),
+      );
+      expect(parties).toContain('https://staging.expirymate.com.au');
+      expect(parties).not.toContain('https://www.staging.expirymate.com.au');
+    });
+
+    it('does NOT prepend www to a *.pages.dev preview host', () => {
+      const parties = getClerkAuthorizedParties(
+        makeEnv({
+          NODE_ENV: 'development',
+          FRONTEND_URL: 'https://date-management-frontend.pages.dev',
+        }),
+      );
+      expect(parties).toContain('https://date-management-frontend.pages.dev');
+      expect(parties).not.toContain('https://www.date-management-frontend.pages.dev');
+    });
+
+    it('does not invent siblings for a malformed FRONTEND_URL', () => {
+      const parties = getClerkAuthorizedParties(
+        makeEnv({
+          NODE_ENV: 'production',
+          FRONTEND_URL: 'not a url',
+        }),
+      );
+      // Falls back to only the static localhost dev origins.
+      expect(parties).toEqual(['http://localhost:3002', 'http://127.0.0.1:3002']);
+    });
+  });
+
   describe('non-production preview origins', () => {
     it('accepts dynamic *.pages.dev preview origin matching project base host', () => {
       const env = makeEnv({

@@ -105,5 +105,14 @@ jobs:
         working-directory: .
         run: doppler run -- node scripts/validate-stripe-deployment-config.js
 
+      # Bind FRONTEND_URL to the worker as a secret BEFORE deploying. `wrangler
+      # deploy` does not create this binding on its own (the value lives in
+      # Doppler, deploy-time only), so a fresh worker could otherwise come up
+      # with no FRONTEND_URL and silently break CORS + Clerk authorizedParties.
+      # The guardrail step above has already validated the value is a canonical
+      # expirymate.com.au host. printf (no trailing newline) keeps the origin exact.
+      - name: Bind FRONTEND_URL secret to worker
+        run: doppler run -- bash -lc 'printf "%s" "$FRONTEND_URL" | npx wrangler secret put FRONTEND_URL --env production'
+
       - name: Deploy production worker
         run: doppler run -- npx wrangler deploy --env production
