@@ -1040,11 +1040,46 @@ function getPagesPreviewBaseHost(env: Env): string {
   return DEFAULT_PAGES_PREVIEW_BASE_HOST;
 }
 
+// Given a configured frontend URL, return that origin plus its apex/www
+// sibling. The apex (https://expirymate.com.au) and www
+// (https://www.expirymate.com.au) hosts serve the same app, but Clerk sets the
+// session `azp` claim to the exact origin the token was minted from. Only one
+// of them is stored in FRONTEND_URL, so without deriving the sibling, requests
+// from the other host fail verification with a 401. We only ever add the
+// matching apex<->www pair (not arbitrary subdomains), so the allowlist stays
+// tight.
+function expandApexAndWwwOrigins(rawUrl: string): string[] {
+  let url: URL;
+  try {
+    url = new URL(rawUrl);
+  } catch {
+    return [];
+  }
+
+  const portSuffix = url.port ? `:${url.port}` : '';
+  const host = url.hostname;
+  const origins = new Set<string>([`${url.protocol}//${host}${portSuffix}`]);
+
+  if (host.startsWith('www.')) {
+    const apex = host.slice(4);
+    // Guard against degenerate inputs like "www." with no registrable domain.
+    if (apex.includes('.')) {
+      origins.add(`${url.protocol}//${apex}${portSuffix}`);
+    }
+  } else {
+    origins.add(`${url.protocol}//www.${host}${portSuffix}`);
+  }
+
+  return Array.from(origins);
+}
+
 export function getClerkAuthorizedParties(env: Env, requestOrigin?: string): string[] {
   const parties = new Set<string>(['http://localhost:3002', 'http://127.0.0.1:3002']);
 
   if (env.FRONTEND_URL) {
-    parties.add(env.FRONTEND_URL);
+    for (const origin of expandApexAndWwwOrigins(env.FRONTEND_URL)) {
+      parties.add(origin);
+    }
   }
 
   // In non-production, allow Cloudflare Pages preview deploys whose hostnames
