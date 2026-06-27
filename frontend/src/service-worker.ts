@@ -19,8 +19,7 @@ clientsClaim();
 // Their URLs are injected into the manifest variable below.
 // This variable must be present somewhere in your service worker file,
 // even if you decide not to use precaching.
-const WB_MANIFEST = self.__WB_MANIFEST;
-precacheAndRoute(WB_MANIFEST);
+precacheAndRoute(self.__WB_MANIFEST);
 
 // Set up App Shell-style routing, so that all navigation requests
 // are fulfilled with your index.html file.
@@ -53,8 +52,8 @@ registerRoute(
     // Return true to signal that we want to handle the request.
     return true;
   },
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any -- WB_MANIFEST entries have dynamic shape from Workbox
-  createHandlerBoundToURL((WB_MANIFEST[0] as any).url),
+  // Serve the precached app shell for SPA navigations.
+  createHandlerBoundToURL('/index.html'),
 );
 
 // An example runtime caching route for requests that aren't handled by the precache,
