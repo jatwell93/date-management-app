@@ -8,12 +8,12 @@ import { apiService } from '../../lib/api.service';
 import { offlineStorage } from '../../lib/offline-storage';
 
 // Mock dependencies
-jest.mock('../../lib/api.service');
-jest.mock('../../lib/offline-storage');
+vi.mock('../../lib/api.service');
+vi.mock('../../lib/offline-storage');
 
-const mockGetToken = jest.fn();
+const mockGetToken = vi.fn();
 
-jest.mock('@clerk/clerk-react', () => ({
+vi.mock('@clerk/clerk-react', () => ({
   useAuth: () => ({
     getToken: mockGetToken,
   }),
@@ -23,24 +23,24 @@ jest.mock('@clerk/clerk-react', () => ({
 const mockHandheldContext = {
   isHandheld: false,
   syncStrategy: 'real-time' as SyncStrategy,
-  setSyncStrategy: jest.fn(),
+  setSyncStrategy: vi.fn(),
   detectionResult: null,
   hapticEnabled: true,
   audioFeedbackEnabled: true,
-  setHapticEnabled: jest.fn(),
-  setAudioFeedbackEnabled: jest.fn(),
-  refreshDetection: jest.fn(),
+  setHapticEnabled: vi.fn(),
+  setAudioFeedbackEnabled: vi.fn(),
+  refreshDetection: vi.fn(),
 };
 
-jest.mock('../../contexts/HandheldContext', () => ({
+vi.mock('../../contexts/HandheldContext', () => ({
   HandheldProvider: ({ children }: { children: React.ReactNode }) => <>{children}</>,
   useHandheldDetectionContext: () => mockHandheldContext,
 }));
 
 // Mock scrollIntoView for Radix UI
-window.HTMLElement.prototype.scrollIntoView = jest.fn();
-window.HTMLElement.prototype.hasPointerCapture = jest.fn();
-window.HTMLElement.prototype.releasePointerCapture = jest.fn();
+window.HTMLElement.prototype.scrollIntoView = vi.fn();
+window.HTMLElement.prototype.hasPointerCapture = vi.fn();
+window.HTMLElement.prototype.releasePointerCapture = vi.fn();
 
 // Mock ResizeObserver
 global.ResizeObserver = class ResizeObserver {
@@ -50,18 +50,21 @@ global.ResizeObserver = class ResizeObserver {
 };
 
 // Mock localforage
-jest.mock('localforage', () => ({
-  createInstance: jest.fn(() => ({
-    setItem: jest.fn(),
-    getItem: jest.fn(),
-    removeItem: jest.fn(),
-    clear: jest.fn(),
-  })),
-  config: jest.fn(),
-}));
+vi.mock('localforage', () => {
+  const localforage = {
+    createInstance: vi.fn(() => ({
+      setItem: vi.fn(),
+      getItem: vi.fn(),
+      removeItem: vi.fn(),
+      clear: vi.fn(),
+    })),
+    config: vi.fn(),
+  };
+  return { ...localforage, default: localforage };
+});
 
 // Mock Scanner
-jest.mock('../../components/Scanner', () => ({
+vi.mock('../../components/Scanner', () => ({
   Scanner: ({ onScan }: { onScan: (val: any) => void }) => (
     <div data-testid="mock-scanner">
       <input
@@ -87,7 +90,7 @@ jest.mock('../../components/Scanner', () => ({
 }));
 
 // Mock HandheldScanner
-jest.mock('../../components/HandheldScanner', () => ({
+vi.mock('../../components/HandheldScanner', () => ({
   HandheldScanner: ({ onScan }: { onScan: (val: any) => void }) => (
     <main className="flex-1 overflow-auto" role="main">
       <div data-testid="handheld-scan-toolbar">
@@ -152,7 +155,7 @@ jest.mock('../../components/HandheldScanner', () => ({
 }));
 
 // Mock Radix UI Select components
-jest.mock('../../components/ui/select', () => ({
+vi.mock('../../components/ui/select', () => ({
   Select: ({ onValueChange, value, children }: any) => (
     <select
       data-testid="location-select"
@@ -194,7 +197,7 @@ describe('ScanPage Integration', () => {
   };
 
   beforeEach(() => {
-    jest.clearAllMocks();
+    vi.clearAllMocks();
 
     // Reset handheld context mock
     mockHandheldContext.isHandheld = false;

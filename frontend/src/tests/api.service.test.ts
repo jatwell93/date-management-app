@@ -1,4 +1,4 @@
-import fetchMock from 'jest-fetch-mock';
+import { fetchMock } from '../test-utils/fetchMock';
 import { apiService, API_AUTH_UNAUTHORIZED_EVENT } from '../lib/api.service';
 
 describe('apiService 401 handling', () => {
@@ -7,7 +7,7 @@ describe('apiService 401 handling', () => {
   beforeEach(() => {
     fetchMock.resetMocks();
     localStorage.clear();
-    consoleErrorSpy = jest.spyOn(console, 'error').mockImplementation(() => {
+    consoleErrorSpy = vi.spyOn(console, 'error').mockImplementation(() => {
       // Silence expected JSDOM navigation noise in this test suite.
     });
   });
@@ -20,7 +20,7 @@ describe('apiService 401 handling', () => {
     localStorage.setItem('authToken', 'test-auth-token');
     localStorage.setItem('session', 'test-session-token');
 
-    const unauthorizedListener = jest.fn();
+    const unauthorizedListener = vi.fn();
     window.addEventListener(API_AUTH_UNAUTHORIZED_EVENT, unauthorizedListener);
 
     fetchMock.mockResponseOnce('', { status: 401 });

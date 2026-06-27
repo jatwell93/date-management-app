@@ -1,18 +1,18 @@
 import * as Sentry from '@sentry/react';
 import { resolveApiToken } from '../auth-token';
 
-jest.mock('@sentry/react', () => ({
-  captureException: jest.fn(),
+vi.mock('@sentry/react', () => ({
+  captureException: vi.fn(),
 }));
 
 describe('resolveApiToken', () => {
   beforeEach(() => {
-    jest.clearAllMocks();
+    vi.clearAllMocks();
   });
 
   it('falls back to the prop token and records Clerk refresh failures without token values', async () => {
     const refreshError = new Error('Clerk token refresh failed');
-    const getToken = jest.fn().mockRejectedValue(refreshError);
+    const getToken = vi.fn().mockRejectedValue(refreshError);
 
     await expect(
       resolveApiToken({

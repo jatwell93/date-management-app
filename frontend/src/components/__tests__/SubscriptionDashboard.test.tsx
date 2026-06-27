@@ -1,13 +1,13 @@
 import { render, screen, waitFor } from '@testing-library/react';
 import { SubscriptionDashboard } from '../SubscriptionDashboard';
 
-jest.mock('../../hooks/useFreshApiToken', () => ({
+vi.mock('../../hooks/useFreshApiToken', () => ({
   useFreshApiToken: (() => {
     const callbacks = new Map<string, jest.Mock>();
     return (token: string | null) => {
       const key = token ?? '__missing__';
       if (!callbacks.has(key)) {
-        callbacks.set(key, jest.fn().mockResolvedValue(token || undefined));
+        callbacks.set(key, vi.fn().mockResolvedValue(token || undefined));
       }
       return callbacks.get(key);
     };
@@ -29,11 +29,11 @@ const mockUsageData = {
   inventoryItems: { current: 8500, limit: null },
 };
 
-global.fetch = jest.fn();
+global.fetch = vi.fn();
 
 describe('SubscriptionDashboard', () => {
   beforeEach(() => {
-    jest.clearAllMocks();
+    vi.clearAllMocks();
   });
 
   it('renders tier badge with correct tier level', async () => {
@@ -91,7 +91,7 @@ describe('SubscriptionDashboard', () => {
         json: async () => mockUsageData,
       });
 
-    render(<SubscriptionDashboard token="test-token" onUpgrade={jest.fn()} />);
+    render(<SubscriptionDashboard token="test-token" onUpgrade={vi.fn()} />);
 
     await waitFor(() => {
       expect(screen.getByRole('button', { name: /Upgrade Plan/i })).toBeInTheDocument();

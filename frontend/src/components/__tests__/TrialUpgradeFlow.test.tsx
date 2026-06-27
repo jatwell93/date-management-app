@@ -1,22 +1,22 @@
 import { render, screen, waitFor } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
-import fetchMock from 'jest-fetch-mock';
+import { fetchMock } from '../../test-utils/fetchMock';
 import { TrialUpgradeFlow } from '../TrialUpgradeFlow';
 
-jest.mock('../../hooks/useFreshApiToken', () => ({
+vi.mock('../../hooks/useFreshApiToken', () => ({
   useFreshApiToken: (() => {
     const callbacks = new Map<string, jest.Mock>();
     return (token: string | null) => {
       const key = token ?? '__missing__';
       if (!callbacks.has(key)) {
-        callbacks.set(key, jest.fn().mockResolvedValue(token || undefined));
+        callbacks.set(key, vi.fn().mockResolvedValue(token || undefined));
       }
       return callbacks.get(key);
     };
   })(),
 }));
 
-jest.mock('../../lib/api.service', () => ({
+vi.mock('../../lib/api.service', () => ({
   buildApiUrl: (route: string) => `https://api.test${route}`,
 }));
 
@@ -43,14 +43,14 @@ describe('TrialUpgradeFlow', () => {
 
   beforeEach(() => {
     fetchMock.resetMocks();
-    jest.clearAllMocks();
-    jest.spyOn(window, 'open').mockImplementation(() => null);
+    vi.clearAllMocks();
+    vi.spyOn(window, 'open').mockImplementation(() => null);
     process.env.REACT_APP_STRIPE_PRICE_PROFESSIONAL_MONTHLY = 'price_professional_monthly';
     process.env.REACT_APP_STRIPE_PRICE_PROFESSIONAL_ANNUAL = 'price_professional_annual';
   });
 
   afterEach(() => {
-    jest.restoreAllMocks();
+    vi.restoreAllMocks();
   });
 
   it('starts Stripe checkout for trialing users', async () => {

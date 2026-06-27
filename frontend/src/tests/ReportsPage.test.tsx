@@ -5,13 +5,17 @@ import { ReportsPage } from '../pages/ReportsPage';
 import { apiService } from '../lib/api.service';
 import '@testing-library/jest-dom';
 
-jest.mock('../hooks/useFreshApiToken', () => ({
+// ReportsPage calls useNavigate() at render; use the shared manual mock that
+// CRA's jest applied automatically for the react-router-dom node module.
+vi.mock('react-router-dom', () => import('../__mocks__/react-router-dom'));
+
+vi.mock('../hooks/useFreshApiToken', () => ({
   useFreshApiToken: (() => {
     const callbacks = new Map<string, jest.Mock>();
     return (token: string | null) => {
       const key = token ?? '__missing__';
       if (!callbacks.has(key)) {
-        callbacks.set(key, jest.fn().mockResolvedValue(token || undefined));
+        callbacks.set(key, vi.fn().mockResolvedValue(token || undefined));
       }
       return callbacks.get(key);
     };
@@ -19,19 +23,19 @@ jest.mock('../hooks/useFreshApiToken', () => ({
 }));
 
 // Mock apiService
-jest.mock('../lib/api.service', () => ({
+vi.mock('../lib/api.service', () => ({
   apiService: {
-    get: jest.fn(),
+    get: vi.fn(),
   },
 }));
 
 describe('ReportsPage', () => {
   beforeEach(() => {
-    jest.clearAllMocks();
+    vi.clearAllMocks();
   });
 
   it('renders monthly expiry report data on successful fetch', async () => {
-    // @ts-expect-error — apiService.get is mocked as jest.fn()
+    // @ts-expect-error — apiService.get is mocked as vi.fn()
     apiService.get.mockImplementation((url) => {
       if (url === '/reports/expiry') {
         return Promise.resolve([
@@ -101,7 +105,7 @@ describe('ReportsPage', () => {
   });
 
   it('renders production-shaped report payloads without visible NaN counts', async () => {
-    // @ts-expect-error — apiService.get is mocked as jest.fn()
+    // @ts-expect-error — apiService.get is mocked as vi.fn()
     apiService.get.mockImplementation((url) => {
       if (url === '/reports/expiry') {
         return Promise.resolve([
@@ -146,7 +150,7 @@ describe('ReportsPage', () => {
   });
 
   it('reports a contract error when the overall summary omits required counts', async () => {
-    // @ts-expect-error — apiService.get is mocked as jest.fn()
+    // @ts-expect-error — apiService.get is mocked as vi.fn()
     apiService.get.mockImplementation((url) => {
       if (url === '/reports/expiry') {
         return Promise.resolve([
@@ -195,7 +199,7 @@ describe('ReportsPage', () => {
   });
 
   it('displays an error message on failed data fetch', async () => {
-    // @ts-expect-error — apiService.get is mocked as jest.fn()
+    // @ts-expect-error — apiService.get is mocked as vi.fn()
     apiService.get.mockRejectedValue(new Error('Failed to load report'));
 
     const tokenValue = randomUUID();
@@ -210,7 +214,7 @@ describe('ReportsPage', () => {
     const firstToken = randomUUID();
     const secondToken = randomUUID();
 
-    // @ts-expect-error — apiService.get is mocked as jest.fn()
+    // @ts-expect-error — apiService.get is mocked as vi.fn()
     apiService.get.mockImplementation((url, token) => {
       if (token === firstToken) {
         return Promise.reject(new Error('Temporary report failure'));
@@ -264,7 +268,7 @@ describe('ReportsPage', () => {
   });
 
   it('renders the sell-through by markdown level report when data is available', async () => {
-    // @ts-expect-error — apiService.get is mocked as jest.fn()
+    // @ts-expect-error — apiService.get is mocked as vi.fn()
     apiService.get.mockImplementation((url) => {
       if (url === '/reports/expiry') {
         return Promise.resolve([]);

@@ -5,18 +5,18 @@ import { DashboardPage } from '../pages/DashboardPage';
 import { apiService } from '../lib/api.service';
 import '@testing-library/jest-dom';
 
-const mockGetToken = jest.fn();
+const mockGetToken = vi.fn();
 
-jest.mock('@clerk/clerk-react', () => ({
+vi.mock('@clerk/clerk-react', () => ({
   useAuth: () => ({
     getToken: mockGetToken,
   }),
 }));
 
 // Mock apiService
-jest.mock('../lib/api.service', () => ({
+vi.mock('../lib/api.service', () => ({
   apiService: {
-    get: jest.fn(),
+    get: vi.fn(),
   },
 }));
 
@@ -30,7 +30,7 @@ function renderDashboard(token: string | null) {
 
 describe('DashboardPage', () => {
   beforeEach(() => {
-    jest.clearAllMocks();
+    vi.clearAllMocks();
     mockGetToken.mockResolvedValue(undefined);
   });
 

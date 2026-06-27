@@ -17,25 +17,25 @@ describe('useHardwareScan', () => {
   let mockNow: number;
 
   beforeEach(() => {
-    jest.clearAllMocks();
-    jest.useFakeTimers();
+    vi.clearAllMocks();
+    vi.useFakeTimers();
     mockNow = 1000;
-    jest.spyOn(Date, 'now').mockImplementation(() => mockNow);
+    vi.spyOn(Date, 'now').mockImplementation(() => mockNow);
   });
 
   afterEach(() => {
-    jest.useRealTimers();
-    jest.restoreAllMocks();
+    vi.useRealTimers();
+    vi.restoreAllMocks();
   });
 
   it('should be callable without errors when mounted', () => {
-    const onScan = jest.fn();
+    const onScan = vi.fn();
     renderHook(() => useHardwareScan(onScan));
     expect(onScan).not.toHaveBeenCalled();
   });
 
   it('should accumulate rapid keystrokes within 50ms timing window and emit onScan on Enter', () => {
-    const onScan = jest.fn();
+    const onScan = vi.fn();
     renderHook(() => useHardwareScan(onScan));
 
     // Simulate hardware scan: rapid keystrokes 5ms apart (within 50ms threshold)
@@ -53,7 +53,7 @@ describe('useHardwareScan', () => {
   });
 
   it('should NOT trigger hardware scan for slow human typing (>50ms between keystrokes)', () => {
-    const onScan = jest.fn();
+    const onScan = vi.fn();
     renderHook(() => useHardwareScan(onScan));
 
     dispatchKey('a');
@@ -67,7 +67,7 @@ describe('useHardwareScan', () => {
   });
 
   it('should accumulate characters correctly across Enter boundary', () => {
-    const onScan = jest.fn();
+    const onScan = vi.fn();
     renderHook(() => useHardwareScan(onScan));
 
     // First scan: ABC
@@ -83,7 +83,7 @@ describe('useHardwareScan', () => {
   });
 
   it('should handle Enter key without any accumulated characters gracefully', () => {
-    const onScan = jest.fn();
+    const onScan = vi.fn();
     renderHook(() => useHardwareScan(onScan));
 
     dispatchKey('Enter');
@@ -93,7 +93,7 @@ describe('useHardwareScan', () => {
   });
 
   it('should ignore non-printable keys except Enter', () => {
-    const onScan = jest.fn();
+    const onScan = vi.fn();
     renderHook(() => useHardwareScan(onScan));
 
     // Simulate scan with special keys mixed in
@@ -110,7 +110,7 @@ describe('useHardwareScan', () => {
   });
 
   it('should prevent duplicate rapid Enter presses from double-submitting', () => {
-    const onScan = jest.fn();
+    const onScan = vi.fn();
     renderHook(() => useHardwareScan(onScan, { timingThreshold: 200 }));
 
     // Rapid keystroke scan

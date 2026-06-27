@@ -1,24 +1,24 @@
 import { fireEvent, render, screen, waitFor } from '@testing-library/react';
 import { ManageSubscriptionButton } from '../ManageSubscriptionButton';
 
-jest.mock('../../hooks/useFreshApiToken', () => ({
+vi.mock('../../hooks/useFreshApiToken', () => ({
   useFreshApiToken: (() => {
     const callbacks = new Map<string, jest.Mock>();
     return (token: string | null) => {
       const key = token ?? '__missing__';
       if (!callbacks.has(key)) {
-        callbacks.set(key, jest.fn().mockResolvedValue(token || undefined));
+        callbacks.set(key, vi.fn().mockResolvedValue(token || undefined));
       }
       return callbacks.get(key);
     };
   })(),
 }));
 
-jest.mock('@sentry/react', () => ({
-  captureException: jest.fn(),
+vi.mock('@sentry/react', () => ({
+  captureException: vi.fn(),
 }));
 
-global.fetch = jest.fn();
+global.fetch = vi.fn();
 
 describe('ManageSubscriptionButton', () => {
   it('keeps the public root element button-shaped when there is no error', () => {
@@ -33,7 +33,7 @@ describe('ManageSubscriptionButton', () => {
   });
 
   beforeEach(() => {
-    jest.clearAllMocks();
+    vi.clearAllMocks();
   });
 
   it('shows a recoverable billing portal error when Stripe portal creation fails', async () => {

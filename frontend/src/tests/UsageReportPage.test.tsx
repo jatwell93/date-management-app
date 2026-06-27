@@ -4,13 +4,13 @@ import { UsageReportPage } from '../pages/UsageReportPage';
 import { apiService } from '../lib/api.service';
 import '@testing-library/jest-dom';
 
-jest.mock('../hooks/useFreshApiToken', () => ({
+vi.mock('../hooks/useFreshApiToken', () => ({
   useFreshApiToken: (() => {
     const callbacks = new Map<string, jest.Mock>();
     return (token: string | null) => {
       const key = token ?? '__missing__';
       if (!callbacks.has(key)) {
-        callbacks.set(key, jest.fn().mockResolvedValue(token || undefined));
+        callbacks.set(key, vi.fn().mockResolvedValue(token || undefined));
       }
       return callbacks.get(key);
     };
@@ -18,25 +18,25 @@ jest.mock('../hooks/useFreshApiToken', () => ({
 }));
 
 // Mock apiService
-jest.mock('../lib/api.service', () => ({
+vi.mock('../lib/api.service', () => ({
   apiService: {
-    get: jest.fn(),
+    get: vi.fn(),
   },
 }));
 
-jest.mock('react-chartjs-2', () => ({
+vi.mock('react-chartjs-2', () => ({
   Bar: () => <div role="img" aria-label="Items added by user chart" />,
   Line: () => <div role="img" aria-label="Items added per day chart" />,
 }));
 
 describe('UsageReportPage', () => {
   beforeEach(() => {
-    jest.clearAllMocks();
+    vi.clearAllMocks();
   });
 
   it('renders usage report data on successful fetch', async () => {
     // Mock all the API calls the component makes
-    // @ts-expect-error — apiService.get is mocked as jest.fn()
+    // @ts-expect-error — apiService.get is mocked as vi.fn()
     apiService.get.mockImplementation((url) => {
       if (url === '/reports/daily-usage') {
         return Promise.resolve([
@@ -105,7 +105,7 @@ describe('UsageReportPage', () => {
   });
 
   it('displays an error message on failed data fetch', async () => {
-    // @ts-expect-error — apiService.get is mocked as jest.fn()
+    // @ts-expect-error — apiService.get is mocked as vi.fn()
     apiService.get.mockRejectedValue(new Error('Failed to load usage report'));
 
     const tokenValue = 'test-session-value';
@@ -124,7 +124,7 @@ describe('UsageReportPage', () => {
       },
     );
 
-    // @ts-expect-error — apiService.get is mocked as jest.fn()
+    // @ts-expect-error — apiService.get is mocked as vi.fn()
     apiService.get.mockImplementation((url) => {
       if (url === '/reports/daily-usage') {
         return Promise.resolve([]);

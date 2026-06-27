@@ -3,12 +3,12 @@ import { readFileSync } from 'fs';
 import { join } from 'path';
 import { SettingsPage } from '../SettingsPage';
 
-const mockOrganizationProfile = jest.fn();
-const mockCaptureException = jest.fn();
+const mockOrganizationProfile = vi.fn();
+const mockCaptureException = vi.fn();
 let mockShouldThrowOrganizationProfile = false;
 const globalsCss = readFileSync(join(__dirname, '..', '..', 'globals.css'), 'utf8');
 
-jest.mock('@clerk/clerk-react', () => ({
+vi.mock('@clerk/clerk-react', () => ({
   SignIn: () => null,
   SignUp: () => null,
   OrganizationProfile: (props: unknown) => {
@@ -21,7 +21,7 @@ jest.mock('@clerk/clerk-react', () => ({
   },
 }));
 
-jest.mock('@sentry/react', () => ({
+vi.mock('@sentry/react', () => ({
   captureException: (...args: unknown[]) => mockCaptureException(...args),
 }));
 
@@ -67,7 +67,7 @@ describe('SettingsPage', () => {
 
   it('adapts organization controls for touch and narrow settings viewports', () => {
     mockShouldThrowOrganizationProfile = true;
-    const consoleErrorSpy = jest.spyOn(console, 'error').mockImplementation(() => undefined);
+    const consoleErrorSpy = vi.spyOn(console, 'error').mockImplementation(() => undefined);
 
     try {
       render(<SettingsPage />);
@@ -111,7 +111,7 @@ describe('SettingsPage', () => {
 
   it('shows a recoverable settings fallback when Clerk organization controls fail', () => {
     mockShouldThrowOrganizationProfile = true;
-    const consoleErrorSpy = jest.spyOn(console, 'error').mockImplementation(() => undefined);
+    const consoleErrorSpy = vi.spyOn(console, 'error').mockImplementation(() => undefined);
 
     try {
       render(<SettingsPage />);

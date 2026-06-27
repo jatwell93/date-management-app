@@ -3,14 +3,14 @@ import { offlineSyncService } from '../lib/offline-sync';
 // Mock localStorage
 let localStorageStore: Record<string, string> = {};
 const localStorageMock = {
-  getItem: jest.fn((key: string) => localStorageStore[key] ?? null),
-  setItem: jest.fn((key: string, value: string) => {
+  getItem: vi.fn((key: string) => localStorageStore[key] ?? null),
+  setItem: vi.fn((key: string, value: string) => {
     localStorageStore[key] = value;
   }),
-  removeItem: jest.fn((key: string) => {
+  removeItem: vi.fn((key: string) => {
     delete localStorageStore[key];
   }),
-  clear: jest.fn(() => {
+  clear: vi.fn(() => {
     localStorageStore = {};
   }),
 };
@@ -25,16 +25,16 @@ Object.defineProperty(navigator, 'onLine', {
 });
 
 // Mock fetch
-global.fetch = jest.fn();
+global.fetch = vi.fn();
 
 // Mock setInterval and clearInterval
-jest.useFakeTimers();
+vi.useFakeTimers();
 
 describe('OfflineSyncService - Sync Strategies', () => {
   beforeEach(() => {
-    jest.restoreAllMocks();
-    jest.clearAllMocks();
-    jest.clearAllTimers();
+    vi.restoreAllMocks();
+    vi.clearAllMocks();
+    vi.clearAllTimers();
     localStorageStore = {};
 
     offlineSyncService.clearQueue();
@@ -63,7 +63,7 @@ describe('OfflineSyncService - Sync Strategies', () => {
     (global.fetch as jest.Mock).mockClear();
     (global.fetch as jest.Mock).mockResolvedValue({
       ok: true,
-      json: jest.fn().mockResolvedValue({}),
+      json: vi.fn().mockResolvedValue({}),
     });
 
     // Reset navigator.onLine
@@ -74,10 +74,10 @@ describe('OfflineSyncService - Sync Strategies', () => {
   });
 
   describe('Sync Strategy Management', () => {
-    it('should load default sync strategy from localStorage', () => {
+    it('should load default sync strategy from localStorage', async () => {
       localStorageMock.getItem.mockReturnValue('batch');
       // Create a new instance to test loading
-      const { offlineSyncService: newService } = require('../lib/offline-sync');
+      const { offlineSyncService: _newService } = await import('../lib/offline-sync');
       // Note: This is tricky to test directly due to singleton pattern
       // We'll test the methods instead
     });
@@ -99,7 +99,7 @@ describe('OfflineSyncService - Sync Strategies', () => {
     });
 
     it('should trigger sync immediately after adding operation in real-time mode', async () => {
-      const performSyncSpy = jest.spyOn(offlineSyncService, 'performSync');
+      const performSyncSpy = vi.spyOn(offlineSyncService, 'performSync');
       performSyncSpy.mockResolvedValue();
 
       await offlineSyncService.addOperation('create', 'inventory-item', {
@@ -124,7 +124,7 @@ describe('OfflineSyncService - Sync Strategies', () => {
     });
 
     it('should not trigger immediate sync after adding operation in batch mode', async () => {
-      const performSyncSpy = jest.spyOn(offlineSyncService, 'performSync');
+      const performSyncSpy = vi.spyOn(offlineSyncService, 'performSync');
       performSyncSpy.mockResolvedValue();
 
       await offlineSyncService.addOperation('create', 'inventory-item', {
@@ -137,11 +137,11 @@ describe('OfflineSyncService - Sync Strategies', () => {
     });
 
     it('should schedule sync every 10 minutes in batch mode', () => {
-      const performSyncSpy = jest.spyOn(offlineSyncService, 'performSync');
+      const performSyncSpy = vi.spyOn(offlineSyncService, 'performSync');
       performSyncSpy.mockResolvedValue();
 
       // Fast-forward 10 minutes
-      jest.advanceTimersByTime(10 * 60 * 1000);
+      vi.advanceTimersByTime(10 * 60 * 1000);
 
       expect(performSyncSpy).toHaveBeenCalledTimes(1);
     });
@@ -153,7 +153,7 @@ describe('OfflineSyncService - Sync Strategies', () => {
     });
 
     it('should not trigger immediate sync after adding operation in manual mode', async () => {
-      const performSyncSpy = jest.spyOn(offlineSyncService, 'performSync');
+      const performSyncSpy = vi.spyOn(offlineSyncService, 'performSync');
       performSyncSpy.mockResolvedValue();
 
       await offlineSyncService.addOperation('create', 'inventory-item', {
@@ -170,16 +170,16 @@ describe('OfflineSyncService - Sync Strategies', () => {
       expect(offlineSyncService.getSyncStrategy()).toBe('manual');
 
       // Fast-forward time - no sync should be called automatically
-      const performSyncSpy = jest.spyOn(offlineSyncService, 'performSync');
+      const performSyncSpy = vi.spyOn(offlineSyncService, 'performSync');
       performSyncSpy.mockResolvedValue();
 
-      jest.advanceTimersByTime(10 * 60 * 1000);
+      vi.advanceTimersByTime(10 * 60 * 1000);
 
       expect(performSyncSpy).not.toHaveBeenCalled();
     });
 
     it('should allow manual sync trigger', async () => {
-      const performSyncSpy = jest.spyOn(offlineSyncService, 'performSync');
+      const performSyncSpy = vi.spyOn(offlineSyncService, 'performSync');
       performSyncSpy.mockResolvedValue();
 
       await offlineSyncService.performSync();
@@ -224,7 +224,7 @@ describe('OfflineSyncService - Sync Strategies', () => {
         }
         return Promise.resolve({
           ok: true,
-          json: jest.fn().mockResolvedValue({}),
+          json: vi.fn().mockResolvedValue({}),
         });
       });
 
@@ -235,9 +235,7 @@ describe('OfflineSyncService - Sync Strategies', () => {
         locationId: 1,
       });
 
-      const delaySpy = jest
-        .spyOn<any, any>(offlineSyncService, 'delay')
-        .mockResolvedValue(undefined);
+      const delaySpy = vi.spyOn<any, any>(offlineSyncService, 'delay').mockResolvedValue(undefined);
 
       // Start sync
       await offlineSyncService.performSync();
@@ -248,9 +246,7 @@ describe('OfflineSyncService - Sync Strategies', () => {
     });
 
     it('should stop retrying after max attempts and keep items in queue', async () => {
-      const delaySpy = jest
-        .spyOn<any, any>(offlineSyncService, 'delay')
-        .mockResolvedValue(undefined);
+      const delaySpy = vi.spyOn<any, any>(offlineSyncService, 'delay').mockResolvedValue(undefined);
 
       // Mock fetch to always fail
       (global.fetch as jest.Mock).mockResolvedValue({
