@@ -794,13 +794,20 @@ Dependabot is configured for the root, backend, frontend, workers, and GitHub Ac
 
 After each change, `npm audit` confirmed the targeted advisories cleared and `npm run security:npm-supply-chain` confirmed the dependency-source policy still passes.
 
+**2026-06-27** — Migrated the frontend off Create React App (`react-scripts`/CRACO) to Vite (follow-up #290). This removed the entire CRA build-tool advisory tree wholesale rather than force-patching transitive dependencies:
+
+| Boundary | Change | Advisories cleared |
+| -------- | ------ | ------------------ |
+| Frontend | Replaced `react-scripts` + `@craco/craco` with `vite` + `@vitejs/plugin-react`; PWA service worker preserved via `vite-plugin-pwa` (`injectManifest`, reusing the existing `service-worker.ts`); Tailwind now processed through PostCSS at build time | `shell-quote` (**critical**), `webpack-dev-server`, `postcss`, `nth-check`, `css-select`, `svgo` and the rest of the CRA/webpack build-tool tree → **removed** |
+
+The test runner migration is staged: this change introduces a temporary standalone Jest (decoupled from CRA) so the existing suites stay green; the `jest → vitest` port is tracked in #291. As a result the frontend now reports the same dev/test-only Jest toolchain advisories as the backend (see Accepted Dependency Risks below), which #291 resolves.
+
 ### Accepted Dependency Risks
 
 | Package area | Current status | Mitigation |
 | ------------ | -------------- | ---------- |
 | `xlsx` in backend/frontend | npm audit reports known high severity advisories and no fixed npm release. | Keep file upload limits, input validation, and CSV injection controls active. Treat XLSX replacement as follow-up work before broadening spreadsheet import features. |
-| `jest` / `ts-jest` toolchain in backend/frontend | Moderate advisories (e.g. `js-yaml`, `@jest/*`) remain because npm's only offered "fix" is a breaking downgrade (`jest@25`, `ts-jest@27`) that would break the test suites. | Dev/test-only; never shipped to runtime. Resolve via a deliberate Jest 30 / `ts-jest` upgrade rather than a forced downgrade. |
-| CRA/react-scripts in frontend | Several transitive build-tool advisories remain (including a critical `shell-quote`) because CRA 5 has no clean patched path; npm only offers `react-scripts@0.0.0` non-fixes. | Do not expose dev server publicly. Prefer a separate frontend build-tool (Vite) migration proposal over risky forced transitive changes. |
+| `jest` toolchain in backend/frontend | Moderate advisories (e.g. `js-yaml`, `@jest/*`, `babel-plugin-istanbul`) remain because npm's only offered "fix" is a breaking downgrade (`jest@25`) that would break the test suites. The frontend is on a transitional standalone Jest after the Vite migration. | Dev/test-only; never shipped to runtime. Resolve via the deliberate Jest 30 / Vitest migration tracked in #291, not a forced downgrade. |
 | `quagga` in frontend | Pulls old request/form-data/qs paths through image loading dependencies (`form-data`, `request`, `tough-cookie` advisories). | Keep scanner use local/browser-only and evaluate replacement during scanner dependency remediation. |
 
 ### Developer Workflow
