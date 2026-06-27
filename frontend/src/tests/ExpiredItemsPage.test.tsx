@@ -5,33 +5,35 @@ import { apiService } from '../lib/api.service';
 import { getExpiredItems } from '../services/expiredItemService';
 import '@testing-library/jest-dom';
 
-jest.mock('../hooks/useFreshApiToken', () => ({
+vi.mock('../hooks/useFreshApiToken', () => ({
   useFreshApiToken: (() => {
     const callbacks = new Map<string, jest.Mock>();
     return (token: string | null) => {
       const key = token ?? '__missing__';
       if (!callbacks.has(key)) {
-        callbacks.set(key, jest.fn().mockResolvedValue(token || undefined));
+        callbacks.set(key, vi.fn().mockResolvedValue(token || undefined));
       }
       return callbacks.get(key);
     };
   })(),
 }));
 
-jest.mock('../lib/api.service', () => ({
+vi.mock('../lib/api.service', () => ({
   apiService: {
-    get: jest.fn(),
+    get: vi.fn(),
   },
 }));
 
-jest.mock('../services/expiredItemService', () => ({
-  getExpiredItems: jest.fn(),
-  processExpiredItem: jest.fn(),
+vi.mock('../services/expiredItemService', () => ({
+  getExpiredItems: vi.fn(),
+  processExpiredItem: vi.fn(),
 }));
 
-jest.mock('../components/ExpiredLossReport', () => () => <div>Expired loss report</div>);
+vi.mock('../components/ExpiredLossReport', () => ({
+  default: () => <div>Expired loss report</div>,
+}));
 
-jest.mock('react-chartjs-2', () => ({
+vi.mock('react-chartjs-2', () => ({
   Bar: () => <div role="img" aria-label="Loss chart" />,
 }));
 
@@ -40,7 +42,7 @@ describe('ExpiredItemsPage', () => {
   const mockedGetExpiredItems = getExpiredItems as jest.MockedFunction<typeof getExpiredItems>;
 
   beforeEach(() => {
-    jest.clearAllMocks();
+    vi.clearAllMocks();
   });
 
   it('passes the chart abort signal into both loss report requests', async () => {

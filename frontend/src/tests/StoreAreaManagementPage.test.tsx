@@ -13,27 +13,27 @@ import { apiService } from '../lib/api.service';
 import '@testing-library/jest-dom';
 
 const testSessionToken = randomUUID();
-const mockGetToken = jest.fn();
+const mockGetToken = vi.fn();
 
-jest.mock('@clerk/clerk-react', () => ({
+vi.mock('@clerk/clerk-react', () => ({
   useAuth: () => ({
     getToken: mockGetToken,
   }),
 }));
 
 // Mock apiService
-jest.mock('../lib/api.service', () => ({
+vi.mock('../lib/api.service', () => ({
   apiService: {
-    get: jest.fn(),
-    post: jest.fn(),
-    put: jest.fn(),
-    delete: jest.fn(),
+    get: vi.fn(),
+    post: vi.fn(),
+    put: vi.fn(),
+    delete: vi.fn(),
   },
 }));
 
 describe('StoreAreaManagementPage', () => {
   beforeEach(() => {
-    jest.clearAllMocks();
+    vi.clearAllMocks();
     mockGetToken.mockResolvedValue(undefined);
   });
 
@@ -62,6 +62,12 @@ describe('StoreAreaManagementPage', () => {
     (apiService.get as jest.Mock).mockResolvedValue([]);
 
     render(<StoreAreaManagementPage token={testSessionToken} />);
+
+    // Let the initial fetchStoreAreas() promise settle before interacting. On
+    // success it calls setError(null), which would otherwise clear the
+    // validation error asserted below (a timing race that jest happened to win
+    // by settling the fetch before the click).
+    await act(async () => {});
 
     expect(screen.getByLabelText(/Area name/i)).toBeInTheDocument();
     expect(screen.getByLabelText(/Sub-department/i)).toHaveAttribute('maxLength', '50');

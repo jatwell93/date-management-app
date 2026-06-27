@@ -4,26 +4,26 @@ import { apiService } from '../lib/api.service';
 import { waitFor } from '@testing-library/react';
 
 // Mock apiService
-jest.mock('../lib/api.service', () => ({
+vi.mock('../lib/api.service', () => ({
   apiService: {
-    post: jest.fn(),
+    post: vi.fn(),
   },
 }));
 
 // Mock offlineStorage
-jest.mock('../lib/offline-storage', () => ({
+vi.mock('../lib/offline-storage', () => ({
   offlineStorage: {
-    setItem: jest.fn(),
-    getItem: jest.fn(),
-    removeItem: jest.fn(),
-    clear: jest.fn(),
-    keys: jest.fn(),
+    setItem: vi.fn(),
+    getItem: vi.fn(),
+    removeItem: vi.fn(),
+    clear: vi.fn(),
+    keys: vi.fn(),
   },
 }));
 
 describe('synchronizeOfflineData', () => {
   beforeEach(() => {
-    jest.clearAllMocks();
+    vi.clearAllMocks();
     // Default to online
     Object.defineProperty(navigator, 'onLine', { writable: true, value: true });
     // Default mock for apiService.post
@@ -105,7 +105,7 @@ describe('synchronizeOfflineData', () => {
       locationId: 1,
     });
 
-    const getToken = jest.fn().mockResolvedValue('fresh-clerk-token');
+    const getToken = vi.fn().mockResolvedValue('fresh-clerk-token');
 
     await synchronizeOfflineData(getToken);
 
@@ -122,7 +122,7 @@ describe('synchronizeOfflineData', () => {
   });
 
   it('does not read the offline queue when a token provider cannot return a token', async () => {
-    const getToken = jest.fn().mockResolvedValue(undefined);
+    const getToken = vi.fn().mockResolvedValue(undefined);
 
     await synchronizeOfflineData(getToken);
 
@@ -149,7 +149,7 @@ describe('synchronizeOfflineData', () => {
         locationId: 2,
       });
 
-    const getToken = jest.fn().mockResolvedValue('fresh-token');
+    const getToken = vi.fn().mockResolvedValue('fresh-token');
     (apiService.post as jest.Mock)
       .mockRejectedValueOnce(new Error('Failed to add item'))
       .mockResolvedValueOnce({ message: 'Inventory item added successfully!' });

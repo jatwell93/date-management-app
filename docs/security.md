@@ -802,12 +802,20 @@ After each change, `npm audit` confirmed the targeted advisories cleared and `np
 
 The test runner migration is staged: this change introduces a temporary standalone Jest (decoupled from CRA) so the existing suites stay green; the `jest → vitest` port is tracked in #291. As a result the frontend now reports the same dev/test-only Jest toolchain advisories as the backend (see Accepted Dependency Risks below), which #291 resolves.
 
+**2026-06-27** — Ported the frontend test suite from Jest to Vitest (the frontend portion of #291). This removes the standalone Jest scaffolding added during the Vite migration and its dev/test-only advisories:
+
+| Boundary | Change | Advisories cleared |
+| -------- | ------ | ------------------ |
+| Frontend | Replaced `jest` / `babel-jest` / `jest-environment-jsdom` / `jest-fetch-mock` with `vitest` + `jsdom` + `vitest-fetch-mock`; 54 suites / 470 tests ported (`jest.*` → `vi.*`), aligning the frontend with the workers boundary | `@jest/*`, `babel-jest`, `babel-plugin-istanbul`, `@istanbuljs/load-nyc-config`, dev/test `js-yaml` → **removed** from the frontend |
+
+After the port, `npm audit` in `/frontend` reports only the pre-existing `quagga` and `xlsx` accepted risks below; the Jest toolchain advisories are gone. The backend Jest 30 upgrade (the remaining part of #291) is unaffected by this change.
+
 ### Accepted Dependency Risks
 
 | Package area | Current status | Mitigation |
 | ------------ | -------------- | ---------- |
 | `xlsx` in backend/frontend | npm audit reports known high severity advisories and no fixed npm release. | Keep file upload limits, input validation, and CSV injection controls active. Treat XLSX replacement as follow-up work before broadening spreadsheet import features. |
-| `jest` toolchain in backend/frontend | Moderate advisories (e.g. `js-yaml`, `@jest/*`, `babel-plugin-istanbul`) remain because npm's only offered "fix" is a breaking downgrade (`jest@25`) that would break the test suites. The frontend is on a transitional standalone Jest after the Vite migration. | Dev/test-only; never shipped to runtime. Resolve via the deliberate Jest 30 / Vitest migration tracked in #291, not a forced downgrade. |
+| `jest` toolchain in backend | Moderate advisories (e.g. `js-yaml`, `@jest/*`, `babel-plugin-istanbul`) remain because npm's only offered "fix" is a breaking downgrade (`jest@25`) that would break the test suites. (The frontend is now on Vitest and no longer affected.) | Dev/test-only; never shipped to runtime. Resolve via the deliberate Jest 30 upgrade tracked in #291, not a forced downgrade. |
 | `quagga` in frontend | Pulls old request/form-data/qs paths through image loading dependencies (`form-data`, `request`, `tough-cookie` advisories). | Keep scanner use local/browser-only and evaluate replacement during scanner dependency remediation. |
 
 ### Developer Workflow

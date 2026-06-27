@@ -4,14 +4,14 @@ import { useAuth, useOrganization } from '@clerk/clerk-react';
 import { apiService } from '../lib/api.service';
 import { useOrgBootstrap } from '../hooks/useOrgBootstrap';
 
-jest.mock('@clerk/clerk-react', () => ({
-  useAuth: jest.fn(),
-  useOrganization: jest.fn(),
+vi.mock('@clerk/clerk-react', () => ({
+  useAuth: vi.fn(),
+  useOrganization: vi.fn(),
 }));
 
-jest.mock('../lib/api.service', () => ({
+vi.mock('../lib/api.service', () => ({
   apiService: {
-    post: jest.fn(),
+    post: vi.fn(),
   },
 }));
 
@@ -31,7 +31,7 @@ describe('useOrgBootstrap', () => {
   const mockPost = apiService.post as jest.Mock;
 
   beforeEach(() => {
-    jest.clearAllMocks();
+    vi.clearAllMocks();
     mockPost.mockResolvedValue({
       userId: 1,
       organizationId: 'org-1',
@@ -43,7 +43,7 @@ describe('useOrgBootstrap', () => {
   });
 
   it('waits for organization loading to complete before bootstrapping invited users', async () => {
-    const getToken = jest.fn().mockResolvedValue('clerk-token');
+    const getToken = vi.fn().mockResolvedValue('clerk-token');
 
     mockUseAuth.mockReturnValue({
       getToken,
@@ -86,7 +86,7 @@ describe('useOrgBootstrap', () => {
   });
 
   it('bootstraps with default-org payload when no Clerk organization exists after load', async () => {
-    const getToken = jest.fn().mockResolvedValue('clerk-token');
+    const getToken = vi.fn().mockResolvedValue('clerk-token');
 
     mockUseAuth.mockReturnValue({
       getToken,
@@ -109,7 +109,7 @@ describe('useOrgBootstrap', () => {
   });
 
   it('retries bootstrap and clears stale state when Clerk user changes', async () => {
-    const getToken = jest.fn().mockResolvedValue('clerk-token');
+    const getToken = vi.fn().mockResolvedValue('clerk-token');
     const authState = {
       getToken,
       isLoaded: true,

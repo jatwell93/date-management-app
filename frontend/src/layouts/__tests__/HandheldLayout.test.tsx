@@ -5,7 +5,7 @@ import { HandheldProvider } from '../../contexts/HandheldContext';
 import { HandheldScanToolbar } from '../../components/HandheldScanToolbar';
 
 // Mock the HandheldScanToolbar component
-jest.mock('../../components/HandheldScanToolbar', () => ({
+vi.mock('../../components/HandheldScanToolbar', () => ({
   HandheldScanToolbar: ({ userName, syncStatus, onSyncNow, onSettingsClick, queueLength }: any) => (
     <div data-testid="handheld-scan-toolbar">
       <span>Toolbar Mock</span>
@@ -16,17 +16,17 @@ jest.mock('../../components/HandheldScanToolbar', () => ({
 }));
 
 // Mock the useHandheldDetectionContext hook
-jest.mock('../../contexts/HandheldContext', () => ({
-  ...jest.requireActual('../../contexts/HandheldContext'),
-  useHandheldDetectionContext: jest.fn(),
+vi.mock('../../contexts/HandheldContext', async (importOriginal) => ({
+  ...(await importOriginal<typeof import('../../contexts/HandheldContext')>()),
+  useHandheldDetectionContext: vi.fn(),
 }));
 
-const mockUseHandheldDetectionContext =
-  require('../../contexts/HandheldContext').useHandheldDetectionContext;
+const mockUseHandheldDetectionContext = (await import('../../contexts/HandheldContext'))
+  .useHandheldDetectionContext as unknown as jest.Mock;
 
 describe('HandheldLayout', () => {
-  const mockOnSyncNow = jest.fn();
-  const mockOnSettingsClick = jest.fn();
+  const mockOnSyncNow = vi.fn();
+  const mockOnSettingsClick = vi.fn();
 
   const defaultProps = {
     children: <div>Test Content</div>,
@@ -38,7 +38,7 @@ describe('HandheldLayout', () => {
   };
 
   beforeEach(() => {
-    jest.clearAllMocks();
+    vi.clearAllMocks();
   });
 
   it('renders children content', () => {
@@ -212,7 +212,7 @@ describe('HandheldLayout', () => {
     });
 
     // Mock console.error to avoid noise in test output
-    const consoleSpy = jest.spyOn(console, 'error').mockImplementation(() => {});
+    const consoleSpy = vi.spyOn(console, 'error').mockImplementation(() => {});
 
     expect(() => {
       render(

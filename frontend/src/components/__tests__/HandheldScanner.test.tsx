@@ -4,7 +4,7 @@ import { HandheldScanner } from '../HandheldScanner';
 import { HandheldProvider } from '../../contexts/HandheldContext';
 
 // Mock the Scanner component
-jest.mock('../Scanner', () => ({
+vi.mock('../Scanner', () => ({
   Scanner: ({ onScan, defaultMode }: any) => (
     <div data-testid="scanner-mock">
       <span>Scanner Mock</span>
@@ -26,19 +26,19 @@ jest.mock('../Scanner', () => ({
 }));
 
 // Mock the useHandheldDetectionContext hook
-jest.mock('../../contexts/HandheldContext', () => ({
-  ...jest.requireActual('../../contexts/HandheldContext'),
-  useHandheldDetectionContext: jest.fn(),
+vi.mock('../../contexts/HandheldContext', async (importOriginal) => ({
+  ...(await importOriginal<typeof import('../../contexts/HandheldContext')>()),
+  useHandheldDetectionContext: vi.fn(),
 }));
 
-const mockUseHandheldDetectionContext =
-  require('../../contexts/HandheldContext').useHandheldDetectionContext;
+const mockUseHandheldDetectionContext = (await import('../../contexts/HandheldContext'))
+  .useHandheldDetectionContext as unknown as jest.Mock;
 
 describe('HandheldScanner', () => {
-  const mockOnScan = jest.fn();
+  const mockOnScan = vi.fn();
 
   beforeEach(() => {
-    jest.clearAllMocks();
+    vi.clearAllMocks();
   });
 
   it('renders Scanner with defaultMode="camera" when isHandheld=true', () => {
@@ -133,7 +133,7 @@ describe('HandheldScanner', () => {
     });
 
     // Mock console.error to avoid noise in test output
-    const consoleSpy = jest.spyOn(console, 'error').mockImplementation(() => {});
+    const consoleSpy = vi.spyOn(console, 'error').mockImplementation(() => {});
 
     expect(() => {
       render(<HandheldScanner onScan={mockOnScan} />);

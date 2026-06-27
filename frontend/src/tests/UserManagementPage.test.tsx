@@ -4,9 +4,9 @@ import { UserManagementPage } from '../pages/UserManagementPage';
 import { useOrganization } from '@clerk/clerk-react';
 
 // Mock Clerk hooks
-const mockGetMemberships = jest.fn();
-jest.mock('@clerk/clerk-react', () => ({
-  useOrganization: jest.fn(),
+const mockGetMemberships = vi.fn();
+vi.mock('@clerk/clerk-react', () => ({
+  useOrganization: vi.fn(),
 }));
 
 // Mock UI components
@@ -21,7 +21,7 @@ function deferred<T>() {
   return { promise, resolve };
 }
 
-jest.mock('../components/ui/card', () => ({
+vi.mock('../components/ui/card', () => ({
   Card: ({ children, className }: MockCardProps) => (
     <div className={className} data-testid="card">
       {children}
@@ -51,7 +51,7 @@ jest.mock('../components/ui/card', () => ({
 
 describe('UserManagementPage', () => {
   beforeEach(() => {
-    jest.clearAllMocks();
+    vi.clearAllMocks();
     (useOrganization as jest.Mock).mockReturnValue({
       organization: {
         id: 'org_123',
@@ -192,11 +192,11 @@ describe('UserManagementPage', () => {
         publicUserData: { firstName: string; lastName: string; identifier: string };
       }>;
     }>();
-    const orgAGetMemberships = jest
+    const orgAGetMemberships = vi
       .fn()
       .mockRejectedValueOnce(new Error('Network unavailable'))
       .mockReturnValueOnce(staleRetry.promise);
-    const orgBGetMemberships = jest.fn().mockResolvedValue({
+    const orgBGetMemberships = vi.fn().mockResolvedValue({
       data: [
         {
           id: 'mem_org_b',

@@ -1,7 +1,7 @@
 import React from 'react';
 import { fireEvent, render, screen, waitFor } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
-import fetchMock from 'jest-fetch-mock';
+import { fetchMock } from '../../test-utils/fetchMock';
 import { CSVUploadPage } from '../CSVUploadPage';
 import {
   validateCSVColumns,
@@ -9,32 +9,32 @@ import {
   type ColumnValidationResult,
 } from '../../utils/csvValidator';
 
-const mockGetToken = jest.fn();
+const mockGetToken = vi.fn();
 
-jest.mock('@clerk/clerk-react', () => ({
+vi.mock('@clerk/clerk-react', () => ({
   useAuth: () => ({
     getToken: mockGetToken,
   }),
 }));
 
 // Mock react-router-dom
-const mockNavigate = jest.fn();
+const mockNavigate = vi.fn();
 const mockSearchParams = new URLSearchParams();
-jest.mock('react-router-dom', () => ({
+vi.mock('react-router-dom', () => ({
   useSearchParams: () => [mockSearchParams],
   useNavigate: () => mockNavigate,
 }));
 
-jest.mock('../../lib/api.service', () => ({
+vi.mock('../../lib/api.service', () => ({
   buildApiUrl: (route: string) => `https://api.test${route}`,
 }));
 
-jest.mock('../../utils/csvValidator', () => {
-  const actual = jest.requireActual('../../utils/csvValidator');
+vi.mock('../../utils/csvValidator', async (importOriginal) => {
+  const actual = await importOriginal<typeof import('../../utils/csvValidator')>();
   return {
     ...actual,
-    validateCSVColumns: jest.fn(),
-    estimateRowCount: jest.fn(),
+    validateCSVColumns: vi.fn(),
+    estimateRowCount: vi.fn(),
   };
 });
 
@@ -52,21 +52,21 @@ describe('CSVUploadPage expiry import', () => {
 
   beforeEach(() => {
     fetchMock.resetMocks();
-    jest.clearAllMocks();
+    vi.clearAllMocks();
     localStorage.clear();
 
     mockGetToken.mockResolvedValue('fresh-clerk-token');
     (validateCSVColumns as jest.Mock).mockResolvedValue(validColumns);
     (estimateRowCount as jest.Mock).mockReturnValue(null);
 
-    (URL.createObjectURL as unknown as jest.Mock) = jest.fn(() => 'blob:test-url');
-    (URL.revokeObjectURL as unknown as jest.Mock) = jest.fn();
+    (URL.createObjectURL as unknown as jest.Mock) = vi.fn(() => 'blob:test-url');
+    (URL.revokeObjectURL as unknown as jest.Mock) = vi.fn();
 
-    jest.spyOn(HTMLAnchorElement.prototype, 'click').mockImplementation(() => {});
+    vi.spyOn(HTMLAnchorElement.prototype, 'click').mockImplementation(() => {});
   });
 
   afterEach(() => {
-    jest.restoreAllMocks();
+    vi.restoreAllMocks();
   });
 
   it('switches to expiry mode UX with template actions', async () => {

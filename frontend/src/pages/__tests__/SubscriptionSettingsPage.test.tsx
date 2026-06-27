@@ -1,28 +1,28 @@
 import { fireEvent, render, screen, waitFor } from '@testing-library/react';
 import { SubscriptionSettingsPage } from '../SubscriptionSettingsPage';
 
-jest.mock('../../hooks/useFreshApiToken', () => ({
+vi.mock('../../hooks/useFreshApiToken', () => ({
   useFreshApiToken: (() => {
     const callbacks = new Map<string, jest.Mock>();
     return (token: string | null) => {
       const key = token ?? '__missing__';
       if (!callbacks.has(key)) {
-        callbacks.set(key, jest.fn().mockResolvedValue(token || undefined));
+        callbacks.set(key, vi.fn().mockResolvedValue(token || undefined));
       }
       return callbacks.get(key);
     };
   })(),
 }));
 
-jest.mock('@sentry/react', () => ({
-  captureException: jest.fn(),
+vi.mock('@sentry/react', () => ({
+  captureException: vi.fn(),
 }));
 
-jest.mock('../../components/SubscriptionDashboard', () => ({
+vi.mock('../../components/SubscriptionDashboard', () => ({
   SubscriptionDashboard: () => <div>Subscription dashboard</div>,
 }));
 
-jest.mock('../../components/UpgradeModal', () => ({
+vi.mock('../../components/UpgradeModal', () => ({
   UpgradeModal: ({ onSelectPlan }: { onSelectPlan: (tier: string, cycle: string) => void }) => (
     <div>
       <button type="button" onClick={() => onSelectPlan('starter', 'annual')}>
@@ -38,20 +38,20 @@ jest.mock('../../components/UpgradeModal', () => ({
   ),
 }));
 
-jest.mock('../../components/ManageSubscriptionButton', () => ({
+vi.mock('../../components/ManageSubscriptionButton', () => ({
   ManageSubscriptionButton: () => <button type="button">Manage Billing</button>,
 }));
 
-jest.mock('../../components/UsageWarning', () => ({
+vi.mock('../../components/UsageWarning', () => ({
   UsageWarning: () => <div>Usage warning</div>,
 }));
 
-global.fetch = jest.fn();
+global.fetch = vi.fn();
 
 describe('SubscriptionSettingsPage', () => {
   beforeEach(() => {
-    jest.clearAllMocks();
-    jest.spyOn(window, 'alert').mockImplementation(() => undefined);
+    vi.clearAllMocks();
+    vi.spyOn(window, 'alert').mockImplementation(() => undefined);
     process.env.REACT_APP_STRIPE_PRICE_STARTER_MONTHLY = 'price_starter_monthly';
     process.env.REACT_APP_STRIPE_PRICE_STARTER_ANNUAL = 'price_starter_annual';
     process.env.REACT_APP_STRIPE_PRICE_PROFESSIONAL_MONTHLY = 'price_professional_monthly';

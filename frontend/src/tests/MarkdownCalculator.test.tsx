@@ -6,9 +6,9 @@ import { MarkdownCalculator } from '../components/MarkdownCalculator';
 import { apiService } from '../lib/api.service';
 import '@testing-library/jest-dom';
 
-const mockGetToken = jest.fn();
+const mockGetToken = vi.fn();
 
-jest.mock('@clerk/clerk-react', () => ({
+vi.mock('@clerk/clerk-react', () => ({
   useAuth: () => ({
     getToken: mockGetToken,
   }),
@@ -19,7 +19,7 @@ const mockScannerProps: Array<{
   isHandheld?: boolean;
 }> = [];
 
-jest.mock('../components/Scanner', () => ({
+vi.mock('../components/Scanner', () => ({
   Scanner: (props: {
     onScan: (result: { barcode: string; timestamp: number; source: 'manual' }) => void;
     isHandheld?: boolean;
@@ -44,9 +44,9 @@ jest.mock('../components/Scanner', () => ({
   },
 }));
 
-jest.mock('../lib/api.service', () => ({
+vi.mock('../lib/api.service', () => ({
   apiService: {
-    get: jest.fn(),
+    get: vi.fn(),
   },
 }));
 

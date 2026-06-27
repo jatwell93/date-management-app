@@ -4,35 +4,35 @@ import { DetailedExpiryReportPage } from '../pages/DetailedExpiryReportPage';
 import { apiService } from '../lib/api.service';
 import '@testing-library/jest-dom';
 
-jest.mock('../hooks/useFreshApiToken', () => ({
+vi.mock('../hooks/useFreshApiToken', () => ({
   useFreshApiToken: (() => {
     const callbacks = new Map<string, jest.Mock>();
     return (token: string | null) => {
       const key = token ?? '__missing__';
       if (!callbacks.has(key)) {
-        callbacks.set(key, jest.fn().mockResolvedValue(token || undefined));
+        callbacks.set(key, vi.fn().mockResolvedValue(token || undefined));
       }
       return callbacks.get(key);
     };
   })(),
 }));
 
-jest.mock('../lib/api.service', () => ({
+vi.mock('../lib/api.service', () => ({
   apiService: {
-    get: jest.fn(),
-    put: jest.fn(),
-    post: jest.fn(),
-    delete: jest.fn(),
+    get: vi.fn(),
+    put: vi.fn(),
+    post: vi.fn(),
+    delete: vi.fn(),
   },
 }));
 
 describe('DetailedExpiryReportPage', () => {
   beforeEach(() => {
-    jest.clearAllMocks();
+    vi.clearAllMocks();
   });
 
   it('renders a mobile-ready expiry action summary without a desktop fallback warning', async () => {
-    // @ts-expect-error — apiService.get is mocked as jest.fn()
+    // @ts-expect-error — apiService.get is mocked as vi.fn()
     apiService.get.mockImplementation((url) => {
       if (url === '/reports/expiry-details') {
         return Promise.resolve([
@@ -90,7 +90,7 @@ describe('DetailedExpiryReportPage', () => {
   });
 
   it('keeps the current row in edit mode when saving fails', async () => {
-    // @ts-expect-error — apiService.get is mocked as jest.fn()
+    // @ts-expect-error — apiService.get is mocked as vi.fn()
     apiService.get.mockImplementation((url) => {
       if (url === '/reports/expiry-details') {
         return Promise.resolve([
@@ -128,7 +128,7 @@ describe('DetailedExpiryReportPage', () => {
       }
       return Promise.resolve([]);
     });
-    // @ts-expect-error — apiService.put is mocked as jest.fn()
+    // @ts-expect-error — apiService.put is mocked as vi.fn()
     apiService.put.mockRejectedValue(new Error('Could not save item'));
 
     render(<DetailedExpiryReportPage token="test-session-value" />);
@@ -149,7 +149,7 @@ describe('DetailedExpiryReportPage', () => {
       return d.toISOString().split('T')[0];
     };
 
-    // @ts-expect-error — apiService.get is mocked as jest.fn()
+    // @ts-expect-error — apiService.get is mocked as vi.fn()
     apiService.get.mockImplementation((url) => {
       if (url === '/reports/expiry-details') {
         return Promise.resolve([
@@ -184,7 +184,7 @@ describe('DetailedExpiryReportPage', () => {
       }
       return Promise.resolve([]);
     });
-    // @ts-expect-error — apiService.post is mocked as jest.fn()
+    // @ts-expect-error — apiService.post is mocked as vi.fn()
     apiService.post.mockResolvedValue({});
 
     render(<DetailedExpiryReportPage token="test-session-value" />);

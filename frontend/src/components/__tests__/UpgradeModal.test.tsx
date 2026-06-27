@@ -2,11 +2,11 @@ import { render, screen, fireEvent } from '@testing-library/react';
 import { UpgradeModal } from '../UpgradeModal';
 
 describe('UpgradeModal', () => {
-  const mockOnClose = jest.fn();
-  const mockOnSelectPlan = jest.fn();
+  const mockOnClose = vi.fn();
+  const mockOnSelectPlan = vi.fn();
 
   beforeEach(() => {
-    jest.clearAllMocks();
+    vi.clearAllMocks();
   });
 
   it('renders tier comparison table with all 4 tiers', () => {

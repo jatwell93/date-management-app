@@ -27,13 +27,13 @@ describe('utils', () => {
 
   describe('isWithinMarkdownPeriod', () => {
     beforeAll(() => {
-      jest.useFakeTimers();
+      vi.useFakeTimers();
       // Set "now" to 2023-01-01
-      jest.setSystemTime(new Date('2023-01-01T00:00:00Z'));
+      vi.setSystemTime(new Date('2023-01-01T00:00:00Z'));
     });
 
     afterAll(() => {
-      jest.useRealTimers();
+      vi.useRealTimers();
     });
 
     it('should return false if expiryDate is null', () => {
@@ -62,31 +62,31 @@ describe('utils', () => {
   describe('calculateMarkdownPrice', () => {
     const COST = 100;
 
-    it('delegates markdown pricing to the shared domain helper', () => {
-      jest.isolateModules(() => {
-        const calculateMarkdownPriceFromCost = jest.fn().mockReturnValue(12.34);
-        const getMarkdownDiscountPercentageForDays = jest.fn().mockReturnValue(37);
+    it('delegates markdown pricing to the shared domain helper', async () => {
+      const calculateMarkdownPriceFromCost = vi.fn().mockReturnValue(12.34);
+      const getMarkdownDiscountPercentageForDays = vi.fn().mockReturnValue(37);
 
-        jest.doMock(
-          '@shared/markdown',
-          () => ({
-            calculateMarkdownPriceFromCost,
-            getMarkdownDiscountPercentageForDays,
-          }),
-          { virtual: true },
-        );
+      vi.resetModules();
+      vi.doMock('@shared/markdown', () => ({
+        calculateMarkdownPriceFromCost,
+        getMarkdownDiscountPercentageForDays,
+      }));
 
+      try {
         const {
           calculateMarkdownPrice: isolatedCalculateMarkdownPrice,
           calculateMarkdownPercentage: isolatedCalculateMarkdownPercentage,
-        } = require('../utils');
+        } = await import('../utils');
 
         expect(isolatedCalculateMarkdownPrice(47.25, 12)).toBe(12.34);
         expect(calculateMarkdownPriceFromCost).toHaveBeenCalledWith(47.25, 12);
 
         expect(isolatedCalculateMarkdownPercentage(12)).toBe(37);
         expect(getMarkdownDiscountPercentageForDays).toHaveBeenCalledWith(12);
-      });
+      } finally {
+        vi.doUnmock('@shared/markdown');
+        vi.resetModules();
+      }
     });
 
     it('should markdown by 75% if expiry is between 1 and 30 days', () => {

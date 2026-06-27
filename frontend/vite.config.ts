@@ -1,4 +1,6 @@
-import { defineConfig, loadEnv } from 'vite';
+/// <reference types="vitest/config" />
+import { defineConfig } from 'vitest/config';
+import { loadEnv } from 'vite';
 import react from '@vitejs/plugin-react';
 import { VitePWA } from 'vite-plugin-pwa';
 import path from 'node:path';
@@ -79,5 +81,20 @@ export default defineConfig(({ mode }) => {
     // Also expose REACT_APP_* on import.meta.env for the eventual migration off
     // process.env; harmless today.
     envPrefix: 'REACT_APP_',
+    test: {
+      globals: true,
+      environment: 'jsdom',
+      setupFiles: ['./src/setupTests.ts'],
+      // Component CSS imports are irrelevant to behavior tests; skip processing.
+      css: false,
+      clearMocks: true,
+      coverage: {
+        provider: 'v8',
+        reportsDirectory: './coverage',
+        reporter: ['text', 'json-summary', 'lcov'],
+        include: ['src/**/*.{ts,tsx}'],
+        exclude: ['src/**/*.d.ts', 'src/**/*.test.{ts,tsx}', 'src/service-worker.ts'],
+      },
+    },
   };
 });

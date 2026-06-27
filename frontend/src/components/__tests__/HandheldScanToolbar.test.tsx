@@ -4,17 +4,17 @@ import { HandheldScanToolbar } from '../HandheldScanToolbar';
 import { HandheldProvider } from '../../contexts/HandheldContext';
 
 // Mock the useHandheldDetectionContext hook
-jest.mock('../../contexts/HandheldContext', () => ({
-  ...jest.requireActual('../../contexts/HandheldContext'),
-  useHandheldDetectionContext: jest.fn(),
+vi.mock('../../contexts/HandheldContext', async (importOriginal) => ({
+  ...(await importOriginal<typeof import('../../contexts/HandheldContext')>()),
+  useHandheldDetectionContext: vi.fn(),
 }));
 
-const mockUseHandheldDetectionContext =
-  require('../../contexts/HandheldContext').useHandheldDetectionContext;
+const mockUseHandheldDetectionContext = (await import('../../contexts/HandheldContext'))
+  .useHandheldDetectionContext as unknown as jest.Mock;
 
 describe('HandheldScanToolbar', () => {
-  const mockOnSyncNow = jest.fn();
-  const mockOnSettingsClick = jest.fn();
+  const mockOnSyncNow = vi.fn();
+  const mockOnSettingsClick = vi.fn();
 
   const defaultProps = {
     userName: 'John Doe',
@@ -25,7 +25,7 @@ describe('HandheldScanToolbar', () => {
   };
 
   beforeEach(() => {
-    jest.clearAllMocks();
+    vi.clearAllMocks();
     mockUseHandheldDetectionContext.mockReturnValue({
       isHandheld: true,
       detectionResult: {
@@ -35,12 +35,12 @@ describe('HandheldScanToolbar', () => {
         screenHeight: 800,
       },
       syncStrategy: 'real-time', // ✓ Default sync strategy
-      setSyncStrategy: jest.fn(), // ✓ Sync strategy setter
+      setSyncStrategy: vi.fn(), // ✓ Sync strategy setter
       hapticEnabled: true,
       audioFeedbackEnabled: false,
-      setHapticEnabled: jest.fn(),
-      setAudioFeedbackEnabled: jest.fn(),
-      refreshDetection: jest.fn(),
+      setHapticEnabled: vi.fn(),
+      setAudioFeedbackEnabled: vi.fn(),
+      refreshDetection: vi.fn(),
     });
   });
 
@@ -135,12 +135,12 @@ describe('HandheldScanToolbar', () => {
         screenHeight: 800,
       },
       syncStrategy: 'batch', // ✓ Correct enum value (not 'batch-10-min')
-      setSyncStrategy: jest.fn(),
+      setSyncStrategy: vi.fn(),
       hapticEnabled: true,
       audioFeedbackEnabled: false,
-      setHapticEnabled: jest.fn(),
-      setAudioFeedbackEnabled: jest.fn(),
-      refreshDetection: jest.fn(),
+      setHapticEnabled: vi.fn(),
+      setAudioFeedbackEnabled: vi.fn(),
+      refreshDetection: vi.fn(),
     });
 
     render(
@@ -218,7 +218,7 @@ describe('HandheldScanToolbar', () => {
     });
 
     // Mock console.error to avoid noise in test output
-    const consoleSpy = jest.spyOn(console, 'error').mockImplementation(() => {});
+    const consoleSpy = vi.spyOn(console, 'error').mockImplementation(() => {});
 
     expect(() => {
       render(<HandheldScanToolbar {...defaultProps} />);
