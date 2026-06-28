@@ -15,32 +15,38 @@ import { SubscriptionStatus, TIER_LIMITS } from '../../types/subscription';
 import { createTestOrgWithSubscription } from '../helpers/test-factories';
 
 // Mock Stripe
-jest.mock('stripe', () => {
-  return jest.fn().mockImplementation(() => ({
-    customers: {
-      create: jest.fn().mockResolvedValue({ id: 'cus_test_transition' }),
-    },
-    subscriptions: {
-      retrieve: jest.fn().mockResolvedValue({
-        id: 'sub_test_transition',
-        status: 'active',
-        items: {
-          data: [{ id: 'si_test_item', price: { id: 'price_old', metadata: { tier: 'starter' } } }],
-        },
-      }),
-      update: jest.fn().mockImplementation((_subId: string, params: any) => {
-        // Extract tier from the price ID passed (e.g., 'professional' or 'starter')
-        const newTier = params?.items?.[0]?.price || 'starter';
-        return Promise.resolve({
+vi.mock('stripe', () => {
+  // SUT default-imports Stripe; expose the constructor as `default`.
+  const StripeMock = vi.fn().mockImplementation(function () {
+    return {
+      customers: {
+        create: vi.fn().mockResolvedValue({ id: 'cus_test_transition' }),
+      },
+      subscriptions: {
+        retrieve: vi.fn().mockResolvedValue({
           id: 'sub_test_transition',
           status: 'active',
           items: {
-            data: [{ id: 'si_test_item', price: { id: newTier, metadata: { tier: newTier } } }],
+            data: [
+              { id: 'si_test_item', price: { id: 'price_old', metadata: { tier: 'starter' } } },
+            ],
           },
-        });
-      }),
-    },
-  }));
+        }),
+        update: vi.fn().mockImplementation((_subId: string, params: any) => {
+          // Extract tier from the price ID passed (e.g., 'professional' or 'starter')
+          const newTier = params?.items?.[0]?.price || 'starter';
+          return Promise.resolve({
+            id: 'sub_test_transition',
+            status: 'active',
+            items: {
+              data: [{ id: 'si_test_item', price: { id: newTier, metadata: { tier: newTier } } }],
+            },
+          });
+        }),
+      },
+    };
+  });
+  return { default: StripeMock };
 });
 
 describe('Multi-Tenant Subscription Transition Tests', () => {
@@ -72,7 +78,7 @@ describe('Multi-Tenant Subscription Transition Tests', () => {
     });
 
     // Create a mock Stripe client via the mocked Stripe constructor
-    const Stripe = require('stripe');
+    const Stripe = (await import('stripe')).default;
     const mockStripe = new Stripe('sk_test_fake');
     subscriptionService = new SubscriptionService(prisma, mockStripe);
 

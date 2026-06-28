@@ -10,17 +10,17 @@ describe('Usage Counter Atomicity Tests', () => {
   beforeEach(() => {
     mockPrisma = {
       product: {
-        create: jest.fn(),
-        update: jest.fn(),
-        findUnique: jest.fn(),
-        findMany: jest.fn(),
-        findFirst: jest.fn(),
-        delete: jest.fn(),
+        create: vi.fn(),
+        update: vi.fn(),
+        findUnique: vi.fn(),
+        findMany: vi.fn(),
+        findFirst: vi.fn(),
+        delete: vi.fn(),
       },
       organizationUsage: {
-        upsert: jest.fn(),
-        update: jest.fn(),
-        findUnique: jest.fn().mockResolvedValue({
+        upsert: vi.fn(),
+        update: vi.fn(),
+        findUnique: vi.fn().mockResolvedValue({
           organizationId,
           totalSkus: 0,
           maxSkus: 1000,
@@ -28,31 +28,31 @@ describe('Usage Counter Atomicity Tests', () => {
         }),
       },
       inventoryItem: {
-        create: jest.fn(),
-        update: jest.fn(),
-        delete: jest.fn(),
-        findFirst: jest.fn(),
-        findMany: jest.fn(),
-        findUnique: jest.fn(),
+        create: vi.fn(),
+        update: vi.fn(),
+        delete: vi.fn(),
+        findFirst: vi.fn(),
+        findMany: vi.fn(),
+        findUnique: vi.fn(),
       },
       storeArea: {
-        findFirst: jest.fn(),
-        findUnique: jest.fn(),
-        create: jest.fn(),
+        findFirst: vi.fn(),
+        findUnique: vi.fn(),
+        create: vi.fn(),
       },
       auditLog: {
-        create: jest.fn(),
+        create: vi.fn(),
       },
       user: {
-        findFirst: jest.fn(),
+        findFirst: vi.fn(),
       },
-      $transaction: jest.fn((callback) => callback(mockPrisma)),
+      $transaction: vi.fn((callback) => callback(mockPrisma)),
     };
     productService = new ProductService(mockPrisma as unknown as PrismaClient, organizationId);
   });
 
   afterEach(() => {
-    jest.clearAllMocks();
+    vi.clearAllMocks();
   });
 
   describe('createProduct - Atomic SKU Counter Increment', () => {
@@ -314,35 +314,35 @@ describe('Usage Counter Atomicity Tests', () => {
     beforeEach(() => {
       mockPrisma = {
         inventoryItem: {
-          create: jest.fn(),
-          update: jest.fn(),
-          findUnique: jest.fn(),
-          findMany: jest.fn(),
-          findFirst: jest.fn(),
-          delete: jest.fn(),
+          create: vi.fn(),
+          update: vi.fn(),
+          findUnique: vi.fn(),
+          findMany: vi.fn(),
+          findFirst: vi.fn(),
+          delete: vi.fn(),
         },
         product: {
-          findFirst: jest.fn(),
-          findUnique: jest.fn(),
+          findFirst: vi.fn(),
+          findUnique: vi.fn(),
         },
         storeArea: {
-          findFirst: jest.fn(),
+          findFirst: vi.fn(),
         },
         user: {
-          findFirst: jest.fn(),
+          findFirst: vi.fn(),
         },
         auditLog: {
-          create: jest.fn(),
+          create: vi.fn(),
         },
         organizationUsage: {
-          findUnique: jest.fn().mockResolvedValue({
+          findUnique: vi.fn().mockResolvedValue({
             organizationId,
             totalInventoryItems: 10,
             maxInventoryItems: 10000,
           }),
-          update: jest.fn(),
+          update: vi.fn(),
         },
-        $transaction: jest.fn((callback) => callback(mockPrisma)),
+        $transaction: vi.fn((callback) => callback(mockPrisma)),
       };
       inventoryService = new InventoryService(
         organizationId,
@@ -380,7 +380,7 @@ describe('Usage Counter Atomicity Tests', () => {
       // Mock the calculateMarkdownStatus method to return 'Normal' for the future date
       const futureDate = new Date();
       futureDate.setFullYear(futureDate.getFullYear() + 1);
-      jest.spyOn(inventoryService, 'calculateMarkdownStatus').mockResolvedValue('Normal');
+      vi.spyOn(inventoryService, 'calculateMarkdownStatus').mockResolvedValue('Normal');
 
       const result = await inventoryService.createInventoryItem(itemData, 1);
 

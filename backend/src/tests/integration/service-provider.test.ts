@@ -44,20 +44,20 @@ describe('ServiceProvider Integration Tests', () => {
     // Create mock Prisma client
     mockPrisma = {
       user: {
-        findMany: jest.fn(),
-        findUnique: jest.fn(),
-        create: jest.fn(),
-        update: jest.fn(),
-        delete: jest.fn(),
+        findMany: vi.fn(),
+        findUnique: vi.fn(),
+        create: vi.fn(),
+        update: vi.fn(),
+        delete: vi.fn(),
       },
       product: {
-        findMany: jest.fn(),
-        findUnique: jest.fn(),
-        create: jest.fn(),
-        update: jest.fn(),
-        upsert: jest.fn(),
+        findMany: vi.fn(),
+        findUnique: vi.fn(),
+        create: vi.fn(),
+        update: vi.fn(),
+        upsert: vi.fn(),
       },
-      $disconnect: jest.fn(),
+      $disconnect: vi.fn(),
     } as any;
 
     mockStorage = new MockStorageProvider();

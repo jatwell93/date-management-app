@@ -2,15 +2,15 @@ import express from 'express';
 import request from 'supertest';
 import { NotFoundError, ValidationError } from '../../errors';
 
-const mockCreateInvite = jest.fn();
-const mockAcceptInvite = jest.fn();
-const mockListPendingInvites = jest.fn();
-const mockRevokeInvite = jest.fn();
-const mockGetOrganization = jest.fn();
-const mockDeleteOrganization = jest.fn();
-const mockSendOrganizationInviteEmail = jest.fn();
+const mockCreateInvite = vi.fn();
+const mockAcceptInvite = vi.fn();
+const mockListPendingInvites = vi.fn();
+const mockRevokeInvite = vi.fn();
+const mockGetOrganization = vi.fn();
+const mockDeleteOrganization = vi.fn();
+const mockSendOrganizationInviteEmail = vi.fn();
 
-jest.mock('../../middleware/auth.middleware', () => ({
+vi.mock('../../middleware/auth.middleware', () => ({
   authenticateToken: (req: any, _res: any, next: any) => {
     req.organizationId = req.get('x-org-id') || undefined;
     const userIdHeader = req.get('x-user-id');
@@ -19,7 +19,7 @@ jest.mock('../../middleware/auth.middleware', () => ({
   },
 }));
 
-jest.mock('../../middleware/requireOrgRole', () => ({
+vi.mock('../../middleware/requireOrgRole', () => ({
   requireOrgRole:
     (...allowedRoles: string[]) =>
     (req: any, _res: any, next: any) => {
@@ -29,7 +29,7 @@ jest.mock('../../middleware/requireOrgRole', () => ({
     },
 }));
 
-jest.mock('../../middleware/clerk-auth.middleware', () => ({
+vi.mock('../../middleware/clerk-auth.middleware', () => ({
   clerkAuth: (req: any, _res: any, next: any) => {
     const userId = req.get('x-clerk-user-id');
     const email = req.get('x-clerk-email');
@@ -47,37 +47,43 @@ jest.mock('../../middleware/clerk-auth.middleware', () => ({
   },
 }));
 
-jest.mock('../../middleware/rateLimiter', () => ({
+vi.mock('../../middleware/rateLimiter', () => ({
   standardLimiter: (_req: any, _res: any, next: any) => next(),
 }));
 
-jest.mock('../../middleware/validateRequest', () => ({
+vi.mock('../../middleware/validateRequest', () => ({
   validateRequest: () => (_req: any, _res: any, next: any) => next(),
 }));
 
-jest.mock('../../services/organization-invite.service', () => ({
-  OrganizationInviteService: jest.fn().mockImplementation(() => ({
-    createInvite: (...args: unknown[]) => mockCreateInvite(...args),
-    acceptInvite: (...args: unknown[]) => mockAcceptInvite(...args),
-    listPendingInvites: (...args: unknown[]) => mockListPendingInvites(...args),
-    revokeInvite: (...args: unknown[]) => mockRevokeInvite(...args),
-  })),
+vi.mock('../../services/organization-invite.service', () => ({
+  OrganizationInviteService: vi.fn().mockImplementation(function () {
+    return {
+      createInvite: (...args: unknown[]) => mockCreateInvite(...args),
+      acceptInvite: (...args: unknown[]) => mockAcceptInvite(...args),
+      listPendingInvites: (...args: unknown[]) => mockListPendingInvites(...args),
+      revokeInvite: (...args: unknown[]) => mockRevokeInvite(...args),
+    };
+  }),
 }));
 
-jest.mock('../../services/organization.service', () => ({
-  OrganizationService: jest.fn().mockImplementation(() => ({
-    getOrganization: (...args: unknown[]) => mockGetOrganization(...args),
-    deleteOrganization: (...args: unknown[]) => mockDeleteOrganization(...args),
-  })),
+vi.mock('../../services/organization.service', () => ({
+  OrganizationService: vi.fn().mockImplementation(function () {
+    return {
+      getOrganization: (...args: unknown[]) => mockGetOrganization(...args),
+      deleteOrganization: (...args: unknown[]) => mockDeleteOrganization(...args),
+    };
+  }),
 }));
 
-jest.mock('../../services/email.service', () => ({
-  EmailService: jest.fn().mockImplementation(() => ({
-    sendOrganizationInviteEmail: (...args: unknown[]) => mockSendOrganizationInviteEmail(...args),
-  })),
+vi.mock('../../services/email.service', () => ({
+  EmailService: vi.fn().mockImplementation(function () {
+    return {
+      sendOrganizationInviteEmail: (...args: unknown[]) => mockSendOrganizationInviteEmail(...args),
+    };
+  }),
 }));
 
-jest.mock('../../config/environment', () => ({
+vi.mock('../../config/environment', () => ({
   envConfig: {
     FRONTEND_URL: 'https://app.test.local',
     ENABLE_CUSTOM_ORG_INVITES: true,
@@ -92,7 +98,7 @@ describe('organization-invite.routes', () => {
   app.use('/organization', organizationInviteRouter);
 
   beforeEach(() => {
-    jest.clearAllMocks();
+    vi.clearAllMocks();
 
     mockCreateInvite.mockResolvedValue({
       id: 'invite-1',

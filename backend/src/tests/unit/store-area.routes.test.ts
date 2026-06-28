@@ -1,48 +1,50 @@
 import express from 'express';
 import request from 'supertest';
 
-const mockGetAllStoreAreas = jest.fn();
-const mockGetStoreAreaById = jest.fn();
-const mockGetStoreAreaByName = jest.fn();
-const mockCreateStoreArea = jest.fn();
-const mockUpdateStoreArea = jest.fn();
-const mockDeleteStoreArea = jest.fn();
+const mockGetAllStoreAreas = vi.fn();
+const mockGetStoreAreaById = vi.fn();
+const mockGetStoreAreaByName = vi.fn();
+const mockCreateStoreArea = vi.fn();
+const mockUpdateStoreArea = vi.fn();
+const mockDeleteStoreArea = vi.fn();
 
-const mockStoreAreaServiceCtor = jest.fn().mockImplementation((_organizationId?: string) => ({
-  getAllStoreAreas: (...args: unknown[]) => mockGetAllStoreAreas(...args),
-  getStoreAreaById: (...args: unknown[]) => mockGetStoreAreaById(...args),
-  getStoreAreaByName: (...args: unknown[]) => mockGetStoreAreaByName(...args),
-  createStoreArea: (...args: unknown[]) => mockCreateStoreArea(...args),
-  updateStoreArea: (...args: unknown[]) => mockUpdateStoreArea(...args),
-  deleteStoreArea: (...args: unknown[]) => mockDeleteStoreArea(...args),
-}));
+const mockStoreAreaServiceCtor = vi.fn().mockImplementation(function (_organizationId?: string) {
+  return {
+    getAllStoreAreas: (...args: unknown[]) => mockGetAllStoreAreas(...args),
+    getStoreAreaById: (...args: unknown[]) => mockGetStoreAreaById(...args),
+    getStoreAreaByName: (...args: unknown[]) => mockGetStoreAreaByName(...args),
+    createStoreArea: (...args: unknown[]) => mockCreateStoreArea(...args),
+    updateStoreArea: (...args: unknown[]) => mockUpdateStoreArea(...args),
+    deleteStoreArea: (...args: unknown[]) => mockDeleteStoreArea(...args),
+  };
+});
 
-jest.mock('../../services/store-area.service', () => ({
+vi.mock('../../services/store-area.service', () => ({
   StoreAreaService: function StoreAreaService(...args: unknown[]) {
     return mockStoreAreaServiceCtor(...args);
   },
 }));
 
-jest.mock('../../middleware/auth.middleware', () => ({
+vi.mock('../../middleware/auth.middleware', () => ({
   authenticateToken: (req: any, _res: any, next: any) => {
     req.organizationId = req.get('x-org-id') || 'org-store-area-test';
     next();
   },
 }));
 
-jest.mock('../../middleware/validation.middleware', () => ({
+vi.mock('../../middleware/validation.middleware', () => ({
   validateDataIntegrity: (_req: any, _res: any, next: any) => next(),
 }));
 
-jest.mock('../../middleware/validateRequest', () => ({
+vi.mock('../../middleware/validateRequest', () => ({
   validateRequest: () => (_req: any, _res: any, next: any) => next(),
 }));
 
-jest.mock('../../middleware/data-integrity.middleware', () => ({
+vi.mock('../../middleware/data-integrity.middleware', () => ({
   validateBusinessRules: (_req: any, _res: any, next: any) => next(),
 }));
 
-jest.mock('../../middleware/rateLimiter', () => ({
+vi.mock('../../middleware/rateLimiter', () => ({
   standardLimiter: (_req: any, _res: any, next: any) => next(),
 }));
 
@@ -54,7 +56,7 @@ describe('store-area.routes', () => {
   app.use('/store-areas', storeAreaRouter);
 
   beforeEach(() => {
-    jest.clearAllMocks();
+    vi.clearAllMocks();
 
     mockGetAllStoreAreas.mockResolvedValue([
       {

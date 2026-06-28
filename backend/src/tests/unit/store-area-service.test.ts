@@ -95,7 +95,7 @@ describe('StoreAreaService repository injection', () => {
 
   it('uses the injected repository for store area reads', async () => {
     const repository = {
-      findAll: jest.fn().mockResolvedValue([
+      findAll: vi.fn().mockResolvedValue([
         {
           id: 1,
           organizationId,

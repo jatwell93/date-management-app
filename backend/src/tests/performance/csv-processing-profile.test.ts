@@ -19,11 +19,11 @@ import * as fs from 'fs';
 import * as os from 'os';
 
 // Mock PrismaClient with minimal overhead
-const mockTransaction = jest.fn();
-const mockFindUnique = jest.fn();
-const mockFindFirst = jest.fn();
-const mockCreate = jest.fn();
-const mockUpdate = jest.fn();
+const mockTransaction = vi.fn();
+const mockFindUnique = vi.fn();
+const mockFindFirst = vi.fn();
+const mockCreate = vi.fn();
+const mockUpdate = vi.fn();
 
 const mockPrisma = {
   $transaction: mockTransaction,
@@ -56,7 +56,7 @@ describe('CSV Processing Performance Profile', () => {
   });
 
   beforeEach(() => {
-    jest.clearAllMocks();
+    vi.clearAllMocks();
 
     // Fast mock implementations
     mockTransaction.mockImplementation(async (callback) => {

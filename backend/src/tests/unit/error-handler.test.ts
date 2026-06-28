@@ -21,8 +21,8 @@ describe('Error Handler Middleware - Phase 13', () => {
   let statusMock: jest.Mock;
 
   beforeEach(() => {
-    jsonMock = jest.fn();
-    statusMock = jest.fn().mockReturnThis();
+    jsonMock = vi.fn();
+    statusMock = vi.fn().mockReturnThis();
 
     mockRes = {
       status: statusMock,
@@ -34,10 +34,10 @@ describe('Error Handler Middleware - Phase 13', () => {
       url: '/test',
       method: 'GET',
       ip: '127.0.0.1',
-      get: jest.fn().mockReturnValue('Test User Agent'),
+      get: vi.fn().mockReturnValue('Test User Agent'),
     };
 
-    mockNext = jest.fn();
+    mockNext = vi.fn();
   });
 
   describe('Custom Error Handling', () => {
@@ -190,7 +190,7 @@ describe('Error Handler Middleware - Phase 13', () => {
 
   describe('Context Logging', () => {
     it('should include request context in error logs', () => {
-      const consoleErrorSpy = jest.spyOn(console, 'error').mockImplementation();
+      const consoleErrorSpy = vi.spyOn(console, 'error').mockImplementation();
       const error = new Error('Test error');
 
       errorHandler(error, mockReq as Request, mockRes as Response, mockNext);

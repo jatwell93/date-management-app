@@ -1,25 +1,28 @@
 import express from 'express';
 import request from 'supertest';
 
-const mockGetAllExpiredItems = jest.fn();
-const mockProcessExpiredItem = jest.fn();
-const mockGetFinancialLossesBySKU = jest.fn();
-const mockGetFinancialLossesByStoreArea = jest.fn();
+const mockGetAllExpiredItems = vi.fn();
+const mockProcessExpiredItem = vi.fn();
+const mockGetFinancialLossesBySKU = vi.fn();
+const mockGetFinancialLossesByStoreArea = vi.fn();
 
-const mockExpiredItemServiceCtor = jest.fn().mockImplementation(() => ({
-  getAllExpiredItems: (...args: unknown[]) => mockGetAllExpiredItems(...args),
-  processExpiredItem: (...args: unknown[]) => mockProcessExpiredItem(...args),
-  getFinancialLossesBySKU: (...args: unknown[]) => mockGetFinancialLossesBySKU(...args),
-  getFinancialLossesByStoreArea: (...args: unknown[]) => mockGetFinancialLossesByStoreArea(...args),
-}));
+const mockExpiredItemServiceCtor = vi.fn().mockImplementation(function () {
+  return {
+    getAllExpiredItems: (...args: unknown[]) => mockGetAllExpiredItems(...args),
+    processExpiredItem: (...args: unknown[]) => mockProcessExpiredItem(...args),
+    getFinancialLossesBySKU: (...args: unknown[]) => mockGetFinancialLossesBySKU(...args),
+    getFinancialLossesByStoreArea: (...args: unknown[]) =>
+      mockGetFinancialLossesByStoreArea(...args),
+  };
+});
 
-jest.mock('../../services/expired-item.service', () => ({
+vi.mock('../../services/expired-item.service', () => ({
   ExpiredItemService: function ExpiredItemService(...args: unknown[]) {
     return mockExpiredItemServiceCtor(...args);
   },
 }));
 
-jest.mock('../../middleware/auth.middleware', () => ({
+vi.mock('../../middleware/auth.middleware', () => ({
   authenticateToken: (req: any, _res: any, next: any) => {
     const userIdHeader = req.get('x-user-id');
     req.userId = userIdHeader ? Number(userIdHeader) : undefined;
@@ -27,11 +30,11 @@ jest.mock('../../middleware/auth.middleware', () => ({
   },
 }));
 
-jest.mock('../../middleware/validateRequest', () => ({
+vi.mock('../../middleware/validateRequest', () => ({
   validateRequest: () => (_req: any, _res: any, next: any) => next(),
 }));
 
-jest.mock('../../middleware/rateLimiter', () => ({
+vi.mock('../../middleware/rateLimiter', () => ({
   standardLimiter: (_req: any, _res: any, next: any) => next(),
 }));
 
@@ -43,7 +46,7 @@ describe('expired-item.routes', () => {
   app.use('/expired-items', expiredItemRouter);
 
   beforeEach(() => {
-    jest.clearAllMocks();
+    vi.clearAllMocks();
 
     mockGetAllExpiredItems.mockResolvedValue([
       {

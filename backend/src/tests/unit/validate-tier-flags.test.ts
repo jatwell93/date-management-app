@@ -9,12 +9,12 @@ import {
 import { PrismaClient } from '@prisma/client';
 
 // Mock the logger to avoid noise in tests
-jest.mock('../../utils/logger', () => ({
+vi.mock('../../utils/logger', () => ({
   Logger: {
-    info: jest.fn(),
-    error: jest.fn(),
-    warn: jest.fn(),
-    debug: jest.fn(),
+    info: vi.fn(),
+    error: vi.fn(),
+    warn: vi.fn(),
+    debug: vi.fn(),
   },
 }));
 

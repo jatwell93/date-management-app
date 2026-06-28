@@ -4,21 +4,23 @@
 
 const originalEnv = process.env;
 
-const loadEnvModule = () => {
-  jest.resetModules();
+// Vitest's module mocking is async (the runner is ESM-based), so these loaders
+// use `await import` instead of jest's synchronous `require`.
+const loadEnvModule = async () => {
+  vi.resetModules();
   // Mock dotenv to prevent file loading interference
-  jest.doMock('dotenv', () => ({
-    config: jest.fn(),
+  vi.doMock('dotenv', () => ({
+    config: vi.fn(),
   }));
-  return require('../../config/environment') as typeof import('../../config/environment');
+  return (await import('../../config/environment')) as typeof import('../../config/environment');
 };
 
-const loadCorsModule = () => {
-  jest.resetModules();
-  jest.doMock('dotenv', () => ({
-    config: jest.fn(),
+const loadCorsModule = async () => {
+  vi.resetModules();
+  vi.doMock('dotenv', () => ({
+    config: vi.fn(),
   }));
-  return require('../../middleware/cors') as typeof import('../../middleware/cors');
+  return (await import('../../middleware/cors')) as typeof import('../../middleware/cors');
 };
 
 describe('EnvironmentConfig', () => {
@@ -26,10 +28,10 @@ describe('EnvironmentConfig', () => {
     process.env = { ...originalEnv };
   });
 
-  const mockExit = jest.spyOn(process, 'exit').mockImplementation((() => {
+  const mockExit = vi.spyOn(process, 'exit').mockImplementation((() => {
     throw new Error('process.exit called');
   }) as any);
-  const mockConsoleError = jest.spyOn(console, 'error').mockImplementation(() => {});
+  const mockConsoleError = vi.spyOn(console, 'error').mockImplementation(() => {});
 
   afterAll(() => {
     process.env = originalEnv;
@@ -37,54 +39,59 @@ describe('EnvironmentConfig', () => {
     mockConsoleError.mockRestore();
   });
 
-  it('defaults to development when NODE_ENV is missing', () => {
+  it('defaults to development when NODE_ENV is missing', async () => {
     delete process.env.NODE_ENV;
     delete process.env.PORT;
     process.env.JWT_SECRET = 'dev-secret';
 
-    const envModule = loadEnvModule();
+    const envModule = await loadEnvModule();
 
     expect(envModule.envConfig.NODE_ENV).toBe('development');
     expect(envModule.envConfig.PORT).toBe(3001);
     expect(envModule.envConfig.JWT_SECRET).toBe('dev-secret');
   });
 
-  it('uses provided JWT_SECRET when NODE_ENV is test', () => {
+  it('uses provided JWT_SECRET when NODE_ENV is test', async () => {
     process.env.NODE_ENV = 'test';
     delete process.env.PORT;
     process.env.JWT_SECRET = 'test_secret';
 
-    const envModule = loadEnvModule();
+    const envModule = await loadEnvModule();
 
     expect(envModule.envConfig.NODE_ENV).toBe('test');
     expect(envModule.envConfig.PORT).toBe(3001);
     expect(envModule.envConfig.JWT_SECRET).toBe('test_secret');
   });
 
-  it('throws when development is missing JWT_SECRET', () => {
+  it('throws when development is missing JWT_SECRET', async () => {
     process.env.NODE_ENV = 'development';
     process.env.PORT = '3001';
-    delete process.env.JWT_SECRET;
+    // Set to '' rather than delete: the SUT loads .env via a source-level
+    // require('dotenv') that Vitest's vi.doMock cannot intercept, and dotenv
+    // would repopulate a *deleted* JWT_SECRET from .env.development. dotenv never
+    // overrides an already-present key, so '' stays empty and still fails validation.
+    process.env.JWT_SECRET = '';
 
-    expect(() => loadEnvModule()).toThrow('process.exit called');
+    await expect(loadEnvModule()).rejects.toThrow('process.exit called');
     expect(mockConsoleError).toHaveBeenCalledWith(
       expect.stringContaining('JWT_SECRET environment variable is missing or empty'),
     );
   });
 
-  it('throws when production is missing JWT_SECRET', () => {
+  it('throws when production is missing JWT_SECRET', async () => {
     process.env.NODE_ENV = 'production';
     process.env.PORT = '3001';
-    delete process.env.JWT_SECRET;
+    // See note above: set '' instead of delete so dotenv cannot repopulate it.
+    process.env.JWT_SECRET = '';
 
-    expect(() => loadEnvModule()).toThrow('process.exit called');
+    await expect(loadEnvModule()).rejects.toThrow('process.exit called');
     expect(mockConsoleError).toHaveBeenCalledWith(
       expect.stringContaining('JWT_SECRET environment variable is missing or empty'),
     );
   });
 
-  it('allows worker config injection', () => {
-    const envModule = loadEnvModule();
+  it('allows worker config injection', async () => {
+    const envModule = await loadEnvModule();
 
     envModule.setWorkerConfig({
       NODE_ENV: 'production',
@@ -97,27 +104,27 @@ describe('EnvironmentConfig', () => {
     expect(envModule.envConfig.JWT_SECRET).toBe('worker-secret');
   });
 
-  it('blocks requests without an Origin header in production by default', () => {
+  it('blocks requests without an Origin header in production by default', async () => {
     process.env.NODE_ENV = 'production';
     process.env.PORT = '3001';
     process.env.JWT_SECRET = 'prod-secret';
     process.env.CORS_ORIGINS = 'https://app.example.com';
     delete process.env.ALLOW_NO_ORIGIN_IN_PRODUCTION;
 
-    const corsModule = loadCorsModule();
+    const corsModule = await loadCorsModule();
 
     expect(corsModule.isOriginAllowed()).toBe(false);
     expect(corsModule.isOriginAllowed('https://app.example.com')).toBe(true);
   });
 
-  it('allows requests without an Origin header in production when explicitly enabled', () => {
+  it('allows requests without an Origin header in production when explicitly enabled', async () => {
     process.env.NODE_ENV = 'production';
     process.env.PORT = '3001';
     process.env.JWT_SECRET = 'prod-secret';
     process.env.CORS_ORIGINS = 'https://app.example.com';
     process.env.ALLOW_NO_ORIGIN_IN_PRODUCTION = 'true';
 
-    const corsModule = loadCorsModule();
+    const corsModule = await loadCorsModule();
 
     expect(corsModule.isOriginAllowed()).toBe(true);
   });

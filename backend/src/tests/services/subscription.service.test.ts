@@ -11,8 +11,8 @@ import { SubscriptionTier } from '../../models/subscription-tier.model';
 import { InternalError, NotFoundError, ValidationError } from '../../errors';
 
 // Mock Stripe and Prisma
-jest.mock('stripe');
-jest.mock('../../database/database-factory');
+vi.mock('stripe');
+vi.mock('../../database/database-factory');
 
 describe('SubscriptionService', () => {
   let service: SubscriptionService;
@@ -21,43 +21,43 @@ describe('SubscriptionService', () => {
 
   beforeEach(() => {
     // Reset mocks
-    jest.clearAllMocks();
+    vi.clearAllMocks();
 
     // Create mock Stripe instance
     mockStripe = {
       customers: {
-        create: jest.fn(),
-        update: jest.fn(),
+        create: vi.fn(),
+        update: vi.fn(),
       },
       subscriptions: {
-        create: jest.fn(),
-        update: jest.fn(),
-        cancel: jest.fn(),
-        retrieve: jest.fn(),
+        create: vi.fn(),
+        update: vi.fn(),
+        cancel: vi.fn(),
+        retrieve: vi.fn(),
       },
     } as any;
 
     // Create mock Prisma client with necessary methods
     mockPrisma = {
       organization: {
-        findUnique: jest.fn(),
+        findUnique: vi.fn(),
       },
       subscriptionTier: {
-        findUnique: jest.fn(),
-        findFirst: jest.fn(),
-        findMany: jest.fn(),
-        create: jest.fn(),
-        update: jest.fn(),
+        findUnique: vi.fn(),
+        findFirst: vi.fn(),
+        findMany: vi.fn(),
+        create: vi.fn(),
+        update: vi.fn(),
       },
       organizationUsage: {
-        create: jest.fn(),
-        findUnique: jest.fn(),
+        create: vi.fn(),
+        findUnique: vi.fn(),
       },
       trialEvent: {
-        create: jest.fn(),
-        findFirst: jest.fn(),
+        create: vi.fn(),
+        findFirst: vi.fn(),
       },
-      $transaction: jest.fn((callback) => callback(mockPrisma)),
+      $transaction: vi.fn((callback) => callback(mockPrisma)),
     } as any;
 
     // Initialize service with mocks
@@ -387,7 +387,7 @@ describe('SubscriptionService', () => {
       (mockStripe.subscriptions.create as jest.Mock).mockResolvedValueOnce(stripeSubscription);
 
       // Mock $transaction to execute callback
-      (mockPrisma.$transaction as jest.Mock) = jest.fn((callback) => callback(mockPrisma));
+      (mockPrisma.$transaction as jest.Mock) = vi.fn((callback) => callback(mockPrisma));
 
       // Mock subscription update within transaction
       (mockPrisma.subscriptionTier.update as jest.Mock).mockResolvedValueOnce({
@@ -431,7 +431,7 @@ describe('SubscriptionService', () => {
         status: 'active' as const,
       } as unknown as Stripe.Subscription;
       (mockStripe.subscriptions.create as jest.Mock).mockResolvedValueOnce(stripeSubscription);
-      (mockPrisma.$transaction as jest.Mock) = jest.fn((callback) => callback(mockPrisma));
+      (mockPrisma.$transaction as jest.Mock) = vi.fn((callback) => callback(mockPrisma));
       (mockPrisma.subscriptionTier.update as jest.Mock).mockResolvedValueOnce({
         id: 1,
         organizationId: 'org-123',
@@ -506,7 +506,7 @@ describe('SubscriptionService', () => {
       ]);
 
       // Mock $transaction for each downgrade
-      (mockPrisma.$transaction as jest.Mock) = jest.fn((callback) => callback(mockPrisma));
+      (mockPrisma.$transaction as jest.Mock) = vi.fn((callback) => callback(mockPrisma));
       (mockPrisma.subscriptionTier.update as jest.Mock).mockResolvedValue({});
       (mockPrisma.trialEvent.create as jest.Mock).mockResolvedValue({});
 
@@ -532,7 +532,7 @@ describe('SubscriptionService', () => {
       ]);
 
       // Mock $transaction
-      (mockPrisma.$transaction as jest.Mock) = jest.fn((callback) => callback(mockPrisma));
+      (mockPrisma.$transaction as jest.Mock) = vi.fn((callback) => callback(mockPrisma));
 
       // First update fails, second succeeds
       (mockPrisma.subscriptionTier.update as jest.Mock)

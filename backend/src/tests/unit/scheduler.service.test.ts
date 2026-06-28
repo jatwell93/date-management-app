@@ -1,48 +1,67 @@
-const mockSchedule = jest.fn();
-const mockStartStripeSyncJob = jest.fn();
-const mockStartTrialExpirationJob = jest.fn();
-const mockStartDunningJob = jest.fn();
-const mockPrepare = jest.fn();
-const mockCreateBackup = jest.fn();
-const mockBulkUpdateMarkdownStatuses = jest.fn();
-const mockAutoCalculateMarkdownStatus = jest.fn();
+// These are referenced inside hoisted vi.mock factories, and the SUT invokes the
+// mocked node-cron at module-load. Lift them with vi.hoisted() so they exist
+// before the factories run (Vitest's auto-hoist of bare vi.fn() consts is
+// unreliable when other factories in the file use chained .mockImplementation()).
+const {
+  mockSchedule,
+  mockStartStripeSyncJob,
+  mockStartTrialExpirationJob,
+  mockStartDunningJob,
+  mockPrepare,
+  mockCreateBackup,
+  mockBulkUpdateMarkdownStatuses,
+  mockAutoCalculateMarkdownStatus,
+} = vi.hoisted(() => ({
+  mockSchedule: vi.fn(),
+  mockStartStripeSyncJob: vi.fn(),
+  mockStartTrialExpirationJob: vi.fn(),
+  mockStartDunningJob: vi.fn(),
+  mockPrepare: vi.fn(),
+  mockCreateBackup: vi.fn(),
+  mockBulkUpdateMarkdownStatuses: vi.fn(),
+  mockAutoCalculateMarkdownStatus: vi.fn(),
+}));
 
-jest.mock('node-cron', () => ({
+vi.mock('node-cron', () => ({
   __esModule: true,
   default: {
     schedule: mockSchedule,
   },
 }));
 
-jest.mock('../../jobs/stripe-sync.job', () => ({
+vi.mock('../../jobs/stripe-sync.job', () => ({
   startStripeSyncJob: mockStartStripeSyncJob,
 }));
 
-jest.mock('../../jobs/trialExpiration.job', () => ({
+vi.mock('../../jobs/trialExpiration.job', () => ({
   startTrialExpirationJob: mockStartTrialExpirationJob,
 }));
 
-jest.mock('../../jobs/dunning.job', () => ({
+vi.mock('../../jobs/dunning.job', () => ({
   startDunningJob: mockStartDunningJob,
 }));
 
-jest.mock('../../database', () => ({
-  getDb: jest.fn(() => ({
+vi.mock('../../database', () => ({
+  getDb: vi.fn(() => ({
     prepare: mockPrepare,
   })),
 }));
 
-jest.mock('../../services/database.backup.service', () => ({
-  DatabaseBackupService: jest.fn().mockImplementation(() => ({
-    createBackup: mockCreateBackup,
-  })),
+vi.mock('../../services/database.backup.service', () => ({
+  DatabaseBackupService: vi.fn().mockImplementation(function () {
+    return {
+      createBackup: mockCreateBackup,
+    };
+  }),
 }));
 
-jest.mock('../../services/inventory.service', () => ({
-  InventoryService: jest.fn().mockImplementation(() => ({
-    bulkUpdateMarkdownStatuses: mockBulkUpdateMarkdownStatuses,
-    autoCalculateMarkdownStatus: mockAutoCalculateMarkdownStatus,
-  })),
+vi.mock('../../services/inventory.service', () => ({
+  InventoryService: vi.fn().mockImplementation(function () {
+    return {
+      bulkUpdateMarkdownStatuses: mockBulkUpdateMarkdownStatuses,
+      autoCalculateMarkdownStatus: mockAutoCalculateMarkdownStatus,
+    };
+  }),
 }));
 
 import { InventoryService } from '../../services/inventory.service';
@@ -50,8 +69,8 @@ import { SchedulerService } from '../../services/scheduler.service';
 
 describe('SchedulerService', () => {
   beforeEach(() => {
-    jest.clearAllMocks();
-    mockSchedule.mockReturnValue({ stop: jest.fn() });
+    vi.clearAllMocks();
+    mockSchedule.mockReturnValue({ stop: vi.fn() });
     mockCreateBackup.mockResolvedValue('backup-path.sqlite');
     mockBulkUpdateMarkdownStatuses.mockResolvedValue(undefined);
     mockAutoCalculateMarkdownStatus.mockResolvedValue(undefined);
@@ -70,10 +89,10 @@ describe('SchedulerService', () => {
     });
 
     it('wires cron callbacks to markdown and backup operations', async () => {
-      const updateSpy = jest
+      const updateSpy = vi
         .spyOn(SchedulerService, 'updateAllInventoryMarkdownStatuses')
         .mockResolvedValue(undefined);
-      const backupSpy = jest.spyOn(SchedulerService, 'createDatabaseBackup').mockResolvedValue();
+      const backupSpy = vi.spyOn(SchedulerService, 'createDatabaseBackup').mockResolvedValue();
 
       SchedulerService.initialize();
 
@@ -92,18 +111,18 @@ describe('SchedulerService', () => {
     it('processes all organizations in bulk mode', async () => {
       mockPrepare.mockImplementation((sql: string) => {
         if (sql.includes('FROM organizations')) {
-          return { all: jest.fn(() => [{ id: 'org-1' }, { id: 'org-2' }]) };
+          return { all: vi.fn(() => [{ id: 'org-1' }, { id: 'org-2' }]) };
         }
 
         if (sql.includes('FROM inventory_items')) {
           return {
-            all: jest.fn((orgId: string) => [
+            all: vi.fn((orgId: string) => [
               { id: orgId === 'org-1' ? 1 : 2, expiry_date: '2026-03-10' },
             ]),
           };
         }
 
-        return { all: jest.fn(() => []) };
+        return { all: vi.fn(() => []) };
       });
 
       await SchedulerService.updateAllInventoryMarkdownStatuses();
@@ -116,19 +135,19 @@ describe('SchedulerService', () => {
     it('falls back to per-item updates when bulk update fails', async () => {
       mockPrepare.mockImplementation((sql: string) => {
         if (sql.includes('FROM organizations')) {
-          return { all: jest.fn(() => [{ id: 'org-1' }]) };
+          return { all: vi.fn(() => [{ id: 'org-1' }]) };
         }
 
         if (sql.includes('FROM inventory_items')) {
           return {
-            all: jest.fn(() => [
+            all: vi.fn(() => [
               { id: 1, expiry_date: '2026-03-10' },
               { id: 2, expiry_date: '2026-03-11' },
             ]),
           };
         }
 
-        return { all: jest.fn(() => []) };
+        return { all: vi.fn(() => []) };
       });
 
       mockBulkUpdateMarkdownStatuses.mockRejectedValueOnce(new Error('bulk failure'));

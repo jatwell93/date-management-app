@@ -1,8 +1,8 @@
-const mockGetDb = jest.fn();
-const mockPrepare = jest.fn();
-const mockRun = jest.fn();
+const mockGetDb = vi.fn();
+const mockPrepare = vi.fn();
+const mockRun = vi.fn();
 
-jest.mock('../../database', () => ({
+vi.mock('../../database', () => ({
   getDb: (...args: unknown[]) => mockGetDb(...args),
 }));
 
@@ -14,7 +14,7 @@ import {
 
 describe('item-transaction model helpers', () => {
   beforeEach(() => {
-    jest.clearAllMocks();
+    vi.clearAllMocks();
     mockPrepare.mockReturnValue({ run: mockRun });
     mockGetDb.mockReturnValue({ prepare: mockPrepare });
   });

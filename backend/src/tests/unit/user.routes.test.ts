@@ -1,28 +1,30 @@
 import express from 'express';
 import request from 'supertest';
 
-const mockGetUsers = jest.fn();
-const mockGetUserById = jest.fn();
-const mockCreateUser = jest.fn();
-const mockUpdateUser = jest.fn();
-const mockDeleteUser = jest.fn();
+const mockGetUsers = vi.fn();
+const mockGetUserById = vi.fn();
+const mockCreateUser = vi.fn();
+const mockUpdateUser = vi.fn();
+const mockDeleteUser = vi.fn();
 
-const mockUserServiceCtor = jest.fn().mockImplementation((_organizationId?: string) => ({
-  getUsers: (...args: unknown[]) => mockGetUsers(...args),
-  getUserById: (...args: unknown[]) => mockGetUserById(...args),
-  createUser: (...args: unknown[]) => mockCreateUser(...args),
-  updateUser: (...args: unknown[]) => mockUpdateUser(...args),
-  deleteUser: (...args: unknown[]) => mockDeleteUser(...args),
-}));
+const mockUserServiceCtor = vi.fn().mockImplementation(function (_organizationId?: string) {
+  return {
+    getUsers: (...args: unknown[]) => mockGetUsers(...args),
+    getUserById: (...args: unknown[]) => mockGetUserById(...args),
+    createUser: (...args: unknown[]) => mockCreateUser(...args),
+    updateUser: (...args: unknown[]) => mockUpdateUser(...args),
+    deleteUser: (...args: unknown[]) => mockDeleteUser(...args),
+  };
+});
 
-jest.mock('../../middleware/auth.middleware', () => ({
+vi.mock('../../middleware/auth.middleware', () => ({
   authenticateToken: (req: any, _res: any, next: any) => {
     req.organizationId = req.get('x-org-id') || undefined;
     next();
   },
 }));
 
-jest.mock('../../middleware/requireOrgRole', () => ({
+vi.mock('../../middleware/requireOrgRole', () => ({
   requireOrgRole:
     (...allowedRoles: string[]) =>
     (req: any, _res: any, next: any) => {
@@ -32,27 +34,27 @@ jest.mock('../../middleware/requireOrgRole', () => ({
     },
 }));
 
-jest.mock('../../middleware/validation.middleware', () => ({
+vi.mock('../../middleware/validation.middleware', () => ({
   validateDataIntegrity: (_req: any, _res: any, next: any) => next(),
 }));
 
-jest.mock('../../middleware/validateRequest', () => ({
+vi.mock('../../middleware/validateRequest', () => ({
   validateRequest: () => (_req: any, _res: any, next: any) => next(),
 }));
 
-jest.mock('../../middleware/data-integrity.middleware', () => ({
+vi.mock('../../middleware/data-integrity.middleware', () => ({
   validateBusinessRules: (_req: any, _res: any, next: any) => next(),
 }));
 
-jest.mock('../../middleware/rateLimiter', () => ({
+vi.mock('../../middleware/rateLimiter', () => ({
   standardLimiter: (_req: any, _res: any, next: any) => next(),
 }));
 
-jest.mock('../../middleware/feature-gate.middleware', () => ({
+vi.mock('../../middleware/feature-gate.middleware', () => ({
   checkUsageLimit: () => (_req: any, _res: any, next: any) => next(),
 }));
 
-jest.mock('../../services/user.service', () => ({
+vi.mock('../../services/user.service', () => ({
   UserService: function UserService(...args: unknown[]) {
     return mockUserServiceCtor(...args);
   },
@@ -76,7 +78,7 @@ describe('user.routes', () => {
   );
 
   beforeEach(() => {
-    jest.clearAllMocks();
+    vi.clearAllMocks();
 
     mockGetUsers.mockResolvedValue([
       {

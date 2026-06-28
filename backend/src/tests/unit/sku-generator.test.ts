@@ -8,7 +8,7 @@ describe('generateSKU', () => {
   });
 
   it('does not use Math.random for SKU entropy', () => {
-    const randomSpy = jest.spyOn(Math, 'random');
+    const randomSpy = vi.spyOn(Math, 'random');
 
     generateSKU();
 

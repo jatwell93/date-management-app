@@ -60,15 +60,15 @@ describe('ReportRepository', () => {
   });
 
   it('returns dashboard summary data from the expected query sequence', () => {
-    const totalProductsStatement = { get: jest.fn().mockReturnValue({ count: 100 }) };
-    const expiringSoonStatement = { get: jest.fn().mockReturnValue({ count: 10 }) };
-    const markdownItemsStatement = { get: jest.fn().mockReturnValue({ count: 5 }) };
+    const totalProductsStatement = { get: vi.fn().mockReturnValue({ count: 100 }) };
+    const expiringSoonStatement = { get: vi.fn().mockReturnValue({ count: 10 }) };
+    const markdownItemsStatement = { get: vi.fn().mockReturnValue({ count: 5 }) };
     const recentActivity = [
       { id: 1, description: 'Created product', timestamp: '2026-05-01T00:00:00.000Z' },
     ];
-    const recentActivityStatement = { all: jest.fn().mockReturnValue(recentActivity) };
+    const recentActivityStatement = { all: vi.fn().mockReturnValue(recentActivity) };
     const db = {
-      prepare: jest
+      prepare: vi
         .fn()
         .mockReturnValueOnce(totalProductsStatement)
         .mockReturnValueOnce(expiringSoonStatement)

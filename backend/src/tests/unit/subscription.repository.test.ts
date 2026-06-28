@@ -26,22 +26,22 @@ describe('SubscriptionRepository', () => {
   beforeEach(() => {
     prisma = {
       subscriptionTier: {
-        findMany: jest.fn(),
-        findFirst: jest.fn(),
-        groupBy: jest.fn(),
-        updateMany: jest.fn(),
-        update: jest.fn(),
+        findMany: vi.fn(),
+        findFirst: vi.fn(),
+        groupBy: vi.fn(),
+        updateMany: vi.fn(),
+        update: vi.fn(),
       },
       organizationUsage: {
-        upsert: jest.fn(),
+        upsert: vi.fn(),
       },
       tierFeatureFlag: {
-        count: jest.fn(),
-        findUnique: jest.fn(),
-        upsert: jest.fn(),
+        count: vi.fn(),
+        findUnique: vi.fn(),
+        upsert: vi.fn(),
       },
       inventoryItem: {
-        count: jest.fn(),
+        count: vi.fn(),
       },
     };
     repository = new SubscriptionRepository(prisma as never);

@@ -11,17 +11,17 @@ describe('CSV Upload Functionality Tests', () => {
   beforeEach(() => {
     mockPrisma = {
       product: {
-        findUnique: jest.fn(),
-        create: jest.fn(),
-        update: jest.fn(),
+        findUnique: vi.fn(),
+        create: vi.fn(),
+        update: vi.fn(),
       },
       organizationUsage: {
-        findUnique: jest
+        findUnique: vi
           .fn()
           .mockResolvedValue({ organizationId: 'default-org', totalSkus: 0, maxSkus: 1000 }),
-        update: jest.fn(),
+        update: vi.fn(),
       },
-      $transaction: jest.fn((callback) => callback(mockPrisma)),
+      $transaction: vi.fn((callback) => callback(mockPrisma)),
     };
     productService = new ProductService(mockPrisma as unknown as PrismaClient);
   });
@@ -71,17 +71,17 @@ describe('CSV Header Name Recognition', () => {
   beforeEach(() => {
     mockPrisma = {
       product: {
-        findUnique: jest.fn(),
-        create: jest.fn(),
-        update: jest.fn(),
+        findUnique: vi.fn(),
+        create: vi.fn(),
+        update: vi.fn(),
       },
       organizationUsage: {
-        findUnique: jest
+        findUnique: vi
           .fn()
           .mockResolvedValue({ organizationId: 'default-org', totalSkus: 0, maxSkus: 1000 }),
-        update: jest.fn(),
+        update: vi.fn(),
       },
-      $transaction: jest.fn((callback) => callback(mockPrisma)),
+      $transaction: vi.fn((callback) => callback(mockPrisma)),
     };
     productService = new ProductService(mockPrisma as unknown as PrismaClient);
   });
@@ -253,10 +253,10 @@ describe('CSV Upload Error Handling', () => {
   beforeEach(() => {
     mockPrisma = {
       product: {
-        findUnique: jest.fn(),
-        create: jest.fn(),
+        findUnique: vi.fn(),
+        create: vi.fn(),
       },
-      $transaction: jest.fn((callback) => callback(mockPrisma)),
+      $transaction: vi.fn((callback) => callback(mockPrisma)),
     };
     productService = new ProductService(mockPrisma as unknown as PrismaClient);
   });
@@ -354,17 +354,17 @@ describe('Comprehensive CSV Processing Tests', () => {
   beforeEach(() => {
     mockPrisma = {
       product: {
-        findUnique: jest.fn(),
-        create: jest.fn(),
-        update: jest.fn(),
+        findUnique: vi.fn(),
+        create: vi.fn(),
+        update: vi.fn(),
       },
       organizationUsage: {
-        findUnique: jest
+        findUnique: vi
           .fn()
           .mockResolvedValue({ organizationId: 'default-org', totalSkus: 0, maxSkus: 1000 }),
-        update: jest.fn(),
+        update: vi.fn(),
       },
-      $transaction: jest.fn((callback) => callback(mockPrisma)),
+      $transaction: vi.fn((callback) => callback(mockPrisma)),
     };
     productService = new ProductService(mockPrisma as unknown as PrismaClient);
   });

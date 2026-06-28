@@ -3,30 +3,30 @@ import request from 'supertest';
 import { BillingCycle } from '../../types/subscription';
 import { envConfig } from '../../config/environment';
 
-const mockFindUnique = jest.fn();
-const mockSubscriptionTierUpdate = jest.fn();
-const mockConvertTrialToPaid = jest.fn();
+const mockFindUnique = vi.fn();
+const mockSubscriptionTierUpdate = vi.fn();
+const mockConvertTrialToPaid = vi.fn();
 
-const mockStripeCustomersCreate = jest.fn();
-const mockStripeCheckoutSessionCreate = jest.fn();
-const mockStripeBillingPortalSessionCreate = jest.fn();
+const mockStripeCustomersCreate = vi.fn();
+const mockStripeCheckoutSessionCreate = vi.fn();
+const mockStripeBillingPortalSessionCreate = vi.fn();
 
-const mockValidateRedirectUrl = jest.fn();
-const mockValidateStripePriceId = jest.fn();
+const mockValidateRedirectUrl = vi.fn();
+const mockValidateStripePriceId = vi.fn();
 
-jest.mock('../../middleware/clerk-auth.middleware', () => ({
+vi.mock('../../middleware/clerk-auth.middleware', () => ({
   clerkAuth: (req: any, _res: any, next: any) => {
     req.userId = req.get('x-clerk-user-id') || 'user_123';
     next();
   },
 }));
 
-jest.mock('../../middleware/rateLimiter', () => ({
+vi.mock('../../middleware/rateLimiter', () => ({
   trialConversionLimiter: (_req: any, _res: any, next: any) => next(),
   checkoutSessionLimiter: (_req: any, _res: any, next: any) => next(),
 }));
 
-jest.mock('../../database/database-factory', () => ({
+vi.mock('../../database/database-factory', () => ({
   getDefaultDatabaseClient: () => ({
     user: {
       findUnique: (...args: unknown[]) => mockFindUnique(...args),
@@ -37,13 +37,15 @@ jest.mock('../../database/database-factory', () => ({
   }),
 }));
 
-jest.mock('../../services/subscription.service', () => ({
-  SubscriptionService: jest.fn().mockImplementation(() => ({
-    convertTrialToPaid: (...args: unknown[]) => mockConvertTrialToPaid(...args),
-  })),
+vi.mock('../../services/subscription.service', () => ({
+  SubscriptionService: vi.fn().mockImplementation(function () {
+    return {
+      convertTrialToPaid: (...args: unknown[]) => mockConvertTrialToPaid(...args),
+    };
+  }),
 }));
 
-jest.mock('../../utils/stripe', () => ({
+vi.mock('../../utils/stripe', () => ({
   getStripeClient: () => ({
     customers: {
       create: (...args: unknown[]) => mockStripeCustomersCreate(...args),
@@ -61,28 +63,31 @@ jest.mock('../../utils/stripe', () => ({
   }),
 }));
 
-jest.mock('../../utils/url-validator', () => ({
-  StripePriceConfigurationError: jest.requireActual('../../utils/url-validator')
-    .StripePriceConfigurationError,
+vi.mock('../../utils/url-validator', async () => ({
+  StripePriceConfigurationError: (
+    await vi.importActual<typeof import('../../utils/url-validator')>('../../utils/url-validator')
+  ).StripePriceConfigurationError,
   validateRedirectUrl: (...args: unknown[]) => mockValidateRedirectUrl(...args),
   validateStripePriceId: (...args: unknown[]) => mockValidateStripePriceId(...args),
 }));
 
 import subscriptionRouter from '../../routes/subscription.routes';
 
-const actualDi = jest.requireActual('../../di/container') as typeof import('../../di/container');
-const actualUserRepository = jest.requireActual(
+const actualDi = (await vi.importActual(
+  '../../di/container',
+)) as typeof import('../../di/container');
+const actualUserRepository = (await vi.importActual(
   '../../repositories/user.repository',
-) as typeof import('../../repositories/user.repository');
-const actualSubscriptionRepository = jest.requireActual(
+)) as typeof import('../../repositories/user.repository');
+const actualSubscriptionRepository = (await vi.importActual(
   '../../repositories/subscription.repository',
-) as typeof import('../../repositories/subscription.repository');
-const actualSubscriptionService = jest.requireActual(
+)) as typeof import('../../repositories/subscription.repository');
+const actualSubscriptionService = (await vi.importActual(
   '../../services/subscription.service',
-) as typeof import('../../services/subscription.service');
-const actualUrlValidator = jest.requireActual(
+)) as typeof import('../../services/subscription.service');
+const actualUrlValidator = (await vi.importActual(
   '../../utils/url-validator',
-) as typeof import('../../utils/url-validator');
+)) as typeof import('../../utils/url-validator');
 
 const configuredStarterMonthlyPriceId = 'price_starter_monthly';
 const configuredStarterAnnualPriceId = 'price_starter_annual';
@@ -129,7 +134,7 @@ describe('subscription.routes', () => {
   );
 
   beforeEach(() => {
-    jest.clearAllMocks();
+    vi.clearAllMocks();
 
     envConfig.NODE_ENV = 'test';
     process.env.FRONTEND_URL = 'http://localhost:3000';

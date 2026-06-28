@@ -19,12 +19,16 @@ import { ProductService } from '../../services/product.service';
 import { createTestOrgWithSubscription } from '../helpers/test-factories';
 
 // Mock Stripe
-jest.mock('stripe', () => {
-  return jest.fn().mockImplementation(() => ({
-    customers: {
-      create: jest.fn().mockResolvedValue({ id: 'cus_test123' }),
-    },
-  }));
+vi.mock('stripe', () => {
+  // SUT default-imports Stripe; expose the constructor as `default`.
+  const StripeMock = vi.fn().mockImplementation(function () {
+    return {
+      customers: {
+        create: vi.fn().mockResolvedValue({ id: 'cus_test123' }),
+      },
+    };
+  });
+  return { default: StripeMock };
 });
 
 describe('Multi-Tenant Usage Limit Boundary Tests', () => {

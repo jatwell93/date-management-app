@@ -123,7 +123,7 @@ describe('SubscriptionService Integration Tests', () => {
       );
 
       // Simulate webhook: fetch latest Stripe state and sync
-      const stripe = require('stripe')(process.env.STRIPE_SECRET_KEY);
+      const stripe = (await import('stripe')).default(process.env.STRIPE_SECRET_KEY!);
       const stripeSubscription = await stripe.subscriptions.retrieve(
         createdSub.stripeSubscriptionId!,
       );

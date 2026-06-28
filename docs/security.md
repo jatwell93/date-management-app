@@ -818,12 +818,17 @@ Contrary to the original framing of #291, the Jest 30 upgrade does **not** clear
 | -------- | ------ | ---------------- |
 | Backend | `jest` `29 → 30`, drop unused `jest-environment-jsdom` | Net **−1 moderate**. The residual moderate advisories trace to `js-yaml <= 4.1.1` (GHSA-h67p-54hq-rp68, quadratic-complexity DoS, no fixed release) pulled in via `@istanbuljs/load-nyc-config` → `babel-plugin-istanbul` → `@jest/transform`. Jest depends on `babel-plugin-istanbul` unconditionally (independent of our `coverageProvider: 'v8'` setting), so this chain is present at **every** Jest version. The only way to shed it is to leave Jest — the path the frontend already took with Vitest (v8 coverage, no `babel-plugin-istanbul`). |
 
+**2026-06-28** — Migrated the backend test suite from Jest to **Vitest v4** (the change #291 actually required to clear the toolchain advisories, per the row above). Replaced `jest` / `ts-jest` / `@types/jest` with `vitest` + `@vitest/coverage-v8` (v8 coverage, no `babel-plugin-istanbul`) plus `unplugin-swc` / `@swc/core` (SWC emits the `design:paramtypes` decorator metadata `tsyringe` needs; the intuitive `esbuild: false` is inert under Vitest 4 — `oxc: false` is required). All 154 test files were ported (`jest.*` → `vi.*`); the two DB-targeted Jest configs became `vitest.config.ts` (SQLite) and `vitest.config.neon.ts` (PostgreSQL). The full suite passes (1,658 passed / 9 skipped) and the coverage thresholds (75/70/75/75) hold.
+
+| Boundary | Change | Advisory outcome |
+| -------- | ------ | ---------------- |
+| Backend | Replaced Jest with Vitest (v8 coverage); dropped `jest` / `ts-jest` / `@types/jest` (247 transitive packages removed) | `@jest/*`, `babel-plugin-istanbul`, `@istanbuljs/load-nyc-config`, and the dev/test `js-yaml <= 4.1.1` they pulled in are **gone**. `npm audit` for `/backend` drops from 19 → 1; the only remaining advisory is the pre-existing `xlsx` runtime risk (below). This is the change that closes the backend Jest-toolchain accepted-risk row. |
+
 ### Accepted Dependency Risks
 
 | Package area | Current status | Mitigation |
 | ------------ | -------------- | ---------- |
 | `xlsx` in backend/frontend | npm audit reports known high severity advisories and no fixed npm release. | Keep file upload limits, input validation, and CSV injection controls active. Treat XLSX replacement as follow-up work before broadening spreadsheet import features. |
-| `jest` toolchain in backend | Now on **Jest 30** (latest). Residual moderate advisories trace to `js-yaml <= 4.1.1` (GHSA-h67p-54hq-rp68 DoS, no fixed release) via `@istanbuljs/load-nyc-config` → `babel-plugin-istanbul` → `@jest/transform`, which Jest depends on at every version. npm's only offered "fix" is a breaking `ts-jest@27` downgrade, which would not actually remove the chain. (The frontend is on Vitest and unaffected.) | Dev/test-only; never shipped to runtime. Do **not** accept the forced downgrade. Full elimination requires migrating the backend off Jest to Vitest (v8 coverage, no `babel-plugin-istanbul`), as the frontend did — tracked as follow-up work. |
 | `quagga` in frontend | Pulls old request/form-data/qs paths through image loading dependencies (`form-data`, `request`, `tough-cookie` advisories). | Keep scanner use local/browser-only and evaluate replacement during scanner dependency remediation. |
 
 ### Developer Workflow

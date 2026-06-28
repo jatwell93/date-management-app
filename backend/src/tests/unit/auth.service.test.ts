@@ -6,24 +6,30 @@ import { AuthService } from '../../services/auth.service';
 import { AuthenticationError, InternalError } from '../../errors';
 import { SubscriptionStatus } from '../../types/subscription';
 
-// Mock the jsonwebtoken module
-jest.mock('jsonwebtoken', () => ({
-  sign: jest.fn(),
-  verify: jest.fn(),
-}));
+// Mock the jsonwebtoken module. The SUT default-imports these CJS packages
+// (`import jwt from 'jsonwebtoken'`), so the factory must expose `default` as
+// well as the named exports — unlike jest, Vitest does not synthesize a default
+// from named exports. `{ ...m, default: m }` satisfies both import styles.
+vi.mock('jsonwebtoken', () => {
+  const m = { sign: vi.fn(), verify: vi.fn() };
+  return { ...m, default: m };
+});
 
 // Mock the bcrypt module
-jest.mock('bcrypt', () => ({
-  hash: jest.fn(),
-  compare: jest.fn(),
-}));
+vi.mock('bcrypt', () => {
+  const m = { hash: vi.fn(), compare: vi.fn() };
+  return { ...m, default: m };
+});
 
 // Mock crypto for refresh tokens
-jest.mock('crypto', () => ({
-  randomBytes: jest.fn(() => ({
-    toString: jest.fn(() => 'mock_refresh_token_hex'),
-  })),
-}));
+vi.mock('crypto', () => {
+  const m = {
+    randomBytes: vi.fn(() => ({
+      toString: vi.fn(() => 'mock_refresh_token_hex'),
+    })),
+  };
+  return { ...m, default: m };
+});
 
 describe('AuthService', () => {
   let authService: AuthService;
@@ -32,17 +38,17 @@ describe('AuthService', () => {
   beforeEach(() => {
     prisma = {
       user: {
-        findMany: jest.fn(),
+        findMany: vi.fn(),
       },
       subscriptionTier: {
-        findFirst: jest.fn(),
+        findFirst: vi.fn(),
       },
       refreshToken: {
-        create: jest.fn(),
-        findUnique: jest.fn(),
-        update: jest.fn(),
-        delete: jest.fn(),
-        deleteMany: jest.fn(),
+        create: vi.fn(),
+        findUnique: vi.fn(),
+        update: vi.fn(),
+        delete: vi.fn(),
+        deleteMany: vi.fn(),
       },
     } as unknown as PrismaClient;
 
@@ -60,7 +66,7 @@ describe('AuthService', () => {
   });
 
   afterEach(() => {
-    jest.clearAllMocks();
+    vi.clearAllMocks();
   });
 
   describe('validatePin', () => {
@@ -131,12 +137,12 @@ describe('AuthService', () => {
 
   describe('generateTokens', () => {
     beforeEach(() => {
-      jest.useFakeTimers();
-      jest.setSystemTime(new Date('2026-03-01T00:00:00Z'));
+      vi.useFakeTimers();
+      vi.setSystemTime(new Date('2026-03-01T00:00:00Z'));
     });
 
     afterEach(() => {
-      jest.useRealTimers();
+      vi.useRealTimers();
     });
 
     it('successfully generates an access and refresh token pair', async () => {

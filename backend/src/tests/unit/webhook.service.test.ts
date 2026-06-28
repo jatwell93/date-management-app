@@ -5,12 +5,17 @@ import { EmailService } from '../../services/email.service';
 import { SubscriptionStatus } from '../../types/subscription';
 import { NotFoundError } from '../../errors';
 
-jest.mock('@sendgrid/mail', () => ({
-  setApiKey: jest.fn(),
-  send: jest.fn(),
+// Auto-mock Sentry so its exports are Vitest-controlled vi.fns shared with the
+// SUT (spying on a real `await import('@sentry/node')` namespace fails — ESM
+// namespaces are non-configurable).
+vi.mock('@sentry/node');
+
+vi.mock('@sendgrid/mail', () => ({
+  setApiKey: vi.fn(),
+  send: vi.fn(),
 }));
 
-jest.mock('../../database/database-factory');
+vi.mock('../../database/database-factory');
 
 type MockPrisma = {
   [key: string]: any;
@@ -32,48 +37,48 @@ describe('WebhookService', () => {
 
     prisma = {
       processedWebhookEvent: {
-        findUnique: jest.fn(),
-        create: jest.fn(),
+        findUnique: vi.fn(),
+        create: vi.fn(),
       },
       organization: {
-        findUnique: jest.fn(),
-        update: jest.fn(),
+        findUnique: vi.fn(),
+        update: vi.fn(),
       },
       subscriptionTier: {
-        create: jest.fn(),
-        update: jest.fn(),
-        updateMany: jest.fn(),
-        findFirst: jest.fn(),
+        create: vi.fn(),
+        update: vi.fn(),
+        updateMany: vi.fn(),
+        findFirst: vi.fn(),
       },
       organizationUsage: {
-        upsert: jest.fn(),
-        update: jest.fn(),
-        findUnique: jest.fn(),
+        upsert: vi.fn(),
+        update: vi.fn(),
+        findUnique: vi.fn(),
       },
       auditLog: {
-        create: jest.fn(),
+        create: vi.fn(),
       },
       trialEvent: {
-        create: jest.fn(),
+        create: vi.fn(),
       },
-      $transaction: jest.fn((callback) => callback(prisma)),
+      $transaction: vi.fn((callback) => callback(prisma)),
     };
 
     emailService = {
-      sendTrialReminderEmail: jest.fn(),
-      sendDunningEmail: jest.fn(),
-      sendDowngradeWarningEmail: jest.fn(),
-      sendPaymentFailedEmail: jest.fn(),
+      sendTrialReminderEmail: vi.fn(),
+      sendDunningEmail: vi.fn(),
+      sendDowngradeWarningEmail: vi.fn(),
+      sendPaymentFailedEmail: vi.fn(),
     } as unknown as jest.Mocked<EmailService>;
 
     service = new WebhookService(prisma as unknown as PrismaClient, undefined, emailService);
 
     mockStripe = {
       customers: {
-        retrieve: jest.fn(),
+        retrieve: vi.fn(),
       },
       subscriptions: {
-        retrieve: jest.fn(),
+        retrieve: vi.fn(),
       },
     } as unknown as jest.Mocked<Stripe>;
 
@@ -107,7 +112,7 @@ describe('WebhookService', () => {
   });
 
   afterEach(() => {
-    jest.clearAllMocks();
+    vi.clearAllMocks();
   });
 
   describe('idempotency helpers', () => {
@@ -151,7 +156,7 @@ describe('WebhookService', () => {
 
   describe('handler behaviors', () => {
     it('ignores unhandled event types without throwing', async () => {
-      const reportSpy = jest.spyOn(service as any, 'reportWebhookError');
+      const reportSpy = vi.spyOn(service as any, 'reportWebhookError');
       const event = {
         id: 'evt_unhandled',
         type: 'customer.created',
@@ -238,7 +243,7 @@ describe('WebhookService', () => {
     it('sets isCreationLocked=true on org when downgrading over SKU limit', async () => {
       prisma.subscriptionTier.findFirst.mockResolvedValue({ id: 1, tierLevel: 'professional' });
       prisma.organizationUsage.findUnique.mockResolvedValue({ totalSkus: 9999 });
-      prisma.organization.update = jest.fn().mockResolvedValue({
+      prisma.organization.update = vi.fn().mockResolvedValue({
         id: organizationId,
         isCreationLocked: true,
       });
@@ -292,7 +297,7 @@ describe('WebhookService', () => {
 
     it('sets isCreationLocked=true on org when subscription deleted and over Starter limit', async () => {
       prisma.organizationUsage.findUnique.mockResolvedValue({ totalSkus: 9999 });
-      prisma.organization.update = jest.fn().mockResolvedValue({
+      prisma.organization.update = vi.fn().mockResolvedValue({
         id: organizationId,
         isCreationLocked: true,
       });
@@ -313,7 +318,7 @@ describe('WebhookService', () => {
     it('does NOT lock org when downgrade is within new SKU limit', async () => {
       prisma.subscriptionTier.findFirst.mockResolvedValue({ id: 1, tierLevel: 'professional' });
       prisma.organizationUsage.findUnique.mockResolvedValue({ totalSkus: 100 });
-      prisma.organization.update = jest.fn().mockResolvedValue({ id: organizationId });
+      prisma.organization.update = vi.fn().mockResolvedValue({ id: organizationId });
 
       const subscription = {
         id: 'sub_within_limit',
@@ -510,8 +515,9 @@ describe('WebhookService', () => {
     });
 
     it('records webhook metrics on successful subscription created', async () => {
-      const monitor =
-        require('../../services/application.monitoring.service').ApplicationMonitoringService.getInstance();
+      const monitor = (
+        await import('../../services/application.monitoring.service')
+      ).ApplicationMonitoringService.getInstance();
       // reset webhook metrics
       (monitor as any).metrics.webhook = { total: 0, byEvent: {}, idempotencySkips: 0 };
 
@@ -545,8 +551,9 @@ describe('WebhookService', () => {
     });
 
     it('captures Sentry and records metric when handler errors', async () => {
-      const monitor =
-        require('../../services/application.monitoring.service').ApplicationMonitoringService.getInstance();
+      const monitor = (
+        await import('../../services/application.monitoring.service')
+      ).ApplicationMonitoringService.getInstance();
       (monitor as any).metrics.webhook = { total: 0, byEvent: {}, idempotencySkips: 0 };
 
       prisma.subscriptionTier.create.mockResolvedValue({ id: 1 });
@@ -554,8 +561,8 @@ describe('WebhookService', () => {
       // Make auditLog.create throw to simulate DB error
       prisma.auditLog.create.mockRejectedValue(new Error('audit failed'));
 
-      const Sentry = require('@sentry/node');
-      jest.spyOn(Sentry, 'captureException').mockImplementation(() => undefined);
+      const Sentry = await import('@sentry/node');
+      vi.mocked(Sentry.captureException).mockImplementation(() => undefined);
 
       const subscription = {
         id: 'sub_created_error',
@@ -590,8 +597,8 @@ describe('WebhookService', () => {
         metadata: { organizationId },
       });
 
-      const Sentry = require('@sentry/node');
-      const sentrySpy = jest.spyOn(Sentry, 'captureException').mockImplementation(() => undefined);
+      const Sentry = await import('@sentry/node');
+      const sentrySpy = vi.mocked(Sentry.captureException).mockImplementation(() => undefined);
 
       const subscription = {
         id: 'sub_deleted_customer',
@@ -649,7 +656,7 @@ describe('WebhookService', () => {
         metadata: { organizationId },
       });
 
-      const criticalSpy = jest
+      const criticalSpy = vi
         .spyOn(service as any, 'reportCriticalWebhookFailure')
         .mockImplementation(() => undefined);
 

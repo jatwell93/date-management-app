@@ -3,6 +3,7 @@ import validator from 'validator';
 import { inject, injectable } from 'tsyringe';
 import { AuthRequest } from '../middleware/auth.middleware';
 import { ReportService } from '../services/report.service';
+import { ServiceProvider } from '../services/service-provider';
 
 type ReportServiceFactory = (organizationId?: string) => ReportService;
 
@@ -117,8 +118,10 @@ export class ReportController {
 
 export function createReportController(): ReportController {
   return new ReportController((organizationId?: string) => {
-    const { ServiceProvider } =
-      require('../services/service-provider') as typeof import('../services/service-provider');
+    // Statically imported (was a lazy `require`): Vitest's ESM runner cannot
+    // resolve a relative `require()` of `.ts` source, and the static import also
+    // lets tests mock service-provider. No cycle: service-provider does not import
+    // this controller.
     return new ServiceProvider({ organizationId }).getReportService();
   });
 }

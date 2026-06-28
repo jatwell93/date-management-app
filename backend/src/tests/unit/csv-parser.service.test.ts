@@ -16,17 +16,17 @@ import * as path from 'path';
 import * as os from 'os';
 
 // Mock PrismaClient
-const mockTransaction = jest.fn();
-const mockProductFindUnique = jest.fn();
-const mockProductFindFirst = jest.fn();
-const mockProductCreate = jest.fn();
-const mockProductUpdate = jest.fn();
-const mockInventoryFindFirst = jest.fn();
-const mockInventoryCreate = jest.fn();
-const mockStoreAreaFindFirst = jest.fn();
-const mockStoreAreaCreate = jest.fn();
-const mockOrganizationUsageUpdateMany = jest.fn();
-const mockOrganizationUsageUpdate = jest.fn();
+const mockTransaction = vi.fn();
+const mockProductFindUnique = vi.fn();
+const mockProductFindFirst = vi.fn();
+const mockProductCreate = vi.fn();
+const mockProductUpdate = vi.fn();
+const mockInventoryFindFirst = vi.fn();
+const mockInventoryCreate = vi.fn();
+const mockStoreAreaFindFirst = vi.fn();
+const mockStoreAreaCreate = vi.fn();
+const mockOrganizationUsageUpdateMany = vi.fn();
+const mockOrganizationUsageUpdate = vi.fn();
 
 const mockPrisma = {
   $transaction: mockTransaction,
@@ -64,7 +64,7 @@ describe('CSVParserService', () => {
   });
 
   beforeEach(() => {
-    jest.clearAllMocks();
+    vi.clearAllMocks();
     parser = new CSVParserService(mockPrisma, {
       batchSize: 2, // Small batch for testing
       progressInterval: 2,

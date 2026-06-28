@@ -7,25 +7,25 @@ import { PrismaClient } from '@prisma/client';
 // Mock Prisma manually
 const mockPrisma = {
   product: {
-    findUnique: jest.fn(),
-    create: jest.fn(),
-    findMany: jest.fn(),
-    update: jest.fn(),
-    delete: jest.fn(),
-    upsert: jest.fn(),
+    findUnique: vi.fn(),
+    create: vi.fn(),
+    findMany: vi.fn(),
+    update: vi.fn(),
+    delete: vi.fn(),
+    upsert: vi.fn(),
   },
   organizationUsage: {
-    findUnique: jest
+    findUnique: vi
       .fn()
       .mockResolvedValue({ organizationId: 'default-org', totalSkus: 0, maxSkus: 1000 }),
-    update: jest.fn(),
+    update: vi.fn(),
   },
-  $transaction: jest.fn((callback) => callback(mockPrisma)),
+  $transaction: vi.fn((callback) => callback(mockPrisma)),
 } as unknown as PrismaClient; // Cast to PrismaClient to satisfy type checker
 
 // Mock the module
-jest.mock('@prisma/client', () => ({
-  PrismaClient: jest.fn(() => mockPrisma),
+vi.mock('@prisma/client', () => ({
+  PrismaClient: vi.fn(() => mockPrisma),
 }));
 
 describe('XLSX Upload Functionality Tests', () => {
@@ -34,7 +34,7 @@ describe('XLSX Upload Functionality Tests', () => {
 
   beforeEach(() => {
     // Reset mocks
-    jest.clearAllMocks();
+    vi.clearAllMocks();
 
     // Reset organizationUsage mock (cleared by clearAllMocks)
     (mockPrisma.organizationUsage.findUnique as jest.Mock).mockResolvedValue({

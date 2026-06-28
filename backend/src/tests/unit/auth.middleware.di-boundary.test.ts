@@ -1,37 +1,37 @@
 const makeResponse = () =>
   ({
-    status: jest.fn().mockReturnThis(),
-    json: jest.fn().mockReturnThis(),
-    setHeader: jest.fn().mockReturnThis(),
+    status: vi.fn().mockReturnThis(),
+    json: vi.fn().mockReturnThis(),
+    setHeader: vi.fn().mockReturnThis(),
   }) as any;
 
 const makeRequest = () =>
   ({
     headers: { authorization: 'Bearer clerk-token' },
     ip: '127.0.0.1',
-    get: jest.fn((header: string) => (header === 'User-Agent' ? 'test-agent' : undefined)),
+    get: vi.fn((header: string) => (header === 'User-Agent' ? 'test-agent' : undefined)),
     path: '/test',
     method: 'GET',
   }) as any;
 
 describe('auth middleware DI boundary', () => {
   beforeEach(() => {
-    jest.resetModules();
+    vi.resetModules();
     process.env.NODE_ENV = 'test';
     process.env.TEST_AUTH_BYPASS = 'false';
   });
 
   it('resolves Clerk-token users and subscriptions through repositories without using the database factory', async () => {
-    const mockGetDefaultDatabaseClient = jest.fn(() => ({
+    const mockGetDefaultDatabaseClient = vi.fn(() => ({
       user: {
-        findUnique: jest.fn().mockResolvedValue({
+        findUnique: vi.fn().mockResolvedValue({
           id: 12,
           role: 'Manager',
           organizationId: 'org-clerk',
         }),
       },
       subscriptionTier: {
-        findFirst: jest.fn().mockResolvedValue({
+        findFirst: vi.fn().mockResolvedValue({
           id: 3,
           organizationId: 'org-clerk',
           tierLevel: 'professional',
@@ -43,14 +43,14 @@ describe('auth middleware DI boundary', () => {
       },
     }));
     const mockUserRepository = {
-      findActiveByClerkUserId: jest.fn().mockResolvedValue({
+      findActiveByClerkUserId: vi.fn().mockResolvedValue({
         id: 12,
         role: 'Manager',
         organizationId: 'org-clerk',
       }),
     };
     const mockSubscriptionRepository = {
-      findLatestByOrganizationId: jest.fn().mockResolvedValue({
+      findLatestByOrganizationId: vi.fn().mockResolvedValue({
         id: 3,
         organizationId: 'org-clerk',
         tierLevel: 'professional',
@@ -61,19 +61,19 @@ describe('auth middleware DI boundary', () => {
       }),
     };
 
-    jest.doMock('jsonwebtoken', () => ({
-      verify: jest.fn(() => {
+    vi.doMock('jsonwebtoken', () => ({
+      verify: vi.fn(() => {
         throw new Error('invalid local token');
       }),
-      sign: jest.fn(),
+      sign: vi.fn(),
     }));
-    jest.doMock('@clerk/backend', () => ({
-      verifyToken: jest.fn().mockResolvedValue({
+    vi.doMock('@clerk/backend', () => ({
+      verifyToken: vi.fn().mockResolvedValue({
         sub: 'clerk-user-1',
         exp: Math.floor(Date.now() / 1000) + 300,
       }),
     }));
-    jest.doMock('../../config/environment', () => ({
+    vi.doMock('../../config/environment', () => ({
       envConfig: {
         JWT_SECRET: 'test_secret',
         CLERK_SECRET_KEY: 'clerk_secret',
@@ -81,30 +81,30 @@ describe('auth middleware DI boundary', () => {
         CORS_ORIGIN: '',
       },
     }));
-    jest.doMock('../../database/database-factory', () => ({
+    vi.doMock('../../database/database-factory', () => ({
       getDefaultDatabaseClient: () => mockGetDefaultDatabaseClient(),
     }));
-    jest.doMock('../../services/analytics.service', () => ({
+    vi.doMock('../../services/analytics.service', () => ({
       AnalyticsService: {
-        getInstance: () => ({ trackEvent: jest.fn() }),
+        getInstance: () => ({ trackEvent: vi.fn() }),
       },
       AnalyticsEventType: {
         USER_LOGOUT: 'USER_LOGOUT',
         VIEW_DASHBOARD: 'VIEW_DASHBOARD',
       },
     }));
-    jest.doMock('../../services/subscription.service', () => ({
+    vi.doMock('../../services/subscription.service', () => ({
       SubscriptionService: class MockSubscriptionService {
-        isAccessActive = jest.fn().mockResolvedValue(true);
+        isAccessActive = vi.fn().mockResolvedValue(true);
       },
     }));
-    jest.doMock('../../repositories/user.repository', () => ({
+    vi.doMock('../../repositories/user.repository', () => ({
       UserRepository: class UserRepository {},
     }));
-    jest.doMock('../../repositories/subscription.repository', () => ({
+    vi.doMock('../../repositories/subscription.repository', () => ({
       SubscriptionRepository: class SubscriptionRepository {},
     }));
-    jest.doMock('../../di/container', () => ({
+    vi.doMock('../../di/container', () => ({
       getDiContainer: () => ({
         resolve: (token: unknown) => {
           const tokenName =
@@ -125,10 +125,10 @@ describe('auth middleware DI boundary', () => {
     }));
 
     const { authenticateToken } =
-      require('../../middleware/auth.middleware') as typeof import('../../middleware/auth.middleware');
+      (await import('../../middleware/auth.middleware')) as typeof import('../../middleware/auth.middleware');
     const req = makeRequest();
     const res = makeResponse();
-    const next = jest.fn();
+    const next = vi.fn();
 
     await authenticateToken(req, res, next);
 

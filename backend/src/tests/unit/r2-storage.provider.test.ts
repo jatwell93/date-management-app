@@ -20,10 +20,10 @@ import {
 } from '../../storage/storage-provider.interface';
 
 // Mock AWS SDK modules
-jest.mock('@aws-sdk/client-s3');
-jest.mock('@aws-sdk/s3-request-presigner');
+vi.mock('@aws-sdk/client-s3');
+vi.mock('@aws-sdk/s3-request-presigner');
 
-const mockSend = jest.fn();
+const mockSend = vi.fn();
 const MockS3Client = S3Client as jest.MockedClass<typeof S3Client>;
 const mockGetSignedUrl = getSignedUrl as jest.MockedFunction<typeof getSignedUrl>;
 
@@ -39,15 +39,16 @@ describe('R2StorageProvider', () => {
   };
 
   beforeEach(() => {
-    jest.clearAllMocks();
+    vi.clearAllMocks();
 
-    // Setup S3Client mock
-    MockS3Client.mockImplementation(
-      () =>
-        ({
-          send: mockSend,
-        }) as unknown as S3Client,
-    );
+    // Setup S3Client mock. A regular function (not an arrow) is required: the SUT
+    // does `new S3Client(...)`, and Vitest invokes the mock impl with `new` — arrows
+    // cannot be constructed.
+    MockS3Client.mockImplementation(function () {
+      return {
+        send: mockSend,
+      } as unknown as S3Client;
+    } as unknown as () => S3Client);
 
     provider = new R2StorageProvider(config);
   });

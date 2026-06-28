@@ -1,41 +1,41 @@
 import express from 'express';
 import request from 'supertest';
 
-const mockGetDb = jest.fn();
-const mockReleaseDb = jest.fn();
-const mockGetDatabaseMetrics = jest.fn();
-const mockValidateTierFeatureFlags = jest.fn();
+const mockGetDb = vi.fn();
+const mockReleaseDb = vi.fn();
+const mockGetDatabaseMetrics = vi.fn();
+const mockValidateTierFeatureFlags = vi.fn();
 const mockSubscriptionRepository = {};
-const mockResolve = jest.fn();
+const mockResolve = vi.fn();
 
-jest.mock('../../database', () => ({
+vi.mock('../../database', () => ({
   getDb: (...args: unknown[]) => mockGetDb(...args),
   releaseDb: (...args: unknown[]) => mockReleaseDb(...args),
 }));
 
-jest.mock('../../services/database.monitoring.service', () => ({
+vi.mock('../../services/database.monitoring.service', () => ({
   DatabaseMonitoringService: {
-    getInstance: jest.fn(() => ({
+    getInstance: vi.fn(() => ({
       getMetrics: (...args: unknown[]) => mockGetDatabaseMetrics(...args),
     })),
   },
 }));
 
-jest.mock('../../utils/validate-tier-flags', () => ({
+vi.mock('../../utils/validate-tier-flags', () => ({
   validateTierFeatureFlags: (...args: unknown[]) => mockValidateTierFeatureFlags(...args),
 }));
 
-jest.mock('../../di/container', () => ({
+vi.mock('../../di/container', () => ({
   getDiContainer: () => ({
     resolve: (...args: unknown[]) => mockResolve(...args),
   }),
 }));
 
-jest.mock('../../middleware/auth.middleware', () => ({
+vi.mock('../../middleware/auth.middleware', () => ({
   authenticateToken: (_req: unknown, _res: unknown, next: () => void) => next(),
 }));
 
-jest.mock('../../middleware/requireOrgRole', () => ({
+vi.mock('../../middleware/requireOrgRole', () => ({
   requireOrgRole:
     (...allowedRoles: string[]) =>
     (_req: unknown, _res: unknown, next: () => void) =>
@@ -84,13 +84,15 @@ describe('health.routes', () => {
   };
 
   beforeEach(async () => {
-    jest.clearAllMocks();
+    vi.clearAllMocks();
 
     db = {
-      prepare: jest.fn().mockImplementation((sql: string) => ({
-        get: () => (sql.includes('ready') ? { ready: 1 } : { alive: 1 }),
-      })),
-      pragma: jest.fn().mockReturnValue(1),
+      prepare: vi.fn().mockImplementation(function (sql: string) {
+        return {
+          get: () => (sql.includes('ready') ? { ready: 1 } : { alive: 1 }),
+        };
+      }),
+      pragma: vi.fn().mockReturnValue(1),
     };
 
     mockGetDb.mockReturnValue(db);
@@ -186,9 +188,11 @@ describe('health.routes', () => {
   });
 
   it('returns not ready when database readiness probe returns non-ready value', async () => {
-    db.prepare.mockImplementation((sql: string) => ({
-      get: () => (sql.includes('ready') ? { ready: 0 } : { alive: 1 }),
-    }));
+    db.prepare.mockImplementation(function (sql: string) {
+      return {
+        get: () => (sql.includes('ready') ? { ready: 0 } : { alive: 1 }),
+      };
+    });
 
     const response = await request(app).get('/ready');
 

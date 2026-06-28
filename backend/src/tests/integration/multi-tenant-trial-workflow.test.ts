@@ -14,19 +14,23 @@ import { SubscriptionService } from '../../services/subscription.service';
 import { SubscriptionStatus, TIER_LIMITS, BillingCycle } from '../../types/subscription';
 
 // Mock Stripe
-jest.mock('stripe', () => {
-  return jest.fn().mockImplementation(() => ({
-    customers: {
-      create: jest.fn().mockResolvedValue({ id: 'cus_test_trial' }),
-    },
-    subscriptions: {
-      create: jest.fn().mockResolvedValue({
-        id: 'sub_test_trial',
-        status: 'trialing',
-        trial_end: Math.floor(Date.now() / 1000) + 14 * 24 * 60 * 60,
-      }),
-    },
-  }));
+vi.mock('stripe', () => {
+  // SUT default-imports Stripe; expose the constructor as `default`.
+  const StripeMock = vi.fn().mockImplementation(function () {
+    return {
+      customers: {
+        create: vi.fn().mockResolvedValue({ id: 'cus_test_trial' }),
+      },
+      subscriptions: {
+        create: vi.fn().mockResolvedValue({
+          id: 'sub_test_trial',
+          status: 'trialing',
+          trial_end: Math.floor(Date.now() / 1000) + 14 * 24 * 60 * 60,
+        }),
+      },
+    };
+  });
+  return { default: StripeMock };
 });
 
 describe('Multi-Tenant Trial Workflow Tests', () => {
@@ -44,10 +48,10 @@ describe('Multi-Tenant Trial Workflow Tests', () => {
     prisma = getDefaultDatabaseClient();
     mockStripeClient = {
       customers: {
-        create: jest.fn().mockResolvedValue({ id: 'cus_test_trial' }),
+        create: vi.fn().mockResolvedValue({ id: 'cus_test_trial' }),
       },
       subscriptions: {
-        create: jest.fn().mockResolvedValue({
+        create: vi.fn().mockResolvedValue({
           id: 'sub_test_trial',
           status: 'active',
         }),

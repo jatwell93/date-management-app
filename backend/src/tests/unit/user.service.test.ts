@@ -16,22 +16,22 @@ describe('UserService', () => {
   beforeEach(() => {
     prisma = {
       user: {
-        create: jest.fn(),
-        findMany: jest.fn(),
-        findFirst: jest.fn(),
-        update: jest.fn(),
-        delete: jest.fn(),
+        create: vi.fn(),
+        findMany: vi.fn(),
+        findFirst: vi.fn(),
+        update: vi.fn(),
+        delete: vi.fn(),
       },
     } as unknown as PrismaClient;
 
     authService = {
-      validatePin: jest.fn(),
-      hashPin: jest.fn(),
-      verifyPin: jest.fn(),
+      validatePin: vi.fn(),
+      hashPin: vi.fn(),
+      verifyPin: vi.fn(),
     } as unknown as AuthService;
 
     service = new UserService(testOrganizationId, prisma, authService);
-    jest.clearAllMocks();
+    vi.clearAllMocks();
   });
 
   describe('createUser', () => {
@@ -279,7 +279,7 @@ describe('UserService repository injection', () => {
 
   it('uses the injected repository for organization-scoped user reads', async () => {
     const repository = {
-      findByOrganization: jest.fn().mockResolvedValue([
+      findByOrganization: vi.fn().mockResolvedValue([
         {
           id: 1,
           organizationId,
