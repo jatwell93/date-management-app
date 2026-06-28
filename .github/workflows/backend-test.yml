@@ -88,19 +88,19 @@ jobs:
         continue-on-error: true
 
       - name: Run Multi-Tenant Feature Gate Tests
-        run: npm test -- --testPathPattern="multi-tenant-feature-gates" --verbose
+        run: npm test -- --testPathPatterns="multi-tenant-feature-gates" --verbose
 
       - name: Run Multi-Tenant Route Filtering Tests
-        run: npm test -- --testPathPattern="multi-tenant-route-filtering" --verbose
+        run: npm test -- --testPathPatterns="multi-tenant-route-filtering" --verbose
 
       - name: Run Cross-Tenant Isolation Tests
-        run: npm test -- --testPathPattern="cross-tenant-isolation" --verbose
+        run: npm test -- --testPathPatterns="cross-tenant-isolation" --verbose
 
       - name: Run Multi-Tenant Penetration Tests
-        run: npm test -- --testPathPattern="multi-tenant-penetration" --verbose
+        run: npm test -- --testPathPatterns="multi-tenant-penetration" --verbose
 
       - name: Run Multi-Tenant Concurrency Load Tests
-        run: npm test -- --testPathPattern="multi-tenant-concurrency" --verbose
+        run: npm test -- --testPathPatterns="multi-tenant-concurrency" --verbose
 
       - name: Generate Multi-Tenant Test Summary
         if: always()
