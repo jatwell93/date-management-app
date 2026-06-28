@@ -3,16 +3,20 @@
  * Tests the 7-day dunning auto-downgrade functionality
  */
 
-jest.mock('@sentry/node', () => ({
-  captureMessage: jest.fn(),
-  captureException: jest.fn(),
+vi.mock('@sentry/node', () => ({
+  captureMessage: vi.fn(),
+  captureException: vi.fn(),
 }));
 
-jest.mock('stripe', () => {
-  return jest.fn().mockImplementation(() => ({}));
+vi.mock('stripe', () => {
+  // SUT default-imports Stripe; expose the constructor as `default`.
+  const StripeMock = vi.fn().mockImplementation(function () {
+    return {};
+  });
+  return { default: StripeMock };
 });
 
-jest.mock('../../database/database-factory');
+vi.mock('../../database/database-factory');
 
 import { SubscriptionService } from '../../services/subscription.service';
 import { PrismaClient } from '@prisma/client';
@@ -26,25 +30,25 @@ describe('SubscriptionService.downgradeExpiredPastDue', () => {
   const sevenDaysAgo = new Date(Date.now() - 8 * 24 * 60 * 60 * 1000); // 8 days ago
 
   beforeEach(() => {
-    jest.clearAllMocks();
+    vi.clearAllMocks();
 
     prisma = {
       subscriptionTier: {
-        findMany: jest.fn(),
-        updateMany: jest.fn(),
+        findMany: vi.fn(),
+        updateMany: vi.fn(),
       },
       organizationUsage: {
-        findUnique: jest.fn(),
-        update: jest.fn(),
+        findUnique: vi.fn(),
+        update: vi.fn(),
       },
       organization: {
-        update: jest.fn(),
+        update: vi.fn(),
       },
       auditLog: {
-        create: jest.fn(),
-        count: jest.fn(),
+        create: vi.fn(),
+        count: vi.fn(),
       },
-      $transaction: jest.fn((callback) => callback(prisma)),
+      $transaction: vi.fn((callback) => callback(prisma)),
     };
 
     service = new SubscriptionService(prisma as unknown as PrismaClient);

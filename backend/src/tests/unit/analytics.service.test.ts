@@ -8,13 +8,13 @@ describe('AnalyticsService', () => {
   beforeEach(() => {
     // Create mock adapter
     mockAdapter = {
-      isAvailable: jest.fn().mockReturnValue(true),
-      initialize: jest.fn(),
-      storeEventsBatch: jest.fn(),
-      startSession: jest.fn().mockReturnValue('session-123'),
-      endSession: jest.fn(),
-      updateSession: jest.fn(),
-      getMetrics: jest.fn().mockResolvedValue({
+      isAvailable: vi.fn().mockReturnValue(true),
+      initialize: vi.fn(),
+      storeEventsBatch: vi.fn(),
+      startSession: vi.fn().mockReturnValue('session-123'),
+      endSession: vi.fn(),
+      updateSession: vi.fn(),
+      getMetrics: vi.fn().mockResolvedValue({
         dailyActiveUsers: 0,
         weeklyActiveUsers: 0,
         monthlyActiveUsers: 0,
@@ -25,9 +25,9 @@ describe('AnalyticsService', () => {
         pwaInstallationRate: 0,
         offlineUsageRate: 0,
       }),
-      getEventCountByType: jest.fn().mockResolvedValue(0),
-      cleanupOldData: jest.fn().mockResolvedValue(0),
-      getActiveUserCount: jest.fn().mockResolvedValue(0),
+      getEventCountByType: vi.fn().mockResolvedValue(0),
+      cleanupOldData: vi.fn().mockResolvedValue(0),
+      getActiveUserCount: vi.fn().mockResolvedValue(0),
     } as any;
 
     // Create service with mock adapter
@@ -35,7 +35,7 @@ describe('AnalyticsService', () => {
   });
 
   afterEach(() => {
-    jest.clearAllMocks();
+    vi.clearAllMocks();
   });
 
   describe('initialize', () => {
@@ -210,15 +210,15 @@ describe('AnalyticsService', () => {
 
   describe('resetInstance', () => {
     beforeEach(() => {
-      jest.useFakeTimers();
+      vi.useFakeTimers();
     });
 
     afterEach(() => {
-      jest.useRealTimers();
+      vi.useRealTimers();
     });
 
     it('clears the batch interval when resetting the singleton', () => {
-      const clearSpy = jest.spyOn(global, 'clearInterval');
+      const clearSpy = vi.spyOn(global, 'clearInterval');
 
       analyticsService.initialize({ enableTracking: true });
       (AnalyticsService as any).instance = analyticsService;

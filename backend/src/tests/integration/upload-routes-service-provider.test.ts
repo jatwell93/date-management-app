@@ -17,7 +17,7 @@ import { UploadController } from '../../controllers/upload.controller';
 import app from '../..';
 
 // Mock authentication middleware
-jest.mock('../../middleware/auth.middleware', () => ({
+vi.mock('../../middleware/auth.middleware', () => ({
   authenticateToken: (req: any, _res: any, next: any) => {
     req.userId = 1;
     req.organizationId = 'default-org';
@@ -27,7 +27,7 @@ jest.mock('../../middleware/auth.middleware', () => ({
 }));
 
 // Mock environment config
-jest.mock('../../config/environment', () => ({
+vi.mock('../../config/environment', () => ({
   envConfig: {
     NODE_ENV: 'test',
     MAX_UPLOAD_SIZE_BYTES: 10 * 1024 * 1024,
@@ -35,18 +35,22 @@ jest.mock('../../config/environment', () => ({
   },
 }));
 
-// Mock StorageQuotaService to prevent real database access
-jest.mock('../../services/storage-quota.service', () => ({
-  StorageQuotaService: jest.fn().mockImplementation(() => ({
-    recordUpload: jest.fn().mockResolvedValue(undefined),
-    markUploadDeleted: jest.fn().mockResolvedValue(undefined),
-    getStorageQuota: jest.fn().mockResolvedValue({
-      used: 0,
-      limit: 10 * 1024 * 1024 * 1024,
-      percentageUsed: 0,
-      tier: 'free',
-    }),
-  })),
+// Mock StorageQuotaService to prevent real database access. A regular function
+// (not an arrow) is required: the SUT does `new StorageQuotaService(...)` and
+// Vitest invokes the mock impl with `new` — arrows cannot be constructed.
+vi.mock('../../services/storage-quota.service', () => ({
+  StorageQuotaService: vi.fn().mockImplementation(function () {
+    return {
+      recordUpload: vi.fn().mockResolvedValue(undefined),
+      markUploadDeleted: vi.fn().mockResolvedValue(undefined),
+      getStorageQuota: vi.fn().mockResolvedValue({
+        used: 0,
+        limit: 10 * 1024 * 1024 * 1024,
+        percentageUsed: 0,
+        tier: 'free',
+      }),
+    };
+  }),
 }));
 
 // In-memory storage provider for testing
@@ -97,33 +101,37 @@ describe('Upload Routes with ServiceProvider Integration', () => {
     // Create mock Prisma client with all models needed by StorageQuotaService
     mockPrisma = {
       product: {
-        findMany: jest.fn().mockResolvedValue([]),
-        findUnique: jest.fn(),
-        create: jest.fn().mockImplementation((data) => ({
-          id: Math.floor(Math.random() * 1000),
-          ...data.data,
-          createdAt: new Date(),
-          updatedAt: new Date(),
-        })),
-        update: jest.fn(),
-        upsert: jest.fn().mockImplementation((args) => ({
-          id: Math.floor(Math.random() * 1000),
-          ...args.create,
-          createdAt: new Date(),
-          updatedAt: new Date(),
-        })),
+        findMany: vi.fn().mockResolvedValue([]),
+        findUnique: vi.fn(),
+        create: vi.fn().mockImplementation(function (data) {
+          return {
+            id: Math.floor(Math.random() * 1000),
+            ...data.data,
+            createdAt: new Date(),
+            updatedAt: new Date(),
+          };
+        }),
+        update: vi.fn(),
+        upsert: vi.fn().mockImplementation(function (args) {
+          return {
+            id: Math.floor(Math.random() * 1000),
+            ...args.create,
+            createdAt: new Date(),
+            updatedAt: new Date(),
+          };
+        }),
       },
       upload: {
-        aggregate: jest.fn().mockResolvedValue({ _sum: { fileSizeBytes: 0 } }),
-        create: jest.fn().mockResolvedValue({ id: 1 }),
-        findUnique: jest.fn(),
-        update: jest.fn().mockResolvedValue({}),
+        aggregate: vi.fn().mockResolvedValue({ _sum: { fileSizeBytes: 0 } }),
+        create: vi.fn().mockResolvedValue({ id: 1 }),
+        findUnique: vi.fn(),
+        update: vi.fn().mockResolvedValue({}),
       },
       organizationUsage: {
-        upsert: jest.fn().mockResolvedValue({}),
-        update: jest.fn().mockResolvedValue({}),
+        upsert: vi.fn().mockResolvedValue({}),
+        update: vi.fn().mockResolvedValue({}),
       },
-      $disconnect: jest.fn(),
+      $disconnect: vi.fn(),
     } as any;
 
     // Create test storage

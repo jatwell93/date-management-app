@@ -29,12 +29,12 @@ describe('UserRepository', () => {
   beforeEach(() => {
     prisma = {
       user: {
-        findMany: jest.fn(),
-        findFirst: jest.fn(),
-        findUnique: jest.fn(),
-        create: jest.fn(),
-        update: jest.fn(),
-        delete: jest.fn(),
+        findMany: vi.fn(),
+        findFirst: vi.fn(),
+        findUnique: vi.fn(),
+        create: vi.fn(),
+        update: vi.fn(),
+        delete: vi.fn(),
       },
     };
     repository = new UserRepository(prisma as never);

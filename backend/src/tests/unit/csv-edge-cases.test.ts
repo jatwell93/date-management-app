@@ -20,13 +20,13 @@ import * as os from 'os';
 
 const mockPrisma = {
   product: {
-    findUnique: jest.fn(),
-    findFirst: jest.fn(),
-    create: jest.fn(),
-    update: jest.fn(),
+    findUnique: vi.fn(),
+    findFirst: vi.fn(),
+    create: vi.fn(),
+    update: vi.fn(),
   },
-  inventoryItem: { create: jest.fn() },
-  $transaction: jest.fn((fn) => fn(mockPrisma)),
+  inventoryItem: { create: vi.fn() },
+  $transaction: vi.fn((fn) => fn(mockPrisma)),
 } as unknown as PrismaClient;
 
 describe('CSV Parser Edge Cases', () => {
@@ -42,7 +42,7 @@ describe('CSV Parser Edge Cases', () => {
   });
 
   beforeEach(() => {
-    jest.clearAllMocks();
+    vi.clearAllMocks();
     (mockPrisma.product.findUnique as jest.Mock).mockResolvedValue(null);
     (mockPrisma.product.findFirst as jest.Mock).mockResolvedValue(null);
     (mockPrisma.product.create as jest.Mock).mockResolvedValue({ id: 1 });

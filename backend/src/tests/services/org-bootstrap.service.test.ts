@@ -24,7 +24,7 @@ describe('OrgBootstrapService', () => {
 
   beforeEach(() => {
     subscriptionService = {
-      createTrialSubscription: jest.fn().mockResolvedValue(undefined),
+      createTrialSubscription: vi.fn().mockResolvedValue(undefined),
     };
     service = new OrgBootstrapService(prisma, undefined, subscriptionService);
   });

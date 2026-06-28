@@ -14,8 +14,8 @@ describe('OrgAuditRepository', () => {
   beforeEach(() => {
     prisma = {
       orgAuditLog: {
-        create: jest.fn(),
-        findMany: jest.fn(),
+        create: vi.fn(),
+        findMany: vi.fn(),
       },
     };
     repository = new OrgAuditRepository(prisma as never);

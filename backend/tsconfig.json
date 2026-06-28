@@ -3,7 +3,7 @@
     "target": "ES2020",
     "module": "commonjs",
     "lib": ["ES2020"],
-    "types": ["node", "jest"],
+    "types": ["node"],
     "outDir": "./dist",
     "rootDir": "..",
     "strict": true,
@@ -15,5 +15,5 @@
     "emitDecoratorMetadata": true
   },
   "include": ["src/**/*", "../shared/**/*"],
-  "exclude": ["src/tests/**/*", "**/*.test.ts", "**/*.spec.ts"]
+  "exclude": ["src/tests/**/*", "src/__mocks__/**/*", "**/*.test.ts", "**/*.spec.ts"]
 }

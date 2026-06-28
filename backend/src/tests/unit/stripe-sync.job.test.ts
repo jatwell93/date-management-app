@@ -6,37 +6,42 @@ import {
 } from '../../jobs/stripe-sync.job';
 import { SubscriptionRepository } from '../../repositories/subscription.repository';
 
-const mockStop = jest.fn();
-const mockSchedule = jest.fn(() => ({ stop: mockStop }));
-const mockResolve = jest.fn();
-const mockGetDefaultDatabaseClient = jest.fn(() => {
+const mockStop = vi.fn();
+const mockSchedule = vi.fn(() => ({ stop: mockStop }));
+const mockResolve = vi.fn();
+const mockGetDefaultDatabaseClient = vi.fn(() => {
   throw new Error('stripe sync job must resolve repositories through DI');
 });
 
-jest.mock('@prisma/client');
-jest.mock('stripe', () => jest.fn().mockImplementation(() => mockStripeClient));
-jest.mock('node-cron', () => ({
+vi.mock('@prisma/client');
+// Regular function (not arrow) so the SUT's `new Stripe(...)` can construct it.
+vi.mock('stripe', () => ({
+  default: vi.fn().mockImplementation(function () {
+    return mockStripeClient;
+  }),
+}));
+vi.mock('node-cron', () => ({
   __esModule: true,
   default: {
     schedule: (...args: unknown[]) => mockSchedule(...args),
   },
   schedule: (...args: unknown[]) => mockSchedule(...args),
 }));
-jest.mock('../../database/database-factory', () => ({
+vi.mock('../../database/database-factory', () => ({
   getDefaultDatabaseClient: () => mockGetDefaultDatabaseClient(),
 }));
-jest.mock('../../di/container', () => ({
+vi.mock('../../di/container', () => ({
   getDiContainer: () => ({
     resolve: (...args: unknown[]) => mockResolve(...args),
   }),
 }));
-jest.mock('../../config/environment', () => ({
+vi.mock('../../config/environment', () => ({
   envConfig: { STRIPE_SECRET_KEY: 'sk_test_123' },
 }));
 
 const mockStripeClient = {
   subscriptions: {
-    list: jest.fn(),
+    list: vi.fn(),
   },
 };
 
@@ -49,17 +54,17 @@ describe('StripeSyncJob', () => {
 
   beforeEach(() => {
     mockRepository = {
-      findStripeLinkedSubscriptions: jest.fn(),
-      updateByStripeSubscriptionId: jest.fn(),
+      findStripeLinkedSubscriptions: vi.fn(),
+      updateByStripeSubscriptionId: vi.fn(),
     };
 
     mockStripe = {
       subscriptions: {
-        list: jest.fn(),
+        list: vi.fn(),
       },
     };
 
-    jest.clearAllMocks();
+    vi.clearAllMocks();
     mockStripeClient.subscriptions.list.mockReset();
     mockResolve.mockReturnValue(mockRepository);
     stopStripeSyncJob();

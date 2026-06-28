@@ -3,12 +3,12 @@ import { requireOrgRole, requirePermission, requireMinRole } from '../../middlew
 import { ROLES } from '../../constants/roles';
 
 // Minimal mock of AnalyticsService to prevent singleton issues
-jest.mock('../../services/analytics.service', () => ({
+vi.mock('../../services/analytics.service', () => ({
   AnalyticsService: {
     getInstance: () => ({
-      trackEvent: jest.fn(),
+      trackEvent: vi.fn(),
     }),
-    resetInstance: jest.fn(),
+    resetInstance: vi.fn(),
   },
   AnalyticsEventType: { USER_LOGOUT: 'user_logout' },
 }));
@@ -21,15 +21,15 @@ function createMockReqRes(role: string | undefined) {
     ip: '127.0.0.1',
     path: '/test',
     method: 'GET',
-    get: jest.fn().mockReturnValue('test-agent'),
+    get: vi.fn().mockReturnValue('test-agent'),
   } as unknown as Request & { userRole?: string; user?: { role: string } };
 
   const res = {
-    status: jest.fn().mockReturnThis(),
-    json: jest.fn().mockReturnThis(),
+    status: vi.fn().mockReturnThis(),
+    json: vi.fn().mockReturnThis(),
   } as unknown as Response;
 
-  const next = jest.fn() as NextFunction;
+  const next = vi.fn() as NextFunction;
 
   return { req, res, next };
 }

@@ -2,15 +2,15 @@ import { getDb, releaseDb } from '../../database';
 import { ExpiredItemService } from '../../services/expired-item.service';
 import { SQLITE_PROCESSED_STATUS } from '../../../../shared/domain/disposition';
 
-jest.mock('../../database', () => ({
-  getDb: jest.fn(),
-  releaseDb: jest.fn(),
+vi.mock('../../database', () => ({
+  getDb: vi.fn(),
+  releaseDb: vi.fn(),
 }));
 
 function createMockDb() {
   return {
-    prepare: jest.fn(),
-    transaction: jest.fn((callback: () => unknown) => () => callback()),
+    prepare: vi.fn(),
+    transaction: vi.fn((callback: () => unknown) => () => callback()),
   };
 }
 
@@ -21,7 +21,7 @@ describe('ExpiredItemService', () => {
   const mockReleaseDb = releaseDb as unknown as jest.Mock;
 
   beforeEach(() => {
-    jest.clearAllMocks();
+    vi.clearAllMocks();
     service = new ExpiredItemService();
     mockDb = createMockDb();
     mockGetDb.mockReturnValue(mockDb);
@@ -42,7 +42,7 @@ describe('ExpiredItemService', () => {
         },
       ];
 
-      mockDb.prepare.mockReturnValue({ all: jest.fn().mockReturnValue(rows) });
+      mockDb.prepare.mockReturnValue({ all: vi.fn().mockReturnValue(rows) });
 
       const result = await service.getAllExpiredItems();
 
@@ -64,7 +64,7 @@ describe('ExpiredItemService', () => {
     it('throws when inventory item does not exist', async () => {
       mockDb.prepare.mockImplementation((sql: string) => {
         if (sql.includes('SELECT ii.*, p.cost_price as costPrice')) {
-          return { get: jest.fn().mockReturnValue(undefined) };
+          return { get: vi.fn().mockReturnValue(undefined) };
         }
         throw new Error(`Unexpected SQL: ${sql}`);
       });
@@ -80,7 +80,7 @@ describe('ExpiredItemService', () => {
       mockDb.prepare.mockImplementation((sql: string) => {
         if (sql.includes('SELECT ii.*, p.cost_price as costPrice')) {
           return {
-            get: jest.fn().mockReturnValue({ id: 1, product_id: 1, costPrice: 5 }),
+            get: vi.fn().mockReturnValue({ id: 1, product_id: 1, costPrice: 5 }),
           };
         }
         throw new Error(`Unexpected SQL: ${sql}`);
@@ -97,7 +97,7 @@ describe('ExpiredItemService', () => {
       mockDb.prepare.mockImplementation((sql: string) => {
         if (sql.includes('SELECT ii.*, p.cost_price as costPrice')) {
           return {
-            get: jest.fn().mockReturnValue({ id: 1, product_id: 1, costPrice: 5 }),
+            get: vi.fn().mockReturnValue({ id: 1, product_id: 1, costPrice: 5 }),
           };
         }
         throw new Error(`Unexpected SQL: ${sql}`);
@@ -111,12 +111,12 @@ describe('ExpiredItemService', () => {
     });
 
     it('creates sold-through transaction with null loss fields', async () => {
-      const selectGet = jest
+      const selectGet = vi
         .fn()
         .mockReturnValue({ id: 3, product_id: 10, location_id: 2, costPrice: 2.5 });
-      const insertRun = jest.fn().mockReturnValue({ lastInsertRowid: BigInt(41) });
-      const auditRun = jest.fn();
-      const updateRun = jest.fn();
+      const insertRun = vi.fn().mockReturnValue({ lastInsertRowid: BigInt(41) });
+      const auditRun = vi.fn();
+      const updateRun = vi.fn();
 
       mockDb.prepare.mockImplementation((sql: string) => {
         if (sql.includes('SELECT ii.*, p.cost_price as costPrice')) {
@@ -152,12 +152,12 @@ describe('ExpiredItemService', () => {
     });
 
     it('creates expired transaction with calculated financial loss', async () => {
-      const selectGet = jest
+      const selectGet = vi
         .fn()
         .mockReturnValue({ id: 5, product_id: 10, location_id: 2, costPrice: 4 });
-      const insertRun = jest.fn().mockReturnValue({ lastInsertRowid: 9 });
-      const auditRun = jest.fn();
-      const updateRun = jest.fn();
+      const insertRun = vi.fn().mockReturnValue({ lastInsertRowid: 9 });
+      const auditRun = vi.fn();
+      const updateRun = vi.fn();
 
       mockDb.prepare.mockImplementation((sql: string) => {
         if (sql.includes('SELECT ii.*, p.cost_price as costPrice')) {
@@ -194,14 +194,14 @@ describe('ExpiredItemService', () => {
     it('snapshots the markdown level from the item expiry date on sold-through', async () => {
       // 10 days from expiry => Markdown 3 window (0-30 days) per the report bucketing.
       const expiryDate = new Date(Date.now() + 10 * 24 * 60 * 60 * 1000).toISOString().slice(0, 10);
-      const selectGet = jest.fn().mockReturnValue({
+      const selectGet = vi.fn().mockReturnValue({
         id: 8,
         product_id: 10,
         location_id: 2,
         costPrice: 2,
         expiry_date: expiryDate,
       });
-      const insertRun = jest.fn().mockReturnValue({ lastInsertRowid: 55 });
+      const insertRun = vi.fn().mockReturnValue({ lastInsertRowid: 55 });
 
       mockDb.prepare.mockImplementation((sql: string) => {
         if (sql.includes('SELECT ii.*, p.cost_price as costPrice')) {
@@ -211,10 +211,10 @@ describe('ExpiredItemService', () => {
           return { run: insertRun };
         }
         if (sql.includes('INSERT INTO audit_log')) {
-          return { run: jest.fn() };
+          return { run: vi.fn() };
         }
         if (sql.includes('UPDATE inventory_items SET status = ? WHERE id = ?')) {
-          return { run: jest.fn() };
+          return { run: vi.fn() };
         }
         throw new Error(`Unexpected SQL: ${sql}`);
       });
@@ -229,7 +229,7 @@ describe('ExpiredItemService', () => {
   describe('getFinancialLossesBySKU', () => {
     it('returns grouped financial losses by sku', async () => {
       const rows = [{ sku: 'SKU-1', productName: 'Milk', totalLoss: 15 }];
-      mockDb.prepare.mockReturnValue({ all: jest.fn().mockReturnValue(rows) });
+      mockDb.prepare.mockReturnValue({ all: vi.fn().mockReturnValue(rows) });
 
       const result = await service.getFinancialLossesBySKU();
 
@@ -241,7 +241,7 @@ describe('ExpiredItemService', () => {
   describe('getFinancialLossesByStoreArea', () => {
     it('returns grouped financial losses by store area', async () => {
       const rows = [{ locationName: 'Cool Room', totalLoss: 20 }];
-      mockDb.prepare.mockReturnValue({ all: jest.fn().mockReturnValue(rows) });
+      mockDb.prepare.mockReturnValue({ all: vi.fn().mockReturnValue(rows) });
 
       const result = await service.getFinancialLossesByStoreArea();
 
@@ -264,7 +264,7 @@ describe('ExpiredItemService', () => {
         },
       ];
 
-      mockDb.prepare.mockReturnValue({ all: jest.fn().mockReturnValue(rows) });
+      mockDb.prepare.mockReturnValue({ all: vi.fn().mockReturnValue(rows) });
 
       const result = await service.getAllExpiredItemTransactions();
 

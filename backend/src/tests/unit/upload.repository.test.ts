@@ -12,9 +12,9 @@ describe('UploadRepository', () => {
 
   beforeEach(() => {
     prisma = {
-      $queryRaw: jest.fn(),
+      $queryRaw: vi.fn(),
       upload: {
-        updateMany: jest.fn(),
+        updateMany: vi.fn(),
       },
     };
     repository = new UploadRepository(prisma as never);

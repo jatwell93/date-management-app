@@ -4,45 +4,45 @@ import { PrismaClient } from '@prisma/client';
 function createMockPrisma() {
   const mockPrisma = {
     inventoryItem: {
-      create: jest.fn(),
-      update: jest.fn(),
-      findUnique: jest.fn(),
-      findMany: jest.fn(),
-      findFirst: jest.fn(),
-      delete: jest.fn(),
+      create: vi.fn(),
+      update: vi.fn(),
+      findUnique: vi.fn(),
+      findMany: vi.fn(),
+      findFirst: vi.fn(),
+      delete: vi.fn(),
     },
     product: {
-      findFirst: jest.fn(),
-      findUnique: jest.fn(),
-      create: jest.fn(),
-      update: jest.fn(),
+      findFirst: vi.fn(),
+      findUnique: vi.fn(),
+      create: vi.fn(),
+      update: vi.fn(),
     },
     storeArea: {
-      findFirst: jest.fn(),
-      findUnique: jest.fn(),
-      create: jest.fn(),
+      findFirst: vi.fn(),
+      findUnique: vi.fn(),
+      create: vi.fn(),
     },
     user: {
-      findFirst: jest.fn(),
-      findUnique: jest.fn(),
-      update: jest.fn(),
-      updateMany: jest.fn(),
+      findFirst: vi.fn(),
+      findUnique: vi.fn(),
+      update: vi.fn(),
+      updateMany: vi.fn(),
     },
     auditLog: {
-      create: jest.fn(),
+      create: vi.fn(),
     },
     itemTransaction: {
-      create: jest.fn(),
+      create: vi.fn(),
     },
     organizationUsage: {
-      update: jest.fn(),
-      findUnique: jest.fn(),
+      update: vi.fn(),
+      findUnique: vi.fn(),
     },
     subscriptionTier: {
-      findFirst: jest.fn(),
-      update: jest.fn(),
+      findFirst: vi.fn(),
+      update: vi.fn(),
     },
-    $transaction: jest.fn((callback) => callback(mockPrisma)),
+    $transaction: vi.fn((callback) => callback(mockPrisma)),
   };
 
   return mockPrisma;
@@ -50,46 +50,46 @@ function createMockPrisma() {
 
 function createInventoryRepositoryMock(mockPrisma: any) {
   return {
-    findFirst: jest.fn((where) => mockPrisma.inventoryItem.findFirst({ where })),
-    findAll: jest.fn((orgId) =>
+    findFirst: vi.fn((where) => mockPrisma.inventoryItem.findFirst({ where })),
+    findAll: vi.fn((orgId) =>
       mockPrisma.inventoryItem.findMany({ where: { organizationId: orgId } }),
     ),
-    findById: jest.fn((id, orgId) =>
+    findById: vi.fn((id, orgId) =>
       mockPrisma.inventoryItem.findFirst({ where: { id, organizationId: orgId } }),
     ),
-    findByProductId: jest.fn((productId, orgId) =>
+    findByProductId: vi.fn((productId, orgId) =>
       mockPrisma.inventoryItem.findMany({
         where: { productId, organizationId: orgId },
       }),
     ),
-    findRecentByProductId: jest.fn((productId, orgId, limit) =>
+    findRecentByProductId: vi.fn((productId, orgId, limit) =>
       mockPrisma.inventoryItem.findMany({
         where: { productId, organizationId: orgId },
         orderBy: { createdAt: 'desc' },
         take: limit,
       }),
     ),
-    findByLocationId: jest.fn((locationId, orgId) =>
+    findByLocationId: vi.fn((locationId, orgId) =>
       mockPrisma.inventoryItem.findMany({
         where: { locationId, organizationId: orgId },
       }),
     ),
-    findByOrganizationIdAndId: jest.fn((id, orgId) =>
+    findByOrganizationIdAndId: vi.fn((id, orgId) =>
       mockPrisma.inventoryItem.findFirst({ where: { id, organizationId: orgId } }),
     ),
-    findManyByIds: jest.fn((ids, orgId) =>
+    findManyByIds: vi.fn((ids, orgId) =>
       mockPrisma.inventoryItem.findMany({
         where: { id: { in: ids }, organizationId: orgId },
         select: { id: true },
       }),
     ),
-    findUniqueWithProduct: jest.fn((id, orgId) =>
+    findUniqueWithProduct: vi.fn((id, orgId) =>
       mockPrisma.inventoryItem.findUnique({
         where: { id, organizationId: orgId },
         include: { product: { select: { costPrice: true } } },
       }),
     ),
-    updateManyByIds: jest.fn((items) =>
+    updateManyByIds: vi.fn((items) =>
       Promise.all(
         items.map((item) =>
           mockPrisma.inventoryItem.update({
@@ -99,11 +99,11 @@ function createInventoryRepositoryMock(mockPrisma: any) {
         ),
       ),
     ),
-    create: jest.fn((data) => mockPrisma.inventoryItem.create({ data })),
-    update: jest.fn((id, orgId, data) =>
+    create: vi.fn((data) => mockPrisma.inventoryItem.create({ data })),
+    update: vi.fn((id, orgId, data) =>
       mockPrisma.inventoryItem.update({ where: { id, organizationId: orgId }, data }),
     ),
-    delete: jest.fn((id, orgId) =>
+    delete: vi.fn((id, orgId) =>
       mockPrisma.inventoryItem.delete({ where: { id, organizationId: orgId } }),
     ),
   };
@@ -111,14 +111,14 @@ function createInventoryRepositoryMock(mockPrisma: any) {
 
 function createProductRepositoryMock(mockPrisma: any) {
   return {
-    findById: jest.fn((id, orgId) =>
+    findById: vi.fn((id, orgId) =>
       mockPrisma.product.findFirst({ where: { id, organizationId: orgId } }),
     ),
-    findBySku: jest.fn((sku, orgId) =>
+    findBySku: vi.fn((sku, orgId) =>
       mockPrisma.product.findFirst({ where: { sku, organizationId: orgId } }),
     ),
-    create: jest.fn((data) => mockPrisma.product.create({ data })),
-    update: jest.fn((id, orgId, data) =>
+    create: vi.fn((data) => mockPrisma.product.create({ data })),
+    update: vi.fn((id, orgId, data) =>
       mockPrisma.product.update({ where: { id, organizationId: orgId }, data }),
     ),
   };
@@ -131,15 +131,15 @@ function createInventoryService(organizationId: string, mockPrisma: any): Invent
     createInventoryRepositoryMock(mockPrisma) as any,
     createProductRepositoryMock(mockPrisma) as any,
     {
-      findUsageByOrganizationId: jest.fn((orgId) =>
+      findUsageByOrganizationId: vi.fn((orgId) =>
         mockPrisma.organizationUsage.findUnique({ where: { organizationId: orgId } }),
       ),
-      updateUsage: jest.fn((orgId, data) =>
+      updateUsage: vi.fn((orgId, data) =>
         mockPrisma.organizationUsage.update({ where: { organizationId: orgId }, data }),
       ),
     } as any,
     {
-      findById: jest.fn((id, orgId) =>
+      findById: vi.fn((id, orgId) =>
         mockPrisma.user.findFirst({ where: { id, organizationId: orgId } }),
       ),
       findByEmailAndOrganizationId: mockPrisma.user.findFirst,
@@ -153,10 +153,10 @@ function createInventoryService(organizationId: string, mockPrisma: any): Invent
       findRecentTrialUserByEmail: mockPrisma.user.findFirst,
     } as any,
     {
-      create: jest.fn((data) => mockPrisma.auditLog.create({ data })),
+      create: vi.fn((data) => mockPrisma.auditLog.create({ data })),
     } as any,
     {
-      findById: jest.fn((id, orgId) =>
+      findById: vi.fn((id, orgId) =>
         mockPrisma.storeArea.findFirst({ where: { id, organizationId: orgId } }),
       ),
     } as any,
@@ -186,7 +186,7 @@ describe('InventoryService', () => {
   });
 
   afterEach(() => {
-    jest.clearAllMocks();
+    vi.clearAllMocks();
   });
 
   describe('createInventoryItem', () => {
@@ -357,7 +357,7 @@ describe('InventoryService', () => {
   describe('getAllInventoryItems', () => {
     it('delegates inventory reads to the repository when injected', async () => {
       const inventoryRepo = {
-        findAll: jest.fn().mockResolvedValue([
+        findAll: vi.fn().mockResolvedValue([
           {
             id: 1,
             productId: 1,
@@ -417,7 +417,7 @@ describe('InventoryService', () => {
   describe('getInventoryItemById', () => {
     it('delegates item lookup to the repository when injected', async () => {
       const inventoryRepo = {
-        findById: jest.fn().mockResolvedValue({
+        findById: vi.fn().mockResolvedValue({
           id: 1,
           productId: 1,
           locationId: 1,
@@ -449,7 +449,7 @@ describe('InventoryService', () => {
   describe('getInventoryItemsByProductId', () => {
     it('delegates product inventory reads to the repository when injected', async () => {
       const inventoryRepo = {
-        findByProductId: jest.fn().mockResolvedValue([]),
+        findByProductId: vi.fn().mockResolvedValue([]),
       };
       const service = createRepositoryDelegationService(organizationId, mockPrisma, inventoryRepo);
 
@@ -494,7 +494,7 @@ describe('InventoryService', () => {
   describe('getRecentInventoryItemsByProductId', () => {
     it('delegates recent product inventory reads to the repository when injected', async () => {
       const inventoryRepo = {
-        findRecentByProductId: jest.fn().mockResolvedValue([]),
+        findRecentByProductId: vi.fn().mockResolvedValue([]),
       };
       const service = createRepositoryDelegationService(organizationId, mockPrisma, inventoryRepo);
 
@@ -541,7 +541,7 @@ describe('InventoryService', () => {
   describe('getInventoryItemsByLocationId', () => {
     it('delegates location inventory reads to the repository when injected', async () => {
       const inventoryRepo = {
-        findByLocationId: jest.fn().mockResolvedValue([]),
+        findByLocationId: vi.fn().mockResolvedValue([]),
       };
       const service = createRepositoryDelegationService(organizationId, mockPrisma, inventoryRepo);
 

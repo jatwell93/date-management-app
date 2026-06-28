@@ -1,15 +1,17 @@
 import express from 'express';
 import request from 'supertest';
 
-const mockGetStorageQuota = jest.fn();
-const mockCanUploadFile = jest.fn();
+const mockGetStorageQuota = vi.fn();
+const mockCanUploadFile = vi.fn();
 
-const mockStorageQuotaServiceCtor = jest.fn().mockImplementation((_organizationId?: string) => ({
-  getStorageQuota: (...args: unknown[]) => mockGetStorageQuota(...args),
-  canUploadFile: (...args: unknown[]) => mockCanUploadFile(...args),
-}));
+const mockStorageQuotaServiceCtor = vi.fn().mockImplementation(function (_organizationId?: string) {
+  return {
+    getStorageQuota: (...args: unknown[]) => mockGetStorageQuota(...args),
+    canUploadFile: (...args: unknown[]) => mockCanUploadFile(...args),
+  };
+});
 
-jest.mock('../../services/storage-quota.service', () => ({
+vi.mock('../../services/storage-quota.service', () => ({
   StorageQuotaService: function StorageQuotaService(...args: unknown[]) {
     return mockStorageQuotaServiceCtor(...args);
   },
@@ -31,7 +33,7 @@ describe('storage-quota.routes', () => {
   app.use('/storage-quota', storageQuotaRouter);
 
   beforeEach(() => {
-    jest.clearAllMocks();
+    vi.clearAllMocks();
 
     mockGetStorageQuota.mockResolvedValue({
       used: 500,

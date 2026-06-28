@@ -58,7 +58,7 @@ describe('DatabaseFactory', () => {
     });
 
     it('should use hyperdrive connection string when provided', () => {
-      const logSpy = jest.spyOn(console, 'log').mockImplementation(() => undefined);
+      const logSpy = vi.spyOn(console, 'log').mockImplementation(() => undefined);
 
       const client = createDatabaseClient({
         hyperdriveConnectionString: 'postgresql://hyperdrive.test/db',
@@ -152,7 +152,7 @@ describe('DatabaseFactory', () => {
       process.env.DATABASE_URL = 'file:./disconnect-test.db';
 
       const client = getDefaultDatabaseClient();
-      const disconnectSpy = jest.spyOn(client, '$disconnect');
+      const disconnectSpy = vi.spyOn(client, '$disconnect');
 
       await resetDefaultDatabaseClient();
 
@@ -202,7 +202,7 @@ describe('DatabaseFactory', () => {
     it('should delegate to client.$transaction', async () => {
       const txResult = { ok: true };
       const client = {
-        $transaction: jest.fn(async (fn: (tx: unknown) => Promise<unknown>) => fn({})),
+        $transaction: vi.fn(async (fn: (tx: unknown) => Promise<unknown>) => fn({})),
       } as unknown as PrismaClient;
 
       const result = await withTransaction(client, async () => txResult);
@@ -213,7 +213,7 @@ describe('DatabaseFactory', () => {
 
     it('should pass options to client.$transaction', async () => {
       const client = {
-        $transaction: jest.fn(async (_fn: (tx: unknown) => Promise<unknown>) => 'ok'),
+        $transaction: vi.fn(async (_fn: (tx: unknown) => Promise<unknown>) => 'ok'),
       } as unknown as PrismaClient;
 
       await withTransactionOptions(client, async () => 'ok', { maxWait: 1000, timeout: 5000 });

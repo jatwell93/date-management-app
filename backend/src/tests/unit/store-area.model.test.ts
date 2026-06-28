@@ -22,15 +22,15 @@ describe('StoreAreaModel', () => {
 
   beforeEach(() => {
     db = {
-      get: jest.fn(),
-      all: jest.fn(),
-      run: jest.fn(),
+      get: vi.fn(),
+      all: vi.fn(),
+      run: vi.fn(),
     };
     model = new StoreAreaModel(db as unknown as never);
   });
 
   afterEach(() => {
-    jest.restoreAllMocks();
+    vi.restoreAllMocks();
   });
 
   it('createTable creates the table when it does not exist', async () => {
@@ -82,7 +82,7 @@ describe('StoreAreaModel', () => {
   it('createTable rethrows migration errors', async () => {
     db.get.mockResolvedValue({ name: 'store_areas' });
     db.all.mockRejectedValue(new Error('pragma failure'));
-    const errorSpy = jest.spyOn(console, 'error').mockImplementation(() => undefined);
+    const errorSpy = vi.spyOn(console, 'error').mockImplementation(() => undefined);
 
     await expect(model.createTable()).rejects.toThrow('pragma failure');
     expect(errorSpy).toHaveBeenCalledWith('Error during table migration:', expect.any(Error));

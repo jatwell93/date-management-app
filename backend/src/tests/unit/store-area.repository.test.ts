@@ -28,11 +28,11 @@ describe('StoreAreaRepository', () => {
   beforeEach(() => {
     prisma = {
       storeArea: {
-        findMany: jest.fn(),
-        findFirst: jest.fn(),
-        create: jest.fn(),
-        update: jest.fn(),
-        delete: jest.fn(),
+        findMany: vi.fn(),
+        findFirst: vi.fn(),
+        create: vi.fn(),
+        update: vi.fn(),
+        delete: vi.fn(),
       },
     };
     repository = new StoreAreaRepository(prisma as never);

@@ -13,10 +13,10 @@ describe('Validation Middleware', () => {
 
   beforeEach(() => {
     mockRes = {
-      status: jest.fn().mockReturnThis(),
-      json: jest.fn(),
+      status: vi.fn().mockReturnThis(),
+      json: vi.fn(),
     };
-    mockNext = jest.fn();
+    mockNext = vi.fn();
   });
 
   describe('validateProductInput', () => {

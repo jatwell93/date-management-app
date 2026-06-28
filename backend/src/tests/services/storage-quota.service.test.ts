@@ -9,11 +9,11 @@ describe('StorageQuotaService', () => {
   };
 
   beforeEach(() => {
-    jest.clearAllMocks();
+    vi.clearAllMocks();
     mockStorageQuotaRepository = {
-      sumActiveUploadBytes: jest.fn().mockResolvedValue(0),
-      recordUpload: jest.fn().mockResolvedValue(undefined),
-      markUploadDeleted: jest.fn().mockResolvedValue(undefined),
+      sumActiveUploadBytes: vi.fn().mockResolvedValue(0),
+      recordUpload: vi.fn().mockResolvedValue(undefined),
+      markUploadDeleted: vi.fn().mockResolvedValue(undefined),
     };
     service = new StorageQuotaService('test-org', mockStorageQuotaRepository as never);
   });

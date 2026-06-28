@@ -13,28 +13,30 @@ const defaultEnv: EnvironmentOverrides = {
 };
 
 const loadDatabaseModule = async (overrides: Partial<EnvironmentOverrides> = {}) => {
-  jest.resetModules();
+  vi.resetModules();
 
-  const databaseCtor = jest.fn().mockImplementation(() => ({ mockDb: true }));
+  const databaseCtor = vi.fn().mockImplementation(function () {
+    return { mockDb: true };
+  });
   const logger = {
-    info: jest.fn(),
-    warn: jest.fn(),
-    error: jest.fn(),
+    info: vi.fn(),
+    warn: vi.fn(),
+    error: vi.fn(),
   };
 
-  jest.doMock('better-sqlite3', () => ({
+  vi.doMock('better-sqlite3', () => ({
     __esModule: true,
     default: databaseCtor,
   }));
 
-  jest.doMock('../../config/environment', () => ({
+  vi.doMock('../../config/environment', () => ({
     envConfig: {
       ...defaultEnv,
       ...overrides,
     },
   }));
 
-  jest.doMock('../../utils/logger', () => ({
+  vi.doMock('../../utils/logger', () => ({
     Logger: logger,
   }));
 
@@ -49,11 +51,11 @@ const loadDatabaseModule = async (overrides: Partial<EnvironmentOverrides> = {})
 
 describe('database security verification', () => {
   afterEach(() => {
-    jest.dontMock('better-sqlite3');
-    jest.dontMock('../../config/environment');
-    jest.dontMock('../../utils/logger');
-    jest.resetModules();
-    jest.clearAllMocks();
+    vi.doUnmock('better-sqlite3');
+    vi.doUnmock('../../config/environment');
+    vi.doUnmock('../../utils/logger');
+    vi.resetModules();
+    vi.clearAllMocks();
   });
 
   it('logs sqlite informational message when provider is sqlite', async () => {

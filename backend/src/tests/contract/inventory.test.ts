@@ -1,5 +1,5 @@
 // Mock auth middleware to bypass check
-jest.mock('../../middleware/auth.middleware', () => ({
+vi.mock('../../middleware/auth.middleware', () => ({
   authenticateToken: (req: any, res: any, next: any) => {
     req.user = { id: 1, role: 'Manager', organizationId: 'default-org', tierLevel: 'professional' };
     req.userId = 1;

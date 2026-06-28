@@ -23,9 +23,9 @@ describe('InventoryItemModel', () => {
 
   beforeEach(() => {
     db = {
-      run: jest.fn(),
-      get: jest.fn(),
-      all: jest.fn(),
+      run: vi.fn(),
+      get: vi.fn(),
+      all: vi.fn(),
     };
     model = new InventoryItemModel(db as unknown as never);
   });

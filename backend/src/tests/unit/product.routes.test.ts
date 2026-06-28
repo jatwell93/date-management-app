@@ -2,50 +2,63 @@ import express from 'express';
 import path from 'path';
 import request from 'supertest';
 
-const mockUploadMiddleware = jest.fn();
-const mockMulterSingle = jest.fn(() => (req: any, res: any, next: any) => {
-  mockUploadMiddleware(req, res, next);
-});
-let capturedMulterOptions: unknown;
-const mockMulter = jest.fn((options: unknown) => {
-  capturedMulterOptions = options;
-  return {
-    single: mockMulterSingle,
-  };
+// `vi.mock('multer', () => mockMulter)` references mockMulter directly, so the
+// whole multer mock group is lifted via vi.hoisted() to exist before the hoisted
+// factory runs. capturedMulterOptions lives on a holder so tests can read it.
+const { mockUploadMiddleware, mockMulter, multerState } = vi.hoisted(() => {
+  const mockUploadMiddleware = vi.fn();
+  const mockMulterSingle = vi.fn(() => (req: any, res: any, next: any) => {
+    mockUploadMiddleware(req, res, next);
+  });
+  const multerState: { options: unknown } = { options: undefined };
+  const mockMulter = vi.fn((options: unknown) => {
+    multerState.options = options;
+    return {
+      single: mockMulterSingle,
+    };
+  });
+  return { mockUploadMiddleware, mockMulter, multerState };
 });
 
-const mockUnlink = jest.fn();
+const mockUnlink = vi.fn();
 
 const mockPrisma = {
   subscriptionTier: {
-    findFirst: jest.fn(),
+    findFirst: vi.fn(),
   },
   organizationUsage: {
-    findUnique: jest.fn(),
+    findUnique: vi.fn(),
   },
   product: {
-    findMany: jest.fn(),
+    findMany: vi.fn(),
   },
 };
 
-const mockProductService = {
-  getAllProducts: jest.fn(),
-  getProductByBarcode: jest.fn(),
-  getProductBySku: jest.fn(),
-  getProductById: jest.fn(),
-  createProduct: jest.fn(),
-  updateProduct: jest.fn(),
-  deleteProduct: jest.fn(),
-  processCSVUpload: jest.fn(),
-  getExcessProductsView: jest.fn(),
-};
-
-const MockProductService = jest.fn().mockImplementation(() => mockProductService);
+// The vi.mock factory references MockProductService directly, so both it and the
+// object it returns must be initialized before the hoisted factory runs. A
+// regular function (not arrow) lets the SUT `new ProductService()` construct it.
+const { mockProductService, MockProductService } = vi.hoisted(() => {
+  const mockProductService = {
+    getAllProducts: vi.fn(),
+    getProductByBarcode: vi.fn(),
+    getProductBySku: vi.fn(),
+    getProductById: vi.fn(),
+    createProduct: vi.fn(),
+    updateProduct: vi.fn(),
+    deleteProduct: vi.fn(),
+    processCSVUpload: vi.fn(),
+    getExcessProductsView: vi.fn(),
+  };
+  const MockProductService = vi.fn().mockImplementation(function () {
+    return mockProductService;
+  });
+  return { mockProductService, MockProductService };
+});
 let mockProductController: any;
 
-jest.mock('multer', () => mockMulter);
+vi.mock('multer', () => ({ default: mockMulter }));
 
-jest.mock('fs', () => ({
+vi.mock('fs', () => ({
   __esModule: true,
   default: {
     unlink: (...args: unknown[]) => mockUnlink(...args),
@@ -53,7 +66,7 @@ jest.mock('fs', () => ({
   unlink: (...args: unknown[]) => mockUnlink(...args),
 }));
 
-jest.mock('../../middleware/auth.middleware', () => ({
+vi.mock('../../middleware/auth.middleware', () => ({
   authenticateToken: (req: any, _res: any, next: any) => {
     req.organizationId = req.get('x-org-id') || undefined;
     req.user = { id: 1, role: 'Manager' };
@@ -61,35 +74,35 @@ jest.mock('../../middleware/auth.middleware', () => ({
   },
 }));
 
-jest.mock('../../middleware/feature-gate.middleware', () => ({
+vi.mock('../../middleware/feature-gate.middleware', () => ({
   checkUsageLimit: () => (_req: any, _res: any, next: any) => next(),
 }));
 
-jest.mock('../../middleware/validation.middleware', () => ({
+vi.mock('../../middleware/validation.middleware', () => ({
   validateDataIntegrity: (_req: any, _res: any, next: any) => next(),
 }));
 
-jest.mock('../../middleware/validateRequest', () => ({
+vi.mock('../../middleware/validateRequest', () => ({
   validateRequest: () => (_req: any, _res: any, next: any) => next(),
 }));
 
-jest.mock('../../middleware/data-integrity.middleware', () => ({
+vi.mock('../../middleware/data-integrity.middleware', () => ({
   validateBusinessRules: (_req: any, _res: any, next: any) => next(),
 }));
 
-jest.mock('../../middleware/rateLimiter', () => ({
+vi.mock('../../middleware/rateLimiter', () => ({
   standardLimiter: (_req: any, _res: any, next: any) => next(),
 }));
 
-jest.mock('../../services/product.service', () => ({
+vi.mock('../../services/product.service', () => ({
   ProductService: MockProductService,
 }));
 
-jest.mock('../../database/database-factory', () => ({
+vi.mock('../../database/database-factory', () => ({
   getDefaultDatabaseClient: () => mockPrisma,
 }));
 
-jest.mock('../../di/services', () => ({
+vi.mock('../../di/services', () => ({
   createProductController: () => mockProductController,
 }));
 
@@ -169,9 +182,9 @@ describe('product.routes organization guards', () => {
   };
 
   beforeEach(() => {
-    jest.clearAllMocks();
+    vi.clearAllMocks();
 
-    jest.spyOn(console, 'error').mockImplementation(() => undefined);
+    vi.spyOn(console, 'error').mockImplementation(() => undefined);
 
     mockPrisma.subscriptionTier.findFirst.mockResolvedValue({ tierLevel: 'professional' });
     mockPrisma.organizationUsage.findUnique.mockResolvedValue({ totalSkus: 2005 });
@@ -236,7 +249,7 @@ describe('product.routes organization guards', () => {
   });
 
   afterEach(() => {
-    jest.restoreAllMocks();
+    vi.restoreAllMocks();
   });
 
   it('returns all products for GET /products', async () => {
@@ -628,7 +641,7 @@ describe('product.routes organization guards', () => {
   });
 
   it('configures multer with the default 10MB upload limit', () => {
-    expect(capturedMulterOptions).toEqual(
+    expect(multerState.options).toEqual(
       expect.objectContaining({
         limits: { fileSize: 10 * 1024 * 1024 },
       }),

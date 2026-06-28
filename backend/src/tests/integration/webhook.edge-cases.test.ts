@@ -5,8 +5,8 @@ import Stripe from 'stripe';
 import crypto from 'crypto';
 
 // Mock Stripe and Email service
-jest.mock('stripe');
-jest.mock('../../services/email.service');
+vi.mock('stripe');
+vi.mock('../../services/email.service');
 
 const prisma = new PrismaClient();
 
@@ -21,10 +21,10 @@ describe('Webhook Edge Cases', () => {
     // Create mock Stripe instance
     mockStripe = {
       customers: {
-        retrieve: jest.fn(),
+        retrieve: vi.fn(),
       },
       subscriptions: {
-        retrieve: jest.fn(),
+        retrieve: vi.fn(),
       },
     } as any;
 
@@ -52,7 +52,7 @@ describe('Webhook Edge Cases', () => {
     testOrganizationId = org.id;
 
     // Reset mocks
-    jest.clearAllMocks();
+    vi.clearAllMocks();
   });
 
   afterAll(async () => {

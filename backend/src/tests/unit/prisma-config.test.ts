@@ -5,7 +5,7 @@ describe('Prisma datasource defaults', () => {
   afterEach(() => {
     process.env.DATABASE_URL = originalDatabaseUrl;
     process.env.NEON_CONNECTION_STRING = originalNeonConnectionString;
-    jest.resetModules();
+    vi.resetModules();
   });
 
   it('defaults local Prisma to the runtime SQLite database file', async () => {

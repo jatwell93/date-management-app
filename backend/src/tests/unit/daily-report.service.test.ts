@@ -10,7 +10,7 @@ describe('DailyReportService', () => {
     const weekAgoDate = new Date(normalizedReportDate);
     weekAgoDate.setDate(weekAgoDate.getDate() - 7);
     const saasMetricsService = {
-      getSaasMetrics: jest.fn().mockResolvedValue({
+      getSaasMetrics: vi.fn().mockResolvedValue({
         trialConversionRate: 25,
         avgRevenuePerUser: 40,
         churnRate: 3,
@@ -26,7 +26,7 @@ describe('DailyReportService', () => {
     };
     const emailService = {};
     const analyticsRepo = {
-      findMetricsSnapshotByDate: jest
+      findMetricsSnapshotByDate: vi
         .fn()
         .mockResolvedValueOnce({
           totalRevenueCents: 6000,

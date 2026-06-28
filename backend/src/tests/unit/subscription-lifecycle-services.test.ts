@@ -12,44 +12,44 @@ describe('subscription lifecycle services', () => {
   let stripe: jest.Mocked<Stripe>;
 
   beforeEach(() => {
-    jest.clearAllMocks();
+    vi.clearAllMocks();
 
     prisma = {
       organization: {
-        findUnique: jest.fn(),
-        update: jest.fn(),
+        findUnique: vi.fn(),
+        update: vi.fn(),
       },
       organizationUsage: {
-        create: jest.fn(),
-        update: jest.fn(),
-        findUnique: jest.fn(),
+        create: vi.fn(),
+        update: vi.fn(),
+        findUnique: vi.fn(),
       },
       subscriptionTier: {
-        create: jest.fn(),
-        findFirst: jest.fn(),
-        findMany: jest.fn(),
-        update: jest.fn(),
-        updateMany: jest.fn(),
+        create: vi.fn(),
+        findFirst: vi.fn(),
+        findMany: vi.fn(),
+        update: vi.fn(),
+        updateMany: vi.fn(),
       },
       trialEvent: {
-        create: jest.fn(),
-        findFirst: jest.fn(),
-        findMany: jest.fn(),
+        create: vi.fn(),
+        findFirst: vi.fn(),
+        findMany: vi.fn(),
       },
       auditLog: {
-        create: jest.fn(),
+        create: vi.fn(),
       },
-      $transaction: jest.fn((callback) => callback(prisma)),
+      $transaction: vi.fn((callback) => callback(prisma)),
     } as unknown as jest.Mocked<PrismaClient>;
 
     stripe = {
       customers: {
-        create: jest.fn(),
+        create: vi.fn(),
       },
       subscriptions: {
-        create: jest.fn(),
-        retrieve: jest.fn(),
-        update: jest.fn(),
+        create: vi.fn(),
+        retrieve: vi.fn(),
+        update: vi.fn(),
       },
     } as unknown as jest.Mocked<Stripe>;
   });

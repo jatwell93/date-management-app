@@ -11,8 +11,8 @@ describe('AuditLogModel', () => {
 
   beforeEach(() => {
     db = {
-      run: jest.fn(),
-      get: jest.fn(),
+      run: vi.fn(),
+      get: vi.fn(),
     };
     model = new AuditLogModel(db as unknown as never);
   });

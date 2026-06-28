@@ -13,26 +13,26 @@ import { getDiContainer } from '../../di/container';
 import { OrganizationRepository } from '../../repositories/organization.repository';
 import { SubscriptionRepository } from '../../repositories/subscription.repository';
 
-jest.mock('../../database/database-factory');
-jest.mock('../../di/container', () => ({
-  getDiContainer: jest.fn(),
+vi.mock('../../database/database-factory');
+vi.mock('../../di/container', () => ({
+  getDiContainer: vi.fn(),
 }));
 
 // Mock Logger
-jest.mock('../../utils/logger', () => ({
+vi.mock('../../utils/logger', () => ({
   Logger: {
-    debug: jest.fn(),
-    info: jest.fn(),
-    warn: jest.fn(),
-    error: jest.fn(),
+    debug: vi.fn(),
+    info: vi.fn(),
+    warn: vi.fn(),
+    error: vi.fn(),
   },
 }));
 
 // Mock AnalyticsService
-jest.mock('../../services/analytics.service', () => ({
+vi.mock('../../services/analytics.service', () => ({
   AnalyticsService: {
-    getInstance: jest.fn().mockReturnValue({
-      trackEvent: jest.fn(),
+    getInstance: vi.fn().mockReturnValue({
+      trackEvent: vi.fn(),
     }),
   },
   AnalyticsEventType: {
@@ -55,35 +55,35 @@ describe('Feature Gating Middleware', () => {
       organizationId: 'org-1',
       tierLevel: 'professional',
       ip: '127.0.0.1',
-      get: jest.fn((name: string) => (name === 'set-cookie' ? undefined : ['Mozilla/5.0'])) as any,
+      get: vi.fn((name: string) => (name === 'set-cookie' ? undefined : ['Mozilla/5.0'])) as any,
     };
 
     res = {
-      status: jest.fn().mockReturnThis(),
-      json: jest.fn().mockReturnThis(),
+      status: vi.fn().mockReturnThis(),
+      json: vi.fn().mockReturnThis(),
       locals: {},
     };
 
-    next = jest.fn();
+    next = vi.fn();
 
     prisma = {
       tierFeatureFlag: {
-        findUnique: jest.fn(),
+        findUnique: vi.fn(),
       },
       organizationUsage: {
-        upsert: jest.fn(),
+        upsert: vi.fn(),
       },
       subscriptionTier: {
-        findFirst: jest.fn(),
+        findFirst: vi.fn(),
       },
       organization: {
-        findUnique: jest.fn().mockResolvedValue({ isCreationLocked: false }),
+        findUnique: vi.fn().mockResolvedValue({ isCreationLocked: false }),
       },
     } as any;
 
     (getDefaultDatabaseClient as jest.Mock).mockReturnValue(prisma);
     (getDiContainer as jest.Mock).mockReturnValue({
-      resolve: jest.fn((token) => {
+      resolve: vi.fn((token) => {
         if (token === SubscriptionRepository) {
           return {
             getOrCreateUsage: prisma.organizationUsage!.upsert,
@@ -102,7 +102,7 @@ describe('Feature Gating Middleware', () => {
   });
 
   afterEach(() => {
-    jest.clearAllMocks();
+    vi.clearAllMocks();
   });
 
   describe('requireFeature middleware (Task 5.1-5.3)', () => {
@@ -508,8 +508,8 @@ describe('Feature Gating Middleware', () => {
       await middleware1(req as AuthRequest, res as Response, next);
       expect(next).toHaveBeenCalled();
 
-      jest.clearAllMocks();
-      next = jest.fn();
+      vi.clearAllMocks();
+      next = vi.fn();
 
       await middleware2(req as AuthRequest, res as Response, next);
       expect(next).toHaveBeenCalled();
