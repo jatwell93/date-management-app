@@ -484,6 +484,7 @@ describe('CSVUploadPage expiry import', () => {
     const previewTable = screen.getByRole('table');
 
     expect(previewRegion).toHaveClass('overflow-x-auto');
+    expect(previewRegion).toHaveAttribute('tabIndex', '0');
     expect(previewTable).toHaveClass('min-w-max');
   });
 

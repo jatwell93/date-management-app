@@ -36,7 +36,7 @@ export class AdminMetricsController {
     return getDiContainer().resolve(AnalyticsRepository);
   }
 
-  async getDashboard(req: AuthRequest, res: Response, next: NextFunction): Promise<void> {
+  async getDashboard(req: AuthRequest, res: Response, _next: NextFunction): Promise<void> {
     try {
       const [saasMetrics, applicationMetrics] = await Promise.all([
         this.saasMetricsService.getSaasMetrics(),
@@ -104,7 +104,7 @@ export class AdminMetricsController {
     }
   }
 
-  async getSubscriptionTiers(req: AuthRequest, res: Response, next: NextFunction): Promise<void> {
+  async getSubscriptionTiers(req: AuthRequest, res: Response, _next: NextFunction): Promise<void> {
     try {
       const tierCounts =
         await this.getSubscriptionRepository().groupSubscriptionCountsByTierAndStatus();
@@ -177,7 +177,7 @@ export class AdminMetricsController {
     }
   }
 
-  async getRevenueProjections(req: AuthRequest, res: Response, next: NextFunction): Promise<void> {
+  async getRevenueProjections(req: AuthRequest, res: Response, _next: NextFunction): Promise<void> {
     try {
       // Get last 90 days of metrics snapshots
       const ninetyDaysAgo = new Date();
@@ -259,7 +259,7 @@ export class AdminMetricsController {
     }
   }
 
-  async getHistorical(req: AuthRequest, res: Response, next: NextFunction): Promise<void> {
+  async getHistorical(req: AuthRequest, res: Response, _next: NextFunction): Promise<void> {
     try {
       const daysParam = parseInt(req.query.days as string) || 30;
       const days = Math.min(Math.max(daysParam, 7), 365);
@@ -314,7 +314,7 @@ export class AdminMetricsController {
     }
   }
 
-  async getAlerts(req: AuthRequest, res: Response, next: NextFunction): Promise<void> {
+  async getAlerts(req: AuthRequest, res: Response, _next: NextFunction): Promise<void> {
     try {
       const metrics = await this.saasMetricsService.getSaasMetrics();
 

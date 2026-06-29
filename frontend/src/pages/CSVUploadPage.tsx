@@ -999,6 +999,8 @@ export const CSVUploadPage: React.FC<{
               {filePreview.length > 0 && (
                 <div className="mb-6">
                   <h3 className="text-lg font-medium mb-2">File Preview (First 5 rows):</h3>
+                  {/* Keyboard users need a focus target to scroll the wide preview table horizontally. */}
+                  {/* eslint-disable jsx-a11y/no-noninteractive-tabindex */}
                   <div
                     className="overflow-x-auto rounded-md border border-hairline"
                     role="region"
@@ -1034,6 +1036,7 @@ export const CSVUploadPage: React.FC<{
                       </TableBody>
                     </Table>
                   </div>
+                  {/* eslint-enable jsx-a11y/no-noninteractive-tabindex */}
                 </div>
               )}
 

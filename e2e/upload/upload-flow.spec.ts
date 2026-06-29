@@ -53,7 +53,7 @@ TEST002,Test Product 2,19.99,987654321`;
     fs.unlinkSync(tempFile);
   });
 
-  test('should upload large CSV file via presigned URL path', async ({ page, context }) => {
+  test('should upload large CSV file via presigned URL path', async ({ page }) => {
     // Navigate to upload page
     await page.goto('/csv-upload');
 

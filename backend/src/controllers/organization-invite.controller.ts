@@ -1,4 +1,4 @@
-import { Response, NextFunction, RequestHandler } from 'express';
+import { Response, NextFunction } from 'express';
 import { injectable } from 'tsyringe';
 import { AuthRequest } from '../middleware/auth.middleware';
 import { ClerkAuthRequest } from '../middleware/clerk-auth.middleware';
@@ -25,7 +25,7 @@ export class OrganizationInviteController {
     this.emailService = emailService ?? new EmailService();
   }
 
-  async createInvite(req: AuthRequest, res: Response, next: NextFunction): Promise<void> {
+  async createInvite(req: AuthRequest, res: Response, _next: NextFunction): Promise<void> {
     try {
       if (!req.organizationId || !req.userId) {
         res.status(401).json({ message: 'Access denied: Missing organization context' });
@@ -66,7 +66,7 @@ export class OrganizationInviteController {
     }
   }
 
-  async acceptInvite(req: ClerkAuthRequest, res: Response, next: NextFunction): Promise<void> {
+  async acceptInvite(req: ClerkAuthRequest, res: Response, _next: NextFunction): Promise<void> {
     try {
       if (!req.auth?.userId || !req.auth.email) {
         res.status(401).json({ message: 'Authentication required' });
@@ -93,7 +93,7 @@ export class OrganizationInviteController {
     }
   }
 
-  async listInvites(req: AuthRequest, res: Response, next: NextFunction): Promise<void> {
+  async listInvites(req: AuthRequest, res: Response, _next: NextFunction): Promise<void> {
     try {
       if (!req.organizationId) {
         res.status(401).json({ message: 'Access denied: Missing organization context' });
@@ -111,7 +111,7 @@ export class OrganizationInviteController {
     }
   }
 
-  async revokeInvite(req: AuthRequest, res: Response, next: NextFunction): Promise<void> {
+  async revokeInvite(req: AuthRequest, res: Response, _next: NextFunction): Promise<void> {
     try {
       if (!req.organizationId) {
         res.status(401).json({ message: 'Access denied: Missing organization context' });
@@ -133,7 +133,7 @@ export class OrganizationInviteController {
     }
   }
 
-  async resendInvite(req: AuthRequest, res: Response, next: NextFunction): Promise<void> {
+  async resendInvite(req: AuthRequest, res: Response, _next: NextFunction): Promise<void> {
     try {
       if (!req.organizationId || !req.userId) {
         res.status(401).json({ message: 'Access denied: Missing organization context' });
@@ -173,7 +173,7 @@ export class OrganizationInviteController {
     }
   }
 
-  async deleteOrganization(req: AuthRequest, res: Response, next: NextFunction): Promise<void> {
+  async deleteOrganization(req: AuthRequest, res: Response, _next: NextFunction): Promise<void> {
     try {
       if (!req.organizationId) {
         res.status(401).json({ message: 'Access denied: Missing organization context' });
