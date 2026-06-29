@@ -53,11 +53,10 @@ function markdownLevelLabel(level: number | null): string {
 
 const numberFormatter = new Intl.NumberFormat('en-AU');
 const dateFormatter = new Intl.DateTimeFormat('en-AU', { dateStyle: 'medium' });
-const REQUIRED_OVERALL_SUMMARY_FIELDS = [
-  'expiry_risk_count',
-  'next_month_markdown_count',
-  'active_expiry_stock_count',
-] as const satisfies readonly (keyof MonthlyExpiryReportItem)[];
+type RequiredOverallSummaryField =
+  | 'expiry_risk_count'
+  | 'next_month_markdown_count'
+  | 'active_expiry_stock_count';
 
 function formatReportDate(value: string) {
   const date = new Date(value);
@@ -71,7 +70,7 @@ function normalizeReportNumber(value: unknown): number {
 
 function normalizeRequiredReportNumber(
   item: RawMonthlyExpiryReportItem,
-  field: (typeof REQUIRED_OVERALL_SUMMARY_FIELDS)[number],
+  field: RequiredOverallSummaryField,
 ): number {
   const rawValue = item[field];
   if (

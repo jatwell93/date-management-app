@@ -1003,7 +1003,6 @@ export const CSVUploadPage: React.FC<{
                     className="overflow-x-auto rounded-md border border-hairline"
                     role="region"
                     aria-label="File preview"
-                    tabIndex={0}
                   >
                     <Table className="min-w-max">
                       <TableHeader>

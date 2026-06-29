@@ -2,10 +2,14 @@ import { fireEvent, render, screen, waitFor, within } from '@testing-library/rea
 import { API_AUTH_UNAUTHORIZED_EVENT } from './lib/api.service';
 import { useAuthContext } from './components/ClerkAuthProvider';
 import type { RoleValue } from './constants/roles';
-// eslint-disable-next-line jest/no-mocks-import -- intentionally read the shared manual mock's navigate spy
-import { mockNavigate } from './__mocks__/react-router-dom';
 
-vi.mock('react-router-dom', () => import('./__mocks__/react-router-dom'));
+const mockNavigate = vi.hoisted(() => vi.fn());
+
+vi.mock('react-router-dom', async () => ({
+  ...(await import('./__mocks__/react-router-dom')),
+  mockNavigate,
+  useNavigate: () => mockNavigate,
+}));
 
 vi.mock('./hooks/useFreshApiToken', () => ({
   useFreshApiToken: (() => {
