@@ -72,7 +72,11 @@ process.on('SIGTERM', () => forwardSignal('SIGTERM'));
 child.on('exit', (code, signal) => {
   cleanup();
   if (signal) {
-    // Re-raise so the parent shell observes the same termination signal.
+    // Re-raise so the parent shell observes the same termination signal. We must
+    // first drop our own listener, otherwise the re-raised signal is caught by it
+    // again (instead of taking the default "terminate" action) and the process
+    // hangs in a loop. Removing the listener restores the default disposition.
+    process.removeAllListeners(signal);
     process.kill(process.pid, signal);
     return;
   }
