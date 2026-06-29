@@ -81,7 +81,7 @@ export class StoreAreaRepository {
     subDepartment: string,
     organizationId: string,
     tx: DbClient,
-  ): Promise<any | null> {
+  ): Promise<StoreAreaRecord | null> {
     return this.getClient(tx).storeArea.findUnique({
       where: {
         organizationId_name_subDepartment: {
@@ -98,7 +98,7 @@ export class StoreAreaRepository {
     name: string,
     subDepartment: string,
     tx: DbClient,
-  ): Promise<any> {
+  ): Promise<StoreAreaRecord> {
     return this.getClient(tx).storeArea.create({
       data: { organizationId, name, subDepartment },
     });

@@ -38,6 +38,7 @@ type InventoryItemRaw = {
 type DbClient = PrismaClient | Prisma.TransactionClient;
 type InventoryStatus = InventoryItem['status'];
 type InventoryTransactionInput = Omit<ItemTransaction, 'id' | 'transaction_date'>;
+type CreatedItemTransaction = { id: number };
 
 @injectable()
 export class InventoryService {
@@ -305,7 +306,7 @@ export class InventoryService {
   private async logTransactionInternal(
     transaction: InventoryTransactionInput,
     tx?: DbClient,
-  ): Promise<any> {
+  ): Promise<CreatedItemTransaction> {
     const client = tx ?? this.prisma;
     return client.itemTransaction.create({
       data: {
