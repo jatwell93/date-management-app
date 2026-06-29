@@ -104,13 +104,23 @@
           "**/setupTests.ts"
         ],
         "rules": {
-          "testing-library/no-node-access": "warn",
-          "testing-library/no-wait-for-multiple-assertions": "warn",
-          "testing-library/no-unnecessary-act": "warn",
-          "testing-library/no-container": "warn",
+          "testing-library/no-wait-for-multiple-assertions": "off",
+          "testing-library/no-unnecessary-act": "off",
+          "testing-library/no-container": "off",
+          "testing-library/no-node-access": "off",
           "@typescript-eslint/no-empty-function": "off",
+          "@typescript-eslint/no-explicit-any": "off",
+          "@typescript-eslint/no-non-null-assertion": "off",
           "@typescript-eslint/no-var-requires": "off",
           "@typescript-eslint/ban-ts-comment": "warn"
+        }
+      },
+      {
+        "files": [
+          "**/*.d.ts"
+        ],
+        "rules": {
+          "@typescript-eslint/no-explicit-any": "off"
         }
       }
     ],

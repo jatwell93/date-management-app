@@ -9,6 +9,18 @@ const prettierPlugin = require('eslint-plugin-prettier');
 const prettierConfig = require('eslint-config-prettier');
 const globals = require('globals');
 
+const vitestGlobals = {
+  afterAll: 'readonly',
+  afterEach: 'readonly',
+  beforeAll: 'readonly',
+  beforeEach: 'readonly',
+  describe: 'readonly',
+  expect: 'readonly',
+  it: 'readonly',
+  test: 'readonly',
+  vi: 'readonly',
+};
+
 const baseTsRules = {
   ...tsPlugin.configs.recommended.rules,
   'no-unused-vars': 'off',
@@ -39,6 +51,26 @@ module.exports = [
     files: ['**/*.test.{js,jsx,ts,tsx}', '**/__tests__/**/*.{js,jsx,ts,tsx}'],
     languageOptions: {
       globals: globals.jest,
+    },
+  },
+  {
+    files: [
+      'frontend/src/**/*.test.{js,jsx,ts,tsx}',
+      'frontend/src/**/__tests__/**/*.{js,jsx,ts,tsx}',
+      'frontend/src/setupTests.{js,jsx,ts,tsx}',
+      'frontend/src/test-utils/**/*.{js,jsx,ts,tsx}',
+      'frontend/src/__mocks__/**/*.{js,jsx,ts,tsx}',
+    ],
+    languageOptions: {
+      globals: {
+        ...globals.browser,
+        ...vitestGlobals,
+      },
+    },
+    rules: {
+      '@typescript-eslint/no-explicit-any': 'off',
+      '@typescript-eslint/no-non-null-assertion': 'off',
+      'no-redeclare': 'off',
     },
   },
   {
@@ -207,6 +239,7 @@ module.exports = [
       '**/*.config.js',
       '**/craco.config.js',
       '**/postcss.config.js',
+      '**/.prettierrc.js',
       '**/tailwind.config.js',
     ],
     languageOptions: {
@@ -228,6 +261,60 @@ module.exports = [
     rules: {
       ...baseJsRules,
       'no-case-declarations': 'off',
+    },
+  },
+  {
+    files: ['brand-identity/**/*.{ts,tsx}', 'frontend/*.ts'],
+    languageOptions: {
+      parser: tsParser,
+      ecmaVersion: 'latest',
+      sourceType: 'module',
+      globals: {
+        ...globals.browser,
+        ...globals.node,
+      },
+    },
+    plugins: {
+      '@typescript-eslint': tsPlugin,
+      prettier: prettierPlugin,
+      react: reactPlugin,
+    },
+    settings: { react: { version: 'detect' } },
+    rules: {
+      ...baseTsRules,
+      ...reactPlugin.configs.recommended.rules,
+      'react/react-in-jsx-scope': 'off',
+      'react/prop-types': 'off',
+    },
+  },
+  {
+    files: [
+      'frontend/src/**/*.test.{js,jsx,ts,tsx}',
+      'frontend/src/**/__tests__/**/*.{js,jsx,ts,tsx}',
+      'frontend/src/setupTests.{js,jsx,ts,tsx}',
+      'frontend/src/test-utils/**/*.{js,jsx,ts,tsx}',
+      'frontend/src/tests/**/*.{js,jsx,ts,tsx}',
+      'frontend/src/__mocks__/**/*.{js,jsx,ts,tsx}',
+      'frontend/src/**/*.d.ts',
+    ],
+    languageOptions: {
+      globals: {
+        ...globals.browser,
+        ...globals.node,
+        ...vitestGlobals,
+      },
+    },
+    rules: {
+      '@typescript-eslint/no-explicit-any': 'off',
+      '@typescript-eslint/no-non-null-assertion': 'off',
+      'no-redeclare': 'off',
+      'no-undef': 'off',
+    },
+  },
+  {
+    files: ['scripts/**/*.test.js'],
+    rules: {
+      'no-redeclare': 'off',
     },
   },
   {
