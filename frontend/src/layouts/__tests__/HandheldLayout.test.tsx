@@ -2,11 +2,10 @@ import React from 'react';
 import { render, screen } from '@testing-library/react';
 import { HandheldLayout } from '../HandheldLayout';
 import { HandheldProvider } from '../../contexts/HandheldContext';
-import { HandheldScanToolbar } from '../../components/HandheldScanToolbar';
 
 // Mock the HandheldScanToolbar component
 vi.mock('../../components/HandheldScanToolbar', () => ({
-  HandheldScanToolbar: ({ userName, syncStatus, onSyncNow, onSettingsClick, queueLength }: any) => (
+  HandheldScanToolbar: ({ userName, syncStatus }: { userName: string; syncStatus: string }) => (
     <div data-testid="handheld-scan-toolbar">
       <span>Toolbar Mock</span>
       <span data-testid="toolbar-user-name">{userName}</span>

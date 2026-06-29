@@ -81,7 +81,10 @@ export class UploadRepository {
     return rows[0] ?? null;
   }
 
-  async markCompleted(fileKey: string, data: CompleteUploadStatusParams): Promise<any> {
+  async markCompleted(
+    fileKey: string,
+    data: CompleteUploadStatusParams,
+  ): Promise<Prisma.BatchPayload> {
     return this.prisma.upload.updateMany({
       where: { fileKey },
       data: {
@@ -91,7 +94,7 @@ export class UploadRepository {
     });
   }
 
-  async markFailed(fileKey: string, errorMessage?: string): Promise<any> {
+  async markFailed(fileKey: string, errorMessage?: string): Promise<Prisma.BatchPayload> {
     return this.prisma.upload.updateMany({
       where: { fileKey },
       data: {

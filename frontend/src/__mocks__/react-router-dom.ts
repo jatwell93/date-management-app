@@ -1,6 +1,8 @@
-export const BrowserRouter = ({ children }: { children: any }) => children;
-export const Routes = ({ children }: { children: any }) => children;
-export const Route = ({ path, element }: { path?: string; element: any }) => {
+import type { ReactNode } from 'react';
+
+export const BrowserRouter = ({ children }: { children: ReactNode }) => children;
+export const Routes = ({ children }: { children: ReactNode }) => children;
+export const Route = ({ path, element }: { path?: string; element: ReactNode }) => {
   const pathname = window.location.pathname;
 
   if (!path || path === '*') {
@@ -14,7 +16,7 @@ export const Route = ({ path, element }: { path?: string; element: any }) => {
 
   return pathname === path ? element : null;
 };
-export const Link = ({ children }: { children: any }) => children;
+export const Link = ({ children }: { children: ReactNode }) => children;
 export const Navigate = () => null;
 export const useLocation = () => ({ pathname: '/' });
 export const mockNavigate = vi.fn();

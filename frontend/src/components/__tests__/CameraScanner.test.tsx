@@ -28,7 +28,6 @@ Object.defineProperty(global.navigator, 'mediaDevices', {
 describe('CameraScanner', () => {
   const mockOnDetected = vi.fn();
   const mockOnScannerReady = vi.fn();
-  const mockOnScannerReset = vi.fn();
 
   beforeEach(() => {
     vi.clearAllMocks();
