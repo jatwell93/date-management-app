@@ -76,7 +76,6 @@ function logMemory(kind, title, message) {
 
   // Check if API key is available in environment (for potential future use)
   const hasApiKey = !!process.env.GEMINI_API_KEY || !!process.env.OPENAI_API_KEY;
-  const embeddingFlags = '';
 
   // Prepare environment for memvid (keep API keys for remote providers)
   const cleanEnv = { ...process.env };

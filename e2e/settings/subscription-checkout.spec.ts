@@ -1,4 +1,4 @@
-import { test, expect, Page } from '@playwright/test';
+import { test, expect } from '@playwright/test';
 
 /**
  * E2E: Stripe Checkout Session Redirect
@@ -188,7 +188,7 @@ test.describe('Subscription - Stripe Checkout Session', () => {
       if (responseBody.sessionId) {
         expect(responseBody.sessionId).toMatch(/^cs_/); // Stripe checkout session IDs start with cs_
       }
-    } catch (error) {
+    } catch {
       // API call might not be captured in test environment
       console.log('Note: API response capture not available in test environment');
     }
