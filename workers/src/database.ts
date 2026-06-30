@@ -11,7 +11,7 @@ import { neon, NeonQueryFunction } from '@neondatabase/serverless';
 import type { Env } from './types/env';
 import {
   DISPOSITIONED_STATUSES,
-  EXPIRED_STATUS,
+  EXPIRED_WORKLIST_STATUSES,
   WORKERS_SOLD_THROUGH_STATUS,
 } from '../../shared/domain/disposition';
 import { getMarkdownLevelForDays, MARKDOWN_WINDOWS } from '../../shared/domain/markdown';
@@ -382,7 +382,7 @@ async function getMatchingExpiredItemIds(
       AND ii.product_id = ${context.productId}
       AND ii.location_id IS NOT DISTINCT FROM ${context.locationId}
       AND p.cost_price = ${context.costPrice}
-      AND (ii.expiry_date < CURRENT_DATE OR ii.status = ${EXPIRED_STATUS})
+      AND (ii.expiry_date < CURRENT_DATE OR ii.status = ANY(${[...EXPIRED_WORKLIST_STATUSES]}))
       AND ii.status IS DISTINCT FROM ${WORKERS_SOLD_THROUGH_STATUS}
       AND ii.status IS DISTINCT FROM ${DISPOSITIONED_STATUSES[0]}
     ORDER BY ii.expiry_date ASC, ii.id ASC
@@ -891,7 +891,7 @@ export function createWorkersDatabase(env: Env): Database {
         JOIN products p ON ii.product_id = p.id
         JOIN store_areas sa ON ii.location_id = sa.id
         WHERE (ii.expiry_date < CURRENT_DATE
-          OR ii.status IN ('Expired', 'Markdown 1', 'Markdown 2', 'Markdown 3'))
+          OR ii.status = ANY(${[...EXPIRED_WORKLIST_STATUSES]}))
           AND ii.organization_id = ${organizationId}
           AND ii.status IS DISTINCT FROM ${WORKERS_SOLD_THROUGH_STATUS}
           AND ii.status IS DISTINCT FROM ${DISPOSITIONED_STATUSES[0]}

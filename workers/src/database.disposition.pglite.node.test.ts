@@ -148,6 +148,42 @@ describe('Workers disposition markdown capture (real SQL)', () => {
     );
   });
 
+  it('writes off a future-dated Markdown item shown in the worklist (issue #268)', async () => {
+    // Regression: the worklist (getExpiredItems) surfaces Markdown items before
+    // their expiry date, so the write-off matcher must accept the same statuses.
+    // Previously the matcher only matched 'Expired', so processing a future-dated
+    // Markdown item threw "Cannot discard 1 units; only 0 expired units are available".
+    const db = createWorkersDatabase({ NEON_CONNECTION_STRING: 'postgres://test' } as Env);
+    const productRows = await sql`
+      INSERT INTO products (organization_id, barcode, sku, name, cost_price)
+      VALUES (${ORG}, ${'MKDN'}, ${'MKDN'}, ${'Markdown Item'}, 5)
+      RETURNING id`;
+    const productId = Number(productRows[0].id);
+    const areaRows = await sql`
+      INSERT INTO store_areas (organization_id, name, sub_department)
+      VALUES (${ORG}, ${'Shelf'}, ${'Grocery'})
+      RETURNING id`;
+    const locationId = Number(areaRows[0].id);
+    // 20 days to expiry => Markdown 3 window, not yet expired.
+    const itemRows = await sql`
+      INSERT INTO inventory_items (organization_id, product_id, location_id, expiry_date, status)
+      VALUES (${ORG}, ${productId}, ${locationId}, (CURRENT_DATE + INTERVAL '20 days')::date, ${'Markdown 3'})
+      RETURNING id`;
+    const itemId = Number(itemRows[0].id);
+
+    // The worklist surfaces it...
+    const worklist = await db.getExpiredItems(ORG);
+    expect(worklist).toHaveLength(1);
+    expect(worklist[0]).toMatchObject({ sku: 'MKDN', quantityAvailable: 1 });
+
+    // ...and the write-off matcher must agree, not reject it.
+    const txn = await db.processExpiredItem(itemId, USER_ID, ORG, 'expired', 1);
+    expect(txn).toMatchObject({ inventoryItemId: itemId, action: 'expired', unitsDiscarded: 1 });
+
+    const after = await db.getExpiredItems(ORG);
+    expect(after).toHaveLength(0);
+  });
+
   it('reports expired losses from the transaction ledger', async () => {
     const db = createWorkersDatabase({ NEON_CONNECTION_STRING: 'postgres://test' } as Env);
     const productRows = await sql`

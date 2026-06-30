@@ -1643,10 +1643,18 @@ function parseExpiredItemProcessBody(body: ExpiredItemProcessBody): ParsedExpire
     return { ok: false, message: "Action must be either 'sold_through' or 'expired'" };
   }
 
-  if (body.action === 'expired' && !isPositiveInteger(body.unitsDiscarded)) {
+  if (body.action === 'expired') {
+    if (!isPositiveInteger(body.unitsDiscarded)) {
+      return {
+        ok: false,
+        message: 'Units discarded must be a positive number when marking as expired',
+      };
+    }
     return {
-      ok: false,
-      message: 'Units discarded must be a positive number when marking as expired',
+      ok: true,
+      inventoryItemId: body.inventoryItemId,
+      action: body.action,
+      unitsDiscarded: body.unitsDiscarded,
     };
   }
 
@@ -1654,7 +1662,7 @@ function parseExpiredItemProcessBody(body: ExpiredItemProcessBody): ParsedExpire
     ok: true,
     inventoryItemId: body.inventoryItemId,
     action: body.action,
-    unitsDiscarded: body.action === 'expired' ? body.unitsDiscarded : undefined,
+    unitsDiscarded: undefined,
   };
 }
 
