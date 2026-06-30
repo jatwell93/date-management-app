@@ -14,7 +14,7 @@
  * Node project only — see vitest.node.config.mts. Skipped unless RUN_LOAD_TEST=true.
  */
 import { describe, it, expect, beforeEach, afterEach } from 'vitest';
-import { processCatalogueImportJob } from '../index-minimal';
+import { processCatalogueImportJob } from '../upload/catalogue-import';
 import type { Env } from '../types/env';
 import { createPgliteHarness, type PgliteHarness } from './pglite-db';
 

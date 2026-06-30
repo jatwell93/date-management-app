@@ -65,6 +65,46 @@ function decodeUploadRouteKey(
   }
 }
 
+type KeyedUploadRoute = {
+  method: string;
+  suffix: string;
+  handler: (
+    handlers: WorkerUploadHandlers,
+    request: Request,
+    env: Env,
+    key: string,
+    db: Database,
+    url: URL,
+  ) => Promise<Response>;
+};
+
+const KEYED_UPLOAD_ROUTES: KeyedUploadRoute[] = [
+  {
+    method: 'POST',
+    suffix: '/direct/',
+    handler: (handlers, request, env, key, db) =>
+      handlers.handleUploadDirect(request, env, key, db),
+  },
+  {
+    method: 'PUT',
+    suffix: '/presigned/',
+    handler: (handlers, request, env, key, _db, url) =>
+      handlers.handleUploadPresigned(request, env, key, url.searchParams.get('token')),
+  },
+  {
+    method: 'GET',
+    suffix: '/status/',
+    handler: (handlers, request, env, key, db) =>
+      handlers.handleUploadStatus(request, env, key, db),
+  },
+  {
+    method: 'GET',
+    suffix: '/error-report/',
+    handler: (handlers, request, env, key, db) =>
+      handlers.handleUploadErrorReport(request, env, key, db),
+  },
+];
+
 export async function handleWorkerUploadRoute({
   request,
   env,
@@ -81,33 +121,14 @@ export async function handleWorkerUploadRoute({
     return handlers.handleUploadInitiate(request, env, uploadRouteBase, getDb());
   }
 
-  if (method === 'POST' && pathname.startsWith(`${uploadRouteBase}/direct/`)) {
-    const key = decodeUploadRouteKey(pathname, `${uploadRouteBase}/direct/`, env, requestOrigin);
-    return key instanceof Response ? key : handlers.handleUploadDirect(request, env, key, getDb());
-  }
-
-  if (method === 'PUT' && pathname.startsWith(`${uploadRouteBase}/presigned/`)) {
-    const key = decodeUploadRouteKey(pathname, `${uploadRouteBase}/presigned/`, env, requestOrigin);
-    return key instanceof Response
-      ? key
-      : handlers.handleUploadPresigned(request, env, key, url.searchParams.get('token'));
-  }
-
-  if (method === 'GET' && pathname.startsWith(`${uploadRouteBase}/status/`)) {
-    const key = decodeUploadRouteKey(pathname, `${uploadRouteBase}/status/`, env, requestOrigin);
-    return key instanceof Response ? key : handlers.handleUploadStatus(request, env, key, getDb());
-  }
-
-  if (method === 'GET' && pathname.startsWith(`${uploadRouteBase}/error-report/`)) {
-    const key = decodeUploadRouteKey(
-      pathname,
-      `${uploadRouteBase}/error-report/`,
-      env,
-      requestOrigin,
-    );
-    return key instanceof Response
-      ? key
-      : handlers.handleUploadErrorReport(request, env, key, getDb());
+  for (const route of KEYED_UPLOAD_ROUTES) {
+    const prefix = `${uploadRouteBase}${route.suffix}`;
+    if (method === route.method && pathname.startsWith(prefix)) {
+      const key = decodeUploadRouteKey(pathname, prefix, env, requestOrigin);
+      return key instanceof Response
+        ? key
+        : route.handler(handlers, request, env, key, getDb(), url);
+    }
   }
 
   if (method === 'POST' && pathname === `${uploadRouteBase}/complete`) {
