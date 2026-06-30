@@ -262,6 +262,43 @@ export async function upsertClerkUser(
   }
 }
 
+async function syncClerkUserFromEvent(
+  sql: SqlClient,
+  data: Record<string, unknown>,
+  options: { ensureTrial: boolean },
+): Promise<void> {
+  const clerkUserId = typeof data.id === 'string' ? data.id : null;
+  if (!clerkUserId) {
+    return;
+  }
+
+  const primaryEmail = extractPrimaryClerkEmail(data);
+  const memberships = Array.isArray(data.organization_memberships)
+    ? data.organization_memberships
+    : [];
+  const firstMembership = memberships.find((item) => item && typeof item === 'object') as
+    | Record<string, unknown>
+    | undefined;
+  const orgPayload =
+    firstMembership && typeof firstMembership.organization === 'object'
+      ? (firstMembership.organization as Record<string, unknown>)
+      : null;
+
+  const organizationId = await findOrCreateOrganization(sql, orgPayload, primaryEmail);
+
+  await upsertClerkUser(sql, {
+    clerkUserId,
+    organizationId,
+    role: mapClerkRole(firstMembership?.role),
+    email: primaryEmail,
+    username: deriveUsername(data, primaryEmail, clerkUserId),
+  });
+
+  if (options.ensureTrial) {
+    await ensureTrialSubscription(sql, organizationId);
+  }
+}
+
 export async function processClerkWebhookEvent(
   sql: SqlClient,
   event: ClerkWebhookEventPayload,
@@ -272,66 +309,12 @@ export async function processClerkWebhookEvent(
 
   switch (eventType) {
     case 'user.created': {
-      const clerkUserId = typeof data.id === 'string' ? data.id : null;
-      if (!clerkUserId) {
-        return;
-      }
-
-      const primaryEmail = extractPrimaryClerkEmail(data);
-      const memberships = Array.isArray(data.organization_memberships)
-        ? data.organization_memberships
-        : [];
-      const firstMembership = memberships.find((item) => item && typeof item === 'object') as
-        | Record<string, unknown>
-        | undefined;
-      const orgPayload =
-        firstMembership && typeof firstMembership.organization === 'object'
-          ? (firstMembership.organization as Record<string, unknown>)
-          : null;
-
-      const organizationId = await findOrCreateOrganization(sql, orgPayload, primaryEmail);
-      const username = deriveUsername(data, primaryEmail, clerkUserId);
-      const role = mapClerkRole(firstMembership?.role);
-
-      await upsertClerkUser(sql, {
-        clerkUserId,
-        organizationId,
-        role,
-        email: primaryEmail,
-        username,
-      });
-
-      await ensureTrialSubscription(sql, organizationId);
+      await syncClerkUserFromEvent(sql, data, { ensureTrial: true });
       return;
     }
 
     case 'user.updated': {
-      const clerkUserId = typeof data.id === 'string' ? data.id : null;
-      if (!clerkUserId) {
-        return;
-      }
-
-      const primaryEmail = extractPrimaryClerkEmail(data);
-      const memberships = Array.isArray(data.organization_memberships)
-        ? data.organization_memberships
-        : [];
-      const firstMembership = memberships.find((item) => item && typeof item === 'object') as
-        | Record<string, unknown>
-        | undefined;
-      const orgPayload =
-        firstMembership && typeof firstMembership.organization === 'object'
-          ? (firstMembership.organization as Record<string, unknown>)
-          : null;
-      const organizationId = await findOrCreateOrganization(sql, orgPayload, primaryEmail);
-
-      await upsertClerkUser(sql, {
-        clerkUserId,
-        organizationId,
-        role: mapClerkRole(firstMembership?.role),
-        email: primaryEmail,
-        username: deriveUsername(data, primaryEmail, clerkUserId),
-      });
-
+      await syncClerkUserFromEvent(sql, data, { ensureTrial: false });
       return;
     }
 

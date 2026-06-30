@@ -309,7 +309,7 @@ async function upsertProductFromUpload(
       WHERE NOT EXISTS (SELECT 1 FROM updated)
       RETURNING id
     )
-    SELECT EXISTS(SELECT 1 FROM inserted) as inserted
+    SELECT (EXISTS(SELECT 1 FROM inserted))::int as inserted
   `;
-  return rows[0]?.inserted === true;
+  return Number(rows[0]?.inserted) === 1;
 }
