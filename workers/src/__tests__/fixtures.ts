@@ -51,7 +51,7 @@ export function createTestJWT(payload: JWTTestPayload): string {
  * Test environment setup
  */
 export const testEnv: Env = {
-  NODE_ENV: 'test' as unknown as 'development',
+  NODE_ENV: 'test',
   STORAGE_PROVIDER: 'r2',
   MAX_FILE_SIZE: '10485760',
   CSV_BATCH_SIZE: '100',

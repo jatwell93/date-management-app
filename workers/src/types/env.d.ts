@@ -10,7 +10,7 @@ export interface Env {
   // Environment Variables
   // ============================================================================
 
-  NODE_ENV: 'production' | 'staging' | 'development';
+  NODE_ENV: 'production' | 'staging' | 'development' | 'test';
   STORAGE_PROVIDER: 'r2' | 'local';
   MAX_FILE_SIZE: string; // e.g., "10485760" (10MB)
   CSV_BATCH_SIZE: string; // e.g., "100"
