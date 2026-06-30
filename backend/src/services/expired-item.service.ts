@@ -126,14 +126,42 @@ export class ExpiredItemService {
           throw new Error(`Inventory item with ID ${inventoryItemId} not found`);
         }
 
+        let inventoryItemIdsToProcess = [inventoryItemId];
+
         if (action === 'expired') {
-          // Validate unitsDiscarded is provided and is positive
-          if (unitsDiscarded === undefined || unitsDiscarded <= 0) {
+          if (
+            unitsDiscarded === undefined ||
+            !Number.isInteger(unitsDiscarded) ||
+            unitsDiscarded <= 0
+          ) {
             throw new Error('Units discarded must be a positive number when marking as expired');
           }
 
-          // Check if there's sufficient quantity available (we're only checking if at least 1 exists)
-          // Since we're processing individual items, we expect there to be 1 instance
+          const matchingRowsStmt = db.prepare(`
+            SELECT ii.id
+            FROM inventory_items ii
+            JOIN products p ON ii.product_id = p.id
+            WHERE ii.product_id = ?
+              AND ii.location_id = ?
+              AND p.cost_price = ?
+              AND ii.status = 'Expired'
+            ORDER BY ii.expiry_date ASC, ii.id ASC
+            LIMIT ?
+          `);
+          const matchingRows = matchingRowsStmt.all(
+            inventoryItem.product_id,
+            inventoryItem.location_id,
+            inventoryItem.costPrice,
+            unitsDiscarded,
+          ) as Array<{ id: number }>;
+
+          if (matchingRows.length < unitsDiscarded) {
+            throw new Error(
+              `Cannot discard ${unitsDiscarded} units; only ${matchingRows.length} expired units are available`,
+            );
+          }
+
+          inventoryItemIdsToProcess = matchingRows.map((row) => row.id);
         }
 
         // Calculate financial loss if marking as expired
@@ -178,8 +206,11 @@ export class ExpiredItemService {
 
         // Update the inventory item's status to 'Processed' to remove it from the expired list
         // but keep it for reporting purposes.
-        const updateStmt = db.prepare('UPDATE inventory_items SET status = ? WHERE id = ?');
-        updateStmt.run(SQLITE_PROCESSED_STATUS, inventoryItemId);
+        const placeholders = inventoryItemIdsToProcess.map(() => '?').join(', ');
+        const updateStmt = db.prepare(
+          `UPDATE inventory_items SET status = ? WHERE id IN (${placeholders})`,
+        );
+        updateStmt.run(SQLITE_PROCESSED_STATUS, ...inventoryItemIdsToProcess);
 
         // Return the created transaction record
         return {

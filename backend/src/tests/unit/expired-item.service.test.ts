@@ -128,7 +128,7 @@ describe('ExpiredItemService', () => {
         if (sql.includes('INSERT INTO audit_log')) {
           return { run: auditRun };
         }
-        if (sql.includes('UPDATE inventory_items SET status = ? WHERE id = ?')) {
+        if (sql.includes('UPDATE inventory_items SET status = ? WHERE id IN (?)')) {
           return { run: updateRun };
         }
         throw new Error(`Unexpected SQL: ${sql}`);
@@ -163,13 +163,19 @@ describe('ExpiredItemService', () => {
         if (sql.includes('SELECT ii.*, p.cost_price as costPrice')) {
           return { get: selectGet };
         }
+        if (
+          sql.includes('WHERE ii.product_id = ?') &&
+          sql.includes('ORDER BY ii.expiry_date ASC')
+        ) {
+          return { all: vi.fn().mockReturnValue([{ id: 5 }, { id: 6 }, { id: 7 }]) };
+        }
         if (sql.includes('INSERT INTO expired_item_transactions')) {
           return { run: insertRun };
         }
         if (sql.includes('INSERT INTO audit_log')) {
           return { run: auditRun };
         }
-        if (sql.includes('UPDATE inventory_items SET status = ? WHERE id = ?')) {
+        if (sql.includes('UPDATE inventory_items SET status = ?') && sql.includes('WHERE id IN')) {
           return { run: updateRun };
         }
         throw new Error(`Unexpected SQL: ${sql}`);
@@ -187,8 +193,87 @@ describe('ExpiredItemService', () => {
         5,
         'Expired item marked as discarded, units: 3, financial loss: 12',
       );
-      expect(updateRun).toHaveBeenCalledWith(SQLITE_PROCESSED_STATUS, 5);
+      expect(updateRun).toHaveBeenCalledWith(SQLITE_PROCESSED_STATUS, 5, 6, 7);
       expect(mockReleaseDb).toHaveBeenCalledWith(mockDb);
+    });
+
+    it('processes the requested number of matching expired rows oldest first with one ledger row', async () => {
+      const representative = {
+        id: 5,
+        product_id: 10,
+        location_id: 2,
+        costPrice: 4,
+        expiry_date: '2026-04-01',
+      };
+      const matchingRows = [{ id: 5 }, { id: 6 }, { id: 7 }];
+      const selectRepresentative = vi.fn().mockReturnValue(representative);
+      const selectMatchingRows = vi.fn().mockReturnValue(matchingRows);
+      const insertRun = vi.fn().mockReturnValue({ lastInsertRowid: 9 });
+      const auditRun = vi.fn();
+      const updateRun = vi.fn();
+
+      mockDb.prepare.mockImplementation((sql: string) => {
+        if (sql.includes('SELECT ii.*, p.cost_price as costPrice')) {
+          return { get: selectRepresentative };
+        }
+        if (
+          sql.includes('WHERE ii.product_id = ?') &&
+          sql.includes('ORDER BY ii.expiry_date ASC')
+        ) {
+          return { all: selectMatchingRows };
+        }
+        if (sql.includes('INSERT INTO expired_item_transactions')) {
+          return { run: insertRun };
+        }
+        if (sql.includes('INSERT INTO audit_log')) {
+          return { run: auditRun };
+        }
+        if (sql.includes('UPDATE inventory_items SET status = ?') && sql.includes('WHERE id IN')) {
+          return { run: updateRun };
+        }
+        throw new Error(`Unexpected SQL: ${sql}`);
+      });
+
+      const result = await service.processExpiredItem(5, 11, 'expired', 3);
+
+      expect(result.unitsDiscarded).toBe(3);
+      expect(result.financialLoss).toBe(12);
+      expect(selectMatchingRows).toHaveBeenCalledWith(10, 2, 4, 3);
+      expect(insertRun).toHaveBeenCalledWith(5, 11, 'expired', 3, 12, null);
+      expect(auditRun).toHaveBeenCalledWith(
+        11,
+        5,
+        'Expired item marked as discarded, units: 3, financial loss: 12',
+      );
+      expect(updateRun).toHaveBeenCalledWith(SQLITE_PROCESSED_STATUS, 5, 6, 7);
+    });
+
+    it('rejects expired write-offs above the matching available quantity', async () => {
+      const selectRepresentative = vi.fn().mockReturnValue({
+        id: 5,
+        product_id: 10,
+        location_id: 2,
+        costPrice: 4,
+        expiry_date: '2026-04-01',
+      });
+      const selectMatchingRows = vi.fn().mockReturnValue([{ id: 5 }, { id: 6 }]);
+
+      mockDb.prepare.mockImplementation((sql: string) => {
+        if (sql.includes('SELECT ii.*, p.cost_price as costPrice')) {
+          return { get: selectRepresentative };
+        }
+        if (
+          sql.includes('WHERE ii.product_id = ?') &&
+          sql.includes('ORDER BY ii.expiry_date ASC')
+        ) {
+          return { all: selectMatchingRows };
+        }
+        throw new Error(`Unexpected SQL: ${sql}`);
+      });
+
+      await expect(service.processExpiredItem(5, 11, 'expired', 3)).rejects.toThrow(
+        'Cannot discard 3 units; only 2 expired units are available',
+      );
     });
 
     it('snapshots the markdown level from the item expiry date on sold-through', async () => {
@@ -213,7 +298,7 @@ describe('ExpiredItemService', () => {
         if (sql.includes('INSERT INTO audit_log')) {
           return { run: vi.fn() };
         }
-        if (sql.includes('UPDATE inventory_items SET status = ? WHERE id = ?')) {
+        if (sql.includes('UPDATE inventory_items SET status = ? WHERE id IN (?)')) {
           return { run: vi.fn() };
         }
         throw new Error(`Unexpected SQL: ${sql}`);

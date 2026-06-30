@@ -70,7 +70,8 @@ describe('Workers disposition markdown capture (real SQL)', () => {
     const txn = await db.processExpiredItem(itemId, USER_ID, ORG, 'sold_through');
 
     expect(txn.markdownLevel).toBe(expected);
-    const stored = await sql`SELECT markdown_level FROM expired_item_transactions WHERE id = ${txn.id}`;
+    const stored =
+      await sql`SELECT markdown_level FROM expired_item_transactions WHERE id = ${txn.id}`;
     expect(stored[0].markdown_level).toBe(expected);
   });
 
@@ -78,10 +79,111 @@ describe('Workers disposition markdown capture (real SQL)', () => {
     const db = createWorkersDatabase({ NEON_CONNECTION_STRING: 'postgres://test' } as Env);
     const itemId = await seedItem(-5, 'SKU-EXPIRED');
 
-    const txn = await db.processExpiredItem(itemId, USER_ID, ORG, 'expired', 2);
+    const txn = await db.processExpiredItem(itemId, USER_ID, ORG, 'expired', 1);
 
     expect(txn.markdownLevel).toBeNull();
     expect(txn.action).toBe('expired');
+  });
+
+  it('processes a multi-unit expired write-off as one ledger row and removes processed rows', async () => {
+    const db = createWorkersDatabase({ NEON_CONNECTION_STRING: 'postgres://test' } as Env);
+    const productRows = await sql`
+      INSERT INTO products (organization_id, barcode, sku, name, cost_price)
+      VALUES (${ORG}, ${'MULTI'}, ${'MULTI'}, ${'Multi Item'}, 7)
+      RETURNING id`;
+    const productId = Number(productRows[0].id);
+    const areaRows = await sql`
+      INSERT INTO store_areas (organization_id, name, sub_department)
+      VALUES (${ORG}, ${'Fridge'}, ${'Cold Chain'})
+      RETURNING id`;
+    const locationId = Number(areaRows[0].id);
+    const ids: number[] = [];
+    for (const offset of [-7, -5, -3, -1]) {
+      const itemRows = await sql`
+        INSERT INTO inventory_items (organization_id, product_id, location_id, expiry_date, status)
+        VALUES (${ORG}, ${productId}, ${locationId}, (CURRENT_DATE + ${offset} * INTERVAL '1 day')::date, ${'Expired'})
+        RETURNING id`;
+      ids.push(Number(itemRows[0].id));
+    }
+
+    const before = await db.getExpiredItems(ORG);
+    expect(before).toHaveLength(1);
+    expect(before[0]).toMatchObject({ sku: 'MULTI', quantityAvailable: 4 });
+
+    const txn = await db.processExpiredItem(ids[1], USER_ID, ORG, 'expired', 3);
+
+    expect(txn).toMatchObject({
+      inventoryItemId: ids[1],
+      action: 'expired',
+      unitsDiscarded: 3,
+      financialLoss: 21,
+    });
+
+    const transactions = await sql`
+      SELECT inventory_item_id, units_discarded, financial_loss
+      FROM expired_item_transactions`;
+    expect(transactions).toEqual([
+      expect.objectContaining({
+        inventory_item_id: ids[1],
+        units_discarded: 3,
+        financial_loss: 21,
+      }),
+    ]);
+
+    const statuses = await sql`
+      SELECT id, status FROM inventory_items WHERE product_id = ${productId} ORDER BY expiry_date ASC`;
+    expect(statuses.slice(0, 3).map((row) => row.status)).toEqual([
+      'Sold Through',
+      'Sold Through',
+      'Sold Through',
+    ]);
+    expect(statuses[3].status).toBe('Expired');
+
+    const after = await db.getExpiredItems(ORG);
+    expect(after).toHaveLength(1);
+    expect(after[0]).toMatchObject({ sku: 'MULTI', quantityAvailable: 1 });
+
+    await expect(db.processExpiredItem(ids[3], USER_ID, ORG, 'expired', 2)).rejects.toThrow(
+      'Cannot discard 2 units; only 1 expired units are available',
+    );
+  });
+
+  it('reports expired losses from the transaction ledger', async () => {
+    const db = createWorkersDatabase({ NEON_CONNECTION_STRING: 'postgres://test' } as Env);
+    const productRows = await sql`
+      INSERT INTO products (organization_id, barcode, sku, name, cost_price)
+      VALUES (${ORG}, ${'LOSS'}, ${'LOSS'}, ${'Loss Item'}, 9)
+      RETURNING id`;
+    const productId = Number(productRows[0].id);
+    const areaRows = await sql`
+      INSERT INTO store_areas (organization_id, name, sub_department)
+      VALUES (${ORG}, ${'Aisle'}, ${'General'})
+      RETURNING id`;
+    const locationId = Number(areaRows[0].id);
+    const itemRows = await sql`
+      INSERT INTO inventory_items (organization_id, product_id, location_id, expiry_date, status)
+      VALUES (${ORG}, ${productId}, ${locationId}, (CURRENT_DATE - INTERVAL '2 days')::date, ${'Sold Through'})
+      RETURNING id`;
+    await sql`
+      INSERT INTO expired_item_transactions
+        (organization_id, inventory_item_id, user_id, action, units_discarded, financial_loss)
+      VALUES (${ORG}, ${Number(itemRows[0].id)}, ${USER_ID}, ${'expired'}, 1, 9)`;
+
+    expect(await db.getLossBySkuReport(ORG)).toEqual([
+      expect.objectContaining({
+        sku: 'LOSS',
+        productName: 'Loss Item',
+        totalLoss: 9,
+        count: 1,
+      }),
+    ]);
+    expect(await db.getLossByDepartmentReport(ORG)).toEqual([
+      expect.objectContaining({
+        department: 'General',
+        totalLoss: 9,
+        count: 1,
+      }),
+    ]);
   });
 
   it('aggregates sell-through counts by markdown level', async () => {
