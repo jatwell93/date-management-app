@@ -6,6 +6,16 @@ import { getExpiredItems, processExpiredItem } from '../services/expiredItemServ
 import ExpiredLossReport from '../components/ExpiredLossReport';
 import { Button } from '../components/ui/button';
 import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from '../components/ui/dialog';
+import { Input } from '../components/ui/input';
+import { Label } from '../components/ui/label';
+import {
   AlertDialog,
   AlertDialogAction,
   AlertDialogCancel,
@@ -154,15 +164,30 @@ const ExpiredItemsPage: React.FC<ExpiredItemsPageProps> = ({ token }) => {
     setIsModalOpen(true);
   }, []);
 
-  const handleUnitsDiscardedChange = useCallback((e: React.ChangeEvent<HTMLInputElement>) => {
-    const parsed = parseInt(e.target.value, 10);
-    if (!Number.isNaN(parsed)) {
+  const handleUnitsDiscardedChange = useCallback(
+    (e: React.ChangeEvent<HTMLInputElement>) => {
+      const parsed = Number(e.target.value);
       setUnitsDiscarded(parsed);
+
+      if (!Number.isInteger(parsed)) {
+        setUnitsDiscardedError('Enter a whole number');
+        return;
+      }
+      if (parsed < 1) {
+        setUnitsDiscardedError('Must be at least 1');
+        return;
+      }
+      if (selectedItem && parsed > selectedItem.quantityAvailable) {
+        setUnitsDiscardedError(
+          `Cannot exceed available quantity (${selectedItem.quantityAvailable})`,
+        );
+        return;
+      }
+
       setUnitsDiscardedError(null);
-    } else {
-      setUnitsDiscardedError('Enter a whole number');
-    }
-  }, []);
+    },
+    [selectedItem],
+  );
 
   const showToast = useCallback((message: string, type: 'success' | 'error') => {
     setToast({ message, type });
@@ -184,6 +209,10 @@ const ExpiredItemsPage: React.FC<ExpiredItemsPageProps> = ({ token }) => {
     setUnitsDiscardedError(null);
 
     if (action === 'expired') {
+      if (!Number.isInteger(unitsDiscarded)) {
+        setUnitsDiscardedError('Enter a whole number');
+        return;
+      }
       if (!unitsDiscarded || unitsDiscarded <= 0) {
         setUnitsDiscardedError('Must be at least 1');
         return;
@@ -285,6 +314,7 @@ const ExpiredItemsPage: React.FC<ExpiredItemsPageProps> = ({ token }) => {
 
   const closeModal = useCallback(() => {
     setIsModalOpen(false);
+    setIsConfirmDialogOpen(false);
     setSelectedItem(null);
     setAction(null);
     setProcessError(null);
@@ -713,38 +743,18 @@ const ExpiredItemsPage: React.FC<ExpiredItemsPageProps> = ({ token }) => {
       </div>
 
       {/* Process Expired Item Dialog */}
-      {isModalOpen && selectedItem && action && (
-        <div
-          className="fixed inset-0 z-50 flex items-center justify-center"
-          role="dialog"
-          aria-modal="true"
-          aria-labelledby="process-dialog-title"
-        >
-          <button
-            type="button"
-            aria-label="Close dialog"
-            className="fixed inset-0 bg-semantic-canvas/50 backdrop-blur-sm"
-            onClick={closeModal}
-          />
-          <div className="relative z-10 bg-background rounded-lg shadow-lg w-11/12 max-w-md p-6">
-            <div className="flex justify-between items-center mb-4">
-              <h3
-                id="process-dialog-title"
-                className="text-lg font-semibold font-heading text-foreground"
-              >
-                Process Expired Item
-              </h3>
-              <button
-                onClick={closeModal}
-                aria-label="Close dialog"
-                className="rounded text-muted-foreground hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
-              >
-                <span className="text-2xl" aria-hidden="true">
-                  &times;
-                </span>
-              </button>
-            </div>
-
+      <Dialog
+        open={isModalOpen && !!selectedItem && !!action}
+        onOpenChange={(open) => !open && closeModal()}
+      >
+        {selectedItem && action && (
+          <DialogContent className="sm:max-w-md">
+            <DialogHeader>
+              <DialogTitle>Process Expired Item</DialogTitle>
+              <DialogDescription>
+                Review item details and choose the quantity to process.
+              </DialogDescription>
+            </DialogHeader>
             <dl className="mb-4 grid grid-cols-2 gap-x-4 gap-y-2 text-sm">
               <div className="col-span-2">
                 <dt className="text-muted-foreground">Product</dt>
@@ -770,22 +780,19 @@ const ExpiredItemsPage: React.FC<ExpiredItemsPageProps> = ({ token }) => {
 
             {action === 'expired' && (
               <div className="mb-4">
-                <label
-                  htmlFor="units-discarded"
-                  className="block text-sm font-medium text-foreground mb-1"
-                >
+                <Label htmlFor="units-discarded" className="mb-1 block">
                   Units to Discard
-                </label>
-                <input
+                </Label>
+                <Input
                   id="units-discarded"
                   type="number"
                   min="1"
+                  step="1"
                   max={selectedItem.quantityAvailable}
                   value={unitsDiscarded}
                   onChange={handleUnitsDiscardedChange}
                   aria-describedby="units-hint units-error"
                   aria-invalid={!!unitsDiscardedError}
-                  className="w-full px-3 py-2 border border-input rounded-md focus:outline-none focus:ring-2 focus:ring-ring focus:border-transparent"
                 />
                 <p id="units-hint" className="mt-1 text-xs text-muted-foreground">
                   Maximum available: {selectedItem.quantityAvailable}
@@ -804,7 +811,7 @@ const ExpiredItemsPage: React.FC<ExpiredItemsPageProps> = ({ token }) => {
               </div>
             )}
 
-            <div className="mt-6 flex justify-end gap-2">
+            <DialogFooter className="mt-6">
               <Button variant="outline" onClick={closeModal} disabled={isProcessing}>
                 Cancel
               </Button>
@@ -817,15 +824,18 @@ const ExpiredItemsPage: React.FC<ExpiredItemsPageProps> = ({ token }) => {
               >
                 {action === 'expired' ? 'Mark Expired' : 'Mark Sold Through'}
               </Button>
-            </div>
+            </DialogFooter>
 
             <AlertDialog open={isConfirmDialogOpen} onOpenChange={setIsConfirmDialogOpen}>
               <AlertDialogContent>
                 <AlertDialogHeader>
                   <AlertDialogTitle>Confirm Action</AlertDialogTitle>
                   <AlertDialogDescription>
-                    Are you sure you want to mark this item as {action}? This action cannot be
-                    undone.
+                    {action === 'expired'
+                      ? `Confirm writing off ${unitsDiscarded} units for ${currencyFormatter.format(
+                          unitsDiscarded * selectedItem.costPrice,
+                        )} loss. This action cannot be undone.`
+                      : 'Confirm marking this item as sold through. This action cannot be undone.'}
                   </AlertDialogDescription>
                 </AlertDialogHeader>
                 <AlertDialogFooter>
@@ -843,9 +853,9 @@ const ExpiredItemsPage: React.FC<ExpiredItemsPageProps> = ({ token }) => {
                 </AlertDialogFooter>
               </AlertDialogContent>
             </AlertDialog>
-          </div>
-        </div>
-      )}
+          </DialogContent>
+        )}
+      </Dialog>
 
       {/* Expired Losses Report Section */}
       <div className="mt-12">

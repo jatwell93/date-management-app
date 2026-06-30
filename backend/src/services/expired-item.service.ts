@@ -1,6 +1,10 @@
 import { getDb, releaseDb } from '../database';
 import { InventoryItem } from '../models/inventory-item.model';
-import { SQLITE_PROCESSED_STATUS } from '../../../shared/domain/disposition';
+import {
+  DISPOSITIONED_STATUSES,
+  EXPIRED_WORKLIST_STATUSES,
+  SQLITE_PROCESSED_STATUS,
+} from '../../../shared/domain/disposition';
 import { getMarkdownLevelForDays } from '../../../shared/domain/markdown';
 
 const MS_PER_DAY = 1000 * 60 * 60 * 24;
@@ -67,10 +71,14 @@ export class ExpiredItemService {
   async getAllExpiredItems(): Promise<ExpiredItem[]> {
     const db = getDb();
     try {
-      // Query to get all items with 'Expired' status
-      // Group by product and location to get quantity
+      // Worklist eligibility mirrors the Workers/Neon path (shared constants):
+      // past-expiry stock OR markdown stock not yet expired, excluding anything
+      // already dispositioned. Keeping the two backends on EXPIRED_WORKLIST_STATUSES
+      // prevents the matcher below from rejecting rows the worklist surfaces.
+      const statusPlaceholders = EXPIRED_WORKLIST_STATUSES.map(() => '?').join(', ');
+      const dispositionedPlaceholders = DISPOSITIONED_STATUSES.map(() => '?').join(', ');
       const query = `
-        SELECT 
+        SELECT
           ii.id,
           ii.expiry_date as expiryDate,
           p.sku,
@@ -82,12 +90,15 @@ export class ExpiredItemService {
         FROM inventory_items ii
         JOIN products p ON ii.product_id = p.id
         JOIN store_areas sa ON ii.location_id = sa.id
-        WHERE ii.status = 'Expired'
+        WHERE (ii.expiry_date < date('now') OR ii.status IN (${statusPlaceholders}))
+          AND ii.status NOT IN (${dispositionedPlaceholders})
         GROUP BY ii.product_id, ii.location_id, p.cost_price
         ORDER BY ii.expiry_date ASC
       `;
 
-      const items = db.prepare(query).all() as ExpiredItem[];
+      const items = db
+        .prepare(query)
+        .all(...EXPIRED_WORKLIST_STATUSES, ...DISPOSITIONED_STATUSES) as ExpiredItem[];
       return items;
     } finally {
       releaseDb(db);
@@ -118,22 +129,64 @@ export class ExpiredItemService {
           JOIN products p ON ii.product_id = p.id
           WHERE ii.id = ?
         `);
+        // The query selects `ii.*` (snake_case columns) plus an aliased costPrice,
+        // so type the raw row shape it actually returns rather than the camelCase model.
         const inventoryItem = itemStmt.get(inventoryItemId) as
-          | (InventoryItem & { costPrice: number; expiry_date: string })
+          | (InventoryItem & {
+              product_id: number;
+              location_id: number;
+              costPrice: number;
+              expiry_date: string;
+            })
           | undefined;
 
         if (!inventoryItem) {
           throw new Error(`Inventory item with ID ${inventoryItemId} not found`);
         }
 
+        let inventoryItemIdsToProcess = [inventoryItemId];
+
         if (action === 'expired') {
-          // Validate unitsDiscarded is provided and is positive
-          if (unitsDiscarded === undefined || unitsDiscarded <= 0) {
+          if (
+            unitsDiscarded === undefined ||
+            !Number.isInteger(unitsDiscarded) ||
+            unitsDiscarded <= 0
+          ) {
             throw new Error('Units discarded must be a positive number when marking as expired');
           }
 
-          // Check if there's sufficient quantity available (we're only checking if at least 1 exists)
-          // Since we're processing individual items, we expect there to be 1 instance
+          // Must accept the same statuses the worklist surfaces (shared constants),
+          // otherwise a markdown row shown to the user can't be written off.
+          const statusPlaceholders = EXPIRED_WORKLIST_STATUSES.map(() => '?').join(', ');
+          const dispositionedPlaceholders = DISPOSITIONED_STATUSES.map(() => '?').join(', ');
+          const matchingRowsStmt = db.prepare(`
+            SELECT ii.id
+            FROM inventory_items ii
+            JOIN products p ON ii.product_id = p.id
+            WHERE ii.product_id = ?
+              AND ii.location_id = ?
+              AND p.cost_price = ?
+              AND (ii.expiry_date < date('now') OR ii.status IN (${statusPlaceholders}))
+              AND ii.status NOT IN (${dispositionedPlaceholders})
+            ORDER BY ii.expiry_date ASC, ii.id ASC
+            LIMIT ?
+          `);
+          const matchingRows = matchingRowsStmt.all(
+            inventoryItem.product_id,
+            inventoryItem.location_id,
+            inventoryItem.costPrice,
+            ...EXPIRED_WORKLIST_STATUSES,
+            ...DISPOSITIONED_STATUSES,
+            unitsDiscarded,
+          ) as Array<{ id: number }>;
+
+          if (matchingRows.length < unitsDiscarded) {
+            throw new Error(
+              `Cannot discard ${unitsDiscarded} units; only ${matchingRows.length} expired units are available`,
+            );
+          }
+
+          inventoryItemIdsToProcess = matchingRows.map((row) => row.id);
         }
 
         // Calculate financial loss if marking as expired
@@ -178,8 +231,11 @@ export class ExpiredItemService {
 
         // Update the inventory item's status to 'Processed' to remove it from the expired list
         // but keep it for reporting purposes.
-        const updateStmt = db.prepare('UPDATE inventory_items SET status = ? WHERE id = ?');
-        updateStmt.run(SQLITE_PROCESSED_STATUS, inventoryItemId);
+        const placeholders = inventoryItemIdsToProcess.map(() => '?').join(', ');
+        const updateStmt = db.prepare(
+          `UPDATE inventory_items SET status = ? WHERE id IN (${placeholders})`,
+        );
+        updateStmt.run(SQLITE_PROCESSED_STATUS, ...inventoryItemIdsToProcess);
 
         // Return the created transaction record
         return {

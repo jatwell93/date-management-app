@@ -6,6 +6,18 @@ import { ExpiredItemService } from '../services/expired-item.service';
 type ExpiredItemAction = 'sold_through' | 'expired';
 type ExpiredItemServiceFactory = (organizationId?: string) => ExpiredItemService;
 
+function isPositiveInteger(value: unknown): value is number {
+  return typeof value === 'number' && Number.isInteger(value) && value > 0;
+}
+
+function isProcessValidationError(error: unknown): error is Error {
+  return (
+    error instanceof Error &&
+    (error.message.startsWith('Cannot discard') ||
+      error.message === 'Units discarded must be a positive number when marking as expired')
+  );
+}
+
 @injectable()
 export class ExpiredItemController {
   constructor(
@@ -19,13 +31,7 @@ export class ExpiredItemController {
 
   private parseInventoryItemId(req: AuthRequest, res: Response): number | undefined {
     const { inventoryItemId } = req.body as { inventoryItemId?: unknown };
-    if (
-      inventoryItemId === undefined ||
-      inventoryItemId === null ||
-      typeof inventoryItemId !== 'number' ||
-      Number.isNaN(inventoryItemId) ||
-      inventoryItemId < 1
-    ) {
+    if (!isPositiveInteger(inventoryItemId)) {
       res.status(400).json({ message: 'Missing or invalid required field: inventoryItemId' });
       return undefined;
     }
@@ -53,13 +59,7 @@ export class ExpiredItemController {
       return undefined;
     }
 
-    if (
-      unitsDiscarded === undefined ||
-      unitsDiscarded === null ||
-      typeof unitsDiscarded !== 'number' ||
-      Number.isNaN(unitsDiscarded) ||
-      unitsDiscarded <= 0
-    ) {
+    if (!isPositiveInteger(unitsDiscarded)) {
       res
         .status(400)
         .json({ message: 'Units discarded must be a positive number when marking as expired' });
@@ -105,6 +105,10 @@ export class ExpiredItemController {
     } catch (error) {
       if (error instanceof Error && error.message.includes('not found')) {
         res.status(404).json({ message: error.message });
+        return;
+      }
+      if (isProcessValidationError(error)) {
+        res.status(400).json({ message: error.message });
         return;
       }
 

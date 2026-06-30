@@ -1,5 +1,6 @@
 import { describe, expect, it, vi } from 'vitest';
 import { resolveMinimalApiRoute, type MinimalApiRoute } from './minimal-api-routes';
+import * as minimalEntrypoint from './index-minimal';
 import type { Database } from './database';
 import type { Env } from './types/env';
 
@@ -58,5 +59,19 @@ describe('minimal API route table', () => {
     });
 
     expect(response).toBeNull();
+  });
+
+  it('registers the expired-loss report route used by the frontend', () => {
+    const routes = (
+      minimalEntrypoint as typeof minimalEntrypoint & {
+        MINIMAL_API_ROUTES?: MinimalApiRoute[];
+      }
+    ).MINIMAL_API_ROUTES;
+
+    expect(routes).toEqual(
+      expect.arrayContaining([
+        expect.arrayContaining(['GET', '/api/expired-items/reports/expired-losses']),
+      ]),
+    );
   });
 });

@@ -107,6 +107,10 @@ function parsePositiveInt(value: string): number | null {
   return n;
 }
 
+function isPositiveInteger(value: unknown): value is number {
+  return typeof value === 'number' && Number.isInteger(value) && value > 0;
+}
+
 /** ISO calendar date YYYY-MM-DD (no time component). */
 const ISO_DATE_RE = /^\d{4}-\d{2}-\d{2}$/;
 
@@ -137,7 +141,7 @@ export type { ValidatedCatalogueRow };
 const RE_USER_ID = /^\/api\/users\/\d+$/;
 const RE_INVENTORY_ID = /^\/api\/inventory-items\/\d+$/;
 const RE_STORE_AREA_ID = /^\/api\/store-areas\/\d+$/;
-const MINIMAL_API_ROUTES: MinimalApiRoute[] = [
+export const MINIMAL_API_ROUTES: MinimalApiRoute[] = [
   ['POST', '/api/auth/login', handleLogin],
   ['POST', '/api/auth/register', handleRegister],
   ['GET', '/api/users/me', handleGetCurrentUser],
@@ -177,6 +181,7 @@ const MINIMAL_API_ROUTES: MinimalApiRoute[] = [
   ['GET', '/api/reports/loss-by-department', handleGetLossByDepartmentReport],
   ['GET', '/api/reports/sell-through', handleGetSellThroughReport],
   ['GET', '/api/expired-items', handleGetExpiredItems],
+  ['GET', '/api/expired-items/reports/expired-losses', handleGetExpiredLossesReport],
   ['POST', '/api/expired-items/process', handleProcessExpiredItem],
   ['GET', '/api/subscription/trial-status', handleGetTrialStatus],
   ['POST', '/api/organization/bootstrap', handleOrganizationBootstrap, 'bootstrap'],
@@ -1014,6 +1019,23 @@ async function handleGetExpiredItems(request: Request, db: Database, env: Env): 
 }
 
 /**
+ * GET /api/expired-items/reports/expired-losses
+ */
+async function handleGetExpiredLossesReport(
+  request: Request,
+  db: Database,
+  env: Env,
+): Promise<Response> {
+  const auth = await authenticateApiRequest(request, env, db);
+  if (auth instanceof Response) return auth;
+  const [lossesBySKU, lossesByStoreArea] = await Promise.all([
+    db.getExpiredLossBySku(auth.organizationId),
+    db.getExpiredLossByStoreArea(auth.organizationId),
+  ]);
+  return jsonResponse({ lossesBySKU, lossesByStoreArea }, 200, env);
+}
+
+/**
  * GET /api/products/by-barcode/:barcode
  */
 async function handleGetProductByBarcode(
@@ -1597,6 +1619,53 @@ async function handleDeleteUser(
 /**
  * POST /api/expired-items/process
  */
+type ExpiredItemProcessBody = {
+  inventoryItemId?: unknown;
+  action?: unknown;
+  unitsDiscarded?: unknown;
+};
+
+type ParsedExpiredItemProcessBody =
+  | {
+      ok: true;
+      inventoryItemId: number;
+      action: 'sold_through' | 'expired';
+      unitsDiscarded?: number;
+    }
+  | { ok: false; message: string };
+
+function parseExpiredItemProcessBody(body: ExpiredItemProcessBody): ParsedExpiredItemProcessBody {
+  if (!isPositiveInteger(body.inventoryItemId)) {
+    return { ok: false, message: 'Missing or invalid required field: inventoryItemId' };
+  }
+
+  if (body.action !== 'sold_through' && body.action !== 'expired') {
+    return { ok: false, message: "Action must be either 'sold_through' or 'expired'" };
+  }
+
+  if (body.action === 'expired') {
+    if (!isPositiveInteger(body.unitsDiscarded)) {
+      return {
+        ok: false,
+        message: 'Units discarded must be a positive number when marking as expired',
+      };
+    }
+    return {
+      ok: true,
+      inventoryItemId: body.inventoryItemId,
+      action: body.action,
+      unitsDiscarded: body.unitsDiscarded,
+    };
+  }
+
+  return {
+    ok: true,
+    inventoryItemId: body.inventoryItemId,
+    action: body.action,
+    unitsDiscarded: undefined,
+  };
+}
+
 async function handleProcessExpiredItem(
   request: Request,
   db: Database,
@@ -1610,46 +1679,31 @@ async function handleProcessExpiredItem(
     action?: string;
     unitsDiscarded?: number;
   };
-
-  if (
-    !body.inventoryItemId ||
-    typeof body.inventoryItemId !== 'number' ||
-    body.inventoryItemId < 1
-  ) {
-    return errorResponse('Missing or invalid required field: inventoryItemId', 400, env);
-  }
-
-  if (!body.action || (body.action !== 'sold_through' && body.action !== 'expired')) {
-    return errorResponse("Action must be either 'sold_through' or 'expired'", 400, env);
-  }
-
-  if (body.action === 'expired') {
-    if (
-      !body.unitsDiscarded ||
-      typeof body.unitsDiscarded !== 'number' ||
-      body.unitsDiscarded <= 0
-    ) {
-      return errorResponse(
-        'Units discarded must be a positive number when marking as expired',
-        400,
-        env,
-      );
-    }
+  const parsed = parseExpiredItemProcessBody(body);
+  if (!parsed.ok) {
+    return errorResponse(parsed.message, 400, env);
   }
 
   try {
     const transaction = await db.processExpiredItem(
-      body.inventoryItemId,
+      parsed.inventoryItemId,
       auth.userId,
       auth.organizationId,
-      body.action,
-      body.unitsDiscarded,
+      parsed.action,
+      parsed.unitsDiscarded,
     );
     return jsonResponse(transaction, 201, env);
   } catch (error) {
     const message = error instanceof Error ? error.message : 'Internal server error';
     if (message.includes('not found')) {
       return errorResponse(message, 404, env);
+    }
+    // Predictable client-input failures — e.g. available stock changed between
+    // the worklist loading and the user submitting (race). These are 400s, not
+    // server faults, so surface the real message and keep them out of the
+    // 500/Sentry path.
+    if (message.includes('Cannot discard') || message.includes('must be a positive number')) {
+      return errorResponse(message, 400, env);
     }
     return errorResponse('Internal server error', 500, env);
   }
@@ -1758,13 +1812,13 @@ async function handleGetTrialStatus(request: Request, db: Database, env: Env): P
 
   const subscription = subscriptionRows[0] as
     | {
-      status?: string;
-      tier_level?: string;
-      trial_end_date?: string | null;
-      trial_started_at?: string | null;
-      trial_converted_at?: string | null;
-      billing_cycle?: string | null;
-    }
+        status?: string;
+        tier_level?: string;
+        trial_end_date?: string | null;
+        trial_started_at?: string | null;
+        trial_converted_at?: string | null;
+        billing_cycle?: string | null;
+      }
     | undefined;
 
   let daysRemaining: number | null = null;
@@ -1773,8 +1827,8 @@ async function handleGetTrialStatus(request: Request, db: Database, env: Env): P
   const subscriptionStatusRaw = (subscription?.status || 'EXPIRED').toUpperCase();
   const normalizedStatus: 'ACTIVE' | 'TRIALING' | 'EXPIRED' | 'CANCELED' =
     subscriptionStatusRaw === 'ACTIVE' ||
-      subscriptionStatusRaw === 'TRIALING' ||
-      subscriptionStatusRaw === 'CANCELED'
+    subscriptionStatusRaw === 'TRIALING' ||
+    subscriptionStatusRaw === 'CANCELED'
       ? subscriptionStatusRaw
       : 'EXPIRED';
 
@@ -1796,14 +1850,14 @@ async function handleGetTrialStatus(request: Request, db: Database, env: Env): P
     isTrialExpired: normalizedStatus === 'TRIALING' && isTrialExpired,
     subscription: subscription
       ? {
-        status: normalizedStatus,
-        tierLevel: normalizedTierKey,
-        trialEndDate: subscription.trial_end_date || null,
-        trialStartedAt: subscription.trial_started_at || null,
-        trialConvertedAt: subscription.trial_converted_at || null,
-        daysRemaining,
-        billingCycle: subscription.billing_cycle || null,
-      }
+          status: normalizedStatus,
+          tierLevel: normalizedTierKey,
+          trialEndDate: subscription.trial_end_date || null,
+          trialStartedAt: subscription.trial_started_at || null,
+          trialConvertedAt: subscription.trial_converted_at || null,
+          daysRemaining,
+          billingCycle: subscription.billing_cycle || null,
+        }
       : null,
     tierLimits,
   };

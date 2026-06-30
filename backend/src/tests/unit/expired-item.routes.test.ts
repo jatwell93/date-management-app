@@ -45,6 +45,25 @@ describe('expired-item.routes', () => {
   app.use(express.json());
   app.use('/expired-items', expiredItemRouter);
 
+  const postProcess = (body: Record<string, unknown>, userId = '7') => {
+    const req = request(app).post('/expired-items/process');
+    if (userId) {
+      req.set('x-user-id', userId);
+    }
+    return req.send(body);
+  };
+
+  const expectProcessBadRequest = async (
+    body: Record<string, unknown>,
+    message: string,
+  ): Promise<void> => {
+    const response = await postProcess(body);
+
+    expect(response.status).toBe(400);
+    expect(response.body).toEqual({ message });
+    expect(mockProcessExpiredItem).not.toHaveBeenCalled();
+  };
+
   beforeEach(() => {
     vi.clearAllMocks();
 
@@ -103,48 +122,52 @@ describe('expired-item.routes', () => {
 
   describe('POST /expired-items/process', () => {
     it('returns 400 for missing or invalid inventoryItemId', async () => {
-      const response = await request(app)
-        .post('/expired-items/process')
-        .set('x-user-id', '7')
-        .send({ action: 'expired', unitsDiscarded: 2 });
-
-      expect(response.status).toBe(400);
-      expect(response.body).toEqual({
-        message: 'Missing or invalid required field: inventoryItemId',
-      });
-      expect(mockProcessExpiredItem).not.toHaveBeenCalled();
+      await expectProcessBadRequest(
+        { action: 'expired', unitsDiscarded: 2 },
+        'Missing or invalid required field: inventoryItemId',
+      );
     });
 
     it('returns 400 for invalid action values', async () => {
-      const response = await request(app)
-        .post('/expired-items/process')
-        .set('x-user-id', '7')
-        .send({ inventoryItemId: 1, action: 'archive' });
-
-      expect(response.status).toBe(400);
-      expect(response.body).toEqual({
-        message: "Action must be either 'sold_through' or 'expired'",
-      });
-      expect(mockProcessExpiredItem).not.toHaveBeenCalled();
+      await expectProcessBadRequest(
+        { inventoryItemId: 1, action: 'archive' },
+        "Action must be either 'sold_through' or 'expired'",
+      );
     });
 
     it('returns 400 when expired action is missing positive unitsDiscarded', async () => {
-      const response = await request(app)
-        .post('/expired-items/process')
-        .set('x-user-id', '7')
-        .send({ inventoryItemId: 1, action: 'expired', unitsDiscarded: 0 });
+      await expectProcessBadRequest(
+        { inventoryItemId: 1, action: 'expired', unitsDiscarded: 0 },
+        'Units discarded must be a positive number when marking as expired',
+      );
+    });
+
+    it('returns 400 when expired action has decimal unitsDiscarded', async () => {
+      await expectProcessBadRequest(
+        { inventoryItemId: 1, action: 'expired', unitsDiscarded: 1.5 },
+        'Units discarded must be a positive number when marking as expired',
+      );
+    });
+
+    it('returns 400 when service rejects quantity above available expired units', async () => {
+      mockProcessExpiredItem.mockRejectedValue(
+        new Error('Cannot discard 3 units; only 2 expired units are available'),
+      );
+
+      const response = await postProcess({
+        inventoryItemId: 1,
+        action: 'expired',
+        unitsDiscarded: 3,
+      });
 
       expect(response.status).toBe(400);
       expect(response.body).toEqual({
-        message: 'Units discarded must be a positive number when marking as expired',
+        message: 'Cannot discard 3 units; only 2 expired units are available',
       });
-      expect(mockProcessExpiredItem).not.toHaveBeenCalled();
     });
 
     it('returns 401 when userId is missing from auth context', async () => {
-      const response = await request(app)
-        .post('/expired-items/process')
-        .send({ inventoryItemId: 1, action: 'sold_through' });
+      const response = await postProcess({ inventoryItemId: 1, action: 'sold_through' }, '');
 
       expect(response.status).toBe(401);
       expect(response.body).toEqual({ message: 'Access denied: No user ID found' });
@@ -152,10 +175,7 @@ describe('expired-item.routes', () => {
     });
 
     it('returns 201 and transaction payload for successful processing', async () => {
-      const response = await request(app)
-        .post('/expired-items/process')
-        .set('x-user-id', '7')
-        .send({ inventoryItemId: 1, action: 'sold_through' });
+      const response = await postProcess({ inventoryItemId: 1, action: 'sold_through' });
 
       expect(response.status).toBe(201);
       expect(response.body).toEqual({
@@ -173,10 +193,7 @@ describe('expired-item.routes', () => {
     it('returns 404 when service reports inventory item not found', async () => {
       mockProcessExpiredItem.mockRejectedValue(new Error('Inventory item with ID 1 not found'));
 
-      const response = await request(app)
-        .post('/expired-items/process')
-        .set('x-user-id', '7')
-        .send({ inventoryItemId: 1, action: 'sold_through' });
+      const response = await postProcess({ inventoryItemId: 1, action: 'sold_through' });
 
       expect(response.status).toBe(404);
       expect(response.body).toEqual({ message: 'Inventory item with ID 1 not found' });
@@ -185,10 +202,7 @@ describe('expired-item.routes', () => {
     it('returns 500 when processing fails with unexpected error', async () => {
       mockProcessExpiredItem.mockRejectedValue(new Error('transaction failure'));
 
-      const response = await request(app)
-        .post('/expired-items/process')
-        .set('x-user-id', '7')
-        .send({ inventoryItemId: 1, action: 'sold_through' });
+      const response = await postProcess({ inventoryItemId: 1, action: 'sold_through' });
 
       expect(response.status).toBe(500);
       expect(response.body).toEqual({ message: 'Internal server error' });

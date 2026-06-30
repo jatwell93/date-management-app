@@ -11,7 +11,8 @@ import { neon, NeonQueryFunction } from '@neondatabase/serverless';
 import type { Env } from './types/env';
 import {
   DISPOSITIONED_STATUSES,
-  EXPIRED_STATUS,
+  EXPIRED_WORKLIST_STATUSES,
+  SQLITE_PROCESSED_STATUS,
   WORKERS_SOLD_THROUGH_STATUS,
 } from '../../shared/domain/disposition';
 import { getMarkdownLevelForDays, MARKDOWN_WINDOWS } from '../../shared/domain/markdown';
@@ -56,6 +57,8 @@ export interface Database {
   getItemsByDateReport(organizationId: string): Promise<ItemsByDateReportItem[]>;
   getLossBySkuReport(organizationId: string): Promise<LossBySkuReportItem[]>;
   getLossByDepartmentReport(organizationId: string): Promise<LossByDepartmentReportItem[]>;
+  getExpiredLossBySku(organizationId: string): Promise<LossBySkuReportItem[]>;
+  getExpiredLossByStoreArea(organizationId: string): Promise<ExpiredLossByStoreAreaItem[]>;
   getSellThroughByMarkdownLevel(organizationId: string): Promise<SellThroughByLevelItem[]>;
 
   // Expired items queries
@@ -260,6 +263,12 @@ export interface LossByDepartmentReportItem {
   count: number;
 }
 
+export interface ExpiredLossByStoreAreaItem {
+  locationName: string;
+  totalLoss: number;
+  count: number;
+}
+
 export interface SellThroughByLevelItem {
   markdownLevel: number | null;
   soldCount: number;
@@ -308,6 +317,14 @@ export interface ExpiredItemTransaction {
   transactionDate: string;
 }
 
+type InventoryProcessContext = {
+  productId: number;
+  locationId: number | null;
+  costPrice: number;
+  financialLoss: number | null;
+  daysToExpiry: number | null;
+};
+
 /**
  * Markdown level snapshot aligned with the expiry report windows
  * (Markdown 1 = 61-90 days, Markdown 2 = 31-60, Markdown 3 = 0-30 days to expiry).
@@ -317,6 +334,98 @@ export interface ExpiredItemTransaction {
  */
 export function reportMarkdownLevel(daysToExpiry: number | null): number | null {
   return getMarkdownLevelForDays(daysToExpiry);
+}
+
+function isPositiveInteger(value: unknown): value is number {
+  return typeof value === 'number' && Number.isInteger(value) && value > 0;
+}
+
+function toNumberOrNull(value: unknown): number | null {
+  return value === null || value === undefined ? null : Number(value);
+}
+
+async function getInventoryProcessContext(
+  sql: NeonQueryFunction<false, false>,
+  inventoryItemId: number,
+  organizationId: string,
+  unitsDiscarded?: number,
+): Promise<InventoryProcessContext> {
+  const itemRows = await sql`
+    SELECT
+      ii.product_id as "productId",
+      ii.location_id as "locationId",
+      COALESCE(p.cost_price, 0) as "costPrice",
+      COALESCE(p.cost_price, 0) * ${unitsDiscarded ?? 0} as "financialLoss",
+      (ii.expiry_date::date - CURRENT_DATE) as "daysToExpiry"
+    FROM inventory_items ii
+    JOIN products p ON ii.product_id = p.id
+    WHERE ii.id = ${inventoryItemId} AND ii.organization_id = ${organizationId}
+    LIMIT 1
+  `;
+
+  const row = itemRows[0];
+  if (!row) {
+    throw new Error(`Inventory item ${inventoryItemId} not found`);
+  }
+
+  return {
+    productId: Number(row.productId),
+    locationId: toNumberOrNull(row.locationId),
+    costPrice: Number(row.costPrice),
+    financialLoss: toNumberOrNull(row.financialLoss),
+    daysToExpiry: toNumberOrNull(row.daysToExpiry),
+  };
+}
+
+async function getMatchingExpiredItemIds(
+  sql: NeonQueryFunction<false, false>,
+  organizationId: string,
+  context: InventoryProcessContext,
+  unitsDiscarded: number,
+): Promise<number[]> {
+  const matchingRows = await sql`
+    SELECT ii.id
+    FROM inventory_items ii
+    JOIN products p ON ii.product_id = p.id
+    WHERE ii.organization_id = ${organizationId}
+      AND ii.product_id = ${context.productId}
+      AND ii.location_id IS NOT DISTINCT FROM ${context.locationId}
+      AND p.cost_price = ${context.costPrice}
+      AND (ii.expiry_date < CURRENT_DATE OR ii.status = ANY(${[...EXPIRED_WORKLIST_STATUSES]}))
+      -- Exclude every dispositioned status dynamically so adding one to the
+      -- shared constant can't leak already-processed items back into the matcher.
+      AND ii.status <> ALL(${[...DISPOSITIONED_STATUSES]})
+    ORDER BY ii.expiry_date ASC, ii.id ASC
+    LIMIT ${unitsDiscarded}
+  `;
+
+  return matchingRows.map((row) => Number(row.id));
+}
+
+async function getProcessedItemIds(
+  sql: NeonQueryFunction<false, false>,
+  organizationId: string,
+  inventoryItemId: number,
+  action: string,
+  unitsDiscarded: number | undefined,
+  context: InventoryProcessContext,
+): Promise<number[]> {
+  if (action !== 'expired') {
+    return [inventoryItemId];
+  }
+
+  if (!isPositiveInteger(unitsDiscarded)) {
+    throw new Error('Units discarded must be a positive number when marking as expired');
+  }
+
+  const matchingIds = await getMatchingExpiredItemIds(sql, organizationId, context, unitsDiscarded);
+  if (matchingIds.length < unitsDiscarded) {
+    throw new Error(
+      `Cannot discard ${unitsDiscarded} units; only ${matchingIds.length} expired units are available`,
+    );
+  }
+
+  return matchingIds;
 }
 
 /**
@@ -726,6 +835,10 @@ export function createWorkersDatabase(env: Env): Database {
       `) as ItemsByDateReportItem[];
     },
 
+    // Standalone /api/reports/loss-by-* endpoints (ExpiredItemsPage charts). These
+    // value the stock CURRENTLY sitting expired, mirroring the SQLite backend's
+    // report.repository. Kept distinct from the write-off ledger reports below so
+    // production (Workers) and dev (backend) stay in parity.
     async getLossBySkuReport(organizationId: string): Promise<LossBySkuReportItem[]> {
       return (await sql`
         SELECT
@@ -759,6 +872,47 @@ export function createWorkersDatabase(env: Env): Database {
       `) as LossByDepartmentReportItem[];
     },
 
+    // Write-off ledger reports for /api/expired-items/reports/expired-losses
+    // (ExpiredLossReport). These sum REALIZED losses from expired_item_transactions,
+    // mirroring the SQLite backend's expired-item.service getFinancialLosses* methods.
+    async getExpiredLossBySku(organizationId: string): Promise<LossBySkuReportItem[]> {
+      return (await sql`
+        SELECT
+          COALESCE(p.sku, '') as sku,
+          p.name as "productName",
+          COALESCE(SUM(eit.financial_loss), 0) as "totalLoss",
+          COALESCE(SUM(eit.units_discarded), 0)::int as count
+        FROM expired_item_transactions eit
+        JOIN inventory_items ii ON eit.inventory_item_id = ii.id
+        JOIN products p ON ii.product_id = p.id
+        WHERE eit.action = 'expired'
+          AND eit.organization_id = ${organizationId}
+        GROUP BY p.sku, p.name
+        ORDER BY "totalLoss" DESC
+        LIMIT 10
+      `) as LossBySkuReportItem[];
+    },
+
+    async getExpiredLossByStoreArea(
+      organizationId: string,
+    ): Promise<ExpiredLossByStoreAreaItem[]> {
+      // Frontend reads `locationName`; group by store-area name to match the
+      // SQLite backend's getFinancialLossesByStoreArea.
+      return (await sql`
+        SELECT
+          sa.name as "locationName",
+          COALESCE(SUM(eit.financial_loss), 0) as "totalLoss",
+          COALESCE(SUM(eit.units_discarded), 0)::int as count
+        FROM expired_item_transactions eit
+        JOIN inventory_items ii ON eit.inventory_item_id = ii.id
+        JOIN store_areas sa ON ii.location_id = sa.id
+        WHERE eit.action = 'expired'
+          AND eit.organization_id = ${organizationId}
+        GROUP BY sa.id, sa.name
+        ORDER BY "totalLoss" DESC
+      `) as ExpiredLossByStoreAreaItem[];
+    },
+
     async getSellThroughByMarkdownLevel(organizationId: string): Promise<SellThroughByLevelItem[]> {
       // How many items sold through at each markdown depth (null = sold before
       // reaching a markdown window). Surfaces stock that only moves when reduced.
@@ -777,23 +931,29 @@ export function createWorkersDatabase(env: Env): Database {
     async getExpiredItems(organizationId: string): Promise<ExpiredItemRow[]> {
       return (await sql`
         SELECT
-          ii.id,
+          MIN(ii.id) as id,
           ii.product_id as "productId",
           p.name as "productName",
           COALESCE(p.sku, '') as sku,
-          ii.expiry_date::text as "expiryDate",
-          ii.status,
+          MIN(ii.expiry_date)::text as "expiryDate",
+          -- The write-off matcher pools rows by product/location/cost_price (not status)
+          -- and processes earliest-expiry first, so a row must represent that whole pool.
+          -- Grouping by status here would split it and let the user act on a status that
+          -- isn't the one actually processed. Show the earliest-expiry item's status.
+          (array_agg(ii.status ORDER BY ii.expiry_date ASC, ii.id ASC))[1] as status,
           COALESCE(p.cost_price, 0) as "costPrice",
           ii.location_id as "locationId",
           sa.name as "locationName",
-          1::int as "quantityAvailable"
+          COUNT(*)::int as "quantityAvailable"
         FROM inventory_items ii
         JOIN products p ON ii.product_id = p.id
         JOIN store_areas sa ON ii.location_id = sa.id
         WHERE (ii.expiry_date < CURRENT_DATE
-          OR ii.status IN ('Expired', 'Markdown 1', 'Markdown 2', 'Markdown 3'))
+          OR ii.status = ANY(${[...EXPIRED_WORKLIST_STATUSES]}))
           AND ii.organization_id = ${organizationId}
-        ORDER BY ii.expiry_date ASC
+          AND ii.status <> ALL(${[...DISPOSITIONED_STATUSES]})
+        GROUP BY ii.product_id, p.name, p.sku, p.cost_price, ii.location_id, sa.name
+        ORDER BY MIN(ii.expiry_date) ASC
       `) as ExpiredItemRow[];
     },
 
@@ -804,36 +964,40 @@ export function createWorkersDatabase(env: Env): Database {
       action: string,
       unitsDiscarded?: number,
     ): Promise<ExpiredItemTransaction> {
-      const newStatus = action === 'sold_through' ? WORKERS_SOLD_THROUGH_STATUS : EXPIRED_STATUS;
-      const itemRows = await sql`
-        SELECT
-          COALESCE(p.cost_price, 0) * ${action === 'expired' ? (unitsDiscarded ?? 0) : 0} as "financialLoss",
-          (ii.expiry_date::date - CURRENT_DATE) as "daysToExpiry"
-        FROM inventory_items ii
-        JOIN products p ON ii.product_id = p.id
-        WHERE ii.id = ${inventoryItemId}
-        LIMIT 1
-      `;
+      const context = await getInventoryProcessContext(
+        sql,
+        inventoryItemId,
+        organizationId,
+        action === 'expired' ? unitsDiscarded : undefined,
+      );
+      const markdownLevel = reportMarkdownLevel(context.daysToExpiry);
+      const processedItemIds = await getProcessedItemIds(
+        sql,
+        organizationId,
+        inventoryItemId,
+        action,
+        unitsDiscarded,
+        context,
+      );
 
-      if (!itemRows[0]) {
-        throw new Error(`Inventory item ${inventoryItemId} not found`);
-      }
-
-      const daysToExpiry =
-        itemRows[0].daysToExpiry === null ? null : Number(itemRows[0].daysToExpiry);
-      const markdownLevel = reportMarkdownLevel(daysToExpiry);
-
+      // Preserve the disposition's meaning on the inventory row: sold-through stays
+      // 'Sold Through', expired write-offs become 'Processed' (matching the SQLite
+      // backend). Both are excluded from the worklist; collapsing expired items to
+      // 'Sold Through' would mislabel waste as a sale for any status-based consumer.
+      const dispositionStatus =
+        action === 'expired' ? SQLITE_PROCESSED_STATUS : WORKERS_SOLD_THROUGH_STATUS;
       await sql`
         UPDATE inventory_items
-        SET status = ${newStatus}, updated_at = NOW()
-        WHERE id = ${inventoryItemId}
+        SET status = ${dispositionStatus}, updated_at = NOW()
+        WHERE id = ANY(${processedItemIds})
+          AND organization_id = ${organizationId}
       `;
 
       const rows = await sql`
         INSERT INTO expired_item_transactions
           (organization_id, inventory_item_id, user_id, action, units_discarded, financial_loss, markdown_level, transaction_date, created_at, updated_at)
         VALUES
-          (${organizationId}, ${inventoryItemId}, ${userId}, ${action}, ${unitsDiscarded ?? null}, ${Number(itemRows[0].financialLoss) || null}, ${markdownLevel}, NOW(), NOW(), NOW())
+          (${organizationId}, ${inventoryItemId}, ${userId}, ${action}, ${unitsDiscarded ?? null}, ${action === 'expired' ? context.financialLoss : null}, ${markdownLevel}, NOW(), NOW(), NOW())
         RETURNING
           id,
           inventory_item_id as "inventoryItemId",
