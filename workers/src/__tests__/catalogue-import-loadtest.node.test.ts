@@ -107,7 +107,7 @@ async function collectLoadTestResults(uploadId: number): Promise<LoadTestResults
     .rows[0] as Record<string, number | string>;
   const productCount = Number(
     (
-      await harness.pg.query(
+      await harness.pg.query<{ c: number }>(
         `SELECT COUNT(*)::int AS c FROM products WHERE organization_id = $1`,
         [ORG],
       )

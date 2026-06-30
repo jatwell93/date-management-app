@@ -8,6 +8,7 @@
     "build": "node build.js",
     "build:types": "tsc --noEmit -p tsconfig.deploy.json",
     "lint": "tsc --noEmit -p tsconfig.deploy.json",
+    "typecheck": "tsc --noEmit -p tsconfig.test.json",
     "deploy": "npm run build && wrangler deploy",
     "deploy:prod": "npm run build && wrangler deploy --env production",
     "deploy:dev": "npm run build && wrangler deploy --env development",
