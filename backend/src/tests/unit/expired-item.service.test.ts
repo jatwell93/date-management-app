@@ -1,6 +1,10 @@
 import { getDb, releaseDb } from '../../database';
 import { ExpiredItemService } from '../../services/expired-item.service';
-import { SQLITE_PROCESSED_STATUS } from '../../../../shared/domain/disposition';
+import {
+  DISPOSITIONED_STATUSES,
+  EXPIRED_WORKLIST_STATUSES,
+  SQLITE_PROCESSED_STATUS,
+} from '../../../../shared/domain/disposition';
 
 vi.mock('../../database', () => ({
   getDb: vi.fn(),
@@ -238,7 +242,14 @@ describe('ExpiredItemService', () => {
 
       expect(result.unitsDiscarded).toBe(3);
       expect(result.financialLoss).toBe(12);
-      expect(selectMatchingRows).toHaveBeenCalledWith(10, 2, 4, 3);
+      expect(selectMatchingRows).toHaveBeenCalledWith(
+        10,
+        2,
+        4,
+        ...EXPIRED_WORKLIST_STATUSES,
+        ...DISPOSITIONED_STATUSES,
+        3,
+      );
       expect(insertRun).toHaveBeenCalledWith(5, 11, 'expired', 3, 12, null);
       expect(auditRun).toHaveBeenCalledWith(
         11,
