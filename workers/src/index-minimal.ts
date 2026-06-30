@@ -1698,6 +1698,13 @@ async function handleProcessExpiredItem(
     if (message.includes('not found')) {
       return errorResponse(message, 404, env);
     }
+    // Predictable client-input failures — e.g. available stock changed between
+    // the worklist loading and the user submitting (race). These are 400s, not
+    // server faults, so surface the real message and keep them out of the
+    // 500/Sentry path.
+    if (message.includes('Cannot discard') || message.includes('must be a positive number')) {
+      return errorResponse(message, 400, env);
+    }
     return errorResponse('Internal server error', 500, env);
   }
 }
