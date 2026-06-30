@@ -392,8 +392,9 @@ async function getMatchingExpiredItemIds(
       AND ii.location_id IS NOT DISTINCT FROM ${context.locationId}
       AND p.cost_price = ${context.costPrice}
       AND (ii.expiry_date < CURRENT_DATE OR ii.status = ANY(${[...EXPIRED_WORKLIST_STATUSES]}))
-      AND ii.status IS DISTINCT FROM ${WORKERS_SOLD_THROUGH_STATUS}
-      AND ii.status IS DISTINCT FROM ${DISPOSITIONED_STATUSES[0]}
+      -- Exclude every dispositioned status dynamically so adding one to the
+      -- shared constant can't leak already-processed items back into the matcher.
+      AND ii.status <> ALL(${[...DISPOSITIONED_STATUSES]})
     ORDER BY ii.expiry_date ASC, ii.id ASC
     LIMIT ${unitsDiscarded}
   `;
@@ -950,8 +951,7 @@ export function createWorkersDatabase(env: Env): Database {
         WHERE (ii.expiry_date < CURRENT_DATE
           OR ii.status = ANY(${[...EXPIRED_WORKLIST_STATUSES]}))
           AND ii.organization_id = ${organizationId}
-          AND ii.status IS DISTINCT FROM ${WORKERS_SOLD_THROUGH_STATUS}
-          AND ii.status IS DISTINCT FROM ${DISPOSITIONED_STATUSES[0]}
+          AND ii.status <> ALL(${[...DISPOSITIONED_STATUSES]})
         GROUP BY ii.product_id, p.name, p.sku, p.cost_price, ii.location_id, sa.name
         ORDER BY MIN(ii.expiry_date) ASC
       `) as ExpiredItemRow[];
