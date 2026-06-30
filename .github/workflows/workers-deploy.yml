@@ -47,6 +47,11 @@ jobs:
       - name: Type check
         run: npm run lint
 
+      # Also type-check test files (tsconfig.test.json) so a broken test import
+      # cannot reach production via a direct push to main that skips the PR gate.
+      - name: Type check (including tests)
+        run: npm run typecheck
+
       - name: Build worker
         run: npm run build
 

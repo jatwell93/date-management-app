@@ -34,6 +34,13 @@ jobs:
       - name: Install dependencies
         run: npm ci
 
+      # Type-checks production code AND tests (tsconfig.test.json). The deploy-time
+      # `npm run lint` excludes test files, so a broken import inside a test (e.g. a
+      # module moved during a refactor) is invisible to esbuild and to that check.
+      # This step is the PR gate that catches those.
+      - name: Type check (including tests)
+        run: npm run typecheck
+
       - name: Build worker bundle
         run: npm run build
 

@@ -106,6 +106,7 @@ describe('healthCheck', () => {
     RATE_LIMIT_MAX_AUTHENTICATED: '1000',
     NEON_CONNECTION_STRING: 'postgres://example',
     JWT_SECRET: 'test-secret',
+    CLERK_WEBHOOK_SECRET: 'whsec_test',
     R2_ACCOUNT_ID: 'test',
     R2_ACCESS_KEY_ID: 'test',
     R2_SECRET_ACCESS_KEY: 'test',
@@ -290,7 +291,12 @@ describe('API config guard', () => {
 });
 
 describe('Upload strategy parity', () => {
-  const mockedVerifyToken = vi.mocked(verifyToken);
+  // `verifyToken` resolves to Clerk's full `JwtPayload`. Tests only assert on the
+  // handful of claims the Worker reads, so type the mock against a loose claims shape
+  // rather than reconstructing every required Clerk field at each call site.
+  const mockedVerifyToken = vi.mocked(
+    verifyToken as unknown as (...args: unknown[]) => Promise<Record<string, unknown>>,
+  );
 
   const createUploadEnv = (overrides: Partial<Env> = {}): Env => ({
     NODE_ENV: 'development',
@@ -302,6 +308,7 @@ describe('Upload strategy parity', () => {
     RATE_LIMIT_MAX_AUTHENTICATED: '100',
     NEON_CONNECTION_STRING: 'postgres://example',
     JWT_SECRET: 'upload-test-secret',
+    CLERK_WEBHOOK_SECRET: 'whsec_test',
     R2_ACCOUNT_ID: 'test-account',
     R2_ACCESS_KEY_ID: 'test-key',
     R2_SECRET_ACCESS_KEY: 'test-secret',
@@ -1234,7 +1241,7 @@ describe('Auth input validation', () => {
     expect(body.error || body.message).toBeTruthy();
   });
 
-  const createDb = (overrides: Partial<Database> = {}): Database => ({
+  const createDb = (overrides: Partial<Database> = {}) => ({
     sql: {} as any,
     findUserByEmail: vi.fn().mockResolvedValue(null),
     findUserById: vi.fn(),
@@ -1255,7 +1262,7 @@ describe('Auth input validation', () => {
     findStoreAreas: vi.fn(),
     getDashboardStats: vi.fn(),
     ...overrides,
-  });
+  }) as unknown as Database;
 
   it('returns 400 when login body is missing fields', async () => {
     const request = new Request('https://example.com/api/auth/login', {
