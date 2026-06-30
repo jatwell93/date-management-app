@@ -3,11 +3,7 @@
   "compilerOptions": {
     "types": ["@cloudflare/workers-types", "node", "vitest/globals"],
     "experimentalDecorators": true,
-    "emitDecoratorMetadata": true,
-    "paths": {
-      "@/*": ["workers/src/*"],
-      "better-sqlite3": ["backend/node_modules/@types/better-sqlite3"]
-    }
+    "emitDecoratorMetadata": true
   },
   "include": ["src/**/*", "../shared/**/*"],
   "exclude": [
