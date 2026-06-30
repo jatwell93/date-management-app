@@ -57,6 +57,8 @@ export interface Database {
   getItemsByDateReport(organizationId: string): Promise<ItemsByDateReportItem[]>;
   getLossBySkuReport(organizationId: string): Promise<LossBySkuReportItem[]>;
   getLossByDepartmentReport(organizationId: string): Promise<LossByDepartmentReportItem[]>;
+  getExpiredLossBySku(organizationId: string): Promise<LossBySkuReportItem[]>;
+  getExpiredLossByStoreArea(organizationId: string): Promise<ExpiredLossByStoreAreaItem[]>;
   getSellThroughByMarkdownLevel(organizationId: string): Promise<SellThroughByLevelItem[]>;
 
   // Expired items queries
@@ -256,6 +258,12 @@ export interface LossBySkuReportItem {
 }
 
 export interface LossByDepartmentReportItem {
+  department: string;
+  totalLoss: number;
+  count: number;
+}
+
+export interface ExpiredLossByStoreAreaItem {
   locationName: string;
   totalLoss: number;
   count: number;
@@ -826,7 +834,47 @@ export function createWorkersDatabase(env: Env): Database {
       `) as ItemsByDateReportItem[];
     },
 
+    // Standalone /api/reports/loss-by-* endpoints (ExpiredItemsPage charts). These
+    // value the stock CURRENTLY sitting expired, mirroring the SQLite backend's
+    // report.repository. Kept distinct from the write-off ledger reports below so
+    // production (Workers) and dev (backend) stay in parity.
     async getLossBySkuReport(organizationId: string): Promise<LossBySkuReportItem[]> {
+      return (await sql`
+        SELECT
+          COALESCE(p.sku, '') as sku,
+          p.name as "productName",
+          COALESCE(SUM(p.cost_price), 0) as "totalLoss",
+          COUNT(*)::int as count
+        FROM inventory_items ii
+        JOIN products p ON ii.product_id = p.id
+        WHERE ii.status = 'Expired'
+          AND ii.organization_id = ${organizationId}
+        GROUP BY p.sku, p.name
+        ORDER BY "totalLoss" DESC
+        LIMIT 10
+      `) as LossBySkuReportItem[];
+    },
+
+    async getLossByDepartmentReport(organizationId: string): Promise<LossByDepartmentReportItem[]> {
+      return (await sql`
+        SELECT
+          sa.sub_department as department,
+          COALESCE(SUM(p.cost_price), 0) as "totalLoss",
+          COUNT(*)::int as count
+        FROM inventory_items ii
+        JOIN products p ON ii.product_id = p.id
+        JOIN store_areas sa ON ii.location_id = sa.id
+        WHERE ii.status = 'Expired' AND sa.sub_department IS NOT NULL
+          AND ii.organization_id = ${organizationId}
+        GROUP BY sa.sub_department
+        ORDER BY "totalLoss" DESC
+      `) as LossByDepartmentReportItem[];
+    },
+
+    // Write-off ledger reports for /api/expired-items/reports/expired-losses
+    // (ExpiredLossReport). These sum REALIZED losses from expired_item_transactions,
+    // mirroring the SQLite backend's expired-item.service getFinancialLosses* methods.
+    async getExpiredLossBySku(organizationId: string): Promise<LossBySkuReportItem[]> {
       return (await sql`
         SELECT
           COALESCE(p.sku, '') as sku,
@@ -844,10 +892,11 @@ export function createWorkersDatabase(env: Env): Database {
       `) as LossBySkuReportItem[];
     },
 
-    async getLossByDepartmentReport(organizationId: string): Promise<LossByDepartmentReportItem[]> {
-      // "Financial Loss by Store Area" — the frontend reads `locationName`, and the
-      // SQLite backend groups by store-area name (sa.name), not sub_department. Match
-      // that shape and grouping so production (Workers) and dev (backend) agree.
+    async getExpiredLossByStoreArea(
+      organizationId: string,
+    ): Promise<ExpiredLossByStoreAreaItem[]> {
+      // Frontend reads `locationName`; group by store-area name to match the
+      // SQLite backend's getFinancialLossesByStoreArea.
       return (await sql`
         SELECT
           sa.name as "locationName",
@@ -860,7 +909,7 @@ export function createWorkersDatabase(env: Env): Database {
           AND eit.organization_id = ${organizationId}
         GROUP BY sa.id, sa.name
         ORDER BY "totalLoss" DESC
-      `) as LossByDepartmentReportItem[];
+      `) as ExpiredLossByStoreAreaItem[];
     },
 
     async getSellThroughByMarkdownLevel(organizationId: string): Promise<SellThroughByLevelItem[]> {

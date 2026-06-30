@@ -248,7 +248,7 @@ describe('Workers disposition markdown capture (real SQL)', () => {
     expect(await db.getExpiredItems(ORG)).toHaveLength(0);
   });
 
-  it('reports expired losses from the transaction ledger', async () => {
+  it('reports realized expired losses from the transaction ledger (expired-losses report)', async () => {
     const db = createWorkersDatabase({ NEON_CONNECTION_STRING: 'postgres://test' } as Env);
     const productRows = await sql`
       INSERT INTO products (organization_id, barcode, sku, name, cost_price)
@@ -260,6 +260,8 @@ describe('Workers disposition markdown capture (real SQL)', () => {
       VALUES (${ORG}, ${'Aisle'}, ${'General'})
       RETURNING id`;
     const locationId = Number(areaRows[0].id);
+    // Item is already dispositioned (Sold Through status) — proving the ledger
+    // reports realized write-offs, independent of current inventory status.
     const itemRows = await sql`
       INSERT INTO inventory_items (organization_id, product_id, location_id, expiry_date, status)
       VALUES (${ORG}, ${productId}, ${locationId}, (CURRENT_DATE - INTERVAL '2 days')::date, ${'Sold Through'})
@@ -269,20 +271,40 @@ describe('Workers disposition markdown capture (real SQL)', () => {
         (organization_id, inventory_item_id, user_id, action, units_discarded, financial_loss)
       VALUES (${ORG}, ${Number(itemRows[0].id)}, ${USER_ID}, ${'expired'}, 1, 9)`;
 
+    expect(await db.getExpiredLossBySku(ORG)).toEqual([
+      expect.objectContaining({ sku: 'LOSS', productName: 'Loss Item', totalLoss: 9, count: 1 }),
+    ]);
+    expect(await db.getExpiredLossByStoreArea(ORG)).toEqual([
+      expect.objectContaining({ locationName: 'Aisle', totalLoss: 9, count: 1 }),
+    ]);
+  });
+
+  it('values currently-expired stock for the standalone loss-by-sku/department reports', async () => {
+    // The standalone /reports/loss-by-* endpoints value stock CURRENTLY marked
+    // Expired (cost_price), not the write-off ledger — matching the SQLite backend.
+    const db = createWorkersDatabase({ NEON_CONNECTION_STRING: 'postgres://test' } as Env);
+    const productRows = await sql`
+      INSERT INTO products (organization_id, barcode, sku, name, cost_price)
+      VALUES (${ORG}, ${'CUR'}, ${'CUR'}, ${'Current Item'}, 6)
+      RETURNING id`;
+    const productId = Number(productRows[0].id);
+    const areaRows = await sql`
+      INSERT INTO store_areas (organization_id, name, sub_department)
+      VALUES (${ORG}, ${'Aisle'}, ${'Bakery'})
+      RETURNING id`;
+    const locationId = Number(areaRows[0].id);
+    // Two currently-Expired units (counted) + one already-processed unit (ignored).
+    await sql`
+      INSERT INTO inventory_items (organization_id, product_id, location_id, expiry_date, status)
+      VALUES (${ORG}, ${productId}, ${locationId}, (CURRENT_DATE - INTERVAL '1 day')::date, ${'Expired'}),
+             (${ORG}, ${productId}, ${locationId}, (CURRENT_DATE - INTERVAL '1 day')::date, ${'Expired'}),
+             (${ORG}, ${productId}, ${locationId}, (CURRENT_DATE - INTERVAL '1 day')::date, ${'Processed'})`;
+
     expect(await db.getLossBySkuReport(ORG)).toEqual([
-      expect.objectContaining({
-        sku: 'LOSS',
-        productName: 'Loss Item',
-        totalLoss: 9,
-        count: 1,
-      }),
+      expect.objectContaining({ sku: 'CUR', productName: 'Current Item', totalLoss: 12, count: 2 }),
     ]);
     expect(await db.getLossByDepartmentReport(ORG)).toEqual([
-      expect.objectContaining({
-        locationName: 'Aisle',
-        totalLoss: 9,
-        count: 1,
-      }),
+      expect.objectContaining({ department: 'Bakery', totalLoss: 12, count: 2 }),
     ]);
   });
 

@@ -1029,8 +1029,8 @@ async function handleGetExpiredLossesReport(
   const auth = await authenticateApiRequest(request, env, db);
   if (auth instanceof Response) return auth;
   const [lossesBySKU, lossesByStoreArea] = await Promise.all([
-    db.getLossBySkuReport(auth.organizationId),
-    db.getLossByDepartmentReport(auth.organizationId),
+    db.getExpiredLossBySku(auth.organizationId),
+    db.getExpiredLossByStoreArea(auth.organizationId),
   ]);
   return jsonResponse({ lossesBySKU, lossesByStoreArea }, 200, env);
 }
