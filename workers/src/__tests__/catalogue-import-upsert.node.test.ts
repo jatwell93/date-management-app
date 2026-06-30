@@ -9,7 +9,7 @@
  * Node project only — see vitest.node.config.mts.
  */
 import { describe, it, expect, beforeEach, afterEach } from 'vitest';
-import { processCatalogueImportJob } from '../index-minimal';
+import { processCatalogueImportJob } from '../upload/catalogue-import';
 import type { Env } from '../types/env';
 import { createPgliteHarness, type PgliteHarness } from './pglite-db';
 
