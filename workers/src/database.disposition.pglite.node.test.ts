@@ -85,6 +85,31 @@ describe('Workers disposition markdown capture (real SQL)', () => {
     expect(txn.action).toBe('expired');
   });
 
+  it('records a zero financial loss as 0, not NULL, for a zero-cost expired write-off', async () => {
+    // A $0 cost item still represents a real disposition: the loss applies and
+    // equals zero. Storing NULL (loss not applicable) would diverge from the
+    // SQLite backend, which records 0. Guards against `value || null` coercion.
+    const db = createWorkersDatabase({ NEON_CONNECTION_STRING: 'postgres://test' } as Env);
+    const productRows = await sql`
+      INSERT INTO products (organization_id, barcode, sku, name, cost_price)
+      VALUES (${ORG}, ${'ZERO'}, ${'ZERO'}, ${'Zero Cost'}, 0)
+      RETURNING id`;
+    const productId = Number(productRows[0].id);
+    const itemRows = await sql`
+      INSERT INTO inventory_items (organization_id, product_id, expiry_date, status)
+      VALUES (${ORG}, ${productId}, (CURRENT_DATE - INTERVAL '1 day')::date, ${'Expired'})
+      RETURNING id`;
+    const itemId = Number(itemRows[0].id);
+
+    const txn = await db.processExpiredItem(itemId, USER_ID, ORG, 'expired', 1);
+    expect(txn.financialLoss).toBe(0);
+
+    const stored = await sql`
+      SELECT financial_loss FROM expired_item_transactions WHERE id = ${txn.id}`;
+    expect(stored[0].financial_loss).toBe(0);
+    expect(stored[0].financial_loss).not.toBeNull();
+  });
+
   it('processes a multi-unit expired write-off as one ledger row and removes processed rows', async () => {
     const db = createWorkersDatabase({ NEON_CONNECTION_STRING: 'postgres://test' } as Env);
     const productRows = await sql`

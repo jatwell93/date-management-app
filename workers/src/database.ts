@@ -948,7 +948,7 @@ export function createWorkersDatabase(env: Env): Database {
         INSERT INTO expired_item_transactions
           (organization_id, inventory_item_id, user_id, action, units_discarded, financial_loss, markdown_level, transaction_date, created_at, updated_at)
         VALUES
-          (${organizationId}, ${inventoryItemId}, ${userId}, ${action}, ${unitsDiscarded ?? null}, ${context.financialLoss || null}, ${markdownLevel}, NOW(), NOW(), NOW())
+          (${organizationId}, ${inventoryItemId}, ${userId}, ${action}, ${unitsDiscarded ?? null}, ${action === 'expired' ? context.financialLoss : null}, ${markdownLevel}, NOW(), NOW(), NOW())
         RETURNING
           id,
           inventory_item_id as "inventoryItemId",
