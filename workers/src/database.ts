@@ -12,6 +12,7 @@ import type { Env } from './types/env';
 import {
   DISPOSITIONED_STATUSES,
   EXPIRED_WORKLIST_STATUSES,
+  SQLITE_PROCESSED_STATUS,
   WORKERS_SOLD_THROUGH_STATUS,
 } from '../../shared/domain/disposition';
 import { getMarkdownLevelForDays, MARKDOWN_WINDOWS } from '../../shared/domain/markdown';
@@ -255,7 +256,7 @@ export interface LossBySkuReportItem {
 }
 
 export interface LossByDepartmentReportItem {
-  department: string;
+  locationName: string;
   totalLoss: number;
   count: number;
 }
@@ -844,17 +845,20 @@ export function createWorkersDatabase(env: Env): Database {
     },
 
     async getLossByDepartmentReport(organizationId: string): Promise<LossByDepartmentReportItem[]> {
+      // "Financial Loss by Store Area" — the frontend reads `locationName`, and the
+      // SQLite backend groups by store-area name (sa.name), not sub_department. Match
+      // that shape and grouping so production (Workers) and dev (backend) agree.
       return (await sql`
         SELECT
-          sa.sub_department as department,
+          sa.name as "locationName",
           COALESCE(SUM(eit.financial_loss), 0) as "totalLoss",
           COALESCE(SUM(eit.units_discarded), 0)::int as count
         FROM expired_item_transactions eit
         JOIN inventory_items ii ON eit.inventory_item_id = ii.id
         JOIN store_areas sa ON ii.location_id = sa.id
-        WHERE eit.action = 'expired' AND sa.sub_department IS NOT NULL
+        WHERE eit.action = 'expired'
           AND eit.organization_id = ${organizationId}
-        GROUP BY sa.sub_department
+        GROUP BY sa.id, sa.name
         ORDER BY "totalLoss" DESC
       `) as LossByDepartmentReportItem[];
     },
@@ -882,7 +886,11 @@ export function createWorkersDatabase(env: Env): Database {
           p.name as "productName",
           COALESCE(p.sku, '') as sku,
           MIN(ii.expiry_date)::text as "expiryDate",
-          ii.status,
+          -- The write-off matcher pools rows by product/location/cost_price (not status)
+          -- and processes earliest-expiry first, so a row must represent that whole pool.
+          -- Grouping by status here would split it and let the user act on a status that
+          -- isn't the one actually processed. Show the earliest-expiry item's status.
+          (array_agg(ii.status ORDER BY ii.expiry_date ASC, ii.id ASC))[1] as status,
           COALESCE(p.cost_price, 0) as "costPrice",
           ii.location_id as "locationId",
           sa.name as "locationName",
@@ -895,7 +903,7 @@ export function createWorkersDatabase(env: Env): Database {
           AND ii.organization_id = ${organizationId}
           AND ii.status IS DISTINCT FROM ${WORKERS_SOLD_THROUGH_STATUS}
           AND ii.status IS DISTINCT FROM ${DISPOSITIONED_STATUSES[0]}
-        GROUP BY ii.product_id, p.name, p.sku, ii.status, p.cost_price, ii.location_id, sa.name
+        GROUP BY ii.product_id, p.name, p.sku, p.cost_price, ii.location_id, sa.name
         ORDER BY MIN(ii.expiry_date) ASC
       `) as ExpiredItemRow[];
     },
@@ -923,9 +931,15 @@ export function createWorkersDatabase(env: Env): Database {
         context,
       );
 
+      // Preserve the disposition's meaning on the inventory row: sold-through stays
+      // 'Sold Through', expired write-offs become 'Processed' (matching the SQLite
+      // backend). Both are excluded from the worklist; collapsing expired items to
+      // 'Sold Through' would mislabel waste as a sale for any status-based consumer.
+      const dispositionStatus =
+        action === 'expired' ? SQLITE_PROCESSED_STATUS : WORKERS_SOLD_THROUGH_STATUS;
       await sql`
         UPDATE inventory_items
-        SET status = ${WORKERS_SOLD_THROUGH_STATUS}, updated_at = NOW()
+        SET status = ${dispositionStatus}, updated_at = NOW()
         WHERE id = ANY(${processedItemIds})
           AND organization_id = ${organizationId}
       `;

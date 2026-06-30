@@ -133,9 +133,9 @@ describe('Workers disposition markdown capture (real SQL)', () => {
     const statuses = await sql`
       SELECT id, status FROM inventory_items WHERE product_id = ${productId} ORDER BY expiry_date ASC`;
     expect(statuses.slice(0, 3).map((row) => row.status)).toEqual([
-      'Sold Through',
-      'Sold Through',
-      'Sold Through',
+      'Processed',
+      'Processed',
+      'Processed',
     ]);
     expect(statuses[3].status).toBe('Expired');
 
@@ -184,6 +184,45 @@ describe('Workers disposition markdown capture (real SQL)', () => {
     expect(after).toHaveLength(0);
   });
 
+  it('merges mixed Expired + Markdown stock at one location into a single processable row', async () => {
+    // The worklist groups by product/location/cost_price (not status) so it lines up
+    // with the write-off matcher's pool. A product with both an expired and a future
+    // Markdown unit at the same location must be one row the user can fully write off.
+    const db = createWorkersDatabase({ NEON_CONNECTION_STRING: 'postgres://test' } as Env);
+    const productRows = await sql`
+      INSERT INTO products (organization_id, barcode, sku, name, cost_price)
+      VALUES (${ORG}, ${'MIX'}, ${'MIX'}, ${'Mixed Item'}, 4)
+      RETURNING id`;
+    const productId = Number(productRows[0].id);
+    const areaRows = await sql`
+      INSERT INTO store_areas (organization_id, name, sub_department)
+      VALUES (${ORG}, ${'Bay'}, ${'Grocery'})
+      RETURNING id`;
+    const locationId = Number(areaRows[0].id);
+    // One already expired, one future-dated Markdown 3 — same product/location/cost.
+    await sql`
+      INSERT INTO inventory_items (organization_id, product_id, location_id, expiry_date, status)
+      VALUES (${ORG}, ${productId}, ${locationId}, (CURRENT_DATE - INTERVAL '2 days')::date, ${'Expired'})`;
+    await sql`
+      INSERT INTO inventory_items (organization_id, product_id, location_id, expiry_date, status)
+      VALUES (${ORG}, ${productId}, ${locationId}, (CURRENT_DATE + INTERVAL '20 days')::date, ${'Markdown 3'})`;
+
+    const worklist = await db.getExpiredItems(ORG);
+    expect(worklist).toHaveLength(1);
+    // Earliest-expiry item drives the displayed status (the one processed first).
+    expect(worklist[0]).toMatchObject({
+      sku: 'MIX',
+      quantityAvailable: 2,
+      status: 'Expired',
+      locationName: 'Bay',
+    });
+
+    // The whole pool (both statuses) can be written off in one action.
+    const txn = await db.processExpiredItem(worklist[0].id, USER_ID, ORG, 'expired', 2);
+    expect(txn).toMatchObject({ action: 'expired', unitsDiscarded: 2 });
+    expect(await db.getExpiredItems(ORG)).toHaveLength(0);
+  });
+
   it('reports expired losses from the transaction ledger', async () => {
     const db = createWorkersDatabase({ NEON_CONNECTION_STRING: 'postgres://test' } as Env);
     const productRows = await sql`
@@ -215,7 +254,7 @@ describe('Workers disposition markdown capture (real SQL)', () => {
     ]);
     expect(await db.getLossByDepartmentReport(ORG)).toEqual([
       expect.objectContaining({
-        department: 'General',
+        locationName: 'Aisle',
         totalLoss: 9,
         count: 1,
       }),
