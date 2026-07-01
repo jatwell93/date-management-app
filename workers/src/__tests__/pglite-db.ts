@@ -107,6 +107,45 @@ const SCHEMA_SQL = `
     created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
     updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
   );
+
+  CREATE TABLE organizations (
+    id TEXT PRIMARY KEY,
+    clerk_organization_id TEXT,
+    name TEXT NOT NULL,
+    slug TEXT NOT NULL,
+    contact_email TEXT,
+    is_creation_locked BOOLEAN NOT NULL DEFAULT FALSE,
+    created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+    updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+    UNIQUE (clerk_organization_id),
+    UNIQUE (slug)
+  );
+
+  CREATE TABLE users (
+    id SERIAL PRIMARY KEY,
+    organization_id TEXT NOT NULL,
+    clerk_user_id TEXT,
+    email TEXT,
+    username TEXT,
+    role TEXT NOT NULL,
+    deleted_at TIMESTAMPTZ,
+    created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+    updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+  );
+
+  CREATE UNIQUE INDEX users_clerk_user_id_key ON users (clerk_user_id);
+
+  CREATE TABLE subscription_tiers (
+    id SERIAL PRIMARY KEY,
+    organization_id TEXT NOT NULL,
+    tier_level TEXT NOT NULL,
+    status TEXT NOT NULL DEFAULT 'active',
+    billing_cycle TEXT NOT NULL DEFAULT 'monthly',
+    trial_started_at TIMESTAMPTZ,
+    trial_end_date TIMESTAMPTZ,
+    created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+    updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+  );
 `;
 
 /**

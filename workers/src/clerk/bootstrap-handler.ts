@@ -40,7 +40,7 @@ const DEFAULT_PAGES_PREVIEW_BASE_HOST = 'date-management-frontend.pages.dev';
 const MULTI_LABEL_PUBLIC_SUFFIXES = ['com.au', 'net.au', 'org.au', 'co.uk', 'org.uk'];
 
 function getConnectionString(env: Env): string {
-  return env.HYPERDRIVE?.connectionString || env.NEON_CONNECTION_STRING || env.DATABASE_URL || '';
+  return env.HYPERDRIVE?.connectionString || env.NEON_CONNECTION_STRING || '';
 }
 
 function getPagesPreviewBaseHost(env: Env): string {
