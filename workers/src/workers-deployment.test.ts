@@ -58,22 +58,26 @@ describe('Workers Preview Deployment', () => {
 
   describe('Expired Items Routes', () => {
     it('should not return route-not-found for the expired-loss report route', async () => {
-      try {
-        const response = await fetch(EXPIRED_LOSS_REPORT_URL);
-        expect(response.status).not.toBe(404);
+      let response: Response;
 
-        if (response.ok) {
-          const data = (await response.json()) as {
-            lossesBySKU?: unknown;
-            lossesByStoreArea?: unknown;
-          };
-          expect(data).toHaveProperty('lossesBySKU');
-          expect(data).toHaveProperty('lossesByStoreArea');
-        } else {
-          expect([400, 401, 403, 429, 500]).toContain(response.status);
-        }
+      try {
+        response = await fetch(EXPIRED_LOSS_REPORT_URL);
       } catch (error) {
         console.warn('⚠️  Expired-loss route smoke test skipped - Worker may not be deployed');
+        return;
+      }
+
+      expect(response.status).not.toBe(404);
+
+      if (response.ok) {
+        const data = (await response.json()) as {
+          lossesBySKU?: unknown;
+          lossesByStoreArea?: unknown;
+        };
+        expect(data).toHaveProperty('lossesBySKU');
+        expect(data).toHaveProperty('lossesByStoreArea');
+      } else {
+        expect([400, 401, 403, 429, 500]).toContain(response.status);
       }
     });
   });

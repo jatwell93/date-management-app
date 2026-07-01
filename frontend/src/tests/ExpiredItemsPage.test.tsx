@@ -173,25 +173,34 @@ describe('ExpiredItemsPage', () => {
     fireEvent.change(screen.getByLabelText(/Units to Discard/i), { target: { value: '101' } });
 
     const dialog = screen.getByRole('dialog', { name: /Process Expired Item/i });
-    const valueClassNames = [
+    const primaryValueElements = [
       within(dialog).getByText('Cold Chain Vaccine'),
       within(dialog).getByText('VAC-100'),
       within(dialog).getByText('Fridge'),
       within(dialog).getByText('01 May 2026'),
       within(dialog).getByText('$12.50'),
-      within(dialog).getByText('Maximum available: 100'),
-      within(dialog).getByText('Cannot exceed available quantity (100)'),
-    ].map((element) => element?.className ?? '');
+    ];
+    primaryValueElements.forEach((element) => {
+      expect(element).toHaveClass(
+        'text-sm',
+        'font-medium',
+        'text-semantic-text-primary',
+        'break-words',
+      );
+    });
 
-    expect(valueClassNames).toEqual([
-      'text-sm font-medium text-semantic-text-primary break-words',
-      'text-sm font-medium text-semantic-text-primary break-words',
-      'text-sm font-medium text-semantic-text-primary break-words',
-      'text-sm font-medium text-semantic-text-primary break-words',
-      'text-sm font-medium text-semantic-text-primary break-words',
-      'mt-1 text-sm font-medium text-semantic-text-secondary',
-      'mt-1 text-sm font-medium text-semantic-critical',
-    ]);
+    expect(within(dialog).getByText('Maximum available: 100')).toHaveClass(
+      'mt-1',
+      'text-sm',
+      'font-medium',
+      'text-semantic-text-secondary',
+    );
+    expect(within(dialog).getByText('Cannot exceed available quantity (100)')).toHaveClass(
+      'mt-1',
+      'text-sm',
+      'font-medium',
+      'text-semantic-critical',
+    );
   });
 
   it.each([
