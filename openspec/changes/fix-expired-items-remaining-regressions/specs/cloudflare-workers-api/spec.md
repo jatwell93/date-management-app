@@ -17,6 +17,24 @@ The Workers API SHALL register `GET /api/expired-items/reports/expired-losses` i
 - **THEN** a `404` response fails the check
 - **AND** authentication, rate-limit, or server responses are accepted as route-present signals
 
+#### Scenario: PR preview frontend uses a fresh development Worker
+
+- **GIVEN** a pull request changes Worker source, Worker tests, Worker package scripts, or Worker deploy configuration
+- **WHEN** the pull request is opened or updated from a trusted branch
+- **THEN** CI deploys the `development` Worker environment used by Pages previews
+- **AND** the preview frontend is not left pointing at a stale `date-management-api-dev` deployment
+
+### Requirement: Organization bootstrap uses the Worker database connection path
+
+Organization bootstrap SHALL use a database connection string that is compatible with the Worker SQL client.
+
+#### Scenario: Direct Neon and Hyperdrive connection strings are both configured
+
+- **GIVEN** `NEON_CONNECTION_STRING` and `HYPERDRIVE.connectionString` are both available
+- **WHEN** `POST /api/organization/bootstrap` runs bootstrap SQL
+- **THEN** the Worker uses `NEON_CONNECTION_STRING` before falling back to Hyperdrive
+- **AND** the response carries CORS headers for the request origin
+
 ### Requirement: Expired write-offs preserve multi-unit quantities and realized loss
 
 Expired write-offs SHALL process exactly the requested number of matching inventory rows and record realized loss from the expired item transaction ledger.

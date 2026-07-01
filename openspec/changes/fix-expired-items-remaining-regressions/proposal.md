@@ -18,6 +18,7 @@
 - Production currently builds from `workers/src/index-minimal.ts` via `workers/build.js`, not from Sentry's diagnostic `workers/src/index.ts` proposal.
 - Sentry issue `NODE-EXPRESS-1X` reports `/expired-items` failing to fetch `/expired-items/reports/expired-losses` with 404. Related Sentry issues `NODE-EXPRESS-1W`, `NODE-EXPRESS-1V`, `NODE-EXPRESS-19`, and `NODE-EXPRESS-1R` are diagnostic context for issue 268 follow-up verification.
 - The route must remain registered in `workers/src/index-minimal.ts`, and the built `workers/dist/index.js` artifact must contain `/api/expired-items/reports/expired-losses` after `npm run build --prefix workers`.
+- PR 310 browser QA showed the Pages preview was using `date-management-api-dev`, which had not been redeployed with the branch Worker changes. After manually deploying the dev Worker, `/api/organization/bootstrap` exposed a separate Hyperdrive-first connection failure (`NeonDbError` 530/1016), so bootstrap must use the same direct-Neon-first connection order as the working Worker database path.
 
 ## Reuse Strategy
 
@@ -33,4 +34,5 @@
 3. Add or confirm Workers regressions for route registration, multi-unit processing, expired-loss aggregation, and built artifact route presence.
 4. Store the frontend units input as a string, parsing only during validation and submission.
 5. Fix backend or Workers defects exposed by the regressions while preserving existing layered architecture.
-6. Validate OpenSpec and run focused frontend, backend, Workers, build, and preview/live smoke checks where available.
+6. Keep PR preview frontend deployments paired with fresh dev Worker deployments when Worker code changes.
+7. Validate OpenSpec and run focused frontend, backend, Workers, build, and preview/live smoke checks where available.

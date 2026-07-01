@@ -6,4 +6,6 @@
 - [x] Implement frontend string-backed `unitsDiscarded` input with submit-time parsing.
 - [x] Fix any Express or Workers parity defects exposed by the regressions.
 - [x] Address PR 310 Copilot review follow-up on Worker artifact freshness and user-event interaction ordering.
+- [x] Run headed Expect QA against PR 310 preview, redeploy the dev Worker, and fix bootstrap direct-Neon connection selection.
+- [x] Add PR Worker preview deployment so Pages previews do not use stale dev API code.
 - [x] Run focused verification commands and record memory for the completed fix.

@@ -14,6 +14,7 @@
  * `vitest.node.config.mts` (`*.node.test.ts`, `npm run test:db`).
  */
 import { afterAll, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
+import { neon } from '@neondatabase/serverless';
 import type { NeonQueryFunction } from '@neondatabase/serverless';
 import type { Env } from '../types/env';
 import { createPgliteHarness, createTaggedSql, type PgliteHarness } from '../__tests__/pglite-db';
@@ -86,6 +87,7 @@ describe('handleOrganizationBootstrap (real SQL)', () => {
   });
 
   beforeEach(async () => {
+    vi.mocked(neon).mockClear();
     await sql`DELETE FROM subscription_tiers`;
     await sql`DELETE FROM users`;
     await sql`DELETE FROM organizations`;
@@ -138,6 +140,34 @@ describe('handleOrganizationBootstrap (real SQL)', () => {
 
     const userCount = await sql`SELECT COUNT(*)::int AS n FROM users`;
     expect(userCount[0].n).toBe(1);
+  });
+
+  it('uses the direct Neon connection before Hyperdrive for bootstrap SQL', async () => {
+    const envWithHyperdrive = {
+      ...ENV,
+      NEON_CONNECTION_STRING: 'postgres://direct-neon',
+      HYPERDRIVE: { connectionString: 'postgres://hyperdrive' },
+    } as unknown as Env;
+
+    await seedOrg('org-connection', 'clerk-org-connection', 'connection');
+    await seedUser(
+      'org-connection',
+      'clerk-connection-user',
+      'admin',
+      'connection@example.test',
+    );
+
+    const request = bootstrapRequest({
+      sub: 'clerk-connection-user',
+      email: 'connection@example.test',
+      username: 'connection',
+      org_id: 'clerk-org-connection',
+      org_role: 'org:admin',
+    });
+
+    const response = await handleOrganizationBootstrap(request, envWithHyperdrive);
+    expect(response.status).toBe(200);
+    expect(neon).toHaveBeenCalledWith('postgres://direct-neon');
   });
 
   it('links a new user to an existing org as a non-first admin', async () => {
