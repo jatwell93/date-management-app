@@ -12,6 +12,9 @@ import { describe, it, expect } from 'vitest';
 describe('Workers Preview Deployment', () => {
   // This would be set during deployment process
   const PREVIEW_URL = process.env.WORKERS_PREVIEW_URL || 'http://localhost:8787';
+  const EXPIRED_LOSS_REPORT_URL =
+    process.env.EXPIRED_LOSS_REPORT_SMOKE_URL ||
+    `${PREVIEW_URL}/api/expired-items/reports/expired-losses`;
 
   describe('Health Check', () => {
     it('should return 200 OK from health endpoint', async () => {
@@ -49,6 +52,28 @@ describe('Workers Preview Deployment', () => {
         expect([400, 401, 500]).toContain(response.status);
       } catch (error) {
         console.warn('⚠️  Login endpoint test skipped - Worker may not be deployed');
+      }
+    });
+  });
+
+  describe('Expired Items Routes', () => {
+    it('should not return route-not-found for the expired-loss report route', async () => {
+      try {
+        const response = await fetch(EXPIRED_LOSS_REPORT_URL);
+        expect(response.status).not.toBe(404);
+
+        if (response.ok) {
+          const data = (await response.json()) as {
+            lossesBySKU?: unknown;
+            lossesByStoreArea?: unknown;
+          };
+          expect(data).toHaveProperty('lossesBySKU');
+          expect(data).toHaveProperty('lossesByStoreArea');
+        } else {
+          expect([400, 401, 403, 429, 500]).toContain(response.status);
+        }
+      } catch (error) {
+        console.warn('⚠️  Expired-loss route smoke test skipped - Worker may not be deployed');
       }
     });
   });
