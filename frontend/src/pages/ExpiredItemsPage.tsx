@@ -93,6 +93,30 @@ const PROCESS_DIALOG_VALUE_CLASS = 'text-sm font-medium text-semantic-text-prima
 const PROCESS_DIALOG_HELP_CLASS = 'mt-1 text-sm font-medium text-semantic-text-secondary';
 const PROCESS_DIALOG_ERROR_CLASS = 'mt-1 text-sm font-medium text-semantic-critical';
 
+function parseUnitsDiscardedInput(
+  rawUnitsDiscarded: string,
+  quantityAvailable: number,
+): { value?: number; error: string | null } {
+  const trimmed = rawUnitsDiscarded.trim();
+  if (trimmed === '') {
+    return { error: 'Must be at least 1' };
+  }
+
+  if (!/^\d+$/.test(trimmed)) {
+    return { error: 'Enter a whole number' };
+  }
+
+  const parsed = Number(trimmed);
+  if (parsed < 1) {
+    return { error: 'Must be at least 1' };
+  }
+  if (parsed > quantityAvailable) {
+    return { error: `Cannot exceed available quantity (${quantityAvailable})` };
+  }
+
+  return { value: parsed, error: null };
+}
+
 const ExpiredItemsPage: React.FC<ExpiredItemsPageProps> = ({ token }) => {
   const getFreshApiToken = useFreshApiToken(token);
   const [expiredItems, setExpiredItems] = useState<ExpiredItem[]>([]);
@@ -100,7 +124,7 @@ const ExpiredItemsPage: React.FC<ExpiredItemsPageProps> = ({ token }) => {
   const [error, setError] = useState<string | null>(null);
   const [selectedItem, setSelectedItem] = useState<ExpiredItem | null>(null);
   const [action, setAction] = useState<'sold_through' | 'expired' | null>(null);
-  const [unitsDiscarded, setUnitsDiscarded] = useState<number>(1);
+  const [unitsDiscarded, setUnitsDiscarded] = useState<string>('1');
   const [isModalOpen, setIsModalOpen] = useState<boolean>(false);
   const [processError, setProcessError] = useState<string | null>(null);
   const [isConfirmDialogOpen, setIsConfirmDialogOpen] = useState(false);
@@ -164,31 +188,19 @@ const ExpiredItemsPage: React.FC<ExpiredItemsPageProps> = ({ token }) => {
     setAction(actionType);
     setProcessError(null);
     setUnitsDiscardedError(null);
-    setUnitsDiscarded(actionType === 'expired' ? 1 : 0);
+    setUnitsDiscarded(actionType === 'expired' ? '1' : '0');
     setIsModalOpen(true);
   }, []);
 
   const handleUnitsDiscardedChange = useCallback(
     (e: React.ChangeEvent<HTMLInputElement>) => {
-      const parsed = Number(e.target.value);
-      setUnitsDiscarded(parsed);
-
-      if (!Number.isInteger(parsed)) {
-        setUnitsDiscardedError('Enter a whole number');
-        return;
-      }
-      if (parsed < 1) {
-        setUnitsDiscardedError('Must be at least 1');
-        return;
-      }
-      if (selectedItem && parsed > selectedItem.quantityAvailable) {
-        setUnitsDiscardedError(
-          `Cannot exceed available quantity (${selectedItem.quantityAvailable})`,
-        );
-        return;
-      }
-
-      setUnitsDiscardedError(null);
+      const rawUnitsDiscarded = e.target.value;
+      setUnitsDiscarded(rawUnitsDiscarded);
+      setUnitsDiscardedError(
+        selectedItem
+          ? parseUnitsDiscardedInput(rawUnitsDiscarded, selectedItem.quantityAvailable).error
+          : null,
+      );
     },
     [selectedItem],
   );
@@ -213,18 +225,12 @@ const ExpiredItemsPage: React.FC<ExpiredItemsPageProps> = ({ token }) => {
     setUnitsDiscardedError(null);
 
     if (action === 'expired') {
-      if (!Number.isInteger(unitsDiscarded)) {
-        setUnitsDiscardedError('Enter a whole number');
-        return;
-      }
-      if (!unitsDiscarded || unitsDiscarded <= 0) {
-        setUnitsDiscardedError('Must be at least 1');
-        return;
-      }
-      if (unitsDiscarded > selectedItem.quantityAvailable) {
-        setUnitsDiscardedError(
-          `Cannot exceed available quantity (${selectedItem.quantityAvailable})`,
-        );
+      const validation = parseUnitsDiscardedInput(
+        unitsDiscarded,
+        selectedItem.quantityAvailable,
+      );
+      if (validation.error) {
+        setUnitsDiscardedError(validation.error);
         return;
       }
     }
@@ -239,14 +245,23 @@ const ExpiredItemsPage: React.FC<ExpiredItemsPageProps> = ({ token }) => {
     setProcessError(null);
 
     try {
-      const processUnitsDiscarded = action === 'expired' ? unitsDiscarded : 0;
+      const processUnitsDiscarded =
+        action === 'expired'
+          ? parseUnitsDiscardedInput(unitsDiscarded, selectedItem.quantityAvailable).value
+          : undefined;
+      if (action === 'expired' && processUnitsDiscarded === undefined) {
+        setUnitsDiscardedError('Must be at least 1');
+        setIsProcessing(false);
+        return;
+      }
+
       const authToken = await getFreshApiToken('expired-items-process');
 
       await processExpiredItem(
         {
           inventoryItemId: selectedItem.id,
           action,
-          unitsDiscarded: processUnitsDiscarded,
+          ...(action === 'expired' ? { unitsDiscarded: processUnitsDiscarded } : {}),
         },
         authToken || null,
       );
@@ -841,7 +856,10 @@ const ExpiredItemsPage: React.FC<ExpiredItemsPageProps> = ({ token }) => {
                   <AlertDialogDescription>
                     {action === 'expired'
                       ? `Confirm writing off ${unitsDiscarded} units for ${currencyFormatter.format(
-                          unitsDiscarded * selectedItem.costPrice,
+                          (parseUnitsDiscardedInput(
+                            unitsDiscarded,
+                            selectedItem.quantityAvailable,
+                          ).value ?? 0) * selectedItem.costPrice,
                         )} loss. This action cannot be undone.`
                       : 'Confirm marking this item as sold through. This action cannot be undone.'}
                   </AlertDialogDescription>
