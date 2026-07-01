@@ -78,11 +78,12 @@ jobs:
         run: doppler run -- npx wrangler deploy --env development --keep-vars
 
   deploy-production:
-    # Only deploy to production on push to main. Pull requests trigger this
-    # workflow (for the development preview deploy), but the production
+    # Deploy to production on push to main or on a manual workflow_dispatch
+    # from main (for rollbacks / emergency patches). Pull requests trigger this
+    # workflow only for the development preview deploy; the production
     # environment's branch protection rejects non-main refs, so guard the job
-    # explicitly instead of letting it start and fail.
-    if: github.event_name == 'push'
+    # explicitly instead of letting it start and fail. Mirrors pages-deploy.yml.
+    if: github.event_name == 'push' || (github.event_name == 'workflow_dispatch' && github.ref == 'refs/heads/main')
     runs-on: ubuntu-latest
     environment:
       name: production
