@@ -1,5 +1,6 @@
 import React from 'react';
 import { act, fireEvent, render, screen, waitFor, within } from '@testing-library/react';
+import userEvent from '@testing-library/user-event';
 import ExpiredItemsPage from '../pages/ExpiredItemsPage';
 import { apiService } from '../lib/api.service';
 import { getExpiredItems, processExpiredItem } from '../services/expiredItemService';
@@ -100,7 +101,7 @@ describe('ExpiredItemsPage', () => {
     });
   });
 
-  it('submits the entered whole write-off quantity for an expired item group', async () => {
+  it('allows clearing and typing a multi-digit write-off quantity for an expired item group', async () => {
     mockedGetExpiredItems
       .mockResolvedValueOnce([
         {
@@ -123,8 +124,8 @@ describe('ExpiredItemsPage', () => {
       inventoryItemId: 101,
       userId: 7,
       action: 'expired',
-      unitsDiscarded: 37,
-      financialLoss: 462.5,
+      unitsDiscarded: 15,
+      financialLoss: 187.5,
       markdownLevel: null,
       transactionDate: '2026-06-30T00:00:00.000Z',
     });
@@ -132,21 +133,84 @@ describe('ExpiredItemsPage', () => {
     render(<ExpiredItemsPage token="test-session-value" />);
 
     expect(await screen.findAllByText('Cold Chain Vaccine')).not.toHaveLength(0);
-    fireEvent.click(screen.getAllByRole('button', { name: /^Expired$/i })[0]);
-    fireEvent.change(screen.getByLabelText(/Units to Discard/i), { target: { value: '37' } });
-    fireEvent.click(screen.getByRole('button', { name: /Mark Expired/i }));
+    await userEvent.click(screen.getAllByRole('button', { name: /^Expired$/i })[0]);
 
-    expect(await screen.findByText(/37 units/i, {}, { timeout: 2000 })).toBeInTheDocument();
-    expect(screen.getByText(/\$462\.50/)).toBeInTheDocument();
+    const unitsInput = screen.getByLabelText(/Units to Discard/i);
+    await userEvent.clear(unitsInput);
+    expect(unitsInput).toHaveValue(null);
 
-    fireEvent.click(screen.getByRole('button', { name: /Confirm/i }));
+    await userEvent.type(unitsInput, '15');
+    expect(unitsInput).toHaveValue(15);
+
+    await userEvent.click(screen.getByRole('button', { name: /Mark Expired/i }));
+
+    expect(await screen.findByText(/15 units/i, {}, { timeout: 2000 })).toBeInTheDocument();
+    expect(screen.getByText(/\$187\.50/)).toBeInTheDocument();
+
+    await userEvent.click(screen.getByRole('button', { name: /Confirm/i }));
 
     await waitFor(() => {
       expect(mockedProcessExpiredItem).toHaveBeenCalledWith(
-        { inventoryItemId: 101, action: 'expired', unitsDiscarded: 37 },
+        { inventoryItemId: 101, action: 'expired', unitsDiscarded: 15 },
         'test-session-value',
       );
     });
+  });
+
+  it('omits unitsDiscarded from the payload when marking an item as sold through', async () => {
+    mockedGetExpiredItems
+      .mockResolvedValueOnce([
+        {
+          id: 101,
+          productId: 20,
+          productName: 'Cold Chain Vaccine',
+          sku: 'VAC-100',
+          expiryDate: '2026-05-01',
+          status: 'Expired',
+          costPrice: 12.5,
+          locationId: 4,
+          locationName: 'Fridge',
+          quantityAvailable: 100,
+        },
+      ])
+      .mockResolvedValueOnce([]);
+    mockedApiGet.mockResolvedValue([]);
+    mockedProcessExpiredItem.mockResolvedValue({
+      id: 901,
+      inventoryItemId: 101,
+      userId: 7,
+      action: 'sold_through',
+      unitsDiscarded: null,
+      financialLoss: null,
+      markdownLevel: null,
+      transactionDate: '2026-06-30T00:00:00.000Z',
+    });
+
+    render(<ExpiredItemsPage token="test-session-value" />);
+
+    expect(await screen.findAllByText('Cold Chain Vaccine')).not.toHaveLength(0);
+    await userEvent.click(screen.getAllByRole('button', { name: /Sold Through/i })[0]);
+
+    await userEvent.click(screen.getByRole('button', { name: /Mark Sold Through/i }));
+
+    expect(
+      await screen.findByText(/marking this item as sold through/i, {}, { timeout: 2000 }),
+    ).toBeInTheDocument();
+
+    await userEvent.click(screen.getByRole('button', { name: /Confirm/i }));
+
+    await waitFor(() => {
+      expect(mockedProcessExpiredItem).toHaveBeenCalledWith(
+        { inventoryItemId: 101, action: 'sold_through' },
+        'test-session-value',
+      );
+    });
+
+    // The payload must not carry unitsDiscarded for sold-through; both the
+    // production Worker and the backend ignore the field only when it is absent
+    // and action is 'sold_through'.
+    const [payload] = mockedProcessExpiredItem.mock.calls[0];
+    expect(payload).not.toHaveProperty('unitsDiscarded');
   });
 
   it('uses one semantic typography system for process dialog detail and quantity text', async () => {

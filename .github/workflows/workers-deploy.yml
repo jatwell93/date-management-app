@@ -2,6 +2,12 @@ name: Deploy Workers API
 
 on:
   workflow_dispatch:
+  pull_request:
+    branches:
+      - main
+    paths:
+      - 'workers/**'
+      - '.github/workflows/workers-deploy.yml'
   push:
     branches:
       - main
@@ -13,11 +19,71 @@ permissions:
   contents: read
 
 concurrency:
-  group: workers-deploy-production
+  group: workers-deploy-${{ github.event_name }}-${{ github.ref }}
   cancel-in-progress: true
 
 jobs:
+  deploy-development:
+    if: github.event_name == 'pull_request' && github.event.pull_request.head.repo.fork == false && github.event.pull_request.user.login != 'dependabot[bot]'
+    runs-on: ubuntu-latest
+    environment:
+      name: preview
+      url: https://date-management-api-dev.date-management-app.workers.dev
+    env:
+      DOPPLER_TOKEN: ${{ secrets.DOPPLER_TOKEN }}
+    defaults:
+      run:
+        working-directory: ./workers
+
+    steps:
+      - uses: actions/checkout@v7
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v6
+        with:
+          node-version: '22'
+          cache: 'npm'
+          cache-dependency-path: workers/package-lock.json
+
+      - name: Install Doppler CLI
+        uses: dopplerhq/cli-action@v4
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Type check
+        run: npm run lint
+
+      - name: Type check (including tests)
+        run: npm run typecheck
+
+      - name: Build worker
+        run: npm run build
+
+      - name: Validate required Doppler secrets
+        run: |
+          required_vars=(
+            CLOUDFLARE_API_TOKEN
+            CLOUDFLARE_ACCOUNT_ID
+          )
+
+          for var_name in "${required_vars[@]}"; do
+            if ! doppler run -- bash -lc "[ -n \"\${$var_name}\" ]"; then
+              echo "::error::Missing required Doppler secret: ${var_name}"
+              exit 1
+            fi
+          done
+
+      - name: Deploy development worker
+        run: doppler run -- npx wrangler deploy --env development --keep-vars
+
   deploy-production:
+    # Deploy to production on push to main or on a manual workflow_dispatch
+    # from main (for rollbacks / emergency patches). Pull requests trigger this
+    # workflow only for the development preview deploy; the production
+    # environment's branch protection rejects non-main refs, so guard the job
+    # explicitly instead of letting it start and fail. Mirrors pages-deploy.yml.
+    if: github.event_name == 'push' || (github.event_name == 'workflow_dispatch' && github.ref == 'refs/heads/main')
     runs-on: ubuntu-latest
     environment:
       name: production

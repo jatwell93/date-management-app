@@ -10,6 +10,7 @@
 import { neon } from '@neondatabase/serverless';
 import type { Env } from '../types/env';
 import { withNeonRetry } from '../utils/db-retry';
+import { getConnectionString } from '../utils/db-connection';
 
 export interface StoreArea {
   id: number;
@@ -111,8 +112,4 @@ export async function deleteStoreArea(
     `;
     return results.length > 0;
   });
-}
-
-function getConnectionString(env: Env): string {
-  return env.HYPERDRIVE?.connectionString || env.NEON_CONNECTION_STRING || '';
 }

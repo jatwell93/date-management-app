@@ -2,6 +2,7 @@ import { createClerkClient, verifyToken } from '@clerk/backend';
 import { neon } from '@neondatabase/serverless';
 import type { Env } from '../types/env';
 import { errorResponse, jsonResponse } from '../utils/worker-response';
+import { getConnectionString } from '../utils/db-connection';
 import {
   deriveUsername,
   ensureTrialSubscription,
@@ -38,10 +39,6 @@ type BootstrapRoleValue = 'admin' | 'manager' | 'team_member';
 
 const DEFAULT_PAGES_PREVIEW_BASE_HOST = 'date-management-frontend.pages.dev';
 const MULTI_LABEL_PUBLIC_SUFFIXES = ['com.au', 'net.au', 'org.au', 'co.uk', 'org.uk'];
-
-function getConnectionString(env: Env): string {
-  return env.HYPERDRIVE?.connectionString || env.NEON_CONNECTION_STRING || '';
-}
 
 function getPagesPreviewBaseHost(env: Env): string {
   const candidates = [env.FRONTEND_URL];

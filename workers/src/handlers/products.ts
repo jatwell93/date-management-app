@@ -10,6 +10,7 @@
 import { neon } from '@neondatabase/serverless';
 import type { Env } from '../types/env';
 import { withNeonRetry } from '../utils/db-retry';
+import { getConnectionString } from '../utils/db-connection';
 
 export interface Product {
   id: number;
@@ -132,8 +133,4 @@ export async function deleteProduct(
     `;
     return (results as any[]).length > 0;
   });
-}
-
-function getConnectionString(env: Env): string {
-  return env.HYPERDRIVE?.connectionString || env.NEON_CONNECTION_STRING || '';
 }
