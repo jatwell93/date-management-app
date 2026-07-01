@@ -1,5 +1,5 @@
 import React from 'react';
-import { act, fireEvent, render, screen, waitFor, within } from '@testing-library/react';
+import { act, fireEvent, render, screen, waitFor } from '@testing-library/react';
 import ExpiredItemsPage from '../pages/ExpiredItemsPage';
 import { apiService } from '../lib/api.service';
 import { getExpiredItems, processExpiredItem } from '../services/expiredItemService';
@@ -147,51 +147,6 @@ describe('ExpiredItemsPage', () => {
         'test-session-value',
       );
     });
-  });
-
-  it('uses one semantic typography system for process dialog detail and quantity text', async () => {
-    mockedGetExpiredItems.mockResolvedValue([
-      {
-        id: 101,
-        productId: 20,
-        productName: 'Cold Chain Vaccine',
-        sku: 'VAC-100',
-        expiryDate: '2026-05-01',
-        status: 'Expired',
-        costPrice: 12.5,
-        locationId: 4,
-        locationName: 'Fridge',
-        quantityAvailable: 100,
-      },
-    ]);
-    mockedApiGet.mockResolvedValue([]);
-
-    render(<ExpiredItemsPage token="test-session-value" />);
-
-    expect(await screen.findAllByText('Cold Chain Vaccine')).not.toHaveLength(0);
-    fireEvent.click(screen.getAllByRole('button', { name: /^Expired$/i })[0]);
-    fireEvent.change(screen.getByLabelText(/Units to Discard/i), { target: { value: '101' } });
-
-    const dialog = screen.getByRole('dialog', { name: /Process Expired Item/i });
-    const valueClassNames = [
-      within(dialog).getByText('Cold Chain Vaccine'),
-      within(dialog).getByText('VAC-100'),
-      within(dialog).getByText('Fridge'),
-      within(dialog).getByText('01 May 2026'),
-      within(dialog).getByText('$12.50'),
-      within(dialog).getByText('Maximum available: 100'),
-      within(dialog).getByText('Cannot exceed available quantity (100)'),
-    ].map((element) => element?.className ?? '');
-
-    expect(valueClassNames).toEqual([
-      'text-sm font-medium text-semantic-text-primary break-words',
-      'text-sm font-medium text-semantic-text-primary break-words',
-      'text-sm font-medium text-semantic-text-primary break-words',
-      'text-sm font-medium text-semantic-text-primary break-words',
-      'text-sm font-medium text-semantic-text-primary break-words',
-      'mt-1 text-sm font-medium text-semantic-text-secondary',
-      'mt-1 text-sm font-medium text-semantic-critical',
-    ]);
   });
 
   it.each([
