@@ -133,21 +133,21 @@ describe('ExpiredItemsPage', () => {
     render(<ExpiredItemsPage token="test-session-value" />);
 
     expect(await screen.findAllByText('Cold Chain Vaccine')).not.toHaveLength(0);
-    userEvent.click(screen.getAllByRole('button', { name: /^Expired$/i })[0]);
+    await userEvent.click(screen.getAllByRole('button', { name: /^Expired$/i })[0]);
 
     const unitsInput = screen.getByLabelText(/Units to Discard/i);
-    userEvent.clear(unitsInput);
+    await userEvent.clear(unitsInput);
     expect(unitsInput).toHaveValue(null);
 
-    userEvent.type(unitsInput, '15');
+    await userEvent.type(unitsInput, '15');
     expect(unitsInput).toHaveValue(15);
 
-    userEvent.click(screen.getByRole('button', { name: /Mark Expired/i }));
+    await userEvent.click(screen.getByRole('button', { name: /Mark Expired/i }));
 
     expect(await screen.findByText(/15 units/i, {}, { timeout: 2000 })).toBeInTheDocument();
     expect(screen.getByText(/\$187\.50/)).toBeInTheDocument();
 
-    userEvent.click(screen.getByRole('button', { name: /Confirm/i }));
+    await userEvent.click(screen.getByRole('button', { name: /Confirm/i }));
 
     await waitFor(() => {
       expect(mockedProcessExpiredItem).toHaveBeenCalledWith(

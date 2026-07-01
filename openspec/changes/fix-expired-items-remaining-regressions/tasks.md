@@ -5,4 +5,5 @@
 - [x] Add or confirm Workers regressions for route registration, multi-unit processing, expired-loss aggregation, and built artifact route presence.
 - [x] Implement frontend string-backed `unitsDiscarded` input with submit-time parsing.
 - [x] Fix any Express or Workers parity defects exposed by the regressions.
+- [x] Address PR 310 Copilot review follow-up on Worker artifact freshness and user-event interaction ordering.
 - [x] Run focused verification commands and record memory for the completed fix.
