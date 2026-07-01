@@ -157,6 +157,62 @@ describe('ExpiredItemsPage', () => {
     });
   });
 
+  it('omits unitsDiscarded from the payload when marking an item as sold through', async () => {
+    mockedGetExpiredItems
+      .mockResolvedValueOnce([
+        {
+          id: 101,
+          productId: 20,
+          productName: 'Cold Chain Vaccine',
+          sku: 'VAC-100',
+          expiryDate: '2026-05-01',
+          status: 'Expired',
+          costPrice: 12.5,
+          locationId: 4,
+          locationName: 'Fridge',
+          quantityAvailable: 100,
+        },
+      ])
+      .mockResolvedValueOnce([]);
+    mockedApiGet.mockResolvedValue([]);
+    mockedProcessExpiredItem.mockResolvedValue({
+      id: 901,
+      inventoryItemId: 101,
+      userId: 7,
+      action: 'sold_through',
+      unitsDiscarded: null,
+      financialLoss: null,
+      markdownLevel: null,
+      transactionDate: '2026-06-30T00:00:00.000Z',
+    });
+
+    render(<ExpiredItemsPage token="test-session-value" />);
+
+    expect(await screen.findAllByText('Cold Chain Vaccine')).not.toHaveLength(0);
+    await userEvent.click(screen.getAllByRole('button', { name: /Sold Through/i })[0]);
+
+    await userEvent.click(screen.getByRole('button', { name: /Mark Sold Through/i }));
+
+    expect(
+      await screen.findByText(/marking this item as sold through/i, {}, { timeout: 2000 }),
+    ).toBeInTheDocument();
+
+    await userEvent.click(screen.getByRole('button', { name: /Confirm/i }));
+
+    await waitFor(() => {
+      expect(mockedProcessExpiredItem).toHaveBeenCalledWith(
+        { inventoryItemId: 101, action: 'sold_through' },
+        'test-session-value',
+      );
+    });
+
+    // The payload must not carry unitsDiscarded for sold-through; both the
+    // production Worker and the backend ignore the field only when it is absent
+    // and action is 'sold_through'.
+    const [payload] = mockedProcessExpiredItem.mock.calls[0];
+    expect(payload).not.toHaveProperty('unitsDiscarded');
+  });
+
   it('uses one semantic typography system for process dialog detail and quantity text', async () => {
     mockedGetExpiredItems.mockResolvedValue([
       {
