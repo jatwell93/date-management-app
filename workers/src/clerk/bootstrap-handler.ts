@@ -1,5 +1,5 @@
 import { createClerkClient, verifyToken } from '@clerk/backend';
-import { createWorkersDatabase } from '../database';
+import { neon } from '@neondatabase/serverless';
 import type { Env } from '../types/env';
 import { errorResponse, jsonResponse } from '../utils/worker-response';
 import {
@@ -38,6 +38,10 @@ type BootstrapRoleValue = 'admin' | 'manager' | 'team_member';
 
 const DEFAULT_PAGES_PREVIEW_BASE_HOST = 'date-management-frontend.pages.dev';
 const MULTI_LABEL_PUBLIC_SUFFIXES = ['com.au', 'net.au', 'org.au', 'co.uk', 'org.uk'];
+
+function getConnectionString(env: Env): string {
+  return env.HYPERDRIVE?.connectionString || env.NEON_CONNECTION_STRING || '';
+}
 
 function getPagesPreviewBaseHost(env: Env): string {
   const candidates = [env.FRONTEND_URL];
@@ -250,23 +254,11 @@ export async function handleOrganizationBootstrap(
     `${email.split('@')[0]}-${Date.now()}`.toLowerCase().replace(/[^a-z0-9-]/g, '-'),
   );
 
-  const db = createWorkersDatabase(env);
-  const existingOrg = await db.sql`
-    SELECT id
-    FROM organizations
-    WHERE clerk_organization_id = ${finalClerkOrgId}
-    LIMIT 1
-  `;
-  const isNewOrg = existingOrg.length === 0;
-  const organizationId = isNewOrg
-    ? await findOrCreateOrganization(
-      db.sql,
-      { id: finalClerkOrgId, name: finalOrgName, slug: finalOrgSlug },
-      email,
-    )
-    : String(existingOrg[0].id);
+  const sql = neon(getConnectionString(env));
 
-  const existingUser = await db.sql`
+  // Returning-user happy path: a single lookup is enough. The user row already
+  // carries its organization and role, so we never need to resolve the org here.
+  const existingUser = await sql`
     SELECT id,
            organization_id as "organizationId",
            role
@@ -291,7 +283,23 @@ export async function handleOrganizationBootstrap(
     );
   }
 
-  const activeAdmin = await db.sql`
+  // New user: resolve (and if needed create) the organization before linking.
+  const existingOrg = await sql`
+    SELECT id
+    FROM organizations
+    WHERE clerk_organization_id = ${finalClerkOrgId}
+    LIMIT 1
+  `;
+  const isNewOrg = existingOrg.length === 0;
+  const organizationId = isNewOrg
+    ? await findOrCreateOrganization(
+      sql,
+      { id: finalClerkOrgId, name: finalOrgName, slug: finalOrgSlug },
+      email,
+    )
+    : String(existingOrg[0].id);
+
+  const activeAdmin = await sql`
     SELECT id
     FROM users
     WHERE organization_id = ${organizationId}
@@ -305,7 +313,7 @@ export async function handleOrganizationBootstrap(
     ? 'admin'
     : normalizeBootstrapRole(body.clerkMembershipRole ?? authResult.organizationRole);
 
-  await upsertClerkUser(db.sql, {
+  await upsertClerkUser(sql, {
     clerkUserId: authResult.clerkUserId,
     organizationId,
     role: assignedRole,
@@ -313,9 +321,9 @@ export async function handleOrganizationBootstrap(
     username,
   });
 
-  await ensureTrialSubscription(db.sql, organizationId);
+  await ensureTrialSubscription(sql, organizationId);
 
-  const bootstrappedUser = await db.sql`
+  const bootstrappedUser = await sql`
     SELECT id,
            role
     FROM users
