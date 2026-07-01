@@ -88,6 +88,10 @@ function formatExpiry(raw: string): string {
 }
 
 const SKELETON_ROWS = Array.from({ length: 5 }, (_, i) => i);
+const PROCESS_DIALOG_LABEL_CLASS = 'text-xs font-medium text-semantic-text-secondary';
+const PROCESS_DIALOG_VALUE_CLASS = 'text-sm font-medium text-semantic-text-primary break-words';
+const PROCESS_DIALOG_HELP_CLASS = 'mt-1 text-sm font-medium text-semantic-text-secondary';
+const PROCESS_DIALOG_ERROR_CLASS = 'mt-1 text-sm font-medium text-semantic-critical';
 
 const ExpiredItemsPage: React.FC<ExpiredItemsPageProps> = ({ token }) => {
   const getFreshApiToken = useFreshApiToken(token);
@@ -757,24 +761,28 @@ const ExpiredItemsPage: React.FC<ExpiredItemsPageProps> = ({ token }) => {
             </DialogHeader>
             <dl className="mb-4 grid grid-cols-2 gap-x-4 gap-y-2 text-sm">
               <div className="col-span-2">
-                <dt className="text-muted-foreground">Product</dt>
-                <dd className="font-medium break-words">{selectedItem.productName}</dd>
+                <dt className={PROCESS_DIALOG_LABEL_CLASS}>Product</dt>
+                <dd className={PROCESS_DIALOG_VALUE_CLASS}>{selectedItem.productName}</dd>
               </div>
               <div>
-                <dt className="text-muted-foreground">SKU</dt>
-                <dd className="font-mono">{selectedItem.sku}</dd>
+                <dt className={PROCESS_DIALOG_LABEL_CLASS}>SKU</dt>
+                <dd className={PROCESS_DIALOG_VALUE_CLASS}>{selectedItem.sku}</dd>
               </div>
               <div>
-                <dt className="text-muted-foreground">Location</dt>
-                <dd>{selectedItem.locationName}</dd>
+                <dt className={PROCESS_DIALOG_LABEL_CLASS}>Location</dt>
+                <dd className={PROCESS_DIALOG_VALUE_CLASS}>{selectedItem.locationName}</dd>
               </div>
               <div>
-                <dt className="text-muted-foreground">Expiry Date</dt>
-                <dd className="tabular-nums">{formatExpiry(selectedItem.expiryDate)}</dd>
+                <dt className={PROCESS_DIALOG_LABEL_CLASS}>Expiry Date</dt>
+                <dd className={PROCESS_DIALOG_VALUE_CLASS}>
+                  {formatExpiry(selectedItem.expiryDate)}
+                </dd>
               </div>
               <div>
-                <dt className="text-muted-foreground">Cost Price</dt>
-                <dd className="tabular-nums">{currencyFormatter.format(selectedItem.costPrice)}</dd>
+                <dt className={PROCESS_DIALOG_LABEL_CLASS}>Cost Price</dt>
+                <dd className={PROCESS_DIALOG_VALUE_CLASS}>
+                  {currencyFormatter.format(selectedItem.costPrice)}
+                </dd>
               </div>
             </dl>
 
@@ -794,11 +802,11 @@ const ExpiredItemsPage: React.FC<ExpiredItemsPageProps> = ({ token }) => {
                   aria-describedby="units-hint units-error"
                   aria-invalid={!!unitsDiscardedError}
                 />
-                <p id="units-hint" className="mt-1 text-xs text-muted-foreground">
+                <p id="units-hint" className={PROCESS_DIALOG_HELP_CLASS}>
                   Maximum available: {selectedItem.quantityAvailable}
                 </p>
                 {unitsDiscardedError && (
-                  <p id="units-error" className="mt-1 text-xs text-semantic-critical" role="alert">
+                  <p id="units-error" className={PROCESS_DIALOG_ERROR_CLASS} role="alert">
                     {unitsDiscardedError}
                   </p>
                 )}
