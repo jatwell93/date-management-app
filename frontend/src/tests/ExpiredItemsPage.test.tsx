@@ -234,7 +234,10 @@ describe('ExpiredItemsPage', () => {
 
     expect(await screen.findAllByText('Cold Chain Vaccine')).not.toHaveLength(0);
     fireEvent.click(screen.getAllByRole('button', { name: /^Expired$/i })[0]);
-    fireEvent.change(screen.getByLabelText(/Units to Discard/i), { target: { value: '101' } });
+    // '0' is invalid (must be >= 1), so the error element renders and we can assert
+    // its typography class. The quantity is intentionally NOT capped at the
+    // scanned count anymore (issue #268), so a value above quantityAvailable is valid.
+    fireEvent.change(screen.getByLabelText(/Units to Discard/i), { target: { value: '0' } });
 
     const dialog = screen.getByRole('dialog', { name: /Process Expired Item/i });
     const primaryValueElements = [
@@ -253,13 +256,10 @@ describe('ExpiredItemsPage', () => {
       );
     });
 
-    expect(within(dialog).getByText('Maximum available: 100')).toHaveClass(
-      'mt-1',
-      'text-sm',
-      'font-medium',
-      'text-semantic-text-secondary',
-    );
-    expect(within(dialog).getByText('Cannot exceed available quantity (100)')).toHaveClass(
+    expect(
+      within(dialog).getByText('Enter the total number of expired units to write off.'),
+    ).toHaveClass('mt-1', 'text-sm', 'font-medium', 'text-semantic-text-secondary');
+    expect(within(dialog).getByText('Must be at least 1')).toHaveClass(
       'mt-1',
       'text-sm',
       'font-medium',
@@ -267,10 +267,59 @@ describe('ExpiredItemsPage', () => {
     );
   });
 
+  it('allows a write-off quantity greater than the scanned count (issue #268)', async () => {
+    mockedGetExpiredItems
+      .mockResolvedValueOnce([
+        {
+          id: 101,
+          productId: 20,
+          productName: 'Cold Chain Vaccine',
+          sku: 'VAC-100',
+          expiryDate: '2026-05-01',
+          status: 'Expired',
+          costPrice: 10,
+          locationId: 4,
+          locationName: 'Fridge',
+          quantityAvailable: 1,
+        },
+      ])
+      .mockResolvedValueOnce([]);
+    mockedApiGet.mockResolvedValue([]);
+    mockedProcessExpiredItem.mockResolvedValue({
+      id: 902,
+      inventoryItemId: 101,
+      userId: 7,
+      action: 'expired',
+      unitsDiscarded: 15,
+      financialLoss: 150,
+      markdownLevel: null,
+      transactionDate: '2026-06-30T00:00:00.000Z',
+    });
+
+    render(<ExpiredItemsPage token="test-session-value" />);
+
+    expect(await screen.findAllByText('Cold Chain Vaccine')).not.toHaveLength(0);
+    fireEvent.click(screen.getAllByRole('button', { name: /^Expired$/i })[0]);
+
+    const unitsInput = screen.getByLabelText(/Units to Discard/i);
+    fireEvent.change(unitsInput, { target: { value: '15' } });
+    // No validation error even though quantityAvailable is 1.
+    expect(screen.queryByText(/Must be at least 1/i)).not.toBeInTheDocument();
+
+    fireEvent.click(screen.getByRole('button', { name: /Mark Expired/i }));
+    fireEvent.click(await screen.findByRole('button', { name: /Confirm/i }));
+
+    await waitFor(() => {
+      expect(mockedProcessExpiredItem).toHaveBeenCalledWith(
+        { inventoryItemId: 101, action: 'expired', unitsDiscarded: 15 },
+        'test-session-value',
+      );
+    });
+  });
+
   it.each([
     ['0', /Must be at least 1/i],
     ['1.5', /Enter a whole number/i],
-    ['101', /Cannot exceed available quantity \(100\)/i],
   ])('rejects invalid write-off quantity %s before confirmation', async (quantity, message) => {
     mockedGetExpiredItems.mockResolvedValue([
       {

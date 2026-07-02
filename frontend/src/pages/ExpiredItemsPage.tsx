@@ -93,10 +93,15 @@ const PROCESS_DIALOG_VALUE_CLASS = 'text-sm font-medium text-semantic-text-prima
 const PROCESS_DIALOG_HELP_CLASS = 'mt-1 text-sm font-medium text-semantic-text-secondary';
 const PROCESS_DIALOG_ERROR_CLASS = 'mt-1 text-sm font-medium text-semantic-critical';
 
-function parseUnitsDiscardedInput(
-  rawUnitsDiscarded: string,
-  quantityAvailable: number,
-): { value?: number; error: string | null } {
+// The number entered here is the physically-counted expired quantity, recorded
+// at write-off time. It is intentionally NOT capped by `quantityAvailable`: the
+// scan flow only logs a SKU + expiry marker (not real stock-on-hand), so the true
+// expired count is only known now. See issue #268. We still require a whole number
+// >= 1; the write-off ledger is the source of truth for the recorded loss.
+function parseUnitsDiscardedInput(rawUnitsDiscarded: string): {
+  value?: number;
+  error: string | null;
+} {
   const trimmed = rawUnitsDiscarded.trim();
   if (trimmed === '') {
     return { error: 'Must be at least 1' };
@@ -109,9 +114,6 @@ function parseUnitsDiscardedInput(
   const parsed = Number(trimmed);
   if (parsed < 1) {
     return { error: 'Must be at least 1' };
-  }
-  if (parsed > quantityAvailable) {
-    return { error: `Cannot exceed available quantity (${quantityAvailable})` };
   }
 
   return { value: parsed, error: null };
@@ -196,13 +198,9 @@ const ExpiredItemsPage: React.FC<ExpiredItemsPageProps> = ({ token }) => {
     (e: React.ChangeEvent<HTMLInputElement>) => {
       const rawUnitsDiscarded = e.target.value;
       setUnitsDiscarded(rawUnitsDiscarded);
-      setUnitsDiscardedError(
-        selectedItem
-          ? parseUnitsDiscardedInput(rawUnitsDiscarded, selectedItem.quantityAvailable).error
-          : null,
-      );
+      setUnitsDiscardedError(parseUnitsDiscardedInput(rawUnitsDiscarded).error);
     },
-    [selectedItem],
+    [],
   );
 
   const showToast = useCallback((message: string, type: 'success' | 'error') => {
@@ -225,10 +223,7 @@ const ExpiredItemsPage: React.FC<ExpiredItemsPageProps> = ({ token }) => {
     setUnitsDiscardedError(null);
 
     if (action === 'expired') {
-      const validation = parseUnitsDiscardedInput(
-        unitsDiscarded,
-        selectedItem.quantityAvailable,
-      );
+      const validation = parseUnitsDiscardedInput(unitsDiscarded);
       if (validation.error) {
         setUnitsDiscardedError(validation.error);
         return;
@@ -246,9 +241,7 @@ const ExpiredItemsPage: React.FC<ExpiredItemsPageProps> = ({ token }) => {
 
     try {
       const processUnitsDiscarded =
-        action === 'expired'
-          ? parseUnitsDiscardedInput(unitsDiscarded, selectedItem.quantityAvailable).value
-          : undefined;
+        action === 'expired' ? parseUnitsDiscardedInput(unitsDiscarded).value : undefined;
       if (action === 'expired' && processUnitsDiscarded === undefined) {
         setUnitsDiscardedError('Must be at least 1');
         setIsProcessing(false);
@@ -811,14 +804,13 @@ const ExpiredItemsPage: React.FC<ExpiredItemsPageProps> = ({ token }) => {
                   type="number"
                   min="1"
                   step="1"
-                  max={selectedItem.quantityAvailable}
                   value={unitsDiscarded}
                   onChange={handleUnitsDiscardedChange}
-                  aria-describedby="units-hint units-error"
+                  aria-describedby={unitsDiscardedError ? 'units-hint units-error' : 'units-hint'}
                   aria-invalid={!!unitsDiscardedError}
                 />
                 <p id="units-hint" className={PROCESS_DIALOG_HELP_CLASS}>
-                  Maximum available: {selectedItem.quantityAvailable}
+                  Enter the total number of expired units to write off.
                 </p>
                 {unitsDiscardedError && (
                   <p id="units-error" className={PROCESS_DIALOG_ERROR_CLASS} role="alert">
@@ -856,10 +848,8 @@ const ExpiredItemsPage: React.FC<ExpiredItemsPageProps> = ({ token }) => {
                   <AlertDialogDescription>
                     {action === 'expired'
                       ? `Confirm writing off ${unitsDiscarded} units for ${currencyFormatter.format(
-                          (parseUnitsDiscardedInput(
-                            unitsDiscarded,
-                            selectedItem.quantityAvailable,
-                          ).value ?? 0) * selectedItem.costPrice,
+                          (parseUnitsDiscardedInput(unitsDiscarded).value ?? 0) *
+                            selectedItem.costPrice,
                         )} loss. This action cannot be undone.`
                       : 'Confirm marking this item as sold through. This action cannot be undone.'}
                   </AlertDialogDescription>

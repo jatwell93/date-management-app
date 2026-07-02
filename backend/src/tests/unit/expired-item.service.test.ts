@@ -67,7 +67,7 @@ describe('ExpiredItemService', () => {
   describe('processExpiredItem', () => {
     it('throws when inventory item does not exist', async () => {
       mockDb.prepare.mockImplementation((sql: string) => {
-        if (sql.includes('SELECT ii.*, p.cost_price as costPrice')) {
+        if (sql.includes('as costPrice')) {
           return { get: vi.fn().mockReturnValue(undefined) };
         }
         throw new Error(`Unexpected SQL: ${sql}`);
@@ -82,7 +82,7 @@ describe('ExpiredItemService', () => {
 
     it('throws when expired action is missing unitsDiscarded', async () => {
       mockDb.prepare.mockImplementation((sql: string) => {
-        if (sql.includes('SELECT ii.*, p.cost_price as costPrice')) {
+        if (sql.includes('as costPrice')) {
           return {
             get: vi.fn().mockReturnValue({ id: 1, product_id: 1, costPrice: 5 }),
           };
@@ -99,7 +99,7 @@ describe('ExpiredItemService', () => {
 
     it('throws when expired action has non-positive unitsDiscarded', async () => {
       mockDb.prepare.mockImplementation((sql: string) => {
-        if (sql.includes('SELECT ii.*, p.cost_price as costPrice')) {
+        if (sql.includes('as costPrice')) {
           return {
             get: vi.fn().mockReturnValue({ id: 1, product_id: 1, costPrice: 5 }),
           };
@@ -123,7 +123,7 @@ describe('ExpiredItemService', () => {
       const updateRun = vi.fn();
 
       mockDb.prepare.mockImplementation((sql: string) => {
-        if (sql.includes('SELECT ii.*, p.cost_price as costPrice')) {
+        if (sql.includes('as costPrice')) {
           return { get: selectGet };
         }
         if (sql.includes('INSERT INTO expired_item_transactions')) {
@@ -164,7 +164,7 @@ describe('ExpiredItemService', () => {
       const updateRun = vi.fn();
 
       mockDb.prepare.mockImplementation((sql: string) => {
-        if (sql.includes('SELECT ii.*, p.cost_price as costPrice')) {
+        if (sql.includes('as costPrice')) {
           return { get: selectGet };
         }
         if (
@@ -217,7 +217,7 @@ describe('ExpiredItemService', () => {
       const updateRun = vi.fn();
 
       mockDb.prepare.mockImplementation((sql: string) => {
-        if (sql.includes('SELECT ii.*, p.cost_price as costPrice')) {
+        if (sql.includes('as costPrice')) {
           return { get: selectRepresentative };
         }
         if (
@@ -259,7 +259,10 @@ describe('ExpiredItemService', () => {
       expect(updateRun).toHaveBeenCalledWith(SQLITE_PROCESSED_STATUS, 5, 6, 7);
     });
 
-    it('rejects expired write-offs above the matching available quantity', async () => {
+    it('records the full entered quantity when it exceeds the matching rows (over-count write-off)', async () => {
+      // The scan flow only logs SKU + expiry markers, so a pool can represent more
+      // physical units than it has rows. Entering 3 when 2 marker rows match must
+      // record the full 3 units in the ledger and dispose the 2 rows, not reject. #268
       const selectRepresentative = vi.fn().mockReturnValue({
         id: 5,
         product_id: 10,
@@ -268,9 +271,55 @@ describe('ExpiredItemService', () => {
         expiry_date: '2026-04-01',
       });
       const selectMatchingRows = vi.fn().mockReturnValue([{ id: 5 }, { id: 6 }]);
+      const insertRun = vi.fn().mockReturnValue({ lastInsertRowid: 9 });
+      const auditRun = vi.fn();
+      const updateRun = vi.fn();
 
       mockDb.prepare.mockImplementation((sql: string) => {
-        if (sql.includes('SELECT ii.*, p.cost_price as costPrice')) {
+        if (sql.includes('as costPrice')) {
+          return { get: selectRepresentative };
+        }
+        if (
+          sql.includes('WHERE ii.product_id = ?') &&
+          sql.includes('ORDER BY ii.expiry_date ASC')
+        ) {
+          return { all: selectMatchingRows };
+        }
+        if (sql.includes('INSERT INTO expired_item_transactions')) {
+          return { run: insertRun };
+        }
+        if (sql.includes('INSERT INTO audit_log')) {
+          return { run: auditRun };
+        }
+        if (sql.includes('UPDATE inventory_items SET status = ?') && sql.includes('WHERE id IN')) {
+          return { run: updateRun };
+        }
+        throw new Error(`Unexpected SQL: ${sql}`);
+      });
+
+      const result = await service.processExpiredItem(5, 11, 'expired', 3);
+
+      // Ledger records the entered quantity (3) and its loss (3 * cost 4 = 12),
+      // independent of the 2 marker rows actually present.
+      expect(result.unitsDiscarded).toBe(3);
+      expect(result.financialLoss).toBe(12);
+      expect(insertRun).toHaveBeenCalledWith(5, 11, 'expired', 3, 12, null);
+      // Only the two real marker rows are dispositioned.
+      expect(updateRun).toHaveBeenCalledWith(SQLITE_PROCESSED_STATUS, 5, 6);
+    });
+
+    it('rejects an expired write-off when no matching rows remain in the worklist', async () => {
+      const selectRepresentative = vi.fn().mockReturnValue({
+        id: 5,
+        product_id: 10,
+        location_id: 2,
+        costPrice: 4,
+        expiry_date: '2026-04-01',
+      });
+      const selectMatchingRows = vi.fn().mockReturnValue([]);
+
+      mockDb.prepare.mockImplementation((sql: string) => {
+        if (sql.includes('as costPrice')) {
           return { get: selectRepresentative };
         }
         if (
@@ -283,7 +332,7 @@ describe('ExpiredItemService', () => {
       });
 
       await expect(service.processExpiredItem(5, 11, 'expired', 3)).rejects.toThrow(
-        'Cannot discard 3 units; only 2 expired units are available',
+        'Cannot discard 3 units; no expired units are available to process',
       );
     });
 
@@ -300,7 +349,7 @@ describe('ExpiredItemService', () => {
       const insertRun = vi.fn().mockReturnValue({ lastInsertRowid: 55 });
 
       mockDb.prepare.mockImplementation((sql: string) => {
-        if (sql.includes('SELECT ii.*, p.cost_price as costPrice')) {
+        if (sql.includes('as costPrice')) {
           return { get: selectGet };
         }
         if (sql.includes('INSERT INTO expired_item_transactions')) {

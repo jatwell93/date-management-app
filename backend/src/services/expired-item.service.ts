@@ -124,7 +124,7 @@ export class ExpiredItemService {
       const transaction = transactionCapableDb.transaction(() => {
         // Get the inventory item to validate and get cost price
         const itemStmt = db.prepare(`
-          SELECT ii.*, p.cost_price as costPrice
+          SELECT ii.*, COALESCE(p.cost_price, 0) as costPrice
           FROM inventory_items ii
           JOIN products p ON ii.product_id = p.id
           WHERE ii.id = ?
@@ -165,7 +165,9 @@ export class ExpiredItemService {
             JOIN products p ON ii.product_id = p.id
             WHERE ii.product_id = ?
               AND ii.location_id = ?
-              AND p.cost_price = ?
+              -- COALESCE both sides so a legacy NULL cost_price still matches the
+              -- worklist pool (which COALESCEs it to 0). Mirrors the Workers backend. #268
+              AND COALESCE(p.cost_price, 0) = ?
               AND (ii.expiry_date < date('now') OR ii.status IN (${statusPlaceholders}))
               AND ii.status NOT IN (${dispositionedPlaceholders})
             ORDER BY ii.expiry_date ASC, ii.id ASC
@@ -180,9 +182,16 @@ export class ExpiredItemService {
             unitsDiscarded,
           ) as Array<{ id: number }>;
 
-          if (matchingRows.length < unitsDiscarded) {
+          // The scan flow logs only a SKU + expiry marker, not real stock-on-hand,
+          // so a worklist pool can represent more physical units than it has rows.
+          // The user reconciles expired stock in the back office and enters the true
+          // count here, which may exceed the row count. Dispose whatever matching
+          // rows exist (clearing the pool from the worklist) and let the ledger
+          // record the full entered quantity as the loss. Only reject when the pool
+          // is already empty (nothing to process). Mirrors the Workers backend. #268
+          if (matchingRows.length === 0) {
             throw new Error(
-              `Cannot discard ${unitsDiscarded} units; only ${matchingRows.length} expired units are available`,
+              `Cannot discard ${unitsDiscarded} units; no expired units are available to process`,
             );
           }
 
