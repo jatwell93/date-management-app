@@ -11,6 +11,7 @@ import { neon, NeonQueryFunction } from '@neondatabase/serverless';
 import type { Env } from './types/env';
 import {
   DISPOSITIONED_STATUSES,
+  EXPIRED_STATUS,
   EXPIRED_WORKLIST_STATUSES,
   SQLITE_PROCESSED_STATUS,
   WORKERS_SOLD_THROUGH_STATUS,
@@ -851,6 +852,13 @@ export function createWorkersDatabase(env: Env): Database {
     // value the stock CURRENTLY sitting expired, mirroring the SQLite backend's
     // report.repository. Kept distinct from the write-off ledger reports below so
     // production (Workers) and dev (backend) stay in parity.
+    //
+    // "Currently expired" is defined by expiry_date, not a literal 'Expired' status:
+    // the Workers scan path stores items as 'Normal' and never recomputes status,
+    // so filtering on status = 'Expired' returned nothing on Neon (the SQLite
+    // backend does set that status, hence the parity gap). We count anything past
+    // its expiry date (or explicitly flagged 'Expired') that hasn't been
+    // dispositioned — matching how the worklist itself decides an item is expired.
     async getLossBySkuReport(organizationId: string): Promise<LossBySkuReportItem[]> {
       return (await sql`
         SELECT
@@ -860,7 +868,8 @@ export function createWorkersDatabase(env: Env): Database {
           COUNT(*)::int as count
         FROM inventory_items ii
         JOIN products p ON ii.product_id = p.id
-        WHERE ii.status = 'Expired'
+        WHERE (ii.expiry_date < CURRENT_DATE OR ii.status = ${EXPIRED_STATUS})
+          AND ii.status <> ALL(${[...DISPOSITIONED_STATUSES]})
           AND ii.organization_id = ${organizationId}
         GROUP BY p.sku, p.name
         ORDER BY "totalLoss" DESC
@@ -877,7 +886,9 @@ export function createWorkersDatabase(env: Env): Database {
         FROM inventory_items ii
         JOIN products p ON ii.product_id = p.id
         JOIN store_areas sa ON ii.location_id = sa.id
-        WHERE ii.status = 'Expired' AND sa.sub_department IS NOT NULL
+        WHERE (ii.expiry_date < CURRENT_DATE OR ii.status = ${EXPIRED_STATUS})
+          AND sa.sub_department IS NOT NULL
+          AND ii.status <> ALL(${[...DISPOSITIONED_STATUSES]})
           AND ii.organization_id = ${organizationId}
         GROUP BY sa.sub_department
         ORDER BY "totalLoss" DESC
@@ -998,14 +1009,22 @@ export function createWorkersDatabase(env: Env): Database {
       // 'Sold Through' would mislabel waste as a sale for any status-based consumer.
       const dispositionStatus =
         action === 'expired' ? SQLITE_PROCESSED_STATUS : WORKERS_SOLD_THROUGH_STATUS;
-      await sql`
-        UPDATE inventory_items
-        SET status = ${dispositionStatus}, updated_at = NOW()
-        WHERE id = ANY(${processedItemIds})
-          AND organization_id = ${organizationId}
-      `;
 
+      // Disposition (status update) and ledger insert must be atomic: Neon's HTTP
+      // driver autocommits each `sql` tag separately, so running them as two
+      // statements can tear — the UPDATE commits, the INSERT fails, and the item
+      // is silently removed from the worklist with no matching loss recorded.
+      // A single data-modifying CTE runs both in one implicit transaction, so any
+      // INSERT failure rolls the status change back with it. Postgres always runs
+      // data-modifying WITH clauses to completion even when unreferenced. #268
       const rows = await sql`
+        WITH disposed AS (
+          UPDATE inventory_items
+          SET status = ${dispositionStatus}, updated_at = NOW()
+          WHERE id = ANY(${processedItemIds})
+            AND organization_id = ${organizationId}
+          RETURNING id
+        )
         INSERT INTO expired_item_transactions
           (organization_id, inventory_item_id, user_id, action, units_discarded, financial_loss, markdown_level, transaction_date, created_at, updated_at)
         VALUES

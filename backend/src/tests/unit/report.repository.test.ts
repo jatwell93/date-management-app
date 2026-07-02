@@ -187,4 +187,26 @@ describe('ReportRepository', () => {
     expect(statuses).not.toContain('Processed');
     expect(statuses).not.toContain('Sold Through');
   });
+
+  it('values past-expiry stock by date (not just Expired status) for loss-by-sku/department', () => {
+    const repository = new ReportRepository(db, 'test-org');
+
+    // Counted: an explicitly-'Expired' unit and a past-expiry 'Normal' unit. The
+    // 'Normal' case is the one that previously went uncounted — the Workers scan
+    // path stores items as 'Normal' and never recomputes status, so a status-only
+    // filter left the loss graphs empty on Neon. See #268.
+    insertInventoryItem(sqliteDate('-1 day'), 'Expired');
+    insertInventoryItem(sqliteDate('-1 day'), 'Normal');
+    // Excluded: already dispositioned, and a future-dated (not yet expired) unit.
+    insertInventoryItem(sqliteDate('-1 day'), 'Processed');
+    insertInventoryItem(sqliteDate('+5 days'), 'Normal');
+
+    // Two units of SKU1 @ cost 10 in the Dairy sub-department.
+    expect(repository.getLossBySkuReport()).toEqual([
+      { sku: 'SKU1', productName: 'Test product', totalLoss: 20, count: 2 },
+    ]);
+    expect(repository.getLossByDepartmentReport()).toEqual([
+      { department: 'Dairy', totalLoss: 20, count: 2 },
+    ]);
+  });
 });

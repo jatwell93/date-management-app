@@ -314,6 +314,7 @@ model ExpiredItemTransaction {
   action          String
   unitsDiscarded  Int?          @map("units_discarded")
   financialLoss   Float?        @map("financial_loss")
+  markdownLevel   Int?          @map("markdown_level")
   transactionDate DateTime      @default(now()) @map("transaction_date")
   createdAt       DateTime      @default(now()) @map("created_at")
   updatedAt       DateTime      @updatedAt @map("updated_at")

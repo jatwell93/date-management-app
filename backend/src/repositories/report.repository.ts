@@ -8,7 +8,7 @@
  */
 
 import Database from 'better-sqlite3';
-import { DISPOSITIONED_STATUSES } from '../../../shared/domain/disposition';
+import { DISPOSITIONED_STATUSES, EXPIRED_STATUS } from '../../../shared/domain/disposition';
 import { MARKDOWN_WINDOWS } from '../../../shared/domain/markdown';
 
 const dispositionedStatusPlaceholders = DISPOSITIONED_STATUSES.map(() => '?').join(', ');
@@ -361,20 +361,30 @@ export class ReportRepository {
    * Get loss by SKU report (top 10 expired items)
    */
   getLossBySkuReport(): LossBySkuReportItem[] {
+    // "Currently expired" is defined by expiry_date (or an explicit 'Expired'
+    // status), not solely a literal status, so the Workers backend — which stores
+    // scanned items as 'Normal' and never recomputes status — reports the same
+    // stock. Dispositioned items are excluded so written-off stock isn't counted.
     const stmt = this.db.prepare(`
-      SELECT 
+      SELECT
         p.sku as sku,
         p.name as productName,
         SUM(p.cost_price) as totalLoss,
         COUNT(*) as count
       FROM inventory_items ii
       JOIN products p ON ii.product_id = p.id
-      WHERE ii.status = 'Expired' AND ii.organization_id = ?
+      WHERE (ii.expiry_date < date('now') OR ii.status = ?)
+        AND ii.status NOT IN (${dispositionedStatusPlaceholders})
+        AND ii.organization_id = ?
       GROUP BY p.sku, p.name
       ORDER BY totalLoss DESC
       LIMIT 10
     `);
-    return stmt.all(this.organizationId) as LossBySkuReportItem[];
+    return stmt.all(
+      EXPIRED_STATUS,
+      ...DISPOSITIONED_STATUSES,
+      this.organizationId,
+    ) as LossBySkuReportItem[];
   }
 
   /**
@@ -382,19 +392,25 @@ export class ReportRepository {
    */
   getLossByDepartmentReport(): LossByDepartmentReportItem[] {
     const stmt = this.db.prepare(`
-      SELECT 
+      SELECT
         sa.sub_department as department,
         SUM(p.cost_price) as totalLoss,
         COUNT(*) as count
       FROM inventory_items ii
       JOIN products p ON ii.product_id = p.id
       JOIN store_areas sa ON ii.location_id = sa.id
-      WHERE ii.status = 'Expired' AND sa.sub_department IS NOT NULL
+      WHERE (ii.expiry_date < date('now') OR ii.status = ?)
+        AND sa.sub_department IS NOT NULL
+        AND ii.status NOT IN (${dispositionedStatusPlaceholders})
         AND ii.organization_id = ?
       GROUP BY sa.sub_department
       ORDER BY totalLoss DESC
     `);
-    return stmt.all(this.organizationId) as LossByDepartmentReportItem[];
+    return stmt.all(
+      EXPIRED_STATUS,
+      ...DISPOSITIONED_STATUSES,
+      this.organizationId,
+    ) as LossByDepartmentReportItem[];
   }
 
   /**
