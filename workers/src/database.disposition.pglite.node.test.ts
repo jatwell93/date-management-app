@@ -359,9 +359,12 @@ describe('Workers disposition markdown capture (real SQL)', () => {
     ]);
   });
 
-  it('values currently-expired stock for the standalone loss-by-sku/department reports', async () => {
-    // The standalone /reports/loss-by-* endpoints value stock CURRENTLY marked
-    // Expired (cost_price), not the write-off ledger — matching the SQLite backend.
+  it('values currently-expired stock (by expiry date, not status) for the loss-by-sku/department reports', async () => {
+    // The standalone /reports/loss-by-* endpoints value stock CURRENTLY sitting
+    // expired (cost_price), not the write-off ledger. "Expired" is defined by
+    // expiry_date, because the Workers scan path stores items as 'Normal' and
+    // never recomputes status — filtering on a literal 'Expired' status returned
+    // nothing on Neon and left the graphs empty. See #268.
     const db = createWorkersDatabase({ NEON_CONNECTION_STRING: 'postgres://test' } as Env);
     const productRows = await sql`
       INSERT INTO products (organization_id, barcode, sku, name, cost_price)
@@ -373,18 +376,22 @@ describe('Workers disposition markdown capture (real SQL)', () => {
       VALUES (${ORG}, ${'Aisle'}, ${'Bakery'})
       RETURNING id`;
     const locationId = Number(areaRows[0].id);
-    // Two currently-Expired units (counted) + one already-processed unit (ignored).
+    // Counted: two past-expiry 'Expired' + one past-expiry 'Normal' (the scan-path
+    // case that was previously invisible). Ignored: an already-processed unit and a
+    // future-dated 'Normal' unit that has not expired yet.
     await sql`
       INSERT INTO inventory_items (organization_id, product_id, location_id, expiry_date, status)
       VALUES (${ORG}, ${productId}, ${locationId}, (CURRENT_DATE - INTERVAL '1 day')::date, ${'Expired'}),
              (${ORG}, ${productId}, ${locationId}, (CURRENT_DATE - INTERVAL '1 day')::date, ${'Expired'}),
-             (${ORG}, ${productId}, ${locationId}, (CURRENT_DATE - INTERVAL '1 day')::date, ${'Processed'})`;
+             (${ORG}, ${productId}, ${locationId}, (CURRENT_DATE - INTERVAL '1 day')::date, ${'Normal'}),
+             (${ORG}, ${productId}, ${locationId}, (CURRENT_DATE - INTERVAL '1 day')::date, ${'Processed'}),
+             (${ORG}, ${productId}, ${locationId}, (CURRENT_DATE + INTERVAL '5 days')::date, ${'Normal'})`;
 
     expect(await db.getLossBySkuReport(ORG)).toEqual([
-      expect.objectContaining({ sku: 'CUR', productName: 'Current Item', totalLoss: 12, count: 2 }),
+      expect.objectContaining({ sku: 'CUR', productName: 'Current Item', totalLoss: 18, count: 3 }),
     ]);
     expect(await db.getLossByDepartmentReport(ORG)).toEqual([
-      expect.objectContaining({ department: 'Bakery', totalLoss: 12, count: 2 }),
+      expect.objectContaining({ department: 'Bakery', totalLoss: 18, count: 3 }),
     ]);
   });
 
