@@ -209,4 +209,49 @@ describe('ReportRepository', () => {
       { department: 'Dairy', totalLoss: 20, count: 2 },
     ]);
   });
+
+  it('caps loss-by-sku/department at the top 5 sources of loss, ordered by value', () => {
+    const repository = new ReportRepository(db, 'test-org');
+    const yesterday = sqliteDate('-1 day');
+
+    // Six distinct SKUs, each in its own sub-department, with ascending cost so
+    // the ranking is unambiguous. The cheapest (SKU_1 / Dept_1) must be dropped
+    // once we cap at five.
+    for (let i = 1; i <= 6; i++) {
+      db.prepare('INSERT INTO products (id, name, sku, cost_price) VALUES (?, ?, ?, ?)').run(
+        100 + i,
+        `Product ${i}`,
+        `SKU_${i}`,
+        i,
+      );
+      db.prepare('INSERT INTO store_areas (id, name, sub_department) VALUES (?, ?, ?)').run(
+        100 + i,
+        `Aisle ${i}`,
+        `Dept_${i}`,
+      );
+      db.prepare(
+        'INSERT INTO inventory_items (product_id, expiry_date, location_id, status, organization_id) VALUES (?, ?, ?, ?, ?)',
+      ).run(100 + i, yesterday, 100 + i, 'Normal', 'test-org');
+    }
+
+    const skuReport = repository.getLossBySkuReport();
+    expect(skuReport).toHaveLength(5);
+    expect(skuReport.map((row) => row.sku)).toEqual([
+      'SKU_6',
+      'SKU_5',
+      'SKU_4',
+      'SKU_3',
+      'SKU_2',
+    ]);
+
+    const deptReport = repository.getLossByDepartmentReport();
+    expect(deptReport).toHaveLength(5);
+    expect(deptReport.map((row) => row.department)).toEqual([
+      'Dept_6',
+      'Dept_5',
+      'Dept_4',
+      'Dept_3',
+      'Dept_2',
+    ]);
+  });
 });

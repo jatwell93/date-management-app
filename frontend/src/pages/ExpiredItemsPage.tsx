@@ -447,7 +447,7 @@ const ExpiredItemsPage: React.FC<ExpiredItemsPageProps> = ({ token }) => {
       ...chartOptions,
       plugins: {
         ...chartOptions.plugins,
-        title: { display: true, text: 'Top SKUs by Total Loss Value' },
+        title: { display: true, text: '5 Worst Performing SKUs' },
       },
     }),
     [chartOptions],
@@ -458,7 +458,7 @@ const ExpiredItemsPage: React.FC<ExpiredItemsPageProps> = ({ token }) => {
       ...chartOptions,
       plugins: {
         ...chartOptions.plugins,
-        title: { display: true, text: 'Losses by Department' },
+        title: { display: true, text: '5 Worst Performing Departments' },
       },
     }),
     [chartOptions],
@@ -697,7 +697,7 @@ const ExpiredItemsPage: React.FC<ExpiredItemsPageProps> = ({ token }) => {
       <div className="grid grid-cols-1 md:grid-cols-2 gap-6 mb-6 mt-8">
         <Card>
           <CardHeader>
-            <CardTitle>Worst Loss by SKU</CardTitle>
+            <CardTitle>5 Worst Performing SKUs</CardTitle>
           </CardHeader>
           <CardContent>
             <div className="min-h-[12rem]">
@@ -726,7 +726,7 @@ const ExpiredItemsPage: React.FC<ExpiredItemsPageProps> = ({ token }) => {
 
         <Card>
           <CardHeader>
-            <CardTitle>Worst Loss by Department</CardTitle>
+            <CardTitle>5 Worst Performing Departments</CardTitle>
           </CardHeader>
           <CardContent>
             <div className="min-h-[12rem]">
