@@ -222,6 +222,37 @@ describe('Workers disposition markdown capture (real SQL)', () => {
     ]);
   });
 
+  it('writes off an item whose product has a NULL cost_price (issue #268 400)', async () => {
+    // Repro for the dev-deploy 400 "no expired units are available to process":
+    // the worklist COALESCEs cost_price to 0 for display but groups on the raw
+    // (NULL) value, while the write-off matcher compared `p.cost_price = 0`, which
+    // never matches a NULL row. The matcher must use NULL-safe comparison so an
+    // item shown in the worklist can always be written off.
+    const db = createWorkersDatabase({ NEON_CONNECTION_STRING: 'postgres://test' } as Env);
+    const productRows = await sql`
+      INSERT INTO products (organization_id, barcode, sku, name, cost_price)
+      VALUES (${ORG}, ${'NULLC'}, ${'NULLC'}, ${'No Cost Item'}, NULL)
+      RETURNING id`;
+    const productId = Number(productRows[0].id);
+    const areaRows = await sql`
+      INSERT INTO store_areas (organization_id, name, sub_department)
+      VALUES (${ORG}, ${'Shelf'}, ${'Grocery'})
+      RETURNING id`;
+    const locationId = Number(areaRows[0].id);
+    await sql`
+      INSERT INTO inventory_items (organization_id, product_id, location_id, expiry_date, status)
+      VALUES (${ORG}, ${productId}, ${locationId}, (CURRENT_DATE - INTERVAL '1 day')::date, ${'Expired'})`;
+
+    const worklist = await db.getExpiredItems(ORG);
+    expect(worklist).toHaveLength(1);
+    expect(worklist[0]).toMatchObject({ sku: 'NULLC', quantityAvailable: 1, costPrice: 0 });
+
+    // Must not throw; loss for a NULL/zero cost is 0.
+    const txn = await db.processExpiredItem(worklist[0].id, USER_ID, ORG, 'expired', 4);
+    expect(txn).toMatchObject({ action: 'expired', unitsDiscarded: 4, financialLoss: 0 });
+    expect(await db.getExpiredItems(ORG)).toHaveLength(0);
+  });
+
   it('writes off a future-dated Markdown item shown in the worklist (issue #268)', async () => {
     // Regression: the worklist (getExpiredItems) surfaces Markdown items before
     // their expiry date, so the write-off matcher must accept the same statuses.

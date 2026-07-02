@@ -67,7 +67,7 @@ describe('ExpiredItemService', () => {
   describe('processExpiredItem', () => {
     it('throws when inventory item does not exist', async () => {
       mockDb.prepare.mockImplementation((sql: string) => {
-        if (sql.includes('SELECT ii.*, p.cost_price as costPrice')) {
+        if (sql.includes('as costPrice')) {
           return { get: vi.fn().mockReturnValue(undefined) };
         }
         throw new Error(`Unexpected SQL: ${sql}`);
@@ -82,7 +82,7 @@ describe('ExpiredItemService', () => {
 
     it('throws when expired action is missing unitsDiscarded', async () => {
       mockDb.prepare.mockImplementation((sql: string) => {
-        if (sql.includes('SELECT ii.*, p.cost_price as costPrice')) {
+        if (sql.includes('as costPrice')) {
           return {
             get: vi.fn().mockReturnValue({ id: 1, product_id: 1, costPrice: 5 }),
           };
@@ -99,7 +99,7 @@ describe('ExpiredItemService', () => {
 
     it('throws when expired action has non-positive unitsDiscarded', async () => {
       mockDb.prepare.mockImplementation((sql: string) => {
-        if (sql.includes('SELECT ii.*, p.cost_price as costPrice')) {
+        if (sql.includes('as costPrice')) {
           return {
             get: vi.fn().mockReturnValue({ id: 1, product_id: 1, costPrice: 5 }),
           };
@@ -123,7 +123,7 @@ describe('ExpiredItemService', () => {
       const updateRun = vi.fn();
 
       mockDb.prepare.mockImplementation((sql: string) => {
-        if (sql.includes('SELECT ii.*, p.cost_price as costPrice')) {
+        if (sql.includes('as costPrice')) {
           return { get: selectGet };
         }
         if (sql.includes('INSERT INTO expired_item_transactions')) {
@@ -164,7 +164,7 @@ describe('ExpiredItemService', () => {
       const updateRun = vi.fn();
 
       mockDb.prepare.mockImplementation((sql: string) => {
-        if (sql.includes('SELECT ii.*, p.cost_price as costPrice')) {
+        if (sql.includes('as costPrice')) {
           return { get: selectGet };
         }
         if (
@@ -217,7 +217,7 @@ describe('ExpiredItemService', () => {
       const updateRun = vi.fn();
 
       mockDb.prepare.mockImplementation((sql: string) => {
-        if (sql.includes('SELECT ii.*, p.cost_price as costPrice')) {
+        if (sql.includes('as costPrice')) {
           return { get: selectRepresentative };
         }
         if (
@@ -276,7 +276,7 @@ describe('ExpiredItemService', () => {
       const updateRun = vi.fn();
 
       mockDb.prepare.mockImplementation((sql: string) => {
-        if (sql.includes('SELECT ii.*, p.cost_price as costPrice')) {
+        if (sql.includes('as costPrice')) {
           return { get: selectRepresentative };
         }
         if (
@@ -319,7 +319,7 @@ describe('ExpiredItemService', () => {
       const selectMatchingRows = vi.fn().mockReturnValue([]);
 
       mockDb.prepare.mockImplementation((sql: string) => {
-        if (sql.includes('SELECT ii.*, p.cost_price as costPrice')) {
+        if (sql.includes('as costPrice')) {
           return { get: selectRepresentative };
         }
         if (
@@ -349,7 +349,7 @@ describe('ExpiredItemService', () => {
       const insertRun = vi.fn().mockReturnValue({ lastInsertRowid: 55 });
 
       mockDb.prepare.mockImplementation((sql: string) => {
-        if (sql.includes('SELECT ii.*, p.cost_price as costPrice')) {
+        if (sql.includes('as costPrice')) {
           return { get: selectGet };
         }
         if (sql.includes('INSERT INTO expired_item_transactions')) {

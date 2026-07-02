@@ -26,7 +26,10 @@ const SCHEMA_SQL = `
     barcode TEXT NOT NULL,
     sku TEXT NOT NULL,
     name TEXT NOT NULL,
-    cost_price DOUBLE PRECISION NOT NULL DEFAULT 0,
+    -- Nullable to mirror production, where legacy rows can have a NULL cost_price
+    -- (all cost queries COALESCE it to 0). A NOT NULL harness previously hid a
+    -- write-off matcher bug that only manifested against real NULL data. #268
+    cost_price DOUBLE PRECISION DEFAULT 0,
     notes TEXT NOT NULL DEFAULT '',
     created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
     updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),

@@ -390,7 +390,11 @@ async function getMatchingExpiredItemIds(
     WHERE ii.organization_id = ${organizationId}
       AND ii.product_id = ${context.productId}
       AND ii.location_id IS NOT DISTINCT FROM ${context.locationId}
-      AND p.cost_price = ${context.costPrice}
+      -- COALESCE both sides so a legacy NULL cost_price (the worklist COALESCEs it
+      -- to 0 for display) still matches. Comparing a raw NULL column against the
+      -- COALESCE'd context value never matched, so the representative row failed to
+      -- match even itself, yielding a spurious "no expired units available" 400. #268
+      AND COALESCE(p.cost_price, 0) = ${context.costPrice}
       AND (ii.expiry_date < CURRENT_DATE OR ii.status = ANY(${[...EXPIRED_WORKLIST_STATUSES]}))
       -- Exclude every dispositioned status dynamically so adding one to the
       -- shared constant can't leak already-processed items back into the matcher.
