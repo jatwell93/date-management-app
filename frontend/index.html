@@ -2,6 +2,16 @@
 <html lang="en">
   <head>
     <meta charset="utf-8" />
+    <script>
+      if (!Array.prototype.at) {
+        Array.prototype.at = function(index) {
+          index = Math.trunc(index) || 0;
+          if (index < 0) index += this.length;
+          if (index < 0 || index >= this.length) return undefined;
+          return this[index];
+        };
+      }
+    </script>
     <link rel="icon" href="/favicon.ico" />
     <meta name="viewport" content="width=device-width, initial-scale=1" />
     <meta name="theme-color" content="#000000" />
