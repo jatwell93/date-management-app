@@ -168,9 +168,58 @@ describe('Workers disposition markdown capture (real SQL)', () => {
     expect(after).toHaveLength(1);
     expect(after[0]).toMatchObject({ sku: 'MULTI', quantityAvailable: 1 });
 
-    await expect(db.processExpiredItem(ids[3], USER_ID, ORG, 'expired', 2)).rejects.toThrow(
-      'Cannot discard 2 units; only 1 expired units are available',
-    );
+    // Over-count write-off: the remaining pool has 1 marker row but the user
+    // physically counted 2 expired units. We record the full entered quantity in
+    // the ledger and clear the worklist entry, rather than rejecting. See #268.
+    const overTxn = await db.processExpiredItem(ids[3], USER_ID, ORG, 'expired', 2);
+    expect(overTxn).toMatchObject({
+      inventoryItemId: ids[3],
+      action: 'expired',
+      unitsDiscarded: 2,
+      financialLoss: 14,
+    });
+    expect(await db.getExpiredItems(ORG)).toHaveLength(0);
+  });
+
+  it('records more expired units than there are scanned rows (issue #268)', async () => {
+    // Reproduces the reported bug: the scan flow logs a single SKU + expiry marker
+    // (one inventory row), so the worklist shows quantityAvailable: 1. The user
+    // reconciles real stock in the back office and writes off the true count (15).
+    // The ledger must record all 15 units and clear the worklist entry.
+    const db = createWorkersDatabase({ NEON_CONNECTION_STRING: 'postgres://test' } as Env);
+    const productRows = await sql`
+      INSERT INTO products (organization_id, barcode, sku, name, cost_price)
+      VALUES (${ORG}, ${'ONE'}, ${'ONE'}, ${'Single Marker'}, 3)
+      RETURNING id`;
+    const productId = Number(productRows[0].id);
+    const areaRows = await sql`
+      INSERT INTO store_areas (organization_id, name, sub_department)
+      VALUES (${ORG}, ${'Shelf'}, ${'Grocery'})
+      RETURNING id`;
+    const locationId = Number(areaRows[0].id);
+    const itemRows = await sql`
+      INSERT INTO inventory_items (organization_id, product_id, location_id, expiry_date, status)
+      VALUES (${ORG}, ${productId}, ${locationId}, (CURRENT_DATE - INTERVAL '1 day')::date, ${'Expired'})
+      RETURNING id`;
+    const itemId = Number(itemRows[0].id);
+
+    const before = await db.getExpiredItems(ORG);
+    expect(before[0]).toMatchObject({ sku: 'ONE', quantityAvailable: 1 });
+
+    const txn = await db.processExpiredItem(itemId, USER_ID, ORG, 'expired', 15);
+    expect(txn).toMatchObject({
+      inventoryItemId: itemId,
+      action: 'expired',
+      unitsDiscarded: 15,
+      financialLoss: 45,
+    });
+
+    // The single marker row is dispositioned and the worklist entry is cleared.
+    expect(await db.getExpiredItems(ORG)).toHaveLength(0);
+    // The realized-loss ledger reflects the full entered quantity.
+    expect(await db.getExpiredLossBySku(ORG)).toEqual([
+      expect.objectContaining({ sku: 'ONE', totalLoss: 45, count: 15 }),
+    ]);
   });
 
   it('writes off a future-dated Markdown item shown in the worklist (issue #268)', async () => {

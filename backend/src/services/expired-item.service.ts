@@ -180,9 +180,16 @@ export class ExpiredItemService {
             unitsDiscarded,
           ) as Array<{ id: number }>;
 
-          if (matchingRows.length < unitsDiscarded) {
+          // The scan flow logs only a SKU + expiry marker, not real stock-on-hand,
+          // so a worklist pool can represent more physical units than it has rows.
+          // The user reconciles expired stock in the back office and enters the true
+          // count here, which may exceed the row count. Dispose whatever matching
+          // rows exist (clearing the pool from the worklist) and let the ledger
+          // record the full entered quantity as the loss. Only reject when the pool
+          // is already empty (nothing to process). Mirrors the Workers backend. #268
+          if (matchingRows.length === 0) {
             throw new Error(
-              `Cannot discard ${unitsDiscarded} units; only ${matchingRows.length} expired units are available`,
+              `Cannot discard ${unitsDiscarded} units; no expired units are available to process`,
             );
           }
 

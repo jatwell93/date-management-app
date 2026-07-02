@@ -418,10 +418,18 @@ async function getProcessedItemIds(
     throw new Error('Units discarded must be a positive number when marking as expired');
   }
 
+  // The scan flow logs only a SKU + expiry marker, not real stock-on-hand, so a
+  // worklist pool can represent more physical units than it has rows. The user
+  // reconciles expired stock in the back office and enters the true count here,
+  // which may exceed the row count. We therefore dispose whatever matching rows
+  // exist (clearing the pool from the worklist) and let the ledger record the
+  // full entered quantity as the loss — the ledger is the source of truth, not
+  // the row count. Only reject when the pool is already empty (nothing to
+  // process, e.g. the entry was dispositioned concurrently). See issue #268.
   const matchingIds = await getMatchingExpiredItemIds(sql, organizationId, context, unitsDiscarded);
-  if (matchingIds.length < unitsDiscarded) {
+  if (matchingIds.length === 0) {
     throw new Error(
-      `Cannot discard ${unitsDiscarded} units; only ${matchingIds.length} expired units are available`,
+      `Cannot discard ${unitsDiscarded} units; no expired units are available to process`,
     );
   }
 
