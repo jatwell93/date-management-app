@@ -806,7 +806,7 @@ const ExpiredItemsPage: React.FC<ExpiredItemsPageProps> = ({ token }) => {
                   step="1"
                   value={unitsDiscarded}
                   onChange={handleUnitsDiscardedChange}
-                  aria-describedby="units-hint units-error"
+                  aria-describedby={unitsDiscardedError ? 'units-hint units-error' : 'units-hint'}
                   aria-invalid={!!unitsDiscardedError}
                 />
                 <p id="units-hint" className={PROCESS_DIALOG_HELP_CLASS}>
