@@ -395,6 +395,44 @@ describe('Workers disposition markdown capture (real SQL)', () => {
     ]);
   });
 
+  it('caps the loss-by-sku/department reports at the top 5 sources of loss', async () => {
+    // Surface only the five biggest loss sources so the graphs stay a focused
+    // "worst offenders" view rather than an unbounded list. See #268.
+    const db = createWorkersDatabase({ NEON_CONNECTION_STRING: 'postgres://test' } as Env);
+
+    // Six SKUs/departments with ascending cost so ranking is unambiguous; the
+    // cheapest (cost 1) must be dropped once we cap at five.
+    for (let i = 1; i <= 6; i++) {
+      const productRows = await sql`
+        INSERT INTO products (organization_id, barcode, sku, name, cost_price)
+        VALUES (${ORG}, ${`B${i}`}, ${`SKU_${i}`}, ${`Product ${i}`}, ${i})
+        RETURNING id`;
+      const productId = Number(productRows[0].id);
+      const areaRows = await sql`
+        INSERT INTO store_areas (organization_id, name, sub_department)
+        VALUES (${ORG}, ${`Aisle ${i}`}, ${`Dept_${i}`})
+        RETURNING id`;
+      const locationId = Number(areaRows[0].id);
+      await sql`
+        INSERT INTO inventory_items (organization_id, product_id, location_id, expiry_date, status)
+        VALUES (${ORG}, ${productId}, ${locationId}, (CURRENT_DATE - INTERVAL '1 day')::date, ${'Normal'})`;
+    }
+
+    const skuReport = await db.getLossBySkuReport(ORG);
+    expect(skuReport).toHaveLength(5);
+    expect(skuReport.map((row) => row.sku)).toEqual(['SKU_6', 'SKU_5', 'SKU_4', 'SKU_3', 'SKU_2']);
+
+    const deptReport = await db.getLossByDepartmentReport(ORG);
+    expect(deptReport).toHaveLength(5);
+    expect(deptReport.map((row) => row.department)).toEqual([
+      'Dept_6',
+      'Dept_5',
+      'Dept_4',
+      'Dept_3',
+      'Dept_2',
+    ]);
+  });
+
   it('aggregates sell-through counts by markdown level', async () => {
     const db = createWorkersDatabase({ NEON_CONNECTION_STRING: 'postgres://test' } as Env);
 

@@ -358,7 +358,7 @@ export class ReportRepository {
   }
 
   /**
-   * Get loss by SKU report (top 10 expired items)
+   * Get loss by SKU report (top 5 expired items by loss value)
    */
   getLossBySkuReport(): LossBySkuReportItem[] {
     // "Currently expired" is defined by expiry_date (or an explicit 'Expired'
@@ -378,7 +378,7 @@ export class ReportRepository {
         AND ii.organization_id = ?
       GROUP BY p.sku, p.name
       ORDER BY totalLoss DESC
-      LIMIT 10
+      LIMIT 5
     `);
     return stmt.all(
       EXPIRED_STATUS,
@@ -405,6 +405,7 @@ export class ReportRepository {
         AND ii.organization_id = ?
       GROUP BY sa.sub_department
       ORDER BY totalLoss DESC
+      LIMIT 5
     `);
     return stmt.all(
       EXPIRED_STATUS,

@@ -873,7 +873,7 @@ export function createWorkersDatabase(env: Env): Database {
           AND ii.organization_id = ${organizationId}
         GROUP BY p.sku, p.name
         ORDER BY "totalLoss" DESC
-        LIMIT 10
+        LIMIT 5
       `) as LossBySkuReportItem[];
     },
 
@@ -892,6 +892,7 @@ export function createWorkersDatabase(env: Env): Database {
           AND ii.organization_id = ${organizationId}
         GROUP BY sa.sub_department
         ORDER BY "totalLoss" DESC
+        LIMIT 5
       `) as LossByDepartmentReportItem[];
     },
 
