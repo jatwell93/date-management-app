@@ -32,7 +32,11 @@ import {
   inMemoryRateLimitStore,
 } from './utils/minimal-rate-limit';
 import { handleWorkerUploadRoute } from './upload/upload-router';
-import { resolveMinimalApiRoute, type MinimalApiRoute } from './minimal-api-routes';
+import {
+  resolveBootstrapApiRoute,
+  resolveMinimalApiRoute,
+  type MinimalApiRoute,
+} from './minimal-api-routes';
 import type { ValidatedCatalogueRow } from './upload/catalogue-parser';
 import {
   parseUploadCompleteBody,
@@ -282,6 +286,16 @@ export default Sentry.withSentry(
               request,
               applyRateLimitHeaders(blockedResponse, rateLimitDecision, retryAfter),
             );
+          }
+
+          const bootstrapRouteResponse = resolveBootstrapApiRoute(MINIMAL_API_ROUTES, {
+            request,
+            pathname,
+            method,
+            env,
+          });
+          if (bootstrapRouteResponse) {
+            return finalizeApiResponse(bootstrapRouteResponse);
           }
 
           if (!env.JWT_SECRET?.trim()) {

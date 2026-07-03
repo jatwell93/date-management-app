@@ -1,5 +1,9 @@
 import { describe, expect, it, vi } from 'vitest';
-import { resolveMinimalApiRoute, type MinimalApiRoute } from './minimal-api-routes';
+import {
+  resolveBootstrapApiRoute,
+  resolveMinimalApiRoute,
+  type MinimalApiRoute,
+} from './minimal-api-routes';
 import * as minimalEntrypoint from './index-minimal';
 import type { Database } from './database';
 import type { Env } from './types/env';
@@ -59,6 +63,24 @@ describe('minimal API route table', () => {
     });
 
     expect(response).toBeNull();
+  });
+
+  it('dispatches bootstrap routes without requiring a database instance', async () => {
+    const handleBootstrap = vi.fn().mockResolvedValue(new Response('bootstrap'));
+    const routes: MinimalApiRoute[] = [
+      ['POST', '/api/organization/bootstrap', handleBootstrap, 'bootstrap'],
+      ['GET', '/api/products', vi.fn()],
+    ];
+
+    const response = await resolveBootstrapApiRoute(routes, {
+      request: new Request('https://example.com/api/organization/bootstrap', { method: 'POST' }),
+      pathname: '/api/organization/bootstrap',
+      method: 'POST',
+      env,
+    });
+
+    expect(response?.status).toBe(200);
+    expect(handleBootstrap).toHaveBeenCalledWith(expect.any(Request), env);
   });
 
   it('registers the expired-loss report route used by the frontend', () => {
