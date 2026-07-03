@@ -168,6 +168,67 @@ describe('API config guard', () => {
     expect(body.error || body.message).toBeTruthy();
   });
 
+  it('dispatches organization bootstrap before requiring the legacy JWT secret', async () => {
+    const productionLikeEnv = {
+      ...env,
+      NODE_ENV: 'production',
+      JWT_SECRET: '',
+      NEON_CONNECTION_STRING:
+        'postgresql://user:password@direct-neon.example.com/app?sslmode=require',
+      HYPERDRIVE: {
+        connectionString:
+          'postgresql://user:password@hyperdrive.example.com/app?sslmode=require',
+      } as unknown as Hyperdrive,
+    } as Env;
+    const ctx = {
+      waitUntil: vi.fn(),
+      passThroughOnException: vi.fn(),
+    } as unknown as ExecutionContext;
+
+    const response = await worker.fetch(
+      new Request('https://example.com/api/organization/bootstrap', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({}),
+      }),
+      productionLikeEnv,
+      ctx,
+    );
+
+    const body = (await response.json()) as any;
+    expect(response.status).toBe(401);
+    expect(body.error || body.message).not.toBe('JWT_SECRET is required');
+  });
+
+  it('dispatches organization bootstrap before initializing generic API database setup', async () => {
+    const productionLikeEnv = {
+      ...env,
+      NODE_ENV: 'production',
+      JWT_SECRET: 'legacy-jwt-secret',
+      NEON_CONNECTION_STRING: '',
+      DATABASE_URL: '',
+      HYPERDRIVE: undefined,
+    } as unknown as Env;
+    const ctx = {
+      waitUntil: vi.fn(),
+      passThroughOnException: vi.fn(),
+    } as unknown as ExecutionContext;
+
+    const response = await worker.fetch(
+      new Request('https://example.com/api/organization/bootstrap', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({}),
+      }),
+      productionLikeEnv,
+      ctx,
+    );
+
+    const body = (await response.json()) as any;
+    expect(response.status).toBe(401);
+    expect(body.error || body.message).not.toContain('database connection string');
+  });
+
   it('returns 500 when database config is missing for /api/users/me', async () => {
     const response = await SELF.fetch('https://example.com/api/users/me');
     expect(response.status).toBe(500);

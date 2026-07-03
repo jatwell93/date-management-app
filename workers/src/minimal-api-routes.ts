@@ -31,6 +31,8 @@ type MinimalApiRouteContext = {
   env: Env;
 };
 
+type BootstrapApiRouteContext = Omit<MinimalApiRouteContext, 'db'>;
+
 function matches(match: string | RegExp, pathname: string): boolean {
   return typeof match === 'string' ? match === pathname : match.test(pathname);
 }
@@ -51,6 +53,21 @@ export function resolveMinimalApiRoute(
       return (handler as PathApiHandler)(request, db, env, pathname);
     }
     return (handler as StaticApiHandler)(request, db, env);
+  }
+
+  return null;
+}
+
+export function resolveBootstrapApiRoute(
+  routes: readonly MinimalApiRoute[],
+  { request, pathname, method, env }: BootstrapApiRouteContext,
+): Promise<Response> | null {
+  for (const [routeMethod, match, handler, kind] of routes) {
+    if (routeMethod !== method || kind !== 'bootstrap' || !matches(match, pathname)) {
+      continue;
+    }
+
+    return (handler as BootstrapApiHandler)(request, env);
   }
 
   return null;
