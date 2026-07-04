@@ -147,7 +147,7 @@ jobs:
 
             # FRONTEND_URL must be the canonical prod host.
             # Reject dev/preview/tunnel hosts and anything outside expirymate.com.au.
-            PROD_HOST_RE='^https://([a-z0-9-]+\.)?expirymate\.com\.au(/.*)?$'
+            PROD_HOST_RE="^https://([a-z0-9-]+\.)?expirymate\.com\.au(/.*)?$"
             value="${FRONTEND_URL:-}"
             if [ -z "${value}" ]; then
               echo "::error::Production Worker requires FRONTEND_URL to be set."
