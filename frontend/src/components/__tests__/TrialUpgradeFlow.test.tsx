@@ -1,4 +1,4 @@
-import { render, screen, waitFor } from '@testing-library/react';
+import { render, screen, waitFor, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { fetchMock } from '../../test-utils/fetchMock';
 import { TrialUpgradeFlow } from '../TrialUpgradeFlow';
@@ -19,6 +19,12 @@ vi.mock('../../hooks/useFreshApiToken', () => ({
 vi.mock('../../lib/api.service', () => ({
   buildApiUrl: (route: string) => `https://api.test${route}`,
 }));
+
+/** Clicks the "Upgrade" CTA inside a specific tier card. */
+async function clickTierUpgrade(tier: string) {
+  const card = await screen.findByTestId(`tier-card-${tier}`);
+  userEvent.click(within(card).getByRole('button', { name: /upgrade/i }));
+}
 
 describe('TrialUpgradeFlow', () => {
   const trialStatus = {
@@ -60,7 +66,7 @@ describe('TrialUpgradeFlow', () => {
 
     render(<TrialUpgradeFlow token="test-token" />);
 
-    userEvent.click(await screen.findByRole('button', { name: 'Upgrade Monthly' }));
+    await clickTierUpgrade('professional');
 
     await waitFor(() => {
       expect(fetchMock).toHaveBeenCalledWith(
@@ -85,7 +91,8 @@ describe('TrialUpgradeFlow', () => {
 
     render(<TrialUpgradeFlow token="test-token" />);
 
-    userEvent.click(await screen.findByRole('button', { name: 'Upgrade Annual' }));
+    userEvent.click(await screen.findByRole('button', { name: /Annual/i }));
+    await clickTierUpgrade('professional');
 
     await waitFor(() => {
       expect(fetchMock).toHaveBeenCalledWith(
@@ -103,8 +110,14 @@ describe('TrialUpgradeFlow', () => {
 
     render(<TrialUpgradeFlow token="test-token" />);
 
-    expect(await screen.findByText('A$99')).toBeInTheDocument();
-    expect(screen.getByText('Billed A$990 yearly')).toBeInTheDocument();
+    const professional = await screen.findByTestId('tier-card-professional');
+    expect(within(professional).getByText('A$99')).toBeInTheDocument();
+
+    userEvent.click(screen.getByRole('button', { name: /Annual/i }));
+
+    await waitFor(() => {
+      expect(within(professional).getByText(/Billed A\$990 annually/)).toBeInTheDocument();
+    });
   });
 
   it('lets expired-trial starter users start an upgrade', async () => {
@@ -127,7 +140,7 @@ describe('TrialUpgradeFlow', () => {
     render(<TrialUpgradeFlow token="test-token" />);
 
     expect(await screen.findByText('Starter plan')).toBeInTheDocument();
-    userEvent.click(screen.getByRole('button', { name: 'Upgrade Monthly' }));
+    await clickTierUpgrade('professional');
 
     await waitFor(() => {
       expect(fetchMock).toHaveBeenCalledWith(
@@ -161,7 +174,7 @@ describe('TrialUpgradeFlow', () => {
     render(<TrialUpgradeFlow token="test-token" />);
 
     expect(await screen.findByText('Professional plan active')).toBeInTheDocument();
-    expect(screen.queryByRole('button', { name: 'Upgrade Monthly' })).not.toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: /upgrade/i })).not.toBeInTheDocument();
     expect(fetchMock).toHaveBeenCalledTimes(1);
   });
 });
