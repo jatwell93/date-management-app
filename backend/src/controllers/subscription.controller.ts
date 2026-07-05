@@ -13,6 +13,7 @@ import { Logger } from '../utils/logger';
 import { NotFoundError, ValidationError, AuthenticationError, InternalError } from '../errors';
 import { UserRepository } from '../repositories/user.repository';
 import { SubscriptionRepository } from '../repositories/subscription.repository';
+import type { OrganizationUsage, SubscriptionTier } from '@prisma/client';
 
 interface SubscriptionTierResponse {
   status: `${SubscriptionStatus}`;
@@ -35,6 +36,58 @@ interface TrialStatusResponse {
     features: string[];
   };
 }
+
+interface CurrentSubscriptionResponse {
+  tierLevel: string;
+  status: string;
+  billingCycle: string | null;
+  currentPeriodEnd: string | null;
+}
+
+interface OrganizationUsageResponse {
+  skus: number;
+  users: number;
+  storage: number;
+  inventoryItems: number;
+}
+
+const getClerkUserId = (req: Request): string => {
+  const userId = (req as unknown as ClerkAuthRequest).userId;
+
+  if (!userId) {
+    throw new AuthenticationError('User ID missing from request');
+  }
+
+  return userId;
+};
+
+const mapCurrentSubscriptionResponse = (
+  subscription: SubscriptionTier | null,
+): CurrentSubscriptionResponse => ({
+  tierLevel: subscription?.tierLevel ?? 'free',
+  status: subscription?.status ?? 'expired',
+  billingCycle: subscription?.billingCycle ?? null,
+  currentPeriodEnd: subscription?.trialEndDate?.toISOString() ?? null,
+});
+
+const mapOrganizationUsageResponse = (usage: OrganizationUsage): OrganizationUsageResponse => ({
+  skus: usage.totalSkus,
+  users: usage.activeUsers,
+  storage: usage.storageUsedBytes,
+  inventoryItems: usage.totalInventoryItems,
+});
+
+const handleSubscriptionControllerError = (message: string, error: unknown): never => {
+  Logger.error(message, {
+    error: error instanceof Error ? error.message : String(error),
+  });
+
+  if (error instanceof NotFoundError || error instanceof AuthenticationError) {
+    throw error;
+  }
+
+  throw new InternalError(message);
+};
 
 const TIER_LIMITS = {
   free: {
@@ -96,6 +149,40 @@ export class SubscriptionController {
     @inject('StripeClientFactory')
     private stripeClientFactory: () => ReturnType<typeof getStripeClient>,
   ) {}
+
+  private async getAuthenticatedOrganizationId(req: Request): Promise<string> {
+    const userId = getClerkUserId(req);
+    const user = await this.userRepository.findOrganizationIdByClerkUserId(userId);
+
+    if (!user?.organizationId) {
+      throw new NotFoundError('User organization not found');
+    }
+
+    return user.organizationId;
+  }
+
+  async getCurrentSubscription(req: Request, res: Response): Promise<void> {
+    try {
+      const organizationId = await this.getAuthenticatedOrganizationId(req);
+      const subscription =
+        await this.subscriptionRepository.findLatestByOrganizationId(organizationId);
+
+      res.json(mapCurrentSubscriptionResponse(subscription));
+    } catch (error) {
+      handleSubscriptionControllerError('Failed to fetch current subscription', error);
+    }
+  }
+
+  async getOrganizationUsage(req: Request, res: Response): Promise<void> {
+    try {
+      const organizationId = await this.getAuthenticatedOrganizationId(req);
+      const usage = await this.subscriptionRepository.getOrCreateUsage(organizationId);
+
+      res.json(mapOrganizationUsageResponse(usage));
+    } catch (error) {
+      handleSubscriptionControllerError('Failed to fetch organization usage', error);
+    }
+  }
 
   async getTrialStatus(req: Request, res: Response): Promise<void> {
     try {

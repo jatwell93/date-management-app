@@ -15,6 +15,10 @@ describe('Workers Preview Deployment', () => {
   const EXPIRED_LOSS_REPORT_URL =
     process.env.EXPIRED_LOSS_REPORT_SMOKE_URL ||
     `${PREVIEW_URL}/api/expired-items/reports/expired-losses`;
+  const SUBSCRIPTION_CURRENT_URL =
+    process.env.SUBSCRIPTION_CURRENT_SMOKE_URL || `${PREVIEW_URL}/api/subscription/current`;
+  const ORGANIZATION_USAGE_URL =
+    process.env.ORGANIZATION_USAGE_SMOKE_URL || `${PREVIEW_URL}/api/organization/usage`;
 
   describe('Health Check', () => {
     it('should return 200 OK from health endpoint', async () => {
@@ -76,6 +80,33 @@ describe('Workers Preview Deployment', () => {
         };
         expect(data).toHaveProperty('lossesBySKU');
         expect(data).toHaveProperty('lossesByStoreArea');
+      } else {
+        expect([400, 401, 403, 429, 500]).toContain(response.status);
+      }
+    });
+  });
+
+  describe('Subscription Settings Routes', () => {
+    it.each([
+      ['current subscription', SUBSCRIPTION_CURRENT_URL],
+      ['organization usage', ORGANIZATION_USAGE_URL],
+    ])('should not return route-not-found for the %s route', async (_label, routeUrl) => {
+      let response: Response;
+
+      try {
+        response = await fetch(routeUrl);
+      } catch (error) {
+        console.warn(
+          '⚠️  Subscription settings route smoke test skipped - Worker may not be deployed',
+        );
+        return;
+      }
+
+      expect(response.status).not.toBe(404);
+
+      if (response.ok) {
+        const data = (await response.json()) as Record<string, unknown>;
+        expect(data).toEqual(expect.any(Object));
       } else {
         expect([400, 401, 403, 429, 500]).toContain(response.status);
       }

@@ -187,7 +187,9 @@ export const MINIMAL_API_ROUTES: MinimalApiRoute[] = [
   ['GET', '/api/expired-items', handleGetExpiredItems],
   ['GET', '/api/expired-items/reports/expired-losses', handleGetExpiredLossesReport],
   ['POST', '/api/expired-items/process', handleProcessExpiredItem],
+  ['GET', '/api/subscription/current', handleGetCurrentSubscription],
   ['GET', '/api/subscription/trial-status', handleGetTrialStatus],
+  ['GET', '/api/organization/usage', handleGetOrganizationUsage],
   ['POST', '/api/organization/bootstrap', handleOrganizationBootstrap, 'bootstrap'],
 ];
 
@@ -1798,6 +1800,108 @@ const SUBSCRIPTION_TIER_LIMITS: Record<
     features: ['Enterprise fair-use access', 'Dedicated support', 'Custom development'],
   },
 };
+
+type SubscriptionSettingsRow = {
+  status?: string | null;
+  tier_level?: string | null;
+  billing_cycle?: string | null;
+  trial_end_date?: string | null;
+};
+
+type OrganizationUsageRow = {
+  total_skus?: number | string | null;
+  active_users?: number | string | null;
+  storage_used_bytes?: number | string | null;
+  total_inventory_items?: number | string | null;
+};
+
+const mapSubscriptionSettingsResponse = (subscription?: SubscriptionSettingsRow) => ({
+  tierLevel: normalizeLaunchTier(subscription?.tier_level),
+  status: String(subscription?.status || 'expired').toLowerCase(),
+  billingCycle: subscription?.billing_cycle || 'monthly',
+  currentPeriodEnd: subscription?.trial_end_date || null,
+});
+
+const mapOrganizationUsageResponse = (usage?: OrganizationUsageRow) => ({
+  skus: Number(usage?.total_skus ?? 0),
+  users: Number(usage?.active_users ?? 0),
+  storage: Number(usage?.storage_used_bytes ?? 0),
+  inventoryItems: Number(usage?.total_inventory_items ?? 0),
+});
+
+/**
+ * GET /api/subscription/current
+ */
+async function handleGetCurrentSubscription(
+  request: Request,
+  db: Database,
+  env: Env,
+): Promise<Response> {
+  const auth = await authenticateApiRequest(request, env, db);
+  if (auth instanceof Response) {
+    return auth;
+  }
+
+  const rows = await db.sql`
+    SELECT
+      status,
+      tier_level,
+      billing_cycle,
+      trial_end_date
+    FROM subscription_tiers
+    WHERE organization_id = ${auth.organizationId}
+    ORDER BY created_at DESC
+    LIMIT 1
+  `;
+
+  return jsonResponse(
+    mapSubscriptionSettingsResponse(rows[0] as SubscriptionSettingsRow),
+    200,
+    env,
+  );
+}
+
+/**
+ * GET /api/organization/usage
+ */
+async function handleGetOrganizationUsage(
+  request: Request,
+  db: Database,
+  env: Env,
+): Promise<Response> {
+  const auth = await authenticateApiRequest(request, env, db);
+  if (auth instanceof Response) {
+    return auth;
+  }
+
+  await db.sql`
+    INSERT INTO organization_usage (
+      organization_id,
+      active_users,
+      max_users,
+      total_skus,
+      max_skus,
+      total_inventory_items,
+      max_inventory_items,
+      storage_used_bytes
+    )
+    VALUES (${auth.organizationId}, 0, 1, 0, 500, 0, 500, 0)
+    ON CONFLICT (organization_id) DO NOTHING
+  `;
+
+  const rows = await db.sql`
+    SELECT
+      total_skus,
+      active_users,
+      storage_used_bytes,
+      total_inventory_items
+    FROM organization_usage
+    WHERE organization_id = ${auth.organizationId}
+    LIMIT 1
+  `;
+
+  return jsonResponse(mapOrganizationUsageResponse(rows[0] as OrganizationUsageRow), 200, env);
+}
 
 /**
  * GET /api/subscription/trial-status
