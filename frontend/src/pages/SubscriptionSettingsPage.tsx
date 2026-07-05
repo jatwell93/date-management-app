@@ -100,6 +100,15 @@ export function SubscriptionSettingsPage({ token }: SubscriptionSettingsPageProp
     setShowUpgradeModal(true);
   };
 
+  // Only paid subscriptions with a reliable Stripe customer can open the billing
+  // portal. `active` and `past_due` both have one (past_due users specifically
+  // need the portal to fix a failed payment). Free/trialing users have no Stripe
+  // customer yet, so we show a subscribe CTA instead of a button that would 402.
+  const canManageBilling =
+    !!subscription &&
+    subscription.tierLevel !== 'free' &&
+    (subscription.status === 'active' || subscription.status === 'past_due');
+
   const handleSelectPlan = async (tier: TierLevel, billingCycle: 'monthly' | 'annual') => {
     if (!token) return;
 
@@ -256,15 +265,25 @@ export function SubscriptionSettingsPage({ token }: SubscriptionSettingsPageProp
           <CardHeader>
             <CardTitle>Billing Management</CardTitle>
             <CardDescription>
-              Update payment methods, view invoices, and manage billing details
+              {canManageBilling
+                ? 'Update payment methods, view invoices, and manage billing details'
+                : 'Subscribe to a paid plan to manage payment methods, invoices, and billing details'}
             </CardDescription>
           </CardHeader>
           <CardContent>
             <div className="flex gap-3">
-              <ManageSubscriptionButton token={token} variant="default" />
-              <Button variant="outline" onClick={handleUpgrade}>
-                Change Plan
-              </Button>
+              {canManageBilling ? (
+                <>
+                  <ManageSubscriptionButton token={token} variant="default" />
+                  <Button variant="outline" onClick={handleUpgrade}>
+                    Change Plan
+                  </Button>
+                </>
+              ) : (
+                <Button variant="default" onClick={handleUpgrade}>
+                  View plans
+                </Button>
+              )}
             </div>
           </CardContent>
         </Card>

@@ -141,6 +141,48 @@ describe('SubscriptionSettingsPage', () => {
     });
   });
 
+  it('hides Manage Billing and shows a subscribe CTA for a free plan', async () => {
+    (global.fetch as jest.Mock)
+      .mockResolvedValueOnce({
+        ok: true,
+        json: async () => ({ tierLevel: 'free', status: 'active' }),
+      })
+      .mockResolvedValueOnce({
+        ok: true,
+        json: async () => ({
+          skus: { current: 0, limit: 500 },
+          users: { current: 1, limit: 1 },
+          storage: { current: 0, limit: 1073741824 },
+        }),
+      });
+
+    render(<SubscriptionSettingsPage token="test-token" />);
+
+    expect(await screen.findByRole('button', { name: /View plans/i })).toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: /Manage Billing/i })).not.toBeInTheDocument();
+  });
+
+  it('shows Manage Billing for an active paid plan', async () => {
+    (global.fetch as jest.Mock)
+      .mockResolvedValueOnce({
+        ok: true,
+        json: async () => ({ tierLevel: 'starter', status: 'active' }),
+      })
+      .mockResolvedValueOnce({
+        ok: true,
+        json: async () => ({
+          skus: { current: 0, limit: 5000 },
+          users: { current: 1, limit: 3 },
+          storage: { current: 0, limit: 10737418240 },
+        }),
+      });
+
+    render(<SubscriptionSettingsPage token="test-token" />);
+
+    expect(await screen.findByRole('button', { name: /Manage Billing/i })).toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: /View plans/i })).not.toBeInTheDocument();
+  });
+
   it('does not start Checkout for Enterprise contact sales', async () => {
     const alertSpy = window.alert as jest.Mock;
     (global.fetch as jest.Mock)
