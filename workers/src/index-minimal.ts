@@ -347,7 +347,12 @@ export default Sentry.withSentry(
             env,
           });
 
-          return finalizeApiResponse(apiRouteResponse ?? errorResponse('Not Found', 404, env));
+          // `return await` (not a bare `return`) so a rejected handler promise
+          // surfaces inside this try block and is caught by the outer handler,
+          // which wraps the 500 with CORS headers. A bare `return` adopts the
+          // rejected promise's state at the caller, skipping the catch and
+          // producing a CORS-less 500 the browser masks as a CORS error.
+          return await finalizeApiResponse(apiRouteResponse ?? errorResponse('Not Found', 404, env));
         }
 
         return withCors(
@@ -1883,9 +1888,11 @@ async function handleGetOrganizationUsage(
       max_skus,
       total_inventory_items,
       max_inventory_items,
-      storage_used_bytes
+      storage_used_bytes,
+      created_at,
+      updated_at
     )
-    VALUES (${auth.organizationId}, 0, 1, 0, 500, 0, 500, 0)
+    VALUES (${auth.organizationId}, 0, 1, 0, 500, 0, 500, 0, NOW(), NOW())
     ON CONFLICT (organization_id) DO NOTHING
   `;
 
