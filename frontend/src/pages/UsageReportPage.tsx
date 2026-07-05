@@ -318,29 +318,6 @@ export function UsageReportPage({ token }: UsageReportPageProps) {
       <header className="max-w-3xl">
         <div className="flex items-center justify-between">
           <h1 className="font-heading text-2xl font-semibold">Usage Report</h1>
-          <button
-            onClick={() => window.print()}
-            aria-label="Print this report"
-            className="hidden md:flex items-center gap-2 rounded-md border border-semantic-primary px-3 py-1.5 text-sm font-medium text-semantic-primary hover:bg-semantic-primary/5 transition-colors no-print"
-          >
-            <svg
-              xmlns="http://www.w3.org/2000/svg"
-              width="16"
-              height="16"
-              viewBox="0 0 24 24"
-              fill="none"
-              stroke="currentColor"
-              strokeWidth="2"
-              strokeLinecap="round"
-              strokeLinejoin="round"
-              aria-hidden="true"
-            >
-              <path d="M6 9V2h12v7" />
-              <path d="M6 18H4a2 2 0 0 1-2-2v-5a2 2 0 0 1 2-2h16a2 2 0 0 1 2 2v5a2 2 0 0 1-2 2h-2" />
-              <rect x="6" y="14" width="12" height="8" />
-            </svg>
-            Print Report
-          </button>
         </div>
         <p className="mt-2 text-sm text-semantic-text-secondary">
           See which team members are adding stock, and review daily adds, edits, and removals over

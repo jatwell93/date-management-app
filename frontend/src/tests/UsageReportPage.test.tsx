@@ -88,6 +88,7 @@ describe('UsageReportPage', () => {
     expect(screen.getByRole('table', { name: /Items added per day summary/i })).toHaveTextContent(
       new Intl.DateTimeFormat('en-AU', { dateStyle: 'medium' }).format(new Date('2025-01-30')),
     );
+    expect(screen.queryByText(/Print Report/i)).not.toBeInTheDocument();
 
     expect(apiService.get).toHaveBeenCalledWith(
       '/reports/daily-usage',

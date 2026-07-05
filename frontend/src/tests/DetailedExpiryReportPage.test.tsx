@@ -81,6 +81,45 @@ describe('DetailedExpiryReportPage', () => {
     expect(screen.queryByText(/best viewed on a desktop/i)).not.toBeInTheDocument();
   });
 
+  it('renders a print-only full expiry table with every loaded row', async () => {
+    const reportRows = Array.from({ length: 12 }, (_, index) => ({
+      inventoryId: index + 1,
+      expiryDate: `2025-02-${String(index + 1).padStart(2, '0')}`,
+      status: index < 10 ? 'Markdown 3' : 'Markdown 2',
+      productId: 100 + index,
+      productName: `Printable Product ${index + 1}`,
+      sku: `SKU-${index + 1}`,
+      costPrice: 10 + index,
+      locationId: 2,
+      locationName: 'Front Counter',
+      subDepartment: 'Cold and Flu',
+    }));
+
+    // @ts-expect-error — apiService.get is mocked as vi.fn()
+    apiService.get.mockImplementation((url) => {
+      if (url === '/reports/expiry-details') {
+        return Promise.resolve(reportRows);
+      }
+      if (url === '/store-areas') {
+        return Promise.resolve([{ id: 2, name: 'Front Counter' }]);
+      }
+      return Promise.resolve([]);
+    });
+
+    render(<DetailedExpiryReportPage token="test-session-value" />);
+
+    await screen.findAllByText('Printable Product 12');
+
+    const printTable = screen.getByRole('table', {
+      name: /Printable full expiry table/i,
+      hidden: true,
+    });
+
+    expect(printTable).toHaveTextContent('Printable Product 1');
+    expect(printTable).toHaveTextContent('Printable Product 12');
+    expect(printTable).not.toHaveTextContent(/Actions/i);
+  });
+
   it('announces missing token and fetch errors', async () => {
     render(<DetailedExpiryReportPage token={null} />);
 

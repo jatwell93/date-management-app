@@ -92,6 +92,7 @@ describe('ReportsPage', () => {
     expect(screen.getByRole('region', { name: /Primary expiry decision/i })).toHaveTextContent('3');
     expect(screen.getByText(/Entering markdown next month/i).parentElement).toHaveTextContent('7');
     expect(screen.getByText(/Active expiry stock/i).parentElement).toHaveTextContent('45');
+    expect(screen.queryByText(/Print Report/i)).not.toBeInTheDocument();
     expect(screen.queryByText(/Next review window/i)).not.toBeInTheDocument();
     expect(screen.queryByText(/^Total Items$/i)).not.toBeInTheDocument();
     expect(screen.queryByText(/^Markdown 1$/i)).not.toBeInTheDocument();

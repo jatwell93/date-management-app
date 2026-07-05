@@ -350,4 +350,36 @@ describe('ExpiredItemsPage', () => {
     expect(screen.queryByText(/Confirm Action/i)).not.toBeInTheDocument();
     expect(mockedProcessExpiredItem).not.toHaveBeenCalled();
   });
+
+  it('renders a print-only desktop table without interactive actions', async () => {
+    mockedGetExpiredItems.mockResolvedValue([
+      {
+        id: 201,
+        productId: 30,
+        productName: 'Printable Expired Item',
+        sku: 'EXP-200',
+        expiryDate: '2026-05-01',
+        status: 'Expired',
+        costPrice: 8.75,
+        locationId: 5,
+        locationName: 'Back Stock',
+        quantityAvailable: 4,
+      },
+    ]);
+    mockedApiGet.mockResolvedValue([]);
+
+    render(<ExpiredItemsPage token="test-session-value" />);
+
+    await screen.findAllByText('Printable Expired Item');
+
+    const printTable = await screen.findByRole('table', {
+      name: /Printable expired items table/i,
+      hidden: true,
+    });
+
+    expect(printTable).toHaveTextContent('Printable Expired Item');
+    expect(printTable).toHaveTextContent('EXP-200');
+    expect(printTable).not.toHaveTextContent(/Actions/i);
+    expect(printTable).not.toHaveTextContent(/Sold Through/i);
+  });
 });

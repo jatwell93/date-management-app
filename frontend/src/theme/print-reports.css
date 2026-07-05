@@ -1,4 +1,21 @@
 @media print {
+  .print-report-root > :not(.print-report-target):not(.print-only) {
+    display: none !important;
+  }
+
+  .print-report-root .no-print,
+  .print-report-root .print-hide {
+    display: none !important;
+  }
+
+  .print-report-root .print-report-target {
+    display: block !important;
+  }
+
+  .print-report-root .print-only {
+    display: block !important;
+  }
+
   /* Hide non-content elements */
   nav,
   header:not(main header),
@@ -122,4 +139,8 @@
     background-color: #f8fafc !important;
     border: 1px solid #f1f5f9 !important;
   }
+}
+
+.print-only {
+  display: none;
 }
