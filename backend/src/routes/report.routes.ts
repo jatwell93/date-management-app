@@ -33,6 +33,15 @@ router.get(
   },
 );
 
+// GET /reports/expiry-entries - Get all active (non-expired) expiry entries
+router.get(
+  '/expiry-entries',
+  authenticateToken,
+  async (req: AuthRequest, res: Response, next: NextFunction) => {
+    await reportController.getActiveExpiryEntriesReport(req, res, next);
+  },
+);
+
 // GET /reports/monthly-markdown - Get monthly markdown report
 router.get(
   '/monthly-markdown',

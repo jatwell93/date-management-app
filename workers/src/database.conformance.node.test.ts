@@ -238,6 +238,11 @@ describe('dual-backend report conformance', () => {
     await expect(
       workersDb.getDetailedExpiryReport(ORG).then(normalizeDetailedRows),
     ).resolves.toEqual(normalizeDetailedRows(sqliteRepo.getDetailedExpiryReport()));
+    // Unlike the 90-day worklist, active entries include far-future items
+    // (offsets 100 and 140 above) — both backends must return the same set.
+    await expect(
+      workersDb.getActiveExpiryEntries(ORG).then(normalizeDetailedRows),
+    ).resolves.toEqual(normalizeDetailedRows(sqliteRepo.getActiveExpiryEntries()));
     await expect(workersDb.getOverallExpiryReport(ORG).then(normalizeSummary)).resolves.toEqual(
       normalizeSummary(sqliteRepo.getOverallExpiryReport()),
     );

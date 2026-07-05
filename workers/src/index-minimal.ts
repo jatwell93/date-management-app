@@ -180,6 +180,7 @@ export const MINIMAL_API_ROUTES: MinimalApiRoute[] = [
   ['GET', '/api/reports/expiry', handleGetExpiryReport],
   ['GET', '/api/reports/expiry-overall', handleGetExpiryOverallReport],
   ['GET', '/api/reports/expiry-details', handleGetExpiryDetailsReport],
+  ['GET', '/api/reports/expiry-entries', handleGetActiveExpiryEntriesReport],
   ['GET', '/api/reports/daily-usage', handleGetDailyUsageReport],
   ['GET', '/api/reports/items-by-user', handleGetItemsByUserReport],
   ['GET', '/api/reports/items-by-date', handleGetItemsByDateReport],
@@ -959,6 +960,20 @@ async function handleGetExpiryDetailsReport(
   const auth = await authenticateApiRequest(request, env, db);
   if (auth instanceof Response) return auth;
   const report = await db.getDetailedExpiryReport(auth.organizationId);
+  return jsonResponse(report, 200, env);
+}
+
+/**
+ * GET /api/reports/expiry-entries
+ */
+async function handleGetActiveExpiryEntriesReport(
+  request: Request,
+  db: Database,
+  env: Env,
+): Promise<Response> {
+  const auth = await authenticateApiRequest(request, env, db);
+  if (auth instanceof Response) return auth;
+  const report = await db.getActiveExpiryEntries(auth.organizationId);
   return jsonResponse(report, 200, env);
 }
 

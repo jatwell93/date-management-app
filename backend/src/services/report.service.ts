@@ -47,6 +47,10 @@ export class ReportService {
     return this.repository.getDetailedExpiryReport();
   }
 
+  async getActiveExpiryEntries(): Promise<DetailedExpiryReportItem[]> {
+    return this.repository.getActiveExpiryEntries();
+  }
+
   async getMonthlyMarkdownReport(): Promise<MonthlyMarkdownReport[]> {
     return this.repository.getMonthlyMarkdownReport();
   }

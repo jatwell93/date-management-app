@@ -53,6 +53,7 @@ export interface Database {
   getMonthlyExpiryReport(organizationId: string): Promise<MonthlyExpiryReport[]>;
   getOverallExpiryReport(organizationId: string): Promise<MonthlyExpiryReport>;
   getDetailedExpiryReport(organizationId: string): Promise<DetailedExpiryReportItem[]>;
+  getActiveExpiryEntries(organizationId: string): Promise<DetailedExpiryReportItem[]>;
   getDailyUsageReport(organizationId: string): Promise<DailyUsageReportItem[]>;
   getItemsByUserReport(
     organizationId: string,
@@ -859,6 +860,34 @@ export function createWorkersDatabase(env: Env): Database {
         -- ii.id tiebreaker keeps ordering deterministic across engines when two
         -- items share an expiry_date; without it Postgres and SQLite can break
         -- the tie differently and the conformance test would drift.
+        ORDER BY ii.expiry_date ASC, ii.id ASC
+      `) as DetailedExpiryReportItem[];
+    },
+
+    async getActiveExpiryEntries(organizationId: string): Promise<DetailedExpiryReportItem[]> {
+      return (await sql`
+        SELECT
+          ii.id as "inventoryId",
+          ii.expiry_date::text as "expiryDate",
+          ii.status,
+          p.id as "productId",
+          p.name as "productName",
+          COALESCE(p.sku, '') as sku,
+          COALESCE(p.cost_price, 0) as "costPrice",
+          sa.id as "locationId",
+          sa.name as "locationName",
+          sa.sub_department as "subDepartment"
+        FROM inventory_items ii
+        JOIN products p ON ii.product_id = p.id
+        JOIN store_areas sa ON ii.location_id = sa.id
+        WHERE ii.expiry_date >= CURRENT_DATE
+          AND ii.organization_id = ${organizationId}
+          -- Exclude items already dispositioned via sold-through so they do not
+          -- reappear after refresh. 'Sold Through' is the workers marker;
+          -- 'Processed' is the SQLite backend marker.
+          AND ii.status <> ALL(${[...DISPOSITIONED_STATUSES]})
+        -- ii.id tiebreaker keeps ordering deterministic across engines, matching
+        -- getDetailedExpiryReport.
         ORDER BY ii.expiry_date ASC, ii.id ASC
       `) as DetailedExpiryReportItem[];
     },

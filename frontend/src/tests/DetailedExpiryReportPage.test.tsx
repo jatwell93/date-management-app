@@ -26,19 +26,25 @@ vi.mock('../lib/api.service', () => ({
   },
 }));
 
+const daysFromNow = (n: number) => {
+  const d = new Date();
+  d.setDate(d.getDate() + n);
+  return d.toISOString().split('T')[0];
+};
+
 describe('DetailedExpiryReportPage', () => {
   beforeEach(() => {
     vi.clearAllMocks();
   });
 
-  it('renders a mobile-ready expiry action summary without a desktop fallback warning', async () => {
+  it('renders the worklist heading, summary, and a link to all expiry entries', async () => {
     // @ts-expect-error — apiService.get is mocked as vi.fn()
     apiService.get.mockImplementation((url) => {
       if (url === '/reports/expiry-details') {
         return Promise.resolve([
           {
             inventoryId: 10,
-            expiryDate: '2025-02-01',
+            expiryDate: daysFromNow(20),
             status: 'Markdown 3',
             productId: 20,
             productName: 'Very Long Pharmacy Product Name With Strength 500 mg Tablets',
@@ -50,9 +56,6 @@ describe('DetailedExpiryReportPage', () => {
           },
         ]);
       }
-      if (url === '/store-areas') {
-        return Promise.resolve([{ id: 2, name: 'Front Counter' }]);
-      }
       return Promise.resolve([]);
     });
 
@@ -61,7 +64,7 @@ describe('DetailedExpiryReportPage', () => {
     expect(screen.getByRole('status')).toHaveTextContent(/Loading detailed expiry report/i);
 
     expect(
-      await screen.findByRole('heading', { name: /Detailed Expiry Report/i, level: 1 }),
+      await screen.findByRole('heading', { name: /Markdown Worklist/i, level: 1 }),
     ).toBeInTheDocument();
     expect(
       screen.getByRole('main', { name: /Detailed expiry reporting workspace/i }),
@@ -72,52 +75,9 @@ describe('DetailedExpiryReportPage', () => {
     expect(screen.getByRole('region', { name: /Primary shelf decision/i })).toHaveTextContent(
       /Expired risk/i,
     );
-    expect(screen.getByRole('list', { name: /Mobile expiry row summary/i })).toHaveTextContent(
-      /Very Long Pharmacy Product Name/i,
-    );
-    expect(
-      screen.getByText(/Open each row summary for the immediate shelf decision/i),
-    ).toBeInTheDocument();
-    expect(screen.queryByText(/best viewed on a desktop/i)).not.toBeInTheDocument();
-  });
 
-  it('renders a print-only full expiry table with every loaded row', async () => {
-    const reportRows = Array.from({ length: 12 }, (_, index) => ({
-      inventoryId: index + 1,
-      expiryDate: `2025-02-${String(index + 1).padStart(2, '0')}`,
-      status: index < 10 ? 'Markdown 3' : 'Markdown 2',
-      productId: 100 + index,
-      productName: `Printable Product ${index + 1}`,
-      sku: `SKU-${index + 1}`,
-      costPrice: 10 + index,
-      locationId: 2,
-      locationName: 'Front Counter',
-      subDepartment: 'Cold and Flu',
-    }));
-
-    // @ts-expect-error — apiService.get is mocked as vi.fn()
-    apiService.get.mockImplementation((url) => {
-      if (url === '/reports/expiry-details') {
-        return Promise.resolve(reportRows);
-      }
-      if (url === '/store-areas') {
-        return Promise.resolve([{ id: 2, name: 'Front Counter' }]);
-      }
-      return Promise.resolve([]);
-    });
-
-    render(<DetailedExpiryReportPage token="test-session-value" />);
-
-    await screen.findAllByText('Printable Product 12');
-
-    const printTable = screen.getByRole('table', {
-      name: /Printable full expiry table/i,
-      hidden: true,
-    });
-
-    expect(printTable).toHaveTextContent('Printable Product 1');
-    expect(printTable).toHaveTextContent('Printable Product 12');
-    expect(printTable).not.toHaveTextContent(/Actions/i);
+    const allEntriesLink = screen.getByRole('link', { name: /Browse all expiry entries/i });
+    expect(allEntriesLink).toHaveAttribute('href', '/expiry-entries');
   });
 
   it('announces missing token and fetch errors', async () => {
@@ -128,66 +88,40 @@ describe('DetailedExpiryReportPage', () => {
     });
   });
 
-  it('keeps the current row in edit mode when saving fails', async () => {
+  it('does not render the full expiry table or per-row edit/delete controls', async () => {
     // @ts-expect-error — apiService.get is mocked as vi.fn()
     apiService.get.mockImplementation((url) => {
       if (url === '/reports/expiry-details') {
         return Promise.resolve([
           {
             inventoryId: 10,
-            expiryDate: '2025-02-01',
+            expiryDate: daysFromNow(20),
             status: 'Markdown 3',
             productId: 20,
-            productName: 'First Product',
+            productName: 'Worklist Product',
             sku: 'SKU-1',
             costPrice: 12.5,
             locationId: 2,
             locationName: 'Front Counter',
             subDepartment: 'Cold and Flu',
           },
-          {
-            inventoryId: 11,
-            expiryDate: '2025-03-01',
-            status: 'Markdown 2',
-            productId: 21,
-            productName: 'Second Product',
-            sku: 'SKU-2',
-            costPrice: 15,
-            locationId: 3,
-            locationName: 'Aisle 1',
-            subDepartment: 'Pain Relief',
-          },
-        ]);
-      }
-      if (url === '/store-areas') {
-        return Promise.resolve([
-          { id: 2, name: 'Front Counter' },
-          { id: 3, name: 'Aisle 1' },
         ]);
       }
       return Promise.resolve([]);
     });
-    // @ts-expect-error — apiService.put is mocked as vi.fn()
-    apiService.put.mockRejectedValue(new Error('Could not save item'));
 
     render(<DetailedExpiryReportPage token="test-session-value" />);
 
-    const editButtons = await screen.findAllByRole('button', { name: /^Edit$/i });
-    fireEvent.click(editButtons[0]);
-    fireEvent.click(screen.getByRole('button', { name: /^Save$/i }));
+    await screen.findByRole('heading', { name: /Markdown Worklist/i, level: 1 });
 
-    expect(await screen.findByRole('alert')).toHaveTextContent(/Could not save item/i);
-    expect(screen.getByDisplayValue('2025-02-01')).toBeInTheDocument();
-    expect(screen.queryByDisplayValue('2025-03-01')).not.toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: /^Edit$/i })).not.toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: /^Delete$/i })).not.toBeInTheDocument();
+    expect(
+      screen.queryByRole('table', { name: /Printable full expiry table/i, hidden: true }),
+    ).not.toBeInTheDocument();
   });
 
   it('groups active stock into the markdown worklist and records sold-through', async () => {
-    const daysFromNow = (n: number) => {
-      const d = new Date();
-      d.setDate(d.getDate() + n);
-      return d.toISOString().split('T')[0];
-    };
-
     // @ts-expect-error — apiService.get is mocked as vi.fn()
     apiService.get.mockImplementation((url) => {
       if (url === '/reports/expiry-details') {
@@ -217,9 +151,6 @@ describe('DetailedExpiryReportPage', () => {
             subDepartment: null,
           },
         ]);
-      }
-      if (url === '/store-areas') {
-        return Promise.resolve([{ id: 2, name: 'Front Counter' }]);
       }
       return Promise.resolve([]);
     });

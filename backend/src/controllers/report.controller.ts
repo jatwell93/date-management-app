@@ -48,6 +48,14 @@ export class ReportController {
     await this.respondWithReport(req, res, next, (service) => service.getDetailedExpiryReport());
   }
 
+  async getActiveExpiryEntriesReport(
+    req: AuthRequest,
+    res: Response,
+    next: NextFunction,
+  ): Promise<void> {
+    await this.respondWithReport(req, res, next, (service) => service.getActiveExpiryEntries());
+  }
+
   async getMonthlyMarkdownReport(
     req: AuthRequest,
     res: Response,

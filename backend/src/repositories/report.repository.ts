@@ -219,6 +219,42 @@ export class ReportRepository {
   }
 
   /**
+   * Get all active expiry entries (every future-dated, non-dispositioned item).
+   *
+   * Unlike getDetailedExpiryReport this has no 90-day upper bound, so it surfaces
+   * the whole active pipeline — including data-entry errors with far-future dates
+   * (e.g. year 2666) that would otherwise be invisible in the 90-day worklist.
+   */
+  getActiveExpiryEntries(): DetailedExpiryReportItem[] {
+    const stmt = this.db.prepare(
+      `SELECT
+        ii.id as inventoryId,
+        ii.expiry_date as expiryDate,
+        ii.status as status,
+        p.id as productId,
+        p.name as productName,
+        p.sku as sku,
+        p.cost_price as costPrice,
+        sa.id as locationId,
+        sa.name as locationName,
+        sa.sub_department as subDepartment
+      FROM inventory_items ii
+      JOIN products p ON ii.product_id = p.id
+      JOIN store_areas sa ON ii.location_id = sa.id
+      WHERE ii.expiry_date >= date('now')
+        AND ii.organization_id = ?
+        -- Exclude items already dispositioned via sold-through so they do not
+        -- reappear after refresh. 'Processed' is the SQLite backend marker;
+        -- 'Sold Through' is the workers marker.
+        AND ii.status NOT IN (${dispositionedStatusPlaceholders})
+      -- ii.id tiebreaker keeps ordering deterministic across engines when two
+      -- items share an expiry_date, matching getDetailedExpiryReport.
+      ORDER BY ii.expiry_date ASC, ii.id ASC`,
+    );
+    return stmt.all(this.organizationId, ...DISPOSITIONED_STATUSES) as DetailedExpiryReportItem[];
+  }
+
+  /**
    * Get monthly markdown report
    */
   getMonthlyMarkdownReport(): MonthlyMarkdownReport[] {

@@ -22,6 +22,7 @@ describe('ReportService', () => {
       getMonthlyExpiryReport: vi.fn().mockResolvedValue([]),
       getOverallExpiryReport: vi.fn().mockResolvedValue({}),
       getDetailedExpiryReport: vi.fn().mockResolvedValue([]),
+      getActiveExpiryEntries: vi.fn().mockResolvedValue([]),
       getMonthlyMarkdownReport: vi.fn().mockResolvedValue([]),
       getUsageReport: vi.fn().mockResolvedValue([]),
       getDailyUsageReport: vi.fn().mockResolvedValue([]),
@@ -77,6 +78,18 @@ describe('ReportService', () => {
 
     expect(report).toEqual(mockReport);
     expect(mockRepository.getMonthlyExpiryReport).toHaveBeenCalledTimes(1);
+  });
+
+  it('should return all active expiry entries', async () => {
+    const mockEntries = [
+      { inventoryId: 1, expiryDate: '2027-01-01', status: 'Normal', locationName: 'Aisle 1' },
+    ];
+    (mockRepository.getActiveExpiryEntries as any).mockResolvedValue(mockEntries);
+
+    const entries = await reportService.getActiveExpiryEntries();
+
+    expect(entries).toEqual(mockEntries);
+    expect(mockRepository.getActiveExpiryEntries).toHaveBeenCalledTimes(1);
   });
 
   it('should return dashboard analytics', async () => {

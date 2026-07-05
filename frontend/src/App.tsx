@@ -76,6 +76,11 @@ const DetailedExpiryReportPage = React.lazy(() =>
     default: module.DetailedExpiryReportPage,
   })),
 );
+const ExpiryEntriesPage = React.lazy(() =>
+  import('./pages/ExpiryEntriesPage').then((module) => ({
+    default: module.ExpiryEntriesPage,
+  })),
+);
 const ExpiredItemsPage = React.lazy(() => import('./pages/ExpiredItemsPage'));
 const SubscriptionSettingsPage = React.lazy(() =>
   import('./pages/SubscriptionSettingsPage').then((module) => ({
@@ -363,6 +368,13 @@ function AppRoutes({ isLoggedIn, effectiveUserRole, token }: AppRoutesProps) {
           element={renderSignedInElement(isLoggedIn, <DetailedExpiryReportPage token={token} />)}
         />
         <Route
+          path="/expiry-entries"
+          element={renderSignedInElement(
+            isLoggedIn,
+            <ExpiryEntriesPage token={token} role={effectiveUserRole} />,
+          )}
+        />
+        <Route
           path="/expired-items"
           element={renderSignedInElement(isLoggedIn, <ExpiredItemsPage token={token} />)}
         />
@@ -642,7 +654,10 @@ function AppContent({
                         <Link to="/reports">Overview Reports</Link>
                       </DropdownMenuItem>
                       <DropdownMenuItem asChild>
-                        <Link to="/detailed-expiry-report">Detailed Expiry Report</Link>
+                        <Link to="/detailed-expiry-report">Markdown Worklist</Link>
+                      </DropdownMenuItem>
+                      <DropdownMenuItem asChild>
+                        <Link to="/expiry-entries">All Expiry Entries</Link>
                       </DropdownMenuItem>
                       <DropdownMenuItem asChild>
                         <Link to="/expired-items">Expired Items</Link>
@@ -739,7 +754,8 @@ function AppContent({
                     { to: '/scan', label: 'Scan' },
                     { to: '/dashboard', label: 'Dashboard' },
                     { to: '/reports', label: 'Reports' },
-                    { to: '/detailed-expiry-report', label: 'Detailed Expiry Report' },
+                    { to: '/detailed-expiry-report', label: 'Markdown Worklist' },
+                    { to: '/expiry-entries', label: 'All Expiry Entries' },
                     { to: '/expired-items', label: 'Expired Items' },
                     { to: '/usage-report', label: 'Usage Report' },
                     { to: '/markdown-calculator', label: 'Markdown Calculator' },
