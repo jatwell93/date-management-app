@@ -13,6 +13,24 @@ export interface ParsedExpiryImportDate {
   errorMessage?: string;
 }
 
+const unsupportedDateFormat: ParsedExpiryImportDate = {
+  ok: false,
+  errorCode: 'unsupported-date-format',
+  errorMessage: 'Only numeric date formats are supported',
+};
+
+const invalidCalendarDate: ParsedExpiryImportDate = {
+  ok: false,
+  errorCode: 'invalid-date',
+  errorMessage: 'Date is not a valid calendar date',
+};
+
+const ambiguousDayMonthDate: ParsedExpiryImportDate = {
+  ok: false,
+  errorCode: 'year-missing-or-ambiguous',
+  errorMessage: 'Date must include a year for day/month format',
+};
+
 function toIsoDate(year: number, month: number, day: number): string {
   const monthPart = String(month).padStart(2, '0');
   const dayPart = String(day).padStart(2, '0');
@@ -20,9 +38,9 @@ function toIsoDate(year: number, month: number, day: number): string {
 }
 
 function isValidDateParts(year: number, month: number, day: number): boolean {
-  if (month < 1 || month > 12 || day < 1) {
-    return false;
-  }
+  const hasValidMonth = month >= 1 && month <= 12;
+  if (!hasValidMonth) return false;
+  if (day < 1) return false;
 
   const candidate = new Date(Date.UTC(year, month - 1, day));
   return (
@@ -39,98 +57,67 @@ function normalizeYear(yearToken: string): number {
   return Number(yearToken);
 }
 
-export function parseExpiryImportDate(value: string): ParsedExpiryImportDate {
-  const raw = value.trim();
+function lastDayOfMonth(year: number, month: number): number {
+  return new Date(Date.UTC(year, month, 0)).getUTCDate();
+}
 
-  if (raw.length === 0) {
-    return {
-      ok: false,
-      errorCode: 'unsupported-date-format',
-      errorMessage: 'Only numeric date formats are supported',
-    };
-  }
-
-  if (/[a-zA-Z]/.test(raw)) {
-    return {
-      ok: false,
-      errorCode: 'unsupported-date-format',
-      errorMessage: 'Only numeric date formats are supported',
-    };
-  }
-
-  const ambiguousDayMonthMatch = raw.match(/^(\d{1,2})\/(\d{1,2})$/);
-  if (ambiguousDayMonthMatch) {
-    const secondToken = Number(ambiguousDayMonthMatch[2]);
-    if (secondToken > 12) {
-      const month = Number(ambiguousDayMonthMatch[1]);
-      const year = 2000 + secondToken;
-
-      if (!isValidDateParts(year, month, 1)) {
-        return {
-          ok: false,
-          errorCode: 'invalid-date',
-          errorMessage: 'Date is not a valid calendar date',
-        };
-      }
-
-      const lastDay = new Date(Date.UTC(year, month, 0)).getUTCDate();
-      return {
-        ok: true,
-        isoDate: toIsoDate(year, month, lastDay),
-      };
-    }
-
-    return {
-      ok: false,
-      errorCode: 'year-missing-or-ambiguous',
-      errorMessage: 'Date must include a year for day/month format',
-    };
-  }
-
-  const fullDateMatch = raw.match(/^(\d{1,2})\/(\d{1,2})\/(\d{2}|\d{4})$/);
-  if (fullDateMatch) {
-    const day = Number(fullDateMatch[1]);
-    const month = Number(fullDateMatch[2]);
-    const year = normalizeYear(fullDateMatch[3]);
-
-    if (!isValidDateParts(year, month, day)) {
-      return {
-        ok: false,
-        errorCode: 'invalid-date',
-        errorMessage: 'Date is not a valid calendar date',
-      };
-    }
-
-    return {
-      ok: true,
-      isoDate: toIsoDate(year, month, day),
-    };
-  }
-
-  const monthYearMatch = raw.match(/^(\d{1,2})([\/-])(\d{2}|\d{4})$/);
-  if (monthYearMatch) {
-    const month = Number(monthYearMatch[1]);
-    const year = normalizeYear(monthYearMatch[3]);
-
-    if (!isValidDateParts(year, month, 1)) {
-      return {
-        ok: false,
-        errorCode: 'invalid-date',
-        errorMessage: 'Date is not a valid calendar date',
-      };
-    }
-
-    const lastDay = new Date(Date.UTC(year, month, 0)).getUTCDate();
-
-    return {
-      ok: true,
-      isoDate: toIsoDate(year, month, lastDay),
-    };
+function toMonthEndResult(year: number, month: number): ParsedExpiryImportDate {
+  if (!isValidDateParts(year, month, 1)) {
+    return invalidCalendarDate;
   }
 
   return {
-    ok: false,
-    errorCode: 'unsupported-date-format',
-    errorMessage: 'Only numeric date formats are supported',
+    ok: true,
+    isoDate: toIsoDate(year, month, lastDayOfMonth(year, month)),
   };
+}
+
+function parseAmbiguousDayMonth(raw: string): ParsedExpiryImportDate | null {
+  const match = raw.match(/^(\d{1,2})\/(\d{1,2})$/);
+  if (!match) return null;
+
+  const secondToken = Number(match[2]);
+  if (secondToken <= 12) {
+    return ambiguousDayMonthDate;
+  }
+
+  return toMonthEndResult(2000 + secondToken, Number(match[1]));
+}
+
+function parseFullDate(raw: string): ParsedExpiryImportDate | null {
+  const match = raw.match(/^(\d{1,2})\/(\d{1,2})\/(\d{2}|\d{4})$/);
+  if (!match) return null;
+
+  const day = Number(match[1]);
+  const month = Number(match[2]);
+  const year = normalizeYear(match[3]);
+
+  if (!isValidDateParts(year, month, day)) {
+    return invalidCalendarDate;
+  }
+
+  return {
+    ok: true,
+    isoDate: toIsoDate(year, month, day),
+  };
+}
+
+function parseMonthYear(raw: string): ParsedExpiryImportDate | null {
+  const match = raw.match(/^(\d{1,2})([/-])(\d{2}|\d{4})$/);
+  if (!match) return null;
+
+  return toMonthEndResult(normalizeYear(match[3]), Number(match[1]));
+}
+
+export function parseExpiryImportDate(value: string): ParsedExpiryImportDate {
+  const raw = value.trim();
+
+  if (raw.length === 0 || /[a-zA-Z]/.test(raw)) return unsupportedDateFormat;
+
+  return (
+    parseAmbiguousDayMonth(raw) ??
+    parseFullDate(raw) ??
+    parseMonthYear(raw) ??
+    unsupportedDateFormat
+  );
 }

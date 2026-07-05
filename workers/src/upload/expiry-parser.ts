@@ -34,74 +34,107 @@ export const EXPIRY_HEADER_ALIASES = {
   department: ['department', 'dept', 'location', 'storearea', 'area', 'section'],
 } as const;
 
+type ExpiryHeaderIndexes = {
+  sku: number;
+  itemDescription: number;
+  usedByDate: number;
+  department: number;
+};
+
+type ExpiryValidationResult = {
+  rows: ValidatedExpiryRow[];
+  rowErrors: string[];
+  fatalErrors: string[];
+  totalRows: number;
+};
+
+function emptyValidationResult(fatalErrors: string[] = []): ExpiryValidationResult {
+  return { rows: [], rowErrors: [], fatalErrors, totalRows: 0 };
+}
+
+function findExpiryHeaderIndexes(headers: string[]): ExpiryHeaderIndexes {
+  return {
+    sku: findHeaderIndex(headers, EXPIRY_HEADER_ALIASES.sku),
+    itemDescription: findHeaderIndex(headers, EXPIRY_HEADER_ALIASES.itemDescription),
+    usedByDate: findHeaderIndex(headers, EXPIRY_HEADER_ALIASES.usedByDate),
+    department: findHeaderIndex(headers, EXPIRY_HEADER_ALIASES.department),
+  };
+}
+
+function missingRequiredHeaders(indexes: ExpiryHeaderIndexes): Array<'sku' | 'usedByDate'> {
+  return (['sku', 'usedByDate'] as const).filter((key) => indexes[key] < 0);
+}
+
+function isBlankRecord(record: string[]): boolean {
+  return !record.some((cell) => cell.trim());
+}
+
+function cellValue(record: string[], index: number): string {
+  return index >= 0 ? (record[index] || '').trim() : '';
+}
+
+function validateExpiryRecord(
+  record: string[],
+  rowNumber: number,
+  indexes: ExpiryHeaderIndexes,
+): { row?: ValidatedExpiryRow; error?: string } {
+  const sku = cellValue(record, indexes.sku);
+  const usedByInput = cellValue(record, indexes.usedByDate);
+  const itemDescription = cellValue(record, indexes.itemDescription);
+  const departmentRaw = cellValue(record, indexes.department);
+
+  if (!sku) {
+    return { error: `Row ${rowNumber}: SKU is required and cannot be empty` };
+  }
+  if (!usedByInput) {
+    return { error: `Row ${rowNumber}: Used-By Date is required and cannot be empty` };
+  }
+
+  const parsedDate = parseExpiryImportDate(usedByInput);
+  if (!parsedDate.ok || !parsedDate.isoDate) {
+    return { error: `Row ${rowNumber}: ${parsedDate.errorMessage} ("${usedByInput}")` };
+  }
+
+  return {
+    row: {
+      sku,
+      itemDescription,
+      usedByDate: parsedDate.isoDate,
+      department: departmentRaw !== '' ? departmentRaw : undefined,
+      rowNumber,
+    },
+  };
+}
+
 export function validateExpiryRecords(records: string[][]): {
   rows: ValidatedExpiryRow[];
   rowErrors: string[];
   fatalErrors: string[];
   totalRows: number;
 } {
-  const fatalErrors: string[] = [];
-  const rowErrors: string[] = [];
   if (records.length < 2) {
-    return { rows: [], rowErrors, fatalErrors: ['No expiry rows found'], totalRows: 0 };
+    return emptyValidationResult(['No expiry rows found']);
   }
 
   const headers = records[0].map(normalizeHeader);
-  const indexes = {
-    sku: findHeaderIndex(headers, EXPIRY_HEADER_ALIASES.sku),
-    itemDescription: findHeaderIndex(headers, EXPIRY_HEADER_ALIASES.itemDescription),
-    usedByDate: findHeaderIndex(headers, EXPIRY_HEADER_ALIASES.usedByDate),
-    department: findHeaderIndex(headers, EXPIRY_HEADER_ALIASES.department),
-  };
+  const indexes = findExpiryHeaderIndexes(headers);
 
   // Only SKU and Used-By Date are required; item description and department are optional.
-  const missing = (['sku', 'usedByDate'] as const).filter((key) => indexes[key] < 0);
+  const missing = missingRequiredHeaders(indexes);
   if (missing.length > 0) {
-    return {
-      rows: [],
-      rowErrors,
-      fatalErrors: [`Missing required column header(s): ${missing.join(', ')}`],
-      totalRows: 0,
-    };
+    return emptyValidationResult([`Missing required column header(s): ${missing.join(', ')}`]);
   }
 
   const rows: ValidatedExpiryRow[] = [];
+  const rowErrors: string[] = [];
   let totalRows = 0;
   records.slice(1).forEach((record, index) => {
-    if (!record.some((cell) => cell.trim())) return;
+    if (isBlankRecord(record)) return;
     totalRows += 1;
-    const rowNumber = index + 2;
-
-    const sku = (record[indexes.sku] || '').trim();
-    const usedByInput = (record[indexes.usedByDate] || '').trim();
-    const itemDescription =
-      indexes.itemDescription >= 0 ? (record[indexes.itemDescription] || '').trim() : '';
-    const departmentRaw =
-      indexes.department >= 0 ? (record[indexes.department] || '').trim() : '';
-
-    if (!sku) {
-      rowErrors.push(`Row ${rowNumber}: SKU is required and cannot be empty`);
-      return;
-    }
-    if (!usedByInput) {
-      rowErrors.push(`Row ${rowNumber}: Used-By Date is required and cannot be empty`);
-      return;
-    }
-
-    const parsedDate = parseExpiryImportDate(usedByInput);
-    if (!parsedDate.ok || !parsedDate.isoDate) {
-      rowErrors.push(`Row ${rowNumber}: ${parsedDate.errorMessage} ("${usedByInput}")`);
-      return;
-    }
-
-    rows.push({
-      sku,
-      itemDescription,
-      usedByDate: parsedDate.isoDate,
-      department: departmentRaw !== '' ? departmentRaw : undefined,
-      rowNumber,
-    });
+    const validated = validateExpiryRecord(record, index + 2, indexes);
+    if (validated.error) rowErrors.push(validated.error);
+    if (validated.row) rows.push(validated.row);
   });
 
-  return { rows, rowErrors, fatalErrors, totalRows };
+  return { rows, rowErrors, fatalErrors: [], totalRows };
 }

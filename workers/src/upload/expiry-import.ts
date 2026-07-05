@@ -68,10 +68,26 @@ export async function processExpiryListUpload(
   summary.skippedCount += validation.rowErrors.length;
   summary.errors.push(...validation.rowErrors);
 
-  // First-wins dedupe within the uploaded file; later duplicates count as merged.
+  const dedupedRows = dedupeExpiryRows(validation.rows, summary);
+  const productIdBySku = new Map<string, number>();
+  const locationIdByName = new Map<string, number>();
+
+  for (const row of dedupedRows) {
+    await importExpiryRow(db, organizationId, row, productIdBySku, locationIdByName, summary);
+  }
+
+  summary.rowsProcessed = summary.importedCount + summary.updatedCount + summary.skippedCount;
+  summary.errorCount = summary.errors.length;
+  return summary;
+}
+
+function dedupeExpiryRows(
+  rows: ValidatedExpiryRow[],
+  summary: UploadProcessingSummary,
+): ValidatedExpiryRow[] {
   const seen = new Set<string>();
   const dedupedRows: ValidatedExpiryRow[] = [];
-  for (const row of validation.rows) {
+  for (const row of rows) {
     const dedupeKey = `${row.sku.toLowerCase()}|${row.usedByDate}`;
     if (seen.has(dedupeKey)) {
       summary.updatedCount += 1;
@@ -81,54 +97,75 @@ export async function processExpiryListUpload(
     dedupedRows.push(row);
   }
 
-  const productIdBySku = new Map<string, number>();
-  const locationIdByName = new Map<string, number>();
+  return dedupedRows;
+}
 
-  for (const row of dedupedRows) {
-    try {
-      const productId = await getOrCreateExpiryProduct(db, organizationId, row, productIdBySku);
-
-      const existing = await db.sql`
-        SELECT id FROM inventory_items
-        WHERE organization_id = ${organizationId}
-          AND product_id = ${productId}
-          AND expiry_date::date = ${row.usedByDate}::date
-        LIMIT 1
-      `;
-      if (existing[0]) {
-        summary.updatedCount += 1;
-        continue;
-      }
-
-      const departmentName = row.department ?? UNALLOCATED_DEPARTMENT_NAME;
-      const locationId = await getOrCreateStoreArea(
-        db,
-        organizationId,
-        departmentName,
-        locationIdByName,
-      );
-
-      await db.sql`
-        INSERT INTO inventory_items
-          (organization_id, product_id, expiry_date, location_id, status, created_at, updated_at)
-        VALUES
-          (${organizationId}, ${productId}, ${row.usedByDate}, ${locationId},
-           ${calculateInventoryStatus(row.usedByDate)}, NOW(), NOW())
-      `;
-      summary.importedCount += 1;
-    } catch (error) {
-      Sentry.captureException(error, {
-        tags: { feature: 'worker-upload', action: 'expiry-import-row' },
-        extra: { rowNumber: row.rowNumber },
-      });
-      summary.skippedCount += 1;
-      summary.errors.push(`Row ${row.rowNumber}: Expiry import failed`);
+async function importExpiryRow(
+  db: Database,
+  organizationId: string,
+  row: ValidatedExpiryRow,
+  productIdBySku: Map<string, number>,
+  locationIdByName: Map<string, number>,
+  summary: UploadProcessingSummary,
+): Promise<void> {
+  try {
+    const productId = await getOrCreateExpiryProduct(db, organizationId, row, productIdBySku);
+    const alreadyImported = await inventoryItemExists(db, organizationId, productId, row.usedByDate);
+    if (alreadyImported) {
+      summary.updatedCount += 1;
+      return;
     }
-  }
 
-  summary.rowsProcessed = summary.importedCount + summary.updatedCount + summary.skippedCount;
-  summary.errorCount = summary.errors.length;
-  return summary;
+    const departmentName = row.department ?? UNALLOCATED_DEPARTMENT_NAME;
+    const locationId = await getOrCreateStoreArea(
+      db,
+      organizationId,
+      departmentName,
+      locationIdByName,
+    );
+
+    await insertInventoryItem(db, organizationId, productId, row.usedByDate, locationId);
+    summary.importedCount += 1;
+  } catch (error) {
+    Sentry.captureException(error, {
+      tags: { feature: 'worker-upload', action: 'expiry-import-row' },
+      extra: { rowNumber: row.rowNumber },
+    });
+    summary.skippedCount += 1;
+    summary.errors.push(`Row ${row.rowNumber}: Expiry import failed`);
+  }
+}
+
+async function inventoryItemExists(
+  db: Database,
+  organizationId: string,
+  productId: number,
+  usedByDate: string,
+): Promise<boolean> {
+  const existing = await db.sql`
+    SELECT id FROM inventory_items
+    WHERE organization_id = ${organizationId}
+      AND product_id = ${productId}
+      AND expiry_date::date = ${usedByDate}::date
+    LIMIT 1
+  `;
+  return Boolean(existing[0]);
+}
+
+async function insertInventoryItem(
+  db: Database,
+  organizationId: string,
+  productId: number,
+  usedByDate: string,
+  locationId: number,
+): Promise<void> {
+  await db.sql`
+    INSERT INTO inventory_items
+      (organization_id, product_id, expiry_date, location_id, status, created_at, updated_at)
+    VALUES
+      (${organizationId}, ${productId}, ${usedByDate}, ${locationId},
+       ${calculateInventoryStatus(usedByDate)}, NOW(), NOW())
+  `;
 }
 
 async function getOrCreateExpiryProduct(
