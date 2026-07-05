@@ -190,18 +190,24 @@ describe('minimal API route table', () => {
           active_users: 3,
           storage_used_bytes: 4096,
           total_inventory_items: 84,
+          max_skus: 5000,
+          max_users: 3,
+          max_inventory_items: 5000,
         },
       ],
+      'FROM subscription_tiers': [{ tier_level: 'starter' }],
     });
 
     const response = await resolveMinimalGet('/api/organization/usage', dbWithRows);
 
     expect(response?.status).toBe(200);
+    // The frontend ProgressBar consumes a nested { current, limit } shape;
+    // a flat number here is what crashed SubscriptionDashboard in production.
     await expect(response?.json()).resolves.toEqual({
-      skus: 42,
-      users: 3,
-      storage: 4096,
-      inventoryItems: 84,
+      skus: { current: 42, limit: 5000 },
+      users: { current: 3, limit: 3 },
+      storage: { current: 4096, limit: 10 * 1024 * 1024 * 1024 },
+      inventoryItems: { current: 84, limit: 5000 },
     });
   });
 
