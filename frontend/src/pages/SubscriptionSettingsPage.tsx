@@ -101,13 +101,16 @@ export function SubscriptionSettingsPage({ token }: SubscriptionSettingsPageProp
   };
 
   // Only paid subscriptions with a reliable Stripe customer can open the billing
-  // portal. `active` and `past_due` both have one (past_due users specifically
-  // need the portal to fix a failed payment). Free/trialing users have no Stripe
-  // customer yet, so we show a subscribe CTA instead of a button that would 402.
+  // portal. `active`, `past_due`, and `canceled` all retain one: past_due users
+  // need the portal to fix a failed payment, and canceled users can still view
+  // past invoices or re-subscribe. Free/trialing users have no Stripe customer
+  // yet, so we show a subscribe CTA instead of a button that would 402.
   const canManageBilling =
     !!subscription &&
     subscription.tierLevel !== 'free' &&
-    (subscription.status === 'active' || subscription.status === 'past_due');
+    (subscription.status === 'active' ||
+      subscription.status === 'past_due' ||
+      subscription.status === 'canceled');
 
   const handleSelectPlan = async (tier: TierLevel, billingCycle: 'monthly' | 'annual') => {
     if (!token) return;

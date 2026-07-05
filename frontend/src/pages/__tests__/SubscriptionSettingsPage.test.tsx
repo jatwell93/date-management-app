@@ -183,6 +183,27 @@ describe('SubscriptionSettingsPage', () => {
     expect(screen.queryByRole('button', { name: /View plans/i })).not.toBeInTheDocument();
   });
 
+  it('shows Manage Billing for a canceled paid plan that still has a Stripe customer', async () => {
+    (global.fetch as jest.Mock)
+      .mockResolvedValueOnce({
+        ok: true,
+        json: async () => ({ tierLevel: 'starter', status: 'canceled' }),
+      })
+      .mockResolvedValueOnce({
+        ok: true,
+        json: async () => ({
+          skus: { current: 0, limit: 5000 },
+          users: { current: 1, limit: 3 },
+          storage: { current: 0, limit: 10737418240 },
+        }),
+      });
+
+    render(<SubscriptionSettingsPage token="test-token" />);
+
+    expect(await screen.findByRole('button', { name: /Manage Billing/i })).toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: /View plans/i })).not.toBeInTheDocument();
+  });
+
   it('does not start Checkout for Enterprise contact sales', async () => {
     const alertSpy = window.alert as jest.Mock;
     (global.fetch as jest.Mock)
