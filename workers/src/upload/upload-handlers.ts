@@ -10,6 +10,7 @@ import {
   type ProductCatalogRow,
 } from './catalogue-parser';
 import { parseCsvRecords } from './csv-parser';
+import { processExpiryListUpload } from './expiry-import';
 
 export type UploadCompleteBody = { key?: string; importType?: string };
 
@@ -40,6 +41,7 @@ export type ProcessCompletedUploadSyncDeps<TSummary extends Record<string, unkno
     organizationId: string,
     env: Env,
     db: Database,
+    importType?: string,
   ) => Promise<TSummary>;
 };
 
@@ -101,6 +103,7 @@ export async function processCompletedUploadSync<TSummary extends Record<string,
   db: Database;
   key: string;
   organizationId: string;
+  importType?: string;
   deps: ProcessCompletedUploadSyncDeps<TSummary>;
 }): Promise<Response> {
   try {
@@ -109,6 +112,7 @@ export async function processCompletedUploadSync<TSummary extends Record<string,
       input.organizationId,
       input.env,
       input.db,
+      input.importType,
     );
     return jsonResponse(
       { message: 'Upload completed and processing started', ...processingSummary },
@@ -197,6 +201,7 @@ export async function processStoredUpload(
   organizationId: string,
   env: Env,
   db: Database,
+  importType?: string,
 ): Promise<UploadProcessingSummary> {
   if (typeof env.CSV_UPLOADS.get !== 'function') {
     return emptyUploadProcessingSummary();
@@ -208,7 +213,10 @@ export async function processStoredUpload(
   }
 
   const data = await object.arrayBuffer();
-  const processingSummary = await processProductCatalogUpload(data, organizationId, db);
+  const processingSummary =
+    importType === 'expiry-list'
+      ? await processExpiryListUpload(data, organizationId, db)
+      : await processProductCatalogUpload(data, organizationId, db);
 
   await env.CSV_UPLOADS.put(key, data, {
     httpMetadata: {

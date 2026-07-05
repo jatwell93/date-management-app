@@ -38,6 +38,7 @@ import {
   type MinimalApiRoute,
 } from './minimal-api-routes';
 import type { ValidatedCatalogueRow } from './upload/catalogue-parser';
+import { processExpiryListUpload } from './upload/expiry-import';
 import {
   parseUploadCompleteBody,
   parseUploadProcessingSummary,
@@ -2241,7 +2242,10 @@ export async function handleUploadDirect(
     );
   }
 
-  const processingSummary = await processProductCatalogUpload(data, auth.organizationId, db);
+  const processingSummary =
+    requestedImportType === 'expiry-list'
+      ? await processExpiryListUpload(data, auth.organizationId, db)
+      : await processProductCatalogUpload(data, auth.organizationId, db);
 
   await env.CSV_UPLOADS.put(key, data, {
     httpMetadata: {
@@ -2309,6 +2313,7 @@ export async function handleUploadComplete(
     db,
     key: body.key,
     organizationId: auth.organizationId,
+    importType: body.importType,
     deps: { processStoredUpload },
   });
 }
