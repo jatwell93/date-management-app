@@ -1818,7 +1818,13 @@ type OrganizationUsageRow = {
   active_users?: number | string | null;
   storage_used_bytes?: number | string | null;
   total_inventory_items?: number | string | null;
+  max_users?: number | string | null;
+  max_skus?: number | string | null;
+  max_inventory_items?: number | string | null;
 };
+
+const toNullableLimit = (value: unknown): number | null =>
+  value === null || value === undefined ? null : Number(value);
 
 const mapSubscriptionSettingsResponse = (subscription?: SubscriptionSettingsRow) => ({
   tierLevel: normalizeLaunchTier(subscription?.tier_level),
@@ -1827,11 +1833,32 @@ const mapSubscriptionSettingsResponse = (subscription?: SubscriptionSettingsRow)
   currentPeriodEnd: subscription?.trial_end_date || null,
 });
 
-const mapOrganizationUsageResponse = (usage?: OrganizationUsageRow) => ({
-  skus: Number(usage?.total_skus ?? 0),
-  users: Number(usage?.active_users ?? 0),
-  storage: Number(usage?.storage_used_bytes ?? 0),
-  inventoryItems: Number(usage?.total_inventory_items ?? 0),
+// The frontend SubscriptionDashboard renders each resource as a
+// "{current} / {limit}" progress bar, so the API MUST return a nested
+// { current, limit } pair per resource — not a flat number. skus/users/
+// inventory limits are the per-org max_* columns (source of truth, see the
+// max_users enforcement query above). Storage has no per-org column, so its
+// limit is derived from the org's tier in the handler.
+const mapOrganizationUsageResponse = (
+  usage: OrganizationUsageRow | undefined,
+  storageLimitBytes: number,
+) => ({
+  skus: {
+    current: Number(usage?.total_skus ?? 0),
+    limit: toNullableLimit(usage?.max_skus),
+  },
+  users: {
+    current: Number(usage?.active_users ?? 0),
+    limit: Number(usage?.max_users ?? 0),
+  },
+  storage: {
+    current: Number(usage?.storage_used_bytes ?? 0),
+    limit: storageLimitBytes,
+  },
+  inventoryItems: {
+    current: Number(usage?.total_inventory_items ?? 0),
+    limit: toNullableLimit(usage?.max_inventory_items),
+  },
 });
 
 /**
@@ -1901,13 +1928,23 @@ async function handleGetOrganizationUsage(
       total_skus,
       active_users,
       storage_used_bytes,
-      total_inventory_items
+      total_inventory_items,
+      max_users,
+      max_skus,
+      max_inventory_items
     FROM organization_usage
     WHERE organization_id = ${auth.organizationId}
     LIMIT 1
   `;
 
-  return jsonResponse(mapOrganizationUsageResponse(rows[0] as OrganizationUsageRow), 200, env);
+  const tier = await getOrganizationLaunchTier(auth.organizationId, db);
+  const storageLimitBytes = STORAGE_LIMIT_BYTES_BY_TIER[tier];
+
+  return jsonResponse(
+    mapOrganizationUsageResponse(rows[0] as OrganizationUsageRow, storageLimitBytes),
+    200,
+    env,
+  );
 }
 
 /**
@@ -2398,6 +2435,19 @@ const LAUNCH_TIER_LIMITS: Record<LaunchTier, { maxSkus: number; maxActiveExpirie
   starter: { maxSkus: 5000, maxActiveExpiries: 5000 },
   professional: { maxSkus: 50000, maxActiveExpiries: 50000 },
   enterprise: { maxSkus: 250000, maxActiveExpiries: 250000 },
+};
+
+const GIBIBYTE = 1024 * 1024 * 1024;
+
+// Per-tier storage limits (bytes). There is no per-org max_storage column, so
+// storage limits mirror StorageQuotaService's free/pro/enterprise buckets
+// (backend/src/services/storage-quota.service.ts), keyed by normalized launch
+// tier. Adjust here if product changes the storage entitlement per plan.
+const STORAGE_LIMIT_BYTES_BY_TIER: Record<LaunchTier, number> = {
+  free: 1 * GIBIBYTE,
+  starter: 10 * GIBIBYTE,
+  professional: 10 * GIBIBYTE,
+  enterprise: 1000 * GIBIBYTE,
 };
 
 function normalizeLaunchTier(value: unknown): LaunchTier {
