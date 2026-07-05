@@ -99,4 +99,31 @@ describe('Worker upload completion helpers', () => {
       }),
     );
   });
+
+  it('dispatches expiry-list uploads to the expiry processor, not the catalogue parser', async () => {
+    // A header-only expiry file surfaces the expiry-specific "No expiry rows found"
+    // error, proving importType routed to processExpiryListUpload (the catalogue path
+    // would instead report "No product rows found").
+    const csv = new TextEncoder().encode('SKU,Used-By Date\n').buffer;
+    const processingEnv = {
+      ...env,
+      CSV_UPLOADS: {
+        get: vi.fn().mockResolvedValue({
+          arrayBuffer: vi.fn().mockResolvedValue(csv),
+          httpMetadata: { contentType: 'text/csv' },
+        }),
+        put: vi.fn(),
+      },
+    } as unknown as Env;
+
+    const summary = await processStoredUpload(
+      'uploads/user-7/expiry.csv',
+      'org_test',
+      processingEnv,
+      { sql: vi.fn() } as unknown as Database,
+      'expiry-list',
+    );
+
+    expect(summary.errors).toEqual(['No expiry rows found']);
+  });
 });

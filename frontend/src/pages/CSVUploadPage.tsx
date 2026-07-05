@@ -309,6 +309,58 @@ export const CSVUploadPage: React.FC<{
     triggerFileDownload(new Blob([binary], { type: mimeType }), `expiry-import-template.${format}`);
   };
 
+  const downloadCatalogTemplate = (format: 'csv' | 'xlsx' | 'xls') => {
+    const templateRows = [
+      ['SKU', 'Name', 'Cost', 'Barcode'],
+      ['1001', 'Sample Vitamin C 500mg', '12.99', '9312345678900'],
+      ['1002', 'Sample Moisturiser 200ml', '8.50', '9312345678917'],
+    ];
+
+    const guidanceRows = [
+      ['Guidance', 'Value'],
+      ['Required columns', 'SKU, Name, Cost, Barcode'],
+      ['Accepted SKU headers', 'SKU, Item Code, Reorder Number, Product Code, Item Number'],
+      ['Accepted Name headers', 'Name, Item Description, Product Name, Description, Item Name'],
+      ['Accepted Cost headers', 'Cost, Cost Price, Unit Cost, Price, Selling Price'],
+      ['Accepted Barcode headers', 'Barcode, Alias, EAN, UPC, GTIN'],
+      ['Cost format', 'Decimal numbers like 1.99 or 19.99 (currency symbols are stripped)'],
+    ];
+
+    if (format === 'csv') {
+      const csvBody = templateRows
+        .map((row) => row.map((cell) => `"${String(cell).replace(/"/g, '""')}"`).join(','))
+        .join('\n');
+      const csvGuidance = guidanceRows.map((row) => `# ${row[0]}: ${row[1]}`).join('\n');
+      const csvContent = `${csvBody}\n\n${csvGuidance}\n`;
+
+      triggerFileDownload(
+        new Blob([csvContent], { type: 'text/csv;charset=utf-8' }),
+        'product-catalog-template.csv',
+      );
+      return;
+    }
+
+    const workbook = XLSX.utils.book_new();
+    const templateSheet = XLSX.utils.aoa_to_sheet(templateRows);
+    const guidanceSheet = XLSX.utils.aoa_to_sheet(guidanceRows);
+    XLSX.utils.book_append_sheet(workbook, templateSheet, 'Template');
+    XLSX.utils.book_append_sheet(workbook, guidanceSheet, 'Guidance');
+
+    const binary = XLSX.write(workbook, {
+      bookType: format,
+      type: 'array',
+    });
+
+    const mimeType =
+      format === 'xlsx'
+        ? 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet'
+        : 'application/vnd.ms-excel';
+    triggerFileDownload(
+      new Blob([binary], { type: mimeType }),
+      `product-catalog-template.${format}`,
+    );
+  };
+
   const normalizeUploadFile = async (
     file: File,
   ): Promise<{ fileToUpload: File; fileNameToUpload: string }> => {
@@ -922,43 +974,50 @@ export const CSVUploadPage: React.FC<{
               )}
             </div>
 
-            {isExpiryImport && (
-              <div className="mb-6 p-4 bg-semantic-surface-2 rounded-md border border-hairline">
-                <h3 className="text-lg font-medium text-semantic-text-primary mb-2">
-                  Download Import Templates
-                </h3>
-                <p className="text-sm text-semantic-text-secondary mb-3">
-                  Templates include required fields, accepted date examples, and rejected-format
-                  guidance.
-                </p>
-                <div className="grid gap-2 sm:flex sm:flex-wrap">
-                  <Button
-                    type="button"
-                    onClick={() => downloadExpiryTemplate('csv')}
-                    size="sm"
-                    className="min-h-11 w-full sm:w-auto"
-                  >
-                    Download CSV Template
-                  </Button>
-                  <Button
-                    type="button"
-                    onClick={() => downloadExpiryTemplate('xlsx')}
-                    size="sm"
-                    className="min-h-11 w-full sm:w-auto"
-                  >
-                    Download XLSX Template
-                  </Button>
-                  <Button
-                    type="button"
-                    onClick={() => downloadExpiryTemplate('xls')}
-                    size="sm"
-                    className="min-h-11 w-full sm:w-auto"
-                  >
-                    Download XLS Template
-                  </Button>
-                </div>
+            <div className="mb-6 p-4 bg-semantic-surface-2 rounded-md border border-hairline">
+              <h3 className="text-lg font-medium text-semantic-text-primary mb-2">
+                Download Import Templates
+              </h3>
+              <p className="text-sm text-semantic-text-secondary mb-3">
+                {isExpiryImport
+                  ? 'Templates include required fields, accepted date examples, and rejected-format guidance.'
+                  : 'Templates include the required columns (SKU, Name, Cost, Barcode) and accepted header variations.'}
+              </p>
+              <div className="grid gap-2 sm:flex sm:flex-wrap">
+                <Button
+                  type="button"
+                  onClick={() =>
+                    isExpiryImport ? downloadExpiryTemplate('csv') : downloadCatalogTemplate('csv')
+                  }
+                  size="sm"
+                  className="min-h-11 w-full sm:w-auto"
+                >
+                  Download CSV Template
+                </Button>
+                <Button
+                  type="button"
+                  onClick={() =>
+                    isExpiryImport
+                      ? downloadExpiryTemplate('xlsx')
+                      : downloadCatalogTemplate('xlsx')
+                  }
+                  size="sm"
+                  className="min-h-11 w-full sm:w-auto"
+                >
+                  Download XLSX Template
+                </Button>
+                <Button
+                  type="button"
+                  onClick={() =>
+                    isExpiryImport ? downloadExpiryTemplate('xls') : downloadCatalogTemplate('xls')
+                  }
+                  size="sm"
+                  className="min-h-11 w-full sm:w-auto"
+                >
+                  Download XLS Template
+                </Button>
               </div>
-            )}
+            </div>
 
             <form onSubmit={handleSubmit} aria-busy={isUploading}>
               <div className="mb-4">

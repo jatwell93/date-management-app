@@ -83,7 +83,9 @@ const SCHEMA_SQL = `
     id SERIAL PRIMARY KEY,
     organization_id TEXT NOT NULL,
     name TEXT NOT NULL,
-    sub_department TEXT NOT NULL DEFAULT ''
+    sub_department TEXT NOT NULL DEFAULT '',
+    created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+    updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
   );
 
   CREATE TABLE inventory_items (

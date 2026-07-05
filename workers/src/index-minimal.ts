@@ -38,6 +38,7 @@ import {
   type MinimalApiRoute,
 } from './minimal-api-routes';
 import type { ValidatedCatalogueRow } from './upload/catalogue-parser';
+import { processExpiryListUpload } from './upload/expiry-import';
 import {
   parseUploadCompleteBody,
   parseUploadProcessingSummary,
@@ -46,6 +47,7 @@ import {
   processCompletedUploadSync,
   queueCompletedCatalogueUpload,
   serializeUploadProcessingSummary,
+  type UploadProcessingSummary,
   userOwnsUploadKey,
 } from './upload/upload-handlers';
 import {
@@ -2241,7 +2243,12 @@ export async function handleUploadDirect(
     );
   }
 
-  const processingSummary = await processProductCatalogUpload(data, auth.organizationId, db);
+  const processingSummary = await processDirectUpload(
+    data,
+    requestedImportType,
+    auth.organizationId,
+    db,
+  );
 
   await env.CSV_UPLOADS.put(key, data, {
     httpMetadata: {
@@ -2259,6 +2266,19 @@ export async function handleUploadDirect(
     200,
     env,
   );
+}
+
+function processDirectUpload(
+  data: ArrayBuffer,
+  requestedImportType: string,
+  organizationId: string,
+  db: Database,
+): Promise<UploadProcessingSummary> {
+  if (requestedImportType === 'expiry-list') {
+    return processExpiryListUpload(data, organizationId, db);
+  }
+
+  return processProductCatalogUpload(data, organizationId, db);
 }
 
 /**
@@ -2309,6 +2329,7 @@ export async function handleUploadComplete(
     db,
     key: body.key,
     organizationId: auth.organizationId,
+    importType: body.importType,
     deps: { processStoredUpload },
   });
 }
