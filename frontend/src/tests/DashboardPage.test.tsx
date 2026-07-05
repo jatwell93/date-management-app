@@ -40,15 +40,16 @@ describe('DashboardPage', () => {
         totalProducts: 100,
         totalInventoryItems: 42,
         expiringItems: 10,
-        lowStockItems: 5,
+        expiredActionItems: 5,
       },
-      recentActivity: [
-        {
-          id: 1,
-          description: 'Activity 1',
-          timestamp: '2025-09-24T10:00:00Z',
+      activity: {
+        lastCatalogueUpload: {
+          fileName: 'catalogue-sep.csv',
+          uploadedAt: '2025-09-24T10:00:00Z',
         },
-      ],
+        expiredItemsEnteredToday: 7,
+        stockLossLast30Days: 1234.5,
+      },
     });
 
     const tokenValue = 'test-session-value';
@@ -60,7 +61,7 @@ describe('DashboardPage', () => {
       await screen.findByRole('heading', { name: /Dashboard/i, level: 1 }),
     ).toBeInTheDocument();
     expect(
-      screen.getByText(/Review expiring stock and low stock before the next order/i),
+      screen.getByText(/Review expiring stock and expired items awaiting a decision/i),
     ).toBeInTheDocument();
     expect(await screen.findByText(/Total Products/i)).toBeInTheDocument();
     expect(screen.getByText('100')).toBeInTheDocument();
@@ -68,15 +69,22 @@ describe('DashboardPage', () => {
     expect(screen.getByText('42')).toBeInTheDocument();
     expect(screen.getByRole('heading', { name: /Expiring Soon/i, level: 3 })).toBeInTheDocument();
     expect(screen.getByText('10')).toBeInTheDocument();
-    expect(screen.getByRole('heading', { name: /Low Stock/i, level: 3 })).toBeInTheDocument();
+    expect(
+      screen.getByRole('heading', { name: /Expired — needs action/i, level: 3 }),
+    ).toBeInTheDocument();
     expect(screen.getByText('5')).toBeInTheDocument();
     expect(screen.getByText(/Recent Activity/i)).toBeInTheDocument();
-    expect(screen.getByText(/Activity 1/i)).toBeInTheDocument();
+    expect(screen.getByText(/Catalogue last updated/i)).toBeInTheDocument();
+    expect(screen.getByText(/catalogue-sep\.csv/i)).toBeInTheDocument();
+    expect(screen.getByText(/Expired items added today/i)).toBeInTheDocument();
+    expect(screen.getByText('7')).toBeInTheDocument();
+    expect(screen.getByText(/Stock loss \(last 30 days\)/i)).toBeInTheDocument();
+    expect(screen.getByText(/\$1,234\.50/)).toBeInTheDocument();
     expect(screen.getByRole('region', { name: /Needs attention/i })).toHaveTextContent(
       /15 items need a stock decision/i,
     );
-    expect(screen.getByText(/Use the expiry report to plan markdowns/i)).toBeInTheDocument();
-    expect(screen.getByText(/Check whether these items need reordering/i)).toBeInTheDocument();
+    expect(screen.getByText(/Within 30 days of expiry/i)).toBeInTheDocument();
+    expect(screen.getByText(/Mark these as sold-through or expired/i)).toBeInTheDocument();
     expect(screen.getByRole('region', { name: /Inventory covered/i })).toBeInTheDocument();
     expect(screen.getByText(/100 products with 42 inventory records/i)).toBeInTheDocument();
     expect(screen.queryByText(/stock signals/i)).not.toBeInTheDocument();
@@ -113,39 +121,43 @@ describe('DashboardPage', () => {
     expect(apiService.get).toHaveBeenCalledWith('/dashboard', tokenValue);
   });
 
-  it('shows an action-oriented empty activity state', async () => {
+  it('shows a fallback when no catalogue has been uploaded', async () => {
     (apiService.get as jest.Mock).mockResolvedValue({
       stats: {
         totalProducts: 0,
         totalInventoryItems: 0,
         expiringItems: 0,
-        lowStockItems: 0,
+        expiredActionItems: 0,
       },
-      recentActivity: [],
+      activity: {
+        lastCatalogueUpload: null,
+        expiredItemsEnteredToday: 0,
+        stockLossLast30Days: 0,
+      },
     });
 
     renderDashboard('test-session-value');
 
-    expect(
-      await screen.findByText(/Activity will appear after scans, imports, or stock edits/i),
-    ).toBeInTheDocument();
+    expect(await screen.findByText(/No catalogue uploaded yet/i)).toBeInTheDocument();
+    expect(screen.getByText(/\$0\.00/)).toBeInTheDocument();
   });
 
-  it('does not render an invalid activity timestamp as a time element', async () => {
+  it('does not render an invalid upload timestamp as a time element', async () => {
     (apiService.get as jest.Mock).mockResolvedValue({
       stats: {
         totalProducts: 0,
         totalInventoryItems: 0,
         expiringItems: 0,
-        lowStockItems: 0,
+        expiredActionItems: 0,
       },
-      recentActivity: [
-        {
-          id: 1,
-          description: 'Imported shelf count',
-          timestamp: 'not-a-date',
+      activity: {
+        lastCatalogueUpload: {
+          fileName: 'broken.csv',
+          uploadedAt: 'not-a-date',
         },
-      ],
+        expiredItemsEnteredToday: 0,
+        stockLossLast30Days: 0,
+      },
     });
 
     renderDashboard('test-session-value');
@@ -153,6 +165,21 @@ describe('DashboardPage', () => {
     const fallbackTimestamp = await screen.findByText('Time not available');
     expect(fallbackTimestamp.tagName).toBe('SPAN');
     expect(fallbackTimestamp).not.toHaveAttribute('dateTime');
+  });
+
+  it('renders without an activity payload', async () => {
+    (apiService.get as jest.Mock).mockResolvedValue({
+      stats: {
+        totalProducts: 0,
+        totalInventoryItems: 0,
+        expiringItems: 0,
+        expiredActionItems: 0,
+      },
+    });
+
+    renderDashboard('test-session-value');
+
+    expect(await screen.findByText(/No catalogue uploaded yet/i)).toBeInTheDocument();
   });
 
   it('displays an error message if token is missing', async () => {
@@ -181,9 +208,13 @@ describe('DashboardPage', () => {
         totalProducts: 1,
         totalInventoryItems: 1,
         expiringItems: 0,
-        lowStockItems: 0,
+        expiredActionItems: 0,
       },
-      recentActivity: [],
+      activity: {
+        lastCatalogueUpload: null,
+        expiredItemsEnteredToday: 0,
+        stockLossLast30Days: 0,
+      },
     });
 
     renderDashboard('expired-prop-token');

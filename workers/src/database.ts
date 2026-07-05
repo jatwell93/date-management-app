@@ -45,6 +45,9 @@ export interface Database {
 
   // Dashboard queries
   getDashboardStats(organizationId: string): Promise<DashboardStats>;
+  getLastCatalogueUpload(organizationId: string): Promise<LastCatalogueUpload | null>;
+  getExpiredItemsEnteredToday(organizationId: string): Promise<number>;
+  getStockLossLast30Days(organizationId: string): Promise<number>;
 
   // Report queries
   getMonthlyExpiryReport(organizationId: string): Promise<MonthlyExpiryReport[]>;
@@ -201,7 +204,12 @@ export interface DashboardStats {
   totalProducts: number;
   totalInventoryItems: number;
   expiringItems: number;
-  lowStockItems: number;
+  expiredActionItems: number;
+}
+
+export interface LastCatalogueUpload {
+  fileName: string;
+  uploadedAt: string;
 }
 
 export interface MonthlyExpiryReport {
@@ -656,26 +664,94 @@ export function createWorkersDatabase(env: Env): Database {
 
     // Dashboard queries
     async getDashboardStats(organizationId: string): Promise<DashboardStats> {
-      // The schema dropped the legacy `quantity` column in favour of a
-      // `status` enum on inventory_items. The DashboardStats `lowStockItems`
-      // counter now reflects items flagged as Critical/LowStock.
-      const [products, inventory, expiring, lowStock] = await Promise.all([
+      // This app tracks expiry dates, not stock levels. `expiringItems` counts
+      // near-expiry stock (0-30 days out, not yet expired — the deepest markdown
+      // window). `expiredActionItems` counts the expired worklist line items still
+      // awaiting a sold-through/expired decision, mirroring the grouping used by
+      // getExpiredItems (product/location/cost_price) so the dashboard figure
+      // matches the row count shown on the /expired-items page.
+      const [products, inventory, expiring, expiredAction] = await Promise.all([
         sql`SELECT COUNT(*)::int as count FROM products WHERE organization_id = ${organizationId}`,
         sql`SELECT COUNT(*)::int as count FROM inventory_items WHERE organization_id = ${organizationId}`,
         sql`SELECT COUNT(*)::int as count FROM inventory_items
-            WHERE expiry_date IS NOT NULL AND expiry_date <= NOW() + INTERVAL '7 days'
+            WHERE expiry_date IS NOT NULL
+              AND expiry_date >= CURRENT_DATE
+              AND expiry_date <= CURRENT_DATE + INTERVAL '30 days'
               AND organization_id = ${organizationId}`,
-        sql`SELECT COUNT(*)::int as count FROM inventory_items
-            WHERE status IN ('Critical', 'LowStock', 'Low')
-              AND organization_id = ${organizationId}`,
+        sql`SELECT COUNT(*)::int as count FROM (
+              SELECT 1
+              FROM inventory_items ii
+              JOIN products p ON ii.product_id = p.id
+              WHERE (ii.expiry_date < CURRENT_DATE
+                  OR ii.status = ANY(${[...EXPIRED_WORKLIST_STATUSES]}))
+                AND ii.organization_id = ${organizationId}
+                AND ii.status <> ALL(${[...DISPOSITIONED_STATUSES]})
+              GROUP BY ii.product_id, ii.location_id, p.cost_price
+            ) worklist`,
       ]);
 
       return {
         totalProducts: products[0]?.count || 0,
         totalInventoryItems: inventory[0]?.count || 0,
         expiringItems: expiring[0]?.count || 0,
-        lowStockItems: lowStock[0]?.count || 0,
+        expiredActionItems: expiredAction[0]?.count || 0,
       };
+    },
+
+    // The latest catalogue upload timestamp lets users judge how stale their
+    // product catalogue is. Only queued catalogue imports reliably persist an
+    // `uploads` row (small synchronous/expiry-list uploads may not), which is fine
+    // here since this signal is specifically about catalogue freshness.
+    async getLastCatalogueUpload(
+      organizationId: string,
+    ): Promise<LastCatalogueUpload | null> {
+      const rows = await sql`
+        SELECT
+          file_name as "fileName",
+          COALESCE(completed_at, created_at)::text as "uploadedAt"
+        FROM uploads
+        WHERE organization_id = ${organizationId}
+          AND status = 'completed'
+        ORDER BY COALESCE(completed_at, created_at) DESC
+        LIMIT 1
+      `;
+      const row = rows[0];
+      if (!row) return null;
+      return { fileName: row.fileName as string, uploadedAt: row.uploadedAt as string };
+    },
+
+    // Expired items that became actionable today: either an item whose expiry
+    // passed such that today is its first actionable day, or an already-expired
+    // item that was entered today. The "became actionable" day is the later of when
+    // the row was created and the day after it expired. Scoped to genuinely
+    // past-expiry, not-yet-dispositioned rows so that date is well defined.
+    async getExpiredItemsEnteredToday(organizationId: string): Promise<number> {
+      const rows = await sql`
+        SELECT COUNT(*)::int as count
+        FROM inventory_items ii
+        WHERE ii.expiry_date < CURRENT_DATE
+          AND ii.organization_id = ${organizationId}
+          AND ii.status <> ALL(${[...DISPOSITIONED_STATUSES]})
+          AND GREATEST(
+                ii.created_at::date,
+                (ii.expiry_date + INTERVAL '1 day')::date
+              ) = CURRENT_DATE
+      `;
+      return (rows[0]?.count as number) || 0;
+    },
+
+    // Realized cost-basis stock loss over the last 30 days, summed from the
+    // expired write-off ledger (mirrors getExpiredLoss* which value expired='expired'
+    // disposals rather than sold-through).
+    async getStockLossLast30Days(organizationId: string): Promise<number> {
+      const rows = await sql`
+        SELECT COALESCE(SUM(financial_loss), 0)::float as "totalLoss"
+        FROM expired_item_transactions
+        WHERE action = 'expired'
+          AND organization_id = ${organizationId}
+          AND transaction_date >= CURRENT_DATE - INTERVAL '30 days'
+      `;
+      return (rows[0]?.totalLoss as number) || 0;
     },
 
     // Report queries

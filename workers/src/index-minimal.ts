@@ -902,9 +902,26 @@ async function handleGetDashboard(request: Request, db: Database, env: Env): Pro
     return auth;
   }
 
-  const stats = await db.getDashboardStats(auth.organizationId);
+  const [stats, lastCatalogueUpload, expiredItemsEnteredToday, stockLossLast30Days] =
+    await Promise.all([
+      db.getDashboardStats(auth.organizationId),
+      db.getLastCatalogueUpload(auth.organizationId),
+      db.getExpiredItemsEnteredToday(auth.organizationId),
+      db.getStockLossLast30Days(auth.organizationId),
+    ]);
 
-  return jsonResponse({ stats }, 200, env);
+  return jsonResponse(
+    {
+      stats,
+      activity: {
+        lastCatalogueUpload,
+        expiredItemsEnteredToday,
+        stockLossLast30Days,
+      },
+    },
+    200,
+    env,
+  );
 }
 
 /**
