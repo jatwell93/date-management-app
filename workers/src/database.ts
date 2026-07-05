@@ -666,10 +666,15 @@ export function createWorkersDatabase(env: Env): Database {
     async getDashboardStats(organizationId: string): Promise<DashboardStats> {
       // This app tracks expiry dates, not stock levels. `expiringItems` counts
       // near-expiry stock (0-30 days out, not yet expired — the deepest markdown
-      // window). `expiredActionItems` counts the expired worklist line items still
-      // awaiting a sold-through/expired decision, mirroring the grouping used by
-      // getExpiredItems (product/location/cost_price) so the dashboard figure
-      // matches the row count shown on the /expired-items page.
+      // window) that has NOT already been marked down or dispositioned, i.e. stock
+      // still needing a markdown decision. `expiredActionItems` counts the expired
+      // worklist line items still awaiting a sold-through/expired decision, mirroring
+      // the grouping used by getExpiredItems (product/location/cost_price) so the
+      // dashboard figure matches the row count shown on the /expired-items page.
+      // The two are kept mutually exclusive (worklist/dispositioned statuses are
+      // excluded from `expiringItems`) so the "needs attention" headline that sums
+      // them does not double-count an item that is both near-expiry and on the
+      // worklist (e.g. a Markdown 3 row expiring within 30 days).
       const [products, inventory, expiring, expiredAction] = await Promise.all([
         sql`SELECT COUNT(*)::int as count FROM products WHERE organization_id = ${organizationId}`,
         sql`SELECT COUNT(*)::int as count FROM inventory_items WHERE organization_id = ${organizationId}`,
@@ -677,7 +682,9 @@ export function createWorkersDatabase(env: Env): Database {
             WHERE expiry_date IS NOT NULL
               AND expiry_date >= CURRENT_DATE
               AND expiry_date <= CURRENT_DATE + INTERVAL '30 days'
-              AND organization_id = ${organizationId}`,
+              AND organization_id = ${organizationId}
+              AND status <> ALL(${[...EXPIRED_WORKLIST_STATUSES]})
+              AND status <> ALL(${[...DISPOSITIONED_STATUSES]})`,
         sql`SELECT COUNT(*)::int as count FROM (
               SELECT 1
               FROM inventory_items ii
@@ -708,7 +715,10 @@ export function createWorkersDatabase(env: Env): Database {
       const rows = await sql`
         SELECT
           file_name as "fileName",
-          COALESCE(completed_at, created_at)::text as "uploadedAt"
+          -- Serialize as ISO 8601 (T separator) rather than the space-separated
+          -- form ::text produces, so new Date() parses reliably across JS engines
+          -- (Safari/JSC rejects the ::text form and would show "Time not available").
+          to_json(COALESCE(completed_at, created_at)) #>> '{}' as "uploadedAt"
         FROM uploads
         WHERE organization_id = ${organizationId}
           AND status = 'completed'

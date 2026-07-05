@@ -93,6 +93,11 @@ describe('Workers dashboard stats + activity (real SQL)', () => {
       await seedItem({ offsetDays: -5, productId: 1, status: 'Expired' });
       await seedItem({ offsetDays: 40, productId: 2, status: 'Markdown 3' });
       await seedItem({ offsetDays: -3, productId: 1, status: 'Sold Through' });
+      // A Markdown 3 row expiring within 30 days is already marked down, so it is a
+      // worklist action item, NOT an "expiring soon (plan markdown)" item. It must
+      // not inflate expiringItems (would double-count against the worklist tile).
+      // Same product/location/cost as the +40 row, so it stays one worklist line.
+      await seedItem({ offsetDays: 15, productId: 2, status: 'Markdown 3' });
 
       const stats = await makeDb().getDashboardStats(ORG);
 
