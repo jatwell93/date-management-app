@@ -5,6 +5,8 @@ import { envConfig } from '../../config/environment';
 
 const mockFindUnique = vi.fn();
 const mockSubscriptionTierUpdate = vi.fn();
+const mockFindLatestByOrganizationId = vi.fn();
+const mockGetOrCreateUsage = vi.fn();
 const mockConvertTrialToPaid = vi.fn();
 
 const mockStripeCustomersCreate = vi.fn();
@@ -24,6 +26,7 @@ vi.mock('../../middleware/clerk-auth.middleware', () => ({
 vi.mock('../../middleware/rateLimiter', () => ({
   trialConversionLimiter: (_req: any, _res: any, next: any) => next(),
   checkoutSessionLimiter: (_req: any, _res: any, next: any) => next(),
+  standardLimiter: (_req: any, _res: any, next: any) => next(),
 }));
 
 vi.mock('../../database/database-factory', () => ({
@@ -72,6 +75,7 @@ vi.mock('../../utils/url-validator', async () => ({
 }));
 
 import subscriptionRouter from '../../routes/subscription.routes';
+import organizationRouter from '../../routes/org-bootstrap.routes';
 
 const actualDi = (await vi.importActual(
   '../../di/container',
@@ -117,11 +121,119 @@ const restoreEnvValue = (key: (typeof envKeysChangedBySuite)[number]) => {
   process.env[key] = originalValue;
 };
 
+const configureSubscriptionTestEnv = () => {
+  envConfig.NODE_ENV = 'test';
+  process.env.FRONTEND_URL = 'http://localhost:3000';
+  process.env.STRIPE_STARTER_MONTHLY_PRICE_ID = configuredStarterMonthlyPriceId;
+  process.env.STRIPE_STARTER_ANNUAL_PRICE_ID = configuredStarterAnnualPriceId;
+  process.env.STRIPE_PROFESSIONAL_MONTHLY_PRICE_ID = configuredProfessionalMonthlyPriceId;
+  process.env.STRIPE_PROFESSIONAL_ANNUAL_PRICE_ID = configuredProfessionalAnnualPriceId;
+};
+
+const configureValidatorMocks = () => {
+  mockValidateStripePriceId.mockImplementation((priceId: string) =>
+    actualUrlValidator.validateStripePriceId(priceId),
+  );
+  mockValidateRedirectUrl.mockImplementation(() => undefined);
+};
+
+const configureRepositoryMocks = () => {
+  mockFindUnique.mockResolvedValue({
+    organizationId: 'org-1',
+    organization: {
+      id: 'org-1',
+      contactEmail: 'owner@example.com',
+      subscriptionTiers: [
+        {
+          id: 'sub-1',
+          status: 'TRIALING',
+          tierLevel: 'professional',
+          trialEndDate: new Date('2026-04-20T00:00:00.000Z'),
+          trialStartedAt: new Date('2026-04-01T00:00:00.000Z'),
+          trialConvertedAt: null,
+          billingCycle: 'monthly',
+          stripeCustomerId: 'cus_existing',
+        },
+      ],
+    },
+  });
+
+  mockConvertTrialToPaid.mockResolvedValue({
+    id: 'sub-1',
+    tierLevel: 'professional',
+    status: 'active',
+    billingCycle: 'annual',
+    trialConvertedAt: new Date('2026-04-11T00:00:00.000Z'),
+  });
+
+  mockFindLatestByOrganizationId.mockResolvedValue({
+    tierLevel: 'professional',
+    status: 'active',
+    billingCycle: 'annual',
+    trialEndDate: new Date('2026-08-01T00:00:00.000Z'),
+  });
+  mockGetOrCreateUsage.mockResolvedValue({
+    totalSkus: 42,
+    activeUsers: 3,
+    storageUsedBytes: 4096,
+    totalInventoryItems: 84,
+  });
+};
+
+const configureStripeMocks = () => {
+  mockStripeCustomersCreate.mockResolvedValue({ id: 'cus_new' });
+  mockSubscriptionTierUpdate.mockResolvedValue({ id: 'sub-1', stripeCustomerId: 'cus_new' });
+  mockStripeCheckoutSessionCreate.mockResolvedValue({
+    id: 'cs_test_123',
+    url: 'https://checkout.stripe.com/c/session_test_123',
+  });
+  mockStripeBillingPortalSessionCreate.mockResolvedValue({
+    url: 'https://billing.stripe.com/session_test_123',
+  });
+};
+
+const registerTestDependencies = () => {
+  const diContainer = actualDi.getDiContainer();
+
+  diContainer.registerInstance(actualUserRepository.UserRepository, {
+    findByClerkUserIdWithOrganizationSubscriptions: (...args: unknown[]) => mockFindUnique(...args),
+    findOrganizationIdByClerkUserId: (...args: unknown[]) => mockFindUnique(...args),
+  } as never);
+  diContainer.registerInstance(actualSubscriptionRepository.SubscriptionRepository, {
+    updateStripeCustomerId: (id: number, stripeCustomerId: string) =>
+      mockSubscriptionTierUpdate({
+        where: { id },
+        data: { stripeCustomerId },
+      }),
+    findLatestByOrganizationId: (...args: unknown[]) => mockFindLatestByOrganizationId(...args),
+    getOrCreateUsage: (...args: unknown[]) => mockGetOrCreateUsage(...args),
+  } as never);
+  diContainer.registerInstance(actualSubscriptionService.SubscriptionService, {
+    convertTrialToPaid: (...args: unknown[]) => mockConvertTrialToPaid(...args),
+  } as never);
+  diContainer.registerInstance('StripeClientFactory', () => ({
+    customers: {
+      create: (...args: unknown[]) => mockStripeCustomersCreate(...args),
+    },
+    checkout: {
+      sessions: {
+        create: (...args: unknown[]) => mockStripeCheckoutSessionCreate(...args),
+      },
+    },
+    billingPortal: {
+      sessions: {
+        create: (...args: unknown[]) => mockStripeBillingPortalSessionCreate(...args),
+      },
+    },
+  }));
+};
+
 describe('subscription.routes', () => {
   const app = express();
 
   app.use(express.json());
   app.use('/subscription', subscriptionRouter);
+  app.use('/organization', organizationRouter);
   app.use(
     (
       error: Error & { statusCode?: number },
@@ -136,92 +248,51 @@ describe('subscription.routes', () => {
   beforeEach(() => {
     vi.clearAllMocks();
 
-    envConfig.NODE_ENV = 'test';
-    process.env.FRONTEND_URL = 'http://localhost:3000';
-    process.env.STRIPE_STARTER_MONTHLY_PRICE_ID = configuredStarterMonthlyPriceId;
-    process.env.STRIPE_STARTER_ANNUAL_PRICE_ID = configuredStarterAnnualPriceId;
-    process.env.STRIPE_PROFESSIONAL_MONTHLY_PRICE_ID = configuredProfessionalMonthlyPriceId;
-    process.env.STRIPE_PROFESSIONAL_ANNUAL_PRICE_ID = configuredProfessionalAnnualPriceId;
-
-    mockValidateStripePriceId.mockImplementation((priceId: string) =>
-      actualUrlValidator.validateStripePriceId(priceId),
-    );
-    mockValidateRedirectUrl.mockImplementation(() => undefined);
-
-    mockFindUnique.mockResolvedValue({
-      organizationId: 'org-1',
-      organization: {
-        id: 'org-1',
-        contactEmail: 'owner@example.com',
-        subscriptionTiers: [
-          {
-            id: 'sub-1',
-            status: 'TRIALING',
-            tierLevel: 'professional',
-            trialEndDate: new Date('2026-04-20T00:00:00.000Z'),
-            trialStartedAt: new Date('2026-04-01T00:00:00.000Z'),
-            trialConvertedAt: null,
-            billingCycle: 'monthly',
-            stripeCustomerId: 'cus_existing',
-          },
-        ],
-      },
-    });
-
-    mockConvertTrialToPaid.mockResolvedValue({
-      id: 'sub-1',
-      tierLevel: 'professional',
-      status: 'active',
-      billingCycle: 'annual',
-      trialConvertedAt: new Date('2026-04-11T00:00:00.000Z'),
-    });
-
-    mockStripeCustomersCreate.mockResolvedValue({ id: 'cus_new' });
-    mockSubscriptionTierUpdate.mockResolvedValue({ id: 'sub-1', stripeCustomerId: 'cus_new' });
-    mockStripeCheckoutSessionCreate.mockResolvedValue({
-      id: 'cs_test_123',
-      url: 'https://checkout.stripe.com/c/session_test_123',
-    });
-    mockStripeBillingPortalSessionCreate.mockResolvedValue({
-      url: 'https://billing.stripe.com/session_test_123',
-    });
-
-    const diContainer = actualDi.getDiContainer();
-    diContainer.registerInstance(actualUserRepository.UserRepository, {
-      findByClerkUserIdWithOrganizationSubscriptions: (...args: unknown[]) =>
-        mockFindUnique(...args),
-      findOrganizationIdByClerkUserId: (...args: unknown[]) => mockFindUnique(...args),
-    } as never);
-    diContainer.registerInstance(actualSubscriptionRepository.SubscriptionRepository, {
-      updateStripeCustomerId: (id: number, stripeCustomerId: string) =>
-        mockSubscriptionTierUpdate({
-          where: { id },
-          data: { stripeCustomerId },
-        }),
-    } as never);
-    diContainer.registerInstance(actualSubscriptionService.SubscriptionService, {
-      convertTrialToPaid: (...args: unknown[]) => mockConvertTrialToPaid(...args),
-    } as never);
-    diContainer.registerInstance('StripeClientFactory', () => ({
-      customers: {
-        create: (...args: unknown[]) => mockStripeCustomersCreate(...args),
-      },
-      checkout: {
-        sessions: {
-          create: (...args: unknown[]) => mockStripeCheckoutSessionCreate(...args),
-        },
-      },
-      billingPortal: {
-        sessions: {
-          create: (...args: unknown[]) => mockStripeBillingPortalSessionCreate(...args),
-        },
-      },
-    }));
+    configureSubscriptionTestEnv();
+    configureValidatorMocks();
+    configureRepositoryMocks();
+    configureStripeMocks();
+    registerTestDependencies();
   });
 
   afterAll(() => {
     envConfig.NODE_ENV = originalNodeEnv;
     envKeysChangedBySuite.forEach(restoreEnvValue);
+  });
+
+  const expectAuthenticatedGet = async (path: string, expectedBody: unknown) => {
+    const response = await request(app).get(path).set('x-clerk-user-id', 'user_123');
+
+    expect(response.status).toBe(200);
+    expect(response.body).toEqual(expectedBody);
+  };
+
+  describe('GET /subscription/current', () => {
+    it('returns the current subscription for the authenticated organization', async () => {
+      mockFindUnique.mockResolvedValue({ organizationId: 'org-1' });
+
+      await expectAuthenticatedGet('/subscription/current', {
+        tierLevel: 'professional',
+        status: 'active',
+        billingCycle: 'annual',
+        currentPeriodEnd: '2026-08-01T00:00:00.000Z',
+      });
+      expect(mockFindLatestByOrganizationId).toHaveBeenCalledWith('org-1');
+    });
+  });
+
+  describe('GET /organization/usage', () => {
+    it('returns usage for the authenticated organization', async () => {
+      mockFindUnique.mockResolvedValue({ organizationId: 'org-1' });
+
+      await expectAuthenticatedGet('/organization/usage', {
+        skus: 42,
+        users: 3,
+        storage: 4096,
+        inventoryItems: 84,
+      });
+      expect(mockGetOrCreateUsage).toHaveBeenCalledWith('org-1');
+    });
   });
 
   describe('GET /subscription/trial-status', () => {

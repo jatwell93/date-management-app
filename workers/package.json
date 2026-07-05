@@ -15,7 +15,7 @@
     "tail": "wrangler tail",
     "tail:prod": "wrangler tail --env production",
     "test": "vitest",
-    "test:build-artifact": "npm run build && node -e \"const fs=require('node:fs');const route='/api/expired-items/reports/expired-losses';const artifact=fs.readFileSync('dist/index.js','utf8');if(!artifact.includes(route)){throw new Error('Built Worker artifact is missing '+route)}\"",
+    "test:build-artifact": "npm run build && node -e \"const fs=require('node:fs');const routes=['/api/expired-items/reports/expired-losses','/api/subscription/current','/api/organization/usage'];const artifact=fs.readFileSync('dist/index.js','utf8');for(const route of routes){if(!artifact.includes(route)){throw new Error('Built Worker artifact is missing '+route)}}\"",
     "test:preview": "npm run test:build-artifact && cross-env RUN_WORKERS_PREVIEW_TESTS=true vitest run src/workers-deployment.test.ts",
     "test:db": "vitest run --config vitest.node.config.mts",
     "test:workers:integration": "vitest run src/__tests__",
