@@ -370,7 +370,10 @@ export function ExpiryEntriesPage({ token, role }: ExpiryEntriesPageProps) {
         ),
       },
       {
-        accessorKey: 'daysToExpiry',
+        id: 'daysToExpiry',
+        // Computed column: give the table an accessorFn so sorting/filtering read
+        // the derived day count instead of a non-existent `daysToExpiry` field.
+        accessorFn: (row) => getDaysToExpiry(row.expiryDate) ?? Number.POSITIVE_INFINITY,
         header: ({ column }) => <DataTableColumnHeader column={column} title="Days to Expiry" />,
         cell: ({ row }) => {
           const isEditing = editingItem && editingItem.inventoryId === row.original.inventoryId;
@@ -419,7 +422,13 @@ export function ExpiryEntriesPage({ token, role }: ExpiryEntriesPageProps) {
         },
       },
       {
-        accessorKey: 'markdownPrice',
+        id: 'markdownPrice',
+        // Computed column: derive the markdown price for sorting/filtering rather
+        // than relying on a `markdownPrice` field that isn't on the data model.
+        accessorFn: (row) => {
+          const days = getDaysToExpiry(row.expiryDate);
+          return days === null ? row.costPrice : calculateMarkdownPrice(row.costPrice, days);
+        },
         header: ({ column }) => <DataTableColumnHeader column={column} title="Markdown Price" />,
         cell: ({ row }) => {
           const isEditing = editingItem && editingItem.inventoryId === row.original.inventoryId;
