@@ -40,6 +40,13 @@ export function ManageSubscriptionButton({
       });
 
       if (!response.ok) {
+        // 400/402/404 are expected "not eligible for billing portal" responses
+        // (no org / no Stripe customer). Surface an actionable message and skip
+        // Sentry — these are not errors, just users without a billing account.
+        if ([400, 402, 404].includes(response.status)) {
+          setError('Please subscribe to a paid plan to access billing management.');
+          return;
+        }
         throw new Error('Failed to create portal session');
       }
 

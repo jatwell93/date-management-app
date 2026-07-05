@@ -10,7 +10,13 @@ import {
 } from '../utils/url-validator';
 import { injectable, inject } from 'tsyringe';
 import { Logger } from '../utils/logger';
-import { NotFoundError, ValidationError, AuthenticationError, InternalError } from '../errors';
+import {
+  NotFoundError,
+  ValidationError,
+  AuthenticationError,
+  InternalError,
+  PaymentRequiredError,
+} from '../errors';
 import { UserRepository } from '../repositories/user.repository';
 import { SubscriptionRepository } from '../repositories/subscription.repository';
 import type { OrganizationUsage, SubscriptionTier } from '@prisma/client';
@@ -417,13 +423,15 @@ export class SubscriptionController {
 
       const user = await this.userRepository.findByClerkUserIdWithOrganizationSubscriptions(userId);
 
-      if (!user?.organization) {
-        throw new NotFoundError('Organization not found');
-      }
-
-      const subscription = user.organization.subscriptionTiers?.[0];
+      const subscription = user?.organization?.subscriptionTiers?.[0];
       if (!subscription?.stripeCustomerId) {
-        throw new ValidationError('No Stripe customer found');
+        // No org, no subscription, or no Stripe customer all mean the same thing
+        // from the caller's perspective: there is no billing account to manage.
+        // Return 402 (not 404/400) so this eligibility gate is distinguishable
+        // from a genuine server error and the frontend can prompt to subscribe.
+        throw new PaymentRequiredError(
+          'No active billing account found. Subscribe to a paid plan to manage billing.',
+        );
       }
 
       const stripe = this.stripeClientFactory();
@@ -440,7 +448,8 @@ export class SubscriptionController {
       if (
         error instanceof ValidationError ||
         error instanceof NotFoundError ||
-        error instanceof AuthenticationError
+        error instanceof AuthenticationError ||
+        error instanceof PaymentRequiredError
       ) {
         throw error;
       }

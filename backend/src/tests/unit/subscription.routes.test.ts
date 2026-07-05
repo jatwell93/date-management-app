@@ -798,7 +798,7 @@ describe('subscription.routes', () => {
       expect(response.body).toEqual({ error: 'returnUrl is not a valid URL: not-a-url' });
     });
 
-    it('returns 404 when portal session is requested without organization', async () => {
+    it('returns 402 when portal session is requested without organization', async () => {
       mockFindUnique.mockResolvedValue({ organization: null });
 
       const response = await request(app)
@@ -806,11 +806,13 @@ describe('subscription.routes', () => {
         .set('x-clerk-user-id', 'user_123')
         .send({ returnUrl: 'http://localhost:3000/settings' });
 
-      expect(response.status).toBe(404);
-      expect(response.body).toEqual({ error: 'Organization not found' });
+      expect(response.status).toBe(402);
+      expect(response.body).toEqual({
+        error: 'No active billing account found. Subscribe to a paid plan to manage billing.',
+      });
     });
 
-    it('returns 400 when no Stripe customer exists for portal session', async () => {
+    it('returns 402 when no Stripe customer exists for portal session', async () => {
       mockFindUnique.mockResolvedValue({
         organization: {
           subscriptionTiers: [{ stripeCustomerId: null }],
@@ -821,8 +823,10 @@ describe('subscription.routes', () => {
         .post('/subscription/create-portal-session')
         .set('x-clerk-user-id', 'user_123');
 
-      expect(response.status).toBe(400);
-      expect(response.body).toEqual({ error: 'No Stripe customer found' });
+      expect(response.status).toBe(402);
+      expect(response.body).toEqual({
+        error: 'No active billing account found. Subscribe to a paid plan to manage billing.',
+      });
     });
 
     it('creates portal session using provided returnUrl', async () => {

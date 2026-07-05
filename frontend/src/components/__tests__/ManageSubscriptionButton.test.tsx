@@ -1,4 +1,5 @@
 import { fireEvent, render, screen, waitFor } from '@testing-library/react';
+import * as Sentry from '@sentry/react';
 import { ManageSubscriptionButton } from '../ManageSubscriptionButton';
 
 vi.mock('../../hooks/useFreshApiToken', () => ({
@@ -39,6 +40,7 @@ describe('ManageSubscriptionButton', () => {
   it('shows a recoverable billing portal error when Stripe portal creation fails', async () => {
     (global.fetch as jest.Mock).mockResolvedValue({
       ok: false,
+      status: 500,
       json: async () => ({ error: 'Portal unavailable' }),
     });
 
@@ -50,6 +52,26 @@ describe('ManageSubscriptionButton', () => {
       expect(screen.getByRole('alert')).toHaveTextContent(/Unable to open billing portal/i);
     });
 
+    expect(Sentry.captureException).toHaveBeenCalled();
+    expect(screen.getByRole('button', { name: /Manage Billing/i })).not.toBeDisabled();
+  });
+
+  it('shows an actionable subscribe message without alerting Sentry on a 402', async () => {
+    (global.fetch as jest.Mock).mockResolvedValue({
+      ok: false,
+      status: 402,
+      json: async () => ({ error: 'No active billing account found.' }),
+    });
+
+    render(<ManageSubscriptionButton token="test-token" />);
+
+    fireEvent.click(screen.getByRole('button', { name: /Manage Billing/i }));
+
+    await waitFor(() => {
+      expect(screen.getByRole('alert')).toHaveTextContent(/subscribe to a paid plan/i);
+    });
+
+    expect(Sentry.captureException).not.toHaveBeenCalled();
     expect(screen.getByRole('button', { name: /Manage Billing/i })).not.toBeDisabled();
   });
 });
