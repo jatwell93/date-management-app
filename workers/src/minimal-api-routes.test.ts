@@ -204,6 +204,25 @@ describe('minimal API route table', () => {
       inventoryItems: 84,
     });
   });
+
+  it('creates default organization usage with production-required timestamps', async () => {
+    mockedAuthenticateClerkRequest.mockResolvedValue(authenticatedClerkOrgContext);
+    const dbWithRows = createAuthenticatedOrgDatabase({
+      'FROM organization_usage': [],
+    });
+
+    const response = await resolveMinimalGet('/api/organization/usage', dbWithRows);
+
+    expect(response?.status).toBe(200);
+    const sqlCalls = vi.mocked(dbWithRows.sql).mock.calls.map(([strings]) => strings.join(' '));
+    const insertUsageQuery = sqlCalls.find((query) =>
+      query.includes('INSERT INTO organization_usage'),
+    );
+
+    expect(insertUsageQuery).toContain('created_at');
+    expect(insertUsageQuery).toContain('updated_at');
+    expect(insertUsageQuery).toContain('NOW()');
+  });
   it.each(['/api/subscription/current', '/api/organization/usage'])(
     'dispatches %s to auth instead of returning route-not-found',
     async (pathname) => {
