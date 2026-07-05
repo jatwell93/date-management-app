@@ -18,6 +18,13 @@ vi.mock('./clerk/bootstrap-handler', () => ({
 const env = {} as Env;
 const db = {} as Database;
 const mockedAuthenticateClerkRequest = vi.mocked(authenticateClerkRequest);
+const authenticatedClerkOrgContext = {
+  clerkUserId: 'user_clerk_123',
+  email: 'user@example.com',
+  username: 'user',
+  organizationId: 'org_123',
+  organizationRole: 'org:admin',
+};
 
 function getMinimalRoutes(): MinimalApiRoute[] {
   return (
@@ -151,7 +158,7 @@ describe('minimal API route table', () => {
   });
 
   it('returns current subscription details for an authenticated organization', async () => {
-    mockedAuthenticateClerkRequest.mockResolvedValue({ clerkUserId: 'user_clerk_123' });
+    mockedAuthenticateClerkRequest.mockResolvedValue(authenticatedClerkOrgContext);
     const dbWithRows = createAuthenticatedOrgDatabase({
       'FROM subscription_tiers': [
         {
@@ -175,7 +182,7 @@ describe('minimal API route table', () => {
   });
 
   it('returns organization usage for an authenticated organization', async () => {
-    mockedAuthenticateClerkRequest.mockResolvedValue({ clerkUserId: 'user_clerk_123' });
+    mockedAuthenticateClerkRequest.mockResolvedValue(authenticatedClerkOrgContext);
     const dbWithRows = createAuthenticatedOrgDatabase({
       'FROM organization_usage': [
         {
