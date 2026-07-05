@@ -766,7 +766,7 @@ export function DetailedExpiryReportPage({ token }: DetailedExpiryReportPageProp
 
   return (
     <main
-      className="container mx-auto max-w-7xl space-y-6 p-4"
+      className="print-report-root container mx-auto max-w-7xl space-y-6 p-4"
       aria-label="Detailed expiry reporting workspace"
     >
       <header className="mb-5">
@@ -971,7 +971,7 @@ export function DetailedExpiryReportPage({ token }: DetailedExpiryReportPageProp
         </ul>
       ) : null}
 
-      <Card className="overflow-hidden">
+      <Card className="print-report-target overflow-hidden">
         <CardHeader>
           <CardTitle>
             <h2 className="text-xl font-semibold">Full expiry table</h2>
@@ -979,17 +979,58 @@ export function DetailedExpiryReportPage({ token }: DetailedExpiryReportPageProp
         </CardHeader>
         <CardContent className="p-0 sm:p-6">
           {hasData ? (
-            <div className="overflow-x-auto pb-4">
-              <div className="min-w-[1000px] px-4 sm:px-0">
-                <DataTable
-                  columns={columns}
-                  data={reportData}
-                  filtering={true}
-                  pagination={true}
-                  sorting={true}
-                />
+            <>
+              <div className="overflow-x-auto pb-4 no-print">
+                <div className="min-w-[1000px] px-4 sm:px-0">
+                  <DataTable
+                    columns={columns}
+                    data={reportData}
+                    filtering={true}
+                    pagination={true}
+                    sorting={true}
+                  />
+                </div>
               </div>
-            </div>
+              <div className="print-only">
+                <div className="overflow-x-auto">
+                  <table
+                    className="w-full border-collapse text-sm"
+                    aria-label="Printable full expiry table"
+                  >
+                    <thead>
+                      <tr>
+                        <th className="border-b px-4 py-3 text-left font-semibold">SKU</th>
+                        <th className="border-b px-4 py-3 text-left font-semibold">Product Name</th>
+                        <th className="border-b px-4 py-3 text-left font-semibold">Location</th>
+                        <th className="border-b px-4 py-3 text-left font-semibold">Expiry Date</th>
+                        <th className="border-b px-4 py-3 text-left font-semibold">Cost Price</th>
+                        <th className="border-b px-4 py-3 text-left font-semibold">
+                          Sub-Department
+                        </th>
+                        <th className="border-b px-4 py-3 text-left font-semibold">Status</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {reportData.map((item) => (
+                        <tr key={item.inventoryId} className="border-b">
+                          <td className="px-4 py-3 align-top">{item.sku}</td>
+                          <td className="px-4 py-3 align-top">{item.productName}</td>
+                          <td className="px-4 py-3 align-top">{item.locationName}</td>
+                          <td className="px-4 py-3 align-top">
+                            {formatExpiryDate(item.expiryDate)}
+                          </td>
+                          <td className="px-4 py-3 align-top">
+                            {formatCurrencyValue(item.costPrice)}
+                          </td>
+                          <td className="px-4 py-3 align-top">{item.subDepartment || 'N/A'}</td>
+                          <td className="px-4 py-3 align-top">{item.status}</td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+              </div>
+            </>
           ) : (
             <p className="py-8 text-center text-sm text-semantic-text-secondary">
               No expiry items found in the next 90 days.

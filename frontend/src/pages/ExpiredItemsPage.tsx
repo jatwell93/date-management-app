@@ -194,14 +194,11 @@ const ExpiredItemsPage: React.FC<ExpiredItemsPageProps> = ({ token }) => {
     setIsModalOpen(true);
   }, []);
 
-  const handleUnitsDiscardedChange = useCallback(
-    (e: React.ChangeEvent<HTMLInputElement>) => {
-      const rawUnitsDiscarded = e.target.value;
-      setUnitsDiscarded(rawUnitsDiscarded);
-      setUnitsDiscardedError(parseUnitsDiscardedInput(rawUnitsDiscarded).error);
-    },
-    [],
-  );
+  const handleUnitsDiscardedChange = useCallback((e: React.ChangeEvent<HTMLInputElement>) => {
+    const rawUnitsDiscarded = e.target.value;
+    setUnitsDiscarded(rawUnitsDiscarded);
+    setUnitsDiscardedError(parseUnitsDiscardedInput(rawUnitsDiscarded).error);
+  }, []);
 
   const showToast = useCallback((message: string, type: 'success' | 'error') => {
     setToast({ message, type });
@@ -507,7 +504,7 @@ const ExpiredItemsPage: React.FC<ExpiredItemsPageProps> = ({ token }) => {
   }
 
   return (
-    <div className="container mx-auto px-4 py-8">
+    <div className="print-report-root container mx-auto px-4 py-8">
       <header className="mb-6">
         <div className="flex items-center justify-between">
           <h1 className="text-3xl font-semibold font-heading">Expired Items</h1>
@@ -599,88 +596,146 @@ const ExpiredItemsPage: React.FC<ExpiredItemsPageProps> = ({ token }) => {
             ))}
           </ul>
 
-          <div className="hidden lg:block overflow-x-auto rounded-md border">
-            <Table>
-              <TableHeader>
-                <TableRow className="bg-semantic-surface-2 hover:bg-semantic-surface-2">
-                  <TableHead className="text-left text-xs font-semibold font-eyebrow text-semantic-text-secondary uppercase tracking-wider">
-                    SKU
-                  </TableHead>
-                  <TableHead className="text-left text-xs font-semibold font-eyebrow text-semantic-text-secondary uppercase tracking-wider">
-                    Product Name
-                  </TableHead>
-                  <TableHead className="text-left text-xs font-semibold font-eyebrow text-semantic-text-secondary uppercase tracking-wider">
-                    Location
-                  </TableHead>
-                  <TableHead className="text-left text-xs font-semibold font-eyebrow text-semantic-text-secondary uppercase tracking-wider">
-                    Expiry Date
-                  </TableHead>
-                  <TableHead className="text-left text-xs font-semibold font-eyebrow text-semantic-text-secondary uppercase tracking-wider">
-                    Cost Price
-                  </TableHead>
-                  <TableHead className="text-left text-xs font-semibold font-eyebrow text-semantic-text-secondary uppercase tracking-wider">
-                    Qty
-                  </TableHead>
-                  <TableHead className="text-left text-xs font-semibold font-eyebrow text-semantic-text-secondary uppercase tracking-wider">
-                    Status
-                  </TableHead>
-                  <TableHead className="text-left text-xs font-semibold font-eyebrow text-semantic-text-secondary uppercase tracking-wider">
-                    Actions
-                  </TableHead>
-                </TableRow>
-              </TableHeader>
-              <TableBody>
-                {expiredItems.map((item) => (
-                  <TableRow
-                    key={item.id}
-                    className="hover:bg-semantic-surface-2/50 transition-colors"
-                  >
-                    <TableCell className="whitespace-nowrap text-sm text-semantic-text-primary">
-                      {item.sku}
-                    </TableCell>
-                    <TableCell className="whitespace-nowrap text-sm font-medium text-semantic-text-primary">
-                      {item.productName}
-                    </TableCell>
-                    <TableCell className="whitespace-nowrap text-sm text-semantic-text-secondary">
-                      {item.locationName}
-                    </TableCell>
-                    <TableCell className="whitespace-nowrap text-sm tabular-nums text-semantic-text-primary">
-                      {formatExpiry(item.expiryDate)}
-                    </TableCell>
-                    <TableCell className="whitespace-nowrap text-sm text-semantic-text-primary">
-                      {currencyFormatter.format(item.costPrice)}
-                    </TableCell>
-                    <TableCell className="whitespace-nowrap text-sm text-semantic-text-primary">
-                      {item.quantityAvailable}
-                    </TableCell>
-                    <TableCell className="whitespace-nowrap text-sm font-medium text-semantic-critical">
-                      {item.status}
-                    </TableCell>
-                    <TableCell className="whitespace-nowrap text-sm">
-                      <div className="flex gap-2">
-                        <Button
-                          onClick={() => handleAction(item, 'sold_through')}
-                          variant="outline"
-                          size="sm"
-                          disabled={isProcessing}
-                        >
-                          Sold Through
-                        </Button>
-                        <Button
-                          onClick={() => handleAction(item, 'expired')}
-                          variant="outline"
-                          size="sm"
-                          className="text-semantic-critical border-semantic-critical hover:bg-semantic-critical/10"
-                          disabled={isProcessing}
-                        >
-                          Expired
-                        </Button>
-                      </div>
-                    </TableCell>
+          <div className="hidden lg:block overflow-x-auto rounded-md border print-report-target">
+            <div className="no-print">
+              <Table>
+                <TableHeader>
+                  <TableRow className="bg-semantic-surface-2 hover:bg-semantic-surface-2">
+                    <TableHead className="text-left text-xs font-semibold font-eyebrow text-semantic-text-secondary uppercase tracking-wider">
+                      SKU
+                    </TableHead>
+                    <TableHead className="text-left text-xs font-semibold font-eyebrow text-semantic-text-secondary uppercase tracking-wider">
+                      Product Name
+                    </TableHead>
+                    <TableHead className="text-left text-xs font-semibold font-eyebrow text-semantic-text-secondary uppercase tracking-wider">
+                      Location
+                    </TableHead>
+                    <TableHead className="text-left text-xs font-semibold font-eyebrow text-semantic-text-secondary uppercase tracking-wider">
+                      Expiry Date
+                    </TableHead>
+                    <TableHead className="text-left text-xs font-semibold font-eyebrow text-semantic-text-secondary uppercase tracking-wider">
+                      Cost Price
+                    </TableHead>
+                    <TableHead className="text-left text-xs font-semibold font-eyebrow text-semantic-text-secondary uppercase tracking-wider">
+                      Qty
+                    </TableHead>
+                    <TableHead className="text-left text-xs font-semibold font-eyebrow text-semantic-text-secondary uppercase tracking-wider">
+                      Status
+                    </TableHead>
+                    <TableHead className="text-left text-xs font-semibold font-eyebrow text-semantic-text-secondary uppercase tracking-wider">
+                      Actions
+                    </TableHead>
                   </TableRow>
-                ))}
-              </TableBody>
-            </Table>
+                </TableHeader>
+                <TableBody>
+                  {expiredItems.map((item) => (
+                    <TableRow
+                      key={item.id}
+                      className="hover:bg-semantic-surface-2/50 transition-colors"
+                    >
+                      <TableCell className="whitespace-nowrap text-sm text-semantic-text-primary">
+                        {item.sku}
+                      </TableCell>
+                      <TableCell className="whitespace-nowrap text-sm font-medium text-semantic-text-primary">
+                        {item.productName}
+                      </TableCell>
+                      <TableCell className="whitespace-nowrap text-sm text-semantic-text-secondary">
+                        {item.locationName}
+                      </TableCell>
+                      <TableCell className="whitespace-nowrap text-sm tabular-nums text-semantic-text-primary">
+                        {formatExpiry(item.expiryDate)}
+                      </TableCell>
+                      <TableCell className="whitespace-nowrap text-sm text-semantic-text-primary">
+                        {currencyFormatter.format(item.costPrice)}
+                      </TableCell>
+                      <TableCell className="whitespace-nowrap text-sm text-semantic-text-primary">
+                        {item.quantityAvailable}
+                      </TableCell>
+                      <TableCell className="whitespace-nowrap text-sm font-medium text-semantic-critical">
+                        {item.status}
+                      </TableCell>
+                      <TableCell className="whitespace-nowrap text-sm">
+                        <div className="flex gap-2">
+                          <Button
+                            onClick={() => handleAction(item, 'sold_through')}
+                            variant="outline"
+                            size="sm"
+                            disabled={isProcessing}
+                          >
+                            Sold Through
+                          </Button>
+                          <Button
+                            onClick={() => handleAction(item, 'expired')}
+                            variant="outline"
+                            size="sm"
+                            className="text-semantic-critical border-semantic-critical hover:bg-semantic-critical/10"
+                            disabled={isProcessing}
+                          >
+                            Expired
+                          </Button>
+                        </div>
+                      </TableCell>
+                    </TableRow>
+                  ))}
+                </TableBody>
+              </Table>
+            </div>
+            <div className="print-only">
+              <Table aria-label="Printable expired items table">
+                <TableHeader>
+                  <TableRow className="bg-semantic-surface-2 hover:bg-semantic-surface-2">
+                    <TableHead className="text-left text-xs font-semibold font-eyebrow text-semantic-text-secondary uppercase tracking-wider">
+                      SKU
+                    </TableHead>
+                    <TableHead className="text-left text-xs font-semibold font-eyebrow text-semantic-text-secondary uppercase tracking-wider">
+                      Product Name
+                    </TableHead>
+                    <TableHead className="text-left text-xs font-semibold font-eyebrow text-semantic-text-secondary uppercase tracking-wider">
+                      Location
+                    </TableHead>
+                    <TableHead className="text-left text-xs font-semibold font-eyebrow text-semantic-text-secondary uppercase tracking-wider">
+                      Expiry Date
+                    </TableHead>
+                    <TableHead className="text-left text-xs font-semibold font-eyebrow text-semantic-text-secondary uppercase tracking-wider">
+                      Cost Price
+                    </TableHead>
+                    <TableHead className="text-left text-xs font-semibold font-eyebrow text-semantic-text-secondary uppercase tracking-wider">
+                      Qty
+                    </TableHead>
+                    <TableHead className="text-left text-xs font-semibold font-eyebrow text-semantic-text-secondary uppercase tracking-wider">
+                      Status
+                    </TableHead>
+                  </TableRow>
+                </TableHeader>
+                <TableBody>
+                  {expiredItems.map((item) => (
+                    <TableRow key={item.id}>
+                      <TableCell className="whitespace-nowrap text-sm text-semantic-text-primary">
+                        {item.sku}
+                      </TableCell>
+                      <TableCell className="whitespace-nowrap text-sm font-medium text-semantic-text-primary">
+                        {item.productName}
+                      </TableCell>
+                      <TableCell className="whitespace-nowrap text-sm text-semantic-text-secondary">
+                        {item.locationName}
+                      </TableCell>
+                      <TableCell className="whitespace-nowrap text-sm tabular-nums text-semantic-text-primary">
+                        {formatExpiry(item.expiryDate)}
+                      </TableCell>
+                      <TableCell className="whitespace-nowrap text-sm text-semantic-text-primary">
+                        {currencyFormatter.format(item.costPrice)}
+                      </TableCell>
+                      <TableCell className="whitespace-nowrap text-sm text-semantic-text-primary">
+                        {item.quantityAvailable}
+                      </TableCell>
+                      <TableCell className="whitespace-nowrap text-sm font-medium text-semantic-critical">
+                        {item.status}
+                      </TableCell>
+                    </TableRow>
+                  ))}
+                </TableBody>
+              </Table>
+            </div>
           </div>
         </>
       )}
