@@ -108,12 +108,14 @@ jobs:
         working-directory: ./frontend
 
       - name: Deploy preview to Cloudflare Pages
+        env:
+          PR_TITLE: ${{ github.event.pull_request.title }}
         run: |
           doppler run -- npx wrangler pages deploy frontend/build \
             --project-name date-management-frontend \
             --branch "pr-${{ github.event.number }}" \
             --commit-hash "${{ github.sha }}" \
-            --commit-message "PR #${{ github.event.number }} - ${{ github.event.pull_request.title }}"
+            --commit-message "PR #${{ github.event.number }} - ${PR_TITLE}"
 
       - name: Publish preview URL summary
         run: |
@@ -217,9 +219,11 @@ jobs:
         working-directory: ./frontend
 
       - name: Deploy production to Cloudflare Pages
+        env:
+          COMMIT_MESSAGE: ${{ github.event.head_commit.message }}
         run: |
           doppler run -- npx wrangler pages deploy frontend/build \
             --project-name date-management-frontend \
             --branch main \
             --commit-hash "${{ github.sha }}" \
-            --commit-message "${{ github.event.head_commit.message }}"
+            --commit-message "${COMMIT_MESSAGE%%$'\n'*}"
