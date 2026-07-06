@@ -68,6 +68,7 @@ export const CSVUploadPage: React.FC<{
       setFileName(file.name);
       setColumnValidation(null);
       setRowEstimate(null);
+      resetUploadState();
 
       // Generate preview of the first 5 rows
       previewFile(file);

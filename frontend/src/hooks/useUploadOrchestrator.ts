@@ -39,6 +39,13 @@ async function extractStatusErrorSuffix(res: Response): Promise<string> {
   }
 }
 
+function hasImmediateExpiryResult(
+  importType: UploadImportType,
+  data: Record<string, unknown> | undefined,
+): boolean {
+  return importType === 'expiry-list' && data?.importedCount !== undefined;
+}
+
 async function throwForPollError(res: Response): Promise<never> {
   if (NON_RETRYABLE_STATUS_CODES.has(res.status)) {
     const suffix = await extractStatusErrorSuffix(res);
@@ -320,11 +327,7 @@ export function useUploadOrchestrator({
 
         setUploadProgress(100);
 
-        if (
-          strategy === 'direct' &&
-          importType === 'expiry-list' &&
-          directCompletionData?.importedCount !== undefined
-        ) {
+        if (strategy === 'direct' && hasImmediateExpiryResult(importType, directCompletionData)) {
           recordCompletedUpload(
             toUploadResultFromSummary(directCompletionData),
             file.name,
@@ -347,7 +350,7 @@ export function useUploadOrchestrator({
           setProgressMessage('Processing file');
           const completeData = await completeUpload(uploadKey, importType, uploadBaseUrl);
 
-          if (importType === 'expiry-list' && completeData.importedCount !== undefined) {
+          if (hasImmediateExpiryResult(importType, completeData)) {
             recordCompletedUpload(
               toUploadResultFromSummary(completeData),
               file.name,
