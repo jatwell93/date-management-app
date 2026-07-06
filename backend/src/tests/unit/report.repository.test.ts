@@ -188,6 +188,30 @@ describe('ReportRepository', () => {
     expect(statuses).not.toContain('Sold Through');
   });
 
+  it('returns all active entries beyond 90 days but excludes past-expiry and dispositioned stock', () => {
+    const repository = new ReportRepository(db, 'test-org');
+
+    // Within the 90-day worklist window.
+    insertInventoryItem(sqliteDate('+20 days'), 'Normal');
+    // Far-future item — invisible to the 90-day worklist, but the whole point of
+    // this view (e.g. a fat-finger year like 2666).
+    insertInventoryItem(sqliteDate('+400 days'), 'Normal');
+    // Excluded: already dispositioned.
+    insertInventoryItem(sqliteDate('+30 days'), 'Processed');
+    insertInventoryItem(sqliteDate('+30 days'), 'Sold Through');
+    // Excluded: already past expiry (belongs on the Expired Items page).
+    insertInventoryItem(sqliteDate('-1 day'), 'Normal');
+
+    const worklist = repository.getDetailedExpiryReport();
+    const active = repository.getActiveExpiryEntries();
+
+    // The 90-day worklist only sees the +20d item; the active view also sees +400d.
+    expect(worklist).toHaveLength(1);
+    expect(active).toHaveLength(2);
+    expect(active.map((row) => row.status)).not.toContain('Processed');
+    expect(active.map((row) => row.status)).not.toContain('Sold Through');
+  });
+
   it('values past-expiry stock by date (not just Expired status) for loss-by-sku/department', () => {
     const repository = new ReportRepository(db, 'test-org');
 

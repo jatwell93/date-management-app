@@ -5,6 +5,7 @@ const mockReportService = {
   getMonthlyExpiryReport: vi.fn(),
   getOverallExpiryReport: vi.fn(),
   getDetailedExpiryReport: vi.fn(),
+  getActiveExpiryEntries: vi.fn(),
   getMonthlyMarkdownReport: vi.fn(),
   updateAllMarkdownStatuses: vi.fn(),
   getUsageReport: vi.fn(),
@@ -63,6 +64,7 @@ describe('report.routes', () => {
     mockReportService.getMonthlyExpiryReport.mockResolvedValue({ report: 'expiry' });
     mockReportService.getOverallExpiryReport.mockResolvedValue({ report: 'overall' });
     mockReportService.getDetailedExpiryReport.mockResolvedValue({ report: 'details' });
+    mockReportService.getActiveExpiryEntries.mockResolvedValue({ report: 'entries' });
     mockReportService.getMonthlyMarkdownReport.mockResolvedValue({ report: 'markdown' });
     mockReportService.updateAllMarkdownStatuses.mockResolvedValue(undefined);
     mockReportService.getUsageReport.mockResolvedValue({ report: 'usage' });
@@ -87,6 +89,7 @@ describe('report.routes', () => {
     const cases = [
       ['/reports/expiry-overall', { report: 'overall' }, 'getOverallExpiryReport'],
       ['/reports/expiry-details', { report: 'details' }, 'getDetailedExpiryReport'],
+      ['/reports/expiry-entries', { report: 'entries' }, 'getActiveExpiryEntries'],
       ['/reports/monthly-markdown', { report: 'markdown' }, 'getMonthlyMarkdownReport'],
       ['/reports/usage', { report: 'usage' }, 'getUsageReport'],
       ['/reports/daily-usage', { report: 'daily-usage' }, 'getDailyUsageReport'],

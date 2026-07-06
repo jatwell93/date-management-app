@@ -5,6 +5,7 @@ const phaseThreeFiles = [
   '../DashboardPage.tsx',
   '../ExpiredItemsPage.tsx',
   '../DetailedExpiryReportPage.tsx',
+  '../ExpiryEntriesPage.tsx',
   '../UsageReportPage.tsx',
   '../StoreAreaManagementPage.tsx',
   '../UserManagementPage.tsx',

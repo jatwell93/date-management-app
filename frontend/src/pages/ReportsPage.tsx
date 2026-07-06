@@ -413,6 +413,9 @@ export function ReportsPage({ token }: ReportsPageProps) {
             <Button asChild className="flex-1" size="lg">
               <a href="/detailed-expiry-report">Open next 90 days</a>
             </Button>
+            <Button asChild variant="outline" className="flex-1" size="lg">
+              <a href="/expiry-entries">Open all expiry entries</a>
+            </Button>
             <Button asChild variant="destructive" className="flex-1" size="lg">
               <a href="/expired-items">Review expired items</a>
             </Button>
