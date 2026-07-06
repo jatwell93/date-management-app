@@ -626,116 +626,6 @@ describe('ProductService with organizationId', () => {
     });
   });
 
-  describe('private lookup helpers', () => {
-    it('delegates combined SKU/barcode lookup to the product repository', async () => {
-      const byBarcode = {
-        id: 22,
-        organizationId,
-        sku: 'SKU-22',
-        barcode: 'BAR-22',
-        name: 'By Barcode',
-        costPrice: 22,
-        notes: '',
-        createdAt: new Date('2026-01-01T00:00:00.000Z'),
-        updatedAt: new Date('2026-01-02T00:00:00.000Z'),
-      };
-      const productRepo = {
-        findBySkuOrBarcode: vi.fn().mockResolvedValue({
-          bySku: null,
-          byBarcode,
-        }),
-      };
-      const service = new ProductService(
-        mockPrisma as unknown as PrismaClient,
-        organizationId,
-        productRepo as never,
-      );
-
-      mockPrisma.product.findUnique.mockRejectedValue(new Error('service should use repository'));
-
-      const result = await (service as any).getProductBySkuOrBarcode('SKU-MISSING', 'BAR-22');
-
-      expect(productRepo.findBySkuOrBarcode).toHaveBeenCalledWith(
-        'SKU-MISSING',
-        'BAR-22',
-        organizationId,
-      );
-      expect(mockPrisma.product.findUnique).not.toHaveBeenCalled();
-      expect(result).toEqual({
-        id: 22,
-        organizationId,
-        sku: 'SKU-22',
-        barcode: 'BAR-22',
-        name: 'By Barcode',
-        costPrice: 22,
-        createdAt: '2026-01-01T00:00:00.000Z',
-        updatedAt: '2026-01-02T00:00:00.000Z',
-      });
-    });
-
-    it('throws duplicate identifier error when SKU and barcode match different products', async () => {
-      mockPrisma.product.findUnique
-        .mockResolvedValueOnce({
-          id: 1,
-          organizationId,
-          sku: 'SKU-1',
-          barcode: 'BAR-1',
-          name: 'One',
-          costPrice: 1,
-          notes: '',
-          createdAt: new Date(),
-          updatedAt: new Date(),
-        })
-        .mockResolvedValueOnce({
-          id: 2,
-          organizationId,
-          sku: 'SKU-2',
-          barcode: 'BAR-2',
-          name: 'Two',
-          costPrice: 2,
-          notes: '',
-          createdAt: new Date(),
-          updatedAt: new Date(),
-        });
-
-      await expect(
-        (productService as any).getProductBySkuOrBarcode('SKU-1', 'BAR-2'),
-      ).rejects.toThrow('Duplicate identifiers detected');
-    });
-
-    it('returns product found by barcode when SKU lookup misses', async () => {
-      const byBarcode = {
-        id: 22,
-        organizationId,
-        sku: 'SKU-22',
-        barcode: 'BAR-22',
-        name: 'By Barcode',
-        costPrice: 22,
-        notes: '',
-        createdAt: new Date('2026-01-01T00:00:00.000Z'),
-        updatedAt: new Date('2026-01-02T00:00:00.000Z'),
-      };
-
-      mockPrisma.product.findUnique.mockResolvedValueOnce(null).mockResolvedValueOnce(byBarcode);
-
-      const result = await (productService as any).getProductBySkuOrBarcode(
-        'SKU-MISSING',
-        'BAR-22',
-      );
-
-      expect(result).toEqual({
-        id: 22,
-        organizationId,
-        sku: 'SKU-22',
-        barcode: 'BAR-22',
-        name: 'By Barcode',
-        costPrice: 22,
-        createdAt: '2026-01-01T00:00:00.000Z',
-        updatedAt: '2026-01-02T00:00:00.000Z',
-      });
-    });
-  });
-
   describe('CSV internal processing and validation helpers', () => {
     const setupStreamEmitter = () => {
       const handlers: Record<string, (...args: any[]) => void> = {};
@@ -816,6 +706,18 @@ describe('ProductService with organizationId', () => {
         errors: [],
       });
 
+      const now = new Date();
+      const existingPrismaProduct = {
+        id: 7,
+        organizationId,
+        sku: 'SKU-EXIST',
+        barcode: 'BAR-EXIST',
+        name: 'Existing',
+        costPrice: 9.99,
+        notes: '',
+        createdAt: now,
+        updatedAt: now,
+      };
       const existingProduct = {
         id: 7,
         organizationId,
@@ -823,14 +725,37 @@ describe('ProductService with organizationId', () => {
         barcode: 'BAR-EXIST',
         name: 'Existing',
         costPrice: 9.99,
-        createdAt: new Date().toISOString(),
-        updatedAt: new Date().toISOString(),
+        createdAt: now.toISOString(),
+        updatedAt: now.toISOString(),
+      };
+      // Two distinct products so resolveProductImportOperation detects a conflict on row 3
+      const conflictBySku = {
+        id: 1,
+        organizationId,
+        sku: 'SKU-DUP',
+        barcode: 'BAR-OTHER',
+        name: 'Conflict A',
+        costPrice: 5,
+        notes: '',
+        createdAt: now,
+        updatedAt: now,
+      };
+      const conflictByBarcode = {
+        id: 2,
+        organizationId,
+        sku: 'SKU-OTHER',
+        barcode: 'BAR-DUP',
+        name: 'Conflict B',
+        costPrice: 5,
+        notes: '',
+        createdAt: now,
+        updatedAt: now,
       };
 
-      vi.spyOn(productService as any, 'getProductBySkuOrBarcode')
-        .mockResolvedValueOnce(existingProduct)
-        .mockResolvedValueOnce(null)
-        .mockRejectedValueOnce(new Error('Duplicate identifiers detected'));
+      vi.spyOn((productService as any)['productRepo'], 'findBySkuOrBarcode')
+        .mockResolvedValueOnce({ bySku: existingPrismaProduct, byBarcode: null })
+        .mockResolvedValueOnce({ bySku: null, byBarcode: null })
+        .mockResolvedValueOnce({ bySku: conflictBySku, byBarcode: conflictByBarcode });
       vi.spyOn(productService, 'updateProduct').mockResolvedValue(existingProduct as any);
       vi.spyOn(productService, 'createProduct').mockResolvedValue({
         ...existingProduct,
@@ -858,7 +783,9 @@ describe('ProductService with organizationId', () => {
 
       expect(result.imported).toBe(1);
       expect(result.updated).toBe(1);
-      expect(result.errors).toContain('Row 3: Duplicate identifiers detected');
+      expect(result.errors).toEqual(
+        expect.arrayContaining([expect.stringContaining('Row 3: Duplicate identifiers detected')]),
+      );
       expect(productService.updateProduct).toHaveBeenCalled();
       expect(productService.createProduct).toHaveBeenCalled();
     });
