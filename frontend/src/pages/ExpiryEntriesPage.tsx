@@ -398,7 +398,11 @@ export function ExpiryEntriesPage({ token, role }: ExpiryEntriesPageProps) {
         },
       },
       {
-        accessorKey: 'status',
+        id: 'status',
+        // Computed column: the cell always shows the markdown status derived from the
+        // expiry date, not the raw DB `status` field — so sort/filter on the same
+        // derived value rather than the stored status (typically 'Normal').
+        accessorFn: (row) => getMarkdownStatus(getDaysToExpiry(row.expiryDate)),
         header: ({ column }) => <DataTableColumnHeader column={column} title="Markdown Status" />,
         cell: ({ row }) => {
           const isEditing = editingItem && editingItem.inventoryId === row.original.inventoryId;
