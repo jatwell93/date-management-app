@@ -1,5 +1,6 @@
 /* eslint-disable @typescript-eslint/no-explicit-any */
 import { ProductService } from '../../services/product.service';
+import { findColumnByAlternatives } from '../../services/product-import.helpers';
 import { PrismaClient } from '@prisma/client';
 import fs from 'fs';
 import path from 'path';
@@ -65,33 +66,12 @@ TEST003,Product 3,"1,000.99",1234567890125`;
 
 // Test cases for alternative header name recognition
 describe('CSV Header Name Recognition', () => {
-  let productService: ProductService;
-  let mockPrisma: any;
-
-  beforeEach(() => {
-    mockPrisma = {
-      product: {
-        findUnique: vi.fn(),
-        create: vi.fn(),
-        update: vi.fn(),
-      },
-      organizationUsage: {
-        findUnique: vi
-          .fn()
-          .mockResolvedValue({ organizationId: 'default-org', totalSkus: 0, maxSkus: 1000 }),
-        update: vi.fn(),
-      },
-      $transaction: vi.fn((callback) => callback(mockPrisma)),
-    };
-    productService = new ProductService(mockPrisma as unknown as PrismaClient);
-  });
 
   it('should recognize alternative SKU column names', () => {
     const row = { 'Item Code': 'SKU123', Name: 'Product', Cost: '10.00', Barcode: '123456' };
     const alternatives = ['SKU', 'Item Code', 'Reorder Number', 'Product Code', 'Item Number'];
 
-    // Access the private method by casting to 'any'
-    const header = (productService as any).findColumnByAlternatives(row, alternatives);
+    const header = findColumnByAlternatives(row, alternatives);
     expect(header).toBe('Item Code');
   });
 
@@ -99,7 +79,7 @@ describe('CSV Header Name Recognition', () => {
     const row = { SKU: 'SKU123', 'Product Name': 'Product', Cost: '10.00', Barcode: '123456' };
     const alternatives = ['Name', 'Item Description', 'Product Name', 'Description', 'Item Name'];
 
-    const header = (productService as any).findColumnByAlternatives(row, alternatives);
+    const header = findColumnByAlternatives(row, alternatives);
     expect(header).toBe('Product Name');
   });
 
@@ -117,7 +97,7 @@ describe('CSV Header Name Recognition', () => {
       'Retail Price',
     ];
 
-    const header = (productService as any).findColumnByAlternatives(row, alternatives);
+    const header = findColumnByAlternatives(row, alternatives);
     expect(header).toBe('Unit Price');
   });
 
@@ -133,16 +113,16 @@ describe('CSV Header Name Recognition', () => {
       'Barcode Number',
     ];
 
-    const header = (productService as any).findColumnByAlternatives(row, alternatives);
+    const header = findColumnByAlternatives(row, alternatives);
     expect(header).toBe('GTIN');
   });
 
   it('should be case-insensitive for headers', () => {
     const row = { sku: 'SKU123', name: 'Product', cost: '10.00', barcode: '123456' };
-    const skuHeader = (productService as any).findColumnByAlternatives(row, ['SKU']);
-    const nameHeader = (productService as any).findColumnByAlternatives(row, ['Name']);
-    const costHeader = (productService as any).findColumnByAlternatives(row, ['Cost']);
-    const barcodeHeader = (productService as any).findColumnByAlternatives(row, ['Barcode']);
+    const skuHeader = findColumnByAlternatives(row, ['SKU']);
+    const nameHeader = findColumnByAlternatives(row, ['Name']);
+    const costHeader = findColumnByAlternatives(row, ['Cost']);
+    const barcodeHeader = findColumnByAlternatives(row, ['Barcode']);
 
     expect(skuHeader).toBe('sku');
     expect(nameHeader).toBe('name');
