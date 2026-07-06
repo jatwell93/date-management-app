@@ -391,6 +391,16 @@ export class ProductService {
               );
               const unexpectedColumns = getProductImportCsvUnexpectedColumns(row, columnState);
 
+              const preValidation = validateProductImportRow({
+                rowNumber,
+                values: { sku, name, costStr, barcode },
+                unexpectedColumns,
+              });
+              if (!preValidation.isValid) {
+                errors.push(...preValidation.errors);
+                return;
+              }
+
               const trimmedSku = String(sku ?? '').trim();
               const trimmedBarcode = String(barcode ?? '').trim();
               let bySku: Product | null = null;
