@@ -279,6 +279,7 @@ describe('subscription.routes', () => {
         status: 'active',
         billingCycle: 'annual',
         currentPeriodEnd: '2026-08-01T00:00:00.000Z',
+        cancelAtPeriodEnd: false,
       });
       expect(mockFindLatestByOrganizationId).toHaveBeenCalledWith('org-1');
     });

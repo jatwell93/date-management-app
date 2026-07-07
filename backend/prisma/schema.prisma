@@ -44,6 +44,7 @@ model SubscriptionTier {
   pastDueSince         DateTime?    @map("past_due_since")
   status               String       @default("active")
   billingCycle         String       @default("monthly") @map("billing_cycle")
+  cancelAtPeriodEnd    Boolean      @default(false) @map("cancel_at_period_end")
   createdAt            DateTime     @default(now()) @map("created_at")
   updatedAt            DateTime     @updatedAt @map("updated_at")
   stripeCustomerId     String?      @map("stripe_customer_id")

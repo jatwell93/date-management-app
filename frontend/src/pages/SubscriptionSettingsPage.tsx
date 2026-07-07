@@ -20,7 +20,6 @@ export function SubscriptionSettingsPage({ token }: SubscriptionSettingsPageProp
   const [subscription, setSubscription] = useState<SubscriptionData | null>(null);
   const [usage, setUsage] = useState<UsageData | null>(null);
   const [cancelLoading, setCancelLoading] = useState(false);
-  const [cancelScheduled, setCancelScheduled] = useState(false);
   const [billingLoadError, setBillingLoadError] = useState<string | null>(null);
   const [billingLoading, setBillingLoading] = useState(false);
   const [checkoutError, setCheckoutError] = useState<string | null>(null);
@@ -114,6 +113,8 @@ export function SubscriptionSettingsPage({ token }: SubscriptionSettingsPageProp
       subscription.status === 'past_due' ||
       subscription.status === 'canceled');
 
+  const cancellationScheduled = subscription?.cancelAtPeriodEnd ?? false;
+
   const handleSelectPlan = async (tier: TierLevel, billingCycle: 'monthly' | 'annual') => {
     if (!token) return;
 
@@ -202,7 +203,6 @@ export function SubscriptionSettingsPage({ token }: SubscriptionSettingsPageProp
         throw new Error('Failed to cancel subscription');
       }
 
-      setCancelScheduled(true);
       await loadSubscriptionData();
     } catch (error) {
       Sentry.captureException(error, {
@@ -252,7 +252,7 @@ export function SubscriptionSettingsPage({ token }: SubscriptionSettingsPageProp
           </Card>
         )}
 
-        {cancelScheduled && (
+        {cancellationScheduled && (
           <Card className="border-green-500/40 bg-green-500/5">
             <CardHeader>
               <CardTitle>Subscription cancellation scheduled</CardTitle>
@@ -324,7 +324,7 @@ export function SubscriptionSettingsPage({ token }: SubscriptionSettingsPageProp
         </Card>
 
         {/* Plan Management */}
-        {!cancelScheduled && subscription && subscription.status === 'active' && subscription.tierLevel !== 'free' && (
+        {!cancellationScheduled && subscription && subscription.status === 'active' && subscription.tierLevel !== 'free' && (
           <Card>
             <CardHeader>
               <CardTitle>Plan Management</CardTitle>
