@@ -37,6 +37,7 @@ export function mapPrismaSubscriptionTierToModel(
     status: prismaRecord.status as SubscriptionStatus,
     billingCycle: prismaRecord.billingCycle as BillingCycle,
     cancelAtPeriodEnd: prismaRecord.cancelAtPeriodEnd,
+    currentPeriodEnd: prismaRecord.currentPeriodEnd ?? undefined,
     createdAt: prismaRecord.createdAt,
     updatedAt: prismaRecord.updatedAt,
   };
