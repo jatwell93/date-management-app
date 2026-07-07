@@ -401,6 +401,16 @@ export class SubscriptionController {
     }
   }
 
+  async cancelSubscription(req: Request, res: Response): Promise<void> {
+    try {
+      const organizationId = await this.getAuthenticatedOrganizationId(req);
+      await this.subscriptionService.cancelSubscription(organizationId);
+      res.json({ success: true });
+    } catch (error) {
+      handleSubscriptionControllerError('Failed to cancel subscription', error);
+    }
+  }
+
   async createPortalSession(req: Request, res: Response): Promise<void> {
     try {
       const userId = (req as unknown as ClerkAuthRequest).userId;

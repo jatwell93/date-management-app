@@ -8,6 +8,7 @@ const mockSubscriptionTierUpdate = vi.fn();
 const mockFindLatestByOrganizationId = vi.fn();
 const mockGetOrCreateUsage = vi.fn();
 const mockConvertTrialToPaid = vi.fn();
+const mockCancelSubscription = vi.fn();
 
 const mockStripeCustomersCreate = vi.fn();
 const mockStripeCheckoutSessionCreate = vi.fn();
@@ -44,6 +45,7 @@ vi.mock('../../services/subscription.service', () => ({
   SubscriptionService: vi.fn().mockImplementation(function () {
     return {
       convertTrialToPaid: (...args: unknown[]) => mockConvertTrialToPaid(...args),
+      cancelSubscription: (...args: unknown[]) => mockCancelSubscription(...args),
     };
   }),
 }));
@@ -210,6 +212,7 @@ const registerTestDependencies = () => {
   } as never);
   diContainer.registerInstance(actualSubscriptionService.SubscriptionService, {
     convertTrialToPaid: (...args: unknown[]) => mockConvertTrialToPaid(...args),
+    cancelSubscription: (...args: unknown[]) => mockCancelSubscription(...args),
   } as never);
   diContainer.registerInstance('StripeClientFactory', () => ({
     customers: {
@@ -866,6 +869,43 @@ describe('subscription.routes', () => {
 
       expect(response.status).toBe(500);
       expect(response.body).toEqual({ error: 'portal unavailable' });
+    });
+  });
+
+  describe('POST /subscription/cancel', () => {
+    it('cancels subscription at period end and returns success', async () => {
+      mockFindUnique.mockResolvedValue({ organizationId: 'org-1' });
+      mockCancelSubscription.mockResolvedValue(undefined);
+
+      const response = await request(app)
+        .post('/subscription/cancel')
+        .set('x-clerk-user-id', 'user_123');
+
+      expect(response.status).toBe(200);
+      expect(response.body).toEqual({ success: true });
+      expect(mockCancelSubscription).toHaveBeenCalledWith('org-1');
+    });
+
+    it('returns 404 when user has no organization', async () => {
+      mockFindUnique.mockResolvedValue(null);
+
+      const response = await request(app)
+        .post('/subscription/cancel')
+        .set('x-clerk-user-id', 'user_123');
+
+      expect(response.status).toBe(404);
+    });
+
+    it('returns 500 when cancellation service throws unexpected error', async () => {
+      mockFindUnique.mockResolvedValue({ organizationId: 'org-1' });
+      mockCancelSubscription.mockRejectedValue(new Error('Stripe connection error'));
+
+      const response = await request(app)
+        .post('/subscription/cancel')
+        .set('x-clerk-user-id', 'user_123');
+
+      expect(response.status).toBe(500);
+      expect(response.body).toEqual({ error: 'Failed to cancel subscription' });
     });
   });
 });
