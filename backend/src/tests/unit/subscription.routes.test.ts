@@ -172,7 +172,7 @@ const configureRepositoryMocks = () => {
     tierLevel: 'professional',
     status: 'active',
     billingCycle: 'annual',
-    trialEndDate: new Date('2026-08-01T00:00:00.000Z'),
+    currentPeriodEnd: new Date('2026-08-01T00:00:00.000Z'),
   });
   mockGetOrCreateUsage.mockResolvedValue({
     totalSkus: 42,

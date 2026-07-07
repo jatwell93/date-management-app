@@ -74,7 +74,7 @@ const mapCurrentSubscriptionResponse = (
   tierLevel: subscription?.tierLevel ?? 'free',
   status: subscription?.status ?? 'expired',
   billingCycle: subscription?.billingCycle ?? null,
-  currentPeriodEnd: subscription?.trialEndDate?.toISOString() ?? null,
+  currentPeriodEnd: subscription?.currentPeriodEnd?.toISOString() ?? null,
   cancelAtPeriodEnd: subscription?.cancelAtPeriodEnd ?? false,
 });
 

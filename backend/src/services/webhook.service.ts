@@ -921,6 +921,9 @@ export class WebhookService {
       billingCycle:
         subscription.items.data[0]?.price.recurring?.interval === 'year' ? 'annual' : 'monthly',
       cancelAtPeriodEnd: subscription.cancel_at_period_end,
+      currentPeriodEnd: subscription.current_period_end
+        ? new Date(subscription.current_period_end * 1000)
+        : null,
     };
 
     if (existingTier) {
