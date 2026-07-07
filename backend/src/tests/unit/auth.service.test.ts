@@ -188,7 +188,7 @@ describe('AuthService', () => {
 
       expect(payload.userId).toBe(7);
       expect(payload.role).toBe('Staff');
-      expect(jwt.verify).toHaveBeenCalledWith('valid_token', 'test_secret');
+      expect(jwt.verify).toHaveBeenCalledWith('valid_token', 'test_secret', { algorithms: ['HS256'] });
     });
 
     it('throws AuthenticationError for expired token', () => {

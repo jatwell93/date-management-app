@@ -20,8 +20,10 @@ export function SubscriptionSettingsPage({ token }: SubscriptionSettingsPageProp
   const [subscription, setSubscription] = useState<SubscriptionData | null>(null);
   const [usage, setUsage] = useState<UsageData | null>(null);
   const [cancelLoading, setCancelLoading] = useState(false);
+  const [cancelScheduled, setCancelScheduled] = useState(false);
   const [billingLoadError, setBillingLoadError] = useState<string | null>(null);
   const [billingLoading, setBillingLoading] = useState(false);
+  const [checkoutError, setCheckoutError] = useState<string | null>(null);
 
   const loadSubscriptionData = useCallback(
     async (isMounted: () => boolean = () => true) => {
@@ -115,12 +117,15 @@ export function SubscriptionSettingsPage({ token }: SubscriptionSettingsPageProp
   const handleSelectPlan = async (tier: TierLevel, billingCycle: 'monthly' | 'annual') => {
     if (!token) return;
 
+    setCheckoutError(null);
+
     if (tier === 'free') {
       setShowUpgradeModal(false);
       return;
     }
     if (tier === 'enterprise') {
-      alert('Enterprise plans are configured by contract. Please contact support.');
+      setShowUpgradeModal(false);
+      setCheckoutError('Enterprise plans are configured by contract. Please contact support.');
       return;
     }
 
@@ -139,7 +144,8 @@ export function SubscriptionSettingsPage({ token }: SubscriptionSettingsPageProp
 
       const priceId = priceIds[tier as keyof typeof priceIds]?.[billingCycle];
       if (!priceId) {
-        alert('Price configuration not found. Please contact support.');
+        setShowUpgradeModal(false);
+        setCheckoutError('Price configuration not found. Please contact support.');
         return;
       }
 
@@ -166,7 +172,8 @@ export function SubscriptionSettingsPage({ token }: SubscriptionSettingsPageProp
       Sentry.captureException(error, {
         tags: { feature: 'subscription-upgrade' },
       });
-      alert('Failed to start upgrade process. Please try again.');
+      setShowUpgradeModal(false);
+      setCheckoutError('Failed to start upgrade process. Please try again.');
     }
   };
 
@@ -179,6 +186,7 @@ export function SubscriptionSettingsPage({ token }: SubscriptionSettingsPageProp
 
     if (!confirmed) return;
 
+    setCheckoutError(null);
     setCancelLoading(true);
     try {
       const authToken = await getFreshApiToken('subscription-settings-cancel');
@@ -194,15 +202,13 @@ export function SubscriptionSettingsPage({ token }: SubscriptionSettingsPageProp
         throw new Error('Failed to cancel subscription');
       }
 
-      alert(
-        'Your subscription has been scheduled for cancellation at the end of the billing period.',
-      );
-      window.location.reload();
+      setCancelScheduled(true);
+      await loadSubscriptionData();
     } catch (error) {
       Sentry.captureException(error, {
         tags: { feature: 'subscription-cancel' },
       });
-      alert('Failed to cancel subscription. Please try again or contact support.');
+      setCheckoutError('Failed to cancel subscription. Please try again or contact support.');
     } finally {
       setCancelLoading(false);
     }
@@ -229,6 +235,32 @@ export function SubscriptionSettingsPage({ token }: SubscriptionSettingsPageProp
                 {billingLoading ? 'Retrying...' : 'Retry billing data'}
               </Button>
             </CardContent>
+          </Card>
+        )}
+
+        {checkoutError && (
+          <Card className="border-destructive/40 bg-destructive/5">
+            <CardHeader>
+              <CardTitle>Billing action failed</CardTitle>
+              <CardDescription>{checkoutError}</CardDescription>
+            </CardHeader>
+            <CardContent>
+              <Button variant="outline" onClick={() => setCheckoutError(null)}>
+                Dismiss
+              </Button>
+            </CardContent>
+          </Card>
+        )}
+
+        {cancelScheduled && (
+          <Card className="border-green-500/40 bg-green-500/5">
+            <CardHeader>
+              <CardTitle>Subscription cancellation scheduled</CardTitle>
+              <CardDescription>
+                Your subscription will remain active until the end of your current billing period.
+                After that, you will be downgraded to the Starter plan.
+              </CardDescription>
+            </CardHeader>
           </Card>
         )}
 
@@ -292,7 +324,7 @@ export function SubscriptionSettingsPage({ token }: SubscriptionSettingsPageProp
         </Card>
 
         {/* Plan Management */}
-        {subscription && subscription.status === 'active' && subscription.tierLevel !== 'free' && (
+        {!cancelScheduled && subscription && subscription.status === 'active' && subscription.tierLevel !== 'free' && (
           <Card>
             <CardHeader>
               <CardTitle>Plan Management</CardTitle>

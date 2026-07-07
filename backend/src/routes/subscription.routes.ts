@@ -60,6 +60,20 @@ router.post(
   },
 );
 
+// Cancel subscription at end of current billing period
+router.post(
+  '/cancel',
+  clerkAuth as unknown as RequestHandler,
+  async (req: Request, res: Response, next: NextFunction) => {
+    try {
+      const controller = createSubscriptionController();
+      await controller.cancelSubscription(req, res);
+    } catch (error) {
+      next(error);
+    }
+  },
+);
+
 // Create Stripe Customer Portal Session for billing management
 router.post(
   '/create-portal-session',

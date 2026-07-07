@@ -444,9 +444,8 @@ export function useUploadOrchestrator({
         anchor.remove();
         window.URL.revokeObjectURL(objectUrl);
       } catch (error) {
-        window.alert(
-          error instanceof Error ? error.message : 'Failed to download the error report',
-        );
+        // eslint-disable-next-line no-console
+        console.error('Failed to download the error report', error);
       }
     },
     [getUploadAuthHeaders],
