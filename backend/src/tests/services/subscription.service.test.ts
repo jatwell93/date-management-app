@@ -246,6 +246,7 @@ describe('SubscriptionService', () => {
         id: 1,
         organizationId,
         status: SubscriptionStatus.ACTIVE,
+        cancelAtPeriodEnd: true,
         updatedAt: new Date(),
       });
 
@@ -255,6 +256,12 @@ describe('SubscriptionService', () => {
       expect(mockStripe.subscriptions.update).toHaveBeenCalledWith('sub_test123', {
         cancel_at_period_end: true,
       });
+      expect(mockPrisma.subscriptionTier.update).toHaveBeenCalledWith(
+        expect.objectContaining({
+          data: expect.objectContaining({ cancelAtPeriodEnd: true }),
+        }),
+      );
+      expect(result.cancelAtPeriodEnd).toBe(true);
     });
 
     it('should throw NotFoundError if subscription does not exist', async () => {

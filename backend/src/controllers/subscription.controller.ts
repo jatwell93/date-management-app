@@ -48,6 +48,7 @@ interface CurrentSubscriptionResponse {
   status: string;
   billingCycle: string | null;
   currentPeriodEnd: string | null;
+  cancelAtPeriodEnd: boolean;
 }
 
 interface OrganizationUsageResponse {
@@ -74,6 +75,7 @@ const mapCurrentSubscriptionResponse = (
   status: subscription?.status ?? 'expired',
   billingCycle: subscription?.billingCycle ?? null,
   currentPeriodEnd: subscription?.trialEndDate?.toISOString() ?? null,
+  cancelAtPeriodEnd: subscription?.cancelAtPeriodEnd ?? false,
 });
 
 const mapOrganizationUsageResponse = (usage: OrganizationUsage): OrganizationUsageResponse => ({

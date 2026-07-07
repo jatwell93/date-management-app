@@ -15,6 +15,7 @@ export interface SubscriptionData {
   status: SubscriptionStatus;
   billingCycle: BillingCycle | null;
   currentPeriodEnd: string | null;
+  cancelAtPeriodEnd?: boolean;
 }
 
 export interface UsageData {
