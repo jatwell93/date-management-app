@@ -283,6 +283,10 @@ export class WebhookService {
                 ? 'annual'
                 : 'monthly',
             trialEndDate: subscription.trial_end ? new Date(subscription.trial_end * 1000) : null,
+            cancelAtPeriodEnd: subscription.cancel_at_period_end,
+            currentPeriodEnd: subscription.current_period_end
+              ? new Date(subscription.current_period_end * 1000)
+              : null,
           },
           tx,
         );
@@ -1114,6 +1118,10 @@ export class WebhookService {
           checkoutData.stripeSubscription.items.data[0]?.price.recurring?.interval === 'year'
             ? 'annual'
             : 'monthly',
+        cancelAtPeriodEnd: checkoutData.stripeSubscription.cancel_at_period_end,
+        currentPeriodEnd: checkoutData.stripeSubscription.current_period_end
+          ? new Date(checkoutData.stripeSubscription.current_period_end * 1000)
+          : null,
       },
       tx,
     );
