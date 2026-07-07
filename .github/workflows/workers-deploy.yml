@@ -29,8 +29,6 @@ jobs:
     environment:
       name: preview
       url: https://date-management-api-dev.date-management-app.workers.dev
-    env:
-      DOPPLER_TOKEN: ${{ secrets.DOPPLER_TOKEN }}
     defaults:
       run:
         working-directory: ./workers
@@ -49,7 +47,7 @@ jobs:
         uses: dopplerhq/cli-action@v4
 
       - name: Install dependencies
-        run: npm ci
+        run: npm ci --ignore-scripts
 
       - name: Type check
         run: npm run lint
@@ -61,6 +59,8 @@ jobs:
         run: npm run build
 
       - name: Validate required Doppler secrets
+        env:
+          DOPPLER_TOKEN: ${{ secrets.DOPPLER_TOKEN }}
         run: |
           required_vars=(
             CLOUDFLARE_API_TOKEN
@@ -75,6 +75,8 @@ jobs:
           done
 
       - name: Deploy development worker
+        env:
+          DOPPLER_TOKEN: ${{ secrets.DOPPLER_TOKEN }}
         run: doppler run -- npx wrangler deploy --env development --keep-vars
 
   deploy-production:
@@ -88,8 +90,6 @@ jobs:
     environment:
       name: production
       url: https://api.expirymate.com.au
-    env:
-      DOPPLER_TOKEN: ${{ secrets.DOPPLER_TOKEN }}
     defaults:
       run:
         working-directory: ./workers
@@ -108,7 +108,7 @@ jobs:
         uses: dopplerhq/cli-action@v4
 
       - name: Install dependencies
-        run: npm ci
+        run: npm ci --ignore-scripts
 
       - name: Type check
         run: npm run lint
@@ -122,6 +122,8 @@ jobs:
         run: npm run build
 
       - name: Validate required Doppler secrets
+        env:
+          DOPPLER_TOKEN: ${{ secrets.DOPPLER_TOKEN }}
         run: |
           required_vars=(
             CLOUDFLARE_API_TOKEN
@@ -136,6 +138,8 @@ jobs:
           done
 
       - name: Guardrail - ensure prod Doppler config (block dev/preview values)
+        env:
+          DOPPLER_TOKEN: ${{ secrets.DOPPLER_TOKEN }}
         run: |
           doppler run -- bash -lc '
             # CLERK_SECRET_KEY must be a live key for production
@@ -173,6 +177,8 @@ jobs:
           '
 
       - name: Validate Stripe test launch prices
+        env:
+          DOPPLER_TOKEN: ${{ secrets.DOPPLER_TOKEN }}
         working-directory: .
         run: doppler run -- node scripts/validate-stripe-deployment-config.js
 
@@ -183,7 +189,11 @@ jobs:
       # The guardrail step above has already validated the value is a canonical
       # expirymate.com.au host. printf (no trailing newline) keeps the origin exact.
       - name: Bind FRONTEND_URL secret to worker
+        env:
+          DOPPLER_TOKEN: ${{ secrets.DOPPLER_TOKEN }}
         run: doppler run -- bash -lc 'printf "%s" "$FRONTEND_URL" | npx wrangler secret put FRONTEND_URL --env production'
 
       - name: Deploy production worker
+        env:
+          DOPPLER_TOKEN: ${{ secrets.DOPPLER_TOKEN }}
         run: doppler run -- npx wrangler deploy --env production

@@ -53,27 +53,35 @@ export async function synchronizeOfflineData(token: OfflineSyncTokenSource) {
     return;
   }
 
-  for (const key of pendingInventoryItemKeys) {
-    const item = await offlineStorage.getItem(key);
-    if (item) {
-      try {
+  await Promise.allSettled(
+    pendingInventoryItemKeys.map(async (key) => {
+      const item = await offlineStorage.getItem(key);
+      if (item) {
         // console.log(`Synchronizing item: ${key}`, item);
         await apiService.post('/inventory-items', item, authToken);
 
         // console.log(`Successfully synchronized item: ${key}`);
         await offlineStorage.removeItem(key);
-      } catch (err: unknown) {
+      }
+    }),
+  ).then((results) => {
+    results.forEach((result, i) => {
+      if (result.status === 'rejected') {
+        const err = result.reason;
         if (err instanceof Error) {
           // eslint-disable-next-line no-console
-          console.error(`Error synchronizing item ${key}:`, err);
+          console.error(`Error synchronizing item ${pendingInventoryItemKeys[i]}:`, err);
           // Could add user notification here if needed
         } else {
           // eslint-disable-next-line no-console
-          console.error(`An unknown error occurred while synchronizing item ${key}`, err);
+          console.error(
+            `An unknown error occurred while synchronizing item ${pendingInventoryItemKeys[i]}`,
+            err,
+          );
         }
         // Keep item in offline storage for retry later
       }
-    }
-  }
+    });
+  });
   // console.log("Offline data synchronization attempt finished.");
 }

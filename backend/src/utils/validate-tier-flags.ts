@@ -176,34 +176,36 @@ export async function validateTierFeatureFlags(
 
   Logger.info('Starting tier feature flags validation...');
 
-  // Check each required tier
+  // Fetch all (tier × feature) flags in parallel
+  const pairs = REQUIRED_TIERS.flatMap((tier) => REQUIRED_FEATURES.map((feature) => ({ tier, feature })));
+  const flags = await Promise.all(
+    pairs.map(({ tier, feature }) => tierFeatureFlags.findTierFeatureFlag(tier, feature)),
+  );
+
   for (const tier of REQUIRED_TIERS) {
-    let tierFlagCount = 0;
+    flagCounts[tier] = 0;
+  }
 
-    for (const feature of REQUIRED_FEATURES) {
-      const flag = await tierFeatureFlags.findTierFeatureFlag(tier, feature);
+  pairs.forEach(({ tier, feature }, i) => {
+    const flag = flags[i];
+    if (!flag) {
+      const missingKey = `${tier}.${feature}`;
+      missingFeatures.push(missingKey);
+      errors.push(`Missing feature flag: ${missingKey}`);
+    } else {
+      flagCounts[tier]++;
 
-      if (!flag) {
-        const missingKey = `${tier}.${feature}`;
-        missingFeatures.push(missingKey);
-        errors.push(`Missing feature flag: ${missingKey}`);
-      } else {
-        tierFlagCount++;
-
-        // Validate limit values match expected (warn, don't error - allows flexibility)
-        if (flag.limitValue !== undefined && feature in (EXPECTED_LIMITS[tier] || {})) {
-          const expectedLimit = EXPECTED_LIMITS[tier][feature];
-          if (flag.limitValue !== expectedLimit) {
-            warnings.push(
-              `Feature flag ${tier}.${feature} has limitValue=${flag.limitValue}, expected ${expectedLimit}`,
-            );
-          }
+      // Validate limit values match expected (warn, don't error - allows flexibility)
+      if (flag.limitValue !== undefined && feature in (EXPECTED_LIMITS[tier] || {})) {
+        const expectedLimit = EXPECTED_LIMITS[tier][feature];
+        if (flag.limitValue !== expectedLimit) {
+          warnings.push(
+            `Feature flag ${tier}.${feature} has limitValue=${flag.limitValue}, expected ${expectedLimit}`,
+          );
         }
       }
     }
-
-    flagCounts[tier] = tierFlagCount;
-  }
+  });
 
   // Log summary
   Logger.info('Tier feature flags validation summary:', {

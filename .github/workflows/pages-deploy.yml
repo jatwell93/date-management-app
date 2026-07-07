@@ -30,7 +30,6 @@ jobs:
       name: preview
       url: https://pr-${{ github.event.number }}.date-management-frontend.pages.dev
     env:
-      DOPPLER_TOKEN: ${{ secrets.DOPPLER_TOKEN }}
       CLOUDFLARE_ACCOUNT_ID: 0d7fd66d4292d901c684b723f66be69f
 
     steps:
@@ -47,10 +46,12 @@ jobs:
         uses: dopplerhq/cli-action@v4
 
       - name: Install frontend dependencies
-        run: npm ci
+        run: npm ci --ignore-scripts
         working-directory: ./frontend
 
       - name: Validate required Doppler secrets
+        env:
+          DOPPLER_TOKEN: ${{ secrets.DOPPLER_TOKEN }}
         run: |
           doppler run -- bash -lc '
             required_vars=(
@@ -93,6 +94,8 @@ jobs:
           '
 
       - name: Build frontend
+        env:
+          DOPPLER_TOKEN: ${{ secrets.DOPPLER_TOKEN }}
         run: |
           doppler run -- bash -lc '
             export REACT_APP_API_URL="${REACT_APP_API_URL:-${REACT_APP_API_BASE_URL:-}}"
@@ -109,6 +112,7 @@ jobs:
 
       - name: Deploy preview to Cloudflare Pages
         env:
+          DOPPLER_TOKEN: ${{ secrets.DOPPLER_TOKEN }}
           PR_TITLE: ${{ github.event.pull_request.title }}
         run: |
           doppler run -- npx wrangler pages deploy frontend/build \
@@ -130,7 +134,6 @@ jobs:
       name: production
       url: https://www.expirymate.com.au
     env:
-      DOPPLER_TOKEN: ${{ secrets.DOPPLER_TOKEN }}
       CLOUDFLARE_ACCOUNT_ID: 0d7fd66d4292d901c684b723f66be69f
 
     steps:
@@ -147,10 +150,12 @@ jobs:
         uses: dopplerhq/cli-action@v4
 
       - name: Install frontend dependencies
-        run: npm ci
+        run: npm ci --ignore-scripts
         working-directory: ./frontend
 
       - name: Validate required Doppler secrets
+        env:
+          DOPPLER_TOKEN: ${{ secrets.DOPPLER_TOKEN }}
         run: |
           doppler run -- bash -lc '
             required_vars=(
@@ -204,6 +209,8 @@ jobs:
           '
 
       - name: Build frontend
+        env:
+          DOPPLER_TOKEN: ${{ secrets.DOPPLER_TOKEN }}
         run: |
           doppler run -- bash -lc '
             export REACT_APP_API_URL="${REACT_APP_API_URL:-${REACT_APP_API_BASE_URL:-}}"
@@ -220,6 +227,7 @@ jobs:
 
       - name: Deploy production to Cloudflare Pages
         env:
+          DOPPLER_TOKEN: ${{ secrets.DOPPLER_TOKEN }}
           COMMIT_MESSAGE: ${{ github.event.head_commit.message }}
         run: |
           doppler run -- npx wrangler pages deploy frontend/build \
