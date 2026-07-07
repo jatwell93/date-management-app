@@ -20,6 +20,7 @@ export function SubscriptionSettingsPage({ token }: SubscriptionSettingsPageProp
   const [subscription, setSubscription] = useState<SubscriptionData | null>(null);
   const [usage, setUsage] = useState<UsageData | null>(null);
   const [cancelLoading, setCancelLoading] = useState(false);
+  const [cancelScheduled, setCancelScheduled] = useState(false);
   const [billingLoadError, setBillingLoadError] = useState<string | null>(null);
   const [billingLoading, setBillingLoading] = useState(false);
   const [checkoutError, setCheckoutError] = useState<string | null>(null);
@@ -201,7 +202,8 @@ export function SubscriptionSettingsPage({ token }: SubscriptionSettingsPageProp
         throw new Error('Failed to cancel subscription');
       }
 
-      window.location.reload();
+      setCancelScheduled(true);
+      await loadSubscriptionData();
     } catch (error) {
       Sentry.captureException(error, {
         tags: { feature: 'subscription-cancel' },
@@ -247,6 +249,18 @@ export function SubscriptionSettingsPage({ token }: SubscriptionSettingsPageProp
                 Dismiss
               </Button>
             </CardContent>
+          </Card>
+        )}
+
+        {cancelScheduled && (
+          <Card className="border-green-500/40 bg-green-500/5">
+            <CardHeader>
+              <CardTitle>Subscription cancellation scheduled</CardTitle>
+              <CardDescription>
+                Your subscription will remain active until the end of your current billing period.
+                After that, you will be downgraded to the Starter plan.
+              </CardDescription>
+            </CardHeader>
           </Card>
         )}
 
@@ -310,7 +324,7 @@ export function SubscriptionSettingsPage({ token }: SubscriptionSettingsPageProp
         </Card>
 
         {/* Plan Management */}
-        {subscription && subscription.status === 'active' && subscription.tierLevel !== 'free' && (
+        {!cancelScheduled && subscription && subscription.status === 'active' && subscription.tierLevel !== 'free' && (
           <Card>
             <CardHeader>
               <CardTitle>Plan Management</CardTitle>
