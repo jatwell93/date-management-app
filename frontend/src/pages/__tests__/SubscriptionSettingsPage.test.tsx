@@ -205,7 +205,6 @@ describe('SubscriptionSettingsPage', () => {
   });
 
   it('does not start Checkout for Enterprise contact sales', async () => {
-    const alertSpy = window.alert as jest.Mock;
     (global.fetch as jest.Mock)
       .mockResolvedValueOnce({
         ok: true,
@@ -223,9 +222,9 @@ describe('SubscriptionSettingsPage', () => {
     render(<SubscriptionSettingsPage token="test-token" />);
     fireEvent.click(await screen.findByRole('button', { name: 'Contact Enterprise Sales' }));
 
-    expect(alertSpy).toHaveBeenCalledWith(
-      'Enterprise plans are configured by contract. Please contact support.',
-    );
+    expect(
+      await screen.findByText('Enterprise plans are configured by contract. Please contact support.'),
+    ).toBeInTheDocument();
     expect(global.fetch).toHaveBeenCalledTimes(2);
   });
 });
