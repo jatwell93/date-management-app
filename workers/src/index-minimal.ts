@@ -1845,6 +1845,8 @@ type SubscriptionSettingsRow = {
   tier_level?: string | null;
   billing_cycle?: string | null;
   trial_end_date?: string | null;
+  current_period_end?: string | null;
+  cancel_at_period_end?: boolean | null;
 };
 
 type OrganizationUsageRow = {
@@ -1864,7 +1866,8 @@ const mapSubscriptionSettingsResponse = (subscription?: SubscriptionSettingsRow)
   tierLevel: normalizeLaunchTier(subscription?.tier_level),
   status: String(subscription?.status || 'expired').toLowerCase(),
   billingCycle: subscription?.billing_cycle || 'monthly',
-  currentPeriodEnd: subscription?.trial_end_date || null,
+  currentPeriodEnd: subscription?.current_period_end || null,
+  cancelAtPeriodEnd: subscription?.cancel_at_period_end ?? false,
 });
 
 // The frontend SubscriptionDashboard renders each resource as a
@@ -1913,7 +1916,9 @@ async function handleGetCurrentSubscription(
       status,
       tier_level,
       billing_cycle,
-      trial_end_date
+      trial_end_date,
+      current_period_end,
+      cancel_at_period_end
     FROM subscription_tiers
     WHERE organization_id = ${auth.organizationId}
     ORDER BY created_at DESC

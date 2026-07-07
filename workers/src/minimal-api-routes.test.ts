@@ -165,7 +165,8 @@ describe('minimal API route table', () => {
           tier_level: 'professional',
           status: 'active',
           billing_cycle: 'annual',
-          trial_end_date: '2026-08-01T00:00:00.000Z',
+          current_period_end: '2026-08-01T00:00:00.000Z',
+          cancel_at_period_end: false,
         },
       ],
     });
@@ -178,6 +179,7 @@ describe('minimal API route table', () => {
       status: 'active',
       billingCycle: 'annual',
       currentPeriodEnd: '2026-08-01T00:00:00.000Z',
+      cancelAtPeriodEnd: false,
     });
   });
 
