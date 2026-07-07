@@ -88,9 +88,17 @@ export async function runStripeSyncJob(
 
     Logger.info(`Fetched ${stripeSubscriptionMap.size} subscriptions from Stripe`);
 
-    // Step 3: Compare and sync
-    let syncCount = 0;
+    // Step 3: Compare and sync — classify synchronously, then update in parallel
     let divergenceCount = 0;
+
+    type PendingUpdate = {
+      stripeId: string;
+      organizationId: string;
+      stripeTier: string;
+      stripeStatus: string;
+      stripeTrialEnd: Date | null;
+    };
+    const toUpdate: PendingUpdate[] = [];
 
     for (const local of localSubscriptions) {
       const stripeId = local.stripeSubscriptionId;
@@ -131,17 +139,21 @@ export async function runStripeSyncJob(
           localStatus: local.status,
           stripeStatus,
         });
+        toUpdate.push({ stripeId, organizationId: local.organizationId, stripeTier, stripeStatus, stripeTrialEnd });
+        divergenceCount++;
+      }
+    }
 
-        await subscriptionRepository.updateByStripeSubscriptionId(stripeId, {
+    await Promise.all(
+      toUpdate.map(({ stripeId, stripeTier, stripeStatus, stripeTrialEnd }) =>
+        subscriptionRepository.updateByStripeSubscriptionId(stripeId, {
           tierLevel: stripeTier,
           status: stripeStatus,
           trialEndDate: stripeTrialEnd,
-        });
-
-        divergenceCount++;
-        syncCount++;
-      }
-    }
+        }),
+      ),
+    );
+    const syncCount = toUpdate.length;
 
     Logger.info('Hourly Stripe sync completed', {
       checkedCount: localSubscriptions.length,
