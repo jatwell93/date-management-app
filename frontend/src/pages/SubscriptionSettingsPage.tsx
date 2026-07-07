@@ -116,6 +116,8 @@ export function SubscriptionSettingsPage({ token }: SubscriptionSettingsPageProp
   const handleSelectPlan = async (tier: TierLevel, billingCycle: 'monthly' | 'annual') => {
     if (!token) return;
 
+    setCheckoutError(null);
+
     if (tier === 'free') {
       setShowUpgradeModal(false);
       return;
@@ -183,6 +185,7 @@ export function SubscriptionSettingsPage({ token }: SubscriptionSettingsPageProp
 
     if (!confirmed) return;
 
+    setCheckoutError(null);
     setCancelLoading(true);
     try {
       const authToken = await getFreshApiToken('subscription-settings-cancel');
