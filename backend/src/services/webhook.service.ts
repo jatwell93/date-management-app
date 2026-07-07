@@ -920,6 +920,7 @@ export class WebhookService {
       trialEndDate: subscription.trial_end ? new Date(subscription.trial_end * 1000) : null,
       billingCycle:
         subscription.items.data[0]?.price.recurring?.interval === 'year' ? 'annual' : 'monthly',
+      cancelAtPeriodEnd: subscription.cancel_at_period_end,
     };
 
     if (existingTier) {

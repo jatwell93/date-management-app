@@ -226,6 +226,7 @@ export class SubscriptionBillingLifecycleService {
 
       const updated = await this.subscriptionRepo.update(subscriptionTier.id, {
         status: mapStripeSubscriptionStatusToLocal(reactivatedSubscription.status),
+        cancelAtPeriodEnd: reactivatedSubscription.cancel_at_period_end,
       });
 
       Logger.info(
