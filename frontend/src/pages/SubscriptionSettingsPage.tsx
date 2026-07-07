@@ -22,6 +22,7 @@ export function SubscriptionSettingsPage({ token }: SubscriptionSettingsPageProp
   const [cancelLoading, setCancelLoading] = useState(false);
   const [billingLoadError, setBillingLoadError] = useState<string | null>(null);
   const [billingLoading, setBillingLoading] = useState(false);
+  const [checkoutError, setCheckoutError] = useState<string | null>(null);
 
   const loadSubscriptionData = useCallback(
     async (isMounted: () => boolean = () => true) => {
@@ -120,7 +121,7 @@ export function SubscriptionSettingsPage({ token }: SubscriptionSettingsPageProp
       return;
     }
     if (tier === 'enterprise') {
-      alert('Enterprise plans are configured by contract. Please contact support.');
+      setCheckoutError('Enterprise plans are configured by contract. Please contact support.');
       return;
     }
 
@@ -139,7 +140,7 @@ export function SubscriptionSettingsPage({ token }: SubscriptionSettingsPageProp
 
       const priceId = priceIds[tier as keyof typeof priceIds]?.[billingCycle];
       if (!priceId) {
-        alert('Price configuration not found. Please contact support.');
+        setCheckoutError('Price configuration not found. Please contact support.');
         return;
       }
 
@@ -166,7 +167,7 @@ export function SubscriptionSettingsPage({ token }: SubscriptionSettingsPageProp
       Sentry.captureException(error, {
         tags: { feature: 'subscription-upgrade' },
       });
-      alert('Failed to start upgrade process. Please try again.');
+      setCheckoutError('Failed to start upgrade process. Please try again.');
     }
   };
 
@@ -194,15 +195,12 @@ export function SubscriptionSettingsPage({ token }: SubscriptionSettingsPageProp
         throw new Error('Failed to cancel subscription');
       }
 
-      alert(
-        'Your subscription has been scheduled for cancellation at the end of the billing period.',
-      );
       window.location.reload();
     } catch (error) {
       Sentry.captureException(error, {
         tags: { feature: 'subscription-cancel' },
       });
-      alert('Failed to cancel subscription. Please try again or contact support.');
+      setCheckoutError('Failed to cancel subscription. Please try again or contact support.');
     } finally {
       setCancelLoading(false);
     }
@@ -227,6 +225,20 @@ export function SubscriptionSettingsPage({ token }: SubscriptionSettingsPageProp
             <CardContent>
               <Button onClick={() => loadSubscriptionData()} disabled={billingLoading}>
                 {billingLoading ? 'Retrying...' : 'Retry billing data'}
+              </Button>
+            </CardContent>
+          </Card>
+        )}
+
+        {checkoutError && (
+          <Card className="border-destructive/40 bg-destructive/5">
+            <CardHeader>
+              <CardTitle>Billing action failed</CardTitle>
+              <CardDescription>{checkoutError}</CardDescription>
+            </CardHeader>
+            <CardContent>
+              <Button variant="outline" onClick={() => setCheckoutError(null)}>
+                Dismiss
               </Button>
             </CardContent>
           </Card>

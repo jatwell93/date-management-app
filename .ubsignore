@@ -47,3 +47,6 @@ bug-scan-backend.json
 # Ignore IDE / OS files
 .vscode/
 .DS_Store
+
+# Windsurf IDE scripts (third-party, not project code)
+.windsurf/

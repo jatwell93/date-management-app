@@ -224,12 +224,14 @@ function extractTokenFromRequest(req: AuthRequest): string | null {
 async function verifyToken(token: string): Promise<TokenPayload | null> {
   // First try with the current JWT secret
   try {
-    return jwt.verify(token, envConfig.JWT_SECRET) as TokenPayload;
+    return jwt.verify(token, envConfig.JWT_SECRET, { algorithms: ['HS256'] }) as TokenPayload;
   } catch (_err) {
     // If current secret fails, try with old secret (for rotation period)
     if (process.env.JWT_SECRET_OLD) {
       try {
-        return jwt.verify(token, process.env.JWT_SECRET_OLD) as TokenPayload;
+        return jwt.verify(token, process.env.JWT_SECRET_OLD, {
+          algorithms: ['HS256'],
+        }) as TokenPayload;
       } catch (_rotationErr) {
         // Fall through to Clerk verification
       }

@@ -916,7 +916,7 @@ export function createWorkersDatabase(env: Env): Database {
     ): Promise<ItemsByUserReportItem[]> {
       if (timeFrameDays && timeFrameDays !== 'all-time') {
         const days = parseInt(timeFrameDays, 10);
-        if (!isNaN(days) && days > 0) {
+        if (!Number.isNaN(days) && days > 0) {
           return (await sql`
             SELECT
               al.user_id as "userId",
