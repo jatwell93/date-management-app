@@ -121,6 +121,7 @@ export function SubscriptionSettingsPage({ token }: SubscriptionSettingsPageProp
       return;
     }
     if (tier === 'enterprise') {
+      setShowUpgradeModal(false);
       setCheckoutError('Enterprise plans are configured by contract. Please contact support.');
       return;
     }
@@ -140,6 +141,7 @@ export function SubscriptionSettingsPage({ token }: SubscriptionSettingsPageProp
 
       const priceId = priceIds[tier as keyof typeof priceIds]?.[billingCycle];
       if (!priceId) {
+        setShowUpgradeModal(false);
         setCheckoutError('Price configuration not found. Please contact support.');
         return;
       }
@@ -167,6 +169,7 @@ export function SubscriptionSettingsPage({ token }: SubscriptionSettingsPageProp
       Sentry.captureException(error, {
         tags: { feature: 'subscription-upgrade' },
       });
+      setShowUpgradeModal(false);
       setCheckoutError('Failed to start upgrade process. Please try again.');
     }
   };
