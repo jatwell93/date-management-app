@@ -251,6 +251,26 @@ describe('processCatalogueImportJob (real SQL via pglite)', () => {
     expect(await getProduct(ORG, 'S2')).toBeUndefined();
   });
 
+  it('preserves an existing retail price when a queued cost-only re-upload omits retail (#338)', async () => {
+    await seedProduct({ org: ORG, sku: 'S1', barcode: 'B1', name: 'One', cost: 1.0 });
+    // Give the product a retail price the cost-only upload must not wipe.
+    await harness.pg.query(
+      `UPDATE products SET retail_price = $1 WHERE organization_id = $2 AND sku = $3`,
+      [9.99, ORG, 'S1'],
+    );
+
+    // Change cost only; no retail column present in the upload.
+    const csv = ['SKU,Name,Barcode,Cost', 'S1,One,B1,2.00', ''].join('\n');
+    const { env } = makeEnv(csv);
+    const uploadId = await insertUpload();
+
+    await processCatalogueImportJob(uploadId, env, harness.db);
+
+    const product = await getProduct(ORG, 'S1');
+    expect(Number(product?.cost_price)).toBe(2);
+    expect(Number(product?.retail_price)).toBe(9.99); // retained
+  });
+
   it('re-importing identical rows performs no product writes', async () => {
     await seedProduct({ org: ORG, sku: 'S1', barcode: 'B1', name: 'One', cost: 1.0 });
     await seedProduct({ org: ORG, sku: 'S2', barcode: 'B2', name: 'Two', cost: 2.0 });

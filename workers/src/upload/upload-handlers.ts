@@ -250,6 +250,10 @@ export async function processProductCatalogUpload(
     barcode: findHeaderIndex(headers, PRODUCT_CATALOG_HEADER_ALIASES.barcode),
     cost: findHeaderIndex(headers, PRODUCT_CATALOG_HEADER_ALIASES.cost),
   };
+  // Retail is optional, so it is resolved separately and excluded from the
+  // required-column check below (-1 means "no retail column"). Mirrors the
+  // queued import path so retail is captured on the synchronous path too (#338).
+  const retailIndex = findHeaderIndex(headers, PRODUCT_CATALOG_HEADER_ALIASES.retail);
 
   const missingHeaders = Object.entries(columnIndexes)
     .filter(([, index]) => index === -1)
@@ -265,7 +269,7 @@ export async function processProductCatalogUpload(
 
   for (const [index, row] of rows.entries()) {
     const rowNumber = index + 2;
-    const parsedRow = parseProductCatalogRow(row, columnIndexes);
+    const parsedRow = parseProductCatalogRow(row, { ...columnIndexes, retail: retailIndex });
     if (!parsedRow) {
       summary.skippedCount += 1;
       summary.errors.push(`Row ${rowNumber}: Missing required product fields`);
@@ -306,7 +310,9 @@ async function upsertProductFromUpload(
           sku = ${row.sku},
           name = ${row.name},
           cost_price = ${row.costPrice},
-          retail_price = ${row.retailPrice},
+          -- Preserve an existing retail price when the upload has no retail value,
+          -- so a cost-only re-upload cannot silently wipe retail data (#338).
+          retail_price = COALESCE(${row.retailPrice}, retail_price),
           updated_at = NOW()
       WHERE organization_id = ${organizationId}
         AND (sku = ${row.sku} OR barcode = ${row.barcode})

@@ -229,12 +229,15 @@ async function upsertProductBatch(
       FROM classified_base
     ), updated AS (
       UPDATE products p SET sku = c.sku, barcode = c.barcode, name = c.name,
-             cost_price = c."costPrice", retail_price = c."retailPrice", updated_at = NOW()
+             cost_price = c."costPrice",
+             -- Preserve existing retail when the upload has no retail value, so a
+             -- cost-only re-upload cannot silently wipe retail data (#338).
+             retail_price = COALESCE(c."retailPrice", p.retail_price), updated_at = NOW()
       FROM classified c
       WHERE NOT c.conflict AND c.product_id = p.id
         AND (p.sku IS DISTINCT FROM c.sku OR p.barcode IS DISTINCT FROM c.barcode
           OR p.name IS DISTINCT FROM c.name OR p.cost_price IS DISTINCT FROM c."costPrice"
-          OR p.retail_price IS DISTINCT FROM c."retailPrice")
+          OR p.retail_price IS DISTINCT FROM COALESCE(c."retailPrice", p.retail_price))
       RETURNING p.id
     ), inserted AS (
       INSERT INTO products (organization_id, sku, barcode, name, cost_price, retail_price, notes, created_at, updated_at)

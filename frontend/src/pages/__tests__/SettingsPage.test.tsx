@@ -25,6 +25,12 @@ vi.mock('@sentry/react', () => ({
   captureException: (...args: unknown[]) => mockCaptureException(...args),
 }));
 
+// The markdown matrix section is exercised by its own test; stub it here so this
+// suite stays focused on the Clerk workspace surface and its error boundary.
+vi.mock('../../components/MarkdownMatrixSettings', () => ({
+  MarkdownMatrixSettings: () => <div data-testid="markdown-matrix-settings" />,
+}));
+
 describe('SettingsPage', () => {
   beforeEach(() => {
     mockOrganizationProfile.mockClear();
