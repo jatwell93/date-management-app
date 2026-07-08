@@ -53,6 +53,7 @@ export interface ParsedRow {
   name: string;
   barcode: string;
   costPrice: number;
+  retailPrice?: number | null;
   /** Original row number in CSV (1-indexed, excluding header) */
   rowNumber: number;
 }
@@ -159,12 +160,11 @@ const PRODUCT_COLUMN_ALTERNATIVES = {
     'Price',
     'Unit Price',
     'Cost inc',
-    'Selling Price',
-    'Retail Price',
     'cost',
     'cost_price',
     'price',
   ],
+  retail: ['Retail Price', 'Selling Price', 'Sell Price', 'RRP', 'Sale Price', 'retail_price'],
 };
 
 const EXPIRY_COLUMN_ALTERNATIVES = {
@@ -642,6 +642,9 @@ export class CSVParserService extends EventEmitter {
                 name: row.name,
                 costPrice: row.costPrice,
                 barcode: row.barcode,
+                ...(row.retailPrice !== null && row.retailPrice !== undefined
+                  ? { retailPrice: row.retailPrice }
+                  : {}),
               },
               tx,
             );
@@ -655,6 +658,7 @@ export class CSVParserService extends EventEmitter {
                 name: row.name,
                 barcode: row.barcode,
                 costPrice: row.costPrice,
+                retailPrice: row.retailPrice ?? null,
               },
               tx,
             );
@@ -923,6 +927,7 @@ export function validateProductRowStrictly(
   const rawName = pureExtractField(record, headerMap, 'name');
   const rawBarcode = pureExtractField(record, headerMap, 'barcode');
   const rawCost = pureExtractField(record, headerMap, 'cost');
+  const rawRetail = pureExtractField(record, headerMap, 'retail');
 
   const requiredFields = [
     { value: rawSku, name: 'sku' },
@@ -968,7 +973,14 @@ export function validateProductRowStrictly(
   }
 
   return {
-    row: { sku, name, barcode, costPrice, rowNumber },
+    row: {
+      sku,
+      name,
+      barcode,
+      costPrice,
+      retailPrice: rawRetail?.trim() ? pureParseCostValue(rawRetail.trim()) : null,
+      rowNumber,
+    },
     errors,
   };
 }

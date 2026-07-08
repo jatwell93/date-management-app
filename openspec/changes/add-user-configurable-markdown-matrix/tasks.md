@@ -15,7 +15,7 @@
 ### CSV / catalogue parser
 - [x] Split a `retail` alias group (`retailprice`, `sellingprice`, `sellprice`, `rrp`, `saleprice`) out of the `cost` alias list in `workers/src/upload/catalogue-parser.ts`; persist `retailPrice` when present (optional, excluded from required-column check).
 - [x] Keep cost-only uploads valid; threaded `retailPrice` through both worker upsert paths (`catalogue-import.ts` bulk + `upload-handlers.ts` per-row). Worker import tests pass.
-- [ ] **DEFERRED** (user decision): backend Express importer (`product-import.helpers.ts` / `product.service.ts`) still folds Retail/Selling Price into cost. Live path is workers. See follow-up below.
+- [x] Backend Express importer parity: split Retail/Selling Price aliases into optional `retail`, exclude it from required-column checks, thread `retailPrice` through create/update without clobbering existing retail on cost-only re-imports, and keep the streaming `CSVParserService` alias contract consistent.
 
 ### Backend config service + routes
 - [x] `MarkdownConfigRepository` (`findByOrganizationId`, `upsert`, `hasRetailData`) + `MarkdownConfigService` (`getMatrix` row-or-default, `getConfig`, `updateConfig`).
@@ -42,6 +42,5 @@
 - [x] `npx openspec validate add-user-configurable-markdown-matrix --strict` is valid.
 
 ## Deferred follow-ups (tracked)
-1. Backend Express importer retail capture (parity with workers path).
-2. Scan page + detailed expiry report price displays consume the org matrix.
-3. v2: snapshot resolved markdown price for frozen history; configurable day windows / >3 bands.
+1. Scan page + detailed expiry report price displays consume the org matrix.
+2. v2: snapshot resolved markdown price for frozen history; configurable day windows / >3 bands.
