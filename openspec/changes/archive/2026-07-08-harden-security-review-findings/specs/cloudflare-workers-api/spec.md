@@ -1,4 +1,4 @@
-## MODIFIED Requirements
+## ADDED Requirements
 
 ### Requirement: Error handling
 The system SHALL provide consistent error handling and reporting for all Workers endpoints without exposing unauthenticated production debug error triggers.
