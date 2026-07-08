@@ -1,7 +1,8 @@
 import { InventoryItem } from '../models/inventory-item.model';
 import {
-  getMarkdownDiscountPercentageForDays,
+  calculateMarkdownPrice,
   MARKDOWN_WINDOWS,
+  type MarkdownMatrixConfig,
 } from '../../../shared/domain/markdown';
 
 export type InventoryMarkdownStatus = InventoryItem['status'];
@@ -55,25 +56,28 @@ export function calculateInventoryMarkdownStatus(
   return 'Normal';
 }
 
+export interface InventoryMarkdownPriceOptions {
+  /** Retail price for retail-basis bands; falls back to cost when absent. */
+  retailPrice?: number | null;
+  /** The organization's matrix; defaults to the shared 50/60/75%-off-cost ladder. */
+  matrix?: MarkdownMatrixConfig;
+}
+
 export function calculateInventoryMarkdownPrice(
   costPrice: number,
   expiryDate: InventoryMarkdownExpiryDate,
   now = new Date(),
+  options: InventoryMarkdownPriceOptions = {},
 ): number | null {
   const daysDiff = daysUntil(expiryDate, now);
 
-  if (daysDiff === null) {
-    return null;
-  }
-  // Expired stock is written off, not marked down — mirror calculateInventoryMarkdownStatus.
-  if (daysDiff <= 0) {
-    return null;
-  }
-  if (daysDiff <= INVENTORY_MARKDOWN_THRESHOLDS.markdown1) {
-    const discountPercentage = getMarkdownDiscountPercentageForDays(daysDiff);
-
-    return costPrice * (1 - discountPercentage / 100);
-  }
-
-  return null;
+  // Delegates to the shared resolver so backend prices stay in parity with the
+  // frontend and honor the org's configured matrix and basis (issue #338). The
+  // resolver returns null for expired (<=0 days) and >90-day stock, matching
+  // calculateInventoryMarkdownStatus.
+  return calculateMarkdownPrice(
+    { costPrice, retailPrice: options.retailPrice ?? null },
+    daysDiff,
+    options.matrix,
+  );
 }

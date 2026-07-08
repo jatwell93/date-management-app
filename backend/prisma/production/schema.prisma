@@ -46,6 +46,7 @@ model Organization {
   itemTransactions        ItemTransaction[]
   organizationInvites     OrganizationInvite[]
   organizationUsages      OrganizationUsage?
+  markdownConfig          OrganizationMarkdownConfig?
   products                Product[]
   storeAreas              StoreArea[]
   subscriptionTiers       SubscriptionTier[]
@@ -124,6 +125,22 @@ model OrganizationUsage {
   @@map("organization_usage")
 }
 
+model OrganizationMarkdownConfig {
+  id              Int          @id @default(autoincrement())
+  organizationId  String       @unique @map("organization_id")
+  band1Percentage Float        @default(50) @map("band1_percentage")
+  band2Percentage Float        @default(60) @map("band2_percentage")
+  band3Percentage Float        @default(75) @map("band3_percentage")
+  band1Basis      String       @default("cost") @map("band1_basis")
+  band2Basis      String       @default("cost") @map("band2_basis")
+  band3Basis      String       @default("cost") @map("band3_basis")
+  createdAt       DateTime     @default(now()) @map("created_at")
+  updatedAt       DateTime     @updatedAt @map("updated_at")
+  organization    Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+
+  @@map("organization_markdown_config")
+}
+
 model ProcessedWebhookEvent {
   id          String   @id
   eventType   String   @map("event_type")
@@ -149,6 +166,7 @@ model Product {
   sku            String
   name           String
   costPrice      Float           @map("cost_price")
+  retailPrice    Float?          @map("retail_price")
   notes          String          @default("")
   createdAt      DateTime        @default(now()) @map("created_at")
   updatedAt      DateTime        @updatedAt @map("updated_at")

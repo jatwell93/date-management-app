@@ -135,15 +135,20 @@ export class InventoryRepository {
     id: number,
     organizationId: string,
     tx?: DbClient,
-  ): Promise<(InventoryItem & { product: { costPrice: number | null } }) | null> {
+  ): Promise<
+    (InventoryItem & { product: { costPrice: number | null; retailPrice: number | null } }) | null
+  > {
     return this.getClient(tx).inventoryItem.findUnique({
       where: { id, organizationId },
       include: {
         product: {
-          select: { costPrice: true },
+          select: { costPrice: true, retailPrice: true },
         },
       },
-    }) as Promise<(InventoryItem & { product: { costPrice: number | null } }) | null>;
+    }) as Promise<
+      | (InventoryItem & { product: { costPrice: number | null; retailPrice: number | null } })
+      | null
+    >;
   }
 
   async updateManyByIds(

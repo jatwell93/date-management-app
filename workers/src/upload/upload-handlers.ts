@@ -306,14 +306,15 @@ async function upsertProductFromUpload(
           sku = ${row.sku},
           name = ${row.name},
           cost_price = ${row.costPrice},
+          retail_price = ${row.retailPrice},
           updated_at = NOW()
       WHERE organization_id = ${organizationId}
         AND (sku = ${row.sku} OR barcode = ${row.barcode})
       RETURNING id
     ),
     inserted AS (
-      INSERT INTO products (organization_id, barcode, sku, name, cost_price, notes, created_at, updated_at)
-      SELECT ${organizationId}, ${row.barcode}, ${row.sku}, ${row.name}, ${row.costPrice}, '', NOW(), NOW()
+      INSERT INTO products (organization_id, barcode, sku, name, cost_price, retail_price, notes, created_at, updated_at)
+      SELECT ${organizationId}, ${row.barcode}, ${row.sku}, ${row.name}, ${row.costPrice}, ${row.retailPrice}, '', NOW(), NOW()
       WHERE NOT EXISTS (SELECT 1 FROM updated)
       RETURNING id
     )

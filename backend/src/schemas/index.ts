@@ -396,9 +396,41 @@ export const idParamSchema = z.object({
 });
 
 // ============================================================================
+// Markdown Matrix Schema (issue #338)
+// ============================================================================
+
+const markdownBandSchema = z.object({
+  percentage: z
+    .number({ error: 'Discount percentage must be a number' })
+    .min(0, 'Discount percentage cannot be below 0')
+    .max(100, 'Discount percentage cannot exceed 100'),
+  basis: z.enum(['cost', 'retail'], { error: "Basis must be 'cost' or 'retail'" }),
+});
+
+export const markdownConfigSchema = z.object({
+  body: z
+    .object({
+      band1: markdownBandSchema,
+      band2: markdownBandSchema,
+      band3: markdownBandSchema,
+    })
+    .refine(
+      (matrix) =>
+        matrix.band1.percentage <= matrix.band2.percentage &&
+        matrix.band2.percentage <= matrix.band3.percentage,
+      {
+        message:
+          'Discounts must not decrease as expiry nears: band 1 (61-90 days) ≤ band 2 (31-60 days) ≤ band 3 (0-30 days).',
+        path: ['band3', 'percentage'],
+      },
+    ),
+});
+
+// ============================================================================
 // Type Exports
 // ============================================================================
 
+export type MarkdownConfigInput = z.infer<typeof markdownConfigSchema.shape.body>;
 export type LoginInput = z.infer<typeof loginSchema.shape.body>;
 export type UserInput = z.infer<typeof userSchema.shape.body>;
 export type ProductInput = z.infer<typeof productSchema.shape.body>;

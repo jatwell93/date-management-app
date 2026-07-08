@@ -16,6 +16,60 @@ export const MARKDOWN_DISCOUNT_PERCENTAGES = {
   none: 0,
 } as const;
 
+/**
+ * Whether a band's discount is taken off the item's cost price or its retail price.
+ */
+export type MarkdownBasis = 'cost' | 'retail';
+
+export interface MarkdownBandConfig {
+  /** Discount percentage, 0-100. */
+  percentage: number;
+  basis: MarkdownBasis;
+}
+
+/**
+ * An organization's markdown matrix: one config per band, keyed to the existing
+ * day-to-expiry windows (band1 = 61-90 days, band2 = 31-60, band3 = 0-30).
+ */
+export interface MarkdownMatrixConfig {
+  band1: MarkdownBandConfig;
+  band2: MarkdownBandConfig;
+  band3: MarkdownBandConfig;
+}
+
+/**
+ * The pre-existing hardcoded ladder, expressed as a matrix: 50/60/75% off cost.
+ * Organizations that have not customized their matrix use this, so behavior is
+ * unchanged until they edit it.
+ */
+export const DEFAULT_MARKDOWN_MATRIX: MarkdownMatrixConfig = {
+  band1: { percentage: MARKDOWN_DISCOUNT_PERCENTAGES.markdown1, basis: 'cost' },
+  band2: { percentage: MARKDOWN_DISCOUNT_PERCENTAGES.markdown2, basis: 'cost' },
+  band3: { percentage: MARKDOWN_DISCOUNT_PERCENTAGES.markdown3, basis: 'cost' },
+} as const;
+
+/**
+ * An item whose markdown price can be resolved. Retail is optional — items
+ * without a retail price fall back to cost even on a retail-basis band.
+ */
+export interface MarkdownableItem {
+  costPrice: number;
+  retailPrice?: number | null;
+}
+
+function bandConfigForLevel(
+  level: MarkdownLevel,
+  config: MarkdownMatrixConfig,
+): MarkdownBandConfig {
+  if (level === 1) {
+    return config.band1;
+  }
+  if (level === 2) {
+    return config.band2;
+  }
+  return config.band3;
+}
+
 export function getMarkdownLevelForDays(daysToExpiry: number | null): MarkdownLevel | null {
   // Expired stock (on or past its used-by date) is written off, not marked down.
   if (daysToExpiry === null || daysToExpiry <= 0) {
@@ -55,4 +109,36 @@ export function calculateMarkdownPriceFromCost(costPrice: number, daysToExpiry: 
   const discountPercentage = getMarkdownDiscountPercentageForDays(daysToExpiry);
 
   return costPrice * (1 - discountPercentage / 100);
+}
+
+/**
+ * Resolve the reduced price of a marked-down item using an organization's matrix.
+ *
+ * Band selection reuses the shared day-to-expiry windows. Each band's discount is
+ * taken off cost or retail per its configured basis; a retail-basis band falls back
+ * to the item's cost when the item has no finite retail price, so no item is left
+ * unpriced. Returns null for stock that is not on markdown (expired or >90 days out),
+ * mirroring getMarkdownLevelForDays.
+ *
+ * Callers that pass no config get DEFAULT_MARKDOWN_MATRIX, i.e. the pre-existing
+ * 50/60/75%-off-cost behavior.
+ */
+export function calculateMarkdownPrice(
+  item: MarkdownableItem,
+  daysToExpiry: number | null,
+  config: MarkdownMatrixConfig = DEFAULT_MARKDOWN_MATRIX,
+): number | null {
+  const level = getMarkdownLevelForDays(daysToExpiry);
+  if (level === null) {
+    return null;
+  }
+
+  const band = bandConfigForLevel(level, config);
+  const useRetail =
+    band.basis === 'retail' &&
+    typeof item.retailPrice === 'number' &&
+    Number.isFinite(item.retailPrice);
+  const basisPrice = useRetail ? (item.retailPrice as number) : item.costPrice;
+
+  return basisPrice * (1 - band.percentage / 100);
 }
