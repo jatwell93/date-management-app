@@ -244,6 +244,7 @@ describe('ProductService with organizationId', () => {
       expect(mockPrisma.product.create).toHaveBeenCalledWith({
         data: {
           ...productData,
+          retailPrice: null,
           organizationId,
         },
       });
@@ -573,18 +574,18 @@ describe('ProductService with organizationId', () => {
 
     it('updates existing product and creates new product from XLSX rows', async () => {
       writeXlsxFixture('/tmp/success.xlsx', [
-        ['SKU', 'Name', 'Cost', 'Barcode'],
-        ['SKU-1', 'Existing Product Updated', '11.00', 'BAR-1'],
-        ['SKU-2', 'New Product', '12.50', 'BAR-2'],
+        ['SKU', 'Name', 'Cost', 'Retail Price', 'Barcode'],
+        ['SKU-1', 'Existing Product Updated', '11.00', '19.99', 'BAR-1'],
+        ['SKU-2', 'New Product', '12.50', '24.99', 'BAR-2'],
       ]);
       mockXlsxReadFile.mockReturnValue({
         SheetNames: ['Sheet1'],
         Sheets: { Sheet1: {} },
       });
       mockXlsxSheetToJson.mockReturnValue([
-        ['SKU', 'Name', 'Cost', 'Barcode'],
-        ['SKU-1', 'Existing Product Updated', '11.00', 'BAR-1'],
-        ['SKU-2', 'New Product', '12.50', 'BAR-2'],
+        ['SKU', 'Name', 'Cost', 'Retail Price', 'Barcode'],
+        ['SKU-1', 'Existing Product Updated', '11.00', '19.99', 'BAR-1'],
+        ['SKU-2', 'New Product', '12.50', '24.99', 'BAR-2'],
       ]);
 
       vi.spyOn(productService, 'getAllProducts').mockResolvedValue([
@@ -606,6 +607,7 @@ describe('ProductService with organizationId', () => {
         barcode: 'BAR-1',
         name: 'Existing Product Updated',
         costPrice: 11,
+        retailPrice: 19.99,
         createdAt: new Date().toISOString(),
         updatedAt: new Date().toISOString(),
       });
@@ -616,6 +618,7 @@ describe('ProductService with organizationId', () => {
         barcode: 'BAR-2',
         name: 'New Product',
         costPrice: 12.5,
+        retailPrice: 24.99,
         createdAt: new Date().toISOString(),
         updatedAt: new Date().toISOString(),
       });
@@ -623,6 +626,13 @@ describe('ProductService with organizationId', () => {
       const result = await (productService as any).processXLSXUpload('/tmp/success.xlsx');
 
       expect(result).toEqual({ imported: 1, updated: 1, errors: [] });
+      expect(productService.updateProduct).toHaveBeenCalledWith(
+        1,
+        expect.objectContaining({ retailPrice: 19.99 }),
+      );
+      expect(productService.createProduct).toHaveBeenCalledWith(
+        expect.objectContaining({ retailPrice: 24.99 }),
+      );
     });
   });
 
@@ -773,9 +783,16 @@ describe('ProductService with organizationId', () => {
         SKU: 'SKU-EXIST',
         Name: 'Existing Updated',
         Cost: '10.00',
+        'Retail Price': '20.00',
         Barcode: 'BAR-EXIST',
       });
-      handlers.data({ SKU: 'SKU-NEW', Name: 'New Product', Cost: '11.25', Barcode: 'BAR-NEW' });
+      handlers.data({
+        SKU: 'SKU-NEW',
+        Name: 'New Product',
+        Cost: '11.25',
+        'Retail Price': '22.50',
+        Barcode: 'BAR-NEW',
+      });
       handlers.data({ SKU: 'SKU-DUP', Name: 'Dup', Cost: '5.00', Barcode: 'BAR-DUP' });
       await handlers.end();
 
@@ -786,8 +803,13 @@ describe('ProductService with organizationId', () => {
       expect(result.errors).toEqual(
         expect.arrayContaining([expect.stringContaining('Row 3: Duplicate identifiers detected')]),
       );
-      expect(productService.updateProduct).toHaveBeenCalled();
-      expect(productService.createProduct).toHaveBeenCalled();
+      expect(productService.updateProduct).toHaveBeenCalledWith(
+        7,
+        expect.objectContaining({ retailPrice: 20 }),
+      );
+      expect(productService.createProduct).toHaveBeenCalledWith(
+        expect.objectContaining({ retailPrice: 22.5 }),
+      );
     });
 
     it('validateCSVStructure marks CSV invalid when parser emits an error', async () => {

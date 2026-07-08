@@ -143,6 +143,7 @@ export class ProductService {
           sku: product.sku,
           name: product.name,
           costPrice: product.costPrice,
+          retailPrice: product.retailPrice ?? null,
           organizationId: this.organizationId,
         },
         tx,
@@ -188,12 +189,25 @@ export class ProductService {
    */
   private buildProductUpdateData(
     product: Partial<Omit<Product, 'id' | 'createdAt' | 'updatedAt'>>,
-  ): { barcode?: string; sku?: string; name?: string; costPrice?: number } {
-    const data: { barcode?: string; sku?: string; name?: string; costPrice?: number } = {};
+  ): {
+    barcode?: string;
+    sku?: string;
+    name?: string;
+    costPrice?: number;
+    retailPrice?: number | null;
+  } {
+    const data: {
+      barcode?: string;
+      sku?: string;
+      name?: string;
+      costPrice?: number;
+      retailPrice?: number | null;
+    } = {};
     if (product.barcode !== undefined) data.barcode = product.barcode;
     if (product.sku !== undefined) data.sku = product.sku;
     if (product.name !== undefined) data.name = product.name;
     if (product.costPrice !== undefined) data.costPrice = product.costPrice;
+    if (product.retailPrice !== undefined) data.retailPrice = product.retailPrice;
     return data;
   }
 
@@ -387,7 +401,7 @@ export class ProductService {
           const rowProcessingPromise = (async () => {
             try {
               const columnState = getProductImportCsvColumnState(row);
-              const { sku, name, costStr, barcode } = getProductImportCsvRowValues(
+              const { sku, name, costStr, retailStr, barcode } = getProductImportCsvRowValues(
                 row,
                 columnState,
               );
@@ -395,7 +409,7 @@ export class ProductService {
 
               const preValidation = validateProductImportRow({
                 rowNumber,
-                values: { sku, name, costStr, barcode },
+                values: { sku, name, costStr, retailStr, barcode },
                 unexpectedColumns,
               });
               if (!preValidation.isValid) {
@@ -424,7 +438,7 @@ export class ProductService {
 
               await this.upsertImportedProduct(
                 rowNumber,
-                { sku, name, costStr, barcode },
+                { sku, name, costStr, retailStr, barcode },
                 unexpectedColumns,
                 bySku,
                 byBarcode,
@@ -513,13 +527,16 @@ export class ProductService {
         const recordCount = i;
 
         try {
-          const { sku, name, costStr, barcode } = getProductImportXlsxRowValues(row, columnState);
+          const { sku, name, costStr, retailStr, barcode } = getProductImportXlsxRowValues(
+            row,
+            columnState,
+          );
           const bySku = productMap.get(String(sku ?? '').trim()) || null;
           const byBarcode = barcodeMap.get(String(barcode ?? '').trim()) || null;
 
           const result = await this.upsertImportedProduct(
             recordCount,
-            { sku, name, costStr, barcode },
+            { sku, name, costStr, retailStr, barcode },
             [],
             bySku,
             byBarcode,
@@ -582,9 +599,10 @@ export class ProductService {
     return errors;
   }
 
-  private buildProductLookupMaps(
-    products: Product[],
-  ): { productMap: Map<string, Product>; barcodeMap: Map<string, Product> } {
+  private buildProductLookupMaps(products: Product[]): {
+    productMap: Map<string, Product>;
+    barcodeMap: Map<string, Product>;
+  } {
     const productMap = new Map<string, Product>();
     const barcodeMap = new Map<string, Product>();
     for (const product of products) {
@@ -633,6 +651,10 @@ export class ProductService {
           sku: validation.row.sku,
           name: validation.row.name,
           costPrice: validation.row.cost,
+          // Only overwrite retail when the upload actually carried one, so a
+          // cost-only re-import preserves existing retail — parity with the
+          // workers COALESCE(c."retailPrice", p.retail_price) upsert (#338).
+          ...(validation.row.retail !== null ? { retailPrice: validation.row.retail } : {}),
         });
         if (updatedProduct) {
           counters.updated++;
@@ -655,6 +677,7 @@ export class ProductService {
         sku: validation.row.sku,
         name: validation.row.name,
         costPrice: validation.row.cost,
+        retailPrice: validation.row.retail,
       });
       counters.imported++;
       return newProduct;
