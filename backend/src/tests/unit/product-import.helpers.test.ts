@@ -95,6 +95,24 @@ describe('product-import helpers', () => {
       });
     });
 
+    it('recognizes retail_price as a retail column in non-streaming imports', () => {
+      const row = {
+        SKU: 'SKU123',
+        Name: 'Product',
+        Cost: '10.00',
+        retail_price: '25.00',
+        Barcode: '123456',
+      };
+      const headers = ['SKU', 'Name', 'Cost', 'retail_price', 'Barcode'];
+
+      const csvState = getProductImportCsvColumnState(row);
+      const xlsxState = getProductImportXlsxColumnState(headers);
+
+      expect(csvState.retailHeader).toBe('retail_price');
+      expect(getProductImportCsvRowValues(row, csvState).retailStr).toBe('25.00');
+      expect(xlsxState.retailColIndex).toBe(3);
+    });
+
     it('treats "Selling Price" as retail, no longer as cost (XLSX)', () => {
       const headers = ['SKU', 'Name', 'Cost', 'Selling Price', 'GTIN'];
       const state = getProductImportXlsxColumnState(headers);

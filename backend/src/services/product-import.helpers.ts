@@ -17,7 +17,7 @@ export const PRODUCT_IMPORT_COLUMN_ALTERNATIVES = {
   // Retail/selling price, captured distinct from cost so a markdown band can be
   // taken off retail (issue #338). Optional — cost-only files stay valid, so this
   // group is deliberately excluded from the required-column check.
-  retail: ['Retail Price', 'Selling Price', 'Sell Price', 'RRP', 'Sale Price'],
+  retail: ['Retail Price', 'Selling Price', 'Sell Price', 'RRP', 'Sale Price', 'retail_price'],
   barcode: ['Barcode', 'Alias', 'EAN', 'UPC', 'GTIN', 'Product Barcode', 'Barcode Number'],
 } as const;
 
