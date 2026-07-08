@@ -24,7 +24,12 @@ afterEach(async () => {
 });
 
 function toArrayBuffer(csv: string): ArrayBuffer {
-  return new TextEncoder().encode(csv).buffer;
+  // Build a fresh ArrayBuffer (TextEncoder().encode().buffer is ArrayBufferLike,
+  // which may be a SharedArrayBuffer and is not assignable to ArrayBuffer).
+  const bytes = new TextEncoder().encode(csv);
+  const buffer = new ArrayBuffer(bytes.byteLength);
+  new Uint8Array(buffer).set(bytes);
+  return buffer;
 }
 
 async function seedProduct(
