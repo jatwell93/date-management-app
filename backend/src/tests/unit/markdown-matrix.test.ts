@@ -1,5 +1,6 @@
 import {
   calculateMarkdownPrice,
+  getMarkdownBandConfig,
   DEFAULT_MARKDOWN_MATRIX,
   type MarkdownMatrixConfig,
 } from '../../../../shared/domain/markdown';
@@ -73,6 +74,37 @@ describe('calculateMarkdownPrice (org-configurable matrix)', () => {
       expect(calculateMarkdownPrice(item, 0)).toBeNull();
       expect(calculateMarkdownPrice(item, -5)).toBeNull();
       expect(calculateMarkdownPrice(item, null)).toBeNull();
+    });
+  });
+
+  describe('getMarkdownBandConfig (drives the scan page percentage/basis display)', () => {
+    const days = { band1: 80, band2: 45, band3: 20 };
+
+    it('returns the configured band for each in-window level', () => {
+      const matrix: MarkdownMatrixConfig = {
+        band1: { percentage: 50, basis: 'retail' },
+        band2: { percentage: 75, basis: 'cost' },
+        band3: { percentage: 90, basis: 'retail' },
+      };
+      expect(getMarkdownBandConfig(days.band1, matrix)).toEqual({
+        percentage: 50,
+        basis: 'retail',
+      });
+      expect(getMarkdownBandConfig(days.band2, matrix)).toEqual({ percentage: 75, basis: 'cost' });
+      expect(getMarkdownBandConfig(days.band3, matrix)).toEqual({
+        percentage: 90,
+        basis: 'retail',
+      });
+    });
+
+    it('defaults to the 50/60/75%-off-cost ladder when no config is passed', () => {
+      expect(getMarkdownBandConfig(days.band1)).toEqual(DEFAULT_MARKDOWN_MATRIX.band1);
+    });
+
+    it('returns null outside the markdown window', () => {
+      expect(getMarkdownBandConfig(91)).toBeNull();
+      expect(getMarkdownBandConfig(0)).toBeNull();
+      expect(getMarkdownBandConfig(null)).toBeNull();
     });
   });
 });

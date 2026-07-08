@@ -43,14 +43,15 @@ describe('ReportRepository', () => {
         id INTEGER PRIMARY KEY AUTOINCREMENT,
         name TEXT NOT NULL DEFAULT 'Test product',
         sku TEXT,
-        cost_price REAL
+        cost_price REAL,
+        retail_price REAL
       );
       CREATE TABLE store_areas (
         id INTEGER PRIMARY KEY AUTOINCREMENT,
         name TEXT NOT NULL DEFAULT 'Aisle',
         sub_department TEXT
       );
-      INSERT INTO products (id, name, sku, cost_price) VALUES (1, 'Test product', 'SKU1', 10);
+      INSERT INTO products (id, name, sku, cost_price, retail_price) VALUES (1, 'Test product', 'SKU1', 10, 25);
       INSERT INTO store_areas (id, name, sub_department) VALUES (1, 'Aisle 1', 'Dairy');
     `);
   });
@@ -186,6 +187,9 @@ describe('ReportRepository', () => {
     expect(statuses).toContain('Expired');
     expect(statuses).not.toContain('Processed');
     expect(statuses).not.toContain('Sold Through');
+    // Retail price travels with each row so retail-basis markdown bands (#338) can
+    // price the item client-side without a second product lookup.
+    expect(report.every((row) => row.retailPrice === 25)).toBe(true);
   });
 
   it('returns all active entries beyond 90 days but excludes past-expiry and dispositioned stock', () => {
@@ -260,13 +264,7 @@ describe('ReportRepository', () => {
 
     const skuReport = repository.getLossBySkuReport();
     expect(skuReport).toHaveLength(5);
-    expect(skuReport.map((row) => row.sku)).toEqual([
-      'SKU_6',
-      'SKU_5',
-      'SKU_4',
-      'SKU_3',
-      'SKU_2',
-    ]);
+    expect(skuReport.map((row) => row.sku)).toEqual(['SKU_6', 'SKU_5', 'SKU_4', 'SKU_3', 'SKU_2']);
 
     const deptReport = repository.getLossByDepartmentReport();
     expect(deptReport).toHaveLength(5);

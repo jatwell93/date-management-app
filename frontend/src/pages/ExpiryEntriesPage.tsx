@@ -10,7 +10,8 @@ import {
   SelectValue,
 } from '../components/ui/select';
 import { apiService } from '../lib/api.service';
-import { calculateMarkdownPrice } from '../lib/utils';
+import { calculateMarkdownPrice } from '@shared/markdown';
+import { useMarkdownMatrix } from '../hooks/useMarkdownMatrix';
 import { DataTable } from '../components/ui/data-table';
 import { DataTableColumnHeader } from '../components/ui/data-table-column-header';
 import { ColumnDef } from '@tanstack/react-table';
@@ -31,6 +32,7 @@ interface ExpiryEntryItem {
   productName: string;
   sku: string;
   costPrice: number;
+  retailPrice: number | null;
   locationId: number;
   locationName: string;
   subDepartment: string | null;
@@ -109,6 +111,7 @@ function TableSkeleton() {
 
 export function ExpiryEntriesPage({ token, role }: ExpiryEntriesPageProps) {
   const getFreshApiToken = useFreshApiToken(token);
+  const markdownMatrix = useMarkdownMatrix(token);
   // Only admins (manage_members) may delete entries; everyone can edit typos.
   const canDelete = !!role && hasPermission(role, PERMISSIONS.MANAGE_MEMBERS);
   const [reportData, setReportData] = useState<ExpiryEntryItem[] | null>(null);
@@ -431,7 +434,13 @@ export function ExpiryEntriesPage({ token, role }: ExpiryEntriesPageProps) {
         // than relying on a `markdownPrice` field that isn't on the data model.
         accessorFn: (row) => {
           const days = getDaysToExpiry(row.expiryDate);
-          return days === null ? row.costPrice : calculateMarkdownPrice(row.costPrice, days);
+          return (
+            calculateMarkdownPrice(
+              { costPrice: row.costPrice, retailPrice: row.retailPrice },
+              days,
+              markdownMatrix,
+            ) ?? row.costPrice
+          );
         },
         header: ({ column }) => <DataTableColumnHeader column={column} title="Markdown Price" />,
         cell: ({ row }) => {
@@ -440,9 +449,11 @@ export function ExpiryEntriesPage({ token, role }: ExpiryEntriesPageProps) {
             ? getDaysToExpiry(editingItem.expiryDate)
             : getDaysToExpiry(row.original.expiryDate);
           const markdownPrice =
-            daysToExpiry === null
-              ? row.original.costPrice
-              : calculateMarkdownPrice(row.original.costPrice, daysToExpiry);
+            calculateMarkdownPrice(
+              { costPrice: row.original.costPrice, retailPrice: row.original.retailPrice },
+              daysToExpiry,
+              markdownMatrix,
+            ) ?? row.original.costPrice;
 
           return (
             <div className="min-w-[100px] tabular-nums">{formatCurrencyValue(markdownPrice)}</div>
@@ -602,6 +613,7 @@ export function ExpiryEntriesPage({ token, role }: ExpiryEntriesPageProps) {
       deleting,
       deleteConfirmation,
       canDelete,
+      markdownMatrix,
       storeAreas,
       storeAreasError,
       handleSaveEdit,
@@ -758,9 +770,11 @@ export function ExpiryEntriesPage({ token, role }: ExpiryEntriesPageProps) {
           {filteredData.slice(0, 50).map((item) => {
             const daysToExpiry = getDaysToExpiry(item.expiryDate);
             const markdownPrice =
-              daysToExpiry === null
-                ? item.costPrice
-                : calculateMarkdownPrice(item.costPrice, daysToExpiry);
+              calculateMarkdownPrice(
+                { costPrice: item.costPrice, retailPrice: item.retailPrice },
+                daysToExpiry,
+                markdownMatrix,
+              ) ?? item.costPrice;
 
             return (
               <li key={item.inventoryId} className="rounded-lg border bg-semantic-surface-1 p-4">

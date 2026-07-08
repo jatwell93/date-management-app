@@ -15,11 +15,8 @@ import {
   SelectValue,
 } from '../components/ui/select';
 import { offlineStorage } from '../lib/offline-storage';
-import {
-  isWithinMarkdownPeriod,
-  calculateMarkdownPercentage,
-  calculateMarkdownPrice,
-} from '../lib/utils';
+import { calculateMarkdownPrice, getMarkdownBandConfig } from '@shared/markdown';
+import { useMarkdownMatrix } from '../hooks/useMarkdownMatrix';
 import { apiService } from '../lib/api.service';
 import { parseGS1Barcode } from '../lib/gs1-parser';
 import { synchronizeOfflineData } from '../lib/sync-manager';
@@ -54,6 +51,7 @@ interface ProductDetails {
   sku: string;
   barcode: string;
   costPrice?: number | null;
+  retailPrice?: number | null;
 }
 
 interface InventoryItem {
@@ -84,6 +82,7 @@ function formatExpiryDateForCopy(expiryDate: string): string {
 
 export function ScanPage({ token }: ScanPageProps) {
   const getFreshApiToken = useFreshApiToken(token);
+  const markdownMatrix = useMarkdownMatrix(token);
   const { isHandheld } = useHandheldDetectionContext();
   const [scannedBarcode, setScannedBarcode] = useState<string | null>(null);
   const [productDetails, setProductDetails] = useState<ProductDetails | null>(null);
@@ -149,10 +148,20 @@ export function ScanPage({ token }: ScanPageProps) {
 
       setIsExpiredStock(false);
 
-      const isMarkdown = isWithinMarkdownPeriod(expiryDate, 90);
-      if (isMarkdown && typeof costPrice === 'number' && Number.isFinite(costPrice)) {
-        setMarkdownPrice(calculateMarkdownPrice(costPrice, daysToExpiry));
-        setMarkdownPercentage(calculateMarkdownPercentage(daysToExpiry));
+      // Price against the org's configured matrix (issue #338): the band picks the
+      // percentage and whether it comes off cost or retail. Retail falls back to
+      // cost when the product has none, so no in-window item is left unpriced.
+      const band = getMarkdownBandConfig(daysToExpiry, markdownMatrix);
+      if (band && typeof costPrice === 'number' && Number.isFinite(costPrice)) {
+        const retailPrice =
+          typeof productDetails.retailPrice === 'number' &&
+          Number.isFinite(productDetails.retailPrice)
+            ? productDetails.retailPrice
+            : null;
+        setMarkdownPrice(
+          calculateMarkdownPrice({ costPrice, retailPrice }, daysToExpiry, markdownMatrix),
+        );
+        setMarkdownPercentage(band.percentage);
         return;
       }
 
@@ -164,7 +173,7 @@ export function ScanPage({ token }: ScanPageProps) {
       setMarkdownPercentage(null);
       setIsExpiredStock(false);
     }
-  }, [productDetails, expiryDate]);
+  }, [productDetails, expiryDate, markdownMatrix]);
 
   const resetScanState = (barcode: string) => {
     setScannedBarcode(barcode);

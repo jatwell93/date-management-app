@@ -52,6 +52,7 @@ export interface DetailedExpiryReportItem {
   productName: string;
   sku: string;
   costPrice: number;
+  retailPrice: number | null;
   locationId: number;
   locationName: string;
   subDepartment: string | null;
@@ -195,6 +196,7 @@ export class ReportRepository {
         p.name as productName,
         p.sku as sku,
         p.cost_price as costPrice,
+        p.retail_price as retailPrice,
         sa.id as locationId,
         sa.name as locationName,
         sa.sub_department as subDepartment
@@ -235,6 +237,7 @@ export class ReportRepository {
         p.name as productName,
         p.sku as sku,
         p.cost_price as costPrice,
+        p.retail_price as retailPrice,
         sa.id as locationId,
         sa.name as locationName,
         sa.sub_department as subDepartment
