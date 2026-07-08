@@ -324,34 +324,37 @@ export function SubscriptionSettingsPage({ token }: SubscriptionSettingsPageProp
         </Card>
 
         {/* Plan Management */}
-        {!cancellationScheduled && subscription && subscription.status === 'active' && subscription.tierLevel !== 'free' && (
-          <Card>
-            <CardHeader>
-              <CardTitle>Plan Management</CardTitle>
-              <CardDescription>
-                Cancel your subscription or make changes to your plan
-              </CardDescription>
-            </CardHeader>
-            <CardContent>
-              <div className="space-y-4">
-                <div className="p-4 bg-semantic-warning-muted border border-semantic-warning-muted rounded-lg">
-                  <p className="text-sm text-semantic-warning-muted-foreground">
-                    <strong>Note:</strong> If you cancel, you'll retain access to your current plan
-                    until the end of your billing period. After that, you'll be downgraded to the
-                    Starter plan.
-                  </p>
+        {!cancellationScheduled &&
+          subscription &&
+          subscription.status === 'active' &&
+          subscription.tierLevel !== 'free' && (
+            <Card>
+              <CardHeader>
+                <CardTitle>Plan Management</CardTitle>
+                <CardDescription>
+                  Cancel your subscription or make changes to your plan
+                </CardDescription>
+              </CardHeader>
+              <CardContent>
+                <div className="space-y-4">
+                  <div className="p-4 bg-semantic-warning-muted border border-semantic-warning-muted rounded-lg">
+                    <p className="text-sm text-semantic-warning-muted-foreground">
+                      <strong>Note:</strong> If you cancel, you'll retain access to your current
+                      plan until the end of your billing period. After that, you'll be downgraded to
+                      the Starter plan.
+                    </p>
+                  </div>
+                  <Button
+                    variant="destructive"
+                    onClick={handleCancelSubscription}
+                    disabled={cancelLoading}
+                  >
+                    {cancelLoading ? 'Canceling...' : 'Cancel Subscription'}
+                  </Button>
                 </div>
-                <Button
-                  variant="destructive"
-                  onClick={handleCancelSubscription}
-                  disabled={cancelLoading}
-                >
-                  {cancelLoading ? 'Canceling...' : 'Cancel Subscription'}
-                </Button>
-              </div>
-            </CardContent>
-          </Card>
-        )}
+              </CardContent>
+            </Card>
+          )}
 
         {/* Help & Support */}
         <Card>

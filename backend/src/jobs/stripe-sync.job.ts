@@ -139,7 +139,13 @@ export async function runStripeSyncJob(
           localStatus: local.status,
           stripeStatus,
         });
-        toUpdate.push({ stripeId, organizationId: local.organizationId, stripeTier, stripeStatus, stripeTrialEnd });
+        toUpdate.push({
+          stripeId,
+          organizationId: local.organizationId,
+          stripeTier,
+          stripeStatus,
+          stripeTrialEnd,
+        });
         divergenceCount++;
       }
     }

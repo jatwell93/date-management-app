@@ -223,7 +223,9 @@ describe('SubscriptionSettingsPage', () => {
     fireEvent.click(await screen.findByRole('button', { name: 'Contact Enterprise Sales' }));
 
     expect(
-      await screen.findByText('Enterprise plans are configured by contract. Please contact support.'),
+      await screen.findByText(
+        'Enterprise plans are configured by contract. Please contact support.',
+      ),
     ).toBeInTheDocument();
     expect(global.fetch).toHaveBeenCalledTimes(2);
   });

@@ -177,7 +177,9 @@ export async function validateTierFeatureFlags(
   Logger.info('Starting tier feature flags validation...');
 
   // Fetch all (tier × feature) flags in parallel
-  const pairs = REQUIRED_TIERS.flatMap((tier) => REQUIRED_FEATURES.map((feature) => ({ tier, feature })));
+  const pairs = REQUIRED_TIERS.flatMap((tier) =>
+    REQUIRED_FEATURES.map((feature) => ({ tier, feature })),
+  );
   const flags = await Promise.all(
     pairs.map(({ tier, feature }) => tierFeatureFlags.findTierFeatureFlag(tier, feature)),
   );

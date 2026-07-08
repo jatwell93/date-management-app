@@ -66,7 +66,6 @@ TEST003,Product 3,"1,000.99",1234567890125`;
 
 // Test cases for alternative header name recognition
 describe('CSV Header Name Recognition', () => {
-
   it('should recognize alternative SKU column names', () => {
     const row = { 'Item Code': 'SKU123', Name: 'Product', Cost: '10.00', Barcode: '123456' };
     const alternatives = ['SKU', 'Item Code', 'Reorder Number', 'Product Code', 'Item Number'];

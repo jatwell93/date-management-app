@@ -55,21 +55,15 @@ export const toUploadResultFromSummary = (summary: Record<string, unknown>): Upl
     skippedCount: Number(summary.skippedCount ?? summary.rejectedCount ?? 0),
     processedCount: Number(summary.rowsProcessed ?? summary.processedCount ?? 0),
     totalCount: Number(summary.rowsTotal ?? summary.totalCount ?? 0),
-    columnsUsed: Array.isArray(summary.columnsUsed)
-      ? (summary.columnsUsed as string[])
-      : undefined,
+    columnsUsed: Array.isArray(summary.columnsUsed) ? (summary.columnsUsed as string[]) : undefined,
     columnsIgnored:
-      typeof summary.columnsIgnored === 'number'
-        ? (summary.columnsIgnored as number)
-        : undefined,
+      typeof summary.columnsIgnored === 'number' ? (summary.columnsIgnored as number) : undefined,
     errors: Array.isArray(summary.errors) ? (summary.errors as string[]) : undefined,
     rejectedRows: Array.isArray(summary.rejectedRows)
       ? (summary.rejectedRows as RejectedRowDetail[])
       : undefined,
     errorReportUrl:
-      typeof summary.errorReportUrl === 'string'
-        ? (summary.errorReportUrl as string)
-        : undefined,
+      typeof summary.errorReportUrl === 'string' ? (summary.errorReportUrl as string) : undefined,
   };
 };
 
@@ -215,10 +209,7 @@ export const downloadExpiryTemplate = (format: 'csv' | 'xlsx' | 'xls') => {
     format === 'xlsx'
       ? 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet'
       : 'application/vnd.ms-excel';
-  triggerFileDownload(
-    new Blob([binary], { type: mimeType }),
-    `expiry-import-template.${format}`,
-  );
+  triggerFileDownload(new Blob([binary], { type: mimeType }), `expiry-import-template.${format}`);
 };
 
 export const downloadCatalogTemplate = (format: 'csv' | 'xlsx' | 'xls') => {
@@ -267,8 +258,5 @@ export const downloadCatalogTemplate = (format: 'csv' | 'xlsx' | 'xls') => {
     format === 'xlsx'
       ? 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet'
       : 'application/vnd.ms-excel';
-  triggerFileDownload(
-    new Blob([binary], { type: mimeType }),
-    `product-catalog-template.${format}`,
-  );
+  triggerFileDownload(new Blob([binary], { type: mimeType }), `product-catalog-template.${format}`);
 };

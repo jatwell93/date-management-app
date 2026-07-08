@@ -102,7 +102,10 @@ async function getCachedOrFetchSubscription(
 ): Promise<{ subscription: SubscriptionTier | null; hasActiveAccess: boolean }> {
   const cached = subscriptionCache.get(orgId);
   if (cached && Date.now() - cached.timestamp < CACHE_TTL_MS) {
-    return { subscription: cached.subscription.data, hasActiveAccess: cached.subscription.hasActiveAccess };
+    return {
+      subscription: cached.subscription.data,
+      hasActiveAccess: cached.subscription.hasActiveAccess,
+    };
   }
 
   const subscriptionRepository = getDiContainer().resolve(SubscriptionRepository);
@@ -342,7 +345,9 @@ async function validateOrganizationSubscription(
 
   if (subscription.status === SubscriptionStatus.CANCELED) {
     const tierLevel = isTierLevel(subscription.tierLevel) ? subscription.tierLevel : null;
-    const billingCycle = isBillingCycle(subscription.billingCycle) ? subscription.billingCycle : null;
+    const billingCycle = isBillingCycle(subscription.billingCycle)
+      ? subscription.billingCycle
+      : null;
 
     if (!tierLevel || !billingCycle) {
       AnalyticsService.getInstance().trackEvent({
@@ -371,7 +376,11 @@ async function validateOrganizationSubscription(
         eventAction: 'organization_subscription_canceled',
         ipAddress: req.ip,
         userAgent: req.get('User-Agent') || undefined,
-        metadata: { organizationId: decodedToken.organizationId, path: req.path, method: req.method },
+        metadata: {
+          organizationId: decodedToken.organizationId,
+          path: req.path,
+          method: req.method,
+        },
       });
       throw new Error('Organization subscription has been canceled. Please contact support.');
     }

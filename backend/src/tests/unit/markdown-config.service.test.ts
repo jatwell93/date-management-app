@@ -1,7 +1,10 @@
 import { MarkdownConfigService } from '../../services/markdown-config.service';
 import { MarkdownConfigRepository } from '../../repositories/markdown-config.repository';
 import { ValidationError } from '../../errors';
-import { DEFAULT_MARKDOWN_MATRIX, type MarkdownMatrixConfig } from '../../../../shared/domain/markdown';
+import {
+  DEFAULT_MARKDOWN_MATRIX,
+  type MarkdownMatrixConfig,
+} from '../../../../shared/domain/markdown';
 
 type Record = {
   organizationId: string;
@@ -13,14 +16,13 @@ type Record = {
   band3Basis: string;
 };
 
-function makeService(overrides: {
-  record?: Record | null;
-  hasRetailData?: boolean;
-}) {
-  const upsert = vi.fn(async (organizationId: string, data): Promise<Record> => ({
-    organizationId,
-    ...data,
-  }));
+function makeService(overrides: { record?: Record | null; hasRetailData?: boolean }) {
+  const upsert = vi.fn(
+    async (organizationId: string, data): Promise<Record> => ({
+      organizationId,
+      ...data,
+    }),
+  );
   const repo = {
     findByOrganizationId: vi.fn(async () => overrides.record ?? null),
     hasRetailData: vi.fn(async () => overrides.hasRetailData ?? false),
