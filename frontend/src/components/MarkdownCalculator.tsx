@@ -1,18 +1,14 @@
-import React, { useEffect, useMemo, useState } from 'react';
+import React, { useMemo, useState } from 'react';
 import { Card, CardContent, CardHeader, CardTitle } from './ui/card';
 import { Input } from './ui/input';
 import { Label } from './ui/label';
 import { Button } from './ui/button';
 import { Scanner } from './Scanner';
 import { apiService } from '../lib/api.service';
-import {
-  calculateMarkdownPrice,
-  DEFAULT_MARKDOWN_MATRIX,
-  getMarkdownLevelForDays,
-  type MarkdownMatrixConfig,
-} from '@shared/markdown';
+import { calculateMarkdownPrice, getMarkdownLevelForDays } from '@shared/markdown';
 import { HardwareScanResult } from '../types/handheld';
 import { useFreshApiToken } from '../hooks/useFreshApiToken';
+import { useMarkdownMatrix } from '../hooks/useMarkdownMatrix';
 
 interface MarkdownCalculatorProps {
   token: string | null;
@@ -25,11 +21,6 @@ interface ProductDetails {
   barcode: string;
   costPrice?: number | null;
   retailPrice?: number | null;
-}
-
-interface MarkdownConfigResponse {
-  matrix: MarkdownMatrixConfig;
-  hasRetailData: boolean;
 }
 
 interface MarkdownResult {
@@ -51,28 +42,9 @@ export function MarkdownCalculator({ token }: MarkdownCalculatorProps) {
   const [productDetails, setProductDetails] = useState<ProductDetails | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [validationError, setValidationError] = useState<string | null>(null);
-  const [markdownMatrix, setMarkdownMatrix] =
-    useState<MarkdownMatrixConfig>(DEFAULT_MARKDOWN_MATRIX);
-
   // Load the org's markdown matrix so the calculator honors configured bands and
   // basis (issue #338). Falls back to the default ladder if it cannot be loaded.
-  useEffect(() => {
-    let cancelled = false;
-    (async () => {
-      try {
-        const apiToken = await getFreshApiToken('markdown-config-load');
-        const config = await apiService.get<MarkdownConfigResponse>('/markdown-config', apiToken);
-        if (!cancelled) {
-          setMarkdownMatrix(config.matrix);
-        }
-      } catch {
-        // Non-fatal: keep the default matrix.
-      }
-    })();
-    return () => {
-      cancelled = true;
-    };
-  }, [getFreshApiToken]);
+  const markdownMatrix = useMarkdownMatrix(token);
 
   const hasProductCost =
     typeof productDetails?.costPrice === 'number' && Number.isFinite(productDetails.costPrice);

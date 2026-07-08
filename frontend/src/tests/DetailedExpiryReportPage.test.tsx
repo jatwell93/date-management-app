@@ -175,4 +175,48 @@ describe('DetailedExpiryReportPage', () => {
     expect(postMock.mock.calls[0][0]).toBe('/expired-items/process');
     expect(postMock.mock.calls[0][1]).toEqual({ inventoryItemId: 1, action: 'sold_through' });
   });
+
+  it('prices rows using the org markdown matrix, including a retail-basis band (#338)', async () => {
+    // @ts-expect-error — apiService.get is mocked as vi.fn()
+    apiService.get.mockImplementation((url) => {
+      if (url === '/markdown-config') {
+        return Promise.resolve({
+          matrix: {
+            band1: { percentage: 50, basis: 'retail' },
+            band2: { percentage: 60, basis: 'cost' },
+            band3: { percentage: 75, basis: 'cost' },
+          },
+          hasRetailData: true,
+        });
+      }
+      if (url === '/reports/expiry-details') {
+        return Promise.resolve([
+          {
+            inventoryId: 1,
+            expiryDate: daysFromNow(75), // band1 (61–90 days) -> 50% off retail
+            status: 'Markdown 1',
+            productId: 1,
+            productName: 'Retail Priced Product',
+            sku: 'SKU-R1',
+            costPrice: 10,
+            retailPrice: 40,
+            locationId: 2,
+            locationName: 'Front Counter',
+            subDepartment: null,
+          },
+        ]);
+      }
+      return Promise.resolve([]);
+    });
+
+    render(<DetailedExpiryReportPage token="test-session-value" />);
+
+    const group = await screen.findByRole('region', { name: /Apply Markdown 1/i });
+    // 50% off the $40 retail price = $20.00 — not the $5.00 the default cost ladder
+    // (50% off $10 cost) would produce, proving the configured matrix drives pricing.
+    await waitFor(() => {
+      expect(group).toHaveTextContent('$20.00');
+    });
+    expect(group).not.toHaveTextContent('$5.00');
+  });
 });

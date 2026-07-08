@@ -2,9 +2,10 @@ import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { Card, CardContent, CardHeader, CardTitle } from '../components/ui/card';
 import { Button } from '../components/ui/button';
 import { apiService } from '../lib/api.service';
-import { calculateMarkdownPrice } from '../lib/utils';
+import { calculateMarkdownPrice } from '@shared/markdown';
 import Toast from '../components/ui/toast';
 import { useFreshApiToken } from '../hooks/useFreshApiToken';
+import { useMarkdownMatrix } from '../hooks/useMarkdownMatrix';
 
 interface DetailedExpiryReportPageProps {
   token: string | null;
@@ -18,6 +19,7 @@ interface DetailedExpiryReportItem {
   productName: string;
   sku: string;
   costPrice: number;
+  retailPrice: number | null;
   locationId: number;
   locationName: string;
   subDepartment: string | null;
@@ -82,6 +84,7 @@ function worklistGroupForDays(daysToExpiry: number | null): WorklistGroupKey | n
 
 export function DetailedExpiryReportPage({ token }: DetailedExpiryReportPageProps) {
   const getFreshApiToken = useFreshApiToken(token);
+  const markdownMatrix = useMarkdownMatrix(token);
   const [reportData, setReportData] = useState<DetailedExpiryReportItem[] | null>(null);
   const [loading, setLoading] = useState(true);
   const [fetchError, setFetchError] = useState<string | null>(null);
@@ -379,9 +382,11 @@ export function DetailedExpiryReportPage({ token }: DetailedExpiryReportPageProp
                       {items.map((item) => {
                         const daysToExpiry = getDaysToExpiry(item.expiryDate);
                         const markdownPrice =
-                          daysToExpiry === null
-                            ? item.costPrice
-                            : calculateMarkdownPrice(item.costPrice, daysToExpiry);
+                          calculateMarkdownPrice(
+                            { costPrice: item.costPrice, retailPrice: item.retailPrice },
+                            daysToExpiry,
+                            markdownMatrix,
+                          ) ?? item.costPrice;
                         const isSubmitting = soldThroughId === item.inventoryId;
                         return (
                           <li

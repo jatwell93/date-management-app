@@ -87,6 +87,20 @@ export function getMarkdownLevelForDays(daysToExpiry: number | null): MarkdownLe
   return null;
 }
 
+/**
+ * Resolve the configured band (percentage + basis) that applies to an item this
+ * many days from expiry, or null when the item is not on markdown (expired or
+ * >90 days out). Lets UI show the configured percentage/basis without duplicating
+ * the day-to-band mapping. Defaults to the pre-existing 50/60/75%-off-cost ladder.
+ */
+export function getMarkdownBandConfig(
+  daysToExpiry: number | null,
+  config: MarkdownMatrixConfig = DEFAULT_MARKDOWN_MATRIX,
+): MarkdownBandConfig | null {
+  const level = getMarkdownLevelForDays(daysToExpiry);
+  return level === null ? null : bandConfigForLevel(level, config);
+}
+
 export function getMarkdownDiscountPercentageForDays(daysToExpiry: number | null): number {
   // Expired stock (on or past its used-by date) gets no discount — mirror getMarkdownLevelForDays.
   if (daysToExpiry === null || daysToExpiry <= 0) {
