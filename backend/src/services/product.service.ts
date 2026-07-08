@@ -243,6 +243,7 @@ export class ProductService {
     sku: string;
     name: string;
     costPrice: number;
+    retailPrice?: number | null;
     notes: string;
     createdAt: Date;
     updatedAt: Date;
@@ -254,6 +255,7 @@ export class ProductService {
       sku: product.sku,
       name: product.name,
       costPrice: product.costPrice,
+      retailPrice: product.retailPrice ?? null,
       createdAt: product.createdAt.toISOString(),
       updatedAt: product.updatedAt.toISOString(),
     };

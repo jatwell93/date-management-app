@@ -1,11 +1,16 @@
-import React, { useMemo, useState } from 'react';
+import React, { useEffect, useMemo, useState } from 'react';
 import { Card, CardContent, CardHeader, CardTitle } from './ui/card';
 import { Input } from './ui/input';
 import { Label } from './ui/label';
 import { Button } from './ui/button';
 import { Scanner } from './Scanner';
 import { apiService } from '../lib/api.service';
-import { calculateMarkdownPrice } from '../lib/utils';
+import {
+  calculateMarkdownPrice,
+  DEFAULT_MARKDOWN_MATRIX,
+  getMarkdownLevelForDays,
+  type MarkdownMatrixConfig,
+} from '@shared/markdown';
 import { HardwareScanResult } from '../types/handheld';
 import { useFreshApiToken } from '../hooks/useFreshApiToken';
 
@@ -19,6 +24,12 @@ interface ProductDetails {
   sku: string;
   barcode: string;
   costPrice?: number | null;
+  retailPrice?: number | null;
+}
+
+interface MarkdownConfigResponse {
+  matrix: MarkdownMatrixConfig;
+  hasRetailData: boolean;
 }
 
 interface MarkdownResult {
@@ -40,6 +51,28 @@ export function MarkdownCalculator({ token }: MarkdownCalculatorProps) {
   const [productDetails, setProductDetails] = useState<ProductDetails | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [validationError, setValidationError] = useState<string | null>(null);
+  const [markdownMatrix, setMarkdownMatrix] =
+    useState<MarkdownMatrixConfig>(DEFAULT_MARKDOWN_MATRIX);
+
+  // Load the org's markdown matrix so the calculator honors configured bands and
+  // basis (issue #338). Falls back to the default ladder if it cannot be loaded.
+  useEffect(() => {
+    let cancelled = false;
+    (async () => {
+      try {
+        const apiToken = await getFreshApiToken('markdown-config-load');
+        const config = await apiService.get<MarkdownConfigResponse>('/markdown-config', apiToken);
+        if (!cancelled) {
+          setMarkdownMatrix(config.matrix);
+        }
+      } catch {
+        // Non-fatal: keep the default matrix.
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [getFreshApiToken]);
 
   const hasProductCost =
     typeof productDetails?.costPrice === 'number' && Number.isFinite(productDetails.costPrice);
@@ -135,20 +168,28 @@ export function MarkdownCalculator({ token }: MarkdownCalculatorProps) {
     const diffTime = expiry.getTime() - today.getTime();
     const diffDays = Math.ceil(diffTime / (1000 * 60 * 60 * 24));
 
+    // Status derives from the shared day-to-band mapping (no local ladder to drift).
+    const level = getMarkdownLevelForDays(diffDays);
     let status = 'Normal';
     if (diffDays <= 0) {
       status = 'Expired';
-    } else if (diffDays <= 30) {
-      status = 'Markdown 3';
-    } else if (diffDays <= 60) {
-      status = 'Markdown 2';
-    } else if (diffDays <= 90) {
-      status = 'Markdown 1';
+    } else if (level !== null) {
+      status = `Markdown ${level}`;
     }
 
-    // Expired stock is pulled, not marked down; everything else uses the shared schedule.
-    const value =
-      diffDays <= 0 ? parsedCostPrice : calculateMarkdownPrice(parsedCostPrice, diffDays);
+    const retailPrice =
+      typeof productDetails?.retailPrice === 'number' && Number.isFinite(productDetails.retailPrice)
+        ? productDetails.retailPrice
+        : null;
+
+    // Expired stock is pulled, not marked down; everything else uses the org matrix,
+    // which selects cost or retail per band and falls back to cost without retail.
+    const resolved = calculateMarkdownPrice(
+      { costPrice: parsedCostPrice, retailPrice },
+      diffDays,
+      markdownMatrix,
+    );
+    const value = resolved ?? parsedCostPrice;
 
     setMarkdownResult({ status, value });
   };

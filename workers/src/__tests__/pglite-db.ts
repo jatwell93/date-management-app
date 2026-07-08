@@ -30,11 +30,27 @@ const SCHEMA_SQL = `
     -- (all cost queries COALESCE it to 0). A NOT NULL harness previously hid a
     -- write-off matcher bug that only manifested against real NULL data. #268
     cost_price DOUBLE PRECISION DEFAULT 0,
+    -- Retail price distinct from cost, so a markdown band can discount off retail
+    -- (issue #338). Nullable: cost-only catalogues leave it NULL and fall back to cost.
+    retail_price DOUBLE PRECISION,
     notes TEXT NOT NULL DEFAULT '',
     created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
     updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
     UNIQUE (organization_id, sku),
     UNIQUE (organization_id, barcode)
+  );
+
+  CREATE TABLE organization_markdown_config (
+    id SERIAL PRIMARY KEY,
+    organization_id TEXT NOT NULL UNIQUE,
+    band1_percentage DOUBLE PRECISION NOT NULL DEFAULT 50,
+    band2_percentage DOUBLE PRECISION NOT NULL DEFAULT 60,
+    band3_percentage DOUBLE PRECISION NOT NULL DEFAULT 75,
+    band1_basis TEXT NOT NULL DEFAULT 'cost',
+    band2_basis TEXT NOT NULL DEFAULT 'cost',
+    band3_basis TEXT NOT NULL DEFAULT 'cost',
+    created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+    updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
   );
 
   CREATE TABLE uploads (

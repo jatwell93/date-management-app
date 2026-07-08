@@ -411,6 +411,62 @@ export class MigrationService {
           Logger.warn('Cannot revert markdown_level column migration in SQLite');
         },
       },
+      // Store retail price distinct from cost so a markdown band can discount off
+      // retail (issue #338). Nullable: existing cost-only products stay valid.
+      {
+        id: 10,
+        name: '010-add-retail-price-to-products',
+        up: (db: DB) => {
+          const tableInfo = db
+            .prepare('PRAGMA table_info(products)')
+            .all() as PragmaTableInfoRow[];
+          const hasRetailPrice = tableInfo.some((column) => column.name === 'retail_price');
+
+          if (!hasRetailPrice) {
+            db.exec('ALTER TABLE products ADD COLUMN retail_price REAL');
+            Logger.info('Added retail_price column to products table');
+          }
+        },
+        down: (_db: DB) => {
+          Logger.warn("Cannot revert retail_price column migration in SQLite");
+        },
+      },
+      // Per-organization markdown matrix: three bands, each a discount percentage
+      // off cost or retail. Defaults reproduce the previous 50/60/75%-off-cost
+      // ladder so untouched orgs are unchanged.
+      {
+        id: 11,
+        name: '011-add-organization-markdown-config-table',
+        up: (db: DB) => {
+          db.exec(`
+            CREATE TABLE IF NOT EXISTS organization_markdown_config (
+              id INTEGER PRIMARY KEY AUTOINCREMENT,
+              organization_id TEXT NOT NULL UNIQUE,
+              band1_percentage REAL NOT NULL DEFAULT 50,
+              band2_percentage REAL NOT NULL DEFAULT 60,
+              band3_percentage REAL NOT NULL DEFAULT 75,
+              band1_basis TEXT NOT NULL DEFAULT 'cost',
+              band2_basis TEXT NOT NULL DEFAULT 'cost',
+              band3_basis TEXT NOT NULL DEFAULT 'cost',
+              created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+              updated_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+              FOREIGN KEY (organization_id) REFERENCES organizations (id) ON DELETE CASCADE,
+              CHECK (band1_basis IN ('cost', 'retail')),
+              CHECK (band2_basis IN ('cost', 'retail')),
+              CHECK (band3_basis IN ('cost', 'retail')),
+              CHECK (band1_percentage BETWEEN 0 AND 100),
+              CHECK (band2_percentage BETWEEN 0 AND 100),
+              CHECK (band3_percentage BETWEEN 0 AND 100)
+            );
+
+            CREATE UNIQUE INDEX IF NOT EXISTS idx_organization_markdown_config_org_id
+              ON organization_markdown_config (organization_id);
+          `);
+        },
+        down: (db: DB) => {
+          db.exec('DROP TABLE IF EXISTS organization_markdown_config;');
+        },
+      },
     ];
   }
 

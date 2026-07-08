@@ -16,6 +16,7 @@ import {
   calculateInventoryMarkdownStatus,
   INVENTORY_MARKDOWN_THRESHOLDS,
 } from './inventory-markdown.helpers';
+import { MarkdownConfigService } from './markdown-config.service';
 
 export interface CreateInventoryItemInput {
   productId: number;
@@ -383,7 +384,13 @@ export class InventoryService {
       return null;
     }
 
-    return calculateInventoryMarkdownPrice(item.product.costPrice, item.expiryDate);
+    // Honor the org's configured matrix and retail basis (issue #338).
+    const matrix = await new MarkdownConfigService(this.organizationId, this.prisma).getMatrix();
+
+    return calculateInventoryMarkdownPrice(item.product.costPrice, item.expiryDate, new Date(), {
+      retailPrice: item.product.retailPrice ?? null,
+      matrix,
+    });
   }
 
   private async validateResourceOwnership(

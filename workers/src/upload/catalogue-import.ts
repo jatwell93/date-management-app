@@ -205,7 +205,7 @@ async function upsertProductBatch(
   const result = await db.sql`
     WITH input AS (
       SELECT * FROM jsonb_to_recordset(${JSON.stringify(rows)}::jsonb)
-        AS x("rowNumber" int, sku text, name text, barcode text, "costPrice" double precision)
+        AS x("rowNumber" int, sku text, name text, barcode text, "costPrice" double precision, "retailPrice" double precision)
     ), matched AS (
       SELECT i.*, sku_match.id AS sku_id, barcode_match.id AS barcode_id
       FROM input i
@@ -229,15 +229,19 @@ async function upsertProductBatch(
       FROM classified_base
     ), updated AS (
       UPDATE products p SET sku = c.sku, barcode = c.barcode, name = c.name,
-             cost_price = c."costPrice", updated_at = NOW()
+             cost_price = c."costPrice",
+             -- Preserve existing retail when the upload has no retail value, so a
+             -- cost-only re-upload cannot silently wipe retail data (#338).
+             retail_price = COALESCE(c."retailPrice", p.retail_price), updated_at = NOW()
       FROM classified c
       WHERE NOT c.conflict AND c.product_id = p.id
         AND (p.sku IS DISTINCT FROM c.sku OR p.barcode IS DISTINCT FROM c.barcode
-          OR p.name IS DISTINCT FROM c.name OR p.cost_price IS DISTINCT FROM c."costPrice")
+          OR p.name IS DISTINCT FROM c.name OR p.cost_price IS DISTINCT FROM c."costPrice"
+          OR p.retail_price IS DISTINCT FROM COALESCE(c."retailPrice", p.retail_price))
       RETURNING p.id
     ), inserted AS (
-      INSERT INTO products (organization_id, sku, barcode, name, cost_price, notes, created_at, updated_at)
-      SELECT ${organizationId}, c.sku, c.barcode, c.name, c."costPrice", '', NOW(), NOW()
+      INSERT INTO products (organization_id, sku, barcode, name, cost_price, retail_price, notes, created_at, updated_at)
+      SELECT ${organizationId}, c.sku, c.barcode, c.name, c."costPrice", c."retailPrice", '', NOW(), NOW()
       FROM classified c WHERE NOT c.conflict AND c.product_id IS NULL
       RETURNING id
     ), counts AS (
