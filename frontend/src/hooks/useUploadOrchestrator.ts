@@ -351,11 +351,7 @@ export function useUploadOrchestrator({
           const completeData = await completeUpload(uploadKey, importType, uploadBaseUrl);
 
           if (hasImmediateExpiryResult(importType, completeData)) {
-            recordCompletedUpload(
-              toUploadResultFromSummary(completeData),
-              file.name,
-              importType,
-            );
+            recordCompletedUpload(toUploadResultFromSummary(completeData), file.name, importType);
             logUploadMetric('upload_complete', {
               fileSize: fileToUpload.size,
               durationMs: Date.now() - uploadStartTime,

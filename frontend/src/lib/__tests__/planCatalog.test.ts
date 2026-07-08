@@ -1,9 +1,4 @@
-import {
-  formatPrice,
-  getTierPricing,
-  tierRank,
-  LAUNCH_TIERS,
-} from '../planCatalog';
+import { formatPrice, getTierPricing, tierRank, LAUNCH_TIERS } from '../planCatalog';
 
 describe('planCatalog', () => {
   it('orders tiers so upgrades rank above the current plan', () => {

@@ -417,9 +417,7 @@ export class MigrationService {
         id: 10,
         name: '010-add-retail-price-to-products',
         up: (db: DB) => {
-          const tableInfo = db
-            .prepare('PRAGMA table_info(products)')
-            .all() as PragmaTableInfoRow[];
+          const tableInfo = db.prepare('PRAGMA table_info(products)').all() as PragmaTableInfoRow[];
           const hasRetailPrice = tableInfo.some((column) => column.name === 'retail_price');
 
           if (!hasRetailPrice) {
@@ -428,7 +426,7 @@ export class MigrationService {
           }
         },
         down: (_db: DB) => {
-          Logger.warn("Cannot revert retail_price column migration in SQLite");
+          Logger.warn('Cannot revert retail_price column migration in SQLite');
         },
       },
       // Per-organization markdown matrix: three bands, each a discount percentage

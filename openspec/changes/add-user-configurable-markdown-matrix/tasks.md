@@ -33,14 +33,13 @@
 - [x] Settings section: 3 rows (percentage input + cost/retail toggle); retail disabled with tooltip until `hasRetailData`; wired to GET/PUT. (`MarkdownMatrixSettings.tsx`, embedded in `SettingsPage.tsx`)
 - [x] Consume org matrix in `MarkdownCalculator.tsx` (removed the inline 30/60/90 ladder; now uses shared resolver + retail).
 - [x] Frontend tests: settings load/gating/monotonic/save (`MarkdownMatrixSettings.test.tsx`); calculator still green.
-- [ ] **DEFERRED**: Scan page + detailed expiry report price displays still use the cost-only `utils.calculateMarkdownPrice`. Wire them to the org matrix in a follow-up.
+- [x] Scan page + detailed expiry report price displays consume the org matrix via the shared resolver and `useMarkdownMatrix`.
 
 ### Completion checks
 - [x] Backend `tsc` clean; frontend `tsc` clean for new files (pre-existing unrelated errors remain).
 - [x] Affected backend tests (102) + frontend markdown tests (35) + worker import tests (12) pass.
-- [ ] Run full `npm run lint` (backend + frontend) before PR.
+- [x] Run full `npm run lint` (backend + frontend) before PR.
 - [x] `npx openspec validate add-user-configurable-markdown-matrix --strict` is valid.
 
 ## Deferred follow-ups (tracked)
-1. Scan page + detailed expiry report price displays consume the org matrix.
-2. v2: snapshot resolved markdown price for frozen history; configurable day windows / >3 bands.
+1. v2: snapshot resolved markdown price for frozen history; configurable day windows / >3 bands.

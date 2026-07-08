@@ -289,7 +289,9 @@ export class SubscriptionTrialLifecycleService {
 
     const events = await this.trialEventRepo.findRecentByType('trial_expired', yesterday);
 
-    const orgs = await Promise.all(events.map((event) => this.orgRepo.findByIdSelect(event.organizationId)));
+    const orgs = await Promise.all(
+      events.map((event) => this.orgRepo.findByIdSelect(event.organizationId)),
+    );
 
     const results: Array<{
       organizationId: string;

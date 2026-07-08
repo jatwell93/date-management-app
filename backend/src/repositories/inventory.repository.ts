@@ -146,8 +146,7 @@ export class InventoryRepository {
         },
       },
     }) as Promise<
-      | (InventoryItem & { product: { costPrice: number | null; retailPrice: number | null } })
-      | null
+      (InventoryItem & { product: { costPrice: number | null; retailPrice: number | null } }) | null
     >;
   }
 
