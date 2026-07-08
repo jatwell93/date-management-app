@@ -585,7 +585,7 @@ export class ProductService {
     }
     if (columnState.costColIndex === null) {
       errors.push(
-        'Missing required column for Cost. Acceptable alternatives: Cost, Cost Price, Unit Cost, Item Cost, Cost ex, Price, Unit Price, Cost inc, Selling Price, Retail Price. Column headers are case-insensitive and leading/trailing spaces are ignored.',
+        'Missing required column for Cost. Acceptable alternatives: Cost, Cost Price, Unit Cost, Item Cost, Cost ex, Price, Unit Price, Cost inc. Column headers are case-insensitive and leading/trailing spaces are ignored.',
       );
     }
 
@@ -737,7 +737,7 @@ export class ProductService {
             }
             if (!columnState.costHeader) {
               errors.push(
-                `Missing required column header for Cost. Acceptable alternatives: Cost, Cost Price, Unit Cost, Item Cost, Cost ex, Price, Unit Price, Cost inc, Selling Price, Retail Price. Column headers are case-insensitive and leading/trailing spaces are ignored.`,
+                `Missing required column header for Cost. Acceptable alternatives: Cost, Cost Price, Unit Cost, Item Cost, Cost ex, Price, Unit Price, Cost inc. Column headers are case-insensitive and leading/trailing spaces are ignored.`,
               );
               isValid = false;
             }

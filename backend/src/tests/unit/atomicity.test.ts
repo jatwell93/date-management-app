@@ -92,6 +92,7 @@ describe('Usage Counter Atomicity Tests', () => {
           sku: productData.sku,
           name: productData.name,
           costPrice: productData.costPrice,
+          retailPrice: null,
           organizationId,
         },
       });

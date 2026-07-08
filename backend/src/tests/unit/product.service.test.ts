@@ -551,6 +551,29 @@ describe('ProductService with organizationId', () => {
       expect(result.errors[0]).toContain('Missing required column for SKU');
     });
 
+    it('does not advertise retail headers as Cost alternatives when XLSX cost is missing', async () => {
+      writeXlsxFixture('/tmp/missing-cost-retail.xlsx', [
+        ['SKU', 'Name', 'Retail Price', 'Barcode'],
+        ['SKU-1', 'Product A', '15.00', '111'],
+      ]);
+      mockXlsxReadFile.mockReturnValue({
+        SheetNames: ['Sheet1'],
+        Sheets: { Sheet1: {} },
+      });
+      mockXlsxSheetToJson.mockReturnValue([
+        ['SKU', 'Name', 'Retail Price', 'Barcode'],
+        ['SKU-1', 'Product A', '15.00', '111'],
+      ]);
+
+      const result = await (productService as any).processXLSXUpload(
+        '/tmp/missing-cost-retail.xlsx',
+      );
+
+      expect(result.errors[0]).toContain('Missing required column for Cost');
+      expect(result.errors[0]).not.toContain('Selling Price');
+      expect(result.errors[0]).not.toContain('Retail Price');
+    });
+
     it('returns unexpected-columns error when headers include unsupported fields', async () => {
       writeXlsxFixture('/tmp/unexpected-column.xlsx', [
         ['SKU', 'Name', 'Cost', 'Barcode', 'Unexpected Column'],
@@ -845,6 +868,30 @@ describe('ProductService with organizationId', () => {
       expect(
         result.errors.some((e: string) => e.includes('Missing required column header for Barcode')),
       ).toBe(true);
+    });
+
+    it('does not advertise retail headers as Cost alternatives when CSV cost is missing', async () => {
+      const handlers = setupStreamEmitter();
+      const promise = (productService as any).validateCSVStructure('/tmp/missing-cost.csv');
+
+      handlers.data(
+        {
+          SKU: 'SKU-1',
+          Name: 'Name',
+          'Retail Price': '15.00',
+          Barcode: '12345',
+        },
+        0,
+      );
+      handlers.end();
+
+      const result = await promise;
+      const costError = result.errors.find((e: string) =>
+        e.includes('Missing required column header for Cost'),
+      );
+      expect(costError).toBeDefined();
+      expect(costError).not.toContain('Selling Price');
+      expect(costError).not.toContain('Retail Price');
     });
 
     it('validateCSVStructure returns valid when required headers are present via alternatives', async () => {

@@ -172,6 +172,43 @@ describe('CSVParserService', () => {
       expect(result.imported).toBe(1);
     });
 
+    it('should reject Retail Price as a cost-only header and report true cost alternatives', async () => {
+      const filePath = createTestCSV(
+        'retail-price-without-cost.csv',
+        'SKU,Name,Barcode,Retail Price\n' + 'SKU001,Product 1,123456789,19.99\n',
+      );
+
+      const result = await parser.processFile(filePath);
+
+      const costHeaderError = result.errors.find(
+        (error) => error.field === 'header' && error.value === 'cost',
+      );
+      expect(costHeaderError).toBeDefined();
+      expect(costHeaderError?.message).not.toContain('Selling Price');
+      expect(costHeaderError?.message).not.toContain('Retail Price');
+      expect(result.imported).toBe(0);
+    });
+
+    it('should import optional Retail Price separately from Cost', async () => {
+      const filePath = createTestCSV(
+        'retail-price-header.csv',
+        'SKU,Name,Barcode,Cost,Retail Price\n' + 'SKU001,Product 1,123456789,12.99,19.99\n',
+      );
+
+      const result = await parser.processFile(filePath);
+
+      expect(result.errors.filter((e) => e.field === 'header')).toHaveLength(0);
+      expect(result.imported).toBe(1);
+      expect(mockProductCreate).toHaveBeenCalledWith(
+        expect.objectContaining({
+          data: expect.objectContaining({
+            costPrice: 12.99,
+            retailPrice: 19.99,
+          }),
+        }),
+      );
+    });
+
     it('should report missing required headers', async () => {
       const filePath = createTestCSV('missing-headers.csv', 'SKU,Name\n' + 'SKU001,Product 1\n');
 
