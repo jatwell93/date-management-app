@@ -961,6 +961,7 @@ describe('Upload strategy parity', () => {
         name: `Product ${index}`,
         barcode: `BAR-${index}`,
         costPrice: 12.99,
+        retailPrice: null,
       }));
       let offset = 0;
       while (offset < rows.length) {
@@ -983,6 +984,7 @@ describe('Upload strategy parity', () => {
       name: `Product ${index} ${'x'.repeat(3000)}`,
       barcode: `BAR-${index}`,
       costPrice: 12.99,
+      retailPrice: null,
     }));
     const batch = takeImportBatch(rows, 0, rows.length);
     expect(batch.length).toBeLessThan(1000);
