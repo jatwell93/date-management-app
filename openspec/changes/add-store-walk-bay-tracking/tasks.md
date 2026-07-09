@@ -19,10 +19,10 @@
 - [x] Worker tests (pglite): cycle lifecycle, bay-check insert updates `lastChecked`, leaf-only + active-cycle-required rejections, floor-progress shape.
 
 ### Backend (SQLite) — parity
-- [ ] `store-area` (or new `check-cycle`/`bay-check`) repository + service: cycle CRUD, `recordBayCheck`, `getFloorProgress`; single-active-cycle + leaf-only validation; derived `lastChecked` write.
-- [ ] Zod validation schemas; admin/manager gating per existing RBAC; org from auth only (golden rule 1).
-- [ ] Controller + routes mounted in `index.ts`.
-- [ ] Backend route/validation/service unit tests (cycle lifecycle, leaf rejection, no-active-cycle rejection, coverage read).
+- [x] `store-area` (or new `check-cycle`/`bay-check`) repository + service: cycle CRUD, `recordBayCheck`, `getFloorProgress`; single-active-cycle + leaf-only validation; derived `lastChecked` write.
+- [x] Zod validation schemas; admin/manager gating per existing RBAC; org from auth only (golden rule 1).
+- [x] Controller + routes mounted in `index.ts`.
+- [x] Backend route/validation/service unit tests (cycle lifecycle, leaf rejection, no-active-cycle rejection, coverage read).
 
 ### Dual-backend conformance (golden rule 5)
 - [ ] Conformance test comparing floor-progress / coverage output (including row order) across Postgres/pglite and SQLite via the shared resolver.

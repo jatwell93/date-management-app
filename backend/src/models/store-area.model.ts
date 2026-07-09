@@ -10,9 +10,67 @@ export interface StoreArea {
   organizationId: string;
   name: string;
   subDepartment?: string; // New field for sub-departments
+  parentId?: number | null;
   lastChecked?: string;
   createdAt: string;
   updatedAt: string;
+}
+
+export type CheckCycleStatus = 'active' | 'completed';
+export type BayCheckState = 'checked' | 'not_checked' | 'overdue';
+
+export interface CheckCycle {
+  id: number;
+  organizationId: string;
+  name: string;
+  status: CheckCycleStatus;
+  startedAt: string;
+  completedAt: string | null;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface BayCheck {
+  id: number;
+  organizationId: string;
+  cycleId: number;
+  storeAreaId: number;
+  userId: number | null;
+  checkedAt: string;
+  itemsAddedCount: number;
+  notes: string | null;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface FloorProgressSummary {
+  totalBays: number;
+  checkedBays: number;
+  notCheckedBays: number;
+  overdueBays: number;
+  coveragePercent: number;
+  uncheckedBays: number;
+}
+
+export interface FloorProgressBay {
+  id: number;
+  name: string;
+  parentId: number | null;
+  state: BayCheckState;
+  checkedAt: string | null;
+  checkedBy: { id: number; name: string | null } | null;
+}
+
+export interface FloorProgressDepartment {
+  department: { id: number | null; name: string };
+  summary: FloorProgressSummary;
+  bays: FloorProgressBay[];
+}
+
+export interface FloorProgress {
+  activeCycle: CheckCycle | null;
+  summary: FloorProgressSummary;
+  departments: FloorProgressDepartment[];
 }
 
 export class StoreAreaModel {

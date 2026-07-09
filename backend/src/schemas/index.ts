@@ -247,6 +247,72 @@ export const storeAreaSchema = z.object({
   }),
 });
 
+const optionalIsoDateTime = z
+  .string()
+  .datetime({ offset: true, message: 'Timestamp must be an ISO 8601 datetime' })
+  .optional();
+
+export const checkCycleCreateSchema = z.object({
+  body: z.object({
+    name: z
+      .string()
+      .min(1, 'Check cycle name is required')
+      .max(100, 'Check cycle name must be at most 100 characters')
+      .refine(
+        (val) => !val.includes('<') && !val.includes('>'),
+        'Check cycle name cannot contain HTML tags',
+      ),
+    startedAt: optionalIsoDateTime,
+  }),
+});
+
+export const bayCheckCreateSchema = z.object({
+  body: z
+    .object({
+      storeAreaId: z
+        .number()
+        .int()
+        .positive('Store area ID must be a positive integer')
+        .optional()
+        .or(
+          z
+            .string()
+            .regex(/^\d+$/, 'Store area ID must be a positive integer')
+            .transform((val) => parseInt(val, 10))
+            .refine((val) => val > 0, 'Store area ID must be positive'),
+        ),
+      store_area_id: z
+        .number()
+        .int()
+        .positive('Store area ID must be a positive integer')
+        .optional()
+        .or(
+          z
+            .string()
+            .regex(/^\d+$/, 'Store area ID must be a positive integer')
+            .transform((val) => parseInt(val, 10))
+            .refine((val) => val > 0, 'Store area ID must be positive'),
+        ),
+      checkedAt: optionalIsoDateTime,
+      checked_at: optionalIsoDateTime,
+      itemsAddedCount: z
+        .number()
+        .int()
+        .nonnegative('Items added count must be a non-negative integer')
+        .optional(),
+      items_added_count: z
+        .number()
+        .int()
+        .nonnegative('Items added count must be a non-negative integer')
+        .optional(),
+      notes: z.string().max(1000, 'Notes must be at most 1000 characters').nullable().optional(),
+    })
+    .refine((body) => body.storeAreaId !== undefined || body.store_area_id !== undefined, {
+      message: 'Store area ID is required',
+      path: ['storeAreaId'],
+    }),
+});
+
 // ============================================================================
 // Upload Schema
 // ============================================================================
@@ -437,5 +503,7 @@ export type ProductInput = z.infer<typeof productSchema.shape.body>;
 export type InventoryItemInput = z.infer<typeof inventoryItemSchema.shape.body>;
 export type InventoryTransactionInput = z.infer<typeof inventoryTransactionSchema.shape.body>;
 export type StoreAreaInput = z.infer<typeof storeAreaSchema.shape.body>;
+export type CheckCycleCreateInput = z.infer<typeof checkCycleCreateSchema.shape.body>;
+export type BayCheckCreateInput = z.infer<typeof bayCheckCreateSchema.shape.body>;
 export type UploadInitiateInput = z.infer<typeof uploadInitiateSchema.shape.body>;
 export type UploadCompleteInput = z.infer<typeof uploadCompleteSchema.shape.body>;
