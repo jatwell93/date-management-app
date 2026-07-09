@@ -1,18 +1,18 @@
 ## Tasks
 
 ### Shared domain
-- [ ] Add `CheckCycleStatus` (`active` | `completed`) and `BayCheckState` (`checked` | `not_checked` | `overdue`) types to `shared/domain/`.
-- [ ] Add `resolveBayState(bay, checksForCycle)` and `rollupCoverage(bays, checksForCycle)` pure helpers used by both backends.
-- [ ] Unit tests: bay with a check in the active cycle = checked; no check = not_checked; check only in a prior cycle = overdue; coverage % rollup per department and store.
+- [x] Add `CheckCycleStatus` (`active` | `completed`) and `BayCheckState` (`checked` | `not_checked` | `overdue`) types to `shared/domain/`.
+- [x] Add `resolveBayState(bay, checksForCycle)` and `rollupCoverage(bays, checksForCycle)` pure helpers used by both backends.
+- [x] Unit tests: bay with a check in the active cycle = checked; no check = not_checked; check only in a prior cycle = overdue; coverage % rollup per department and store.
 
 ### Schema (triplicated — golden rule 6)
-- [ ] Prisma (base + `production/schema.prisma`): add `StoreArea.parentId Int? @map("parent_id")` self-relation (`parent`/`children`); add `CheckCycle` and `BayCheck` models — org-scoped, cascade delete, `userId` SetNull, indexes on `(organizationId)`, `(cycleId)`, `(storeAreaId)`, `(checkedAt)`.
-- [ ] Neon SQL `0004_add_store_walk_bay_tracking.sql` (+ rollback): `store_areas.parent_id` FK; `check_cycles`, `bay_checks` tables; FKs, status/leaf `CHECK`s, and partial unique index `one_active_cycle_per_org`.
-- [ ] Runtime SQLite migrations `012-add-parent-id-to-store-areas`, `013-add-check-cycles-table`, `014-add-bay-checks-table` in `backend/src/migrations/migration.service.ts`.
-- [ ] Update pglite harness (`workers/src/__tests__/pglite-db.ts`) with the new columns/tables for parity.
+- [x] Prisma (base + `production/schema.prisma`): add `StoreArea.parentId Int? @map("parent_id")` self-relation (`parent`/`children`); add `CheckCycle` and `BayCheck` models — org-scoped, cascade delete, `userId` SetNull, indexes on `(organizationId)`, `(cycleId)`, `(storeAreaId)`, `(checkedAt)`.
+- [x] Neon SQL `0004_add_store_walk_bay_tracking.sql` (+ rollback): `store_areas.parent_id` FK; `check_cycles`, `bay_checks` tables; FKs, status/leaf `CHECK`s, and partial unique index `one_active_cycle_per_org`.
+- [x] Runtime SQLite migrations `012-add-parent-id-to-store-areas`, `013-add-check-cycles-table`, `014-add-bay-checks-table` in `backend/src/migrations/migration.service.ts`.
+- [x] Update pglite harness (`workers/src/__tests__/pglite-db.ts`) with the new columns/tables for parity.
 
 ### Backfill
-- [ ] Idempotent, org-scoped backfill: create a department `StoreArea` per distinct `subDepartment` (plus an "Unassigned" department for null), then set each existing flat area's `parentId`. Existing area ids (and all `InventoryItem.locationId` refs) unchanged.
+- [x] Idempotent, org-scoped backfill: create a department `StoreArea` per distinct `subDepartment` (plus an "Unassigned" department for null), then set each existing flat area's `parentId`. Existing area ids (and all `InventoryItem.locationId` refs) unchanged.
 
 ### Workers (Postgres) — parity
 - [ ] `store-areas.ts` handlers (with `withNeonRetry`): create/list/complete `CheckCycle`; record `BayCheck` (validates active cycle + leaf bay, writes derived `lastChecked`); floor-progress read grouped by department using the shared resolver.

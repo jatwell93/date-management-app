@@ -465,6 +465,158 @@ export class MigrationService {
           db.exec('DROP TABLE IF EXISTS organization_markdown_config;');
         },
       },
+      {
+        id: 12,
+        name: '012-add-parent-id-to-store-areas',
+        up: (db: DB) => {
+          const tableInfo = db
+            .prepare('PRAGMA table_info(store_areas)')
+            .all() as PragmaTableInfoRow[];
+          const hasParentId = tableInfo.some((column) => column.name === 'parent_id');
+
+          if (!hasParentId) {
+            db.exec('ALTER TABLE store_areas ADD COLUMN parent_id INTEGER');
+            Logger.info('Added parent_id column to store_areas table');
+          }
+
+          db.exec(`
+            CREATE INDEX IF NOT EXISTS idx_store_areas_parent_id ON store_areas(parent_id);
+
+            CREATE TEMP TABLE IF NOT EXISTS store_area_backfill_bays AS
+              SELECT
+                id,
+                organization_id,
+                CASE
+                  WHEN sub_department IS NULL OR TRIM(sub_department) = ''
+                    THEN 'Unassigned'
+                  ELSE sub_department
+                END AS department_name
+              FROM store_areas
+              WHERE parent_id IS NULL;
+
+            INSERT INTO store_areas (
+              organization_id,
+              name,
+              sub_department,
+              last_checked,
+              created_at,
+              updated_at
+            )
+            SELECT
+              candidate.organization_id,
+              candidate.department_name,
+              NULL,
+              NULL,
+              CURRENT_TIMESTAMP,
+              CURRENT_TIMESTAMP
+            FROM (
+              SELECT DISTINCT organization_id, department_name
+              FROM store_area_backfill_bays
+            ) AS candidate
+            WHERE NOT EXISTS (
+              SELECT 1
+              FROM store_areas AS existing
+              WHERE existing.organization_id = candidate.organization_id
+                AND existing.parent_id IS NULL
+                AND existing.name = candidate.department_name
+                AND existing.sub_department IS NULL
+            );
+
+            UPDATE store_areas
+            SET parent_id = (
+              SELECT department.id
+              FROM store_areas AS department
+              JOIN store_area_backfill_bays AS bay
+                ON bay.organization_id = department.organization_id
+               AND bay.department_name = department.name
+              WHERE bay.id = store_areas.id
+                AND department.parent_id IS NULL
+                AND department.sub_department IS NULL
+              ORDER BY department.id
+              LIMIT 1
+            )
+            WHERE id IN (SELECT id FROM store_area_backfill_bays)
+              AND parent_id IS NULL;
+
+            DROP TABLE IF EXISTS store_area_backfill_bays;
+          `);
+        },
+        down: (_db: DB) => {
+          Logger.warn('Cannot revert store_areas parent_id migration in SQLite');
+        },
+      },
+      {
+        id: 13,
+        name: '013-add-check-cycles-table',
+        up: (db: DB) => {
+          db.exec(`
+            CREATE TABLE IF NOT EXISTS check_cycles (
+              id INTEGER PRIMARY KEY AUTOINCREMENT,
+              organization_id TEXT NOT NULL,
+              name TEXT NOT NULL,
+              status TEXT NOT NULL DEFAULT 'active',
+              started_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+              completed_at TEXT,
+              created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+              updated_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+              FOREIGN KEY (organization_id) REFERENCES organizations (id) ON DELETE CASCADE,
+              CHECK (status IN ('active', 'completed')),
+              CHECK (
+                (status = 'completed' AND completed_at IS NOT NULL)
+                OR (status = 'active' AND completed_at IS NULL)
+              )
+            );
+
+            CREATE INDEX IF NOT EXISTS idx_check_cycles_organization_id
+              ON check_cycles (organization_id);
+            CREATE INDEX IF NOT EXISTS idx_check_cycles_started_at
+              ON check_cycles (started_at);
+            CREATE UNIQUE INDEX IF NOT EXISTS one_active_cycle_per_org
+              ON check_cycles (organization_id)
+              WHERE status = 'active';
+          `);
+        },
+        down: (db: DB) => {
+          db.exec('DROP TABLE IF EXISTS check_cycles;');
+        },
+      },
+      {
+        id: 14,
+        name: '014-add-bay-checks-table',
+        up: (db: DB) => {
+          db.exec(`
+            CREATE TABLE IF NOT EXISTS bay_checks (
+              id INTEGER PRIMARY KEY AUTOINCREMENT,
+              organization_id TEXT NOT NULL,
+              cycle_id INTEGER NOT NULL,
+              store_area_id INTEGER NOT NULL,
+              user_id INTEGER,
+              checked_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+              items_added_count INTEGER NOT NULL DEFAULT 0,
+              notes TEXT,
+              created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+              updated_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+              FOREIGN KEY (organization_id) REFERENCES organizations (id) ON DELETE CASCADE,
+              FOREIGN KEY (cycle_id) REFERENCES check_cycles (id) ON DELETE CASCADE,
+              FOREIGN KEY (store_area_id) REFERENCES store_areas (id) ON DELETE CASCADE,
+              FOREIGN KEY (user_id) REFERENCES users (id) ON DELETE SET NULL,
+              CHECK (items_added_count >= 0)
+            );
+
+            CREATE INDEX IF NOT EXISTS idx_bay_checks_organization_id
+              ON bay_checks (organization_id);
+            CREATE INDEX IF NOT EXISTS idx_bay_checks_cycle_id
+              ON bay_checks (cycle_id);
+            CREATE INDEX IF NOT EXISTS idx_bay_checks_store_area_id
+              ON bay_checks (store_area_id);
+            CREATE INDEX IF NOT EXISTS idx_bay_checks_checked_at
+              ON bay_checks (checked_at);
+          `);
+        },
+        down: (db: DB) => {
+          db.exec('DROP TABLE IF EXISTS bay_checks;');
+        },
+      },
     ];
   }
 

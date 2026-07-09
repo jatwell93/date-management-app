@@ -24,6 +24,8 @@ model Organization {
   organizationInvites     OrganizationInvite[]
   organizationUsages      OrganizationUsage?
   markdownConfig          OrganizationMarkdownConfig?
+  checkCycles             CheckCycle[]
+  bayChecks               BayCheck[]
   products                Product[]
   storeAreas              StoreArea[]
   subscriptionTiers       SubscriptionTier[]
@@ -188,18 +190,64 @@ model InventoryItem {
 model StoreArea {
   id             Int             @id @default(autoincrement())
   organizationId String          @map("organization_id")
+  parentId       Int?            @map("parent_id")
   name           String
   subDepartment  String?         @map("sub_department")
   lastChecked    DateTime?       @map("last_checked")
   createdAt      DateTime        @default(now()) @map("created_at")
   updatedAt      DateTime        @updatedAt @map("updated_at")
   inventoryItems InventoryItem[]
+  bayChecks      BayCheck[]
   organization   Organization    @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  parent         StoreArea?      @relation("StoreAreaHierarchy", fields: [parentId], references: [id], onDelete: Cascade)
+  children       StoreArea[]     @relation("StoreAreaHierarchy")
 
   @@unique([organizationId, name, subDepartment])
   @@index([organizationId])
+  @@index([parentId])
   @@index([name])
   @@map("store_areas")
+}
+
+model CheckCycle {
+  id             Int          @id @default(autoincrement())
+  organizationId String       @map("organization_id")
+  name           String
+  status         String       @default("active")
+  startedAt      DateTime     @default(now()) @map("started_at")
+  completedAt    DateTime?    @map("completed_at")
+  createdAt      DateTime     @default(now()) @map("created_at")
+  updatedAt      DateTime     @updatedAt @map("updated_at")
+  organization   Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  bayChecks      BayCheck[]
+
+  @@index([organizationId])
+  @@index([status])
+  @@index([startedAt])
+  @@map("check_cycles")
+}
+
+model BayCheck {
+  id              Int          @id @default(autoincrement())
+  organizationId  String       @map("organization_id")
+  cycleId         Int          @map("cycle_id")
+  storeAreaId     Int          @map("store_area_id")
+  userId          Int?         @map("user_id")
+  checkedAt       DateTime     @default(now()) @map("checked_at")
+  itemsAddedCount Int          @default(0) @map("items_added_count")
+  notes           String?
+  createdAt       DateTime     @default(now()) @map("created_at")
+  updatedAt       DateTime     @updatedAt @map("updated_at")
+  organization    Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  cycle           CheckCycle   @relation(fields: [cycleId], references: [id], onDelete: Cascade)
+  storeArea       StoreArea    @relation(fields: [storeAreaId], references: [id], onDelete: Cascade)
+  user            User?        @relation(fields: [userId], references: [id], onDelete: SetNull)
+
+  @@index([organizationId])
+  @@index([cycleId])
+  @@index([storeAreaId])
+  @@index([checkedAt])
+  @@map("bay_checks")
 }
 
 model User {
@@ -213,6 +261,7 @@ model User {
   createdAt               DateTime                 @default(now()) @map("created_at")
   updatedAt               DateTime                 @updatedAt @map("updated_at")
   auditLogs               AuditLog[]
+  bayChecks               BayCheck[]
   expiredItemTransactions ExpiredItemTransaction[]
   itemTransactions        ItemTransaction[]
   sentInvites             OrganizationInvite[]     @relation("InvitedBy")
