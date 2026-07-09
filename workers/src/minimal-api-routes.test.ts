@@ -219,6 +219,120 @@ describe('minimal API route table', () => {
     });
   });
 
+  it('degrades to the default matrix when the markdown schema is not yet migrated', async () => {
+    mockedAuthenticateClerkRequest.mockResolvedValue(authenticatedClerkOrgContext);
+    // Simulate Neon migration 0003 not applied: the config table and
+    // products.retail_price column are missing (undefined_table / undefined_column).
+    const dbMissingSchema = {
+      sql: vi.fn((strings: TemplateStringsArray) => {
+        const query = strings.join(' ');
+        if (query.includes('FROM users')) {
+          return Promise.resolve([{ id: 7, organizationId: 'org_123', role: 'admin' }]);
+        }
+        if (query.includes('organization_markdown_config')) {
+          return Promise.reject(
+            Object.assign(new Error('relation "organization_markdown_config" does not exist'), {
+              code: '42P01',
+            }),
+          );
+        }
+        if (query.includes('retail_price')) {
+          return Promise.reject(
+            Object.assign(new Error('column "retail_price" does not exist'), { code: '42703' }),
+          );
+        }
+        return Promise.resolve([]);
+      }),
+    } as unknown as Database;
+
+    const response = await resolveMinimalGet('/api/markdown-config', dbMissingSchema);
+
+    expect(response?.status).toBe(200);
+    await expect(response?.json()).resolves.toEqual({
+      matrix: {
+        band1: { percentage: 50, basis: 'cost' },
+        band2: { percentage: 60, basis: 'cost' },
+        band3: { percentage: 75, basis: 'cost' },
+      },
+      hasRetailData: false,
+    });
+  });
+
+  it('returns an actionable 503 when saving before the markdown schema is migrated', async () => {
+    mockedAuthenticateClerkRequest.mockResolvedValue(authenticatedClerkOrgContext);
+    const dbMissingSchema = {
+      sql: vi.fn((strings: TemplateStringsArray) => {
+        const query = strings.join(' ');
+        if (query.includes('FROM users')) {
+          return Promise.resolve([{ id: 7, organizationId: 'org_123', role: 'admin' }]);
+        }
+        if (query.includes('organization_markdown_config') || query.includes('retail_price')) {
+          return Promise.reject(
+            Object.assign(new Error('relation "organization_markdown_config" does not exist'), {
+              code: '42P01',
+            }),
+          );
+        }
+        return Promise.resolve([]);
+      }),
+    } as unknown as Database;
+
+    const response = await resolveMinimalApiRoute(getMinimalRoutes(), {
+      request: new Request('https://example.com/api/markdown-config', {
+        method: 'PUT',
+        body: JSON.stringify({
+          band1: { percentage: 50, basis: 'cost' },
+          band2: { percentage: 60, basis: 'cost' },
+          band3: { percentage: 75, basis: 'cost' },
+        }),
+      }),
+      pathname: '/api/markdown-config',
+      method: 'PUT',
+      db: dbMissingSchema,
+      env,
+    });
+
+    expect(response?.status).toBe(503);
+  });
+
+  it('returns a 503 (not a misleading 400) when saving retail bands before the retail column exists', async () => {
+    mockedAuthenticateClerkRequest.mockResolvedValue(authenticatedClerkOrgContext);
+    // products.retail_price missing (migration 0003 not applied). A retail-based
+    // save must surface as a 503 "migration not applied", not a 400 telling the
+    // admin to upload retail prices (which would be unactionable).
+    const dbMissingRetailColumn = {
+      sql: vi.fn((strings: TemplateStringsArray) => {
+        const query = strings.join(' ');
+        if (query.includes('FROM users')) {
+          return Promise.resolve([{ id: 7, organizationId: 'org_123', role: 'admin' }]);
+        }
+        if (query.includes('retail_price')) {
+          return Promise.reject(
+            Object.assign(new Error('column "retail_price" does not exist'), { code: '42703' }),
+          );
+        }
+        return Promise.resolve([]);
+      }),
+    } as unknown as Database;
+
+    const response = await resolveMinimalApiRoute(getMinimalRoutes(), {
+      request: new Request('https://example.com/api/markdown-config', {
+        method: 'PUT',
+        body: JSON.stringify({
+          band1: { percentage: 40, basis: 'retail' },
+          band2: { percentage: 55, basis: 'cost' },
+          band3: { percentage: 80, basis: 'retail' },
+        }),
+      }),
+      pathname: '/api/markdown-config',
+      method: 'PUT',
+      db: dbMissingRetailColumn,
+      env,
+    });
+
+    expect(response?.status).toBe(503);
+  });
+
   it('returns current subscription details for an authenticated organization', async () => {
     mockedAuthenticateClerkRequest.mockResolvedValue(authenticatedClerkOrgContext);
     const dbWithRows = createAuthenticatedOrgDatabase({

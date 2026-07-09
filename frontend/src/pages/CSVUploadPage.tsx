@@ -214,7 +214,7 @@ export const CSVUploadPage: React.FC<{
             <p className="mb-4 text-semantic-text-secondary">
               {isExpiryImport
                 ? 'Upload a CSV, XLSX, or XLS file containing SKU, optional item description, and used-by date data to import expiry list records.'
-                : 'Upload a CSV, XLSX, or XLS file containing product information (SKU, Name, Cost, Barcode) to update your product database.'}
+                : 'Upload a CSV, XLSX, or XLS file containing product information (SKU, Name, Cost, Barcode, and optional Retail Price) to update your product database.'}
             </p>
 
             <div className="mb-6 p-4 bg-semantic-surface-2 rounded-md border border-hairline">
@@ -301,11 +301,17 @@ export const CSVUploadPage: React.FC<{
                     </span>
                   </li>
                   <li>
+                    Optional column:{' '}
+                    <code className="bg-semantic-primary-muted px-1 rounded">Retail Price</code>{' '}
+                    (also accepts "Selling Price", "Sell Price", "RRP", "Sale Price") — enables
+                    retail-based markdown bands
+                  </li>
+                  <li>
                     Column names are case-insensitive and can include common variations (e.g.,
                     "Product Name", "Item Name", "Item Cost", "Unit Cost")
                   </li>
                   <li>
-                    Cost format: Use decimal numbers like{' '}
+                    Cost and Retail format: Use decimal numbers like{' '}
                     <code className="bg-semantic-secondary-muted px-1 rounded">1.99</code> or{' '}
                     <code className="bg-semantic-secondary-muted px-1 rounded">19.99</code> (no
                     currency symbols)
@@ -321,7 +327,7 @@ export const CSVUploadPage: React.FC<{
               <p className="text-sm text-semantic-text-secondary mb-3">
                 {isExpiryImport
                   ? 'Templates include required fields, accepted date examples, and rejected-format guidance.'
-                  : 'Templates include the required columns (SKU, Name, Cost, Barcode) and accepted header variations.'}
+                  : 'Templates include the required columns (SKU, Name, Cost, Barcode), the optional Retail Price column, and accepted header variations.'}
               </p>
               <div className="grid gap-2 sm:flex sm:flex-wrap">
                 <Button
@@ -391,7 +397,7 @@ export const CSVUploadPage: React.FC<{
                 <p className="mt-2 text-sm text-semantic-text-tertiary">
                   {isExpiryImport
                     ? 'The file should include SKU and Used-By Date columns. When the Department column is omitted, items are assigned to Unallocated.'
-                    : 'The CSV/XLSX/XLS file should contain columns: SKU, Name, Cost, and Barcode (in that order).'}
+                    : 'The CSV/XLSX/XLS file should contain columns: SKU, Name, Cost, and Barcode, plus an optional Retail Price column.'}
                 </p>
               </div>
 

@@ -141,6 +141,22 @@ function isUniqueViolation(error: unknown): boolean {
   return false;
 }
 
+// Postgres `undefined_column` (42703) or `undefined_table` (42P01). Guards
+// against a code-before-migration gap: e.g. the products.retail_price column or
+// organization_markdown_config table (#338) not yet applied to the live Neon DB.
+// Detecting it lets callers degrade to cost-only defaults instead of surfacing
+// a raw NeonDbError to the user.
+function isMissingSchemaError(error: unknown): boolean {
+  const hasMissingCode = (value: unknown): boolean =>
+    !!value &&
+    typeof value === 'object' &&
+    ((value as { code?: unknown }).code === '42703' ||
+      (value as { code?: unknown }).code === '42P01');
+  if (hasMissingCode(error)) return true;
+  // Some neon driver wrappers nest the pg error under .cause.
+  return hasMissingCode((error as { cause?: unknown }).cause);
+}
+
 export { maybeCompressJsonResponse };
 export { isCatalogueWithinLimit, takeImportBatch };
 export type { ValidatedCatalogueRow };
@@ -362,7 +378,9 @@ export default Sentry.withSentry(
           // which wraps the 500 with CORS headers. A bare `return` adopts the
           // rejected promise's state at the caller, skipping the catch and
           // producing a CORS-less 500 the browser masks as a CORS error.
-          return await finalizeApiResponse(apiRouteResponse ?? errorResponse('Not Found', 404, env));
+          return await finalizeApiResponse(
+            apiRouteResponse ?? errorResponse('Not Found', 404, env),
+          );
         }
 
         return withCors(
@@ -1993,35 +2011,82 @@ async function handleGetOrganizationUsage(
   );
 }
 
-async function organizationHasRetailData(organizationId: string, db: Database): Promise<boolean> {
-  const rows = await db.sql`
-    SELECT id
-    FROM products
-    WHERE organization_id = ${organizationId}
-      AND retail_price IS NOT NULL
-    LIMIT 1
-  `;
-  return rows.length > 0;
+// A missing products.retail_price column (migration 0003 not applied) is
+// reported distinctly from "column present, zero retail rows": the GET path
+// degrades either way, but the PUT path must tell them apart so a retail-based
+// save returns an actionable 503 rather than a misleading 400.
+async function organizationHasRetailData(
+  organizationId: string,
+  db: Database,
+): Promise<{ hasRetailData: boolean; retailColumnMissing: boolean }> {
+  try {
+    const rows = await db.sql`
+      SELECT id
+      FROM products
+      WHERE organization_id = ${organizationId}
+        AND retail_price IS NOT NULL
+      LIMIT 1
+    `;
+    return { hasRetailData: rows.length > 0, retailColumnMissing: false };
+  } catch (error) {
+    // The products.retail_price column ships in Neon migration 0003 (#338). If
+    // it is missing the migration has not been applied yet — degrade to
+    // cost-only (no retail data) so markdown config still loads, rather than
+    // 500-ing with a raw NeonDbError. Log loudly so ops can spot the un-applied
+    // migration.
+    if (isMissingSchemaError(error)) {
+      console.error(
+        'organization_markdown_config: products.retail_price column missing — apply Neon migration 0003_add_configurable_markdown_matrix. Falling back to cost-only.',
+      );
+      return { hasRetailData: false, retailColumnMissing: true };
+    }
+    throw error;
+  }
+}
+
+// Shared 503 for when Neon migration 0003 (#338) has not been applied, so the
+// markdown config schema (organization_markdown_config table / retail_price
+// column) is missing.
+function markdownSchemaMissingResponse(env: Env): Response {
+  return errorResponse(
+    'Markdown settings storage is not ready yet. The database migration for this feature has not been applied — please contact your administrator.',
+    503,
+    env,
+  );
 }
 
 async function getOrganizationMarkdownMatrix(
   organizationId: string,
   db: Database,
 ): Promise<MarkdownMatrixConfig> {
-  const rows = await db.sql`
-    SELECT
-      band1_percentage,
-      band2_percentage,
-      band3_percentage,
-      band1_basis,
-      band2_basis,
-      band3_basis
-    FROM organization_markdown_config
-    WHERE organization_id = ${organizationId}
-    LIMIT 1
-  `;
+  try {
+    const rows = await db.sql`
+      SELECT
+        band1_percentage,
+        band2_percentage,
+        band3_percentage,
+        band1_basis,
+        band2_basis,
+        band3_basis
+      FROM organization_markdown_config
+      WHERE organization_id = ${organizationId}
+      LIMIT 1
+    `;
 
-  return markdownConfigRowToMatrix(rows[0] as MarkdownConfigRow | undefined);
+    return markdownConfigRowToMatrix(rows[0] as MarkdownConfigRow | undefined);
+  } catch (error) {
+    // organization_markdown_config ships in Neon migration 0003 (#338). If the
+    // table is missing, fall back to the default matrix (cost-only ladder) so
+    // Settings still renders instead of 500-ing. markdownConfigRowToMatrix(undefined)
+    // returns those defaults.
+    if (isMissingSchemaError(error)) {
+      console.error(
+        'organization_markdown_config table missing — apply Neon migration 0003_add_configurable_markdown_matrix. Falling back to default matrix.',
+      );
+      return markdownConfigRowToMatrix(undefined);
+    }
+    throw error;
+  }
 }
 
 /**
@@ -2037,12 +2102,12 @@ async function handleGetMarkdownConfig(
     return auth;
   }
 
-  const [matrix, hasRetailData] = await Promise.all([
+  const [matrix, retailData] = await Promise.all([
     getOrganizationMarkdownMatrix(auth.organizationId, db),
     organizationHasRetailData(auth.organizationId, db),
   ]);
 
-  return jsonResponse({ matrix, hasRetailData }, 200, env);
+  return jsonResponse({ matrix, hasRetailData: retailData.hasRetailData }, 200, env);
 }
 
 /**
@@ -2066,54 +2131,81 @@ async function handleUpdateMarkdownConfig(
     return errorResponse(parsedMatrix, 400, env);
   }
 
-  const hasRetailData = await organizationHasRetailData(auth.organizationId, db);
-  if (matrixUsesRetail(parsedMatrix) && !hasRetailData) {
-    return errorResponse(
-      'Retail-based markdowns require retail prices. Upload a catalogue with a retail (or selling price) column first.',
-      400,
-      env,
-    );
+  const { hasRetailData, retailColumnMissing } = await organizationHasRetailData(
+    auth.organizationId,
+    db,
+  );
+  if (matrixUsesRetail(parsedMatrix)) {
+    // A missing retail_price column means migration 0003 is not applied — the
+    // save cannot honour retail bands, and telling the user to "upload retail
+    // prices" would be unactionable. Surface it as the same 503 as the INSERT
+    // path. A cost-only matrix skips this block and saves normally.
+    if (retailColumnMissing) {
+      return markdownSchemaMissingResponse(env);
+    }
+    if (!hasRetailData) {
+      return errorResponse(
+        'Retail-based markdowns require retail prices. Upload a catalogue with a retail (or selling price) column first.',
+        400,
+        env,
+      );
+    }
   }
 
-  const rows = await db.sql`
-    INSERT INTO organization_markdown_config (
-      organization_id,
-      band1_percentage,
-      band2_percentage,
-      band3_percentage,
-      band1_basis,
-      band2_basis,
-      band3_basis,
-      created_at,
-      updated_at
-    )
-    VALUES (
-      ${auth.organizationId},
-      ${parsedMatrix.band1.percentage},
-      ${parsedMatrix.band2.percentage},
-      ${parsedMatrix.band3.percentage},
-      ${parsedMatrix.band1.basis},
-      ${parsedMatrix.band2.basis},
-      ${parsedMatrix.band3.basis},
-      NOW(),
-      NOW()
-    )
-    ON CONFLICT (organization_id) DO UPDATE SET
-      band1_percentage = EXCLUDED.band1_percentage,
-      band2_percentage = EXCLUDED.band2_percentage,
-      band3_percentage = EXCLUDED.band3_percentage,
-      band1_basis = EXCLUDED.band1_basis,
-      band2_basis = EXCLUDED.band2_basis,
-      band3_basis = EXCLUDED.band3_basis,
-      updated_at = NOW()
-    RETURNING
-      band1_percentage,
-      band2_percentage,
-      band3_percentage,
-      band1_basis,
-      band2_basis,
-      band3_basis
-  `;
+  let rows;
+  try {
+    rows = await db.sql`
+      INSERT INTO organization_markdown_config (
+        organization_id,
+        band1_percentage,
+        band2_percentage,
+        band3_percentage,
+        band1_basis,
+        band2_basis,
+        band3_basis,
+        created_at,
+        updated_at
+      )
+      VALUES (
+        ${auth.organizationId},
+        ${parsedMatrix.band1.percentage},
+        ${parsedMatrix.band2.percentage},
+        ${parsedMatrix.band3.percentage},
+        ${parsedMatrix.band1.basis},
+        ${parsedMatrix.band2.basis},
+        ${parsedMatrix.band3.basis},
+        NOW(),
+        NOW()
+      )
+      ON CONFLICT (organization_id) DO UPDATE SET
+        band1_percentage = EXCLUDED.band1_percentage,
+        band2_percentage = EXCLUDED.band2_percentage,
+        band3_percentage = EXCLUDED.band3_percentage,
+        band1_basis = EXCLUDED.band1_basis,
+        band2_basis = EXCLUDED.band2_basis,
+        band3_basis = EXCLUDED.band3_basis,
+        updated_at = NOW()
+      RETURNING
+        band1_percentage,
+        band2_percentage,
+        band3_percentage,
+        band1_basis,
+        band2_basis,
+        band3_basis
+    `;
+  } catch (error) {
+    // The organization_markdown_config table (and products.retail_price) ship in
+    // Neon migration 0003 (#338). A missing table/column here means the migration
+    // has not been applied to this database — return an actionable 503 rather than
+    // leaking a raw NeonDbError to the admin.
+    if (isMissingSchemaError(error)) {
+      console.error(
+        'handleUpdateMarkdownConfig: markdown config schema missing — apply Neon migration 0003_add_configurable_markdown_matrix.',
+      );
+      return markdownSchemaMissingResponse(env);
+    }
+    throw error;
+  }
 
   return jsonResponse(
     { matrix: markdownConfigRowToMatrix(rows[0] as MarkdownConfigRow), hasRetailData },
@@ -2687,7 +2779,10 @@ function parseMarkdownMatrix(value: unknown): MarkdownMatrixConfig | string {
   return validMatrix;
 }
 
-function parseMarkdownBand(value: unknown, label: string): { percentage: number; basis: MarkdownBasis } | string {
+function parseMarkdownBand(
+  value: unknown,
+  label: string,
+): { percentage: number; basis: MarkdownBasis } | string {
   if (!value || typeof value !== 'object') {
     return `${label} must include percentage and basis.`;
   }

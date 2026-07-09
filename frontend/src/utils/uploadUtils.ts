@@ -214,19 +214,22 @@ export const downloadExpiryTemplate = (format: 'csv' | 'xlsx' | 'xls') => {
 
 export const downloadCatalogTemplate = (format: 'csv' | 'xlsx' | 'xls') => {
   const templateRows = [
-    ['SKU', 'Name', 'Cost', 'Barcode'],
-    ['1001', 'Sample Vitamin C 500mg', '12.99', '9312345678900'],
-    ['1002', 'Sample Moisturiser 200ml', '8.50', '9312345678917'],
+    ['SKU', 'Name', 'Cost', 'Barcode', 'Retail Price'],
+    ['1001', 'Sample Vitamin C 500mg', '12.99', '9312345678900', '19.99'],
+    ['1002', 'Sample Moisturiser 200ml', '8.50', '9312345678917', ''],
   ];
 
   const guidanceRows = [
     ['Guidance', 'Value'],
     ['Required columns', 'SKU, Name, Cost, Barcode'],
+    ['Optional columns', 'Retail Price (enables retail-based markdown bands)'],
     ['Accepted SKU headers', 'SKU, Item Code, Reorder Number, Product Code, Item Number'],
     ['Accepted Name headers', 'Name, Item Description, Product Name, Description, Item Name'],
-    ['Accepted Cost headers', 'Cost, Cost Price, Unit Cost, Price, Selling Price'],
+    ['Accepted Cost headers', 'Cost, Cost Price, Unit Cost, Price, Item Cost'],
+    ['Accepted Retail headers', 'Retail Price, Selling Price, Sell Price, RRP, Sale Price'],
     ['Accepted Barcode headers', 'Barcode, Alias, EAN, UPC, GTIN'],
     ['Cost format', 'Decimal numbers like 1.99 or 19.99 (currency symbols are stripped)'],
+    ['Retail format', 'Same as cost; leave blank when a product has no retail price'],
   ];
 
   if (format === 'csv') {
