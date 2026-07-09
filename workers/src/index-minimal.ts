@@ -63,6 +63,11 @@ import {
   handleOrganizationBootstrap,
 } from './clerk/bootstrap-handler';
 import { handleClerkWebhook } from './clerk/webhook-handler';
+import {
+  DEFAULT_MARKDOWN_MATRIX,
+  type MarkdownBasis,
+  type MarkdownMatrixConfig,
+} from '../../shared/domain/markdown';
 
 const DIRECT_UPLOAD_THRESHOLD_BYTES = 2 * 1024 * 1024;
 const PRESIGNED_UPLOAD_TTL_SECONDS = 15 * 60;
@@ -193,6 +198,8 @@ export const MINIMAL_API_ROUTES: MinimalApiRoute[] = [
   ['GET', '/api/subscription/current', handleGetCurrentSubscription],
   ['GET', '/api/subscription/trial-status', handleGetTrialStatus],
   ['GET', '/api/organization/usage', handleGetOrganizationUsage],
+  ['GET', '/api/markdown-config', handleGetMarkdownConfig],
+  ['PUT', '/api/markdown-config', handleUpdateMarkdownConfig],
   ['POST', '/api/organization/bootstrap', handleOrganizationBootstrap, 'bootstrap'],
 ];
 
@@ -1986,6 +1993,135 @@ async function handleGetOrganizationUsage(
   );
 }
 
+async function organizationHasRetailData(organizationId: string, db: Database): Promise<boolean> {
+  const rows = await db.sql`
+    SELECT id
+    FROM products
+    WHERE organization_id = ${organizationId}
+      AND retail_price IS NOT NULL
+    LIMIT 1
+  `;
+  return rows.length > 0;
+}
+
+async function getOrganizationMarkdownMatrix(
+  organizationId: string,
+  db: Database,
+): Promise<MarkdownMatrixConfig> {
+  const rows = await db.sql`
+    SELECT
+      band1_percentage,
+      band2_percentage,
+      band3_percentage,
+      band1_basis,
+      band2_basis,
+      band3_basis
+    FROM organization_markdown_config
+    WHERE organization_id = ${organizationId}
+    LIMIT 1
+  `;
+
+  return markdownConfigRowToMatrix(rows[0] as MarkdownConfigRow | undefined);
+}
+
+/**
+ * GET /api/markdown-config
+ */
+async function handleGetMarkdownConfig(
+  request: Request,
+  db: Database,
+  env: Env,
+): Promise<Response> {
+  const auth = await authenticateApiRequest(request, env, db);
+  if (auth instanceof Response) {
+    return auth;
+  }
+
+  const [matrix, hasRetailData] = await Promise.all([
+    getOrganizationMarkdownMatrix(auth.organizationId, db),
+    organizationHasRetailData(auth.organizationId, db),
+  ]);
+
+  return jsonResponse({ matrix, hasRetailData }, 200, env);
+}
+
+/**
+ * PUT /api/markdown-config
+ */
+async function handleUpdateMarkdownConfig(
+  request: Request,
+  db: Database,
+  env: Env,
+): Promise<Response> {
+  const auth = await authenticateApiRequest(request, env, db);
+  if (auth instanceof Response) {
+    return auth;
+  }
+  if (!canManageUsers(auth.role)) {
+    return errorResponse('Only admins can update markdown settings', 403, env);
+  }
+
+  const parsedMatrix = parseMarkdownMatrix(await request.json().catch(() => null));
+  if (typeof parsedMatrix === 'string') {
+    return errorResponse(parsedMatrix, 400, env);
+  }
+
+  const hasRetailData = await organizationHasRetailData(auth.organizationId, db);
+  if (matrixUsesRetail(parsedMatrix) && !hasRetailData) {
+    return errorResponse(
+      'Retail-based markdowns require retail prices. Upload a catalogue with a retail (or selling price) column first.',
+      400,
+      env,
+    );
+  }
+
+  const rows = await db.sql`
+    INSERT INTO organization_markdown_config (
+      organization_id,
+      band1_percentage,
+      band2_percentage,
+      band3_percentage,
+      band1_basis,
+      band2_basis,
+      band3_basis,
+      created_at,
+      updated_at
+    )
+    VALUES (
+      ${auth.organizationId},
+      ${parsedMatrix.band1.percentage},
+      ${parsedMatrix.band2.percentage},
+      ${parsedMatrix.band3.percentage},
+      ${parsedMatrix.band1.basis},
+      ${parsedMatrix.band2.basis},
+      ${parsedMatrix.band3.basis},
+      NOW(),
+      NOW()
+    )
+    ON CONFLICT (organization_id) DO UPDATE SET
+      band1_percentage = EXCLUDED.band1_percentage,
+      band2_percentage = EXCLUDED.band2_percentage,
+      band3_percentage = EXCLUDED.band3_percentage,
+      band1_basis = EXCLUDED.band1_basis,
+      band2_basis = EXCLUDED.band2_basis,
+      band3_basis = EXCLUDED.band3_basis,
+      updated_at = NOW()
+    RETURNING
+      band1_percentage,
+      band2_percentage,
+      band3_percentage,
+      band1_basis,
+      band2_basis,
+      band3_basis
+  `;
+
+  return jsonResponse(
+    { matrix: markdownConfigRowToMatrix(rows[0] as MarkdownConfigRow), hasRetailData },
+    200,
+    env,
+  );
+}
+
 /**
  * GET /api/subscription/trial-status
  */
@@ -2487,6 +2623,94 @@ export { handleLogin, handleRegister, handleOrganizationBootstrap };
 export { getClerkAuthorizedParties };
 
 type LaunchTier = 'free' | 'starter' | 'professional' | 'enterprise';
+
+type MarkdownConfigRow = {
+  band1_percentage?: number | string | null;
+  band2_percentage?: number | string | null;
+  band3_percentage?: number | string | null;
+  band1_basis?: string | null;
+  band2_basis?: string | null;
+  band3_basis?: string | null;
+};
+
+function isMarkdownBasis(value: unknown): value is MarkdownBasis {
+  return value === 'cost' || value === 'retail';
+}
+
+function markdownConfigRowToMatrix(row: MarkdownConfigRow | undefined): MarkdownMatrixConfig {
+  if (!row) {
+    return DEFAULT_MARKDOWN_MATRIX;
+  }
+
+  return {
+    band1: {
+      percentage: Number(row.band1_percentage ?? DEFAULT_MARKDOWN_MATRIX.band1.percentage),
+      basis: isMarkdownBasis(row.band1_basis) ? row.band1_basis : 'cost',
+    },
+    band2: {
+      percentage: Number(row.band2_percentage ?? DEFAULT_MARKDOWN_MATRIX.band2.percentage),
+      basis: isMarkdownBasis(row.band2_basis) ? row.band2_basis : 'cost',
+    },
+    band3: {
+      percentage: Number(row.band3_percentage ?? DEFAULT_MARKDOWN_MATRIX.band3.percentage),
+      basis: isMarkdownBasis(row.band3_basis) ? row.band3_basis : 'cost',
+    },
+  };
+}
+
+function parseMarkdownMatrix(value: unknown): MarkdownMatrixConfig | string {
+  if (!value || typeof value !== 'object') {
+    return 'Request body must be a markdown matrix.';
+  }
+
+  const matrix = value as Partial<Record<keyof MarkdownMatrixConfig, unknown>>;
+  const parsed = {
+    band1: parseMarkdownBand(matrix.band1, 'Markdown 1'),
+    band2: parseMarkdownBand(matrix.band2, 'Markdown 2'),
+    band3: parseMarkdownBand(matrix.band3, 'Markdown 3'),
+  };
+
+  for (const band of [parsed.band1, parsed.band2, parsed.band3]) {
+    if (typeof band === 'string') {
+      return band;
+    }
+  }
+
+  const validMatrix = parsed as MarkdownMatrixConfig;
+  if (
+    validMatrix.band1.percentage > validMatrix.band2.percentage ||
+    validMatrix.band2.percentage > validMatrix.band3.percentage
+  ) {
+    return 'Discounts must not decrease as expiry nears: Markdown 1 <= Markdown 2 <= Markdown 3.';
+  }
+
+  return validMatrix;
+}
+
+function parseMarkdownBand(value: unknown, label: string): { percentage: number; basis: MarkdownBasis } | string {
+  if (!value || typeof value !== 'object') {
+    return `${label} must include percentage and basis.`;
+  }
+
+  const band = value as { percentage?: unknown; basis?: unknown };
+  const percentage = Number(band.percentage);
+  if (!Number.isFinite(percentage) || percentage < 0 || percentage > 100) {
+    return `${label} percentage must be between 0 and 100.`;
+  }
+  if (!isMarkdownBasis(band.basis)) {
+    return `${label} basis must be cost or retail.`;
+  }
+
+  return { percentage, basis: band.basis };
+}
+
+function matrixUsesRetail(matrix: MarkdownMatrixConfig): boolean {
+  return (
+    matrix.band1.basis === 'retail' ||
+    matrix.band2.basis === 'retail' ||
+    matrix.band3.basis === 'retail'
+  );
+}
 
 const LAUNCH_TIER_LIMITS: Record<LaunchTier, { maxSkus: number; maxActiveExpiries: number }> = {
   free: { maxSkus: 500, maxActiveExpiries: 500 },
