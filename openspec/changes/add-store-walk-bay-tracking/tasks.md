@@ -15,8 +15,8 @@
 - [x] Idempotent, org-scoped backfill: create a department `StoreArea` per distinct `subDepartment` (plus an "Unassigned" department for null), then set each existing flat area's `parentId`. Existing area ids (and all `InventoryItem.locationId` refs) unchanged.
 
 ### Workers (Postgres) — parity
-- [ ] `store-areas.ts` handlers (with `withNeonRetry`): create/list/complete `CheckCycle`; record `BayCheck` (validates active cycle + leaf bay, writes derived `lastChecked`); floor-progress read grouped by department using the shared resolver.
-- [ ] Worker tests (pglite): cycle lifecycle, bay-check insert updates `lastChecked`, leaf-only + active-cycle-required rejections, floor-progress shape.
+- [x] `store-areas.ts` handlers (with `withNeonRetry`): create/list/complete `CheckCycle`; record `BayCheck` (validates active cycle + leaf bay, writes derived `lastChecked`); floor-progress read grouped by department using the shared resolver.
+- [x] Worker tests (pglite): cycle lifecycle, bay-check insert updates `lastChecked`, leaf-only + active-cycle-required rejections, floor-progress shape.
 
 ### Backend (SQLite) — parity
 - [ ] `store-area` (or new `check-cycle`/`bay-check`) repository + service: cycle CRUD, `recordBayCheck`, `getFloorProgress`; single-active-cycle + leaf-only validation; derived `lastChecked` write.

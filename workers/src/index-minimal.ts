@@ -168,6 +168,7 @@ export type { ValidatedCatalogueRow };
 const RE_USER_ID = /^\/api\/users\/\d+$/;
 const RE_INVENTORY_ID = /^\/api\/inventory-items\/\d+$/;
 const RE_STORE_AREA_ID = /^\/api\/store-areas\/\d+$/;
+const RE_STORE_AREA_CHECK_CYCLE_COMPLETE = /^\/api\/store-areas\/check-cycles\/\d+\/complete$/;
 export const MINIMAL_API_ROUTES: MinimalApiRoute[] = [
   ['POST', '/api/auth/login', handleLogin],
   ['POST', '/api/auth/register', handleRegister],
@@ -195,6 +196,11 @@ export const MINIMAL_API_ROUTES: MinimalApiRoute[] = [
   ['DELETE', RE_INVENTORY_ID, handleDeleteInventoryItem, 'path'],
   ['GET', '/api/store-areas', handleGetStoreAreas],
   ['POST', '/api/store-areas', handleCreateStoreArea],
+  ['GET', '/api/store-areas/check-cycles', handleListCheckCycles],
+  ['POST', '/api/store-areas/check-cycles', handleCreateCheckCycle],
+  ['POST', RE_STORE_AREA_CHECK_CYCLE_COMPLETE, handleCompleteCheckCycle, 'path'],
+  ['POST', '/api/store-areas/bay-checks', handleRecordBayCheck],
+  ['GET', '/api/store-areas/floor-progress', handleGetFloorProgress],
   ['PUT', RE_STORE_AREA_ID, handleUpdateStoreArea, 'path'],
   ['DELETE', RE_STORE_AREA_ID, handleDeleteStoreArea, 'path'],
   ['GET', '/api/dashboard', handleGetDashboard],
@@ -917,6 +923,128 @@ async function handleGetStoreAreas(request: Request, db: Database, env: Env): Pr
   const areas = await db.findStoreAreas();
 
   return jsonResponse(areas, 200, env);
+}
+
+/**
+ * GET /api/store-areas/check-cycles
+ */
+async function handleListCheckCycles(request: Request, db: Database, env: Env): Promise<Response> {
+  const auth = await authenticateApiRequest(request, env, db);
+  if (auth instanceof Response) return auth;
+
+  const cycles = await db.listCheckCycles(auth.organizationId);
+  return jsonResponse(cycles, 200, env);
+}
+
+/**
+ * POST /api/store-areas/check-cycles
+ */
+async function handleCreateCheckCycle(request: Request, db: Database, env: Env): Promise<Response> {
+  const auth = await authenticateApiRequest(request, env, db);
+  if (auth instanceof Response) return auth;
+
+  const body = (await request.json()) as { name?: string; startedAt?: string };
+  if (!body.name || typeof body.name !== 'string' || body.name.trim().length === 0) {
+    return errorResponse('Missing required field: name', 400, env);
+  }
+
+  try {
+    const cycle = await db.createCheckCycle(auth.organizationId, {
+      name: body.name.trim(),
+      startedAt: body.startedAt,
+    });
+    return jsonResponse(cycle, 201, env);
+  } catch (error) {
+    const message = error instanceof Error ? error.message : 'Internal server error';
+    if (message.includes('Active check cycle already exists')) {
+      return errorResponse(message, 409, env);
+    }
+    console.error('handleCreateCheckCycle error:', error);
+    return errorResponse('Internal server error', 500, env);
+  }
+}
+
+/**
+ * POST /api/store-areas/check-cycles/:id/complete
+ */
+async function handleCompleteCheckCycle(
+  request: Request,
+  db: Database,
+  env: Env,
+  pathname: string,
+): Promise<Response> {
+  const auth = await authenticateApiRequest(request, env, db);
+  if (auth instanceof Response) return auth;
+
+  const match = pathname.match(/^\/api\/store-areas\/check-cycles\/(\d+)\/complete$/);
+  if (!match) {
+    return errorResponse('Invalid check cycle id', 400, env);
+  }
+
+  try {
+    const cycle = await db.completeCheckCycle(auth.organizationId, parseInt(match[1], 10));
+    return jsonResponse(cycle, 200, env);
+  } catch (error) {
+    const message = error instanceof Error ? error.message : 'Internal server error';
+    if (message.includes('not found')) {
+      return errorResponse(message, 404, env);
+    }
+    console.error('handleCompleteCheckCycle error:', error);
+    return errorResponse('Internal server error', 500, env);
+  }
+}
+
+/**
+ * POST /api/store-areas/bay-checks
+ */
+async function handleRecordBayCheck(request: Request, db: Database, env: Env): Promise<Response> {
+  const auth = await authenticateApiRequest(request, env, db);
+  if (auth instanceof Response) return auth;
+
+  const body = (await request.json()) as {
+    storeAreaId?: number;
+    store_area_id?: number;
+    checkedAt?: string;
+    checked_at?: string;
+    itemsAddedCount?: number;
+    items_added_count?: number;
+    notes?: string | null;
+  };
+  const storeAreaId = body.storeAreaId ?? body.store_area_id;
+  if (!Number.isInteger(storeAreaId) || Number(storeAreaId) <= 0) {
+    return errorResponse('Missing required field: storeAreaId', 400, env);
+  }
+
+  try {
+    const check = await db.recordBayCheck(auth.organizationId, auth.userId, {
+      storeAreaId: Number(storeAreaId),
+      checkedAt: body.checkedAt ?? body.checked_at,
+      itemsAddedCount: body.itemsAddedCount ?? body.items_added_count,
+      notes: body.notes,
+    });
+    return jsonResponse(check, 201, env);
+  } catch (error) {
+    const message = error instanceof Error ? error.message : 'Internal server error';
+    if (message.includes('Active check cycle is required')) {
+      return errorResponse(message, 409, env);
+    }
+    if (message.includes('leaf bay')) {
+      return errorResponse(message, 400, env);
+    }
+    console.error('handleRecordBayCheck error:', error);
+    return errorResponse('Internal server error', 500, env);
+  }
+}
+
+/**
+ * GET /api/store-areas/floor-progress
+ */
+async function handleGetFloorProgress(request: Request, db: Database, env: Env): Promise<Response> {
+  const auth = await authenticateApiRequest(request, env, db);
+  if (auth instanceof Response) return auth;
+
+  const progress = await db.getFloorProgress(auth.organizationId);
+  return jsonResponse(progress, 200, env);
 }
 
 /**
