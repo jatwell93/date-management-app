@@ -2011,7 +2011,14 @@ async function handleGetOrganizationUsage(
   );
 }
 
-async function organizationHasRetailData(organizationId: string, db: Database): Promise<boolean> {
+// A missing products.retail_price column (migration 0003 not applied) is
+// reported distinctly from "column present, zero retail rows": the GET path
+// degrades either way, but the PUT path must tell them apart so a retail-based
+// save returns an actionable 503 rather than a misleading 400.
+async function organizationHasRetailData(
+  organizationId: string,
+  db: Database,
+): Promise<{ hasRetailData: boolean; retailColumnMissing: boolean }> {
   try {
     const rows = await db.sql`
       SELECT id
@@ -2020,21 +2027,32 @@ async function organizationHasRetailData(organizationId: string, db: Database): 
         AND retail_price IS NOT NULL
       LIMIT 1
     `;
-    return rows.length > 0;
+    return { hasRetailData: rows.length > 0, retailColumnMissing: false };
   } catch (error) {
     // The products.retail_price column ships in Neon migration 0003 (#338). If
     // it is missing the migration has not been applied yet — degrade to
-    // cost-only (no retail data) so markdown config still loads and saves,
-    // rather than 500-ing with a raw NeonDbError. Log loudly so ops can spot
-    // the un-applied migration.
+    // cost-only (no retail data) so markdown config still loads, rather than
+    // 500-ing with a raw NeonDbError. Log loudly so ops can spot the un-applied
+    // migration.
     if (isMissingSchemaError(error)) {
       console.error(
         'organization_markdown_config: products.retail_price column missing — apply Neon migration 0003_add_configurable_markdown_matrix. Falling back to cost-only.',
       );
-      return false;
+      return { hasRetailData: false, retailColumnMissing: true };
     }
     throw error;
   }
+}
+
+// Shared 503 for when Neon migration 0003 (#338) has not been applied, so the
+// markdown config schema (organization_markdown_config table / retail_price
+// column) is missing.
+function markdownSchemaMissingResponse(env: Env): Response {
+  return errorResponse(
+    'Markdown settings storage is not ready yet. The database migration for this feature has not been applied — please contact your administrator.',
+    503,
+    env,
+  );
 }
 
 async function getOrganizationMarkdownMatrix(
@@ -2084,12 +2102,12 @@ async function handleGetMarkdownConfig(
     return auth;
   }
 
-  const [matrix, hasRetailData] = await Promise.all([
+  const [matrix, retailData] = await Promise.all([
     getOrganizationMarkdownMatrix(auth.organizationId, db),
     organizationHasRetailData(auth.organizationId, db),
   ]);
 
-  return jsonResponse({ matrix, hasRetailData }, 200, env);
+  return jsonResponse({ matrix, hasRetailData: retailData.hasRetailData }, 200, env);
 }
 
 /**
@@ -2113,13 +2131,25 @@ async function handleUpdateMarkdownConfig(
     return errorResponse(parsedMatrix, 400, env);
   }
 
-  const hasRetailData = await organizationHasRetailData(auth.organizationId, db);
-  if (matrixUsesRetail(parsedMatrix) && !hasRetailData) {
-    return errorResponse(
-      'Retail-based markdowns require retail prices. Upload a catalogue with a retail (or selling price) column first.',
-      400,
-      env,
-    );
+  const { hasRetailData, retailColumnMissing } = await organizationHasRetailData(
+    auth.organizationId,
+    db,
+  );
+  if (matrixUsesRetail(parsedMatrix)) {
+    // A missing retail_price column means migration 0003 is not applied — the
+    // save cannot honour retail bands, and telling the user to "upload retail
+    // prices" would be unactionable. Surface it as the same 503 as the INSERT
+    // path. A cost-only matrix skips this block and saves normally.
+    if (retailColumnMissing) {
+      return markdownSchemaMissingResponse(env);
+    }
+    if (!hasRetailData) {
+      return errorResponse(
+        'Retail-based markdowns require retail prices. Upload a catalogue with a retail (or selling price) column first.',
+        400,
+        env,
+      );
+    }
   }
 
   let rows;
@@ -2172,11 +2202,7 @@ async function handleUpdateMarkdownConfig(
       console.error(
         'handleUpdateMarkdownConfig: markdown config schema missing — apply Neon migration 0003_add_configurable_markdown_matrix.',
       );
-      return errorResponse(
-        'Markdown settings storage is not ready yet. The database migration for this feature has not been applied — please contact your administrator.',
-        503,
-        env,
-      );
+      return markdownSchemaMissingResponse(env);
     }
     throw error;
   }
