@@ -157,6 +157,68 @@ describe('minimal API route table', () => {
     );
   });
 
+  it('returns the default markdown matrix for an authenticated organization', async () => {
+    mockedAuthenticateClerkRequest.mockResolvedValue(authenticatedClerkOrgContext);
+    const dbWithRows = createAuthenticatedOrgDatabase({
+      'FROM organization_markdown_config': [],
+      'FROM products': [],
+    });
+
+    const response = await resolveMinimalGet('/api/markdown-config', dbWithRows);
+
+    expect(response?.status).toBe(200);
+    await expect(response?.json()).resolves.toEqual({
+      matrix: {
+        band1: { percentage: 50, basis: 'cost' },
+        band2: { percentage: 60, basis: 'cost' },
+        band3: { percentage: 75, basis: 'cost' },
+      },
+      hasRetailData: false,
+    });
+  });
+
+  it('persists a valid markdown matrix for organization admins', async () => {
+    mockedAuthenticateClerkRequest.mockResolvedValue(authenticatedClerkOrgContext);
+    const dbWithRows = createAuthenticatedOrgDatabase({
+      'FROM products': [{ id: 1 }],
+      'INSERT INTO organization_markdown_config': [
+        {
+          band1_percentage: 40,
+          band2_percentage: 55,
+          band3_percentage: 80,
+          band1_basis: 'retail',
+          band2_basis: 'cost',
+          band3_basis: 'retail',
+        },
+      ],
+    });
+
+    const response = await resolveMinimalApiRoute(getMinimalRoutes(), {
+      request: new Request('https://example.com/api/markdown-config', {
+        method: 'PUT',
+        body: JSON.stringify({
+          band1: { percentage: 40, basis: 'retail' },
+          band2: { percentage: 55, basis: 'cost' },
+          band3: { percentage: 80, basis: 'retail' },
+        }),
+      }),
+      pathname: '/api/markdown-config',
+      method: 'PUT',
+      db: dbWithRows,
+      env,
+    });
+
+    expect(response?.status).toBe(200);
+    await expect(response?.json()).resolves.toEqual({
+      matrix: {
+        band1: { percentage: 40, basis: 'retail' },
+        band2: { percentage: 55, basis: 'cost' },
+        band3: { percentage: 80, basis: 'retail' },
+      },
+      hasRetailData: true,
+    });
+  });
+
   it('returns current subscription details for an authenticated organization', async () => {
     mockedAuthenticateClerkRequest.mockResolvedValue(authenticatedClerkOrgContext);
     const dbWithRows = createAuthenticatedOrgDatabase({

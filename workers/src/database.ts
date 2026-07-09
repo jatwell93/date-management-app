@@ -255,6 +255,7 @@ export interface DetailedExpiryReportItem {
   productName: string;
   sku: string;
   costPrice: number;
+  retailPrice: number | null;
   locationId: number;
   locationName: string;
   subDepartment: string | null;
@@ -842,6 +843,7 @@ export function createWorkersDatabase(env: Env): Database {
           p.name as "productName",
           COALESCE(p.sku, '') as sku,
           COALESCE(p.cost_price, 0) as "costPrice",
+          p.retail_price as "retailPrice",
           sa.id as "locationId",
           sa.name as "locationName",
           sa.sub_department as "subDepartment"
@@ -874,6 +876,7 @@ export function createWorkersDatabase(env: Env): Database {
           p.name as "productName",
           COALESCE(p.sku, '') as sku,
           COALESCE(p.cost_price, 0) as "costPrice",
+          p.retail_price as "retailPrice",
           sa.id as "locationId",
           sa.name as "locationName",
           sa.sub_department as "subDepartment"
