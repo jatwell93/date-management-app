@@ -211,6 +211,7 @@ export const MINIMAL_API_ROUTES: MinimalApiRoute[] = [
   ['GET', '/api/reports/daily-usage', handleGetDailyUsageReport],
   ['GET', '/api/reports/items-by-user', handleGetItemsByUserReport],
   ['GET', '/api/reports/items-by-date', handleGetItemsByDateReport],
+  ['GET', '/api/reports/store-walk-audit', handleGetStoreWalkAuditReport],
   ['GET', '/api/reports/loss-by-sku', handleGetLossBySkuReport],
   ['GET', '/api/reports/loss-by-department', handleGetLossByDepartmentReport],
   ['GET', '/api/reports/sell-through', handleGetSellThroughReport],
@@ -1175,6 +1176,20 @@ async function handleGetItemsByDateReport(
 }
 
 /**
+ * GET /api/reports/store-walk-audit
+ */
+async function handleGetStoreWalkAuditReport(
+  request: Request,
+  db: Database,
+  env: Env,
+): Promise<Response> {
+  const auth = await authenticateApiRequest(request, env, db);
+  if (auth instanceof Response) return auth;
+  const report = await db.getStoreWalkAuditReport(auth.organizationId);
+  return jsonResponse(report, 200, env);
+}
+
+/**
  * GET /api/reports/loss-by-sku
  */
 async function handleGetLossBySkuReport(
@@ -1536,6 +1551,8 @@ async function handleCreateStoreArea(request: Request, db: Database, env: Env): 
     name?: string;
     subDepartment?: string | null;
     sub_department?: string | null;
+    parentId?: number | null;
+    parent_id?: number | null;
   };
 
   if (!body.name || typeof body.name !== 'string' || body.name.trim().length === 0) {
@@ -1553,6 +1570,7 @@ async function handleCreateStoreArea(request: Request, db: Database, env: Env): 
     const area = await db.createStoreArea(auth.organizationId, {
       name: body.name.trim(),
       subDepartment: subDepartment ?? null,
+      parentId: body.parentId ?? body.parent_id ?? null,
     });
     return jsonResponse(area, 201, env);
   } catch (error) {
@@ -1586,14 +1604,21 @@ async function handleUpdateStoreArea(
     name?: string;
     subDepartment?: string | null;
     sub_department?: string | null;
+    parentId?: number | null;
+    parent_id?: number | null;
   };
 
-  const data: { name?: string; subDepartment?: string | null } = {};
+  const data: { name?: string; subDepartment?: string | null; parentId?: number | null } = {};
   if (typeof body.name === 'string') data.name = body.name.trim();
   if (body.subDepartment !== undefined) {
     data.subDepartment = body.subDepartment ?? null;
   } else if (body.sub_department !== undefined) {
     data.subDepartment = body.sub_department ?? null;
+  }
+  if (body.parentId !== undefined) {
+    data.parentId = body.parentId;
+  } else if (body.parent_id !== undefined) {
+    data.parentId = body.parent_id;
   }
 
   const updated = await db.updateStoreArea(auth.organizationId, id, data);

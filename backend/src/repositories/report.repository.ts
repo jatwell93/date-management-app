@@ -104,6 +104,29 @@ export interface ItemsByDateReportItem {
   itemCount: number;
 }
 
+export interface StoreWalkAuditUser {
+  userId: number;
+  userName: string;
+  baysChecked: number;
+  coveragePercent: number;
+  baysPerHour: number;
+}
+
+export interface StoreWalkAuditFlag {
+  type: 'implausible_pace' | 'all_zero_findings';
+  userName: string;
+  message: string;
+}
+
+export interface StoreWalkAuditCycle {
+  cycleId: number;
+  cycleName: string;
+  status: string;
+  completionMinutes: number | null;
+  users: StoreWalkAuditUser[];
+  flags: StoreWalkAuditFlag[];
+}
+
 export interface DashboardAnalytics {
   totalProducts: number;
   totalInventoryItems: number;
@@ -518,4 +541,119 @@ export class ReportRepository {
     `);
     return stmt.all(this.organizationId) as ItemsByDateReportItem[];
   }
+
+  getStoreWalkAuditReport(): StoreWalkAuditCycle[] {
+    const totalBays = (
+      this.db
+        .prepare(
+          `SELECT COUNT(*) as count
+           FROM store_areas
+           WHERE organization_id = ? AND parent_id IS NOT NULL`,
+        )
+        .get(this.organizationId) as { count: number }
+    ).count;
+
+    const cycleRows = this.db
+      .prepare(
+        `SELECT id as cycleId,
+                name as cycleName,
+                status,
+                started_at as startedAt,
+                completed_at as completedAt
+         FROM check_cycles
+         WHERE organization_id = ?
+         ORDER BY started_at DESC, id DESC
+         LIMIT 12`,
+      )
+      .all(this.organizationId) as Array<{
+      cycleId: number;
+      cycleName: string;
+      status: string;
+      startedAt: string;
+      completedAt: string | null;
+    }>;
+
+    const userRows = this.db
+      .prepare(
+        `SELECT bc.cycle_id as cycleId,
+                COALESCE(u.id, bc.user_id, 0) as userId,
+                COALESCE(u.pin, u.role, 'Unknown user') as userName,
+                COUNT(DISTINCT bc.store_area_id) as baysChecked,
+                MIN(bc.checked_at) as firstCheckedAt,
+                MAX(bc.checked_at) as lastCheckedAt,
+                SUM(CASE WHEN bc.items_added_count = 0 THEN 1 ELSE 0 END) as zeroFindingChecks
+         FROM bay_checks bc
+         LEFT JOIN users u ON bc.user_id = u.id
+         WHERE bc.organization_id = ?
+         GROUP BY bc.cycle_id, COALESCE(u.id, bc.user_id, 0), COALESCE(u.pin, u.role, 'Unknown user')
+         ORDER BY bc.cycle_id DESC, baysChecked DESC`,
+      )
+      .all(this.organizationId) as Array<{
+      cycleId: number;
+      userId: number;
+      userName: string;
+      baysChecked: number;
+      firstCheckedAt: string;
+      lastCheckedAt: string;
+      zeroFindingChecks: number;
+    }>;
+
+    return cycleRows.map((cycle) => {
+      const users = userRows
+        .filter((row) => row.cycleId === cycle.cycleId)
+        .map((row) => {
+          const firstCheckedAt = new Date(row.firstCheckedAt).getTime();
+          const lastCheckedAt = new Date(row.lastCheckedAt).getTime();
+          const elapsedHours = Math.max((lastCheckedAt - firstCheckedAt) / 3_600_000, 1 / 60);
+          const baysChecked = Number(row.baysChecked);
+          return {
+            userId: Number(row.userId),
+            userName: row.userName,
+            baysChecked,
+            coveragePercent: totalBays === 0 ? 0 : Math.round((baysChecked / totalBays) * 100),
+            baysPerHour: Number((baysChecked / elapsedHours).toFixed(1)),
+          };
+        });
+
+      const flags = users.flatMap((user) => {
+        const source = userRows.find(
+          (row) => row.cycleId === cycle.cycleId && Number(row.userId) === user.userId,
+        );
+        const userFlags: StoreWalkAuditFlag[] = [];
+        if (user.baysPerHour > 10) {
+          userFlags.push({
+            type: 'implausible_pace',
+            userName: user.userName,
+            message: `${numberFormatter(user.baysPerHour)} bays/hour is faster than the review threshold.`,
+          });
+        }
+        if (source && Number(source.zeroFindingChecks) >= 6) {
+          userFlags.push({
+            type: 'all_zero_findings',
+            userName: user.userName,
+            message: `${numberFormatter(Number(source.zeroFindingChecks))} consecutive bay checks recorded zero items added.`,
+          });
+        }
+        return userFlags;
+      });
+
+      return {
+        cycleId: Number(cycle.cycleId),
+        cycleName: cycle.cycleName,
+        status: cycle.status,
+        completionMinutes: cycle.completedAt
+          ? Math.round(
+              (new Date(cycle.completedAt).getTime() - new Date(cycle.startedAt).getTime()) /
+                60_000,
+            )
+          : null,
+        users,
+        flags,
+      };
+    });
+  }
+}
+
+function numberFormatter(value: number): string {
+  return new Intl.NumberFormat('en-AU', { maximumFractionDigits: 1 }).format(value);
 }

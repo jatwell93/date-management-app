@@ -94,7 +94,7 @@ export class StoreAreaController {
   }
 
   async createStoreArea(req: AuthRequest, res: Response, next: NextFunction): Promise<void> {
-    const { name, subDepartment, lastChecked } = req.body;
+    const { name, subDepartment, lastChecked, parentId } = req.body;
     if (!name) {
       res.status(400).json({ message: 'Missing required store area fields' });
       return;
@@ -105,6 +105,7 @@ export class StoreAreaController {
         name,
         subDepartment,
         lastChecked,
+        parentId,
       } as StoreAreaPayload);
       res.status(201).json(newArea);
     } catch (error) {
@@ -117,11 +118,12 @@ export class StoreAreaController {
       const id = this.parseStoreAreaId(req, res);
       if (id === undefined) return;
 
-      const { name, subDepartment, lastChecked } = req.body;
+      const { name, subDepartment, lastChecked, parentId } = req.body;
       const updateData: Partial<StoreAreaPayload> = {};
       if (name !== undefined) updateData.name = name;
       if (subDepartment !== undefined) updateData.subDepartment = subDepartment;
       if (lastChecked !== undefined) updateData.lastChecked = lastChecked;
+      if (parentId !== undefined) updateData.parentId = parentId;
 
       const updatedArea = await this.getService(req).updateStoreArea(id, updateData);
       if (!updatedArea) {

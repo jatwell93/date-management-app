@@ -244,6 +244,7 @@ export const storeAreaSchema = z.object({
       .string()
       .regex(/^\d{4}-\d{2}-\d{2}$/, 'Last checked date must be in YYYY-MM-DD format')
       .optional(),
+    parentId: z.number().int().positive('Parent department ID must be positive').optional(),
   }),
 });
 

@@ -144,6 +144,7 @@ describe('minimal API route table', () => {
     expect(routes).toEqual(
       expect.arrayContaining([
         expect.arrayContaining(['GET', '/api/expired-items/reports/expired-losses']),
+        expect.arrayContaining(['GET', '/api/reports/store-walk-audit']),
       ]),
     );
   });

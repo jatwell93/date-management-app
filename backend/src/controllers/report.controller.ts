@@ -119,6 +119,14 @@ export class ReportController {
     await this.respondWithReport(req, res, next, (service) => service.getItemsByDateReport());
   }
 
+  async getStoreWalkAuditReport(
+    req: AuthRequest,
+    res: Response,
+    next: NextFunction,
+  ): Promise<void> {
+    await this.respondWithReport(req, res, next, (service) => service.getStoreWalkAuditReport());
+  }
+
   async getDashboardAnalytics(req: AuthRequest, res: Response, next: NextFunction): Promise<void> {
     await this.respondWithReport(req, res, next, (service) => service.getDashboardAnalytics());
   }

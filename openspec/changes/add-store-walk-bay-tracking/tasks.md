@@ -28,13 +28,13 @@
 - [x] Conformance test comparing floor-progress / coverage output (including row order) across Postgres/pglite and SQLite via the shared resolver.
 
 ### Frontend
-- [ ] Floor Progress view: bays grouped by department, colored checked-this-cycle / not-yet / overdue with checker name + time; tap a bay to record a `BayCheck`; cycle progress bar (dept + store %).
-- [ ] Cycle controls: start a new walk, complete the active walk; empty/no-active-cycle states.
-- [ ] Extend `StoreAreaManagementPage.tsx` to assign a bay's parent department.
-- [ ] Extend `UsageReportPage.tsx`: per-user coverage %, bays/hour, cycle completion time, implausible-pace / all-zero-findings red flags.
-- [ ] Frontend tests: floor-progress render + tap-to-check, cycle start/complete, audit metrics.
+- [x] Floor Progress view: bays grouped by department, colored checked-this-cycle / not-yet / overdue with checker name + time; tap a bay to record a `BayCheck`; cycle progress bar (dept + store %).
+- [x] Cycle controls: start a new walk, complete the active walk; empty/no-active-cycle states.
+- [x] Extend `StoreAreaManagementPage.tsx` to assign a bay's parent department.
+- [x] Extend `UsageReportPage.tsx`: per-user coverage %, bays/hour, cycle completion time, implausible-pace / all-zero-findings red flags.
+- [x] Frontend tests: floor-progress render + tap-to-check, cycle start/complete, audit metrics.
 
 ### Completion checks
-- [ ] Backend + frontend lint and `tsc` clean for new files.
-- [ ] Affected worker + backend + frontend tests pass.
-- [ ] `npx openspec validate add-store-walk-bay-tracking --strict` passes.
+- [x] Backend + frontend lint and `tsc` clean for new files.
+- [x] Affected worker + backend + frontend tests pass.
+- [x] `npx openspec validate add-store-walk-bay-tracking --strict` passes.

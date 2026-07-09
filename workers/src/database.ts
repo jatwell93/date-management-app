@@ -67,6 +67,7 @@ export interface Database {
     timeFrameDays?: string,
   ): Promise<ItemsByUserReportItem[]>;
   getItemsByDateReport(organizationId: string): Promise<ItemsByDateReportItem[]>;
+  getStoreWalkAuditReport(organizationId: string): Promise<StoreWalkAuditCycle[]>;
   getLossBySkuReport(organizationId: string): Promise<LossBySkuReportItem[]>;
   getLossByDepartmentReport(organizationId: string): Promise<LossByDepartmentReportItem[]>;
   getExpiredLossBySku(organizationId: string): Promise<LossBySkuReportItem[]>;
@@ -129,12 +130,12 @@ export interface Database {
   // Store area CRUD
   createStoreArea(
     organizationId: string,
-    data: { name: string; subDepartment?: string | null },
+    data: { name: string; subDepartment?: string | null; parentId?: number | null },
   ): Promise<StoreArea>;
   updateStoreArea(
     organizationId: string,
     id: number,
-    data: { name?: string; subDepartment?: string | null },
+    data: { name?: string; subDepartment?: string | null; parentId?: number | null },
   ): Promise<StoreArea | null>;
   deleteStoreArea(organizationId: string, id: number): Promise<boolean>;
 
@@ -324,6 +325,29 @@ export interface ItemsByDateReportItem {
   itemCount: number;
 }
 
+export interface StoreWalkAuditUser {
+  userId: number;
+  userName: string;
+  baysChecked: number;
+  coveragePercent: number;
+  baysPerHour: number;
+}
+
+export interface StoreWalkAuditFlag {
+  type: 'implausible_pace' | 'all_zero_findings';
+  userName: string;
+  message: string;
+}
+
+export interface StoreWalkAuditCycle {
+  cycleId: number;
+  cycleName: string;
+  status: string;
+  completionMinutes: number | null;
+  users: StoreWalkAuditUser[];
+  flags: StoreWalkAuditFlag[];
+}
+
 export interface DetailedExpiryReportItem {
   inventoryId: number;
   expiryDate: string;
@@ -430,6 +454,10 @@ function isPositiveInteger(value: unknown): value is number {
 
 function toNumberOrNull(value: unknown): number | null {
   return value === null || value === undefined ? null : Number(value);
+}
+
+function formatStoreWalkAuditNumber(value: number): string {
+  return new Intl.NumberFormat('en-AU', { maximumFractionDigits: 1 }).format(value);
 }
 
 function toIsoStringOrNull(value: unknown): string | null {
@@ -1084,6 +1112,102 @@ export function createWorkersDatabase(env: Env): Database {
       `) as ItemsByDateReportItem[];
     },
 
+    async getStoreWalkAuditReport(organizationId: string): Promise<StoreWalkAuditCycle[]> {
+      const totalBayRows = (await sql`
+        SELECT COUNT(*)::int as count
+        FROM store_areas
+        WHERE organization_id = ${organizationId}
+          AND parent_id IS NOT NULL
+      `) as Array<{ count: number }>;
+      const totalBays = Number(totalBayRows[0]?.count ?? 0);
+
+      const cycleRows = (await sql`
+        SELECT id as "cycleId",
+               name as "cycleName",
+               status,
+               CASE
+                 WHEN completed_at IS NULL THEN NULL
+                 ELSE ROUND(EXTRACT(EPOCH FROM (completed_at - started_at)) / 60)::int
+               END as "completionMinutes"
+        FROM check_cycles
+        WHERE organization_id = ${organizationId}
+        ORDER BY started_at DESC, id DESC
+        LIMIT 12
+      `) as Array<{
+        cycleId: number;
+        cycleName: string;
+        status: string;
+        completionMinutes: number | null;
+      }>;
+
+      const userRows = (await sql`
+        SELECT bc.cycle_id as "cycleId",
+               COALESCE(u.id, bc.user_id, 0) as "userId",
+               COALESCE(u.username, u.email, 'Unknown user') as "userName",
+               COUNT(DISTINCT bc.store_area_id)::int as "baysChecked",
+               GREATEST(
+                 EXTRACT(EPOCH FROM (MAX(bc.checked_at) - MIN(bc.checked_at))) / 3600,
+                 1.0 / 60.0
+               ) as "elapsedHours",
+               SUM(CASE WHEN bc.items_added_count = 0 THEN 1 ELSE 0 END)::int as "zeroFindingChecks"
+        FROM bay_checks bc
+        LEFT JOIN users u ON bc.user_id = u.id
+        WHERE bc.organization_id = ${organizationId}
+        GROUP BY bc.cycle_id, COALESCE(u.id, bc.user_id, 0), COALESCE(u.username, u.email, 'Unknown user')
+        ORDER BY bc.cycle_id DESC, "baysChecked" DESC
+      `) as Array<{
+        cycleId: number;
+        userId: number;
+        userName: string;
+        baysChecked: number;
+        elapsedHours: number | string;
+        zeroFindingChecks: number;
+      }>;
+
+      return cycleRows.map((cycle) => {
+        const sourceRows = userRows.filter((row) => Number(row.cycleId) === Number(cycle.cycleId));
+        const users = sourceRows.map((row) => {
+          const baysChecked = Number(row.baysChecked);
+          const elapsedHours = Number(row.elapsedHours);
+          return {
+            userId: Number(row.userId),
+            userName: row.userName,
+            baysChecked,
+            coveragePercent: totalBays === 0 ? 0 : Math.round((baysChecked / totalBays) * 100),
+            baysPerHour: Number((baysChecked / elapsedHours).toFixed(1)),
+          };
+        });
+        const flags = users.flatMap((user) => {
+          const source = sourceRows.find((row) => Number(row.userId) === user.userId);
+          const userFlags: StoreWalkAuditFlag[] = [];
+          if (user.baysPerHour > 10) {
+            userFlags.push({
+              type: 'implausible_pace',
+              userName: user.userName,
+              message: `${formatStoreWalkAuditNumber(user.baysPerHour)} bays/hour is faster than the review threshold.`,
+            });
+          }
+          if (source && Number(source.zeroFindingChecks) >= 6) {
+            userFlags.push({
+              type: 'all_zero_findings',
+              userName: user.userName,
+              message: `${formatStoreWalkAuditNumber(Number(source.zeroFindingChecks))} bay checks recorded zero items added.`,
+            });
+          }
+          return userFlags;
+        });
+        return {
+          cycleId: Number(cycle.cycleId),
+          cycleName: cycle.cycleName,
+          status: cycle.status,
+          completionMinutes:
+            cycle.completionMinutes === null ? null : Number(cycle.completionMinutes),
+          users,
+          flags,
+        };
+      });
+    },
+
     // Standalone /api/reports/loss-by-* endpoints (ExpiredItemsPage charts). These
     // value the stock CURRENTLY sitting expired, mirroring the SQLite backend's
     // report.repository. Kept distinct from the write-off ledger reports below so
@@ -1545,11 +1669,25 @@ export function createWorkersDatabase(env: Env): Database {
     // ---- Store area CRUD ----
     async createStoreArea(
       organizationId: string,
-      data: { name: string; subDepartment?: string | null },
+      data: { name: string; subDepartment?: string | null; parentId?: number | null },
     ): Promise<StoreArea> {
       const rows = await sql`
-        INSERT INTO store_areas (organization_id, name, sub_department, created_at, updated_at)
-        VALUES (${organizationId}, ${data.name}, ${data.subDepartment ?? null}, NOW(), NOW())
+        INSERT INTO store_areas (
+          organization_id,
+          name,
+          sub_department,
+          parent_id,
+          created_at,
+          updated_at
+        )
+        VALUES (
+          ${organizationId},
+          ${data.name},
+          ${data.subDepartment ?? null},
+          ${data.parentId ?? null},
+          NOW(),
+          NOW()
+        )
         RETURNING id, name,
                   parent_id as "parentId",
                   sub_department as "subDepartment",
@@ -1562,7 +1700,7 @@ export function createWorkersDatabase(env: Env): Database {
     async updateStoreArea(
       organizationId: string,
       id: number,
-      data: { name?: string; subDepartment?: string | null },
+      data: { name?: string; subDepartment?: string | null; parentId?: number | null },
     ): Promise<StoreArea | null> {
       const existing = await sql`
         SELECT id FROM store_areas
@@ -1580,6 +1718,10 @@ export function createWorkersDatabase(env: Env): Database {
           sub_department = CASE
             WHEN ${data.subDepartment === undefined} THEN sub_department
             ELSE ${data.subDepartment ?? null}
+          END,
+          parent_id = CASE
+            WHEN ${data.parentId === undefined} THEN parent_id
+            ELSE ${data.parentId ?? null}
           END,
           updated_at = NOW()
         WHERE id = ${id} AND organization_id = ${organizationId}

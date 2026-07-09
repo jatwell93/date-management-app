@@ -56,6 +56,9 @@ describe('UsageReportPage', () => {
       if (url === '/reports/items-by-date') {
         return Promise.resolve([{ date: '2025-01-30', itemCount: 20 }]);
       }
+      if (url === '/reports/store-walk-audit') {
+        return Promise.resolve([]);
+      }
       return Promise.resolve([]);
     });
 
@@ -155,5 +158,76 @@ describe('UsageReportPage', () => {
     expect(
       await screen.findByRole('table', { name: /Items added per day summary/i }),
     ).toBeInTheDocument();
+  });
+
+  it('renders store walk audit metrics and red flags', async () => {
+    // @ts-expect-error — apiService.get is mocked as vi.fn()
+    apiService.get.mockImplementation((url) => {
+      if (url === '/reports/daily-usage') {
+        return Promise.resolve([]);
+      }
+      if (url.startsWith('/reports/items-by-user')) {
+        return Promise.resolve([]);
+      }
+      if (url === '/reports/items-by-date') {
+        return Promise.resolve([]);
+      }
+      if (url === '/reports/store-walk-audit') {
+        return Promise.resolve([
+          {
+            cycleId: 31,
+            cycleName: 'July walk',
+            status: 'completed',
+            completionMinutes: 42,
+            users: [
+              {
+                userId: 7,
+                userName: 'Alex Checker',
+                baysChecked: 9,
+                coveragePercent: 75,
+                baysPerHour: 12.5,
+              },
+            ],
+            flags: [
+              {
+                type: 'implausible_pace',
+                userName: 'Alex Checker',
+                message: '12.5 bays/hour is faster than the review threshold.',
+              },
+              {
+                type: 'all_zero_findings',
+                userName: 'Alex Checker',
+                message: 'Six consecutive bay checks recorded zero items added.',
+              },
+            ],
+          },
+        ]);
+      }
+      return Promise.resolve([]);
+    });
+
+    render(<UsageReportPage token="test-session-value" />);
+
+    expect(await screen.findByRole('heading', { name: /Store Walk Audit/i })).toBeInTheDocument();
+    expect(screen.getByRole('region', { name: /Store walk audit/i })).toHaveTextContent(
+      /July walk/i,
+    );
+    expect(screen.getByRole('table', { name: /Store walk productivity/i })).toHaveTextContent(
+      /Alex Checker/i,
+    );
+    expect(screen.getByRole('table', { name: /Store walk productivity/i })).toHaveTextContent(
+      /75%/i,
+    );
+    expect(screen.getByRole('table', { name: /Store walk productivity/i })).toHaveTextContent(
+      /12.5 bays\/hour/i,
+    );
+    expect(screen.getByText(/42 min/i)).toBeInTheDocument();
+    expect(screen.getByText(/Implausible pace/i)).toBeInTheDocument();
+    expect(screen.getByText(/All-zero findings/i)).toBeInTheDocument();
+    expect(apiService.get).toHaveBeenCalledWith(
+      '/reports/store-walk-audit',
+      'test-session-value',
+      expect.any(AbortSignal),
+    );
   });
 });
