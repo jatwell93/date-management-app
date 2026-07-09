@@ -7,10 +7,12 @@ import { createPgliteHarness, createTaggedSql, type PgliteHarness } from './__te
 import { DISPOSITIONED_STATUSES } from '../../shared/domain/disposition';
 import { MARKDOWN_WINDOWS } from '../../shared/domain/markdown';
 import { ReportRepository } from '../../backend/src/repositories/report.repository';
+import type { FloorProgress } from '../../backend/src/models/store-area.model';
 
 const backendRequire = createRequire(
   fileURLToPath(new URL('../../backend/package.json', import.meta.url)),
 );
+backendRequire('reflect-metadata');
 const SQLiteDatabase = backendRequire('better-sqlite3') as typeof import('better-sqlite3');
 
 const sqlHolder = vi.hoisted(() => ({ current: null as unknown }));
@@ -47,8 +49,41 @@ function createSqliteDb(): import('better-sqlite3').Database {
     CREATE TABLE store_areas (
       id INTEGER PRIMARY KEY AUTOINCREMENT,
       organization_id TEXT NOT NULL,
+      parent_id INTEGER,
       name TEXT NOT NULL,
-      sub_department TEXT
+      sub_department TEXT,
+      last_checked TEXT
+    );
+    CREATE TABLE users (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      organization_id TEXT NOT NULL,
+      email TEXT,
+      username TEXT,
+      role TEXT NOT NULL,
+      created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+      updated_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
+    );
+    CREATE TABLE check_cycles (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      organization_id TEXT NOT NULL,
+      name TEXT NOT NULL,
+      status TEXT NOT NULL DEFAULT 'active',
+      started_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+      completed_at TEXT,
+      created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+      updated_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
+    );
+    CREATE TABLE bay_checks (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      organization_id TEXT NOT NULL,
+      cycle_id INTEGER NOT NULL,
+      store_area_id INTEGER NOT NULL,
+      user_id INTEGER,
+      checked_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+      items_added_count INTEGER NOT NULL DEFAULT 0,
+      notes TEXT,
+      created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+      updated_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
     );
     CREATE TABLE inventory_items (
       id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -73,6 +108,32 @@ function createSqliteDb(): import('better-sqlite3').Database {
     );
   `);
   return db;
+}
+
+function toSqliteStatement(strings: TemplateStringsArray, values: unknown[]) {
+  let text = '';
+  strings.forEach((chunk, index) => {
+    text += chunk;
+    if (index < values.length) {
+      text += '?';
+    }
+  });
+  return text;
+}
+
+function createSqlitePrismaAdapter(db: import('better-sqlite3').Database) {
+  const runRaw = (strings: TemplateStringsArray, ...values: unknown[]) => {
+    const text = toSqliteStatement(strings, values);
+    return db.prepare(text).all(...values);
+  };
+
+  return {
+    $queryRaw: runRaw,
+    $executeRaw: (strings: TemplateStringsArray, ...values: unknown[]) => {
+      const text = toSqliteStatement(strings, values);
+      return db.prepare(text).run(...values).changes;
+    },
+  };
 }
 
 function expiryDateForOffset(offsetDays: number): string {
@@ -114,6 +175,126 @@ function normalizeSellThrough(
     markdownLevel: row.markdownLevel === null ? null : Number(row.markdownLevel),
     soldCount: Number(row.soldCount),
   }));
+}
+
+function normalizeFloorProgress(progress: FloorProgress) {
+  return {
+    activeCycle: progress.activeCycle
+      ? {
+          id: progress.activeCycle.id,
+          name: progress.activeCycle.name,
+          status: progress.activeCycle.status,
+          startedAt: progress.activeCycle.startedAt,
+        }
+      : null,
+    summary: progress.summary,
+    departments: progress.departments.map((department) => ({
+      department: department.department,
+      summary: department.summary,
+      bays: department.bays.map((bay) => ({
+        id: bay.id,
+        name: bay.name,
+        parentId: bay.parentId,
+        state: bay.state,
+        checkedAt: bay.checkedAt,
+        checkedBy: bay.checkedBy,
+      })),
+    })),
+  };
+}
+
+async function seedWorkersStoreWalkFloorProgress(sql: NeonQueryFunction<false, false>) {
+  await sql`DELETE FROM bay_checks`;
+  await sql`DELETE FROM check_cycles`;
+  await sql`DELETE FROM store_areas`;
+  await sql`DELETE FROM users`;
+  await sql`
+    INSERT INTO organizations (id, name, slug)
+    VALUES (${ORG}, ${'Conformance Org'}, ${'conformance-org'})
+  `;
+  await sql`
+    INSERT INTO users (id, organization_id, email, username, role)
+    VALUES (${7}, ${ORG}, ${'checker@example.test'}, ${'Checker One'}, ${'team_member'})
+  `;
+  await sql`
+    INSERT INTO store_areas (id, organization_id, name, sub_department)
+    VALUES
+      (${10}, ${ORG}, ${'Bakery'}, ${'Bakery'}),
+      (${20}, ${ORG}, ${'Dairy'}, ${'Dairy'})
+  `;
+  await sql`
+    INSERT INTO store_areas (id, organization_id, parent_id, name, sub_department, last_checked)
+    VALUES
+      (${12}, ${ORG}, ${10}, ${'Bakery Bay 2'}, ${'Bakery'}, ${null}),
+      (${11}, ${ORG}, ${10}, ${'Bakery Bay 1'}, ${'Bakery'}, ${'2026-07-09T07:00:00.000Z'}::timestamptz),
+      (${22}, ${ORG}, ${20}, ${'Dairy Bay 2'}, ${'Dairy'}, ${'2026-07-09T09:30:00.000Z'}::timestamptz),
+      (${21}, ${ORG}, ${20}, ${'Dairy Bay 1'}, ${'Dairy'}, ${'2026-07-09T06:00:00.000Z'}::timestamptz)
+  `;
+  await sql`
+    INSERT INTO check_cycles (id, organization_id, name, status, started_at, created_at, updated_at)
+    VALUES (
+      ${31},
+      ${ORG},
+      ${'Morning walk'},
+      ${'active'},
+      ${'2026-07-09T08:00:00.000Z'}::timestamptz,
+      ${'2026-07-09T08:00:00.000Z'}::timestamptz,
+      ${'2026-07-09T08:00:00.000Z'}::timestamptz
+    )
+  `;
+  await sql`
+    INSERT INTO bay_checks (
+      id, organization_id, cycle_id, store_area_id, user_id, checked_at, items_added_count
+    )
+    VALUES (
+      ${41},
+      ${ORG},
+      ${31},
+      ${22},
+      ${7},
+      ${'2026-07-09T10:00:00.000Z'}::timestamptz,
+      ${2}
+    )
+  `;
+}
+
+function seedSqliteStoreWalkFloorProgress(sqlite: import('better-sqlite3').Database) {
+  sqlite
+    .prepare('INSERT INTO users (id, organization_id, email, username, role) VALUES (?, ?, ?, ?, ?)')
+    .run(7, ORG, 'checker@example.test', 'checker-one', 'Checker One');
+  sqlite
+    .prepare('INSERT INTO store_areas (id, organization_id, name, sub_department) VALUES (?, ?, ?, ?)')
+    .run(10, ORG, 'Bakery', 'Bakery');
+  sqlite
+    .prepare('INSERT INTO store_areas (id, organization_id, name, sub_department) VALUES (?, ?, ?, ?)')
+    .run(20, ORG, 'Dairy', 'Dairy');
+
+  const insertBay = sqlite.prepare(
+    'INSERT INTO store_areas (id, organization_id, parent_id, name, sub_department, last_checked) VALUES (?, ?, ?, ?, ?, ?)',
+  );
+  insertBay.run(12, ORG, 10, 'Bakery Bay 2', 'Bakery', null);
+  insertBay.run(11, ORG, 10, 'Bakery Bay 1', 'Bakery', '2026-07-09T07:00:00.000Z');
+  insertBay.run(22, ORG, 20, 'Dairy Bay 2', 'Dairy', '2026-07-09T09:30:00.000Z');
+  insertBay.run(21, ORG, 20, 'Dairy Bay 1', 'Dairy', '2026-07-09T06:00:00.000Z');
+
+  sqlite
+    .prepare(
+      'INSERT INTO check_cycles (id, organization_id, name, status, started_at, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?)',
+    )
+    .run(
+      31,
+      ORG,
+      'Morning walk',
+      'active',
+      '2026-07-09T08:00:00.000Z',
+      '2026-07-09T08:00:00.000Z',
+      '2026-07-09T08:00:00.000Z',
+    );
+  sqlite
+    .prepare(
+      'INSERT INTO bay_checks (id, organization_id, cycle_id, store_area_id, user_id, checked_at, items_added_count) VALUES (?, ?, ?, ?, ?, ?, ?)',
+    )
+    .run(41, ORG, 31, 22, 7, '2026-07-09T10:00:00.000Z', 2);
 }
 
 describe('dual-backend report conformance', () => {
@@ -251,5 +432,19 @@ describe('dual-backend report conformance', () => {
     await expect(
       workersDb.getSellThroughByMarkdownLevel(ORG).then(normalizeSellThrough),
     ).resolves.toEqual(normalizeSellThrough(sqliteRepo.getSellThroughByMarkdownLevel()));
+  });
+
+  it('returns identical store-walk floor-progress coverage and row order', async () => {
+    await seedWorkersStoreWalkFloorProgress(sql);
+    seedSqliteStoreWalkFloorProgress(sqlite);
+    const workersDb = createWorkersDatabase({ NEON_CONNECTION_STRING: 'postgres://test' } as Env);
+    const { StoreAreaRepository } = await import(
+      '../../backend/src/repositories/store-area.repository'
+    );
+    const sqliteRepo = new StoreAreaRepository(createSqlitePrismaAdapter(sqlite) as never);
+
+    await expect(workersDb.getFloorProgress(ORG).then(normalizeFloorProgress)).resolves.toEqual(
+      normalizeFloorProgress(await sqliteRepo.getFloorProgress(ORG)),
+    );
   });
 });

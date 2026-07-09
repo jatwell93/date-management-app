@@ -25,7 +25,7 @@
 - [x] Backend route/validation/service unit tests (cycle lifecycle, leaf rejection, no-active-cycle rejection, coverage read).
 
 ### Dual-backend conformance (golden rule 5)
-- [ ] Conformance test comparing floor-progress / coverage output (including row order) across Postgres/pglite and SQLite via the shared resolver.
+- [x] Conformance test comparing floor-progress / coverage output (including row order) across Postgres/pglite and SQLite via the shared resolver.
 
 ### Frontend
 - [ ] Floor Progress view: bays grouped by department, colored checked-this-cycle / not-yet / overdue with checker name + time; tap a bay to record a `BayCheck`; cycle progress bar (dept + store %).
