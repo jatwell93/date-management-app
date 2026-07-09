@@ -41,7 +41,8 @@ function createSqliteDb(): import('better-sqlite3').Database {
       barcode TEXT NOT NULL,
       sku TEXT NOT NULL,
       name TEXT NOT NULL,
-      cost_price REAL NOT NULL DEFAULT 0
+      cost_price REAL NOT NULL DEFAULT 0,
+      retail_price REAL
     );
     CREATE TABLE store_areas (
       id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -87,6 +88,7 @@ function normalizeDetailedRows(
     expiryDate: row.expiryDate.slice(0, 10),
     status: row.status,
     sku: row.sku,
+    retailPrice: row.retailPrice === null ? null : Number(row.retailPrice),
     subDepartment: row.subDepartment ?? '',
   }));
 }
@@ -157,8 +159,8 @@ describe('dual-backend report conformance', () => {
     const status = seed.status ?? 'Active';
     const expiryDate = expiryDateForOffset(seed.offsetDays);
     const productRows = await sql`
-      INSERT INTO products (organization_id, barcode, sku, name, cost_price)
-      VALUES (${org}, ${seed.sku}, ${seed.sku}, ${'Item ' + seed.sku}, 10)
+      INSERT INTO products (organization_id, barcode, sku, name, cost_price, retail_price)
+      VALUES (${org}, ${seed.sku}, ${seed.sku}, ${'Item ' + seed.sku}, 10, 18.5)
       RETURNING id`;
     await sql`
       INSERT INTO inventory_items (organization_id, product_id, location_id, expiry_date, status)
@@ -172,9 +174,9 @@ describe('dual-backend report conformance', () => {
 
     const product = sqlite
       .prepare(
-        'INSERT INTO products (organization_id, barcode, sku, name, cost_price) VALUES (?, ?, ?, ?, ?)',
+        'INSERT INTO products (organization_id, barcode, sku, name, cost_price, retail_price) VALUES (?, ?, ?, ?, ?, ?)',
       )
-      .run(org, seed.sku, seed.sku, `Item ${seed.sku}`, 10);
+      .run(org, seed.sku, seed.sku, `Item ${seed.sku}`, 10, 18.5);
     sqliteProductId = Number(product.lastInsertRowid);
     sqlite
       .prepare(
