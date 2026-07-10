@@ -263,6 +263,26 @@ describe('CreditClaimService', () => {
         ValidationError,
       );
     });
+
+    it('refuses to re-settle a claim in a terminal outcome', async () => {
+      const { service } = makeDeps({ claim: { ...sent, status: 'CREDITED' } });
+      await expect(service.recordOutcome(1, 'CREDITED', 30, null)).rejects.toBeInstanceOf(
+        ValidationError,
+      );
+    });
+
+    it('allows a partially-credited claim to be topped up to credited', async () => {
+      const { service, updateClaim } = makeDeps({
+        claim: { ...sent, status: 'PARTIALLY_CREDITED' },
+      });
+      await service.recordOutcome(1, 'CREDITED', 30, 'balance paid');
+      expect(updateClaim).toHaveBeenCalledWith(
+        'org-1',
+        1,
+        expect.objectContaining({ status: 'CREDITED', creditedValue: 30 }),
+        expect.anything(),
+      );
+    });
   });
 
   describe('sendFollowUp', () => {

@@ -16,6 +16,7 @@ import {
   expectedCredit,
   nextFollowUp,
   isChaseableClaimStatus,
+  isSettledClaimStatus,
   rollupClaimablePool,
   rollupRecoveryReport,
   type RecoveryReport,
@@ -39,6 +40,59 @@ export type ClaimOutcome = 'CREDITED' | 'PARTIALLY_CREDITED' | 'REJECTED';
 
 function addDays(from: Date, days: number): Date {
   return new Date(from.getTime() + days * 24 * 60 * 60 * 1000);
+}
+
+/** A candidate write-off row loaded for claim building. */
+type WriteOffRow = Awaited<ReturnType<CreditClaimRepository['findWriteOffsByIds']>>[number];
+
+/** Sum the non-null values, returning null only when no value was present (unknown ratio). */
+function sumOrNull(values: (number | null)[]): number | null {
+  const present = values.filter((v): v is number => v != null);
+  return present.length ? present.reduce((a, b) => a + b, 0) : null;
+}
+
+/**
+ * Validate one requested line against its write-off and compute the expected credit.
+ * Extracted from buildClaim so the per-line guards live in one small, testable unit.
+ */
+function prepareClaimLine(
+  line: ClaimLineInput,
+  writeOff: WriteOffRow | undefined,
+  supplier: { id: number; policyWriteOffQty: number | null; policyCreditQty: number | null },
+) {
+  if (!writeOff) {
+    throw new NotFoundError(`Write-off ${line.expiredItemTransactionId} not found`);
+  }
+  if (writeOff.action !== 'expired') {
+    throw new ValidationError(`Write-off ${writeOff.id} is not an expired-stock write-off.`);
+  }
+  if (writeOff.creditClaimLine) {
+    throw new ValidationError(`Write-off ${writeOff.id} is already on a claim.`);
+  }
+  const product = writeOff.inventoryItem.product;
+  if (product.supplierId !== supplier.id) {
+    throw new ValidationError(
+      `Write-off ${writeOff.id} is for a product not assigned to this supplier.`,
+    );
+  }
+
+  const unitsClaimed = line.unitsClaimed ?? writeOff.unitsDiscarded ?? 0;
+  if (unitsClaimed <= 0) {
+    throw new ValidationError(`Write-off ${writeOff.id} has no units to claim.`);
+  }
+
+  const credit = expectedCredit(
+    { writeOffQty: supplier.policyWriteOffQty, creditQty: supplier.policyCreditQty },
+    unitsClaimed,
+    product.costPrice ?? 0,
+  );
+  return {
+    expiredItemTransactionId: writeOff.id,
+    batchNumber: line.batchNumber?.trim() || null,
+    unitsClaimed,
+    expectedCreditUnits: credit.units,
+    expectedCreditValue: credit.value,
+  };
 }
 
 export class CreditClaimService {
@@ -101,48 +155,11 @@ export class CreditClaimService {
     const writeOffs = await this.repo.findWriteOffsByIds(this.organizationId, ids);
     const byId = new Map(writeOffs.map((w) => [w.id, w]));
 
-    const ratio = {
-      writeOffQty: supplier.policyWriteOffQty,
-      creditQty: supplier.policyCreditQty,
-    };
-
-    let totalUnits: number | null = null;
-    let totalValue: number | null = null;
-    const lines = input.lines.map((line) => {
-      const writeOff = byId.get(line.expiredItemTransactionId);
-      if (!writeOff) {
-        throw new NotFoundError(`Write-off ${line.expiredItemTransactionId} not found`);
-      }
-      if (writeOff.action !== 'expired') {
-        throw new ValidationError(`Write-off ${writeOff.id} is not an expired-stock write-off.`);
-      }
-      if (writeOff.creditClaimLine) {
-        throw new ValidationError(`Write-off ${writeOff.id} is already on a claim.`);
-      }
-      const product = writeOff.inventoryItem.product;
-      if (product.supplierId !== supplier.id) {
-        throw new ValidationError(
-          `Write-off ${writeOff.id} is for a product not assigned to this supplier.`,
-        );
-      }
-
-      const unitsClaimed = line.unitsClaimed ?? writeOff.unitsDiscarded ?? 0;
-      if (unitsClaimed <= 0) {
-        throw new ValidationError(`Write-off ${writeOff.id} has no units to claim.`);
-      }
-
-      const credit = expectedCredit(ratio, unitsClaimed, product.costPrice ?? 0);
-      if (credit.units != null) totalUnits = (totalUnits ?? 0) + credit.units;
-      if (credit.value != null) totalValue = (totalValue ?? 0) + credit.value;
-
-      return {
-        expiredItemTransactionId: writeOff.id,
-        batchNumber: line.batchNumber?.trim() || null,
-        unitsClaimed,
-        expectedCreditUnits: credit.units,
-        expectedCreditValue: credit.value,
-      };
-    });
+    const lines = input.lines.map((line) =>
+      prepareClaimLine(line, byId.get(line.expiredItemTransactionId), supplier),
+    );
+    const totalUnits = sumOrNull(lines.map((l) => l.expectedCreditUnits));
+    const totalValue = sumOrNull(lines.map((l) => l.expectedCreditValue));
 
     return this.prisma.$transaction(async (tx) => {
       const claim = await this.repo.createClaim(
@@ -262,6 +279,14 @@ export class CreditClaimService {
     const claim = await this.getClaim(id);
     if (claim.status === 'DRAFT') {
       throw new ValidationError('Cannot record an outcome for a claim that was never sent.');
+    }
+    // Terminal outcomes are final. A PARTIALLY_CREDITED claim is intentionally left
+    // open so a later top-up can progress it to CREDITED, so it's the one settled
+    // status we still accept an outcome for.
+    if (isSettledClaimStatus(claim.status) && claim.status !== 'PARTIALLY_CREDITED') {
+      throw new ValidationError(
+        `Claim ${id} is already settled (${claim.status}); its outcome is final.`,
+      );
     }
     const settledAt = this.now();
     return this.prisma.$transaction(async (tx) => {
