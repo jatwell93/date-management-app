@@ -59,6 +59,7 @@ function createSqliteDb(): import('better-sqlite3').Database {
       organization_id TEXT NOT NULL,
       email TEXT,
       username TEXT,
+      pin TEXT,
       role TEXT NOT NULL,
       created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
       updated_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
@@ -260,13 +261,19 @@ async function seedWorkersStoreWalkFloorProgress(sql: NeonQueryFunction<false, f
 
 function seedSqliteStoreWalkFloorProgress(sqlite: import('better-sqlite3').Database) {
   sqlite
-    .prepare('INSERT INTO users (id, organization_id, email, username, role) VALUES (?, ?, ?, ?, ?)')
+    .prepare(
+      'INSERT INTO users (id, organization_id, email, username, role) VALUES (?, ?, ?, ?, ?)',
+    )
     .run(7, ORG, 'checker@example.test', 'checker-one', 'Checker One');
   sqlite
-    .prepare('INSERT INTO store_areas (id, organization_id, name, sub_department) VALUES (?, ?, ?, ?)')
+    .prepare(
+      'INSERT INTO store_areas (id, organization_id, name, sub_department) VALUES (?, ?, ?, ?)',
+    )
     .run(10, ORG, 'Bakery', 'Bakery');
   sqlite
-    .prepare('INSERT INTO store_areas (id, organization_id, name, sub_department) VALUES (?, ?, ?, ?)')
+    .prepare(
+      'INSERT INTO store_areas (id, organization_id, name, sub_department) VALUES (?, ?, ?, ?)',
+    )
     .run(20, ORG, 'Dairy', 'Dairy');
 
   const insertBay = sqlite.prepare(
@@ -295,6 +302,109 @@ function seedSqliteStoreWalkFloorProgress(sqlite: import('better-sqlite3').Datab
       'INSERT INTO bay_checks (id, organization_id, cycle_id, store_area_id, user_id, checked_at, items_added_count) VALUES (?, ?, ?, ?, ?, ?, ?)',
     )
     .run(41, ORG, 31, 22, 7, '2026-07-09T10:00:00.000Z', 2);
+}
+
+// Audit-report seed: two cycles (one completed, one active) and two checkers.
+// Ava checks six distinct bays at a single instant with zero findings — that
+// clamps elapsedHours to one minute (360 bays/hour) and trips both flags. Ben
+// checks two bays 30 minutes apart with findings — a steady, unflagged pace.
+// userName sources differ per backend (SQLite COALESCE(pin, role); Workers
+// COALESCE(username, email)), so pin and username are seeded to the same value.
+const AUDIT_BAY_IDS = [101, 102, 103, 104, 105, 106, 107, 108] as const;
+const AVA_CHECKED_BAY_IDS = [101, 102, 103, 104, 105, 106] as const;
+
+async function seedWorkersStoreWalkAudit(sql: NeonQueryFunction<false, false>) {
+  await sql`DELETE FROM bay_checks`;
+  await sql`DELETE FROM check_cycles`;
+  await sql`DELETE FROM store_areas`;
+  await sql`DELETE FROM users`;
+  await sql`
+    INSERT INTO organizations (id, name, slug)
+    VALUES (${ORG}, ${'Conformance Org'}, ${'conformance-org'})
+    ON CONFLICT (id) DO NOTHING
+  `;
+  await sql`
+    INSERT INTO users (id, organization_id, username, role)
+    VALUES
+      (${51}, ${ORG}, ${'Ava Checker'}, ${'team_member'}),
+      (${52}, ${ORG}, ${'Ben Checker'}, ${'team_member'})
+  `;
+  await sql`
+    INSERT INTO store_areas (id, organization_id, name, sub_department)
+    VALUES
+      (${100}, ${ORG}, ${'Chilled'}, ${'Chilled'}),
+      (${200}, ${ORG}, ${'Ambient'}, ${'Ambient'})
+  `;
+  for (const bayId of AUDIT_BAY_IDS) {
+    const parentId = bayId < 105 ? 100 : 200;
+    await sql`
+      INSERT INTO store_areas (id, organization_id, parent_id, name, sub_department)
+      VALUES (${bayId}, ${ORG}, ${parentId}, ${`Bay ${bayId}`}, ${'Chilled'})
+    `;
+  }
+  await sql`
+    INSERT INTO check_cycles (id, organization_id, name, status, started_at, completed_at)
+    VALUES
+      (${900}, ${ORG}, ${'Morning walk'}, ${'completed'},
+        ${'2026-07-09T08:00:00.000Z'}::timestamptz, ${'2026-07-09T08:45:00.000Z'}::timestamptz),
+      (${901}, ${ORG}, ${'Evening walk'}, ${'active'},
+        ${'2026-07-09T09:00:00.000Z'}::timestamptz, ${null})
+  `;
+  for (const bayId of AVA_CHECKED_BAY_IDS) {
+    await sql`
+      INSERT INTO bay_checks (organization_id, cycle_id, store_area_id, user_id, checked_at, items_added_count)
+      VALUES (${ORG}, ${900}, ${bayId}, ${51}, ${'2026-07-09T08:10:00.000Z'}::timestamptz, ${0})
+    `;
+  }
+  await sql`
+    INSERT INTO bay_checks (organization_id, cycle_id, store_area_id, user_id, checked_at, items_added_count)
+    VALUES
+      (${ORG}, ${901}, ${101}, ${52}, ${'2026-07-09T09:05:00.000Z'}::timestamptz, ${3}),
+      (${ORG}, ${901}, ${102}, ${52}, ${'2026-07-09T09:35:00.000Z'}::timestamptz, ${2})
+  `;
+}
+
+function seedSqliteStoreWalkAudit(sqlite: import('better-sqlite3').Database) {
+  const insertUser = sqlite.prepare(
+    'INSERT INTO users (id, organization_id, username, pin, role) VALUES (?, ?, ?, ?, ?)',
+  );
+  insertUser.run(51, ORG, 'ava', 'Ava Checker', 'team_member');
+  insertUser.run(52, ORG, 'ben', 'Ben Checker', 'team_member');
+
+  const insertDept = sqlite.prepare(
+    'INSERT INTO store_areas (id, organization_id, name, sub_department) VALUES (?, ?, ?, ?)',
+  );
+  insertDept.run(100, ORG, 'Chilled', 'Chilled');
+  insertDept.run(200, ORG, 'Ambient', 'Ambient');
+
+  const insertBay = sqlite.prepare(
+    'INSERT INTO store_areas (id, organization_id, parent_id, name, sub_department) VALUES (?, ?, ?, ?, ?)',
+  );
+  for (const bayId of AUDIT_BAY_IDS) {
+    insertBay.run(bayId, ORG, bayId < 105 ? 100 : 200, `Bay ${bayId}`, 'Chilled');
+  }
+
+  const insertCycle = sqlite.prepare(
+    'INSERT INTO check_cycles (id, organization_id, name, status, started_at, completed_at) VALUES (?, ?, ?, ?, ?, ?)',
+  );
+  insertCycle.run(
+    900,
+    ORG,
+    'Morning walk',
+    'completed',
+    '2026-07-09T08:00:00.000Z',
+    '2026-07-09T08:45:00.000Z',
+  );
+  insertCycle.run(901, ORG, 'Evening walk', 'active', '2026-07-09T09:00:00.000Z', null);
+
+  const insertCheck = sqlite.prepare(
+    'INSERT INTO bay_checks (organization_id, cycle_id, store_area_id, user_id, checked_at, items_added_count) VALUES (?, ?, ?, ?, ?, ?)',
+  );
+  for (const bayId of AVA_CHECKED_BAY_IDS) {
+    insertCheck.run(ORG, 900, bayId, 51, '2026-07-09T08:10:00.000Z', 0);
+  }
+  insertCheck.run(ORG, 901, 101, 52, '2026-07-09T09:05:00.000Z', 3);
+  insertCheck.run(ORG, 901, 102, 52, '2026-07-09T09:35:00.000Z', 2);
 }
 
 describe('dual-backend report conformance', () => {
@@ -438,13 +548,74 @@ describe('dual-backend report conformance', () => {
     await seedWorkersStoreWalkFloorProgress(sql);
     seedSqliteStoreWalkFloorProgress(sqlite);
     const workersDb = createWorkersDatabase({ NEON_CONNECTION_STRING: 'postgres://test' } as Env);
-    const { StoreAreaRepository } = await import(
-      '../../backend/src/repositories/store-area.repository'
-    );
+    const { StoreAreaRepository } =
+      await import('../../backend/src/repositories/store-area.repository');
     const sqliteRepo = new StoreAreaRepository(createSqlitePrismaAdapter(sqlite) as never);
 
     await expect(workersDb.getFloorProgress(ORG).then(normalizeFloorProgress)).resolves.toEqual(
       normalizeFloorProgress(await sqliteRepo.getFloorProgress(ORG)),
     );
+  });
+
+  it('returns identical store-walk audit cycles, users, and flags', async () => {
+    await seedWorkersStoreWalkAudit(sql);
+    seedSqliteStoreWalkAudit(sqlite);
+
+    const workersDb = createWorkersDatabase({ NEON_CONNECTION_STRING: 'postgres://test' } as Env);
+    const sqliteRepo = new ReportRepository(sqlite, ORG);
+
+    const workersReport = await workersDb.getStoreWalkAuditReport(ORG);
+    const sqliteReport = sqliteRepo.getStoreWalkAuditReport();
+
+    expect(workersReport).toEqual(sqliteReport);
+
+    // Cycles order by started_at DESC: the active "Evening walk" precedes the
+    // completed "Morning walk". Assert the derived numbers and the unified flag
+    // wording (the Workers copy previously dropped "consecutive") on both engines.
+    expect(workersReport).toEqual([
+      {
+        cycleId: 901,
+        cycleName: 'Evening walk',
+        status: 'active',
+        completionMinutes: null,
+        users: [
+          {
+            userId: 52,
+            userName: 'Ben Checker',
+            baysChecked: 2,
+            coveragePercent: 25,
+            baysPerHour: 4,
+          },
+        ],
+        flags: [],
+      },
+      {
+        cycleId: 900,
+        cycleName: 'Morning walk',
+        status: 'completed',
+        completionMinutes: 45,
+        users: [
+          {
+            userId: 51,
+            userName: 'Ava Checker',
+            baysChecked: 6,
+            coveragePercent: 75,
+            baysPerHour: 360,
+          },
+        ],
+        flags: [
+          {
+            type: 'implausible_pace',
+            userName: 'Ava Checker',
+            message: '360 bays/hour is faster than the review threshold.',
+          },
+          {
+            type: 'all_zero_findings',
+            userName: 'Ava Checker',
+            message: '6 consecutive bay checks recorded zero items added.',
+          },
+        ],
+      },
+    ]);
   });
 });
