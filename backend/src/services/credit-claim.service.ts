@@ -316,6 +316,31 @@ export class CreditClaimService {
     );
   }
 
+  /** Claims due for a follow-up nudge now (reminder-engine input). */
+  getFollowUpDue(): Promise<ClaimWithRelations[]> {
+    return this.repo.findFollowUpDue(this.organizationId, this.now());
+  }
+
+  /**
+   * Delete photos whose lifecycle window has passed: remove the object-storage bytes
+   * first, then the row. Best-effort per photo so one storage failure does not block
+   * the rest. Returns the number of rows removed.
+   */
+  async purgeExpiredPhotos(): Promise<number> {
+    const photos = await this.repo.findPhotosToPurge(this.organizationId, this.now());
+    let purged = 0;
+    for (const photo of photos) {
+      try {
+        await this.storage.delete(photo.storageKey);
+      } catch {
+        // Object may already be gone; still drop the row so it isn't retried forever.
+      }
+      await this.repo.deletePhoto(this.organizationId, photo.id);
+      purged += 1;
+    }
+    return purged;
+  }
+
   private async loadAttachments(claim: ClaimWithRelations) {
     const attachments: Array<{ filename: string; content: Buffer; contentType: string }> = [];
     for (const line of claim.lines) {

@@ -6,6 +6,7 @@ import { DatabaseBackupService } from './database.backup.service';
 import { startStripeSyncJob } from '../jobs/stripe-sync.job';
 import { startTrialExpirationJob } from '../jobs/trialExpiration.job';
 import { startDunningJob } from '../jobs/dunning.job';
+import { startCreditClaimJobs } from '../jobs/credit-claim.job';
 
 export class SchedulerService {
   private static databaseBackupService = new DatabaseBackupService();
@@ -67,6 +68,9 @@ export class SchedulerService {
 
     // Initialize Stripe sync job (runs hourly)
     startStripeSyncJob();
+
+    // Supplier credit-claim jobs: reminder engine (daily 08:00) + photo purge (daily 03:00)
+    startCreditClaimJobs();
   }
 
   // Update markdown statuses for all inventory items across all organizations

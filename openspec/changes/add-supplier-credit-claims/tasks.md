@@ -55,9 +55,10 @@
 
 ## 5. Scheduled jobs
 
-- [ ] 5.1 Reminder engine: query `status = SENT AND nextFollowUpAt <= now`, send follow-ups, advance
-      schedule (worker/cron layer).
-- [ ] 5.2 Photo-lifecycle purge job: delete R2 objects + rows where `deleteAfter <= now`.
+- [x] 5.1 Reminder engine: `runCreditClaimReminderJob` iterates orgs, `findFollowUpDue` +
+      `sendFollowUp` per due claim, failures isolated. Registered in `scheduler.service` (daily 08:00).
+- [x] 5.2 Photo-lifecycle purge job: `runCreditClaimPhotoPurgeJob` deletes storage objects + rows
+      where `deleteAfter <= now`. Registered (daily 03:00). 3 job tests green; backend tsc clean.
 
 ## 6. Frontend (Supplier Credits workspace)
 
