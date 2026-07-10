@@ -17,6 +17,13 @@ import {
   WORKERS_SOLD_THROUGH_STATUS,
 } from '../../shared/domain/disposition';
 import { getMarkdownLevelForDays, MARKDOWN_WINDOWS } from '../../shared/domain/markdown';
+import {
+  resolveBayState,
+  rollupCoverage,
+  type BayCheckForCycle,
+  type CoverageSummary,
+  type StoreWalkBay,
+} from '../../shared/domain/store-walk-tracking';
 
 // Note: fetchConnectionCache is now always true by default in @neondatabase/serverless
 
@@ -60,6 +67,7 @@ export interface Database {
     timeFrameDays?: string,
   ): Promise<ItemsByUserReportItem[]>;
   getItemsByDateReport(organizationId: string): Promise<ItemsByDateReportItem[]>;
+  getStoreWalkAuditReport(organizationId: string): Promise<StoreWalkAuditCycle[]>;
   getLossBySkuReport(organizationId: string): Promise<LossBySkuReportItem[]>;
   getLossByDepartmentReport(organizationId: string): Promise<LossByDepartmentReportItem[]>;
   getExpiredLossBySku(organizationId: string): Promise<LossBySkuReportItem[]>;
@@ -122,14 +130,33 @@ export interface Database {
   // Store area CRUD
   createStoreArea(
     organizationId: string,
-    data: { name: string; subDepartment?: string | null },
+    data: { name: string; subDepartment?: string | null; parentId?: number | null },
   ): Promise<StoreArea>;
   updateStoreArea(
     organizationId: string,
     id: number,
-    data: { name?: string; subDepartment?: string | null },
+    data: { name?: string; subDepartment?: string | null; parentId?: number | null },
   ): Promise<StoreArea | null>;
   deleteStoreArea(organizationId: string, id: number): Promise<boolean>;
+
+  // Store walk tracking
+  listCheckCycles(organizationId: string): Promise<CheckCycle[]>;
+  createCheckCycle(
+    organizationId: string,
+    data: { name: string; startedAt?: string },
+  ): Promise<CheckCycle>;
+  completeCheckCycle(organizationId: string, id: number): Promise<CheckCycle>;
+  recordBayCheck(
+    organizationId: string,
+    userId: number,
+    data: {
+      storeAreaId: number;
+      checkedAt?: string;
+      itemsAddedCount?: number;
+      notes?: string | null;
+    },
+  ): Promise<BayCheck>;
+  getFloorProgress(organizationId: string): Promise<FloorProgress>;
 
   // Users CRUD
   listUsers(organizationId: string): Promise<UserListItem[]>;
@@ -196,9 +223,60 @@ export interface StoreArea {
   id: number;
   name: string;
   subDepartment: string | null;
+  parentId: number | null;
+  lastChecked: Date | string | null;
   createdAt: Date;
   updatedAt: Date;
   description?: string | null;
+}
+
+export interface CheckCycle {
+  id: number;
+  organizationId: string;
+  name: string;
+  status: 'active' | 'completed';
+  startedAt: string;
+  completedAt: string | null;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface BayCheck {
+  id: number;
+  organizationId: string;
+  cycleId: number;
+  storeAreaId: number;
+  userId: number | null;
+  checkedAt: string;
+  itemsAddedCount: number;
+  notes: string | null;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface FloorProgressBay {
+  id: number;
+  name: string;
+  parentId: number | null;
+  state: 'checked' | 'not_checked' | 'overdue';
+  checkedAt: string | null;
+  checkedBy: { id: number; name: string | null } | null;
+}
+
+export interface FloorProgressSummary extends CoverageSummary {
+  uncheckedBays: number;
+}
+
+export interface FloorProgressDepartment {
+  department: { id: number | null; name: string };
+  summary: FloorProgressSummary;
+  bays: FloorProgressBay[];
+}
+
+export interface FloorProgress {
+  activeCycle: CheckCycle | null;
+  summary: FloorProgressSummary;
+  departments: FloorProgressDepartment[];
 }
 
 export interface DashboardStats {
@@ -245,6 +323,29 @@ export interface ItemsByUserReportItem {
 export interface ItemsByDateReportItem {
   date: string;
   itemCount: number;
+}
+
+export interface StoreWalkAuditUser {
+  userId: number;
+  userName: string;
+  baysChecked: number;
+  coveragePercent: number;
+  baysPerHour: number;
+}
+
+export interface StoreWalkAuditFlag {
+  type: 'implausible_pace' | 'all_zero_findings';
+  userName: string;
+  message: string;
+}
+
+export interface StoreWalkAuditCycle {
+  cycleId: number;
+  cycleName: string;
+  status: string;
+  completionMinutes: number | null;
+  users: StoreWalkAuditUser[];
+  flags: StoreWalkAuditFlag[];
 }
 
 export interface DetailedExpiryReportItem {
@@ -353,6 +454,51 @@ function isPositiveInteger(value: unknown): value is number {
 
 function toNumberOrNull(value: unknown): number | null {
   return value === null || value === undefined ? null : Number(value);
+}
+
+function formatStoreWalkAuditNumber(value: number): string {
+  return new Intl.NumberFormat('en-AU', { maximumFractionDigits: 1 }).format(value);
+}
+
+function toIsoStringOrNull(value: unknown): string | null {
+  if (value === null || value === undefined) return null;
+  const date = value instanceof Date ? value : new Date(String(value));
+  return Number.isNaN(date.getTime()) ? null : date.toISOString();
+}
+
+function toFloorProgressSummary(summary: CoverageSummary): FloorProgressSummary {
+  return {
+    ...summary,
+    uncheckedBays: summary.notCheckedBays + summary.overdueBays,
+  };
+}
+
+function toCheckCycle(row: Record<string, unknown>): CheckCycle {
+  return {
+    id: Number(row.id),
+    organizationId: String(row.organizationId),
+    name: String(row.name),
+    status: row.status as CheckCycle['status'],
+    startedAt: toIsoStringOrNull(row.startedAt) ?? '',
+    completedAt: toIsoStringOrNull(row.completedAt),
+    createdAt: toIsoStringOrNull(row.createdAt) ?? '',
+    updatedAt: toIsoStringOrNull(row.updatedAt) ?? '',
+  };
+}
+
+function toBayCheck(row: Record<string, unknown>): BayCheck {
+  return {
+    id: Number(row.id),
+    organizationId: String(row.organizationId),
+    cycleId: Number(row.cycleId),
+    storeAreaId: Number(row.storeAreaId),
+    userId: toNumberOrNull(row.userId),
+    checkedAt: toIsoStringOrNull(row.checkedAt) ?? '',
+    itemsAddedCount: Number(row.itemsAddedCount),
+    notes: row.notes === null || row.notes === undefined ? null : String(row.notes),
+    createdAt: toIsoStringOrNull(row.createdAt) ?? '',
+    updatedAt: toIsoStringOrNull(row.updatedAt) ?? '',
+  };
 }
 
 async function getInventoryProcessContext(
@@ -657,7 +803,9 @@ export function createWorkersDatabase(env: Env): Database {
     async findStoreAreas(): Promise<StoreArea[]> {
       return (await sql`
         SELECT id, name,
+               parent_id as "parentId",
                sub_department as "subDepartment",
+               last_checked as "lastChecked",
                created_at as "createdAt", updated_at as "updatedAt"
         FROM store_areas
         ORDER BY name ASC
@@ -711,9 +859,7 @@ export function createWorkersDatabase(env: Env): Database {
     // product catalogue is. Only queued catalogue imports reliably persist an
     // `uploads` row (small synchronous/expiry-list uploads may not), which is fine
     // here since this signal is specifically about catalogue freshness.
-    async getLastCatalogueUpload(
-      organizationId: string,
-    ): Promise<LastCatalogueUpload | null> {
+    async getLastCatalogueUpload(organizationId: string): Promise<LastCatalogueUpload | null> {
       const rows = await sql`
         SELECT
           file_name as "fileName",
@@ -966,6 +1112,102 @@ export function createWorkersDatabase(env: Env): Database {
       `) as ItemsByDateReportItem[];
     },
 
+    async getStoreWalkAuditReport(organizationId: string): Promise<StoreWalkAuditCycle[]> {
+      const totalBayRows = (await sql`
+        SELECT COUNT(*)::int as count
+        FROM store_areas
+        WHERE organization_id = ${organizationId}
+          AND parent_id IS NOT NULL
+      `) as Array<{ count: number }>;
+      const totalBays = Number(totalBayRows[0]?.count ?? 0);
+
+      const cycleRows = (await sql`
+        SELECT id as "cycleId",
+               name as "cycleName",
+               status,
+               CASE
+                 WHEN completed_at IS NULL THEN NULL
+                 ELSE ROUND(EXTRACT(EPOCH FROM (completed_at - started_at)) / 60)::int
+               END as "completionMinutes"
+        FROM check_cycles
+        WHERE organization_id = ${organizationId}
+        ORDER BY started_at DESC, id DESC
+        LIMIT 12
+      `) as Array<{
+        cycleId: number;
+        cycleName: string;
+        status: string;
+        completionMinutes: number | null;
+      }>;
+
+      const userRows = (await sql`
+        SELECT bc.cycle_id as "cycleId",
+               COALESCE(u.id, bc.user_id, 0) as "userId",
+               COALESCE(u.username, u.email, 'Unknown user') as "userName",
+               COUNT(DISTINCT bc.store_area_id)::int as "baysChecked",
+               GREATEST(
+                 EXTRACT(EPOCH FROM (MAX(bc.checked_at) - MIN(bc.checked_at))) / 3600,
+                 1.0 / 60.0
+               ) as "elapsedHours",
+               SUM(CASE WHEN bc.items_added_count = 0 THEN 1 ELSE 0 END)::int as "zeroFindingChecks"
+        FROM bay_checks bc
+        LEFT JOIN users u ON bc.user_id = u.id
+        WHERE bc.organization_id = ${organizationId}
+        GROUP BY bc.cycle_id, COALESCE(u.id, bc.user_id, 0), COALESCE(u.username, u.email, 'Unknown user')
+        ORDER BY bc.cycle_id DESC, "baysChecked" DESC
+      `) as Array<{
+        cycleId: number;
+        userId: number;
+        userName: string;
+        baysChecked: number;
+        elapsedHours: number | string;
+        zeroFindingChecks: number;
+      }>;
+
+      return cycleRows.map((cycle) => {
+        const sourceRows = userRows.filter((row) => Number(row.cycleId) === Number(cycle.cycleId));
+        const users = sourceRows.map((row) => {
+          const baysChecked = Number(row.baysChecked);
+          const elapsedHours = Number(row.elapsedHours);
+          return {
+            userId: Number(row.userId),
+            userName: row.userName,
+            baysChecked,
+            coveragePercent: totalBays === 0 ? 0 : Math.round((baysChecked / totalBays) * 100),
+            baysPerHour: Number((baysChecked / elapsedHours).toFixed(1)),
+          };
+        });
+        const flags = users.flatMap((user) => {
+          const source = sourceRows.find((row) => Number(row.userId) === user.userId);
+          const userFlags: StoreWalkAuditFlag[] = [];
+          if (user.baysPerHour > 10) {
+            userFlags.push({
+              type: 'implausible_pace',
+              userName: user.userName,
+              message: `${formatStoreWalkAuditNumber(user.baysPerHour)} bays/hour is faster than the review threshold.`,
+            });
+          }
+          if (source && Number(source.zeroFindingChecks) >= 6) {
+            userFlags.push({
+              type: 'all_zero_findings',
+              userName: user.userName,
+              message: `${formatStoreWalkAuditNumber(Number(source.zeroFindingChecks))} bay checks recorded zero items added.`,
+            });
+          }
+          return userFlags;
+        });
+        return {
+          cycleId: Number(cycle.cycleId),
+          cycleName: cycle.cycleName,
+          status: cycle.status,
+          completionMinutes:
+            cycle.completionMinutes === null ? null : Number(cycle.completionMinutes),
+          users,
+          flags,
+        };
+      });
+    },
+
     // Standalone /api/reports/loss-by-* endpoints (ExpiredItemsPage charts). These
     // value the stock CURRENTLY sitting expired, mirroring the SQLite backend's
     // report.repository. Kept distinct from the write-off ledger reports below so
@@ -1035,9 +1277,7 @@ export function createWorkersDatabase(env: Env): Database {
       `) as LossBySkuReportItem[];
     },
 
-    async getExpiredLossByStoreArea(
-      organizationId: string,
-    ): Promise<ExpiredLossByStoreAreaItem[]> {
+    async getExpiredLossByStoreArea(organizationId: string): Promise<ExpiredLossByStoreAreaItem[]> {
       // Frontend reads `locationName`; group by store-area name to match the
       // SQLite backend's getFinancialLossesByStoreArea.
       return (await sql`
@@ -1429,13 +1669,29 @@ export function createWorkersDatabase(env: Env): Database {
     // ---- Store area CRUD ----
     async createStoreArea(
       organizationId: string,
-      data: { name: string; subDepartment?: string | null },
+      data: { name: string; subDepartment?: string | null; parentId?: number | null },
     ): Promise<StoreArea> {
       const rows = await sql`
-        INSERT INTO store_areas (organization_id, name, sub_department, created_at, updated_at)
-        VALUES (${organizationId}, ${data.name}, ${data.subDepartment ?? null}, NOW(), NOW())
+        INSERT INTO store_areas (
+          organization_id,
+          name,
+          sub_department,
+          parent_id,
+          created_at,
+          updated_at
+        )
+        VALUES (
+          ${organizationId},
+          ${data.name},
+          ${data.subDepartment ?? null},
+          ${data.parentId ?? null},
+          NOW(),
+          NOW()
+        )
         RETURNING id, name,
+                  parent_id as "parentId",
                   sub_department as "subDepartment",
+                  last_checked as "lastChecked",
                   created_at as "createdAt", updated_at as "updatedAt"
       `;
       return rows[0] as StoreArea;
@@ -1444,7 +1700,7 @@ export function createWorkersDatabase(env: Env): Database {
     async updateStoreArea(
       organizationId: string,
       id: number,
-      data: { name?: string; subDepartment?: string | null },
+      data: { name?: string; subDepartment?: string | null; parentId?: number | null },
     ): Promise<StoreArea | null> {
       const existing = await sql`
         SELECT id FROM store_areas
@@ -1463,10 +1719,16 @@ export function createWorkersDatabase(env: Env): Database {
             WHEN ${data.subDepartment === undefined} THEN sub_department
             ELSE ${data.subDepartment ?? null}
           END,
+          parent_id = CASE
+            WHEN ${data.parentId === undefined} THEN parent_id
+            ELSE ${data.parentId ?? null}
+          END,
           updated_at = NOW()
         WHERE id = ${id} AND organization_id = ${organizationId}
         RETURNING id, name,
+                  parent_id as "parentId",
                   sub_department as "subDepartment",
+                  last_checked as "lastChecked",
                   created_at as "createdAt", updated_at as "updatedAt"
       `;
       return (rows[0] as StoreArea) || null;
@@ -1488,6 +1750,282 @@ export function createWorkersDatabase(env: Env): Database {
         RETURNING id
       `;
       return !!rows[0];
+    },
+
+    // ---- Store walk tracking ----
+    async listCheckCycles(organizationId: string): Promise<CheckCycle[]> {
+      const rows = await sql`
+        SELECT id,
+               organization_id as "organizationId",
+               name,
+               status,
+               started_at as "startedAt",
+               completed_at as "completedAt",
+               created_at as "createdAt",
+               updated_at as "updatedAt"
+        FROM check_cycles
+        WHERE organization_id = ${organizationId}
+        ORDER BY started_at DESC, id DESC
+      `;
+      return rows.map((row) => toCheckCycle(row as Record<string, unknown>));
+    },
+
+    async createCheckCycle(
+      organizationId: string,
+      data: { name: string; startedAt?: string },
+    ): Promise<CheckCycle> {
+      const activeRows = await sql`
+        SELECT id
+        FROM check_cycles
+        WHERE organization_id = ${organizationId} AND status = 'active'
+        LIMIT 1
+      `;
+      if (activeRows[0]) {
+        throw new Error('Active check cycle already exists');
+      }
+
+      const rows = await sql`
+        INSERT INTO check_cycles (
+          organization_id, name, status, started_at, created_at, updated_at
+        )
+        VALUES (
+          ${organizationId},
+          ${data.name},
+          'active',
+          COALESCE(${data.startedAt ?? null}::timestamptz, NOW()),
+          NOW(),
+          NOW()
+        )
+        RETURNING id,
+                  organization_id as "organizationId",
+                  name,
+                  status,
+                  started_at as "startedAt",
+                  completed_at as "completedAt",
+                  created_at as "createdAt",
+                  updated_at as "updatedAt"
+      `;
+      return toCheckCycle(rows[0] as Record<string, unknown>);
+    },
+
+    async completeCheckCycle(organizationId: string, id: number): Promise<CheckCycle> {
+      const rows = await sql`
+        UPDATE check_cycles
+        SET status = 'completed',
+            completed_at = NOW(),
+            updated_at = NOW()
+        WHERE id = ${id}
+          AND organization_id = ${organizationId}
+          AND status = 'active'
+        RETURNING id,
+                  organization_id as "organizationId",
+                  name,
+                  status,
+                  started_at as "startedAt",
+                  completed_at as "completedAt",
+                  created_at as "createdAt",
+                  updated_at as "updatedAt"
+      `;
+      if (!rows[0]) {
+        throw new Error('Active check cycle not found');
+      }
+      return toCheckCycle(rows[0] as Record<string, unknown>);
+    },
+
+    async recordBayCheck(
+      organizationId: string,
+      userId: number,
+      data: {
+        storeAreaId: number;
+        checkedAt?: string;
+        itemsAddedCount?: number;
+        notes?: string | null;
+      },
+    ): Promise<BayCheck> {
+      const activeRows = await sql`
+        SELECT id
+        FROM check_cycles
+        WHERE organization_id = ${organizationId} AND status = 'active'
+        ORDER BY started_at DESC, id DESC
+        LIMIT 1
+      `;
+      const activeCycleId = activeRows[0]?.id;
+      if (!activeCycleId) {
+        throw new Error('Active check cycle is required');
+      }
+
+      const bayRows = await sql`
+        SELECT id
+        FROM store_areas
+        WHERE id = ${data.storeAreaId}
+          AND organization_id = ${organizationId}
+          AND parent_id IS NOT NULL
+        LIMIT 1
+      `;
+      if (!bayRows[0]) {
+        throw new Error('Bay check must target a leaf bay');
+      }
+
+      const rows = await sql`
+        WITH inserted AS (
+          INSERT INTO bay_checks (
+            organization_id,
+            cycle_id,
+            store_area_id,
+            user_id,
+            checked_at,
+            items_added_count,
+            notes,
+            created_at,
+            updated_at
+          )
+          VALUES (
+            ${organizationId},
+            ${Number(activeCycleId)},
+            ${data.storeAreaId},
+            ${userId},
+            COALESCE(${data.checkedAt ?? null}::timestamptz, NOW()),
+            ${data.itemsAddedCount ?? 0},
+            ${data.notes ?? null},
+            NOW(),
+            NOW()
+          )
+          RETURNING id,
+                    organization_id,
+                    cycle_id,
+                    store_area_id,
+                    user_id,
+                    checked_at,
+                    items_added_count,
+                    notes,
+                    created_at,
+                    updated_at
+        ), updated_area AS (
+          UPDATE store_areas
+          SET last_checked = (SELECT checked_at FROM inserted),
+              updated_at = NOW()
+          WHERE id = ${data.storeAreaId}
+            AND organization_id = ${organizationId}
+        )
+        SELECT id,
+               organization_id as "organizationId",
+               cycle_id as "cycleId",
+               store_area_id as "storeAreaId",
+               user_id as "userId",
+               checked_at as "checkedAt",
+               items_added_count as "itemsAddedCount",
+               notes,
+               created_at as "createdAt",
+               updated_at as "updatedAt"
+        FROM inserted
+      `;
+      return toBayCheck(rows[0] as Record<string, unknown>);
+    },
+
+    async getFloorProgress(organizationId: string): Promise<FloorProgress> {
+      const cycleRows = await sql`
+        SELECT id,
+               organization_id as "organizationId",
+               name,
+               status,
+               started_at as "startedAt",
+               completed_at as "completedAt",
+               created_at as "createdAt",
+               updated_at as "updatedAt"
+        FROM check_cycles
+        WHERE organization_id = ${organizationId} AND status = 'active'
+        ORDER BY started_at DESC, id DESC
+        LIMIT 1
+      `;
+      const activeCycle = cycleRows[0]
+        ? toCheckCycle(cycleRows[0] as Record<string, unknown>)
+        : null;
+
+      const bayRows = await sql`
+        SELECT bay.id,
+               bay.name,
+               bay.parent_id as "parentId",
+               department.name as "parentName",
+               bay.last_checked as "lastChecked"
+        FROM store_areas bay
+        LEFT JOIN store_areas department ON bay.parent_id = department.id
+        WHERE bay.organization_id = ${organizationId}
+          AND bay.parent_id IS NOT NULL
+        ORDER BY department.name ASC NULLS LAST, bay.name ASC, bay.id ASC
+      `;
+      const bays = bayRows.map((row) => ({
+        id: Number(row.id),
+        name: String(row.name),
+        parentId: toNumberOrNull(row.parentId),
+        parentName:
+          row.parentName === null || row.parentName === undefined ? null : String(row.parentName),
+        lastChecked:
+          row.lastChecked === null || row.lastChecked === undefined
+            ? null
+            : String(row.lastChecked),
+      })) satisfies StoreWalkBay[];
+
+      if (!activeCycle) {
+        return {
+          activeCycle: null,
+          summary: toFloorProgressSummary({
+            totalBays: bays.length,
+            checkedBays: 0,
+            notCheckedBays: bays.length,
+            overdueBays: 0,
+            coveragePercent: 0,
+          }),
+          departments: [],
+        };
+      }
+
+      const checkRows = await sql`
+        SELECT bc.store_area_id as "storeAreaId",
+               bc.checked_at as "checkedAt",
+               bc.user_id as "userId",
+               users.username as "checkerName"
+        FROM bay_checks bc
+        LEFT JOIN users ON bc.user_id = users.id
+        WHERE bc.organization_id = ${organizationId}
+          AND bc.cycle_id = ${activeCycle.id}
+        ORDER BY bc.checked_at DESC, bc.id DESC
+      `;
+      const checksForCycle = checkRows.map((row) => ({
+        storeAreaId: Number(row.storeAreaId),
+        checkedAt: String(row.checkedAt),
+        userId: toNumberOrNull(row.userId),
+        checkerName:
+          row.checkerName === null || row.checkerName === undefined
+            ? null
+            : String(row.checkerName),
+      })) satisfies BayCheckForCycle[];
+      const rollup = rollupCoverage(bays, checksForCycle, activeCycle.startedAt);
+
+      return {
+        activeCycle,
+        summary: toFloorProgressSummary(rollup.store),
+        departments: rollup.departments.map((department) => ({
+          department: {
+            id: department.departmentId,
+            name: department.departmentName,
+          },
+          summary: toFloorProgressSummary(department),
+          bays: bays
+            .filter((bay) => bay.parentId === department.departmentId)
+            .map((bay) => {
+              const state = resolveBayState(bay, checksForCycle, activeCycle.startedAt);
+              return {
+                id: bay.id,
+                name: bay.name,
+                parentId: bay.parentId,
+                state: state.state,
+                checkedAt: state.checkedAt?.toISOString() ?? null,
+                checkedBy:
+                  state.userId === null ? null : { id: state.userId, name: state.checkerName },
+              };
+            }),
+        })),
+      };
     },
 
     // ---- Users CRUD ----

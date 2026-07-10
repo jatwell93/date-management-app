@@ -71,6 +71,29 @@ interface ItemsByDateReportItem {
   itemCount: number;
 }
 
+interface StoreWalkAuditUser {
+  userId: number;
+  userName: string;
+  baysChecked: number;
+  coveragePercent: number;
+  baysPerHour: number;
+}
+
+interface StoreWalkAuditFlag {
+  type: 'implausible_pace' | 'all_zero_findings' | string;
+  userName: string;
+  message: string;
+}
+
+interface StoreWalkAuditCycle {
+  cycleId: number;
+  cycleName: string;
+  status: string;
+  completionMinutes: number | null;
+  users: StoreWalkAuditUser[];
+  flags: StoreWalkAuditFlag[];
+}
+
 const numberFormatter = new Intl.NumberFormat('en-AU');
 const dateFormatter = new Intl.DateTimeFormat('en-AU', { dateStyle: 'medium' });
 
@@ -83,6 +106,16 @@ function formatUserLabel(item: ItemsByUserReportItem) {
   return item.userName || `Unknown user ${item.userId}`;
 }
 
+function formatAuditFlagType(type: string) {
+  if (type === 'implausible_pace') return 'Implausible pace';
+  if (type === 'all_zero_findings') return 'All-zero findings';
+  return type
+    .split('_')
+    .filter(Boolean)
+    .map((part) => `${part.charAt(0).toUpperCase()}${part.slice(1)}`)
+    .join(' ');
+}
+
 export function UsageReportPage({ token }: UsageReportPageProps) {
   const getFreshApiToken = useFreshApiToken(token);
   const [usageData, setUsageData] = useState<DailyUsageReportItem[] | null>(null);
@@ -90,9 +123,12 @@ export function UsageReportPage({ token }: UsageReportPageProps) {
   const [usageError, setUsageError] = useState<string | null>(null);
   const [itemsByUser, setItemsByUser] = useState<ItemsByUserReportItem[] | null>(null);
   const [itemsByDate, setItemsByDate] = useState<ItemsByDateReportItem[] | null>(null);
+  const [storeWalkAudit, setStoreWalkAudit] = useState<StoreWalkAuditCycle[] | null>(null);
   const [itemsByUserLoading, setItemsByUserLoading] = useState(true);
   const [itemsByDateLoading, setItemsByDateLoading] = useState(true);
+  const [storeWalkAuditLoading, setStoreWalkAuditLoading] = useState(true);
   const [chartsError, setChartsError] = useState<string | null>(null);
+  const [storeWalkAuditError, setStoreWalkAuditError] = useState<string | null>(null);
   const [timeFrame, setTimeFrame] = useState('all-time');
   const chartsLoading = itemsByUserLoading || itemsByDateLoading;
 
@@ -218,6 +254,44 @@ export function UsageReportPage({ token }: UsageReportPageProps) {
     fetchItemsByUser();
     return () => controller.abort();
   }, [token, timeFrame, getFreshApiToken]);
+
+  useEffect(() => {
+    const controller = new AbortController();
+
+    const fetchStoreWalkAudit = async () => {
+      setStoreWalkAuditLoading(true);
+      setStoreWalkAuditError(null);
+
+      if (!token) {
+        setStoreWalkAuditLoading(false);
+        return;
+      }
+
+      try {
+        const authToken = await getFreshApiToken('usage-report-store-walk-audit');
+        const data = await apiService.get<StoreWalkAuditCycle[]>(
+          '/reports/store-walk-audit',
+          authToken,
+          controller.signal,
+        );
+        if (!controller.signal.aborted) {
+          setStoreWalkAudit(data);
+        }
+      } catch (err: unknown) {
+        if (controller.signal.aborted) return;
+        setStoreWalkAuditError(
+          err instanceof Error ? err.message : 'An unknown error occurred when fetching walk audit',
+        );
+      } finally {
+        if (!controller.signal.aborted) {
+          setStoreWalkAuditLoading(false);
+        }
+      }
+    };
+
+    fetchStoreWalkAudit();
+    return () => controller.abort();
+  }, [token, getFreshApiToken]);
 
   // Prepare chart data for Items by User
   const itemsByUserChartData = useMemo(
@@ -485,6 +559,88 @@ export function UsageReportPage({ token }: UsageReportPageProps) {
           </CardContent>
         </Card>
       </div>
+
+      <Card role="region" aria-label="Store walk audit">
+        <CardHeader>
+          <CardTitle>
+            <h2 className="text-xl font-semibold">Store Walk Audit</h2>
+          </CardTitle>
+        </CardHeader>
+        <CardContent>
+          {storeWalkAuditLoading ? (
+            <div className="text-center py-8" role="status" aria-live="polite">
+              Loading store walk audit…
+            </div>
+          ) : storeWalkAuditError ? (
+            <p className="text-semantic-critical text-sm" role="alert">
+              {storeWalkAuditError}
+            </p>
+          ) : storeWalkAudit && storeWalkAudit.length > 0 ? (
+            <div className="space-y-5">
+              {storeWalkAudit.map((cycle) => (
+                <section key={cycle.cycleId} className="space-y-3" aria-label={cycle.cycleName}>
+                  <div className="flex flex-col gap-1 sm:flex-row sm:items-center sm:justify-between">
+                    <h3 className="font-heading text-base font-semibold">{cycle.cycleName}</h3>
+                    <span className="text-sm text-semantic-text-secondary">
+                      {cycle.completionMinutes === null
+                        ? 'In progress'
+                        : `${numberFormatter.format(cycle.completionMinutes)} min`}
+                    </span>
+                  </div>
+                  <div className="overflow-x-auto">
+                    <Table aria-label="Store walk productivity">
+                      <TableHeader>
+                        <TableRow>
+                          <TableHead>User</TableHead>
+                          <TableHead className="text-right">Bays checked</TableHead>
+                          <TableHead className="text-right">Coverage</TableHead>
+                          <TableHead className="text-right">Pace</TableHead>
+                        </TableRow>
+                      </TableHeader>
+                      <TableBody>
+                        {cycle.users.map((user) => (
+                          <TableRow key={`${cycle.cycleId}-${user.userId}`}>
+                            <TableCell>{user.userName || `Unknown user ${user.userId}`}</TableCell>
+                            <TableCell className="text-right tabular-nums">
+                              {numberFormatter.format(user.baysChecked)}
+                            </TableCell>
+                            <TableCell className="text-right tabular-nums">
+                              {numberFormatter.format(user.coveragePercent)}%
+                            </TableCell>
+                            <TableCell className="text-right tabular-nums">
+                              {numberFormatter.format(user.baysPerHour)} bays/hour
+                            </TableCell>
+                          </TableRow>
+                        ))}
+                      </TableBody>
+                    </Table>
+                  </div>
+                  {cycle.flags.length > 0 && (
+                    <ul className="grid gap-2" aria-label={`${cycle.cycleName} red flags`}>
+                      {cycle.flags.map((flag) => (
+                        <li
+                          key={`${cycle.cycleId}-${flag.type}-${flag.userName}-${flag.message}`}
+                          className="rounded-md border border-semantic-critical/30 bg-semantic-critical-muted p-3 text-sm"
+                        >
+                          <p className="font-medium text-semantic-critical">
+                            {formatAuditFlagType(flag.type)}
+                          </p>
+                          <p className="text-semantic-critical">{flag.userName}</p>
+                          <p className="text-semantic-critical">{flag.message}</p>
+                        </li>
+                      ))}
+                    </ul>
+                  )}
+                </section>
+              ))}
+            </div>
+          ) : (
+            <p className="text-center text-semantic-text-secondary">
+              No store walk audit data recorded yet.
+            </p>
+          )}
+        </CardContent>
+      </Card>
 
       {/* Original Table Section */}
       <Card>

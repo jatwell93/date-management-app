@@ -11,6 +11,7 @@ import {
   SellThroughByLevelItem,
   ItemsByUserReportItem,
   ItemsByDateReportItem,
+  StoreWalkAuditCycle,
   DashboardAnalytics,
 } from '../repositories/report.repository';
 import { SchedulerService } from './scheduler.service';
@@ -90,6 +91,10 @@ export class ReportService {
   async getItemsByDateReport(): Promise<ItemsByDateReportItem[]> {
     return this.repository.getItemsByDateReport();
   }
+
+  async getStoreWalkAuditReport(): Promise<StoreWalkAuditCycle[]> {
+    return this.repository.getStoreWalkAuditReport();
+  }
 }
 
 // Re-export interfaces for convenience
@@ -102,5 +107,6 @@ export type {
   LossByDepartmentReportItem,
   ItemsByUserReportItem,
   ItemsByDateReportItem,
+  StoreWalkAuditCycle,
   DashboardAnalytics,
 };

@@ -95,40 +95,6 @@ const SCHEMA_SQL = `
     WHERE import_type = 'product-catalog'
       AND status IN ('pending', 'queued', 'validating', 'processing');
 
-  CREATE TABLE store_areas (
-    id SERIAL PRIMARY KEY,
-    organization_id TEXT NOT NULL,
-    name TEXT NOT NULL,
-    sub_department TEXT NOT NULL DEFAULT '',
-    created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
-    updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
-  );
-
-  CREATE TABLE inventory_items (
-    id SERIAL PRIMARY KEY,
-    organization_id TEXT NOT NULL,
-    product_id INTEGER,
-    location_id INTEGER,
-    expiry_date DATE,
-    status TEXT NOT NULL DEFAULT 'Active',
-    created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
-    updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
-  );
-
-  CREATE TABLE expired_item_transactions (
-    id SERIAL PRIMARY KEY,
-    organization_id TEXT NOT NULL,
-    inventory_item_id INTEGER NOT NULL,
-    user_id INTEGER,
-    action TEXT NOT NULL,
-    units_discarded INTEGER,
-    financial_loss DOUBLE PRECISION,
-    markdown_level SMALLINT,
-    transaction_date TIMESTAMPTZ NOT NULL DEFAULT NOW(),
-    created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
-    updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
-  );
-
   CREATE TABLE organizations (
     id TEXT PRIMARY KEY,
     clerk_organization_id TEXT,
@@ -155,6 +121,84 @@ const SCHEMA_SQL = `
   );
 
   CREATE UNIQUE INDEX users_clerk_user_id_key ON users (clerk_user_id);
+
+  CREATE TABLE store_areas (
+    id SERIAL PRIMARY KEY,
+    organization_id TEXT NOT NULL,
+    parent_id INTEGER REFERENCES store_areas (id) ON DELETE CASCADE,
+    name TEXT NOT NULL,
+    sub_department TEXT NOT NULL DEFAULT '',
+    last_checked TIMESTAMPTZ,
+    created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+    updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+    CHECK (parent_id IS NULL OR parent_id <> id)
+  );
+
+  CREATE INDEX idx_store_areas_parent_id ON store_areas (parent_id);
+
+  CREATE TABLE check_cycles (
+    id SERIAL PRIMARY KEY,
+    organization_id TEXT NOT NULL REFERENCES organizations (id) ON DELETE CASCADE,
+    name TEXT NOT NULL,
+    status TEXT NOT NULL DEFAULT 'active',
+    started_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+    completed_at TIMESTAMPTZ,
+    created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+    updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+    CHECK (status IN ('active', 'completed')),
+    CHECK (
+      (status = 'completed' AND completed_at IS NOT NULL)
+      OR (status = 'active' AND completed_at IS NULL)
+    )
+  );
+
+  CREATE UNIQUE INDEX one_active_cycle_per_org
+    ON check_cycles (organization_id)
+    WHERE status = 'active';
+
+  CREATE TABLE bay_checks (
+    id SERIAL PRIMARY KEY,
+    organization_id TEXT NOT NULL REFERENCES organizations (id) ON DELETE CASCADE,
+    cycle_id INTEGER NOT NULL REFERENCES check_cycles (id) ON DELETE CASCADE,
+    store_area_id INTEGER NOT NULL REFERENCES store_areas (id) ON DELETE CASCADE,
+    user_id INTEGER REFERENCES users (id) ON DELETE SET NULL,
+    checked_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+    items_added_count INTEGER NOT NULL DEFAULT 0,
+    notes TEXT,
+    created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+    updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+    CHECK (items_added_count >= 0)
+  );
+
+  CREATE INDEX idx_bay_checks_organization_id ON bay_checks (organization_id);
+  CREATE INDEX idx_bay_checks_cycle_id ON bay_checks (cycle_id);
+  CREATE INDEX idx_bay_checks_store_area_id ON bay_checks (store_area_id);
+  CREATE INDEX idx_bay_checks_checked_at ON bay_checks (checked_at);
+
+  CREATE TABLE inventory_items (
+    id SERIAL PRIMARY KEY,
+    organization_id TEXT NOT NULL,
+    product_id INTEGER,
+    location_id INTEGER,
+    expiry_date DATE,
+    status TEXT NOT NULL DEFAULT 'Active',
+    created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+    updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+  );
+
+  CREATE TABLE expired_item_transactions (
+    id SERIAL PRIMARY KEY,
+    organization_id TEXT NOT NULL,
+    inventory_item_id INTEGER NOT NULL,
+    user_id INTEGER,
+    action TEXT NOT NULL,
+    units_discarded INTEGER,
+    financial_loss DOUBLE PRECISION,
+    markdown_level SMALLINT,
+    transaction_date TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+    created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+    updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+  );
 
   CREATE TABLE subscription_tiers (
     id SERIAL PRIMARY KEY,

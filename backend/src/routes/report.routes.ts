@@ -123,6 +123,15 @@ router.get(
   },
 );
 
+// GET /reports/store-walk-audit - Get store walk checking productivity and flags
+router.get(
+  '/store-walk-audit',
+  authenticateToken,
+  async (req: AuthRequest, res: Response, next: NextFunction) => {
+    await reportController.getStoreWalkAuditReport(req, res, next);
+  },
+);
+
 // GET /dashboard/analytics - Get dashboard analytics data (FR-005)
 router.get(
   '/analytics',

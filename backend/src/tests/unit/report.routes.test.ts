@@ -14,6 +14,7 @@ const mockReportService = {
   getLossByDepartmentReport: vi.fn(),
   getItemsByUserReport: vi.fn(),
   getItemsByDateReport: vi.fn(),
+  getStoreWalkAuditReport: vi.fn(),
   getDashboardAnalytics: vi.fn(),
 };
 
@@ -73,6 +74,7 @@ describe('report.routes', () => {
     mockReportService.getLossByDepartmentReport.mockResolvedValue({ report: 'loss-by-department' });
     mockReportService.getItemsByUserReport.mockResolvedValue({ report: 'items-by-user' });
     mockReportService.getItemsByDateReport.mockResolvedValue({ report: 'items-by-date' });
+    mockReportService.getStoreWalkAuditReport.mockResolvedValue({ report: 'store-walk-audit' });
     mockReportService.getDashboardAnalytics.mockResolvedValue({ report: 'analytics' });
   });
 
@@ -100,6 +102,7 @@ describe('report.routes', () => {
         'getLossByDepartmentReport',
       ],
       ['/reports/items-by-date', { report: 'items-by-date' }, 'getItemsByDateReport'],
+      ['/reports/store-walk-audit', { report: 'store-walk-audit' }, 'getStoreWalkAuditReport'],
       ['/reports/analytics', { report: 'analytics' }, 'getDashboardAnalytics'],
     ] as const;
 

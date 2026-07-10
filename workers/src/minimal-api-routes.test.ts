@@ -144,6 +144,7 @@ describe('minimal API route table', () => {
     expect(routes).toEqual(
       expect.arrayContaining([
         expect.arrayContaining(['GET', '/api/expired-items/reports/expired-losses']),
+        expect.arrayContaining(['GET', '/api/reports/store-walk-audit']),
       ]),
     );
   });
@@ -155,6 +156,83 @@ describe('minimal API route table', () => {
         expect.arrayContaining(['GET', '/api/organization/usage']),
       ]),
     );
+  });
+
+  it('registers store walk tracking routes under store areas', () => {
+    expect(getMinimalRoutes()).toEqual(
+      expect.arrayContaining([
+        expect.arrayContaining(['GET', '/api/store-areas/check-cycles']),
+        expect.arrayContaining(['POST', '/api/store-areas/check-cycles']),
+        expect.arrayContaining(['POST', /^\/api\/store-areas\/check-cycles\/\d+\/complete$/]),
+        expect.arrayContaining(['POST', '/api/store-areas/bay-checks']),
+        expect.arrayContaining(['GET', '/api/store-areas/floor-progress']),
+      ]),
+    );
+  });
+
+  it('creates, completes, records, and reads store walk tracking from authenticated org context', async () => {
+    mockedAuthenticateClerkRequest.mockResolvedValue(authenticatedClerkOrgContext);
+    const dbWithStoreWalk = {
+      sql: vi.fn((strings: TemplateStringsArray) => {
+        const query = strings.join(' ');
+        if (query.includes('FROM users')) {
+          return Promise.resolve([{ id: 7, organizationId: 'org_123', role: 'admin' }]);
+        }
+        return Promise.resolve([]);
+      }),
+      createCheckCycle: vi.fn().mockResolvedValue({ id: 11, name: 'Morning walk' }),
+      completeCheckCycle: vi.fn().mockResolvedValue({ id: 11, status: 'completed' }),
+      recordBayCheck: vi.fn().mockResolvedValue({ id: 22, storeAreaId: 5 }),
+      getFloorProgress: vi.fn().mockResolvedValue({ activeCycle: { id: 11 }, departments: [] }),
+    } as unknown as Database;
+
+    const createCycle = await resolveMinimalApiRoute(getMinimalRoutes(), {
+      request: new Request('https://example.com/api/store-areas/check-cycles', {
+        method: 'POST',
+        body: JSON.stringify({ name: 'Morning walk' }),
+      }),
+      pathname: '/api/store-areas/check-cycles',
+      method: 'POST',
+      db: dbWithStoreWalk,
+      env,
+    });
+    const completeCycle = await resolveMinimalApiRoute(getMinimalRoutes(), {
+      request: new Request('https://example.com/api/store-areas/check-cycles/11/complete', {
+        method: 'POST',
+      }),
+      pathname: '/api/store-areas/check-cycles/11/complete',
+      method: 'POST',
+      db: dbWithStoreWalk,
+      env,
+    });
+    const recordCheck = await resolveMinimalApiRoute(getMinimalRoutes(), {
+      request: new Request('https://example.com/api/store-areas/bay-checks', {
+        method: 'POST',
+        body: JSON.stringify({ storeAreaId: 5, itemsAddedCount: 2 }),
+      }),
+      pathname: '/api/store-areas/bay-checks',
+      method: 'POST',
+      db: dbWithStoreWalk,
+      env,
+    });
+    const progress = await resolveMinimalGet('/api/store-areas/floor-progress', dbWithStoreWalk);
+
+    expect(createCycle?.status).toBe(201);
+    expect(completeCycle?.status).toBe(200);
+    expect(recordCheck?.status).toBe(201);
+    expect(progress?.status).toBe(200);
+    expect(dbWithStoreWalk.createCheckCycle).toHaveBeenCalledWith('org_123', {
+      name: 'Morning walk',
+      startedAt: undefined,
+    });
+    expect(dbWithStoreWalk.completeCheckCycle).toHaveBeenCalledWith('org_123', 11);
+    expect(dbWithStoreWalk.recordBayCheck).toHaveBeenCalledWith('org_123', 7, {
+      storeAreaId: 5,
+      checkedAt: undefined,
+      itemsAddedCount: 2,
+      notes: undefined,
+    });
+    expect(dbWithStoreWalk.getFloorProgress).toHaveBeenCalledWith('org_123');
   });
 
   it('returns the default markdown matrix for an authenticated organization', async () => {
