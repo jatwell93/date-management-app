@@ -241,7 +241,7 @@ export class CreditClaimService {
     }
 
     const sentAt = this.now();
-    return this.prisma.$transaction(async (tx) => {
+    const finalizeSentClaim = async (tx?: Parameters<CreditClaimRepository['updateClaim']>[3]) => {
       await this.repo.updateClaim(
         this.organizationId,
         id,
@@ -257,7 +257,30 @@ export class CreditClaimService {
       const updated = await this.repo.findClaim(this.organizationId, id, tx);
       if (!updated) throw new NotFoundError(`Claim ${id} not found`);
       return updated;
-    });
+    };
+
+    try {
+      return await this.prisma.$transaction(async (tx) => finalizeSentClaim(tx));
+    } catch (error) {
+      try {
+        await this.repo.updateClaim(this.organizationId, id, {
+          status: 'SENT',
+          contactEmailSnapshot: to,
+          sentAt,
+          nextFollowUpAt: nextFollowUp(sentAt, claim.supplier.followUpDays, 0),
+        });
+        await this.repo
+          .addEvent(this.organizationId, id, 'SENT', null, `Sent to ${to}`)
+          .catch(() => undefined);
+        const recovered = await this.repo.findClaim(this.organizationId, id);
+        if (recovered) {
+          return recovered;
+        }
+      } catch {
+        // If compensation fails too, bubble the original error from finalize.
+      }
+      throw error;
+    }
   }
 
   /** Send a follow-up nudge and advance the schedule. */

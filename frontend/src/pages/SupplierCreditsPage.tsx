@@ -40,6 +40,10 @@ const STATUS_TONE: Record<string, string> = {
   CANCELLED: 'bg-semantic-surface-3 text-semantic-text-secondary',
 };
 
+function formatClaimLabel(value: string): string {
+  return value.replace(/_/g, ' ');
+}
+
 function isFollowUpDue(claim: CreditClaim): boolean {
   return (
     (claim.status === 'SENT' || claim.status === 'ACKNOWLEDGED') &&
@@ -370,7 +374,7 @@ const ClaimList: React.FC<{
                 </Badge>
               )}
               <Badge className={STATUS_TONE[claim.status] ?? ''}>
-                {claim.status.replace('_', ' ')}
+                {formatClaimLabel(claim.status)}
               </Badge>
             </span>
           </button>
@@ -649,7 +653,7 @@ const ClaimDetailModal: React.FC<{
 
         <div className="space-y-1 text-sm">
           <p>
-            Status: <span className="font-medium">{claim.status.replace('_', ' ')}</span>
+            Status: <span className="font-medium">{formatClaimLabel(claim.status)}</span>
           </p>
           <p className="text-semantic-text-secondary">
             Expected{' '}
@@ -697,7 +701,7 @@ const ClaimDetailModal: React.FC<{
             {claim.events.map((ev) => (
               <li key={ev.id} className="flex justify-between">
                 <span>
-                  {ev.type.replace('_', ' ')}
+                  {formatClaimLabel(ev.type)}
                   {ev.note ? ` — ${ev.note}` : ''}
                 </span>
                 <span className="text-semantic-text-tertiary">

@@ -12,6 +12,7 @@ function makeDeps(
     writeOffs?: unknown[];
     claim?: unknown;
     emailAccepted?: boolean;
+    transactionError?: Error;
   } = {},
 ) {
   const supplier = overrides.supplier ?? {
@@ -26,10 +27,18 @@ function makeDeps(
   const createClaim = vi.fn(async () => ({ id: 1 }));
   const createLine = vi.fn(async () => ({ id: 1 }));
   const addEvent = vi.fn(async () => ({ id: 1 }));
-  const updateClaim = vi.fn(async () => 1);
+  let currentClaim = overrides.claim ?? null;
+  const updateClaim = vi.fn(
+    async (_organizationId: string, _id: number, data: Record<string, unknown>) => {
+      if (currentClaim && typeof currentClaim === 'object') {
+        currentClaim = { ...(currentClaim as Record<string, unknown>), ...data };
+      }
+      return 1;
+    },
+  );
   const claimDraftForSending = vi.fn(async () => 1);
   const setPhotoDeleteAfterForClaim = vi.fn(async () => undefined);
-  const findClaim = vi.fn(async () => overrides.claim ?? null);
+  const findClaim = vi.fn(async () => currentClaim);
 
   const repo = {
     findWriteOffsByIds: vi.fn(async () => overrides.writeOffs ?? []),
@@ -59,7 +68,12 @@ function makeDeps(
 
   // Fake $transaction that runs the callback with a throwaway tx object.
   const tx = { transaction: true };
-  const transaction = vi.fn(async (fn: (tx: unknown) => unknown) => fn(tx));
+  const transaction = vi.fn(async (fn: (tx: unknown) => unknown) => {
+    if (overrides.transactionError) {
+      throw overrides.transactionError;
+    }
+    return fn(tx);
+  });
   const prisma = { $transaction: transaction } as never;
 
   const service = new CreditClaimService('org-1', {
@@ -196,6 +210,35 @@ describe('CreditClaimService', () => {
       );
       expect(addEvent).toHaveBeenCalledWith('org-1', 1, 'SENT', null, expect.any(String), tx);
       expect(repo.findClaim).toHaveBeenCalled();
+    });
+
+    it('restores a sent claim if finalization fails after the email is accepted', async () => {
+      const finalizeError = new Error('transaction failed');
+      const { service, emailSender, updateClaim, addEvent, transaction } = makeDeps({
+        claim: draft,
+        transactionError: finalizeError,
+      });
+
+      const result = await service.sendClaim(1);
+
+      expect(emailSender.send).toHaveBeenCalledOnce();
+      expect(transaction).toHaveBeenCalledOnce();
+      expect(updateClaim).toHaveBeenCalledWith(
+        'org-1',
+        1,
+        expect.objectContaining({
+          status: 'SENT',
+          sentAt: NOW,
+          nextFollowUpAt: new Date('2026-07-17T00:00:00.000Z'),
+        }),
+      );
+      expect(addEvent).toHaveBeenCalledWith('org-1', 1, 'SENT', null, expect.any(String));
+      expect(result).toEqual(
+        expect.objectContaining({
+          status: 'SENT',
+          sentAt: NOW,
+        }),
+      );
     });
 
     it('does not email when another request already claimed the draft send', async () => {

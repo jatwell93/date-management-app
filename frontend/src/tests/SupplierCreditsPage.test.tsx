@@ -83,7 +83,7 @@ const openClaim = {
     followUpDays: 7,
   },
   lines: [],
-  events: [{ id: 1, type: 'SENT', note: null, createdAt: '2026-07-01T00:00:00.000Z' }],
+  events: [{ id: 1, type: 'FOLLOW_UP_SENT', note: null, createdAt: '2026-07-01T00:00:00.000Z' }],
 };
 
 beforeEach(() => {
@@ -131,6 +131,16 @@ describe('SupplierCreditsPage', () => {
 
     await waitFor(() => expect(screen.getByText('Claim #5')).toBeInTheDocument());
     expect(screen.getByText('Follow-up due')).toBeInTheDocument();
+  });
+
+  it('renders multi-underscore event labels in the claim timeline', async () => {
+    render(<SupplierCreditsPage token="tkn" />);
+    await screen.findByText('Money on the table');
+
+    await userEvent.click(screen.getByRole('button', { name: /Open Claims/ }));
+    await userEvent.click(screen.getByRole('button', { name: /Claim #5/ }));
+
+    expect(await screen.findByText('FOLLOW UP SENT')).toBeInTheDocument();
   });
 
   it('opens the build-claim modal from a supplier group', async () => {
