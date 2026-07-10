@@ -379,6 +379,49 @@ export const assignSupplierSchema = z.object({
   }),
 });
 
+export const claimCreateSchema = z.object({
+  body: z.object({
+    supplierId: z.number().int().positive('Supplier ID must be a positive integer'),
+    lines: z
+      .array(
+        z.object({
+          expiredItemTransactionId: z
+            .number()
+            .int()
+            .positive('Write-off ID must be a positive integer'),
+          batchNumber: z
+            .string()
+            .max(120, 'Batch number must be at most 120 characters')
+            .refine(noHtml, 'Batch number cannot contain HTML tags')
+            .nullable()
+            .optional(),
+          unitsClaimed: z
+            .number()
+            .int()
+            .positive('Units claimed must be a positive integer')
+            .optional(),
+        }),
+      )
+      .min(1, 'A claim needs at least one line'),
+  }),
+});
+
+export const claimOutcomeSchema = z.object({
+  body: z.object({
+    outcome: z.enum(['CREDITED', 'PARTIALLY_CREDITED', 'REJECTED']),
+    creditedValue: z
+      .number()
+      .nonnegative('Credited value must be zero or greater')
+      .nullable()
+      .optional(),
+    note: z
+      .string()
+      .max(1000, 'Note must be at most 1000 characters')
+      .nullable()
+      .optional(),
+  }),
+});
+
 // ============================================================================
 // Upload Schema
 // ============================================================================

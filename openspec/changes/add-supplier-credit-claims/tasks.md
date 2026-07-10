@@ -31,17 +31,18 @@
 - [x] 3.2 Assign-supplier-to-product endpoint (persists `Product.supplierId`).
 - [x] 3.3 Claimable-pool listing endpoint (grouped by supplier via the shared rollup; excludes
       already-claimed write-offs).
-- [ ] 3.4 Claim build endpoint: create claim + lines from write-offs, capture batch/units, snapshot
+- [x] 3.4 Claim build endpoint: create claim + lines from write-offs, capture batch/units, snapshot
       expected credit; enforce unique write-off per line.
-- [ ] 3.5 Photo upload to R2 (reuse existing R2 plumbing); persist `CreditClaimPhoto` metadata.
-- [ ] 3.6 Claim send: transactional-email service behind a swappable interface; set `sentAt` +
-      `nextFollowUpAt` only on success; enforce ≥1 line + supplier email; append `SENT` event.
-- [ ] 3.7 Record-outcome endpoint (credited / partially credited / rejected → `settledAt`,
-      `creditedValue`, `deleteAfter`); append event.
-- [ ] 3.8 Follow-up-due read + send-follow-up endpoint (advances schedule, bumps count, appends event).
+- [x] 3.5 Photo upload to R2 (reuse existing storage-factory); persist `CreditClaimPhoto` metadata.
+- [x] 3.6 Claim send: Resend behind a swappable `EmailSender` interface (dependency-free fetch); set
+      `sentAt` + `nextFollowUpAt` only on success; enforce ≥1 line + supplier email; append `SENT` event.
+- [x] 3.7 Record-outcome endpoint (credited / partially credited / rejected → `settledAt`,
+      `creditedValue`, photo `deleteAfter`); append event.
+- [x] 3.8 Send-follow-up endpoint (advances schedule, bumps count, appends event). Follow-up-due read
+      lives in the repo (`findFollowUpDue`) for the reminder engine (task 5.1).
 - [ ] 3.9 Recovery report endpoint (outstanding, per-supplier recovery rate, unclaimed value).
-- [ ] 3.10 Mount routes in `backend/src/index.ts`; tests per endpoint (org-scoping, unique-line,
-      send preconditions, `no-client-organization-id`).
+- [ ] 3.10 Mount routes in `backend/src/index.ts` (done for suppliers/claims); route-level tests per
+      endpoint (org-scoping, unique-line, send preconditions, `no-client-organization-id`).
 
 ## 4. Workers (parity)
 
