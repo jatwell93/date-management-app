@@ -193,6 +193,11 @@ export class CreditClaimService {
     lineId: number,
     file: { buffer: Buffer; originalName: string; contentType: string },
   ) {
+    const claim = await this.getClaim(claimId);
+    if (claim.status !== 'DRAFT') {
+      throw new ValidationError(`Photos can only be added to draft claims.`);
+    }
+
     const line = await this.repo.findClaimLine(this.organizationId, claimId, lineId);
     if (!line) throw new NotFoundError(`Claim line ${lineId} not found`);
 

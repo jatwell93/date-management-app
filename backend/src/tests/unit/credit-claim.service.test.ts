@@ -39,6 +39,8 @@ function makeDeps(
   const claimDraftForSending = vi.fn(async () => 1);
   const setPhotoDeleteAfterForClaim = vi.fn(async () => undefined);
   const findClaim = vi.fn(async () => currentClaim);
+  const findClaimLine = vi.fn(async () => ({ id: 1, claimId: 1 }));
+  const addPhoto = vi.fn(async () => ({ id: 1 }));
 
   const repo = {
     findWriteOffsByIds: vi.fn(async () => overrides.writeOffs ?? []),
@@ -49,6 +51,8 @@ function makeDeps(
     claimDraftForSending,
     setPhotoDeleteAfterForClaim,
     findClaim,
+    findClaimLine,
+    addPhoto,
   } as unknown as CreditClaimRepository;
 
   const supplierRepo = {
@@ -96,6 +100,9 @@ function makeDeps(
     claimDraftForSending,
     addEvent,
     setPhotoDeleteAfterForClaim,
+    findClaimLine,
+    addPhoto,
+    storage,
     transaction,
     tx,
   };
@@ -293,6 +300,26 @@ describe('CreditClaimService', () => {
         expect.objectContaining({ status: 'SENT' }),
         expect.anything(),
       );
+    });
+  });
+
+  describe('addPhoto', () => {
+    it('refuses to upload photos after the claim is settled', async () => {
+      const { service, findClaimLine, addPhoto, storage } = makeDeps({
+        claim: { id: 1, status: 'CREDITED', lines: [{ id: 1, photos: [] }] },
+      });
+
+      await expect(
+        service.addPhoto(1, 1, {
+          buffer: Buffer.from('img'),
+          originalName: 'claim.jpg',
+          contentType: 'image/jpeg',
+        }),
+      ).rejects.toBeInstanceOf(ValidationError);
+
+      expect(findClaimLine).not.toHaveBeenCalled();
+      expect(storage.upload).not.toHaveBeenCalled();
+      expect(addPhoto).not.toHaveBeenCalled();
     });
   });
 
