@@ -6,7 +6,7 @@
  *   node scripts/mem-backfill.js
  */
 
-const { execSync } = require('child_process');
+const { execFileSync } = require('child_process');
 const fs = require('fs');
 const path = require('path');
 
@@ -23,15 +23,13 @@ const MEMORY_FILE =
   process.env.MEMORY_FILE_PATH || path.join(__dirname, '..', 'project-memory.mv2');
 const MEMORY_JSONL = process.env.MEMORY_JSONL_PATH || path.join(__dirname, '..', 'memory.jsonl');
 
-function escapeForShell(value) {
-  return String(value).replace(/"/g, '\\"');
-}
-
 function ensureMemvidAvailable(env) {
   try {
-    execSync('memvid --version', {
+    execFileSync('memvid', ['--version'], {
       env,
       stdio: ['ignore', 'ignore', 'ignore'],
+      shell: true,
+      windowsHide: true,
     });
   } catch (error) {
     console.error('❌ memvid is not available in PATH for this Node process.');
@@ -91,21 +89,26 @@ function backfillMemoryJsonl() {
   const cleanEnv = { ...process.env };
   ensureMemvidAvailable(cleanEnv);
 
-  const stats = execSync(`memvid stats "${escapeForShell(MEMORY_FILE)}"`, {
+  const stats = execFileSync('memvid', ['stats', MEMORY_FILE], {
     env: cleanEnv,
     encoding: 'utf8',
     stdio: ['ignore', 'pipe', 'pipe'],
+    shell: true,
+    windowsHide: true,
   });
   const frameCount = parseFrameCount(stats);
   const records = [];
 
   for (let frameId = 0; frameId < frameCount; frameId += 1) {
-    const output = execSync(
-      `memvid view "${escapeForShell(MEMORY_FILE)}" --frame-id ${frameId} --json`,
+    const output = execFileSync(
+      'memvid',
+      ['view', MEMORY_FILE, '--frame-id', String(frameId), '--json'],
       {
         env: cleanEnv,
         encoding: 'utf8',
         stdio: ['ignore', 'pipe', 'pipe'],
+        shell: true,
+        windowsHide: true,
       },
     );
 

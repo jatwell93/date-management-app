@@ -6,7 +6,7 @@
  *   node scripts/mem-rebuild.js
  */
 
-const { execSync } = require('child_process');
+const { execFileSync } = require('child_process');
 const fs = require('fs');
 const path = require('path');
 
@@ -23,15 +23,13 @@ const MEMORY_FILE =
   process.env.MEMORY_FILE_PATH || path.join(__dirname, '..', 'project-memory.mv2');
 const MEMORY_JSONL = process.env.MEMORY_JSONL_PATH || path.join(__dirname, '..', 'memory.jsonl');
 
-function escapeForShell(value) {
-  return String(value).replace(/"/g, '\\"');
-}
-
 function ensureMemvidAvailable(env) {
   try {
-    execSync('memvid --version', {
+    execFileSync('memvid', ['--version'], {
       env,
       stdio: ['ignore', 'ignore', 'ignore'],
+      shell: true,
+      windowsHide: true,
     });
   } catch (error) {
     console.error('❌ memvid is not available in PATH for this Node process.');
@@ -98,9 +96,11 @@ function rebuildMemory() {
     console.log(`Moved existing local index to ${backupPath}`);
   }
 
-  execSync(`memvid create "${escapeForShell(MEMORY_FILE)}"`, {
+  execFileSync('memvid', ['create', MEMORY_FILE], {
     env: cleanEnv,
     stdio: ['ignore', 'inherit', 'inherit'],
+    shell: true,
+    windowsHide: true,
   });
 
   records.forEach((record, index) => {
@@ -108,14 +108,18 @@ function rebuildMemory() {
     const title = String(record.title || 'Untitled');
     const message = String(record.message || '');
     const memvidTimestamp = toMemvidTimestamp(record.ts);
-    const timestamp = memvidTimestamp ? ` --timestamp "${escapeForShell(memvidTimestamp)}"` : '';
-    const command = `memvid put "${escapeForShell(MEMORY_FILE)}" --title "${escapeForShell(title)}" --kind ${escapeForShell(kind.toLowerCase())}${timestamp}`;
-
     try {
-      execSync(command, {
+      const args = ['put', MEMORY_FILE, '--title', title, '--kind', kind.toLowerCase()];
+      if (memvidTimestamp) {
+        args.push('--timestamp', memvidTimestamp);
+      }
+
+      execFileSync('memvid', args, {
         env: cleanEnv,
         stdio: ['pipe', 'inherit', 'inherit'],
         input: `[${kind}] ${message}`,
+        shell: true,
+        windowsHide: true,
       });
     } catch (error) {
       throw new Error(`Failed to rebuild memory record ${index + 1} (${title}): ${error.message}`);

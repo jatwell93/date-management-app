@@ -18,7 +18,7 @@
  *   node scripts/mem-log.js DECISION "State Management" "Using React Context instead of Redux for simplicity"
  */
 
-const { execSync } = require('child_process');
+const { execFileSync } = require('child_process');
 const fs = require('fs');
 const path = require('path');
 
@@ -42,15 +42,13 @@ const MEMORY_JSONL = process.env.MEMORY_JSONL_PATH || path.join(__dirname, '..',
 
 const VALID_KINDS = ['FIX', 'PATTERN', 'DECISION', 'FEATURE', 'ERROR', 'ARCHITECTURE', 'WORKFLOW'];
 
-function escapeForShell(value) {
-  return String(value).replace(/"/g, '\\"');
-}
-
 function ensureMemvidAvailable(env) {
   try {
-    execSync('memvid --version', {
+    execFileSync('memvid', ['--version'], {
       env,
       stdio: ['ignore', 'ignore', 'ignore'],
+      shell: true,
+      windowsHide: true,
     });
   } catch (error) {
     throw new Error(
@@ -101,18 +99,27 @@ function logMemory(kind, title, message) {
     cleanEnv.GOOGLE_API_KEY = process.env.GEMINI_API_KEY;
   }
 
-  appendMemoryJsonl(normalizedKind, title, message);
+  try {
+    appendMemoryJsonl(normalizedKind, title, message);
+  } catch (error) {
+    console.error('❌ Failed to write memory.jsonl:', error.message);
+    process.exit(1);
+  }
 
   try {
     ensureMemvidAvailable(cleanEnv);
 
-    // Use execSync with explicit quoting so arguments with spaces are preserved
-    const command = `memvid put "${escapeForShell(MEMORY_FILE)}" --title "${escapeForShell(title)}" --kind ${normalizedKind.toLowerCase()}`;
-    execSync(command, {
-      env: cleanEnv,
-      stdio: ['pipe', 'inherit', 'inherit'],
-      input: fullMessage,
-    });
+    execFileSync(
+      'memvid',
+      ['put', MEMORY_FILE, '--title', title, '--kind', normalizedKind.toLowerCase()],
+      {
+        env: cleanEnv,
+        stdio: ['pipe', 'inherit', 'inherit'],
+        input: fullMessage,
+        shell: true,
+        windowsHide: true,
+      },
+    );
 
     console.log(`\n✅ Memory logged: [${normalizedKind}] ${title}`);
   } catch (error) {
