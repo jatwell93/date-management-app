@@ -357,25 +357,17 @@ const supplierBody = z
       .max(365, 'Follow-up cadence must be at most 365 days')
       .optional(),
   })
-  .refine(
-    (body) =>
-      (body.policyWriteOffQty == null) === (body.policyCreditQty == null),
-    {
-      message: 'A credit ratio needs both a write-off quantity and a credit quantity, or neither.',
-      path: ['policyCreditQty'],
-    },
-  );
+  .refine((body) => (body.policyWriteOffQty == null) === (body.policyCreditQty == null), {
+    message: 'A credit ratio needs both a write-off quantity and a credit quantity, or neither.',
+    path: ['policyCreditQty'],
+  });
 
 export const supplierCreateSchema = z.object({ body: supplierBody });
 export const supplierUpdateSchema = z.object({ body: supplierBody });
 
 export const assignSupplierSchema = z.object({
   body: z.object({
-    supplierId: z
-      .number()
-      .int()
-      .positive('Supplier ID must be a positive integer')
-      .nullable(),
+    supplierId: z.number().int().positive('Supplier ID must be a positive integer').nullable(),
   }),
 });
 
@@ -414,11 +406,7 @@ export const claimOutcomeSchema = z.object({
       .nonnegative('Credited value must be zero or greater')
       .nullable()
       .optional(),
-    note: z
-      .string()
-      .max(1000, 'Note must be at most 1000 characters')
-      .nullable()
-      .optional(),
+    note: z.string().max(1000, 'Note must be at most 1000 characters').nullable().optional(),
   }),
 });
 

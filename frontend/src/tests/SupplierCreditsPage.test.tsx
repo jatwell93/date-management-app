@@ -73,7 +73,15 @@ const openClaim = {
   nextFollowUpAt: '2026-07-01T00:00:00.000Z', // in the past → follow-up due
   followUpCount: 0,
   settledAt: null,
-  supplier: { id: 10, name: 'Blackmores', contactEmail: 'x@y.com', creditPolicyNote: '', policyWriteOffQty: 3, policyCreditQty: 1, followUpDays: 7 },
+  supplier: {
+    id: 10,
+    name: 'Blackmores',
+    contactEmail: 'x@y.com',
+    creditPolicyNote: '',
+    policyWriteOffQty: 3,
+    policyCreditQty: 1,
+    followUpDays: 7,
+  },
   lines: [],
   events: [{ id: 1, type: 'SENT', note: null, createdAt: '2026-07-01T00:00:00.000Z' }],
 };
@@ -84,7 +92,17 @@ beforeEach(() => {
   mocked.getRecoveryReport.mockResolvedValue({
     outstandingValue: 20,
     unclaimedValue: 200,
-    suppliers: [{ supplierId: 10, supplierName: 'Blackmores', claimsSent: 1, claimsCredited: 0, expectedValue: 20, creditedValue: 0, recoveryRate: 0 }],
+    suppliers: [
+      {
+        supplierId: 10,
+        supplierName: 'Blackmores',
+        claimsSent: 1,
+        claimsCredited: 0,
+        expectedValue: 20,
+        creditedValue: 0,
+        recoveryRate: 0,
+      },
+    ],
   });
   mocked.listClaims.mockImplementation((view: string) =>
     Promise.resolve(view === 'open' ? [openClaim] : []),

@@ -15,7 +15,11 @@ function makeService(
   const repo = {
     listSuppliers: vi.fn(async () => overrides.suppliers ?? []),
     findSupplier: vi.fn(async () => overrides.findSupplier ?? null),
-    createSupplier: vi.fn(async (orgId: string, data) => ({ id: 1, organizationId: orgId, ...data })),
+    createSupplier: vi.fn(async (orgId: string, data) => ({
+      id: 1,
+      organizationId: orgId,
+      ...data,
+    })),
     updateSupplier: vi.fn(async () => overrides.updateCount ?? 1),
     assignProductSupplier: vi.fn(async () => overrides.assignCount ?? 1),
     findClaimableWriteOffs: vi.fn(async () => overrides.claimable ?? []),

@@ -18,7 +18,9 @@ function buildApp(service: Partial<CreditClaimService>) {
   const upload = multer({ storage: multer.memoryStorage() });
 
   app.get('/claims', (req, res, next) => controller.listClaims(req as any, res, next));
-  app.get('/recovery-report', (req, res, next) => controller.getRecoveryReport(req as any, res, next));
+  app.get('/recovery-report', (req, res, next) =>
+    controller.getRecoveryReport(req as any, res, next),
+  );
   app.post('/claims', (req, res, next) => controller.buildClaim(req as any, res, next));
   app.post('/claims/:id/lines/:lineId/photos', upload.single('file'), (req, res, next) =>
     controller.addPhoto(req as any, res, next),
@@ -45,7 +47,12 @@ describe('CreditClaimController routes', () => {
     const app = buildApp({ listClaims } as any);
 
     await request(app).get('/claims?view=settled').expect(200);
-    expect(listClaims).toHaveBeenCalledWith(['CREDITED', 'PARTIALLY_CREDITED', 'REJECTED', 'CANCELLED']);
+    expect(listClaims).toHaveBeenCalledWith([
+      'CREDITED',
+      'PARTIALLY_CREDITED',
+      'REJECTED',
+      'CANCELLED',
+    ]);
   });
 
   it('lists all claims when no view is given', async () => {

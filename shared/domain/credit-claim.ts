@@ -27,8 +27,10 @@ export const SETTLED_CLAIM_STATUSES = [
 ] as const satisfies readonly CreditClaimStatus[];
 
 /** Statuses that are still open with the supplier and may be followed up. */
-export const CHASEABLE_CLAIM_STATUSES = ['SENT', 'ACKNOWLEDGED'] as const satisfies
-  readonly CreditClaimStatus[];
+export const CHASEABLE_CLAIM_STATUSES = [
+  'SENT',
+  'ACKNOWLEDGED',
+] as const satisfies readonly CreditClaimStatus[];
 
 export function isSettledClaimStatus(status: string): boolean {
   return (SETTLED_CLAIM_STATUSES as readonly string[]).includes(status);

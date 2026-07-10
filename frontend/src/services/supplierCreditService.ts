@@ -90,14 +90,11 @@ export const uploadClaimPhoto = async (
 ): Promise<CreditClaimPhoto> => {
   const form = new FormData();
   form.append('file', file);
-  const response = await fetch(
-    buildApiUrl(`${BASE}/claims/${claimId}/lines/${lineId}/photos`),
-    {
-      method: 'POST',
-      headers: token ? { Authorization: `Bearer ${token}` } : undefined,
-      body: form,
-    },
-  );
+  const response = await fetch(buildApiUrl(`${BASE}/claims/${claimId}/lines/${lineId}/photos`), {
+    method: 'POST',
+    headers: token ? { Authorization: `Bearer ${token}` } : undefined,
+    body: form,
+  });
   if (!response.ok) {
     throw new Error(`Failed to upload photo: ${response.status}`);
   }

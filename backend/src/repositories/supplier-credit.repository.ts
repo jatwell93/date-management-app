@@ -29,11 +29,7 @@ export class SupplierCreditRepository {
     });
   }
 
-  findSupplier(
-    organizationId: string,
-    id: number,
-    tx?: DbClient,
-  ): Promise<SupplierRecord | null> {
+  findSupplier(organizationId: string, id: number, tx?: DbClient): Promise<SupplierRecord | null> {
     return this.getClient(tx).supplier.findFirst({ where: { id, organizationId } });
   }
 

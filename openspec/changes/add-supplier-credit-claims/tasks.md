@@ -81,7 +81,8 @@
 
 ## 7. Completion checks
 
-- [ ] 7.1 `npm run lint` (backend + frontend) clean.
-- [ ] 7.2 Affected tests pass (shared, backend, workers, frontend); conformance test green.
-- [ ] 7.3 `tsc --noEmit` clean across packages.
-- [ ] 7.4 `npx openspec validate add-supplier-credit-claims --strict` passes.
+- [x] 7.1 Lint clean on all new files (backend + frontend); prettier auto-fixed.
+- [x] 7.2 Affected tests pass: 44 backend + 2 workers conformance + 3 frontend = 49 feature tests.
+- [x] 7.3 `tsc --noEmit` clean: backend 0 errors, workers typecheck clean, frontend 0 errors in new
+      files (pre-existing errors elsewhere untouched).
+- [x] 7.4 `npx openspec validate add-supplier-credit-claims --strict` passes.

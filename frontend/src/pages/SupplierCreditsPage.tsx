@@ -101,7 +101,11 @@ const SupplierCreditsPage: React.FC<Props> = ({ token }) => {
 
   if (loading) {
     return (
-      <div className="container mx-auto px-4 py-8" role="status" aria-label="Loading supplier credits">
+      <div
+        className="container mx-auto px-4 py-8"
+        role="status"
+        aria-label="Loading supplier credits"
+      >
         <div className="h-8 w-56 rounded bg-semantic-surface-3 animate-pulse" />
         <div className="mt-6 h-40 w-full rounded bg-semantic-surface-3 animate-pulse" />
       </div>
@@ -150,9 +154,15 @@ const SupplierCreditsPage: React.FC<Props> = ({ token }) => {
           onAssign={(productId, sku) => setAssignItem({ productId, sku })}
         />
       )}
-      {tab === 'open' && <ClaimList claims={openClaims} onOpen={setDetailClaim} emptyLabel="No open claims." />}
+      {tab === 'open' && (
+        <ClaimList claims={openClaims} onOpen={setDetailClaim} emptyLabel="No open claims." />
+      )}
       {tab === 'settled' && (
-        <ClaimList claims={settledClaims} onOpen={setDetailClaim} emptyLabel="No settled claims yet." />
+        <ClaimList
+          claims={settledClaims}
+          onOpen={setDetailClaim}
+          emptyLabel="No settled claims yet."
+        />
       )}
 
       {buildGroup && (
@@ -218,7 +228,9 @@ const RecoveryPanel: React.FC<{ report: RecoveryReport }> = ({ report }) => (
         <CardTitle className="text-sm text-semantic-text-secondary">Outstanding credit</CardTitle>
       </CardHeader>
       <CardContent>
-        <p className="text-2xl font-semibold tabular-nums">{currency.format(report.outstandingValue)}</p>
+        <p className="text-2xl font-semibold tabular-nums">
+          {currency.format(report.outstandingValue)}
+        </p>
         <p className="mt-1 text-xs text-semantic-text-tertiary">Owed on sent, unsettled claims</p>
       </CardContent>
     </Card>
@@ -230,7 +242,9 @@ const RecoveryPanel: React.FC<{ report: RecoveryReport }> = ({ report }) => (
         <p className="text-2xl font-semibold tabular-nums text-semantic-critical">
           {currency.format(report.unclaimedValue)}
         </p>
-        <p className="mt-1 text-xs text-semantic-text-tertiary">Eligible write-offs never claimed</p>
+        <p className="mt-1 text-xs text-semantic-text-tertiary">
+          Eligible write-offs never claimed
+        </p>
       </CardContent>
     </Card>
     <Card>
@@ -291,14 +305,21 @@ const ToClaimBoard: React.FC<{
           <CardContent>
             <ul className="divide-y">
               {group.items.map((item) => (
-                <li key={item.transactionId} className="flex items-center justify-between py-2 text-sm">
+                <li
+                  key={item.transactionId}
+                  className="flex items-center justify-between py-2 text-sm"
+                >
                   <span>
                     <span className="font-medium">{item.productName}</span>{' '}
                     <span className="font-mono text-semantic-text-secondary">{item.sku}</span> ·{' '}
                     {item.unitsDiscarded} units
                   </span>
                   {group.supplierId == null && (
-                    <Button size="sm" variant="outline" onClick={() => onAssign(item.productId, item.sku)}>
+                    <Button
+                      size="sm"
+                      variant="outline"
+                      onClick={() => onAssign(item.productId, item.sku)}
+                    >
                       Assign supplier
                     </Button>
                   )}
@@ -343,9 +364,13 @@ const ClaimList: React.FC<{
             </span>
             <span className="flex items-center gap-2">
               {isFollowUpDue(claim) && (
-                <Badge className="bg-semantic-critical-muted text-semantic-critical">Follow-up due</Badge>
+                <Badge className="bg-semantic-critical-muted text-semantic-critical">
+                  Follow-up due
+                </Badge>
               )}
-              <Badge className={STATUS_TONE[claim.status] ?? ''}>{claim.status.replace('_', ' ')}</Badge>
+              <Badge className={STATUS_TONE[claim.status] ?? ''}>
+                {claim.status.replace('_', ' ')}
+              </Badge>
             </span>
           </button>
         </li>
@@ -396,7 +421,8 @@ const BuildClaimModal: React.FC<{
           {group.items.map((item) => (
             <div key={item.transactionId} className="rounded-md border p-3">
               <p className="text-sm font-medium">
-                {item.productName} <span className="font-mono text-semantic-text-secondary">{item.sku}</span>
+                {item.productName}{' '}
+                <span className="font-mono text-semantic-text-secondary">{item.sku}</span>
               </p>
               <p className="text-xs text-semantic-text-secondary">
                 {item.unitsDiscarded} units · expect{' '}
@@ -483,10 +509,18 @@ const AssignSupplierModal: React.FC<{
         </DialogHeader>
         {suppliers.length > 0 && (
           <div className="mb-3 flex gap-2">
-            <Button variant={mode === 'existing' ? 'default' : 'outline'} size="sm" onClick={() => setMode('existing')}>
+            <Button
+              variant={mode === 'existing' ? 'default' : 'outline'}
+              size="sm"
+              onClick={() => setMode('existing')}
+            >
               Existing
             </Button>
-            <Button variant={mode === 'new' ? 'default' : 'outline'} size="sm" onClick={() => setMode('new')}>
+            <Button
+              variant={mode === 'new' ? 'default' : 'outline'}
+              size="sm"
+              onClick={() => setMode('new')}
+            >
               New supplier
             </Button>
           </div>
@@ -515,16 +549,33 @@ const AssignSupplierModal: React.FC<{
             </div>
             <div>
               <Label htmlFor="new-email">Contact email</Label>
-              <Input id="new-email" type="email" value={email} onChange={(e) => setEmail(e.target.value)} />
+              <Input
+                id="new-email"
+                type="email"
+                value={email}
+                onChange={(e) => setEmail(e.target.value)}
+              />
             </div>
             <div className="grid grid-cols-2 gap-3">
               <div>
                 <Label htmlFor="wo-qty">Write off</Label>
-                <Input id="wo-qty" type="number" min="1" value={writeOffQty} onChange={(e) => setWriteOffQty(e.target.value)} />
+                <Input
+                  id="wo-qty"
+                  type="number"
+                  min="1"
+                  value={writeOffQty}
+                  onChange={(e) => setWriteOffQty(e.target.value)}
+                />
               </div>
               <div>
                 <Label htmlFor="cr-qty">Credit</Label>
-                <Input id="cr-qty" type="number" min="0" value={creditQty} onChange={(e) => setCreditQty(e.target.value)} />
+                <Input
+                  id="cr-qty"
+                  type="number"
+                  min="0"
+                  value={creditQty}
+                  onChange={(e) => setCreditQty(e.target.value)}
+                />
               </div>
             </div>
             <p className="text-xs text-semantic-text-tertiary">
@@ -539,7 +590,9 @@ const AssignSupplierModal: React.FC<{
           </Button>
           <Button
             onClick={() => void submit()}
-            disabled={submitting || (mode === 'new' && !name) || (mode === 'existing' && supplierId === '')}
+            disabled={
+              submitting || (mode === 'new' && !name) || (mode === 'existing' && supplierId === '')
+            }
           >
             {submitting ? 'Saving…' : 'Assign'}
           </Button>
@@ -598,7 +651,8 @@ const ClaimDetailModal: React.FC<{
             Status: <span className="font-medium">{claim.status.replace('_', ' ')}</span>
           </p>
           <p className="text-semantic-text-secondary">
-            Expected {claim.expectedCreditValue != null ? currency.format(claim.expectedCreditValue) : 'TBC'}
+            Expected{' '}
+            {claim.expectedCreditValue != null ? currency.format(claim.expectedCreditValue) : 'TBC'}
             {claim.creditedValue != null && ` · credited ${currency.format(claim.creditedValue)}`}
           </p>
         </div>
@@ -612,7 +666,8 @@ const ClaimDetailModal: React.FC<{
               {claim.lines.map((line) => (
                 <li key={line.id} className="flex items-center justify-between text-xs">
                   <span>
-                    Batch {line.batchNumber ?? '—'} · {line.unitsClaimed} units · {line.photos.length} photo(s)
+                    Batch {line.batchNumber ?? '—'} · {line.unitsClaimed} units ·{' '}
+                    {line.photos.length} photo(s)
                   </span>
                   <label className="cursor-pointer text-semantic-primary">
                     {uploadingLine === line.id ? 'Uploading…' : 'Add photo'}
@@ -634,11 +689,16 @@ const ClaimDetailModal: React.FC<{
         )}
 
         <div className="my-3 max-h-40 overflow-y-auto rounded-md border p-2">
-          <p className="mb-1 text-xs font-semibold uppercase text-semantic-text-secondary">Timeline</p>
+          <p className="mb-1 text-xs font-semibold uppercase text-semantic-text-secondary">
+            Timeline
+          </p>
           <ul className="space-y-1 text-xs">
             {claim.events.map((ev) => (
               <li key={ev.id} className="flex justify-between">
-                <span>{ev.type.replace('_', ' ')}{ev.note ? ` — ${ev.note}` : ''}</span>
+                <span>
+                  {ev.type.replace('_', ' ')}
+                  {ev.note ? ` — ${ev.note}` : ''}
+                </span>
                 <span className="text-semantic-text-tertiary">
                   {new Date(ev.createdAt).toLocaleDateString('en-AU')}
                 </span>
@@ -651,7 +711,10 @@ const ClaimDetailModal: React.FC<{
 
         <DialogFooter className="flex-col gap-2 sm:flex-col sm:items-stretch">
           {claim.status === 'DRAFT' && (
-            <Button disabled={busy} onClick={() => void run(async () => svc.sendClaim(claim.id, await getToken()))}>
+            <Button
+              disabled={busy}
+              onClick={() => void run(async () => svc.sendClaim(claim.id, await getToken()))}
+            >
               {busy ? 'Sending…' : 'Send claim'}
             </Button>
           )}
@@ -698,7 +761,9 @@ const ClaimDetailModal: React.FC<{
                   className="text-semantic-critical border-semantic-critical"
                   disabled={busy}
                   onClick={() =>
-                    void run(async () => svc.recordOutcome(claim.id, 'REJECTED', null, null, await getToken()))
+                    void run(async () =>
+                      svc.recordOutcome(claim.id, 'REJECTED', null, null, await getToken()),
+                    )
                   }
                 >
                   Rejected

@@ -76,11 +76,7 @@ export class CreditClaimRepository {
     });
   }
 
-  findClaim(
-    organizationId: string,
-    id: number,
-    tx?: DbClient,
-  ): Promise<ClaimWithRelations | null> {
+  findClaim(organizationId: string, id: number, tx?: DbClient): Promise<ClaimWithRelations | null> {
     return this.getClient(tx).creditClaim.findFirst({
       where: { id, organizationId },
       include: claimInclude,

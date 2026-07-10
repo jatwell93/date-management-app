@@ -6,10 +6,7 @@ import {
   SupplierCreditRepository,
   type SupplierWriteData,
 } from '../repositories/supplier-credit.repository';
-import {
-  rollupClaimablePool,
-  type ClaimablePoolGroup,
-} from '../../../shared/domain/credit-claim';
+import { rollupClaimablePool, type ClaimablePoolGroup } from '../../../shared/domain/credit-claim';
 
 export interface SupplierInput {
   name: string;

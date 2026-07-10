@@ -85,13 +85,19 @@ describe('credit-claim shared domain', () => {
     it('is due for an open claim whose follow-up time has passed', () => {
       // Spec scenario: An overdue sent claim is surfaced for follow-up.
       expect(
-        isFollowUpDue({ status: 'SENT', nextFollowUpAt: new Date('2026-07-17T00:00:00.000Z') }, now),
+        isFollowUpDue(
+          { status: 'SENT', nextFollowUpAt: new Date('2026-07-17T00:00:00.000Z') },
+          now,
+        ),
       ).toBe(true);
     });
 
     it('is not due when the follow-up time is still in the future', () => {
       expect(
-        isFollowUpDue({ status: 'SENT', nextFollowUpAt: new Date('2026-07-25T00:00:00.000Z') }, now),
+        isFollowUpDue(
+          { status: 'SENT', nextFollowUpAt: new Date('2026-07-25T00:00:00.000Z') },
+          now,
+        ),
       ).toBe(false);
     });
 
@@ -137,7 +143,13 @@ describe('credit-claim shared domain', () => {
     it('collects supplier-less write-offs into a needs-supplier bucket, sorted last', () => {
       // Spec scenario: An unassigned product appears as needs-supplier.
       const groups = rollupClaimablePool([
-        row({ transactionId: 1, supplierId: null, supplierName: null, policyWriteOffQty: null, policyCreditQty: null }),
+        row({
+          transactionId: 1,
+          supplierId: null,
+          supplierName: null,
+          policyWriteOffQty: null,
+          policyCreditQty: null,
+        }),
         row({ transactionId: 2 }),
       ]);
 

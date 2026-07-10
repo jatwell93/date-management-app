@@ -19,7 +19,10 @@ const router = Router();
 
 // Claim photos are small images uploaded directly (memory storage, 10MB cap),
 // matching the direct-upload path in upload.routes.ts.
-const photoUpload = multer({ storage: multer.memoryStorage(), limits: { fileSize: 10 * 1024 * 1024 } });
+const photoUpload = multer({
+  storage: multer.memoryStorage(),
+  limits: { fileSize: 10 * 1024 * 1024 },
+});
 
 // GET /supplier-credits/suppliers — list suppliers (any authenticated user; the
 // claim builder and triage board need to read them).

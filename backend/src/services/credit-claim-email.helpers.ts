@@ -49,7 +49,8 @@ export function renderClaimEmail(
     intro,
     '',
     ...rows.map(
-      (r) => `- Batch ${r.batch} | ${r.units} units | expected credit ${r.expected} | ${r.photoCount} photo(s)`,
+      (r) =>
+        `- Batch ${r.batch} | ${r.units} units | expected credit ${r.expected} | ${r.photoCount} photo(s)`,
     ),
     '',
     claim.expectedCreditValue != null
