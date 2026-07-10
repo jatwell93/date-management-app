@@ -37,22 +37,11 @@ import {
 } from '../components/ui/table';
 import { useFreshApiToken } from '../hooks/useFreshApiToken';
 
-// Import Chart.js components — lazy-loaded to keep initial bundle lean
-import {
-  Chart as ChartJS,
-  CategoryScale,
-  LinearScale,
-  BarElement,
-  Title,
-  Tooltip,
-  Legend,
-  ChartOptions,
-} from 'chart.js';
+// Type-only import — no runtime cost. Chart.js itself is loaded on demand via the
+// shared lazy chart module (registration lives inside that lazily-loaded chunk).
+import type { ChartOptions } from 'chart.js';
 
-// Register Chart.js components
-ChartJS.register(CategoryScale, LinearScale, BarElement, Title, Tooltip, Legend);
-
-const Bar = lazy(() => import('react-chartjs-2').then((m) => ({ default: m.Bar })));
+const Bar = lazy(() => import('../components/charts/lazyCharts').then((m) => ({ default: m.Bar })));
 
 interface ExpiredItemsPageProps {
   token: string | null;
