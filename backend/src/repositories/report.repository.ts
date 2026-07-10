@@ -10,6 +10,20 @@
 import Database from 'better-sqlite3';
 import { DISPOSITIONED_STATUSES, EXPIRED_STATUS } from '../../../shared/domain/disposition';
 import { MARKDOWN_WINDOWS } from '../../../shared/domain/markdown';
+import {
+  buildStoreWalkAuditReport,
+  type StoreWalkAuditCycle,
+  type StoreWalkAuditCycleRow,
+  type StoreWalkAuditUserRow,
+} from '../../../shared/domain/store-walk-audit';
+
+// Re-exported so existing consumers (report.service) keep importing these from
+// the repository; the definitions now live in shared/domain/store-walk-audit.
+export type {
+  StoreWalkAuditCycle,
+  StoreWalkAuditFlag,
+  StoreWalkAuditUser,
+} from '../../../shared/domain/store-walk-audit';
 
 const dispositionedStatusPlaceholders = DISPOSITIONED_STATUSES.map(() => '?').join(', ');
 
@@ -102,29 +116,6 @@ export interface ItemsByUserReportItem {
 export interface ItemsByDateReportItem {
   date: string;
   itemCount: number;
-}
-
-export interface StoreWalkAuditUser {
-  userId: number;
-  userName: string;
-  baysChecked: number;
-  coveragePercent: number;
-  baysPerHour: number;
-}
-
-export interface StoreWalkAuditFlag {
-  type: 'implausible_pace' | 'all_zero_findings';
-  userName: string;
-  message: string;
-}
-
-export interface StoreWalkAuditCycle {
-  cycleId: number;
-  cycleName: string;
-  status: string;
-  completionMinutes: number | null;
-  users: StoreWalkAuditUser[];
-  flags: StoreWalkAuditFlag[];
 }
 
 export interface DashboardAnalytics {
@@ -553,7 +544,7 @@ export class ReportRepository {
         .get(this.organizationId) as { count: number }
     ).count;
 
-    const cycleRows = this.db
+    const rawCycleRows = this.db
       .prepare(
         `SELECT id as cycleId,
                 name as cycleName,
@@ -573,7 +564,7 @@ export class ReportRepository {
       completedAt: string | null;
     }>;
 
-    const userRows = this.db
+    const rawUserRows = this.db
       .prepare(
         `SELECT bc.cycle_id as cycleId,
                 COALESCE(u.id, bc.user_id, 0) as userId,
@@ -598,62 +589,33 @@ export class ReportRepository {
       zeroFindingChecks: number;
     }>;
 
-    return cycleRows.map((cycle) => {
-      const users = userRows
-        .filter((row) => row.cycleId === cycle.cycleId)
-        .map((row) => {
-          const firstCheckedAt = new Date(row.firstCheckedAt).getTime();
-          const lastCheckedAt = new Date(row.lastCheckedAt).getTime();
-          const elapsedHours = Math.max((lastCheckedAt - firstCheckedAt) / 3_600_000, 1 / 60);
-          const baysChecked = Number(row.baysChecked);
-          return {
-            userId: Number(row.userId),
-            userName: row.userName,
-            baysChecked,
-            coveragePercent: totalBays === 0 ? 0 : Math.round((baysChecked / totalBays) * 100),
-            baysPerHour: Number((baysChecked / elapsedHours).toFixed(1)),
-          };
-        });
+    // Normalize SQLite rows to the shared rollup's shape: SQLite has no date
+    // arithmetic here, so completionMinutes and the clamped elapsedHours are
+    // computed in JS (Postgres does the equivalent in SQL on the Workers side).
+    const cycleRows: StoreWalkAuditCycleRow[] = rawCycleRows.map((cycle) => ({
+      cycleId: cycle.cycleId,
+      cycleName: cycle.cycleName,
+      status: cycle.status,
+      completionMinutes: cycle.completedAt
+        ? Math.round(
+            (new Date(cycle.completedAt).getTime() - new Date(cycle.startedAt).getTime()) / 60_000,
+          )
+        : null,
+    }));
 
-      const flags = users.flatMap((user) => {
-        const source = userRows.find(
-          (row) => row.cycleId === cycle.cycleId && Number(row.userId) === user.userId,
-        );
-        const userFlags: StoreWalkAuditFlag[] = [];
-        if (user.baysPerHour > 10) {
-          userFlags.push({
-            type: 'implausible_pace',
-            userName: user.userName,
-            message: `${numberFormatter(user.baysPerHour)} bays/hour is faster than the review threshold.`,
-          });
-        }
-        if (source && Number(source.zeroFindingChecks) >= 6) {
-          userFlags.push({
-            type: 'all_zero_findings',
-            userName: user.userName,
-            message: `${numberFormatter(Number(source.zeroFindingChecks))} consecutive bay checks recorded zero items added.`,
-          });
-        }
-        return userFlags;
-      });
-
+    const userRows: StoreWalkAuditUserRow[] = rawUserRows.map((row) => {
+      const firstCheckedAt = new Date(row.firstCheckedAt).getTime();
+      const lastCheckedAt = new Date(row.lastCheckedAt).getTime();
       return {
-        cycleId: Number(cycle.cycleId),
-        cycleName: cycle.cycleName,
-        status: cycle.status,
-        completionMinutes: cycle.completedAt
-          ? Math.round(
-              (new Date(cycle.completedAt).getTime() - new Date(cycle.startedAt).getTime()) /
-                60_000,
-            )
-          : null,
-        users,
-        flags,
+        cycleId: row.cycleId,
+        userId: row.userId,
+        userName: row.userName,
+        baysChecked: row.baysChecked,
+        elapsedHours: Math.max((lastCheckedAt - firstCheckedAt) / 3_600_000, 1 / 60),
+        zeroFindingChecks: row.zeroFindingChecks,
       };
     });
-  }
-}
 
-function numberFormatter(value: number): string {
-  return new Intl.NumberFormat('en-AU', { maximumFractionDigits: 1 }).format(value);
+    return buildStoreWalkAuditReport(cycleRows, userRows, totalBays);
+  }
 }

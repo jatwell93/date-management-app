@@ -24,6 +24,12 @@ import {
   type CoverageSummary,
   type StoreWalkBay,
 } from '../../shared/domain/store-walk-tracking';
+import {
+  buildStoreWalkAuditReport,
+  type StoreWalkAuditCycle,
+  type StoreWalkAuditCycleRow,
+  type StoreWalkAuditUserRow,
+} from '../../shared/domain/store-walk-audit';
 
 // Note: fetchConnectionCache is now always true by default in @neondatabase/serverless
 
@@ -325,28 +331,11 @@ export interface ItemsByDateReportItem {
   itemCount: number;
 }
 
-export interface StoreWalkAuditUser {
-  userId: number;
-  userName: string;
-  baysChecked: number;
-  coveragePercent: number;
-  baysPerHour: number;
-}
-
-export interface StoreWalkAuditFlag {
-  type: 'implausible_pace' | 'all_zero_findings';
-  userName: string;
-  message: string;
-}
-
-export interface StoreWalkAuditCycle {
-  cycleId: number;
-  cycleName: string;
-  status: string;
-  completionMinutes: number | null;
-  users: StoreWalkAuditUser[];
-  flags: StoreWalkAuditFlag[];
-}
+export type {
+  StoreWalkAuditCycle,
+  StoreWalkAuditFlag,
+  StoreWalkAuditUser,
+} from '../../shared/domain/store-walk-audit';
 
 export interface DetailedExpiryReportItem {
   inventoryId: number;
@@ -454,10 +443,6 @@ function isPositiveInteger(value: unknown): value is number {
 
 function toNumberOrNull(value: unknown): number | null {
   return value === null || value === undefined ? null : Number(value);
-}
-
-function formatStoreWalkAuditNumber(value: number): string {
-  return new Intl.NumberFormat('en-AU', { maximumFractionDigits: 1 }).format(value);
 }
 
 function toIsoStringOrNull(value: unknown): string | null {
@@ -1164,48 +1149,19 @@ export function createWorkersDatabase(env: Env): Database {
         zeroFindingChecks: number;
       }>;
 
-      return cycleRows.map((cycle) => {
-        const sourceRows = userRows.filter((row) => Number(row.cycleId) === Number(cycle.cycleId));
-        const users = sourceRows.map((row) => {
-          const baysChecked = Number(row.baysChecked);
-          const elapsedHours = Number(row.elapsedHours);
-          return {
-            userId: Number(row.userId),
-            userName: row.userName,
-            baysChecked,
-            coveragePercent: totalBays === 0 ? 0 : Math.round((baysChecked / totalBays) * 100),
-            baysPerHour: Number((baysChecked / elapsedHours).toFixed(1)),
-          };
-        });
-        const flags = users.flatMap((user) => {
-          const source = sourceRows.find((row) => Number(row.userId) === user.userId);
-          const userFlags: StoreWalkAuditFlag[] = [];
-          if (user.baysPerHour > 10) {
-            userFlags.push({
-              type: 'implausible_pace',
-              userName: user.userName,
-              message: `${formatStoreWalkAuditNumber(user.baysPerHour)} bays/hour is faster than the review threshold.`,
-            });
-          }
-          if (source && Number(source.zeroFindingChecks) >= 6) {
-            userFlags.push({
-              type: 'all_zero_findings',
-              userName: user.userName,
-              message: `${formatStoreWalkAuditNumber(Number(source.zeroFindingChecks))} bay checks recorded zero items added.`,
-            });
-          }
-          return userFlags;
-        });
-        return {
-          cycleId: Number(cycle.cycleId),
-          cycleName: cycle.cycleName,
-          status: cycle.status,
-          completionMinutes:
-            cycle.completionMinutes === null ? null : Number(cycle.completionMinutes),
-          users,
-          flags,
-        };
-      });
+      // Postgres already computed completionMinutes and elapsedHours in SQL; the
+      // shared rollup only needs elapsedHours coerced to a number (the numeric
+      // GREATEST(...) can arrive as a string over the wire).
+      const auditUserRows: StoreWalkAuditUserRow[] = userRows.map((row) => ({
+        cycleId: row.cycleId,
+        userId: row.userId,
+        userName: row.userName,
+        baysChecked: row.baysChecked,
+        elapsedHours: Number(row.elapsedHours),
+        zeroFindingChecks: row.zeroFindingChecks,
+      }));
+
+      return buildStoreWalkAuditReport(cycleRows, auditUserRows, totalBays);
     },
 
     // Standalone /api/reports/loss-by-* endpoints (ExpiredItemsPage charts). These
