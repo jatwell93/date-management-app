@@ -30,6 +30,10 @@ import {
   type StoreWalkAuditCycleRow,
   type StoreWalkAuditUserRow,
 } from '../../shared/domain/store-walk-audit';
+import {
+  rollupClaimablePool,
+  type ClaimablePoolGroup,
+} from '../../shared/domain/credit-claim';
 
 // Note: fetchConnectionCache is now always true by default in @neondatabase/serverless
 
@@ -79,6 +83,9 @@ export interface Database {
   getExpiredLossBySku(organizationId: string): Promise<LossBySkuReportItem[]>;
   getExpiredLossByStoreArea(organizationId: string): Promise<ExpiredLossByStoreAreaItem[]>;
   getSellThroughByMarkdownLevel(organizationId: string): Promise<SellThroughByLevelItem[]>;
+
+  // Supplier credit-claim queries
+  getClaimablePool(organizationId: string): Promise<ClaimablePoolGroup[]>;
 
   // Expired items queries
   getExpiredItems(organizationId: string): Promise<ExpiredItemRow[]>;
@@ -1266,6 +1273,47 @@ export function createWorkersDatabase(env: Env): Database {
     },
 
     // Expired items queries
+    async getClaimablePool(organizationId: string): Promise<ClaimablePoolGroup[]> {
+      // Expired write-offs not yet on a claim line, joined to product + supplier.
+      // The shared rollup groups them (identically to the SQLite/Prisma backend).
+      const rows = (await sql`
+        SELECT eit.id AS "transactionId",
+               s.id AS "supplierId",
+               s.name AS "supplierName",
+               s.policy_write_off_qty AS "policyWriteOffQty",
+               s.policy_credit_qty AS "policyCreditQty",
+               p.id AS "productId",
+               COALESCE(p.sku, '') AS "sku",
+               p.name AS "productName",
+               COALESCE(eit.units_discarded, 0) AS "unitsDiscarded",
+               COALESCE(p.cost_price, 0) AS "costPrice"
+        FROM expired_item_transactions eit
+        JOIN inventory_items ii ON ii.id = eit.inventory_item_id
+        JOIN products p ON p.id = ii.product_id
+        LEFT JOIN suppliers s ON s.id = p.supplier_id
+        LEFT JOIN credit_claim_lines ccl ON ccl.expired_item_transaction_id = eit.id
+        WHERE eit.organization_id = ${organizationId}
+          AND eit.action = 'expired'
+          AND ccl.id IS NULL
+        ORDER BY eit.id ASC
+      `) as Array<Record<string, unknown>>;
+
+      return rollupClaimablePool(
+        rows.map((row) => ({
+          transactionId: Number(row.transactionId),
+          supplierId: row.supplierId == null ? null : Number(row.supplierId),
+          supplierName: (row.supplierName as string | null) ?? null,
+          policyWriteOffQty: row.policyWriteOffQty == null ? null : Number(row.policyWriteOffQty),
+          policyCreditQty: row.policyCreditQty == null ? null : Number(row.policyCreditQty),
+          productId: Number(row.productId),
+          sku: String(row.sku ?? ''),
+          productName: String(row.productName ?? ''),
+          unitsDiscarded: Number(row.unitsDiscarded),
+          costPrice: Number(row.costPrice),
+        })),
+      );
+    },
+
     async getExpiredItems(organizationId: string): Promise<ExpiredItemRow[]> {
       return (await sql`
         SELECT

@@ -22,8 +22,9 @@
       unique `expired_item_transaction_id`, index on `next_follow_up_at` and `delete_after`.
 - [x] 2.4 Runtime SQLite migration `015-add-supplier-credit-claims` (008 was taken; highest was 014).
 - [x] 2.5 Update pglite harness (`workers/src/__tests__/pglite-db.ts`) with the new tables.
-- [ ] 2.6 Dual-backend conformance test: claimable-pool rollup + expected-credit identical across
-      Postgres/pglite and SQLite (including row order). **→ built with task 4.1 (needs the query).**
+- [x] 2.6 Dual-backend conformance test (`database.credit-claim.conformance.node.test.ts`):
+      claimable-pool rollup + expected-credit identical across Neon/pglite and SQLite, including row
+      order and org isolation. 2 tests green.
 
 ## 3. Backend (Express — layered)
 
@@ -48,10 +49,14 @@
 
 ## 4. Workers (parity)
 
-- [ ] 4.1 Supplier + claim + pool query functions in `workers/src/database.ts` (retry wrappers),
-      sharing the `shared/domain` resolvers.
-- [ ] 4.2 Routes in `workers/src/index.ts` matching the backend surface.
-- [ ] 4.3 Worker route/db tests (pglite) mirroring the backend cases.
+- [x] 4.1 Claimable-pool query `getClaimablePool` in `workers/src/database.ts` (Neon SQL → shared
+      `rollupClaimablePool`), proven identical to the SQLite backend by the 2.6 conformance test.
+- [ ] 4.2 **DEFERRED** — write-side worker handlers (supplier CRUD, claim build/send/outcome/
+      follow-up, photos) + routes in `workers/src/index.ts`. The backend Express router can't be
+      registered as-is (it imports `multer` for photos, which won't bundle in Workers); these need
+      Workers-native handlers (Resend via fetch is fine; photos need R2 bindings). Read-side pool +
+      conformance landed; write-side is a follow-up before production deploy.
+- [x] 4.3 Worker db conformance test (pglite vs SQLite) for the claimable pool — see 2.6.
 
 ## 5. Scheduled jobs
 
