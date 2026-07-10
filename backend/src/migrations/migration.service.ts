@@ -384,6 +384,7 @@ export class MigrationService {
           addColumnIfMissing('products');
           addColumnIfMissing('inventory_items');
           addColumnIfMissing('audit_log');
+          addColumnIfMissing('store_areas');
         },
         down: (_db: DB) => {
           Logger.warn(
