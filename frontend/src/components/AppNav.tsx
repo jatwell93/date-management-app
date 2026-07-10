@@ -85,6 +85,9 @@ export function AppNav({
                     <Link to="/expired-items">Expired Items</Link>
                   </DropdownMenuItem>
                   <DropdownMenuItem asChild>
+                    <Link to="/supplier-credits">Supplier Credits</Link>
+                  </DropdownMenuItem>
+                  <DropdownMenuItem asChild>
                     <Link to="/usage-report">Usage Report</Link>
                   </DropdownMenuItem>
                 </DropdownMenuContent>
@@ -177,6 +180,7 @@ export function AppNav({
                 { to: '/detailed-expiry-report', label: 'Markdown Worklist' },
                 { to: '/expiry-entries', label: 'All Expiry Entries' },
                 { to: '/expired-items', label: 'Expired Items' },
+                { to: '/supplier-credits', label: 'Supplier Credits' },
                 { to: '/usage-report', label: 'Usage Report' },
                 { to: '/markdown-calculator', label: 'Markdown Calculator' },
               ].map((item) => (

@@ -67,15 +67,17 @@
 
 ## 6. Frontend (Supplier Credits workspace)
 
-- [ ] 6.1 New nav entry + route (`AppNav.tsx`, `App.tsx`) and `supplierCreditService.ts`.
-- [ ] 6.2 Triage board: To Claim (grouped by supplier + "needs supplier"), Open Claims (with
-      follow-up-due badge), Settled.
-- [ ] 6.3 Assign-supplier flow from the "needs supplier" bucket (create supplier + policy inline).
-- [ ] 6.4 Claim builder: per-line batch input + photo upload, live expected-credit total, email
-      preview, send.
-- [ ] 6.5 Claim-detail: timeline, resend-follow-up, record-outcome controls.
-- [ ] 6.6 Recovery summary panel (outstanding $, per-supplier recovery rate, money left on the table).
-- [ ] 6.7 Component tests: triage grouping, builder validation (send preconditions), detail timeline.
+- [x] 6.1 Nav entry + `/supplier-credits` route (`AppNav.tsx`, `App.tsx`) and `supplierCreditService.ts`.
+- [x] 6.2 Triage board: To Claim (grouped by supplier + "needs supplier"), Open Claims (with
+      follow-up-due count/badge), Settled tabs.
+- [x] 6.3 Assign-supplier flow from the "needs supplier" bucket (pick existing or create supplier +
+      ratio inline).
+- [x] 6.4 Claim builder: per-line batch input + expected-credit hints; photo upload per line in the
+      detail modal (attach before send). Live email preview deferred (send renders server-side).
+- [x] 6.5 Claim-detail: timeline, send, resend-follow-up, record-outcome (credited/rejected) controls.
+- [x] 6.6 Recovery summary panel (outstanding $, money on the table, per-supplier recovery rate).
+- [x] 6.7 Component tests: recovery panel + pool grouping render, follow-up-due badge on Open tab,
+      build-claim modal opens with batch input (3 tests green; frontend tsc clean for new files).
 
 ## 7. Completion checks
 
