@@ -14,6 +14,12 @@
     "node_modules",
     "dist",
     "src/index.ts",
+    // Cross-package conformance test: imports backend source, which pulls in
+    // backend-only deps (sqlite/@prisma/client/tsyringe) not installed in the
+    // workers-isolated CI install. It runs under vitest.node.config.mts (which
+    // transpiles rather than type-checks), so it must be excluded here — the
+    // same way tsconfig.deploy.json excludes all tests.
+    "src/database.conformance.node.test.ts",
     "../backend/src/tests",
     "../backend/src/**/*.test.ts",
     "../backend/src/**/__mocks__"
