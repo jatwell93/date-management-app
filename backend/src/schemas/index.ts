@@ -315,6 +315,71 @@ export const bayCheckCreateSchema = z.object({
 });
 
 // ============================================================================
+// Supplier Credit Schemas
+// ============================================================================
+
+const noHtml = (val: string) => !val.includes('<') && !val.includes('>');
+
+// A credit ratio needs both legs or neither — a lone quantity is meaningless.
+const supplierBody = z
+  .object({
+    name: z
+      .string()
+      .min(1, 'Supplier name is required')
+      .max(120, 'Supplier name must be at most 120 characters')
+      .refine(noHtml, 'Supplier name cannot contain HTML tags'),
+    contactEmail: z
+      .string()
+      .email('Contact email must be a valid email address')
+      .max(255)
+      .nullable()
+      .optional(),
+    creditPolicyNote: z
+      .string()
+      .max(2000, 'Credit policy note must be at most 2000 characters')
+      .optional(),
+    policyWriteOffQty: z
+      .number()
+      .int()
+      .positive('Write-off quantity must be a positive integer')
+      .nullable()
+      .optional(),
+    policyCreditQty: z
+      .number()
+      .int()
+      .nonnegative('Credit quantity must be a non-negative integer')
+      .nullable()
+      .optional(),
+    followUpDays: z
+      .number()
+      .int()
+      .min(1, 'Follow-up cadence must be at least 1 day')
+      .max(365, 'Follow-up cadence must be at most 365 days')
+      .optional(),
+  })
+  .refine(
+    (body) =>
+      (body.policyWriteOffQty == null) === (body.policyCreditQty == null),
+    {
+      message: 'A credit ratio needs both a write-off quantity and a credit quantity, or neither.',
+      path: ['policyCreditQty'],
+    },
+  );
+
+export const supplierCreateSchema = z.object({ body: supplierBody });
+export const supplierUpdateSchema = z.object({ body: supplierBody });
+
+export const assignSupplierSchema = z.object({
+  body: z.object({
+    supplierId: z
+      .number()
+      .int()
+      .positive('Supplier ID must be a positive integer')
+      .nullable(),
+  }),
+});
+
+// ============================================================================
 // Upload Schema
 // ============================================================================
 

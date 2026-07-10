@@ -27,9 +27,9 @@
 
 ## 3. Backend (Express — layered)
 
-- [ ] 3.1 Supplier repository/service/controller/routes (CRUD + policy fields), org-scoped.
-- [ ] 3.2 Assign-supplier-to-product endpoint (persists `Product.supplierId`).
-- [ ] 3.3 Claimable-pool listing endpoint (grouped by supplier via the shared rollup; excludes
+- [x] 3.1 Supplier repository/service/controller/routes (CRUD + policy fields), org-scoped.
+- [x] 3.2 Assign-supplier-to-product endpoint (persists `Product.supplierId`).
+- [x] 3.3 Claimable-pool listing endpoint (grouped by supplier via the shared rollup; excludes
       already-claimed write-offs).
 - [ ] 3.4 Claim build endpoint: create claim + lines from write-offs, capture batch/units, snapshot
       expected credit; enforce unique write-off per line.
