@@ -706,14 +706,14 @@ openspec validate --all                   # Expected: exit code 0
 
 ## Memvid Memory System
 
-This project uses **Memvid** as a lightweight, file-based memory layer. All project knowledge is stored in a single `project-memory.mv2` file at the project root.
+This project uses **Memvid** as a lightweight, file-based memory layer. Project knowledge is committed to `memory.jsonl` at the project root. The local `project-memory.mv2` file is a gitignored, rebuildable search index derived from `memory.jsonl`.
 
 ### Why Memvid
 
-- **Zero daemon overhead** — No database server, just a single file
+- **Zero daemon overhead** — No database server; committed memory is append-only JSONL
 - **Offline-first** — Works entirely locally, perfect for low-resource devices
 - **Fast retrieval** — Rust-based lexical search (~1-2ms)
-- **Portable** — Memory travels with the project
+- **Portable** — `memory.jsonl` travels with the project; `.mv2` is rebuilt locally
 
 ### Core Commands
 
@@ -724,11 +724,18 @@ node scripts/mem-log.js <KIND> <TITLE> <MESSAGE>
 # Recall memories
 node scripts/mem-recall.js <QUERY>
 
+# Rebuild local search index after a fresh clone
+npm run mem:rebuild
+# or
+node scripts/mem-rebuild.js
+
 # Direct CLI access
 memvid find project-memory.mv2 --query "search term"
 memvid stats project-memory.mv2
 memvid timeline project-memory.mv2
 ```
+
+`project-memory.mv2` no longer belongs in commits. It is a local derived index that can be regenerated from `memory.jsonl`.
 
 ### Memory Kinds
 

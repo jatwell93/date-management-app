@@ -23,6 +23,13 @@ out/
 *.manifest.json
 *.pgdump.sql
 
+# Memvid local index
+# Derived index, rebuildable from memory.jsonl. See scripts/mem-rebuild.js.
+project-memory.mv2
+*.mv2
+*.mv2.bak*
+*.mv2e
+
 # Cache directories
 .cache/
 node_modules/.cache/
