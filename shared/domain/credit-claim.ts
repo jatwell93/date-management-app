@@ -232,3 +232,88 @@ export function rollupClaimablePool(rows: ClaimableWriteOffRow[]): ClaimablePool
   }
   return result;
 }
+
+// ── Recovery report ──────────────────────────────────────────────────────────
+
+/** One ever-sent claim, reduced to the fields the recovery rollup needs. */
+export interface RecoveryClaimRow {
+  supplierId: number;
+  supplierName: string;
+  status: string;
+  expectedCreditValue: number | null;
+  creditedValue: number | null;
+}
+
+export interface SupplierRecovery {
+  supplierId: number;
+  supplierName: string;
+  claimsSent: number;
+  claimsCredited: number;
+  expectedValue: number;
+  creditedValue: number;
+  /** creditedValue / expectedValue, or null when nothing was expected. */
+  recoveryRate: number | null;
+}
+
+export interface RecoveryReport {
+  /** Expected credit still owed on sent-but-unsettled claims. */
+  outstandingValue: number;
+  /** Value of eligible write-offs never attached to a claim ("money on the table"). */
+  unclaimedValue: number;
+  suppliers: SupplierRecovery[];
+}
+
+/**
+ * Aggregate ever-sent claims into per-supplier recovery plus the org totals. Both
+ * backends fetch the claim rows + the unclaimed value in their own dialect and feed
+ * them here, so the maths (and row order) can never drift (golden rule 5).
+ */
+export function rollupRecoveryReport(
+  claims: RecoveryClaimRow[],
+  unclaimedValue: number,
+): RecoveryReport {
+  const bySupplier = new Map<number, SupplierRecovery>();
+  let outstandingValue = 0;
+
+  for (const claim of claims) {
+    if (isChaseableClaimStatus(claim.status)) {
+      outstandingValue += claim.expectedCreditValue ?? 0;
+    }
+
+    let row = bySupplier.get(claim.supplierId);
+    if (!row) {
+      row = {
+        supplierId: claim.supplierId,
+        supplierName: claim.supplierName,
+        claimsSent: 0,
+        claimsCredited: 0,
+        expectedValue: 0,
+        creditedValue: 0,
+        recoveryRate: null,
+      };
+      bySupplier.set(claim.supplierId, row);
+    }
+
+    row.claimsSent += 1;
+    row.expectedValue += claim.expectedCreditValue ?? 0;
+    if (claim.status === 'CREDITED' || claim.status === 'PARTIALLY_CREDITED') {
+      row.claimsCredited += 1;
+      row.creditedValue += claim.creditedValue ?? 0;
+    }
+  }
+
+  const suppliers = [...bySupplier.values()]
+    .map((row) => ({
+      ...row,
+      recoveryRate: row.expectedValue > 0 ? row.creditedValue / row.expectedValue : null,
+    }))
+    .sort((a, b) =>
+      a.supplierName === b.supplierName
+        ? a.supplierId - b.supplierId
+        : a.supplierName < b.supplierName
+          ? -1
+          : 1,
+    );
+
+  return { outstandingValue, unclaimedValue, suppliers };
+}

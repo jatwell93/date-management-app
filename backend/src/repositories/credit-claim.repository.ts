@@ -142,6 +142,20 @@ export class CreditClaimRepository {
     });
   }
 
+  /** Every claim that was ever sent (has a sentAt), with its supplier — report input. */
+  findSentClaimsForReport(organizationId: string, tx?: DbClient) {
+    return this.getClient(tx).creditClaim.findMany({
+      where: { organizationId, sentAt: { not: null } },
+      select: {
+        supplierId: true,
+        status: true,
+        expectedCreditValue: true,
+        creditedValue: true,
+        supplier: { select: { name: true } },
+      },
+    });
+  }
+
   /** Sent claims whose next follow-up time has passed (reminder-engine query). */
   findFollowUpDue(organizationId: string, now: Date, tx?: DbClient) {
     return this.getClient(tx).creditClaim.findMany({

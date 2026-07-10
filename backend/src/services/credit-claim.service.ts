@@ -12,7 +12,14 @@ import {
 import { SupplierCreditRepository } from '../repositories/supplier-credit.repository';
 import { EmailSender, ResendEmailSender } from './email-sender';
 import { renderClaimEmail } from './credit-claim-email.helpers';
-import { expectedCredit, nextFollowUp, isChaseableClaimStatus } from '../../../shared/domain/credit-claim';
+import {
+  expectedCredit,
+  nextFollowUp,
+  isChaseableClaimStatus,
+  rollupClaimablePool,
+  rollupRecoveryReport,
+  type RecoveryReport,
+} from '../../../shared/domain/credit-claim';
 
 /** Days a settled claim's photos are retained before the purge job deletes them. */
 export const PHOTO_RETENTION_DAYS = 90;
@@ -280,6 +287,33 @@ export class CreditClaimService {
       if (!updated) throw new NotFoundError(`Claim ${id} not found`);
       return updated;
     });
+  }
+
+  /**
+   * Recovery report: outstanding credit on open claims, per-supplier recovery rate,
+   * and the value of eligible write-offs never claimed ("money left on the table",
+   * derived from the claimable pool excluding the needs-supplier bucket).
+   */
+  async getRecoveryReport(): Promise<RecoveryReport> {
+    const [claims, poolRows] = await Promise.all([
+      this.repo.findSentClaimsForReport(this.organizationId),
+      this.supplierRepo.findClaimableWriteOffs(this.organizationId),
+    ]);
+
+    const unclaimedValue = rollupClaimablePool(poolRows)
+      .filter((group) => group.supplierId != null)
+      .reduce((sum, group) => sum + group.expectedCreditValueTotal, 0);
+
+    return rollupRecoveryReport(
+      claims.map((claim) => ({
+        supplierId: claim.supplierId,
+        supplierName: claim.supplier.name,
+        status: claim.status,
+        expectedCreditValue: claim.expectedCreditValue,
+        creditedValue: claim.creditedValue,
+      })),
+      unclaimedValue,
+    );
   }
 
   private async loadAttachments(claim: ClaimWithRelations) {

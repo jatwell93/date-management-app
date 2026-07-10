@@ -40,9 +40,11 @@
       `creditedValue`, photo `deleteAfter`); append event.
 - [x] 3.8 Send-follow-up endpoint (advances schedule, bumps count, appends event). Follow-up-due read
       lives in the repo (`findFollowUpDue`) for the reminder engine (task 5.1).
-- [ ] 3.9 Recovery report endpoint (outstanding, per-supplier recovery rate, unclaimed value).
-- [ ] 3.10 Mount routes in `backend/src/index.ts` (done for suppliers/claims); route-level tests per
-      endpoint (org-scoping, unique-line, send preconditions, `no-client-organization-id`).
+- [x] 3.9 Recovery report endpoint (outstanding, per-supplier recovery rate, unclaimed value) via
+      shared `rollupRecoveryReport` (reused by workers later).
+- [x] 3.10 Routes mounted in `backend/src/index.ts`; controller/route-wiring tests (status-filter
+      mapping, missing-photo 400, build passes userId, report). Service tests cover org-scoping,
+      unique-line and send preconditions. 41 feature tests green; backend tsc clean.
 
 ## 4. Workers (parity)
 

@@ -68,6 +68,11 @@ router.get('/claimable-pool', async (req: AuthRequest, res: Response, next) => {
 
 // ── Claims ────────────────────────────────────────────────────────────────────
 
+// GET /supplier-credits/recovery-report — outstanding, recovery rate, unclaimed value.
+router.get('/recovery-report', async (req: AuthRequest, res: Response, next) => {
+  await createCreditClaimController().getRecoveryReport(req, res, next);
+});
+
 // GET /supplier-credits/claims?view=open|settled — triage lists.
 router.get('/claims', async (req: AuthRequest, res: Response, next) => {
   await createCreditClaimController().listClaims(req, res, next);

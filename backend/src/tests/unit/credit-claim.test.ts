@@ -5,7 +5,9 @@ import {
   isSettledClaimStatus,
   isChaseableClaimStatus,
   rollupClaimablePool,
+  rollupRecoveryReport,
   type ClaimableWriteOffRow,
+  type RecoveryClaimRow,
 } from '../../../../shared/domain/credit-claim';
 
 describe('credit-claim shared domain', () => {
@@ -152,6 +154,46 @@ describe('credit-claim shared domain', () => {
       ]);
 
       expect(groups.map((g) => g.supplierName)).toEqual(['Blackmores', 'Nature’s Own']);
+    });
+  });
+
+  describe('rollupRecoveryReport', () => {
+    const claim = (overrides: Partial<RecoveryClaimRow> = {}): RecoveryClaimRow => ({
+      supplierId: 10,
+      supplierName: 'Blackmores',
+      status: 'SENT',
+      expectedCreditValue: 100,
+      creditedValue: null,
+      ...overrides,
+    });
+
+    it('sums outstanding value from chaseable claims only', () => {
+      const report = rollupRecoveryReport(
+        [
+          claim({ status: 'SENT', expectedCreditValue: 100 }),
+          claim({ status: 'ACKNOWLEDGED', expectedCreditValue: 50 }),
+          claim({ status: 'CREDITED', expectedCreditValue: 30, creditedValue: 30 }),
+        ],
+        200,
+      );
+      expect(report.outstandingValue).toBe(150);
+      expect(report.unclaimedValue).toBe(200);
+    });
+
+    it('computes per-supplier recovery rate as credited over expected', () => {
+      const report = rollupRecoveryReport(
+        [
+          claim({ status: 'CREDITED', expectedCreditValue: 100, creditedValue: 80 }),
+          claim({ status: 'SENT', expectedCreditValue: 100 }),
+        ],
+        0,
+      );
+      const blackmores = report.suppliers[0];
+      expect(blackmores.claimsSent).toBe(2);
+      expect(blackmores.claimsCredited).toBe(1);
+      expect(blackmores.expectedValue).toBe(200);
+      expect(blackmores.creditedValue).toBe(80);
+      expect(blackmores.recoveryRate).toBe(0.4);
     });
   });
 });

@@ -79,6 +79,14 @@ export class CreditClaimController {
     }
   }
 
+  async getRecoveryReport(req: AuthRequest, res: Response, next: NextFunction): Promise<void> {
+    try {
+      res.json(await this.getService(req).getRecoveryReport());
+    } catch (error) {
+      next(error);
+    }
+  }
+
   async recordOutcome(req: AuthRequest, res: Response, next: NextFunction): Promise<void> {
     try {
       const { outcome, creditedValue, note } = req.body as {
