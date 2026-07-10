@@ -241,6 +241,13 @@ export class CreditClaimService {
     }
 
     const sentAt = this.now();
+    const sentSnapshot = {
+      ...claim,
+      status: 'SENT',
+      contactEmailSnapshot: to,
+      sentAt,
+      nextFollowUpAt: nextFollowUp(sentAt, claim.supplier.followUpDays, 0),
+    } as ClaimWithRelations;
     const finalizeSentClaim = async (tx?: Parameters<CreditClaimRepository['updateClaim']>[3]) => {
       await this.repo.updateClaim(
         this.organizationId,
@@ -264,18 +271,16 @@ export class CreditClaimService {
     } catch (error) {
       try {
         await this.repo.updateClaim(this.organizationId, id, {
-          status: 'SENT',
-          contactEmailSnapshot: to,
-          sentAt,
-          nextFollowUpAt: nextFollowUp(sentAt, claim.supplier.followUpDays, 0),
+          status: sentSnapshot.status,
+          contactEmailSnapshot: sentSnapshot.contactEmailSnapshot,
+          sentAt: sentSnapshot.sentAt,
+          nextFollowUpAt: sentSnapshot.nextFollowUpAt,
         });
         await this.repo
           .addEvent(this.organizationId, id, 'SENT', null, `Sent to ${to}`)
           .catch(() => undefined);
         const recovered = await this.repo.findClaim(this.organizationId, id);
-        if (recovered) {
-          return recovered;
-        }
+        return recovered ?? sentSnapshot;
       } catch {
         // If compensation fails too, bubble the original error from finalize.
       }

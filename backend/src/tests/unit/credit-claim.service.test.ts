@@ -241,6 +241,28 @@ describe('CreditClaimService', () => {
       );
     });
 
+    it('returns the recovered sent snapshot when the compensation re-read is unavailable', async () => {
+      const finalizeError = new Error('transaction failed');
+      const { service, repo } = makeDeps({
+        claim: draft,
+        transactionError: finalizeError,
+      });
+      (repo.findClaim as ReturnType<typeof vi.fn>)
+        .mockResolvedValueOnce(draft)
+        .mockResolvedValueOnce(null)
+        .mockResolvedValueOnce(null);
+
+      const result = await service.sendClaim(1);
+
+      expect(result).toEqual(
+        expect.objectContaining({
+          status: 'SENT',
+          sentAt: NOW,
+          nextFollowUpAt: new Date('2026-07-17T00:00:00.000Z'),
+        }),
+      );
+    });
+
     it('does not email when another request already claimed the draft send', async () => {
       const { service, emailSender, claimDraftForSending } = makeDeps({ claim: draft });
       claimDraftForSending.mockResolvedValueOnce(0);
