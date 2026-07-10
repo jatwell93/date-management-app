@@ -19,33 +19,12 @@ import {
 import { semanticDataViz } from '../theme/semantic-tokens';
 import { useFreshApiToken } from '../hooks/useFreshApiToken';
 
-// Import Chart.js components — lazy-loaded to keep initial bundle lean
-import {
-  Chart as ChartJS,
-  CategoryScale,
-  LinearScale,
-  BarElement,
-  Title,
-  Tooltip,
-  Legend,
-  PointElement,
-  LineElement,
-} from 'chart.js';
-
-// Register Chart.js components
-ChartJS.register(
-  CategoryScale,
-  LinearScale,
-  BarElement,
-  PointElement,
-  LineElement,
-  Title,
-  Tooltip,
-  Legend,
+// Chart.js is loaded on demand via the shared lazy chart module, keeping it out of
+// the initial bundle (chart.js registration lives inside that lazily-loaded chunk).
+const Bar = lazy(() => import('../components/charts/lazyCharts').then((m) => ({ default: m.Bar })));
+const Line = lazy(() =>
+  import('../components/charts/lazyCharts').then((m) => ({ default: m.Line })),
 );
-
-const Bar = lazy(() => import('react-chartjs-2').then((m) => ({ default: m.Bar })));
-const Line = lazy(() => import('react-chartjs-2').then((m) => ({ default: m.Line })));
 
 interface UsageReportPageProps {
   token: string | null;
@@ -116,6 +95,64 @@ function formatAuditFlagType(type: string) {
     .join(' ');
 }
 
+interface ReportFetchOptions<T> {
+  token: string | null;
+  signal: AbortSignal;
+  getFreshApiToken: (actionTag: string) => Promise<string | undefined>;
+  actionTag: string;
+  endpoint: string;
+  unknownErrorMessage: string;
+  /** Runs before the token check (set loading true, clear error). Omit for fetchers that don't. */
+  onStart?: () => void;
+  /** Handles the absent-token case; responsible for clearing its own loading flag. */
+  onMissingToken: () => void;
+  /** Applies fetched data (and any success-side error clearing). Only called when not aborted. */
+  onData: (data: T) => void;
+  onError: (message: string) => void;
+  /** Runs in `finally` when not aborted (clear loading flag). */
+  onSettled: () => void;
+}
+
+// Shared skeleton for the report fetchers: abort-guarded token check → GET → data/error/settled.
+// Each effect supplies its own state setters and copy so behavior stays identical to before.
+async function runReportFetch<T>(options: ReportFetchOptions<T>): Promise<void> {
+  const {
+    token,
+    signal,
+    getFreshApiToken,
+    actionTag,
+    endpoint,
+    unknownErrorMessage,
+    onStart,
+    onMissingToken,
+    onData,
+    onError,
+    onSettled,
+  } = options;
+
+  onStart?.();
+
+  if (!token) {
+    onMissingToken();
+    return;
+  }
+
+  try {
+    const authToken = await getFreshApiToken(actionTag);
+    const data = await apiService.get<T>(endpoint, authToken, signal);
+    if (!signal.aborted) {
+      onData(data);
+    }
+  } catch (err: unknown) {
+    if (signal.aborted) return;
+    onError(err instanceof Error ? err.message : unknownErrorMessage);
+  } finally {
+    if (!signal.aborted) {
+      onSettled();
+    }
+  }
+}
+
 export function UsageReportPage({ token }: UsageReportPageProps) {
   const getFreshApiToken = useFreshApiToken(token);
   const [usageData, setUsageData] = useState<DailyUsageReportItem[] | null>(null);
@@ -132,164 +169,99 @@ export function UsageReportPage({ token }: UsageReportPageProps) {
   const [timeFrame, setTimeFrame] = useState('all-time');
   const chartsLoading = itemsByUserLoading || itemsByDateLoading;
 
+  // Daily usage — no pre-fetch reset (initial loading state already true).
   useEffect(() => {
     const controller = new AbortController();
-
-    const fetchUsageData = async () => {
-      if (!token) {
+    runReportFetch<DailyUsageReportItem[]>({
+      token,
+      signal: controller.signal,
+      getFreshApiToken,
+      actionTag: 'usage-report-daily',
+      endpoint: '/reports/daily-usage',
+      unknownErrorMessage: 'An unknown error occurred',
+      onMissingToken: () => {
         setUsageError('Authentication token is missing.');
         setLoading(false);
-        return;
-      }
-
-      try {
-        const authToken = await getFreshApiToken('usage-report-daily');
-        const data = await apiService.get<DailyUsageReportItem[]>(
-          '/reports/daily-usage',
-          authToken,
-          controller.signal,
-        );
-        if (!controller.signal.aborted) {
-          setUsageData(data);
-        }
-      } catch (err: unknown) {
-        if (controller.signal.aborted) return;
-        if (err instanceof Error) {
-          setUsageError(err.message);
-        } else {
-          setUsageError('An unknown error occurred');
-        }
-      } finally {
-        if (!controller.signal.aborted) {
-          setLoading(false);
-        }
-      }
-    };
-
-    fetchUsageData();
+      },
+      onData: (data) => setUsageData(data),
+      onError: (message) => setUsageError(message),
+      onSettled: () => setLoading(false),
+    });
     return () => controller.abort();
   }, [token, getFreshApiToken]);
 
-  // Fetch items-by-date (independent of timeFrame)
+  // Items-by-date (independent of timeFrame).
   useEffect(() => {
     const controller = new AbortController();
-
-    const fetchItemsByDate = async () => {
-      setItemsByDateLoading(true);
-      setChartsError(null);
-
-      if (!token) {
-        setItemsByDateLoading(false);
-        return;
-      }
-
-      try {
-        const authToken = await getFreshApiToken('usage-report-items-by-date');
-        const data = await apiService.get<ItemsByDateReportItem[]>(
-          '/reports/items-by-date',
-          authToken,
-          controller.signal,
-        );
-        if (!controller.signal.aborted) {
-          setItemsByDate(data);
-          setChartsError(null);
-        }
-      } catch (err: unknown) {
-        if (controller.signal.aborted) return;
-        if (err instanceof Error) {
-          setChartsError(err.message);
-        } else {
-          setChartsError('An unknown error occurred when fetching chart data');
-        }
-      } finally {
-        if (!controller.signal.aborted) {
-          setItemsByDateLoading(false);
-        }
-      }
-    };
-
-    fetchItemsByDate();
+    runReportFetch<ItemsByDateReportItem[]>({
+      token,
+      signal: controller.signal,
+      getFreshApiToken,
+      actionTag: 'usage-report-items-by-date',
+      endpoint: '/reports/items-by-date',
+      unknownErrorMessage: 'An unknown error occurred when fetching chart data',
+      onStart: () => {
+        setItemsByDateLoading(true);
+        setChartsError(null);
+      },
+      onMissingToken: () => setItemsByDateLoading(false),
+      onData: (data) => {
+        setItemsByDate(data);
+        setChartsError(null);
+      },
+      onError: (message) => setChartsError(message),
+      onSettled: () => setItemsByDateLoading(false),
+    });
     return () => controller.abort();
   }, [token, getFreshApiToken]);
 
-  // Fetch items-by-user (depends on timeFrame)
+  // Items-by-user (depends on timeFrame).
   useEffect(() => {
     const controller = new AbortController();
-
-    const fetchItemsByUser = async () => {
-      setItemsByUserLoading(true);
-      setChartsError(null);
-
-      if (!token) {
+    runReportFetch<ItemsByUserReportItem[]>({
+      token,
+      signal: controller.signal,
+      getFreshApiToken,
+      actionTag: 'usage-report-items-by-user',
+      endpoint: `/reports/items-by-user?timeFrame=${timeFrame}`,
+      unknownErrorMessage: 'An unknown error occurred when fetching chart data',
+      onStart: () => {
+        setItemsByUserLoading(true);
+        setChartsError(null);
+      },
+      onMissingToken: () => {
         setChartsError('Authentication token is missing.');
         setItemsByUserLoading(false);
-        return;
-      }
-
-      try {
-        const authToken = await getFreshApiToken('usage-report-items-by-user');
-        const data = await apiService.get<ItemsByUserReportItem[]>(
-          `/reports/items-by-user?timeFrame=${timeFrame}`,
-          authToken,
-          controller.signal,
-        );
-        if (!controller.signal.aborted) {
-          setItemsByUser(data);
-          setChartsError(null);
-        }
-      } catch (err: unknown) {
-        if (controller.signal.aborted) return;
-        if (err instanceof Error) {
-          setChartsError(err.message);
-        } else {
-          setChartsError('An unknown error occurred when fetching chart data');
-        }
-      } finally {
-        if (!controller.signal.aborted) {
-          setItemsByUserLoading(false);
-        }
-      }
-    };
-
-    fetchItemsByUser();
+      },
+      onData: (data) => {
+        setItemsByUser(data);
+        setChartsError(null);
+      },
+      onError: (message) => setChartsError(message),
+      onSettled: () => setItemsByUserLoading(false),
+    });
     return () => controller.abort();
   }, [token, timeFrame, getFreshApiToken]);
 
+  // Store walk audit.
   useEffect(() => {
     const controller = new AbortController();
-
-    const fetchStoreWalkAudit = async () => {
-      setStoreWalkAuditLoading(true);
-      setStoreWalkAuditError(null);
-
-      if (!token) {
-        setStoreWalkAuditLoading(false);
-        return;
-      }
-
-      try {
-        const authToken = await getFreshApiToken('usage-report-store-walk-audit');
-        const data = await apiService.get<StoreWalkAuditCycle[]>(
-          '/reports/store-walk-audit',
-          authToken,
-          controller.signal,
-        );
-        if (!controller.signal.aborted) {
-          setStoreWalkAudit(data);
-        }
-      } catch (err: unknown) {
-        if (controller.signal.aborted) return;
-        setStoreWalkAuditError(
-          err instanceof Error ? err.message : 'An unknown error occurred when fetching walk audit',
-        );
-      } finally {
-        if (!controller.signal.aborted) {
-          setStoreWalkAuditLoading(false);
-        }
-      }
-    };
-
-    fetchStoreWalkAudit();
+    runReportFetch<StoreWalkAuditCycle[]>({
+      token,
+      signal: controller.signal,
+      getFreshApiToken,
+      actionTag: 'usage-report-store-walk-audit',
+      endpoint: '/reports/store-walk-audit',
+      unknownErrorMessage: 'An unknown error occurred when fetching walk audit',
+      onStart: () => {
+        setStoreWalkAuditLoading(true);
+        setStoreWalkAuditError(null);
+      },
+      onMissingToken: () => setStoreWalkAuditLoading(false),
+      onData: (data) => setStoreWalkAudit(data),
+      onError: (message) => setStoreWalkAuditError(message),
+      onSettled: () => setStoreWalkAuditLoading(false),
+    });
     return () => controller.abort();
   }, [token, getFreshApiToken]);
 
