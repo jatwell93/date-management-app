@@ -27,6 +27,7 @@ function makeDeps(
   const createLine = vi.fn(async () => ({ id: 1 }));
   const addEvent = vi.fn(async () => ({ id: 1 }));
   const updateClaim = vi.fn(async () => 1);
+  const claimDraftForSending = vi.fn(async () => 1);
   const setPhotoDeleteAfterForClaim = vi.fn(async () => undefined);
   const findClaim = vi.fn(async () => overrides.claim ?? null);
 
@@ -36,6 +37,7 @@ function makeDeps(
     createLine,
     addEvent,
     updateClaim,
+    claimDraftForSending,
     setPhotoDeleteAfterForClaim,
     findClaim,
   } as unknown as CreditClaimRepository;
@@ -56,7 +58,9 @@ function makeDeps(
   } as never;
 
   // Fake $transaction that runs the callback with a throwaway tx object.
-  const prisma = { $transaction: async (fn: (tx: unknown) => unknown) => fn({}) } as never;
+  const tx = { transaction: true };
+  const transaction = vi.fn(async (fn: (tx: unknown) => unknown) => fn(tx));
+  const prisma = { $transaction: transaction } as never;
 
   const service = new CreditClaimService('org-1', {
     prismaClient: prisma,
@@ -75,8 +79,11 @@ function makeDeps(
     createClaim,
     createLine,
     updateClaim,
+    claimDraftForSending,
     addEvent,
     setPhotoDeleteAfterForClaim,
+    transaction,
+    tx,
   };
 }
 
@@ -170,10 +177,13 @@ describe('CreditClaimService', () => {
     };
 
     it('sends, sets a verified sentAt and schedules the first follow-up', async () => {
-      const { service, repo, emailSender, updateClaim, addEvent } = makeDeps({ claim: draft });
+      const { service, repo, emailSender, updateClaim, addEvent, transaction, tx } = makeDeps({
+        claim: draft,
+      });
       await service.sendClaim(1);
 
       expect(emailSender.send).toHaveBeenCalledOnce();
+      expect(transaction).toHaveBeenCalledOnce();
       expect(updateClaim).toHaveBeenCalledWith(
         'org-1',
         1,
@@ -182,9 +192,20 @@ describe('CreditClaimService', () => {
           sentAt: NOW,
           nextFollowUpAt: new Date('2026-07-17T00:00:00.000Z'),
         }),
+        tx,
       );
-      expect(addEvent).toHaveBeenCalledWith('org-1', 1, 'SENT', null, expect.any(String));
+      expect(addEvent).toHaveBeenCalledWith('org-1', 1, 'SENT', null, expect.any(String), tx);
       expect(repo.findClaim).toHaveBeenCalled();
+    });
+
+    it('does not email when another request already claimed the draft send', async () => {
+      const { service, emailSender, claimDraftForSending } = makeDeps({ claim: draft });
+      claimDraftForSending.mockResolvedValueOnce(0);
+
+      await expect(service.sendClaim(1)).rejects.toBeInstanceOf(ValidationError);
+
+      expect(claimDraftForSending).toHaveBeenCalledWith('org-1', 1);
+      expect(emailSender.send).not.toHaveBeenCalled();
     });
 
     it('refuses to send without a supplier contact email', async () => {
@@ -200,7 +221,13 @@ describe('CreditClaimService', () => {
     it('does not mark sent when the provider rejects the message', async () => {
       const { service, updateClaim } = makeDeps({ claim: draft, emailAccepted: false });
       await expect(service.sendClaim(1)).rejects.toBeInstanceOf(ValidationError);
-      expect(updateClaim).not.toHaveBeenCalled();
+      expect(updateClaim).toHaveBeenCalledWith('org-1', 1, { status: 'DRAFT' });
+      expect(updateClaim).not.toHaveBeenCalledWith(
+        'org-1',
+        1,
+        expect.objectContaining({ status: 'SENT' }),
+        expect.anything(),
+      );
     });
   });
 
@@ -259,6 +286,13 @@ describe('CreditClaimService', () => {
 
     it('refuses to record an outcome for a draft claim', async () => {
       const { service } = makeDeps({ claim: { ...sent, status: 'DRAFT' } });
+      await expect(service.recordOutcome(1, 'CREDITED', 20, null)).rejects.toBeInstanceOf(
+        ValidationError,
+      );
+    });
+
+    it('refuses to record an outcome while a claim is being sent', async () => {
+      const { service } = makeDeps({ claim: { ...sent, status: 'SENDING' } });
       await expect(service.recordOutcome(1, 'CREDITED', 20, null)).rejects.toBeInstanceOf(
         ValidationError,
       );

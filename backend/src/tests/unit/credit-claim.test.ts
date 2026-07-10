@@ -61,6 +61,7 @@ describe('credit-claim shared domain', () => {
       expect(isChaseableClaimStatus('SENT')).toBe(true);
       expect(isChaseableClaimStatus('ACKNOWLEDGED')).toBe(true);
       expect(isChaseableClaimStatus('DRAFT')).toBe(false);
+      expect(isChaseableClaimStatus('SENDING')).toBe(false);
       expect(isChaseableClaimStatus('CREDITED')).toBe(false);
     });
   });

@@ -223,22 +223,41 @@ export class CreditClaimService {
       throw new ValidationError('The supplier has no contact email; add one before sending.');
     }
 
-    const email = renderClaimEmail(claim);
-    const attachments = await this.loadAttachments(claim);
-    const accepted = await this.emailSender.send({ to, ...email, attachments });
-    if (!accepted) {
-      throw new ValidationError('Email provider is not configured; claim was not sent.');
+    const claimed = await this.repo.claimDraftForSending(this.organizationId, id);
+    if (claimed !== 1) {
+      throw new ValidationError(`Claim ${id} has already been sent or is currently sending.`);
+    }
+
+    try {
+      const email = renderClaimEmail(claim);
+      const attachments = await this.loadAttachments(claim);
+      const accepted = await this.emailSender.send({ to, ...email, attachments });
+      if (!accepted) {
+        throw new ValidationError('Email provider is not configured; claim was not sent.');
+      }
+    } catch (error) {
+      await this.repo.updateClaim(this.organizationId, id, { status: 'DRAFT' });
+      throw error;
     }
 
     const sentAt = this.now();
-    await this.repo.updateClaim(this.organizationId, id, {
-      status: 'SENT',
-      contactEmailSnapshot: to,
-      sentAt,
-      nextFollowUpAt: nextFollowUp(sentAt, claim.supplier.followUpDays, 0),
+    return this.prisma.$transaction(async (tx) => {
+      await this.repo.updateClaim(
+        this.organizationId,
+        id,
+        {
+          status: 'SENT',
+          contactEmailSnapshot: to,
+          sentAt,
+          nextFollowUpAt: nextFollowUp(sentAt, claim.supplier.followUpDays, 0),
+        },
+        tx,
+      );
+      await this.repo.addEvent(this.organizationId, id, 'SENT', null, `Sent to ${to}`, tx);
+      const updated = await this.repo.findClaim(this.organizationId, id, tx);
+      if (!updated) throw new NotFoundError(`Claim ${id} not found`);
+      return updated;
     });
-    await this.repo.addEvent(this.organizationId, id, 'SENT', null, `Sent to ${to}`);
-    return this.getClaim(id);
   }
 
   /** Send a follow-up nudge and advance the schedule. */
@@ -287,6 +306,9 @@ export class CreditClaimService {
       throw new ValidationError(
         `Claim ${id} is already settled (${claim.status}); its outcome is final.`,
       );
+    }
+    if (!isChaseableClaimStatus(claim.status) && claim.status !== 'PARTIALLY_CREDITED') {
+      throw new ValidationError(`Claim ${id} is not awaiting a supplier outcome.`);
     }
     const settledAt = this.now();
     return this.prisma.$transaction(async (tx) => {

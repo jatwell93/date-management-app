@@ -31,6 +31,7 @@ type Tab = 'to-claim' | 'open' | 'settled';
 
 const STATUS_TONE: Record<string, string> = {
   DRAFT: 'bg-semantic-surface-3 text-semantic-text-secondary',
+  SENDING: 'bg-semantic-primary/10 text-semantic-primary',
   SENT: 'bg-semantic-primary/10 text-semantic-primary',
   ACKNOWLEDGED: 'bg-semantic-primary/10 text-semantic-primary',
   CREDITED: 'bg-semantic-success-muted text-semantic-success',
@@ -90,11 +91,11 @@ const SupplierCreditsPage: React.FC<Props> = ({ token }) => {
   }, [load]);
 
   const openClaims = useMemo(
-    () => claims.filter((c) => ['DRAFT', 'SENT', 'ACKNOWLEDGED'].includes(c.status)),
+    () => claims.filter((c) => ['DRAFT', 'SENDING', 'SENT', 'ACKNOWLEDGED'].includes(c.status)),
     [claims],
   );
   const settledClaims = useMemo(
-    () => claims.filter((c) => !['DRAFT', 'SENT', 'ACKNOWLEDGED'].includes(c.status)),
+    () => claims.filter((c) => !['DRAFT', 'SENDING', 'SENT', 'ACKNOWLEDGED'].includes(c.status)),
     [claims],
   );
   const followUpDueCount = useMemo(() => openClaims.filter(isFollowUpDue).length, [openClaims]);

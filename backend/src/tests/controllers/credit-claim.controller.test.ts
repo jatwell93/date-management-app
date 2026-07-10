@@ -39,7 +39,7 @@ describe('CreditClaimController routes', () => {
     const app = buildApp({ listClaims } as any);
 
     await request(app).get('/claims?view=open').expect(200);
-    expect(listClaims).toHaveBeenCalledWith(['DRAFT', 'SENT', 'ACKNOWLEDGED']);
+    expect(listClaims).toHaveBeenCalledWith(['DRAFT', 'SENDING', 'SENT', 'ACKNOWLEDGED']);
   });
 
   it('maps ?view=settled to the settled statuses', async () => {

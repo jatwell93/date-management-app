@@ -7,7 +7,7 @@ import {
   type ClaimOutcome,
 } from '../services/credit-claim.service';
 
-const OPEN_STATUSES = ['DRAFT', 'SENT', 'ACKNOWLEDGED'];
+const OPEN_STATUSES = ['DRAFT', 'SENDING', 'SENT', 'ACKNOWLEDGED'];
 const SETTLED_STATUSES = ['CREDITED', 'PARTIALLY_CREDITED', 'REJECTED', 'CANCELLED'];
 
 export class CreditClaimController {

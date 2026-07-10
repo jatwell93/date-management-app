@@ -8,6 +8,7 @@
 
 export const CREDIT_CLAIM_STATUSES = [
   'DRAFT',
+  'SENDING',
   'SENT',
   'ACKNOWLEDGED',
   'CREDITED',

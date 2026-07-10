@@ -108,6 +108,14 @@ export class CreditClaimRepository {
     return result.count;
   }
 
+  async claimDraftForSending(organizationId: string, id: number, tx?: DbClient): Promise<number> {
+    const result = await this.getClient(tx).creditClaim.updateMany({
+      where: { id, organizationId, status: 'DRAFT' },
+      data: { status: 'SENDING' },
+    });
+    return result.count;
+  }
+
   /** Schedule photo deletion for every photo on a claim (called on settlement). */
   async setPhotoDeleteAfterForClaim(
     organizationId: string,
