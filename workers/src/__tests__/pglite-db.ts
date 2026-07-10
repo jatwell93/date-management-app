@@ -34,6 +34,9 @@ const SCHEMA_SQL = `
     -- (issue #338). Nullable: cost-only catalogues leave it NULL and fall back to cost.
     retail_price DOUBLE PRECISION,
     notes TEXT NOT NULL DEFAULT '',
+    -- Self-building supplier map (issue: supplier credit claims). Nullable = the
+    -- "needs supplier" triage bucket.
+    supplier_id INTEGER,
     created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
     updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
     UNIQUE (organization_id, sku),
@@ -210,6 +213,72 @@ const SCHEMA_SQL = `
     trial_end_date TIMESTAMPTZ,
     created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
     updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+  );
+
+  CREATE TABLE suppliers (
+    id SERIAL PRIMARY KEY,
+    organization_id TEXT NOT NULL,
+    name TEXT NOT NULL,
+    contact_email TEXT,
+    credit_policy_note TEXT NOT NULL DEFAULT '',
+    policy_write_off_qty INTEGER,
+    policy_credit_qty INTEGER,
+    follow_up_days INTEGER NOT NULL DEFAULT 7,
+    created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+    updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+    UNIQUE (organization_id, name)
+  );
+
+  CREATE TABLE credit_claims (
+    id SERIAL PRIMARY KEY,
+    organization_id TEXT NOT NULL,
+    supplier_id INTEGER NOT NULL,
+    created_by_user_id INTEGER,
+    status TEXT NOT NULL DEFAULT 'DRAFT',
+    contact_email_snapshot TEXT,
+    expected_credit_units INTEGER,
+    expected_credit_value DOUBLE PRECISION,
+    credited_value DOUBLE PRECISION,
+    sent_at TIMESTAMPTZ,
+    next_follow_up_at TIMESTAMPTZ,
+    follow_up_count INTEGER NOT NULL DEFAULT 0,
+    settled_at TIMESTAMPTZ,
+    created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+    updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+  );
+
+  CREATE TABLE credit_claim_lines (
+    id SERIAL PRIMARY KEY,
+    organization_id TEXT NOT NULL,
+    claim_id INTEGER NOT NULL REFERENCES credit_claims (id) ON DELETE CASCADE,
+    expired_item_transaction_id INTEGER NOT NULL UNIQUE,
+    batch_number TEXT,
+    units_claimed INTEGER NOT NULL,
+    expected_credit_units INTEGER,
+    expected_credit_value DOUBLE PRECISION,
+    created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+    updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+  );
+
+  CREATE TABLE credit_claim_photos (
+    id SERIAL PRIMARY KEY,
+    organization_id TEXT NOT NULL,
+    claim_line_id INTEGER NOT NULL REFERENCES credit_claim_lines (id) ON DELETE CASCADE,
+    storage_key TEXT NOT NULL,
+    file_name TEXT NOT NULL,
+    size_bytes INTEGER NOT NULL,
+    delete_after TIMESTAMPTZ,
+    created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+  );
+
+  CREATE TABLE credit_claim_events (
+    id SERIAL PRIMARY KEY,
+    organization_id TEXT NOT NULL,
+    claim_id INTEGER NOT NULL REFERENCES credit_claims (id) ON DELETE CASCADE,
+    user_id INTEGER,
+    type TEXT NOT NULL,
+    note TEXT,
+    created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
   );
 `;
 

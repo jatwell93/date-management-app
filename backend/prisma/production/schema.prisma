@@ -55,6 +55,11 @@ model Organization {
   trialEvents             TrialEvent[]
   uploads                 Upload[]
   users                   User[]
+  suppliers               Supplier[]
+  creditClaims            CreditClaim[]
+  creditClaimLines        CreditClaimLine[]
+  creditClaimPhotos       CreditClaimPhoto[]
+  creditClaimEvents       CreditClaimEvent[]
 
   @@map("organizations")
 }
@@ -170,9 +175,11 @@ model Product {
   costPrice      Float           @map("cost_price")
   retailPrice    Float?          @map("retail_price")
   notes          String          @default("")
+  supplierId     Int?            @map("supplier_id")
   createdAt      DateTime        @default(now()) @map("created_at")
   updatedAt      DateTime        @updatedAt @map("updated_at")
   inventoryItems InventoryItem[]
+  supplier       Supplier?       @relation(fields: [supplierId], references: [id], onDelete: SetNull)
   organization   Organization    @relation(fields: [organizationId], references: [id], onDelete: Cascade)
 
   @@unique([organizationId, sku])
@@ -181,6 +188,7 @@ model Product {
   @@index([organizationId, barcode])
   @@index([sku])
   @@index([barcode])
+  @@index([supplierId])
   @@map("products")
 }
 
@@ -288,6 +296,8 @@ model User {
   sentInvites             OrganizationInvite[]     @relation("InvitedBy")
   refreshTokens           RefreshToken[]
   uploads                 Upload[]
+  creditClaims            CreditClaim[]
+  creditClaimEvents       CreditClaimEvent[]
   organization            Organization             @relation(fields: [organizationId], references: [id], onDelete: Cascade)
 
   @@index([organizationId])
@@ -388,6 +398,7 @@ model ExpiredItemTransaction {
   user            User?         @relation(fields: [userId], references: [id], onDelete: SetNull)
   inventoryItem   InventoryItem @relation(fields: [inventoryItemId], references: [id])
   organization    Organization  @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  creditClaimLine CreditClaimLine?
 
   @@index([organizationId])
   @@index([inventoryItemId])
@@ -395,6 +406,111 @@ model ExpiredItemTransaction {
   @@index([action])
   @@index([transactionDate])
   @@map("expired_item_transactions")
+}
+
+model Supplier {
+  id                Int           @id @default(autoincrement())
+  organizationId    String        @map("organization_id")
+  name              String
+  contactEmail      String?       @map("contact_email")
+  creditPolicyNote  String        @default("") @map("credit_policy_note")
+  policyWriteOffQty Int?          @map("policy_write_off_qty")
+  policyCreditQty   Int?          @map("policy_credit_qty")
+  followUpDays      Int           @default(7) @map("follow_up_days")
+  createdAt         DateTime      @default(now()) @map("created_at")
+  updatedAt         DateTime      @updatedAt @map("updated_at")
+  organization      Organization  @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  products          Product[]
+  claims            CreditClaim[]
+
+  @@unique([organizationId, name])
+  @@index([organizationId])
+  @@map("suppliers")
+}
+
+model CreditClaim {
+  id                   Int                @id @default(autoincrement())
+  organizationId       String             @map("organization_id")
+  supplierId           Int                @map("supplier_id")
+  createdByUserId      Int?               @map("created_by_user_id")
+  status               String             @default("DRAFT")
+  contactEmailSnapshot String?            @map("contact_email_snapshot")
+  expectedCreditUnits  Int?               @map("expected_credit_units")
+  expectedCreditValue  Float?             @map("expected_credit_value")
+  creditedValue        Float?             @map("credited_value")
+  sentAt               DateTime?          @map("sent_at")
+  nextFollowUpAt       DateTime?          @map("next_follow_up_at")
+  followUpCount        Int                @default(0) @map("follow_up_count")
+  settledAt            DateTime?          @map("settled_at")
+  createdAt            DateTime           @default(now()) @map("created_at")
+  updatedAt            DateTime           @updatedAt @map("updated_at")
+  organization         Organization       @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  supplier             Supplier           @relation(fields: [supplierId], references: [id])
+  createdBy            User?              @relation(fields: [createdByUserId], references: [id], onDelete: SetNull)
+  lines                CreditClaimLine[]
+  events               CreditClaimEvent[]
+
+  @@index([organizationId])
+  @@index([supplierId])
+  @@index([status])
+  @@index([nextFollowUpAt])
+  @@map("credit_claims")
+}
+
+model CreditClaimLine {
+  id                       Int                    @id @default(autoincrement())
+  organizationId           String                 @map("organization_id")
+  claimId                  Int                    @map("claim_id")
+  expiredItemTransactionId Int                    @unique @map("expired_item_transaction_id")
+  batchNumber              String?                @map("batch_number")
+  unitsClaimed             Int                    @map("units_claimed")
+  expectedCreditUnits      Int?                   @map("expected_credit_units")
+  expectedCreditValue      Float?                 @map("expected_credit_value")
+  createdAt                DateTime               @default(now()) @map("created_at")
+  updatedAt                DateTime               @updatedAt @map("updated_at")
+  organization             Organization           @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  claim                    CreditClaim            @relation(fields: [claimId], references: [id], onDelete: Cascade)
+  expiredItemTransaction   ExpiredItemTransaction @relation(fields: [expiredItemTransactionId], references: [id])
+  photos                   CreditClaimPhoto[]
+
+  @@index([organizationId])
+  @@index([claimId])
+  @@map("credit_claim_lines")
+}
+
+model CreditClaimPhoto {
+  id             Int             @id @default(autoincrement())
+  organizationId String          @map("organization_id")
+  claimLineId    Int             @map("claim_line_id")
+  storageKey     String          @map("storage_key")
+  fileName       String          @map("file_name")
+  sizeBytes      Int             @map("size_bytes")
+  deleteAfter    DateTime?       @map("delete_after")
+  createdAt      DateTime        @default(now()) @map("created_at")
+  organization   Organization    @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  claimLine      CreditClaimLine @relation(fields: [claimLineId], references: [id], onDelete: Cascade)
+
+  @@index([organizationId])
+  @@index([claimLineId])
+  @@index([deleteAfter])
+  @@map("credit_claim_photos")
+}
+
+model CreditClaimEvent {
+  id             Int          @id @default(autoincrement())
+  organizationId String       @map("organization_id")
+  claimId        Int          @map("claim_id")
+  userId         Int?         @map("user_id")
+  type           String
+  note           String?
+  createdAt      DateTime     @default(now()) @map("created_at")
+  organization   Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  claim          CreditClaim  @relation(fields: [claimId], references: [id], onDelete: Cascade)
+  user           User?        @relation(fields: [userId], references: [id], onDelete: SetNull)
+
+  @@index([organizationId])
+  @@index([claimId])
+  @@map("credit_claim_events")
 }
 
 model Upload {
