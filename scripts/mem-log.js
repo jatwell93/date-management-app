@@ -18,7 +18,8 @@
  *   node scripts/mem-log.js DECISION "State Management" "Using React Context instead of Redux for simplicity"
  */
 
-const { execSync } = require('child_process');
+const { execFileSync } = require('child_process');
+const fs = require('fs');
 const path = require('path');
 
 // Load environment variables from .env file
@@ -35,27 +36,41 @@ if (apiKey) {
   console.warn('[WARN] No Gemini API key found in .env or environment');
 }
 
-const MEMORY_FILE = path.join(__dirname, '..', 'project-memory.mv2');
+const MEMORY_FILE =
+  process.env.MEMORY_FILE_PATH || path.join(__dirname, '..', 'project-memory.mv2');
+const MEMORY_JSONL = process.env.MEMORY_JSONL_PATH || path.join(__dirname, '..', 'memory.jsonl');
 
 const VALID_KINDS = ['FIX', 'PATTERN', 'DECISION', 'FEATURE', 'ERROR', 'ARCHITECTURE', 'WORKFLOW'];
 
-function escapeForShell(value) {
-  return String(value).replace(/"/g, '\\"');
-}
-
 function ensureMemvidAvailable(env) {
   try {
-    execSync('memvid --version', {
+    execFileSync('memvid', ['--version'], {
       env,
       stdio: ['ignore', 'ignore', 'ignore'],
+      shell: true,
+      windowsHide: true,
     });
   } catch (error) {
-    console.error('❌ memvid is not available in PATH for this Node process.');
-    console.error('   Install or expose memvid, then retry.');
-    console.error('   Example check: memvid --version');
-    console.error(`   Details: ${error.message}`);
-    process.exit(1);
+    throw new Error(
+      [
+        'memvid is not available in PATH for this Node process.',
+        'Install or expose memvid, then retry.',
+        'Example check: memvid --version',
+        `Details: ${error.message}`,
+      ].join('\n'),
+    );
   }
+}
+
+function appendMemoryJsonl(kind, title, message) {
+  const record = {
+    ts: new Date().toISOString(),
+    kind,
+    title,
+    message,
+  };
+
+  fs.appendFileSync(MEMORY_JSONL, `${JSON.stringify(record)}\n`);
 }
 
 function logMemory(kind, title, message) {
@@ -84,21 +99,32 @@ function logMemory(kind, title, message) {
     cleanEnv.GOOGLE_API_KEY = process.env.GEMINI_API_KEY;
   }
 
-  ensureMemvidAvailable(cleanEnv);
+  try {
+    appendMemoryJsonl(normalizedKind, title, message);
+  } catch (error) {
+    console.error('❌ Failed to write memory.jsonl:', error.message);
+    process.exit(1);
+  }
 
   try {
-    // Use execSync with explicit quoting so arguments with spaces are preserved
-    const command = `memvid put "${escapeForShell(MEMORY_FILE)}" --title "${escapeForShell(title)}" --kind ${normalizedKind.toLowerCase()}`;
-    execSync(command, {
-      env: cleanEnv,
-      stdio: ['pipe', 'inherit', 'inherit'],
-      input: fullMessage,
-    });
+    ensureMemvidAvailable(cleanEnv);
+
+    execFileSync(
+      'memvid',
+      ['put', MEMORY_FILE, '--title', title, '--kind', normalizedKind.toLowerCase()],
+      {
+        env: cleanEnv,
+        stdio: ['pipe', 'inherit', 'inherit'],
+        input: fullMessage,
+        shell: true,
+        windowsHide: true,
+      },
+    );
 
     console.log(`\n✅ Memory logged: [${normalizedKind}] ${title}`);
   } catch (error) {
-    console.error('❌ Failed to log memory:', error.message);
-    process.exit(1);
+    console.warn('⚠ Failed to update local memvid index:', error.message);
+    console.warn('   Memory was preserved in memory.jsonl. Run npm run mem:rebuild later.');
   }
 }
 
