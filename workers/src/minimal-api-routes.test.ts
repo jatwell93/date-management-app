@@ -52,9 +52,9 @@ function createAuthenticatedOrgDatabase(tableRowsByQueryText: Record<string, unk
   } as unknown as Database;
 }
 
-function resolveMinimalGet(pathname: string, database: Database = db) {
+function resolveMinimalGet(pathname: string, database: Database = db, requestPath = pathname) {
   return resolveMinimalApiRoute(getMinimalRoutes(), {
-    request: new Request(`https://example.com${pathname}`),
+    request: new Request(`https://example.com${requestPath}`),
     pathname,
     method: 'GET',
     db: database,
@@ -154,6 +154,17 @@ describe('minimal API route table', () => {
       expect.arrayContaining([
         expect.arrayContaining(['GET', '/api/subscription/current']),
         expect.arrayContaining(['GET', '/api/organization/usage']),
+      ]),
+    );
+  });
+
+  it('registers supplier credit read routes used by the frontend', () => {
+    expect(getMinimalRoutes()).toEqual(
+      expect.arrayContaining([
+        expect.arrayContaining(['GET', '/api/supplier-credits/suppliers']),
+        expect.arrayContaining(['GET', '/api/supplier-credits/claimable-pool']),
+        expect.arrayContaining(['GET', '/api/supplier-credits/recovery-report']),
+        expect.arrayContaining(['GET', '/api/supplier-credits/claims']),
       ]),
     );
   });
@@ -467,6 +478,57 @@ describe('minimal API route table', () => {
     });
   });
 
+  it('loads supplier credit read data from the authenticated organization', async () => {
+    mockedAuthenticateClerkRequest.mockResolvedValue(authenticatedClerkOrgContext);
+    const dbWithSupplierCredits = {
+      sql: vi.fn((strings: TemplateStringsArray) => {
+        const query = strings.join(' ');
+        if (query.includes('FROM users')) {
+          return Promise.resolve([{ id: 7, organizationId: 'org_123', role: 'admin' }]);
+        }
+        return Promise.resolve([]);
+      }),
+      listSuppliers: vi.fn().mockResolvedValue([{ id: 1, name: 'Blackmores' }]),
+      getClaimablePool: vi.fn().mockResolvedValue([{ supplierId: 1, items: [] }]),
+      getRecoveryReport: vi
+        .fn()
+        .mockResolvedValue({ outstandingValue: 0, unclaimedValue: 0, suppliers: [] }),
+      listCreditClaims: vi.fn().mockResolvedValue([{ id: 12, status: 'SENT' }]),
+    } as unknown as Database;
+
+    const suppliers = await resolveMinimalGet(
+      '/api/supplier-credits/suppliers',
+      dbWithSupplierCredits,
+    );
+    const pool = await resolveMinimalGet(
+      '/api/supplier-credits/claimable-pool',
+      dbWithSupplierCredits,
+    );
+    const report = await resolveMinimalGet(
+      '/api/supplier-credits/recovery-report',
+      dbWithSupplierCredits,
+    );
+    const claims = await resolveMinimalGet(
+      '/api/supplier-credits/claims',
+      dbWithSupplierCredits,
+      '/api/supplier-credits/claims?view=open',
+    );
+
+    expect(suppliers?.status).toBe(200);
+    expect(pool?.status).toBe(200);
+    expect(report?.status).toBe(200);
+    expect(claims?.status).toBe(200);
+    expect(dbWithSupplierCredits.listSuppliers).toHaveBeenCalledWith('org_123');
+    expect(dbWithSupplierCredits.getClaimablePool).toHaveBeenCalledWith('org_123');
+    expect(dbWithSupplierCredits.getRecoveryReport).toHaveBeenCalledWith('org_123');
+    expect(dbWithSupplierCredits.listCreditClaims).toHaveBeenCalledWith('org_123', [
+      'DRAFT',
+      'SENDING',
+      'SENT',
+      'ACKNOWLEDGED',
+    ]);
+  });
+
   it('creates default organization usage with production-required timestamps', async () => {
     mockedAuthenticateClerkRequest.mockResolvedValue(authenticatedClerkOrgContext);
     const dbWithRows = createAuthenticatedOrgDatabase({
@@ -503,4 +565,23 @@ describe('minimal API route table', () => {
       expect(response?.status).toBe(401);
     },
   );
+
+  it.each([
+    '/api/supplier-credits/suppliers',
+    '/api/supplier-credits/claimable-pool',
+    '/api/supplier-credits/recovery-report',
+    '/api/supplier-credits/claims',
+  ])('dispatches %s to auth instead of returning route-not-found', async (pathname) => {
+    mockedAuthenticateClerkRequest.mockResolvedValue(new Response('Unauthorized', { status: 401 }));
+    const response = await resolveMinimalApiRoute(getMinimalRoutes(), {
+      request: new Request(`https://example.com${pathname}`),
+      pathname,
+      method: 'GET',
+      db,
+      env,
+    });
+
+    expect(response).not.toBeNull();
+    expect(response?.status).toBe(401);
+  });
 });
