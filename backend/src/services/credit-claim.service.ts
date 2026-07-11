@@ -300,8 +300,26 @@ export class CreditClaimService {
           .catch(() => undefined);
         const recovered = await this.repo.findClaim(this.organizationId, id);
         return recovered ?? sentSnapshot;
-      } catch {
-        // If compensation fails too, bubble the original error from finalize.
+      } catch (compensationError) {
+        // The email was already accepted, but finalize AND its compensation both failed,
+        // so the claim is stuck in SENDING (sentAt still null) and can't be recovered
+        // through the API. SENDING is ambiguous — auto-finalizing could double-email and
+        // auto-reverting could lose an already-sent claim — so we don't guess here.
+        // Surface it loudly instead of swallowing it, so ops can reconcile the one claim
+        // manually, then bubble the original finalize error to the caller.
+        Logger.error(
+          `Claim ${id} stuck in SENDING after finalize + compensation both failed ` +
+            `(org ${this.organizationId}): ${String(compensationError)}`,
+        );
+        Sentry.captureException(compensationError, {
+          level: 'error',
+          tags: { feature: 'credit-claim-send', event: 'sending-stuck' },
+          extra: {
+            organizationId: this.organizationId,
+            claimId: id,
+            originalError: String(error),
+          },
+        });
       }
       throw error;
     }

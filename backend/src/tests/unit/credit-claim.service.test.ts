@@ -1,8 +1,14 @@
+import * as Sentry from '@sentry/node';
 import { CreditClaimService, PHOTO_RETENTION_DAYS } from '../../services/credit-claim.service';
 import { CreditClaimRepository } from '../../repositories/credit-claim.repository';
 import { SupplierCreditRepository } from '../../repositories/supplier-credit.repository';
 import { NotFoundError, ValidationError } from '../../errors';
 import type { EmailSender } from '../../services/email-sender';
+
+vi.mock('@sentry/node', async (importOriginal) => ({
+  ...(await importOriginal<typeof import('@sentry/node')>()),
+  captureException: vi.fn(),
+}));
 
 const NOW = new Date('2026-07-10T00:00:00.000Z');
 
@@ -276,6 +282,27 @@ describe('CreditClaimService', () => {
           status: 'SENT',
           sentAt: NOW,
           nextFollowUpAt: new Date('2026-07-17T00:00:00.000Z'),
+        }),
+      );
+    });
+
+    it('captures and rethrows when finalize AND its compensation both fail (stuck SENDING)', async () => {
+      vi.mocked(Sentry.captureException).mockClear();
+      const finalizeError = new Error('finalize transaction failed');
+      const { service, repo } = makeDeps({ claim: draft, transactionError: finalizeError });
+      // Compensation write also fails -> the claim is left stuck in SENDING.
+      (repo.updateClaim as ReturnType<typeof vi.fn>).mockRejectedValue(
+        new Error('compensation write failed'),
+      );
+
+      // The original finalize error is surfaced to the caller, not swallowed.
+      await expect(service.sendClaim(1)).rejects.toThrow('finalize transaction failed');
+      // ...and the stuck claim is reported so ops can reconcile it.
+      expect(Sentry.captureException).toHaveBeenCalledWith(
+        expect.objectContaining({ message: 'compensation write failed' }),
+        expect.objectContaining({
+          tags: expect.objectContaining({ event: 'sending-stuck' }),
+          extra: expect.objectContaining({ claimId: 1, organizationId: 'org-1' }),
         }),
       );
     });
