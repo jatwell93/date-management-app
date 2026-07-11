@@ -1,6 +1,7 @@
 import { Router, Response } from 'express';
 import multer from 'multer';
 import { AuthRequest, requireManager } from '../middleware/auth.middleware';
+import { ValidationError } from '../errors';
 import { validateRequest } from '../middleware/validateRequest';
 import { standardLimiter } from '../middleware/rateLimiter';
 import {
@@ -17,11 +18,28 @@ import { createCreditClaimController } from '../controllers/credit-claim.control
 // other feature routers (see markdown-config.routes.ts).
 const router = Router();
 
-// Claim photos are small images uploaded directly (memory storage, 10MB cap),
-// matching the direct-upload path in upload.routes.ts.
+// Claim photos are phone snaps of expired stock uploaded directly (memory storage,
+// 10MB cap), matching the direct-upload path in upload.routes.ts. Restricted to image
+// types so the claim email never carries an arbitrary attachment to the supplier.
+const ALLOWED_PHOTO_MIME_TYPES = new Set([
+  'image/jpeg',
+  'image/png',
+  'image/webp',
+  'image/gif',
+  'image/heic',
+  'image/heif',
+]);
+
 const photoUpload = multer({
   storage: multer.memoryStorage(),
   limits: { fileSize: 10 * 1024 * 1024 },
+  fileFilter: (_req, file, cb) => {
+    if (ALLOWED_PHOTO_MIME_TYPES.has(file.mimetype)) {
+      cb(null, true);
+    } else {
+      cb(new ValidationError(`Unsupported photo type: ${file.mimetype}. Upload an image.`));
+    }
+  },
 });
 
 // GET /supplier-credits/suppliers — list suppliers (any authenticated user; the

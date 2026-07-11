@@ -331,6 +331,28 @@ describe('CreditClaimService', () => {
       expect(storage.upload).not.toHaveBeenCalled();
       expect(addPhoto).not.toHaveBeenCalled();
     });
+
+    it('sanitizes the filename so a crafted name cannot escape the key prefix', async () => {
+      const { service, storage, addPhoto } = makeDeps({
+        claim: { id: 1, status: 'DRAFT', lines: [{ id: 1, photos: [] }] },
+      });
+
+      await service.addPhoto(1, 1, {
+        buffer: Buffer.from('img'),
+        originalName: '../../etc/passwd',
+        contentType: 'image/jpeg',
+      });
+
+      const key = (storage.upload as ReturnType<typeof vi.fn>).mock.calls[0][0] as string;
+      expect(key).toMatch(/^credit-claims\/org-1\/1\/1\/[0-9a-f-]+-passwd$/);
+      expect(key).not.toContain('..');
+      // The original name is still recorded verbatim in the DB row.
+      expect(addPhoto).toHaveBeenCalledWith(
+        'org-1',
+        1,
+        expect.objectContaining({ fileName: '../../etc/passwd' }),
+      );
+    });
   });
 
   describe('recordOutcome', () => {

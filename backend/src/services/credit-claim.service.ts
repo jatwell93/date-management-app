@@ -44,6 +44,18 @@ function addDays(from: Date, days: number): Date {
   return new Date(from.getTime() + days * 24 * 60 * 60 * 1000);
 }
 
+/**
+ * Make an uploaded filename safe to embed in an object-storage key: drop any path
+ * segments and reduce to a conservative charset so a crafted name can't escape the
+ * claim's key prefix or create surprise nested keys. The original name is still kept
+ * verbatim in the DB (photo.fileName) for display and the email attachment.
+ */
+function sanitizeKeySegment(name: string): string {
+  const base = name.split(/[\\/]/).pop() ?? '';
+  const cleaned = base.replace(/[^A-Za-z0-9._-]/g, '_').replace(/^\.+/, '');
+  return cleaned.slice(0, 100) || 'photo';
+}
+
 /** A candidate write-off row loaded for claim building. */
 type WriteOffRow = Awaited<ReturnType<CreditClaimRepository['findWriteOffsByIds']>>[number];
 
@@ -203,7 +215,7 @@ export class CreditClaimService {
     const line = await this.repo.findClaimLine(this.organizationId, claimId, lineId);
     if (!line) throw new NotFoundError(`Claim line ${lineId} not found`);
 
-    const key = `credit-claims/${this.organizationId}/${claimId}/${lineId}/${randomUUID()}-${file.originalName}`;
+    const key = `credit-claims/${this.organizationId}/${claimId}/${lineId}/${randomUUID()}-${sanitizeKeySegment(file.originalName)}`;
     await this.storage.upload(key, file.buffer, file.contentType);
     return this.repo.addPhoto(this.organizationId, lineId, {
       storageKey: key,
