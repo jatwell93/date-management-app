@@ -4,6 +4,8 @@ import { getDefaultDatabaseClient } from '../database/database-factory';
 import { getDefaultStorageProvider } from '../storage/storage-factory';
 import type { StorageProvider } from '../storage/storage-provider.interface';
 import { getOrganizationId } from '../utils/auth-bypass';
+import { Logger } from '../utils/logger';
+import * as Sentry from '@sentry/node';
 import { NotFoundError, ValidationError } from '../errors';
 import {
   CreditClaimRepository,
@@ -411,12 +413,26 @@ export class CreditClaimService {
     let purged = 0;
     for (const photo of photos) {
       try {
-        await this.storage.delete(photo.storageKey);
-      } catch {
-        // Object may already be gone; still drop the row so it isn't retried forever.
+        try {
+          await this.storage.delete(photo.storageKey);
+        } catch {
+          // Object may already be gone; still drop the row so it isn't retried forever.
+        }
+        await this.repo.deletePhoto(this.organizationId, photo.id);
+        purged += 1;
+      } catch (error) {
+        // A transient DB failure on one row must not abort the rest of this org's
+        // photos — nor, via the job loop, every later org. Skip it and report it so
+        // the purge keeps its documented "one bad row never stops the batch" posture.
+        Logger.error(
+          `Photo purge failed for photo ${photo.id} (org ${this.organizationId}): ${String(error)}`,
+        );
+        Sentry.captureException(error, {
+          level: 'error',
+          tags: { job: 'credit-claim-photo-purge', event: 'photo-delete' },
+          extra: { organizationId: this.organizationId, photoId: photo.id },
+        });
       }
-      await this.repo.deletePhoto(this.organizationId, photo.id);
-      purged += 1;
     }
     return purged;
   }

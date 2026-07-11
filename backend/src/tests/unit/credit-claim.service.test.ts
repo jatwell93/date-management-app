@@ -13,6 +13,7 @@ function makeDeps(
     claim?: unknown;
     emailAccepted?: boolean;
     transactionError?: Error;
+    photosToPurge?: unknown[];
   } = {},
 ) {
   const supplier = overrides.supplier ?? {
@@ -37,10 +38,13 @@ function makeDeps(
     },
   );
   const claimDraftForSending = vi.fn(async () => 1);
+  const advanceFollowUp = vi.fn(async () => 1);
   const setPhotoDeleteAfterForClaim = vi.fn(async () => undefined);
   const findClaim = vi.fn(async () => currentClaim);
   const findClaimLine = vi.fn(async () => ({ id: 1, claimId: 1 }));
   const addPhoto = vi.fn(async () => ({ id: 1 }));
+  const findPhotosToPurge = vi.fn(async () => overrides.photosToPurge ?? []);
+  const deletePhoto = vi.fn(async () => undefined);
 
   const repo = {
     findWriteOffsByIds: vi.fn(async () => overrides.writeOffs ?? []),
@@ -49,10 +53,13 @@ function makeDeps(
     addEvent,
     updateClaim,
     claimDraftForSending,
+    advanceFollowUp,
     setPhotoDeleteAfterForClaim,
     findClaim,
     findClaimLine,
     addPhoto,
+    findPhotosToPurge,
+    deletePhoto,
   } as unknown as CreditClaimRepository;
 
   const supplierRepo = {
@@ -98,10 +105,13 @@ function makeDeps(
     createLine,
     updateClaim,
     claimDraftForSending,
+    advanceFollowUp,
     addEvent,
     setPhotoDeleteAfterForClaim,
     findClaimLine,
     addPhoto,
+    findPhotosToPurge,
+    deletePhoto,
     storage,
     transaction,
     tx,
@@ -438,6 +448,51 @@ describe('CreditClaimService', () => {
         }),
       );
       expect(addEvent).toHaveBeenCalledWith('org-1', 1, 'FOLLOW_UP_SENT', null, null);
+    });
+  });
+
+  describe('purgeExpiredPhotos', () => {
+    const photo = (id: number) => ({ id, storageKey: `key-${id}` });
+
+    it('deletes object bytes then the row for every expired photo', async () => {
+      const { service, storage, deletePhoto } = makeDeps({
+        photosToPurge: [photo(1), photo(2)],
+      });
+
+      const purged = await service.purgeExpiredPhotos();
+
+      expect(purged).toBe(2);
+      expect(storage.delete).toHaveBeenCalledTimes(2);
+      expect(deletePhoto).toHaveBeenCalledWith('org-1', 1);
+      expect(deletePhoto).toHaveBeenCalledWith('org-1', 2);
+    });
+
+    it('drops the row even when the object is already gone from storage', async () => {
+      const { service, storage, deletePhoto } = makeDeps({ photosToPurge: [photo(1)] });
+      (storage.delete as ReturnType<typeof vi.fn>).mockRejectedValue(new Error('404'));
+
+      const purged = await service.purgeExpiredPhotos();
+
+      expect(purged).toBe(1);
+      expect(deletePhoto).toHaveBeenCalledWith('org-1', 1);
+    });
+
+    it('keeps purging the rest when one row fails to delete (isolation)', async () => {
+      const { service, repo, deletePhoto } = makeDeps({
+        photosToPurge: [photo(1), photo(2), photo(3)],
+      });
+      (repo.deletePhoto as ReturnType<typeof vi.fn>).mockImplementation(
+        async (_org: string, id: number) => {
+          if (id === 2) throw new Error('transient DB failure');
+        },
+      );
+
+      const purged = await service.purgeExpiredPhotos();
+
+      // Row 2 failed but 1 and 3 still purged — the batch is not aborted.
+      expect(purged).toBe(2);
+      expect(deletePhoto).toHaveBeenCalledTimes(3);
+      expect(deletePhoto).toHaveBeenCalledWith('org-1', 3);
     });
   });
 });

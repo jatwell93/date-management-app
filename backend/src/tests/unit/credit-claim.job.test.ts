@@ -63,5 +63,22 @@ describe('credit-claim jobs', () => {
 
       expect(result).toEqual({ purged: 6 });
     });
+
+    it('keeps purging later orgs when one org throws (isolation)', async () => {
+      const purgeExpiredPhotos = vi
+        .fn()
+        .mockResolvedValueOnce(2)
+        .mockRejectedValueOnce(new Error('org-2 DB failure'))
+        .mockResolvedValueOnce(5);
+      MockedService.mockImplementation(function () {
+        return { purgeExpiredPhotos };
+      });
+
+      const result = await runCreditClaimPhotoPurgeJob(fakePrisma(['org-1', 'org-2', 'org-3']));
+
+      // org-2 failed but org-1 and org-3 still purged — the batch is not aborted.
+      expect(result).toEqual({ purged: 7 });
+      expect(purgeExpiredPhotos).toHaveBeenCalledTimes(3);
+    });
   });
 });

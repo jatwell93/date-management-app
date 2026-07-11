@@ -74,8 +74,19 @@ export async function runCreditClaimPhotoPurgeJob(
   try {
     const orgIds = await listOrganizationIds(prisma);
     for (const orgId of orgIds) {
-      const service = new CreditClaimService(orgId, { prismaClient: prisma });
-      purged += await service.purgeExpiredPhotos();
+      try {
+        const service = new CreditClaimService(orgId, { prismaClient: prisma });
+        purged += await service.purgeExpiredPhotos();
+      } catch (error) {
+        // Isolate per org so one org's failure never stops the rest of the batch,
+        // matching the reminder job's per-claim isolation.
+        Logger.error(`Credit-claim photo-purge failed for org ${orgId}: ${String(error)}`);
+        Sentry.captureException(error, {
+          level: 'error',
+          tags: { job: 'credit-claim-photo-purge', event: 'org-failure' },
+          extra: { organizationId: orgId },
+        });
+      }
     }
     Logger.info('Credit-claim photo-purge job completed', { purged });
   } catch (error) {
