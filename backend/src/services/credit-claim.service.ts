@@ -304,18 +304,40 @@ export class CreditClaimService {
     const to = claim.contactEmailSnapshot || claim.supplier.contactEmail;
     if (!to) throw new ValidationError('The supplier has no contact email.');
 
-    const email = renderClaimEmail(claim, { followUp: true });
-    const attachments = await this.loadAttachments(claim);
-    const accepted = await this.emailSender.send({ to, ...email, attachments });
-    if (!accepted) {
-      throw new ValidationError('Email provider is not configured; follow-up was not sent.');
+    const nextCount = claim.followUpCount + 1;
+    const nextFollowUpAt = nextFollowUp(claim.sentAt, claim.supplier.followUpDays, nextCount);
+
+    // Reserve this follow-up slot before sending so two runs (an overlapping cron tick,
+    // or cron racing a manual nudge) can't both email the supplier — only the caller
+    // that advances followUpCount from its observed value wins. Mirrors sendClaim's
+    // send-once guard, keyed on the counter so it re-arms for each follow-up.
+    const reserved = await this.repo.advanceFollowUp(this.organizationId, id, claim.followUpCount, {
+      followUpCount: nextCount,
+      nextFollowUpAt,
+    });
+    if (reserved !== 1) {
+      throw new ValidationError(`Claim ${id} follow-up is already in progress.`);
     }
 
-    const nextCount = claim.followUpCount + 1;
-    await this.repo.updateClaim(this.organizationId, id, {
-      followUpCount: nextCount,
-      nextFollowUpAt: nextFollowUp(claim.sentAt, claim.supplier.followUpDays, nextCount),
-    });
+    const email = renderClaimEmail(claim, { followUp: true });
+    const attachments = await this.loadAttachments(claim);
+    try {
+      const accepted = await this.emailSender.send({ to, ...email, attachments });
+      if (!accepted) {
+        throw new ValidationError('Email provider is not configured; follow-up was not sent.');
+      }
+    } catch (error) {
+      // Send failed after reserving — roll the schedule back to what we observed so the
+      // reminder engine retries this claim next run instead of silently skipping it.
+      await this.repo
+        .updateClaim(this.organizationId, id, {
+          followUpCount: claim.followUpCount,
+          nextFollowUpAt: claim.nextFollowUpAt,
+        })
+        .catch(() => undefined);
+      throw error;
+    }
+
     await this.repo.addEvent(this.organizationId, id, 'FOLLOW_UP_SENT', null, null);
     return this.getClaim(id);
   }

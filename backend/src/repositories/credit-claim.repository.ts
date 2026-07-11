@@ -116,6 +116,26 @@ export class CreditClaimRepository {
     return result.count;
   }
 
+  /**
+   * Optimistically reserve the next follow-up for a sent claim: advance followUpCount
+   * only while it still matches the value the caller observed. Returns the number of
+   * rows updated (1 = this caller won the slot, 0 = another run already advanced it),
+   * so an overlapping cron tick and manual nudge can't both email the supplier.
+   */
+  async advanceFollowUp(
+    organizationId: string,
+    id: number,
+    fromFollowUpCount: number,
+    data: { followUpCount: number; nextFollowUpAt: Date },
+    tx?: DbClient,
+  ): Promise<number> {
+    const result = await this.getClient(tx).creditClaim.updateMany({
+      where: { id, organizationId, followUpCount: fromFollowUpCount },
+      data,
+    });
+    return result.count;
+  }
+
   /** Schedule photo deletion for every photo on a claim (called on settlement). */
   async setPhotoDeleteAfterForClaim(
     organizationId: string,

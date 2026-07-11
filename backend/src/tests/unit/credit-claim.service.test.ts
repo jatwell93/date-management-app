@@ -436,18 +436,73 @@ describe('CreditClaimService', () => {
           followUpDays: 7,
         },
       };
-      const { service, updateClaim, addEvent } = makeDeps({ claim });
+      const { service, advanceFollowUp, addEvent } = makeDeps({ claim });
       await service.sendFollowUp(1);
 
-      expect(updateClaim).toHaveBeenCalledWith(
+      expect(advanceFollowUp).toHaveBeenCalledWith(
         'org-1',
         1,
+        0,
         expect.objectContaining({
           followUpCount: 1,
           nextFollowUpAt: new Date('2026-07-24T00:00:00.000Z'),
         }),
       );
       expect(addEvent).toHaveBeenCalledWith('org-1', 1, 'FOLLOW_UP_SENT', null, null);
+    });
+
+    it('reserves the slot before emailing, so a lost race never double-sends', async () => {
+      const claim = {
+        id: 1,
+        status: 'SENT',
+        contactEmailSnapshot: 'credits@blackmores.com.au',
+        sentAt: new Date('2026-07-10T00:00:00.000Z'),
+        followUpCount: 0,
+        lines: [{ id: 1, photos: [] }],
+        supplier: {
+          name: 'Blackmores',
+          contactEmail: 'credits@blackmores.com.au',
+          followUpDays: 7,
+        },
+      };
+      const { service, repo, emailSender, addEvent } = makeDeps({ claim });
+      // Another run advanced the counter first: reservation returns 0.
+      (repo.advanceFollowUp as ReturnType<typeof vi.fn>).mockResolvedValue(0);
+
+      await expect(service.sendFollowUp(1)).rejects.toBeInstanceOf(ValidationError);
+      expect(emailSender.send).not.toHaveBeenCalled();
+      expect(addEvent).not.toHaveBeenCalled();
+    });
+
+    it('rolls the schedule back when the send fails after reserving', async () => {
+      const claim = {
+        id: 1,
+        status: 'SENT',
+        contactEmailSnapshot: 'credits@blackmores.com.au',
+        sentAt: new Date('2026-07-10T00:00:00.000Z'),
+        nextFollowUpAt: new Date('2026-07-17T00:00:00.000Z'),
+        followUpCount: 0,
+        lines: [{ id: 1, photos: [] }],
+        supplier: {
+          name: 'Blackmores',
+          contactEmail: 'credits@blackmores.com.au',
+          followUpDays: 7,
+        },
+      };
+      const { service, emailSender, updateClaim, addEvent } = makeDeps({ claim });
+      (emailSender.send as ReturnType<typeof vi.fn>).mockRejectedValue(new Error('smtp down'));
+
+      await expect(service.sendFollowUp(1)).rejects.toThrow('smtp down');
+      // Reverted to the observed counter/schedule so the reminder engine retries it.
+      expect(updateClaim).toHaveBeenCalledWith(
+        'org-1',
+        1,
+        expect.objectContaining({
+          followUpCount: 0,
+          nextFollowUpAt: new Date('2026-07-17T00:00:00.000Z'),
+        }),
+      );
+      expect(addEvent).not.toHaveBeenCalled();
     });
   });
 
