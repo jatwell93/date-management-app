@@ -3,18 +3,42 @@
 ALTER TABLE store_areas
   ADD COLUMN IF NOT EXISTS parent_id integer;
 
-ALTER TABLE store_areas
-  ADD CONSTRAINT store_areas_parent_id_fkey
-  FOREIGN KEY (parent_id) REFERENCES store_areas (id) ON DELETE CASCADE;
+DO $$
+BEGIN
+  IF NOT EXISTS (
+    SELECT 1
+    FROM pg_constraint
+    WHERE conname = 'store_areas_parent_id_fkey'
+      AND conrelid = 'store_areas'::regclass
+  ) THEN
+    ALTER TABLE store_areas
+      ADD CONSTRAINT store_areas_parent_id_fkey
+      FOREIGN KEY (parent_id) REFERENCES store_areas (id) ON DELETE CASCADE;
+  END IF;
+END;
+$$;
 
-ALTER TABLE store_areas
-  ADD CONSTRAINT store_areas_parent_not_self_check
-  CHECK (parent_id IS NULL OR parent_id <> id);
+DO $$
+BEGIN
+  IF NOT EXISTS (
+    SELECT 1
+    FROM pg_constraint
+    WHERE conname = 'store_areas_parent_not_self_check'
+      AND conrelid = 'store_areas'::regclass
+  ) THEN
+    ALTER TABLE store_areas
+      ADD CONSTRAINT store_areas_parent_not_self_check
+      CHECK (parent_id IS NULL OR parent_id <> id);
+  END IF;
+END;
+$$;
 
 CREATE INDEX IF NOT EXISTS idx_store_areas_parent_id
   ON store_areas (parent_id);
 
-CREATE TEMP TABLE store_area_backfill_bays ON COMMIT DROP AS
+DROP TABLE IF EXISTS pg_temp.store_area_backfill_bays;
+
+CREATE TEMP TABLE store_area_backfill_bays AS
   SELECT
     id,
     organization_id,
@@ -70,6 +94,8 @@ JOIN LATERAL (
 ) AS department ON TRUE
 WHERE bay.id = backfill.id
   AND bay.parent_id IS NULL;
+
+DROP TABLE IF EXISTS pg_temp.store_area_backfill_bays;
 
 CREATE TABLE IF NOT EXISTS check_cycles (
   id              serial PRIMARY KEY,

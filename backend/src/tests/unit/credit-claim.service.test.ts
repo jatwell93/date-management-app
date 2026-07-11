@@ -1,0 +1,602 @@
+import * as Sentry from '@sentry/node';
+import { CreditClaimService, PHOTO_RETENTION_DAYS } from '../../services/credit-claim.service';
+import { CreditClaimRepository } from '../../repositories/credit-claim.repository';
+import { SupplierCreditRepository } from '../../repositories/supplier-credit.repository';
+import { NotFoundError, ValidationError } from '../../errors';
+import type { EmailSender } from '../../services/email-sender';
+
+vi.mock('@sentry/node', async (importOriginal) => ({
+  ...(await importOriginal<typeof import('@sentry/node')>()),
+  captureException: vi.fn(),
+}));
+
+const NOW = new Date('2026-07-10T00:00:00.000Z');
+
+function makeDeps(
+  overrides: {
+    supplier?: unknown;
+    writeOffs?: unknown[];
+    claim?: unknown;
+    emailAccepted?: boolean;
+    transactionError?: Error;
+    photosToPurge?: unknown[];
+  } = {},
+) {
+  const supplier = overrides.supplier ?? {
+    id: 10,
+    contactEmail: 'credits@blackmores.com.au',
+    name: 'Blackmores',
+    policyWriteOffQty: 3,
+    policyCreditQty: 1,
+    followUpDays: 7,
+  };
+
+  const createClaim = vi.fn(async () => ({ id: 1 }));
+  const createLine = vi.fn(async () => ({ id: 1 }));
+  const addEvent = vi.fn(async () => ({ id: 1 }));
+  let currentClaim = overrides.claim ?? null;
+  const updateClaim = vi.fn(
+    async (_organizationId: string, _id: number, data: Record<string, unknown>) => {
+      if (currentClaim && typeof currentClaim === 'object') {
+        currentClaim = { ...(currentClaim as Record<string, unknown>), ...data };
+      }
+      return 1;
+    },
+  );
+  const claimDraftForSending = vi.fn(async () => 1);
+  const advanceFollowUp = vi.fn(async () => 1);
+  const setPhotoDeleteAfterForClaim = vi.fn(async () => undefined);
+  const findClaim = vi.fn(async () => currentClaim);
+  const findClaimLine = vi.fn(async () => ({ id: 1, claimId: 1 }));
+  const addPhoto = vi.fn(async () => ({ id: 1 }));
+  const findPhotosToPurge = vi.fn(async () => overrides.photosToPurge ?? []);
+  const deletePhoto = vi.fn(async () => undefined);
+
+  const repo = {
+    findWriteOffsByIds: vi.fn(async () => overrides.writeOffs ?? []),
+    createClaim,
+    createLine,
+    addEvent,
+    updateClaim,
+    claimDraftForSending,
+    advanceFollowUp,
+    setPhotoDeleteAfterForClaim,
+    findClaim,
+    findClaimLine,
+    addPhoto,
+    findPhotosToPurge,
+    deletePhoto,
+  } as unknown as CreditClaimRepository;
+
+  const supplierRepo = {
+    findSupplier: vi.fn(async () => overrides.supplier ?? supplier),
+  } as unknown as SupplierCreditRepository;
+
+  const emailSender: EmailSender = {
+    send: vi.fn(async () => overrides.emailAccepted ?? true),
+  };
+
+  const storage = {
+    upload: vi.fn(async () => 'key'),
+    download: vi.fn(async () => Buffer.from('img')),
+    delete: vi.fn(),
+    exists: vi.fn(),
+  } as never;
+
+  // Fake $transaction that runs the callback with a throwaway tx object.
+  const tx = { transaction: true };
+  const transaction = vi.fn(async (fn: (tx: unknown) => unknown) => {
+    if (overrides.transactionError) {
+      throw overrides.transactionError;
+    }
+    return fn(tx);
+  });
+  const prisma = { $transaction: transaction } as never;
+
+  const service = new CreditClaimService('org-1', {
+    prismaClient: prisma,
+    repo,
+    supplierRepo,
+    emailSender,
+    storage,
+    now: () => NOW,
+  });
+
+  return {
+    service,
+    repo,
+    supplierRepo,
+    emailSender,
+    createClaim,
+    createLine,
+    updateClaim,
+    claimDraftForSending,
+    advanceFollowUp,
+    addEvent,
+    setPhotoDeleteAfterForClaim,
+    findClaimLine,
+    addPhoto,
+    findPhotosToPurge,
+    deletePhoto,
+    storage,
+    transaction,
+    tx,
+  };
+}
+
+const writeOff = (overrides: Record<string, unknown> = {}) => ({
+  id: 1,
+  action: 'expired',
+  creditClaimLine: null,
+  unitsDiscarded: 6,
+  inventoryItem: {
+    product: { id: 100, supplierId: 10, sku: 'BM-1', name: 'Vitamin D', costPrice: 10 },
+  },
+  ...overrides,
+});
+
+describe('CreditClaimService', () => {
+  describe('buildClaim', () => {
+    it('snapshots expected credit per line and in aggregate', async () => {
+      const built = { id: 1, lines: [], events: [], supplier: {} };
+      const { service, repo, createClaim, createLine } = makeDeps({
+        writeOffs: [writeOff()],
+        claim: built,
+      });
+      (repo.findClaim as ReturnType<typeof vi.fn>).mockResolvedValue(built);
+
+      await service.buildClaim(
+        {
+          supplierId: 10,
+          lines: [{ expiredItemTransactionId: 1, batchNumber: 'L1', unitsClaimed: 6 }],
+        },
+        7,
+      );
+
+      expect(createClaim).toHaveBeenCalledWith(
+        'org-1',
+        expect.objectContaining({ expectedCreditUnits: 2, expectedCreditValue: 20 }),
+        expect.anything(),
+      );
+      expect(createLine).toHaveBeenCalledWith(
+        'org-1',
+        1,
+        expect.objectContaining({
+          unitsClaimed: 6,
+          expectedCreditUnits: 2,
+          expectedCreditValue: 20,
+          batchNumber: 'L1',
+        }),
+        expect.anything(),
+      );
+    });
+
+    it('404s for an unknown supplier', async () => {
+      const { service } = makeDeps({ supplier: null });
+      await expect(
+        service.buildClaim({ supplierId: 99, lines: [{ expiredItemTransactionId: 1 }] }, null),
+      ).rejects.toBeInstanceOf(NotFoundError);
+    });
+
+    it('rejects a write-off already on a claim', async () => {
+      const { service } = makeDeps({ writeOffs: [writeOff({ creditClaimLine: { id: 5 } })] });
+      await expect(
+        service.buildClaim({ supplierId: 10, lines: [{ expiredItemTransactionId: 1 }] }, null),
+      ).rejects.toBeInstanceOf(ValidationError);
+    });
+
+    it('rejects a write-off whose product is not assigned to this supplier', async () => {
+      const { service } = makeDeps({
+        writeOffs: [
+          writeOff({
+            inventoryItem: {
+              product: { id: 100, supplierId: 20, costPrice: 10, sku: 'x', name: 'y' },
+            },
+          }),
+        ],
+      });
+      await expect(
+        service.buildClaim({ supplierId: 10, lines: [{ expiredItemTransactionId: 1 }] }, null),
+      ).rejects.toBeInstanceOf(ValidationError);
+    });
+  });
+
+  describe('sendClaim', () => {
+    const draft = {
+      id: 1,
+      status: 'DRAFT',
+      contactEmailSnapshot: 'credits@blackmores.com.au',
+      lines: [{ id: 1, batchNumber: 'L1', unitsClaimed: 6, expectedCreditValue: 20, photos: [] }],
+      supplier: { name: 'Blackmores', contactEmail: 'credits@blackmores.com.au', followUpDays: 7 },
+      followUpCount: 0,
+      sentAt: null,
+      expectedCreditValue: 20,
+    };
+
+    it('sends, sets a verified sentAt and schedules the first follow-up', async () => {
+      const { service, repo, emailSender, updateClaim, addEvent, transaction, tx } = makeDeps({
+        claim: draft,
+      });
+      await service.sendClaim(1);
+
+      expect(emailSender.send).toHaveBeenCalledOnce();
+      expect(transaction).toHaveBeenCalledOnce();
+      expect(updateClaim).toHaveBeenCalledWith(
+        'org-1',
+        1,
+        expect.objectContaining({
+          status: 'SENT',
+          sentAt: NOW,
+          nextFollowUpAt: new Date('2026-07-17T00:00:00.000Z'),
+        }),
+        tx,
+      );
+      expect(addEvent).toHaveBeenCalledWith('org-1', 1, 'SENT', null, expect.any(String), tx);
+      expect(repo.findClaim).toHaveBeenCalled();
+    });
+
+    it('restores a sent claim if finalization fails after the email is accepted', async () => {
+      const finalizeError = new Error('transaction failed');
+      const { service, emailSender, updateClaim, addEvent, transaction } = makeDeps({
+        claim: draft,
+        transactionError: finalizeError,
+      });
+
+      const result = await service.sendClaim(1);
+
+      expect(emailSender.send).toHaveBeenCalledOnce();
+      expect(transaction).toHaveBeenCalledOnce();
+      expect(updateClaim).toHaveBeenCalledWith(
+        'org-1',
+        1,
+        expect.objectContaining({
+          status: 'SENT',
+          sentAt: NOW,
+          nextFollowUpAt: new Date('2026-07-17T00:00:00.000Z'),
+        }),
+      );
+      expect(addEvent).toHaveBeenCalledWith('org-1', 1, 'SENT', null, expect.any(String));
+      expect(result).toEqual(
+        expect.objectContaining({
+          status: 'SENT',
+          sentAt: NOW,
+        }),
+      );
+    });
+
+    it('returns the recovered sent snapshot when the compensation re-read is unavailable', async () => {
+      const finalizeError = new Error('transaction failed');
+      const { service, repo } = makeDeps({
+        claim: draft,
+        transactionError: finalizeError,
+      });
+      (repo.findClaim as ReturnType<typeof vi.fn>)
+        .mockResolvedValueOnce(draft)
+        .mockResolvedValueOnce(null)
+        .mockResolvedValueOnce(null);
+
+      const result = await service.sendClaim(1);
+
+      expect(result).toEqual(
+        expect.objectContaining({
+          status: 'SENT',
+          sentAt: NOW,
+          nextFollowUpAt: new Date('2026-07-17T00:00:00.000Z'),
+        }),
+      );
+    });
+
+    it('captures and rethrows when finalize AND its compensation both fail (stuck SENDING)', async () => {
+      vi.mocked(Sentry.captureException).mockClear();
+      const finalizeError = new Error('finalize transaction failed');
+      const { service, repo } = makeDeps({ claim: draft, transactionError: finalizeError });
+      // Compensation write also fails -> the claim is left stuck in SENDING.
+      (repo.updateClaim as ReturnType<typeof vi.fn>).mockRejectedValue(
+        new Error('compensation write failed'),
+      );
+
+      // The original finalize error is surfaced to the caller, not swallowed.
+      await expect(service.sendClaim(1)).rejects.toThrow('finalize transaction failed');
+      // ...and the stuck claim is reported so ops can reconcile it.
+      expect(Sentry.captureException).toHaveBeenCalledWith(
+        expect.objectContaining({ message: 'compensation write failed' }),
+        expect.objectContaining({
+          tags: expect.objectContaining({ event: 'sending-stuck' }),
+          extra: expect.objectContaining({ claimId: 1, organizationId: 'org-1' }),
+        }),
+      );
+    });
+
+    it('does not email when another request already claimed the draft send', async () => {
+      const { service, emailSender, claimDraftForSending } = makeDeps({ claim: draft });
+      claimDraftForSending.mockResolvedValueOnce(0);
+
+      await expect(service.sendClaim(1)).rejects.toBeInstanceOf(ValidationError);
+
+      expect(claimDraftForSending).toHaveBeenCalledWith('org-1', 1);
+      expect(emailSender.send).not.toHaveBeenCalled();
+    });
+
+    it('refuses to send without a supplier contact email', async () => {
+      const noEmail = {
+        ...draft,
+        contactEmailSnapshot: null,
+        supplier: { ...draft.supplier, contactEmail: null },
+      };
+      const { service } = makeDeps({ claim: noEmail });
+      await expect(service.sendClaim(1)).rejects.toBeInstanceOf(ValidationError);
+    });
+
+    it('does not mark sent when the provider rejects the message', async () => {
+      const { service, updateClaim } = makeDeps({ claim: draft, emailAccepted: false });
+      await expect(service.sendClaim(1)).rejects.toBeInstanceOf(ValidationError);
+      expect(updateClaim).toHaveBeenCalledWith('org-1', 1, { status: 'DRAFT' });
+      expect(updateClaim).not.toHaveBeenCalledWith(
+        'org-1',
+        1,
+        expect.objectContaining({ status: 'SENT' }),
+        expect.anything(),
+      );
+    });
+  });
+
+  describe('addPhoto', () => {
+    it('refuses to upload photos after the claim is settled', async () => {
+      const { service, findClaimLine, addPhoto, storage } = makeDeps({
+        claim: { id: 1, status: 'CREDITED', lines: [{ id: 1, photos: [] }] },
+      });
+
+      await expect(
+        service.addPhoto(1, 1, {
+          buffer: Buffer.from('img'),
+          originalName: 'claim.jpg',
+          contentType: 'image/jpeg',
+        }),
+      ).rejects.toBeInstanceOf(ValidationError);
+
+      expect(findClaimLine).not.toHaveBeenCalled();
+      expect(storage.upload).not.toHaveBeenCalled();
+      expect(addPhoto).not.toHaveBeenCalled();
+    });
+
+    it('sanitizes the filename so a crafted name cannot escape the key prefix', async () => {
+      const { service, storage, addPhoto } = makeDeps({
+        claim: { id: 1, status: 'DRAFT', lines: [{ id: 1, photos: [] }] },
+      });
+
+      await service.addPhoto(1, 1, {
+        buffer: Buffer.from('img'),
+        originalName: '../../etc/passwd',
+        contentType: 'image/jpeg',
+      });
+
+      const key = (storage.upload as ReturnType<typeof vi.fn>).mock.calls[0][0] as string;
+      expect(key).toMatch(/^credit-claims\/org-1\/1\/1\/[0-9a-f-]+-passwd$/);
+      expect(key).not.toContain('..');
+      // The original name is still recorded verbatim in the DB row.
+      expect(addPhoto).toHaveBeenCalledWith(
+        'org-1',
+        1,
+        expect.objectContaining({ fileName: '../../etc/passwd' }),
+      );
+    });
+  });
+
+  describe('recordOutcome', () => {
+    const sent = {
+      id: 1,
+      status: 'SENT',
+      lines: [{ id: 1, photos: [] }],
+      supplier: { name: 'Blackmores', followUpDays: 7 },
+    };
+
+    it('settles the claim and schedules photo deletion after the retention window', async () => {
+      const { service, updateClaim, setPhotoDeleteAfterForClaim, addEvent } = makeDeps({
+        claim: sent,
+      });
+      await service.recordOutcome(1, 'CREDITED', 20, 'received');
+
+      expect(updateClaim).toHaveBeenCalledWith(
+        'org-1',
+        1,
+        expect.objectContaining({
+          status: 'CREDITED',
+          creditedValue: 20,
+          settledAt: NOW,
+          nextFollowUpAt: null,
+        }),
+        expect.anything(),
+      );
+      const expectedDeleteAfter = new Date(NOW.getTime() + PHOTO_RETENTION_DAYS * 86400000);
+      expect(setPhotoDeleteAfterForClaim).toHaveBeenCalledWith(
+        'org-1',
+        1,
+        expectedDeleteAfter,
+        expect.anything(),
+      );
+      expect(addEvent).toHaveBeenCalledWith(
+        'org-1',
+        1,
+        'CREDITED',
+        null,
+        'received',
+        expect.anything(),
+      );
+    });
+
+    it('nulls credited value on rejection', async () => {
+      const { service, updateClaim } = makeDeps({ claim: sent });
+      await service.recordOutcome(1, 'REJECTED', 20, null);
+      expect(updateClaim).toHaveBeenCalledWith(
+        'org-1',
+        1,
+        expect.objectContaining({ status: 'REJECTED', creditedValue: null }),
+        expect.anything(),
+      );
+    });
+
+    it('refuses to record an outcome for a draft claim', async () => {
+      const { service } = makeDeps({ claim: { ...sent, status: 'DRAFT' } });
+      await expect(service.recordOutcome(1, 'CREDITED', 20, null)).rejects.toBeInstanceOf(
+        ValidationError,
+      );
+    });
+
+    it('refuses to record an outcome while a claim is being sent', async () => {
+      const { service } = makeDeps({ claim: { ...sent, status: 'SENDING' } });
+      await expect(service.recordOutcome(1, 'CREDITED', 20, null)).rejects.toBeInstanceOf(
+        ValidationError,
+      );
+    });
+
+    it('refuses to re-settle a claim in a terminal outcome', async () => {
+      const { service } = makeDeps({ claim: { ...sent, status: 'CREDITED' } });
+      await expect(service.recordOutcome(1, 'CREDITED', 30, null)).rejects.toBeInstanceOf(
+        ValidationError,
+      );
+    });
+
+    it('allows a partially-credited claim to be topped up to credited', async () => {
+      const { service, updateClaim } = makeDeps({
+        claim: { ...sent, status: 'PARTIALLY_CREDITED' },
+      });
+      await service.recordOutcome(1, 'CREDITED', 30, 'balance paid');
+      expect(updateClaim).toHaveBeenCalledWith(
+        'org-1',
+        1,
+        expect.objectContaining({ status: 'CREDITED', creditedValue: 30 }),
+        expect.anything(),
+      );
+    });
+  });
+
+  describe('sendFollowUp', () => {
+    it('advances the follow-up count and schedule from the send date', async () => {
+      const claim = {
+        id: 1,
+        status: 'SENT',
+        contactEmailSnapshot: 'credits@blackmores.com.au',
+        sentAt: new Date('2026-07-10T00:00:00.000Z'),
+        followUpCount: 0,
+        lines: [{ id: 1, photos: [] }],
+        supplier: {
+          name: 'Blackmores',
+          contactEmail: 'credits@blackmores.com.au',
+          followUpDays: 7,
+        },
+      };
+      const { service, advanceFollowUp, addEvent } = makeDeps({ claim });
+      await service.sendFollowUp(1);
+
+      expect(advanceFollowUp).toHaveBeenCalledWith(
+        'org-1',
+        1,
+        0,
+        expect.objectContaining({
+          followUpCount: 1,
+          nextFollowUpAt: new Date('2026-07-24T00:00:00.000Z'),
+        }),
+      );
+      expect(addEvent).toHaveBeenCalledWith('org-1', 1, 'FOLLOW_UP_SENT', null, null);
+    });
+
+    it('reserves the slot before emailing, so a lost race never double-sends', async () => {
+      const claim = {
+        id: 1,
+        status: 'SENT',
+        contactEmailSnapshot: 'credits@blackmores.com.au',
+        sentAt: new Date('2026-07-10T00:00:00.000Z'),
+        followUpCount: 0,
+        lines: [{ id: 1, photos: [] }],
+        supplier: {
+          name: 'Blackmores',
+          contactEmail: 'credits@blackmores.com.au',
+          followUpDays: 7,
+        },
+      };
+      const { service, repo, emailSender, addEvent } = makeDeps({ claim });
+      // Another run advanced the counter first: reservation returns 0.
+      (repo.advanceFollowUp as ReturnType<typeof vi.fn>).mockResolvedValue(0);
+
+      await expect(service.sendFollowUp(1)).rejects.toBeInstanceOf(ValidationError);
+      expect(emailSender.send).not.toHaveBeenCalled();
+      expect(addEvent).not.toHaveBeenCalled();
+    });
+
+    it('rolls the schedule back when the send fails after reserving', async () => {
+      const claim = {
+        id: 1,
+        status: 'SENT',
+        contactEmailSnapshot: 'credits@blackmores.com.au',
+        sentAt: new Date('2026-07-10T00:00:00.000Z'),
+        nextFollowUpAt: new Date('2026-07-17T00:00:00.000Z'),
+        followUpCount: 0,
+        lines: [{ id: 1, photos: [] }],
+        supplier: {
+          name: 'Blackmores',
+          contactEmail: 'credits@blackmores.com.au',
+          followUpDays: 7,
+        },
+      };
+      const { service, emailSender, updateClaim, addEvent } = makeDeps({ claim });
+      (emailSender.send as ReturnType<typeof vi.fn>).mockRejectedValue(new Error('smtp down'));
+
+      await expect(service.sendFollowUp(1)).rejects.toThrow('smtp down');
+      // Reverted to the observed counter/schedule so the reminder engine retries it.
+      expect(updateClaim).toHaveBeenCalledWith(
+        'org-1',
+        1,
+        expect.objectContaining({
+          followUpCount: 0,
+          nextFollowUpAt: new Date('2026-07-17T00:00:00.000Z'),
+        }),
+      );
+      expect(addEvent).not.toHaveBeenCalled();
+    });
+  });
+
+  describe('purgeExpiredPhotos', () => {
+    const photo = (id: number) => ({ id, storageKey: `key-${id}` });
+
+    it('deletes object bytes then the row for every expired photo', async () => {
+      const { service, storage, deletePhoto } = makeDeps({
+        photosToPurge: [photo(1), photo(2)],
+      });
+
+      const purged = await service.purgeExpiredPhotos();
+
+      expect(purged).toBe(2);
+      expect(storage.delete).toHaveBeenCalledTimes(2);
+      expect(deletePhoto).toHaveBeenCalledWith('org-1', 1);
+      expect(deletePhoto).toHaveBeenCalledWith('org-1', 2);
+    });
+
+    it('drops the row even when the object is already gone from storage', async () => {
+      const { service, storage, deletePhoto } = makeDeps({ photosToPurge: [photo(1)] });
+      (storage.delete as ReturnType<typeof vi.fn>).mockRejectedValue(new Error('404'));
+
+      const purged = await service.purgeExpiredPhotos();
+
+      expect(purged).toBe(1);
+      expect(deletePhoto).toHaveBeenCalledWith('org-1', 1);
+    });
+
+    it('keeps purging the rest when one row fails to delete (isolation)', async () => {
+      const { service, repo, deletePhoto } = makeDeps({
+        photosToPurge: [photo(1), photo(2), photo(3)],
+      });
+      (repo.deletePhoto as ReturnType<typeof vi.fn>).mockImplementation(
+        async (_org: string, id: number) => {
+          if (id === 2) throw new Error('transient DB failure');
+        },
+      );
+
+      const purged = await service.purgeExpiredPhotos();
+
+      // Row 2 failed but 1 and 3 still purged — the batch is not aborted.
+      expect(purged).toBe(2);
+      expect(deletePhoto).toHaveBeenCalledTimes(3);
+      expect(deletePhoto).toHaveBeenCalledWith('org-1', 3);
+    });
+  });
+});

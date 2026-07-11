@@ -7,6 +7,7 @@ const {
   mockStartStripeSyncJob,
   mockStartTrialExpirationJob,
   mockStartDunningJob,
+  mockStartCreditClaimJobs,
   mockPrepare,
   mockCreateBackup,
   mockBulkUpdateMarkdownStatuses,
@@ -16,6 +17,7 @@ const {
   mockStartStripeSyncJob: vi.fn(),
   mockStartTrialExpirationJob: vi.fn(),
   mockStartDunningJob: vi.fn(),
+  mockStartCreditClaimJobs: vi.fn(),
   mockPrepare: vi.fn(),
   mockCreateBackup: vi.fn(),
   mockBulkUpdateMarkdownStatuses: vi.fn(),
@@ -39,6 +41,10 @@ vi.mock('../../jobs/trialExpiration.job', () => ({
 
 vi.mock('../../jobs/dunning.job', () => ({
   startDunningJob: mockStartDunningJob,
+}));
+
+vi.mock('../../jobs/credit-claim.job', () => ({
+  startCreditClaimJobs: mockStartCreditClaimJobs,
 }));
 
 vi.mock('../../database', () => ({
@@ -86,6 +92,7 @@ describe('SchedulerService', () => {
       expect(mockStartTrialExpirationJob).toHaveBeenCalledTimes(1);
       expect(mockStartDunningJob).toHaveBeenCalledTimes(1);
       expect(mockStartStripeSyncJob).toHaveBeenCalledTimes(1);
+      expect(mockStartCreditClaimJobs).toHaveBeenCalledTimes(1);
     });
 
     it('wires cron callbacks to markdown and backup operations', async () => {

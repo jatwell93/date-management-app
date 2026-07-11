@@ -75,6 +75,7 @@ const ExpiryEntriesPage = React.lazy(() =>
   })),
 );
 const ExpiredItemsPage = React.lazy(() => import('./pages/ExpiredItemsPage'));
+const SupplierCreditsPage = React.lazy(() => import('./pages/SupplierCreditsPage'));
 const SubscriptionSettingsPage = React.lazy(() =>
   import('./pages/SubscriptionSettingsPage').then((module) => ({
     default: module.SubscriptionSettingsPage,
@@ -397,6 +398,10 @@ function AppRoutes({ isLoggedIn, effectiveUserRole, token }: AppRoutesProps) {
         <Route
           path="/expired-items"
           element={renderSignedInElement(isLoggedIn, <ExpiredItemsPage token={token} />)}
+        />
+        <Route
+          path="/supplier-credits"
+          element={renderSignedInElement(isLoggedIn, <SupplierCreditsPage token={token} />)}
         />
         <Route
           path="/usage-report"

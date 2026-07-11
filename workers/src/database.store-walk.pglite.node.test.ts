@@ -1,3 +1,6 @@
+import { readFileSync } from 'node:fs';
+import path from 'node:path';
+import { fileURLToPath } from 'node:url';
 import { afterAll, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
 import type { NeonQueryFunction } from '@neondatabase/serverless';
 import type { Env } from './types/env';
@@ -14,6 +17,7 @@ import { createWorkersDatabase } from './database';
 const ORG = 'org-store-walk';
 const OTHER_ORG = 'org-other';
 const USER_ID = 1;
+const __dirname = path.dirname(fileURLToPath(import.meta.url));
 
 describe('Workers store walk tracking (real SQL)', () => {
   let harness: PgliteHarness;
@@ -65,6 +69,16 @@ describe('Workers store walk tracking (real SQL)', () => {
     `;
     bayAId = Number(bayRows.find((row) => row.name === 'Dairy Bay 1')?.id);
     bayBId = Number(bayRows.find((row) => row.name === 'Dairy Bay 2')?.id);
+  });
+
+  it('keeps the Neon store-walk migration safe to run from SQL editors', () => {
+    const migrationSql = readFileSync(
+      path.resolve(__dirname, '../../backend/prisma/neon-sql/0004_add_store_walk_bay_tracking.sql'),
+      'utf8',
+    );
+
+    expect(migrationSql).not.toContain('ON COMMIT DROP');
+    expect(migrationSql).toContain('DROP TABLE IF EXISTS pg_temp.store_area_backfill_bays;');
   });
 
   it('runs a cycle lifecycle and permits a new active cycle after completion', async () => {

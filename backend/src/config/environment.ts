@@ -69,6 +69,9 @@ export interface EnvironmentConfig {
   // SendGrid Configuration (for email notifications)
   SENDGRID_API_KEY?: string;
   SENDGRID_FROM_EMAIL?: string;
+  // Resend Configuration (for supplier credit-claim emails)
+  RESEND_API_KEY?: string;
+  RESEND_FROM_EMAIL?: string;
   // Clerk Configuration (for authentication)
   CLERK_SECRET_KEY?: string;
   CLERK_PUBLISHABLE_KEY?: string;
@@ -208,6 +211,9 @@ function validateEnvironment(env: RawEnv, allowMissingRequired: boolean): Enviro
     // SendGrid Configuration (for email notifications)
     SENDGRID_API_KEY: env.SENDGRID_API_KEY,
     SENDGRID_FROM_EMAIL: env.SENDGRID_FROM_EMAIL,
+    // Resend Configuration (for supplier credit-claim emails)
+    RESEND_API_KEY: env.RESEND_API_KEY,
+    RESEND_FROM_EMAIL: env.RESEND_FROM_EMAIL,
     // Clerk Configuration (for authentication)
     CLERK_SECRET_KEY: env.CLERK_SECRET_KEY, // Required in production, optional during development
     CLERK_PUBLISHABLE_KEY: env.CLERK_PUBLISHABLE_KEY,

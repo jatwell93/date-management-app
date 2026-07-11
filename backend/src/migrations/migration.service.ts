@@ -384,6 +384,7 @@ export class MigrationService {
           addColumnIfMissing('products');
           addColumnIfMissing('inventory_items');
           addColumnIfMissing('audit_log');
+          addColumnIfMissing('store_areas');
         },
         down: (_db: DB) => {
           Logger.warn(
@@ -615,6 +616,126 @@ export class MigrationService {
         },
         down: (db: DB) => {
           db.exec('DROP TABLE IF EXISTS bay_checks;');
+        },
+      },
+      // Supplier credit-claim recovery: suppliers + claim lifecycle tables, and a
+      // nullable products.supplier_id so a SKU can map to a supplier (self-building
+      // through use). Mirrors Neon SQL 0005 and the Prisma models.
+      {
+        id: 15,
+        name: '015-add-supplier-credit-claims',
+        up: (db: DB) => {
+          const productsInfo = db
+            .prepare('PRAGMA table_info(products)')
+            .all() as PragmaTableInfoRow[];
+          const hasSupplierId = productsInfo.some((column) => column.name === 'supplier_id');
+          if (!hasSupplierId) {
+            db.exec('ALTER TABLE products ADD COLUMN supplier_id INTEGER');
+            Logger.info('Added supplier_id column to products table');
+          }
+
+          db.exec(`
+            CREATE TABLE IF NOT EXISTS suppliers (
+              id INTEGER PRIMARY KEY AUTOINCREMENT,
+              organization_id TEXT NOT NULL,
+              name TEXT NOT NULL,
+              contact_email TEXT,
+              credit_policy_note TEXT NOT NULL DEFAULT '',
+              policy_write_off_qty INTEGER,
+              policy_credit_qty INTEGER,
+              follow_up_days INTEGER NOT NULL DEFAULT 7,
+              created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+              updated_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+              FOREIGN KEY (organization_id) REFERENCES organizations (id) ON DELETE CASCADE,
+              UNIQUE (organization_id, name)
+            );
+            CREATE INDEX IF NOT EXISTS idx_suppliers_organization_id ON suppliers (organization_id);
+            CREATE INDEX IF NOT EXISTS idx_products_supplier_id ON products (supplier_id);
+
+            CREATE TABLE IF NOT EXISTS credit_claims (
+              id INTEGER PRIMARY KEY AUTOINCREMENT,
+              organization_id TEXT NOT NULL,
+              supplier_id INTEGER NOT NULL,
+              created_by_user_id INTEGER,
+              status TEXT NOT NULL DEFAULT 'DRAFT',
+              contact_email_snapshot TEXT,
+              expected_credit_units INTEGER,
+              expected_credit_value REAL,
+              credited_value REAL,
+              sent_at TEXT,
+              next_follow_up_at TEXT,
+              follow_up_count INTEGER NOT NULL DEFAULT 0,
+              settled_at TEXT,
+              created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+              updated_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+              FOREIGN KEY (organization_id) REFERENCES organizations (id) ON DELETE CASCADE,
+              FOREIGN KEY (supplier_id) REFERENCES suppliers (id),
+              FOREIGN KEY (created_by_user_id) REFERENCES users (id) ON DELETE SET NULL
+            );
+            CREATE INDEX IF NOT EXISTS idx_credit_claims_organization_id ON credit_claims (organization_id);
+            CREATE INDEX IF NOT EXISTS idx_credit_claims_supplier_id ON credit_claims (supplier_id);
+            CREATE INDEX IF NOT EXISTS idx_credit_claims_status ON credit_claims (status);
+            CREATE INDEX IF NOT EXISTS idx_credit_claims_next_follow_up_at ON credit_claims (next_follow_up_at);
+
+            CREATE TABLE IF NOT EXISTS credit_claim_lines (
+              id INTEGER PRIMARY KEY AUTOINCREMENT,
+              organization_id TEXT NOT NULL,
+              claim_id INTEGER NOT NULL,
+              expired_item_transaction_id INTEGER NOT NULL UNIQUE,
+              batch_number TEXT,
+              units_claimed INTEGER NOT NULL,
+              expected_credit_units INTEGER,
+              expected_credit_value REAL,
+              created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+              updated_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+              FOREIGN KEY (organization_id) REFERENCES organizations (id) ON DELETE CASCADE,
+              FOREIGN KEY (claim_id) REFERENCES credit_claims (id) ON DELETE CASCADE,
+              FOREIGN KEY (expired_item_transaction_id) REFERENCES expired_item_transactions (id)
+            );
+            CREATE INDEX IF NOT EXISTS idx_credit_claim_lines_organization_id ON credit_claim_lines (organization_id);
+            CREATE INDEX IF NOT EXISTS idx_credit_claim_lines_claim_id ON credit_claim_lines (claim_id);
+
+            CREATE TABLE IF NOT EXISTS credit_claim_photos (
+              id INTEGER PRIMARY KEY AUTOINCREMENT,
+              organization_id TEXT NOT NULL,
+              claim_line_id INTEGER NOT NULL,
+              storage_key TEXT NOT NULL,
+              file_name TEXT NOT NULL,
+              size_bytes INTEGER NOT NULL,
+              delete_after TEXT,
+              created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+              FOREIGN KEY (organization_id) REFERENCES organizations (id) ON DELETE CASCADE,
+              FOREIGN KEY (claim_line_id) REFERENCES credit_claim_lines (id) ON DELETE CASCADE
+            );
+            CREATE INDEX IF NOT EXISTS idx_credit_claim_photos_organization_id ON credit_claim_photos (organization_id);
+            CREATE INDEX IF NOT EXISTS idx_credit_claim_photos_claim_line_id ON credit_claim_photos (claim_line_id);
+            CREATE INDEX IF NOT EXISTS idx_credit_claim_photos_delete_after ON credit_claim_photos (delete_after);
+
+            CREATE TABLE IF NOT EXISTS credit_claim_events (
+              id INTEGER PRIMARY KEY AUTOINCREMENT,
+              organization_id TEXT NOT NULL,
+              claim_id INTEGER NOT NULL,
+              user_id INTEGER,
+              type TEXT NOT NULL,
+              note TEXT,
+              created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+              FOREIGN KEY (organization_id) REFERENCES organizations (id) ON DELETE CASCADE,
+              FOREIGN KEY (claim_id) REFERENCES credit_claims (id) ON DELETE CASCADE,
+              FOREIGN KEY (user_id) REFERENCES users (id) ON DELETE SET NULL
+            );
+            CREATE INDEX IF NOT EXISTS idx_credit_claim_events_organization_id ON credit_claim_events (organization_id);
+            CREATE INDEX IF NOT EXISTS idx_credit_claim_events_claim_id ON credit_claim_events (claim_id);
+          `);
+        },
+        down: (db: DB) => {
+          db.exec(`
+            DROP TABLE IF EXISTS credit_claim_events;
+            DROP TABLE IF EXISTS credit_claim_photos;
+            DROP TABLE IF EXISTS credit_claim_lines;
+            DROP TABLE IF EXISTS credit_claims;
+            DROP TABLE IF EXISTS suppliers;
+          `);
+          Logger.warn('Cannot drop products.supplier_id column in SQLite; leaving it in place');
         },
       },
     ];

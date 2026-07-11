@@ -169,6 +169,13 @@ const RE_USER_ID = /^\/api\/users\/\d+$/;
 const RE_INVENTORY_ID = /^\/api\/inventory-items\/\d+$/;
 const RE_STORE_AREA_ID = /^\/api\/store-areas\/\d+$/;
 const RE_STORE_AREA_CHECK_CYCLE_COMPLETE = /^\/api\/store-areas\/check-cycles\/\d+\/complete$/;
+const OPEN_CREDIT_CLAIM_STATUSES = ['DRAFT', 'SENDING', 'SENT', 'ACKNOWLEDGED'];
+const SETTLED_CREDIT_CLAIM_STATUSES = [
+  'CREDITED',
+  'PARTIALLY_CREDITED',
+  'REJECTED',
+  'CANCELLED',
+];
 export const MINIMAL_API_ROUTES: MinimalApiRoute[] = [
   ['POST', '/api/auth/login', handleLogin],
   ['POST', '/api/auth/register', handleRegister],
@@ -217,6 +224,10 @@ export const MINIMAL_API_ROUTES: MinimalApiRoute[] = [
   ['GET', '/api/reports/sell-through', handleGetSellThroughReport],
   ['GET', '/api/expired-items', handleGetExpiredItems],
   ['GET', '/api/expired-items/reports/expired-losses', handleGetExpiredLossesReport],
+  ['GET', '/api/supplier-credits/suppliers', handleListSuppliers],
+  ['GET', '/api/supplier-credits/claimable-pool', handleGetClaimablePool],
+  ['GET', '/api/supplier-credits/recovery-report', handleGetRecoveryReport],
+  ['GET', '/api/supplier-credits/claims', handleListCreditClaims],
   ['POST', '/api/expired-items/process', handleProcessExpiredItem],
   ['GET', '/api/subscription/current', handleGetCurrentSubscription],
   ['GET', '/api/subscription/trial-status', handleGetTrialStatus],
@@ -1256,6 +1267,69 @@ async function handleGetExpiredLossesReport(
     db.getExpiredLossByStoreArea(auth.organizationId),
   ]);
   return jsonResponse({ lossesBySKU, lossesByStoreArea }, 200, env);
+}
+
+/**
+ * GET /api/supplier-credits/suppliers
+ */
+async function handleListSuppliers(request: Request, db: Database, env: Env): Promise<Response> {
+  const auth = await authenticateApiRequest(request, env, db);
+  if (auth instanceof Response) return auth;
+
+  const suppliers = await db.listSuppliers(auth.organizationId);
+  return jsonResponse(suppliers, 200, env);
+}
+
+/**
+ * GET /api/supplier-credits/claimable-pool
+ */
+async function handleGetClaimablePool(
+  request: Request,
+  db: Database,
+  env: Env,
+): Promise<Response> {
+  const auth = await authenticateApiRequest(request, env, db);
+  if (auth instanceof Response) return auth;
+
+  const pool = await db.getClaimablePool(auth.organizationId);
+  return jsonResponse(pool, 200, env);
+}
+
+/**
+ * GET /api/supplier-credits/recovery-report
+ */
+async function handleGetRecoveryReport(
+  request: Request,
+  db: Database,
+  env: Env,
+): Promise<Response> {
+  const auth = await authenticateApiRequest(request, env, db);
+  if (auth instanceof Response) return auth;
+
+  const report = await db.getRecoveryReport(auth.organizationId);
+  return jsonResponse(report, 200, env);
+}
+
+/**
+ * GET /api/supplier-credits/claims?view=open|settled|all
+ */
+async function handleListCreditClaims(
+  request: Request,
+  db: Database,
+  env: Env,
+): Promise<Response> {
+  const auth = await authenticateApiRequest(request, env, db);
+  if (auth instanceof Response) return auth;
+
+  const view = new URL(request.url).searchParams.get('view');
+  const statuses =
+    view === 'open'
+      ? OPEN_CREDIT_CLAIM_STATUSES
+      : view === 'settled'
+        ? SETTLED_CREDIT_CLAIM_STATUSES
+        : undefined;
+  const claims = await db.listCreditClaims(auth.organizationId, statuses);
+  return jsonResponse(claims, 200, env);
 }
 
 /**
