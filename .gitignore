@@ -74,8 +74,9 @@ go-to-market-docs/
 brand-identity-pharma-apps/
 brand-identity/
 
-# Real pharmacy data with sensitive pricing
+# Real pharmacy data with sensitive information
 backend/src/tests/fixtures/real-pharmacy-products.csv
+supplier-doc-examples/
 
 # Coverage
 coverage/
