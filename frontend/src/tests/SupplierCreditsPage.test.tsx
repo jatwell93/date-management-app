@@ -209,6 +209,39 @@ describe('SupplierCreditsPage', () => {
     });
   });
 
+  it('does not reload catalogue review again after an inline brand add refreshes the page data', async () => {
+    mocked.getBrandReview.mockResolvedValue({
+      items: [
+        {
+          productId: 301,
+          sku: 'MISSING',
+          barcode: '',
+          productName: 'Needs a brand',
+          brand: null,
+        },
+      ],
+      nextCursor: null,
+    });
+    mocked.addBrand.mockResolvedValue({
+      id: 51,
+      name: 'Added Brand',
+      supplierId: null,
+      source: 'USER_ADDED',
+    });
+
+    render(<SupplierCreditsPage token="tkn" />);
+    await screen.findByText('Money on the table');
+    await userEvent.click(screen.getByRole('button', { name: 'Catalogue Review' }));
+    await screen.findByText('Needs a brand');
+
+    await userEvent.type(screen.getByLabelText('Brand name for Needs a brand'), 'Added Brand');
+    await userEvent.click(screen.getByRole('button', { name: 'Add brand' }));
+
+    await waitFor(() => expect(mocked.addBrand).toHaveBeenCalledTimes(1));
+    await waitFor(() => expect(mocked.getClaimablePool).toHaveBeenCalledTimes(2));
+    expect(mocked.getBrandReview).toHaveBeenCalledTimes(2);
+  });
+
   it('offers claim and confirmed disposal for suppliers without a policy', async () => {
     mocked.getClaimablePool.mockResolvedValue([
       {

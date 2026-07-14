@@ -278,6 +278,19 @@ function resolveClaimSupplier(row: ClaimableWriteOffRow): ResolvedClaimSupplier 
     };
   }
 
+  const brandName = row.brandName?.trim() || null;
+  if (row.brandId != null && brandName) {
+    return {
+      id: null,
+      name: brandName,
+      writeOffQty: null,
+      creditQty: null,
+      policyNote: null,
+      state: 'PENDING_CONFIRMATION',
+      key: `brand:${row.brandId}`,
+    };
+  }
+
   return {
     id: null,
     name: null,

@@ -104,6 +104,11 @@ const SupplierCreditsPage: React.FC<Props> = ({ token }) => {
     }
   }, [getFreshApiToken]);
 
+  const getCatalogueReviewToken = useCallback(
+    async () => (await getFreshApiToken('supplier-credits-brand-review')) ?? null,
+    [getFreshApiToken],
+  );
+
   useEffect(() => {
     void load();
   }, [load]);
@@ -180,7 +185,7 @@ const SupplierCreditsPage: React.FC<Props> = ({ token }) => {
       {tab === 'catalogue-review' && (
         <CatalogueReviewPanel
           suppliers={suppliers}
-          getToken={async () => (await getFreshApiToken('supplier-credits-brand-review')) ?? null}
+          getToken={getCatalogueReviewToken}
           onChanged={() => void load()}
         />
       )}

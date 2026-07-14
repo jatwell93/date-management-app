@@ -204,6 +204,30 @@ describe('credit-claim shared domain', () => {
       expect(groups[0].items.map((item) => item.brandName)).toEqual(['Blackmores', 'BioCeuticals']);
     });
 
+    it('keeps user-added brands without a supplier in pending confirmation', () => {
+      const groups = rollupClaimablePool([
+        row({
+          supplierId: null,
+          supplierName: null,
+          policyWriteOffQty: null,
+          policyCreditQty: null,
+          brandId: 3,
+          brandName: 'User Brand',
+          brandSource: 'USER_ADDED',
+          brandSupplierId: null,
+          brandSupplierName: null,
+          suggestedSupplierName: null,
+        }),
+      ]);
+
+      expect(groups).toHaveLength(1);
+      expect(groups[0]).toMatchObject({
+        supplierId: null,
+        supplierName: 'User Brand',
+        state: 'PENDING_CONFIRMATION',
+      });
+    });
+
     it('classifies confirmed suppliers with and without policy', () => {
       const groups = rollupClaimablePool([
         row({ transactionId: 1, policyWriteOffQty: null, policyCreditQty: null }),
