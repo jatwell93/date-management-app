@@ -8,6 +8,9 @@ import {
   supplierCreateSchema,
   supplierUpdateSchema,
   assignSupplierSchema,
+  brandCreateSchema,
+  brandSupplierSchema,
+  correctionReviewSchema,
   claimCreateSchema,
   claimOutcomeSchema,
 } from '../schemas';
@@ -17,6 +20,7 @@ import { createCreditClaimController } from '../controllers/credit-claim.control
 // Authentication is applied once at the app-level mount in index.ts, matching the
 // other feature routers (see markdown-config.routes.ts).
 const router = Router();
+export const platformCatalogueCorrectionRouter = Router();
 
 // Claim photos are phone snaps of expired stock uploaded directly (memory storage,
 // 10MB cap), matching the direct-upload path in upload.routes.ts. Restricted to image
@@ -70,6 +74,32 @@ router.put(
   },
 );
 
+router.get('/brands', async (req: AuthRequest, res: Response, next) => {
+  await createSupplierCreditController().listBrands(req, res, next);
+});
+
+router.get('/brand-review', async (req: AuthRequest, res: Response, next) => {
+  await createSupplierCreditController().reviewBrands(req, res, next);
+});
+
+router.post(
+  '/brands',
+  standardLimiter,
+  validateRequest(brandCreateSchema),
+  async (req: AuthRequest, res: Response, next) => {
+    await createSupplierCreditController().addBrand(req, res, next);
+  },
+);
+
+router.put(
+  '/brands/:id/supplier',
+  standardLimiter,
+  validateRequest(brandSupplierSchema),
+  async (req: AuthRequest, res: Response, next) => {
+    await createSupplierCreditController().confirmBrandSupplier(req, res, next);
+  },
+);
+
 // PUT /supplier-credits/products/:productId/supplier — assign (or clear) a product's
 // supplier. This is the self-building map: any authenticated user triaging the pool
 // can attach a SKU to its supplier.
@@ -86,6 +116,30 @@ router.put(
 router.get('/claimable-pool', async (req: AuthRequest, res: Response, next) => {
   await createSupplierCreditController().getClaimablePool(req, res, next);
 });
+
+router.post(
+  '/claimable-pool/:transactionId/dispose',
+  standardLimiter,
+  async (req: AuthRequest, res: Response, next) => {
+    await createSupplierCreditController().disposeWriteOff(req, res, next);
+  },
+);
+
+platformCatalogueCorrectionRouter.get(
+  '/catalogue-corrections',
+  async (req: AuthRequest, res: Response, next) => {
+    await createSupplierCreditController().listCatalogueCorrections(req, res, next);
+  },
+);
+
+platformCatalogueCorrectionRouter.patch(
+  '/catalogue-corrections/:id',
+  standardLimiter,
+  validateRequest(correctionReviewSchema),
+  async (req: AuthRequest, res: Response, next) => {
+    await createSupplierCreditController().reviewCatalogueCorrection(req, res, next);
+  },
+);
 
 // ── Claims ────────────────────────────────────────────────────────────────────
 

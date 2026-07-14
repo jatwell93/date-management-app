@@ -4,10 +4,12 @@ import { findColumnByAlternatives } from '../../services/product-import.helpers'
 import { PrismaClient } from '@prisma/client';
 import fs from 'fs';
 import path from 'path';
+import type { SupplierCreditRepository } from '../../repositories/supplier-credit.repository';
 
 describe('CSV Upload Functionality Tests', () => {
   let productService: ProductService;
   let mockPrisma: any;
+  let enrichmentRepository: Pick<SupplierCreditRepository, 'enrichImportedProduct'>;
 
   beforeEach(() => {
     mockPrisma = {
@@ -24,7 +26,14 @@ describe('CSV Upload Functionality Tests', () => {
       },
       $transaction: vi.fn((callback) => callback(mockPrisma)),
     };
-    productService = new ProductService(mockPrisma as unknown as PrismaClient);
+    enrichmentRepository = { enrichImportedProduct: vi.fn(async () => undefined) };
+    productService = new ProductService(
+      mockPrisma as unknown as PrismaClient,
+      undefined,
+      undefined,
+      undefined,
+      enrichmentRepository as SupplierCreditRepository,
+    );
   });
 
   it('should process CSV with basic format correctly', async () => {
@@ -56,10 +65,45 @@ TEST003,Product 3,"1,000.99",1234567890125`;
       expect(result.errors.length).toBe(0);
       expect(result.imported).toBe(3); // All 3 rows should be imported
       expect(result.updated).toBe(0); // No updates since it's first import
+      expect(enrichmentRepository.enrichImportedProduct).toHaveBeenCalledTimes(3);
+      expect(enrichmentRepository.enrichImportedProduct).toHaveBeenCalledWith('default-org', {
+        productId: 1,
+        barcode: '1234567890123',
+        sku: 'TEST001',
+      });
     } finally {
       if (fs.existsSync(testCSVPath)) {
         fs.unlinkSync(testCSVPath);
       }
+    }
+  });
+
+  it('does not fail a successful product import when advisory enrichment fails', async () => {
+    mockPrisma.product.findUnique.mockResolvedValue(null);
+    mockPrisma.product.create.mockResolvedValue({
+      id: 9,
+      organizationId: 'default-org',
+      name: 'Isolated Product',
+      sku: 'ISOLATED-1',
+      costPrice: 10,
+      barcode: 'ISOLATED-BARCODE',
+      createdAt: new Date(),
+      updatedAt: new Date(),
+    });
+    vi.mocked(enrichmentRepository.enrichImportedProduct).mockRejectedValueOnce(
+      new Error('catalogue unavailable'),
+    );
+    const testCSVPath = path.join(__dirname, 'enrichment-failure.csv');
+    fs.writeFileSync(
+      testCSVPath,
+      'SKU,Name,Cost,Barcode\nISOLATED-1,Isolated Product,10.00,ISOLATED-BARCODE\n',
+    );
+
+    try {
+      const result = await productService.processCSVUploadInternal(testCSVPath);
+      expect(result).toMatchObject({ imported: 1, updated: 0, errors: [] });
+    } finally {
+      if (fs.existsSync(testCSVPath)) fs.unlinkSync(testCSVPath);
     }
   });
 });

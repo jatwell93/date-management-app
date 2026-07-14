@@ -143,6 +143,7 @@ export async function processCatalogueImportJob(
         totalRows: validation.totalRows,
         validationErrorCount: initialValidationErrorCount,
       });
+      await enrichImportedProductsSafely(db, job.organizationId, batchRows, uploadId);
       offset = nextOffset;
       validation.rowErrors.push(...outcome.errors);
     }
@@ -182,6 +183,102 @@ export async function processCatalogueImportJob(
       WHERE id = ${uploadId}
     `;
     throw error;
+  }
+}
+
+export async function enrichImportedProductsSafely(
+  db: Database,
+  organizationId: string,
+  rows: ValidatedCatalogueRow[],
+  uploadId?: number,
+): Promise<void> {
+  if (rows.length === 0) return;
+  try {
+    await db.sql`
+      WITH input AS (
+        SELECT * FROM jsonb_to_recordset(${JSON.stringify(rows)}::jsonb)
+          AS x("rowNumber" int, sku text, name text, barcode text, "costPrice" double precision, "retailPrice" double precision)
+      ), product_input AS (
+        SELECT i."rowNumber", i.sku, i.barcode, p.id AS product_id
+        FROM input i
+        JOIN products p ON p.organization_id = ${organizationId}
+          AND p.sku = i.sku AND p.barcode = i.barcode
+      ), barcode_matches AS (
+        SELECT pi."rowNumber", pi.product_id, m.id AS entry_id
+        FROM product_input pi
+        JOIN master_catalogue_entries m ON BTRIM(m.barcode) = BTRIM(pi.barcode)
+      ), sku_candidates AS (
+        SELECT pi."rowNumber", pi.product_id,
+               COUNT(DISTINCT m.id)::int AS match_count,
+               MIN(m.id)::int AS entry_id
+        FROM product_input pi
+        JOIN master_catalogue_entries m
+          ON UPPER(BTRIM(pi.sku)) IN (
+            UPPER(BTRIM(m.api_sku)), UPPER(BTRIM(m.sigma_sku)), UPPER(BTRIM(m.ch2_sku))
+          )
+        WHERE BTRIM(pi.sku) <> ''
+        GROUP BY pi."rowNumber", pi.product_id
+      ), resolved AS (
+        SELECT pi."rowNumber", pi.product_id, pi.barcode,
+               COALESCE(bm.entry_id,
+                 CASE WHEN sc.match_count = 1 THEN sc.entry_id END) AS entry_id
+        FROM product_input pi
+        LEFT JOIN barcode_matches bm
+          ON bm."rowNumber" = pi."rowNumber" AND bm.product_id = pi.product_id
+        LEFT JOIN sku_candidates sc
+          ON sc."rowNumber" = pi."rowNumber" AND sc.product_id = pi.product_id
+      ), matched AS (
+        SELECT r.*, m.brand_name, m.manufacturer_name
+        FROM resolved r
+        JOIN master_catalogue_entries m ON m.id = r.entry_id
+      ), brand_rows AS (
+        INSERT INTO brands (
+          organization_id, name, manufacturer_name, suggested_supplier_name,
+          supplier_id, source, created_at, updated_at
+        )
+        SELECT DISTINCT ${organizationId}, brand_name, manufacturer_name, manufacturer_name,
+               NULL::integer, 'REFERENCE', NOW(), NOW()
+        FROM matched
+        ON CONFLICT (organization_id, name) DO UPDATE SET
+          manufacturer_name = CASE WHEN brands.source = 'REFERENCE'
+            THEN EXCLUDED.manufacturer_name ELSE brands.manufacturer_name END,
+          suggested_supplier_name = CASE WHEN brands.source = 'REFERENCE'
+            THEN EXCLUDED.suggested_supplier_name ELSE brands.suggested_supplier_name END,
+          updated_at = CASE WHEN brands.source = 'REFERENCE'
+            THEN NOW() ELSE brands.updated_at END
+        RETURNING id, name
+      ), attached AS (
+        UPDATE products p SET brand_id = b.id, updated_at = NOW()
+        FROM matched m
+        JOIN brand_rows b ON b.name = m.brand_name
+        WHERE p.id = m.product_id AND p.organization_id = ${organizationId}
+          AND p.brand_id IS DISTINCT FROM b.id
+        RETURNING p.id
+      ), corrections AS (
+        INSERT INTO catalogue_corrections (
+          organization_id, product_id, barcode, kind, status, created_at, updated_at
+        )
+        SELECT ${organizationId}, r.product_id, NULLIF(BTRIM(r.barcode), ''),
+               'UNMATCHED', 'PENDING', NOW(), NOW()
+        FROM resolved r
+        WHERE r.entry_id IS NULL
+          AND NOT EXISTS (
+            SELECT 1 FROM catalogue_corrections c
+            WHERE c.organization_id = ${organizationId}
+              AND c.product_id = r.product_id
+              AND c.kind = 'UNMATCHED'
+              AND c.status = 'PENDING'
+          )
+        RETURNING id
+      )
+      SELECT (SELECT COUNT(*) FROM attached)::int AS attached,
+             (SELECT COUNT(*) FROM corrections)::int AS corrections
+    `;
+  } catch (error) {
+    Sentry.captureException(error, {
+      tags: { feature: 'catalogue-import', action: 'brand-enrichment' },
+      extra: { organizationId, uploadId, rowCount: rows.length },
+    });
   }
 }
 
@@ -264,9 +361,9 @@ async function upsertProductBatch(
           rows_skipped = u.rows_skipped + counts.rejected,
           row_error_count = u.row_error_count + counts.rejected,
           upload_progress = ${Math.floor(
-    ((checkpoint.nextOffset + checkpoint.validationErrorCount) / checkpoint.totalRows) *
-    100,
-  )},
+            ((checkpoint.nextOffset + checkpoint.validationErrorCount) / checkpoint.totalRows) *
+              100,
+          )},
           processing_message = ${`Imported ${checkpoint.nextOffset} catalogue rows`},
           updated_at = NOW()
       FROM counts
@@ -347,12 +444,7 @@ export async function enqueueCatalogueImport(
       extra: { uploadId },
     });
     try {
-      await failCatalogueImport(
-        db,
-        uploadId,
-        'enqueue',
-        'Catalogue import could not be queued',
-      );
+      await failCatalogueImport(db, uploadId, 'enqueue', 'Catalogue import could not be queued');
     } catch (failureUpdateError) {
       Sentry.captureException(failureUpdateError, {
         tags: { feature: 'catalogue-import', action: 'enqueue-fail-update' },

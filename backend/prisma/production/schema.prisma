@@ -56,6 +56,8 @@ model Organization {
   uploads                 Upload[]
   users                   User[]
   suppliers               Supplier[]
+  brands                  Brand[]
+  catalogueCorrections    CatalogueCorrection[]
   creditClaims            CreditClaim[]
   creditClaimLines        CreditClaimLine[]
   creditClaimPhotos       CreditClaimPhoto[]
@@ -167,20 +169,23 @@ model ClerkWebhookEvent {
 }
 
 model Product {
-  id             Int             @id @default(autoincrement())
-  organizationId String          @map("organization_id")
-  barcode        String
-  sku            String
-  name           String
-  costPrice      Float           @map("cost_price")
-  retailPrice    Float?          @map("retail_price")
-  notes          String          @default("")
-  supplierId     Int?            @map("supplier_id")
-  createdAt      DateTime        @default(now()) @map("created_at")
-  updatedAt      DateTime        @updatedAt @map("updated_at")
-  inventoryItems InventoryItem[]
-  supplier       Supplier?       @relation(fields: [supplierId], references: [id], onDelete: SetNull)
-  organization   Organization    @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  id                   Int                   @id @default(autoincrement())
+  organizationId       String                @map("organization_id")
+  barcode              String
+  sku                  String
+  name                 String
+  costPrice            Float                 @map("cost_price")
+  retailPrice          Float?                @map("retail_price")
+  notes                String                @default("")
+  supplierId           Int?                  @map("supplier_id")
+  brandId              Int?                  @map("brand_id")
+  createdAt            DateTime              @default(now()) @map("created_at")
+  updatedAt            DateTime              @updatedAt @map("updated_at")
+  inventoryItems       InventoryItem[]
+  supplier             Supplier?             @relation(fields: [supplierId], references: [id], onDelete: SetNull)
+  brand                Brand?                @relation(fields: [brandId], references: [id], onDelete: SetNull)
+  catalogueCorrections CatalogueCorrection[]
+  organization         Organization          @relation(fields: [organizationId], references: [id], onDelete: Cascade)
 
   @@unique([organizationId, sku])
   @@unique([organizationId, barcode])
@@ -189,6 +194,7 @@ model Product {
   @@index([sku])
   @@index([barcode])
   @@index([supplierId])
+  @@index([brandId])
   @@map("products")
 }
 
@@ -298,6 +304,7 @@ model User {
   uploads                 Upload[]
   creditClaims            CreditClaim[]
   creditClaimEvents       CreditClaimEvent[]
+  catalogueCorrections    CatalogueCorrection[]
   organization            Organization             @relation(fields: [organizationId], references: [id], onDelete: Cascade)
 
   @@index([organizationId])
@@ -384,48 +391,121 @@ model ItemTransaction {
 }
 
 model ExpiredItemTransaction {
-  id              Int           @id @default(autoincrement())
-  organizationId  String        @map("organization_id")
-  inventoryItemId Int           @map("inventory_item_id")
-  userId          Int?          @map("user_id")
-  action          String
-  unitsDiscarded  Int?          @map("units_discarded")
-  financialLoss   Float?        @map("financial_loss")
-  markdownLevel   Int?          @map("markdown_level")
-  transactionDate DateTime      @default(now()) @map("transaction_date")
-  createdAt       DateTime      @default(now()) @map("created_at")
-  updatedAt       DateTime      @updatedAt @map("updated_at")
-  user            User?         @relation(fields: [userId], references: [id], onDelete: SetNull)
-  inventoryItem   InventoryItem @relation(fields: [inventoryItemId], references: [id])
-  organization    Organization  @relation(fields: [organizationId], references: [id], onDelete: Cascade)
-  creditClaimLine CreditClaimLine?
+  id                Int              @id @default(autoincrement())
+  organizationId    String           @map("organization_id")
+  inventoryItemId   Int              @map("inventory_item_id")
+  userId            Int?             @map("user_id")
+  action            String
+  unitsDiscarded    Int?             @map("units_discarded")
+  financialLoss     Float?           @map("financial_loss")
+  markdownLevel     Int?             @map("markdown_level")
+  creditDisposition String           @default("PENDING") @map("credit_disposition")
+  transactionDate   DateTime         @default(now()) @map("transaction_date")
+  createdAt         DateTime         @default(now()) @map("created_at")
+  updatedAt         DateTime         @updatedAt @map("updated_at")
+  user              User?            @relation(fields: [userId], references: [id], onDelete: SetNull)
+  inventoryItem     InventoryItem    @relation(fields: [inventoryItemId], references: [id])
+  organization      Organization     @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  creditClaimLine   CreditClaimLine?
 
   @@index([organizationId])
   @@index([inventoryItemId])
   @@index([userId])
   @@index([action])
   @@index([transactionDate])
+  @@index([creditDisposition])
   @@map("expired_item_transactions")
 }
 
 model Supplier {
-  id                Int           @id @default(autoincrement())
-  organizationId    String        @map("organization_id")
-  name              String
-  contactEmail      String?       @map("contact_email")
-  creditPolicyNote  String        @default("") @map("credit_policy_note")
-  policyWriteOffQty Int?          @map("policy_write_off_qty")
-  policyCreditQty   Int?          @map("policy_credit_qty")
-  followUpDays      Int           @default(7) @map("follow_up_days")
-  createdAt         DateTime      @default(now()) @map("created_at")
-  updatedAt         DateTime      @updatedAt @map("updated_at")
-  organization      Organization  @relation(fields: [organizationId], references: [id], onDelete: Cascade)
-  products          Product[]
-  claims            CreditClaim[]
+  id                   Int                   @id @default(autoincrement())
+  organizationId       String                @map("organization_id")
+  name                 String
+  contactEmail         String?               @map("contact_email")
+  creditPolicyNote     String                @default("") @map("credit_policy_note")
+  policyWriteOffQty    Int?                  @map("policy_write_off_qty")
+  policyCreditQty      Int?                  @map("policy_credit_qty")
+  followUpDays         Int                   @default(7) @map("follow_up_days")
+  createdAt            DateTime              @default(now()) @map("created_at")
+  updatedAt            DateTime              @updatedAt @map("updated_at")
+  organization         Organization          @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  products             Product[]
+  claims               CreditClaim[]
+  brands               Brand[]
+  catalogueCorrections CatalogueCorrection[]
 
   @@unique([organizationId, name])
   @@index([organizationId])
   @@map("suppliers")
+}
+
+model Brand {
+  id                    Int                   @id @default(autoincrement())
+  organizationId        String                @map("organization_id")
+  name                  String
+  manufacturerName      String?               @map("manufacturer_name")
+  suggestedSupplierName String?               @map("suggested_supplier_name")
+  supplierId            Int?                  @map("supplier_id")
+  source                String                @default("REFERENCE")
+  createdAt             DateTime              @default(now()) @map("created_at")
+  updatedAt             DateTime              @updatedAt @map("updated_at")
+  organization          Organization          @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  supplier              Supplier?             @relation(fields: [supplierId], references: [id], onDelete: SetNull)
+  products              Product[]
+  catalogueCorrections  CatalogueCorrection[]
+
+  @@unique([organizationId, name])
+  @@index([organizationId])
+  @@index([supplierId])
+  @@map("brands")
+}
+
+model MasterCatalogueEntry {
+  id               Int      @id @default(autoincrement())
+  barcode          String   @unique
+  description      String
+  apiSku           String?  @map("api_sku")
+  sigmaSku         String?  @map("sigma_sku")
+  ch2Sku           String?  @map("ch2_sku")
+  brandName        String   @map("brand_name")
+  manufacturerName String?  @map("manufacturer_name")
+  category         String?
+  subCategory      String?  @map("sub_category")
+  rrp              Float?
+  metroPrice       Float?   @map("metro_price")
+  createdAt        DateTime @default(now()) @map("created_at")
+  updatedAt        DateTime @updatedAt @map("updated_at")
+
+  @@index([apiSku])
+  @@index([sigmaSku])
+  @@index([ch2Sku])
+  @@map("master_catalogue_entries")
+}
+
+model CatalogueCorrection {
+  id               Int          @id @default(autoincrement())
+  organizationId   String       @map("organization_id")
+  productId        Int?         @map("product_id")
+  brandId          Int?         @map("brand_id")
+  barcode          String?
+  enteredBrandName String?      @map("entered_brand_name")
+  chosenSupplierId Int?         @map("chosen_supplier_id")
+  kind             String
+  status           String       @default("PENDING")
+  createdByUserId  Int?         @map("created_by_user_id")
+  createdAt        DateTime     @default(now()) @map("created_at")
+  updatedAt        DateTime     @updatedAt @map("updated_at")
+  organization     Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  product          Product?     @relation(fields: [productId], references: [id], onDelete: SetNull)
+  brand            Brand?       @relation(fields: [brandId], references: [id], onDelete: SetNull)
+  chosenSupplier   Supplier?    @relation(fields: [chosenSupplierId], references: [id], onDelete: SetNull)
+  createdByUser    User?        @relation(fields: [createdByUserId], references: [id], onDelete: SetNull)
+
+  @@index([organizationId])
+  @@index([status])
+  @@index([productId])
+  @@index([brandId])
+  @@map("catalogue_corrections")
 }
 
 model CreditClaim {

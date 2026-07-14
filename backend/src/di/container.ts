@@ -25,6 +25,7 @@ import { ClerkWebhookEventRepository } from '../repositories/clerk-webhook-event
 import { ProcessedWebhookEventRepository } from '../repositories/processed-webhook-event.repository';
 import { TrialEventRepository } from '../repositories/trial-event.repository';
 import { AuditLogRepository } from '../repositories/audit-log.repository';
+import { SupplierCreditRepository } from '../repositories/supplier-credit.repository';
 
 let initialized = false;
 
@@ -80,7 +81,8 @@ export function initializeDiContainer(): void {
       const prisma = container.resolve(PrismaClient);
       const productRepo = container.resolve(ProductRepository);
       const subscriptionRepo = container.resolve(SubscriptionRepository);
-      return new ProductService(prisma, orgId, productRepo, subscriptionRepo);
+      const supplierCreditRepo = new SupplierCreditRepository(prisma);
+      return new ProductService(prisma, orgId, productRepo, subscriptionRepo, supplierCreditRepo);
     },
   });
 

@@ -11,6 +11,9 @@ import type {
   BuildClaimLineInput,
   ClaimOutcome,
   RecoveryReport,
+  Brand,
+  BrandReviewPage,
+  CatalogueReviewState,
 } from '../types/supplierCredit';
 
 const BASE = '/supplier-credits';
@@ -32,6 +35,36 @@ export const assignProductSupplier = (
   apiService.put<{ productId: number; supplierId: number | null }>(
     `${BASE}/products/${productId}/supplier`,
     { supplierId },
+    token ?? undefined,
+  );
+
+export const getBrandReview = (
+  token: string | null,
+  options: { state?: CatalogueReviewState; group?: string; cursor?: number; limit?: number } = {},
+) => {
+  const query = new URLSearchParams();
+  if (options.state) query.set('state', options.state);
+  if (options.group) query.set('group', options.group);
+  if (options.cursor != null) query.set('cursor', String(options.cursor));
+  query.set('limit', String(options.limit ?? 50));
+  return apiService.get<BrandReviewPage>(
+    `${BASE}/brand-review?${query.toString()}`,
+    token ?? undefined,
+  );
+};
+
+export const addBrand = (
+  input: { productId: number; name: string; supplierId?: number | null },
+  token: string | null,
+) => apiService.post<Brand>(`${BASE}/brands`, input, token ?? undefined);
+
+export const confirmBrandSupplier = (brandId: number, supplierId: number, token: string | null) =>
+  apiService.put<Brand>(`${BASE}/brands/${brandId}/supplier`, { supplierId }, token ?? undefined);
+
+export const disposeClaimableWriteOff = (transactionId: number, token: string | null) =>
+  apiService.post<{ status: string }>(
+    `${BASE}/claimable-pool/${transactionId}/dispose`,
+    {},
     token ?? undefined,
   );
 

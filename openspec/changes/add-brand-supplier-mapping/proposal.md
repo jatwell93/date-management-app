@@ -12,15 +12,15 @@ brands, ~72 suppliers) is where the policy actually lives.
 Critically, the linkage stores need — `product → brand → supplier` — **does not exist in their own
 data.** A back-office export (FRED Office, Z-office, other POS) carries SKU / alias / description /
 cost / retail / department / category, but no brand and no supplier. The only source of that linkage is a curated reference catalogue
-the *product team* maintains (a ~7k-row master list; a 100-row sample lives in
+the _product team_ maintains (a ~7k-row master list; a 100-row sample lives in
 `supplier-doc-examples/sample_100_ipa_price_brands.xlsx`). Meanwhile supplier **policy** content
 varies by franchise (Priceline scatters it across an intranet; IPA dumps it in one table; DCO and
-others differ) and by negotiation, so shipping a base policy risks asserting *wrong* information.
+others differ) and by negotiation, so shipping a base policy risks asserting _wrong_ information.
 
 The split that resolves this: **the product team ships identity data (barcode → brand → supplier);
 the user enters policy content.** Stores already do this by hand — one real store kept a Google doc:
-"each time we matched a brand to a supplier we noted it down with the policy — *credit → do this, no
-credit → dispose*." This change digitises that artifact.
+"each time we matched a brand to a supplier we noted it down with the policy — _credit → do this, no
+credit → dispose_." This change digitises that artifact.
 
 ## What changes
 
@@ -30,18 +30,18 @@ every inferred link a **suggestion the user confirms** rather than a fact the sy
 Decisions locked with the product owner:
 
 - **Supplier resolution becomes `product.supplier ?? product.brand.supplier`.** The shipped
-  `Product.supplierId` becomes a per-product *override*; the brand link is the *default*. PR #356
+  `Product.supplierId` becomes a per-product _override_; the brand link is the _default_. PR #356
   behaviour is preserved; the brand layer only pre-fills the default path. Policy stays on the
   supplier (a supplier owns many brands — IPA's "Blackmores & Bioceuticals" supplier → brands
   Blackmores + BioCeuticals, one shared policy).
 - **A curated master catalogue provides identity, not policy.** Keyed on **barcode** (the one
   wholesaler-independent identifier), carrying description, per-wholesaler SKUs (`API PDE`,
   `Sigma PDE`, with `CH2` to come), `Brand`, `Manufacturer`, category, and reference prices. `Manufacturer`
-  is *usually but not always* the supplier (Cancer Council's manufacturer is "Vitality Brands"), so
-  it seeds a *suggestion*, never an assertion.
+  is _usually but not always_ the supplier (Cancer Council's manufacturer is "Vitality Brands"), so
+  it seeds a _suggestion_, never an assertion.
 - **Match is barcode-primary, wholesaler-SKU fallback.** A store's SKU codes follow its main
   wholesaler (API's PDE if API is their primary, Sigma's if Sigma), so the fallback matches the
-  store SKU against *any* wholesaler-SKU column.
+  store SKU against _any_ wholesaler-SKU column.
 - **Users confirm and correct; corrections flow back centrally (capture-only in v1).** When the sheet
   doesn't match an item, or a user overrides a suggested supplier / adds a missing brand, the system
   records a **correction event** (barcode, brand, supplier, org). It applies **immediately in that
@@ -58,8 +58,10 @@ Decisions locked with the product owner:
 
 ## Scope (v1)
 
-- **`Brand`** — org-scoped: `name`, nullable `supplierId`, `source` (`REFERENCE` | `USER_ADDED` |
-  `CONFIRMED`), optional `manufacturerName` (from the catalogue, advisory). Unique `(organizationId, name)`.
+- **`Brand`** — org-scoped: `name`, nullable confirmed `supplierId`, `source` (`REFERENCE` |
+  `USER_ADDED` | `CONFIRMED`), optional `manufacturerName`, and separate advisory
+  `suggestedSupplierName`. Unique `(organizationId, name)`. Catalogue enrichment never creates or
+  assigns an actual tenant `Supplier`.
 - **`Product.brandId`** — nullable link to `Brand`; supplier resolves via
   `product.supplier ?? product.brand.supplier`. `Product.supplierId` retained as an override.
 - **`MasterCatalogueEntry`** — the curated reference row: `barcode` (unique key), `description`,
@@ -73,6 +75,9 @@ Decisions locked with the product owner:
   brand's suggested supplier/manufacturer. Unmatched items land in a "needs brand" bucket.
 - **Claimability state:** an expired item whose supplier is not yet confirmed surfaces as
   `pending confirmation` — visible, not blocked; resolved on first interaction.
+- **Persisted disposal:** an expired transaction has `creditDisposition = PENDING | DISPOSED`;
+  confirmed disposal is stored on that transaction, is idempotent, and removes it from the
+  claimable pool unless it has already entered a claim.
 - **Endpoints (backend + worker parity):** catalogue match/enrich for an import batch; list brands +
   suggested suppliers; confirm a brand→supplier; add a missing brand; record a correction; the
   central correction review read (admin).
@@ -80,6 +85,12 @@ Decisions locked with the product owner:
   "needs brand" bucket), inline brand-add + supplier-confirm, the just-in-time policy prompt on first
   claim, and the two-CTA disposition (Begin claim / confirm dispose) on the existing Supplier Credits
   triage board.
+- **Central review authorization:** correction review requires normal authentication and a numeric
+  local user ID listed in comma-separated `PLATFORM_ADMIN_USER_IDS`; missing or malformed
+  configuration fails closed.
+- **Catalogue seed:** development and automated tests use the checked-in 100-row workbook through an
+  explicit path. Production requires an explicitly supplied full curated workbook; rows are never
+  embedded in production code.
 
 ## Relationship to `add-supplier-credit-claims`
 
@@ -90,8 +101,9 @@ photos, or recovery reporting — those consume whatever supplier resolution ret
 
 ## Reuse Strategy
 
-- **Resolution stays a pure `shared/domain` function** (`resolveSupplier(product, brand)`), covered by
-  the existing dual-backend conformance pattern (golden rule 5) so Neon/pglite and SQLite agree.
+- **Resolution stays a pure `shared/domain` function** (`resolveSupplier(product, brand)`) used by the
+  shared claim rollup. Worker SQL matching and layered Express enrichment are covered by the same
+  contract cases (golden rule 5) so Neon/pglite and SQLite agree.
 - **Reuse the queued catalogue-import pipeline** (`add-queued-catalogue-imports`,
   `harden-product-import-pipeline`) — the enrich step hooks the existing import, not a new one.
 - **Reuse the claimable-pool rollup**; it groups by resolved supplier, so it inherits the brand path
@@ -107,7 +119,7 @@ photos, or recovery reporting — those consume whatever supplier resolution ret
   until a user confirms; the "no policy / dispose" flag never blocks a claim.
 - Corrections apply **only within the submitting org** in v1; central acceptance is a separate,
   audited step and never mutates another org's data automatically.
-- Barcode is the trusted key; wholesaler-SKU fallback only *suggests* a match for user confirmation.
+- Barcode is the trusted key; wholesaler-SKU fallback only _suggests_ a match for user confirmation.
 
 ## Deferred Follow-up
 
@@ -127,8 +139,8 @@ photos, or recovery reporting — those consume whatever supplier resolution ret
    Neon SQL (+ rollback), SQLite migration, pglite harness; dual-backend conformance for
    `resolveSupplier` + enrich.
 3. Backend: catalogue enrich-on-import, brand list/confirm/add, correction record + central review;
-   wire into the existing import pipeline.
-4. Workers: parity handlers + routes sharing the `shared/domain` resolvers.
+   wire into the existing layered Express import pipeline.
+4. Workers: parity handlers + routes, with SQL matching checked against the shared resolver contract.
 5. Frontend: post-upload review screen, inline brand-add/supplier-confirm, JIT policy prompt on first
    claim, two-CTA disposition on the triage board.
 6. Seed the master catalogue from the curated sheet (barcode, wholesaler SKUs, brand, manufacturer).

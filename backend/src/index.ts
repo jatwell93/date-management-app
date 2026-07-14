@@ -34,7 +34,9 @@ import webhookRoutes from './routes/webhook.routes';
 import orgBootstrapRoutes from './routes/org-bootstrap.routes';
 import subscriptionRoutes from './routes/subscription.routes';
 import markdownConfigRoutes from './routes/markdown-config.routes';
-import supplierCreditRoutes from './routes/supplier-credit.routes';
+import supplierCreditRoutes, {
+  platformCatalogueCorrectionRouter,
+} from './routes/supplier-credit.routes';
 import { authenticateToken } from './middleware/auth.middleware';
 import { errorHandler } from './middleware/error.middleware';
 import { corsMiddleware } from './middleware/cors';
@@ -334,6 +336,7 @@ app.use('/markdown-config', authenticateToken, markdownConfigRoutes);
 app.use('/api/markdown-config', authenticateToken, markdownConfigRoutes);
 app.use('/supplier-credits', authenticateToken, supplierCreditRoutes);
 app.use('/api/supplier-credits', authenticateToken, supplierCreditRoutes);
+app.use('/api/platform', authenticateToken, platformCatalogueCorrectionRouter);
 
 app.get('/', (req, res) => {
   res.json({

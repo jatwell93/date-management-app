@@ -12,6 +12,10 @@ import { describe, it, expect, beforeEach, afterEach } from 'vitest';
 import { processCatalogueImportJob } from '../upload/catalogue-import';
 import type { Env } from '../types/env';
 import { createPgliteHarness, type PgliteHarness } from './pglite-db';
+import {
+  matchCatalogueEntry,
+  type CatalogueMatchEntry,
+} from '../../../shared/domain/brand-supplier';
 
 const ORG = 'org_test';
 
@@ -101,6 +105,105 @@ async function countProducts(org: string): Promise<number> {
 }
 
 describe('processCatalogueImportJob (real SQL via pglite)', () => {
+  it('enriches by barcode then wholesaler SKU, reuses org brands, and records true misses', async () => {
+    await harness.pg.query(
+      `INSERT INTO organizations (id, name, slug) VALUES ($1, 'Test Org', 'test-org')`,
+      [ORG],
+    );
+    await harness.pg.query(`
+      INSERT INTO master_catalogue_entries
+        (barcode, description, api_sku, sigma_sku, ch2_sku, brand_name, manufacturer_name)
+      VALUES
+        ('CAT-BARCODE', 'Barcode product', 'API-ONE', NULL, NULL, 'Shared Brand', 'Maker One'),
+        ('CAT-API', 'API product', 'API-TWO', NULL, NULL, 'Shared Brand', 'Maker One'),
+        ('CAT-SIGMA', 'Sigma product', NULL, 'SIGMA-ONE', NULL, 'Sigma Brand', 'Maker Two'),
+        ('CAT-CH2', 'CH2 product', NULL, NULL, 'CH2-ONE', 'CH2 Brand', 'Maker Three'),
+        ('AMB-1', 'Ambiguous one', 'AMBIGUOUS', NULL, NULL, 'Amb One', 'Maker Four'),
+        ('AMB-2', 'Ambiguous two', NULL, ' ambiguous ', NULL, 'Amb Two', 'Maker Five')
+    `);
+
+    const csv = [
+      'SKU,Name,Barcode,Cost',
+      'IGNORED-SKU,Barcode product,CAT-BARCODE,1.00',
+      'api-two,API product,STORE-API-BARCODE,1.00',
+      ' sigma-one ,Sigma product,STORE-SIGMA-BARCODE,1.00',
+      'CH2-ONE,CH2 product,STORE-CH2-BARCODE,1.00',
+      'AMBIGUOUS,Ambiguous product,STORE-AMB-BARCODE,1.00',
+      'NO-MATCH,Missing product,STORE-MISS-BARCODE,1.00',
+      '',
+    ].join('\n');
+    const { env } = makeEnv(csv);
+    await processCatalogueImportJob(await insertUpload(), env, harness.db);
+
+    const products = await harness.pg.query(
+      `SELECT sku, brand_id FROM products WHERE organization_id = $1 ORDER BY sku`,
+      [ORG],
+    );
+    const bySku = new Map(
+      (products.rows as Array<{ sku: unknown; brand_id: unknown }>).map((row) => [
+        String(row.sku).trim(),
+        row.brand_id == null ? null : Number(row.brand_id),
+      ]),
+    );
+    expect(bySku.get('IGNORED-SKU')).not.toBeNull();
+    expect(bySku.get('api-two')).toBe(bySku.get('IGNORED-SKU'));
+    expect(bySku.get('sigma-one')).not.toBeNull();
+    expect(bySku.get('CH2-ONE')).not.toBeNull();
+    expect(bySku.get('AMBIGUOUS')).toBeNull();
+    expect(bySku.get('NO-MATCH')).toBeNull();
+
+    const catalogueRows = await harness.pg.query(
+      `SELECT id, barcode, api_sku AS "apiSku", sigma_sku AS "sigmaSku", ch2_sku AS "ch2Sku"
+       FROM master_catalogue_entries ORDER BY id`,
+    );
+    const catalogue = catalogueRows.rows as unknown as CatalogueMatchEntry[];
+    const contractCases = [
+      { sku: 'IGNORED-SKU', barcode: 'CAT-BARCODE' },
+      { sku: 'api-two', barcode: 'STORE-API-BARCODE' },
+      { sku: 'sigma-one', barcode: 'STORE-SIGMA-BARCODE' },
+      { sku: 'CH2-ONE', barcode: 'STORE-CH2-BARCODE' },
+      { sku: 'AMBIGUOUS', barcode: 'STORE-AMB-BARCODE' },
+      { sku: 'NO-MATCH', barcode: 'STORE-MISS-BARCODE' },
+    ];
+    for (const input of contractCases) {
+      expect(bySku.get(input.sku) != null).toBe(matchCatalogueEntry(catalogue, input) != null);
+    }
+
+    const brands = await harness.pg.query(
+      `SELECT name, suggested_supplier_name, supplier_id, source
+       FROM brands WHERE organization_id = $1 ORDER BY name`,
+      [ORG],
+    );
+    expect(brands.rows).toEqual([
+      expect.objectContaining({
+        name: 'CH2 Brand',
+        suggested_supplier_name: 'Maker Three',
+        supplier_id: null,
+        source: 'REFERENCE',
+      }),
+      expect.objectContaining({
+        name: 'Shared Brand',
+        suggested_supplier_name: 'Maker One',
+        supplier_id: null,
+        source: 'REFERENCE',
+      }),
+      expect.objectContaining({
+        name: 'Sigma Brand',
+        suggested_supplier_name: 'Maker Two',
+        supplier_id: null,
+        source: 'REFERENCE',
+      }),
+    ]);
+    const corrections = await harness.pg.query(
+      `SELECT barcode, kind FROM catalogue_corrections WHERE organization_id = $1 ORDER BY barcode`,
+      [ORG],
+    );
+    expect(corrections.rows).toEqual([
+      { barcode: 'STORE-AMB-BARCODE', kind: 'UNMATCHED' },
+      { barcode: 'STORE-MISS-BARCODE', kind: 'UNMATCHED' },
+    ]);
+  });
+
   it('classifies insert / update / unchanged / conflict and writes an error report', async () => {
     await seedProduct({ org: ORG, sku: 'S1', barcode: 'B1', name: 'Old Name', cost: 1.0 });
     await seedProduct({ org: ORG, sku: 'S2', barcode: 'B2', name: 'Keep', cost: 2.0 });
@@ -189,12 +292,7 @@ describe('processCatalogueImportJob (real SQL via pglite)', () => {
         ? 'CONFLICT-SKU,Conflict,CONFLICT-BARCODE,2.00'
         : `S${index},Product ${index},B${index},1.00`,
     );
-    const csv = [
-      'SKU,Name,Barcode,Cost',
-      ...validRows,
-      'MALFORMED,,,',
-      '',
-    ].join('\n');
+    const csv = ['SKU,Name,Barcode,Cost', ...validRows, 'MALFORMED,,,', ''].join('\n');
     const { env } = makeEnv(csv);
     const uploadId = await insertUpload();
 

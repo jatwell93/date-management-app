@@ -11,6 +11,12 @@ interface PragmaTableInfoRow {
   name: string;
 }
 
+function addColumnIfMissing(db: DB, table: string, column: string, definition: string): void {
+  const columns = db.prepare(`PRAGMA table_info(${table})`).all() as PragmaTableInfoRow[];
+  if (columns.some((candidate) => candidate.name === column)) return;
+  db.exec(`ALTER TABLE ${table} ADD COLUMN ${column} ${definition}`);
+}
+
 export interface Migration {
   id: number;
   name: string;
@@ -736,6 +742,112 @@ export class MigrationService {
             DROP TABLE IF EXISTS suppliers;
           `);
           Logger.warn('Cannot drop products.supplier_id column in SQLite; leaving it in place');
+        },
+      },
+      {
+        id: 16,
+        name: '016-add-brand-supplier-mapping',
+        up: (db: DB) => {
+          addColumnIfMissing(db, 'products', 'brand_id', 'INTEGER');
+          addColumnIfMissing(
+            db,
+            'expired_item_transactions',
+            'credit_disposition',
+            "TEXT NOT NULL DEFAULT 'PENDING' CHECK (credit_disposition IN ('PENDING', 'DISPOSED'))",
+          );
+
+          db.exec(`
+            CREATE TABLE IF NOT EXISTS brands (
+              id INTEGER PRIMARY KEY AUTOINCREMENT,
+              organization_id TEXT NOT NULL,
+              name TEXT NOT NULL,
+              manufacturer_name TEXT,
+              suggested_supplier_name TEXT,
+              supplier_id INTEGER,
+              source TEXT NOT NULL DEFAULT 'REFERENCE'
+                CHECK (source IN ('REFERENCE', 'USER_ADDED', 'CONFIRMED')),
+              created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+              updated_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+              FOREIGN KEY (organization_id) REFERENCES organizations (id) ON DELETE CASCADE,
+              FOREIGN KEY (supplier_id) REFERENCES suppliers (id) ON DELETE SET NULL,
+              UNIQUE (organization_id, name)
+            );
+            CREATE INDEX IF NOT EXISTS idx_brands_organization_id ON brands (organization_id);
+            CREATE INDEX IF NOT EXISTS idx_brands_supplier_id ON brands (supplier_id);
+            CREATE INDEX IF NOT EXISTS idx_products_brand_id ON products (brand_id);
+
+            CREATE TRIGGER IF NOT EXISTS brands_set_null_products_after_delete
+            AFTER DELETE ON brands
+            BEGIN
+              UPDATE products SET brand_id = NULL WHERE brand_id = OLD.id;
+            END;
+
+            CREATE TABLE IF NOT EXISTS master_catalogue_entries (
+              id INTEGER PRIMARY KEY AUTOINCREMENT,
+              barcode TEXT NOT NULL UNIQUE,
+              description TEXT NOT NULL,
+              api_sku TEXT,
+              sigma_sku TEXT,
+              ch2_sku TEXT,
+              brand_name TEXT NOT NULL,
+              manufacturer_name TEXT,
+              category TEXT,
+              sub_category TEXT,
+              rrp REAL,
+              metro_price REAL,
+              created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+              updated_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
+            );
+            CREATE INDEX IF NOT EXISTS idx_master_catalogue_entries_api_sku
+              ON master_catalogue_entries (api_sku);
+            CREATE INDEX IF NOT EXISTS idx_master_catalogue_entries_sigma_sku
+              ON master_catalogue_entries (sigma_sku);
+            CREATE INDEX IF NOT EXISTS idx_master_catalogue_entries_ch2_sku
+              ON master_catalogue_entries (ch2_sku);
+
+            CREATE TABLE IF NOT EXISTS catalogue_corrections (
+              id INTEGER PRIMARY KEY AUTOINCREMENT,
+              organization_id TEXT NOT NULL,
+              product_id INTEGER,
+              brand_id INTEGER,
+              barcode TEXT,
+              entered_brand_name TEXT,
+              chosen_supplier_id INTEGER,
+              kind TEXT NOT NULL
+                CHECK (kind IN ('UNMATCHED', 'BRAND_ADDED', 'SUPPLIER_OVERRIDE')),
+              status TEXT NOT NULL DEFAULT 'PENDING'
+                CHECK (status IN ('PENDING', 'ACCEPTED', 'REJECTED')),
+              created_by_user_id INTEGER,
+              created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+              updated_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+              FOREIGN KEY (organization_id) REFERENCES organizations (id) ON DELETE CASCADE,
+              FOREIGN KEY (product_id) REFERENCES products (id) ON DELETE SET NULL,
+              FOREIGN KEY (brand_id) REFERENCES brands (id) ON DELETE SET NULL,
+              FOREIGN KEY (chosen_supplier_id) REFERENCES suppliers (id) ON DELETE SET NULL,
+              FOREIGN KEY (created_by_user_id) REFERENCES users (id) ON DELETE SET NULL
+            );
+            CREATE INDEX IF NOT EXISTS idx_catalogue_corrections_organization_id
+              ON catalogue_corrections (organization_id);
+            CREATE INDEX IF NOT EXISTS idx_catalogue_corrections_status
+              ON catalogue_corrections (status);
+            CREATE INDEX IF NOT EXISTS idx_catalogue_corrections_product_id
+              ON catalogue_corrections (product_id);
+            CREATE INDEX IF NOT EXISTS idx_catalogue_corrections_brand_id
+              ON catalogue_corrections (brand_id);
+            CREATE INDEX IF NOT EXISTS idx_expired_transactions_credit_disposition
+              ON expired_item_transactions (credit_disposition);
+          `);
+        },
+        down: (db: DB) => {
+          db.exec(`
+            DROP TABLE IF EXISTS catalogue_corrections;
+            DROP TABLE IF EXISTS master_catalogue_entries;
+            DROP TRIGGER IF EXISTS brands_set_null_products_after_delete;
+            DROP TABLE IF EXISTS brands;
+          `);
+          Logger.warn(
+            'SQLite rollback leaves products.brand_id and expired_item_transactions.credit_disposition in place',
+          );
         },
       },
     ];

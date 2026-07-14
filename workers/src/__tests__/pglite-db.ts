@@ -37,6 +37,7 @@ const SCHEMA_SQL = `
     -- Self-building supplier map (issue: supplier credit claims). Nullable = the
     -- "needs supplier" triage bucket.
     supplier_id INTEGER,
+    brand_id INTEGER,
     created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
     updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
     UNIQUE (organization_id, sku),
@@ -198,6 +199,8 @@ const SCHEMA_SQL = `
     units_discarded INTEGER,
     financial_loss DOUBLE PRECISION,
     markdown_level SMALLINT,
+    credit_disposition TEXT NOT NULL DEFAULT 'PENDING'
+      CHECK (credit_disposition IN ('PENDING', 'DISPOSED')),
     transaction_date TIMESTAMPTZ NOT NULL DEFAULT NOW(),
     created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
     updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
@@ -228,6 +231,69 @@ const SCHEMA_SQL = `
     updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
     UNIQUE (organization_id, name)
   );
+
+  CREATE TABLE brands (
+    id SERIAL PRIMARY KEY,
+    organization_id TEXT NOT NULL REFERENCES organizations (id) ON DELETE CASCADE,
+    name TEXT NOT NULL,
+    manufacturer_name TEXT,
+    suggested_supplier_name TEXT,
+    supplier_id INTEGER REFERENCES suppliers (id) ON DELETE SET NULL,
+    source TEXT NOT NULL DEFAULT 'REFERENCE'
+      CHECK (source IN ('REFERENCE', 'USER_ADDED', 'CONFIRMED')),
+    created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+    updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+    UNIQUE (organization_id, name)
+  );
+
+  CREATE INDEX idx_brands_organization_id ON brands (organization_id);
+  CREATE INDEX idx_brands_supplier_id ON brands (supplier_id);
+  CREATE INDEX idx_products_brand_id ON products (brand_id);
+
+  CREATE TABLE master_catalogue_entries (
+    id SERIAL PRIMARY KEY,
+    barcode TEXT NOT NULL UNIQUE,
+    description TEXT NOT NULL,
+    api_sku TEXT,
+    sigma_sku TEXT,
+    ch2_sku TEXT,
+    brand_name TEXT NOT NULL,
+    manufacturer_name TEXT,
+    category TEXT,
+    sub_category TEXT,
+    rrp DOUBLE PRECISION,
+    metro_price DOUBLE PRECISION,
+    created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+    updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+  );
+
+  CREATE INDEX idx_master_catalogue_entries_api_sku ON master_catalogue_entries (api_sku);
+  CREATE INDEX idx_master_catalogue_entries_sigma_sku ON master_catalogue_entries (sigma_sku);
+  CREATE INDEX idx_master_catalogue_entries_ch2_sku ON master_catalogue_entries (ch2_sku);
+
+  CREATE TABLE catalogue_corrections (
+    id SERIAL PRIMARY KEY,
+    organization_id TEXT NOT NULL REFERENCES organizations (id) ON DELETE CASCADE,
+    product_id INTEGER,
+    brand_id INTEGER REFERENCES brands (id) ON DELETE SET NULL,
+    barcode TEXT,
+    entered_brand_name TEXT,
+    chosen_supplier_id INTEGER REFERENCES suppliers (id) ON DELETE SET NULL,
+    kind TEXT NOT NULL CHECK (kind IN ('UNMATCHED', 'BRAND_ADDED', 'SUPPLIER_OVERRIDE')),
+    status TEXT NOT NULL DEFAULT 'PENDING'
+      CHECK (status IN ('PENDING', 'ACCEPTED', 'REJECTED')),
+    created_by_user_id INTEGER REFERENCES users (id) ON DELETE SET NULL,
+    created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+    updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+  );
+
+  CREATE INDEX idx_catalogue_corrections_organization_id
+    ON catalogue_corrections (organization_id);
+  CREATE INDEX idx_catalogue_corrections_status ON catalogue_corrections (status);
+  CREATE INDEX idx_catalogue_corrections_product_id ON catalogue_corrections (product_id);
+  CREATE INDEX idx_catalogue_corrections_brand_id ON catalogue_corrections (brand_id);
+  CREATE INDEX idx_expired_transactions_credit_disposition
+    ON expired_item_transactions (credit_disposition);
 
   CREATE TABLE credit_claims (
     id SERIAL PRIMARY KEY,

@@ -29,14 +29,45 @@ export interface ClaimablePoolItem {
   costPrice: number;
   expectedCreditUnits: number | null;
   expectedCreditValue: number | null;
+  brandId?: number | null;
+  brandName?: string | null;
+  brandSource?: string | null;
+  suggestedSupplierName?: string | null;
 }
+
+export type ClaimabilityState = 'NEEDS_BRAND' | 'PENDING_CONFIRMATION' | 'CLAIMABLE' | 'NO_POLICY';
 
 export interface ClaimablePoolGroup {
   supplierId: number | null;
   supplierName: string | null;
   items: ClaimablePoolItem[];
   expectedCreditValueTotal: number;
+  state: ClaimabilityState;
 }
+
+export interface Brand {
+  id: number;
+  name: string;
+  manufacturerName: string | null;
+  suggestedSupplierName: string | null;
+  supplierId: number | null;
+  source: 'REFERENCE' | 'USER_ADDED' | 'CONFIRMED';
+}
+
+export interface BrandReviewItem {
+  productId: number;
+  sku: string;
+  barcode: string;
+  productName: string;
+  brand: Brand | null;
+}
+
+export interface BrandReviewPage {
+  items: BrandReviewItem[];
+  nextCursor: number | null;
+}
+
+export type CatalogueReviewState = 'NEEDS_BRAND' | 'PENDING_CONFIRMATION' | 'CONFIRMED';
 
 export interface CreditClaimPhoto {
   id: number;

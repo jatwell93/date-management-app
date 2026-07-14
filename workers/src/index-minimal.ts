@@ -68,6 +68,7 @@ import {
   type MarkdownBasis,
   type MarkdownMatrixConfig,
 } from '../../shared/domain/markdown';
+import { isCatalogueReviewState } from '../../shared/domain/brand-supplier';
 
 const DIRECT_UPLOAD_THRESHOLD_BYTES = 2 * 1024 * 1024;
 const PRESIGNED_UPLOAD_TTL_SECONDS = 15 * 60;
@@ -169,13 +170,12 @@ const RE_USER_ID = /^\/api\/users\/\d+$/;
 const RE_INVENTORY_ID = /^\/api\/inventory-items\/\d+$/;
 const RE_STORE_AREA_ID = /^\/api\/store-areas\/\d+$/;
 const RE_STORE_AREA_CHECK_CYCLE_COMPLETE = /^\/api\/store-areas\/check-cycles\/\d+\/complete$/;
+const RE_SUPPLIER_CREDIT_BRAND_SUPPLIER = /^\/api\/supplier-credits\/brands\/\d+\/supplier$/;
+const RE_SUPPLIER_CREDIT_PRODUCT_SUPPLIER = /^\/api\/supplier-credits\/products\/\d+\/supplier$/;
+const RE_SUPPLIER_CREDIT_DISPOSE = /^\/api\/supplier-credits\/claimable-pool\/\d+\/dispose$/;
+const RE_PLATFORM_CATALOGUE_CORRECTION = /^\/api\/platform\/catalogue-corrections\/\d+$/;
 const OPEN_CREDIT_CLAIM_STATUSES = ['DRAFT', 'SENDING', 'SENT', 'ACKNOWLEDGED'];
-const SETTLED_CREDIT_CLAIM_STATUSES = [
-  'CREDITED',
-  'PARTIALLY_CREDITED',
-  'REJECTED',
-  'CANCELLED',
-];
+const SETTLED_CREDIT_CLAIM_STATUSES = ['CREDITED', 'PARTIALLY_CREDITED', 'REJECTED', 'CANCELLED'];
 export const MINIMAL_API_ROUTES: MinimalApiRoute[] = [
   ['POST', '/api/auth/login', handleLogin],
   ['POST', '/api/auth/register', handleRegister],
@@ -225,9 +225,17 @@ export const MINIMAL_API_ROUTES: MinimalApiRoute[] = [
   ['GET', '/api/expired-items', handleGetExpiredItems],
   ['GET', '/api/expired-items/reports/expired-losses', handleGetExpiredLossesReport],
   ['GET', '/api/supplier-credits/suppliers', handleListSuppliers],
+  ['GET', '/api/supplier-credits/brands', handleListBrands],
+  ['GET', '/api/supplier-credits/brand-review', handleBrandReview],
+  ['POST', '/api/supplier-credits/brands', handleAddBrand],
+  ['PUT', RE_SUPPLIER_CREDIT_BRAND_SUPPLIER, handleConfirmBrandSupplier, 'path'],
+  ['PUT', RE_SUPPLIER_CREDIT_PRODUCT_SUPPLIER, handleAssignProductSupplier, 'path'],
+  ['POST', RE_SUPPLIER_CREDIT_DISPOSE, handleDisposeClaimableWriteOff, 'path'],
   ['GET', '/api/supplier-credits/claimable-pool', handleGetClaimablePool],
   ['GET', '/api/supplier-credits/recovery-report', handleGetRecoveryReport],
   ['GET', '/api/supplier-credits/claims', handleListCreditClaims],
+  ['GET', '/api/platform/catalogue-corrections', handleListCatalogueCorrections],
+  ['PATCH', RE_PLATFORM_CATALOGUE_CORRECTION, handleReviewCatalogueCorrection, 'path'],
   ['POST', '/api/expired-items/process', handleProcessExpiredItem],
   ['GET', '/api/subscription/current', handleGetCurrentSubscription],
   ['GET', '/api/subscription/trial-status', handleGetTrialStatus],
@@ -1280,14 +1288,193 @@ async function handleListSuppliers(request: Request, db: Database, env: Env): Pr
   return jsonResponse(suppliers, 200, env);
 }
 
-/**
- * GET /api/supplier-credits/claimable-pool
- */
-async function handleGetClaimablePool(
+export function isPlatformAdminUser(
+  userId: number | undefined,
+  configuration: string | undefined,
+): boolean {
+  if (userId == null || !configuration) return false;
+  const tokens = configuration.split(',').map((token) => token.trim());
+  if (tokens.length === 0 || tokens.some((token) => !/^[1-9]\d*$/.test(token))) return false;
+  return tokens.map(Number).includes(userId);
+}
+
+async function handleListBrands(request: Request, db: Database, env: Env): Promise<Response> {
+  const auth = await authenticateApiRequest(request, env, db);
+  if (auth instanceof Response) return auth;
+  return jsonResponse(await db.listBrands(auth.organizationId), 200, env);
+}
+
+async function handleBrandReview(request: Request, db: Database, env: Env): Promise<Response> {
+  const auth = await authenticateApiRequest(request, env, db);
+  if (auth instanceof Response) return auth;
+  const query = new URL(request.url).searchParams;
+  const cursor = query.get('cursor');
+  const state = query.get('state');
+  if (state != null && !isCatalogueReviewState(state)) {
+    return errorResponse(
+      'Catalogue review state must be NEEDS_BRAND, PENDING_CONFIRMATION, or CONFIRMED',
+      400,
+      env,
+    );
+  }
+  const requestedLimit = Number(query.get('limit') ?? 50);
+  return jsonResponse(
+    await db.reviewBrands(auth.organizationId, {
+      state: state ?? undefined,
+      group: query.get('group') ?? undefined,
+      cursor: cursor == null ? undefined : (parsePositiveInt(cursor) ?? undefined),
+      limit: Number.isInteger(requestedLimit) ? Math.min(100, Math.max(1, requestedLimit)) : 50,
+    }),
+    200,
+    env,
+  );
+}
+
+async function handleAddBrand(request: Request, db: Database, env: Env): Promise<Response> {
+  const auth = await authenticateApiRequest(request, env, db);
+  if (auth instanceof Response) return auth;
+  const body = (await request.json().catch(() => null)) as {
+    productId?: unknown;
+    name?: unknown;
+    supplierId?: unknown;
+  } | null;
+  const name = typeof body?.name === 'string' ? body.name.trim() : '';
+  const productId = parsePositiveInt(String(body?.productId ?? ''));
+  const supplierId = body?.supplierId == null ? null : parsePositiveInt(String(body.supplierId));
+  const invalidSupplierId = body?.supplierId != null && supplierId == null;
+  if ([productId == null, name.length === 0, invalidSupplierId].includes(true)) {
+    return errorResponse(
+      'Valid productId, brand name, and optional supplierId are required',
+      400,
+      env,
+    );
+  }
+  const brand = await db.addBrand(auth.organizationId, auth.userId, {
+    productId: productId as number,
+    name,
+    supplierId,
+  });
+  if (!brand) return errorResponse('Product or supplier not found', 404, env);
+  return jsonResponse(brand, 201, env);
+}
+
+async function handleConfirmBrandSupplier(
+  request: Request,
+  db: Database,
+  env: Env,
+  pathname: string,
+): Promise<Response> {
+  const auth = await authenticateApiRequest(request, env, db);
+  if (auth instanceof Response) return auth;
+  const brandId = parsePositiveInt(pathname.split('/')[4] ?? '');
+  const body = (await request.json().catch(() => null)) as { supplierId?: unknown } | null;
+  if (brandId == null || !isPositiveInteger(body?.supplierId)) {
+    return errorResponse('Valid brand and supplier IDs are required', 400, env);
+  }
+  const brand = await db.confirmBrandSupplier(auth.organizationId, brandId, body.supplierId);
+  return brand
+    ? jsonResponse(brand, 200, env)
+    : errorResponse('Brand or supplier not found', 404, env);
+}
+
+async function handleAssignProductSupplier(
+  request: Request,
+  db: Database,
+  env: Env,
+  pathname: string,
+): Promise<Response> {
+  const auth = await authenticateApiRequest(request, env, db);
+  if (auth instanceof Response) return auth;
+  const productId = parsePositiveInt(pathname.split('/')[4] ?? '');
+  const body = (await request.json().catch(() => null)) as { supplierId?: unknown } | null;
+  const supplierId = body?.supplierId == null ? null : parsePositiveInt(String(body.supplierId));
+  const invalidSupplierId = body?.supplierId != null && supplierId == null;
+  if ([productId == null, invalidSupplierId].includes(true)) {
+    return errorResponse('Valid product and optional supplier IDs are required', 400, env);
+  }
+  const updated = await db.assignProductSupplier(
+    auth.organizationId,
+    auth.userId,
+    productId as number,
+    supplierId,
+  );
+  if (!updated) return errorResponse('Product or supplier not found', 404, env);
+  return jsonResponse({ productId, supplierId }, 200, env);
+}
+
+async function handleDisposeClaimableWriteOff(
+  request: Request,
+  db: Database,
+  env: Env,
+  pathname: string,
+): Promise<Response> {
+  const auth = await authenticateApiRequest(request, env, db);
+  if (auth instanceof Response) return auth;
+  const transactionId = parsePositiveInt(pathname.split('/')[4] ?? '');
+  if (transactionId == null) return errorResponse('Invalid expired transaction ID', 400, env);
+  const result = await db.disposeClaimableWriteOff(auth.organizationId, transactionId);
+  if (result === 'NOT_FOUND') return errorResponse('Expired transaction not found', 404, env);
+  if (result === 'CLAIMED')
+    return errorResponse('Expired transaction has entered a claim', 409, env);
+  return jsonResponse({ transactionId, creditDisposition: 'DISPOSED' }, 200, env);
+}
+
+async function handleListCatalogueCorrections(
   request: Request,
   db: Database,
   env: Env,
 ): Promise<Response> {
+  const auth = await authenticateApiRequest(request, env, db);
+  if (auth instanceof Response) return auth;
+  if (!isPlatformAdminUser(auth.userId, env.PLATFORM_ADMIN_USER_IDS)) {
+    return errorResponse('Platform catalogue review access required', 403, env);
+  }
+  const query = new URL(request.url).searchParams;
+  const cursor = query.get('cursor');
+  return jsonResponse(
+    await db.listCatalogueCorrections({
+      status: query.get('status') ?? 'PENDING',
+      cursor: cursor == null ? undefined : (parsePositiveInt(cursor) ?? undefined),
+      limit: 50,
+    }),
+    200,
+    env,
+  );
+}
+
+async function handleReviewCatalogueCorrection(
+  request: Request,
+  db: Database,
+  env: Env,
+  pathname: string,
+): Promise<Response> {
+  const auth = await authenticateApiRequest(request, env, db);
+  if (auth instanceof Response) return auth;
+  if (!isPlatformAdminUser(auth.userId, env.PLATFORM_ADMIN_USER_IDS)) {
+    return errorResponse('Platform catalogue review access required', 403, env);
+  }
+  const id = parsePositiveInt(pathname.split('/')[4] ?? '');
+  const body = (await request.json().catch(() => null)) as { status?: unknown } | null;
+  const status = body?.status;
+  const validStatus = ['ACCEPTED', 'REJECTED'].includes(String(status));
+  if ([id == null, !validStatus].includes(true)) {
+    return errorResponse('Status must be ACCEPTED or REJECTED', 400, env);
+  }
+  const result = await db.reviewCatalogueCorrection(
+    id as number,
+    status as 'ACCEPTED' | 'REJECTED',
+  );
+  if (result === 'NOT_FOUND') return errorResponse('Catalogue correction not found', 404, env);
+  if (result === 'ALREADY_REVIEWED') {
+    return errorResponse('Catalogue correction has already been reviewed', 409, env);
+  }
+  return jsonResponse({ id, status }, 200, env);
+}
+
+/**
+ * GET /api/supplier-credits/claimable-pool
+ */
+async function handleGetClaimablePool(request: Request, db: Database, env: Env): Promise<Response> {
   const auth = await authenticateApiRequest(request, env, db);
   if (auth instanceof Response) return auth;
 
@@ -1313,11 +1500,7 @@ async function handleGetRecoveryReport(
 /**
  * GET /api/supplier-credits/claims?view=open|settled|all
  */
-async function handleListCreditClaims(
-  request: Request,
-  db: Database,
-  env: Env,
-): Promise<Response> {
+async function handleListCreditClaims(request: Request, db: Database, env: Env): Promise<Response> {
   const auth = await authenticateApiRequest(request, env, db);
   if (auth instanceof Response) return auth;
 

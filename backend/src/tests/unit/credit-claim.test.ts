@@ -168,6 +168,66 @@ describe('credit-claim shared domain', () => {
 
       expect(groups.map((g) => g.supplierName)).toEqual(['Blackmores', 'Nature’s Own']);
     });
+
+    it('groups catalogue suggestions by suggested supplier in pending confirmation', () => {
+      const groups = rollupClaimablePool([
+        row({
+          transactionId: 1,
+          supplierId: null,
+          supplierName: null,
+          policyWriteOffQty: null,
+          policyCreditQty: null,
+          brandId: 1,
+          brandName: 'Blackmores',
+          brandSource: 'REFERENCE',
+          suggestedSupplierName: ' Blackmores Group ',
+        }),
+        row({
+          transactionId: 2,
+          supplierId: null,
+          supplierName: null,
+          policyWriteOffQty: null,
+          policyCreditQty: null,
+          brandId: 2,
+          brandName: 'BioCeuticals',
+          brandSource: 'REFERENCE',
+          suggestedSupplierName: 'Blackmores Group',
+        }),
+      ]);
+
+      expect(groups).toHaveLength(1);
+      expect(groups[0]).toMatchObject({
+        supplierId: null,
+        supplierName: 'Blackmores Group',
+        state: 'PENDING_CONFIRMATION',
+      });
+      expect(groups[0].items.map((item) => item.brandName)).toEqual(['Blackmores', 'BioCeuticals']);
+    });
+
+    it('classifies confirmed suppliers with and without policy', () => {
+      const groups = rollupClaimablePool([
+        row({ transactionId: 1, policyWriteOffQty: null, policyCreditQty: null }),
+        row({ transactionId: 2, supplierId: 20, supplierName: 'With Policy' }),
+      ]);
+
+      expect(groups.find((group) => group.supplierId === 10)?.state).toBe('NO_POLICY');
+      expect(groups.find((group) => group.supplierId === 20)?.state).toBe('CLAIMABLE');
+    });
+
+    it('keeps the product override ahead of a different confirmed brand supplier', () => {
+      const groups = rollupClaimablePool([
+        row({
+          supplierId: 10,
+          supplierName: 'Override Supplier',
+          brandId: 1,
+          brandName: 'Brand',
+          brandSource: 'CONFIRMED',
+          brandSupplierId: 20,
+          brandSupplierName: 'Brand Supplier',
+        }),
+      ]);
+      expect(groups[0].supplierName).toBe('Override Supplier');
+    });
   });
 
   describe('rollupRecoveryReport', () => {
