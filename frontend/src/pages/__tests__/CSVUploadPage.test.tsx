@@ -710,7 +710,7 @@ describe('CSVUploadPage expiry import', () => {
     expect(screen.getByText('Errors: 1')).toBeInTheDocument();
   });
 
-  it('restores the last-upload summary from local storage on page load', () => {
+  it('restores the last-upload summary and links completed catalogues to brand review', async () => {
     localStorage.setItem(
       'csvUpload:lastUploadSummary',
       JSON.stringify({
@@ -732,6 +732,8 @@ describe('CSVUploadPage expiry import', () => {
     expect(screen.getByText('Products imported: 12')).toBeInTheDocument();
     expect(screen.getByText('Products updated: 2')).toBeInTheDocument();
     expect(screen.getByText('Rows rejected: 1')).toBeInTheDocument();
+    await userEvent.click(screen.getByRole('button', { name: 'Review brand matches' }));
+    expect(mockNavigate).toHaveBeenCalledWith('/supplier-credits?view=catalogue-review');
   });
 
   it('downloads CSV, XLSX, and XLS templates', async () => {

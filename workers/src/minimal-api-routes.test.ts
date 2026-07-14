@@ -158,13 +158,21 @@ describe('minimal API route table', () => {
     );
   });
 
-  it('registers supplier credit read routes used by the frontend', () => {
+  it('registers supplier credit brand review, correction, and disposal routes', () => {
     expect(getMinimalRoutes()).toEqual(
       expect.arrayContaining([
         expect.arrayContaining(['GET', '/api/supplier-credits/suppliers']),
+        expect.arrayContaining(['GET', '/api/supplier-credits/brands']),
+        expect.arrayContaining(['GET', '/api/supplier-credits/brand-review']),
+        expect.arrayContaining(['POST', '/api/supplier-credits/brands']),
+        expect.arrayContaining(['PUT', /^\/api\/supplier-credits\/brands\/\d+\/supplier$/]),
+        expect.arrayContaining(['PUT', /^\/api\/supplier-credits\/products\/\d+\/supplier$/]),
+        expect.arrayContaining(['POST', /^\/api\/supplier-credits\/claimable-pool\/\d+\/dispose$/]),
         expect.arrayContaining(['GET', '/api/supplier-credits/claimable-pool']),
         expect.arrayContaining(['GET', '/api/supplier-credits/recovery-report']),
         expect.arrayContaining(['GET', '/api/supplier-credits/claims']),
+        expect.arrayContaining(['GET', '/api/platform/catalogue-corrections']),
+        expect.arrayContaining(['PATCH', /^\/api\/platform\/catalogue-corrections\/\d+$/]),
       ]),
     );
   });
@@ -527,6 +535,69 @@ describe('minimal API route table', () => {
       'SENT',
       'ACKNOWLEDGED',
     ]);
+  });
+
+  it('rejects claimability vocabulary on catalogue review', async () => {
+    mockedAuthenticateClerkRequest.mockResolvedValue(authenticatedClerkOrgContext);
+    const reviewBrands = vi.fn().mockResolvedValue({ items: [], nextCursor: null });
+    const database = {
+      sql: vi.fn().mockResolvedValue([{ id: 7, organizationId: 'org_123', role: 'admin' }]),
+      reviewBrands,
+    } as unknown as Database;
+
+    const response = await resolveMinimalGet(
+      '/api/supplier-credits/brand-review',
+      database,
+      '/api/supplier-credits/brand-review?state=CLAIMABLE',
+    );
+
+    expect(response?.status).toBe(400);
+    expect(reviewBrands).not.toHaveBeenCalled();
+  });
+
+  it('passes the CONFIRMED catalogue-review state to the database', async () => {
+    mockedAuthenticateClerkRequest.mockResolvedValue(authenticatedClerkOrgContext);
+    const reviewBrands = vi.fn().mockResolvedValue({ items: [], nextCursor: null });
+    const database = {
+      sql: vi.fn().mockResolvedValue([{ id: 7, organizationId: 'org_123', role: 'admin' }]),
+      reviewBrands,
+    } as unknown as Database;
+
+    const response = await resolveMinimalGet(
+      '/api/supplier-credits/brand-review',
+      database,
+      '/api/supplier-credits/brand-review?state=CONFIRMED',
+    );
+
+    expect(response?.status).toBe(200);
+    expect(reviewBrands).toHaveBeenCalledWith('org_123', {
+      state: 'CONFIRMED',
+      group: undefined,
+      cursor: undefined,
+      limit: 50,
+    });
+  });
+
+  it('conflicts when a platform correction already has a terminal decision', async () => {
+    mockedAuthenticateClerkRequest.mockResolvedValue(authenticatedClerkOrgContext);
+    const database = {
+      sql: vi.fn().mockResolvedValue([{ id: 7, organizationId: 'org_123', role: 'admin' }]),
+      reviewCatalogueCorrection: vi.fn().mockResolvedValue('ALREADY_REVIEWED'),
+    } as unknown as Database;
+    const adminEnv = { PLATFORM_ADMIN_USER_IDS: '7' } as Env;
+
+    const response = await resolveMinimalApiRoute(getMinimalRoutes(), {
+      request: new Request('https://example.com/api/platform/catalogue-corrections/12', {
+        method: 'PATCH',
+        body: JSON.stringify({ status: 'REJECTED' }),
+      }),
+      pathname: '/api/platform/catalogue-corrections/12',
+      method: 'PATCH',
+      db: database,
+      env: adminEnv,
+    });
+
+    expect(response?.status).toBe(409);
   });
 
   it('creates default organization usage with production-required timestamps', async () => {

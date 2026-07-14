@@ -76,7 +76,8 @@ brand-identity/
 
 # Real pharmacy data with sensitive information
 backend/src/tests/fixtures/real-pharmacy-products.csv
-supplier-doc-examples/
+supplier-doc-examples/*
+!supplier-doc-examples/sample_100_ipa_price_brands.xlsx
 
 # Coverage
 coverage/

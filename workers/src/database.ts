@@ -17,6 +17,7 @@ import {
   WORKERS_SOLD_THROUGH_STATUS,
 } from '../../shared/domain/disposition';
 import { getMarkdownLevelForDays, MARKDOWN_WINDOWS } from '../../shared/domain/markdown';
+import type { CatalogueReviewState } from '../../shared/domain/brand-supplier';
 import {
   resolveBayState,
   rollupCoverage,
@@ -89,6 +90,40 @@ export interface Database {
 
   // Supplier credit-claim queries
   listSuppliers(organizationId: string): Promise<Supplier[]>;
+  listBrands(organizationId: string): Promise<Brand[]>;
+  reviewBrands(
+    organizationId: string,
+    options: { state?: CatalogueReviewState; group?: string; cursor?: number; limit: number },
+  ): Promise<{ items: BrandReviewItem[]; nextCursor: number | null }>;
+  addBrand(
+    organizationId: string,
+    userId: number,
+    data: { productId: number; name: string; supplierId: number | null },
+  ): Promise<Brand | null>;
+  confirmBrandSupplier(
+    organizationId: string,
+    brandId: number,
+    supplierId: number,
+  ): Promise<Brand | null>;
+  assignProductSupplier(
+    organizationId: string,
+    userId: number,
+    productId: number,
+    supplierId: number | null,
+  ): Promise<boolean>;
+  disposeClaimableWriteOff(
+    organizationId: string,
+    transactionId: number,
+  ): Promise<'DISPOSED' | 'ALREADY_DISPOSED' | 'CLAIMED' | 'NOT_FOUND'>;
+  listCatalogueCorrections(options: {
+    status: string;
+    cursor?: number;
+    limit: number;
+  }): Promise<{ items: CatalogueCorrection[]; nextCursor: number | null }>;
+  reviewCatalogueCorrection(
+    id: number,
+    status: 'ACCEPTED' | 'REJECTED',
+  ): Promise<'UPDATED' | 'ALREADY_REVIEWED' | 'NOT_FOUND'>;
   getClaimablePool(organizationId: string): Promise<ClaimablePoolGroup[]>;
   getRecoveryReport(organizationId: string): Promise<RecoveryReport>;
   listCreditClaims(organizationId: string, statuses?: string[]): Promise<CreditClaim[]>;
@@ -257,6 +292,40 @@ export interface Supplier {
   policyWriteOffQty: number | null;
   policyCreditQty: number | null;
   followUpDays: number;
+}
+
+export interface Brand {
+  id: number;
+  name: string;
+  manufacturerName: string | null;
+  suggestedSupplierName: string | null;
+  supplierId: number | null;
+  source: string;
+  supplier?: Supplier | null;
+  productCount?: number;
+}
+
+export interface BrandReviewItem {
+  productId: number;
+  sku: string;
+  barcode: string;
+  productName: string;
+  brand: Brand | null;
+}
+
+export interface CatalogueCorrection {
+  id: number;
+  organizationId: string;
+  productId: number | null;
+  brandId: number | null;
+  barcode: string | null;
+  enteredBrandName: string | null;
+  chosenSupplierId: number | null;
+  kind: string;
+  status: string;
+  createdByUserId: number | null;
+  createdAt: string;
+  organization: { id: string; name: string };
 }
 
 export interface CreditClaimPhoto {
@@ -1355,11 +1424,266 @@ export function createWorkersDatabase(env: Env): Database {
         name: row.name,
         contactEmail: row.contactEmail,
         creditPolicyNote: row.creditPolicyNote ?? '',
-        policyWriteOffQty:
-          row.policyWriteOffQty == null ? null : Number(row.policyWriteOffQty),
+        policyWriteOffQty: row.policyWriteOffQty == null ? null : Number(row.policyWriteOffQty),
         policyCreditQty: row.policyCreditQty == null ? null : Number(row.policyCreditQty),
         followUpDays: row.followUpDays == null ? 7 : Number(row.followUpDays),
       }));
+    },
+
+    async listBrands(organizationId: string): Promise<Brand[]> {
+      const rows = (await sql`
+        SELECT b.id, b.name,
+               b.manufacturer_name AS "manufacturerName",
+               b.suggested_supplier_name AS "suggestedSupplierName",
+               b.supplier_id AS "supplierId", b.source,
+               COUNT(p.id)::int AS "productCount"
+        FROM brands b
+        LEFT JOIN products p ON p.brand_id = b.id AND p.organization_id = b.organization_id
+        WHERE b.organization_id = ${organizationId}
+        GROUP BY b.id
+        ORDER BY b.suggested_supplier_name ASC NULLS LAST, b.name ASC, b.id ASC
+      `) as Array<Record<string, unknown>>;
+      return rows.map((row) => ({
+        id: Number(row.id),
+        name: String(row.name),
+        manufacturerName: (row.manufacturerName as string | null) ?? null,
+        suggestedSupplierName: (row.suggestedSupplierName as string | null) ?? null,
+        supplierId: row.supplierId == null ? null : Number(row.supplierId),
+        source: String(row.source),
+        productCount: Number(row.productCount ?? 0),
+      }));
+    },
+
+    async reviewBrands(
+      organizationId,
+      options,
+    ): Promise<{
+      items: BrandReviewItem[];
+      nextCursor: number | null;
+    }> {
+      const state = options.state ?? null;
+      const group = options.group ?? null;
+      const cursor = options.cursor ?? 0;
+      const rows = (await sql`
+        SELECT p.id AS "productId", p.sku, p.barcode, p.name AS "productName",
+               b.id AS "brandId", b.name AS "brandName",
+               b.manufacturer_name AS "manufacturerName",
+               b.suggested_supplier_name AS "suggestedSupplierName",
+               b.supplier_id AS "brandSupplierId", b.source AS "brandSource"
+        FROM products p
+        LEFT JOIN brands b ON b.id = p.brand_id AND b.organization_id = p.organization_id
+        WHERE p.organization_id = ${organizationId}
+          AND p.id > ${cursor}
+          AND (${state}::text IS NULL
+            OR (${state} = 'NEEDS_BRAND' AND p.brand_id IS NULL)
+            OR (${state} = 'PENDING_CONFIRMATION' AND b.source = 'REFERENCE')
+            OR (${state} = 'CONFIRMED' AND b.source IN ('USER_ADDED', 'CONFIRMED') AND b.supplier_id IS NOT NULL))
+          AND (${group}::text IS NULL OR b.suggested_supplier_name = ${group})
+        ORDER BY p.id ASC
+        LIMIT ${options.limit + 1}
+      `) as Array<Record<string, unknown>>;
+      const hasMore = rows.length > options.limit;
+      const page = hasMore ? rows.slice(0, options.limit) : rows;
+      return {
+        items: page.map((row) => ({
+          productId: Number(row.productId),
+          sku: String(row.sku ?? ''),
+          barcode: String(row.barcode ?? ''),
+          productName: String(row.productName ?? ''),
+          brand:
+            row.brandId == null
+              ? null
+              : {
+                  id: Number(row.brandId),
+                  name: String(row.brandName),
+                  manufacturerName: (row.manufacturerName as string | null) ?? null,
+                  suggestedSupplierName: (row.suggestedSupplierName as string | null) ?? null,
+                  supplierId: row.brandSupplierId == null ? null : Number(row.brandSupplierId),
+                  source: String(row.brandSource),
+                },
+        })),
+        nextCursor: hasMore ? Number(page[page.length - 1]?.productId) : null,
+      };
+    },
+
+    async addBrand(organizationId, userId, data): Promise<Brand | null> {
+      const rows = (await sql`
+        WITH product_target AS (
+          SELECT id, barcode FROM products
+          WHERE id = ${data.productId} AND organization_id = ${organizationId}
+        ), valid_supplier AS (
+          SELECT id FROM suppliers
+          WHERE id = ${data.supplierId}::integer AND organization_id = ${organizationId}
+        ), brand_row AS (
+          INSERT INTO brands (
+            organization_id, name, supplier_id, source, created_at, updated_at
+          )
+          SELECT ${organizationId}, ${data.name}, ${data.supplierId}::integer,
+                 'USER_ADDED', NOW(), NOW()
+          FROM product_target
+          WHERE ${data.supplierId}::integer IS NULL OR EXISTS (SELECT 1 FROM valid_supplier)
+          ON CONFLICT (organization_id, name) DO UPDATE SET
+            supplier_id = EXCLUDED.supplier_id, source = 'USER_ADDED', updated_at = NOW()
+          RETURNING id, name, manufacturer_name, suggested_supplier_name, supplier_id, source
+        ), attached AS (
+          UPDATE products p SET brand_id = b.id, updated_at = NOW()
+          FROM brand_row b, product_target pt
+          WHERE p.id = pt.id AND p.organization_id = ${organizationId}
+          RETURNING p.id, p.barcode
+        ), correction AS (
+          INSERT INTO catalogue_corrections (
+            organization_id, product_id, brand_id, barcode, entered_brand_name,
+            chosen_supplier_id, kind, status, created_by_user_id, created_at, updated_at
+          )
+          SELECT ${organizationId}, a.id, b.id, NULLIF(BTRIM(a.barcode), ''), b.name,
+                 ${data.supplierId}::integer, 'BRAND_ADDED', 'PENDING', ${userId}, NOW(), NOW()
+          FROM attached a CROSS JOIN brand_row b
+          RETURNING id
+        )
+        SELECT id, name, manufacturer_name AS "manufacturerName",
+               suggested_supplier_name AS "suggestedSupplierName",
+               supplier_id AS "supplierId", source
+        FROM brand_row
+      `) as Array<Record<string, unknown>>;
+      const row = rows[0];
+      return row
+        ? {
+            id: Number(row.id),
+            name: String(row.name),
+            manufacturerName: (row.manufacturerName as string | null) ?? null,
+            suggestedSupplierName: (row.suggestedSupplierName as string | null) ?? null,
+            supplierId: row.supplierId == null ? null : Number(row.supplierId),
+            source: String(row.source),
+          }
+        : null;
+    },
+
+    async confirmBrandSupplier(organizationId, brandId, supplierId): Promise<Brand | null> {
+      const rows = (await sql`
+        UPDATE brands b SET supplier_id = s.id, source = 'CONFIRMED', updated_at = NOW()
+        FROM suppliers s
+        WHERE b.id = ${brandId} AND b.organization_id = ${organizationId}
+          AND s.id = ${supplierId} AND s.organization_id = ${organizationId}
+        RETURNING b.id, b.name, b.manufacturer_name AS "manufacturerName",
+                  b.suggested_supplier_name AS "suggestedSupplierName",
+                  b.supplier_id AS "supplierId", b.source
+      `) as Array<Record<string, unknown>>;
+      const row = rows[0];
+      return row
+        ? {
+            id: Number(row.id),
+            name: String(row.name),
+            manufacturerName: (row.manufacturerName as string | null) ?? null,
+            suggestedSupplierName: (row.suggestedSupplierName as string | null) ?? null,
+            supplierId: Number(row.supplierId),
+            source: String(row.source),
+          }
+        : null;
+    },
+
+    async assignProductSupplier(organizationId, userId, productId, supplierId): Promise<boolean> {
+      const rows = await sql`
+        WITH valid_supplier AS (
+          SELECT id FROM suppliers
+          WHERE id = ${supplierId}::integer AND organization_id = ${organizationId}
+        ), updated AS (
+          UPDATE products p SET supplier_id = ${supplierId}::integer, updated_at = NOW()
+          WHERE p.id = ${productId} AND p.organization_id = ${organizationId}
+            AND (${supplierId}::integer IS NULL OR EXISTS (SELECT 1 FROM valid_supplier))
+          RETURNING p.id, p.barcode, p.brand_id
+        ), correction AS (
+          INSERT INTO catalogue_corrections (
+            organization_id, product_id, brand_id, barcode, chosen_supplier_id,
+            kind, status, created_by_user_id, created_at, updated_at
+          )
+          SELECT ${organizationId}, u.id, u.brand_id, NULLIF(BTRIM(u.barcode), ''),
+                 ${supplierId}::integer, 'SUPPLIER_OVERRIDE', 'PENDING', ${userId}, NOW(), NOW()
+          FROM updated u WHERE ${supplierId}::integer IS NOT NULL
+          RETURNING id
+        )
+        SELECT id FROM updated
+      `;
+      return rows.length > 0;
+    },
+
+    async disposeClaimableWriteOff(organizationId, transactionId) {
+      const rows = (await sql`
+        WITH target AS (
+          SELECT eit.id, eit.credit_disposition,
+                 EXISTS (SELECT 1 FROM credit_claim_lines ccl
+                         WHERE ccl.expired_item_transaction_id = eit.id) AS claimed
+          FROM expired_item_transactions eit
+          WHERE eit.id = ${transactionId} AND eit.organization_id = ${organizationId}
+            AND eit.action = 'expired'
+        ), updated AS (
+          UPDATE expired_item_transactions eit SET credit_disposition = 'DISPOSED', updated_at = NOW()
+          FROM target t
+          WHERE eit.id = t.id AND NOT t.claimed AND t.credit_disposition <> 'DISPOSED'
+          RETURNING eit.id
+        )
+        SELECT CASE
+          WHEN NOT EXISTS (SELECT 1 FROM target) THEN 'NOT_FOUND'
+          WHEN (SELECT claimed FROM target) THEN 'CLAIMED'
+          WHEN EXISTS (SELECT 1 FROM updated) THEN 'DISPOSED'
+          ELSE 'ALREADY_DISPOSED'
+        END AS result
+      `) as Array<{ result: 'DISPOSED' | 'ALREADY_DISPOSED' | 'CLAIMED' | 'NOT_FOUND' }>;
+      return rows[0]?.result ?? 'NOT_FOUND';
+    },
+
+    async listCatalogueCorrections(options) {
+      const cursor = options.cursor ?? 0;
+      const rows = (await sql`
+        SELECT cc.id, cc.organization_id AS "organizationId", cc.product_id AS "productId",
+               cc.brand_id AS "brandId", cc.barcode,
+               cc.entered_brand_name AS "enteredBrandName",
+               cc.chosen_supplier_id AS "chosenSupplierId", cc.kind, cc.status,
+               cc.created_by_user_id AS "createdByUserId", cc.created_at AS "createdAt",
+               o.name AS "organizationName"
+        FROM catalogue_corrections cc
+        JOIN organizations o ON o.id = cc.organization_id
+        WHERE cc.status = ${options.status} AND cc.id > ${cursor}
+        ORDER BY cc.id ASC LIMIT ${options.limit + 1}
+      `) as Array<Record<string, unknown>>;
+      const hasMore = rows.length > options.limit;
+      const page = hasMore ? rows.slice(0, options.limit) : rows;
+      return {
+        items: page.map((row) => ({
+          id: Number(row.id),
+          organizationId: String(row.organizationId),
+          productId: row.productId == null ? null : Number(row.productId),
+          brandId: row.brandId == null ? null : Number(row.brandId),
+          barcode: (row.barcode as string | null) ?? null,
+          enteredBrandName: (row.enteredBrandName as string | null) ?? null,
+          chosenSupplierId: row.chosenSupplierId == null ? null : Number(row.chosenSupplierId),
+          kind: String(row.kind),
+          status: String(row.status),
+          createdByUserId: row.createdByUserId == null ? null : Number(row.createdByUserId),
+          createdAt: String(row.createdAt),
+          organization: {
+            id: String(row.organizationId),
+            name: String(row.organizationName),
+          },
+        })),
+        nextCursor: hasMore ? Number(page[page.length - 1]?.id) : null,
+      };
+    },
+
+    async reviewCatalogueCorrection(id, status) {
+      const rows = (await sql`
+        WITH updated AS (
+          UPDATE catalogue_corrections SET status = ${status}, updated_at = NOW()
+          WHERE id = ${id} AND status = 'PENDING'
+          RETURNING id
+        )
+        SELECT CASE
+          WHEN EXISTS (SELECT 1 FROM updated) THEN 'UPDATED'
+          WHEN EXISTS (SELECT 1 FROM catalogue_corrections WHERE id = ${id})
+            THEN 'ALREADY_REVIEWED'
+          ELSE 'NOT_FOUND'
+        END AS result
+      `) as Array<{ result: 'UPDATED' | 'ALREADY_REVIEWED' | 'NOT_FOUND' }>;
+      return rows[0]?.result ?? 'NOT_FOUND';
     },
 
     async getClaimablePool(organizationId: string): Promise<ClaimablePoolGroup[]> {
@@ -1371,6 +1695,13 @@ export function createWorkersDatabase(env: Env): Database {
                s.name AS "supplierName",
                s.policy_write_off_qty AS "policyWriteOffQty",
                s.policy_credit_qty AS "policyCreditQty",
+               s.credit_policy_note AS "creditPolicyNote",
+               b.id AS "brandId", b.name AS "brandName", b.source AS "brandSource",
+               b.suggested_supplier_name AS "suggestedSupplierName",
+               bs.id AS "brandSupplierId", bs.name AS "brandSupplierName",
+               bs.policy_write_off_qty AS "brandPolicyWriteOffQty",
+               bs.policy_credit_qty AS "brandPolicyCreditQty",
+               bs.credit_policy_note AS "brandCreditPolicyNote",
                p.id AS "productId",
                COALESCE(p.sku, '') AS "sku",
                p.name AS "productName",
@@ -1380,9 +1711,12 @@ export function createWorkersDatabase(env: Env): Database {
         JOIN inventory_items ii ON ii.id = eit.inventory_item_id
         JOIN products p ON p.id = ii.product_id
         LEFT JOIN suppliers s ON s.id = p.supplier_id
+        LEFT JOIN brands b ON b.id = p.brand_id AND b.organization_id = p.organization_id
+        LEFT JOIN suppliers bs ON bs.id = b.supplier_id
         LEFT JOIN credit_claim_lines ccl ON ccl.expired_item_transaction_id = eit.id
         WHERE eit.organization_id = ${organizationId}
           AND eit.action = 'expired'
+          AND eit.credit_disposition <> 'DISPOSED'
           AND ccl.id IS NULL
         ORDER BY eit.id ASC
       `) as Array<Record<string, unknown>>;
@@ -1394,6 +1728,18 @@ export function createWorkersDatabase(env: Env): Database {
           supplierName: (row.supplierName as string | null) ?? null,
           policyWriteOffQty: row.policyWriteOffQty == null ? null : Number(row.policyWriteOffQty),
           policyCreditQty: row.policyCreditQty == null ? null : Number(row.policyCreditQty),
+          creditPolicyNote: (row.creditPolicyNote as string | null) ?? null,
+          brandId: row.brandId == null ? null : Number(row.brandId),
+          brandName: (row.brandName as string | null) ?? null,
+          brandSource: (row.brandSource as string | null) ?? null,
+          suggestedSupplierName: (row.suggestedSupplierName as string | null) ?? null,
+          brandSupplierId: row.brandSupplierId == null ? null : Number(row.brandSupplierId),
+          brandSupplierName: (row.brandSupplierName as string | null) ?? null,
+          brandPolicyWriteOffQty:
+            row.brandPolicyWriteOffQty == null ? null : Number(row.brandPolicyWriteOffQty),
+          brandPolicyCreditQty:
+            row.brandPolicyCreditQty == null ? null : Number(row.brandPolicyCreditQty),
+          brandCreditPolicyNote: (row.brandCreditPolicyNote as string | null) ?? null,
           productId: Number(row.productId),
           sku: String(row.sku ?? ''),
           productName: String(row.productName ?? ''),

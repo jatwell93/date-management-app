@@ -42,7 +42,7 @@ async function extractStatusErrorSuffix(res: Response): Promise<string> {
 function hasImmediateExpiryResult(
   importType: UploadImportType,
   data: Record<string, unknown> | undefined,
-): boolean {
+): data is Record<string, unknown> {
   return importType === 'expiry-list' && data?.importedCount !== undefined;
 }
 

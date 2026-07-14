@@ -245,6 +245,10 @@ export const CSVUploadPage: React.FC<{
                     : {lastUploadSummary.updatedCount}
                   </p>
                   <p>Rows rejected: {lastUploadSummary.rejectedCount}</p>
+                  <ReviewBrandMatchesAction
+                    importType={lastUploadSummary.importType}
+                    onReview={() => navigate('/supplier-credits?view=catalogue-review')}
+                  />
                 </div>
               ) : (
                 <p className="text-sm text-semantic-text-secondary">No completed uploads yet.</p>
@@ -708,6 +712,20 @@ export const CSVUploadPage: React.FC<{
           </div>
         </CardContent>
       </Card>
+    </div>
+  );
+};
+
+const ReviewBrandMatchesAction: React.FC<{
+  importType: UploadImportType;
+  onReview: () => void;
+}> = ({ importType, onReview }) => {
+  if (importType !== 'product-catalog') return null;
+  return (
+    <div className="mt-3 sm:col-span-2">
+      <Button type="button" onClick={onReview}>
+        Review brand matches
+      </Button>
     </div>
   );
 };

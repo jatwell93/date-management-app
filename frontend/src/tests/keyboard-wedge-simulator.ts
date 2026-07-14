@@ -3,8 +3,7 @@
  * Simulates rapid keystroke sequences typical of barcode scanners
  */
 
-import { GS1ParseResult } from '../lib/gs1-parser';
-import { HardwareScanResult } from '../types/handheld';
+import type { GS1ParseResult, HardwareScanResult } from '../types/handheld';
 
 export interface KeyboardWedgeSimulatorOptions {
   typingSpeed?: number; // Delay between characters in ms (for human typing simulation)

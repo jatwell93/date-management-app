@@ -4,6 +4,8 @@
 // than being re-derived per backend (golden rule 5). The SQL that *fetches* the
 // rows differs per dialect; this module owns the pure logic on top of them.
 
+import { resolveSupplier } from './brand-supplier';
+
 // ── Status vocabulary (String columns + const-union, per shared/domain/disposition.ts) ──
 
 export const CREDIT_CLAIM_STATUSES = [
@@ -146,6 +148,16 @@ export interface ClaimableWriteOffRow {
   supplierName: string | null;
   policyWriteOffQty: number | null;
   policyCreditQty: number | null;
+  creditPolicyNote?: string | null;
+  brandId?: number | null;
+  brandName?: string | null;
+  brandSource?: string | null;
+  suggestedSupplierName?: string | null;
+  brandSupplierId?: number | null;
+  brandSupplierName?: string | null;
+  brandPolicyWriteOffQty?: number | null;
+  brandPolicyCreditQty?: number | null;
+  brandCreditPolicyNote?: string | null;
   productId: number;
   sku: string;
   productName: string;
@@ -162,7 +174,18 @@ export interface ClaimablePoolItem {
   costPrice: number;
   expectedCreditUnits: number | null;
   expectedCreditValue: number | null;
+  brandId: number | null;
+  brandName: string | null;
 }
+
+export const CLAIMABILITY_STATES = [
+  'NEEDS_BRAND',
+  'PENDING_CONFIRMATION',
+  'CLAIMABLE',
+  'NO_POLICY',
+] as const;
+
+export type ClaimabilityState = (typeof CLAIMABILITY_STATES)[number];
 
 export interface ClaimablePoolGroup {
   /** Null for the "needs supplier" bucket (products with no supplier assigned). */
@@ -171,6 +194,7 @@ export interface ClaimablePoolGroup {
   items: ClaimablePoolItem[];
   /** Sum of known line values; null contributions (unknown policy) are skipped. */
   expectedCreditValueTotal: number;
+  state: ClaimabilityState;
 }
 
 // Sort so grouped output is stable across backends (golden rule 5 checks row
@@ -178,10 +202,104 @@ export interface ClaimablePoolGroup {
 function compareGroups(a: ClaimablePoolGroup, b: ClaimablePoolGroup): number {
   if (a.supplierId == null && b.supplierId != null) return 1;
   if (a.supplierId != null && b.supplierId == null) return -1;
+  if (a.supplierId == null && b.supplierId == null && a.state !== b.state) {
+    if (a.state === 'NEEDS_BRAND') return 1;
+    if (b.state === 'NEEDS_BRAND') return -1;
+  }
   const nameA = a.supplierName ?? '';
   const nameB = b.supplierName ?? '';
   if (nameA !== nameB) return nameA < nameB ? -1 : 1;
   return (a.supplierId ?? 0) - (b.supplierId ?? 0);
+}
+
+interface ResolvedClaimSupplier {
+  id: number | null;
+  name: string | null;
+  writeOffQty: number | null;
+  creditQty: number | null;
+  policyNote: string | null;
+  state: ClaimabilityState;
+  key: string;
+}
+
+function resolveClaimSupplier(row: ClaimableWriteOffRow): ResolvedClaimSupplier {
+  const supplierId = resolveSupplier(
+    { supplierId: row.supplierId },
+    { supplierId: row.brandSupplierId },
+  );
+
+  if (supplierId != null && row.supplierId != null) {
+    const hasPolicy =
+      row.policyWriteOffQty != null ||
+      row.policyCreditQty != null ||
+      Boolean(row.creditPolicyNote?.trim());
+    return {
+      id: row.supplierId,
+      name: row.supplierName,
+      writeOffQty: row.policyWriteOffQty,
+      creditQty: row.policyCreditQty,
+      policyNote: row.creditPolicyNote ?? null,
+      state: hasPolicy ? 'CLAIMABLE' : 'NO_POLICY',
+      key: `s:${row.supplierId}`,
+    };
+  }
+
+  if (supplierId != null && row.brandSupplierId != null) {
+    const hasPolicy =
+      row.brandPolicyWriteOffQty != null ||
+      row.brandPolicyCreditQty != null ||
+      Boolean(row.brandCreditPolicyNote?.trim());
+    return {
+      id: row.brandSupplierId,
+      name: row.brandSupplierName ?? null,
+      writeOffQty: row.brandPolicyWriteOffQty ?? null,
+      creditQty: row.brandPolicyCreditQty ?? null,
+      policyNote: row.brandCreditPolicyNote ?? null,
+      state:
+        row.brandSource === 'REFERENCE'
+          ? 'PENDING_CONFIRMATION'
+          : hasPolicy
+            ? 'CLAIMABLE'
+            : 'NO_POLICY',
+      key: `s:${row.brandSupplierId}`,
+    };
+  }
+
+  const suggestion = row.suggestedSupplierName?.trim() || null;
+  if (row.brandId != null && row.brandSource === 'REFERENCE' && suggestion) {
+    return {
+      id: null,
+      name: suggestion,
+      writeOffQty: null,
+      creditQty: null,
+      policyNote: null,
+      state: 'PENDING_CONFIRMATION',
+      key: `suggested:${suggestion.toUpperCase()}`,
+    };
+  }
+
+  const brandName = row.brandName?.trim() || null;
+  if (row.brandId != null && brandName) {
+    return {
+      id: null,
+      name: brandName,
+      writeOffQty: null,
+      creditQty: null,
+      policyNote: null,
+      state: 'PENDING_CONFIRMATION',
+      key: `brand:${row.brandId}`,
+    };
+  }
+
+  return {
+    id: null,
+    name: null,
+    writeOffQty: null,
+    creditQty: null,
+    policyNote: null,
+    state: 'NEEDS_BRAND',
+    key: 'needs-brand',
+  };
 }
 
 /**
@@ -193,20 +311,21 @@ export function rollupClaimablePool(rows: ClaimableWriteOffRow[]): ClaimablePool
   const groups = new Map<string, ClaimablePoolGroup>();
 
   for (const row of rows) {
-    const key = row.supplierId == null ? 'needs-supplier' : `s:${row.supplierId}`;
-    let group = groups.get(key);
+    const resolved = resolveClaimSupplier(row);
+    let group = groups.get(resolved.key);
     if (!group) {
       group = {
-        supplierId: row.supplierId,
-        supplierName: row.supplierName,
+        supplierId: resolved.id,
+        supplierName: resolved.name,
         items: [],
         expectedCreditValueTotal: 0,
+        state: resolved.state,
       };
-      groups.set(key, group);
+      groups.set(resolved.key, group);
     }
 
     const credit = expectedCredit(
-      { writeOffQty: row.policyWriteOffQty, creditQty: row.policyCreditQty },
+      { writeOffQty: resolved.writeOffQty, creditQty: resolved.creditQty },
       row.unitsDiscarded,
       row.costPrice,
     );
@@ -220,6 +339,8 @@ export function rollupClaimablePool(rows: ClaimableWriteOffRow[]): ClaimablePool
       costPrice: row.costPrice,
       expectedCreditUnits: credit.units,
       expectedCreditValue: credit.value,
+      brandId: row.brandId ?? null,
+      brandName: row.brandName ?? null,
     });
 
     if (credit.value != null) {

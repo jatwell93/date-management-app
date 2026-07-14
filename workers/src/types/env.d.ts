@@ -25,6 +25,7 @@ export interface Env {
   ENTERPRISE_MAX_SKUS?: string;
   ENTERPRISE_MAX_ACTIVE_EXPIRIES?: string;
   ENTERPRISE_MAX_FILE_SIZE?: string;
+  PLATFORM_ADMIN_USER_IDS?: string;
 
   // ============================================================================
   // Secrets (Set via wrangler secret put)

@@ -1,12 +1,15 @@
 import { PrismaClient } from '@prisma/client';
 import { getDefaultDatabaseClient } from '../database/database-factory';
 import { getOrganizationId } from '../utils/auth-bypass';
-import { NotFoundError, ValidationError } from '../errors';
+import { ConflictError, NotFoundError, ValidationError } from '../errors';
 import {
   SupplierCreditRepository,
+  type BrandReviewOptions,
+  type CorrectionReviewOptions,
   type SupplierWriteData,
 } from '../repositories/supplier-credit.repository';
 import { rollupClaimablePool, type ClaimablePoolGroup } from '../../../shared/domain/credit-claim';
+import { isCatalogueReviewState } from '../../../shared/domain/brand-supplier';
 
 export interface SupplierInput {
   name: string;
@@ -15,6 +18,12 @@ export interface SupplierInput {
   policyWriteOffQty?: number | null;
   policyCreditQty?: number | null;
   followUpDays?: number;
+}
+
+export interface AddBrandInput {
+  productId: number;
+  name: string;
+  supplierId?: number | null;
 }
 
 /**
@@ -80,27 +89,111 @@ export class SupplierCreditService {
    * belongs to the org so a caller cannot leak another tenant's supplier id, then
    * confirms the product exists in the org.
    */
-  async assignProductSupplier(productId: number, supplierId: number | null) {
+  async assignProductSupplier(
+    productId: number,
+    supplierId: number | null,
+    createdByUserId?: number,
+  ) {
     if (supplierId !== null) {
       const supplier = await this.repo.findSupplier(this.organizationId, supplierId);
       if (!supplier) {
         throw new NotFoundError(`Supplier ${supplierId} not found`);
       }
     }
-    const changed = await this.repo.assignProductSupplier(
-      this.organizationId,
-      productId,
-      supplierId,
-    );
+    const changed =
+      createdByUserId == null
+        ? await this.repo.assignProductSupplier(this.organizationId, productId, supplierId)
+        : await this.repo.assignProductSupplier(
+            this.organizationId,
+            productId,
+            supplierId,
+            createdByUserId,
+          );
     if (changed === 0) {
       throw new NotFoundError(`Product ${productId} not found`);
     }
     return { productId, supplierId };
   }
 
+  listBrands() {
+    return this.repo.listBrands(this.organizationId);
+  }
+
+  reviewBrands(
+    options: Omit<BrandReviewOptions, 'limit' | 'state'> & { state?: string; limit?: number },
+  ) {
+    if (options.state != null && !isCatalogueReviewState(options.state)) {
+      throw new ValidationError(
+        'Catalogue review state must be NEEDS_BRAND, PENDING_CONFIRMATION, or CONFIRMED',
+      );
+    }
+    return this.repo.reviewBrands(this.organizationId, {
+      ...options,
+      state: options.state,
+      limit: Math.min(100, Math.max(1, options.limit ?? 50)),
+    });
+  }
+
+  async addBrand(input: AddBrandInput, createdByUserId: number) {
+    const name = input.name.trim();
+    if (!name) throw new ValidationError('Brand name is required');
+    const supplierId = input.supplierId ?? null;
+    if (supplierId != null) {
+      const supplier = await this.repo.findSupplier(this.organizationId, supplierId);
+      if (!supplier) throw new NotFoundError(`Supplier ${supplierId} not found`);
+    }
+    const brand = await this.repo.addBrandForProduct(
+      this.organizationId,
+      { productId: input.productId, name, supplierId },
+      createdByUserId,
+    );
+    if (!brand) throw new NotFoundError(`Product ${input.productId} not found`);
+    return brand;
+  }
+
+  async confirmBrandSupplier(brandId: number, supplierId: number) {
+    const supplier = await this.repo.findSupplier(this.organizationId, supplierId);
+    if (!supplier) throw new NotFoundError(`Supplier ${supplierId} not found`);
+    const changed = await this.repo.confirmBrandSupplier(this.organizationId, brandId, supplierId);
+    if (changed === 0) throw new NotFoundError(`Brand ${brandId} not found`);
+    const brand = await this.repo.findBrand(this.organizationId, brandId);
+    if (!brand) throw new NotFoundError(`Brand ${brandId} not found`);
+    return brand;
+  }
+
+  listCatalogueCorrections(options: Omit<CorrectionReviewOptions, 'limit'> & { limit?: number }) {
+    return this.repo.listCatalogueCorrections({
+      ...options,
+      limit: Math.min(100, Math.max(1, options.limit ?? 50)),
+    });
+  }
+
+  async reviewCatalogueCorrection(id: number, status: 'ACCEPTED' | 'REJECTED') {
+    if (status !== 'ACCEPTED' && status !== 'REJECTED') {
+      throw new ValidationError('Correction status must be ACCEPTED or REJECTED');
+    }
+    const result = await this.repo.updateCatalogueCorrectionStatus(id, status);
+    if (result === 'NOT_FOUND') throw new NotFoundError(`Catalogue correction ${id} not found`);
+    if (result === 'ALREADY_REVIEWED') {
+      throw new ConflictError(`Catalogue correction ${id} has already been reviewed`);
+    }
+    return { id, status };
+  }
+
   /** Expired write-offs awaiting a claim, grouped by supplier (+ needs-supplier). */
   async getClaimablePool(): Promise<ClaimablePoolGroup[]> {
     const rows = await this.repo.findClaimableWriteOffs(this.organizationId);
     return rollupClaimablePool(rows);
+  }
+
+  async disposeWriteOff(transactionId: number) {
+    const result = await this.repo.disposeWriteOff(this.organizationId, transactionId);
+    if (result === 'NOT_FOUND') {
+      throw new NotFoundError(`Expired transaction ${transactionId} not found`);
+    }
+    if (result === 'CLAIMED') {
+      throw new ConflictError(`Expired transaction ${transactionId} has already entered a claim`);
+    }
+    return { transactionId, creditDisposition: 'DISPOSED' as const };
   }
 }

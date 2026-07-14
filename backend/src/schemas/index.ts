@@ -371,6 +371,29 @@ export const assignSupplierSchema = z.object({
   }),
 });
 
+export const brandCreateSchema = z.object({
+  body: z.object({
+    productId: z.number().int().positive('Product ID must be a positive integer'),
+    name: z.string().trim().min(1, 'Brand name is required').max(160),
+    supplierId: z
+      .number()
+      .int()
+      .positive('Supplier ID must be a positive integer')
+      .nullable()
+      .optional(),
+  }),
+});
+
+export const brandSupplierSchema = z.object({
+  body: z.object({
+    supplierId: z.number().int().positive('Supplier ID must be a positive integer'),
+  }),
+});
+
+export const correctionReviewSchema = z.object({
+  body: z.object({ status: z.enum(['ACCEPTED', 'REJECTED']) }),
+});
+
 export const claimCreateSchema = z.object({
   body: z.object({
     supplierId: z.number().int().positive('Supplier ID must be a positive integer'),

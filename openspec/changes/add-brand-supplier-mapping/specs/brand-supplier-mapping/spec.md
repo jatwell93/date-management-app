@@ -17,9 +17,9 @@ tagged with the catalogue's brand and a suggested supplier; an unmatched item SH
 - **THEN** the product is linked to a brand named "The Cancer Council"
 - **AND** the brand carries the catalogue's manufacturer as an advisory supplier suggestion
 
-#### Scenario: A missing barcode falls back to a wholesaler SKU
+#### Scenario: A missing catalogue barcode match falls back to a wholesaler SKU
 
-- **GIVEN** an uploaded product with no barcode but an API SKU that matches a catalogue entry's API SKU
+- **GIVEN** an uploaded product whose barcode has no master-catalogue match but whose API SKU matches a catalogue entry's API SKU
 - **WHEN** the product is enriched
 - **THEN** the product is matched to that catalogue entry via the wholesaler SKU
 
@@ -31,12 +31,18 @@ tagged with the catalogue's brand and a suggested supplier; an unmatched item SH
 
 ### Requirement: Brands are first-class and mediate the product-to-supplier link
 
-The system SHALL model brands as org-scoped records, each with a name, an optional supplier, a source
-marker distinguishing catalogue-derived, user-added, and user-confirmed brands, and an advisory
-manufacturer name. Each product MAY reference one brand. The system SHALL resolve a product's supplier
+The system SHALL model brands as org-scoped records, each with a name, an optional confirmed supplier,
+a separate advisory suggested supplier name, a source marker distinguishing catalogue-derived,
+user-added, and user-confirmed brands, and an advisory manufacturer name. Catalogue enrichment SHALL
+NOT create or assign a tenant Supplier. Each product MAY reference one brand. The system SHALL resolve a product's supplier
 as the product's own supplier override when present, otherwise the product's brand's supplier,
 otherwise none. Brands SHALL be org-scoped with the organization derived from the authenticated
 context and never from a client-supplied identifier.
+
+Catalogue review SHALL use setup states distinct from claimability: `NEEDS_BRAND`,
+`PENDING_CONFIRMATION`, and `CONFIRMED`. Invalid review states SHALL be rejected rather than silently
+treated as another filter. `CLAIMABLE` and `NO_POLICY` remain claimable-pool states determined by the
+resolved supplier's policy.
 
 #### Scenario: A brand resolves supplier for all its products
 
@@ -132,6 +138,8 @@ The system SHALL present every expired write-off through to a closed disposition
 outcomes: beginning a credit claim when the resolved supplier is claimable, or confirming disposal
 when it is not. A "no policy" or dispose flag SHALL auto-flag the dispose outcome but SHALL still
 require explicit user confirmation, and SHALL never prevent a user from beginning a claim.
+Confirmed disposal SHALL be persisted on the expired transaction and SHALL idempotently exclude that
+transaction from the claimable pool. A transaction that has entered a claim SHALL NOT be disposable.
 
 #### Scenario: A no-policy item is auto-flagged dispose but requires confirmation
 
@@ -140,8 +148,58 @@ require explicit user confirmation, and SHALL never prevent a user from beginnin
 - **THEN** it is auto-flagged for disposal with a confirm action
 - **AND** it is not disposed until the user confirms
 
+#### Scenario: Confirmed disposal persists and leaves the pool
+
+- **GIVEN** an unclaimed expired transaction in the no-policy state
+- **WHEN** the user confirms disposal twice
+- **THEN** the transaction is stored as disposed without duplicate side effects
+- **AND** it no longer appears in the claimable pool
+
+#### Scenario: A claimed transaction cannot be disposed
+
+- **GIVEN** an expired transaction already linked to a claim line
+- **WHEN** a user attempts to dispose it
+- **THEN** the request is rejected as a conflict
+
 #### Scenario: A user may still claim a no-policy brand
 
 - **GIVEN** an expired item whose resolved supplier has no credit policy
 - **WHEN** a rep offers to help and the user begins a claim anyway
 - **THEN** the system allows the claim to be built and does not block it
+
+### Requirement: Central correction review fails closed to a platform allowlist
+
+The system SHALL require normal authentication and SHALL authorize central catalogue-correction
+review only when the authenticated numeric local user ID is present in comma-separated
+`PLATFORM_ADMIN_USER_IDS`. Missing or malformed configuration SHALL deny access. Accepting or
+rejecting a pending correction SHALL only change that correction's status. Accepted and rejected
+corrections SHALL be terminal; a later attempt to change their decision SHALL be rejected as a
+conflict. Both backend implementations SHALL return the same correction representation, including
+the submitting organization's ID and display name.
+
+#### Scenario: Missing platform allowlist denies central review
+
+- **GIVEN** an authenticated user and no valid `PLATFORM_ADMIN_USER_IDS` configuration
+- **WHEN** the user requests central correction review
+- **THEN** access is denied
+
+#### Scenario: Accepted correction changes status only
+
+- **GIVEN** an allowlisted platform administrator and a pending correction
+- **WHEN** the administrator accepts the correction
+- **THEN** only the correction status becomes accepted
+- **AND** no catalogue, brand, product, supplier, or other organization record is modified
+
+### Requirement: Master catalogue seeding is explicit and idempotent
+
+The system SHALL seed the master catalogue from an explicitly supplied workbook path, normalize the
+supported catalogue fields, upsert by barcode, preserve unavailable CH2 values as null, and report
+inserted, updated, skipped, and error counts. Development and automated tests MAY use the checked-in
+100-row sample; production SHALL require an explicitly supplied full curated workbook.
+
+#### Scenario: Re-running the same workbook is idempotent
+
+- **GIVEN** a valid catalogue workbook has already been seeded
+- **WHEN** the same workbook is seeded again
+- **THEN** no duplicate barcode row is created
+- **AND** the result reports the rows as updates or unchanged skips

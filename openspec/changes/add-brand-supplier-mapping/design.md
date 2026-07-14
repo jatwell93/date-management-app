@@ -25,12 +25,13 @@ Product.brandId ─▶ Brand ─(nullable)─▶ Supplier ─▶ (policy, from #
 CatalogueCorrection (org-scoped): barcode?, enteredBrandName, chosenSupplierId?, kind, status
 ```
 
-- **MasterCatalogueEntry** — provider-curated, **not org-scoped** (a barcode *is* a Blackmores
+- **MasterCatalogueEntry** — provider-curated, **not org-scoped** (a barcode _is_ a Blackmores
   product for everyone). Columns mirror the real sheet: `barcode` (unique), `description`, `apiSku`,
   `sigmaSku`, `ch2Sku`, `brandName`, `manufacturerName`, `category`, `subCategory`, `rrp`,
   `metroPrice`. Tenants read it during import; they never write it.
-- **Brand** — org-scoped: `name`, nullable `supplierId`, `source`
-  (`REFERENCE` | `USER_ADDED` | `CONFIRMED`), advisory `manufacturerName`. Unique
+- **Brand** — org-scoped: `name`, nullable confirmed `supplierId`, `source`
+  (`REFERENCE` | `USER_ADDED` | `CONFIRMED`), advisory `manufacturerName`, and separate advisory
+  `suggestedSupplierName`. Unique
   `(organizationId, name)`. `REFERENCE` = auto-created from the catalogue with a suggested supplier;
   `CONFIRMED` = a user has confirmed the supplier; `USER_ADDED` = the user created a brand the sheet
   missed (also emits a correction).
@@ -50,10 +51,10 @@ resolveSupplier(product, brand):
         ?? null                          # "needs brand / needs supplier" bucket
 ```
 
-Pure function in `shared/domain/brand-supplier.ts`, used by both backends and covered by a
-dual-backend conformance test (golden rule 5). Because the claimable-pool rollup already groups by
-"the write-off's supplier", swapping the direct field for `resolveSupplier` gives it the brand path
-with no rollup change.
+Pure function in `shared/domain/brand-supplier.ts`, used by the shared claimable-pool rollup and the
+layered Express enrichment path. The Worker keeps its indexed matching in SQL; table-driven contract
+tests exercise the same barcode/SKU/ambiguity cases against both implementations so SQL cannot drift
+from the shared semantics (golden rule 5).
 
 ## Catalogue matching (import enrichment)
 
@@ -63,18 +64,20 @@ enrichProduct(uploadRow):
          ?? matchByWholesalerSku(uploadRow.sku)   # tries apiSku, sigmaSku, ch2Sku
     if not entry: → "needs brand" bucket; emit CatalogueCorrection(UNMATCHED)
     brand = upsertBrand(entry.brandName, source=REFERENCE,
-                        manufacturerName=entry.manufacturerName)
+                        manufacturerName=entry.manufacturerName,
+                        suggestedSupplierName=entry.manufacturerName)
     product.brandId = brand.id
-    # brand.supplierId stays null until confirmed → claimability "pending confirmation"
+    # brand.supplierId stays null until a user selects an org-owned Supplier
 ```
 
-Barcode is the trusted key. Wholesaler-SKU fallback only *suggests* a match (a store's SKU codes
+Barcode is the trusted key. Wholesaler-SKU fallback only _suggests_ a match (a store's SKU codes
 follow its primary wholesaler, so the same product carries different codes across API/Sigma/CH2);
 the suggestion is surfaced for confirmation on the review screen, not auto-applied silently.
 
-**Where it runs & failure isolation.** Enrich is a step *inside the existing queued catalogue-import
-job* (`add-queued-catalogue-imports`), not a new synchronous pass — so it is already off the request
-path and inherits that job's batching and retries. Each lookup is an indexed point-read
+**Where it runs & failure isolation.** Enrich runs after each successful product upsert in both
+existing import paths: inside the Worker queued catalogue-import job (`add-queued-catalogue-imports`)
+and as a best-effort post-upsert step in the layered Express importer used by SQLite development and
+tests. Each lookup is an indexed point-read
 (`MasterCatalogueEntry.barcode` is unique; wholesaler-SKU columns indexed), so a ~7k-row catalogue is
 a per-row `O(log n)` hit, not a scan. A miss is **not an error** — it routes the item to "needs brand"
 and emits an `UNMATCHED` correction; enrich failing for one row (or the catalogue being unreachable)
@@ -83,19 +86,21 @@ succeeds; enrichment is best-effort advisory.
 
 ## Claimability lifecycle (the one new state)
 
-An expired item's disposition, all visible on the triage board:
+An expired item's disposition, all visible on the triage board. `creditDisposition` is persisted on
+the expired transaction (`PENDING` by default, terminal `DISPOSED`); disposed transactions and
+transactions already linked to claim lines are excluded from this pool:
 
 ```
 expired write-off
       │
-      ├─ resolveSupplier = null ───────────▶ NEEDS BRAND        (assign/confirm)
-      ├─ supplier, brand.source != CONFIRMED ▶ PENDING CONFIRMATION (visible, not blocked)
-      ├─ supplier confirmed, claimable ─────▶ [Begin claim]
-      └─ supplier confirmed, no policy ─────▶ [Dispose (auto-flagged) — confirm]
+      ├─ no brand / supplier ───────────────▶ NEEDS_BRAND
+      ├─ catalogue suggestion only ─────────▶ PENDING_CONFIRMATION
+      ├─ confirmed supplier + policy ───────▶ CLAIMABLE
+      └─ confirmed supplier, no policy ─────▶ NO_POLICY
 ```
 
 `PENDING CONFIRMATION` is the only new state. Nothing is hidden and nothing is blocked: a user may
-begin a claim on a "no policy" brand (rep goodwill), and a dispose is always a *confirm*, never an
+begin a claim on a "no policy" brand (rep goodwill), and a dispose is always a _confirm_, never an
 auto-close — so the store watches every expiry from start to finish.
 
 ## New-user first-run journey
@@ -103,7 +108,7 @@ auto-close — so the store watches every expiry from start to finish.
 1. **Upload** back-office export (barcode, SKU, description, cost) from thier POS system.
 2. **Auto-match** against the master catalogue → each item tagged with brand + suggested supplier.
 3. **Review screen** — matched items grouped by suggested supplier, plus a "needs brand" bucket for
-   unmatched rows. This *is* onboarding; it ends here.
+   unmatched rows. This _is_ onboarding; it ends here.
 4. **Skip policy.** No supplier confirmation or policy entry is required to finish setup.
 5. **Just-in-time** — the first time a brand's item expires and hits the claimable pool, an inline
    prompt confirms that supplier and captures its policy once; from then on every item of that
@@ -121,30 +126,39 @@ auto-close — so the store watches every expiry from start to finish.
   `REJECTED`, no-op. Acceptance never mutates another org's data in v1 (redistribution is deferred).
   Deliberately kept this thin so nobody builds the redistribution surface before we've decided we want
   it.
+- Central review is protected by normal authentication plus a numeric local user ID allowlist read
+  from comma-separated `PLATFORM_ADMIN_USER_IDS`. Missing, blank, non-numeric, or otherwise malformed
+  configuration fails closed. Review status changes never mutate catalogue, brand, product, supplier,
+  or another organization's data.
 - Precedent: FRED AppCat ships imperfect and improves via user-flagged corrections a central team
   adjudicates — lower ongoing cost than hand-curating 7k rows, and it improves with use.
 
 ## Key decisions & alternatives
 
 1. **Brand as a first-class table, not a `Product.brand` string.** Brands have behaviour — user-added,
-   supplier-linked, correction-flagged, `source`-tracked. *Rejected:* a bare string; it can't carry
+   supplier-linked, correction-flagged, `source`-tracked. _Rejected:_ a bare string; it can't carry
    the confirm/override state the whole model turns on.
-2. **`resolveSupplier = override ?? brand-default`.** *Rejected:* migrating #356's `Product.supplierId`
+2. **`resolveSupplier = override ?? brand-default`.** _Rejected:_ migrating #356's `Product.supplierId`
    away — keeping it as an override is back-compatible and preserves shipped behaviour with zero data
    loss.
-3. **Master catalogue global & read-only; corrections org-scoped.** *Rejected:* a shared writable
+3. **Master catalogue global & read-only; corrections org-scoped.** _Rejected:_ a shared writable
    catalogue — it manufactures the "same SKU, different brand per store" conflict. Identity is global;
    per-store divergence is a private correction until centrally accepted.
-4. **Ship identity, never policy.** *Rejected:* seeding base policies — franchise/negotiation variance
+4. **Ship identity, never policy.** _Rejected:_ seeding base policies — franchise/negotiation variance
    means a wrong default is worse than a blank; the user enters policy, we only link.
-5. **Barcode-primary matching.** *Rejected:* SKU-primary — SKU codes are wholesaler-specific, so they
+5. **Barcode-primary matching.** _Rejected:_ SKU-primary — SKU codes are wholesaler-specific, so they
    fragment the same product across API/Sigma/CH2; barcode is the one stable key.
+6. **Workbook-driven, idempotent seeding.** The seed accepts an explicit workbook path, normalizes
+   barcode/SKU/text/price fields, and upserts by barcode with inserted/updated/skipped/error counts.
+   Automated tests and development use `supplier-doc-examples/sample_100_ipa_price_brands.xlsx`;
+   production requires an explicitly supplied full curated workbook. _Rejected:_ embedding the sample
+   or catalogue rows in production source.
 
 ## Dual-backend parity (golden rules 5 & 6)
 
 - `shared/domain/brand-supplier.ts`: `resolveSupplier`, `matchByBarcode`, `matchByWholesalerSku`.
-- Conformance test compares Neon/pglite vs SQLite for `resolveSupplier` and the enrich rollup,
-  including row order and org isolation.
+- Contract tests compare Worker SQL vs SQLite/Express enrichment for supplier precedence, barcode
+  priority, SKU fallback, ambiguity, row order, and org isolation.
 - Schema lands in Prisma (base + production), Neon SQL (+ rollback), the next SQLite migration, and
   the pglite harness — kept in sync.
 

@@ -20,6 +20,7 @@ import type {
   RecoveryReport,
   Supplier,
 } from '../types/supplierCredit';
+import { CatalogueReviewPanel } from '../components/supplier-credits/CatalogueReviewPanel';
 
 interface Props {
   token: string | null;
@@ -27,7 +28,7 @@ interface Props {
 
 const currency = new Intl.NumberFormat('en-AU', { style: 'currency', currency: 'AUD' });
 
-type Tab = 'to-claim' | 'open' | 'settled';
+type Tab = 'to-claim' | 'catalogue-review' | 'open' | 'settled';
 
 const STATUS_TONE: Record<string, string> = {
   DRAFT: 'bg-semantic-surface-3 text-semantic-text-secondary',
@@ -54,7 +55,11 @@ function isFollowUpDue(claim: CreditClaim): boolean {
 
 const SupplierCreditsPage: React.FC<Props> = ({ token }) => {
   const getFreshApiToken = useFreshApiToken(token);
-  const [tab, setTab] = useState<Tab>('to-claim');
+  const [tab, setTab] = useState<Tab>(() =>
+    new URLSearchParams(window.location.search).get('view') === 'catalogue-review'
+      ? 'catalogue-review'
+      : 'to-claim',
+  );
   const [pool, setPool] = useState<ClaimablePoolGroup[]>([]);
   const [claims, setClaims] = useState<CreditClaim[]>([]);
   const [report, setReport] = useState<RecoveryReport | null>(null);
@@ -63,8 +68,17 @@ const SupplierCreditsPage: React.FC<Props> = ({ token }) => {
   const [error, setError] = useState<string | null>(null);
 
   const [buildGroup, setBuildGroup] = useState<ClaimablePoolGroup | null>(null);
-  const [assignItem, setAssignItem] = useState<{ productId: number; sku: string } | null>(null);
+  const [assignItem, setAssignItem] = useState<{
+    productId: number;
+    sku: string;
+    brandId?: number | null;
+    brandName?: string | null;
+  } | null>(null);
   const [detailClaim, setDetailClaim] = useState<CreditClaim | null>(null);
+  const [disposeItem, setDisposeItem] = useState<{
+    transactionId: number;
+    productName: string;
+  } | null>(null);
 
   const load = useCallback(async () => {
     setLoading(true);
@@ -89,6 +103,11 @@ const SupplierCreditsPage: React.FC<Props> = ({ token }) => {
       setLoading(false);
     }
   }, [getFreshApiToken]);
+
+  const getCatalogueReviewToken = useCallback(
+    async () => (await getFreshApiToken('supplier-credits-brand-review')) ?? null,
+    [getFreshApiToken],
+  );
 
   useEffect(() => {
     void load();
@@ -144,6 +163,9 @@ const SupplierCreditsPage: React.FC<Props> = ({ token }) => {
         <TabButton active={tab === 'to-claim'} onClick={() => setTab('to-claim')}>
           To Claim
         </TabButton>
+        <TabButton active={tab === 'catalogue-review'} onClick={() => setTab('catalogue-review')}>
+          Catalogue Review
+        </TabButton>
         <TabButton active={tab === 'open'} onClick={() => setTab('open')}>
           Open Claims{followUpDueCount > 0 ? ` (${followUpDueCount} due)` : ''}
         </TabButton>
@@ -156,7 +178,15 @@ const SupplierCreditsPage: React.FC<Props> = ({ token }) => {
         <ToClaimBoard
           pool={pool}
           onBuild={setBuildGroup}
-          onAssign={(productId, sku) => setAssignItem({ productId, sku })}
+          onAssign={setAssignItem}
+          onDispose={(transactionId, productName) => setDisposeItem({ transactionId, productName })}
+        />
+      )}
+      {tab === 'catalogue-review' && (
+        <CatalogueReviewPanel
+          suppliers={suppliers}
+          getToken={getCatalogueReviewToken}
+          onChanged={() => void load()}
         />
       )}
       {tab === 'open' && (
@@ -200,6 +230,17 @@ const SupplierCreditsPage: React.FC<Props> = ({ token }) => {
           onClose={() => setDetailClaim(null)}
           onChanged={() => {
             setDetailClaim(null);
+            void load();
+          }}
+        />
+      )}
+      {disposeItem && (
+        <DisposeWriteOffModal
+          item={disposeItem}
+          getToken={async () => (await getFreshApiToken('supplier-credits-dispose')) ?? null}
+          onClose={() => setDisposeItem(null)}
+          onDisposed={() => {
+            setDisposeItem(null);
             void load();
           }}
         />
@@ -279,8 +320,14 @@ const RecoveryPanel: React.FC<{ report: RecoveryReport }> = ({ report }) => (
 const ToClaimBoard: React.FC<{
   pool: ClaimablePoolGroup[];
   onBuild: (group: ClaimablePoolGroup) => void;
-  onAssign: (productId: number, sku: string) => void;
-}> = ({ pool, onBuild, onAssign }) => {
+  onAssign: (item: {
+    productId: number;
+    sku: string;
+    brandId?: number | null;
+    brandName?: string | null;
+  }) => void;
+  onDispose: (transactionId: number, productName: string) => void;
+}> = ({ pool, onBuild, onAssign, onDispose }) => {
   if (pool.length === 0) {
     return (
       <div className="rounded-lg border border-dashed py-16 text-center text-sm text-semantic-text-secondary">
@@ -295,6 +342,10 @@ const ToClaimBoard: React.FC<{
           <CardHeader className="flex flex-row items-center justify-between">
             <CardTitle className="text-lg">
               {group.supplierName ?? '⚠ Needs supplier'}
+              {group.state === 'PENDING_CONFIRMATION' && (
+                <Badge className="ml-2">Pending confirmation</Badge>
+              )}
+              {group.state === 'NO_POLICY' && <Badge className="ml-2">No policy</Badge>}
               <span className="ml-2 text-sm font-normal text-semantic-text-secondary">
                 {group.items.length} item{group.items.length === 1 ? '' : 's'}
                 {group.supplierId != null &&
@@ -303,7 +354,7 @@ const ToClaimBoard: React.FC<{
             </CardTitle>
             {group.supplierId != null && (
               <Button size="sm" onClick={() => onBuild(group)}>
-                Build claim
+                Begin claim
               </Button>
             )}
           </CardHeader>
@@ -319,13 +370,38 @@ const ToClaimBoard: React.FC<{
                     <span className="font-mono text-semantic-text-secondary">{item.sku}</span> ·{' '}
                     {item.unitsDiscarded} units
                   </span>
-                  {group.supplierId == null && (
+                  {group.state === 'NEEDS_BRAND' && (
                     <Button
                       size="sm"
                       variant="outline"
-                      onClick={() => onAssign(item.productId, item.sku)}
+                      onClick={() => onAssign({ productId: item.productId, sku: item.sku })}
                     >
                       Assign supplier
+                    </Button>
+                  )}
+                  {group.state === 'PENDING_CONFIRMATION' && item.brandId != null && (
+                    <Button
+                      size="sm"
+                      variant="outline"
+                      onClick={() =>
+                        onAssign({
+                          productId: item.productId,
+                          sku: item.sku,
+                          brandId: item.brandId,
+                          brandName: item.brandName,
+                        })
+                      }
+                    >
+                      Confirm supplier
+                    </Button>
+                  )}
+                  {group.state === 'NO_POLICY' && (
+                    <Button
+                      size="sm"
+                      variant="outline"
+                      onClick={() => onDispose(item.transactionId, item.productName)}
+                    >
+                      Dispose (auto-flagged)
                     </Button>
                   )}
                 </li>
@@ -335,6 +411,49 @@ const ToClaimBoard: React.FC<{
         </Card>
       ))}
     </div>
+  );
+};
+
+const DisposeWriteOffModal: React.FC<{
+  item: { transactionId: number; productName: string };
+  getToken: () => Promise<string | null>;
+  onClose: () => void;
+  onDisposed: () => void;
+}> = ({ item, getToken, onClose, onDisposed }) => {
+  const [submitting, setSubmitting] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  const dispose = async () => {
+    setSubmitting(true);
+    setError(null);
+    try {
+      await svc.disposeClaimableWriteOff(item.transactionId, await getToken());
+      onDisposed();
+    } catch (cause) {
+      setError(cause instanceof Error ? cause.message : 'Failed to dispose write-off');
+      setSubmitting(false);
+    }
+  };
+  return (
+    <Dialog open onOpenChange={(open) => !open && onClose()}>
+      <DialogContent className="sm:max-w-md">
+        <DialogHeader>
+          <DialogTitle>Dispose this write-off?</DialogTitle>
+        </DialogHeader>
+        <p className="text-sm text-semantic-text-secondary">
+          {item.productName} will be removed from the claimable pool. This does not delete its
+          expiry transaction.
+        </p>
+        {error && <p className="text-sm text-semantic-critical">{error}</p>}
+        <DialogFooter>
+          <Button variant="outline" onClick={onClose} disabled={submitting}>
+            Cancel
+          </Button>
+          <Button variant="destructive" onClick={() => void dispose()} disabled={submitting}>
+            Confirm disposal
+          </Button>
+        </DialogFooter>
+      </DialogContent>
+    </Dialog>
   );
 };
 
@@ -463,7 +582,12 @@ const BuildClaimModal: React.FC<{
 };
 
 const AssignSupplierModal: React.FC<{
-  item: { productId: number; sku: string };
+  item: {
+    productId: number;
+    sku: string;
+    brandId?: number | null;
+    brandName?: string | null;
+  };
   suppliers: Supplier[];
   getToken: () => Promise<string | null>;
   onClose: () => void;
@@ -498,7 +622,11 @@ const AssignSupplierModal: React.FC<{
       } else {
         targetId = supplierId as number;
       }
-      await svc.assignProductSupplier(item.productId, targetId, token);
+      if (item.brandId != null) {
+        await svc.confirmBrandSupplier(item.brandId, targetId, token);
+      } else {
+        await svc.assignProductSupplier(item.productId, targetId, token);
+      }
       onAssigned();
     } catch (e) {
       setErr(e instanceof Error ? e.message : 'Failed to assign supplier');
@@ -510,7 +638,11 @@ const AssignSupplierModal: React.FC<{
     <Dialog open onOpenChange={(o) => !o && onClose()}>
       <DialogContent className="sm:max-w-md">
         <DialogHeader>
-          <DialogTitle>Assign supplier · {item.sku}</DialogTitle>
+          <DialogTitle>
+            {item.brandId != null
+              ? `Confirm brand supplier · ${item.brandName ?? item.sku}`
+              : `Assign supplier · ${item.sku}`}
+          </DialogTitle>
         </DialogHeader>
         {suppliers.length > 0 && (
           <div className="mb-3 flex gap-2">
@@ -599,7 +731,7 @@ const AssignSupplierModal: React.FC<{
               submitting || (mode === 'new' && !name) || (mode === 'existing' && supplierId === '')
             }
           >
-            {submitting ? 'Saving…' : 'Assign'}
+            {submitting ? 'Saving…' : item.brandId != null ? 'Confirm supplier' : 'Assign'}
           </Button>
         </DialogFooter>
       </DialogContent>

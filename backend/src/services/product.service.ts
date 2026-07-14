@@ -25,6 +25,7 @@ import {
 import { injectable, inject } from 'tsyringe';
 import { ProductRepository } from '../repositories/product.repository';
 import { SubscriptionRepository } from '../repositories/subscription.repository';
+import { SupplierCreditRepository } from '../repositories/supplier-credit.repository';
 import { TIER_LIMITS, TierLevel } from '../types/subscription';
 
 export function extractCostValue(costStr: string): number | null {
@@ -77,6 +78,7 @@ export class ProductService {
   private organizationId: string;
   private productRepo: ProductRepository;
   private subscriptionRepo: SubscriptionRepository;
+  private supplierCreditRepo: SupplierCreditRepository;
 
   /**
    * Constructor with optional dependency injection
@@ -90,11 +92,13 @@ export class ProductService {
     @inject('OrganizationId') organizationId?: string,
     @inject(ProductRepository) productRepo?: ProductRepository,
     @inject(SubscriptionRepository) subscriptionRepo?: SubscriptionRepository,
+    @inject(SupplierCreditRepository) supplierCreditRepo?: SupplierCreditRepository,
   ) {
     this.prisma = prismaClient ?? getDefaultDatabaseClient();
     this.organizationId = getOrganizationId(organizationId);
     this.productRepo = productRepo ?? new ProductRepository(this.prisma);
     this.subscriptionRepo = subscriptionRepo ?? new SubscriptionRepository(this.prisma);
+    this.supplierCreditRepo = supplierCreditRepo ?? new SupplierCreditRepository(this.prisma);
   }
 
   // Expose parser for tests that reference it via ProductService["extractCostValueEnhanced"]
@@ -657,6 +661,7 @@ export class ProductService {
           ...(validation.row.retail !== null ? { retailPrice: validation.row.retail } : {}),
         });
         if (updatedProduct) {
+          await this.enrichImportedProductSafely(updatedProduct);
           counters.updated++;
           return updatedProduct;
         }
@@ -679,6 +684,7 @@ export class ProductService {
         costPrice: validation.row.cost,
         retailPrice: validation.row.retail,
       });
+      await this.enrichImportedProductSafely(newProduct);
       counters.imported++;
       return newProduct;
     } catch (createError) {
@@ -686,6 +692,22 @@ export class ProductService {
         `Row ${rowNumber}: Failed to create new product (SKU: ${validation.row.sku}) - ${(createError as Error).message}`,
       );
       return null;
+    }
+  }
+
+  private async enrichImportedProductSafely(product: Product): Promise<void> {
+    try {
+      await this.supplierCreditRepo.enrichImportedProduct(this.organizationId, {
+        productId: product.id,
+        barcode: product.barcode,
+        sku: product.sku,
+      });
+    } catch (error) {
+      Logger.error('Catalogue brand enrichment failed', {
+        organizationId: this.organizationId,
+        productId: product.id,
+        error: error instanceof Error ? error.message : String(error),
+      });
     }
   }
 

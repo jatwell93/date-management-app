@@ -1,5 +1,10 @@
 import { PrismaClient } from '@prisma/client';
-import { SeedService } from '../../services/seed.service';
+import path from 'node:path';
+import {
+  SeedService,
+  normalizeMasterCatalogueRows,
+  parseMasterCatalogueWorkbook,
+} from '../../services/seed.service';
 
 const prisma = new PrismaClient();
 
@@ -8,6 +13,7 @@ describe('SeedService', () => {
   let testOrgId: string;
 
   beforeEach(async () => {
+    await prisma.masterCatalogueEntry.deleteMany();
     // Create a test organization
     const org = await prisma.organization.create({
       data: {
@@ -84,5 +90,81 @@ describe('SeedService', () => {
       where: { organizationId: testOrgId },
     });
     expect(inventoryCount).toBe(8);
+  });
+
+  it('parses and normalizes the checked-in 100-row catalogue sample', () => {
+    const workbookPath = path.resolve(
+      __dirname,
+      '../../../../supplier-doc-examples/sample_100_ipa_price_brands.xlsx',
+    );
+    const parsed = parseMasterCatalogueWorkbook(workbookPath);
+
+    expect(parsed.entries).toHaveLength(99);
+    expect(parsed.errors).toEqual([]);
+    expect(parsed.entries[0]).toMatchObject({
+      barcode: '9321299800449',
+      apiSku: '192418',
+      sigmaSku: '10031800',
+      ch2Sku: null,
+      brandName: 'THE CANCER COUNCIL',
+      manufacturerName: 'VITALITY BRANDS WORLDWIDE',
+      rrp: 19.99,
+      metroPrice: 19.49,
+    });
+  });
+
+  it('counts blank and malformed catalogue rows without inventing values', () => {
+    const normalized = normalizeMasterCatalogueRows([
+      ['Description', 'API PDE', 'Sigma PDE', 'CH2 PDE', 'Barcode', 'Brand'],
+      ['Valid product', ' api-1 ', '', '', ' 9300000000001 ', ' Valid Brand '],
+      [],
+      ['Missing barcode', 'api-2', '', '', '', 'Brand'],
+    ]);
+
+    expect(normalized.entries).toEqual([
+      expect.objectContaining({
+        description: 'Valid product',
+        apiSku: 'API-1',
+        sigmaSku: null,
+        ch2Sku: null,
+        barcode: '9300000000001',
+        brandName: 'Valid Brand',
+      }),
+    ]);
+    expect(normalized.skipped).toBe(1);
+    expect(normalized.errors).toHaveLength(1);
+  });
+
+  it('upserts the workbook by barcode on idempotent reruns', async () => {
+    const workbookPath = path.resolve(
+      __dirname,
+      '../../../../supplier-doc-examples/sample_100_ipa_price_brands.xlsx',
+    );
+    const first = await service.seedMasterCatalogue(workbookPath);
+    const second = await service.seedMasterCatalogue(workbookPath);
+
+    expect(first).toMatchObject({ inserted: 99, updated: 0, skipped: 0, errors: [] });
+    expect(second).toMatchObject({ inserted: 0, updated: 0, skipped: 99, errors: [] });
+    await expect(prisma.masterCatalogueEntry.count()).resolves.toBe(99);
+  });
+
+  it('counts only changed catalogue records as updates', async () => {
+    const workbookPath = path.resolve(
+      __dirname,
+      '../../../../supplier-doc-examples/sample_100_ipa_price_brands.xlsx',
+    );
+    await service.seedMasterCatalogue(workbookPath);
+    const row = await prisma.masterCatalogueEntry.findFirstOrThrow();
+    await prisma.masterCatalogueEntry.update({
+      where: { id: row.id },
+      data: { description: 'Stale description' },
+    });
+
+    const result = await service.seedMasterCatalogue(workbookPath);
+
+    expect(result).toMatchObject({ inserted: 0, updated: 1, skipped: 98, errors: [] });
+    await expect(
+      prisma.masterCatalogueEntry.findUnique({ where: { id: row.id } }),
+    ).resolves.not.toMatchObject({ description: 'Stale description' });
   });
 });

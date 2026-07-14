@@ -20,6 +20,9 @@ export default defineConfig({
     environment: 'node',
     include: ['src/**/*.node.test.ts'],
     globals: true,
-    hookTimeout: 30000,
+    // Each file boots a PGlite WASM database. Running several bootstraps at once
+    // exhausts memory on CI and turns healthy setup into nondeterministic timeouts.
+    fileParallelism: false,
+    hookTimeout: 60000,
   },
 });
