@@ -288,10 +288,14 @@ export interface Supplier {
   id: number;
   name: string;
   contactEmail: string | null;
+  contactPhone: string | null;
   creditPolicyNote: string;
   policyWriteOffQty: number | null;
   policyCreditQty: number | null;
   followUpDays: number;
+  representativeName: string | null;
+  representativeEmail: string | null;
+  policyUpdatedAt: Date | string | null;
 }
 
 export interface Brand {

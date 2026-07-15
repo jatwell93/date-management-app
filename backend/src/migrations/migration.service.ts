@@ -850,6 +850,27 @@ export class MigrationService {
           );
         },
       },
+      {
+        id: 17,
+        name: '017-add-supplier-policy-fields',
+        up: (db: DB) => {
+          addColumnIfMissing(db, 'suppliers', 'representative_name', 'TEXT');
+          addColumnIfMissing(db, 'suppliers', 'representative_email', 'TEXT');
+          addColumnIfMissing(db, 'suppliers', 'contact_phone', 'TEXT');
+          addColumnIfMissing(db, 'suppliers', 'policy_updated_at', 'TEXT');
+          db.exec(`
+            UPDATE suppliers
+            SET policy_updated_at = updated_at
+            WHERE policy_updated_at IS NULL
+              AND trim(credit_policy_note) <> '';
+          `);
+        },
+        down: () => {
+          Logger.warn(
+            'SQLite rollback leaves supplier policy columns in place because dropping columns is not portable',
+          );
+        },
+      },
     ];
   }
 
