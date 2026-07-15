@@ -14,6 +14,11 @@ import type {
   Brand,
   BrandReviewPage,
   CatalogueReviewState,
+  BulkAttachPolicyResult,
+  BulkLinkProductsInput,
+  BulkLinkProductsResult,
+  PolicyReviewItem,
+  PolicyStatus,
 } from '../types/supplierCredit';
 
 const BASE = '/supplier-credits';
@@ -24,8 +29,39 @@ export const getSuppliers = (token: string | null) =>
 export const createSupplier = (input: SupplierInput, token: string | null) =>
   apiService.post<Supplier>(`${BASE}/suppliers`, input, token ?? undefined);
 
-export const updateSupplier = (id: number, input: SupplierInput, token: string | null) =>
+export const updateSupplier = (id: number, input: Partial<SupplierInput>, token: string | null) =>
+  apiService.patch<Supplier>(`${BASE}/suppliers/${id}`, input, token ?? undefined);
+
+export const replaceSupplier = (id: number, input: SupplierInput, token: string | null) =>
   apiService.put<Supplier>(`${BASE}/suppliers/${id}`, input, token ?? undefined);
+
+export const clearSupplierPolicy = (id: number, token: string | null) =>
+  apiService.delete<Supplier>(`${BASE}/suppliers/${id}/policy`, token ?? undefined);
+
+export const getPolicyReview = (
+  token: string | null,
+  options: { brand?: string; supplier?: string; status?: PolicyStatus } = {},
+) => {
+  const query = new URLSearchParams();
+  if (options.brand) query.set('brand', options.brand);
+  if (options.supplier) query.set('supplier', options.supplier);
+  if (options.status) query.set('status', options.status);
+  const suffix = query.size > 0 ? `?${query.toString()}` : '';
+  return apiService.get<PolicyReviewItem[]>(`${BASE}/policy-review${suffix}`, token ?? undefined);
+};
+
+export const bulkAttachPolicy = (
+  input: { supplierId: number; brandIds: number[] },
+  token: string | null,
+) =>
+  apiService.post<BulkAttachPolicyResult>(
+    `${BASE}/policy-review/bulk-attach`,
+    input,
+    token ?? undefined,
+  );
+
+export const bulkLinkProducts = (input: BulkLinkProductsInput, token: string | null) =>
+  apiService.post<BulkLinkProductsResult>(`${BASE}/brands/bulk-link`, input, token ?? undefined);
 
 export const assignProductSupplier = (
   productId: number,

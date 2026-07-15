@@ -9,6 +9,10 @@ export interface Supplier {
   policyWriteOffQty: number | null;
   policyCreditQty: number | null;
   followUpDays: number;
+  contactPhone: string | null;
+  representativeName: string | null;
+  representativeEmail: string | null;
+  policyUpdatedAt: string | null;
 }
 
 export interface SupplierInput {
@@ -18,7 +22,38 @@ export interface SupplierInput {
   policyWriteOffQty?: number | null;
   policyCreditQty?: number | null;
   followUpDays?: number;
+  contactPhone?: string | null;
+  representativeName?: string | null;
+  representativeEmail?: string | null;
 }
+
+export type PolicyStatus = 'ATTACHED' | 'MISSING';
+
+export interface PolicyReviewItem {
+  brandId: number;
+  brandName: string;
+  supplier: Supplier | null;
+  status: PolicyStatus;
+  policyUpdatedAt: string | null;
+  representativeName: string | null;
+}
+
+export interface BulkAttachPolicyResult {
+  attached: number;
+  unchanged: number;
+  corrections: number;
+}
+
+export interface BulkLinkProductsResult {
+  brandId: number;
+  linked: number;
+  alreadyLinked: number;
+  corrections: number;
+}
+
+export type BulkLinkProductsInput =
+  | { brandId: number; productIds: number[]; brandName?: never }
+  | { brandName: string; productIds: number[]; brandId?: never };
 
 export interface ClaimablePoolItem {
   transactionId: number;

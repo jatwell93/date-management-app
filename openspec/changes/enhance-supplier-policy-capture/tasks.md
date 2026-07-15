@@ -57,7 +57,7 @@
       filters (brand/supplier/status), oldest-first sort, admin bulk-attach action.
 - [ ] 5.4 Extend `CatalogueReviewPanel` with the SKU matching mode: SKU/product/brand/policy/last-updated
       columns, unmatched red-highlight, group-by-brand, single manual link, and bulk-link selection.
-- [ ] 5.5 Service methods in `supplierCreditService.ts` for the new endpoints.
+- [x] 5.5 Service methods in `supplierCreditService.ts` for the new endpoints.
 
 ## 6. Tests
 
