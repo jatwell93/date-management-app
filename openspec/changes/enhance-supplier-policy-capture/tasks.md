@@ -16,7 +16,7 @@
 - [x] 2.3 Register SQLite migration `017-add-supplier-policy-fields` in
       `backend/src/migrations/migration.service.ts`, with conditional `updatedAt` backfill.
 - [x] 2.4 pglite harness + `workers/src/database.ts` supplier shape updated for the new columns.
-- [ ] 2.5 Dual-backend conformance test for `brandPolicyStatus` / `hasPolicy` (Neon/pglite vs SQLite,
+- [x] 2.5 Dual-backend conformance test for `brandPolicyStatus` / `hasPolicy` (Neon/pglite vs SQLite,
       including row order and org isolation).
 
 ## 3. Backend (Express)
@@ -40,9 +40,9 @@
 
 ## 4. Workers (parity)
 
-- [ ] 4.1 Parity handlers + routes for extended supplier create/update (validation + admin gate),
+- [x] 4.1 Parity handlers + routes for extended supplier create/update (validation + admin gate),
       policy-review read, bulk-attach, bulk-link.
-- [ ] 4.2 SQL policy status (`length(trim(credit_policy_note)) > 0`) checked against the shared helper
+- [x] 4.2 SQL policy status (`length(trim(credit_policy_note)) > 0`) checked against the shared helper
       via the contract test from 2.5.
 
 ## 5. Frontend
@@ -62,8 +62,8 @@
 ## 6. Tests
 
 - [x] 6.1 Shared-domain units (task 1.2).
-- [ ] 6.2 Dual-backend conformance (task 2.5).
-- [ ] 6.3 Backend + worker route tests, including edge cases:
+- [x] 6.2 Dual-backend conformance (task 2.5).
+- [x] 6.3 Backend + worker route tests, including edge cases:
       - policy validation 422: instructions without any contact method; whitespace-only instructions
         treated as empty.
       - `isPolicyWrite` edges: payload with `creditPolicyNote` **unchanged** does not gate/bump;

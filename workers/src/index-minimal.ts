@@ -69,6 +69,13 @@ import {
   type MarkdownMatrixConfig,
 } from '../../shared/domain/markdown';
 import { isCatalogueReviewState } from '../../shared/domain/brand-supplier';
+import {
+  isPolicyWrite,
+  validatePolicyWrite,
+  type PolicyFieldError,
+  type SupplierPolicyRecord,
+} from '../../shared/domain/supplier-policy';
+import { normalizeRole, ROLES } from './constants/roles';
 
 const DIRECT_UPLOAD_THRESHOLD_BYTES = 2 * 1024 * 1024;
 const PRESIGNED_UPLOAD_TTL_SECONDS = 15 * 60;
@@ -172,6 +179,8 @@ const RE_STORE_AREA_ID = /^\/api\/store-areas\/\d+$/;
 const RE_STORE_AREA_CHECK_CYCLE_COMPLETE = /^\/api\/store-areas\/check-cycles\/\d+\/complete$/;
 const RE_SUPPLIER_CREDIT_BRAND_SUPPLIER = /^\/api\/supplier-credits\/brands\/\d+\/supplier$/;
 const RE_SUPPLIER_CREDIT_PRODUCT_SUPPLIER = /^\/api\/supplier-credits\/products\/\d+\/supplier$/;
+const RE_SUPPLIER_CREDIT_SUPPLIER = /^\/api\/supplier-credits\/suppliers\/\d+$/;
+const RE_SUPPLIER_CREDIT_SUPPLIER_POLICY = /^\/api\/supplier-credits\/suppliers\/\d+\/policy$/;
 const RE_SUPPLIER_CREDIT_DISPOSE = /^\/api\/supplier-credits\/claimable-pool\/\d+\/dispose$/;
 const RE_PLATFORM_CATALOGUE_CORRECTION = /^\/api\/platform\/catalogue-corrections\/\d+$/;
 const OPEN_CREDIT_CLAIM_STATUSES = ['DRAFT', 'SENDING', 'SENT', 'ACKNOWLEDGED'];
@@ -225,6 +234,13 @@ export const MINIMAL_API_ROUTES: MinimalApiRoute[] = [
   ['GET', '/api/expired-items', handleGetExpiredItems],
   ['GET', '/api/expired-items/reports/expired-losses', handleGetExpiredLossesReport],
   ['GET', '/api/supplier-credits/suppliers', handleListSuppliers],
+  ['POST', '/api/supplier-credits/suppliers', handleCreateSupplier],
+  ['PUT', RE_SUPPLIER_CREDIT_SUPPLIER, handleReplaceSupplier, 'path'],
+  ['PATCH', RE_SUPPLIER_CREDIT_SUPPLIER, handlePatchSupplier, 'path'],
+  ['DELETE', RE_SUPPLIER_CREDIT_SUPPLIER_POLICY, handleClearSupplierPolicy, 'path'],
+  ['GET', '/api/supplier-credits/policy-review', handlePolicyReview],
+  ['POST', '/api/supplier-credits/policy-review/bulk-attach', handleBulkAttachPolicy],
+  ['POST', '/api/supplier-credits/brands/bulk-link', handleBulkLinkProducts],
   ['GET', '/api/supplier-credits/brands', handleListBrands],
   ['GET', '/api/supplier-credits/brand-review', handleBrandReview],
   ['POST', '/api/supplier-credits/brands', handleAddBrand],
@@ -496,7 +512,13 @@ export async function handleCatalogueImportQueue(
 // These use the typed Database interface from database.ts
 // =============================================================================
 
-import { Database } from './database';
+import {
+  Database,
+  type BulkAttachResult,
+  type BulkLinkResult,
+  type Supplier,
+  type SupplierWriteData,
+} from './database';
 import { SignJWT, jwtVerify } from 'jose';
 
 /**
@@ -1286,6 +1308,452 @@ async function handleListSuppliers(request: Request, db: Database, env: Env): Pr
 
   const suppliers = await db.listSuppliers(auth.organizationId);
   return jsonResponse(suppliers, 200, env);
+}
+
+type SupplierInput = Partial<
+  Pick<
+    SupplierWriteData,
+    | 'name'
+    | 'contactEmail'
+    | 'contactPhone'
+    | 'creditPolicyNote'
+    | 'policyWriteOffQty'
+    | 'policyCreditQty'
+    | 'followUpDays'
+    | 'representativeName'
+    | 'representativeEmail'
+  >
+>;
+
+function structuredErrorResponse(
+  code: string,
+  message: string,
+  statusCode: number,
+  env: Env,
+  errors?: Array<{ field: string; message: string }>,
+): Response {
+  return jsonResponse(
+    { code, message, statusCode, ...(errors?.length ? { errors } : {}) },
+    statusCode,
+    env,
+  );
+}
+
+function policyValidationResponse(
+  message: string,
+  errors: Array<{ field: string; message: string }>,
+  env: Env,
+): Response {
+  return structuredErrorResponse('POLICY_VALIDATION_ERROR', message, 422, env, errors);
+}
+
+function normalizeOptionalText(value: string | null | undefined): string | null {
+  return value?.trim() || null;
+}
+
+function isEmail(value: string): boolean {
+  return /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(value);
+}
+
+async function parseSupplierBody(
+  request: Request,
+  env: Env,
+  requireName: boolean,
+): Promise<{ input: SupplierInput } | { response: Response }> {
+  const body = (await request.json().catch(() => null)) as Record<string, unknown> | null;
+  if (!body || Array.isArray(body)) {
+    return {
+      response: structuredErrorResponse('VALIDATION_ERROR', 'Invalid request body', 400, env),
+    };
+  }
+
+  const errors: Array<{ field: string; message: string }> = [];
+  const input: SupplierInput = {};
+  const textField = (
+    field: keyof Pick<
+      SupplierInput,
+      'name' | 'creditPolicyNote' | 'contactPhone' | 'representativeName'
+    >,
+    max: number,
+    nullable: boolean,
+  ) => {
+    const value = body[field];
+    if (value === undefined) return;
+    if ((nullable && value === null) || typeof value === 'string') {
+      if (typeof value === 'string' && value.length > max) {
+        errors.push({ field, message: `Must be at most ${max} characters` });
+      } else {
+        (input as Record<string, unknown>)[field] = value;
+      }
+      return;
+    }
+    errors.push({ field, message: 'Must be a string' });
+  };
+
+  textField('name', 255, false);
+  textField('creditPolicyNote', 10_000, false);
+  textField('contactPhone', 80, true);
+  textField('representativeName', 120, true);
+
+  for (const field of ['contactEmail', 'representativeEmail'] as const) {
+    const value = body[field];
+    if (value === undefined) continue;
+    if (value !== null && typeof value !== 'string') {
+      errors.push({ field, message: 'Must be a valid email address' });
+      continue;
+    }
+    if (typeof value === 'string' && (value.length > 255 || !isEmail(value.trim()))) {
+      errors.push({ field, message: 'Must be a valid email address' });
+      continue;
+    }
+    input[field] = value;
+  }
+
+  for (const field of ['policyWriteOffQty', 'policyCreditQty'] as const) {
+    const value = body[field];
+    if (value === undefined) continue;
+    if (value !== null && !isPositiveInteger(value)) {
+      errors.push({ field, message: 'Must be a positive integer or null' });
+      continue;
+    }
+    input[field] = value;
+  }
+
+  if (body.followUpDays !== undefined) {
+    if (!isPositiveInteger(body.followUpDays)) {
+      errors.push({ field: 'followUpDays', message: 'Must be a positive integer' });
+    } else {
+      input.followUpDays = body.followUpDays;
+    }
+  }
+
+  if (requireName && (typeof input.name !== 'string' || input.name.trim().length === 0)) {
+    errors.push({ field: 'name', message: 'Supplier name is required' });
+  } else if (input.name !== undefined && input.name.trim().length === 0) {
+    errors.push({ field: 'name', message: 'Supplier name is required' });
+  }
+
+  return errors.length
+    ? {
+        response: structuredErrorResponse(
+          'VALIDATION_ERROR',
+          'Request validation failed',
+          400,
+          env,
+          errors,
+        ),
+      }
+    : { input };
+}
+
+function toCreateSupplierData(input: SupplierInput, policyChanged: boolean): SupplierWriteData {
+  return {
+    name: input.name?.trim() ?? '',
+    contactEmail: normalizeOptionalText(input.contactEmail),
+    contactPhone: normalizeOptionalText(input.contactPhone),
+    creditPolicyNote: input.creditPolicyNote?.trim() ?? '',
+    policyWriteOffQty: input.policyWriteOffQty ?? null,
+    policyCreditQty: input.policyCreditQty ?? null,
+    followUpDays: input.followUpDays ?? 7,
+    representativeName: normalizeOptionalText(input.representativeName),
+    representativeEmail: normalizeOptionalText(input.representativeEmail),
+    policyUpdatedAt: policyChanged ? new Date().toISOString() : null,
+  };
+}
+
+function toMergedSupplierData(
+  input: SupplierInput,
+  existing: Supplier,
+  policyChanged: boolean,
+): SupplierWriteData {
+  return {
+    name: input.name === undefined ? existing.name : input.name.trim(),
+    contactEmail:
+      input.contactEmail === undefined
+        ? existing.contactEmail
+        : normalizeOptionalText(input.contactEmail),
+    contactPhone:
+      input.contactPhone === undefined
+        ? existing.contactPhone
+        : normalizeOptionalText(input.contactPhone),
+    creditPolicyNote:
+      input.creditPolicyNote === undefined
+        ? existing.creditPolicyNote
+        : input.creditPolicyNote.trim(),
+    policyWriteOffQty:
+      input.policyWriteOffQty === undefined ? existing.policyWriteOffQty : input.policyWriteOffQty,
+    policyCreditQty:
+      input.policyCreditQty === undefined ? existing.policyCreditQty : input.policyCreditQty,
+    followUpDays: input.followUpDays ?? existing.followUpDays,
+    representativeName:
+      input.representativeName === undefined
+        ? existing.representativeName
+        : normalizeOptionalText(input.representativeName),
+    representativeEmail:
+      input.representativeEmail === undefined
+        ? existing.representativeEmail
+        : normalizeOptionalText(input.representativeEmail),
+    policyUpdatedAt: policyChanged ? new Date().toISOString() : existing.policyUpdatedAt,
+  };
+}
+
+function ratioErrors(data: SupplierPolicyRecord): Array<{ field: string; message: string }> {
+  return (data.policyWriteOffQty == null) !== (data.policyCreditQty == null)
+    ? [
+        {
+          field: 'policyCreditQty',
+          message:
+            'A credit ratio needs both a write-off quantity and a credit quantity, or neither.',
+        },
+      ]
+    : [];
+}
+
+function authorizeAndValidateWorkerPolicy(
+  input: SupplierPolicyRecord,
+  existing: SupplierPolicyRecord | null,
+  role: string,
+  env: Env,
+): Response | null {
+  if (!isPolicyWrite(input, existing)) return null;
+  if (normalizeRole(role) !== ROLES.ADMIN) {
+    return structuredErrorResponse('AUTHORIZATION_ERROR', 'Insufficient permissions', 403, env);
+  }
+  const errors: PolicyFieldError[] = validatePolicyWrite(input, existing);
+  return errors.length ? policyValidationResponse('Supplier policy is invalid', errors, env) : null;
+}
+
+async function handleCreateSupplier(request: Request, db: Database, env: Env): Promise<Response> {
+  const auth = await authenticateApiRequest(request, env, db);
+  if (auth instanceof Response) return auth;
+  const parsed = await parseSupplierBody(request, env, true);
+  if ('response' in parsed) return parsed.response;
+  const policyError = authorizeAndValidateWorkerPolicy(parsed.input, null, auth.role, env);
+  if (policyError) return policyError;
+  const policyChanged = isPolicyWrite(parsed.input, null);
+  const data = toCreateSupplierData(parsed.input, policyChanged);
+  const ratio = ratioErrors(data);
+  if (ratio.length) return policyValidationResponse('Supplier policy is invalid', ratio, env);
+  return jsonResponse(await db.createSupplier(auth.organizationId, data), 201, env);
+}
+
+async function writeSupplier(
+  request: Request,
+  db: Database,
+  env: Env,
+  pathname: string,
+  replace: boolean,
+): Promise<Response> {
+  const auth = await authenticateApiRequest(request, env, db);
+  if (auth instanceof Response) return auth;
+  const supplierId = parsePositiveInt(pathname.split('/')[4] ?? '');
+  if (supplierId == null)
+    return structuredErrorResponse('VALIDATION_ERROR', 'Invalid supplier ID', 400, env);
+  const parsed = await parseSupplierBody(request, env, replace);
+  if ('response' in parsed) return parsed.response;
+  const existing = await db.findSupplier(auth.organizationId, supplierId);
+  if (!existing) {
+    return structuredErrorResponse('NOT_FOUND_ERROR', `Supplier ${supplierId} not found`, 404, env);
+  }
+  const replacement = replace ? toCreateSupplierData(parsed.input, false) : null;
+  const candidate: SupplierPolicyRecord = replacement ?? parsed.input;
+  const policyError = authorizeAndValidateWorkerPolicy(candidate, existing, auth.role, env);
+  if (policyError) return policyError;
+  const policyChanged = isPolicyWrite(candidate, existing);
+  const data: SupplierWriteData = replacement
+    ? {
+        ...replacement,
+        policyUpdatedAt: policyChanged ? new Date().toISOString() : existing.policyUpdatedAt,
+      }
+    : toMergedSupplierData(parsed.input, existing, policyChanged);
+  const ratio = ratioErrors(data);
+  if (ratio.length) return policyValidationResponse('Supplier policy is invalid', ratio, env);
+  const supplier = await db.updateSupplier(auth.organizationId, supplierId, data);
+  return supplier
+    ? jsonResponse(supplier, 200, env)
+    : structuredErrorResponse('NOT_FOUND_ERROR', `Supplier ${supplierId} not found`, 404, env);
+}
+
+async function handleReplaceSupplier(
+  request: Request,
+  db: Database,
+  env: Env,
+  pathname: string,
+): Promise<Response> {
+  return writeSupplier(request, db, env, pathname, true);
+}
+
+async function handlePatchSupplier(
+  request: Request,
+  db: Database,
+  env: Env,
+  pathname: string,
+): Promise<Response> {
+  return writeSupplier(request, db, env, pathname, false);
+}
+
+async function handleClearSupplierPolicy(
+  request: Request,
+  db: Database,
+  env: Env,
+  pathname: string,
+): Promise<Response> {
+  const auth = await authenticateApiRequest(request, env, db);
+  if (auth instanceof Response) return auth;
+  if (normalizeRole(auth.role) !== ROLES.ADMIN) {
+    return structuredErrorResponse('AUTHORIZATION_ERROR', 'Insufficient permissions', 403, env);
+  }
+  const supplierId = parsePositiveInt(pathname.split('/')[4] ?? '');
+  if (supplierId == null)
+    return structuredErrorResponse('VALIDATION_ERROR', 'Invalid supplier ID', 400, env);
+  const supplier = await db.clearSupplierPolicy(auth.organizationId, supplierId);
+  return supplier
+    ? jsonResponse(supplier, 200, env)
+    : structuredErrorResponse('NOT_FOUND_ERROR', `Supplier ${supplierId} not found`, 404, env);
+}
+
+async function handlePolicyReview(request: Request, db: Database, env: Env): Promise<Response> {
+  const auth = await authenticateApiRequest(request, env, db);
+  if (auth instanceof Response) return auth;
+  const query = new URL(request.url).searchParams;
+  const status = query.get('status');
+  if (status != null && status !== 'ATTACHED' && status !== 'MISSING') {
+    return structuredErrorResponse(
+      'VALIDATION_ERROR',
+      'Policy status must be ATTACHED or MISSING',
+      400,
+      env,
+    );
+  }
+  return jsonResponse(
+    await db.listPolicyReview(auth.organizationId, {
+      brand: query.get('brand') ?? undefined,
+      supplier: query.get('supplier') ?? undefined,
+      status: status ?? undefined,
+    }),
+    200,
+    env,
+  );
+}
+
+function normalizeBulkIds(
+  value: unknown,
+  field: string,
+  env: Env,
+): { ids: number[] } | { response: Response } {
+  if (
+    !Array.isArray(value) ||
+    value.length < 1 ||
+    value.length > 500 ||
+    value.some((id) => !isPositiveInteger(id))
+  ) {
+    return {
+      response: policyValidationResponse(
+        'Bulk request is invalid',
+        [{ field, message: 'Provide between 1 and 500 positive integer IDs' }],
+        env,
+      ),
+    };
+  }
+  return { ids: [...new Set(value)] };
+}
+
+function bulkAttachResponse(result: BulkAttachResult, env: Env): Response {
+  if (result.kind === 'SUCCESS') {
+    const { kind: _kind, ...body } = result;
+    return jsonResponse(body, 200, env);
+  }
+  if (result.kind === 'SUPPLIER_POLICY_MISSING') {
+    return policyValidationResponse(
+      'Supplier policy is invalid',
+      [{ field: 'supplierId', message: 'The selected supplier has no store instructions' }],
+      env,
+    );
+  }
+  return structuredErrorResponse(
+    'NOT_FOUND_ERROR',
+    result.kind === 'SUPPLIER_NOT_FOUND'
+      ? 'Supplier not found'
+      : 'One or more brands were not found',
+    404,
+    env,
+  );
+}
+
+async function handleBulkAttachPolicy(request: Request, db: Database, env: Env): Promise<Response> {
+  const auth = await authenticateApiRequest(request, env, db);
+  if (auth instanceof Response) return auth;
+  if (normalizeRole(auth.role) !== ROLES.ADMIN) {
+    return structuredErrorResponse('AUTHORIZATION_ERROR', 'Insufficient permissions', 403, env);
+  }
+  const body = (await request.json().catch(() => null)) as Record<string, unknown> | null;
+  if (!isPositiveInteger(body?.supplierId)) {
+    return policyValidationResponse(
+      'Bulk request is invalid',
+      [{ field: 'supplierId', message: 'Supplier ID must be a positive integer' }],
+      env,
+    );
+  }
+  const normalized = normalizeBulkIds(body.brandIds, 'brandIds', env);
+  if ('response' in normalized) return normalized.response;
+  return bulkAttachResponse(
+    await db.bulkAttachSupplier(auth.organizationId, body.supplierId, normalized.ids, auth.userId),
+    env,
+  );
+}
+
+function bulkLinkResponse(result: BulkLinkResult, env: Env): Response {
+  if (result.kind === 'SUCCESS') {
+    const { kind: _kind, ...body } = result;
+    return jsonResponse(body, 200, env);
+  }
+  if (result.kind === 'BRAND_CONFLICT') {
+    return structuredErrorResponse(
+      'CONFLICT_ERROR',
+      'One or more products are linked to a different brand',
+      409,
+      env,
+    );
+  }
+  return structuredErrorResponse(
+    'NOT_FOUND_ERROR',
+    result.kind === 'BRAND_NOT_FOUND' ? 'Brand not found' : 'One or more products were not found',
+    404,
+    env,
+  );
+}
+
+async function handleBulkLinkProducts(request: Request, db: Database, env: Env): Promise<Response> {
+  const auth = await authenticateApiRequest(request, env, db);
+  if (auth instanceof Response) return auth;
+  const body = (await request.json().catch(() => null)) as Record<string, unknown> | null;
+  const normalized = normalizeBulkIds(body?.productIds, 'productIds', env);
+  if ('response' in normalized) return normalized.response;
+  const brandId = body?.brandId;
+  const brandName = typeof body?.brandName === 'string' ? body.brandName.trim() : '';
+  if ((brandId == null) === (brandName.length === 0)) {
+    return policyValidationResponse(
+      'Bulk request is invalid',
+      [{ field: 'brand', message: 'Provide exactly one brandId or brandName' }],
+      env,
+    );
+  }
+  if (brandId != null && !isPositiveInteger(brandId)) {
+    return policyValidationResponse(
+      'Bulk request is invalid',
+      [{ field: 'brandId', message: 'Brand ID must be a positive integer' }],
+      env,
+    );
+  }
+  return bulkLinkResponse(
+    await db.bulkLinkProducts(
+      auth.organizationId,
+      brandId == null ? { brandName } : { brandId },
+      normalized.ids,
+      auth.userId,
+    ),
+    env,
+  );
 }
 
 export function isPlatformAdminUser(

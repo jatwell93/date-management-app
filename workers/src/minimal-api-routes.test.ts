@@ -162,6 +162,13 @@ describe('minimal API route table', () => {
     expect(getMinimalRoutes()).toEqual(
       expect.arrayContaining([
         expect.arrayContaining(['GET', '/api/supplier-credits/suppliers']),
+        expect.arrayContaining(['POST', '/api/supplier-credits/suppliers']),
+        expect.arrayContaining(['PUT', /^\/api\/supplier-credits\/suppliers\/\d+$/]),
+        expect.arrayContaining(['PATCH', /^\/api\/supplier-credits\/suppliers\/\d+$/]),
+        expect.arrayContaining(['DELETE', /^\/api\/supplier-credits\/suppliers\/\d+\/policy$/]),
+        expect.arrayContaining(['GET', '/api/supplier-credits/policy-review']),
+        expect.arrayContaining(['POST', '/api/supplier-credits/policy-review/bulk-attach']),
+        expect.arrayContaining(['POST', '/api/supplier-credits/brands/bulk-link']),
         expect.arrayContaining(['GET', '/api/supplier-credits/brands']),
         expect.arrayContaining(['GET', '/api/supplier-credits/brand-review']),
         expect.arrayContaining(['POST', '/api/supplier-credits/brands']),
@@ -535,6 +542,167 @@ describe('minimal API route table', () => {
       'SENT',
       'ACKNOWLEDGED',
     ]);
+  });
+
+  it('allows a team member to create a bare supplier', async () => {
+    mockedAuthenticateClerkRequest.mockResolvedValue(authenticatedClerkOrgContext);
+    const createSupplier = vi.fn().mockResolvedValue({
+      id: 11,
+      name: 'Bare Supplier',
+      creditPolicyNote: '',
+      policyUpdatedAt: null,
+    });
+    const database = {
+      sql: vi.fn().mockResolvedValue([{ id: 7, organizationId: 'org_123', role: 'team_member' }]),
+      createSupplier,
+    } as unknown as Database;
+
+    const response = await resolveMinimalApiRoute(getMinimalRoutes(), {
+      request: new Request('https://example.com/api/supplier-credits/suppliers', {
+        method: 'POST',
+        body: JSON.stringify({ name: '  Bare Supplier  ' }),
+      }),
+      pathname: '/api/supplier-credits/suppliers',
+      method: 'POST',
+      db: database,
+      env,
+    });
+
+    expect(response?.status).toBe(201);
+    expect(createSupplier).toHaveBeenCalledWith(
+      'org_123',
+      expect.objectContaining({
+        name: 'Bare Supplier',
+        creditPolicyNote: '',
+        followUpDays: 7,
+        policyUpdatedAt: null,
+      }),
+    );
+  });
+
+  it('forbids a changed policy for a non-admin before writing', async () => {
+    mockedAuthenticateClerkRequest.mockResolvedValue(authenticatedClerkOrgContext);
+    const createSupplier = vi.fn();
+    const database = {
+      sql: vi.fn().mockResolvedValue([{ id: 7, organizationId: 'org_123', role: 'team_member' }]),
+      createSupplier,
+    } as unknown as Database;
+
+    const response = await resolveMinimalApiRoute(getMinimalRoutes(), {
+      request: new Request('https://example.com/api/supplier-credits/suppliers', {
+        method: 'POST',
+        body: JSON.stringify({
+          name: 'Policy Supplier',
+          creditPolicyNote: 'Return monthly',
+          contactPhone: '02 1234 5678',
+        }),
+      }),
+      pathname: '/api/supplier-credits/suppliers',
+      method: 'POST',
+      db: database,
+      env,
+    });
+
+    expect(response?.status).toBe(403);
+    expect(createSupplier).not.toHaveBeenCalled();
+  });
+
+  it('returns structured 422 field errors for an invalid admin policy', async () => {
+    mockedAuthenticateClerkRequest.mockResolvedValue(authenticatedClerkOrgContext);
+    const createSupplier = vi.fn();
+    const database = {
+      sql: vi.fn().mockResolvedValue([{ id: 7, organizationId: 'org_123', role: 'org:admin' }]),
+      createSupplier,
+    } as unknown as Database;
+
+    const response = await resolveMinimalApiRoute(getMinimalRoutes(), {
+      request: new Request('https://example.com/api/supplier-credits/suppliers', {
+        method: 'POST',
+        body: JSON.stringify({ name: 'Policy Supplier', creditPolicyNote: 'Return monthly' }),
+      }),
+      pathname: '/api/supplier-credits/suppliers',
+      method: 'POST',
+      db: database,
+      env,
+    });
+
+    expect(response?.status).toBe(422);
+    await expect(response?.json()).resolves.toEqual({
+      code: 'POLICY_VALIDATION_ERROR',
+      message: 'Supplier policy is invalid',
+      statusCode: 422,
+      errors: [
+        { field: 'contact', message: 'Add a contact email, phone, or representative email' },
+      ],
+    });
+    expect(createSupplier).not.toHaveBeenCalled();
+  });
+
+  it('allows a normalized unchanged PATCH for a team member without a timestamp bump', async () => {
+    mockedAuthenticateClerkRequest.mockResolvedValue(authenticatedClerkOrgContext);
+    const existing = {
+      id: 4,
+      name: 'Supplier',
+      contactEmail: 'claims@example.com',
+      contactPhone: null,
+      creditPolicyNote: 'Return monthly',
+      policyWriteOffQty: 3,
+      policyCreditQty: 1,
+      followUpDays: 7,
+      representativeName: null,
+      representativeEmail: null,
+      policyUpdatedAt: '2026-07-01T00:00:00.000Z',
+    };
+    const updateSupplier = vi.fn().mockResolvedValue(existing);
+    const database = {
+      sql: vi.fn().mockResolvedValue([{ id: 7, organizationId: 'org_123', role: 'team_member' }]),
+      findSupplier: vi.fn().mockResolvedValue(existing),
+      updateSupplier,
+    } as unknown as Database;
+
+    const response = await resolveMinimalApiRoute(getMinimalRoutes(), {
+      request: new Request('https://example.com/api/supplier-credits/suppliers/4', {
+        method: 'PATCH',
+        body: JSON.stringify({ creditPolicyNote: '  Return monthly  ' }),
+      }),
+      pathname: '/api/supplier-credits/suppliers/4',
+      method: 'PATCH',
+      db: database,
+      env,
+    });
+
+    expect(response?.status).toBe(200);
+    expect(updateSupplier).toHaveBeenCalledWith(
+      'org_123',
+      4,
+      expect.objectContaining({
+        creditPolicyNote: 'Return monthly',
+        policyUpdatedAt: existing.policyUpdatedAt,
+      }),
+    );
+  });
+
+  it('rejects a raw 501-item bulk request before database work', async () => {
+    mockedAuthenticateClerkRequest.mockResolvedValue(authenticatedClerkOrgContext);
+    const bulkAttachSupplier = vi.fn();
+    const database = {
+      sql: vi.fn().mockResolvedValue([{ id: 7, organizationId: 'org_123', role: 'admin' }]),
+      bulkAttachSupplier,
+    } as unknown as Database;
+
+    const response = await resolveMinimalApiRoute(getMinimalRoutes(), {
+      request: new Request('https://example.com/api/supplier-credits/policy-review/bulk-attach', {
+        method: 'POST',
+        body: JSON.stringify({ supplierId: 4, brandIds: Array.from({ length: 501 }, () => 10) }),
+      }),
+      pathname: '/api/supplier-credits/policy-review/bulk-attach',
+      method: 'POST',
+      db: database,
+      env,
+    });
+
+    expect(response?.status).toBe(422);
+    expect(bulkAttachSupplier).not.toHaveBeenCalled();
   });
 
   it('rejects claimability vocabulary on catalogue review', async () => {
