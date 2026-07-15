@@ -19,11 +19,20 @@ import type {
   CreditClaim,
   RecoveryReport,
   Supplier,
+  SupplierInput,
 } from '../types/supplierCredit';
 import { CatalogueReviewPanel } from '../components/supplier-credits/CatalogueReviewPanel';
+import {
+  SupplierPolicyFields,
+  type SupplierPolicyDraft,
+} from '../components/supplier-credits/SupplierPolicyFields';
+import { ApiError } from '../lib/api.service';
+import { ROLES, type RoleValue } from '../constants/roles';
+import { validatePolicyWrite } from '@shared/supplier-policy';
 
 interface Props {
   token: string | null;
+  effectiveUserRole: RoleValue | null;
 }
 
 const currency = new Intl.NumberFormat('en-AU', { style: 'currency', currency: 'AUD' });
@@ -53,7 +62,7 @@ function isFollowUpDue(claim: CreditClaim): boolean {
   );
 }
 
-const SupplierCreditsPage: React.FC<Props> = ({ token }) => {
+const SupplierCreditsPage: React.FC<Props> = ({ token, effectiveUserRole }) => {
   const getFreshApiToken = useFreshApiToken(token);
   const [tab, setTab] = useState<Tab>(() =>
     new URLSearchParams(window.location.search).get('view') === 'catalogue-review'
@@ -215,6 +224,7 @@ const SupplierCreditsPage: React.FC<Props> = ({ token }) => {
         <AssignSupplierModal
           item={assignItem}
           suppliers={suppliers}
+          effectiveUserRole={effectiveUserRole}
           getToken={async () => (await getFreshApiToken('supplier-credits-assign')) ?? null}
           onClose={() => setAssignItem(null)}
           onAssigned={() => {
@@ -581,6 +591,51 @@ const BuildClaimModal: React.FC<{
   );
 };
 
+const EMPTY_POLICY_DRAFT: SupplierPolicyDraft = {
+  contactEmail: '',
+  contactPhone: '',
+  creditPolicyNote: '',
+  policyWriteOffQty: '',
+  policyCreditQty: '',
+  followUpDays: '7',
+  representativeName: '',
+  representativeEmail: '',
+};
+
+function supplierPolicyDraft(supplier?: Supplier): SupplierPolicyDraft {
+  if (!supplier) return { ...EMPTY_POLICY_DRAFT };
+  return {
+    contactEmail: supplier.contactEmail ?? '',
+    contactPhone: supplier.contactPhone ?? '',
+    creditPolicyNote: supplier.creditPolicyNote,
+    policyWriteOffQty: supplier.policyWriteOffQty?.toString() ?? '',
+    policyCreditQty: supplier.policyCreditQty?.toString() ?? '',
+    followUpDays: supplier.followUpDays.toString(),
+    representativeName: supplier.representativeName ?? '',
+    representativeEmail: supplier.representativeEmail ?? '',
+  };
+}
+
+function supplierPolicyInput(
+  draft: SupplierPolicyDraft,
+  includePolicy: boolean,
+): Omit<SupplierInput, 'name'> {
+  const contactInput = {
+    contactEmail: draft.contactEmail.trim() || null,
+    contactPhone: draft.contactPhone.trim() || null,
+  };
+  if (!includePolicy) return contactInput;
+  return {
+    ...contactInput,
+    creditPolicyNote: draft.creditPolicyNote,
+    policyWriteOffQty: draft.policyWriteOffQty ? Number(draft.policyWriteOffQty) : null,
+    policyCreditQty: draft.policyCreditQty ? Number(draft.policyCreditQty) : null,
+    followUpDays: draft.followUpDays ? Number(draft.followUpDays) : 7,
+    representativeName: draft.representativeName.trim() || null,
+    representativeEmail: draft.representativeEmail.trim() || null,
+  };
+}
+
 const AssignSupplierModal: React.FC<{
   item: {
     productId: number;
@@ -589,36 +644,87 @@ const AssignSupplierModal: React.FC<{
     brandName?: string | null;
   };
   suppliers: Supplier[];
+  effectiveUserRole: RoleValue | null;
   getToken: () => Promise<string | null>;
   onClose: () => void;
   onAssigned: () => void;
-}> = ({ item, suppliers, getToken, onClose, onAssigned }) => {
-  const [mode, setMode] = useState<'existing' | 'new'>(suppliers.length > 0 ? 'existing' : 'new');
+}> = ({ item, suppliers, effectiveUserRole, getToken, onClose, onAssigned }) => {
+  const isAdmin = effectiveUserRole === ROLES.ADMIN;
+  const [mode, setMode] = useState<'existing' | 'new' | 'edit'>(
+    suppliers.length > 0 ? 'existing' : 'new',
+  );
   const [supplierId, setSupplierId] = useState<number | ''>(suppliers[0]?.id ?? '');
   const [name, setName] = useState('');
-  const [email, setEmail] = useState('');
-  const [writeOffQty, setWriteOffQty] = useState('');
-  const [creditQty, setCreditQty] = useState('');
+  const [draft, setDraft] = useState<SupplierPolicyDraft>(() => supplierPolicyDraft());
+  const [preview, setPreview] = useState(false);
   const [submitting, setSubmitting] = useState(false);
   const [err, setErr] = useState<string | null>(null);
+  const [permissionError, setPermissionError] = useState<string | null>(null);
+  const [fieldErrors, setFieldErrors] = useState<Record<string, string>>({});
+
+  const selectedSupplier = suppliers.find((supplier) => supplier.id === supplierId);
+  const displayedDraft = mode === 'existing' ? supplierPolicyDraft(selectedSupplier) : draft;
+
+  const changeDraft = (field: keyof SupplierPolicyDraft, value: string) => {
+    setDraft((current) => ({ ...current, [field]: value }));
+    setFieldErrors((current) => {
+      if (!current[field] && !(field.startsWith('contact') && current.contact)) return current;
+      const next = { ...current };
+      delete next[field];
+      if (field.startsWith('contact') || field === 'representativeEmail') delete next.contact;
+      return next;
+    });
+  };
+
+  const enterEditMode = () => {
+    if (!selectedSupplier) return;
+    setName(selectedSupplier.name);
+    setDraft(supplierPolicyDraft(selectedSupplier));
+    setPreview(false);
+    setFieldErrors({});
+    setPermissionError(null);
+    setErr(null);
+    setMode('edit');
+  };
+
+  const selectMode = (nextMode: 'existing' | 'new') => {
+    setMode(nextMode);
+    setName('');
+    setDraft(supplierPolicyDraft());
+    setPreview(false);
+    setFieldErrors({});
+    setPermissionError(null);
+    setErr(null);
+  };
 
   const submit = async () => {
+    const existing = mode === 'edit' ? (selectedSupplier ?? null) : null;
+    const input = supplierPolicyInput(draft, isAdmin);
+    const validationErrors = isAdmin ? validatePolicyWrite(input, existing) : [];
+    if (validationErrors.length > 0) {
+      setFieldErrors(
+        Object.fromEntries(validationErrors.map((error) => [error.field, error.message])),
+      );
+      return;
+    }
+
     setSubmitting(true);
     setErr(null);
+    setPermissionError(null);
+    setFieldErrors({});
     try {
       const token = await getToken();
       let targetId: number;
       if (mode === 'new') {
-        const created = await svc.createSupplier(
-          {
-            name,
-            contactEmail: email || null,
-            policyWriteOffQty: writeOffQty ? Number(writeOffQty) : null,
-            policyCreditQty: creditQty ? Number(creditQty) : null,
-          },
+        const created = await svc.createSupplier({ name: name.trim(), ...input }, token);
+        targetId = created.id;
+      } else if (mode === 'edit' && selectedSupplier) {
+        const updated = await svc.updateSupplier(
+          selectedSupplier.id,
+          { name: name.trim(), ...input },
           token,
         );
-        targetId = created.id;
+        targetId = updated.id;
       } else {
         targetId = supplierId as number;
       }
@@ -628,15 +734,28 @@ const AssignSupplierModal: React.FC<{
         await svc.assignProductSupplier(item.productId, targetId, token);
       }
       onAssigned();
-    } catch (e) {
-      setErr(e instanceof Error ? e.message : 'Failed to assign supplier');
+    } catch (error) {
+      if (error instanceof ApiError && error.status === 403) {
+        setPermissionError('You no longer have permission to change supplier policy.');
+      } else if (error instanceof ApiError && error.status === 422 && error.errors.length > 0) {
+        setFieldErrors(
+          Object.fromEntries(
+            error.errors.map((fieldError) => [fieldError.field, fieldError.message]),
+          ),
+        );
+      } else {
+        setErr(error instanceof Error ? error.message : 'Failed to assign supplier');
+      }
       setSubmitting(false);
     }
   };
 
+  const actionLabel =
+    mode === 'edit' ? 'Save and assign' : item.brandId != null ? 'Confirm supplier' : 'Assign';
+
   return (
-    <Dialog open onOpenChange={(o) => !o && onClose()}>
-      <DialogContent className="sm:max-w-md">
+    <Dialog open onOpenChange={(open) => !open && onClose()}>
+      <DialogContent className="max-h-[90vh] overflow-y-auto sm:max-w-2xl">
         <DialogHeader>
           <DialogTitle>
             {item.brandId != null
@@ -649,78 +768,91 @@ const AssignSupplierModal: React.FC<{
             <Button
               variant={mode === 'existing' ? 'default' : 'outline'}
               size="sm"
-              onClick={() => setMode('existing')}
+              onClick={() => selectMode('existing')}
             >
               Existing
             </Button>
             <Button
               variant={mode === 'new' ? 'default' : 'outline'}
               size="sm"
-              onClick={() => setMode('new')}
+              onClick={() => selectMode('new')}
             >
               New supplier
             </Button>
           </div>
         )}
+
         {mode === 'existing' ? (
-          <div>
-            <Label htmlFor="supplier-select">Supplier</Label>
-            <select
-              id="supplier-select"
-              className="mt-1 w-full rounded-md border px-3 py-2 text-sm"
-              value={supplierId}
-              onChange={(e) => setSupplierId(Number(e.target.value))}
-            >
-              {suppliers.map((s) => (
-                <option key={s.id} value={s.id}>
-                  {s.name}
-                </option>
-              ))}
-            </select>
+          <div className="space-y-4">
+            <div>
+              <Label htmlFor="supplier-select">Supplier</Label>
+              <select
+                id="supplier-select"
+                className="mt-1 w-full rounded-md border bg-semantic-surface-1 px-3 py-2 text-sm"
+                value={supplierId}
+                onChange={(event) => setSupplierId(Number(event.target.value))}
+              >
+                {suppliers.map((supplier) => (
+                  <option key={supplier.id} value={supplier.id}>
+                    {supplier.name}
+                  </option>
+                ))}
+              </select>
+            </div>
+            {selectedSupplier && (
+              <SupplierPolicyFields
+                value={displayedDraft}
+                onChange={() => undefined}
+                fieldErrors={{}}
+                editableContacts={false}
+                editablePolicy={false}
+                preview
+                onPreviewChange={() => undefined}
+                idPrefix="existing-supplier"
+              />
+            )}
+            {isAdmin && selectedSupplier && (
+              <Button type="button" variant="outline" size="sm" onClick={enterEditMode}>
+                Edit supplier policy
+              </Button>
+            )}
           </div>
         ) : (
-          <div className="space-y-3">
+          <div className="space-y-4">
             <div>
-              <Label htmlFor="new-name">Name</Label>
-              <Input id="new-name" value={name} onChange={(e) => setName(e.target.value)} />
-            </div>
-            <div>
-              <Label htmlFor="new-email">Contact email</Label>
+              <Label htmlFor="supplier-name">Name</Label>
               <Input
-                id="new-email"
-                type="email"
-                value={email}
-                onChange={(e) => setEmail(e.target.value)}
+                id="supplier-name"
+                maxLength={255}
+                value={name}
+                onChange={(event) => setName(event.target.value)}
               />
+              {fieldErrors.name && (
+                <p className="mt-1 text-xs text-semantic-critical">{fieldErrors.name}</p>
+              )}
             </div>
-            <div className="grid grid-cols-2 gap-3">
-              <div>
-                <Label htmlFor="wo-qty">Write off</Label>
-                <Input
-                  id="wo-qty"
-                  type="number"
-                  min="1"
-                  value={writeOffQty}
-                  onChange={(e) => setWriteOffQty(e.target.value)}
-                />
-              </div>
-              <div>
-                <Label htmlFor="cr-qty">Credit</Label>
-                <Input
-                  id="cr-qty"
-                  type="number"
-                  min="0"
-                  value={creditQty}
-                  onChange={(e) => setCreditQty(e.target.value)}
-                />
-              </div>
-            </div>
-            <p className="text-xs text-semantic-text-tertiary">
-              e.g. 3 &amp; 1 for a 3-for-1 policy. Leave blank if there is no fixed ratio.
-            </p>
+            <SupplierPolicyFields
+              value={displayedDraft}
+              onChange={changeDraft}
+              fieldErrors={fieldErrors}
+              editableContacts
+              editablePolicy={isAdmin}
+              preview={preview}
+              onPreviewChange={setPreview}
+              idPrefix={mode === 'edit' ? 'edit-supplier' : 'new-supplier'}
+            />
           </div>
         )}
-        {err && <p className="mt-2 text-sm text-semantic-critical">{err}</p>}
+
+        {permissionError && (
+          <p
+            role="alert"
+            className="rounded-md bg-semantic-critical-muted p-3 text-sm text-semantic-critical"
+          >
+            {permissionError}
+          </p>
+        )}
+        {err && <p className="text-sm text-semantic-critical">{err}</p>}
         <DialogFooter>
           <Button variant="outline" onClick={onClose} disabled={submitting}>
             Cancel
@@ -728,10 +860,12 @@ const AssignSupplierModal: React.FC<{
           <Button
             onClick={() => void submit()}
             disabled={
-              submitting || (mode === 'new' && !name) || (mode === 'existing' && supplierId === '')
+              submitting ||
+              ((mode === 'new' || mode === 'edit') && !name.trim()) ||
+              (mode === 'existing' && supplierId === '')
             }
           >
-            {submitting ? 'Saving…' : item.brandId != null ? 'Confirm supplier' : 'Assign'}
+            {submitting ? 'Saving…' : actionLabel}
           </Button>
         </DialogFooter>
       </DialogContent>

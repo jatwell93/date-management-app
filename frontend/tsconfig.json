@@ -19,8 +19,14 @@
     "baseUrl": ".",
     "paths": {
       "@shared/markdown": ["../shared/domain/markdown.ts"],
+      "@shared/supplier-policy": ["../shared/domain/supplier-policy.ts"],
       "@/*": ["./src/*"]
     }
   },
-  "include": ["src", "src/global.d.ts", "../shared/domain/markdown.ts"]
+  "include": [
+    "src",
+    "src/global.d.ts",
+    "../shared/domain/markdown.ts",
+    "../shared/domain/supplier-policy.ts"
+  ]
 }

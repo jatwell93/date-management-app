@@ -50,7 +50,7 @@
 - [ ] 5.1 Add `react-markdown` and `remark-breaks` (raw HTML disabled — no `rehype-raw`) restricted to
       paragraphs, line breaks, bullet/ordered lists, and bold/italic; wrap it in a reusable
       `PolicyMarkdown` component used by both the dialogue preview and the dashboard row expansion.
-- [ ] 5.2 Enrich the add/edit supplier dialogue (`AssignSupplierModal` + edit mode): Store Instructions
+- [x] 5.2 Enrich the add/edit supplier dialogue (`AssignSupplierModal` + edit mode): Store Instructions
       textarea with markdown preview toggle, representative name/email, contact phone; render
       instructions read-only (preview-only) for non-admins; mirror policy validation inline.
 - [ ] 5.3 Supplier Policy Review Dashboard tab: brand rows (supplier, status, last updated, rep),

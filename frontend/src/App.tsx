@@ -401,7 +401,10 @@ function AppRoutes({ isLoggedIn, effectiveUserRole, token }: AppRoutesProps) {
         />
         <Route
           path="/supplier-credits"
-          element={renderSignedInElement(isLoggedIn, <SupplierCreditsPage token={token} />)}
+          element={renderSignedInElement(
+            isLoggedIn,
+            <SupplierCreditsPage token={token} effectiveUserRole={effectiveUserRole} />,
+          )}
         />
         <Route
           path="/usage-report"
