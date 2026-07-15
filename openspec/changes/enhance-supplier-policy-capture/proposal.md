@@ -43,6 +43,14 @@ Decisions locked with the product owner:
   `requireOrgRole('admin')`. Non-admins see instructions and representative details read-only. Bare
   supplier creation during triage (name + optional contact, no policy) stays available to existing
   roles.
+- **Partial updates preserve omitted values.** Add `PATCH /supplier-credits/suppliers/:id` and merge
+  its payload with the stored supplier before normalized diffing. Preserve legacy full `PUT` for
+  compatibility, routing both through the same policy authorization and validation.
+- **Policy failures are structured.** Invalid policy writes return `422` with
+  `{ code, message, statusCode, errors: [{ field, message }] }`; authorization failures remain `403`.
+- **Clearing policy is explicit.** Admins may call
+  `DELETE /supplier-credits/suppliers/:id/policy` to clear instructions, ratio, and representative
+  fields, reset cadence to 7, preserve contact fields, and stamp `policyUpdatedAt`.
 - **SKU-Brand-Supplier matching extends `CatalogueReviewPanel`.** Add a SKU-level table (SKU, product
   name, brand matched/unmatched, supplier-policy attached/missing, last updated), red-highlight
   unmatched SKUs, group by brand, and **bulk-link** (select N unmatched SKUs → assign one brand).
@@ -64,6 +72,8 @@ Decisions locked with the product owner:
   (Attached / Missing), `policyUpdatedAt`, and representative. Filter by brand / supplier / policy
   status; sort by last-updated (oldest first). Bulk-attach an existing supplier's policy to multiple
   brands (admin-only).
+- **Deterministic review order:** null policy timestamps first, followed by timestamp, brand name, and
+  brand ID. Existing non-empty policies are backfilled from supplier `updatedAt`.
 - **SKU-Brand-Supplier Matching View (extend `CatalogueReviewPanel`):** SKU-level table with
   matched/unmatched brand and policy-attached/missing columns, unmatched highlighting, group-by-brand,
   manual single-link, and bulk-link of many SKUs to one brand (emitting the #358 corrections).
@@ -71,6 +81,9 @@ Decisions locked with the product owner:
   with admin gating and policy validation; a policy-review read (brands + policy status + last
   updated); a bulk-link SKUs-to-brand write; a bulk-attach-policy write. All org-scoped, org from auth
   only.
+- **Bulk contracts:** arrays accept 1–500 raw positive IDs and are deduplicated after the raw cap is
+  enforced. Bulk-link accepts exactly one of `{ brandId, productIds }` or
+  `{ brandName, productIds }`; a SKU linked to another brand returns `409` and rolls back the request.
 - **Frontend:** enrich the add/edit supplier dialogue (instructions textarea + markdown preview, rep
   name/email, phone, read-only for non-admins); the Policy Review Dashboard tab; the extended matching
   view with bulk-link.
@@ -94,7 +107,7 @@ unchanged.
   in agreement (golden rule 5).
 - **Reuse `requireOrgRole('admin')`** for policy gating; no new auth primitive.
 - **Schema stays triplicated** (golden rule 6): Prisma base + production, Neon SQL `0007` (+ rollback),
-  runtime SQLite migration `008`, pglite harness.
+  runtime SQLite migration `017-add-supplier-policy-fields`, pglite harness.
 
 ## Guardrails
 
@@ -121,7 +134,7 @@ unchanged.
 
 1. Shared domain: `hasPolicy(supplier)` + `brandPolicyStatus(brand, supplier)` helpers; unit tests.
 2. Schema (triplicated): `Supplier.representativeName / representativeEmail / contactPhone /
-   policyUpdatedAt`; Neon SQL `0007` (+ rollback), SQLite migration `008`, pglite harness; dual-backend
+   policyUpdatedAt`; Neon SQL `0007` (+ rollback), SQLite migration `017`, pglite harness; dual-backend
    conformance for policy status.
 3. Backend: extend create/update with new fields + admin gating + policy-authoring validation +
    `policyUpdatedAt` maintenance; policy-review read; bulk-link SKUs; bulk-attach policy.

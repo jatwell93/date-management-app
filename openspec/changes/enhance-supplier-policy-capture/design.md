@@ -30,6 +30,8 @@ Supplier (org-scoped, from #356 + #358)
   authoring.
 - **`policyUpdatedAt` is nullable** — null means "no policy authored yet" (the JIT default) and drives
   the "Missing" status in review.
+- Migrations backfill `policyUpdatedAt = updatedAt` only for existing suppliers whose trimmed
+  instructions are non-empty. SQLite uses migration sequence `017`; `008` is already occupied.
 
 ## Policy status (shared, the one derived rule)
 
@@ -67,15 +69,22 @@ authority.
 ## Admin gating
 
 ```
-POST /suppliers, PATCH /suppliers/:id:
+POST /supplier-credits/suppliers, PATCH /supplier-credits/suppliers/:id:
     if isPolicyWrite(payload) and req.userRole != 'admin' → 403   # fail closed
     # non-policy create/update (name, contact) stays open to existing roles
 ```
 
-Reuses `requireOrgRole('admin')` semantics inline (the write is conditional on payload, so the guard
-lives in the controller, not blanket route middleware). Read endpoints are role-agnostic within the
-org. `policyUpdatedAt` is stamped in the service whenever a policy field actually changes value —
-idempotent no-op writes don't bump it.
+Reuses canonical role normalization from `requireOrgRole.ts` in a service-level assertion (the write
+is conditional on the effective diff, so blanket route middleware would be incorrect). The service
+merges a partial PATCH with the existing row, normalizes the effective records, then performs diff,
+authorization, validation, and update inside one transaction. Legacy full `PUT /suppliers/:id`
+remains supported through the same rules. Read endpoints are role-agnostic within the org.
+`policyUpdatedAt` is stamped only when a normalized policy value actually changes — idempotent no-op
+writes don't gate, validate, or bump it.
+
+Admins clear policy through `DELETE /supplier-credits/suppliers/:id/policy`. This clears instructions,
+both ratio legs, and representative fields, resets cadence to 7, preserves `contactEmail` and
+`contactPhone`, and stamps `policyUpdatedAt`.
 
 **Worked examples of `isPolicyWrite` (the load-bearing edge).** The service diffs the payload against
 the existing row *before* deciding:
@@ -111,6 +120,10 @@ collapse them into one generic error:
 The bulk endpoints return a **result summary object**, never a bare 204, so the UI can show exactly
 what changed versus what was a no-op.
 
+Policy validation errors use `{ code, message, statusCode, errors: [{ field, message }] }`. The
+frontend API client preserves status, code, and field errors so `403` and `422` cannot collapse into a
+generic message.
+
 ## Bulk operations: bounded & atomic (not a throughput problem)
 
 Realistic bulk sizes are small — a store bulk-links tens of SKUs, bulk-attaches to a few hundred
@@ -118,8 +131,8 @@ brands at the extreme. The risks are **atomicity** and an **unbounded request**,
 
 - Each bulk write runs in **one transaction**: all rows apply or none do (partial *input* that is
   already-satisfied is reported, not failed — see the table above).
-- Each request is **capped** (e.g. ≤500 ids); oversized requests are rejected `422` rather than
-  streamed. The cap is a defensive bound, mirrored client-side.
+- Each request accepts 1–500 raw positive IDs. The raw 500-item cap is checked before deduplication;
+  oversized requests are rejected `422`. The cap is mirrored client-side.
 - Writes touch indexed columns (`Product.id`, `Brand.id`, `Supplier.id`, all org-scoped); no scan.
 - Corrections are inserted in the same transaction as the links they describe, so a correction never
   outlives a rolled-back link.
@@ -135,7 +148,8 @@ A read grouped by **brand**, each row: brand name, resolved supplier name, polic
 ```
 GET /supplier-credits/policy-review
     ?brand= &supplier= &status=ATTACHED|MISSING   # filters
-    &sort=lastUpdatedAsc                          # oldest-first default (prioritise stale)
+                                                    # null timestamp first, then timestamp,
+                                                    # brand name, then brand ID
     → [{ brandId, brandName, supplierId, supplierName, policyStatus,
          policyUpdatedAt, representativeName }]
 ```
@@ -152,7 +166,7 @@ whole point of the supplier-level model).
 ```
 POST /supplier-credits/policy-review/bulk-attach
     { supplierId, brandIds: number[] }            # supplierId must resolve to a supplier with policy
-    → { attached: n, corrections: n }             # atomic; 422 if supplier has no instructions
+    → { attached: n, unchanged: n, corrections: n } # atomic; 422 if supplier has no instructions
 ```
 
 ## SKU-Brand-Supplier Matching View (extends `CatalogueReviewPanel`)
@@ -167,9 +181,13 @@ supplier-policy (Attached / Missing), last updated. Grouped by brand for scannin
 
 ```
 POST /supplier-credits/brands/bulk-link
-    { brandName | brandId, productIds: number[] }
-    → { linked: n, brandId, corrections: n }   # org-scoped, atomic
+    exactly one of { brandName, productIds } or { brandId, productIds }
+    → { brandId, linked: n, alreadyLinked: n, corrections: n }
 ```
+
+Every selected SKU is validated before writing. A SKU already linked to the target brand is a no-op;
+a SKU linked to any other brand returns `409` and rolls back links and corrections for the entire
+request.
 
 The panel keeps its current brand-review mode; the SKU table is an additional mode/tab, not a
 replacement.
@@ -184,7 +202,7 @@ The "New supplier" mode of `AssignSupplierModal` (and a parallel edit mode) gain
 - Client-side mirror of policy validation (instructions + ≥1 contact) shown inline; server remains
   authoritative.
 
-**Markdown decision (locked).** Render with **`react-markdown`** configured to disallow raw HTML
+**Markdown decision (locked).** Render with **`react-markdown`** and **`remark-breaks`**, configured to disallow raw HTML
 (no `rehype-raw`; `skipHtml`/default sanitisation on), restricted to the subset the policy text
 actually uses — paragraphs, line breaks, bullet and ordered lists, bold/italic. No images, no links
 that auto-execute, no HTML passthrough. Instructions are untrusted text. `react-markdown` is chosen
@@ -217,7 +235,7 @@ expansion).
   `validatePolicyWrite`.
 - Contract tests compare Worker SQL vs. SQLite/Express for policy status, validation outcomes,
   `policyUpdatedAt` bump-vs-no-bump, admin gating, row order, and org isolation.
-- Schema lands in Prisma (base + production), Neon SQL `0007` (+ rollback), SQLite migration `008`, and
+- Schema lands in Prisma (base + production), Neon SQL `0007` (+ rollback), SQLite migration `017`, and
   the pglite harness — kept in sync.
 
 ## Risks / open questions

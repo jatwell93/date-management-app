@@ -23,6 +23,10 @@ rendered without allowing raw HTML injection.
 The system SHALL maintain a policy-updated timestamp that changes only when a supplier's policy
 content — store instructions, ratio, cadence, or representative fields — changes, and SHALL leave that
 timestamp unchanged for non-policy edits such as a brand relinking to the supplier.
+Partial supplier edits SHALL preserve omitted fields. Existing full replacement updates SHALL remain
+supported. Policy validation failures SHALL return structured field details with status 422, while
+authorization failures SHALL return 403. Admins SHALL have an explicit operation to clear policy
+content without clearing supplier contact fields.
 
 #### Scenario: A supplier with a 3-for-1 ratio yields expected credit
 
@@ -63,6 +67,20 @@ timestamp unchanged for non-policy edits such as a brand relinking to the suppli
 - **WHEN** a brand is relinked to that supplier without changing any policy field
 - **THEN** the policy-updated timestamp is unchanged
 - **AND** editing the store instructions later advances the policy-updated timestamp
+
+#### Scenario: An unchanged policy payload is a non-policy edit
+
+- **GIVEN** a supplier with normalized policy content
+- **WHEN** a non-admin submits the same effective policy values with different incidental whitespace
+- **THEN** the write does not require admin rights or policy validation
+- **AND** the policy-updated timestamp is unchanged
+
+#### Scenario: An admin explicitly clears a policy
+
+- **GIVEN** a supplier with policy content and supplier contact fields
+- **WHEN** an admin clears the policy
+- **THEN** instructions, ratio, and representative fields are cleared and cadence resets to 7
+- **AND** supplier contact fields remain unchanged
 
 ## ADDED Requirements
 
@@ -105,7 +123,10 @@ missing policies can be prioritized. An admin SHALL be able to attach one existi
 multiple brands in a single action, applying immediately within the organization. Bulk-attach SHALL
 require the chosen supplier to already have store instructions and SHALL reject an attempt to attach a
 supplier that has none. Bulk-attach SHALL apply atomically — every selected brand is attached or none
-is — and SHALL return a summary of how many brands were attached.
+is — and SHALL return a summary of how many brands were attached. Rows SHALL be ordered
+deterministically with null policy timestamps first, then timestamp, brand name, and brand ID. Bulk ID
+arrays SHALL contain 1–500 raw positive IDs and SHALL be deduplicated only after the raw cap is
+enforced.
 
 #### Scenario: A brand whose supplier has no instructions shows missing policy
 
@@ -144,6 +165,9 @@ SHALL apply immediately within the organization and SHALL record a correction pe
 Bulk-link SHALL apply atomically, SHALL bound the number of items accepted in a single request and
 reject an oversized request, and SHALL return a summary reporting how many products were newly linked
 versus already linked rather than failing when some selected products already reference the brand.
+The request SHALL identify exactly one existing brand ID or new brand name. If any selected product is
+linked to a different brand, the system SHALL return 409 and roll back the entire request; products
+already linked to the target brand SHALL be reported as no-ops.
 
 #### Scenario: Unmatched SKUs are distinguished
 
