@@ -132,3 +132,45 @@ describe('SupplierCreditRepository catalogue enrichment', () => {
     });
   });
 });
+
+describe('SupplierCreditRepository policy review', () => {
+  it('orders null policy timestamps first and then timestamp, brand name, and ID', async () => {
+    const rows = [
+      {
+        id: 3,
+        name: 'Zulu',
+        supplier: {
+          id: 1,
+          name: 'Maker',
+          creditPolicyNote: 'A',
+          policyUpdatedAt: new Date('2026-02-01'),
+          representativeName: null,
+        },
+      },
+      { id: 2, name: 'Beta', supplier: null },
+      {
+        id: 4,
+        name: 'Alpha',
+        supplier: {
+          id: 2,
+          name: 'Other',
+          creditPolicyNote: 'B',
+          policyUpdatedAt: new Date('2026-01-01'),
+          representativeName: 'Alex',
+        },
+      },
+      { id: 1, name: 'Alpha', supplier: null },
+    ];
+    const prisma = { brand: { findMany: vi.fn(async () => rows) } } as unknown as PrismaClient;
+    const repository = new SupplierCreditRepository(prisma);
+
+    const result = await repository.listPolicyReview('org-a', {});
+
+    expect(result.map((row) => row.brandId)).toEqual([1, 2, 4, 3]);
+    expect(result.map((row) => row.status)).toEqual(['MISSING', 'MISSING', 'ATTACHED', 'ATTACHED']);
+    expect(prisma.brand.findMany).toHaveBeenCalledWith({
+      where: { organizationId: 'org-a' },
+      include: { supplier: true },
+    });
+  });
+});

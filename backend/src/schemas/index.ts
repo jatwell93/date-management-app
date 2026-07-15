@@ -334,9 +334,14 @@ const supplierBody = z
       .max(255)
       .nullable()
       .optional(),
+    contactPhone: z
+      .string()
+      .max(80, 'Contact phone must be at most 80 characters')
+      .nullable()
+      .optional(),
     creditPolicyNote: z
       .string()
-      .max(2000, 'Credit policy note must be at most 2000 characters')
+      .max(10000, 'Credit policy note must be at most 10000 characters')
       .optional(),
     policyWriteOffQty: z
       .number()
@@ -356,6 +361,17 @@ const supplierBody = z
       .min(1, 'Follow-up cadence must be at least 1 day')
       .max(365, 'Follow-up cadence must be at most 365 days')
       .optional(),
+    representativeName: z
+      .string()
+      .max(120, 'Representative name must be at most 120 characters')
+      .nullable()
+      .optional(),
+    representativeEmail: z
+      .string()
+      .email('Representative email must be a valid email address')
+      .max(255)
+      .nullable()
+      .optional(),
   })
   .refine((body) => (body.policyWriteOffQty == null) === (body.policyCreditQty == null), {
     message: 'A credit ratio needs both a write-off quantity and a credit quantity, or neither.',
@@ -364,6 +380,42 @@ const supplierBody = z
 
 export const supplierCreateSchema = z.object({ body: supplierBody });
 export const supplierUpdateSchema = z.object({ body: supplierBody });
+export const supplierPatchSchema = z.object({
+  body: z
+    .object({
+      name: z.string().trim().min(1).max(120).optional(),
+      contactEmail: z.string().email().max(255).nullable().optional(),
+      contactPhone: z.string().max(80).nullable().optional(),
+      creditPolicyNote: z.string().max(10000).optional(),
+      policyWriteOffQty: z.number().int().positive().nullable().optional(),
+      policyCreditQty: z.number().int().nonnegative().nullable().optional(),
+      followUpDays: z.number().int().min(1).max(365).optional(),
+      representativeName: z.string().max(120).nullable().optional(),
+      representativeEmail: z.string().email().max(255).nullable().optional(),
+    })
+    .refine((body) => Object.keys(body).length > 0, 'Provide at least one supplier field'),
+});
+
+// Cardinality is enforced in the policy service so 0/501-item domain failures
+// use the public structured 422 contract instead of generic Zod 400 handling.
+const positiveIdBatch = z.array(z.number().int().positive());
+
+export const bulkAttachPolicySchema = z.object({
+  body: z.object({ supplierId: z.number().int().positive(), brandIds: positiveIdBatch }),
+});
+
+export const bulkLinkProductsSchema = z.object({
+  body: z
+    .object({
+      brandId: z.number().int().positive().optional(),
+      brandName: z.string().trim().min(1).max(160).optional(),
+      productIds: positiveIdBatch,
+    })
+    .refine((body) => (body.brandId == null) !== (body.brandName == null), {
+      message: 'Provide exactly one brandId or brandName',
+      path: ['brandId'],
+    }),
+});
 
 export const assignSupplierSchema = z.object({
   body: z.object({

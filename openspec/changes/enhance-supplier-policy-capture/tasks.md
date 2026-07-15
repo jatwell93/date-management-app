@@ -21,20 +21,20 @@
 
 ## 3. Backend (Express)
 
-- [ ] 3.1 Extend `SupplierInput` (repository/types) and `createSupplier` / `updateSupplier` to carry
+- [x] 3.1 Extend `SupplierInput` (repository/types) and `createSupplier` / `updateSupplier` to carry
       the new fields.
-- [ ] 3.2 Add create and merge-update normalization paths; preserve full `PUT` and add partial `PATCH`.
-- [ ] 3.3 Apply `validatePolicyWrite` server-side using a structured `PolicyValidationError` (422);
+- [x] 3.2 Add create and merge-update normalization paths; preserve full `PUT` and add partial `PATCH`.
+- [x] 3.3 Apply `validatePolicyWrite` server-side using a structured `PolicyValidationError` (422);
       perform normalized diff, canonical-role authorization, validation, and write transactionally.
-- [ ] 3.4 Stamp `policyUpdatedAt` only when a normalized policy field value actually changes; add an
+- [x] 3.4 Stamp `policyUpdatedAt` only when a normalized policy field value actually changes; add an
       admin-only clear-policy operation that preserves contact fields and resets cadence to 7.
-- [ ] 3.5 Policy-review read endpoint (brands + resolved supplier + policy status + `policyUpdatedAt`
+- [x] 3.5 Policy-review read endpoint (brands + resolved supplier + policy status + `policyUpdatedAt`
       + representative) with brand/supplier/status filters and oldest-first sort.
-- [ ] 3.6 Bulk-attach-policy endpoint (admin): confirm one supplier across many brands in one
+- [x] 3.6 Bulk-attach-policy endpoint (admin): confirm one supplier across many brands in one
       transaction, emitting `SUPPLIER_OVERRIDE` corrections (reuse #358 `confirmBrandSupplier`).
-- [ ] 3.7 Bulk-link-SKUs endpoint: upsert brand + link many products in one transaction, emitting one
+- [x] 3.7 Bulk-link-SKUs endpoint: upsert brand + link many products in one transaction, emitting one
       `BRAND_ADDED` correction per SKU (reuse #358 `addBrand`).
-- [ ] 3.8 Enforce 1–500 raw positive IDs before deduplication. Return `{ attached, unchanged,
+- [x] 3.8 Enforce 1–500 raw positive IDs before deduplication. Return `{ attached, unchanged,
       corrections }` and `{ brandId, linked, alreadyLinked, corrections }`; reject a different-brand
       SKU with `409` and roll back everything.
 

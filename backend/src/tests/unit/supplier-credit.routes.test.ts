@@ -29,6 +29,11 @@ describe('supplier credit route wiring', () => {
         'PUT /brands/:id/supplier',
         'PUT /products/:productId/supplier',
         'POST /claimable-pool/:transactionId/dispose',
+        'PATCH /suppliers/:id',
+        'DELETE /suppliers/:id/policy',
+        'GET /policy-review',
+        'POST /policy-review/bulk-attach',
+        'POST /brands/bulk-link',
       ]),
     );
   });

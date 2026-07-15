@@ -3,6 +3,8 @@ import { AuthRequest } from '../middleware/auth.middleware';
 import {
   SupplierCreditService,
   type AddBrandInput,
+  type BulkAttachInput,
+  type BulkLinkInput,
   type SupplierInput,
 } from '../services/supplier-credit.service';
 import { AuthenticationError, AuthorizationError } from '../errors';
@@ -32,6 +34,10 @@ export class SupplierCreditController {
     return userId;
   }
 
+  private getRole(req: AuthRequest): string | undefined {
+    return req.user?.role ?? req.userRole;
+  }
+
   private requirePlatformAdmin(req: AuthRequest): void {
     if (!isPlatformAdminUser(this.getUserId(req))) {
       throw new AuthorizationError('Platform catalogue review access required');
@@ -48,7 +54,10 @@ export class SupplierCreditController {
 
   async createSupplier(req: AuthRequest, res: Response, next: NextFunction): Promise<void> {
     try {
-      const supplier = await this.getService(req).createSupplier(req.body as SupplierInput);
+      const supplier = await this.getService(req).createSupplier(
+        req.body as SupplierInput,
+        this.getRole(req),
+      );
       res.status(201).json(supplier);
     } catch (error) {
       next(error);
@@ -58,8 +67,76 @@ export class SupplierCreditController {
   async updateSupplier(req: AuthRequest, res: Response, next: NextFunction): Promise<void> {
     try {
       const id = Number(req.params.id);
-      const supplier = await this.getService(req).updateSupplier(id, req.body as SupplierInput);
+      const supplier = await this.getService(req).replaceSupplier(
+        id,
+        req.body as SupplierInput,
+        this.getRole(req),
+      );
       res.json(supplier);
+    } catch (error) {
+      next(error);
+    }
+  }
+
+  async patchSupplier(req: AuthRequest, res: Response, next: NextFunction): Promise<void> {
+    try {
+      const supplier = await this.getService(req).updateSupplier(
+        Number(req.params.id),
+        req.body as SupplierInput,
+        this.getRole(req),
+      );
+      res.json(supplier);
+    } catch (error) {
+      next(error);
+    }
+  }
+
+  async clearSupplierPolicy(req: AuthRequest, res: Response, next: NextFunction): Promise<void> {
+    try {
+      res.json(
+        await this.getService(req).clearSupplierPolicy(Number(req.params.id), this.getRole(req)),
+      );
+    } catch (error) {
+      next(error);
+    }
+  }
+
+  async listPolicyReview(req: AuthRequest, res: Response, next: NextFunction): Promise<void> {
+    try {
+      res.json(
+        await this.getService(req).listPolicyReview({
+          brand: typeof req.query.brand === 'string' ? req.query.brand : undefined,
+          supplier: typeof req.query.supplier === 'string' ? req.query.supplier : undefined,
+          status:
+            req.query.status === 'ATTACHED' || req.query.status === 'MISSING'
+              ? req.query.status
+              : undefined,
+        }),
+      );
+    } catch (error) {
+      next(error);
+    }
+  }
+
+  async bulkAttachPolicy(req: AuthRequest, res: Response, next: NextFunction): Promise<void> {
+    try {
+      res.json(
+        await this.getService(req).bulkAttachPolicy(
+          req.body as BulkAttachInput,
+          this.getRole(req),
+          this.getUserId(req),
+        ),
+      );
+    } catch (error) {
+      next(error);
+    }
+  }
+
+  async bulkLinkProducts(req: AuthRequest, res: Response, next: NextFunction): Promise<void> {
+    try {
+      res.json(
+        await this.getService(req).bulkLinkProducts(req.body as BulkLinkInput, this.getUserId(req)),
+      );
     } catch (error) {
       next(error);
     }

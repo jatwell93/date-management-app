@@ -1,6 +1,12 @@
 import { SupplierCreditService } from '../../services/supplier-credit.service';
 import { SupplierCreditRepository } from '../../repositories/supplier-credit.repository';
-import { ConflictError, NotFoundError, ValidationError } from '../../errors';
+import {
+  AuthorizationError,
+  ConflictError,
+  NotFoundError,
+  PolicyValidationError,
+  ValidationError,
+} from '../../errors';
 import type { ClaimableWriteOffRow } from '../../../../shared/domain/credit-claim';
 import { isPlatformAdminUser } from '../../controllers/supplier-credit.controller';
 
@@ -14,17 +20,47 @@ function makeService(
     disposeResult?: 'DISPOSED' | 'ALREADY_DISPOSED' | 'CLAIMED' | 'NOT_FOUND';
     brandResult?: unknown;
     correctionUpdateResult?: 'UPDATED' | 'ALREADY_REVIEWED' | 'NOT_FOUND';
+    existingSupplier?: Record<string, unknown> | null;
   } = {},
 ) {
+  const existingSupplier =
+    overrides.existingSupplier === undefined
+      ? {
+          id: 1,
+          organizationId: 'org-1',
+          name: 'Existing',
+          contactEmail: 'claims@example.com',
+          contactPhone: null,
+          creditPolicyNote: 'Keep chilled',
+          policyWriteOffQty: 3,
+          policyCreditQty: 1,
+          followUpDays: 7,
+          representativeName: 'Alex',
+          representativeEmail: 'alex@example.com',
+          policyUpdatedAt: new Date('2026-01-01T00:00:00.000Z'),
+        }
+      : overrides.existingSupplier;
   const repo = {
+    withTransaction: vi.fn(async (callback) => callback(undefined)),
     listSuppliers: vi.fn(async () => overrides.suppliers ?? []),
-    findSupplier: vi.fn(async () => overrides.findSupplier ?? null),
+    findSupplier: vi.fn(async () =>
+      overrides.findSupplier === undefined ? existingSupplier : overrides.findSupplier,
+    ),
     createSupplier: vi.fn(async (orgId: string, data) => ({
       id: 1,
       organizationId: orgId,
       ...data,
     })),
     updateSupplier: vi.fn(async () => overrides.updateCount ?? 1),
+    clearSupplierPolicy: vi.fn(async () => existingSupplier),
+    listPolicyReview: vi.fn(async () => []),
+    bulkAttachSupplier: vi.fn(async () => ({ attached: 2, unchanged: 0, corrections: 2 })),
+    bulkLinkProducts: vi.fn(async () => ({
+      brandId: 8,
+      linked: 2,
+      alreadyLinked: 0,
+      corrections: 2,
+    })),
     assignProductSupplier: vi.fn(async () => overrides.assignCount ?? 1),
     findClaimableWriteOffs: vi.fn(async () => overrides.claimable ?? []),
     disposeWriteOff: vi.fn(async () => overrides.disposeResult ?? 'DISPOSED'),
@@ -60,34 +96,177 @@ describe('SupplierCreditService', () => {
   describe('createSupplier', () => {
     it('persists a supplier with a complete credit ratio', async () => {
       const { service, repo } = makeService();
-      await service.createSupplier({
-        name: '  Blackmores  ',
-        contactEmail: 'credits@blackmores.com.au',
-        policyWriteOffQty: 3,
-        policyCreditQty: 1,
-      });
-      expect(repo.createSupplier).toHaveBeenCalledWith('org-1', {
-        name: 'Blackmores',
-        contactEmail: 'credits@blackmores.com.au',
-        creditPolicyNote: '',
-        policyWriteOffQty: 3,
-        policyCreditQty: 1,
-        followUpDays: 7,
-      });
+      await service.createSupplier(
+        {
+          name: '  Blackmores  ',
+          contactEmail: 'credits@blackmores.com.au',
+          policyWriteOffQty: 3,
+          policyCreditQty: 1,
+          creditPolicyNote: 'Return with invoice',
+        },
+        'admin',
+      );
+      expect(repo.createSupplier).toHaveBeenCalledWith(
+        'org-1',
+        {
+          name: 'Blackmores',
+          contactEmail: 'credits@blackmores.com.au',
+          contactPhone: null,
+          creditPolicyNote: 'Return with invoice',
+          policyWriteOffQty: 3,
+          policyCreditQty: 1,
+          followUpDays: 7,
+          representativeName: null,
+          representativeEmail: null,
+          policyUpdatedAt: expect.any(Date),
+        },
+        undefined,
+      );
     });
 
     it('rejects a half-specified credit ratio', async () => {
       const { service } = makeService();
       await expect(
-        service.createSupplier({ name: 'Half', policyWriteOffQty: 3 }),
-      ).rejects.toBeInstanceOf(ValidationError);
+        service.createSupplier({ name: 'Half', policyWriteOffQty: 3 }, 'admin'),
+      ).rejects.toBeInstanceOf(PolicyValidationError);
+    });
+
+    it('allows a team member to create a bare supplier with claim contact details', async () => {
+      const { service, repo } = makeService();
+
+      await service.createSupplier(
+        { name: 'Bare Supplier', contactEmail: 'claims@example.com', contactPhone: '02 1234 5678' },
+        'team_member',
+      );
+
+      expect(repo.createSupplier).toHaveBeenCalledWith(
+        'org-1',
+        expect.objectContaining({ creditPolicyNote: '', policyUpdatedAt: null }),
+        undefined,
+      );
+    });
+
+    it('rejects changed policy content from a non-admin', async () => {
+      const { service } = makeService();
+      await expect(
+        service.createSupplier(
+          { name: 'Policy Supplier', creditPolicyNote: 'Return monthly', contactPhone: '555' },
+          'manager',
+        ),
+      ).rejects.toBeInstanceOf(AuthorizationError);
+    });
+
+    it('returns structured policy validation failures for admins', async () => {
+      const { service } = makeService();
+      await expect(
+        service.createSupplier({ name: 'Invalid', creditPolicyNote: 'Return monthly' }, 'admin'),
+      ).rejects.toMatchObject<Partial<PolicyValidationError>>({
+        statusCode: 422,
+        code: 'POLICY_VALIDATION_ERROR',
+        errors: [{ field: 'contact', message: expect.any(String) }],
+      });
     });
   });
 
   describe('updateSupplier', () => {
     it('404s when the supplier is not in the org', async () => {
       const { service } = makeService({ updateCount: 0 });
-      await expect(service.updateSupplier(99, { name: 'X' })).rejects.toBeInstanceOf(NotFoundError);
+      await expect(service.updateSupplier(99, { name: 'X' }, 'admin')).rejects.toBeInstanceOf(
+        NotFoundError,
+      );
+    });
+
+    it('merges partial input and permits contact-only changes without a policy timestamp bump', async () => {
+      const { service, repo } = makeService();
+
+      await service.updateSupplier(1, { contactPhone: '  02 9999 8888  ' }, 'team_member');
+
+      expect(repo.updateSupplier).toHaveBeenCalledWith(
+        'org-1',
+        1,
+        expect.objectContaining({
+          name: 'Existing',
+          contactPhone: '02 9999 8888',
+          creditPolicyNote: 'Keep chilled',
+          policyUpdatedAt: new Date('2026-01-01T00:00:00.000Z'),
+        }),
+        undefined,
+      );
+    });
+
+    it('treats normalized unchanged policy as an ordinary non-admin update', async () => {
+      const { service, repo } = makeService();
+
+      await service.updateSupplier(1, { creditPolicyNote: '  Keep chilled  ' }, 'team_member');
+
+      expect(repo.updateSupplier).toHaveBeenCalledWith(
+        'org-1',
+        1,
+        expect.objectContaining({ policyUpdatedAt: new Date('2026-01-01T00:00:00.000Z') }),
+        undefined,
+      );
+    });
+
+    it('stamps the policy timestamp when an admin changes effective policy content', async () => {
+      const { service, repo } = makeService();
+
+      await service.updateSupplier(1, { creditPolicyNote: 'Return monthly' }, 'admin');
+
+      expect(repo.updateSupplier).toHaveBeenCalledWith(
+        'org-1',
+        1,
+        expect.objectContaining({
+          creditPolicyNote: 'Return monthly',
+          policyUpdatedAt: expect.any(Date),
+        }),
+        undefined,
+      );
+    });
+
+    it('clears policy only for admins while preserving supplier contact fields', async () => {
+      const { service, repo } = makeService();
+
+      await service.clearSupplierPolicy(1, 'admin');
+
+      expect(repo.clearSupplierPolicy).toHaveBeenCalledWith(
+        'org-1',
+        1,
+        expect.any(Date),
+        undefined,
+      );
+      await expect(service.clearSupplierPolicy(1, 'team_member')).rejects.toBeInstanceOf(
+        AuthorizationError,
+      );
+    });
+
+    it('preserves legacy full PUT replacement semantics separately from PATCH merging', async () => {
+      const { service, repo } = makeService();
+
+      await service.replaceSupplier(
+        1,
+        {
+          name: 'Replacement',
+          contactEmail: 'new@example.com',
+          creditPolicyNote: 'Return monthly',
+        },
+        'admin',
+      );
+
+      expect(repo.updateSupplier).toHaveBeenCalledWith(
+        'org-1',
+        1,
+        expect.objectContaining({
+          name: 'Replacement',
+          contactEmail: 'new@example.com',
+          contactPhone: null,
+          policyWriteOffQty: null,
+          policyCreditQty: null,
+          followUpDays: 7,
+          representativeName: null,
+          representativeEmail: null,
+        }),
+        undefined,
+      );
     });
   });
 
@@ -173,6 +352,71 @@ describe('SupplierCreditService', () => {
       expect(() => service.reviewBrands({ state: 'CLAIMABLE' })).toThrow(ValidationError);
       expect(repo.reviewBrands).not.toHaveBeenCalled();
     });
+  });
+
+  describe('policy review and bulk operations', () => {
+    it('passes org-scoped policy review filters to the repository', async () => {
+      const { service, repo } = makeService();
+
+      await service.listPolicyReview({ brand: 'vita', supplier: 'maker', status: 'MISSING' });
+
+      expect(repo.listPolicyReview).toHaveBeenCalledWith('org-1', {
+        brand: 'vita',
+        supplier: 'maker',
+        status: 'MISSING',
+      });
+    });
+
+    it('deduplicates brand IDs after enforcing the raw cap and requires an admin', async () => {
+      const { service, repo } = makeService();
+
+      await service.bulkAttachPolicy({ supplierId: 4, brandIds: [10, 10, 11] }, 'org:admin', 7);
+
+      expect(repo.bulkAttachSupplier).toHaveBeenCalledWith('org-1', 4, [10, 11], 7, undefined);
+      await expect(
+        service.bulkAttachPolicy({ supplierId: 4, brandIds: [10] }, 'team_member', 7),
+      ).rejects.toBeInstanceOf(AuthorizationError);
+    });
+
+    it('rejects 501 raw IDs even when they are duplicates', async () => {
+      const { service, repo } = makeService();
+      await expect(
+        service.bulkAttachPolicy(
+          { supplierId: 4, brandIds: Array.from({ length: 501 }, () => 10) },
+          'admin',
+          7,
+        ),
+      ).rejects.toBeInstanceOf(PolicyValidationError);
+      expect(repo.bulkAttachSupplier).not.toHaveBeenCalled();
+    });
+
+    it('deduplicates products and accepts exactly one brand target', async () => {
+      const { service, repo } = makeService();
+
+      await service.bulkLinkProducts({ brandName: '  New Brand  ', productIds: [1, 1, 2] }, 7);
+
+      expect(repo.bulkLinkProducts).toHaveBeenCalledWith(
+        'org-1',
+        { brandId: undefined, brandName: 'New Brand' },
+        [1, 2],
+        7,
+        undefined,
+      );
+      await expect(
+        service.bulkLinkProducts({ brandId: 2, brandName: 'Both', productIds: [1] }, 7),
+      ).rejects.toBeInstanceOf(PolicyValidationError);
+    });
+
+    it.each([0, -1, 1.5])(
+      'rejects invalid brand ID %s in the service boundary',
+      async (brandId) => {
+        const { service, repo } = makeService();
+        await expect(
+          service.bulkLinkProducts({ brandId, productIds: [1] }, 7),
+        ).rejects.toBeInstanceOf(PolicyValidationError);
+        expect(repo.bulkLinkProducts).not.toHaveBeenCalled();
+      },
+    );
   });
 
   describe('platform correction review', () => {
