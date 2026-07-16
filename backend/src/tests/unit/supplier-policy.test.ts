@@ -39,9 +39,9 @@ describe('supplier-policy shared domain', () => {
     it('uses bare supplier defaults as the create baseline', () => {
       expect(isPolicyWrite({ name: 'New Supplier' }, null)).toBe(false);
       expect(isPolicyWrite({ name: 'New Supplier', followUpDays: 7 }, null)).toBe(false);
-      expect(isPolicyWrite({ name: 'New Supplier', creditPolicyNote: 'Returns weekly' }, null)).toBe(
-        true,
-      );
+      expect(
+        isPolicyWrite({ name: 'New Supplier', creditPolicyNote: 'Returns weekly' }, null),
+      ).toBe(true);
     });
 
     it('compares normalized effective records instead of raw field presence', () => {
@@ -52,10 +52,7 @@ describe('supplier-policy shared domain', () => {
       };
 
       expect(
-        isPolicyWrite(
-          { creditPolicyNote: 'Return monthly', representativeName: 'Alex' },
-          existing,
-        ),
+        isPolicyWrite({ creditPolicyNote: 'Return monthly', representativeName: 'Alex' }, existing),
       ).toBe(false);
       expect(isPolicyWrite({ creditPolicyNote: 'Return weekly' }, existing)).toBe(true);
     });

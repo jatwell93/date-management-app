@@ -82,7 +82,7 @@
 
 ## 7. Completion
 
-- [ ] 7.1 `rtk lint` on affected packages.
-- [ ] 7.2 Affected tests: `rtk vitest run` (frontend/backend), `npm run test:db`, worker conformance.
-- [ ] 7.3 `rtk tsc` across affected packages.
-- [ ] 7.4 `npx openspec validate enhance-supplier-policy-capture --strict`.
+- [x] 7.1 `rtk lint` on affected packages.
+- [x] 7.2 Affected tests: `rtk vitest run` (frontend/backend), `npm run test:db`, worker conformance.
+- [x] 7.3 `rtk tsc` across affected packages.
+- [x] 7.4 `npx openspec validate enhance-supplier-policy-capture --strict`.

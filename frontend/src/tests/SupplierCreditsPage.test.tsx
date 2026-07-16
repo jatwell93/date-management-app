@@ -437,7 +437,9 @@ describe('SupplierCreditsPage', () => {
     await userEvent.click(await screen.findByRole('button', { name: 'SKU matching' }));
 
     expect((await screen.findAllByRole('columnheader', { name: 'SKU' })).length).toBeGreaterThan(0);
-    expect(screen.getAllByRole('columnheader', { name: 'Supplier policy' }).length).toBeGreaterThan(0);
+    expect(screen.getAllByRole('columnheader', { name: 'Supplier policy' }).length).toBeGreaterThan(
+      0,
+    );
     expect(screen.getAllByRole('columnheader', { name: 'Last updated' }).length).toBeGreaterThan(0);
     expect(screen.getByText('Nature Brand · 1 SKU')).toBeInTheDocument();
     expect(screen.getByText('Unmatched · 1 SKU')).toBeInTheDocument();
@@ -476,7 +478,10 @@ describe('SupplierCreditsPage', () => {
 
     await waitFor(() =>
       expect(mocked.bulkLinkProducts).toHaveBeenCalledWith(
-        { brandName: 'New Bulk Brand', productIds: unmatchedItems.slice(0, 500).map((item) => item.productId) },
+        {
+          brandName: 'New Bulk Brand',
+          productIds: unmatchedItems.slice(0, 500).map((item) => item.productId),
+        },
         'tkn',
       ),
     );
@@ -487,7 +492,15 @@ describe('SupplierCreditsPage', () => {
 
   it('explains that a different-brand conflict rolls back the entire bulk link', async () => {
     mocked.getBrandReview.mockResolvedValue({
-      items: [{ productId: 501, sku: 'CONFLICT', barcode: '', productName: 'Conflict Product', brand: null }],
+      items: [
+        {
+          productId: 501,
+          sku: 'CONFLICT',
+          barcode: '',
+          productName: 'Conflict Product',
+          brand: null,
+        },
+      ],
       nextCursor: null,
     });
     mocked.bulkLinkProducts.mockRejectedValue(

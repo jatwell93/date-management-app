@@ -134,7 +134,10 @@ export function validatePolicyWrite(
     !normalizeText(effective.contactPhone) &&
     !normalizeText(effective.representativeEmail)
   ) {
-    errors.push({ field: 'contact', message: 'Add a contact email, phone, or representative email' });
+    errors.push({
+      field: 'contact',
+      message: 'Add a contact email, phone, or representative email',
+    });
   }
   return errors;
 }

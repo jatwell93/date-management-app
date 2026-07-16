@@ -5,14 +5,7 @@ import { Button } from '../ui/button';
 import { Card, CardContent, CardHeader, CardTitle } from '../ui/card';
 import { Input } from '../ui/input';
 import { Label } from '../ui/label';
-import {
-  Table,
-  TableBody,
-  TableCell,
-  TableHead,
-  TableHeader,
-  TableRow,
-} from '../ui/table';
+import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '../ui/table';
 import {
   AlertDialog,
   AlertDialogAction,
@@ -33,13 +26,7 @@ import {
   supplierPolicyInput,
   type SupplierPolicyDraft,
 } from './SupplierPolicyFields';
-import {
-  Dialog,
-  DialogContent,
-  DialogFooter,
-  DialogHeader,
-  DialogTitle,
-} from '../ui/dialog';
+import { Dialog, DialogContent, DialogFooter, DialogHeader, DialogTitle } from '../ui/dialog';
 import { validatePolicyWrite } from '@shared/supplier-policy';
 
 const MAX_BULK_SELECTION = 500;
@@ -63,12 +50,7 @@ function actionErrorMessage(cause: unknown): string {
   return cause instanceof Error ? cause.message : 'Supplier policy action failed';
 }
 
-export const PolicyReviewPanel: React.FC<Props> = ({
-  suppliers,
-  isAdmin,
-  getToken,
-  onChanged,
-}) => {
+export const PolicyReviewPanel: React.FC<Props> = ({ suppliers, isAdmin, getToken, onChanged }) => {
   const [items, setItems] = useState<PolicyReviewItem[]>([]);
   const [brandFilter, setBrandFilter] = useState('');
   const [supplierFilter, setSupplierFilter] = useState('');
@@ -194,7 +176,9 @@ export const PolicyReviewPanel: React.FC<Props> = ({
     const input = supplierPolicyInput(editDraft, true);
     const validationErrors = validatePolicyWrite(input, editSupplier);
     if (validationErrors.length > 0) {
-      setFieldErrors(Object.fromEntries(validationErrors.map((item) => [item.field, item.message])));
+      setFieldErrors(
+        Object.fromEntries(validationErrors.map((item) => [item.field, item.message])),
+      );
       return;
     }
     setSaving(true);
@@ -225,7 +209,10 @@ export const PolicyReviewPanel: React.FC<Props> = ({
         </p>
       </div>
 
-      <form className="grid gap-3 md:grid-cols-[1fr_1fr_auto_auto] md:items-end" onSubmit={applyFilters}>
+      <form
+        className="grid gap-3 md:grid-cols-[1fr_1fr_auto_auto] md:items-end"
+        onSubmit={applyFilters}
+      >
         <div className="space-y-1">
           <Label htmlFor="policy-brand-filter">Brand</Label>
           <Input
@@ -258,12 +245,16 @@ export const PolicyReviewPanel: React.FC<Props> = ({
             <option value="MISSING">Missing</option>
           </select>
         </div>
-        <Button type="submit" variant="outline">Apply filters</Button>
+        <Button type="submit" variant="outline">
+          Apply filters
+        </Button>
       </form>
 
       {isAdmin && (
         <Card>
-          <CardHeader><CardTitle className="text-base">Bulk attach policy</CardTitle></CardHeader>
+          <CardHeader>
+            <CardTitle className="text-base">Bulk attach policy</CardTitle>
+          </CardHeader>
           <CardContent className="flex flex-wrap items-end gap-3">
             <div className="space-y-1">
               <Label htmlFor="bulk-policy-supplier">Policy supplier</Label>
@@ -272,7 +263,9 @@ export const PolicyReviewPanel: React.FC<Props> = ({
                 aria-label="Policy supplier"
                 className="h-9 min-w-52 rounded-md border bg-semantic-surface-1 px-3 text-sm"
                 value={supplierId ?? ''}
-                onChange={(event) => setSupplierId(event.target.value ? Number(event.target.value) : null)}
+                onChange={(event) =>
+                  setSupplierId(event.target.value ? Number(event.target.value) : null)
+                }
               >
                 <option value="">Choose supplier</option>
                 {suppliers.map((supplier) => (
@@ -297,8 +290,16 @@ export const PolicyReviewPanel: React.FC<Props> = ({
         </Card>
       )}
 
-      {error && <p role="alert" className="text-sm text-semantic-critical">{error}</p>}
-      {summary && <p role="status" className="text-sm text-semantic-success">{summary}</p>}
+      {error && (
+        <p role="alert" className="text-sm text-semantic-critical">
+          {error}
+        </p>
+      )}
+      {summary && (
+        <p role="status" className="text-sm text-semantic-success">
+          {summary}
+        </p>
+      )}
 
       <div className="overflow-x-auto rounded-lg border">
         <Table>
@@ -325,7 +326,9 @@ export const PolicyReviewPanel: React.FC<Props> = ({
                           type="checkbox"
                           aria-label={`Select ${item.brandName}`}
                           checked={selected.has(item.brandId)}
-                          disabled={!selected.has(item.brandId) && selected.size >= MAX_BULK_SELECTION}
+                          disabled={
+                            !selected.has(item.brandId) && selected.size >= MAX_BULK_SELECTION
+                          }
                           onChange={() => toggleSelected(item.brandId)}
                         />
                       </TableCell>
@@ -388,7 +391,10 @@ export const PolicyReviewPanel: React.FC<Props> = ({
             })}
             {!loading && items.length === 0 && (
               <TableRow>
-                <TableCell colSpan={isAdmin ? 7 : 6} className="py-10 text-center text-semantic-text-secondary">
+                <TableCell
+                  colSpan={isAdmin ? 7 : 6}
+                  className="py-10 text-center text-semantic-text-secondary"
+                >
                   No supplier policies match these filters.
                 </TableCell>
               </TableRow>
@@ -396,20 +402,29 @@ export const PolicyReviewPanel: React.FC<Props> = ({
           </TableBody>
         </Table>
       </div>
-      {loading && <p role="status" className="text-sm text-semantic-text-secondary">Loading policies…</p>}
+      {loading && (
+        <p role="status" className="text-sm text-semantic-text-secondary">
+          Loading policies…
+        </p>
+      )}
 
-      <AlertDialog open={clearSupplier != null} onOpenChange={(open) => !open && setClearSupplier(null)}>
+      <AlertDialog
+        open={clearSupplier != null}
+        onOpenChange={(open) => !open && setClearSupplier(null)}
+      >
         <AlertDialogContent>
           <AlertDialogHeader>
             <AlertDialogTitle>Clear supplier policy?</AlertDialogTitle>
             <AlertDialogDescription>
-              This clears the instructions, ratio, and representative fields for {clearSupplier?.name}.
-              Contact details are preserved.
+              This clears the instructions, ratio, and representative fields for{' '}
+              {clearSupplier?.name}. Contact details are preserved.
             </AlertDialogDescription>
           </AlertDialogHeader>
           <AlertDialogFooter>
             <AlertDialogCancel>Cancel</AlertDialogCancel>
-            <AlertDialogAction onClick={() => void clear()} disabled={saving}>Clear policy</AlertDialogAction>
+            <AlertDialogAction onClick={() => void clear()} disabled={saving}>
+              Clear policy
+            </AlertDialogAction>
           </AlertDialogFooter>
         </AlertDialogContent>
       </AlertDialog>
@@ -430,8 +445,12 @@ export const PolicyReviewPanel: React.FC<Props> = ({
             idPrefix="policy-review-edit"
           />
           <DialogFooter>
-            <Button variant="outline" onClick={() => setEditSupplier(null)} disabled={saving}>Cancel</Button>
-            <Button onClick={() => void saveEdit()} disabled={saving}>Save policy</Button>
+            <Button variant="outline" onClick={() => setEditSupplier(null)} disabled={saving}>
+              Cancel
+            </Button>
+            <Button onClick={() => void saveEdit()} disabled={saving}>
+              Save policy
+            </Button>
           </DialogFooter>
         </DialogContent>
       </Dialog>

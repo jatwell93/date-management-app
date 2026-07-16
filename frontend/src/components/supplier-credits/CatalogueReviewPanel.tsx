@@ -5,14 +5,7 @@ import { Card, CardContent, CardHeader, CardTitle } from '../ui/card';
 import { Input } from '../ui/input';
 import type { BrandReviewItem, Supplier } from '../../types/supplierCredit';
 import * as svc from '../../services/supplierCreditService';
-import {
-  Table,
-  TableBody,
-  TableCell,
-  TableHead,
-  TableHeader,
-  TableRow,
-} from '../ui/table';
+import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '../ui/table';
 import { Label } from '../ui/label';
 import { ApiError } from '../../lib/api.service';
 
@@ -362,7 +355,11 @@ const SkuMatchingView: React.FC<{
               }}
             >
               <option value="">Choose existing brand</option>
-              {brands.map((brand) => <option key={brand.id} value={brand.id}>{brand.name}</option>)}
+              {brands.map((brand) => (
+                <option key={brand.id} value={brand.id}>
+                  {brand.name}
+                </option>
+              ))}
             </select>
           </div>
           <div className="space-y-1">
@@ -385,12 +382,22 @@ const SkuMatchingView: React.FC<{
           </Button>
         </CardContent>
       </Card>
-      {error && <p role="alert" className="text-sm text-semantic-critical">{error}</p>}
-      {summary && <p role="status" className="text-sm text-semantic-success">{summary}</p>}
+      {error && (
+        <p role="alert" className="text-sm text-semantic-critical">
+          {error}
+        </p>
+      )}
+      {summary && (
+        <p role="status" className="text-sm text-semantic-success">
+          {summary}
+        </p>
+      )}
       {groups.map(([label, groupItems]) => (
         <Card key={label}>
           <CardHeader>
-            <CardTitle className="text-base">{label} · {groupItems.length} {groupItems.length === 1 ? 'SKU' : 'SKUs'}</CardTitle>
+            <CardTitle className="text-base">
+              {label} · {groupItems.length} {groupItems.length === 1 ? 'SKU' : 'SKUs'}
+            </CardTitle>
           </CardHeader>
           <CardContent className="overflow-x-auto">
             <Table>
@@ -406,33 +413,45 @@ const SkuMatchingView: React.FC<{
               </TableHeader>
               <TableBody>
                 {groupItems.map((item) => {
-                  const supplier = item.brand?.supplierId == null
-                    ? null
-                    : suppliersById.get(item.brand.supplierId) ?? null;
+                  const supplier =
+                    item.brand?.supplierId == null
+                      ? null
+                      : (suppliersById.get(item.brand.supplierId) ?? null);
                   const hasPolicy = Boolean(supplier?.creditPolicyNote.trim());
                   const unmatched = item.brand == null;
                   return (
-                    <TableRow key={item.productId} className={unmatched ? 'bg-semantic-critical-muted' : undefined}>
+                    <TableRow
+                      key={item.productId}
+                      className={unmatched ? 'bg-semantic-critical-muted' : undefined}
+                    >
                       <TableCell>
                         {unmatched && (
                           <input
                             type="checkbox"
                             aria-label={`Select ${item.productName}`}
                             checked={selected.has(item.productId)}
-                            disabled={!selected.has(item.productId) && selected.size >= MAX_BULK_SELECTION}
+                            disabled={
+                              !selected.has(item.productId) && selected.size >= MAX_BULK_SELECTION
+                            }
                             onChange={() => toggle(item.productId)}
                           />
                         )}
                       </TableCell>
                       <TableCell className="font-mono">{item.sku}</TableCell>
                       <TableCell>{item.productName}</TableCell>
-                      <TableCell>{item.brand?.name ?? <Badge variant="error">Unmatched</Badge>}</TableCell>
                       <TableCell>
-                        <Badge variant={hasPolicy ? 'success' : 'error'}>{hasPolicy ? 'Attached' : 'Missing'}</Badge>
+                        {item.brand?.name ?? <Badge variant="error">Unmatched</Badge>}
+                      </TableCell>
+                      <TableCell>
+                        <Badge variant={hasPolicy ? 'success' : 'error'}>
+                          {hasPolicy ? 'Attached' : 'Missing'}
+                        </Badge>
                       </TableCell>
                       <TableCell>
                         {supplier?.policyUpdatedAt
-                          ? new Intl.DateTimeFormat('en-AU', { dateStyle: 'medium' }).format(new Date(supplier.policyUpdatedAt))
+                          ? new Intl.DateTimeFormat('en-AU', { dateStyle: 'medium' }).format(
+                              new Date(supplier.policyUpdatedAt),
+                            )
                           : 'Never'}
                       </TableCell>
                     </TableRow>
@@ -443,7 +462,9 @@ const SkuMatchingView: React.FC<{
           </CardContent>
         </Card>
       ))}
-      {!loading && groups.length === 0 && <p className="text-sm text-semantic-text-secondary">No catalogue SKUs found.</p>}
+      {!loading && groups.length === 0 && (
+        <p className="text-sm text-semantic-text-secondary">No catalogue SKUs found.</p>
+      )}
     </div>
   );
 };
