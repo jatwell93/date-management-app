@@ -93,3 +93,14 @@
 - [x] 8.2 Align Express full-`PUT` authorization/ratio precedence with Worker behavior.
 - [x] 8.3 Reject invalid supplier route IDs before controller/database access.
 - [x] 8.4 Run focused regression, lint, typecheck, and strict OpenSpec verification.
+
+## 9. Browser QA follow-up
+
+- [x] 9.1 Make SQLite migration 012 tolerate legacy unscoped `store_areas` tables and verify the
+      full migration chain reaches supplier-policy migration 017.
+- [x] 9.2 Correct the local Expect QA startup guide for migration setup and Doppler environment
+      override precedence.
+- [x] 9.3 Complete authenticated admin desktop/mobile Browser QA for policy review, supplier-policy
+      editing, bulk attach, catalogue SKU matching, console/network health, and accessibility.
+- [x] 9.4 Complete authenticated non-admin role-control Browser QA or record an explicit user waiver
+      (explicitly waived by the user after admin QA on 17 July 2026).

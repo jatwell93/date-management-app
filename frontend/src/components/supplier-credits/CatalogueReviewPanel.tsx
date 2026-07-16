@@ -65,7 +65,7 @@ export const CatalogueReviewPanel: React.FC<Props> = ({ suppliers, getToken, onC
 
   const confirm = async (item: BrandReviewItem) => {
     if (!item.brand) return;
-    const supplierId = supplierIds[item.productId] ?? suppliers[0]?.id;
+    const supplierId = supplierIds[item.productId] ?? item.brand.supplierId ?? suppliers[0]?.id;
     if (supplierId == null) {
       setError('Create a supplier before confirming this brand.');
       return;
@@ -206,8 +206,10 @@ export const CatalogueReviewPanel: React.FC<Props> = ({ suppliers, getToken, onC
                     {suppliers.length > 0 && (
                       <select
                         aria-label={`Supplier for ${item.productName}`}
-                        className="rounded-md border px-3 py-2 text-sm"
-                        value={supplierIds[item.productId] ?? suppliers[0].id}
+                        className="rounded-md border px-3 py-2 text-sm outline-none focus-visible:border-semantic-primary focus-visible:ring-[3px] focus-visible:ring-semantic-primary/50"
+                        value={
+                          supplierIds[item.productId] ?? item.brand?.supplierId ?? suppliers[0].id
+                        }
                         onChange={(event) =>
                           setSupplierIds((value) => ({
                             ...value,

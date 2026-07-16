@@ -8,6 +8,18 @@ Primary QA uses real Clerk sessions. Backend auth bypass is only a fallback for 
 
 ## Start the Local Stack
 
+Synchronize the database used by the Express Prisma client before starting the backend. From the
+repository root:
+
+```powershell
+doppler run --project date-management --config dev -- npx prisma db push --schema backend/prisma/schema.prisma
+```
+
+The Prisma datasource resolves its relative SQLite URL from `backend/prisma/schema.prisma`, so the
+local Express app uses `backend/prisma/database.sqlite`. The custom migration runner uses
+`backend/database.sqlite`; running `npm run migrate --prefix backend` does not synchronize the
+database used by local Express QA.
+
 Run the backend on `localhost:3001`:
 
 ```powershell
@@ -19,8 +31,15 @@ Run the frontend on `localhost:3002` with the Expect diagnostics panel enabled:
 ```powershell
 $env:REACT_APP_EXPECT_QA_STATUS='true'
 $env:REACT_APP_API_URL='http://localhost:3001'
-doppler run --project date-management --config dev -- npm start --prefix frontend
+$env:BROWSER='none'
+doppler run --project date-management --config dev --preserve-env=REACT_APP_API_URL,REACT_APP_EXPECT_QA_STATUS,BROWSER -- npm start --prefix frontend
 ```
+
+Doppler normally replaces variables that already exist in the shell. Keep `--preserve-env` in the
+frontend command so the QA API URL and diagnostics flag cannot be overwritten by remote development
+configuration. Before testing a feature, confirm the diagnostics panel reports
+`api-base-url: http://localhost:3001`; if it reports a remote URL, restart the frontend with the
+command above.
 
 If you are not using Doppler for a session, set the same variables in the appropriate `.env` files instead. Do not commit local secret files.
 
@@ -47,6 +66,16 @@ Create or confirm two Clerk development users in the same Clerk application and 
 
 Sign in through the real app UI at `http://localhost:3002/login`. After login, Expect should see the diagnostics panel on authenticated pages.
 
+For an interactive Clerk sign-in:
+
+1. Launch Expect in headed Chromium at `http://localhost:3002/login`.
+2. Pause browser automation while the tester enters the saved development-user credentials.
+3. Resume only after the authenticated page and organization have loaded.
+4. Verify every diagnostic below before relying on feature results.
+
+Do not create or alter Clerk users, organization membership, or roles during QA unless the user has
+explicitly authorized that external change.
+
 The key fields to check are:
 
 - `expect-qa-frontend-role`
@@ -57,6 +86,25 @@ The key fields to check are:
 - `expect-qa-api-base-url`
 
 For the admin user, confirm product catalog upload navigation is visible. For the team member user, confirm it is hidden. If frontend and backend roles differ, treat it as a real Clerk/bootstrap issue.
+
+## Browser QA Checklist
+
+Run the feature's acceptance scenarios at desktop and mobile widths. At minimum:
+
+- Check role-gated controls with real admin and team-member sessions.
+- Exercise validation, confirmation, empty, success, and conflict states without destroying shared
+  fixtures.
+- Confirm wide tables and dialogs stay contained at mobile widths and do not create body-level
+  horizontal overflow.
+- Inspect the browser console for new errors and the API request log for failed requests.
+- Run an accessibility audit on the feature region and manually review automated findings that can
+  be caused by third-party overlays or modal focus guards.
+- Capture performance metrics on the development build, but distinguish development instrumentation
+  from production regressions.
+
+Development React mode may issue duplicate read requests while detecting unsafe effects. Treat a
+duplicate warning as informational when both requests are successful and there is no write or visible
+state duplication; failed requests and duplicate mutations remain blockers.
 
 ## Stripe Test Prices
 

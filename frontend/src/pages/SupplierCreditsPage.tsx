@@ -91,29 +91,32 @@ const SupplierCreditsPage: React.FC<Props> = ({ token, effectiveUserRole }) => {
     productName: string;
   } | null>(null);
 
-  const load = useCallback(async () => {
-    setLoading(true);
-    setError(null);
-    try {
-      const authToken = (await getFreshApiToken('supplier-credits')) || null;
-      const [poolData, openClaims, settledClaims, reportData, supplierData] = await Promise.all([
-        svc.getClaimablePool(authToken),
-        svc.listClaims('open', authToken),
-        svc.listClaims('settled', authToken),
-        svc.getRecoveryReport(authToken),
-        svc.getSuppliers(authToken),
-      ]);
-      setPool(poolData);
-      setClaims([...openClaims, ...settledClaims]);
-      setReport(reportData);
-      setSuppliers(supplierData);
-    } catch (err) {
-      setError(err instanceof Error ? err.message : 'Failed to load supplier credits');
-      Sentry.captureException(err, { tags: { feature: 'supplier-credits' } });
-    } finally {
-      setLoading(false);
-    }
-  }, [getFreshApiToken]);
+  const load = useCallback(
+    async (showLoading = true) => {
+      if (showLoading) setLoading(true);
+      setError(null);
+      try {
+        const authToken = (await getFreshApiToken('supplier-credits')) || null;
+        const [poolData, openClaims, settledClaims, reportData, supplierData] = await Promise.all([
+          svc.getClaimablePool(authToken),
+          svc.listClaims('open', authToken),
+          svc.listClaims('settled', authToken),
+          svc.getRecoveryReport(authToken),
+          svc.getSuppliers(authToken),
+        ]);
+        setPool(poolData);
+        setClaims([...openClaims, ...settledClaims]);
+        setReport(reportData);
+        setSuppliers(supplierData);
+      } catch (err) {
+        setError(err instanceof Error ? err.message : 'Failed to load supplier credits');
+        Sentry.captureException(err, { tags: { feature: 'supplier-credits' } });
+      } finally {
+        if (showLoading) setLoading(false);
+      }
+    },
+    [getFreshApiToken],
+  );
 
   const getCatalogueReviewToken = useCallback(
     async () => (await getFreshApiToken('supplier-credits-brand-review')) ?? null,
@@ -200,7 +203,7 @@ const SupplierCreditsPage: React.FC<Props> = ({ token, effectiveUserRole }) => {
         <CatalogueReviewPanel
           suppliers={suppliers}
           getToken={getCatalogueReviewToken}
-          onChanged={() => void load()}
+          onChanged={() => void load(false)}
         />
       )}
       {tab === 'policy-review' && (
@@ -208,7 +211,7 @@ const SupplierCreditsPage: React.FC<Props> = ({ token, effectiveUserRole }) => {
           suppliers={suppliers}
           isAdmin={effectiveUserRole === ROLES.ADMIN}
           getToken={getCatalogueReviewToken}
-          onChanged={() => void load()}
+          onChanged={() => void load(false)}
         />
       )}
       {tab === 'open' && (

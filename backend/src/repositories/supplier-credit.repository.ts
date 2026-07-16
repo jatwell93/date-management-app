@@ -205,8 +205,28 @@ export class SupplierCreditRepository {
       take: options.limit + 1,
     });
     const hasMore = rows.length > options.limit;
-    const items = hasMore ? rows.slice(0, options.limit) : rows;
-    return { items, nextCursor: hasMore ? (items[items.length - 1]?.id ?? null) : null };
+    const page = hasMore ? rows.slice(0, options.limit) : rows;
+    const items = page.map((row) => ({
+      productId: row.id,
+      sku: row.sku,
+      barcode: row.barcode,
+      productName: row.name,
+      brand:
+        row.brand == null
+          ? null
+          : {
+              id: row.brand.id,
+              name: row.brand.name,
+              manufacturerName: row.brand.manufacturerName,
+              suggestedSupplierName: row.brand.suggestedSupplierName,
+              supplierId: row.brand.supplierId,
+              source: row.brand.source,
+            },
+    }));
+    return {
+      items,
+      nextCursor: hasMore ? (items[items.length - 1]?.productId ?? null) : null,
+    };
   }
 
   findSupplier(organizationId: string, id: number, tx?: DbClient): Promise<SupplierRecord | null> {

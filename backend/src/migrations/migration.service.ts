@@ -476,9 +476,18 @@ export class MigrationService {
         id: 12,
         name: '012-add-parent-id-to-store-areas',
         up: (db: DB) => {
-          const tableInfo = db
+          let tableInfo = db
             .prepare('PRAGMA table_info(store_areas)')
             .all() as PragmaTableInfoRow[];
+          const hasOrganizationId = tableInfo.some((column) => column.name === 'organization_id');
+          if (!hasOrganizationId) {
+            // Pre-tenant SQLite databases can have migration 008 recorded while
+            // store_areas still lacks tenant ownership. Preserve those rows as
+            // unowned instead of inventing an organization during this upgrade.
+            db.exec('ALTER TABLE store_areas ADD COLUMN organization_id TEXT');
+            Logger.info('Added nullable organization_id column to legacy store_areas table');
+            tableInfo = db.prepare('PRAGMA table_info(store_areas)').all() as PragmaTableInfoRow[];
+          }
           const hasParentId = tableInfo.some((column) => column.name === 'parent_id');
 
           if (!hasParentId) {
@@ -499,7 +508,8 @@ export class MigrationService {
                   ELSE sub_department
                 END AS department_name
               FROM store_areas
-              WHERE parent_id IS NULL;
+              WHERE parent_id IS NULL
+                AND organization_id IS NOT NULL;
 
             INSERT INTO store_areas (
               organization_id,
