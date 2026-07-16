@@ -638,6 +638,109 @@ describe('minimal API route table', () => {
     expect(createSupplier).not.toHaveBeenCalled();
   });
 
+  it('matches Express supplier field boundaries in Worker create validation', async () => {
+    mockedAuthenticateClerkRequest.mockResolvedValue(authenticatedClerkOrgContext);
+    const createSupplier = vi.fn().mockImplementation((_organizationId, data) =>
+      Promise.resolve({
+        id: 9,
+        ...data,
+      }),
+    );
+    const database = {
+      sql: vi.fn().mockResolvedValue([{ id: 7, organizationId: 'org_123', role: 'org:admin' }]),
+      createSupplier,
+    } as unknown as Database;
+
+    const validZeroCredit = await resolveMinimalApiRoute(getMinimalRoutes(), {
+      request: new Request('https://example.com/api/supplier-credits/suppliers', {
+        method: 'POST',
+        body: JSON.stringify({
+          name: 'Policy Supplier',
+          contactPhone: '02 1234 5678',
+          creditPolicyNote: 'No credit is issued',
+          policyWriteOffQty: 1,
+          policyCreditQty: 0,
+          followUpDays: 365,
+        }),
+      }),
+      pathname: '/api/supplier-credits/suppliers',
+      method: 'POST',
+      db: database,
+      env,
+    });
+
+    expect(validZeroCredit?.status).toBe(201);
+    expect(createSupplier).toHaveBeenCalledOnce();
+
+    for (const body of [
+      { name: 'x'.repeat(121) },
+      { name: '<b>Policy Supplier</b>' },
+      { name: 'Policy Supplier', followUpDays: 366 },
+    ]) {
+      const response = await resolveMinimalApiRoute(getMinimalRoutes(), {
+        request: new Request('https://example.com/api/supplier-credits/suppliers', {
+          method: 'POST',
+          body: JSON.stringify(body),
+        }),
+        pathname: '/api/supplier-credits/suppliers',
+        method: 'POST',
+        db: database,
+        env,
+      });
+
+      expect(response?.status).toBe(400);
+    }
+    expect(createSupplier).toHaveBeenCalledOnce();
+  });
+
+  it('rejects an empty Worker PATCH like the Express partial-update schema', async () => {
+    mockedAuthenticateClerkRequest.mockResolvedValue(authenticatedClerkOrgContext);
+    const updateSupplier = vi.fn();
+    const database = {
+      sql: vi.fn().mockResolvedValue([{ id: 7, organizationId: 'org_123', role: 'admin' }]),
+      findSupplier: vi.fn(),
+      updateSupplier,
+    } as unknown as Database;
+
+    const response = await resolveMinimalApiRoute(getMinimalRoutes(), {
+      request: new Request('https://example.com/api/supplier-credits/suppliers/4', {
+        method: 'PATCH',
+        body: JSON.stringify({}),
+      }),
+      pathname: '/api/supplier-credits/suppliers/4',
+      method: 'PATCH',
+      db: database,
+      env,
+    });
+
+    expect(response?.status).toBe(400);
+    expect(database.findSupplier).not.toHaveBeenCalled();
+    expect(updateSupplier).not.toHaveBeenCalled();
+  });
+
+  it('matches the Express bulk brand-name length limit before database work', async () => {
+    mockedAuthenticateClerkRequest.mockResolvedValue(authenticatedClerkOrgContext);
+    const bulkLinkProducts = vi.fn();
+    const database = {
+      sql: vi.fn().mockResolvedValue([{ id: 7, organizationId: 'org_123', role: 'admin' }]),
+      bulkLinkProducts,
+    } as unknown as Database;
+
+    const response = await resolveMinimalApiRoute(getMinimalRoutes(), {
+      request: new Request('https://example.com/api/supplier-credits/brands/bulk-link', {
+        method: 'POST',
+        body: JSON.stringify({ brandName: 'x'.repeat(161), productIds: [1] }),
+      }),
+      pathname: '/api/supplier-credits/brands/bulk-link',
+      method: 'POST',
+      db: database,
+      env,
+    });
+
+    expect(response?.status).toBe(422);
+    expect(bulkLinkProducts).not.toHaveBeenCalled();
+  });
+
   it('allows a normalized unchanged PATCH for a team member without a timestamp bump', async () => {
     mockedAuthenticateClerkRequest.mockResolvedValue(authenticatedClerkOrgContext);
     const existing = {

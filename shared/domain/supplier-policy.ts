@@ -45,43 +45,41 @@ function normalizeText(value: string | null | undefined): string | null {
   return normalized ? normalized : null;
 }
 
+function effectiveNullable<T>(
+  value: T | null | undefined,
+  fallback: T | null | undefined,
+): T | null {
+  return value === undefined ? (fallback ?? null) : value;
+}
+
+function effectiveText(
+  value: string | null | undefined,
+  fallback: string | null | undefined,
+): string | null {
+  return normalizeText(value === undefined ? fallback : value);
+}
+
 function effectiveRecord(
   payload: SupplierPolicyRecord,
   existing: SupplierPolicyRecord | null,
 ): Required<SupplierPolicyRecord> {
   const base = existing ?? CREATE_BASELINE;
   return {
-    creditPolicyNote:
-      payload.creditPolicyNote === undefined
-        ? (base.creditPolicyNote ?? '')
-        : (normalizeText(payload.creditPolicyNote) ?? ''),
-    policyWriteOffQty:
-      payload.policyWriteOffQty === undefined
-        ? (base.policyWriteOffQty ?? null)
-        : payload.policyWriteOffQty,
-    policyCreditQty:
-      payload.policyCreditQty === undefined
-        ? (base.policyCreditQty ?? null)
-        : payload.policyCreditQty,
-    followUpDays:
-      payload.followUpDays === undefined ? (base.followUpDays ?? 7) : (payload.followUpDays ?? 7),
-    representativeName:
-      payload.representativeName === undefined
-        ? (base.representativeName ?? null)
-        : normalizeText(payload.representativeName),
-    representativeEmail:
-      payload.representativeEmail === undefined
-        ? (base.representativeEmail ?? null)
-        : normalizeText(payload.representativeEmail),
-    contactEmail:
-      payload.contactEmail === undefined
-        ? (base.contactEmail ?? null)
-        : normalizeText(payload.contactEmail),
-    contactPhone:
-      payload.contactPhone === undefined
-        ? (base.contactPhone ?? null)
-        : normalizeText(payload.contactPhone),
+    creditPolicyNote: effectiveText(payload.creditPolicyNote, base.creditPolicyNote) ?? '',
+    policyWriteOffQty: effectiveNullable(payload.policyWriteOffQty, base.policyWriteOffQty),
+    policyCreditQty: effectiveNullable(payload.policyCreditQty, base.policyCreditQty),
+    followUpDays: effectiveNullable(payload.followUpDays, base.followUpDays) ?? 7,
+    representativeName: effectiveText(payload.representativeName, base.representativeName),
+    representativeEmail: effectiveText(payload.representativeEmail, base.representativeEmail),
+    contactEmail: effectiveText(payload.contactEmail, base.contactEmail),
+    contactPhone: effectiveText(payload.contactPhone, base.contactPhone),
   };
+}
+
+function hasContact(record: Required<SupplierPolicyRecord>): boolean {
+  return [record.contactEmail, record.contactPhone, record.representativeEmail].some(
+    (value) => normalizeText(value) !== null,
+  );
 }
 
 function normalizedPolicy(record: SupplierPolicyRecord): NormalizedPolicy {
@@ -129,11 +127,7 @@ export function validatePolicyWrite(
   if (!hasPolicy(effective)) {
     errors.push({ field: 'creditPolicyNote', message: 'Store instructions are required' });
   }
-  if (
-    !normalizeText(effective.contactEmail) &&
-    !normalizeText(effective.contactPhone) &&
-    !normalizeText(effective.representativeEmail)
-  ) {
+  if (!hasContact(effective)) {
     errors.push({
       field: 'contact',
       message: 'Add a contact email, phone, or representative email',

@@ -104,3 +104,14 @@
       editing, bulk attach, catalogue SKU matching, console/network health, and accessibility.
 - [x] 9.4 Complete authenticated non-admin role-control Browser QA or record an explicit user waiver
       (explicitly waived by the user after admin QA on 17 July 2026).
+
+## 10. CodeScene review follow-up
+
+- [x] 10.1 Add Worker route regressions for Express-parity supplier and bulk-brand validation.
+- [x] 10.2 Refactor supplier policy normalization and Worker request parsing to name field rules and
+      remove repeated merge/default conditionals without changing the public contracts.
+- [x] 10.3 Decompose the supplier-policy field renderer where distinct editable/read-only sections
+      already exist; retain the atomic SQL CTEs and explicit claim projection.
+- [x] 10.4 Run focused shared, Worker, frontend, lint, typecheck, and strict OpenSpec verification.
+      Local `cs delta` was blocked by tenant policy prohibiting external diff export; rely on the
+      existing PR bot to rescan after push.
