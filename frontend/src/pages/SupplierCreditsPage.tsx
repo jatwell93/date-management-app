@@ -19,11 +19,13 @@ import type {
   CreditClaim,
   RecoveryReport,
   Supplier,
-  SupplierInput,
 } from '../types/supplierCredit';
 import { CatalogueReviewPanel } from '../components/supplier-credits/CatalogueReviewPanel';
+import { PolicyReviewPanel } from '../components/supplier-credits/PolicyReviewPanel';
 import {
   SupplierPolicyFields,
+  supplierPolicyDraft,
+  supplierPolicyInput,
   type SupplierPolicyDraft,
 } from '../components/supplier-credits/SupplierPolicyFields';
 import { ApiError } from '../lib/api.service';
@@ -37,7 +39,7 @@ interface Props {
 
 const currency = new Intl.NumberFormat('en-AU', { style: 'currency', currency: 'AUD' });
 
-type Tab = 'to-claim' | 'catalogue-review' | 'open' | 'settled';
+type Tab = 'to-claim' | 'catalogue-review' | 'policy-review' | 'open' | 'settled';
 
 const STATUS_TONE: Record<string, string> = {
   DRAFT: 'bg-semantic-surface-3 text-semantic-text-secondary',
@@ -175,6 +177,9 @@ const SupplierCreditsPage: React.FC<Props> = ({ token, effectiveUserRole }) => {
         <TabButton active={tab === 'catalogue-review'} onClick={() => setTab('catalogue-review')}>
           Catalogue Review
         </TabButton>
+        <TabButton active={tab === 'policy-review'} onClick={() => setTab('policy-review')}>
+          Policy Review
+        </TabButton>
         <TabButton active={tab === 'open'} onClick={() => setTab('open')}>
           Open Claims{followUpDueCount > 0 ? ` (${followUpDueCount} due)` : ''}
         </TabButton>
@@ -194,6 +199,14 @@ const SupplierCreditsPage: React.FC<Props> = ({ token, effectiveUserRole }) => {
       {tab === 'catalogue-review' && (
         <CatalogueReviewPanel
           suppliers={suppliers}
+          getToken={getCatalogueReviewToken}
+          onChanged={() => void load()}
+        />
+      )}
+      {tab === 'policy-review' && (
+        <PolicyReviewPanel
+          suppliers={suppliers}
+          isAdmin={effectiveUserRole === ROLES.ADMIN}
           getToken={getCatalogueReviewToken}
           onChanged={() => void load()}
         />
@@ -590,51 +603,6 @@ const BuildClaimModal: React.FC<{
     </Dialog>
   );
 };
-
-const EMPTY_POLICY_DRAFT: SupplierPolicyDraft = {
-  contactEmail: '',
-  contactPhone: '',
-  creditPolicyNote: '',
-  policyWriteOffQty: '',
-  policyCreditQty: '',
-  followUpDays: '7',
-  representativeName: '',
-  representativeEmail: '',
-};
-
-function supplierPolicyDraft(supplier?: Supplier): SupplierPolicyDraft {
-  if (!supplier) return { ...EMPTY_POLICY_DRAFT };
-  return {
-    contactEmail: supplier.contactEmail ?? '',
-    contactPhone: supplier.contactPhone ?? '',
-    creditPolicyNote: supplier.creditPolicyNote,
-    policyWriteOffQty: supplier.policyWriteOffQty?.toString() ?? '',
-    policyCreditQty: supplier.policyCreditQty?.toString() ?? '',
-    followUpDays: supplier.followUpDays.toString(),
-    representativeName: supplier.representativeName ?? '',
-    representativeEmail: supplier.representativeEmail ?? '',
-  };
-}
-
-function supplierPolicyInput(
-  draft: SupplierPolicyDraft,
-  includePolicy: boolean,
-): Omit<SupplierInput, 'name'> {
-  const contactInput = {
-    contactEmail: draft.contactEmail.trim() || null,
-    contactPhone: draft.contactPhone.trim() || null,
-  };
-  if (!includePolicy) return contactInput;
-  return {
-    ...contactInput,
-    creditPolicyNote: draft.creditPolicyNote,
-    policyWriteOffQty: draft.policyWriteOffQty ? Number(draft.policyWriteOffQty) : null,
-    policyCreditQty: draft.policyCreditQty ? Number(draft.policyCreditQty) : null,
-    followUpDays: draft.followUpDays ? Number(draft.followUpDays) : 7,
-    representativeName: draft.representativeName.trim() || null,
-    representativeEmail: draft.representativeEmail.trim() || null,
-  };
-}
 
 const AssignSupplierModal: React.FC<{
   item: {

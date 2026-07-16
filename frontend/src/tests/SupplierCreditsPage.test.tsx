@@ -26,6 +26,10 @@ vi.mock('../services/supplierCreditService', () => ({
   getBrandReview: vi.fn(),
   addBrand: vi.fn(),
   confirmBrandSupplier: vi.fn(),
+  getPolicyReview: vi.fn(),
+  bulkAttachPolicy: vi.fn(),
+  clearSupplierPolicy: vi.fn(),
+  bulkLinkProducts: vi.fn(),
   disposeClaimableWriteOff: vi.fn(),
 }));
 
@@ -117,6 +121,7 @@ beforeEach(() => {
   mocked.getClaimablePool.mockResolvedValue(pool);
   mocked.getSuppliers.mockResolvedValue([]);
   mocked.getBrandReview.mockResolvedValue({ items: [], nextCursor: null });
+  mocked.getPolicyReview.mockResolvedValue([]);
   mocked.disposeClaimableWriteOff.mockResolvedValue({ status: 'DISPOSED' });
   mocked.getRecoveryReport.mockResolvedValue({
     outstandingValue: 20,
@@ -136,6 +141,141 @@ beforeEach(() => {
   mocked.listClaims.mockImplementation((view: string) =>
     Promise.resolve(view === 'open' ? [openClaim] : []),
   );
+});
+
+describe('supplier policy review dashboard', () => {
+  const policyReview = [
+    {
+      brandId: 22,
+      brandName: 'Oldest Missing Brand',
+      supplier: null,
+      status: 'MISSING',
+      policyUpdatedAt: null,
+      representativeName: null,
+    },
+    {
+      brandId: 11,
+      brandName: 'Nature Brand',
+      supplier,
+      status: 'ATTACHED',
+      policyUpdatedAt: supplier.policyUpdatedAt,
+      representativeName: supplier.representativeName,
+    },
+  ];
+
+  beforeEach(() => {
+    mocked.getSuppliers.mockResolvedValue([
+      supplier,
+      {
+        ...supplier,
+        id: 12,
+        name: 'Bare Supplier',
+        creditPolicyNote: '   ',
+        policyUpdatedAt: null,
+      },
+    ]);
+    mocked.getPolicyReview.mockResolvedValue(policyReview);
+    mocked.bulkAttachPolicy.mockResolvedValue({ attached: 1, unchanged: 0, corrections: 1 });
+    mocked.clearSupplierPolicy.mockResolvedValue({
+      ...supplier,
+      creditPolicyNote: '',
+      policyUpdatedAt: '2026-07-16T00:00:00.000Z',
+    });
+  });
+
+  it('preserves API order, filters rows, and expands safe policy markdown', async () => {
+    renderPage(ROLES.ADMIN);
+    await userEvent.click(await screen.findByRole('button', { name: 'Policy Review' }));
+
+    await screen.findByText('Oldest Missing Brand');
+    const rows = screen.getAllByRole('row');
+    expect(rows[1]).toHaveTextContent('Oldest Missing Brand');
+    expect(rows[2]).toHaveTextContent('Nature Brand');
+
+    await userEvent.type(screen.getByLabelText('Filter by brand'), 'Nature');
+    await userEvent.type(screen.getByLabelText('Filter by supplier'), 'Labs');
+    await userEvent.selectOptions(screen.getByLabelText('Filter by policy status'), 'ATTACHED');
+    await userEvent.click(screen.getByRole('button', { name: 'Apply filters' }));
+
+    await waitFor(() =>
+      expect(mocked.getPolicyReview).toHaveBeenLastCalledWith('tkn', {
+        brand: 'Nature',
+        supplier: 'Labs',
+        status: 'ATTACHED',
+      }),
+    );
+
+    await userEvent.click(screen.getByRole('button', { name: 'Show policy for Nature Brand' }));
+    expect(screen.getByText('Include the invoice')).toBeInTheDocument();
+    expect(document.querySelector('script')).not.toBeInTheDocument();
+  });
+
+  it('bulk-attaches selected brands and disables suppliers without policy', async () => {
+    renderPage(ROLES.ADMIN);
+    await userEvent.click(await screen.findByRole('button', { name: 'Policy Review' }));
+    await screen.findByText('Oldest Missing Brand');
+
+    await userEvent.click(screen.getByRole('checkbox', { name: 'Select Oldest Missing Brand' }));
+    const picker = screen.getByLabelText('Policy supplier');
+    expect(screen.getByRole('option', { name: 'Bare Supplier' })).toBeDisabled();
+    await userEvent.selectOptions(picker, String(supplier.id));
+    await userEvent.click(screen.getByRole('button', { name: 'Attach policy to 1 brand' }));
+
+    await waitFor(() =>
+      expect(mocked.bulkAttachPolicy).toHaveBeenCalledWith(
+        { supplierId: supplier.id, brandIds: [22] },
+        'tkn',
+      ),
+    );
+    expect(await screen.findByRole('status')).toHaveTextContent(
+      'Attached 1, unchanged 0, corrections 1',
+    );
+  });
+
+  it('requires confirmation before clearing a supplier policy', async () => {
+    renderPage(ROLES.ADMIN);
+    await userEvent.click(await screen.findByRole('button', { name: 'Policy Review' }));
+    await screen.findByText('Nature Brand');
+
+    await userEvent.click(screen.getByRole('button', { name: 'Clear Nature Labs policy' }));
+    expect(await screen.findByText('Clear supplier policy?')).toBeInTheDocument();
+    expect(mocked.clearSupplierPolicy).not.toHaveBeenCalled();
+    await userEvent.click(screen.getByRole('button', { name: 'Clear policy' }));
+
+    await waitFor(() => expect(mocked.clearSupplierPolicy).toHaveBeenCalledWith(10, 'tkn'));
+  });
+
+  it('lets admins edit a supplier policy from the dashboard', async () => {
+    mocked.updateSupplier.mockResolvedValue({ ...supplier, creditPolicyNote: 'Return weekly' });
+    renderPage(ROLES.ADMIN);
+    await userEvent.click(await screen.findByRole('button', { name: 'Policy Review' }));
+    await screen.findByText('Nature Brand');
+
+    await userEvent.click(screen.getByRole('button', { name: 'Edit Nature Labs policy' }));
+    expect(await screen.findByText('Edit supplier policy · Nature Labs')).toBeInTheDocument();
+    const instructions = screen.getByLabelText('Store instructions');
+    await userEvent.clear(instructions);
+    await userEvent.type(instructions, 'Return weekly');
+    await userEvent.click(screen.getByRole('button', { name: 'Save policy' }));
+
+    await waitFor(() =>
+      expect(mocked.updateSupplier).toHaveBeenCalledWith(
+        supplier.id,
+        expect.objectContaining({ creditPolicyNote: 'Return weekly' }),
+        'tkn',
+      ),
+    );
+  });
+
+  it('keeps policy actions preview-only for non-admins', async () => {
+    renderPage(ROLES.TEAM_MEMBER);
+    await userEvent.click(await screen.findByRole('button', { name: 'Policy Review' }));
+    await screen.findByText('Nature Brand');
+
+    expect(screen.queryByLabelText('Policy supplier')).not.toBeInTheDocument();
+    expect(screen.queryByRole('checkbox')).not.toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: /Clear .* policy/ })).not.toBeInTheDocument();
+  });
 });
 
 describe('SupplierCreditsPage', () => {
@@ -261,6 +401,109 @@ describe('SupplierCreditsPage', () => {
     await waitFor(() => expect(mocked.addBrand).toHaveBeenCalledTimes(1));
     await waitFor(() => expect(mocked.getClaimablePool).toHaveBeenCalledTimes(2));
     expect(mocked.getBrandReview).toHaveBeenCalledTimes(2);
+  });
+
+  it('shows grouped SKU matching rows with policy status and critical unmatched highlighting', async () => {
+    mocked.getSuppliers.mockResolvedValue([supplier]);
+    mocked.getBrandReview.mockResolvedValue({
+      items: [
+        {
+          productId: 401,
+          sku: 'NO-BRAND',
+          barcode: '',
+          productName: 'Unmatched Product',
+          brand: null,
+        },
+        {
+          productId: 402,
+          sku: 'NATURE-1',
+          barcode: '',
+          productName: 'Matched Product',
+          brand: {
+            id: 41,
+            name: 'Nature Brand',
+            manufacturerName: null,
+            suggestedSupplierName: null,
+            supplierId: supplier.id,
+            source: 'CONFIRMED',
+          },
+        },
+      ],
+      nextCursor: null,
+    });
+
+    renderPage(ROLES.ADMIN);
+    await userEvent.click(await screen.findByRole('button', { name: 'Catalogue Review' }));
+    await userEvent.click(await screen.findByRole('button', { name: 'SKU matching' }));
+
+    expect((await screen.findAllByRole('columnheader', { name: 'SKU' })).length).toBeGreaterThan(0);
+    expect(screen.getAllByRole('columnheader', { name: 'Supplier policy' }).length).toBeGreaterThan(0);
+    expect(screen.getAllByRole('columnheader', { name: 'Last updated' }).length).toBeGreaterThan(0);
+    expect(screen.getByText('Nature Brand · 1 SKU')).toBeInTheDocument();
+    expect(screen.getByText('Unmatched · 1 SKU')).toBeInTheDocument();
+    expect(screen.getByText('Attached')).toBeInTheDocument();
+    expect(screen.getByText('Unmatched Product').closest('tr')).toHaveClass(
+      'bg-semantic-critical-muted',
+    );
+  });
+
+  it('caps bulk SKU selection at 500 and reports already-linked skips', async () => {
+    const unmatchedItems = Array.from({ length: 501 }, (_, index) => ({
+      productId: 1000 + index,
+      sku: `SKU-${index + 1}`,
+      barcode: '',
+      productName: `Product ${index + 1}`,
+      brand: null,
+    }));
+    mocked.getBrandReview.mockResolvedValue({ items: unmatchedItems, nextCursor: null });
+    mocked.bulkLinkProducts.mockResolvedValue({
+      brandId: 77,
+      linked: 499,
+      alreadyLinked: 1,
+      corrections: 499,
+    });
+
+    renderPage(ROLES.ADMIN);
+    await userEvent.click(await screen.findByRole('button', { name: 'Catalogue Review' }));
+    await userEvent.click(await screen.findByRole('button', { name: 'SKU matching' }));
+    await screen.findByText('Product 501');
+    await userEvent.click(screen.getByRole('button', { name: 'Select first 500 unmatched SKUs' }));
+
+    expect(screen.getByText('500 of 500 selected')).toBeInTheDocument();
+    expect(screen.getByRole('checkbox', { name: 'Select Product 501' })).toBeDisabled();
+    await userEvent.type(screen.getByLabelText('New brand name'), 'New Bulk Brand');
+    await userEvent.click(screen.getByRole('button', { name: 'Link 500 SKUs' }));
+
+    await waitFor(() =>
+      expect(mocked.bulkLinkProducts).toHaveBeenCalledWith(
+        { brandName: 'New Bulk Brand', productIds: unmatchedItems.slice(0, 500).map((item) => item.productId) },
+        'tkn',
+      ),
+    );
+    expect(await screen.findByRole('status')).toHaveTextContent(
+      'Linked 499, already linked 1, corrections 499',
+    );
+  }, 30000);
+
+  it('explains that a different-brand conflict rolls back the entire bulk link', async () => {
+    mocked.getBrandReview.mockResolvedValue({
+      items: [{ productId: 501, sku: 'CONFLICT', barcode: '', productName: 'Conflict Product', brand: null }],
+      nextCursor: null,
+    });
+    mocked.bulkLinkProducts.mockRejectedValue(
+      new ApiError('Product already belongs to another brand', 409, 'BRAND_CONFLICT'),
+    );
+
+    renderPage(ROLES.ADMIN);
+    await userEvent.click(await screen.findByRole('button', { name: 'Catalogue Review' }));
+    await userEvent.click(await screen.findByRole('button', { name: 'SKU matching' }));
+    await userEvent.click(await screen.findByRole('checkbox', { name: 'Select Conflict Product' }));
+    await userEvent.type(screen.getByLabelText('New brand name'), 'Target Brand');
+    await userEvent.click(screen.getByRole('button', { name: 'Link 1 SKUs' }));
+
+    expect(await screen.findByRole('alert')).toHaveTextContent(
+      'Nothing was linked because one or more SKUs already belong to another brand',
+    );
   });
 
   it('offers claim and confirmed disposal for suppliers without a policy', async () => {

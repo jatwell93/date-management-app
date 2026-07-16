@@ -47,15 +47,15 @@
 
 ## 5. Frontend
 
-- [ ] 5.1 Add `react-markdown` and `remark-breaks` (raw HTML disabled — no `rehype-raw`) restricted to
+- [x] 5.1 Add `react-markdown` and `remark-breaks` (raw HTML disabled — no `rehype-raw`) restricted to
       paragraphs, line breaks, bullet/ordered lists, and bold/italic; wrap it in a reusable
       `PolicyMarkdown` component used by both the dialogue preview and the dashboard row expansion.
 - [x] 5.2 Enrich the add/edit supplier dialogue (`AssignSupplierModal` + edit mode): Store Instructions
       textarea with markdown preview toggle, representative name/email, contact phone; render
       instructions read-only (preview-only) for non-admins; mirror policy validation inline.
-- [ ] 5.3 Supplier Policy Review Dashboard tab: brand rows (supplier, status, last updated, rep),
+- [x] 5.3 Supplier Policy Review Dashboard tab: brand rows (supplier, status, last updated, rep),
       filters (brand/supplier/status), oldest-first sort, admin bulk-attach action.
-- [ ] 5.4 Extend `CatalogueReviewPanel` with the SKU matching mode: SKU/product/brand/policy/last-updated
+- [x] 5.4 Extend `CatalogueReviewPanel` with the SKU matching mode: SKU/product/brand/policy/last-updated
       columns, unmatched red-highlight, group-by-brand, single manual link, and bulk-link selection.
 - [x] 5.5 Service methods in `supplierCreditService.ts` for the new endpoints.
 
@@ -74,7 +74,7 @@
       - bulk-attach: success + corrections; 422 for policy-less supplier; atomic (no partial attach).
       - bulk-link: success + one correction per SKU; already-linked reported as skipped (not failed);
         oversized request rejected 422; org-scoping.
-- [ ] 6.4 Frontend tests: dialogue validation (inline field errors, 422) vs admin-gating read-only
+- [x] 6.4 Frontend tests: dialogue validation (inline field errors, 422) vs admin-gating read-only
       (403 → permission notice, not input error); markdown preview renders lists and **strips/ignores
       raw HTML** (e.g. a `<script>`/`<img onerror>` in instructions is not executed); dashboard
       filters/sort/bulk-attach picker disabled for policy-less supplier; matching view unmatched

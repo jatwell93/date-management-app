@@ -3,6 +3,7 @@ import { Button } from '../ui/button';
 import { Input } from '../ui/input';
 import { Label } from '../ui/label';
 import { PolicyMarkdown } from './PolicyMarkdown';
+import type { Supplier, SupplierInput } from '../../types/supplierCredit';
 
 export interface SupplierPolicyDraft {
   contactEmail: string;
@@ -13,6 +14,51 @@ export interface SupplierPolicyDraft {
   followUpDays: string;
   representativeName: string;
   representativeEmail: string;
+}
+
+export const EMPTY_POLICY_DRAFT: SupplierPolicyDraft = {
+  contactEmail: '',
+  contactPhone: '',
+  creditPolicyNote: '',
+  policyWriteOffQty: '',
+  policyCreditQty: '',
+  followUpDays: '7',
+  representativeName: '',
+  representativeEmail: '',
+};
+
+export function supplierPolicyDraft(supplier?: Supplier): SupplierPolicyDraft {
+  if (!supplier) return { ...EMPTY_POLICY_DRAFT };
+  return {
+    contactEmail: supplier.contactEmail ?? '',
+    contactPhone: supplier.contactPhone ?? '',
+    creditPolicyNote: supplier.creditPolicyNote,
+    policyWriteOffQty: supplier.policyWriteOffQty?.toString() ?? '',
+    policyCreditQty: supplier.policyCreditQty?.toString() ?? '',
+    followUpDays: supplier.followUpDays.toString(),
+    representativeName: supplier.representativeName ?? '',
+    representativeEmail: supplier.representativeEmail ?? '',
+  };
+}
+
+export function supplierPolicyInput(
+  draft: SupplierPolicyDraft,
+  includePolicy: boolean,
+): Omit<SupplierInput, 'name'> {
+  const contactInput = {
+    contactEmail: draft.contactEmail.trim() || null,
+    contactPhone: draft.contactPhone.trim() || null,
+  };
+  if (!includePolicy) return contactInput;
+  return {
+    ...contactInput,
+    creditPolicyNote: draft.creditPolicyNote,
+    policyWriteOffQty: draft.policyWriteOffQty ? Number(draft.policyWriteOffQty) : null,
+    policyCreditQty: draft.policyCreditQty ? Number(draft.policyCreditQty) : null,
+    followUpDays: draft.followUpDays ? Number(draft.followUpDays) : 7,
+    representativeName: draft.representativeName.trim() || null,
+    representativeEmail: draft.representativeEmail.trim() || null,
+  };
 }
 
 interface Props {
