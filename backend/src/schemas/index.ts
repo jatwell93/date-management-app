@@ -321,62 +321,57 @@ export const bayCheckCreateSchema = z.object({
 const noHtml = (val: string) => !val.includes('<') && !val.includes('>');
 
 // A credit ratio needs both legs or neither — a lone quantity is meaningless.
-const supplierBody = z
-  .object({
-    name: z
-      .string()
-      .min(1, 'Supplier name is required')
-      .max(120, 'Supplier name must be at most 120 characters')
-      .refine(noHtml, 'Supplier name cannot contain HTML tags'),
-    contactEmail: z
-      .string()
-      .email('Contact email must be a valid email address')
-      .max(255)
-      .nullable()
-      .optional(),
-    contactPhone: z
-      .string()
-      .max(80, 'Contact phone must be at most 80 characters')
-      .nullable()
-      .optional(),
-    creditPolicyNote: z
-      .string()
-      .max(10000, 'Credit policy note must be at most 10000 characters')
-      .optional(),
-    policyWriteOffQty: z
-      .number()
-      .int()
-      .positive('Write-off quantity must be a positive integer')
-      .nullable()
-      .optional(),
-    policyCreditQty: z
-      .number()
-      .int()
-      .nonnegative('Credit quantity must be a non-negative integer')
-      .nullable()
-      .optional(),
-    followUpDays: z
-      .number()
-      .int()
-      .min(1, 'Follow-up cadence must be at least 1 day')
-      .max(365, 'Follow-up cadence must be at most 365 days')
-      .optional(),
-    representativeName: z
-      .string()
-      .max(120, 'Representative name must be at most 120 characters')
-      .nullable()
-      .optional(),
-    representativeEmail: z
-      .string()
-      .email('Representative email must be a valid email address')
-      .max(255)
-      .nullable()
-      .optional(),
-  })
-  .refine((body) => (body.policyWriteOffQty == null) === (body.policyCreditQty == null), {
-    message: 'A credit ratio needs both a write-off quantity and a credit quantity, or neither.',
-    path: ['policyCreditQty'],
-  });
+const supplierBody = z.object({
+  name: z
+    .string()
+    .min(1, 'Supplier name is required')
+    .max(120, 'Supplier name must be at most 120 characters')
+    .refine(noHtml, 'Supplier name cannot contain HTML tags'),
+  contactEmail: z
+    .string()
+    .email('Contact email must be a valid email address')
+    .max(255)
+    .nullable()
+    .optional(),
+  contactPhone: z
+    .string()
+    .max(80, 'Contact phone must be at most 80 characters')
+    .nullable()
+    .optional(),
+  creditPolicyNote: z
+    .string()
+    .max(10000, 'Credit policy note must be at most 10000 characters')
+    .optional(),
+  policyWriteOffQty: z
+    .number()
+    .int()
+    .positive('Write-off quantity must be a positive integer')
+    .nullable()
+    .optional(),
+  policyCreditQty: z
+    .number()
+    .int()
+    .nonnegative('Credit quantity must be a non-negative integer')
+    .nullable()
+    .optional(),
+  followUpDays: z
+    .number()
+    .int()
+    .min(1, 'Follow-up cadence must be at least 1 day')
+    .max(365, 'Follow-up cadence must be at most 365 days')
+    .optional(),
+  representativeName: z
+    .string()
+    .max(120, 'Representative name must be at most 120 characters')
+    .nullable()
+    .optional(),
+  representativeEmail: z
+    .string()
+    .email('Representative email must be a valid email address')
+    .max(255)
+    .nullable()
+    .optional(),
+});
 
 export const supplierCreateSchema = z.object({ body: supplierBody });
 export const supplierUpdateSchema = z.object({ body: supplierBody });

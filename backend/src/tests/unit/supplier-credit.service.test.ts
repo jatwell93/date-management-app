@@ -268,6 +268,23 @@ describe('SupplierCreditService', () => {
         undefined,
       );
     });
+
+    it('authorizes a non-admin full replacement before validating its credit ratio', async () => {
+      const { service } = makeService();
+
+      await expect(
+        service.replaceSupplier(
+          1,
+          {
+            name: 'Replacement',
+            contactPhone: '02 1234 5678',
+            creditPolicyNote: 'Return monthly',
+            policyWriteOffQty: 3,
+          },
+          'team_member',
+        ),
+      ).rejects.toBeInstanceOf(AuthorizationError);
+    });
   });
 
   describe('assignProductSupplier', () => {

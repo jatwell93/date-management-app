@@ -86,3 +86,10 @@
 - [x] 7.2 Affected tests: `rtk vitest run` (frontend/backend), `npm run test:db`, worker conformance.
 - [x] 7.3 `rtk tsc` across affected packages.
 - [x] 7.4 `npx openspec validate enhance-supplier-policy-capture --strict`.
+
+## 8. Code review follow-up
+
+- [x] 8.1 Correct supplier-route authorization comments.
+- [x] 8.2 Align Express full-`PUT` authorization/ratio precedence with Worker behavior.
+- [x] 8.3 Reject invalid supplier route IDs before controller/database access.
+- [x] 8.4 Run focused regression, lint, typecheck, and strict OpenSpec verification.

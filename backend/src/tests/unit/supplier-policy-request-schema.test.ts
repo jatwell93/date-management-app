@@ -3,6 +3,7 @@ import {
   bulkLinkProductsSchema,
   supplierCreateSchema,
   supplierPatchSchema,
+  supplierUpdateSchema,
 } from '../../schemas';
 
 describe('supplier policy request schemas', () => {
@@ -34,6 +35,15 @@ describe('supplier policy request schemas', () => {
   it('allows one ratio leg in PATCH because the service merges it with the existing record', () => {
     expect(supplierPatchSchema.safeParse({ body: { policyWriteOffQty: 4 } }).success).toBe(true);
   });
+
+  it.each([supplierCreateSchema, supplierUpdateSchema])(
+    'defers full-write ratio validation to the policy service',
+    (schema) => {
+      expect(schema.safeParse({ body: { name: 'Supplier', policyWriteOffQty: 4 } }).success).toBe(
+        true,
+      );
+    },
+  );
 
   it('leaves raw bulk cardinality for the service 422 boundary', () => {
     expect(

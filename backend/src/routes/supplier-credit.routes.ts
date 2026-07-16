@@ -16,6 +16,7 @@ import {
   correctionReviewSchema,
   claimCreateSchema,
   claimOutcomeSchema,
+  idParamSchema,
 } from '../schemas';
 import { createSupplierCreditController } from '../controllers/supplier-credit.controller';
 import { createCreditClaimController } from '../controllers/credit-claim.controller';
@@ -55,7 +56,8 @@ router.get('/suppliers', async (req: AuthRequest, res: Response, next) => {
   await createSupplierCreditController().listSuppliers(req, res, next);
 });
 
-// POST /supplier-credits/suppliers — create a supplier + policy. Manager/admin only.
+// POST /supplier-credits/suppliers — any authenticated user may create a bare supplier;
+// effective policy fields are admin-gated transactionally in the service.
 router.post(
   '/suppliers',
   standardLimiter,
@@ -65,11 +67,13 @@ router.post(
   },
 );
 
-// PUT /supplier-credits/suppliers/:id — update a supplier + policy. Manager/admin only.
+// PUT /supplier-credits/suppliers/:id — full replacement; the service permits ordinary
+// fields for any authenticated user and admin-gates effective policy changes.
 router.put(
   '/suppliers/:id',
   standardLimiter,
   validateRequest(supplierUpdateSchema),
+  validateRequest(idParamSchema),
   async (req: AuthRequest, res: Response, next) => {
     await createSupplierCreditController().updateSupplier(req, res, next);
   },
@@ -79,6 +83,7 @@ router.patch(
   '/suppliers/:id',
   standardLimiter,
   validateRequest(supplierPatchSchema),
+  validateRequest(idParamSchema),
   async (req: AuthRequest, res: Response, next) => {
     await createSupplierCreditController().patchSupplier(req, res, next);
   },
@@ -87,6 +92,7 @@ router.patch(
 router.delete(
   '/suppliers/:id/policy',
   standardLimiter,
+  validateRequest(idParamSchema),
   async (req: AuthRequest, res: Response, next) => {
     await createSupplierCreditController().clearSupplierPolicy(req, res, next);
   },

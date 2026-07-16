@@ -78,7 +78,6 @@ function assertRatio(writeOffQty: number | null, creditQty: number | null): void
 function toCreateData(input: SupplierInput, policyChanged: boolean): SupplierWriteData {
   const writeOffQty = input.policyWriteOffQty ?? null;
   const creditQty = input.policyCreditQty ?? null;
-  assertRatio(writeOffQty, creditQty);
   return {
     name: input.name?.trim() ?? '',
     contactEmail: normalizeText(input.contactEmail),
@@ -172,7 +171,9 @@ export class SupplierCreditService {
   async createSupplier(input: SupplierInput, actorRole?: string) {
     return this.repo.withTransaction(async (tx) => {
       const policyChanged = authorizeAndValidatePolicy(input, null, actorRole);
-      return this.repo.createSupplier(this.organizationId, toCreateData(input, policyChanged), tx);
+      const data = toCreateData(input, policyChanged);
+      assertRatio(data.policyWriteOffQty, data.policyCreditQty);
+      return this.repo.createSupplier(this.organizationId, data, tx);
     });
   }
 
@@ -200,6 +201,7 @@ export class SupplierCreditService {
       if (!existing) throw new NotFoundError(`Supplier ${id} not found`);
       const replacement = toCreateData(input, false);
       const policyChanged = authorizeAndValidatePolicy(replacement, existing, actorRole);
+      assertRatio(replacement.policyWriteOffQty, replacement.policyCreditQty);
       const changed = await this.repo.updateSupplier(
         this.organizationId,
         id,
