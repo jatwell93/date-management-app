@@ -310,19 +310,68 @@ export class SupplierCreditService {
     return this.repo.listBrands(this.organizationId);
   }
 
-  reviewBrands(
-    options: Omit<BrandReviewOptions, 'limit' | 'state'> & { state?: string; limit?: number },
-  ) {
+  reviewBrands(options: {
+    state?: string;
+    group?: string;
+    cursor?: number;
+    limit?: number;
+    page?: number;
+    pageSize?: number;
+    title?: string;
+    titleMatch?: string;
+    sort?: string;
+  }) {
     if (options.state != null && !isCatalogueReviewState(options.state)) {
       throw new ValidationError(
         'Catalogue review state must be NEEDS_BRAND, PENDING_CONFIRMATION, or CONFIRMED',
       );
     }
+    const numbered =
+      options.page != null ||
+      options.pageSize != null ||
+      options.title != null ||
+      options.titleMatch != null ||
+      options.sort != null;
+    if (numbered && options.cursor != null) {
+      throw new ValidationError('cursor cannot be combined with numbered pagination');
+    }
+    if (options.page != null && (!Number.isInteger(options.page) || options.page < 1)) {
+      throw new ValidationError('page must be a positive integer');
+    }
+    if (
+      options.pageSize != null &&
+      (!Number.isInteger(options.pageSize) || options.pageSize < 1 || options.pageSize > 100)
+    ) {
+      throw new ValidationError('pageSize must be an integer from 1 to 100');
+    }
+    if (
+      options.titleMatch != null &&
+      options.titleMatch !== 'contains' &&
+      options.titleMatch !== 'startsWith'
+    ) {
+      throw new ValidationError('titleMatch must be contains or startsWith');
+    }
+    if (options.sort != null && options.sort !== 'titleAsc' && options.sort !== 'titleDesc') {
+      throw new ValidationError('sort must be titleAsc or titleDesc');
+    }
+
+    if (numbered) {
+      return this.repo.reviewBrands(this.organizationId, {
+        ...(options.state == null ? {} : { state: options.state }),
+        ...(options.group == null ? {} : { group: options.group }),
+        page: options.page ?? 1,
+        pageSize: options.pageSize ?? 50,
+        ...(options.title?.trim() ? { title: options.title.trim() } : {}),
+        titleMatch: (options.titleMatch ?? 'contains') as 'contains' | 'startsWith',
+        sort: (options.sort ?? 'titleAsc') as 'titleAsc' | 'titleDesc',
+      });
+    }
+
     return this.repo.reviewBrands(this.organizationId, {
       ...options,
       state: options.state,
       limit: Math.min(100, Math.max(1, options.limit ?? 50)),
-    });
+    } as BrandReviewOptions);
   }
 
   async addBrand(input: AddBrandInput, createdByUserId: number) {

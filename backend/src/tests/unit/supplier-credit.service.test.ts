@@ -8,7 +8,10 @@ import {
   ValidationError,
 } from '../../errors';
 import type { ClaimableWriteOffRow } from '../../../../shared/domain/credit-claim';
-import { isPlatformAdminUser } from '../../controllers/supplier-credit.controller';
+import {
+  isPlatformAdminUser,
+  SupplierCreditController,
+} from '../../controllers/supplier-credit.controller';
 
 function makeService(
   overrides: {
@@ -80,6 +83,43 @@ function makeService(
 }
 
 describe('SupplierCreditService', () => {
+  describe('catalogue review controller', () => {
+    it('passes numbered pagination and title controls to the service', async () => {
+      const reviewBrands = vi.fn(async () => ({ items: [], nextCursor: null }));
+      const controller = new SupplierCreditController(
+        () => ({ reviewBrands }) as unknown as SupplierCreditService,
+      );
+      const json = vi.fn();
+
+      await controller.reviewBrands(
+        {
+          query: {
+            page: '3',
+            pageSize: '25',
+            title: 'vitamin',
+            titleMatch: 'contains',
+            sort: 'titleAsc',
+          },
+        } as never,
+        { json } as never,
+        vi.fn(),
+      );
+
+      expect(reviewBrands).toHaveBeenCalledWith({
+        state: undefined,
+        group: undefined,
+        cursor: undefined,
+        limit: undefined,
+        page: 3,
+        pageSize: 25,
+        title: 'vitamin',
+        titleMatch: 'contains',
+        sort: 'titleAsc',
+      });
+      expect(json).toHaveBeenCalled();
+    });
+  });
+
   describe('platform admin authorization', () => {
     it('accepts only numeric IDs in a fully valid comma-separated allowlist', () => {
       expect(isPlatformAdminUser(7, '2, 7, 12')).toBe(true);
@@ -361,6 +401,41 @@ describe('SupplierCreditService', () => {
         state: 'CONFIRMED',
         limit: 50,
       });
+    });
+
+    it('normalizes numbered pagination, title matching, and title ordering', async () => {
+      const { service, repo } = makeService();
+
+      await service.reviewBrands({
+        page: 2,
+        pageSize: 25,
+        title: '  Vitamin  ',
+        titleMatch: 'startsWith',
+        sort: 'titleDesc',
+      } as never);
+
+      expect(repo.reviewBrands).toHaveBeenCalledWith('org-1', {
+        page: 2,
+        pageSize: 25,
+        title: 'Vitamin',
+        titleMatch: 'startsWith',
+        sort: 'titleDesc',
+      });
+    });
+
+    it.each([
+      [{ page: 0 }, 'page'],
+      [{ pageSize: 101 }, 'pageSize'],
+      [{ page: 1, cursor: 5 }, 'cursor'],
+      [{ titleMatch: 'equals' }, 'titleMatch'],
+      [{ sort: 'newest' }, 'sort'],
+    ])('rejects invalid catalogue paging options %o', (options, field) => {
+      const { service, repo } = makeService();
+
+      expect(() => service.reviewBrands(options as never)).toThrowError(
+        expect.objectContaining({ message: expect.stringContaining(field) }),
+      );
+      expect(repo.reviewBrands).not.toHaveBeenCalled();
     });
 
     it('rejects claimability states as catalogue-review filters', async () => {

@@ -62,4 +62,20 @@ describe('supplierCreditService policy contracts', () => {
       'token',
     );
   });
+
+  it('builds numbered catalogue title filters and ordering', async () => {
+    await service.getBrandReview('token', {
+      state: 'NEEDS_BRAND',
+      page: 3,
+      pageSize: 25,
+      title: 'Vitamin C',
+      titleMatch: 'startsWith',
+      sort: 'titleDesc',
+    } as never);
+
+    expect(apiService.get).toHaveBeenCalledWith(
+      '/supplier-credits/brand-review?state=NEEDS_BRAND&page=3&pageSize=25&title=Vitamin+C&titleMatch=startsWith&sort=titleDesc',
+      'token',
+    );
+  });
 });

@@ -17,6 +17,7 @@ vi.mock('@neondatabase/serverless', () => ({
 }));
 
 import { createWorkersDatabase, type PolicyReviewItem, type SupplierWriteData } from './database';
+import type { BrandReviewOptions, BrandReviewPage } from './database';
 
 const ORG = 'policy-org';
 const OTHER_ORG = 'policy-other';
@@ -42,10 +43,65 @@ function createSqlitePolicyDb(): import('better-sqlite3').Database {
       id INTEGER PRIMARY KEY,
       organization_id TEXT NOT NULL,
       name TEXT NOT NULL,
-      supplier_id INTEGER
+      manufacturer_name TEXT,
+      suggested_supplier_name TEXT,
+      supplier_id INTEGER,
+      source TEXT NOT NULL DEFAULT 'REFERENCE'
+    );
+    CREATE TABLE products (
+      id INTEGER PRIMARY KEY,
+      organization_id TEXT NOT NULL,
+      barcode TEXT NOT NULL,
+      sku TEXT NOT NULL,
+      name TEXT NOT NULL,
+      cost_price REAL NOT NULL DEFAULT 0,
+      brand_id INTEGER
     );
   `);
   return db;
+}
+
+function sqliteCatalogueReview(
+  db: import('better-sqlite3').Database,
+  organizationId: string,
+  options: BrandReviewOptions,
+): BrandReviewPage {
+  const page = options.page ?? 1;
+  const pageSize = options.pageSize ?? 50;
+  const operator =
+    options.titleMatch === 'startsWith' ? `${options.title ?? ''}%` : `%${options.title ?? ''}%`;
+  const where = options.title
+    ? 'WHERE organization_id = ? AND LOWER(name) LIKE LOWER(?)'
+    : 'WHERE organization_id = ?';
+  const values = options.title ? [organizationId, operator] : [organizationId];
+  const totalItems = Number(
+    (
+      db.prepare(`SELECT COUNT(*) AS count FROM products ${where}`).get(...values) as {
+        count: number;
+      }
+    ).count,
+  );
+  const direction = options.sort === 'titleDesc' ? 'DESC' : 'ASC';
+  const rows = db
+    .prepare(
+      `SELECT id, sku, barcode, name FROM products ${where}
+       ORDER BY name COLLATE NOCASE ${direction}, id ASC LIMIT ? OFFSET ?`,
+    )
+    .all(...values, pageSize, (page - 1) * pageSize) as Array<Record<string, unknown>>;
+  return {
+    items: rows.map((row) => ({
+      productId: Number(row.id),
+      sku: String(row.sku),
+      barcode: String(row.barcode),
+      productName: String(row.name),
+      brand: null,
+    })),
+    page,
+    pageSize,
+    totalItems,
+    totalPages: Math.ceil(totalItems / pageSize),
+    nextCursor: null,
+  };
 }
 
 function sqlitePolicyReview(
@@ -227,6 +283,41 @@ describe('Worker supplier policy database and dual-backend conformance', () => {
     await expect(
       db.listPolicyReview(ORG, { status: 'ATTACHED', supplier: 'ear' }),
     ).resolves.toHaveLength(1);
+  });
+
+  it('matches SQLite numbered title filtering, totals, page boundaries, and stable ordering', async () => {
+    const rows = [
+      [101, ORG, 'BAR-101', 'SKU-101', 'vitamin C'],
+      [102, ORG, 'BAR-102', 'SKU-102', 'Vitamin A'],
+      [103, ORG, 'BAR-103', 'SKU-103', 'Vitamin A'],
+      [104, ORG, 'BAR-104', 'SKU-104', 'Zinc'],
+      [105, OTHER_ORG, 'BAR-105', 'SKU-105', 'Vitamin Foreign'],
+    ] as const;
+    for (const [id, organizationId, barcode, sku, name] of rows) {
+      await sql`INSERT INTO products (id, organization_id, barcode, sku, name, cost_price)
+                VALUES (${id}, ${organizationId}, ${barcode}, ${sku}, ${name}, ${1})`;
+      sqlite
+        .prepare(
+          'INSERT INTO products (id, organization_id, barcode, sku, name, cost_price) VALUES (?, ?, ?, ?, ?, ?)',
+        )
+        .run(id, organizationId, barcode, sku, name, 1);
+    }
+
+    const options: BrandReviewOptions = {
+      page: 1,
+      pageSize: 2,
+      title: 'VITAMIN',
+      titleMatch: 'startsWith',
+      sort: 'titleAsc',
+    };
+    const db = createWorkersDatabase({ DATABASE_URL: 'postgres://test' } as never);
+
+    await expect(db.reviewBrands(ORG, options)).resolves.toEqual(
+      sqliteCatalogueReview(sqlite, ORG, options),
+    );
+    await expect(db.reviewBrands(ORG, { ...options, page: 2 })).resolves.toEqual(
+      sqliteCatalogueReview(sqlite, ORG, { ...options, page: 2 }),
+    );
   });
 
   it('bulk-attaches atomically, reports no-ops, and rejects policy-less suppliers', async () => {

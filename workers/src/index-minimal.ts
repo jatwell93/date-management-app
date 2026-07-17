@@ -1938,6 +1938,49 @@ async function handleBrandReview(request: Request, db: Database, env: Env): Prom
       env,
     );
   }
+  const pageParam = query.get('page');
+  const pageSizeParam = query.get('pageSize');
+  const title = query.get('title')?.trim() ?? '';
+  const titleMatch = query.get('titleMatch');
+  const sort = query.get('sort');
+  const numbered =
+    pageParam != null ||
+    pageSizeParam != null ||
+    query.has('title') ||
+    titleMatch != null ||
+    sort != null;
+  if (numbered && cursor != null) {
+    return errorResponse('cursor cannot be combined with numbered pagination', 400, env);
+  }
+  const page = pageParam == null ? 1 : parsePositiveInt(pageParam);
+  if (numbered && page == null) {
+    return errorResponse('page must be a positive integer', 400, env);
+  }
+  const pageSize = pageSizeParam == null ? 50 : parsePositiveInt(pageSizeParam);
+  if (numbered && (pageSize == null || pageSize > 100)) {
+    return errorResponse('pageSize must be an integer from 1 to 100', 400, env);
+  }
+  if (titleMatch != null && titleMatch !== 'contains' && titleMatch !== 'startsWith') {
+    return errorResponse('titleMatch must be contains or startsWith', 400, env);
+  }
+  if (sort != null && sort !== 'titleAsc' && sort !== 'titleDesc') {
+    return errorResponse('sort must be titleAsc or titleDesc', 400, env);
+  }
+  if (numbered) {
+    return jsonResponse(
+      await db.reviewBrands(auth.organizationId, {
+        state: state ?? undefined,
+        group: query.get('group') ?? undefined,
+        page: page ?? 1,
+        pageSize: pageSize ?? 50,
+        ...(title ? { title } : {}),
+        titleMatch: (titleMatch ?? 'contains') as 'contains' | 'startsWith',
+        sort: (sort ?? 'titleAsc') as 'titleAsc' | 'titleDesc',
+      }),
+      200,
+      env,
+    );
+  }
   const requestedLimit = Number(query.get('limit') ?? 50);
   return jsonResponse(
     await db.reviewBrands(auth.organizationId, {

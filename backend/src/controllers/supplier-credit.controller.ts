@@ -173,6 +173,11 @@ export class SupplierCreditController {
           group: typeof req.query.group === 'string' ? req.query.group : undefined,
           cursor: typeof req.query.cursor === 'string' ? Number(req.query.cursor) : undefined,
           limit: typeof req.query.limit === 'string' ? Number(req.query.limit) : undefined,
+          page: typeof req.query.page === 'string' ? Number(req.query.page) : undefined,
+          pageSize: typeof req.query.pageSize === 'string' ? Number(req.query.pageSize) : undefined,
+          title: typeof req.query.title === 'string' ? req.query.title : undefined,
+          titleMatch: typeof req.query.titleMatch === 'string' ? req.query.titleMatch : undefined,
+          sort: typeof req.query.sort === 'string' ? req.query.sort : undefined,
         }),
       );
     } catch (error) {

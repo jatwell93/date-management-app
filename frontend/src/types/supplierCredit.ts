@@ -100,9 +100,15 @@ export interface BrandReviewItem {
 export interface BrandReviewPage {
   items: BrandReviewItem[];
   nextCursor: number | null;
+  page?: number;
+  pageSize?: number;
+  totalItems?: number;
+  totalPages?: number;
 }
 
 export type CatalogueReviewState = 'NEEDS_BRAND' | 'PENDING_CONFIRMATION' | 'CONFIRMED';
+export type CatalogueTitleMatch = 'contains' | 'startsWith';
+export type CatalogueTitleSort = 'titleAsc' | 'titleDesc';
 
 export interface CreditClaimPhoto {
   id: number;

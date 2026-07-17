@@ -116,10 +116,7 @@ export interface Database {
     createdByUserId: number,
   ): Promise<BulkLinkResult>;
   listBrands(organizationId: string): Promise<Brand[]>;
-  reviewBrands(
-    organizationId: string,
-    options: { state?: CatalogueReviewState; group?: string; cursor?: number; limit: number },
-  ): Promise<{ items: BrandReviewItem[]; nextCursor: number | null }>;
+  reviewBrands(organizationId: string, options: BrandReviewOptions): Promise<BrandReviewPage>;
   addBrand(
     organizationId: string,
     userId: number,
@@ -371,6 +368,47 @@ export interface BrandReviewItem {
   barcode: string;
   productName: string;
   brand: Brand | null;
+}
+
+export interface BrandReviewOptions {
+  state?: CatalogueReviewState;
+  group?: string;
+  cursor?: number;
+  limit?: number;
+  page?: number;
+  pageSize?: number;
+  title?: string;
+  titleMatch?: 'contains' | 'startsWith';
+  sort?: 'titleAsc' | 'titleDesc';
+}
+
+export interface BrandReviewPage {
+  items: BrandReviewItem[];
+  nextCursor: number | null;
+  page?: number;
+  pageSize?: number;
+  totalItems?: number;
+  totalPages?: number;
+}
+
+function mapBrandReviewRows(rows: Array<Record<string, unknown>>): BrandReviewItem[] {
+  return rows.map((row) => ({
+    productId: Number(row.productId),
+    sku: String(row.sku ?? ''),
+    barcode: String(row.barcode ?? ''),
+    productName: String(row.productName ?? ''),
+    brand:
+      row.brandId == null
+        ? null
+        : {
+            id: Number(row.brandId),
+            name: String(row.brandName),
+            manufacturerName: (row.manufacturerName as string | null) ?? null,
+            suggestedSupplierName: (row.suggestedSupplierName as string | null) ?? null,
+            supplierId: row.brandSupplierId == null ? null : Number(row.brandSupplierId),
+            source: String(row.brandSource),
+          },
+  }));
 }
 
 export interface CatalogueCorrection {
@@ -1482,16 +1520,66 @@ export function createWorkersDatabase(env: Env): Database {
       }));
     },
 
-    async reviewBrands(
-      organizationId,
-      options,
-    ): Promise<{
-      items: BrandReviewItem[];
-      nextCursor: number | null;
-    }> {
+    async reviewBrands(organizationId, options): Promise<BrandReviewPage> {
       const state = options.state ?? null;
       const group = options.group ?? null;
+      if (options.page != null) {
+        const page = options.page;
+        const pageSize = options.pageSize ?? 50;
+        const title = options.title ?? null;
+        const titleMatch = options.titleMatch ?? 'contains';
+        const sort = options.sort ?? 'titleAsc';
+        const counts = await sql`
+          SELECT COUNT(*) AS "totalItems"
+          FROM products p
+          LEFT JOIN brands b ON b.id = p.brand_id AND b.organization_id = p.organization_id
+          WHERE p.organization_id = ${organizationId}
+            AND (${state}::text IS NULL
+              OR (${state} = 'NEEDS_BRAND' AND p.brand_id IS NULL)
+              OR (${state} = 'PENDING_CONFIRMATION' AND b.source = 'REFERENCE')
+              OR (${state} = 'CONFIRMED' AND b.source IN ('USER_ADDED', 'CONFIRMED') AND b.supplier_id IS NOT NULL))
+            AND (${group}::text IS NULL OR b.suggested_supplier_name = ${group})
+            AND (${title}::text IS NULL
+              OR (${titleMatch} = 'startsWith' AND p.name ILIKE ${title} || '%')
+              OR (${titleMatch} = 'contains' AND p.name ILIKE '%' || ${title} || '%'))
+        `;
+        const rows = (await sql`
+          SELECT p.id AS "productId", p.sku, p.barcode, p.name AS "productName",
+                 b.id AS "brandId", b.name AS "brandName",
+                 b.manufacturer_name AS "manufacturerName",
+                 b.suggested_supplier_name AS "suggestedSupplierName",
+                 b.supplier_id AS "brandSupplierId", b.source AS "brandSource"
+          FROM products p
+          LEFT JOIN brands b ON b.id = p.brand_id AND b.organization_id = p.organization_id
+          WHERE p.organization_id = ${organizationId}
+            AND (${state}::text IS NULL
+              OR (${state} = 'NEEDS_BRAND' AND p.brand_id IS NULL)
+              OR (${state} = 'PENDING_CONFIRMATION' AND b.source = 'REFERENCE')
+              OR (${state} = 'CONFIRMED' AND b.source IN ('USER_ADDED', 'CONFIRMED') AND b.supplier_id IS NOT NULL))
+            AND (${group}::text IS NULL OR b.suggested_supplier_name = ${group})
+            AND (${title}::text IS NULL
+              OR (${titleMatch} = 'startsWith' AND p.name ILIKE ${title} || '%')
+              OR (${titleMatch} = 'contains' AND p.name ILIKE '%' || ${title} || '%'))
+          ORDER BY
+            CASE WHEN ${sort} = 'titleAsc' THEN LOWER(p.name) END ASC,
+            CASE WHEN ${sort} = 'titleDesc' THEN LOWER(p.name) END DESC,
+            p.id ASC
+          LIMIT ${pageSize}
+          OFFSET ${(page - 1) * pageSize}
+        `) as Array<Record<string, unknown>>;
+        const totalItems = Number(counts[0]?.totalItems ?? 0);
+        return {
+          items: mapBrandReviewRows(rows),
+          page,
+          pageSize,
+          totalItems,
+          totalPages: Math.ceil(totalItems / pageSize),
+          nextCursor: null,
+        };
+      }
+
       const cursor = options.cursor ?? 0;
+      const limit = options.limit ?? 50;
       const rows = (await sql`
         SELECT p.id AS "productId", p.sku, p.barcode, p.name AS "productName",
                b.id AS "brandId", b.name AS "brandName",
@@ -1508,28 +1596,12 @@ export function createWorkersDatabase(env: Env): Database {
             OR (${state} = 'CONFIRMED' AND b.source IN ('USER_ADDED', 'CONFIRMED') AND b.supplier_id IS NOT NULL))
           AND (${group}::text IS NULL OR b.suggested_supplier_name = ${group})
         ORDER BY p.id ASC
-        LIMIT ${options.limit + 1}
+        LIMIT ${limit + 1}
       `) as Array<Record<string, unknown>>;
-      const hasMore = rows.length > options.limit;
-      const page = hasMore ? rows.slice(0, options.limit) : rows;
+      const hasMore = rows.length > limit;
+      const page = hasMore ? rows.slice(0, limit) : rows;
       return {
-        items: page.map((row) => ({
-          productId: Number(row.productId),
-          sku: String(row.sku ?? ''),
-          barcode: String(row.barcode ?? ''),
-          productName: String(row.productName ?? ''),
-          brand:
-            row.brandId == null
-              ? null
-              : {
-                  id: Number(row.brandId),
-                  name: String(row.brandName),
-                  manufacturerName: (row.manufacturerName as string | null) ?? null,
-                  suggestedSupplierName: (row.suggestedSupplierName as string | null) ?? null,
-                  supplierId: row.brandSupplierId == null ? null : Number(row.brandSupplierId),
-                  source: String(row.brandSource),
-                },
-        })),
+        items: mapBrandReviewRows(page),
         nextCursor: hasMore ? Number(page[page.length - 1]?.productId) : null,
       };
     },

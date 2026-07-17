@@ -47,7 +47,12 @@ export interface BrandReviewOptions {
   state?: CatalogueReviewState;
   group?: string;
   cursor?: number;
-  limit: number;
+  limit?: number;
+  page?: number;
+  pageSize?: number;
+  title?: string;
+  titleMatch?: 'contains' | 'startsWith';
+  sort?: 'titleAsc' | 'titleDesc';
 }
 
 export interface AddBrandData {
@@ -179,7 +184,7 @@ export class SupplierCreditRepository {
   }
 
   async reviewBrands(organizationId: string, options: BrandReviewOptions, tx?: DbClient) {
-    const stateWhere =
+    const stateWhere: Prisma.ProductWhereInput | undefined =
       options.state === 'NEEDS_BRAND'
         ? { brandId: null }
         : options.state === 'PENDING_CONFIRMATION'
@@ -190,23 +195,66 @@ export class SupplierCreditRepository {
                   is: { source: { in: ['USER_ADDED', 'CONFIRMED'] }, supplierId: { not: null } },
                 },
               }
-            : {};
-    const rows = await this.getClient(tx).product.findMany({
-      where: {
-        organizationId,
-        id: options.cursor == null ? undefined : { gt: options.cursor },
-        AND: [
-          stateWhere,
-          ...(options.group ? [{ brand: { is: { suggestedSupplierName: options.group } } }] : []),
-        ],
-      },
+            : undefined;
+    const titleWhere: Prisma.ProductWhereInput | undefined = options.title
+      ? options.titleMatch === 'startsWith'
+        ? { name: { startsWith: options.title } }
+        : { name: { contains: options.title } }
+      : undefined;
+    const filters: Prisma.ProductWhereInput[] = [
+      ...(stateWhere ? [stateWhere] : []),
+      ...(options.group ? [{ brand: { is: { suggestedSupplierName: options.group } } }] : []),
+      ...(titleWhere ? [titleWhere] : []),
+    ];
+    const numbered = options.page != null;
+    const where: Prisma.ProductWhereInput = {
+      organizationId,
+      id: !numbered && options.cursor != null ? { gt: options.cursor } : undefined,
+      ...(filters.length > 0 ? { AND: filters } : {}),
+    };
+    const client = this.getClient(tx);
+
+    if (numbered) {
+      const page = options.page ?? 1;
+      const pageSize = options.pageSize ?? 50;
+      const [totalItems, rows] = await Promise.all([
+        client.product.count({ where }),
+        client.product.findMany({
+          where,
+          include: { brand: { include: { supplier: true } }, supplier: true },
+          orderBy: [{ name: options.sort === 'titleDesc' ? 'desc' : 'asc' }, { id: 'asc' }],
+          skip: (page - 1) * pageSize,
+          take: pageSize,
+        }),
+      ]);
+      return {
+        items: rows.map((row) => this.toBrandReviewItem(row)),
+        page,
+        pageSize,
+        totalItems,
+        totalPages: Math.ceil(totalItems / pageSize),
+        nextCursor: null,
+      };
+    }
+
+    const limit = options.limit ?? 50;
+    const rows = await client.product.findMany({
+      where,
       include: { brand: { include: { supplier: true } }, supplier: true },
       orderBy: { id: 'asc' },
-      take: options.limit + 1,
+      take: limit + 1,
     });
-    const hasMore = rows.length > options.limit;
-    const page = hasMore ? rows.slice(0, options.limit) : rows;
-    const items = page.map((row) => ({
+    const hasMore = rows.length > limit;
+    const page = hasMore ? rows.slice(0, limit) : rows;
+    const items = page.map((row) => this.toBrandReviewItem(row));
+    return {
+      items,
+      nextCursor: hasMore ? (items[items.length - 1]?.productId ?? null) : null,
+    };
+  }
+
+  private toBrandReviewItem(row: Prisma.ProductGetPayload<{ include: { brand: true } }>) {
+    return {
       productId: row.id,
       sku: row.sku,
       barcode: row.barcode,
@@ -222,10 +270,6 @@ export class SupplierCreditRepository {
               supplierId: row.brand.supplierId,
               source: row.brand.source,
             },
-    }));
-    return {
-      items,
-      nextCursor: hasMore ? (items[items.length - 1]?.productId ?? null) : null,
     };
   }
 

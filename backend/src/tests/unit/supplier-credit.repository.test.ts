@@ -174,3 +174,53 @@ describe('SupplierCreditRepository policy review', () => {
     });
   });
 });
+
+describe('SupplierCreditRepository numbered catalogue review', () => {
+  it('filters before counting and returns deterministic page metadata', async () => {
+    const rows = [
+      {
+        id: 26,
+        sku: 'V-26',
+        barcode: 'BAR-26',
+        name: 'Vitamin C',
+        brand: null,
+      },
+    ];
+    const prisma = {
+      product: {
+        count: vi.fn(async () => 51),
+        findMany: vi.fn(async () => rows),
+      },
+    } as unknown as PrismaClient;
+    const repository = new SupplierCreditRepository(prisma);
+
+    const result = await repository.reviewBrands('org-a', {
+      page: 2,
+      pageSize: 25,
+      title: 'vita',
+      titleMatch: 'startsWith',
+      sort: 'titleDesc',
+    });
+
+    const where = {
+      organizationId: 'org-a',
+      AND: [{ name: { startsWith: 'vita' } }],
+    };
+    expect(prisma.product.count).toHaveBeenCalledWith({ where });
+    expect(prisma.product.findMany).toHaveBeenCalledWith({
+      where,
+      include: { brand: { include: { supplier: true } }, supplier: true },
+      orderBy: [{ name: 'desc' }, { id: 'asc' }],
+      skip: 25,
+      take: 25,
+    });
+    expect(result).toMatchObject({
+      items: [{ productId: 26, productName: 'Vitamin C' }],
+      page: 2,
+      pageSize: 25,
+      totalItems: 51,
+      totalPages: 3,
+      nextCursor: null,
+    });
+  });
+});

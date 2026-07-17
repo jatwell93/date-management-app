@@ -62,6 +62,12 @@ export const PolicyReviewPanel: React.FC<Props> = ({ suppliers, isAdmin, getToke
   }>({});
   const [selected, setSelected] = useState<Set<number>>(new Set());
   const [supplierId, setSupplierId] = useState<number | null>(null);
+  const [createdSupplier, setCreatedSupplier] = useState<Supplier | null>(null);
+  const [createOpen, setCreateOpen] = useState(false);
+  const [createName, setCreateName] = useState('');
+  const [createDraft, setCreateDraft] = useState<SupplierPolicyDraft>(() => supplierPolicyDraft());
+  const [createPreview, setCreatePreview] = useState(false);
+  const [createFieldErrors, setCreateFieldErrors] = useState<Record<string, string>>({});
   const [expandedBrandId, setExpandedBrandId] = useState<number | null>(null);
   const [clearSupplier, setClearSupplier] = useState<Supplier | null>(null);
   const [editSupplier, setEditSupplier] = useState<Supplier | null>(null);
@@ -73,9 +79,16 @@ export const PolicyReviewPanel: React.FC<Props> = ({ suppliers, isAdmin, getToke
   const [error, setError] = useState<string | null>(null);
   const [summary, setSummary] = useState<string | null>(null);
 
+  const availableSuppliers = useMemo(
+    () =>
+      createdSupplier && !suppliers.some((supplier) => supplier.id === createdSupplier.id)
+        ? [...suppliers, createdSupplier]
+        : suppliers,
+    [createdSupplier, suppliers],
+  );
   const policySuppliers = useMemo(
-    () => suppliers.filter((supplier) => supplier.creditPolicyNote.trim().length > 0),
-    [suppliers],
+    () => availableSuppliers.filter((supplier) => supplier.creditPolicyNote.trim().length > 0),
+    [availableSuppliers],
   );
 
   const load = useCallback(async () => {
@@ -113,24 +126,89 @@ export const PolicyReviewPanel: React.FC<Props> = ({ suppliers, isAdmin, getToke
     });
   };
 
+  const performAttach = async (targetSupplierId: number, token: string | null) => {
+    const result = await svc.bulkAttachPolicy(
+      { supplierId: targetSupplierId, brandIds: [...selected] },
+      token,
+    );
+    setSummary(
+      `Attached ${result.attached}, unchanged ${result.unchanged}, corrections ${result.corrections}`,
+    );
+    setSelected(new Set());
+    await load();
+    onChanged();
+  };
+
   const attach = async () => {
     if (supplierId == null || selected.size === 0) return;
     setSaving(true);
     setError(null);
     setSummary(null);
     try {
-      const result = await svc.bulkAttachPolicy(
-        { supplierId, brandIds: [...selected] },
-        await getToken(),
-      );
-      setSummary(
-        `Attached ${result.attached}, unchanged ${result.unchanged}, corrections ${result.corrections}`,
-      );
-      setSelected(new Set());
-      await load();
-      onChanged();
+      await performAttach(supplierId, await getToken());
     } catch (cause) {
       setError(actionErrorMessage(cause));
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  const beginCreate = () => {
+    setCreateName('');
+    setCreateDraft(supplierPolicyDraft());
+    setCreatePreview(false);
+    setCreateFieldErrors({});
+    setError(null);
+    setCreateOpen(true);
+  };
+
+  const changeCreateDraft = (field: keyof SupplierPolicyDraft, value: string) => {
+    setCreateDraft((current) => ({ ...current, [field]: value }));
+    setCreateFieldErrors((current) => {
+      const next = { ...current };
+      delete next[field];
+      if (field.startsWith('contact') || field === 'representativeEmail') delete next.contact;
+      return next;
+    });
+  };
+
+  const createAndAttach = async () => {
+    const name = createName.trim();
+    const input = supplierPolicyInput(createDraft, true);
+    const validationErrors = validatePolicyWrite(input, null);
+    const nextErrors = Object.fromEntries(
+      validationErrors.map((item) => [item.field, item.message]),
+    );
+    if (!name) nextErrors.name = 'Supplier name is required';
+    if (Object.keys(nextErrors).length > 0) {
+      setCreateFieldErrors(nextErrors);
+      return;
+    }
+
+    setSaving(true);
+    setError(null);
+    setSummary(null);
+    let created: Supplier | null = null;
+    try {
+      const token = await getToken();
+      created = await svc.createSupplier({ name, ...input }, token);
+      setCreatedSupplier(created);
+      setSupplierId(created.id);
+      setCreateOpen(false);
+      await performAttach(created.id, token);
+    } catch (cause) {
+      if (
+        !created &&
+        cause instanceof ApiError &&
+        cause.status === 422 &&
+        cause.errors.length > 0
+      ) {
+        setCreateFieldErrors(
+          Object.fromEntries(cause.errors.map((item) => [item.field, item.message])),
+        );
+      } else {
+        setError(actionErrorMessage(cause));
+      }
     } finally {
       setSaving(false);
     }
@@ -268,7 +346,7 @@ export const PolicyReviewPanel: React.FC<Props> = ({ suppliers, isAdmin, getToke
                 }
               >
                 <option value="">Choose supplier</option>
-                {suppliers.map((supplier) => (
+                {availableSuppliers.map((supplier) => (
                   <option
                     key={supplier.id}
                     value={supplier.id}
@@ -279,6 +357,9 @@ export const PolicyReviewPanel: React.FC<Props> = ({ suppliers, isAdmin, getToke
                 ))}
               </select>
             </div>
+            <Button type="button" variant="outline" onClick={beginCreate} disabled={saving}>
+              Create new supplier
+            </Button>
             <Button
               onClick={() => void attach()}
               disabled={saving || supplierId == null || selected.size === 0}
@@ -450,6 +531,47 @@ export const PolicyReviewPanel: React.FC<Props> = ({ suppliers, isAdmin, getToke
             </Button>
             <Button onClick={() => void saveEdit()} disabled={saving}>
               Save policy
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      <Dialog open={createOpen} onOpenChange={setCreateOpen}>
+        <DialogContent className="max-h-[90vh] overflow-y-auto sm:max-w-2xl">
+          <DialogHeader>
+            <DialogTitle>Create supplier and attach policy</DialogTitle>
+          </DialogHeader>
+          <div>
+            <Label htmlFor="policy-review-create-name">Supplier name</Label>
+            <Input
+              id="policy-review-create-name"
+              maxLength={120}
+              value={createName}
+              onChange={(event) => {
+                setCreateName(event.target.value);
+                setCreateFieldErrors((current) => ({ ...current, name: '' }));
+              }}
+            />
+            {createFieldErrors.name && (
+              <p className="mt-1 text-xs text-semantic-critical">{createFieldErrors.name}</p>
+            )}
+          </div>
+          <SupplierPolicyFields
+            value={createDraft}
+            onChange={changeCreateDraft}
+            fieldErrors={createFieldErrors}
+            editableContacts
+            editablePolicy
+            preview={createPreview}
+            onPreviewChange={setCreatePreview}
+            idPrefix="policy-review-create"
+          />
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setCreateOpen(false)} disabled={saving}>
+              Cancel
+            </Button>
+            <Button onClick={() => void createAndAttach()} disabled={saving || selected.size === 0}>
+              Create and attach
             </Button>
           </DialogFooter>
         </DialogContent>

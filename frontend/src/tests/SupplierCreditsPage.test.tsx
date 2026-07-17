@@ -1,5 +1,5 @@
 import React from 'react';
-import { render, screen, waitFor } from '@testing-library/react';
+import { fireEvent, render, screen, waitFor } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import SupplierCreditsPage from '../pages/SupplierCreditsPage';
 import * as svc from '../services/supplierCreditService';
@@ -232,6 +232,80 @@ describe('supplier policy review dashboard', () => {
     );
   });
 
+  it('creates a policy-bearing supplier and attaches it to selected brands', async () => {
+    const created = {
+      ...supplier,
+      id: 44,
+      name: 'New Policy Supplier',
+      contactPhone: '02 4444 4444',
+      creditPolicyNote: 'Return with invoice',
+    };
+    mocked.createSupplier.mockResolvedValue(created);
+    renderPage(ROLES.ADMIN);
+    await userEvent.click(await screen.findByRole('button', { name: 'Policy Review' }));
+    await screen.findByText('Oldest Missing Brand');
+
+    await userEvent.click(screen.getByRole('checkbox', { name: 'Select Oldest Missing Brand' }));
+    await userEvent.click(screen.getByRole('button', { name: 'Create new supplier' }));
+    fireEvent.change(screen.getByLabelText('Supplier name'), {
+      target: { value: 'New Policy Supplier' },
+    });
+    fireEvent.change(screen.getByLabelText('Contact phone'), {
+      target: { value: '02 4444 4444' },
+    });
+    fireEvent.change(screen.getByLabelText('Store instructions'), {
+      target: { value: 'Return with invoice' },
+    });
+    await userEvent.click(screen.getByRole('button', { name: 'Create and attach' }));
+
+    await waitFor(() =>
+      expect(mocked.createSupplier).toHaveBeenCalledWith(
+        expect.objectContaining({
+          name: 'New Policy Supplier',
+          contactPhone: '02 4444 4444',
+          creditPolicyNote: 'Return with invoice',
+        }),
+        'tkn',
+      ),
+    );
+    expect(mocked.bulkAttachPolicy).toHaveBeenCalledWith({ supplierId: 44, brandIds: [22] }, 'tkn');
+  }, 10_000);
+
+  it('retains a newly created supplier for retry when attachment fails', async () => {
+    const created = {
+      ...supplier,
+      id: 44,
+      name: 'Retry Supplier',
+      contactPhone: '02 4444 4444',
+      creditPolicyNote: 'Return with invoice',
+    };
+    mocked.createSupplier.mockResolvedValue(created);
+    mocked.bulkAttachPolicy.mockRejectedValueOnce(new Error('Attachment unavailable'));
+    renderPage(ROLES.ADMIN);
+    await userEvent.click(await screen.findByRole('button', { name: 'Policy Review' }));
+    await screen.findByText('Oldest Missing Brand');
+
+    await userEvent.click(screen.getByRole('checkbox', { name: 'Select Oldest Missing Brand' }));
+    await userEvent.click(screen.getByRole('button', { name: 'Create new supplier' }));
+    fireEvent.change(screen.getByLabelText('Supplier name'), {
+      target: { value: 'Retry Supplier' },
+    });
+    fireEvent.change(screen.getByLabelText('Contact phone'), {
+      target: { value: '02 4444 4444' },
+    });
+    fireEvent.change(screen.getByLabelText('Store instructions'), {
+      target: { value: 'Return with invoice' },
+    });
+    await userEvent.click(screen.getByRole('button', { name: 'Create and attach' }));
+
+    expect(await screen.findByRole('alert')).toHaveTextContent('Attachment unavailable');
+    expect(screen.getByLabelText('Policy supplier')).toHaveValue('44');
+    await userEvent.click(screen.getByRole('button', { name: 'Attach policy to 1 brand' }));
+
+    await waitFor(() => expect(mocked.bulkAttachPolicy).toHaveBeenCalledTimes(2));
+    expect(mocked.createSupplier).toHaveBeenCalledTimes(1);
+  }, 10_000);
+
   it('requires confirmation before clearing a supplier policy', async () => {
     renderPage(ROLES.ADMIN);
     await userEvent.click(await screen.findByRole('button', { name: 'Policy Review' }));
@@ -274,6 +348,7 @@ describe('supplier policy review dashboard', () => {
 
     expect(screen.queryByLabelText('Policy supplier')).not.toBeInTheDocument();
     expect(screen.queryByRole('checkbox')).not.toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: 'Create new supplier' })).not.toBeInTheDocument();
     expect(screen.queryByRole('button', { name: /Clear .* policy/ })).not.toBeInTheDocument();
   });
 });
@@ -322,7 +397,7 @@ describe('SupplierCreditsPage', () => {
     expect(await screen.findByLabelText('Batch number')).toBeInTheDocument();
   });
 
-  it('reviews catalogue matches by suggested supplier with cursor pagination', async () => {
+  it('reviews catalogue matches with numbered pagination and a result range', async () => {
     mocked.getBrandReview
       .mockResolvedValueOnce({
         items: [
@@ -341,7 +416,11 @@ describe('SupplierCreditsPage', () => {
             },
           },
         ],
-        nextCursor: 301,
+        nextCursor: null,
+        page: 1,
+        pageSize: 50,
+        totalItems: 51,
+        totalPages: 2,
       })
       .mockResolvedValueOnce({
         items: [
@@ -354,6 +433,10 @@ describe('SupplierCreditsPage', () => {
           },
         ],
         nextCursor: null,
+        page: 2,
+        pageSize: 50,
+        totalItems: 51,
+        totalPages: 2,
       });
 
     renderPage();
@@ -362,11 +445,112 @@ describe('SupplierCreditsPage', () => {
 
     expect(await screen.findByText('Nature Labs')).toBeInTheDocument();
     expect(screen.getByText('Pending confirmation')).toBeInTheDocument();
-    await userEvent.click(screen.getByRole('button', { name: 'Load more' }));
+    expect(screen.getByText('1–50 of 51')).toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: 'Load more' })).not.toBeInTheDocument();
+    await userEvent.click(screen.getByRole('button', { name: 'Next page' }));
     expect(await screen.findByText('Needs a brand')).toBeInTheDocument();
     expect(mocked.getBrandReview).toHaveBeenLastCalledWith('tkn', {
-      cursor: 301,
-      limit: 50,
+      page: 2,
+      pageSize: 50,
+      titleMatch: 'contains',
+      sort: 'titleAsc',
+    });
+  });
+
+  it('applies catalogue title controls from page one and clears hidden SKU selections', async () => {
+    mocked.getBrandReview.mockResolvedValue({
+      items: [
+        {
+          productId: 401,
+          sku: 'NO-BRAND',
+          barcode: '',
+          productName: 'Vitamin C',
+          brand: null,
+        },
+      ],
+      nextCursor: null,
+      page: 1,
+      pageSize: 50,
+      totalItems: 1,
+      totalPages: 1,
+    });
+
+    renderPage();
+    await screen.findByText('Money on the table');
+    await userEvent.click(screen.getByRole('button', { name: 'Catalogue Review' }));
+    await userEvent.click(await screen.findByRole('button', { name: 'SKU matching' }));
+    await userEvent.click(screen.getByRole('checkbox', { name: 'Select Vitamin C' }));
+    expect(screen.getByText('1 of 500 selected')).toBeInTheDocument();
+
+    fireEvent.change(screen.getByLabelText('Filter product titles'), {
+      target: { value: 'Vitamin' },
+    });
+    fireEvent.change(screen.getByLabelText('Title match'), { target: { value: 'startsWith' } });
+    fireEvent.change(screen.getByLabelText('Title order'), { target: { value: 'titleDesc' } });
+    await userEvent.click(screen.getByRole('button', { name: 'Apply title filter' }));
+
+    await waitFor(() =>
+      expect(mocked.getBrandReview).toHaveBeenLastCalledWith('tkn', {
+        page: 1,
+        pageSize: 50,
+        title: 'Vitamin',
+        titleMatch: 'startsWith',
+        sort: 'titleDesc',
+      }),
+    );
+    expect(screen.getByText('0 of 500 selected')).toBeInTheDocument();
+
+    fireEvent.change(screen.getByLabelText('Rows per page'), { target: { value: '25' } });
+    await waitFor(() =>
+      expect(mocked.getBrandReview).toHaveBeenLastCalledWith('tkn', {
+        page: 1,
+        pageSize: 25,
+        title: 'Vitamin',
+        titleMatch: 'startsWith',
+        sort: 'titleDesc',
+      }),
+    );
+  });
+
+  it('navigates a 5,000-item catalogue to the last page without losing SKU selections', async () => {
+    mocked.getBrandReview.mockImplementation(async (_token, options = {}) => {
+      const page = options.page ?? 1;
+      const productNumber = page === 200 ? 5000 : 1;
+      return {
+        items: [
+          {
+            productId: productNumber,
+            sku: `QA-PAGE-${productNumber}`,
+            barcode: '',
+            productName: `Paged Product ${productNumber}`,
+            brand: null,
+          },
+        ],
+        nextCursor: null,
+        page,
+        pageSize: 25,
+        totalItems: 5000,
+        totalPages: 200,
+      };
+    });
+
+    renderPage();
+    await screen.findByText('Money on the table');
+    await userEvent.click(screen.getByRole('button', { name: 'Catalogue Review' }));
+    fireEvent.change(await screen.findByLabelText('Rows per page'), { target: { value: '25' } });
+    await userEvent.click(screen.getByRole('button', { name: 'SKU matching' }));
+    await userEvent.click(await screen.findByRole('checkbox', { name: 'Select Paged Product 1' }));
+
+    await userEvent.click(screen.getByRole('button', { name: 'Last page' }));
+
+    expect(await screen.findByText('Paged Product 5000')).toBeInTheDocument();
+    expect(screen.getByText('4976–5000 of 5000')).toBeInTheDocument();
+    expect(screen.getByText('1 of 500 selected')).toBeInTheDocument();
+    expect(mocked.getBrandReview).toHaveBeenLastCalledWith('tkn', {
+      page: 200,
+      pageSize: 25,
+      titleMatch: 'contains',
+      sort: 'titleAsc',
     });
   });
 

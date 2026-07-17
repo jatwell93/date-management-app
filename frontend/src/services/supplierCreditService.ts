@@ -14,6 +14,8 @@ import type {
   Brand,
   BrandReviewPage,
   CatalogueReviewState,
+  CatalogueTitleMatch,
+  CatalogueTitleSort,
   BulkAttachPolicyResult,
   BulkLinkProductsInput,
   BulkLinkProductsResult,
@@ -76,13 +78,32 @@ export const assignProductSupplier = (
 
 export const getBrandReview = (
   token: string | null,
-  options: { state?: CatalogueReviewState; group?: string; cursor?: number; limit?: number } = {},
+  options: {
+    state?: CatalogueReviewState;
+    group?: string;
+    cursor?: number;
+    limit?: number;
+    page?: number;
+    pageSize?: number;
+    title?: string;
+    titleMatch?: CatalogueTitleMatch;
+    sort?: CatalogueTitleSort;
+  } = {},
 ) => {
   const query = new URLSearchParams();
   if (options.state) query.set('state', options.state);
   if (options.group) query.set('group', options.group);
-  if (options.cursor != null) query.set('cursor', String(options.cursor));
-  query.set('limit', String(options.limit ?? 50));
+  const usesNumberedPagination = options.page != null || options.pageSize != null;
+  if (usesNumberedPagination) {
+    if (options.page != null) query.set('page', String(options.page));
+    if (options.pageSize != null) query.set('pageSize', String(options.pageSize));
+    if (options.title) query.set('title', options.title);
+    if (options.titleMatch) query.set('titleMatch', options.titleMatch);
+    if (options.sort) query.set('sort', options.sort);
+  } else {
+    if (options.cursor != null) query.set('cursor', String(options.cursor));
+    query.set('limit', String(options.limit ?? 50));
+  }
   return apiService.get<BrandReviewPage>(
     `${BASE}/brand-review?${query.toString()}`,
     token ?? undefined,

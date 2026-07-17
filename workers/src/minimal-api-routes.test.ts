@@ -849,6 +849,60 @@ describe('minimal API route table', () => {
     });
   });
 
+  it('passes numbered catalogue pagination and title controls to the database', async () => {
+    mockedAuthenticateClerkRequest.mockResolvedValue(authenticatedClerkOrgContext);
+    const reviewBrands = vi.fn().mockResolvedValue({
+      items: [],
+      page: 2,
+      pageSize: 25,
+      totalItems: 0,
+      totalPages: 0,
+      nextCursor: null,
+    });
+    const database = {
+      sql: vi.fn().mockResolvedValue([{ id: 7, organizationId: 'org_123', role: 'admin' }]),
+      reviewBrands,
+    } as unknown as Database;
+
+    const response = await resolveMinimalGet(
+      '/api/supplier-credits/brand-review',
+      database,
+      '/api/supplier-credits/brand-review?page=2&pageSize=25&title=Vitamin&titleMatch=startsWith&sort=titleDesc',
+    );
+
+    expect(response?.status).toBe(200);
+    expect(reviewBrands).toHaveBeenCalledWith('org_123', {
+      state: undefined,
+      group: undefined,
+      page: 2,
+      pageSize: 25,
+      title: 'Vitamin',
+      titleMatch: 'startsWith',
+      sort: 'titleDesc',
+    });
+  });
+
+  it.each(['page=0', 'pageSize=101', 'page=1&cursor=5', 'titleMatch=equals', 'sort=newest'])(
+    'rejects invalid numbered catalogue query %s',
+    async (query) => {
+      mockedAuthenticateClerkRequest.mockResolvedValue(authenticatedClerkOrgContext);
+      const reviewBrands = vi.fn();
+      const database = {
+        sql: vi.fn().mockResolvedValue([{ id: 7, organizationId: 'org_123', role: 'admin' }]),
+        reviewBrands,
+      } as unknown as Database;
+
+      const response = await resolveMinimalGet(
+        '/api/supplier-credits/brand-review',
+        database,
+        `/api/supplier-credits/brand-review?${query}`,
+      );
+
+      expect(response?.status).toBe(400);
+      expect(reviewBrands).not.toHaveBeenCalled();
+    },
+  );
+
   it('conflicts when a platform correction already has a terminal decision', async () => {
     mockedAuthenticateClerkRequest.mockResolvedValue(authenticatedClerkOrgContext);
     const database = {

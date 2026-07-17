@@ -3,7 +3,12 @@ import { Badge } from '../ui/badge';
 import { Button } from '../ui/button';
 import { Card, CardContent, CardHeader, CardTitle } from '../ui/card';
 import { Input } from '../ui/input';
-import type { BrandReviewItem, Supplier } from '../../types/supplierCredit';
+import type {
+  BrandReviewItem,
+  CatalogueTitleMatch,
+  CatalogueTitleSort,
+  Supplier,
+} from '../../types/supplierCredit';
 import * as svc from '../../services/supplierCreditService';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '../ui/table';
 import { Label } from '../ui/label';
@@ -20,34 +25,42 @@ interface Props {
 export const CatalogueReviewPanel: React.FC<Props> = ({ suppliers, getToken, onChanged }) => {
   const [mode, setMode] = useState<'BRAND_REVIEW' | 'SKU_MATCHING'>('BRAND_REVIEW');
   const [items, setItems] = useState<BrandReviewItem[]>([]);
-  const [nextCursor, setNextCursor] = useState<number | null>(null);
   const [filter, setFilter] = useState<'ALL' | 'NEEDS_BRAND'>('ALL');
+  const [currentPage, setCurrentPage] = useState(1);
+  const [pageSize, setPageSize] = useState(50);
+  const [totalItems, setTotalItems] = useState(0);
+  const [totalPages, setTotalPages] = useState(0);
+  const [titleDraft, setTitleDraft] = useState('');
+  const [title, setTitle] = useState('');
+  const [titleMatch, setTitleMatch] = useState<CatalogueTitleMatch>('contains');
+  const [sort, setSort] = useState<CatalogueTitleSort>('titleAsc');
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [brandNames, setBrandNames] = useState<Record<number, string>>({});
   const [supplierIds, setSupplierIds] = useState<Record<number, number>>({});
 
-  const loadPage = useCallback(
-    async (cursor?: number) => {
-      setLoading(true);
-      setError(null);
-      try {
-        const token = await getToken();
-        const page = await svc.getBrandReview(token, {
-          ...(filter === 'NEEDS_BRAND' ? { state: 'NEEDS_BRAND' } : {}),
-          ...(cursor == null ? {} : { cursor }),
-          limit: 50,
-        });
-        setItems((current) => (cursor == null ? page.items : [...current, ...page.items]));
-        setNextCursor(page.nextCursor);
-      } catch (cause) {
-        setError(cause instanceof Error ? cause.message : 'Failed to load catalogue review');
-      } finally {
-        setLoading(false);
-      }
-    },
-    [filter, getToken],
-  );
+  const loadPage = useCallback(async () => {
+    setLoading(true);
+    setError(null);
+    try {
+      const token = await getToken();
+      const page = await svc.getBrandReview(token, {
+        ...(filter === 'NEEDS_BRAND' ? { state: 'NEEDS_BRAND' } : {}),
+        page: currentPage,
+        pageSize,
+        ...(title ? { title } : {}),
+        titleMatch,
+        sort,
+      });
+      setItems(page.items);
+      setTotalItems(page.totalItems ?? page.items.length);
+      setTotalPages(page.totalPages ?? (page.items.length > 0 ? 1 : 0));
+    } catch (cause) {
+      setError(cause instanceof Error ? cause.message : 'Failed to load catalogue review');
+    } finally {
+      setLoading(false);
+    }
+  }, [currentPage, filter, getToken, pageSize, sort, title, titleMatch]);
 
   useEffect(() => {
     void loadPage();
@@ -62,6 +75,51 @@ export const CatalogueReviewPanel: React.FC<Props> = ({ suppliers, getToken, onC
     }
     return [...grouped.entries()];
   }, [items]);
+
+  const changeFilter = (nextFilter: 'ALL' | 'NEEDS_BRAND') => {
+    setFilter(nextFilter);
+    setCurrentPage(1);
+  };
+
+  const applyTitle = (event: React.FormEvent) => {
+    event.preventDefault();
+    setTitle(titleDraft.trim());
+    setCurrentPage(1);
+  };
+
+  const controls = (
+    <CatalogueControls
+      titleDraft={titleDraft}
+      titleMatch={titleMatch}
+      sort={sort}
+      pageSize={pageSize}
+      onTitleDraftChange={setTitleDraft}
+      onSubmit={applyTitle}
+      onTitleMatchChange={(value) => {
+        setTitleMatch(value);
+        setCurrentPage(1);
+      }}
+      onSortChange={(value) => {
+        setSort(value);
+        setCurrentPage(1);
+      }}
+      onPageSizeChange={(value) => {
+        setPageSize(value);
+        setCurrentPage(1);
+      }}
+    />
+  );
+
+  const pagination = (
+    <CataloguePagination
+      currentPage={currentPage}
+      pageSize={pageSize}
+      totalItems={totalItems}
+      totalPages={totalPages}
+      loading={loading}
+      onPageChange={setCurrentPage}
+    />
+  );
 
   const confirm = async (item: BrandReviewItem) => {
     if (!item.brand) return;
@@ -110,16 +168,19 @@ export const CatalogueReviewPanel: React.FC<Props> = ({ suppliers, getToken, onC
             <Button size="sm">SKU matching</Button>
           </div>
         </div>
+        {controls}
         <SkuMatchingView
           items={items}
           suppliers={suppliers}
           loading={loading}
+          selectionResetKey={`${filter}|${title}|${titleMatch}|${sort}|${pageSize}`}
           getToken={getToken}
           onLinked={async () => {
             await loadPage();
             onChanged();
           }}
         />
+        {pagination}
       </section>
     );
   }
@@ -142,19 +203,20 @@ export const CatalogueReviewPanel: React.FC<Props> = ({ suppliers, getToken, onC
           <Button
             variant={filter === 'ALL' ? 'default' : 'outline'}
             size="sm"
-            onClick={() => setFilter('ALL')}
+            onClick={() => changeFilter('ALL')}
           >
             All matches
           </Button>
           <Button
             variant={filter === 'NEEDS_BRAND' ? 'default' : 'outline'}
             size="sm"
-            onClick={() => setFilter('NEEDS_BRAND')}
+            onClick={() => changeFilter('NEEDS_BRAND')}
           >
             Needs brand
           </Button>
         </div>
       </div>
+      {controls}
       {error && <p className="text-sm text-semantic-critical">{error}</p>}
       {!loading && groups.length === 0 && (
         <div className="rounded-lg border border-dashed py-12 text-center text-sm text-semantic-text-secondary">
@@ -234,11 +296,7 @@ export const CatalogueReviewPanel: React.FC<Props> = ({ suppliers, getToken, onC
           </CardContent>
         </Card>
       ))}
-      {nextCursor != null && (
-        <Button variant="outline" onClick={() => void loadPage(nextCursor)} disabled={loading}>
-          Load more
-        </Button>
-      )}
+      {pagination}
       {loading && (
         <p role="status" className="text-sm text-semantic-text-secondary">
           Loading catalogue…
@@ -252,15 +310,20 @@ const SkuMatchingView: React.FC<{
   items: BrandReviewItem[];
   suppliers: Supplier[];
   loading: boolean;
+  selectionResetKey: string;
   getToken: () => Promise<string | null>;
   onLinked: () => Promise<void>;
-}> = ({ items, suppliers, loading, getToken, onLinked }) => {
+}> = ({ items, suppliers, loading, selectionResetKey, getToken, onLinked }) => {
   const [selected, setSelected] = useState<Set<number>>(new Set());
   const [brandId, setBrandId] = useState<number | null>(null);
   const [brandName, setBrandName] = useState('');
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [summary, setSummary] = useState<string | null>(null);
+
+  useEffect(() => {
+    setSelected(new Set());
+  }, [selectionResetKey]);
 
   const suppliersById = useMemo(
     () => new Map(suppliers.map((supplier) => [supplier.id, supplier])),
@@ -468,5 +531,178 @@ const SkuMatchingView: React.FC<{
         <p className="text-sm text-semantic-text-secondary">No catalogue SKUs found.</p>
       )}
     </div>
+  );
+};
+
+interface CatalogueControlsProps {
+  titleDraft: string;
+  titleMatch: CatalogueTitleMatch;
+  sort: CatalogueTitleSort;
+  pageSize: number;
+  onTitleDraftChange: (value: string) => void;
+  onSubmit: (event: React.FormEvent) => void;
+  onTitleMatchChange: (value: CatalogueTitleMatch) => void;
+  onSortChange: (value: CatalogueTitleSort) => void;
+  onPageSizeChange: (value: number) => void;
+}
+
+const CatalogueControls: React.FC<CatalogueControlsProps> = ({
+  titleDraft,
+  titleMatch,
+  sort,
+  pageSize,
+  onTitleDraftChange,
+  onSubmit,
+  onTitleMatchChange,
+  onSortChange,
+  onPageSizeChange,
+}) => (
+  <form
+    className="flex flex-wrap items-end gap-3 rounded-lg border bg-semantic-surface-1 p-3"
+    onSubmit={onSubmit}
+  >
+    <div className="min-w-48 flex-1 space-y-1">
+      <Label htmlFor="catalogue-title-filter">Product title</Label>
+      <Input
+        id="catalogue-title-filter"
+        aria-label="Filter product titles"
+        value={titleDraft}
+        onChange={(event) => onTitleDraftChange(event.target.value)}
+        placeholder="Filter by title"
+      />
+    </div>
+    <div className="space-y-1">
+      <Label htmlFor="catalogue-title-match">Match</Label>
+      <select
+        id="catalogue-title-match"
+        aria-label="Title match"
+        className="h-9 rounded-md border bg-semantic-surface-1 px-3 text-sm"
+        value={titleMatch}
+        onChange={(event) => onTitleMatchChange(event.target.value as CatalogueTitleMatch)}
+      >
+        <option value="contains">Contains</option>
+        <option value="startsWith">Starts with</option>
+      </select>
+    </div>
+    <div className="space-y-1">
+      <Label htmlFor="catalogue-title-order">Order</Label>
+      <select
+        id="catalogue-title-order"
+        aria-label="Title order"
+        className="h-9 rounded-md border bg-semantic-surface-1 px-3 text-sm"
+        value={sort}
+        onChange={(event) => onSortChange(event.target.value as CatalogueTitleSort)}
+      >
+        <option value="titleAsc">A–Z</option>
+        <option value="titleDesc">Z–A</option>
+      </select>
+    </div>
+    <div className="space-y-1">
+      <Label htmlFor="catalogue-page-size">Rows</Label>
+      <select
+        id="catalogue-page-size"
+        aria-label="Rows per page"
+        className="h-9 rounded-md border bg-semantic-surface-1 px-3 text-sm"
+        value={pageSize}
+        onChange={(event) => onPageSizeChange(Number(event.target.value))}
+      >
+        {[25, 50, 100].map((size) => (
+          <option key={size} value={size}>
+            {size}
+          </option>
+        ))}
+      </select>
+    </div>
+    <Button type="submit" variant="outline">
+      Apply title filter
+    </Button>
+  </form>
+);
+
+interface CataloguePaginationProps {
+  currentPage: number;
+  pageSize: number;
+  totalItems: number;
+  totalPages: number;
+  loading: boolean;
+  onPageChange: (page: number) => void;
+}
+
+const CataloguePagination: React.FC<CataloguePaginationProps> = ({
+  currentPage,
+  pageSize,
+  totalItems,
+  totalPages,
+  loading,
+  onPageChange,
+}) => {
+  const firstItem = totalItems === 0 ? 0 : (currentPage - 1) * pageSize + 1;
+  const lastItem = Math.min(currentPage * pageSize, totalItems);
+  const firstVisiblePage = Math.max(1, Math.min(currentPage - 2, totalPages - 4));
+  const visiblePages = Array.from(
+    { length: Math.min(5, totalPages) },
+    (_, index) => firstVisiblePage + index,
+  );
+
+  return (
+    <nav
+      aria-label="Catalogue pagination"
+      className="flex flex-wrap items-center justify-between gap-3"
+    >
+      <p className="text-sm tabular-nums text-semantic-text-secondary">
+        {firstItem}–{lastItem} of {totalItems}
+      </p>
+      <div className="flex flex-wrap gap-1">
+        <Button
+          variant="outline"
+          size="sm"
+          aria-label="First page"
+          disabled={loading || currentPage <= 1}
+          onClick={() => onPageChange(1)}
+        >
+          First
+        </Button>
+        <Button
+          variant="outline"
+          size="sm"
+          aria-label="Previous page"
+          disabled={loading || currentPage <= 1}
+          onClick={() => onPageChange(currentPage - 1)}
+        >
+          Previous
+        </Button>
+        {visiblePages.map((page) => (
+          <Button
+            key={page}
+            variant={page === currentPage ? 'default' : 'outline'}
+            size="sm"
+            aria-label={`Page ${page}`}
+            aria-current={page === currentPage ? 'page' : undefined}
+            disabled={loading}
+            onClick={() => onPageChange(page)}
+          >
+            {page}
+          </Button>
+        ))}
+        <Button
+          variant="outline"
+          size="sm"
+          aria-label="Next page"
+          disabled={loading || currentPage >= totalPages}
+          onClick={() => onPageChange(currentPage + 1)}
+        >
+          Next
+        </Button>
+        <Button
+          variant="outline"
+          size="sm"
+          aria-label="Last page"
+          disabled={loading || currentPage >= totalPages}
+          onClick={() => onPageChange(totalPages)}
+        >
+          Last
+        </Button>
+      </div>
+    </nav>
   );
 };
