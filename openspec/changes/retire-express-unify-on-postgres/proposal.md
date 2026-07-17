@@ -41,8 +41,8 @@ locally against Postgres so there is **one backend and one database engine** eve
 
 ## What changes
 
-Two independently valuable knobs. Either can ship without the other; together they collapse 5–7
-artifacts to ~2.
+Two independently valuable knobs. Either can ship without the other; together they collapse the 5–7
+per-schema-change artifacts to ~2–3.
 
 ### Knob A — Unify the dev/test database on Postgres (drop SQLite)
 
@@ -57,10 +57,20 @@ artifacts to ~2.
 
 - Run the Cloudflare Worker locally via `wrangler dev` (workerd/Miniflare) as the single dev API.
 - Migrate the Express-only endpoints and any Express-only test coverage onto the Worker.
-- Remove `backend/` (Express server, Prisma client, `better-sqlite3`) once parity and test coverage
-  are confirmed on the Worker.
-- Removes artifacts **#2, #3** (Prisma entirely), leaving only the Worker's raw SQL + Neon migrations
-  + shared domain (~2 artifacts per schema change).
+- **Rehome the non-route responsibilities that also live in `backend/`** before deletion: the six
+  scheduled jobs in `backend/src/jobs/` (credit-claim, daily-metrics, daily-report-email, dunning,
+  stripe-sync, trial-expiration) move to Cloudflare **Cron Triggers/Queues**, and the operational
+  scripts in `backend/scripts/` (seeds, org-id audits/backfills, Neon export, webhook diagnostics,
+  backup) are relocated, reimplemented, or explicitly retired.
+- **Replace the authoritative production migration mechanism first.** Today production migrations run
+  via `npm run migrate:prod` (`scripts/migrate-production-doppler.js`, Prisma `db push`) — a
+  backend-owned script. Removing Prisma removes it, so a Prisma-independent, executable Neon migration
+  runner (forward + rollback) is stood up **before** deletion and the Neon SQL migrations are promoted
+  from Prisma-mirroring review SQL to the single authoritative path.
+- Remove `backend/` (Express server, Prisma client, `better-sqlite3`) and the Prisma **production**
+  schema only once parity, jobs, scripts, tests, and the migration runner are all confirmed. End state
+  per schema change: authoritative Neon SQL migration + Worker raw SQL + shared domain (**~2–3
+  artifacts**, down from 5–7).
 
 ## Local development after this change
 
@@ -82,7 +92,8 @@ weight to the dev machine.
 
 - **In scope:** the two knobs above; updating the dual-backend parity conventions (golden rules 5 & 6)
   to their single-backend form; a local-dev-on-Postgres story that avoids Docker; migrating Express-only
-  route + test coverage onto the Worker.
+  route + test coverage onto the Worker; rehoming the backend's scheduled jobs and operational scripts;
+  and standing up a Prisma-independent authoritative production migration path before Prisma is removed.
 - **In scope (docs/spec only for now):** this proposal, its design notes, task breakdown, and the
   `dual-backend-parity` spec delta. No source changes land under this change until the Decision Gate
   clears.
@@ -108,6 +119,11 @@ Before any source change under this proposal, confirm all of:
    Postgres-backed equivalent (pglite or Neon branch) that is green.
 4. **Sequencing:** Knob A ships and stabilises before Knob B, so a rollback point exists between "one
    database engine" and "one backend".
+5. **Migration path replaced first:** a Prisma-independent, executable Neon migration runner (forward +
+   rollback) is proven **before** Prisma/`backend/` is removed — `npm run migrate:prod` must not be
+   deleted without a working successor.
+6. **Non-route responsibilities rehomed:** the six scheduled jobs and the operational scripts in
+   `backend/` each have a Worker/relocated home or a recorded retirement decision before deletion.
 
 If the trigger is not met, this stays parked — the shared-domain discipline already contains the
 dangerous part of the duplication, so completing this is cleanup, not risk reduction.
@@ -116,8 +132,17 @@ dangerous part of the duplication, so completing this is cleanup, not risk reduc
 
 - **`openspec/project.md` golden rules 5 & 6** — rewritten for a single backend / single migration path
   once Knob B lands (captured as MODIFIED requirements in the `dual-backend-parity` spec delta).
-- **`backend/`** — removed at the end of Knob B.
-- **`workers/`** — becomes the sole API for all environments; gains any Express-only endpoints.
+- **Production migration mechanism** — `npm run migrate:prod`
+  (`scripts/migrate-production-doppler.js`, Prisma `db push`) is replaced by a Prisma-independent Neon
+  migration runner (forward + rollback) that lives outside `backend/`; the Neon SQL migrations become
+  the authoritative path rather than a mirror of Prisma.
+- **Scheduled jobs** — the six `backend/src/jobs/` jobs move to Cloudflare Cron Triggers/Queues (or are
+  explicitly retired) before `backend/` is deleted.
+- **Operational scripts** — `backend/scripts/` seeds, audits/backfills, Neon export, webhook
+  diagnostics, and backup are relocated, reimplemented, or explicitly retired per the audit.
+- **`backend/`** — removed at the end of Knob B, only after the rehoming checklist is fully satisfied.
+- **`workers/`** — becomes the sole API for all environments; gains any Express-only endpoints and the
+  rehomed jobs/scripts.
 - **CI** — the backend Vitest project and SQLite migration steps retire; the Worker suite and pglite
   conformance become the whole backend test story.
 - **Developer onboarding** — one backend to run (`wrangler dev`) and one dialect (Postgres) to learn.
@@ -127,8 +152,12 @@ dangerous part of the duplication, so completing this is cleanup, not risk reduc
 1. **Decision Gate** review — go/no-go with the trigger and prerequisites above.
 2. **Knob A:** stand up Postgres-backed dev/test (pglite or Neon branch); port the backend test suite
    off SQLite; delete the SQLite Prisma base schema and runtime `src/migrations/` path.
-3. **Parity audit:** enumerate Express-only endpoints and test coverage that must move to the Worker.
-4. **Knob B:** implement/verify Worker parity for those endpoints; run the Worker locally as the dev
-   API; delete `backend/` and Prisma once green.
-5. **Conventions:** rewrite golden rules 5 & 6; update the PR checklist; `npx openspec validate
-   retire-express-unify-on-postgres --strict`.
+3. **Responsibility & parity audit:** inventory everything `backend/` owns — Express-only endpoints,
+   tests, the six scheduled jobs, the operational scripts, and the production migration mechanism — and
+   map each to a Worker/replacement target or an explicit retirement. This checklist gates deletion.
+4. **Replacement migration path:** stand up a Prisma-independent, executable Neon migration runner
+   (forward + rollback) outside `backend/` and prove it on a real schema change before Prisma is removed.
+5. **Knob B:** implement/verify Worker parity; rehome jobs and scripts; run the Worker locally as the
+   dev API; delete `backend/` and Prisma only once the checklist is satisfied.
+6. **Conventions:** rewrite golden rules 5 & 6 (naming the new migration runner); update the PR
+   checklist; `npx openspec validate retire-express-unify-on-postgres --strict`.

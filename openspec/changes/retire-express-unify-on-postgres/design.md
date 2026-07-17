@@ -23,7 +23,8 @@ Splitting the work de-risks it and keeps each step independently shippable:
   story and makes dev/test behave like prod.
 - **Knob B (retire Express)** removes the *second backend* and Prisma entirely. It depends on Knob A
   being done first, because running the Worker as the dev API implies a Postgres-shaped dev database —
-  doing Knob B on top of SQLite would be incoherent.
+  doing Knob B on top of SQLite would be incoherent. Knob B also depends on the replacement migration
+  runner and the rehoming of jobs/scripts (below) landing before any deletion.
 
 Sequencing A→B leaves a stable rollback point in between ("one engine, two backends").
 
@@ -63,13 +64,49 @@ fallback for offline work. This keeps local weight low without Docker.
 - Prisma base (SQLite) schema and the runtime `src/migrations/` SQLite path (Knob A).
 - The SQLite side of the conformance tests; conformance becomes "raw SQL vs shared TS on Postgres"
   rather than "Postgres vs SQLite".
+- The Prisma-based production migration mechanism (`npm run migrate:prod` /
+  `scripts/migrate-production-doppler.js`), **replaced first** by a Prisma-independent Neon migration
+  runner (see below) — never deleted without a successor.
 - Golden rules 5 and 6 in their current dual-backend form.
+
+## What must be rehomed, not silently dropped
+
+`backend/` owns more than HTTP routes; each of these needs a home or an explicit retirement decision in
+the Phase 2 rehoming checklist **before** the directory is deleted:
+
+- **Scheduled jobs** (`backend/src/jobs/`): `credit-claim`, `daily-metrics`, `daily-report-email`,
+  `dunning`, `stripe-sync`, `trial-expiration` → Cloudflare **Cron Triggers** or **Queues**.
+- **Operational scripts** (`backend/scripts/`): seeds (`seed-users`, `seed-tier-feature-flags`),
+  audits/backfills (`audit-org-ids`, `backfill-*`), data export (`neon-to-sqlite`,
+  `export-excess-products`), diagnostics (`diagnose-webhook`, `verify-neon*`), and `backup.sh`.
+- **Production migration runner** (see below) — the single most load-bearing non-route responsibility.
+
+## Replacement production migration path
+
+Golden rule 6 makes production authoritative through `prisma db push` (`npm run migrate:prod`). Removing
+Prisma removes that path, so before deletion we stand up a Prisma-independent runner:
+
+- **Promote `backend/prisma/neon-sql/*.sql`** from Prisma-mirroring review/operator SQL to the single
+  authoritative, executable migration set.
+- **Run it with a lightweight runner** (`node-pg-migrate`, `dbmate`, or a small first-party script) that
+  supports forward migration and rollback, invoked under Doppler from outside `backend/` (workers
+  workspace or repo root).
+- **Prove it on a real schema change against a Neon dev branch, including rollback**, before Prisma is
+  removed. This is the successor to `migrate:prod` and becomes the "one authoritative path" named in the
+  rewritten golden rule 6.
 
 ## Risks and mitigations
 
-- **Express-only endpoint gaps.** Some routes may exist only in Express. Mitigation: a parity audit
-  (task 3) enumerates them before any deletion; Express is not removed until each has a tested Worker
-  equivalent.
+- **Express-only endpoint gaps.** Some routes may exist only in Express. Mitigation: the Phase 2
+  responsibility audit enumerates them before any deletion; Express is not removed until each has a
+  tested Worker equivalent.
+- **Silent loss of non-route capabilities.** `backend/` also owns scheduled jobs and operational
+  scripts. Mitigation: the Phase 2 audit inventories jobs and scripts alongside routes, and the
+  deletion invariant forbids removing anything not on the rehoming checklist with a replacement or a
+  recorded retirement.
+- **No production migration path after Prisma.** `migrate:prod` is Prisma-based and backend-owned.
+  Mitigation: Phase 3 stands up and proves a Prisma-independent Neon runner (forward + rollback) before
+  Phase 4 deletes anything.
 - **Test coverage regression.** The backend Vitest suite runs on SQLite today. Mitigation: port it to a
   Postgres-backed path (pglite/Neon branch) and require green before deleting Express.
 - **pglite/prod driver divergence for dev.** pglite is not the `@neondatabase/serverless` driver.

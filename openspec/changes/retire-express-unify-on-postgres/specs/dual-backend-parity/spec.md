@@ -72,10 +72,12 @@ from the business rules unnoticed.
 
 ### Requirement: Single-backend schema and domain conventions are documented
 
-The project conventions SHALL state that there is one backend (the Worker on Postgres) with one schema
-and migration path, that cross-cutting domain values come from the shared module, and that
-parity-critical SQL is covered by a shared-logic conformance test. The contribution checklist SHALL
-reflect these single-backend rules so the pattern is applied to future work.
+The project conventions SHALL state that there is one backend (the Worker on Postgres) with one
+authoritative, executable migration path, that cross-cutting domain values come from the shared module,
+and that parity-critical SQL is covered by a shared-logic conformance test. The authoritative migration
+path SHALL support forward migration and rollback and SHALL NOT depend on the retired Prisma tooling.
+The contribution checklist SHALL reflect these single-backend rules so the pattern is applied to future
+work.
 
 #### Scenario: Convention is discoverable
 
@@ -88,5 +90,13 @@ reflect these single-backend rules so the pattern is applied to future work.
 
 - **GIVEN** an engineer adding a column
 - **WHEN** they consult the project conventions or the PR checklist
-- **THEN** the rule names one Postgres schema/migration path as authoritative
+- **THEN** the rule names one Postgres migration path as authoritative
+- **AND** that path is executable with a documented rollback and does not depend on Prisma
 - **AND** it does not require mirroring the change into a SQLite schema or a runtime SQLite migration
+
+#### Scenario: Production has a deployable migration mechanism after Prisma
+
+- **GIVEN** Prisma and the Express backend have been removed
+- **WHEN** a production schema change is deployed
+- **THEN** it is applied by the authoritative Neon migration runner that replaced `npm run migrate:prod`
+- **AND** the change can be rolled back through the same mechanism
