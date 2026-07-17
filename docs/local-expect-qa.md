@@ -12,7 +12,8 @@ Synchronize the database used by the Express Prisma client before starting the b
 repository root:
 
 ```powershell
-doppler run --project date-management --config dev -- npx prisma db push --schema backend/prisma/schema.prisma
+$env:DATABASE_URL='file:./database.sqlite'
+doppler run --project date-management --config dev --preserve-env=DATABASE_URL -- npx prisma db push --schema backend/prisma/schema.prisma
 ```
 
 The Prisma datasource resolves its relative SQLite URL from `backend/prisma/schema.prisma`, so the
@@ -23,7 +24,8 @@ database used by local Express QA.
 Run the backend on `localhost:3001`:
 
 ```powershell
-doppler run --project date-management --config dev -- npm run dev --prefix backend
+$env:DATABASE_URL='file:./database.sqlite'
+doppler run --project date-management --config dev --preserve-env=DATABASE_URL -- npm run dev --prefix backend
 ```
 
 Run the frontend on `localhost:3002` with the Expect diagnostics panel enabled:
