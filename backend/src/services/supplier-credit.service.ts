@@ -1,7 +1,7 @@
 import { PrismaClient } from '@prisma/client';
 import { getDefaultDatabaseClient } from '../database/database-factory';
 import { getOrganizationId } from '../utils/auth-bypass';
-import { ConflictError, NotFoundError, ValidationError } from '../errors';
+import { ConflictError, NotFoundError, PolicyValidationError, ValidationError } from '../errors';
 import {
   SupplierCreditRepository,
   type BrandReviewOptions,
@@ -10,14 +10,42 @@ import {
 } from '../repositories/supplier-credit.repository';
 import { rollupClaimablePool, type ClaimablePoolGroup } from '../../../shared/domain/credit-claim';
 import { isCatalogueReviewState } from '../../../shared/domain/brand-supplier';
+import {
+  isPolicyWrite,
+  validatePolicyWrite,
+  type PolicyStatus,
+  type SupplierPolicyRecord,
+} from '../../../shared/domain/supplier-policy';
+import { assertOrgRole } from '../middleware/requireOrgRole';
+import { ROLES } from '../constants/roles';
 
 export interface SupplierInput {
-  name: string;
+  name?: string;
   contactEmail?: string | null;
+  contactPhone?: string | null;
   creditPolicyNote?: string;
   policyWriteOffQty?: number | null;
   policyCreditQty?: number | null;
   followUpDays?: number;
+  representativeName?: string | null;
+  representativeEmail?: string | null;
+}
+
+export interface PolicyReviewInput {
+  brand?: string;
+  supplier?: string;
+  status?: PolicyStatus;
+}
+
+export interface BulkAttachInput {
+  supplierId: number;
+  brandIds: number[];
+}
+
+export interface BulkLinkInput {
+  brandId?: number;
+  brandName?: string;
+  productIds: number[];
 }
 
 export interface AddBrandInput {
@@ -31,22 +59,94 @@ export interface AddBrandInput {
  * a lone write-off or credit quantity is meaningless — so we validate them as a
  * pair here (the one rule that Zod can express but we also enforce server-side).
  */
-function toWriteData(input: SupplierInput): SupplierWriteData {
+function normalizeText(value: string | null | undefined): string | null {
+  return value?.trim() || null;
+}
+
+function assertRatio(writeOffQty: number | null, creditQty: number | null): void {
+  if ((writeOffQty == null) !== (creditQty == null)) {
+    throw new PolicyValidationError('Supplier policy is invalid', [
+      {
+        field: 'policyCreditQty',
+        message:
+          'A credit ratio needs both a write-off quantity and a credit quantity, or neither.',
+      },
+    ]);
+  }
+}
+
+function toCreateData(input: SupplierInput, policyChanged: boolean): SupplierWriteData {
   const writeOffQty = input.policyWriteOffQty ?? null;
   const creditQty = input.policyCreditQty ?? null;
-  if ((writeOffQty == null) !== (creditQty == null)) {
-    throw new ValidationError(
-      'A credit ratio needs both a write-off quantity and a credit quantity, or neither.',
-    );
-  }
   return {
-    name: input.name.trim(),
-    contactEmail: input.contactEmail?.trim() || null,
+    name: input.name?.trim() ?? '',
+    contactEmail: normalizeText(input.contactEmail),
+    contactPhone: normalizeText(input.contactPhone),
     creditPolicyNote: input.creditPolicyNote?.trim() ?? '',
     policyWriteOffQty: writeOffQty,
     policyCreditQty: creditQty,
     followUpDays: input.followUpDays ?? 7,
+    representativeName: normalizeText(input.representativeName),
+    representativeEmail: normalizeText(input.representativeEmail),
+    policyUpdatedAt: policyChanged ? new Date() : null,
   };
+}
+
+function toMergedData(
+  input: SupplierInput,
+  existing: SupplierWriteData & { name: string },
+  policyChanged: boolean,
+): SupplierWriteData {
+  const writeOffQty =
+    input.policyWriteOffQty === undefined ? existing.policyWriteOffQty : input.policyWriteOffQty;
+  const creditQty =
+    input.policyCreditQty === undefined ? existing.policyCreditQty : input.policyCreditQty;
+  assertRatio(writeOffQty, creditQty);
+  return {
+    name: input.name === undefined ? existing.name : input.name.trim(),
+    contactEmail:
+      input.contactEmail === undefined ? existing.contactEmail : normalizeText(input.contactEmail),
+    contactPhone:
+      input.contactPhone === undefined ? existing.contactPhone : normalizeText(input.contactPhone),
+    creditPolicyNote:
+      input.creditPolicyNote === undefined
+        ? existing.creditPolicyNote
+        : (normalizeText(input.creditPolicyNote) ?? ''),
+    policyWriteOffQty: writeOffQty,
+    policyCreditQty: creditQty,
+    followUpDays: input.followUpDays ?? existing.followUpDays,
+    representativeName:
+      input.representativeName === undefined
+        ? existing.representativeName
+        : normalizeText(input.representativeName),
+    representativeEmail:
+      input.representativeEmail === undefined
+        ? existing.representativeEmail
+        : normalizeText(input.representativeEmail),
+    policyUpdatedAt: policyChanged ? new Date() : existing.policyUpdatedAt,
+  };
+}
+
+function authorizeAndValidatePolicy(
+  input: SupplierPolicyRecord,
+  existing: SupplierPolicyRecord | null,
+  actorRole: string | undefined,
+): boolean {
+  const policyChanged = isPolicyWrite(input, existing);
+  if (!policyChanged) return false;
+  assertOrgRole(actorRole, ROLES.ADMIN);
+  const errors = validatePolicyWrite(input, existing);
+  if (errors.length) throw new PolicyValidationError('Supplier policy is invalid', errors);
+  return true;
+}
+
+function normalizeBulkIds(ids: number[], field: string): number[] {
+  if (ids.length < 1 || ids.length > 500 || ids.some((id) => !Number.isInteger(id) || id <= 0)) {
+    throw new PolicyValidationError('Bulk request is invalid', [
+      { field, message: 'Provide between 1 and 500 positive integer IDs' },
+    ]);
+  }
+  return [...new Set(ids)];
 }
 
 export class SupplierCreditService {
@@ -68,20 +168,111 @@ export class SupplierCreditService {
     return this.repo.listSuppliers(this.organizationId);
   }
 
-  async createSupplier(input: SupplierInput) {
-    return this.repo.createSupplier(this.organizationId, toWriteData(input));
+  async createSupplier(input: SupplierInput, actorRole?: string) {
+    return this.repo.withTransaction(async (tx) => {
+      const policyChanged = authorizeAndValidatePolicy(input, null, actorRole);
+      const data = toCreateData(input, policyChanged);
+      assertRatio(data.policyWriteOffQty, data.policyCreditQty);
+      return this.repo.createSupplier(this.organizationId, data, tx);
+    });
   }
 
-  async updateSupplier(id: number, input: SupplierInput) {
-    const changed = await this.repo.updateSupplier(this.organizationId, id, toWriteData(input));
-    if (changed === 0) {
-      throw new NotFoundError(`Supplier ${id} not found`);
+  async updateSupplier(id: number, input: SupplierInput, actorRole?: string) {
+    return this.repo.withTransaction(async (tx) => {
+      const existing = await this.repo.findSupplier(this.organizationId, id, tx);
+      if (!existing) throw new NotFoundError(`Supplier ${id} not found`);
+      const policyChanged = authorizeAndValidatePolicy(input, existing, actorRole);
+      const changed = await this.repo.updateSupplier(
+        this.organizationId,
+        id,
+        toMergedData(input, existing, policyChanged),
+        tx,
+      );
+      if (changed === 0) throw new NotFoundError(`Supplier ${id} not found`);
+      const supplier = await this.repo.findSupplier(this.organizationId, id, tx);
+      if (!supplier) throw new NotFoundError(`Supplier ${id} not found`);
+      return supplier;
+    });
+  }
+
+  async replaceSupplier(id: number, input: SupplierInput, actorRole?: string) {
+    return this.repo.withTransaction(async (tx) => {
+      const existing = await this.repo.findSupplier(this.organizationId, id, tx);
+      if (!existing) throw new NotFoundError(`Supplier ${id} not found`);
+      const replacement = toCreateData(input, false);
+      const policyChanged = authorizeAndValidatePolicy(replacement, existing, actorRole);
+      assertRatio(replacement.policyWriteOffQty, replacement.policyCreditQty);
+      const changed = await this.repo.updateSupplier(
+        this.organizationId,
+        id,
+        { ...replacement, policyUpdatedAt: policyChanged ? new Date() : existing.policyUpdatedAt },
+        tx,
+      );
+      if (changed === 0) throw new NotFoundError(`Supplier ${id} not found`);
+      const supplier = await this.repo.findSupplier(this.organizationId, id, tx);
+      if (!supplier) throw new NotFoundError(`Supplier ${id} not found`);
+      return supplier;
+    });
+  }
+
+  async clearSupplierPolicy(id: number, actorRole?: string) {
+    assertOrgRole(actorRole, ROLES.ADMIN);
+    return await this.repo.withTransaction(async (tx) => {
+      const supplier = await this.repo.clearSupplierPolicy(this.organizationId, id, new Date(), tx);
+      if (!supplier) throw new NotFoundError(`Supplier ${id} not found`);
+      return supplier;
+    });
+  }
+
+  listPolicyReview(options: PolicyReviewInput) {
+    return this.repo.listPolicyReview(this.organizationId, options);
+  }
+
+  async bulkAttachPolicy(
+    input: BulkAttachInput,
+    actorRole: string | undefined,
+    createdByUserId: number,
+  ) {
+    assertOrgRole(actorRole, ROLES.ADMIN);
+    if (!Number.isInteger(input.supplierId) || input.supplierId <= 0) {
+      throw new PolicyValidationError('Bulk request is invalid', [
+        { field: 'supplierId', message: 'Supplier ID must be a positive integer' },
+      ]);
     }
-    const supplier = await this.repo.findSupplier(this.organizationId, id);
-    if (!supplier) {
-      throw new NotFoundError(`Supplier ${id} not found`);
+    const brandIds = normalizeBulkIds(input.brandIds, 'brandIds');
+    return await this.repo.withTransaction((tx) =>
+      this.repo.bulkAttachSupplier(
+        this.organizationId,
+        input.supplierId,
+        brandIds,
+        createdByUserId,
+        tx,
+      ),
+    );
+  }
+
+  async bulkLinkProducts(input: BulkLinkInput, createdByUserId: number) {
+    const productIds = normalizeBulkIds(input.productIds, 'productIds');
+    const brandName = normalizeText(input.brandName);
+    if ((input.brandId == null) === (brandName == null)) {
+      throw new PolicyValidationError('Bulk request is invalid', [
+        { field: 'brand', message: 'Provide exactly one brandId or brandName' },
+      ]);
     }
-    return supplier;
+    if (input.brandId != null && (!Number.isInteger(input.brandId) || input.brandId <= 0)) {
+      throw new PolicyValidationError('Bulk request is invalid', [
+        { field: 'brandId', message: 'Brand ID must be a positive integer' },
+      ]);
+    }
+    return await this.repo.withTransaction((tx) =>
+      this.repo.bulkLinkProducts(
+        this.organizationId,
+        { brandId: input.brandId, brandName: brandName ?? undefined },
+        productIds,
+        createdByUserId,
+        tx,
+      ),
+    );
   }
 
   /**
@@ -119,19 +310,68 @@ export class SupplierCreditService {
     return this.repo.listBrands(this.organizationId);
   }
 
-  reviewBrands(
-    options: Omit<BrandReviewOptions, 'limit' | 'state'> & { state?: string; limit?: number },
-  ) {
+  reviewBrands(options: {
+    state?: string;
+    group?: string;
+    cursor?: number;
+    limit?: number;
+    page?: number;
+    pageSize?: number;
+    title?: string;
+    titleMatch?: string;
+    sort?: string;
+  }) {
     if (options.state != null && !isCatalogueReviewState(options.state)) {
       throw new ValidationError(
         'Catalogue review state must be NEEDS_BRAND, PENDING_CONFIRMATION, or CONFIRMED',
       );
     }
+    const numbered =
+      options.page != null ||
+      options.pageSize != null ||
+      options.title != null ||
+      options.titleMatch != null ||
+      options.sort != null;
+    if (numbered && options.cursor != null) {
+      throw new ValidationError('cursor cannot be combined with numbered pagination');
+    }
+    if (options.page != null && (!Number.isInteger(options.page) || options.page < 1)) {
+      throw new ValidationError('page must be a positive integer');
+    }
+    if (
+      options.pageSize != null &&
+      (!Number.isInteger(options.pageSize) || options.pageSize < 1 || options.pageSize > 100)
+    ) {
+      throw new ValidationError('pageSize must be an integer from 1 to 100');
+    }
+    if (
+      options.titleMatch != null &&
+      options.titleMatch !== 'contains' &&
+      options.titleMatch !== 'startsWith'
+    ) {
+      throw new ValidationError('titleMatch must be contains or startsWith');
+    }
+    if (options.sort != null && options.sort !== 'titleAsc' && options.sort !== 'titleDesc') {
+      throw new ValidationError('sort must be titleAsc or titleDesc');
+    }
+
+    if (numbered) {
+      return this.repo.reviewBrands(this.organizationId, {
+        ...(options.state == null ? {} : { state: options.state }),
+        ...(options.group == null ? {} : { group: options.group }),
+        page: options.page ?? 1,
+        pageSize: options.pageSize ?? 50,
+        ...(options.title?.trim() ? { title: options.title.trim() } : {}),
+        titleMatch: (options.titleMatch ?? 'contains') as 'contains' | 'startsWith',
+        sort: (options.sort ?? 'titleAsc') as 'titleAsc' | 'titleDesc',
+      });
+    }
+
     return this.repo.reviewBrands(this.organizationId, {
       ...options,
       state: options.state,
       limit: Math.min(100, Math.max(1, options.limit ?? 50)),
-    });
+    } as BrandReviewOptions);
   }
 
   async addBrand(input: AddBrandInput, createdByUserId: number) {

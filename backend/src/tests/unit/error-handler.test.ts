@@ -10,6 +10,7 @@ import {
   NotFoundError,
   ConflictError,
   InternalError,
+  PolicyValidationError,
 } from '../../errors';
 import { errorHandler } from '../../middleware/error.middleware';
 
@@ -54,6 +55,22 @@ describe('Error Handler Middleware - Phase 13', () => {
         message: 'Invalid input',
         statusCode: 400,
         errors: [{ field: 'email', message: 'Invalid email format' }],
+      });
+    });
+
+    it('should preserve structured policy validation errors with 422 status', () => {
+      const error = new PolicyValidationError('Supplier policy is invalid', [
+        { field: 'contact', message: 'Add a contact method' },
+      ]);
+
+      errorHandler(error, mockReq as Request, mockRes as Response, mockNext);
+
+      expect(statusMock).toHaveBeenCalledWith(422);
+      expect(jsonMock).toHaveBeenCalledWith({
+        code: 'POLICY_VALIDATION_ERROR',
+        message: 'Supplier policy is invalid',
+        statusCode: 422,
+        errors: [{ field: 'contact', message: 'Add a contact method' }],
       });
     });
 

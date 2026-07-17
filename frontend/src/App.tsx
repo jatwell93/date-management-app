@@ -241,7 +241,7 @@ interface ExpectQaStatusProps {
   hasToken: boolean;
 }
 
-function ExpectQaStatus({
+export function ExpectQaStatus({
   isLoggedIn,
   isFullySignedIn,
   hasOrganization,
@@ -268,7 +268,9 @@ function ExpectQaStatus({
     <section
       aria-label="Expect QA auth diagnostics"
       data-testid="expect-qa-status"
-      className="fixed bottom-3 right-3 z-50 max-w-sm rounded-md border border-semantic-warning-muted bg-semantic-warning-muted p-3 text-xs text-semantic-warning-muted-foreground shadow-lg"
+      className={`fixed bottom-3 right-3 z-50 max-w-sm rounded-md border border-semantic-warning-muted bg-semantic-warning-muted p-3 text-xs text-semantic-warning-muted-foreground shadow-lg ${
+        isCompactViewport ? '' : 'pointer-events-none'
+      }`}
     >
       <div className="flex items-center justify-between gap-3">
         <div className="font-semibold">Expect QA</div>
@@ -401,7 +403,10 @@ function AppRoutes({ isLoggedIn, effectiveUserRole, token }: AppRoutesProps) {
         />
         <Route
           path="/supplier-credits"
-          element={renderSignedInElement(isLoggedIn, <SupplierCreditsPage token={token} />)}
+          element={renderSignedInElement(
+            isLoggedIn,
+            <SupplierCreditsPage token={token} effectiveUserRole={effectiveUserRole} />,
+          )}
         />
         <Route
           path="/usage-report"

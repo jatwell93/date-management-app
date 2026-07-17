@@ -38,6 +38,7 @@ import {
   type RecoveryClaimRow,
   type RecoveryReport,
 } from '../../shared/domain/credit-claim';
+import { createSupplierCreditDatabase } from './supplier-credit-database';
 
 // Note: fetchConnectionCache is now always true by default in @neondatabase/serverless
 
@@ -90,11 +91,32 @@ export interface Database {
 
   // Supplier credit-claim queries
   listSuppliers(organizationId: string): Promise<Supplier[]>;
-  listBrands(organizationId: string): Promise<Brand[]>;
-  reviewBrands(
+  findSupplier(organizationId: string, id: number): Promise<Supplier | null>;
+  createSupplier(organizationId: string, data: SupplierWriteData): Promise<Supplier>;
+  updateSupplier(
     organizationId: string,
-    options: { state?: CatalogueReviewState; group?: string; cursor?: number; limit: number },
-  ): Promise<{ items: BrandReviewItem[]; nextCursor: number | null }>;
+    id: number,
+    data: SupplierWriteData,
+  ): Promise<Supplier | null>;
+  clearSupplierPolicy(organizationId: string, id: number): Promise<Supplier | null>;
+  listPolicyReview(
+    organizationId: string,
+    options: PolicyReviewOptions,
+  ): Promise<PolicyReviewItem[]>;
+  bulkAttachSupplier(
+    organizationId: string,
+    supplierId: number,
+    brandIds: number[],
+    createdByUserId: number,
+  ): Promise<BulkAttachResult>;
+  bulkLinkProducts(
+    organizationId: string,
+    target: { brandId?: number; brandName?: string },
+    productIds: number[],
+    createdByUserId: number,
+  ): Promise<BulkLinkResult>;
+  listBrands(organizationId: string): Promise<Brand[]>;
+  reviewBrands(organizationId: string, options: BrandReviewOptions): Promise<BrandReviewPage>;
   addBrand(
     organizationId: string,
     userId: number,
@@ -288,11 +310,46 @@ export interface Supplier {
   id: number;
   name: string;
   contactEmail: string | null;
+  contactPhone: string | null;
   creditPolicyNote: string;
   policyWriteOffQty: number | null;
   policyCreditQty: number | null;
   followUpDays: number;
+  representativeName: string | null;
+  representativeEmail: string | null;
+  policyUpdatedAt: Date | string | null;
 }
+
+export type SupplierWriteData = Omit<Supplier, 'id'>;
+
+export interface PolicyReviewOptions {
+  brand?: string;
+  supplier?: string;
+  status?: 'ATTACHED' | 'MISSING';
+}
+
+export interface PolicyReviewItem {
+  brandId: number;
+  brandName: string;
+  supplier: Supplier | null;
+  status: 'ATTACHED' | 'MISSING';
+  policyUpdatedAt: Date | string | null;
+  representativeName: string | null;
+}
+
+export type BulkAttachResult =
+  | { kind: 'SUCCESS'; attached: number; unchanged: number; corrections: number }
+  | { kind: 'SUPPLIER_NOT_FOUND' | 'SUPPLIER_POLICY_MISSING' | 'BRAND_NOT_FOUND' };
+
+export type BulkLinkResult =
+  | {
+      kind: 'SUCCESS';
+      brandId: number;
+      linked: number;
+      alreadyLinked: number;
+      corrections: number;
+    }
+  | { kind: 'BRAND_NOT_FOUND' | 'PRODUCT_NOT_FOUND' | 'BRAND_CONFLICT' };
 
 export interface Brand {
   id: number;
@@ -311,6 +368,47 @@ export interface BrandReviewItem {
   barcode: string;
   productName: string;
   brand: Brand | null;
+}
+
+export interface BrandReviewOptions {
+  state?: CatalogueReviewState;
+  group?: string;
+  cursor?: number;
+  limit?: number;
+  page?: number;
+  pageSize?: number;
+  title?: string;
+  titleMatch?: 'contains' | 'startsWith';
+  sort?: 'titleAsc' | 'titleDesc';
+}
+
+export interface BrandReviewPage {
+  items: BrandReviewItem[];
+  nextCursor: number | null;
+  page?: number;
+  pageSize?: number;
+  totalItems?: number;
+  totalPages?: number;
+}
+
+function mapBrandReviewRows(rows: Array<Record<string, unknown>>): BrandReviewItem[] {
+  return rows.map((row) => ({
+    productId: Number(row.productId),
+    sku: String(row.sku ?? ''),
+    barcode: String(row.barcode ?? ''),
+    productName: String(row.productName ?? ''),
+    brand:
+      row.brandId == null
+        ? null
+        : {
+            id: Number(row.brandId),
+            name: String(row.brandName),
+            manufacturerName: (row.manufacturerName as string | null) ?? null,
+            suggestedSupplierName: (row.suggestedSupplierName as string | null) ?? null,
+            supplierId: row.brandSupplierId == null ? null : Number(row.brandSupplierId),
+            source: String(row.brandSource),
+          },
+  }));
 }
 
 export interface CatalogueCorrection {
@@ -743,6 +841,7 @@ export function createWorkersDatabase(env: Env): Database {
 
   return {
     sql,
+    ...createSupplierCreditDatabase(sql),
 
     // User queries
     async findUserByEmail(email: string): Promise<User | null> {
@@ -1397,39 +1496,6 @@ export function createWorkersDatabase(env: Env): Database {
       `) as SellThroughByLevelItem[];
     },
 
-    async listSuppliers(organizationId: string): Promise<Supplier[]> {
-      const rows = (await sql`
-        SELECT id,
-               name,
-               contact_email AS "contactEmail",
-               credit_policy_note AS "creditPolicyNote",
-               policy_write_off_qty AS "policyWriteOffQty",
-               policy_credit_qty AS "policyCreditQty",
-               follow_up_days AS "followUpDays"
-        FROM suppliers
-        WHERE organization_id = ${organizationId}
-        ORDER BY name ASC
-      `) as Array<{
-        id: number | string;
-        name: string;
-        contactEmail: string | null;
-        creditPolicyNote: string | null;
-        policyWriteOffQty: number | string | null;
-        policyCreditQty: number | string | null;
-        followUpDays: number | string | null;
-      }>;
-
-      return rows.map((row) => ({
-        id: Number(row.id),
-        name: row.name,
-        contactEmail: row.contactEmail,
-        creditPolicyNote: row.creditPolicyNote ?? '',
-        policyWriteOffQty: row.policyWriteOffQty == null ? null : Number(row.policyWriteOffQty),
-        policyCreditQty: row.policyCreditQty == null ? null : Number(row.policyCreditQty),
-        followUpDays: row.followUpDays == null ? 7 : Number(row.followUpDays),
-      }));
-    },
-
     async listBrands(organizationId: string): Promise<Brand[]> {
       const rows = (await sql`
         SELECT b.id, b.name,
@@ -1454,16 +1520,66 @@ export function createWorkersDatabase(env: Env): Database {
       }));
     },
 
-    async reviewBrands(
-      organizationId,
-      options,
-    ): Promise<{
-      items: BrandReviewItem[];
-      nextCursor: number | null;
-    }> {
+    async reviewBrands(organizationId, options): Promise<BrandReviewPage> {
       const state = options.state ?? null;
       const group = options.group ?? null;
+      if (options.page != null) {
+        const page = options.page;
+        const pageSize = options.pageSize ?? 50;
+        const title = options.title ?? null;
+        const titleMatch = options.titleMatch ?? 'contains';
+        const sort = options.sort ?? 'titleAsc';
+        const counts = await sql`
+          SELECT COUNT(*) AS "totalItems"
+          FROM products p
+          LEFT JOIN brands b ON b.id = p.brand_id AND b.organization_id = p.organization_id
+          WHERE p.organization_id = ${organizationId}
+            AND (${state}::text IS NULL
+              OR (${state} = 'NEEDS_BRAND' AND p.brand_id IS NULL)
+              OR (${state} = 'PENDING_CONFIRMATION' AND b.source = 'REFERENCE')
+              OR (${state} = 'CONFIRMED' AND b.source IN ('USER_ADDED', 'CONFIRMED') AND b.supplier_id IS NOT NULL))
+            AND (${group}::text IS NULL OR b.suggested_supplier_name = ${group})
+            AND (${title}::text IS NULL
+              OR (${titleMatch} = 'startsWith' AND p.name ILIKE ${title} || '%')
+              OR (${titleMatch} = 'contains' AND p.name ILIKE '%' || ${title} || '%'))
+        `;
+        const rows = (await sql`
+          SELECT p.id AS "productId", p.sku, p.barcode, p.name AS "productName",
+                 b.id AS "brandId", b.name AS "brandName",
+                 b.manufacturer_name AS "manufacturerName",
+                 b.suggested_supplier_name AS "suggestedSupplierName",
+                 b.supplier_id AS "brandSupplierId", b.source AS "brandSource"
+          FROM products p
+          LEFT JOIN brands b ON b.id = p.brand_id AND b.organization_id = p.organization_id
+          WHERE p.organization_id = ${organizationId}
+            AND (${state}::text IS NULL
+              OR (${state} = 'NEEDS_BRAND' AND p.brand_id IS NULL)
+              OR (${state} = 'PENDING_CONFIRMATION' AND b.source = 'REFERENCE')
+              OR (${state} = 'CONFIRMED' AND b.source IN ('USER_ADDED', 'CONFIRMED') AND b.supplier_id IS NOT NULL))
+            AND (${group}::text IS NULL OR b.suggested_supplier_name = ${group})
+            AND (${title}::text IS NULL
+              OR (${titleMatch} = 'startsWith' AND p.name ILIKE ${title} || '%')
+              OR (${titleMatch} = 'contains' AND p.name ILIKE '%' || ${title} || '%'))
+          ORDER BY
+            CASE WHEN ${sort} = 'titleAsc' THEN LOWER(p.name) END ASC,
+            CASE WHEN ${sort} = 'titleDesc' THEN LOWER(p.name) END DESC,
+            p.id ASC
+          LIMIT ${pageSize}
+          OFFSET ${(page - 1) * pageSize}
+        `) as Array<Record<string, unknown>>;
+        const totalItems = Number(counts[0]?.totalItems ?? 0);
+        return {
+          items: mapBrandReviewRows(rows),
+          page,
+          pageSize,
+          totalItems,
+          totalPages: Math.ceil(totalItems / pageSize),
+          nextCursor: null,
+        };
+      }
+
       const cursor = options.cursor ?? 0;
+      const limit = options.limit ?? 50;
       const rows = (await sql`
         SELECT p.id AS "productId", p.sku, p.barcode, p.name AS "productName",
                b.id AS "brandId", b.name AS "brandName",
@@ -1480,28 +1596,12 @@ export function createWorkersDatabase(env: Env): Database {
             OR (${state} = 'CONFIRMED' AND b.source IN ('USER_ADDED', 'CONFIRMED') AND b.supplier_id IS NOT NULL))
           AND (${group}::text IS NULL OR b.suggested_supplier_name = ${group})
         ORDER BY p.id ASC
-        LIMIT ${options.limit + 1}
+        LIMIT ${limit + 1}
       `) as Array<Record<string, unknown>>;
-      const hasMore = rows.length > options.limit;
-      const page = hasMore ? rows.slice(0, options.limit) : rows;
+      const hasMore = rows.length > limit;
+      const page = hasMore ? rows.slice(0, limit) : rows;
       return {
-        items: page.map((row) => ({
-          productId: Number(row.productId),
-          sku: String(row.sku ?? ''),
-          barcode: String(row.barcode ?? ''),
-          productName: String(row.productName ?? ''),
-          brand:
-            row.brandId == null
-              ? null
-              : {
-                  id: Number(row.brandId),
-                  name: String(row.brandName),
-                  manufacturerName: (row.manufacturerName as string | null) ?? null,
-                  suggestedSupplierName: (row.suggestedSupplierName as string | null) ?? null,
-                  supplierId: row.brandSupplierId == null ? null : Number(row.brandSupplierId),
-                  source: String(row.brandSource),
-                },
-        })),
+        items: mapBrandReviewRows(page),
         nextCursor: hasMore ? Number(page[page.length - 1]?.productId) : null,
       };
     },
@@ -1798,10 +1898,14 @@ export function createWorkersDatabase(env: Env): Database {
                s.id AS "supplier_id",
                s.name AS "supplier_name",
                s.contact_email AS "supplier_contact_email",
+               s.contact_phone AS "supplier_contact_phone",
                s.credit_policy_note AS "supplier_credit_policy_note",
                s.policy_write_off_qty AS "supplier_policy_write_off_qty",
                s.policy_credit_qty AS "supplier_policy_credit_qty",
-               s.follow_up_days AS "supplier_follow_up_days"
+               s.follow_up_days AS "supplier_follow_up_days",
+               s.representative_name AS "supplier_representative_name",
+               s.representative_email AS "supplier_representative_email",
+               s.policy_updated_at::text AS "supplier_policy_updated_at"
         FROM credit_claims cc
         JOIN suppliers s ON s.id = cc.supplier_id
         WHERE cc.organization_id = ${organizationId}
@@ -1917,6 +2021,7 @@ export function createWorkersDatabase(env: Env): Database {
             id: Number(row.supplier_id),
             name: String(row.supplier_name),
             contactEmail: (row.supplier_contact_email as string | null) ?? null,
+            contactPhone: (row.supplier_contact_phone as string | null) ?? null,
             creditPolicyNote: String(row.supplier_credit_policy_note ?? ''),
             policyWriteOffQty:
               row.supplier_policy_write_off_qty == null
@@ -1928,6 +2033,9 @@ export function createWorkersDatabase(env: Env): Database {
                 : Number(row.supplier_policy_credit_qty),
             followUpDays:
               row.supplier_follow_up_days == null ? 7 : Number(row.supplier_follow_up_days),
+            representativeName: (row.supplier_representative_name as string | null) ?? null,
+            representativeEmail: (row.supplier_representative_email as string | null) ?? null,
+            policyUpdatedAt: (row.supplier_policy_updated_at as string | null) ?? null,
           },
           lines: linesByClaim.get(claimId) ?? [],
           events: eventsByClaim.get(claimId) ?? [],

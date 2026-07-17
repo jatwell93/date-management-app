@@ -1,18 +1,22 @@
 import { Router, Response } from 'express';
 import multer from 'multer';
-import { AuthRequest, requireManager } from '../middleware/auth.middleware';
+import { AuthRequest } from '../middleware/auth.middleware';
 import { ValidationError } from '../errors';
 import { validateRequest } from '../middleware/validateRequest';
 import { standardLimiter } from '../middleware/rateLimiter';
 import {
   supplierCreateSchema,
   supplierUpdateSchema,
+  supplierPatchSchema,
+  bulkAttachPolicySchema,
+  bulkLinkProductsSchema,
   assignSupplierSchema,
   brandCreateSchema,
   brandSupplierSchema,
   correctionReviewSchema,
   claimCreateSchema,
   claimOutcomeSchema,
+  idParamSchema,
 } from '../schemas';
 import { createSupplierCreditController } from '../controllers/supplier-credit.controller';
 import { createCreditClaimController } from '../controllers/credit-claim.controller';
@@ -52,10 +56,10 @@ router.get('/suppliers', async (req: AuthRequest, res: Response, next) => {
   await createSupplierCreditController().listSuppliers(req, res, next);
 });
 
-// POST /supplier-credits/suppliers — create a supplier + policy. Manager/admin only.
+// POST /supplier-credits/suppliers — any authenticated user may create a bare supplier;
+// effective policy fields are admin-gated transactionally in the service.
 router.post(
   '/suppliers',
-  requireManager,
   standardLimiter,
   validateRequest(supplierCreateSchema),
   async (req: AuthRequest, res: Response, next) => {
@@ -63,14 +67,56 @@ router.post(
   },
 );
 
-// PUT /supplier-credits/suppliers/:id — update a supplier + policy. Manager/admin only.
+// PUT /supplier-credits/suppliers/:id — full replacement; the service permits ordinary
+// fields for any authenticated user and admin-gates effective policy changes.
 router.put(
   '/suppliers/:id',
-  requireManager,
   standardLimiter,
   validateRequest(supplierUpdateSchema),
+  validateRequest(idParamSchema),
   async (req: AuthRequest, res: Response, next) => {
     await createSupplierCreditController().updateSupplier(req, res, next);
+  },
+);
+
+router.patch(
+  '/suppliers/:id',
+  standardLimiter,
+  validateRequest(supplierPatchSchema),
+  validateRequest(idParamSchema),
+  async (req: AuthRequest, res: Response, next) => {
+    await createSupplierCreditController().patchSupplier(req, res, next);
+  },
+);
+
+router.delete(
+  '/suppliers/:id/policy',
+  standardLimiter,
+  validateRequest(idParamSchema),
+  async (req: AuthRequest, res: Response, next) => {
+    await createSupplierCreditController().clearSupplierPolicy(req, res, next);
+  },
+);
+
+router.get('/policy-review', async (req: AuthRequest, res: Response, next) => {
+  await createSupplierCreditController().listPolicyReview(req, res, next);
+});
+
+router.post(
+  '/policy-review/bulk-attach',
+  standardLimiter,
+  validateRequest(bulkAttachPolicySchema),
+  async (req: AuthRequest, res: Response, next) => {
+    await createSupplierCreditController().bulkAttachPolicy(req, res, next);
+  },
+);
+
+router.post(
+  '/brands/bulk-link',
+  standardLimiter,
+  validateRequest(bulkLinkProductsSchema),
+  async (req: AuthRequest, res: Response, next) => {
+    await createSupplierCreditController().bulkLinkProducts(req, res, next);
   },
 );
 

@@ -14,6 +14,13 @@ import type {
   Brand,
   BrandReviewPage,
   CatalogueReviewState,
+  CatalogueTitleMatch,
+  CatalogueTitleSort,
+  BulkAttachPolicyResult,
+  BulkLinkProductsInput,
+  BulkLinkProductsResult,
+  PolicyReviewItem,
+  PolicyStatus,
 } from '../types/supplierCredit';
 
 const BASE = '/supplier-credits';
@@ -24,8 +31,39 @@ export const getSuppliers = (token: string | null) =>
 export const createSupplier = (input: SupplierInput, token: string | null) =>
   apiService.post<Supplier>(`${BASE}/suppliers`, input, token ?? undefined);
 
-export const updateSupplier = (id: number, input: SupplierInput, token: string | null) =>
+export const updateSupplier = (id: number, input: Partial<SupplierInput>, token: string | null) =>
+  apiService.patch<Supplier>(`${BASE}/suppliers/${id}`, input, token ?? undefined);
+
+export const replaceSupplier = (id: number, input: SupplierInput, token: string | null) =>
   apiService.put<Supplier>(`${BASE}/suppliers/${id}`, input, token ?? undefined);
+
+export const clearSupplierPolicy = (id: number, token: string | null) =>
+  apiService.delete<Supplier>(`${BASE}/suppliers/${id}/policy`, token ?? undefined);
+
+export const getPolicyReview = (
+  token: string | null,
+  options: { brand?: string; supplier?: string; status?: PolicyStatus } = {},
+) => {
+  const query = new URLSearchParams();
+  if (options.brand) query.set('brand', options.brand);
+  if (options.supplier) query.set('supplier', options.supplier);
+  if (options.status) query.set('status', options.status);
+  const suffix = query.size > 0 ? `?${query.toString()}` : '';
+  return apiService.get<PolicyReviewItem[]>(`${BASE}/policy-review${suffix}`, token ?? undefined);
+};
+
+export const bulkAttachPolicy = (
+  input: { supplierId: number; brandIds: number[] },
+  token: string | null,
+) =>
+  apiService.post<BulkAttachPolicyResult>(
+    `${BASE}/policy-review/bulk-attach`,
+    input,
+    token ?? undefined,
+  );
+
+export const bulkLinkProducts = (input: BulkLinkProductsInput, token: string | null) =>
+  apiService.post<BulkLinkProductsResult>(`${BASE}/brands/bulk-link`, input, token ?? undefined);
 
 export const assignProductSupplier = (
   productId: number,
@@ -40,13 +78,32 @@ export const assignProductSupplier = (
 
 export const getBrandReview = (
   token: string | null,
-  options: { state?: CatalogueReviewState; group?: string; cursor?: number; limit?: number } = {},
+  options: {
+    state?: CatalogueReviewState;
+    group?: string;
+    cursor?: number;
+    limit?: number;
+    page?: number;
+    pageSize?: number;
+    title?: string;
+    titleMatch?: CatalogueTitleMatch;
+    sort?: CatalogueTitleSort;
+  } = {},
 ) => {
   const query = new URLSearchParams();
   if (options.state) query.set('state', options.state);
   if (options.group) query.set('group', options.group);
-  if (options.cursor != null) query.set('cursor', String(options.cursor));
-  query.set('limit', String(options.limit ?? 50));
+  const usesNumberedPagination = options.page != null || options.pageSize != null;
+  if (usesNumberedPagination) {
+    if (options.page != null) query.set('page', String(options.page));
+    if (options.pageSize != null) query.set('pageSize', String(options.pageSize));
+    if (options.title) query.set('title', options.title);
+    if (options.titleMatch) query.set('titleMatch', options.titleMatch);
+    if (options.sort) query.set('sort', options.sort);
+  } else {
+    if (options.cursor != null) query.set('cursor', String(options.cursor));
+    query.set('limit', String(options.limit ?? 50));
+  }
   return apiService.get<BrandReviewPage>(
     `${BASE}/brand-review?${query.toString()}`,
     token ?? undefined,

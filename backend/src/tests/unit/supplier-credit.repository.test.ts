@@ -132,3 +132,95 @@ describe('SupplierCreditRepository catalogue enrichment', () => {
     });
   });
 });
+
+describe('SupplierCreditRepository policy review', () => {
+  it('orders null policy timestamps first and then timestamp, brand name, and ID', async () => {
+    const rows = [
+      {
+        id: 3,
+        name: 'Zulu',
+        supplier: {
+          id: 1,
+          name: 'Maker',
+          creditPolicyNote: 'A',
+          policyUpdatedAt: new Date('2026-02-01'),
+          representativeName: null,
+        },
+      },
+      { id: 2, name: 'Beta', supplier: null },
+      {
+        id: 4,
+        name: 'Alpha',
+        supplier: {
+          id: 2,
+          name: 'Other',
+          creditPolicyNote: 'B',
+          policyUpdatedAt: new Date('2026-01-01'),
+          representativeName: 'Alex',
+        },
+      },
+      { id: 1, name: 'Alpha', supplier: null },
+    ];
+    const prisma = { brand: { findMany: vi.fn(async () => rows) } } as unknown as PrismaClient;
+    const repository = new SupplierCreditRepository(prisma);
+
+    const result = await repository.listPolicyReview('org-a', {});
+
+    expect(result.map((row) => row.brandId)).toEqual([1, 2, 4, 3]);
+    expect(result.map((row) => row.status)).toEqual(['MISSING', 'MISSING', 'ATTACHED', 'ATTACHED']);
+    expect(prisma.brand.findMany).toHaveBeenCalledWith({
+      where: { organizationId: 'org-a' },
+      include: { supplier: true },
+    });
+  });
+});
+
+describe('SupplierCreditRepository numbered catalogue review', () => {
+  it('filters before counting and returns deterministic page metadata', async () => {
+    const rows = [
+      {
+        id: 26,
+        sku: 'V-26',
+        barcode: 'BAR-26',
+        name: 'Vitamin C',
+        brand: null,
+      },
+    ];
+    const prisma = {
+      product: {
+        count: vi.fn(async () => 51),
+        findMany: vi.fn(async () => rows),
+      },
+    } as unknown as PrismaClient;
+    const repository = new SupplierCreditRepository(prisma);
+
+    const result = await repository.reviewBrands('org-a', {
+      page: 2,
+      pageSize: 25,
+      title: 'vita',
+      titleMatch: 'startsWith',
+      sort: 'titleDesc',
+    });
+
+    const where = {
+      organizationId: 'org-a',
+      AND: [{ name: { startsWith: 'vita' } }],
+    };
+    expect(prisma.product.count).toHaveBeenCalledWith({ where });
+    expect(prisma.product.findMany).toHaveBeenCalledWith({
+      where,
+      include: { brand: { include: { supplier: true } }, supplier: true },
+      orderBy: [{ name: 'desc' }, { id: 'asc' }],
+      skip: 25,
+      take: 25,
+    });
+    expect(result).toMatchObject({
+      items: [{ productId: 26, productName: 'Vitamin C' }],
+      page: 2,
+      pageSize: 25,
+      totalItems: 51,
+      totalPages: 3,
+      nextCursor: null,
+    });
+  });
+});
