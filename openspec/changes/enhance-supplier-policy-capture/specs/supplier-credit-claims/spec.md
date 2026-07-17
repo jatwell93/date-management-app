@@ -120,7 +120,9 @@ status of attached or missing determined by whether the resolved supplier has st
 policy-updated timestamp, and the representative name. The read SHALL support filtering by brand,
 supplier, and policy status, and SHALL support sorting by policy-updated time oldest first so stale or
 missing policies can be prioritized. An admin SHALL be able to attach one existing supplier's policy to
-multiple brands in a single action, applying immediately within the organization. Bulk-attach SHALL
+multiple brands in a single action and SHALL be able to create a new policy-bearing supplier before
+attaching it to those selected brands. The create flow SHALL use the same supplier policy validation
+and authorization as other supplier creation. Bulk-attach SHALL
 require the chosen supplier to already have store instructions and SHALL reject an attempt to attach a
 supplier that has none. Bulk-attach SHALL apply atomically — every selected brand is attached or none
 is — and SHALL return a summary of how many brands were attached. Rows SHALL be ordered
@@ -155,6 +157,20 @@ enforced.
 - **THEN** the request is rejected as invalid
 - **AND** none of the selected brands are changed
 
+#### Scenario: Creating a supplier and attaching it to selected brands
+
+- **GIVEN** an admin has selected several brands and no suitable supplier exists
+- **WHEN** the admin creates a valid policy-bearing supplier and continues the attach action
+- **THEN** the new supplier is created through the standard supplier policy rules
+- **AND** every selected brand is atomically attached to that supplier
+
+#### Scenario: Attachment failure after supplier creation is recoverable
+
+- **GIVEN** a valid supplier has been created from the bulk-attach workflow
+- **WHEN** the subsequent atomic brand attachment fails
+- **THEN** none of the selected brands are changed
+- **AND** the created supplier remains selected so the admin can retry without re-entering it
+
 ### Requirement: A SKU matching view highlights unmatched SKUs and supports bulk-link
 
 The system SHALL present a SKU-level matching view listing each product's SKU, product name, brand
@@ -167,7 +183,11 @@ reject an oversized request, and SHALL return a summary reporting how many produ
 versus already linked rather than failing when some selected products already reference the brand.
 The request SHALL identify exactly one existing brand ID or new brand name. If any selected product is
 linked to a different brand, the system SHALL return 409 and roll back the entire request; products
-already linked to the target brand SHALL be reported as no-ops.
+already linked to the target brand SHALL be reported as no-ops. The view SHALL use server-backed
+numbered pagination with filtered totals rather than append-only loading. It SHALL support a
+case-insensitive product-name filter with `starts with` and `contains` modes and product-name A-Z and
+Z-A ordering. Equal product names SHALL use product ID as a deterministic tie-breaker. Existing cursor
+callers SHALL remain compatible.
 
 #### Scenario: Unmatched SKUs are distinguished
 
@@ -202,3 +222,25 @@ already linked to the target brand SHALL be reported as no-ops.
 - **WHEN** the request is submitted
 - **THEN** it is rejected as invalid
 - **AND** no products are linked
+
+#### Scenario: Numbered pagination describes the filtered catalogue
+
+- **GIVEN** an organization catalogue containing more products than one configured page
+- **WHEN** the user opens a numbered catalogue page
+- **THEN** only that page's rows are returned
+- **AND** the response reports the filtered total item and page counts
+- **AND** first, previous, numbered, next, and last navigation reflects those counts
+
+#### Scenario: Product titles are filtered and ordered server-side
+
+- **GIVEN** catalogue product names with mixed case and duplicate titles
+- **WHEN** the user chooses `starts with` or `contains`, enters title text, and chooses A-Z or Z-A
+- **THEN** matching is case-insensitive and applied before pagination
+- **AND** rows are ordered by product name in the requested direction and then product ID ascending
+
+#### Scenario: A filter change cannot leave hidden bulk selections
+
+- **GIVEN** the user has selected SKU rows across numbered pages
+- **WHEN** the user changes the title, match mode, ordering, catalogue state, or page size
+- **THEN** the view returns to page 1
+- **AND** selections hidden by the new result set are cleared

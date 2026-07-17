@@ -115,3 +115,31 @@
 - [x] 10.4 Run focused shared, Worker, frontend, lint, typecheck, and strict OpenSpec verification.
       Local `cs delta` was blocked by tenant policy prohibiting external diff export; rely on the
       existing PR bot to rescan after push.
+
+## 11. Supplier-to-brand workflow and catalogue navigation follow-up
+
+- [x] 11.1 Lock the reuse and public-contract decisions in proposal, design, specification, and tasks:
+      extend Policy Review rather than adding a supplier-management surface; retain legacy cursor
+      callers; define page metadata, case-insensitive title matching, deterministic ordering, and
+      selection-reset behavior.
+- [ ] 11.2 Express RED/GREEN: add repository, service, and route tests for one-based `page`, bounded
+      `pageSize`, filtered totals, `contains` / `startsWith`, A-Z / Z-A ordering with ID tie-breaks,
+      invalid query values, org isolation, and cursor compatibility; then extend the existing
+      `reviewBrands` route/service/repository path.
+- [ ] 11.3 Worker parity RED/GREEN: cover the same query validation and response metadata in
+      `workers/src/minimal-api-routes.test.ts`, then update the existing handler/database query and
+      add SQLite/Postgres conformance for filters, totals, page boundaries, and stable ordering.
+- [ ] 11.4 Policy Review frontend RED/GREEN: test an admin creating a policy-bearing supplier from the
+      selected-brand attach area, reusing `SupplierPolicyFields`, standard `403` / `422` handling,
+      `createSupplier`, and `bulkAttachPolicy`; verify non-admin controls remain absent and a failed
+      attach retains the created supplier for retry.
+- [ ] 11.5 Catalogue frontend RED/GREEN: replace "Load more" with first/previous/numbered/next/last
+      controls and `x–y of n`; add compact title, match-mode, A-Z/Z-A, and page-size controls; reset to
+      page 1 and clear hidden selections when result-shaping controls change while preserving visible
+      selections across page navigation up to 500.
+- [ ] 11.6 Refactor shared catalogue query/response types without creating a second review service;
+      run focused backend, Worker, dual-backend, frontend, accessibility, and desktop/mobile Browser
+      QA including 500-, 5,000-, empty-result, last-page, and filter-reset cases.
+- [ ] 11.7 Run `rtk lint`, affected `rtk vitest run` suites, worker integration/conformance,
+      `rtk tsc`, frontend/Worker builds, `doppler run -- cs delta` (or record the tenant-policy block),
+      and strict OpenSpec validation before marking this follow-up complete.

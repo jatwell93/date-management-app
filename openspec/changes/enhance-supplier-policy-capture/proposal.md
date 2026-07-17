@@ -71,12 +71,15 @@ Decisions locked with the product owner:
 - **Supplier Policy Review Dashboard (read + bulk):** per-brand rows with supplier name, policy status
   (Attached / Missing), `policyUpdatedAt`, and representative. Filter by brand / supplier / policy
   status; sort by last-updated (oldest first). Bulk-attach an existing supplier's policy to multiple
-  brands (admin-only).
+  brands, or create a new policy-bearing supplier and then attach it to the selected brands
+  (admin-only).
 - **Deterministic review order:** null policy timestamps first, followed by timestamp, brand name, and
   brand ID. Existing non-empty policies are backfilled from supplier `updatedAt`.
 - **SKU-Brand-Supplier Matching View (extend `CatalogueReviewPanel`):** SKU-level table with
   matched/unmatched brand and policy-attached/missing columns, unmatched highlighting, group-by-brand,
-  manual single-link, and bulk-link of many SKUs to one brand (emitting the #358 corrections).
+  manual single-link, and bulk-link of many SKUs to one brand (emitting the #358 corrections). Replace
+  the frontend's append-only "Load more" interaction with server-backed numbered pagination and add a
+  compact product-title filter (`startsWith` / `contains`) plus A-Z / Z-A ordering.
 - **Endpoints (backend + worker parity):** extended supplier create/update carrying the new fields
   with admin gating and policy validation; a policy-review read (brands + policy status + last
   updated); a bulk-link SKUs-to-brand write; a bulk-attach-policy write. All org-scoped, org from auth
@@ -93,14 +96,19 @@ Decisions locked with the product owner:
 This change **modifies** #356's "Suppliers carry a reusable credit policy" requirement (adds
 representative, phone, markdown instructions, `policyUpdatedAt`, admin gating, policy-authoring
 validation) and **adds** the policy-review dashboard, the SKU matching view, and bulk-link. It does
-**not** touch the claim lifecycle, sending, reminders, photos, recovery reporting, the master
-catalogue, or the correction-review authorization from #358 — those consume supplier resolution
-unchanged.
+**not** touch the claim lifecycle, sending, reminders, photos, recovery reporting, catalogue master
+data writes, or the correction-review authorization from #358. The follow-up only extends the
+existing catalogue-review read contract with pagination, title filtering, and ordering.
 
 ## Reuse Strategy
 
 - **Extend `CatalogueReviewPanel`** for the SKU matching view; reuse its brand-add + correction calls
   for bulk-link rather than a parallel surface.
+- **Extend `PolicyReviewPanel`** for the reverse supplier-to-brand workflow. Reuse
+  `SupplierPolicyFields`, `supplierPolicyDraft` / `supplierPolicyInput`, `createSupplier`, and the
+  existing atomic `bulkAttachPolicy` call; do not add a second supplier form or assignment endpoint.
+- **Extend `reviewBrands` in place** in Express and Worker. Preserve the existing cursor/limit request
+  shape for compatibility while the frontend adopts the additive page/page-size response metadata.
 - **Reuse the claimable-pool / brand rollup** for policy status (a brand's policy is its resolved
   supplier's `creditPolicyNote` non-empty) — no new resolution logic; a shared
   `hasPolicy(supplier)` / `brandPolicyStatus` helper in `shared/domain/*` keeps Worker SQL and Express
@@ -145,3 +153,6 @@ unchanged.
    validation + org-scoping tests; frontend dialogue + dashboard + matching-view tests.
 7. Completion: lint, affected tests, `tsc`,
    `npx openspec validate enhance-supplier-policy-capture --strict`.
+8. Follow-up: add create-then-attach to Policy Review; add dual-backend numbered catalogue pagination,
+   case-insensitive product-title matching, deterministic A-Z/Z-A ordering, and compact frontend
+   controls with focused regression and Browser QA coverage.

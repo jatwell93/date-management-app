@@ -169,6 +169,22 @@ POST /supplier-credits/policy-review/bulk-attach
     → { attached: n, unchanged: n, corrections: n } # atomic; 422 if supplier has no instructions
 ```
 
+### Create a supplier, then attach it to brands
+
+The admin bulk-attach area also offers **New supplier**. It opens the existing supplier-policy fields
+plus the supplier name, creates the policy-bearing supplier through
+`POST /supplier-credits/suppliers`, selects the returned supplier ID, and calls the existing atomic
+`POST /supplier-credits/policy-review/bulk-attach` operation for the selected brand IDs. This is a
+deliberate two-step workflow rather than a new combined endpoint: supplier creation and policy
+validation already have one canonical implementation, while brand attachment already has one atomic,
+org-scoped implementation.
+
+If supplier creation fails, no attachment request is sent and the existing inline `403` / `422`
+handling remains visible. If creation succeeds but attachment fails, the valid supplier is retained,
+the selected brands remain unchanged by the atomic attach operation, and the UI keeps the supplier
+selected so the admin can retry. Non-admins continue to see the review data without create or attach
+controls.
+
 ## SKU-Brand-Supplier Matching View (extends `CatalogueReviewPanel`)
 
 SKU-level table: SKU, product name, brand (Matched / **Unmatched** — red highlight),
@@ -191,6 +207,36 @@ request.
 
 The panel keeps its current brand-review mode; the SKU table is an additional mode/tab, not a
 replacement.
+
+### Numbered catalogue pagination and title controls
+
+The existing cursor contract remains available to callers that send `cursor` / `limit`. The Supplier
+Credits frontend switches to an additive page contract:
+
+```
+GET /supplier-credits/brand-review
+    ?page=1&pageSize=50
+    &title=vitamin&titleMatch=contains|startsWith
+    &sort=titleAsc|titleDesc
+    &state=NEEDS_BRAND|PENDING_CONFIRMATION|CONFIRMED
+    &group=
+    → { items, page, pageSize, totalItems, totalPages, nextCursor }
+```
+
+- `page` is one-based; `pageSize` is capped at 100. The UI offers 25, 50, and 100 rows.
+- `title` is trimmed and matched case-insensitively against the product name. Empty input means no
+  title filter. `titleMatch` defaults to `contains`; unsupported values are rejected.
+- `sort` defaults to `titleAsc`. Both directions use product ID ascending as the deterministic
+  tie-breaker so page boundaries cannot duplicate equal titles.
+- Express and Worker apply the organization, catalogue state, group, and title predicates before
+  counting and paging. `totalItems` and `totalPages` therefore describe the filtered result, not the
+  whole tenant catalogue.
+- Changing title, match mode, sort, catalogue state, or page size returns the UI to page 1. Page
+  navigation preserves selected SKU IDs up to the existing 500-item cap; changing a filter clears
+  hidden selections. The current page displays `x–y of n` with first/previous/numbered/next/last
+  controls.
+- Both catalogue modes consume the same page. Brand grouping remains a presentation concern for the
+  rows on that page; no second catalogue query is introduced.
 
 ## Frontend dialogue changes
 
@@ -228,6 +274,10 @@ expansion).
    #358 brand-add / correction plumbing and drift.
 6. **Validation server-authoritative, mirrored on client.** _Rejected:_ client-only validation — trust
    boundary; both backends enforce it.
+7. **Create then reuse the existing attach operation.** _Rejected:_ a combined create-and-attach API —
+   it would duplicate supplier validation and brand-assignment orchestration for a small UI workflow.
+8. **Numbered pagination is server-backed.** _Rejected:_ slicing an ever-growing browser array — it
+   still downloads thousands of catalogue rows and makes filtered totals misleading.
 
 ## Dual-backend parity (golden rules 5 & 6)
 
