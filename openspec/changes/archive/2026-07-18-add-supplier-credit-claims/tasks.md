@@ -51,11 +51,12 @@
 
 - [x] 4.1 Claimable-pool query `getClaimablePool` in `workers/src/database.ts` (Neon SQL → shared
       `rollupClaimablePool`), proven identical to the SQLite backend by the 2.6 conformance test.
-- [ ] 4.2 **DEFERRED** — write-side worker handlers (supplier CRUD, claim build/send/outcome/
-      follow-up, photos) + routes in `workers/src/index.ts`. The backend Express router can't be
-      registered as-is (it imports `multer` for photos, which won't bundle in Workers); these need
-      Workers-native handlers (Resend via fetch is fine; photos need R2 bindings). Read-side pool +
-      conformance landed; write-side is a follow-up before production deploy.
+- [x] 4.2 **MOVED** to follow-up change `add-workers-credit-claim-write-handlers` — write-side worker
+      handlers (supplier CRUD, claim build/send/outcome/follow-up, photos) + routes in
+      `workers/src/index.ts`. The backend Express router can't be registered as-is (it imports
+      `multer` for photos, which won't bundle in Workers); these need Workers-native handlers (Resend
+      via fetch is fine; photos need R2 bindings). Read-side pool + conformance landed here;
+      write-side tracked in the follow-up change before production deploy.
 - [x] 4.3 Worker db conformance test (pglite vs SQLite) for the claimable pool — see 2.6.
 
 ## 5. Scheduled jobs
