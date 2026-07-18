@@ -16,18 +16,19 @@
 const { execSync } = require('child_process');
 const path = require('path');
 
-// Load environment variables from .env file
-const envPath = path.join(__dirname, '..', '.env');
-require('dotenv').config({ path: envPath, override: true });
-
-// Ensure all common Gemini/Google environment variables are set and exported
-const apiKey = process.env.GEMINI_API_KEY || process.env.GOOGLE_API_KEY || process.env.MEMVID_TOKEN;
-if (apiKey) {
-  process.env.GEMINI_API_KEY = apiKey;
-  process.env.GOOGLE_API_KEY = apiKey;
-  // console.log(`[DEBUG] Key found in .env (length: ${apiKey.length})`);
-} else {
-  console.warn('[WARN] No Gemini API key found in .env or environment');
+// Recall runs offline lexical search (`--mode lex`) and needs no credentials, so we do
+// NOT load .env by default. Only when an explicit remote/embedding mode is requested
+// (MEM_RECALL_REMOTE=1) do we pull a key from the existing environment — never from .env.
+const REMOTE_MODE = process.env.MEM_RECALL_REMOTE === '1';
+if (REMOTE_MODE) {
+  const apiKey =
+    process.env.GEMINI_API_KEY || process.env.GOOGLE_API_KEY || process.env.MEMVID_TOKEN;
+  if (apiKey) {
+    process.env.GEMINI_API_KEY = apiKey;
+    process.env.GOOGLE_API_KEY = apiKey;
+  } else {
+    console.warn('[WARN] MEM_RECALL_REMOTE=1 set but no Gemini/Google key in environment');
+  }
 }
 
 const MEMORY_FILE = path.join(__dirname, '..', 'project-memory.mv2');
