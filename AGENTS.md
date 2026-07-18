@@ -49,7 +49,7 @@ SKILLs should be used when the work needs specific knowledge that a skill or age
 - **No Mock Data**: Never fake/simulated data in production; test fixtures are OK
 - **No Secrets**: Never hardcode API keys, passwords, or credentials
 - **TDD Mandatory**: Tests written before production code
-- **Code Quality**: Must pass `npm run lint`, `npm test`, and `doppler run -- cs delta`
+- **Code Quality**: Must pass `npm run lint` and the component test gate for what you touched — `npm run test:backend:diff` and/or `npm run test:frontend:diff` (the bare `npm test` at the repo root deliberately errors and is not a valid gate). `doppler run -- cs delta` is a separately authorized provider check, not part of the local loop.
 - **Task Tracking**: Use OpenSpec workflows for ALL work —- no outside markdown TODOs files
 
 ---
@@ -290,13 +290,13 @@ async function activateUser(user: User): Promise<User> {
 
 ### Project Structure
 
-Use `codemap` for a quick check of the project structure:
+Use `codemap` for a quick check of the project structure. Prefer scoping to the component you're touching — a full-root `codemap .` on this repo produces 1,700+ lines and is rarely worth it at startup:
 
 ```bash
-codemap .               # Project structure
-codemap --deps .        # How files connect
-codemap --diff          # What changed vs main
+codemap backend         # Scope to one component (backend | frontend | workers)
+codemap --diff          # What changed vs main (best default for routine work)
 codemap --diff --ref branch  # Changes vs specific branch
+codemap .               # Full project structure — only when you genuinely need the whole map
 ```
 
 Other useful commands
@@ -309,54 +309,14 @@ codemap serve      # HTTP API for non-MCP integrations
 
 ### Agentlens Integration
 
-This project uses **agentlens** for AI-optimized documentation.
+This project uses **agentlens** for AI-optimized documentation. Route through it before reading source:
 
-#### Reading Protocol
+1. `.agentlens/INDEX.md` — global routing table (start here)
+2. `.agentlens/AGENT.md` — full reading protocol, doc structure, commands, and key patterns (canonical — do not duplicate here)
+3. `.agentlens/modules/{module}/MODULE.md` — module file lists and entry points
+4. `.agentlens/modules/{module}/memory.md` — warnings/TODOs to check **before editing**
 
-Follow this order to understand the codebase efficiently:
-
-1. **Start here**: `.agentlens/INDEX.md` - Project overview and module routing
-2. **AI instructions**: `.agentlens/AGENT.md` - How to use the documentation
-3. **Module details**: `.agentlens/modules/{module}/MODULE.md` - File lists and entry points
-4. **Before editing**: Check `.agentlens/modules/{module}/memory.md` for warnings/TODOs
-
-## Documentation Structure
-
-```
-.agentlens/
-├── INDEX.md              # Start here - global routing table
-├── AGENT.md              # AI agent instructions
-├── modules/
-│   └── {module-slug}/
-│       ├── MODULE.md     # Module summary
-│       ├── outline.md    # Symbol maps for large files
-│       ├── memory.md     # Warnings, TODOs, business rules
-│       └── imports.md    # Dependencies
-└── files/                # Deep docs for complex files
-```
-
-## During Development
-
-- Use `.agentlens/modules/{module}/outline.md` to find symbols in large files
-- Check `.agentlens/modules/{module}/imports.md` for dependencies
-- For complex files, see `.agentlens/files/{file-slug}.md`
-
-## Commands
-
-| Task                       | Command                 |
-| -------------------------- | ----------------------- |
-| Regenerate docs            | `agentlens`             |
-| Fast update (changed only) | `agentlens --diff main` |
-| Check if stale             | `agentlens --check`     |
-| Force full regen           | `agentlens --force`     |
-
-## Key Patterns
-
-- **Module boundaries**: `mod.rs` (Rust), `index.ts` (TS), `__init__.py` (Python)
-- **Large files**: >500 lines, have symbol outlines
-- **Complex files**: >30 symbols, have L2 deep docs
-- **Hub files**: Imported by 3+ files, marked with 🔗
-- **Memory markers**: TODO, FIXME, WARNING, SAFETY, RULE
+Regenerate with `agentlens` (or `agentlens --diff main` for a fast changed-only update); check staleness with `agentlens --check`.
 
 ## 3. Session Startup Context
 
@@ -365,7 +325,7 @@ Follow this order to understand the codebase efficiently:
 **Every Session (Mandatory):**
 
 1. Load AGENTS.md
-2. Run `git standup -d 7` and check the project's commits over the past seven (7) days
+2. Run `git log -5 --oneline` for recent context (use `git standup -d 7` only when you need a deeper history sweep)
 3. Identify environment (development/test/staging/production)
 
 **Quick Bug Fix (< 30 min):**
@@ -416,7 +376,7 @@ Before starting work, clarify:
 **In:** Task contract / Feature request **Out:** Validated OpenSpec Proposal **Exit:** User approves proposal files
 **Actions:**
 
-1.  **Search Memory (REQUIRED):** Run `node scripts/mem-recall.js "<task keywords>"` to find similar patterns, past solutions, or related work
+1.  **Search Memory (when relevant):** For non-trivial changes, run `node scripts/mem-recall.js "<task keywords>"` to find similar patterns, past solutions, or related work. Recall is offline lexical search — skip it for pure docs/read-only tasks, and do not block on it if the index is unavailable.
 2.  Choose a concise `change-id` (e.g., `add-user-validation`).
 3.  Run: `openspec proposal <change-id>`.
 4.  Edit `openspec/changes/<change-id>/proposal.md` with analysis, reuse strategy, and implementation steps.
@@ -464,8 +424,8 @@ Before starting work, clarify:
 1. **Codemap:** Use codemap commands for context of project structure:
 
 ```bash
-codemap .               # Project structure
-codemap --deps          # How files connect
+codemap <component>     # Scope to backend | frontend | workers
+codemap --diff          # What changed vs main
 ```
 
 2.  **Read Tasks:** Review `openspec/changes/<change-id>/tasks.md`.
@@ -503,7 +463,7 @@ export const usersService = {
   },
 };
 
-// Verify: npm test (should now pass)
+// Verify: npm run test:backend:diff (or test:frontend:diff) — should now pass
 ```
 
 **Exit:** Tests pass (`npm run test:frontend:diff` or `npm run test:backend:diff`), linter clean, `tasks.md` fully checked `[x]`.
@@ -685,20 +645,24 @@ export const usersService = {
 Before marking task complete, run all (must pass):
 
 ```bash
-# Run all tests
-npm run test:coverage                     # Expected: high level of quality coverage
+# Run the coverage suite for the component(s) you changed
+npm run test:backend:coverage             # backend changes
+npm run test:frontend:coverage            # frontend changes
+npm run test:db                           # worker DB changes (real-SQL via pglite)
 
-# Run linter with auto-fix
-npm run lint                              # Expected: exit code 0 or only minor
+# Lint (root ESLint covers all packages)
+npm run lint                              # Expected: exit code 0
 
-# Check TypeScript compilation
-npm run build                             # Expected: exit code 0
-# OR
-tsc --noEmit
+# Type-check / build the affected component
+npm run build:frontend                    # frontend
+npm run build:workers                     # workers
+npm run compile                           # root tsc
 
 # Validate OpenSpec changes
 openspec validate --all                   # Expected: exit code 0
 ```
+
+> There is no root `npm test`, `npm run test:coverage`, or `npm run build`. Always use the component-scoped scripts above (see `package.json`).
 
 ---
 
@@ -767,9 +731,9 @@ node scripts/mem-recall.js "authentication"
 
 ## Memvid Memory Protocol
 
-### REQUIRED: Before Starting Work
+### Before Starting Work (when relevant)
 
-Run `node scripts/mem-recall.js "<task keywords>"` to check for relevant project context.
+For non-trivial changes, run `node scripts/mem-recall.js "<task keywords>"` to check for relevant project context. This is offline lexical search and needs no credentials — skip it for pure docs/read-only work and don't block on it if the index is missing.
 
 ### REQUIRED: Automatic Storage Triggers
 
