@@ -824,6 +824,19 @@ Contrary to the original framing of #291, the Jest 30 upgrade does **not** clear
 | -------- | ------ | ---------------- |
 | Backend | Replaced Jest with Vitest (v8 coverage); dropped `jest` / `ts-jest` / `@types/jest` (247 transitive packages removed) | `@jest/*`, `babel-plugin-istanbul`, `@istanbuljs/load-nyc-config`, and the dev/test `js-yaml <= 4.1.1` they pulled in are **gone**. `npm audit` for `/backend` drops from 19 → 1; the only remaining advisory is the pre-existing `xlsx` runtime risk (below). This is the change that closes the backend Jest-toolchain accepted-risk row. |
 
+**2026-07-19** — Triaged the backlog of 32 open Dependabot PRs by package boundary (no advisories were outstanding beyond the accepted risks below; this was routine version hygiene, not remediation). All bumps were validated as npm-registry-sourced, so the supply-chain source policy was never at risk — the only concern was breakage from major version jumps.
+
+- **Closed as superseded (2):** root `wrangler` #212 (target 4.103.0 < shipped 4.105.0) and workers `esbuild` #163 (target 0.28.0 < shipped 0.28.1) — merging either would have been a downgrade.
+- **Safe batch — approved for squash auto-merge (registry-sourced dev/type/tooling, no runtime code paths):** backend `@types/csv-parse` #200, `@types/supertest` #203, `@types/sqlite3` #196; frontend `@types/jwt-decode` #160, `@types/uuid` #157; workers `@types/bcryptjs` #156, `cross-env` #176, `wrangler` #211, `@cloudflare/vitest-pool-workers` #208; root `globals` #278; the `github-actions` group #362. The `@types/node` → 26 bumps for root #277 and backend #289 were each **locally `tsc`-verified clean** before auto-merge was enabled.
+- **Deferred (left open with per-PR remediation notes):**
+  - `@types/node` → 26 for **frontend #285** (fails local `tsc` — TypeScript 4.9.5 cannot parse Node-26 `.d.ts`; coupled to the frontend TS upgrade #152) and **workers #276** (fails the `bundle-size` gate's typecheck/build). Their green PR-level CI was misleading because those boundaries' merge gates do not run `tsc`; the failure only surfaced under a local typecheck.
+  - Runtime majors requiring code changes + focused tests: `rate-limiter-flexible` 8→11 #286 (security control), `stripe` 13→22 #283, `@prisma/client` + `prisma` 5→7 #183/#153 (must move as a pair), `web-vitals` 2→5 #287 (`getCLS`→`onCLS`/`onINP`).
+  - Tooling majors requiring coordinated migration: `eslint` 8→10 group #279/#170/#288/#178 (flat-config migration across boundaries) and `typescript` → 6 group #159/#198/#166/#152.
+
+| Boundary | Change | Outcome |
+| -------- | ------ | ------- |
+| root / backend / frontend / workers / actions | Closed 2 stale PRs; approved ~11 dev/type/tooling bumps for auto-merge; deferred 15 major-version PRs with tracked remediation notes | `npm run security:npm-supply-chain` passes; `npm audit` unchanged — only the documented `xlsx` (backend/frontend) and `quagga` (frontend) accepted risks remain, root/workers clean. Open Dependabot count reduced 32 → 15 (the deferred majors), each with a documented next step. |
+
 ### Accepted Dependency Risks
 
 | Package area | Current status | Mitigation |
