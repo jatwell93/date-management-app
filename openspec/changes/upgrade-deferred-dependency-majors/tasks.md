@@ -6,11 +6,13 @@ boundary tests green, `npm run security:npm-supply-chain` passes, `npm audit` sh
 
 ## 1. Wave 1 — small, isolated runtime bumps
 
-- [ ] 1.1 **web-vitals 2→5** (frontend, #287). Bump `web-vitals ^2.1.4 → ^5.3.0` (lockfile-only).
+- [x] 1.1 **web-vitals 2→5** (frontend, #287). Bump `web-vitals ^2.1.4 → ^5.3.0` (lockfile-only).
       Migrate the reporting code: `getCLS/getFID/getFCP/getLCP/getTTFB` → `onCLS/onINP/onFCP/onLCP/onTTFB`;
       replace FID with **INP** (FID is removed in v5). Grep for `web-vitals` imports and `reportWebVitals`.
-- [ ] 1.2 web-vitals verify: frontend `vitest run`, `tsc --noEmit`, `vite build`; confirm the metric
-      callback still fires (unit or manual). Verify (supply-chain + audit + log).
+      Done: `frontend/src/reportWebVitals.ts` migrated (`ReportHandler` type → `(metric: Metric) => void`).
+- [x] 1.2 web-vitals verify: frontend `vitest run` (clerk-setup incl. reportWebVitals mock), `tsc --noEmit`,
+      `vite build` all green; `security:npm-supply-chain` passes; frontend `npm audit` unchanged (only
+      `xlsx`/`quagga`). Remediation-log row deferred to PR-merge time.
 - [ ] 1.3 **rate-limiter-flexible 8→11** (backend, #286). Bump `^8.3.0 → ^11.2.0` (lockfile-only).
       Diff the v9/v10/v11 changelogs for constructor option renames and `consume()`/`RateLimiterRes`
       shape changes; update `backend/src/middleware/rateLimiter.ts` (and any store adapter) accordingly.
