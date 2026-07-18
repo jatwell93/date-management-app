@@ -46,7 +46,7 @@
     "@types/node": "^20.19.41",
     "@vitest/coverage-istanbul": "^4.1.7",
     "@vitest/coverage-v8": "^4.1.7",
-    "cross-env": "^7.0.3",
+    "cross-env": "^10.1.0",
     "esbuild": "^0.28.1",
     "typescript": "^5.3.3",
     "vitest": "^4.1.7",
