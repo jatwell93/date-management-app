@@ -45,9 +45,14 @@ boundary tests green, `npm run security:npm-supply-chain` passes, `npm audit` sh
       `bundle-size` gate is unaffected. Supply-chain policy passes; root/workers audit 0 vulns, backend
       audit unchanged (only the accepted `xlsx` highs). typescript-eslint estree 8.62.0 supports TS
       `<6.1.0`, so 6.0.3 is compatible with the existing eslint 8 toolchain (no Wave 2a→2b conflict).
-- [ ] 2.3 **TS 6 for frontend** (#152, `^4.9.5 → ^6.0.3` — a two-major jump). Expect the largest
-      diagnostic set (React types, JSX). Run `tsc --noEmit` + `vite build` + frontend `vitest run`.
-      This is the prerequisite for 2.6. Verify.
+- [x] 2.3 **TS 6 for frontend** (#152, `^4.9.5 → ^6.0.3` — a two-major jump). Bumped clean: the only
+      source change was `ignoreDeprecations "5.0" → "6.0"` (covers the TS 6 `baseUrl` + `moduleResolution:
+      node10` deprecations). `tsc --noEmit` clean — the anticipated React/JSX diagnostic set did not
+      materialise (codebase already strict + React 19 types); no `rootDir` TS6059 either (frontend config
+      has no `outDir`, so containment isn't enforced over the `../shared` include). `vite build` green;
+      `vitest run` 546/546 (one 501-item bulk-select test timed out only under full-suite parallelism —
+      passes in 8.5s in isolation). Supply-chain passes; frontend audit unchanged (8 pre-existing accepted
+      quagga-chain + xlsx advisories, identical to main). Prerequisite for 2.6 now satisfied.
 
 ### 2b. ESLint 8→10 (flat-config migration — land as ONE change)
 
