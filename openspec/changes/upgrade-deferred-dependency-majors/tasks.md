@@ -66,10 +66,15 @@ boundary tests green, `npm run security:npm-supply-chain` passes, `npm audit` sh
 
 ### 2c. Unblock the typecheck-gated @types/node PRs
 
-- [ ] 2.6 After 2.3 lands, re-enable **frontend `@types/node` #285** (→26.1.1): confirm `tsc --noEmit`
-      is clean under TS 6 (previously failed on TS 4.9 parsing Node-26 `.d.ts`), then merge. Verify.
-- [ ] 2.7 After 2.1 lands, re-check **workers `@types/node` #276** (→26.1.0): confirm the `bundle-size`
-      gate passes (typecheck + build), then merge. Verify.
+- [x] 2.6 **frontend `@types/node` → 26.1.1** (#285). `tsc --noEmit` clean under TS 6 (the TS 4.9 parse
+      failure on Node-26 `.d.ts` is gone). `vite build` + `vitest` unaffected. Landed together with 2.7.
+- [x] 2.7 **workers `@types/node` → 26.1.1** (#276). `bundle-size` path (typecheck + `build:types` +
+      esbuild `build`) green; `test:db` 70/71 (1 skipped). Node-26 tightened `URLSearchParams` iterator
+      types (added `[Symbol.dispose]`), which clashed with `@cloudflare/workers-types`' `URL` in the
+      node-typed test config — fixed by importing `URL` from `node:url` in the three
+      `*.conformance.node.test.ts` files (runtime-identical to the global). Supply-chain passes; workers
+      audit 0, frontend audit unchanged. `undici-types` transitive moved 6.21→8.3 (it is `@types/node`'s
+      own dep).
 
 ## 3. Wave 3 — highest blast radius (see design.md)
 
