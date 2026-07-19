@@ -159,8 +159,20 @@ boundary tests green, `npm run security:npm-supply-chain` passes, `npm audit` sh
 
 ## 4. Completion
 
-- [ ] 4.1 All 13 deferred PRs + #285/#276 merged or explicitly re-deferred with a recorded reason.
-- [ ] 4.2 Final sweep: `npm run security:npm-supply-chain` + `npm audit` across all four boundaries;
-      confirm only `xlsx`/`quagga` remain.
-- [ ] 4.3 `docs/security.md` remediation log updated per wave.
-- [ ] 4.4 `npx openspec validate upgrade-deferred-dependency-majors --strict`.
+- [x] 4.1 All 13 deferred PRs + #285/#276 reconciled. **Merged/done:** web-vitals #287, rate-limiter
+      #286 (removed as dead dep), TS 6 #159/#198/#166/#152, react-hooks #178, `@types/node` #285/#276,
+      stripe #283 (PR #372), prisma #183/#153 landed at **6** (PR #373). **Still deferred with recorded
+      reasons (left open):** ESLint 10 #279/#170/#288 (upstream-blocked — `eslint-plugin-react` uses the
+      removed `getFilename()`; ESLint 9 is the max viable version and delivered the flat-config migration)
+      and Prisma 7 #183/#153 (ORM re-architecture needing ESM + driver adapters vs this CJS/tsyringe/SWC
+      backend; landed 6 as the safe step). Reasons captured in the 2b/3b notes above and the 2026-07-20
+      `docs/security.md` remediation-log entry. (The remaining open PRs — #362/#284/#203/#200/#196/#157 —
+      are the 2026-07-19 triage's Tier-A safe dev/type/tooling batch, out of scope for this deferred-
+      majors change.)
+- [x] 4.2 Final sweep clean: `npm run security:npm-supply-chain` **passes**; `npm audit` across all four
+      boundaries shows **no new advisories** — root **0**, workers **0**, backend **2 high** (`xlsx`
+      Prototype-Pollution + ReDoS, accepted), frontend **8** (6 moderate + 2 high = the pre-existing
+      `quagga` chain `qs`/`tough-cookie`/`uuid` + `xlsx`, identical to main). Only `xlsx`/`quagga` remain.
+- [x] 4.3 `docs/security.md` Dependabot Remediation Log updated with the **2026-07-20** entry covering the
+      full deferred-majors execution (per-wave table + the two still-deferred groups with reasons).
+- [x] 4.4 `npx openspec validate upgrade-deferred-dependency-majors --strict` → **valid**.
