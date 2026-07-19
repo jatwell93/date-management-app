@@ -65,8 +65,8 @@ describe('subscription lifecycle services', () => {
     (stripe.subscriptions.retrieve as jest.Mock).mockResolvedValueOnce({
       status: 'canceled',
       cancel_at_period_end: true,
-      current_period_end: Math.floor(Date.now() / 1000) + 3600,
-    } as Stripe.Subscription);
+      items: { data: [{ current_period_end: Math.floor(Date.now() / 1000) + 3600 }] },
+    } as unknown as Stripe.Subscription);
 
     await expect(service.isAccessActive(subscriptionTier)).resolves.toBe(true);
     expect(stripe.subscriptions.retrieve).toHaveBeenCalledWith('sub_123');

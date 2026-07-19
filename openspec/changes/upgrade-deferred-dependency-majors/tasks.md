@@ -98,13 +98,31 @@ boundary tests green, `npm run security:npm-supply-chain` passes, `npm audit` sh
 
 ### 3a. Stripe 13→22 (backend, #283)
 
-- [ ] 3.1 Bump `stripe ^13.10.0 → ^22.3.0` (lockfile-only). Pin the SDK `apiVersion` in the Stripe
-      client init to the account's current version; do not rely on the SDK default.
-- [ ] 3.2 Reconcile type/name changes across the 9 majors (event, subscription, and webhook types);
-      update the webhook handler and any `Stripe.*` type references. Keep signature verification and
-      idempotency unchanged.
-- [ ] 3.3 Run billing + webhook tests (`vitest run`), `tsc`, and `npm run validate:stripe-config` /
-      `test:stripe-config`. Confirm `workers-deploy.yml` Stripe config validation still passes. Verify.
+- [x] 3.1 **Bumped `stripe ^13.10.0 → ^22.3.2`** (#283; backend only — the Worker doesn't call the
+      Stripe SDK). SDK v22 pins its types to `LatestApiVersion = "2026-06-24.dahlia"` and the config
+      field is strictly typed `apiVersion?: LatestApiVersion`, so the five `new Stripe(...)` sites
+      (`utils/stripe.ts`, `jobs/stripe-sync.job.ts`, `services/{stripe-webhook-signature,subscription,
+      webhook}.service.ts`) had to move off `'2023-08-16'`. Per the user decision, **adopted the SDK's
+      native `'2026-06-24.dahlia'`** rather than casting the old version — pinned explicitly, not relying
+      on the SDK default. No other lockfile packages changed (v22 dropped the `qs` dep and made
+      `@types/node` an optional peer).
+- [x] 3.2 **Reconciled the "basil" breaking change.** Stripe's 2025 API moved
+      `current_period_start/end` off the `Subscription` onto each **subscription item**. Added two
+      accessors to `subscription-billing.helpers.ts` (`getSubscriptionCurrentPeriodEnd` →
+      `items.data[0].current_period_end`, plus a `…Date` wrapper) and routed all 9 read sites through
+      them (`subscription-access.helpers.ts` + 4 in `webhook.service.ts`). Signature verification
+      (`constructEvent`) and idempotency are untouched; webhook payload shape is governed by the
+      Dashboard endpoint version, not the SDK. Updated 4 test fixtures to the item-based shape and fixed
+      a **latent broken `@sendgrid/mail` mock** in `webhook.service.test.ts` (missing `default` export →
+      the file's 24 tests never ran; now green standalone).
+- [x] 3.3 **Verified.** Backend `tsc --noEmit` clean. Stripe-touched suites green: `webhook.service`
+      24/24, `subscription.service` (incl. access-window), `subscription-access.helpers`,
+      `subscription-lifecycle-services`. `validate:stripe-config` valid under Doppler + `test:stripe-config`
+      3/3 (pure config JS, SDK-version-independent). `security:npm-supply-chain` passes; backend `npm audit`
+      unchanged (only accepted `xlsx` highs). Pre-existing, non-Stripe failures left as-is and proven
+      unrelated: `storage-factory` R2-env artifact, `auth.service` JWT `tierLevel` payload drift, and the
+      live-Stripe `subscription.integration.test.ts` (`No such price` — a stale hardcoded test-account
+      price ID, only runs locally because Doppler injects an `sk_test_` key; skipped in CI).
 
 ### 3b. Prisma 5→7 pair (root + backend, #183 + #153)
 

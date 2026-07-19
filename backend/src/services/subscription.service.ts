@@ -151,7 +151,7 @@ export class SubscriptionService {
     }
 
     return new Stripe(stripeSecretKey || '', {
-      apiVersion: '2023-08-16',
+      apiVersion: '2026-06-24.dahlia',
     });
   }
 }
