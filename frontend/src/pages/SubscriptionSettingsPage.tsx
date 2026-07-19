@@ -90,6 +90,7 @@ export function SubscriptionSettingsPage({ token }: SubscriptionSettingsPageProp
   useEffect(() => {
     let isMounted = true;
 
+    // eslint-disable-next-line react-hooks/set-state-in-effect -- intentional: kicks off subscription data fetch on mount/deps change
     loadSubscriptionData(() => isMounted);
 
     return () => {

@@ -97,7 +97,7 @@ function retrieveContext(query) {
       const cleanEnv = { ...process.env };
       const fallbackArgs = ['find', MEMORY_FILE, '--query', query];
       runMemvid(fallbackArgs, cleanEnv);
-    } catch (fallbackError) {
+    } catch (_fallbackError) {
       console.error('❌ Retrieval failed:', error.message);
       process.exit(1);
     }

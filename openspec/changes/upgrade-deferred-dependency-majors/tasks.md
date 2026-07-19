@@ -54,15 +54,33 @@ boundary tests green, `npm run security:npm-supply-chain` passes, `npm audit` sh
       passes in 8.5s in isolation). Supply-chain passes; frontend audit unchanged (8 pre-existing accepted
       quagga-chain + xlsx advisories, identical to main). Prerequisite for 2.6 now satisfied.
 
-### 2b. ESLint 8→10 (flat-config migration — land as ONE change)
+### 2b. ESLint flat-config migration + ESLint 9 (land as ONE change)
 
-- [ ] 2.4 Migrate **backend** off legacy `.eslintrc.json` to flat `eslint.config.*` (root already uses
-      flat config). Reconcile the **frontend** `ESLINT_USE_FLAT_CONFIG=false` override — either migrate
-      frontend to flat config or keep the legacy path explicitly and document why.
-- [ ] 2.5 Bump together: `eslint ^8.57.1 → ^10.6.0` (root #279, backend #288), `@eslint/js → ^10`
-      (#170), `eslint-plugin-react-hooks ^4.6.2 → ^7.1.1` (frontend #178). Run `npm run lint` /
-      `lint:check` on every boundary; the lint CI gate must stay green. Do **not** merge these
-      individually. Verify.
+> **ESLint 10 deferred (upstream-blocked).** `eslint-plugin-react@7.37.x` (latest) calls
+> `context.getFilename()`, an API **removed in ESLint 10**, so any `react/*` rule crashes on 10
+> (`TypeError … getFilename is not a function`). `eslint-plugin-react`/`-jsx-a11y`/`-import` all cap
+> their `eslint` peer at `^9`. **ESLint 9 is the max viable version** and is still flat-config-native, so
+> it delivers the migration. Root #279 / backend #288 / `@eslint/js` #170 (all target 10) stay **deferred
+> with this recorded reason**; re-attempt when `eslint-plugin-react` ships ESLint 10 support. Note there
+> is **no ESLint CI gate** here — the only workflow `npm run lint` is workers' misnamed `tsc` alias, and
+> frontend `lint-staged` runs only prettier — so ESLint is a local dev tool; verification is the boundary
+> `lint` scripts running clean.
+
+- [x] 2.4 **Migrated all boundaries onto the root flat config.** The root `eslint.config.js` already
+      lints the whole monorepo (dedicated `backend/**`, `frontend/src/**`, `shared/**` blocks). Deleted
+      the redundant `backend/.eslintrc.json` + `.eslintignore` (backend `eslint .` now discovers the root
+      flat config by walking up). Removed the frontend `eslintConfig` block + `ESLINT_USE_FLAT_CONFIG=false`
+      + `--ext` flags, dropped `eslint-config-react-app` (CRA-era, eslintrc-only), and added an explicit
+      `eslint@^9` devDep to frontend so its local binary matches the root's eslint-9-era plugins. Cleaned
+      dead `eslint-disable` directives (ESLint 9 reports them by default) and stray `/* eslint-env */`
+      comments (error in ESLint 10).
+- [x] 2.5 **Bumped to ESLint 9** (not 10 — see note): `eslint ^9.39` (root #279-partial, backend #288),
+      `@eslint/js ^9.39` (#170-partial), `eslint-plugin-react-hooks ^4.6.2 → ^7.1.1` (**#178 fully done**).
+      react-hooks v7's stricter recommended set flagged 24 findings; resolved per the agreed hybrid — two
+      clean lazy-`useState` refactors (`HandheldContext`, `useHandheldDetection`) + justified per-line
+      `eslint-disable` for the intentional fetch-guard / external-sync / timer patterns, plus the
+      `preserve-manual-memoization` + `incompatible-library` advisories. All boundaries lint **clean**
+      (root/backend/frontend, 0 problems); supply-chain passes; audits unchanged (accepted `xlsx`/`quagga`).
 
 ### 2c. Unblock the typecheck-gated @types/node PRs
 

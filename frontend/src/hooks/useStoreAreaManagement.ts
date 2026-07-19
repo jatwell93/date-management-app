@@ -102,12 +102,14 @@ export function useStoreAreaManagement(token: string | null) {
 
   useEffect(() => {
     const controller = new AbortController();
+    // eslint-disable-next-line react-hooks/set-state-in-effect -- intentional: kicks off an abortable data fetch on deps change
     fetchStoreAreas(controller.signal);
     return () => controller.abort();
   }, [fetchStoreAreas]);
 
   useEffect(() => {
     const controller = new AbortController();
+    // eslint-disable-next-line react-hooks/set-state-in-effect -- intentional: kicks off an abortable data fetch on deps change
     fetchFloorProgress(controller.signal);
     return () => controller.abort();
   }, [fetchFloorProgress]);
@@ -195,6 +197,7 @@ export function useStoreAreaManagement(token: string | null) {
     }
   }, [token, view.newCycleName, isStartingCycle, getFreshApiToken]);
 
+  // eslint-disable-next-line react-hooks/preserve-manual-memoization -- intentional: deps intentionally exclude derived values to keep the callback stable
   const handleCompleteCycle = useCallback(async () => {
     if (!token || !floorProgress?.activeCycle || isCompletingCycle) {
       return;

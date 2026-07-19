@@ -91,6 +91,7 @@ export function UserManagementPage() {
   useEffect(() => {
     if (!organization) {
       latestRequestIdRef.current += 1;
+      // eslint-disable-next-line react-hooks/set-state-in-effect -- intentional: resets member state when the organization becomes absent
       setMembers([]);
       setMembersError(null);
       setIsFetchingMembers(false);

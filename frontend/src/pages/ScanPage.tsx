@@ -140,6 +140,7 @@ export function ScanPage({ token }: ScanPageProps) {
       const costPrice = productDetails.costPrice;
       const isExpired = daysToExpiry <= 0;
       if (isExpired) {
+        // eslint-disable-next-line react-hooks/set-state-in-effect -- intentional: derives markdown pricing state from productDetails/expiryDate
         setMarkdownPrice(null);
         setMarkdownPercentage(null);
         setIsExpiredStock(true);
