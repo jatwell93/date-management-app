@@ -25,7 +25,6 @@ class ErrorBoundary extends React.Component<Props, State> {
     // Also mirror to the browser console so developers can debug without
     // cracking open Sentry. Without this, render exceptions produce a bare
     // "Something went wrong" page with no clue in DevTools.
-    // eslint-disable-next-line no-console
     console.error('[ErrorBoundary] Caught render exception:', error, errorInfo);
 
     Sentry.captureException(error, {

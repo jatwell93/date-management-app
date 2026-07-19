@@ -60,80 +60,11 @@
     "test:watch": "cross-env TZ=UTC vitest",
     "test:coverage": "cross-env TZ=UTC vitest run --coverage",
     "test:diff": "cross-env TZ=UTC vitest run --coverage --changed origin/main",
-    "lint": "cross-env ESLINT_USE_FLAT_CONFIG=false eslint src --ext .js,.jsx,.ts,.tsx",
-    "lint:fix": "cross-env ESLINT_USE_FLAT_CONFIG=false eslint src --ext .js,.jsx,.ts,.tsx --fix",
+    "lint": "eslint src",
+    "lint:fix": "eslint src --fix",
     "format": "prettier --config .prettierrc.js --write \"src/**/*.{js,jsx,ts,tsx,json,css,md}\"",
     "token-compliance": "node scripts/check-token-compliance.js",
     "token-compliance:baseline": "node scripts/check-token-compliance.js --baseline"
-  },
-  "eslintConfig": {
-    "extends": [
-      "react-app",
-      "react-app/jest",
-      "plugin:@typescript-eslint/recommended",
-      "plugin:prettier/recommended"
-    ],
-    "plugins": [
-      "@typescript-eslint",
-      "prettier"
-    ],
-    "rules": {
-      "prettier/prettier": [
-        "error",
-        {
-          "printWidth": 100,
-          "singleQuote": true,
-          "trailingComma": "all",
-          "semi": true,
-          "tabWidth": 2,
-          "bracketSpacing": true,
-          "arrowParens": "always"
-        }
-      ],
-      "no-console": "warn",
-      "@typescript-eslint/no-unused-vars": [
-        "warn",
-        {
-          "argsIgnorePattern": "^_",
-          "varsIgnorePattern": "^_"
-        }
-      ]
-    },
-    "overrides": [
-      {
-        "files": [
-          "**/*.test.ts",
-          "**/*.test.tsx",
-          "**/tests/**",
-          "**/__tests__/**",
-          "**/setupTests.ts"
-        ],
-        "rules": {
-          "testing-library/no-wait-for-multiple-assertions": "off",
-          "testing-library/no-unnecessary-act": "off",
-          "testing-library/no-container": "off",
-          "testing-library/no-node-access": "off",
-          "@typescript-eslint/no-empty-function": "off",
-          "@typescript-eslint/no-explicit-any": "off",
-          "@typescript-eslint/no-non-null-assertion": "off",
-          "@typescript-eslint/no-var-requires": "off",
-          "@typescript-eslint/ban-ts-comment": "warn"
-        }
-      },
-      {
-        "files": [
-          "**/*.d.ts"
-        ],
-        "rules": {
-          "@typescript-eslint/no-explicit-any": "off"
-        }
-      }
-    ],
-    "settings": {
-      "react": {
-        "version": "detect"
-      }
-    }
   },
   "browserslist": {
     "production": [
@@ -154,8 +85,8 @@
     "@vitest/coverage-v8": "^3.2.4",
     "autoprefixer": "^10.5.2",
     "cross-env": "^10.1.0",
+    "eslint": "^9.39.0",
     "eslint-config-prettier": "^10.1.8",
-    "eslint-config-react-app": "^7.0.1",
     "eslint-plugin-prettier": "^5.5.6",
     "husky": "^9.1.7",
     "jsdom": "^25.0.1",

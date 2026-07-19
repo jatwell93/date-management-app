@@ -519,7 +519,6 @@ function AppContent({
     const handleUnauthorized = (event: Event) => {
       // Log the unauthorized event for debugging
       if (event instanceof CustomEvent) {
-        // eslint-disable-next-line no-console
         console.warn('[Auth] Unauthorized API response detected:', event.detail);
       }
       // Call logout to clear auth state and redirect to login

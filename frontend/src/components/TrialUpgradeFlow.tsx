@@ -123,6 +123,7 @@ export function TrialUpgradeFlow({ token }: TrialUpgradeFlowProps) {
 
   useEffect(() => {
     if (!token) {
+      // eslint-disable-next-line react-hooks/set-state-in-effect -- intentional: guard state when the auth prerequisite is absent
       setLoading(false);
       return;
     }

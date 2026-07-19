@@ -9,7 +9,6 @@
 // IDE/type-checker honest by mapping the `jest` type namespace onto Vitest's
 // equivalents. The runtime calls all use `vi.*`.
 declare global {
-  // eslint-disable-next-line @typescript-eslint/no-namespace
   namespace jest {
     type Mock<TReturn = any, TArgs extends any[] = any[]> = import('vitest').Mock<
       (...args: TArgs) => TReturn

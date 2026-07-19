@@ -440,7 +440,6 @@ export function useUploadOrchestrator({
         anchor.remove();
         window.URL.revokeObjectURL(objectUrl);
       } catch (error) {
-        // eslint-disable-next-line no-console
         console.error('Failed to download the error report', error);
       }
     },

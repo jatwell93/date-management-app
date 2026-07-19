@@ -49,6 +49,7 @@ export function DataTable<TData, TValue>({
     pageSize: 10,
   });
 
+  // eslint-disable-next-line react-hooks/incompatible-library -- @tanstack/react-table is intentionally used here; React Compiler simply skips optimizing this component
   const table = useReactTable({
     data,
     columns,

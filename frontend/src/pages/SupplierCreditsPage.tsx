@@ -124,6 +124,7 @@ const SupplierCreditsPage: React.FC<Props> = ({ token, effectiveUserRole }) => {
   );
 
   useEffect(() => {
+    // eslint-disable-next-line react-hooks/set-state-in-effect -- intentional: kicks off the claims data fetch on deps change
     void load();
   }, [load]);
 
