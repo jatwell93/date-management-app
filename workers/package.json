@@ -48,7 +48,7 @@
     "@vitest/coverage-v8": "^4.1.7",
     "cross-env": "^10.1.0",
     "esbuild": "^0.28.1",
-    "typescript": "^5.3.3",
+    "typescript": "^6.0.3",
     "vitest": "^4.1.7",
     "wrangler": "^4.112.0"
   }

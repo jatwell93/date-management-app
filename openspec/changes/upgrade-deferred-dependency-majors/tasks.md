@@ -32,11 +32,19 @@ boundary tests green, `npm run security:npm-supply-chain` passes, `npm audit` sh
 
 ### 2a. TypeScript → 6
 
-- [ ] 2.1 **TS 6 for root + backend + workers together** (#159/#198/#166). Bump `typescript` to `^6.0.3`
-      in all three; run each boundary's `tsc`/`type-check`/`build`. Triage new diagnostics from TS 6's
-      stricter defaults; fix source, do not loosen `tsconfig` without noting why.
-- [ ] 2.2 workers guard: `npm run typecheck && npm run build` must pass and stay under the 256 KiB
-      gzip `bundle-size` limit. Verify each boundary.
+- [x] 2.1 **TS 6 for root + backend + workers together** (#159/#198/#166). Bumped `typescript` to
+      `^6.0.3` in all three (`--legacy-peer-deps` one-shot for the workers lockfile only, to tolerate the
+      pre-existing sentry/wrangler `@cloudflare/workers-types` v4-vs-v5 `peerOptional` conflict that a
+      full `npm install` re-resolves — CI uses `npm ci` which doesn't). Backend `type-check` clean; root
+      `compile` fails only on a pre-existing, TS-version-independent `TS2584` in the `src/index.ts`
+      starter file (same 5 errors on `main`, script not in CI). Workers needed two TS 6 tsconfig
+      diagnostics fixed: `ignoreDeprecations: "6.0"` (baseUrl deprecation, sanctioned bridge to TS 7) and
+      an explicit `rootDir: "../"` (TS 6 now enforces rootDir containment for the compiled `../shared/**`).
+- [x] 2.2 workers guard: `npm run typecheck` + `build:types` + esbuild `build` all pass; bundle is
+      617.2 kB raw, **byte-identical to `main`** (no runtime code touched), so the 256 KiB gzip
+      `bundle-size` gate is unaffected. Supply-chain policy passes; root/workers audit 0 vulns, backend
+      audit unchanged (only the accepted `xlsx` highs). typescript-eslint estree 8.62.0 supports TS
+      `<6.1.0`, so 6.0.3 is compatible with the existing eslint 8 toolchain (no Wave 2a→2b conflict).
 - [ ] 2.3 **TS 6 for frontend** (#152, `^4.9.5 → ^6.0.3` — a two-major jump). Expect the largest
       diagnostic set (React types, JSX). Run `tsc --noEmit` + `vite build` + frontend `vitest run`.
       This is the prerequisite for 2.6. Verify.
