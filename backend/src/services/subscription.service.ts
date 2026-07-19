@@ -17,6 +17,14 @@ import { SubscriptionAccessService } from './subscription-access.service';
 import { SubscriptionBillingLifecycleService } from './subscription-billing-lifecycle.service';
 import { SubscriptionTrialLifecycleService } from './subscription-trial-lifecycle.service';
 
+// Stripe SDK v22 throws at construction when the apiKey is empty; v13 deferred
+// that error to the first request. In dev/test the key is often unset, and this
+// facade must still construct (it is wired up eagerly by WebhookService). Use an
+// obviously-invalid placeholder so construction succeeds and any real API call
+// fails with a 401 at call time — preserving the pre-v22 "defer until used"
+// behavior instead of crashing service wiring.
+const STRIPE_UNCONFIGURED_KEY_PLACEHOLDER = 'sk_test_unconfigured_placeholder';
+
 @injectable()
 export class SubscriptionService {
   private readonly prisma: PrismaClient;
@@ -150,7 +158,7 @@ export class SubscriptionService {
       }
     }
 
-    return new Stripe(stripeSecretKey || '', {
+    return new Stripe(stripeSecretKey || STRIPE_UNCONFIGURED_KEY_PLACEHOLDER, {
       apiVersion: '2026-06-24.dahlia',
     });
   }
