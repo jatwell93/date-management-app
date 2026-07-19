@@ -131,16 +131,31 @@ boundary tests green, `npm run security:npm-supply-chain` passes, `npm audit` sh
       Re-verified against a **no-Doppler** run (CI-parity, no key): full unit suite 1515/1516, the lone
       failure being the local-only `storage-factory` `.env.production` R2 bleed.
 
-### 3b. Prisma 5→7 pair (root + backend, #183 + #153)
+### 3b. Prisma 5→6 (root + backend); Prisma 7 re-deferred (PR #373, was #183 + #153)
 
-- [ ] 3.4 Bump `@prisma/client` and `prisma` `^5.22.0 → ^7.8.0` in **both** root and backend (all four
-      declarations) in one branch; run `prisma generate`.
-- [ ] 3.5 Review Prisma 6→7 breaking changes: client engine/runtime, `$queryRaw`/`$executeRaw` typing,
-      any renamed client APIs. Update `backend/src/**` call sites; keep the **triplicated schema**
-      (Prisma base + Neon SQL + SQLite migration + pglite harness) in agreement (golden rule 6).
-- [ ] 3.6 Migrate + test both backends: apply migrations on SQLite dev and Neon test DBs; run the full
-      backend suite `vitest run` **and** `npm run test:db` (pglite worker harness) and the dual-backend
-      conformance tests. Verify.
+  SCOPE DECISION (user-confirmed): land Prisma **6**, not 7. Prisma 7 is an ORM re-architecture, not a
+  bump — it mandates **driver adapters** (`new PrismaClient()` no longer self-connects), is **ESM-only**
+  (`"type": "module"`), and needs the new `prisma-client` generator + `prisma.config.ts` + explicit
+  `.env` loading. This backend is CommonJS + tsyringe/reflect-metadata + SWC decorator metadata, so 7 is
+  a multi-day architecture change out of scope for a dependency wave. Prisma 6 keeps the classic Rust
+  engine, CJS, and auto-`.env`, making 5→6 a genuine low-risk forward step. **Dependabot #183/#153
+  (target ^7) re-deferred** with this reason (recorded here + in 4.1).
+
+- [x] 3.4 Bumped `@prisma/client` and `prisma` `^5.22.0 → ^6.19.3` in **both** root and backend (all four
+      declarations); `prisma generate` clean (classic Rust query engine retained). Also removed a dead
+      `@prisma/adapter-planetscale@^7.8.0` (zero imports, PlanetScale not in stack, leftover from early
+      R2 work) whose hard peer on `@prisma/client@7` would ERESOLVE against the v6 pin.
+- [x] 3.5 Reviewed 5→6 breaking changes — **none apply**: no `Bytes` fields (Buffer→Uint8Array n/a), no
+      implicit m-n relations (PK change n/a), `NotFoundError` here is a **custom app error** not Prisma's
+      removed one, full-text search unused. TS `^6.0.3` + `@types/node ^26` already clear v6 floors. No
+      `backend/src/**` call-site changes needed. Triplicated schema untouched (no model changes).
+- [x] 3.6 Verified. `tsc --noEmit` clean; full backend Vitest **1882 passing** (9 remaining failures are
+      pre-existing Doppler/local-env artifacts — storage-factory `.env.production` R2 bleed, live-Stripe
+      integration price IDs, auth JWT payload drift — all pass/skip in CI's secret-free env); workers
+      `npm run test:db` (pglite harness) **70/70**; supply-chain policy pass; `npm audit` only accepted
+      `xlsx`. One test-only fix: `database-factory` `instanceof PrismaClient` smoke checks — v6 returns a
+      proxy-wrapped client whose prototype is an internal class, so `instanceof` is false even for a
+      valid client → replaced with a behavioral method-surface assertion. PR #373.
 
 ## 4. Completion
 
