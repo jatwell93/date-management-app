@@ -123,6 +123,13 @@ boundary tests green, `npm run security:npm-supply-chain` passes, `npm audit` sh
       unrelated: `storage-factory` R2-env artifact, `auth.service` JWT `tierLevel` payload drift, and the
       live-Stripe `subscription.integration.test.ts` (`No such price` — a stale hardcoded test-account
       price ID, only runs locally because Doppler injects an `sk_test_` key; skipped in CI).
+      **CI regression caught + fixed:** v22 throws `Neither apiKey nor config.authenticator provided`
+      at *construction* when the key is empty (v13 deferred it to first request). The eagerly-wired
+      `SubscriptionService.createStripeClient` used `new Stripe(key || '', …)`, crashing 41 tests across
+      21 files in CI — masked locally because `doppler run` injects `STRIPE_SECRET_KEY`. Fixed by falling
+      back to an obviously-invalid placeholder key so construction succeeds and real calls still 401.
+      Re-verified against a **no-Doppler** run (CI-parity, no key): full unit suite 1515/1516, the lone
+      failure being the local-only `storage-factory` `.env.production` R2 bleed.
 
 ### 3b. Prisma 5→7 pair (root + backend, #183 + #153)
 
