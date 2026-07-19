@@ -13,12 +13,20 @@ boundary tests green, `npm run security:npm-supply-chain` passes, `npm audit` sh
 - [x] 1.2 web-vitals verify: frontend `vitest run` (clerk-setup incl. reportWebVitals mock), `tsc --noEmit`,
       `vite build` all green; `security:npm-supply-chain` passes; frontend `npm audit` unchanged (only
       `xlsx`/`quagga`). Remediation-log row deferred to PR-merge time.
-- [ ] 1.3 **rate-limiter-flexible 8→11** (backend, #286). Bump `^8.3.0 → ^11.2.0` (lockfile-only).
-      Diff the v9/v10/v11 changelogs for constructor option renames and `consume()`/`RateLimiterRes`
-      shape changes; update `backend/src/middleware/rateLimiter.ts` (and any store adapter) accordingly.
-- [ ] 1.4 rate-limiter verify: the strict (5/15min login+register), upload (10/hr), and standard
-      (100/15min) tiers must behave **identically** — assert limits, `429` body, and `Retry-After`
-      header in the rate-limit tests. Full backend `vitest run` + `tsc`. Verify.
+- [x] 1.3 **rate-limiter-flexible — REMOVED, not upgraded** (backend, #286). Repo-wide search confirmed
+      the package was declared in `backend/package.json` but imported nowhere; live rate limiting uses
+      `express-rate-limit` (`backend/src/middleware/rateLimiter.ts`). Removed the dead dependency via
+      `npm uninstall rate-limiter-flexible` rather than performing the 8→11 bump — closes #286 and
+      shrinks the supply-chain surface.
+- [x] 1.4 rate-limiter verify: `express-rate-limit` (the real control) untouched, so tier behaviour is
+      unchanged by definition. Backend `tsc --noEmit` clean; `contract` suite green and unit/route tests
+      1515/1516 (after a local native-module rebuild of `better-sqlite3`); `security:npm-supply-chain`
+      passes; backend `npm audit` unchanged (only `xlsx`). The single unit failure
+      (`storage-factory.test.ts` "throws when production R2 config is missing") is a pre-existing
+      environment artifact — running locally without Doppler lets `.env.production`'s R2 vars bleed into
+      `process.env` via `config/environment.ts`, so the "missing config" assertion doesn't hold; it is
+      unrelated to this dependency removal and passes in CI/Doppler. Remediation-log row deferred to
+      PR-merge time.
 
 ## 2. Wave 2 — coordinated toolchain migration
 
