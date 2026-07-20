@@ -10,13 +10,13 @@ describe('haptic', () => {
     // Mock navigator.vibrate if not already mocked
     if (!navigator.vibrate) {
       Object.defineProperty(navigator, 'vibrate', {
-        value: jest.fn().mockReturnValue(true),
+        value: vi.fn().mockReturnValue(true),
         writable: true,
         configurable: true,
       });
     }
     // Clear all mocks before each test
-    jest.clearAllMocks();
+    vi.clearAllMocks();
   });
 
   afterEach(() => {

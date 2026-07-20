@@ -2,6 +2,7 @@ import React, { useEffect, useState } from 'react';
 import { Card, CardContent, CardHeader, CardTitle } from '../components/ui/card';
 import { buttonVariants } from '../components/ui/button';
 import { apiService } from '../lib/api.service';
+import { useFreshApiToken } from '../hooks/useFreshApiToken';
 
 interface DashboardPageProps {
   token: string | null;
@@ -11,27 +12,35 @@ interface DashboardStats {
   totalProducts: number;
   totalInventoryItems: number;
   expiringItems: number;
-  lowStockItems: number;
+  expiredActionItems: number;
 }
 
-interface DashboardActivityEntry {
-  id: number;
-  description: string;
-  timestamp: string;
+interface LastCatalogueUpload {
+  fileName: string;
+  uploadedAt: string;
 }
 
-// The Workers API (GET /api/dashboard) returns `{ stats: DashboardStats }`.
-// Older versions of this page expected a flat object with
-// `expiringSoon`/`markdownItems`/`recentActivity` — that shape is no longer
-// produced by the backend and tried to call `.map` on an undefined
-// `recentActivity`, which threw and left the user stuck on the generic
-// ErrorBoundary fallback with nothing in the console.
+interface DashboardActivity {
+  lastCatalogueUpload: LastCatalogueUpload | null;
+  expiredItemsEnteredToday: number;
+  stockLossLast30Days: number;
+}
+
+// The Workers API (GET /api/dashboard) returns `{ stats, activity }`.
+// `stats` drives the "Needs attention" tiles (near-expiry stock and expired
+// items awaiting a sold-through/expired decision). `activity` surfaces catalogue
+// freshness and stock-loss signals in place of the old (never-populated) event
+// feed, which used to call `.map` on an undefined `recentActivity` and threw.
 interface DashboardResponse {
   stats: DashboardStats;
-  recentActivity?: DashboardActivityEntry[];
+  activity?: DashboardActivity;
 }
 
 const dashboardCountFormatter = new Intl.NumberFormat('en-AU');
+const currencyFormatter = new Intl.NumberFormat('en-AU', {
+  style: 'currency',
+  currency: 'AUD',
+});
 const activityTimestampFormatter = new Intl.DateTimeFormat('en-AU', {
   dateStyle: 'medium',
   timeStyle: 'short',
@@ -41,23 +50,24 @@ function formatDashboardCount(value: number | undefined): string {
   return dashboardCountFormatter.format(value ?? 0);
 }
 
-function parseActivityTimestamp(timestamp: string): Date | null {
-  const activityDate = new Date(timestamp);
+function formatCurrency(value: number | undefined): string {
+  return currencyFormatter.format(value ?? 0);
+}
 
-  if (Number.isNaN(activityDate.getTime())) {
+function formatUploadTimestamp(timestamp: string): string | null {
+  const uploadDate = new Date(timestamp);
+
+  if (Number.isNaN(uploadDate.getTime())) {
     return null;
   }
 
-  return activityDate;
-}
-
-function formatActivityTimestamp(activityDate: Date): string {
-  return activityTimestampFormatter.format(activityDate);
+  return activityTimestampFormatter.format(uploadDate);
 }
 
 export function DashboardPage({ token }: DashboardPageProps) {
+  const getFreshApiToken = useFreshApiToken(token);
   const [stats, setStats] = useState<DashboardStats | null>(null);
-  const [recentActivity, setRecentActivity] = useState<DashboardActivityEntry[]>([]);
+  const [activity, setActivity] = useState<DashboardActivity | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
@@ -70,9 +80,10 @@ export function DashboardPage({ token }: DashboardPageProps) {
       }
 
       try {
-        const data = await apiService.get<DashboardResponse>('/dashboard', token);
+        const authToken = await getFreshApiToken('dashboard-fetch');
+        const data = await apiService.get<DashboardResponse>('/dashboard', authToken);
         setStats(data?.stats ?? null);
-        setRecentActivity(Array.isArray(data?.recentActivity) ? data.recentActivity : []);
+        setActivity(data?.activity ?? null);
       } catch (err: unknown) {
         if (err instanceof Error) {
           setError(err.message);
@@ -85,7 +96,7 @@ export function DashboardPage({ token }: DashboardPageProps) {
     };
 
     fetchDashboardData();
-  }, [token]);
+  }, [token, getFreshApiToken]);
 
   if (loading) {
     return (
@@ -115,8 +126,12 @@ export function DashboardPage({ token }: DashboardPageProps) {
   }
 
   const expiringItems = stats?.expiringItems ?? 0;
-  const lowStockItems = stats?.lowStockItems ?? 0;
-  const attentionItems = expiringItems + lowStockItems;
+  const expiredActionItems = stats?.expiredActionItems ?? 0;
+  const attentionItems = expiringItems + expiredActionItems;
+  const lastCatalogueUpload = activity?.lastCatalogueUpload ?? null;
+  const lastCatalogueUploadTimestamp = lastCatalogueUpload
+    ? formatUploadTimestamp(lastCatalogueUpload.uploadedAt)
+    : null;
 
   return (
     <section
@@ -128,7 +143,7 @@ export function DashboardPage({ token }: DashboardPageProps) {
           Dashboard
         </h1>
         <p className="mt-1 text-sm text-semantic-text-secondary">
-          Review expiring stock and low stock before the next order.
+          Review expiring stock and expired items awaiting a decision.
         </p>
       </div>
 
@@ -157,19 +172,19 @@ export function DashboardPage({ token }: DashboardPageProps) {
                   {formatDashboardCount(expiringItems)}
                 </p>
                 <p className="mt-1 text-xs text-semantic-warning-muted-foreground">
-                  Use the expiry report to plan markdowns.
+                  Within 30 days of expiry — plan markdowns.
                 </p>
               </div>
 
               <div className="rounded-md border border-semantic-critical/20 bg-semantic-critical-muted p-3 sm:p-4">
-                <h3 id="dashboard-low-stock-heading" className="text-sm font-semibold">
-                  Low stock
+                <h3 id="dashboard-expired-action-heading" className="text-sm font-semibold">
+                  Expired — needs action
                 </h3>
                 <p className="mt-1 font-heading text-2xl font-bold tabular-nums text-semantic-critical sm:mt-2 sm:text-3xl">
-                  {formatDashboardCount(lowStockItems)}
+                  {formatDashboardCount(expiredActionItems)}
                 </p>
                 <p className="mt-1 text-xs text-semantic-critical-muted-foreground">
-                  Check whether these items need reordering.
+                  Mark these as sold-through or expired.
                 </p>
               </div>
             </div>
@@ -248,38 +263,48 @@ export function DashboardPage({ token }: DashboardPageProps) {
             </CardTitle>
           </CardHeader>
           <CardContent className="px-4 sm:px-6">
-            {recentActivity.length === 0 ? (
-              <p className="max-w-prose text-sm text-semantic-text-secondary">
-                Activity will appear after scans, imports, or stock edits.
-              </p>
-            ) : (
-              <ul aria-label="Recent dashboard activity">
-                {recentActivity.map((activity) => {
-                  const activityDate = parseActivityTimestamp(activity.timestamp);
+            <dl className="space-y-4" aria-label="Recent dashboard activity">
+              <div className="min-w-0 border-b pb-3">
+                <dt className="text-xs text-semantic-text-tertiary">Catalogue last updated</dt>
+                {lastCatalogueUpload ? (
+                  <dd className="mt-1 min-w-0">
+                    <p className="break-words text-sm font-medium">
+                      {lastCatalogueUpload.fileName}
+                    </p>
+                    {lastCatalogueUploadTimestamp ? (
+                      <time
+                        dateTime={lastCatalogueUpload.uploadedAt}
+                        className="text-xs text-semantic-text-tertiary"
+                      >
+                        {lastCatalogueUploadTimestamp}
+                      </time>
+                    ) : (
+                      <span className="text-xs text-semantic-text-tertiary">
+                        Time not available
+                      </span>
+                    )}
+                  </dd>
+                ) : (
+                  <dd className="mt-1 text-sm text-semantic-text-secondary">
+                    No catalogue uploaded yet.
+                  </dd>
+                )}
+              </div>
 
-                  return (
-                    <li
-                      key={`${activity.id}-${activity.timestamp}`}
-                      className="mb-2 min-w-0 border-b pb-2 last:border-b-0"
-                    >
-                      <p className="break-words text-sm">{activity.description}</p>
-                      {activityDate ? (
-                        <time
-                          dateTime={activity.timestamp}
-                          className="text-xs text-semantic-text-tertiary"
-                        >
-                          {formatActivityTimestamp(activityDate)}
-                        </time>
-                      ) : (
-                        <span className="text-xs text-semantic-text-tertiary">
-                          Time not available
-                        </span>
-                      )}
-                    </li>
-                  );
-                })}
-              </ul>
-            )}
+              <div className="min-w-0 border-b pb-3">
+                <dt className="text-xs text-semantic-text-tertiary">Expired items added today</dt>
+                <dd className="mt-1 font-heading text-2xl font-bold tabular-nums">
+                  {formatDashboardCount(activity?.expiredItemsEnteredToday)}
+                </dd>
+              </div>
+
+              <div className="min-w-0">
+                <dt className="text-xs text-semantic-text-tertiary">Stock loss (last 30 days)</dt>
+                <dd className="mt-1 font-heading text-2xl font-bold tabular-nums text-semantic-critical">
+                  {formatCurrency(activity?.stockLossLast30Days)}
+                </dd>
+              </div>
+            </dl>
           </CardContent>
         </Card>
       </div>

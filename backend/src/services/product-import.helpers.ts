@@ -8,13 +8,16 @@ export const PRODUCT_IMPORT_COLUMN_ALTERNATIVES = {
     'Cost',
     'Cost Price',
     'Unit Cost',
+    'Item Cost',
     'Cost ex',
     'Price',
     'Unit Price',
     'Cost inc',
-    'Selling Price',
-    'Retail Price',
   ],
+  // Retail/selling price, captured distinct from cost so a markdown band can be
+  // taken off retail (issue #338). Optional — cost-only files stay valid, so this
+  // group is deliberately excluded from the required-column check.
+  retail: ['Retail Price', 'Selling Price', 'Sell Price', 'RRP', 'Sale Price', 'retail_price'],
   barcode: ['Barcode', 'Alias', 'EAN', 'UPC', 'GTIN', 'Product Barcode', 'Barcode Number'],
 } as const;
 
@@ -22,6 +25,7 @@ export interface ProductImportCsvColumnState {
   skuHeader: string | null;
   nameHeader: string | null;
   costHeader: string | null;
+  retailHeader: string | null;
   barcodeHeader: string | null;
 }
 
@@ -29,6 +33,7 @@ export interface ProductImportXlsxColumnState {
   skuColIndex: number | null;
   nameColIndex: number | null;
   costColIndex: number | null;
+  retailColIndex: number | null;
   barcodeColIndex: number | null;
 }
 
@@ -36,6 +41,7 @@ export interface ProductImportRowValues {
   sku: string | null | undefined;
   name: string | null | undefined;
   costStr: string | null | undefined;
+  retailStr: string | null | undefined;
   barcode: string | null | undefined;
 }
 
@@ -45,6 +51,8 @@ export interface ValidProductImportRow {
   costStr: string;
   barcode: string;
   cost: number;
+  // Optional: null when no retail column is present or the cell is blank/unparseable.
+  retail: number | null;
 }
 
 export type ProductImportRowValidationResult =
@@ -114,6 +122,7 @@ function getAllowedProductImportHeaderValues(): string[] {
     ...PRODUCT_IMPORT_COLUMN_ALTERNATIVES.sku,
     ...PRODUCT_IMPORT_COLUMN_ALTERNATIVES.name,
     ...PRODUCT_IMPORT_COLUMN_ALTERNATIVES.cost,
+    ...PRODUCT_IMPORT_COLUMN_ALTERNATIVES.retail,
     ...PRODUCT_IMPORT_COLUMN_ALTERNATIVES.barcode,
   ].map((header) => header.toLowerCase());
 }
@@ -126,6 +135,7 @@ function getAllowedProductImportHeadersFromCsvState(
       state.skuHeader,
       state.nameHeader,
       state.costHeader,
+      state.retailHeader,
       state.barcodeHeader,
       ...getAllowedProductImportHeaderValues(),
     ]
@@ -143,6 +153,7 @@ function getAllowedProductImportHeadersFromXlsxState(
       state.skuColIndex !== null ? headers[state.skuColIndex] : null,
       state.nameColIndex !== null ? headers[state.nameColIndex] : null,
       state.costColIndex !== null ? headers[state.costColIndex] : null,
+      state.retailColIndex !== null ? headers[state.retailColIndex] : null,
       state.barcodeColIndex !== null ? headers[state.barcodeColIndex] : null,
       ...getAllowedProductImportHeaderValues(),
     ]
@@ -217,6 +228,7 @@ export function getProductImportCsvColumnState(
     skuHeader: findColumnByAlternatives(row, [...PRODUCT_IMPORT_COLUMN_ALTERNATIVES.sku]),
     nameHeader: findColumnByAlternatives(row, [...PRODUCT_IMPORT_COLUMN_ALTERNATIVES.name]),
     costHeader: findColumnByAlternatives(row, [...PRODUCT_IMPORT_COLUMN_ALTERNATIVES.cost]),
+    retailHeader: findColumnByAlternatives(row, [...PRODUCT_IMPORT_COLUMN_ALTERNATIVES.retail]),
     barcodeHeader: findColumnByAlternatives(row, [...PRODUCT_IMPORT_COLUMN_ALTERNATIVES.barcode]),
   };
 }
@@ -234,6 +246,9 @@ export function getProductImportXlsxColumnState(
     costColIndex: findColumnIndexByAlternatives(headers, [
       ...PRODUCT_IMPORT_COLUMN_ALTERNATIVES.cost,
     ]),
+    retailColIndex: findColumnIndexByAlternatives(headers, [
+      ...PRODUCT_IMPORT_COLUMN_ALTERNATIVES.retail,
+    ]),
     barcodeColIndex: findColumnIndexByAlternatives(headers, [
       ...PRODUCT_IMPORT_COLUMN_ALTERNATIVES.barcode,
     ]),
@@ -248,6 +263,7 @@ export function getProductImportCsvRowValues(
     sku: state.skuHeader,
     name: state.nameHeader,
     costStr: state.costHeader,
+    retailStr: state.retailHeader,
     barcode: state.barcodeHeader,
   });
 }
@@ -260,6 +276,7 @@ export function getProductImportXlsxRowValues(
     sku: state.skuColIndex,
     name: state.nameColIndex,
     costStr: state.costColIndex,
+    retailStr: state.retailColIndex,
     barcode: state.barcodeColIndex,
   });
 }
@@ -272,6 +289,7 @@ function getProductImportRowValues(
     sku: readRowValue(row, keys.sku),
     name: readRowValue(row, keys.name),
     costStr: readRowValue(row, keys.costStr),
+    retailStr: readRowValue(row, keys.retailStr),
     barcode: readRowValue(row, keys.barcode),
   };
 }
@@ -456,6 +474,7 @@ export function validateProductImportRow({
   const sku = values.sku?.trim() || null;
   const name = values.name?.trim() || null;
   const costStr = values.costStr?.trim() || null;
+  const retailStr = values.retailStr?.trim() || null;
   const barcode = values.barcode?.trim() || null;
   const requiredFields = getProductImportRequiredFields({ sku, name, costStr, barcode });
   const errors = getMissingRequiredFieldErrors(rowNumber, requiredFields);
@@ -474,6 +493,11 @@ export function validateProductImportRow({
     return { isValid: false, errors };
   }
 
+  // Retail is optional: a missing column, blank cell, or unparseable value is not
+  // an error — it simply leaves the product without a retail price (falls back to
+  // cost for retail-basis markdown bands). Mirrors the workers catalogue parser.
+  const retail = retailStr === null ? null : parseProductImportCost(retailStr);
+
   return {
     isValid: true,
     errors: [],
@@ -483,6 +507,7 @@ export function validateProductImportRow({
       costStr: requiredValues.costStr,
       barcode: requiredValues.barcode,
       cost,
+      retail,
     },
   };
 }

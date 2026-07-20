@@ -1,21 +1,25 @@
 import express from 'express';
 import request from 'supertest';
 
-const mockInitiate = jest.fn();
-const mockDirect = jest.fn();
-const mockComplete = jest.fn();
-const mockStatus = jest.fn();
-const mockCreateUploadControllerForRequest = jest.fn();
+const mockInitiate = vi.fn();
+const mockDirect = vi.fn();
+const mockComplete = vi.fn();
+const mockStatus = vi.fn();
+const mockCreateUploadControllerForRequest = vi.fn();
 
-const mockCheckUsageLimit = jest
-  .fn()
-  .mockImplementation(() => (_req: any, _res: any, next: any) => next());
+// These mocks are invoked at the SUT's module-load time (the router calls
+// checkUsageLimit()/validateRequest() to build middleware), so they must exist
+// before the hoisted vi.mock factories run. Vitest auto-hoists bare `vi.fn()`
+// consts but NOT chained `.mockImplementation(...)` ones — wrap in vi.hoisted().
+const mockCheckUsageLimit = vi.hoisted(() =>
+  vi.fn().mockImplementation(() => (_req: any, _res: any, next: any) => next()),
+);
 
-const mockValidateRequest = jest
-  .fn()
-  .mockImplementation(() => (_req: any, _res: any, next: any) => next());
+const mockValidateRequest = vi.hoisted(() =>
+  vi.fn().mockImplementation(() => (_req: any, _res: any, next: any) => next()),
+);
 
-jest.mock('../../middleware/auth.middleware', () => ({
+vi.mock('../../middleware/auth.middleware', () => ({
   authenticateToken: (req: any, _res: any, next: any) => {
     req.organizationId = req.get('x-org-id') || 'org-upload-test';
     const userIdHeader = req.get('x-user-id');
@@ -24,20 +28,20 @@ jest.mock('../../middleware/auth.middleware', () => ({
   },
 }));
 
-jest.mock('../../middleware/feature-gate.middleware', () => ({
+vi.mock('../../middleware/feature-gate.middleware', () => ({
   checkUsageLimit: (...args: unknown[]) => mockCheckUsageLimit(...args),
 }));
 
-jest.mock('../../middleware/rateLimiter', () => ({
+vi.mock('../../middleware/rateLimiter', () => ({
   uploadLimiter: (_req: any, _res: any, next: any) => next(),
   presignedUrlLimiter: (_req: any, _res: any, next: any) => next(),
 }));
 
-jest.mock('../../middleware/validateRequest', () => ({
+vi.mock('../../middleware/validateRequest', () => ({
   validateRequest: (...args: unknown[]) => mockValidateRequest(...args),
 }));
 
-jest.mock('../../controllers/upload.controller', () => ({
+vi.mock('../../controllers/upload.controller', () => ({
   createUploadControllerForRequest: (...args: unknown[]) =>
     mockCreateUploadControllerForRequest(...args),
 }));

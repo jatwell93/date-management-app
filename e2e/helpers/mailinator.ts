@@ -11,8 +11,7 @@ export async function getOtpFromMailinator(
   email: string,
   maxAttempts = 40,
 ): Promise<string> {
-  const [inbox, domain] = email.split('@');
-  const mailinatorDomain = domain || 'mailinator.com';
+  const [inbox] = email.split('@');
   const apiToken = process.env.MAILINATOR_API_TOKEN;
 
   // Validate API token before making requests
@@ -21,11 +20,6 @@ export async function getOtpFromMailinator(
       'MAILINATOR_API_TOKEN environment variable is required for OTP retrieval. Set this in your .env file or environment variables.',
     );
   }
-
-  const headers = {
-    Authorization: `Bearer ${apiToken}`,
-    'X-API-Token': apiToken,
-  };
 
   function extractOtp(text: string | undefined): string | null {
     if (!text) return null;

@@ -782,13 +782,84 @@ Do not set global `ignore-scripts=true` for this repo without a separate migrati
 
 Dependabot is configured for the root, backend, frontend, workers, and GitHub Actions package ecosystems. Review dependency PRs by package boundary and avoid mixing unrelated runtime and tooling updates unless the advisory requires coordinated remediation.
 
+### Dependabot Remediation Log
+
+**2026-06-27** — Cleared the runtime, edge, and build-tool advisories that had a clean (non-major) patched path, working per package boundary with lockfile-only updates (`--package-lock-only --ignore-scripts`) so no install scripts ran:
+
+| Boundary | Change | Advisories cleared |
+| -------- | ------ | ------------------ |
+| Backend | `multer ^2.0.2 → ^2.2.0` (direct, runtime); `form-data → 4.0.6`, `@opentelemetry/*`, `@sentry/*`, `@babel/core` via audit fix; bumped existing overrides `tar 7.5.15 → 7.5.17` and `ws 8.20.1 → 8.21.0` | multer (high), form-data (high), tar, ws, OpenTelemetry/Sentry (moderate) |
+| Root | `wrangler 4.94.0 → 4.105.0` (clears bundled `undici`/`ws`/`esbuild`/`miniflare`); `js-yaml → 4.3.0` via audit fix | undici (high), ws (high), esbuild (low), js-yaml (moderate) → **0 remaining** |
+| Workers | `esbuild ^0.27.7 → ^0.28.1` (direct); `wrangler`/`vite`/`undici`/`ws`/`miniflare`/`vitest-pool-workers` via audit fix | undici (high), vite (high), ws (high), esbuild (low) → **0 remaining** |
+
+After each change, `npm audit` confirmed the targeted advisories cleared and `npm run security:npm-supply-chain` confirmed the dependency-source policy still passes.
+
+**2026-06-27** — Migrated the frontend off Create React App (`react-scripts`/CRACO) to Vite (follow-up #290). This removed the entire CRA build-tool advisory tree wholesale rather than force-patching transitive dependencies:
+
+| Boundary | Change | Advisories cleared |
+| -------- | ------ | ------------------ |
+| Frontend | Replaced `react-scripts` + `@craco/craco` with `vite` + `@vitejs/plugin-react`; PWA service worker preserved via `vite-plugin-pwa` (`injectManifest`, reusing the existing `service-worker.ts`); Tailwind now processed through PostCSS at build time | `shell-quote` (**critical**), `webpack-dev-server`, `postcss`, `nth-check`, `css-select`, `svgo` and the rest of the CRA/webpack build-tool tree → **removed** |
+
+The test runner migration is staged: this change introduces a temporary standalone Jest (decoupled from CRA) so the existing suites stay green; the `jest → vitest` port is tracked in #291. As a result the frontend now reports the same dev/test-only Jest toolchain advisories as the backend (see Accepted Dependency Risks below), which #291 resolves.
+
+**2026-06-27** — Ported the frontend test suite from Jest to Vitest (the frontend portion of #291). This removes the standalone Jest scaffolding added during the Vite migration and its dev/test-only advisories:
+
+| Boundary | Change | Advisories cleared |
+| -------- | ------ | ------------------ |
+| Frontend | Replaced `jest` / `babel-jest` / `jest-environment-jsdom` / `jest-fetch-mock` with `vitest` + `jsdom` + `vitest-fetch-mock`; 54 suites / 470 tests ported (`jest.*` → `vi.*`), aligning the frontend with the workers boundary | `@jest/*`, `babel-jest`, `babel-plugin-istanbul`, `@istanbuljs/load-nyc-config`, dev/test `js-yaml` → **removed** from the frontend |
+
+After the port, `npm audit` in `/frontend` reports only the pre-existing `quagga` and `xlsx` accepted risks below; the Jest toolchain advisories are gone. The backend Jest 30 upgrade (the remaining part of #291) is unaffected by this change.
+
+**2026-06-28** — Upgraded the backend test toolchain to Jest 30 (the remaining part of #291): `jest` `^29.7.0` → `^30.4.2`, `@types/jest` `^29` → `^30`, kept `ts-jest` on `^29.4.11` (the Jest-30-compatible line — ts-jest ships no v30 and its `29.4.x` declares `jest: ^29 || ^30` as a peer), and removed the unused `jest-environment-jsdom` dev dependency (both backend Jest configs run `testEnvironment: 'node'`). The full suite (152 suites / 1,667 tests) passes on Jest 30.
+
+Contrary to the original framing of #291, the Jest 30 upgrade does **not** clear the backend's dev/test toolchain advisories. `npm audit` moves from 20 → 19 (one moderate cleared), but the remainder persist because they are now dominated by a newly-published advisory with **no upstream fix**:
+
+| Boundary | Change | Advisory outcome |
+| -------- | ------ | ---------------- |
+| Backend | `jest` `29 → 30`, drop unused `jest-environment-jsdom` | Net **−1 moderate**. The residual moderate advisories trace to `js-yaml <= 4.1.1` (GHSA-h67p-54hq-rp68, quadratic-complexity DoS, no fixed release) pulled in via `@istanbuljs/load-nyc-config` → `babel-plugin-istanbul` → `@jest/transform`. Jest depends on `babel-plugin-istanbul` unconditionally (independent of our `coverageProvider: 'v8'` setting), so this chain is present at **every** Jest version. The only way to shed it is to leave Jest — the path the frontend already took with Vitest (v8 coverage, no `babel-plugin-istanbul`). |
+
+**2026-06-28** — Migrated the backend test suite from Jest to **Vitest v4** (the change #291 actually required to clear the toolchain advisories, per the row above). Replaced `jest` / `ts-jest` / `@types/jest` with `vitest` + `@vitest/coverage-v8` (v8 coverage, no `babel-plugin-istanbul`) plus `unplugin-swc` / `@swc/core` (SWC emits the `design:paramtypes` decorator metadata `tsyringe` needs; the intuitive `esbuild: false` is inert under Vitest 4 — `oxc: false` is required). All 154 test files were ported (`jest.*` → `vi.*`); the two DB-targeted Jest configs became `vitest.config.ts` (SQLite) and `vitest.config.neon.ts` (PostgreSQL). The full suite passes (1,658 passed / 9 skipped) and the coverage thresholds (75/70/75/75) hold.
+
+| Boundary | Change | Advisory outcome |
+| -------- | ------ | ---------------- |
+| Backend | Replaced Jest with Vitest (v8 coverage); dropped `jest` / `ts-jest` / `@types/jest` (247 transitive packages removed) | `@jest/*`, `babel-plugin-istanbul`, `@istanbuljs/load-nyc-config`, and the dev/test `js-yaml <= 4.1.1` they pulled in are **gone**. `npm audit` for `/backend` drops from 19 → 1; the only remaining advisory is the pre-existing `xlsx` runtime risk (below). This is the change that closes the backend Jest-toolchain accepted-risk row. |
+
+**2026-07-19** — Triaged the backlog of 32 open Dependabot PRs by package boundary (no advisories were outstanding beyond the accepted risks below; this was routine version hygiene, not remediation). All bumps were validated as npm-registry-sourced, so the supply-chain source policy was never at risk — the only concern was breakage from major version jumps.
+
+- **Closed as superseded (2):** root `wrangler` #212 (target 4.103.0 < shipped 4.105.0) and workers `esbuild` #163 (target 0.28.0 < shipped 0.28.1) — merging either would have been a downgrade.
+- **Safe batch — approved for squash auto-merge (registry-sourced dev/type/tooling, no runtime code paths):** backend `@types/csv-parse` #200, `@types/supertest` #203, `@types/sqlite3` #196; frontend `@types/jwt-decode` #160, `@types/uuid` #157; workers `@types/bcryptjs` #156, `cross-env` #176, `wrangler` #211, `@cloudflare/vitest-pool-workers` #208; root `globals` #278; the `github-actions` group #362. The `@types/node` → 26 bumps for root #277 and backend #289 were each **locally `tsc`-verified clean** before auto-merge was enabled.
+- **Deferred (left open with per-PR remediation notes):**
+  - `@types/node` → 26 for **frontend #285** (fails local `tsc` — TypeScript 4.9.5 cannot parse Node-26 `.d.ts`; coupled to the frontend TS upgrade #152) and **workers #276** (fails the `bundle-size` gate's typecheck/build). Their green PR-level CI was misleading because those boundaries' merge gates do not run `tsc`; the failure only surfaced under a local typecheck.
+  - Runtime majors requiring code changes + focused tests: `rate-limiter-flexible` 8→11 #286 (security control), `stripe` 13→22 #283, `@prisma/client` + `prisma` 5→7 #183/#153 (must move as a pair), `web-vitals` 2→5 #287 (`getCLS`→`onCLS`/`onINP`).
+  - Tooling majors requiring coordinated migration: `eslint` 8→10 group #279/#170/#288/#178 (flat-config migration across boundaries) and `typescript` → 6 group #159/#198/#166/#152.
+
+| Boundary | Change | Outcome |
+| -------- | ------ | ------- |
+| root / backend / frontend / workers / actions | Closed 2 stale PRs; approved ~11 dev/type/tooling bumps for auto-merge; deferred 15 major-version PRs with tracked remediation notes | `npm run security:npm-supply-chain` passes; `npm audit` unchanged — only the documented `xlsx` (backend/frontend) and `quagga` (frontend) accepted risks remain, root/workers clean. Open Dependabot count reduced 32 → 15 (the deferred majors), each with a documented next step. |
+
+**2026-07-20** — Executed the deferred major-version upgrades from the 2026-07-19 triage as a risk-ordered set of per-PR branches (OpenSpec change `upgrade-deferred-dependency-majors`). This was capability/version hygiene, not advisory remediation — **no new advisories were introduced and none of the accepted risks changed**; `npm run security:npm-supply-chain` passes and `npm audit` reports only the documented `xlsx`/`quagga` risks (root/workers clean). Two upgrades also **shrank the supply-chain surface** by removing dead dependencies (`rate-limiter-flexible`, `@prisma/adapter-planetscale`).
+
+| Boundary | Change | Outcome |
+| -------- | ------ | ------- |
+| Frontend | `web-vitals 2→5` (#287): `getCLS/getFID/…` → `onCLS/onINP/…`, FID→INP in `reportWebVitals.ts` | Landed; `vitest`/`tsc`/`vite build` green |
+| Backend | `rate-limiter-flexible` 8→11 (#286) — **removed** as a dead dep (declared, imported nowhere; live limiting is `express-rate-limit`) | Supply-chain surface reduced; tier behaviour unchanged |
+| root + backend + workers + frontend | `typescript → 6.0.3` (#159/#198/#166/#152) as one coordinated set | All boundaries typecheck/build green |
+| Backend + frontend | `eslint → 9` + flat-config migration; `eslint-plugin-react-hooks 4→7` (#178) | Migration delivered; all boundaries lint clean |
+| Frontend + workers | `@types/node → 26.1.1` (#285/#276), unblocked by the TS 6 upgrade | typecheck/build/`test:db` green |
+| Backend | `stripe 13→22` (#283): adopted API `2026-06-24.dahlia`, migrated the "basil" `current_period_end` move to subscription items | Suite green; caught+fixed a v22 empty-key construction throw masked by Doppler |
+| root + backend | `@prisma/client` + `prisma` `5→6.19.3` (#373); removed dead `@prisma/adapter-planetscale@7.8.0` | Suite green; `test:db` 70/70 |
+
+**Still deferred (left open with recorded reasons):**
+
+- **ESLint 10** — root `eslint` #279, backend `eslint` #288, `@eslint/js` #170. Upstream-blocked: `eslint-plugin-react@7.37.x` calls `context.getFilename()`, removed in ESLint 10, and the react/a11y/import plugins cap their `eslint` peer at `^9`. ESLint **9** is the max viable version and is already flat-config-native, so the migration was delivered at 9. Re-attempt when `eslint-plugin-react` ships ESLint 10 support.
+- **Prisma 7** — `@prisma/client` #183, `prisma` #153. Prisma 7 is an ORM re-architecture, not a bump: it mandates **driver adapters** (`new PrismaClient()` no longer self-connects), is **ESM-only** (`"type":"module"`), and needs the new `prisma-client` generator + `prisma.config.ts`. This backend is CommonJS + tsyringe/reflect-metadata + SWC decorator metadata, so 7 is a separate architecture change; landed **6** (classic engine, CJS, auto-`.env`) as the safe forward step.
+
 ### Accepted Dependency Risks
 
 | Package area | Current status | Mitigation |
 | ------------ | -------------- | ---------- |
 | `xlsx` in backend/frontend | npm audit reports known high severity advisories and no fixed npm release. | Keep file upload limits, input validation, and CSV injection controls active. Treat XLSX replacement as follow-up work before broadening spreadsheet import features. |
-| CRA/react-scripts in frontend | Several transitive build-tool advisories remain because CRA 5 has no clean patched path. | Do not expose dev server publicly. Prefer a separate frontend build-tool migration proposal over risky forced transitive changes. |
-| `quagga` in frontend | Pulls old request/form-data paths through image loading dependencies. | Keep scanner use local/browser-only and evaluate replacement during scanner dependency remediation. |
+| `quagga` in frontend | Pulls old request/form-data/qs paths through image loading dependencies (`form-data`, `request`, `tough-cookie` advisories). | Keep scanner use local/browser-only and evaluate replacement during scanner dependency remediation. |
 
 ### Developer Workflow
 

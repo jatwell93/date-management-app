@@ -21,16 +21,16 @@ describe('StorageQuotaRepository', () => {
   beforeEach(() => {
     prisma = {
       upload: {
-        aggregate: jest.fn(),
-        create: jest.fn(),
-        findUnique: jest.fn(),
-        update: jest.fn(),
+        aggregate: vi.fn(),
+        create: vi.fn(),
+        findUnique: vi.fn(),
+        update: vi.fn(),
       },
       organizationUsage: {
-        upsert: jest.fn(),
-        update: jest.fn(),
+        upsert: vi.fn(),
+        update: vi.fn(),
       },
-      $transaction: jest.fn(async (callback: (client: typeof prisma) => Promise<unknown>) =>
+      $transaction: vi.fn(async (callback: (client: typeof prisma) => Promise<unknown>) =>
         callback(prisma),
       ),
     };

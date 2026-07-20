@@ -1,6 +1,6 @@
 import { PrismaClient, Prisma } from '@prisma/client';
 import { getDefaultDatabaseClient } from '../database/database-factory';
-import { AuditEventType, AUDIT_EVENT_TYPES } from '../constants/roles';
+import { AuditEventType } from '../constants/roles';
 import { OrgAuditRepository, OrgAuditQueryOptions } from '../repositories/org-audit.repository';
 
 export interface OrgAuditEntry {

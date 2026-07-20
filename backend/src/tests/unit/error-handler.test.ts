@@ -10,6 +10,7 @@ import {
   NotFoundError,
   ConflictError,
   InternalError,
+  PolicyValidationError,
 } from '../../errors';
 import { errorHandler } from '../../middleware/error.middleware';
 
@@ -21,8 +22,8 @@ describe('Error Handler Middleware - Phase 13', () => {
   let statusMock: jest.Mock;
 
   beforeEach(() => {
-    jsonMock = jest.fn();
-    statusMock = jest.fn().mockReturnThis();
+    jsonMock = vi.fn();
+    statusMock = vi.fn().mockReturnThis();
 
     mockRes = {
       status: statusMock,
@@ -34,10 +35,10 @@ describe('Error Handler Middleware - Phase 13', () => {
       url: '/test',
       method: 'GET',
       ip: '127.0.0.1',
-      get: jest.fn().mockReturnValue('Test User Agent'),
+      get: vi.fn().mockReturnValue('Test User Agent'),
     };
 
-    mockNext = jest.fn();
+    mockNext = vi.fn();
   });
 
   describe('Custom Error Handling', () => {
@@ -54,6 +55,22 @@ describe('Error Handler Middleware - Phase 13', () => {
         message: 'Invalid input',
         statusCode: 400,
         errors: [{ field: 'email', message: 'Invalid email format' }],
+      });
+    });
+
+    it('should preserve structured policy validation errors with 422 status', () => {
+      const error = new PolicyValidationError('Supplier policy is invalid', [
+        { field: 'contact', message: 'Add a contact method' },
+      ]);
+
+      errorHandler(error, mockReq as Request, mockRes as Response, mockNext);
+
+      expect(statusMock).toHaveBeenCalledWith(422);
+      expect(jsonMock).toHaveBeenCalledWith({
+        code: 'POLICY_VALIDATION_ERROR',
+        message: 'Supplier policy is invalid',
+        statusCode: 422,
+        errors: [{ field: 'contact', message: 'Add a contact method' }],
       });
     });
 
@@ -190,7 +207,7 @@ describe('Error Handler Middleware - Phase 13', () => {
 
   describe('Context Logging', () => {
     it('should include request context in error logs', () => {
-      const consoleErrorSpy = jest.spyOn(console, 'error').mockImplementation();
+      const consoleErrorSpy = vi.spyOn(console, 'error').mockImplementation();
       const error = new Error('Test error');
 
       errorHandler(error, mockReq as Request, mockRes as Response, mockNext);

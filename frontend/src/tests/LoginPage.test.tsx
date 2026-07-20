@@ -5,9 +5,9 @@ import { LoginPage } from '../components/LoginPage';
 import { apiService } from '../lib/api.service';
 
 // Mock apiService
-jest.mock('../lib/api.service', () => ({
+vi.mock('../lib/api.service', () => ({
   apiService: {
-    post: jest.fn(),
+    post: vi.fn(),
   },
 }));
 
@@ -15,10 +15,10 @@ jest.mock('../lib/api.service', () => ({
 const mockAuthToken = randomUUID();
 
 describe('LoginPage', () => {
-  const mockOnLogin = jest.fn();
+  const mockOnLogin = vi.fn();
 
   beforeEach(() => {
-    jest.clearAllMocks();
+    vi.clearAllMocks();
     (apiService.post as jest.Mock).mockResolvedValue({ token: mockAuthToken });
   });
 

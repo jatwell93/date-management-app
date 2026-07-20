@@ -16,17 +16,17 @@ import * as path from 'path';
 import * as os from 'os';
 
 // Mock PrismaClient
-const mockTransaction = jest.fn();
-const mockProductFindUnique = jest.fn();
-const mockProductFindFirst = jest.fn();
-const mockProductCreate = jest.fn();
-const mockProductUpdate = jest.fn();
-const mockInventoryFindFirst = jest.fn();
-const mockInventoryCreate = jest.fn();
-const mockStoreAreaFindFirst = jest.fn();
-const mockStoreAreaCreate = jest.fn();
-const mockOrganizationUsageUpdateMany = jest.fn();
-const mockOrganizationUsageUpdate = jest.fn();
+const mockTransaction = vi.fn();
+const mockProductFindUnique = vi.fn();
+const mockProductFindFirst = vi.fn();
+const mockProductCreate = vi.fn();
+const mockProductUpdate = vi.fn();
+const mockInventoryFindFirst = vi.fn();
+const mockInventoryCreate = vi.fn();
+const mockStoreAreaFindFirst = vi.fn();
+const mockStoreAreaCreate = vi.fn();
+const mockOrganizationUsageUpdateMany = vi.fn();
+const mockOrganizationUsageUpdate = vi.fn();
 
 const mockPrisma = {
   $transaction: mockTransaction,
@@ -64,7 +64,7 @@ describe('CSVParserService', () => {
   });
 
   beforeEach(() => {
-    jest.clearAllMocks();
+    vi.clearAllMocks();
     parser = new CSVParserService(mockPrisma, {
       batchSize: 2, // Small batch for testing
       progressInterval: 2,
@@ -158,6 +158,55 @@ describe('CSVParserService', () => {
 
       expect(result.errors.filter((e) => e.field === 'header')).toHaveLength(0);
       expect(result.imported).toBe(1);
+    });
+
+    it('should accept Item Cost as a cost header', async () => {
+      const filePath = createTestCSV(
+        'item-cost-header.csv',
+        'Item Code,Item Description,EAN,Item Cost\n' + 'SKU001,Product 1,123456789,12.99\n',
+      );
+
+      const result = await parser.processFile(filePath);
+
+      expect(result.errors.filter((e) => e.field === 'header')).toHaveLength(0);
+      expect(result.imported).toBe(1);
+    });
+
+    it('should reject Retail Price as a cost-only header and report true cost alternatives', async () => {
+      const filePath = createTestCSV(
+        'retail-price-without-cost.csv',
+        'SKU,Name,Barcode,Retail Price\n' + 'SKU001,Product 1,123456789,19.99\n',
+      );
+
+      const result = await parser.processFile(filePath);
+
+      const costHeaderError = result.errors.find(
+        (error) => error.field === 'header' && error.value === 'cost',
+      );
+      expect(costHeaderError).toBeDefined();
+      expect(costHeaderError?.message).not.toContain('Selling Price');
+      expect(costHeaderError?.message).not.toContain('Retail Price');
+      expect(result.imported).toBe(0);
+    });
+
+    it('should import optional Retail Price separately from Cost', async () => {
+      const filePath = createTestCSV(
+        'retail-price-header.csv',
+        'SKU,Name,Barcode,Cost,Retail Price\n' + 'SKU001,Product 1,123456789,12.99,19.99\n',
+      );
+
+      const result = await parser.processFile(filePath);
+
+      expect(result.errors.filter((e) => e.field === 'header')).toHaveLength(0);
+      expect(result.imported).toBe(1);
+      expect(mockProductCreate).toHaveBeenCalledWith(
+        expect.objectContaining({
+          data: expect.objectContaining({
+            costPrice: 12.99,
+            retailPrice: 19.99,
+          }),
+        }),
+      );
     });
 
     it('should report missing required headers', async () => {

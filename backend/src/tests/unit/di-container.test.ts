@@ -1,20 +1,20 @@
 import 'reflect-metadata';
 
-function loadCompositionRoot() {
-  jest.resetModules();
+async function loadCompositionRoot() {
+  vi.resetModules();
 
   const mockPrisma = {
     product: {},
     inventoryItem: {},
     subscriptionTier: {},
   };
-  const mockGetDefaultDatabaseClient = jest.fn(() => mockPrisma);
-  const mockGetStripeClient = jest.fn();
+  const mockGetDefaultDatabaseClient = vi.fn(() => mockPrisma);
+  const mockGetStripeClient = vi.fn();
 
-  jest.doMock('../../database/database-factory', () => ({
+  vi.doMock('../../database/database-factory', () => ({
     getDefaultDatabaseClient: () => mockGetDefaultDatabaseClient(),
   }));
-  jest.doMock('../../utils/stripe', () => ({
+  vi.doMock('../../utils/stripe', () => ({
     getStripeClient: (...args: unknown[]) => mockGetStripeClient(...args),
   }));
 
@@ -22,33 +22,33 @@ function loadCompositionRoot() {
     mockPrisma,
     mockGetDefaultDatabaseClient,
     mockGetStripeClient,
-    ...(require('@prisma/client') as typeof import('@prisma/client')),
-    ...(require('../../di/container') as typeof import('../../di/container')),
-    ...(require('../../repositories/analytics.repository') as typeof import('../../repositories/analytics.repository')),
-    ...(require('../../repositories/inventory.repository') as typeof import('../../repositories/inventory.repository')),
-    ...(require('../../repositories/job-lock.repository') as typeof import('../../repositories/job-lock.repository')),
-    ...(require('../../repositories/organization.repository') as typeof import('../../repositories/organization.repository')),
-    ...(require('../../repositories/org-audit.repository') as typeof import('../../repositories/org-audit.repository')),
-    ...(require('../../repositories/product.repository') as typeof import('../../repositories/product.repository')),
-    ...(require('../../repositories/storage-quota.repository') as typeof import('../../repositories/storage-quota.repository')),
-    ...(require('../../repositories/store-area.repository') as typeof import('../../repositories/store-area.repository')),
-    ...(require('../../repositories/subscription.repository') as typeof import('../../repositories/subscription.repository')),
-    ...(require('../../repositories/upload.repository') as typeof import('../../repositories/upload.repository')),
-    ...(require('../../repositories/user.repository') as typeof import('../../repositories/user.repository')),
-    ...(require('../../services/inventory.service') as typeof import('../../services/inventory.service')),
-    ...(require('../../services/product.service') as typeof import('../../services/product.service')),
-    ...(require('../../services/subscription.service') as typeof import('../../services/subscription.service')),
+    ...((await import('@prisma/client')) as typeof import('@prisma/client')),
+    ...((await import('../../di/container')) as typeof import('../../di/container')),
+    ...((await import('../../repositories/analytics.repository')) as typeof import('../../repositories/analytics.repository')),
+    ...((await import('../../repositories/inventory.repository')) as typeof import('../../repositories/inventory.repository')),
+    ...((await import('../../repositories/job-lock.repository')) as typeof import('../../repositories/job-lock.repository')),
+    ...((await import('../../repositories/organization.repository')) as typeof import('../../repositories/organization.repository')),
+    ...((await import('../../repositories/org-audit.repository')) as typeof import('../../repositories/org-audit.repository')),
+    ...((await import('../../repositories/product.repository')) as typeof import('../../repositories/product.repository')),
+    ...((await import('../../repositories/storage-quota.repository')) as typeof import('../../repositories/storage-quota.repository')),
+    ...((await import('../../repositories/store-area.repository')) as typeof import('../../repositories/store-area.repository')),
+    ...((await import('../../repositories/subscription.repository')) as typeof import('../../repositories/subscription.repository')),
+    ...((await import('../../repositories/upload.repository')) as typeof import('../../repositories/upload.repository')),
+    ...((await import('../../repositories/user.repository')) as typeof import('../../repositories/user.repository')),
+    ...((await import('../../services/inventory.service')) as typeof import('../../services/inventory.service')),
+    ...((await import('../../services/product.service')) as typeof import('../../services/product.service')),
+    ...((await import('../../services/subscription.service')) as typeof import('../../services/subscription.service')),
   };
 }
 
 describe('DI composition root', () => {
   afterEach(() => {
-    jest.dontMock('../../database/database-factory');
-    jest.dontMock('../../utils/stripe');
+    vi.doUnmock('../../database/database-factory');
+    vi.doUnmock('../../utils/stripe');
   });
 
-  it('registers the shared Prisma client and migrated repositories', () => {
-    const modules = loadCompositionRoot();
+  it('registers the shared Prisma client and migrated repositories', async () => {
+    const modules = await loadCompositionRoot();
     const container = modules.getDiContainer();
 
     expect(container.resolve(modules.PrismaClient)).toBe(modules.mockPrisma);
@@ -79,8 +79,8 @@ describe('DI composition root', () => {
     expect(container.resolve(modules.JobLockRepository)).toBeInstanceOf(modules.JobLockRepository);
   });
 
-  it('resolves migrated service factories from registered repositories', () => {
-    const modules = loadCompositionRoot();
+  it('resolves migrated service factories from registered repositories', async () => {
+    const modules = await loadCompositionRoot();
     const container = modules.getDiContainer();
 
     const productServiceFactory =
@@ -95,8 +95,8 @@ describe('DI composition root', () => {
     );
   });
 
-  it('registers Stripe as a lazy client factory', () => {
-    const modules = loadCompositionRoot();
+  it('registers Stripe as a lazy client factory', async () => {
+    const modules = await loadCompositionRoot();
     const container = modules.getDiContainer();
 
     const stripeClientFactory = container.resolve<() => unknown>('StripeClientFactory');

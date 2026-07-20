@@ -12,23 +12,20 @@ import localforage from 'localforage';
 
 let mockStore: Record<string, any> = {};
 
-// The mock factory must be completely self-contained due to Jest hoisting
-jest.mock('localforage', () => {
-  // This reference to the outer mockStore works because Jest doesn't hoist
-  // variable references that are used inside the factory function's implementation
-  return {
-    setItem: jest.fn((key: string, value: any) => {
-      // We need to import the mockStore at runtime, not capture it
-      const store = require('../tests/offline-storage.test.ts').mockStore;
-      return Promise.resolve(value);
-    }),
-    getItem: jest.fn((key: string) => Promise.resolve(null)),
-    removeItem: jest.fn(() => Promise.resolve()),
-    clear: jest.fn(() => Promise.resolve()),
-    keys: jest.fn(() => Promise.resolve([])),
-    config: jest.fn(),
+// The mock factory must be completely self-contained due to hoisting.
+vi.mock('localforage', () => {
+  const localforage = {
+    // Default no-op implementation; each test installs its own setItem
+    // implementation against `mockStore` in beforeEach.
+    setItem: vi.fn((_key: string, value: any) => Promise.resolve(value)),
+    getItem: vi.fn((_key: string) => Promise.resolve(null)),
+    removeItem: vi.fn(() => Promise.resolve()),
+    clear: vi.fn(() => Promise.resolve()),
+    keys: vi.fn(() => Promise.resolve([])),
+    config: vi.fn(),
     INDEXEDDB: 'asyncStorage',
   };
+  return { ...localforage, default: localforage };
 });
 
 // We need to export mockStore for the circular reference to work
@@ -37,7 +34,7 @@ export { mockStore };
 describe('offlineStorage', () => {
   beforeEach(() => {
     mockStore = {};
-    jest.clearAllMocks();
+    vi.clearAllMocks();
 
     // Set up fresh mock implementations for each test
     (localforage.setItem as jest.Mock).mockImplementation((key: string, value: any) => {

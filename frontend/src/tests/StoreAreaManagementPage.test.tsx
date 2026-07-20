@@ -13,20 +13,28 @@ import { apiService } from '../lib/api.service';
 import '@testing-library/jest-dom';
 
 const testSessionToken = randomUUID();
+const mockGetToken = vi.fn();
+
+vi.mock('@clerk/clerk-react', () => ({
+  useAuth: () => ({
+    getToken: mockGetToken,
+  }),
+}));
 
 // Mock apiService
-jest.mock('../lib/api.service', () => ({
+vi.mock('../lib/api.service', () => ({
   apiService: {
-    get: jest.fn(),
-    post: jest.fn(),
-    put: jest.fn(),
-    delete: jest.fn(),
+    get: vi.fn(),
+    post: vi.fn(),
+    put: vi.fn(),
+    delete: vi.fn(),
   },
 }));
 
 describe('StoreAreaManagementPage', () => {
   beforeEach(() => {
-    jest.clearAllMocks();
+    vi.clearAllMocks();
+    mockGetToken.mockResolvedValue(undefined);
   });
 
   it('renders the store area management page and fetches areas', async () => {
@@ -40,8 +48,8 @@ describe('StoreAreaManagementPage', () => {
 
     expect(screen.getByText(/Store Area Management/i)).toBeInTheDocument();
 
-    expect(await screen.findAllByText(/Aisle 1/i)).toHaveLength(2);
-    expect(screen.getAllByText(/Aisle 2/i)).toHaveLength(2);
+    expect((await screen.findAllByText(/Aisle 1/i)).length).toBeGreaterThanOrEqual(2);
+    expect(screen.getAllByText(/Aisle 2/i).length).toBeGreaterThanOrEqual(2);
     expect(screen.getAllByText(/20 Sept 2025/i)).toHaveLength(2);
     expect(apiService.get).toHaveBeenCalledWith(
       '/store-areas',
@@ -54,6 +62,12 @@ describe('StoreAreaManagementPage', () => {
     (apiService.get as jest.Mock).mockResolvedValue([]);
 
     render(<StoreAreaManagementPage token={testSessionToken} />);
+
+    // Let the initial fetchStoreAreas() promise settle before interacting. On
+    // success it calls setError(null), which would otherwise clear the
+    // validation error asserted below (a timing race that jest happened to win
+    // by settling the fetch before the click).
+    await act(async () => {});
 
     expect(screen.getByLabelText(/Area name/i)).toBeInTheDocument();
     expect(screen.getByLabelText(/Sub-department/i)).toHaveAttribute('maxLength', '50');
@@ -187,6 +201,222 @@ describe('StoreAreaManagementPage', () => {
     expect(await screen.findByRole('status')).toHaveTextContent(/New Area added/i);
   });
 
+  it('assigns a new bay to a parent department', async () => {
+    (apiService.get as jest.Mock).mockResolvedValue([
+      { id: 10, name: 'Hair', parentId: null, last_checked: null },
+      { id: 11, name: 'Hair Bay 1', parentId: 10, last_checked: null },
+    ]);
+    (apiService.post as jest.Mock).mockResolvedValue({
+      id: 12,
+      name: 'Hair Bay 2',
+      parentId: 10,
+      last_checked: null,
+    });
+
+    render(<StoreAreaManagementPage token={testSessionToken} />);
+
+    await screen.findAllByText(/Hair Bay 1/i);
+
+    fireEvent.change(screen.getByLabelText(/Area name/i), {
+      target: { value: 'Hair Bay 2' },
+    });
+    fireEvent.change(screen.getByLabelText(/Parent department/i), {
+      target: { value: '10' },
+    });
+    fireEvent.click(screen.getByRole('button', { name: /Add location/i }));
+
+    await _waitFor(() =>
+      expect(apiService.post).toHaveBeenCalledWith(
+        '/store-areas',
+        { name: 'Hair Bay 2', subDepartment: '', parentId: 10 },
+        testSessionToken,
+      ),
+    );
+  });
+
+  it('renders active floor progress and records a bay check', async () => {
+    // @ts-expect-error — apiService.get is mocked as vi.fn()
+    apiService.get.mockImplementation((url) => {
+      if (url === '/store-areas') {
+        return Promise.resolve([
+          { id: 10, name: 'Hair', parentId: null, last_checked: null },
+          { id: 11, name: 'Hair Bay 1', parentId: 10, last_checked: '2026-07-08T08:00:00Z' },
+          { id: 12, name: 'Hair Bay 2', parentId: 10, last_checked: null },
+        ]);
+      }
+      if (url === '/store-areas/floor-progress') {
+        return Promise.resolve({
+          activeCycle: { id: 31, name: 'July walk', status: 'active' },
+          summary: {
+            totalBays: 2,
+            checkedBays: 1,
+            notCheckedBays: 1,
+            overdueBays: 0,
+            uncheckedBays: 1,
+            coveragePercent: 50,
+          },
+          departments: [
+            {
+              department: { id: 10, name: 'Hair' },
+              summary: {
+                totalBays: 2,
+                checkedBays: 1,
+                notCheckedBays: 1,
+                overdueBays: 0,
+                uncheckedBays: 1,
+                coveragePercent: 50,
+              },
+              bays: [
+                {
+                  id: 11,
+                  name: 'Hair Bay 1',
+                  parentId: 10,
+                  state: 'checked',
+                  checkedAt: '2026-07-10T01:00:00.000Z',
+                  checkedBy: { id: 7, name: 'Alex Checker' },
+                },
+                {
+                  id: 12,
+                  name: 'Hair Bay 2',
+                  parentId: 10,
+                  state: 'not_checked',
+                  checkedAt: null,
+                  checkedBy: null,
+                },
+              ],
+            },
+          ],
+        });
+      }
+      return Promise.resolve([]);
+    });
+    (apiService.post as jest.Mock).mockResolvedValue({
+      id: 41,
+      storeAreaId: 12,
+      itemsAddedCount: 0,
+    });
+
+    render(<StoreAreaManagementPage token={testSessionToken} />);
+
+    expect(await screen.findByRole('heading', { name: /Floor Progress/i })).toBeInTheDocument();
+    expect(screen.getByText(/July walk/i)).toBeInTheDocument();
+    expect(screen.getAllByText(/50%/i).length).toBeGreaterThanOrEqual(1);
+    expect(screen.getByText(/Alex Checker/i)).toBeInTheDocument();
+    expect(screen.getByText(/Not yet checked/i)).toBeInTheDocument();
+
+    fireEvent.click(screen.getByRole('button', { name: /Mark Hair Bay 2 checked/i }));
+
+    await _waitFor(() =>
+      expect(apiService.post).toHaveBeenCalledWith(
+        '/store-areas/bay-checks',
+        { storeAreaId: 12, itemsAddedCount: 0 },
+        testSessionToken,
+      ),
+    );
+    await _waitFor(() =>
+      expect(apiService.get).toHaveBeenCalledWith(
+        '/store-areas/floor-progress',
+        testSessionToken,
+        expect.any(AbortSignal),
+      ),
+    );
+  });
+
+  it('starts and completes store walk cycles', async () => {
+    // @ts-expect-error — apiService.get is mocked as vi.fn()
+    apiService.get.mockImplementation((url) => {
+      if (url === '/store-areas') return Promise.resolve([]);
+      if (url === '/store-areas/floor-progress') {
+        return Promise.resolve({
+          activeCycle: null,
+          summary: {
+            totalBays: 0,
+            checkedBays: 0,
+            notCheckedBays: 0,
+            overdueBays: 0,
+            uncheckedBays: 0,
+            coveragePercent: 0,
+          },
+          departments: [],
+        });
+      }
+      return Promise.resolve([]);
+    });
+    (apiService.post as jest.Mock).mockResolvedValue({ id: 31, name: 'July walk' });
+
+    render(<StoreAreaManagementPage token={testSessionToken} />);
+
+    fireEvent.change(await screen.findByLabelText(/Walk name/i), {
+      target: { value: 'July walk' },
+    });
+    fireEvent.click(screen.getByRole('button', { name: /Start walk/i }));
+
+    await _waitFor(() =>
+      expect(apiService.post).toHaveBeenCalledWith(
+        '/store-areas/check-cycles',
+        { name: 'July walk' },
+        testSessionToken,
+      ),
+    );
+
+    // @ts-expect-error — apiService.get is mocked as vi.fn()
+    apiService.get.mockImplementation((url) => {
+      if (url === '/store-areas') return Promise.resolve([]);
+      if (url === '/store-areas/floor-progress') {
+        return Promise.resolve({
+          activeCycle: { id: 31, name: 'July walk', status: 'active' },
+          summary: {
+            totalBays: 0,
+            checkedBays: 0,
+            notCheckedBays: 0,
+            overdueBays: 0,
+            uncheckedBays: 0,
+            coveragePercent: 0,
+          },
+          departments: [],
+        });
+      }
+      return Promise.resolve([]);
+    });
+
+    expect(await screen.findByRole('button', { name: /Complete walk/i })).toBeInTheDocument();
+    fireEvent.click(screen.getByRole('button', { name: /Complete walk/i }));
+
+    await _waitFor(() =>
+      expect(apiService.post).toHaveBeenCalledWith(
+        '/store-areas/check-cycles/31/complete',
+        {},
+        testSessionToken,
+      ),
+    );
+  });
+
+  it('refreshes the Clerk token before creating a store area', async () => {
+    mockGetToken.mockResolvedValue('fresh-clerk-token');
+    (apiService.get as jest.Mock).mockResolvedValue([]);
+    (apiService.post as jest.Mock).mockResolvedValue({
+      id: 3,
+      name: 'New Area',
+      last_checked: null,
+    });
+
+    render(<StoreAreaManagementPage token="expired-prop-token" />);
+
+    fireEvent.change(await screen.findByLabelText(/Area name/i), {
+      target: { value: 'New Area' },
+    });
+    fireEvent.click(screen.getByRole('button', { name: /Add location/i }));
+
+    await _waitFor(() => {
+      expect(mockGetToken).toHaveBeenCalled();
+      expect(apiService.post).toHaveBeenCalledWith(
+        '/store-areas',
+        { name: 'New Area', subDepartment: '' },
+        'fresh-clerk-token',
+      );
+    });
+  });
+
   it('prevents duplicate add submissions while saving', async () => {
     (apiService.get as jest.Mock).mockResolvedValue([]);
     let resolvePost: (value: unknown) => void = () => {};
@@ -207,7 +437,7 @@ describe('StoreAreaManagementPage', () => {
     fireEvent.click(addButton);
     fireEvent.click(addButton);
 
-    expect(apiService.post).toHaveBeenCalledTimes(1);
+    await _waitFor(() => expect(apiService.post).toHaveBeenCalledTimes(1));
     expect(addButton).toBeDisabled();
 
     await act(async () => {

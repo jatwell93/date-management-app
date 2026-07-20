@@ -12,12 +12,14 @@ async function build() {
       bundle: true,
       outfile: path.join(__dirname, 'dist/index.js'),
       format: 'esm',
-      target: 'es2021',
+      target: 'es2022',
       platform: 'neutral',
       conditions: ['workerd', 'worker', 'browser'],
       mainFields: ['browser', 'module', 'main'],
       sourcemap: true,
       minify: true,
+      drop: ['console'],
+      legalComments: 'none',
 
       // Externalize Node.js native modules that can't run in Workers
       external: [
@@ -89,6 +91,8 @@ async function build() {
       // Define for environment detection
       define: {
         'process.env.WORKERS_ENVIRONMENT': '"true"',
+        // Remove Sentry's debug-only branches from the production Worker bundle.
+        __SENTRY_DEBUG__: 'false',
       },
 
       // Log level

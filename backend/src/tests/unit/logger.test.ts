@@ -10,15 +10,15 @@ describe('Logger', () => {
   beforeEach(() => {
     mockLogs = [];
 
-    console.log = jest.fn((message: string) => {
+    console.log = vi.fn((message: string) => {
       mockLogs.push({ level: 'log', message });
     });
 
-    console.warn = jest.fn((message: string) => {
+    console.warn = vi.fn((message: string) => {
       mockLogs.push({ level: 'warn', message });
     });
 
-    console.error = jest.fn((message: string) => {
+    console.error = vi.fn((message: string) => {
       mockLogs.push({ level: 'error', message });
     });
   });

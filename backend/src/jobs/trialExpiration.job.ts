@@ -2,7 +2,7 @@
  * Trial Expiration Job
  *
  * Scheduled job that runs daily to:
- * 1. Downgrade expired trials to starter tier
+ * 1. Downgrade expired trials to the permanent Free tier
  * 2. Send trial reminder emails (10, 5, 2 days before expiry)
  * 3. Send downgrade warning emails
  *
@@ -46,33 +46,37 @@ export async function runTrialExpirationJob(): Promise<void> {
   Logger.info('Starting trial expiration job');
 
   try {
-    // Step 1: Downgrade expired trials to starter tier
+    // Step 1: Downgrade expired trials to the permanent Free tier
     Logger.info('Checking for expired trials to downgrade...');
     const downgradedCount = await subscriptionService.downgradeExpiredTrials();
-    Logger.info(`Downgraded ${downgradedCount} expired trials to starter tier`);
+    Logger.info(`Downgraded ${downgradedCount} expired trials to free tier`);
 
     // Step 2: Send downgrade warning emails to recently downgraded
     if (downgradedCount > 0) {
       // Get organizations that were just downgraded (last 24 hours)
       const recentDowngrades = await subscriptionService.getRecentlyDowngradedTrials();
-      for (const trial of recentDowngrades) {
-        try {
-          await emailService.sendDowngradeWarningEmail(
+      const downgradeResults = await Promise.allSettled(
+        recentDowngrades.map((trial) =>
+          emailService.sendDowngradeWarningEmail(
             trial.organizationId,
             0, // We don't have current usage, assume within limits
             500, // Starter tier limit
-          );
-        } catch (error) {
+          ),
+        ),
+      );
+      downgradeResults.forEach((result, i) => {
+        if (result.status === 'rejected') {
+          const error = result.reason;
           Logger.error(
-            `Failed to send downgrade warning for org ${trial.organizationId}: ${String(error)}`,
+            `Failed to send downgrade warning for org ${recentDowngrades[i].organizationId}: ${String(error)}`,
           );
           Sentry.captureException(error, {
             level: 'error',
             tags: { job: 'trial-expiration', event: 'downgrade-warning-email' },
-            extra: { organizationId: trial.organizationId },
+            extra: { organizationId: recentDowngrades[i].organizationId },
           });
         }
-      }
+      });
     }
 
     // Step 3: Find trials needing reminder emails
@@ -80,20 +84,23 @@ export async function runTrialExpirationJob(): Promise<void> {
     const trialsNeedingReminders = await subscriptionService.findTrialsNeedingReminders();
     Logger.info(`Found ${trialsNeedingReminders.length} trials needing reminders`);
 
-    // Step 4: Send reminder emails
-    for (const trial of trialsNeedingReminders) {
-      try {
+    // Step 4: Send reminder emails — all trials are independent, run in parallel
+    const reminderResults = await Promise.allSettled(
+      trialsNeedingReminders.map(async (trial) => {
         await emailService.sendTrialReminderEmail(trial.organizationId, trial.daysRemaining);
-
-        // Log the reminder event
+        // Log the reminder event only after the email succeeds
         await subscriptionService.logTrialEvent(trial.organizationId, 'trial_reminder_sent', {
           daysRemaining: trial.daysRemaining,
         });
-
         Logger.info(
           `Sent trial reminder to org ${trial.organizationId}: ${trial.daysRemaining} days remaining`,
         );
-      } catch (error) {
+      }),
+    );
+    reminderResults.forEach((result, i) => {
+      if (result.status === 'rejected') {
+        const error = result.reason;
+        const trial = trialsNeedingReminders[i];
         Logger.error(`Failed to send reminder for org ${trial.organizationId}: ${String(error)}`);
         Sentry.captureException(error, {
           level: 'error',
@@ -102,7 +109,7 @@ export async function runTrialExpirationJob(): Promise<void> {
         });
         // Continue with other reminders even if one fails
       }
-    }
+    });
 
     Logger.info('Trial expiration job completed successfully');
   } catch (error) {

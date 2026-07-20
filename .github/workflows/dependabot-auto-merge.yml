@@ -1,0 +1,47 @@
+name: Dependabot auto-merge
+
+# Auto-merges Dependabot PRs for minor and patch updates once the required
+# status checks (CodeQL, Scan for secrets, Check npm supply chain) pass.
+#
+# Why this exists: the `main` ruleset is strict (require-up-to-date) with no
+# bypass actors, so every Dependabot PR otherwise needs a manual branch-update
+# + merge. `@dependabot merge` comment commands proved unreliable on this repo,
+# so we drive merges from CI instead.
+#
+# Scope, per docs/security.md ("review by boundary, don't mix runtime and
+# tooling"): only minor/patch updates auto-merge. Major bumps return
+# update-type `semver-major` and are intentionally skipped so each gets
+# individual review. The grouped minor/patch PRs (production-minor-patch /
+# development-minor-patch) report the highest semver change in the group, so a
+# group containing only minor/patch updates is what this matches.
+#
+# To tighten further to dev/tooling deps only, add to the merge step's `if`:
+#   && steps.metadata.outputs.dependency-type == 'direct:development'
+on: pull_request
+
+# Grant the GITHUB_TOKEN write scopes for this workflow only. This applies even
+# to Dependabot-triggered runs (which default to a read-only token). The ruleset
+# requires 0 approvals, so the workflow never needs to approve — only to enable
+# auto-merge — hence no repo-wide permission changes are required.
+permissions:
+  contents: write
+  pull-requests: write
+
+jobs:
+  dependabot-auto-merge:
+    runs-on: ubuntu-latest
+    # Only act on Dependabot's own PRs.
+    if: ${{ github.actor == 'dependabot[bot]' }}
+    steps:
+      - name: Fetch Dependabot metadata
+        id: metadata
+        uses: dependabot/fetch-metadata@v2
+        with:
+          github-token: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Enable auto-merge for minor and patch updates
+        if: ${{ steps.metadata.outputs.update-type == 'version-update:semver-minor' || steps.metadata.outputs.update-type == 'version-update:semver-patch' }}
+        run: gh pr merge --auto --squash "$PR_URL"
+        env:
+          PR_URL: ${{ github.event.pull_request.html_url }}
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}

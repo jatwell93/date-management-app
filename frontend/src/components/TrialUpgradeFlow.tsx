@@ -1,7 +1,9 @@
 import { useState, useEffect } from 'react';
-import { Button } from './ui/button';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from './ui/card';
+import { PlanComparison } from './PlanComparison';
 import { buildApiUrl } from '../lib/api.service';
+import { useFreshApiToken } from '../hooks/useFreshApiToken';
+import type { BillingCycle, LaunchTier } from '../lib/planCatalog';
 
 interface SubscriptionTierResponse {
   status: 'active' | 'trialing' | 'expired' | 'canceled';
@@ -55,30 +57,24 @@ function ActivePlanCard({ tierLevel, billingCycle }: ActivePlanCardProps) {
   );
 }
 
-interface UpgradeCardProps {
+interface UpgradeHeaderProps {
   isInTrial: boolean;
   isTrialExpired: boolean;
   status: SubscriptionTierResponse['status'] | undefined;
   daysRemaining: number;
   tierLimits: TrialStatusResponse['tierLimits'];
-  error: string | null;
-  converting: boolean;
-  onUpgrade: (billingCycle: 'monthly' | 'annual') => void;
 }
 
-function UpgradeCard({
+function UpgradeHeader({
   isInTrial,
   isTrialExpired,
   status,
   daysRemaining,
   tierLimits,
-  error,
-  converting,
-  onUpgrade,
-}: UpgradeCardProps) {
+}: UpgradeHeaderProps) {
   function getDescription(): string {
     if (isInTrial && daysRemaining > 0) {
-      return `${daysRemaining} day${daysRemaining === 1 ? '' : 's'} remaining`;
+      return `${daysRemaining} day${daysRemaining === 1 ? '' : 's'} remaining on your Professional trial`;
     }
     if (isTrialExpired || status === 'expired') {
       return 'Trial expired. Upgrade to restore full access.';
@@ -87,103 +83,57 @@ function UpgradeCard({
   }
 
   return (
-    <Card className="w-full max-w-md">
-      <CardHeader>
-        <CardTitle className="flex items-center gap-2">
-          {isInTrial && (
-            <span className="size-3 rounded-full bg-semantic-secondary animate-pulse" />
-          )}
-          {isInTrial ? 'Professional Trial' : 'Starter plan'}
-        </CardTitle>
-        <CardDescription>{getDescription()}</CardDescription>
-      </CardHeader>
-      <CardContent className="space-y-6">
-        <div className="space-y-3">
-          <h4 className="text-sm font-medium">Your Current Usage</h4>
-          <div className="space-y-2">
-            <div className="flex justify-between text-sm">
-              <span className="text-muted-foreground">Products</span>
-              <span>0 / {tierLimits.maxProducts}</span>
-            </div>
-            <div className="flex justify-between text-sm">
-              <span className="text-muted-foreground">Users</span>
-              <span>1 / {tierLimits.maxUsers}</span>
-            </div>
-            <div className="flex justify-between text-sm">
-              <span className="text-muted-foreground">Store Areas</span>
-              <span>0 / {tierLimits.maxStoreAreas}</span>
-            </div>
+    <div className="mb-8">
+      <h1 className="text-3xl font-semibold font-heading mb-2 flex items-center gap-2">
+        {isInTrial && <span className="size-3 rounded-full bg-semantic-secondary animate-pulse" />}
+        {isInTrial ? 'Professional Trial' : 'Starter plan'}
+      </h1>
+      <p className="text-muted-foreground">{getDescription()}</p>
+
+      <Card className="mt-6 max-w-md">
+        <CardHeader>
+          <CardTitle className="text-base">Your current usage</CardTitle>
+        </CardHeader>
+        <CardContent className="space-y-2">
+          <div className="flex justify-between text-sm">
+            <span className="text-muted-foreground">Products</span>
+            <span className="tabular-nums">0 / {tierLimits.maxProducts}</span>
           </div>
-        </div>
-
-        <div className="space-y-3">
-          <h4 className="text-sm font-medium font-heading">Upgrade to Professional</h4>
-          <div className="grid grid-cols-2 gap-3">
-            <div className="p-3 border rounded-lg space-y-1">
-              <p className="font-semibold">Monthly</p>
-              <p className="text-2xl font-bold font-heading">
-                $29<span className="text-sm font-normal text-muted-foreground">/mo</span>
-              </p>
-              <p className="text-xs text-muted-foreground">Billed monthly</p>
-            </div>
-            <div className="p-3 border rounded-lg space-y-1 relative">
-              <div className="absolute -top-2 -right-2 bg-semantic-success text-semantic-success-foreground text-xs px-2 py-0.5 rounded-full">
-                Save 30%
-              </div>
-              <p className="font-semibold">Annual</p>
-              <p className="text-2xl font-bold font-heading">
-                $19<span className="text-sm font-normal text-muted-foreground">/mo</span>
-              </p>
-              <p className="text-xs text-muted-foreground">Billed $228 yearly</p>
-            </div>
+          <div className="flex justify-between text-sm">
+            <span className="text-muted-foreground">Users</span>
+            <span className="tabular-nums">1 / {tierLimits.maxUsers}</span>
           </div>
-        </div>
-
-        {error && (
-          <div className="p-3 bg-semantic-critical-muted border border-semantic-critical-muted rounded-md">
-            <p className="text-sm text-semantic-critical">{error}</p>
+          <div className="flex justify-between text-sm">
+            <span className="text-muted-foreground">Store Areas</span>
+            <span className="tabular-nums">0 / {tierLimits.maxStoreAreas}</span>
           </div>
-        )}
-
-        <div className="flex gap-3">
-          <Button className="flex-1" onClick={() => onUpgrade('monthly')} disabled={converting}>
-            {converting ? 'Processing...' : 'Upgrade Monthly'}
-          </Button>
-          <Button
-            className="flex-1"
-            variant="outline"
-            onClick={() => onUpgrade('annual')}
-            disabled={converting}
-          >
-            {converting ? 'Processing...' : 'Upgrade Annual'}
-          </Button>
-        </div>
-
-        <p className="text-xs text-center text-muted-foreground">
-          Upgrade now to keep your data and continue using all features
-        </p>
-      </CardContent>
-    </Card>
+        </CardContent>
+      </Card>
+    </div>
   );
 }
 
 export function TrialUpgradeFlow({ token }: TrialUpgradeFlowProps) {
+  const getFreshApiToken = useFreshApiToken(token);
   const [trialStatus, setTrialStatus] = useState<TrialStatusResponse | null>(null);
   const [loading, setLoading] = useState(true);
   const [converting, setConverting] = useState(false);
+  const [selectedTier, setSelectedTier] = useState<LaunchTier | null>(null);
   const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
     if (!token) {
+      // eslint-disable-next-line react-hooks/set-state-in-effect -- intentional: guard state when the auth prerequisite is absent
       setLoading(false);
       return;
     }
 
     const fetchTrialStatus = async () => {
       try {
+        const authToken = await getFreshApiToken('trial-upgrade-status');
         const response = await fetch(buildApiUrl('/subscription/trial-status'), {
           headers: {
-            Authorization: `Bearer ${token}`,
+            Authorization: `Bearer ${authToken}`,
           },
         });
 
@@ -201,20 +151,35 @@ export function TrialUpgradeFlow({ token }: TrialUpgradeFlowProps) {
     };
 
     fetchTrialStatus();
-  }, [token]);
+  }, [token, getFreshApiToken]);
 
-  const handleUpgrade = async (billingCycle: 'monthly' | 'annual') => {
+  const handleUpgrade = async (tier: LaunchTier, billingCycle: BillingCycle) => {
     if (!token || !trialStatus) return;
 
+    // Free is a no-op (nothing to buy); Enterprise is contract-based.
+    if (tier === 'free') return;
+    if (tier === 'enterprise') {
+      alert('Enterprise plans are configured by contract. Please contact support.');
+      return;
+    }
+
+    setSelectedTier(tier);
     setConverting(true);
     setError(null);
 
     try {
+      const authToken = await getFreshApiToken('trial-upgrade-checkout');
       const priceIds = {
-        monthly: process.env.REACT_APP_STRIPE_PRICE_PROFESSIONAL_MONTHLY,
-        annual: process.env.REACT_APP_STRIPE_PRICE_PROFESSIONAL_ANNUAL,
+        starter: {
+          monthly: process.env.REACT_APP_STRIPE_PRICE_STARTER_MONTHLY,
+          annual: process.env.REACT_APP_STRIPE_PRICE_STARTER_ANNUAL,
+        },
+        professional: {
+          monthly: process.env.REACT_APP_STRIPE_PRICE_PROFESSIONAL_MONTHLY,
+          annual: process.env.REACT_APP_STRIPE_PRICE_PROFESSIONAL_ANNUAL,
+        },
       };
-      const priceId = priceIds[billingCycle];
+      const priceId = priceIds[tier as 'starter' | 'professional']?.[billingCycle];
 
       if (!priceId) {
         throw new Error('Price configuration not found. Please contact support.');
@@ -224,7 +189,7 @@ export function TrialUpgradeFlow({ token }: TrialUpgradeFlowProps) {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
-          Authorization: `Bearer ${token}`,
+          Authorization: `Bearer ${authToken}`,
         },
         body: JSON.stringify({
           priceId,
@@ -268,9 +233,9 @@ export function TrialUpgradeFlow({ token }: TrialUpgradeFlowProps) {
 
   const { isInTrial, isTrialExpired, subscription, tierLimits } = trialStatus;
   const daysRemaining = subscription?.daysRemaining ?? 0;
-  const tierLevel = subscription?.tierLevel?.toLowerCase() || 'starter';
+  const tierLevel = subscription?.tierLevel?.toLowerCase() || 'free';
   const status = subscription?.status;
-  const isActivePaidPlan = status === 'active' && tierLevel !== 'starter';
+  const isActivePaidPlan = status === 'active' && tierLevel !== 'free';
 
   if (isActivePaidPlan) {
     return (
@@ -279,15 +244,28 @@ export function TrialUpgradeFlow({ token }: TrialUpgradeFlowProps) {
   }
 
   return (
-    <UpgradeCard
-      isInTrial={isInTrial}
-      isTrialExpired={isTrialExpired}
-      status={status}
-      daysRemaining={daysRemaining}
-      tierLimits={tierLimits}
-      error={error}
-      converting={converting}
-      onUpgrade={handleUpgrade}
-    />
+    <div className="container mx-auto py-8 px-4 max-w-6xl">
+      <UpgradeHeader
+        isInTrial={isInTrial}
+        isTrialExpired={isTrialExpired}
+        status={status}
+        daysRemaining={daysRemaining}
+        tierLimits={tierLimits}
+      />
+
+      {error && (
+        <div className="mb-6 max-w-md p-3 bg-semantic-critical-muted border border-semantic-critical-muted rounded-md">
+          <p className="text-sm text-semantic-critical">{error}</p>
+        </div>
+      )}
+
+      {/* Users without a paid plan can upgrade to any tier — pass 'free' so every
+          paid tier renders as an upgrade rather than a disabled current plan. */}
+      <PlanComparison
+        currentTier="free"
+        onSelectPlan={handleUpgrade}
+        busyTier={converting ? selectedTier : null}
+      />
+    </div>
   );
 }

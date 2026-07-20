@@ -9,10 +9,18 @@ type FeatureKey =
   | 'custom_integrations';
 
 const TIER_FEATURES: Record<TierLevel, FeatureKey[]> = {
+  free: [],
   starter: [],
-  professional: ['api_access'],
+  professional: ['advanced_analytics', 'api_access', 'priority_support'],
   premium: ['advanced_analytics', 'api_access', 'priority_support'],
   concierge: [
+    'advanced_analytics',
+    'api_access',
+    'priority_support',
+    'dedicated_support',
+    'custom_integrations',
+  ],
+  enterprise: [
     'advanced_analytics',
     'api_access',
     'priority_support',

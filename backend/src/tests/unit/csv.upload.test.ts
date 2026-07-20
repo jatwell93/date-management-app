@@ -1,29 +1,38 @@
-/* eslint-disable @typescript-eslint/no-explicit-any */
 import { ProductService } from '../../services/product.service';
+import { findColumnByAlternatives } from '../../services/product-import.helpers';
 import { PrismaClient } from '@prisma/client';
 import fs from 'fs';
 import path from 'path';
+import type { SupplierCreditRepository } from '../../repositories/supplier-credit.repository';
 
 describe('CSV Upload Functionality Tests', () => {
   let productService: ProductService;
   let mockPrisma: any;
+  let enrichmentRepository: Pick<SupplierCreditRepository, 'enrichImportedProduct'>;
 
   beforeEach(() => {
     mockPrisma = {
       product: {
-        findUnique: jest.fn(),
-        create: jest.fn(),
-        update: jest.fn(),
+        findUnique: vi.fn(),
+        create: vi.fn(),
+        update: vi.fn(),
       },
       organizationUsage: {
-        findUnique: jest
+        findUnique: vi
           .fn()
           .mockResolvedValue({ organizationId: 'default-org', totalSkus: 0, maxSkus: 1000 }),
-        update: jest.fn(),
+        update: vi.fn(),
       },
-      $transaction: jest.fn((callback) => callback(mockPrisma)),
+      $transaction: vi.fn((callback) => callback(mockPrisma)),
     };
-    productService = new ProductService(mockPrisma as unknown as PrismaClient);
+    enrichmentRepository = { enrichImportedProduct: vi.fn(async () => undefined) };
+    productService = new ProductService(
+      mockPrisma as unknown as PrismaClient,
+      undefined,
+      undefined,
+      undefined,
+      enrichmentRepository as SupplierCreditRepository,
+    );
   });
 
   it('should process CSV with basic format correctly', async () => {
@@ -55,43 +64,56 @@ TEST003,Product 3,"1,000.99",1234567890125`;
       expect(result.errors.length).toBe(0);
       expect(result.imported).toBe(3); // All 3 rows should be imported
       expect(result.updated).toBe(0); // No updates since it's first import
+      expect(enrichmentRepository.enrichImportedProduct).toHaveBeenCalledTimes(3);
+      expect(enrichmentRepository.enrichImportedProduct).toHaveBeenCalledWith('default-org', {
+        productId: 1,
+        barcode: '1234567890123',
+        sku: 'TEST001',
+      });
     } finally {
       if (fs.existsSync(testCSVPath)) {
         fs.unlinkSync(testCSVPath);
       }
     }
   });
+
+  it('does not fail a successful product import when advisory enrichment fails', async () => {
+    mockPrisma.product.findUnique.mockResolvedValue(null);
+    mockPrisma.product.create.mockResolvedValue({
+      id: 9,
+      organizationId: 'default-org',
+      name: 'Isolated Product',
+      sku: 'ISOLATED-1',
+      costPrice: 10,
+      barcode: 'ISOLATED-BARCODE',
+      createdAt: new Date(),
+      updatedAt: new Date(),
+    });
+    vi.mocked(enrichmentRepository.enrichImportedProduct).mockRejectedValueOnce(
+      new Error('catalogue unavailable'),
+    );
+    const testCSVPath = path.join(__dirname, 'enrichment-failure.csv');
+    fs.writeFileSync(
+      testCSVPath,
+      'SKU,Name,Cost,Barcode\nISOLATED-1,Isolated Product,10.00,ISOLATED-BARCODE\n',
+    );
+
+    try {
+      const result = await productService.processCSVUploadInternal(testCSVPath);
+      expect(result).toMatchObject({ imported: 1, updated: 0, errors: [] });
+    } finally {
+      if (fs.existsSync(testCSVPath)) fs.unlinkSync(testCSVPath);
+    }
+  });
 });
 
 // Test cases for alternative header name recognition
 describe('CSV Header Name Recognition', () => {
-  let productService: ProductService;
-  let mockPrisma: any;
-
-  beforeEach(() => {
-    mockPrisma = {
-      product: {
-        findUnique: jest.fn(),
-        create: jest.fn(),
-        update: jest.fn(),
-      },
-      organizationUsage: {
-        findUnique: jest
-          .fn()
-          .mockResolvedValue({ organizationId: 'default-org', totalSkus: 0, maxSkus: 1000 }),
-        update: jest.fn(),
-      },
-      $transaction: jest.fn((callback) => callback(mockPrisma)),
-    };
-    productService = new ProductService(mockPrisma as unknown as PrismaClient);
-  });
-
   it('should recognize alternative SKU column names', () => {
     const row = { 'Item Code': 'SKU123', Name: 'Product', Cost: '10.00', Barcode: '123456' };
     const alternatives = ['SKU', 'Item Code', 'Reorder Number', 'Product Code', 'Item Number'];
 
-    // Access the private method by casting to 'any'
-    const header = (productService as any).findColumnByAlternatives(row, alternatives);
+    const header = findColumnByAlternatives(row, alternatives);
     expect(header).toBe('Item Code');
   });
 
@@ -99,7 +121,7 @@ describe('CSV Header Name Recognition', () => {
     const row = { SKU: 'SKU123', 'Product Name': 'Product', Cost: '10.00', Barcode: '123456' };
     const alternatives = ['Name', 'Item Description', 'Product Name', 'Description', 'Item Name'];
 
-    const header = (productService as any).findColumnByAlternatives(row, alternatives);
+    const header = findColumnByAlternatives(row, alternatives);
     expect(header).toBe('Product Name');
   });
 
@@ -117,7 +139,7 @@ describe('CSV Header Name Recognition', () => {
       'Retail Price',
     ];
 
-    const header = (productService as any).findColumnByAlternatives(row, alternatives);
+    const header = findColumnByAlternatives(row, alternatives);
     expect(header).toBe('Unit Price');
   });
 
@@ -133,16 +155,16 @@ describe('CSV Header Name Recognition', () => {
       'Barcode Number',
     ];
 
-    const header = (productService as any).findColumnByAlternatives(row, alternatives);
+    const header = findColumnByAlternatives(row, alternatives);
     expect(header).toBe('GTIN');
   });
 
   it('should be case-insensitive for headers', () => {
     const row = { sku: 'SKU123', name: 'Product', cost: '10.00', barcode: '123456' };
-    const skuHeader = (productService as any).findColumnByAlternatives(row, ['SKU']);
-    const nameHeader = (productService as any).findColumnByAlternatives(row, ['Name']);
-    const costHeader = (productService as any).findColumnByAlternatives(row, ['Cost']);
-    const barcodeHeader = (productService as any).findColumnByAlternatives(row, ['Barcode']);
+    const skuHeader = findColumnByAlternatives(row, ['SKU']);
+    const nameHeader = findColumnByAlternatives(row, ['Name']);
+    const costHeader = findColumnByAlternatives(row, ['Cost']);
+    const barcodeHeader = findColumnByAlternatives(row, ['Barcode']);
 
     expect(skuHeader).toBe('sku');
     expect(nameHeader).toBe('name');
@@ -253,10 +275,10 @@ describe('CSV Upload Error Handling', () => {
   beforeEach(() => {
     mockPrisma = {
       product: {
-        findUnique: jest.fn(),
-        create: jest.fn(),
+        findUnique: vi.fn(),
+        create: vi.fn(),
       },
-      $transaction: jest.fn((callback) => callback(mockPrisma)),
+      $transaction: vi.fn((callback) => callback(mockPrisma)),
     };
     productService = new ProductService(mockPrisma as unknown as PrismaClient);
   });
@@ -354,17 +376,17 @@ describe('Comprehensive CSV Processing Tests', () => {
   beforeEach(() => {
     mockPrisma = {
       product: {
-        findUnique: jest.fn(),
-        create: jest.fn(),
-        update: jest.fn(),
+        findUnique: vi.fn(),
+        create: vi.fn(),
+        update: vi.fn(),
       },
       organizationUsage: {
-        findUnique: jest
+        findUnique: vi
           .fn()
           .mockResolvedValue({ organizationId: 'default-org', totalSkus: 0, maxSkus: 1000 }),
-        update: jest.fn(),
+        update: vi.fn(),
       },
-      $transaction: jest.fn((callback) => callback(mockPrisma)),
+      $transaction: vi.fn((callback) => callback(mockPrisma)),
     };
     productService = new ProductService(mockPrisma as unknown as PrismaClient);
   });

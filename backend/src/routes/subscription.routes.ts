@@ -6,6 +6,19 @@ import { createSubscriptionController } from '../di/services';
 const router = Router();
 
 router.get(
+  '/current',
+  clerkAuth as unknown as RequestHandler,
+  async (req: Request, res: Response, next: NextFunction) => {
+    try {
+      const controller = createSubscriptionController();
+      await controller.getCurrentSubscription(req, res);
+    } catch (error) {
+      next(error);
+    }
+  },
+);
+
+router.get(
   '/trial-status',
   clerkAuth as unknown as RequestHandler,
   async (req: Request, res: Response, next: NextFunction) => {
@@ -41,6 +54,20 @@ router.post(
     try {
       const controller = createSubscriptionController();
       await controller.createCheckoutSession(req, res);
+    } catch (error) {
+      next(error);
+    }
+  },
+);
+
+// Cancel subscription at end of current billing period
+router.post(
+  '/cancel',
+  clerkAuth as unknown as RequestHandler,
+  async (req: Request, res: Response, next: NextFunction) => {
+    try {
+      const controller = createSubscriptionController();
+      await controller.cancelSubscription(req, res);
     } catch (error) {
       next(error);
     }

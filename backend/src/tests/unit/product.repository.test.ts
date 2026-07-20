@@ -27,8 +27,8 @@ describe('ProductRepository', () => {
   beforeEach(() => {
     prisma = {
       product: {
-        findUnique: jest.fn(),
-        findMany: jest.fn(),
+        findUnique: vi.fn(),
+        findMany: vi.fn(),
       },
     };
     repository = new ProductRepository(prisma as never);

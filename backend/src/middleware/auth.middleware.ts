@@ -9,6 +9,7 @@ import { SubscriptionService } from '../services/subscription.service';
 import { getDiContainer } from '../di/container';
 import { UserRepository } from '../repositories/user.repository';
 import { SubscriptionRepository } from '../repositories/subscription.repository';
+import { getAuthorizedParties } from '../utils/authorized-parties';
 
 export interface AuthRequest extends Request {
   userId?: number;
@@ -35,32 +36,12 @@ interface ClerkTokenPayload {
   exp?: number;
 }
 
-const CLERK_DEV_ORIGINS = ['http://localhost:3002', 'http://127.0.0.1:3002'];
 const TIER_VERSION_HEADER = 'X-Org-Tier-Version';
 
-function getAuthorizedParties(): string[] {
-  const partySet = new Set<string>(CLERK_DEV_ORIGINS);
-
-  if (envConfig.FRONTEND_URL) {
-    partySet.add(envConfig.FRONTEND_URL);
-  }
-
-  if (envConfig.CORS_ORIGIN) {
-    partySet.add(envConfig.CORS_ORIGIN);
-  }
-
-  const parties = Array.from(partySet);
-  if (parties.length === CLERK_DEV_ORIGINS.length && process.env.NODE_ENV === 'production') {
-    console.warn(
-      'WARNING: No production origins configured for Clerk token verification. Please set FRONTEND_URL or CORS_ORIGIN.',
-    );
-  }
-
-  return parties;
-}
-
 const isTierLevel = (value: string): value is TierLevel =>
-  ['starter', 'professional', 'premium', 'concierge'].includes(value as TierLevel);
+  ['free', 'starter', 'professional', 'enterprise', 'premium', 'concierge'].includes(
+    value as TierLevel,
+  );
 
 const isBillingCycle = (value: string): value is BillingCycle =>
   Object.values(BillingCycle).includes(value as BillingCycle);
@@ -96,6 +77,53 @@ const subscriptionCache = new Map<
 const CACHE_TTL_MS = 5 * 60 * 1000; // 5 minutes
 export const TEST_AUTH_BYPASS_ORG_ID = 'default-org';
 
+async function checkCanceledAccess(subscription: SubscriptionTier): Promise<boolean> {
+  const tierLevel = isTierLevel(subscription.tierLevel) ? subscription.tierLevel : null;
+  const billingCycle = isBillingCycle(subscription.billingCycle) ? subscription.billingCycle : null;
+  if (!tierLevel || !billingCycle) return false;
+  const subscriptionService = getDiContainer().resolve(SubscriptionService);
+  return subscriptionService.isAccessActive({
+    id: subscription.id,
+    organizationId: subscription.organizationId,
+    tierLevel,
+    stripeSubscriptionId: subscription.stripeSubscriptionId ?? undefined,
+    trialEndDate: subscription.trialEndDate ?? undefined,
+    trialStartedAt: subscription.trialStartedAt ?? undefined,
+    trialConvertedAt: subscription.trialConvertedAt ?? undefined,
+    status: subscription.status as SubscriptionStatus,
+    billingCycle,
+    createdAt: subscription.createdAt,
+    updatedAt: subscription.updatedAt,
+  });
+}
+
+async function getCachedOrFetchSubscription(
+  orgId: string,
+): Promise<{ subscription: SubscriptionTier | null; hasActiveAccess: boolean }> {
+  const cached = subscriptionCache.get(orgId);
+  if (cached && Date.now() - cached.timestamp < CACHE_TTL_MS) {
+    return {
+      subscription: cached.subscription.data,
+      hasActiveAccess: cached.subscription.hasActiveAccess,
+    };
+  }
+
+  const subscriptionRepository = getDiContainer().resolve(SubscriptionRepository);
+  const subscription = await subscriptionRepository.findLatestByOrganizationId(orgId);
+
+  const hasActiveAccess =
+    subscription?.status === SubscriptionStatus.CANCELED
+      ? await checkCanceledAccess(subscription)
+      : true;
+
+  subscriptionCache.set(orgId, {
+    subscription: { data: subscription, hasActiveAccess },
+    timestamp: Date.now(),
+  });
+
+  return { subscription, hasActiveAccess };
+}
+
 export const authenticateToken = async (req: AuthRequest, res: Response, next: NextFunction) => {
   // Test environment bypass
   if (process.env.NODE_ENV === 'test' && process.env.TEST_AUTH_BYPASS === 'true') {
@@ -104,57 +132,51 @@ export const authenticateToken = async (req: AuthRequest, res: Response, next: N
 
   const token = extractTokenFromRequest(req);
   if (!token) {
-    return handleAuthError(
-      res,
-      'Access denied: No token provided',
-      'unauthorized_access_attempt',
-      req,
-    );
+    return handleAuthError(res, req, {
+      message: 'Access denied: No token provided',
+      action: 'unauthorized_access_attempt',
+    });
   }
 
   const decodedToken = await verifyToken(token);
   if (!decodedToken) {
-    return handleAuthError(res, 'Access denied: Invalid token', 'invalid_token_attempt', req, 403);
+    return handleAuthError(res, req, {
+      message: 'Access denied: Invalid token',
+      action: 'invalid_token_attempt',
+      statusCode: 403,
+    });
   }
 
   if (!isValidTokenStructure(decodedToken)) {
-    return handleAuthError(
-      res,
-      'Access denied: Invalid token payload',
-      'invalid_token_payload',
-      req,
-      403,
-    );
+    return handleAuthError(res, req, {
+      message: 'Access denied: Invalid token payload',
+      action: 'invalid_token_payload',
+      statusCode: 403,
+    });
   }
 
   if (!hasRequiredTokenFields(decodedToken)) {
-    return handleAuthError(
-      res,
-      'Access denied: Malformed token payload',
-      'missing_token_fields',
-      req,
-      403,
-    );
+    return handleAuthError(res, req, {
+      message: 'Access denied: Malformed token payload',
+      action: 'missing_token_fields',
+      statusCode: 403,
+    });
   }
 
   if (isTokenExpired(decodedToken)) {
-    return handleAuthError(
-      res,
-      'Access denied: Token has expired',
-      'expired_token_attempt',
-      req,
-      403,
-    );
+    return handleAuthError(res, req, {
+      message: 'Access denied: Token has expired',
+      action: 'expired_token_attempt',
+      statusCode: 403,
+    });
   }
 
   if (!decodedToken.organizationId) {
-    return handleAuthError(
-      res,
-      'Access denied: Missing tenant context in token',
-      'missing_tenant_context',
-      req,
-      403,
-    );
+    return handleAuthError(res, req, {
+      message: 'Access denied: Missing tenant context in token',
+      action: 'missing_tenant_context',
+      statusCode: 403,
+    });
   }
 
   try {
@@ -164,18 +186,7 @@ export const authenticateToken = async (req: AuthRequest, res: Response, next: N
     trackSuccessfulAuth(decodedToken, req);
     next();
   } catch (error) {
-    // Check if it's a subscription validation error
-    if (
-      error instanceof Error &&
-      (error.message.includes('Organization subscription not configured') ||
-        error.message.includes('Organization subscription is invalid') ||
-        error.message.includes('Organization subscription has been canceled'))
-    ) {
-      return handleAuthError(res, error.message, 'organization_subscription_invalid', req, 403);
-    }
-
-    trackAuthError(decodedToken, 'organization_validation_error', error, req);
-    return res.status(500).json({ message: 'Error validating organization access' });
+    return handleSubscriptionError(error, res, req, decodedToken);
   }
 };
 
@@ -216,12 +227,14 @@ function extractTokenFromRequest(req: AuthRequest): string | null {
 async function verifyToken(token: string): Promise<TokenPayload | null> {
   // First try with the current JWT secret
   try {
-    return jwt.verify(token, envConfig.JWT_SECRET) as TokenPayload;
+    return jwt.verify(token, envConfig.JWT_SECRET, { algorithms: ['HS256'] }) as TokenPayload;
   } catch (_err) {
     // If current secret fails, try with old secret (for rotation period)
     if (process.env.JWT_SECRET_OLD) {
       try {
-        return jwt.verify(token, process.env.JWT_SECRET_OLD) as TokenPayload;
+        return jwt.verify(token, process.env.JWT_SECRET_OLD, {
+          algorithms: ['HS256'],
+        }) as TokenPayload;
       } catch (_rotationErr) {
         // Fall through to Clerk verification
       }
@@ -273,94 +286,63 @@ function isTokenExpired(decodedToken: TokenPayload): boolean {
 
 function handleAuthError(
   res: Response,
-  message: string,
-  action: string,
   req: AuthRequest,
-  statusCode: number = 401,
+  opts: { message: string; action: string; statusCode?: number },
 ): Response {
-  const analyticsService = AnalyticsService.getInstance();
-  analyticsService.trackEvent({
+  AnalyticsService.getInstance().trackEvent({
     eventType: AnalyticsEventType.USER_LOGOUT,
     eventCategory: 'Auth',
-    eventAction: action,
+    eventAction: opts.action,
     ipAddress: req.ip,
     userAgent: req.get('User-Agent') || undefined,
     metadata: { path: req.path, method: req.method },
   });
+  return res.status(opts.statusCode ?? 401).json({ message: opts.message });
+}
 
-  return res.status(statusCode).json({ message });
+function handleSubscriptionError(
+  error: unknown,
+  res: Response,
+  req: AuthRequest,
+  decodedToken: TokenPayload,
+): Response {
+  if (
+    error instanceof Error &&
+    (error.message.includes('Organization subscription not configured') ||
+      error.message.includes('Organization subscription is invalid') ||
+      error.message.includes('Organization subscription has been canceled'))
+  ) {
+    return handleAuthError(res, req, {
+      message: error.message,
+      action: 'organization_subscription_invalid',
+      statusCode: 403,
+    });
+  }
+  trackAuthError(decodedToken, 'organization_validation_error', error, req);
+  return res.status(500).json({ message: 'Error validating organization access' });
 }
 
 async function validateOrganizationSubscription(
   decodedToken: TokenPayload,
   req: AuthRequest,
 ): Promise<{ dbTierLevel: TierLevel | null; tierVersion: string }> {
-  const orgId = decodedToken.organizationId;
-  let subscription: SubscriptionTier | null = null;
-  let hasActiveAccess = true;
-
-  // Check cache first
-  const cached = subscriptionCache.get(orgId);
-  if (cached && Date.now() - cached.timestamp < CACHE_TTL_MS) {
-    subscription = cached.subscription.data;
-    hasActiveAccess = cached.subscription.hasActiveAccess;
-  } else {
-    const subscriptionRepository = getDiContainer().resolve(SubscriptionRepository);
-    subscription = await subscriptionRepository.findLatestByOrganizationId(orgId);
-
-    if (subscription && subscription.status === SubscriptionStatus.CANCELED) {
-      const tierLevel = isTierLevel(subscription.tierLevel) ? subscription.tierLevel : null;
-      const billingCycle = isBillingCycle(subscription.billingCycle)
-        ? subscription.billingCycle
-        : null;
-
-      if (tierLevel && billingCycle) {
-        const subscriptionService = getDiContainer().resolve(SubscriptionService);
-        hasActiveAccess = await subscriptionService.isAccessActive({
-          id: subscription.id,
-          organizationId: subscription.organizationId,
-          tierLevel,
-          stripeSubscriptionId: subscription.stripeSubscriptionId ?? undefined,
-          trialEndDate: subscription.trialEndDate ?? undefined,
-          trialStartedAt: subscription.trialStartedAt ?? undefined,
-          trialConvertedAt: subscription.trialConvertedAt ?? undefined,
-          status: subscription.status,
-          billingCycle,
-          createdAt: subscription.createdAt,
-          updatedAt: subscription.updatedAt,
-        });
-      } else {
-        hasActiveAccess = false;
-      }
-    }
-
-    // Update cache
-    subscriptionCache.set(orgId, {
-      subscription: { data: subscription, hasActiveAccess },
-      timestamp: Date.now(),
-    });
-  }
+  const { subscription, hasActiveAccess } = await getCachedOrFetchSubscription(
+    decodedToken.organizationId,
+  );
 
   if (!subscription) {
-    const analyticsService = AnalyticsService.getInstance();
-    analyticsService.trackEvent({
+    AnalyticsService.getInstance().trackEvent({
       userId: decodedToken.userId,
       eventType: AnalyticsEventType.USER_LOGOUT,
       eventCategory: 'Auth',
       eventAction: 'organization_subscription_not_found',
       ipAddress: req.ip,
       userAgent: req.get('User-Agent') || undefined,
-      metadata: {
-        organizationId: decodedToken.organizationId,
-        path: req.path,
-        method: req.method,
-      },
+      metadata: { organizationId: decodedToken.organizationId, path: req.path, method: req.method },
     });
-
     throw new Error('Organization subscription not configured');
   }
 
-  // Check if subscription is canceled (allow access until Stripe period end if applicable)
   if (subscription.status === SubscriptionStatus.CANCELED) {
     const tierLevel = isTierLevel(subscription.tierLevel) ? subscription.tierLevel : null;
     const billingCycle = isBillingCycle(subscription.billingCycle)
@@ -368,8 +350,7 @@ async function validateOrganizationSubscription(
       : null;
 
     if (!tierLevel || !billingCycle) {
-      const analyticsService = AnalyticsService.getInstance();
-      analyticsService.trackEvent({
+      AnalyticsService.getInstance().trackEvent({
         userId: decodedToken.userId,
         eventType: AnalyticsEventType.USER_LOGOUT,
         eventCategory: 'Auth',
@@ -384,13 +365,11 @@ async function validateOrganizationSubscription(
           subscriptionBillingCycle: subscription.billingCycle,
         },
       });
-
       throw new Error('Organization subscription is invalid. Please contact support.');
     }
 
     if (!hasActiveAccess) {
-      const analyticsService = AnalyticsService.getInstance();
-      analyticsService.trackEvent({
+      AnalyticsService.getInstance().trackEvent({
         userId: decodedToken.userId,
         eventType: AnalyticsEventType.USER_LOGOUT,
         eventCategory: 'Auth',
@@ -403,12 +382,10 @@ async function validateOrganizationSubscription(
           method: req.method,
         },
       });
-
       throw new Error('Organization subscription has been canceled. Please contact support.');
     }
   }
 
-  // Override tierLevel from database (Source of Truth)
   const dbTierLevel = isTierLevel(subscription.tierLevel) ? subscription.tierLevel : null;
   const tierVersion = getTierVersion(subscription);
 
@@ -418,7 +395,7 @@ async function validateOrganizationSubscription(
       organizationId: decodedToken.organizationId,
       tokenTierLevel: decodedToken.tierLevel,
       dbTierLevel,
-      tierVersion: getTierVersion(subscription),
+      tierVersion,
     });
   }
 
@@ -438,7 +415,7 @@ function setRequestContext(
     id: decodedToken.userId,
     role: decodedToken.role,
     organizationId: decodedToken.organizationId,
-    tierLevel: dbTierLevel ?? 'starter', // Default to starter if validation failed
+    tierLevel: dbTierLevel ?? 'free',
   };
 }
 
@@ -483,14 +460,21 @@ function trackAuthError(
   });
 }
 
-// Function to generate a JWT token with configurable expiration
-export const generateToken = (
-  userId: number,
-  role: string,
-  organizationId: string,
-  tierLevel: TierLevel,
-  expiresIn: string | number = '24h',
-): string => {
+export interface GenerateTokenArgs {
+  userId: number;
+  role: string;
+  organizationId: string;
+  tierLevel: TierLevel;
+  expiresIn?: string | number;
+}
+
+export const generateToken = ({
+  userId,
+  role,
+  organizationId,
+  tierLevel,
+  expiresIn = '24h',
+}: GenerateTokenArgs): string => {
   return jwt.sign(
     { userId, role, organizationId, tierLevel },
     envConfig.JWT_SECRET as string,

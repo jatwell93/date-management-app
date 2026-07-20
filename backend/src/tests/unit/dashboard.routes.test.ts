@@ -1,19 +1,27 @@
 import express from 'express';
 import request from 'supertest';
 
-const mockGetDashboardData = jest.fn();
-const mockGetDashboardService = jest.fn(() => ({
-  getDashboardData: (...args: unknown[]) => mockGetDashboardData(...args),
-}));
-const MockServiceProvider = jest.fn().mockImplementation(() => ({
-  getDashboardService: mockGetDashboardService,
-}));
+// The vi.mock factory references MockServiceProvider directly, so it (and the
+// mocks it closes over) must be initialized before the hoisted factory runs.
+// vi.hoisted() lifts the whole interdependent group above the mock.
+const { mockGetDashboardData, mockGetDashboardService, MockServiceProvider } = vi.hoisted(() => {
+  const mockGetDashboardData = vi.fn();
+  const mockGetDashboardService = vi.fn(() => ({
+    getDashboardData: (...args: unknown[]) => mockGetDashboardData(...args),
+  }));
+  const MockServiceProvider = vi.fn().mockImplementation(function () {
+    return {
+      getDashboardService: mockGetDashboardService,
+    };
+  });
+  return { mockGetDashboardData, mockGetDashboardService, MockServiceProvider };
+});
 
-jest.mock('../../middleware/auth.middleware', () => ({
+vi.mock('../../middleware/auth.middleware', () => ({
   authenticateToken: (_req: unknown, _res: unknown, next: () => void) => next(),
 }));
 
-jest.mock('../../services/service-provider', () => ({
+vi.mock('../../services/service-provider', () => ({
   ServiceProvider: MockServiceProvider,
 }));
 
@@ -32,7 +40,7 @@ describe('dashboard.routes', () => {
   );
 
   beforeEach(() => {
-    jest.clearAllMocks();
+    vi.clearAllMocks();
     mockGetDashboardData.mockResolvedValue({
       totalProducts: 12,
       totalInventoryItems: 34,

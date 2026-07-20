@@ -1,5 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import './StorageQuotaWarning.css';
+import { useFreshApiToken } from '../hooks/useFreshApiToken';
 
 /**
  * Storage Quota Warning Modal Component
@@ -41,6 +42,7 @@ export const StorageQuotaWarning: React.FC<StorageQuotaWarningProps> = ({
   onDismiss,
   autoHideDays = 7,
 }) => {
+  const getFreshApiToken = useFreshApiToken(token || null);
   const [quota, setQuota] = useState<StorageQuotaInfo | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -55,9 +57,10 @@ export const StorageQuotaWarning: React.FC<StorageQuotaWarningProps> = ({
           return;
         }
 
+        const authToken = await getFreshApiToken('storage-quota');
         const response = await fetch(`/api/storage-quota/${userId}?tier=${subscriptionTier}`, {
           headers: {
-            Authorization: `Bearer ${token}`,
+            Authorization: `Bearer ${authToken}`,
           },
         });
 
@@ -94,7 +97,7 @@ export const StorageQuotaWarning: React.FC<StorageQuotaWarningProps> = ({
     };
 
     fetchQuota();
-  }, [userId, subscriptionTier, autoHideDays, token]);
+  }, [userId, subscriptionTier, autoHideDays, token, getFreshApiToken]);
 
   // Handle dismiss
   const handleDismiss = () => {

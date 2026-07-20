@@ -18,6 +18,8 @@ This change formalizes the existing `UI-fixes` note into an OpenSpec change so i
 - `frontend/src/pages/CSVUploadPage.tsx:357` polls upload status for an upload key and renders per-upload results in state, but there is no durable user-facing "last uploaded file" summary after the page/session changes.
 - `frontend/src/App.tsx:153` has a global unauthorized handler. The `/scan` logout report should be tested against scanner/API failure paths so random barcode input does not trigger a full logout unless auth is actually invalid.
 - `frontend/src/App.tsx:617` has a handheld settings TODO, and the current generic loading state uses app-wide styling rather than an expiry-domain loading affordance.
+- `frontend/src/pages/ScanPage.tsx:45` still models product lookup responses with legacy `cost_price`, while the current backend and Workers product endpoints return `costPrice`. At `frontend/src/pages/ScanPage.tsx:133`, that missing value is passed into the markdown calculation, and `frontend/src/pages/ScanPage.tsx:528` calls `toFixed` on the resulting `NaN`/undefined render state.
+- `frontend/src/lib/utils.ts:16` contains an obsolete markdown schedule (20% off, no discount, then a 20% markup). The required default schedule is 50% off at 61-90 days, 60% off at 31-60 days, and 75% off at 30 days or fewer.
 
 **Related OpenSpec context:**
 
@@ -32,6 +34,7 @@ This change formalizes the existing `UI-fixes` note into an OpenSpec change so i
 - Reuse `CSVUploadPage` for admin product catalog upload and upload result presentation.
 - Reuse Clerk `UserProfile` routing for profile rendering, with wrapper/layout fixes only where needed to center the profile inside the app shell.
 - Reuse existing scanner and auth error boundaries; change logout behavior only after reproducing the random-code scan failure with a failing test.
+- Extend the existing `ScanPage` product model and shared markdown utility instead of adding a new pricing component or service. Keep product API fields camelCase and reuse the utility across scan, calculator, and report surfaces.
 
 ## What Changes
 
@@ -43,6 +46,7 @@ This change formalizes the existing `UI-fixes` note into an OpenSpec change so i
 - Make `/upgrade` a functional upgrade path for trial and non-trial eligible users.
 - Ensure admin users can reach the required CSV/XLSX product catalog upload flow.
 - Add a user-visible last-upload summary so users can inspect the most recent file and processing outcome.
+- Prevent `/scan` from crashing when a looked-up product has a missing or invalid cost, display the API-provided cost when present, and apply the default 50%/60%/75% markdown schedule across the shared frontend calculation.
 
 ## Capabilities
 
@@ -76,4 +80,5 @@ This change formalizes the existing `UI-fixes` note into an OpenSpec change so i
 - `/upgrade` allows eligible users to start a Stripe-backed plan upgrade, or shows a clear non-eligible/current-plan state.
 - Admin users can find and use product catalog CSV/XLSX upload.
 - Users can see their most recent uploaded file name, upload type, completion state, and processing counts.
+- Product lookups on `/scan` display `costPrice` returned by the API, dates inside and outside 30 days do not trigger the error boundary, and markdown labels/prices match the 90/60/30-day 50%/60%/75% schedule.
 - `openspec validate UI-fixes --strict`, frontend tests, lint, and relevant E2E smoke tests pass before approval.

@@ -84,7 +84,7 @@ export async function verifyJWT(token: string, secret: string): Promise<JWTPaylo
     // Token is invalid, expired, or signature doesn't match
     // Log the error type for debugging (don't expose details to client)
     const errorMsg = error instanceof Error ? error.message : 'Unknown error';
-    if (process.env.DEBUG) {
+    if ((globalThis as { DEBUG?: boolean }).DEBUG) {
       console.error('JWT verification failed:', errorMsg);
     }
 

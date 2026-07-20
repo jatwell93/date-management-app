@@ -12,7 +12,7 @@ describe('OrganizationInviteService Security', () => {
     service = new OrganizationInviteService(prisma, () => new Date());
 
     // Mock the user limit check to avoid subscription setup complexity
-    jest.spyOn(service as any, 'ensureWithinUserLimit').mockResolvedValue(undefined);
+    vi.spyOn(service as any, 'ensureWithinUserLimit').mockResolvedValue(undefined);
 
     // Set up test data to satisfy foreign key constraints
     await prisma.organization.upsert({

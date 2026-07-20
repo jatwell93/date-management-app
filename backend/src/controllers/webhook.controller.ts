@@ -21,7 +21,7 @@ import { WebhookService } from '../services/webhook.service';
 import { ClerkWebhookService } from '../services/clerk-webhook.service';
 import { ApplicationMonitoringService } from '../services/application.monitoring.service';
 import { ConflictError, NotFoundError } from '../errors';
-import { injectable, inject } from 'tsyringe';
+import { injectable } from 'tsyringe';
 import * as Sentry from '@sentry/node';
 import { Logger } from '../utils/logger';
 
@@ -93,7 +93,7 @@ export class WebhookController {
    * 2. Parse payload second (after verification)
    * 3. Handle idempotently (check event ID, process, store)
    */
-  async handleStripeWebhook(req: Request, res: Response, next: NextFunction): Promise<void> {
+  async handleStripeWebhook(req: Request, res: Response, _next: NextFunction): Promise<void> {
     try {
       // Step 1: Verify Stripe signature (using raw body)
       const signature = req.headers['stripe-signature'] as string;
@@ -195,7 +195,7 @@ export class WebhookController {
    * 2. Parse payload second (after verification)
    * 3. Handle idempotently (check event ID, process, store)
    */
-  async handleClerkWebhook(req: Request, res: Response, next: NextFunction): Promise<void> {
+  async handleClerkWebhook(req: Request, res: Response, _next: NextFunction): Promise<void> {
     try {
       // Step 1: Verify Clerk signature (using raw body)
       const headers = {

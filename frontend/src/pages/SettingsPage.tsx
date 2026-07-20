@@ -2,6 +2,7 @@ import { OrganizationProfile } from '@clerk/clerk-react';
 import { responsiveClerkAppearance } from '../components/ClerkAuthPage';
 import ErrorBoundary from '../components/ErrorBoundary';
 import { Button } from '../components/ui/button';
+import { MarkdownMatrixSettings } from '../components/MarkdownMatrixSettings';
 
 function SettingsControlsFallback() {
   return (
@@ -52,6 +53,12 @@ export function SettingsPage() {
             path="/settings"
             appearance={responsiveClerkAppearance}
           />
+        </ErrorBoundary>
+      </section>
+
+      <section aria-label="Markdown matrix" className="mt-6 min-w-0">
+        <ErrorBoundary fallback={<SettingsControlsFallback />}>
+          <MarkdownMatrixSettings />
         </ErrorBoundary>
       </section>
     </div>

@@ -1,13 +1,15 @@
 import sgMail from '@sendgrid/mail';
 import * as Sentry from '@sentry/node';
 
-const mockDefaultPrisma = {};
+// Referenced by the hoisted vi.mock factory (invoked at the SUT's module-load
+// DI), so it must be initialized before the factory runs — vi.hoisted() lifts it.
+const mockDefaultPrisma = vi.hoisted(() => ({}));
 
-jest.mock('../../database/database-factory', () => ({
+vi.mock('../../database/database-factory', () => ({
   getDefaultDatabaseClient: () => mockDefaultPrisma,
 }));
 
-jest.mock('../../config/environment', () => ({
+vi.mock('../../config/environment', () => ({
   envConfig: {
     SENDGRID_API_KEY: 'sg_test_key',
     SENDGRID_FROM_EMAIL: 'noreply@test.local',
@@ -15,24 +17,24 @@ jest.mock('../../config/environment', () => ({
   },
 }));
 
-jest.mock('../../utils/logger', () => ({
+vi.mock('../../utils/logger', () => ({
   Logger: {
-    warn: jest.fn(),
-    info: jest.fn(),
-    error: jest.fn(),
+    warn: vi.fn(),
+    info: vi.fn(),
+    error: vi.fn(),
   },
 }));
 
-jest.mock('@sendgrid/mail', () => ({
+vi.mock('@sendgrid/mail', () => ({
   __esModule: true,
   default: {
-    setApiKey: jest.fn(),
-    send: jest.fn(),
+    setApiKey: vi.fn(),
+    send: vi.fn(),
   },
 }));
 
-jest.mock('@sentry/node', () => ({
-  captureException: jest.fn(),
+vi.mock('@sentry/node', () => ({
+  captureException: vi.fn(),
 }));
 
 import { EmailService } from '../../services/email.service';
@@ -42,10 +44,10 @@ import { Logger } from '../../utils/logger';
 describe('email.service', () => {
   const mockPrisma = {
     organization: {
-      findUnique: jest.fn(),
+      findUnique: vi.fn(),
     },
     auditLog: {
-      create: jest.fn(),
+      create: vi.fn(),
     },
   };
 
@@ -55,7 +57,7 @@ describe('email.service', () => {
   };
 
   beforeEach(() => {
-    jest.clearAllMocks();
+    vi.clearAllMocks();
     (envConfig as any).SENDGRID_API_KEY = 'sg_test_key';
     (envConfig as any).SENDGRID_FROM_EMAIL = 'noreply@test.local';
     (envConfig as any).FRONTEND_URL = 'https://app.test.local';
@@ -89,7 +91,7 @@ describe('email.service', () => {
   it('sendEmail exits early when SendGrid is not configured', async () => {
     (envConfig as any).SENDGRID_API_KEY = '';
     const service = new EmailService(mockPrisma as any);
-    jest.clearAllMocks();
+    vi.clearAllMocks();
 
     await service.sendEmail({ to: 'a@test.local', subject: 'Hello' });
 

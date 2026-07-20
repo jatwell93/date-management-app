@@ -17,6 +17,20 @@ import { PrismaClient } from '@prisma/client';
 // Store original env
 const originalEnv = process.env;
 
+/**
+ * Prisma 6 returns a proxy-wrapped client whose prototype is an internal class
+ * (not the exported `PrismaClient.prototype`), so `instanceof PrismaClient` is
+ * unreliable — it is `false` even for a fully valid client. Assert the returned
+ * value is a usable Prisma client by its public method surface instead.
+ */
+function expectUsablePrismaClient(client: unknown): void {
+  expect(client).toBeDefined();
+  const c = client as Record<string, unknown>;
+  expect(typeof c.$connect).toBe('function');
+  expect(typeof c.$disconnect).toBe('function');
+  expect(typeof c.$transaction).toBe('function');
+}
+
 describe('DatabaseFactory', () => {
   beforeEach(async () => {
     // Reset environment and default client for each test
@@ -36,7 +50,7 @@ describe('DatabaseFactory', () => {
         connectionUrl: 'file:./test.db',
       });
 
-      expect(client).toBeInstanceOf(PrismaClient);
+      expectUsablePrismaClient(client);
     });
 
     it('should use DATABASE_URL from environment when no config URL provided', () => {
@@ -44,7 +58,7 @@ describe('DatabaseFactory', () => {
 
       const client = createDatabaseClient();
 
-      expect(client).toBeInstanceOf(PrismaClient);
+      expectUsablePrismaClient(client);
     });
 
     it('should prefer config URL over environment variable', () => {
@@ -54,17 +68,17 @@ describe('DatabaseFactory', () => {
         connectionUrl: 'file:./config-test.db',
       });
 
-      expect(client).toBeInstanceOf(PrismaClient);
+      expectUsablePrismaClient(client);
     });
 
     it('should use hyperdrive connection string when provided', () => {
-      const logSpy = jest.spyOn(console, 'log').mockImplementation(() => undefined);
+      const logSpy = vi.spyOn(console, 'log').mockImplementation(() => undefined);
 
       const client = createDatabaseClient({
         hyperdriveConnectionString: 'postgresql://hyperdrive.test/db',
       });
 
-      expect(client).toBeInstanceOf(PrismaClient);
+      expectUsablePrismaClient(client);
       expect(logSpy).toHaveBeenCalledWith(
         '[Database] Connecting via Cloudflare Hyperdrive (edge pooling)',
       );
@@ -152,7 +166,7 @@ describe('DatabaseFactory', () => {
       process.env.DATABASE_URL = 'file:./disconnect-test.db';
 
       const client = getDefaultDatabaseClient();
-      const disconnectSpy = jest.spyOn(client, '$disconnect');
+      const disconnectSpy = vi.spyOn(client, '$disconnect');
 
       await resetDefaultDatabaseClient();
 
@@ -202,7 +216,7 @@ describe('DatabaseFactory', () => {
     it('should delegate to client.$transaction', async () => {
       const txResult = { ok: true };
       const client = {
-        $transaction: jest.fn(async (fn: (tx: unknown) => Promise<unknown>) => fn({})),
+        $transaction: vi.fn(async (fn: (tx: unknown) => Promise<unknown>) => fn({})),
       } as unknown as PrismaClient;
 
       const result = await withTransaction(client, async () => txResult);
@@ -213,7 +227,7 @@ describe('DatabaseFactory', () => {
 
     it('should pass options to client.$transaction', async () => {
       const client = {
-        $transaction: jest.fn(async (_fn: (tx: unknown) => Promise<unknown>) => 'ok'),
+        $transaction: vi.fn(async (_fn: (tx: unknown) => Promise<unknown>) => 'ok'),
       } as unknown as PrismaClient;
 
       await withTransactionOptions(client, async () => 'ok', { maxWait: 1000, timeout: 5000 });

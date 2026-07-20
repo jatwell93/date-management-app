@@ -12,14 +12,14 @@ export function extractTierFromPrice(subscription: Stripe.Subscription): TierLev
   const price = subscription.items.data[0]?.price;
   if (!price) {
     Logger.warn('No price found in subscription items');
-    return 'starter';
+    return 'free';
   }
 
-  const tier = (price.metadata?.tier as TierLevel) || 'starter';
+  const tier = (price.metadata?.tier as TierLevel) || 'free';
 
   if (!Object.keys(TIER_LIMITS).includes(tier)) {
-    Logger.warn(`Unknown tier ${tier} from price metadata, using starter`);
-    return 'starter';
+    Logger.warn(`Unknown tier ${tier} from price metadata, using free`);
+    return 'free';
   }
 
   return tier;
@@ -36,6 +36,8 @@ export function mapPrismaSubscriptionTierToModel(
     trialEndDate: prismaRecord.trialEndDate ?? undefined,
     status: prismaRecord.status as SubscriptionStatus,
     billingCycle: prismaRecord.billingCycle as BillingCycle,
+    cancelAtPeriodEnd: prismaRecord.cancelAtPeriodEnd,
+    currentPeriodEnd: prismaRecord.currentPeriodEnd ?? undefined,
     createdAt: prismaRecord.createdAt,
     updatedAt: prismaRecord.updatedAt,
   };

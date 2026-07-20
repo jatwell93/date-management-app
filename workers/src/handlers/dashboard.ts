@@ -10,6 +10,7 @@
 import { neon } from '@neondatabase/serverless';
 import type { Env } from '../types/env';
 import { withNeonRetry } from '../utils/db-retry';
+import { getConnectionString } from '../utils/db-connection';
 
 export interface DashboardData {
   totalProducts: number;
@@ -54,8 +55,4 @@ export async function getDashboardData(env: Env, organizationId: string): Promis
       expiredItems: ((expiredRes[0] as any).count as number) ?? 0,
     };
   });
-}
-
-function getConnectionString(env: Env): string {
-  return env.HYPERDRIVE?.connectionString || env.NEON_CONNECTION_STRING || '';
 }

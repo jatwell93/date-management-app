@@ -1,19 +1,19 @@
 import fs from 'fs';
 import { PrismaClient } from '@prisma/client';
 
-const mockXlsxReadFile = jest.fn();
-const mockXlsxSheetToJson = jest.fn();
-const mockCsvParse = jest.fn();
-const realXlsx = jest.requireActual<typeof import('xlsx')>('xlsx');
+const mockXlsxReadFile = vi.fn();
+const mockXlsxSheetToJson = vi.fn();
+const mockCsvParse = vi.fn();
+const realXlsx = await vi.importActual<typeof import('xlsx')>('xlsx');
 
-jest.mock('xlsx', () => ({
+vi.mock('xlsx', () => ({
   readFile: (...args: unknown[]) => mockXlsxReadFile(...args),
   utils: {
     sheet_to_json: (...args: unknown[]) => mockXlsxSheetToJson(...args),
   },
 }));
 
-jest.mock('csv-parse', () => ({
+vi.mock('csv-parse', () => ({
   parse: (...args: unknown[]) => mockCsvParse(...args),
 }));
 
@@ -39,25 +39,25 @@ describe('ProductService with organizationId', () => {
   beforeEach(() => {
     mockPrisma = {
       product: {
-        create: jest.fn(),
-        update: jest.fn(),
-        findUnique: jest.fn(),
-        findMany: jest.fn(),
-        findFirst: jest.fn(),
-        delete: jest.fn(),
+        create: vi.fn(),
+        update: vi.fn(),
+        findUnique: vi.fn(),
+        findMany: vi.fn(),
+        findFirst: vi.fn(),
+        delete: vi.fn(),
       },
       organizationUsage: {
-        findUnique: jest.fn(),
-        update: jest.fn(),
-        upsert: jest.fn(),
+        findUnique: vi.fn(),
+        update: vi.fn(),
+        upsert: vi.fn(),
       },
-      $transaction: jest.fn((callback) => callback(mockPrisma)),
+      $transaction: vi.fn((callback) => callback(mockPrisma)),
     };
     productService = new ProductService(mockPrisma as unknown as PrismaClient, organizationId);
   });
 
   afterEach(() => {
-    jest.clearAllMocks();
+    vi.clearAllMocks();
   });
 
   describe('getAllProducts', () => {
@@ -244,6 +244,7 @@ describe('ProductService with organizationId', () => {
       expect(mockPrisma.product.create).toHaveBeenCalledWith({
         data: {
           ...productData,
+          retailPrice: null,
           organizationId,
         },
       });
@@ -452,10 +453,10 @@ describe('ProductService with organizationId', () => {
 
   describe('processCSVUpload file-type routing', () => {
     it('routes to XLSX processor when original filename is .xlsx', async () => {
-      const processXLSXSpy = jest
+      const processXLSXSpy = vi
         .spyOn(productService as any, 'processXLSXUpload')
         .mockResolvedValue({ imported: 1, updated: 0, errors: [] });
-      const processCSVSpy = jest
+      const processCSVSpy = vi
         .spyOn(productService as any, 'processCSVUploadInternal')
         .mockResolvedValue({ imported: 0, updated: 0, errors: [] });
 
@@ -467,14 +468,14 @@ describe('ProductService with organizationId', () => {
     });
 
     it('routes to CSV processor when file-type detection falls back after header read error', async () => {
-      const processXLSXSpy = jest
+      const processXLSXSpy = vi
         .spyOn(productService as any, 'processXLSXUpload')
         .mockResolvedValue({ imported: 1, updated: 0, errors: [] });
-      const processCSVSpy = jest
+      const processCSVSpy = vi
         .spyOn(productService as any, 'processCSVUploadInternal')
         .mockResolvedValue({ imported: 0, updated: 2, errors: [] });
-      const fsOpenSpy = jest.spyOn(fs.promises, 'open').mockRejectedValue(new Error('open failed'));
-      const consoleErrorSpy = jest.spyOn(console, 'error').mockImplementation(() => undefined);
+      const fsOpenSpy = vi.spyOn(fs.promises, 'open').mockRejectedValue(new Error('open failed'));
+      const consoleErrorSpy = vi.spyOn(console, 'error').mockImplementation(() => undefined);
 
       const result = await productService.processCSVUpload('/tmp/upload-no-ext');
 
@@ -486,21 +487,21 @@ describe('ProductService with organizationId', () => {
     });
 
     it('routes to XLSX processor when binary header indicates zip archive', async () => {
-      const processXLSXSpy = jest
+      const processXLSXSpy = vi
         .spyOn(productService as any, 'processXLSXUpload')
         .mockResolvedValue({ imported: 3, updated: 0, errors: [] });
-      const processCSVSpy = jest
+      const processCSVSpy = vi
         .spyOn(productService as any, 'processCSVUploadInternal')
         .mockResolvedValue({ imported: 0, updated: 0, errors: [] });
 
       const handle = {
-        read: jest.fn(async (buffer: Buffer) => {
+        read: vi.fn(async (buffer: Buffer) => {
           Buffer.from('PK12').copy(buffer, 0);
           return { bytesRead: 4, buffer };
         }),
-        close: jest.fn(async () => undefined),
+        close: vi.fn(async () => undefined),
       };
-      const fsOpenSpy = jest.spyOn(fs.promises, 'open').mockResolvedValue(handle as any);
+      const fsOpenSpy = vi.spyOn(fs.promises, 'open').mockResolvedValue(handle as any);
 
       const result = await productService.processCSVUpload('/tmp/upload-no-ext');
 
@@ -550,6 +551,29 @@ describe('ProductService with organizationId', () => {
       expect(result.errors[0]).toContain('Missing required column for SKU');
     });
 
+    it('does not advertise retail headers as Cost alternatives when XLSX cost is missing', async () => {
+      writeXlsxFixture('/tmp/missing-cost-retail.xlsx', [
+        ['SKU', 'Name', 'Retail Price', 'Barcode'],
+        ['SKU-1', 'Product A', '15.00', '111'],
+      ]);
+      mockXlsxReadFile.mockReturnValue({
+        SheetNames: ['Sheet1'],
+        Sheets: { Sheet1: {} },
+      });
+      mockXlsxSheetToJson.mockReturnValue([
+        ['SKU', 'Name', 'Retail Price', 'Barcode'],
+        ['SKU-1', 'Product A', '15.00', '111'],
+      ]);
+
+      const result = await (productService as any).processXLSXUpload(
+        '/tmp/missing-cost-retail.xlsx',
+      );
+
+      expect(result.errors[0]).toContain('Missing required column for Cost');
+      expect(result.errors[0]).not.toContain('Selling Price');
+      expect(result.errors[0]).not.toContain('Retail Price');
+    });
+
     it('returns unexpected-columns error when headers include unsupported fields', async () => {
       writeXlsxFixture('/tmp/unexpected-column.xlsx', [
         ['SKU', 'Name', 'Cost', 'Barcode', 'Unexpected Column'],
@@ -573,21 +597,21 @@ describe('ProductService with organizationId', () => {
 
     it('updates existing product and creates new product from XLSX rows', async () => {
       writeXlsxFixture('/tmp/success.xlsx', [
-        ['SKU', 'Name', 'Cost', 'Barcode'],
-        ['SKU-1', 'Existing Product Updated', '11.00', 'BAR-1'],
-        ['SKU-2', 'New Product', '12.50', 'BAR-2'],
+        ['SKU', 'Name', 'Cost', 'Retail Price', 'Barcode'],
+        ['SKU-1', 'Existing Product Updated', '11.00', '19.99', 'BAR-1'],
+        ['SKU-2', 'New Product', '12.50', '24.99', 'BAR-2'],
       ]);
       mockXlsxReadFile.mockReturnValue({
         SheetNames: ['Sheet1'],
         Sheets: { Sheet1: {} },
       });
       mockXlsxSheetToJson.mockReturnValue([
-        ['SKU', 'Name', 'Cost', 'Barcode'],
-        ['SKU-1', 'Existing Product Updated', '11.00', 'BAR-1'],
-        ['SKU-2', 'New Product', '12.50', 'BAR-2'],
+        ['SKU', 'Name', 'Cost', 'Retail Price', 'Barcode'],
+        ['SKU-1', 'Existing Product Updated', '11.00', '19.99', 'BAR-1'],
+        ['SKU-2', 'New Product', '12.50', '24.99', 'BAR-2'],
       ]);
 
-      jest.spyOn(productService, 'getAllProducts').mockResolvedValue([
+      vi.spyOn(productService, 'getAllProducts').mockResolvedValue([
         {
           id: 1,
           organizationId,
@@ -599,23 +623,25 @@ describe('ProductService with organizationId', () => {
           updatedAt: new Date().toISOString(),
         },
       ]);
-      jest.spyOn(productService, 'updateProduct').mockResolvedValue({
+      vi.spyOn(productService, 'updateProduct').mockResolvedValue({
         id: 1,
         organizationId,
         sku: 'SKU-1',
         barcode: 'BAR-1',
         name: 'Existing Product Updated',
         costPrice: 11,
+        retailPrice: 19.99,
         createdAt: new Date().toISOString(),
         updatedAt: new Date().toISOString(),
       });
-      jest.spyOn(productService, 'createProduct').mockResolvedValue({
+      vi.spyOn(productService, 'createProduct').mockResolvedValue({
         id: 2,
         organizationId,
         sku: 'SKU-2',
         barcode: 'BAR-2',
         name: 'New Product',
         costPrice: 12.5,
+        retailPrice: 24.99,
         createdAt: new Date().toISOString(),
         updatedAt: new Date().toISOString(),
       });
@@ -623,116 +649,13 @@ describe('ProductService with organizationId', () => {
       const result = await (productService as any).processXLSXUpload('/tmp/success.xlsx');
 
       expect(result).toEqual({ imported: 1, updated: 1, errors: [] });
-    });
-  });
-
-  describe('private lookup helpers', () => {
-    it('delegates combined SKU/barcode lookup to the product repository', async () => {
-      const byBarcode = {
-        id: 22,
-        organizationId,
-        sku: 'SKU-22',
-        barcode: 'BAR-22',
-        name: 'By Barcode',
-        costPrice: 22,
-        notes: '',
-        createdAt: new Date('2026-01-01T00:00:00.000Z'),
-        updatedAt: new Date('2026-01-02T00:00:00.000Z'),
-      };
-      const productRepo = {
-        findBySkuOrBarcode: jest.fn().mockResolvedValue({
-          bySku: null,
-          byBarcode,
-        }),
-      };
-      const service = new ProductService(
-        mockPrisma as unknown as PrismaClient,
-        organizationId,
-        productRepo as never,
+      expect(productService.updateProduct).toHaveBeenCalledWith(
+        1,
+        expect.objectContaining({ retailPrice: 19.99 }),
       );
-
-      mockPrisma.product.findUnique.mockRejectedValue(new Error('service should use repository'));
-
-      const result = await (service as any).getProductBySkuOrBarcode('SKU-MISSING', 'BAR-22');
-
-      expect(productRepo.findBySkuOrBarcode).toHaveBeenCalledWith(
-        'SKU-MISSING',
-        'BAR-22',
-        organizationId,
+      expect(productService.createProduct).toHaveBeenCalledWith(
+        expect.objectContaining({ retailPrice: 24.99 }),
       );
-      expect(mockPrisma.product.findUnique).not.toHaveBeenCalled();
-      expect(result).toEqual({
-        id: 22,
-        organizationId,
-        sku: 'SKU-22',
-        barcode: 'BAR-22',
-        name: 'By Barcode',
-        costPrice: 22,
-        createdAt: '2026-01-01T00:00:00.000Z',
-        updatedAt: '2026-01-02T00:00:00.000Z',
-      });
-    });
-
-    it('throws duplicate identifier error when SKU and barcode match different products', async () => {
-      mockPrisma.product.findUnique
-        .mockResolvedValueOnce({
-          id: 1,
-          organizationId,
-          sku: 'SKU-1',
-          barcode: 'BAR-1',
-          name: 'One',
-          costPrice: 1,
-          notes: '',
-          createdAt: new Date(),
-          updatedAt: new Date(),
-        })
-        .mockResolvedValueOnce({
-          id: 2,
-          organizationId,
-          sku: 'SKU-2',
-          barcode: 'BAR-2',
-          name: 'Two',
-          costPrice: 2,
-          notes: '',
-          createdAt: new Date(),
-          updatedAt: new Date(),
-        });
-
-      await expect(
-        (productService as any).getProductBySkuOrBarcode('SKU-1', 'BAR-2'),
-      ).rejects.toThrow('Duplicate identifiers detected');
-    });
-
-    it('returns product found by barcode when SKU lookup misses', async () => {
-      const byBarcode = {
-        id: 22,
-        organizationId,
-        sku: 'SKU-22',
-        barcode: 'BAR-22',
-        name: 'By Barcode',
-        costPrice: 22,
-        notes: '',
-        createdAt: new Date('2026-01-01T00:00:00.000Z'),
-        updatedAt: new Date('2026-01-02T00:00:00.000Z'),
-      };
-
-      mockPrisma.product.findUnique.mockResolvedValueOnce(null).mockResolvedValueOnce(byBarcode);
-
-      const result = await (productService as any).getProductBySkuOrBarcode(
-        'SKU-MISSING',
-        'BAR-22',
-      );
-
-      expect(result).toEqual({
-        id: 22,
-        organizationId,
-        sku: 'SKU-22',
-        barcode: 'BAR-22',
-        name: 'By Barcode',
-        costPrice: 22,
-        createdAt: '2026-01-01T00:00:00.000Z',
-        updatedAt: '2026-01-02T00:00:00.000Z',
-      });
     });
   });
 
@@ -740,14 +663,14 @@ describe('ProductService with organizationId', () => {
     const setupStreamEmitter = () => {
       const handlers: Record<string, (...args: any[]) => void> = {};
       const emitter = {
-        on: jest.fn((event: string, cb: (...args: any[]) => void) => {
+        on: vi.fn((event: string, cb: (...args: any[]) => void) => {
           handlers[event] = cb;
           return emitter;
         }),
       };
 
-      jest.spyOn(fs, 'createReadStream').mockReturnValue({
-        pipe: jest.fn(() => emitter),
+      vi.spyOn(fs, 'createReadStream').mockReturnValue({
+        pipe: vi.fn(() => emitter),
       } as any);
       mockCsvParse.mockReturnValue({});
 
@@ -755,7 +678,7 @@ describe('ProductService with organizationId', () => {
     };
 
     it('processCSVUploadInternal returns validation errors when CSV structure is invalid', async () => {
-      jest.spyOn(productService as any, 'validateCSVStructure').mockResolvedValue({
+      vi.spyOn(productService as any, 'validateCSVStructure').mockResolvedValue({
         isValid: false,
         errors: ['Missing required column header for SKU.'],
       });
@@ -770,7 +693,7 @@ describe('ProductService with organizationId', () => {
     });
 
     it('processCSVUploadInternal rejects when CSV parser emits error', async () => {
-      jest.spyOn(productService as any, 'validateCSVStructure').mockResolvedValue({
+      vi.spyOn(productService as any, 'validateCSVStructure').mockResolvedValue({
         isValid: true,
         errors: [],
       });
@@ -790,7 +713,7 @@ describe('ProductService with organizationId', () => {
     });
 
     it('processCSVUploadInternal returns empty-file error when no records are parsed', async () => {
-      jest.spyOn(productService as any, 'validateCSVStructure').mockResolvedValue({
+      vi.spyOn(productService as any, 'validateCSVStructure').mockResolvedValue({
         isValid: true,
         errors: [],
       });
@@ -811,11 +734,23 @@ describe('ProductService with organizationId', () => {
     });
 
     it('processCSVUploadInternal updates and creates products from parsed rows', async () => {
-      jest.spyOn(productService as any, 'validateCSVStructure').mockResolvedValue({
+      vi.spyOn(productService as any, 'validateCSVStructure').mockResolvedValue({
         isValid: true,
         errors: [],
       });
 
+      const now = new Date();
+      const existingPrismaProduct = {
+        id: 7,
+        organizationId,
+        sku: 'SKU-EXIST',
+        barcode: 'BAR-EXIST',
+        name: 'Existing',
+        costPrice: 9.99,
+        notes: '',
+        createdAt: now,
+        updatedAt: now,
+      };
       const existingProduct = {
         id: 7,
         organizationId,
@@ -823,17 +758,39 @@ describe('ProductService with organizationId', () => {
         barcode: 'BAR-EXIST',
         name: 'Existing',
         costPrice: 9.99,
-        createdAt: new Date().toISOString(),
-        updatedAt: new Date().toISOString(),
+        createdAt: now.toISOString(),
+        updatedAt: now.toISOString(),
+      };
+      // Two distinct products so resolveProductImportOperation detects a conflict on row 3
+      const conflictBySku = {
+        id: 1,
+        organizationId,
+        sku: 'SKU-DUP',
+        barcode: 'BAR-OTHER',
+        name: 'Conflict A',
+        costPrice: 5,
+        notes: '',
+        createdAt: now,
+        updatedAt: now,
+      };
+      const conflictByBarcode = {
+        id: 2,
+        organizationId,
+        sku: 'SKU-OTHER',
+        barcode: 'BAR-DUP',
+        name: 'Conflict B',
+        costPrice: 5,
+        notes: '',
+        createdAt: now,
+        updatedAt: now,
       };
 
-      jest
-        .spyOn(productService as any, 'getProductBySkuOrBarcode')
-        .mockResolvedValueOnce(existingProduct)
-        .mockResolvedValueOnce(null)
-        .mockRejectedValueOnce(new Error('Duplicate identifiers detected'));
-      jest.spyOn(productService, 'updateProduct').mockResolvedValue(existingProduct as any);
-      jest.spyOn(productService, 'createProduct').mockResolvedValue({
+      vi.spyOn((productService as any)['productRepo'], 'findBySkuOrBarcode')
+        .mockResolvedValueOnce({ bySku: existingPrismaProduct, byBarcode: null })
+        .mockResolvedValueOnce({ bySku: null, byBarcode: null })
+        .mockResolvedValueOnce({ bySku: conflictBySku, byBarcode: conflictByBarcode });
+      vi.spyOn(productService, 'updateProduct').mockResolvedValue(existingProduct as any);
+      vi.spyOn(productService, 'createProduct').mockResolvedValue({
         ...existingProduct,
         id: 8,
         sku: 'SKU-NEW',
@@ -849,9 +806,16 @@ describe('ProductService with organizationId', () => {
         SKU: 'SKU-EXIST',
         Name: 'Existing Updated',
         Cost: '10.00',
+        'Retail Price': '20.00',
         Barcode: 'BAR-EXIST',
       });
-      handlers.data({ SKU: 'SKU-NEW', Name: 'New Product', Cost: '11.25', Barcode: 'BAR-NEW' });
+      handlers.data({
+        SKU: 'SKU-NEW',
+        Name: 'New Product',
+        Cost: '11.25',
+        'Retail Price': '22.50',
+        Barcode: 'BAR-NEW',
+      });
       handlers.data({ SKU: 'SKU-DUP', Name: 'Dup', Cost: '5.00', Barcode: 'BAR-DUP' });
       await handlers.end();
 
@@ -859,9 +823,16 @@ describe('ProductService with organizationId', () => {
 
       expect(result.imported).toBe(1);
       expect(result.updated).toBe(1);
-      expect(result.errors).toContain('Row 3: Duplicate identifiers detected');
-      expect(productService.updateProduct).toHaveBeenCalled();
-      expect(productService.createProduct).toHaveBeenCalled();
+      expect(result.errors).toEqual(
+        expect.arrayContaining([expect.stringContaining('Row 3: Duplicate identifiers detected')]),
+      );
+      expect(productService.updateProduct).toHaveBeenCalledWith(
+        7,
+        expect.objectContaining({ retailPrice: 20 }),
+      );
+      expect(productService.createProduct).toHaveBeenCalledWith(
+        expect.objectContaining({ retailPrice: 22.5 }),
+      );
     });
 
     it('validateCSVStructure marks CSV invalid when parser emits an error', async () => {
@@ -897,6 +868,30 @@ describe('ProductService with organizationId', () => {
       expect(
         result.errors.some((e: string) => e.includes('Missing required column header for Barcode')),
       ).toBe(true);
+    });
+
+    it('does not advertise retail headers as Cost alternatives when CSV cost is missing', async () => {
+      const handlers = setupStreamEmitter();
+      const promise = (productService as any).validateCSVStructure('/tmp/missing-cost.csv');
+
+      handlers.data(
+        {
+          SKU: 'SKU-1',
+          Name: 'Name',
+          'Retail Price': '15.00',
+          Barcode: '12345',
+        },
+        0,
+      );
+      handlers.end();
+
+      const result = await promise;
+      const costError = result.errors.find((e: string) =>
+        e.includes('Missing required column header for Cost'),
+      );
+      expect(costError).toBeDefined();
+      expect(costError).not.toContain('Selling Price');
+      expect(costError).not.toContain('Retail Price');
     });
 
     it('validateCSVStructure returns valid when required headers are present via alternatives', async () => {

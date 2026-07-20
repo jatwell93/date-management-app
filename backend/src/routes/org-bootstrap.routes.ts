@@ -5,6 +5,7 @@ import { standardLimiter } from '../middleware/rateLimiter';
 import { validateRequest } from '../middleware/validateRequest';
 import { organizationBootstrapSchema } from '../schemas';
 import { createOrgBootstrapController } from '../controllers/org-bootstrap.controller';
+import { createSubscriptionController } from '../di/services';
 
 const router = Router();
 const orgBootstrapController = createOrgBootstrapController();
@@ -14,6 +15,15 @@ const authenticateTokenHandler: RequestHandler = (req, res, next) =>
   authenticateToken(req as AuthRequest, res, next);
 const requireManagerHandler: RequestHandler = (req, res, next) =>
   requireManager(req as AuthRequest, res, next);
+
+router.get('/usage', clerkAuthHandler, async (req, res, next) => {
+  try {
+    const controller = createSubscriptionController();
+    await controller.getOrganizationUsage(req, res);
+  } catch (error) {
+    next(error);
+  }
+});
 
 /**
  * POST /api/organization/bootstrap

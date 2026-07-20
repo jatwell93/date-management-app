@@ -3,13 +3,11 @@ import {
   BrowserRouter as Router,
   Routes,
   Route,
-  Link,
   Navigate,
   useLocation,
   useNavigate,
 } from 'react-router-dom';
 import * as Sentry from '@sentry/react';
-import { ChevronDown, LogOut, Menu, X } from 'lucide-react';
 import {
   ClerkSignInPage,
   ClerkSignUpPage,
@@ -24,22 +22,18 @@ import { StorageQuotaWarning } from './components/StorageQuotaWarning';
 import { TrialBanner } from './components/TrialBanner';
 import { TrialUpgradeFlow } from './components/TrialUpgradeFlow';
 import SentryTest from './SentryTest';
-import {
-  DropdownMenu,
-  DropdownMenuContent,
-  DropdownMenuItem,
-  DropdownMenuTrigger,
-} from './components/ui/dropdown-menu';
 import ErrorBoundary from './components/ErrorBoundary';
-import { synchronizeOfflineData, getPendingInventoryItemCount } from './lib/sync-manager';
-import { offlineSyncService } from './lib/offline-sync';
+import { synchronizeOfflineData } from './lib/sync-manager';
 import { offlineStorage as _offlineStorage } from './lib/offline-storage';
 import { ToastProvider } from './components/ui/toast-provider';
 import { HandheldProvider, useHandheldDetectionContext } from './contexts/HandheldContext';
 import { useOrgBootstrap } from './hooks/useOrgBootstrap';
+import { useFreshApiToken } from './hooks/useFreshApiToken';
 import { hasPermission, PERMISSIONS, RoleValue } from './constants/roles';
 import { HandheldLayout } from './layouts/HandheldLayout';
 import { API_AUTH_UNAUTHORIZED_EVENT, API_BASE_URL } from './lib/api.service';
+import { AppNav } from './components/AppNav';
+import { useSyncStatus } from './hooks/useSyncStatus';
 import './globals.css';
 import './styles/handheld.css';
 import './theme/scanner-adaptation.css';
@@ -75,7 +69,13 @@ const DetailedExpiryReportPage = React.lazy(() =>
     default: module.DetailedExpiryReportPage,
   })),
 );
+const ExpiryEntriesPage = React.lazy(() =>
+  import('./pages/ExpiryEntriesPage').then((module) => ({
+    default: module.ExpiryEntriesPage,
+  })),
+);
 const ExpiredItemsPage = React.lazy(() => import('./pages/ExpiredItemsPage'));
+const SupplierCreditsPage = React.lazy(() => import('./pages/SupplierCreditsPage'));
 const SubscriptionSettingsPage = React.lazy(() =>
   import('./pages/SubscriptionSettingsPage').then((module) => ({
     default: module.SubscriptionSettingsPage,
@@ -115,6 +115,33 @@ function ExpiryLoadingState({ message }: { message: string }) {
   );
 }
 
+function BootstrapErrorState({ error }: { error: string }) {
+  return (
+    <div className="min-h-screen bg-background text-foreground flex items-center justify-center">
+      <div className="text-center max-w-md">
+        <h1 className="text-2xl font-semibold text-destructive mb-2">Setup Required</h1>
+        <p className="text-muted-foreground mb-4">
+          Please complete your organization setup to continue.
+        </p>
+        {process.env.NODE_ENV === 'development' && (
+          <details className="mb-4 text-left bg-destructive/10 p-3 rounded text-sm">
+            <summary className="cursor-pointer font-semibold mb-2">Debug Info</summary>
+            <code className="block whitespace-pre-wrap break-words text-xs text-destructive">
+              {error}
+            </code>
+          </details>
+        )}
+        <button
+          onClick={() => window.location.reload()}
+          className="px-4 py-2 bg-primary text-primary-foreground rounded-md hover:bg-primary/90 transition-colors"
+        >
+          Retry Setup
+        </button>
+      </div>
+    </div>
+  );
+}
+
 function RouteLoadingState() {
   return (
     <div role="status" className="py-8 text-center text-sm font-medium text-muted-foreground">
@@ -124,17 +151,28 @@ function RouteLoadingState() {
 }
 
 function runHandledHandheldSync(
-  token: string | null,
+  getSyncToken: () => Promise<string | undefined>,
   refreshPendingQueueCount: () => Promise<void>,
 ): void {
   void (async () => {
-    await synchronizeOfflineData(token);
+    await synchronizeOfflineData(getSyncToken);
     await refreshPendingQueueCount();
   })().catch((error: unknown) => {
     Sentry.captureException(error, {
       tags: { feature: 'handheld-sync' },
     });
   });
+}
+
+function useHandheldSyncNow(
+  token: string | null,
+  refreshPendingQueueCount: () => Promise<void>,
+): () => void {
+  const getFreshApiToken = useFreshApiToken(token);
+
+  return useCallback(() => {
+    runHandledHandheldSync(() => getFreshApiToken('app-handheld-sync'), refreshPendingQueueCount);
+  }, [getFreshApiToken, refreshPendingQueueCount]);
 }
 
 function ProfilePage() {
@@ -203,7 +241,7 @@ interface ExpectQaStatusProps {
   hasToken: boolean;
 }
 
-function ExpectQaStatus({
+export function ExpectQaStatus({
   isLoggedIn,
   isFullySignedIn,
   hasOrganization,
@@ -230,7 +268,9 @@ function ExpectQaStatus({
     <section
       aria-label="Expect QA auth diagnostics"
       data-testid="expect-qa-status"
-      className="fixed bottom-3 right-3 z-50 max-w-sm rounded-md border border-semantic-warning-muted bg-semantic-warning-muted p-3 text-xs text-semantic-warning-muted-foreground shadow-lg"
+      className={`fixed bottom-3 right-3 z-50 max-w-sm rounded-md border border-semantic-warning-muted bg-semantic-warning-muted p-3 text-xs text-semantic-warning-muted-foreground shadow-lg ${
+        isCompactViewport ? '' : 'pointer-events-none'
+      }`}
     >
       <div className="flex items-center justify-between gap-3">
         <div className="font-semibold">Expect QA</div>
@@ -351,8 +391,22 @@ function AppRoutes({ isLoggedIn, effectiveUserRole, token }: AppRoutesProps) {
           element={renderSignedInElement(isLoggedIn, <DetailedExpiryReportPage token={token} />)}
         />
         <Route
+          path="/expiry-entries"
+          element={renderSignedInElement(
+            isLoggedIn,
+            <ExpiryEntriesPage token={token} role={effectiveUserRole} />,
+          )}
+        />
+        <Route
           path="/expired-items"
           element={renderSignedInElement(isLoggedIn, <ExpiredItemsPage token={token} />)}
+        />
+        <Route
+          path="/supplier-credits"
+          element={renderSignedInElement(
+            isLoggedIn,
+            <SupplierCreditsPage token={token} effectiveUserRole={effectiveUserRole} />,
+          )}
         />
         <Route
           path="/usage-report"
@@ -457,38 +511,14 @@ function AppContent({
   const usesHandheldShell = isHandheld && detectionResult?.method !== 'dimensions';
   const { pathname } = useLocation();
   const navigate = useNavigate();
-  const [isOnline, setIsOnline] = useState<boolean>(navigator.onLine);
-  const [pendingQueueCount, setPendingQueueCount] = useState(0);
-
-  const refreshPendingQueueCount = useCallback(async () => {
-    try {
-      const pendingInventoryCount = await getPendingInventoryItemCount(); // ✓ Use centralized function (fixes 17.3)
-      const operationQueueCount = offlineSyncService.getPendingOperationCount();
-      setPendingQueueCount(pendingInventoryCount + operationQueueCount);
-    } catch (_error) {
-      setPendingQueueCount(offlineSyncService.getPendingOperationCount());
-    }
-  }, []);
-
-  useEffect(() => {
-    const handleOnline = () => setIsOnline(true);
-    const handleOffline = () => setIsOnline(false);
-
-    window.addEventListener('online', handleOnline);
-    window.addEventListener('offline', handleOffline);
-
-    return () => {
-      window.removeEventListener('online', handleOnline);
-      window.removeEventListener('offline', handleOffline);
-    };
-  }, []);
+  const { isOnline, pendingQueueCount, refreshPendingQueueCount } = useSyncStatus(isLoggedIn);
+  const handleSyncNow = useHandheldSyncNow(token, refreshPendingQueueCount);
 
   // Handle API authorization failures (401 responses)
   useEffect(() => {
     const handleUnauthorized = (event: Event) => {
       // Log the unauthorized event for debugging
       if (event instanceof CustomEvent) {
-        // eslint-disable-next-line no-console
         console.warn('[Auth] Unauthorized API response detected:', event.detail);
       }
       // Call logout to clear auth state and redirect to login
@@ -502,21 +532,11 @@ function AppContent({
     };
   }, [handleLogout]);
 
-  useEffect(() => {
-    void refreshPendingQueueCount();
-    const intervalId = window.setInterval(() => {
-      void refreshPendingQueueCount();
-    }, 2000);
-
-    return () => {
-      window.clearInterval(intervalId);
-    };
-  }, [isLoggedIn, refreshPendingQueueCount]);
-
   // Redirect dedicated scanner devices to /scan by default (only when logged in).
   useEffect(() => {
-    if (usesHandheldShell && isLoggedIn && pathname !== '/scan' && !pathname.startsWith('/login')) {
-      // Use React Router navigation instead of full page reload
+    const shouldRedirectHandheldToScan =
+      usesHandheldShell && isLoggedIn && pathname !== '/scan' && !pathname.startsWith('/login');
+    if (shouldRedirectHandheldToScan) {
       navigate('/scan', { replace: true });
     }
   }, [usesHandheldShell, isLoggedIn, pathname, navigate]);
@@ -533,31 +553,9 @@ function AppContent({
   }
 
   // Show error state if bootstrap failed.
-  if (!isBootstrapped && !isBootstrapping && isLoggedIn && bootstrapError) {
-    return (
-      <div className="min-h-screen bg-background text-foreground flex items-center justify-center">
-        <div className="text-center max-w-md">
-          <h1 className="text-2xl font-semibold text-destructive mb-2">Setup Required</h1>
-          <p className="text-muted-foreground mb-4">
-            Please complete your organization setup to continue.
-          </p>
-          {process.env.NODE_ENV === 'development' && (
-            <details className="mb-4 text-left bg-destructive/10 p-3 rounded text-sm">
-              <summary className="cursor-pointer font-semibold mb-2">Debug Info</summary>
-              <code className="block whitespace-pre-wrap break-words text-xs text-destructive">
-                {bootstrapError}
-              </code>
-            </details>
-          )}
-          <button
-            onClick={() => window.location.reload()}
-            className="px-4 py-2 bg-primary text-primary-foreground rounded-md hover:bg-primary/90 transition-colors"
-          >
-            Retry Setup
-          </button>
-        </div>
-      </div>
-    );
+  const hasBootstrapFailed = !isBootstrapped && !isBootstrapping && isLoggedIn && !!bootstrapError;
+  if (hasBootstrapFailed) {
+    return <BootstrapErrorState error={bootstrapError!} />;
   }
 
   return (
@@ -580,229 +578,20 @@ function AppContent({
         hasToken={!!token}
       />
       {isLoggedIn && !usesHandheldShell && (
-        <nav className="border-b border-semantic-primary-hover/30 bg-semantic-primary text-semantic-primary-foreground shadow-sm">
-          <div className="mx-auto max-w-7xl px-4">
-            <div
-              className="flex min-h-20 items-center justify-between gap-4"
-              data-testid="app-nav-shell-row"
-            >
-              <Link
-                to="/scan"
-                className="font-heading text-lg font-semibold leading-tight hover:opacity-90 focus:outline-none focus:ring-2 focus:ring-semantic-primary-foreground/70"
-              >
-                Inventory Manager
-              </Link>
-
-              <ul className="hidden items-center gap-1 lg:flex" aria-label="Primary navigation">
-                <li data-testid="desktop-primary-nav-item" data-nav-label="Scan">
-                  <Link
-                    to="/scan"
-                    className={`rounded-md px-3 py-2 text-sm font-medium transition-colors ${
-                      pathname === '/scan'
-                        ? 'bg-semantic-primary-foreground text-semantic-primary'
-                        : 'hover:bg-semantic-primary-hover'
-                    }`}
-                  >
-                    Scan
-                  </Link>
-                </li>
-                <li data-testid="desktop-primary-nav-item" data-nav-label="Dashboard">
-                  <Link
-                    to="/dashboard"
-                    className={`rounded-md px-3 py-2 text-sm font-medium transition-colors ${
-                      pathname === '/dashboard'
-                        ? 'bg-semantic-primary-foreground text-semantic-primary'
-                        : 'hover:bg-semantic-primary-hover'
-                    }`}
-                  >
-                    Dashboard
-                  </Link>
-                </li>
-                <li data-testid="desktop-primary-nav-item" data-nav-label="Reports">
-                  <DropdownMenu>
-                    <DropdownMenuTrigger className="inline-flex cursor-pointer items-center gap-1 rounded-md px-3 py-2 text-sm font-medium transition-colors hover:bg-semantic-primary-hover focus:outline-none focus:ring-2 focus:ring-semantic-primary-foreground/70">
-                      Reports
-                      <ChevronDown className="size-4" aria-hidden="true" />
-                    </DropdownMenuTrigger>
-                    <DropdownMenuContent align="end" className="min-w-56">
-                      <DropdownMenuItem asChild>
-                        <Link to="/reports">Overview Reports</Link>
-                      </DropdownMenuItem>
-                      <DropdownMenuItem asChild>
-                        <Link to="/detailed-expiry-report">Detailed Expiry Report</Link>
-                      </DropdownMenuItem>
-                      <DropdownMenuItem asChild>
-                        <Link to="/expired-items">Expired Items</Link>
-                      </DropdownMenuItem>
-                      <DropdownMenuItem asChild>
-                        <Link to="/usage-report">Usage Report</Link>
-                      </DropdownMenuItem>
-                    </DropdownMenuContent>
-                  </DropdownMenu>
-                </li>
-                <li data-testid="desktop-primary-nav-item" data-nav-label="Manage">
-                  <DropdownMenu>
-                    <DropdownMenuTrigger className="inline-flex cursor-pointer items-center gap-1 rounded-md px-3 py-2 text-sm font-medium transition-colors hover:bg-semantic-primary-hover focus:outline-none focus:ring-2 focus:ring-semantic-primary-foreground/70">
-                      Manage
-                      <ChevronDown className="size-4" aria-hidden="true" />
-                    </DropdownMenuTrigger>
-                    <DropdownMenuContent
-                      align="end"
-                      className="min-w-56"
-                      data-testid="desktop-manage-menu"
-                    >
-                      <DropdownMenuItem asChild>
-                        <Link to="/markdown-calculator">Markdown Calculator</Link>
-                      </DropdownMenuItem>
-                      {effectiveUserRole &&
-                        hasPermission(effectiveUserRole, PERMISSIONS.MANAGE_MEMBERS) && (
-                          <>
-                            <DropdownMenuItem asChild>
-                              <Link to="/csv-upload">CSV Upload</Link>
-                            </DropdownMenuItem>
-                            <DropdownMenuItem asChild>
-                              <Link to="/expiry-import">Expiry Import</Link>
-                            </DropdownMenuItem>
-                            <DropdownMenuItem asChild>
-                              <Link to="/store-area-management">Store Areas</Link>
-                            </DropdownMenuItem>
-                            <DropdownMenuItem asChild>
-                              <Link to="/user-management">User Management</Link>
-                            </DropdownMenuItem>
-                          </>
-                        )}
-                    </DropdownMenuContent>
-                  </DropdownMenu>
-                </li>
-                <li data-testid="desktop-primary-nav-item" data-nav-label="Account">
-                  <DropdownMenu>
-                    <DropdownMenuTrigger className="inline-flex cursor-pointer items-center gap-1 rounded-md px-3 py-2 text-sm font-medium transition-colors hover:bg-semantic-primary-hover focus:outline-none focus:ring-2 focus:ring-semantic-primary-foreground/70">
-                      Account
-                      <ChevronDown className="size-4" aria-hidden="true" />
-                    </DropdownMenuTrigger>
-                    <DropdownMenuContent align="end" className="min-w-48">
-                      <DropdownMenuItem asChild>
-                        <Link to="/profile">Profile</Link>
-                      </DropdownMenuItem>
-                      <DropdownMenuItem asChild>
-                        <Link to="/subscription">Billing</Link>
-                      </DropdownMenuItem>
-                      {effectiveUserRole &&
-                        hasPermission(effectiveUserRole, PERMISSIONS.MANAGE_MEMBERS) && (
-                          <DropdownMenuItem asChild>
-                            <Link to="/settings">Settings</Link>
-                          </DropdownMenuItem>
-                        )}
-                      <DropdownMenuItem variant="destructive" asChild>
-                        <button type="button" onClick={handleLogout} className="w-full">
-                          <LogOut className="size-4" aria-hidden="true" />
-                          Logout
-                        </button>
-                      </DropdownMenuItem>
-                    </DropdownMenuContent>
-                  </DropdownMenu>
-                </li>
-              </ul>
-
-              <button
-                type="button"
-                className="inline-flex size-11 cursor-pointer items-center justify-center rounded-md text-semantic-primary-foreground transition-colors hover:bg-semantic-primary-hover focus:outline-none focus:ring-2 focus:ring-semantic-primary-foreground/70 lg:hidden"
-                onClick={() => setIsMobileMenuOpen(!isMobileMenuOpen)}
-                aria-label={isMobileMenuOpen ? 'Close navigation menu' : 'Open navigation menu'}
-                aria-expanded={isMobileMenuOpen}
-              >
-                {isMobileMenuOpen ? (
-                  <X className="size-5" aria-hidden="true" />
-                ) : (
-                  <Menu className="size-5" aria-hidden="true" />
-                )}
-              </button>
-            </div>
-
-            {isMobileMenuOpen && (
-              <div className="border-t border-semantic-primary-foreground/20 py-3 lg:hidden">
-                <div className="grid gap-1">
-                  {[
-                    { to: '/scan', label: 'Scan' },
-                    { to: '/dashboard', label: 'Dashboard' },
-                    { to: '/reports', label: 'Reports' },
-                    { to: '/detailed-expiry-report', label: 'Detailed Expiry Report' },
-                    { to: '/expired-items', label: 'Expired Items' },
-                    { to: '/usage-report', label: 'Usage Report' },
-                    { to: '/markdown-calculator', label: 'Markdown Calculator' },
-                  ].map((item) => (
-                    <Link
-                      key={item.to}
-                      to={item.to}
-                      className="rounded-md px-3 py-2 text-sm font-medium transition-colors hover:bg-semantic-primary-hover"
-                      onClick={() => setIsMobileMenuOpen(false)}
-                    >
-                      {item.label}
-                    </Link>
-                  ))}
-                  {effectiveUserRole &&
-                    hasPermission(effectiveUserRole, PERMISSIONS.MANAGE_MEMBERS) && (
-                      <>
-                        <div className="mt-2 border-t border-semantic-primary-foreground/20 px-3 pt-3 text-xs font-semibold uppercase tracking-wide text-semantic-primary-foreground/75">
-                          Manage
-                        </div>
-                        {[
-                          { to: '/csv-upload', label: 'CSV Upload' },
-                          { to: '/expiry-import', label: 'Expiry Import' },
-                          { to: '/store-area-management', label: 'Store Areas' },
-                          { to: '/user-management', label: 'User Management' },
-                          { to: '/settings', label: 'Settings' },
-                        ].map((item) => (
-                          <Link
-                            key={item.to}
-                            to={item.to}
-                            className="rounded-md px-3 py-2 text-sm font-medium transition-colors hover:bg-semantic-primary-hover"
-                            onClick={() => setIsMobileMenuOpen(false)}
-                          >
-                            {item.label}
-                          </Link>
-                        ))}
-                      </>
-                    )}
-                  <div className="mt-2 border-t border-semantic-primary-foreground/20 px-3 pt-3 text-xs font-semibold uppercase tracking-wide text-semantic-primary-foreground/75">
-                    Account
-                  </div>
-                  {[
-                    { to: '/profile', label: 'Profile' },
-                    { to: '/subscription', label: 'Billing' },
-                  ].map((item) => (
-                    <Link
-                      key={item.to}
-                      to={item.to}
-                      className="rounded-md px-3 py-2 text-sm font-medium transition-colors hover:bg-semantic-primary-hover"
-                      onClick={() => setIsMobileMenuOpen(false)}
-                    >
-                      {item.label}
-                    </Link>
-                  ))}
-                  <button
-                    type="button"
-                    onClick={() => {
-                      handleLogout();
-                      setIsMobileMenuOpen(false);
-                    }}
-                    className="mt-1 flex cursor-pointer items-center gap-2 rounded-md px-3 py-2 text-left text-sm font-medium text-semantic-critical-muted transition-colors hover:bg-semantic-primary-hover"
-                  >
-                    <LogOut className="size-4" aria-hidden="true" />
-                    Logout
-                  </button>
-                </div>
-              </div>
-            )}
-          </div>
-        </nav>
+        <AppNav
+          effectiveUserRole={effectiveUserRole}
+          isMobileMenuOpen={isMobileMenuOpen}
+          setIsMobileMenuOpen={setIsMobileMenuOpen}
+          handleLogout={handleLogout}
+          pathname={pathname}
+        />
       )}
 
       {usesHandheldShell ? (
         <HandheldLayout
           userName={userName || undefined}
           syncStatus={isOnline ? 'synced' : 'offline'}
-          onSyncNow={() => runHandledHandheldSync(token, refreshPendingQueueCount)}
+          onSyncNow={handleSyncNow}
           onSettingsClick={() => {
             navigate('/settings');
           }}

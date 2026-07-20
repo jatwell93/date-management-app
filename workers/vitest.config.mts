@@ -11,7 +11,12 @@ export default defineConfig({
   ],
   test: {
     include: ['src/**/*.test.ts'],
-    exclude: runPreviewTests ? [] : ['src/workers-deployment.test.ts'],
+    // `*.node.test.ts` run under the Node project (vitest.node.config.mts) because they
+    // use pglite (WASM), which cannot load in the workerd pool.
+    exclude: [
+      'src/**/*.node.test.ts',
+      ...(runPreviewTests ? [] : ['src/workers-deployment.test.ts']),
+    ],
     globals: true,
   },
 });

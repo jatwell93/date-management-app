@@ -30,7 +30,7 @@ describe('Zod Request Validation Middleware', () => {
       query: {},
     };
     mockResponse = {};
-    mockNext = jest.fn();
+    mockNext = vi.fn();
   });
 
   describe('validateRequest - Combined Validation', () => {
@@ -382,7 +382,7 @@ describe('Zod Request Validation Middleware', () => {
       });
 
       // Force a non-Zod error by mocking schema.parseAsync
-      jest.spyOn(schema, 'parseAsync').mockRejectedValue(new Error('Unexpected error'));
+      vi.spyOn(schema, 'parseAsync').mockRejectedValue(new Error('Unexpected error'));
 
       mockRequest = {
         body: { field: 'value' },

@@ -22,10 +22,10 @@ jobs:
         working-directory: ./workers
 
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
 
       - name: Setup Node.js
-        uses: actions/setup-node@v4
+        uses: actions/setup-node@v6
         with:
           node-version: '22'
           cache: 'npm'
@@ -33,6 +33,13 @@ jobs:
 
       - name: Install dependencies
         run: npm ci
+
+      # Type-checks production code AND tests (tsconfig.test.json). The deploy-time
+      # `npm run lint` excludes test files, so a broken import inside a test (e.g. a
+      # module moved during a refactor) is invisible to esbuild and to that check.
+      # This step is the PR gate that catches those.
+      - name: Type check (including tests)
+        run: npm run typecheck
 
       - name: Build worker bundle
         run: npm run build
@@ -60,17 +67,21 @@ jobs:
       - name: Publish bundle summary
         run: |
           echo "## Workers Bundle Size" >> "$GITHUB_STEP_SUMMARY"
-          echo "- Raw: ${{ steps.measure.outputs.raw_kib }} KiB" >> "$GITHUB_STEP_SUMMARY"
+          echo "- Raw: ${{ steps.measure.outputs.raw_kib }} KiB (informational)" >> "$GITHUB_STEP_SUMMARY"
           echo "- Gzip: ${{ steps.measure.outputs.gzip_kib }} KiB" >> "$GITHUB_STEP_SUMMARY"
-          echo "- Limit: 500.00 KiB (raw)" >> "$GITHUB_STEP_SUMMARY"
+          echo "- Limit: 256.00 KiB (gzip)" >> "$GITHUB_STEP_SUMMARY"
 
       - name: Enforce bundle size limit
         env:
-          RAW_BYTES: ${{ steps.measure.outputs.raw_bytes }}
+          GZIP_BYTES: ${{ steps.measure.outputs.gzip_bytes }}
         run: |
-          LIMIT_BYTES=512000
-          if [ "$RAW_BYTES" -gt "$LIMIT_BYTES" ]; then
-            echo "::error::Workers bundle is ${RAW_BYTES} bytes (limit ${LIMIT_BYTES} bytes / 500 KiB)."
+          # Cloudflare enforces its Worker size limit on the compressed bundle,
+          # so we guard the gzip size rather than raw bytes. 256 KiB gives ample
+          # headroom over the current ~152 KiB while staying well under
+          # Cloudflare's 1 MiB (free) compressed limit.
+          LIMIT_BYTES=262144
+          if [ "$GZIP_BYTES" -gt "$LIMIT_BYTES" ]; then
+            echo "::error::Workers bundle is ${GZIP_BYTES} bytes gzipped (limit ${LIMIT_BYTES} bytes / 256 KiB)."
             exit 1
           fi
-          echo "Bundle size check passed: ${RAW_BYTES} bytes <= ${LIMIT_BYTES} bytes"
+          echo "Bundle size check passed: ${GZIP_BYTES} bytes gzipped <= ${LIMIT_BYTES} bytes"

@@ -1,7 +1,7 @@
 import React from 'react';
 import { fireEvent, render, screen, waitFor } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
-import fetchMock from 'jest-fetch-mock';
+import { fetchMock } from '../../test-utils/fetchMock';
 import { CSVUploadPage } from '../CSVUploadPage';
 import {
   validateCSVColumns,
@@ -9,24 +9,32 @@ import {
   type ColumnValidationResult,
 } from '../../utils/csvValidator';
 
+const mockGetToken = vi.fn();
+
+vi.mock('@clerk/clerk-react', () => ({
+  useAuth: () => ({
+    getToken: mockGetToken,
+  }),
+}));
+
 // Mock react-router-dom
-const mockNavigate = jest.fn();
+const mockNavigate = vi.fn();
 const mockSearchParams = new URLSearchParams();
-jest.mock('react-router-dom', () => ({
+vi.mock('react-router-dom', () => ({
   useSearchParams: () => [mockSearchParams],
   useNavigate: () => mockNavigate,
 }));
 
-jest.mock('../../lib/api.service', () => ({
+vi.mock('../../lib/api.service', () => ({
   buildApiUrl: (route: string) => `https://api.test${route}`,
 }));
 
-jest.mock('../../utils/csvValidator', () => {
-  const actual = jest.requireActual('../../utils/csvValidator');
+vi.mock('../../utils/csvValidator', async (importOriginal) => {
+  const actual = await importOriginal<typeof import('../../utils/csvValidator')>();
   return {
     ...actual,
-    validateCSVColumns: jest.fn(),
-    estimateRowCount: jest.fn(),
+    validateCSVColumns: vi.fn(),
+    estimateRowCount: vi.fn(),
   };
 });
 
@@ -44,20 +52,21 @@ describe('CSVUploadPage expiry import', () => {
 
   beforeEach(() => {
     fetchMock.resetMocks();
-    jest.clearAllMocks();
+    vi.clearAllMocks();
     localStorage.clear();
 
+    mockGetToken.mockResolvedValue('fresh-clerk-token');
     (validateCSVColumns as jest.Mock).mockResolvedValue(validColumns);
     (estimateRowCount as jest.Mock).mockReturnValue(null);
 
-    (URL.createObjectURL as unknown as jest.Mock) = jest.fn(() => 'blob:test-url');
-    (URL.revokeObjectURL as unknown as jest.Mock) = jest.fn();
+    (URL.createObjectURL as unknown as jest.Mock) = vi.fn(() => 'blob:test-url');
+    (URL.revokeObjectURL as unknown as jest.Mock) = vi.fn();
 
-    jest.spyOn(HTMLAnchorElement.prototype, 'click').mockImplementation(() => {});
+    vi.spyOn(HTMLAnchorElement.prototype, 'click').mockImplementation(() => {});
   });
 
   afterEach(() => {
-    jest.restoreAllMocks();
+    vi.restoreAllMocks();
   });
 
   it('switches to expiry mode UX with template actions', async () => {
@@ -262,6 +271,150 @@ describe('CSVUploadPage expiry import', () => {
     });
   });
 
+  it('uses the direct upload URL returned by initiate when it includes the upload key', async () => {
+    fetchMock
+      .mockResponseOnce(
+        JSON.stringify({
+          strategy: 'direct',
+          uploadUrl: '/api/upload/direct/uploads%2Fuser-26%2Fproducts.csv',
+          method: 'POST',
+          key: 'uploads/user-26/products.csv',
+        }),
+      )
+      .mockResponseOnce(
+        JSON.stringify({
+          key: 'uploads/user-26/products.csv',
+        }),
+      )
+      .mockResponseOnce(
+        JSON.stringify({
+          status: 'complete',
+          importedCount: 1,
+          updatedCount: 0,
+          skippedCount: 0,
+          processedCount: 1,
+          totalCount: 1,
+        }),
+      );
+
+    render(<CSVUploadPage token="test-token" />);
+
+    const fileInput = screen.getByLabelText('CSV/XLSX/XLS File') as HTMLInputElement;
+    const file = new File(['SKU,Name,Barcode,Cost\nSKU-1,Milk,123,12.99'], 'products.csv', {
+      type: 'text/csv',
+    });
+
+    fireEvent.change(fileInput, { target: { files: [file] } });
+    userEvent.click(screen.getByRole('button', { name: 'Upload CSV/XLSX/XLS' }));
+
+    await waitFor(() => {
+      expect(fetchMock).toHaveBeenCalledTimes(3);
+    });
+
+    expect(fetchMock.mock.calls[1]?.[0]).toBe(
+      'https://api.test/api/upload/direct/uploads%2Fuser-26%2Fproducts.csv',
+    );
+  });
+
+  it('refreshes the Clerk token before starting an upload', async () => {
+    fetchMock
+      .mockResponseOnce(
+        JSON.stringify({
+          strategy: 'direct',
+          uploadUrl: '/api/upload/direct/uploads%2Fuser-26%2Fproducts.csv',
+          method: 'POST',
+          key: 'uploads/user-26/products.csv',
+        }),
+      )
+      .mockResponseOnce(
+        JSON.stringify({
+          key: 'uploads/user-26/products.csv',
+        }),
+      )
+      .mockResponseOnce(
+        JSON.stringify({
+          status: 'complete',
+          importedCount: 1,
+          updatedCount: 0,
+          skippedCount: 0,
+          processedCount: 1,
+          totalCount: 1,
+        }),
+      );
+
+    render(<CSVUploadPage token="expired-prop-token" />);
+
+    const fileInput = screen.getByLabelText('CSV/XLSX/XLS File') as HTMLInputElement;
+    const file = new File(['SKU,Name,Barcode,Cost\nSKU-1,Milk,123,12.99'], 'products.csv', {
+      type: 'text/csv',
+    });
+
+    fireEvent.change(fileInput, { target: { files: [file] } });
+    userEvent.click(screen.getByRole('button', { name: 'Upload CSV/XLSX/XLS' }));
+
+    await waitFor(() => {
+      expect(fetchMock).toHaveBeenCalledTimes(3);
+    });
+
+    const initiateOptions = fetchMock.mock.calls[0]?.[1] as RequestInit;
+    expect(mockGetToken).toHaveBeenCalled();
+    expect(initiateOptions.headers).toEqual(
+      expect.objectContaining({
+        Authorization: 'Bearer fresh-clerk-token',
+      }),
+    );
+  });
+
+  it('falls back to the existing token when Clerk token refresh fails', async () => {
+    mockGetToken.mockRejectedValue(new Error('Clerk token refresh failed'));
+
+    fetchMock
+      .mockResponseOnce(
+        JSON.stringify({
+          strategy: 'direct',
+          uploadUrl: '/api/upload/direct/uploads%2Fuser-26%2Fproducts.csv',
+          method: 'POST',
+          key: 'uploads/user-26/products.csv',
+        }),
+      )
+      .mockResponseOnce(
+        JSON.stringify({
+          key: 'uploads/user-26/products.csv',
+        }),
+      )
+      .mockResponseOnce(
+        JSON.stringify({
+          status: 'complete',
+          importedCount: 1,
+          updatedCount: 0,
+          skippedCount: 0,
+          processedCount: 1,
+          totalCount: 1,
+        }),
+      );
+
+    render(<CSVUploadPage token="existing-prop-token" />);
+
+    const fileInput = screen.getByLabelText('CSV/XLSX/XLS File') as HTMLInputElement;
+    const file = new File(['SKU,Name,Barcode,Cost\nSKU-1,Milk,123,12.99'], 'products.csv', {
+      type: 'text/csv',
+    });
+
+    fireEvent.change(fileInput, { target: { files: [file] } });
+    userEvent.click(screen.getByRole('button', { name: 'Upload CSV/XLSX/XLS' }));
+
+    await waitFor(() => {
+      expect(fetchMock).toHaveBeenCalledTimes(3);
+    });
+
+    const initiateOptions = fetchMock.mock.calls[0]?.[1] as RequestInit;
+    expect(initiateOptions.headers).toEqual(
+      expect.objectContaining({
+        Authorization: 'Bearer existing-prop-token',
+      }),
+    );
+  });
+
   it('keeps format-guideline links safe when reduced-motion detection is unavailable', async () => {
     const originalMatchMedia = window.matchMedia;
     Object.defineProperty(window, 'matchMedia', {
@@ -331,6 +484,7 @@ describe('CSVUploadPage expiry import', () => {
     const previewTable = screen.getByRole('table');
 
     expect(previewRegion).toHaveClass('overflow-x-auto');
+    expect(previewRegion).toHaveAttribute('tabIndex', '0');
     expect(previewTable).toHaveClass('min-w-max');
   });
 
@@ -504,7 +658,59 @@ describe('CSVUploadPage expiry import', () => {
     expect(screen.getAllByText('Products updated: 1').length).toBeGreaterThan(0);
   });
 
-  it('restores the last-upload summary from local storage on page load', () => {
+  it('treats completed-with-errors as terminal and reports unchanged products', async () => {
+    const productColumns: ColumnValidationResult = {
+      isValid: true,
+      missingColumns: [],
+      importType: 'product-catalog',
+      foundColumns: { sku: 'SKU', name: 'Name', cost: 'Cost', barcode: 'Barcode' },
+      suggestions: {},
+    };
+    (validateCSVColumns as jest.Mock).mockResolvedValue(productColumns);
+    fetchMock
+      .mockResponseOnce(
+        JSON.stringify({
+          strategy: 'direct',
+          uploadUrl: '/api/upload/direct',
+          method: 'POST',
+          key: 'uploads/org-123/products.csv',
+        }),
+      )
+      .mockResponseOnce(JSON.stringify({ key: 'uploads/org-123/products.csv', status: 'queued' }), {
+        status: 202,
+      })
+      .mockResponseOnce(
+        JSON.stringify({
+          status: 'completed_with_errors',
+          importedCount: 2,
+          updatedCount: 1,
+          unchangedCount: 4,
+          skippedCount: 1,
+          errorCount: 1,
+          rowsProcessed: 8,
+          rowsTotal: 8,
+        }),
+      );
+
+    render(<CSVUploadPage token="test-token" />);
+    const fileInput = screen.getByLabelText('CSV/XLSX/XLS File') as HTMLInputElement;
+    fireEvent.change(fileInput, {
+      target: {
+        files: [
+          new File(['SKU,Name,Barcode,Cost\nSKU-1,Milk,123,12.99'], 'products.csv', {
+            type: 'text/csv',
+          }),
+        ],
+      },
+    });
+    userEvent.click(screen.getByRole('button', { name: 'Upload CSV/XLSX/XLS' }));
+
+    expect(await screen.findByText('Upload successful')).toBeInTheDocument();
+    expect(screen.getByText('Products unchanged: 4')).toBeInTheDocument();
+    expect(screen.getByText('Errors: 1')).toBeInTheDocument();
+  });
+
+  it('restores the last-upload summary and links completed catalogues to brand review', async () => {
     localStorage.setItem(
       'csvUpload:lastUploadSummary',
       JSON.stringify({
@@ -526,6 +732,8 @@ describe('CSVUploadPage expiry import', () => {
     expect(screen.getByText('Products imported: 12')).toBeInTheDocument();
     expect(screen.getByText('Products updated: 2')).toBeInTheDocument();
     expect(screen.getByText('Rows rejected: 1')).toBeInTheDocument();
+    await userEvent.click(screen.getByRole('button', { name: 'Review brand matches' }));
+    expect(mockNavigate).toHaveBeenCalledWith('/supplier-credits?view=catalogue-review');
   });
 
   it('downloads CSV, XLSX, and XLS templates', async () => {

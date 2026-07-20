@@ -1,4 +1,28 @@
 @media print {
+  /*
+   * Show only the print target subtree, at any nesting depth under the root.
+   * Hide every element that is not the target, is not inside the target, and is
+   * not an ancestor of the target. This survives the target being wrapped in
+   * layout containers, unlike a direct-child (>) selector.
+   */
+  .print-report-root
+    *:not(.print-report-target):not(.print-report-target *):not(:has(.print-report-target)) {
+    display: none !important;
+  }
+
+  .print-report-root .no-print,
+  .print-report-root .print-hide {
+    display: none !important;
+  }
+
+  .print-report-root .print-report-target {
+    display: block !important;
+  }
+
+  .print-report-root .print-only {
+    display: block !important;
+  }
+
   /* Hide non-content elements */
   nav,
   header:not(main header),
@@ -122,4 +146,8 @@
     background-color: #f8fafc !important;
     border: 1px solid #f1f5f9 !important;
   }
+}
+
+.print-only {
+  display: none;
 }

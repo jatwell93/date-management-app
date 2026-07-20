@@ -2,7 +2,7 @@ import { ClerkWebhookSignatureService } from '../../services/clerk-webhook-signa
 
 describe('ClerkWebhookSignatureService', () => {
   it('verifies signatures using Svix headers', () => {
-    const verify = jest.fn().mockReturnValue({ type: 'user.created' });
+    const verify = vi.fn().mockReturnValue({ type: 'user.created' });
     const service = new ClerkWebhookSignatureService('whsec_test_123', () => ({ verify }));
     const payload = Buffer.from('{"type":"user.created"}');
 

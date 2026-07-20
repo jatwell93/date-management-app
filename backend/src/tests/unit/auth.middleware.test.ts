@@ -2,26 +2,28 @@ import jwt from 'jsonwebtoken';
 import type { AuthRequest } from '../../middleware/auth.middleware';
 import { SubscriptionStatus } from '../../types/subscription';
 
-const trackEvent = jest.fn();
+const trackEvent = vi.fn();
 let mockPrisma: any;
 let mockIsAccessActive: jest.Mock;
 const mockSubscriptionRepository = {
-  findLatestByOrganizationId: jest.fn(),
+  findLatestByOrganizationId: vi.fn(),
 };
 const mockUserRepository = {
-  findActiveByClerkUserId: jest.fn(),
+  findActiveByClerkUserId: vi.fn(),
 };
 
-jest.mock('jsonwebtoken', () => ({
-  verify: jest.fn(),
-  sign: jest.fn(),
-}));
+// The SUT default-imports jsonwebtoken; expose `default` (Vitest, unlike jest,
+// does not synthesize a default export from named exports).
+vi.mock('jsonwebtoken', () => {
+  const m = { verify: vi.fn(), sign: vi.fn() };
+  return { ...m, default: m };
+});
 
-jest.mock('../../database/database-factory', () => ({
+vi.mock('../../database/database-factory', () => ({
   getDefaultDatabaseClient: () => mockPrisma,
 }));
 
-jest.mock('../../di/container', () => ({
+vi.mock('../../di/container', () => ({
   getDiContainer: () => ({
     resolve: (token: unknown) => {
       const tokenName =
@@ -33,7 +35,13 @@ jest.mock('../../di/container', () => ({
       if (tokenName === 'UserRepository') {
         return mockUserRepository;
       }
-      if (tokenName === 'SubscriptionService' || tokenName === 'mockConstructor') {
+      // 'Mock' is the name of a `vi.fn()` (jest's was 'mockConstructor'); the SUT
+      // resolves the mocked SubscriptionService *class* (a vi.fn) by reference.
+      if (
+        tokenName === 'SubscriptionService' ||
+        tokenName === 'mockConstructor' ||
+        tokenName === 'Mock'
+      ) {
         return { isAccessActive: (...args: any[]) => mockIsAccessActive(...args) };
       }
 
@@ -42,13 +50,15 @@ jest.mock('../../di/container', () => ({
   }),
 }));
 
-jest.mock('../../services/subscription.service', () => ({
-  SubscriptionService: jest.fn().mockImplementation(() => ({
-    isAccessActive: (...args: any[]) => mockIsAccessActive(...args),
-  })),
+vi.mock('../../services/subscription.service', () => ({
+  SubscriptionService: vi.fn().mockImplementation(function () {
+    return {
+      isAccessActive: (...args: any[]) => mockIsAccessActive(...args),
+    };
+  }),
 }));
 
-jest.mock('../../services/analytics.service', () => ({
+vi.mock('../../services/analytics.service', () => ({
   AnalyticsService: {
     getInstance: () => ({ trackEvent }),
   },
@@ -58,25 +68,25 @@ jest.mock('../../services/analytics.service', () => ({
   },
 }));
 
-jest.mock('../../middleware/clerk-auth.middleware', () => ({
-  verifyClerkToken: jest.fn().mockResolvedValue(null),
-  getAuthorizedParties: jest.fn().mockReturnValue(['localhost:3002']),
-  clerkAuth: jest.fn(),
-  clerkAuthOptional: jest.fn(),
+vi.mock('../../middleware/clerk-auth.middleware', () => ({
+  verifyClerkToken: vi.fn().mockResolvedValue(null),
+  getAuthorizedParties: vi.fn().mockReturnValue(['localhost:3002']),
+  clerkAuth: vi.fn(),
+  clerkAuthOptional: vi.fn(),
 }));
 
-jest.mock('@clerk/backend', () => ({
-  verifyToken: jest.fn().mockResolvedValue(null),
+vi.mock('@clerk/backend', () => ({
+  verifyToken: vi.fn().mockResolvedValue(null),
 }));
 
 const { authenticateToken, requireManager } =
-  require('../../middleware/auth.middleware') as typeof import('../../middleware/auth.middleware');
+  (await import('../../middleware/auth.middleware')) as typeof import('../../middleware/auth.middleware');
 
 const makeResponse = () => {
   const res = {
-    status: jest.fn().mockReturnThis(),
-    json: jest.fn().mockReturnThis(),
-    setHeader: jest.fn().mockReturnThis(),
+    status: vi.fn().mockReturnThis(),
+    json: vi.fn().mockReturnThis(),
+    setHeader: vi.fn().mockReturnThis(),
   } as any;
 
   return res;
@@ -86,7 +96,7 @@ const makeRequest = (overrides?: Partial<AuthRequest>): AuthRequest =>
   ({
     headers: {},
     ip: '127.0.0.1',
-    get: jest.fn((header: string) => (header === 'User-Agent' ? 'test-agent' : undefined)),
+    get: vi.fn((header: string) => (header === 'User-Agent' ? 'test-agent' : undefined)),
     path: '/test',
     method: 'GET',
     ...overrides,
@@ -117,20 +127,20 @@ const testInvalidTokenScenario = async (
 };
 
 describe('auth middleware', () => {
-  const next = jest.fn();
+  const next = vi.fn();
 
   beforeEach(() => {
-    jest.clearAllMocks();
+    vi.clearAllMocks();
     process.env.NODE_ENV = 'test';
     process.env.TEST_AUTH_BYPASS = 'false';
     process.env.JWT_SECRET = 'test_secret';
     delete process.env.JWT_SECRET_OLD;
     mockPrisma = {
       subscriptionTier: {
-        findFirst: jest.fn(),
+        findFirst: vi.fn(),
       },
     };
-    mockIsAccessActive = jest.fn();
+    mockIsAccessActive = vi.fn();
     mockSubscriptionRepository.findLatestByOrganizationId.mockReset();
     mockUserRepository.findActiveByClerkUserId.mockReset();
     // Ensure jwt.verify mock is available
@@ -141,7 +151,7 @@ describe('auth middleware', () => {
     let warnSpy: jest.SpyInstance;
 
     beforeEach(() => {
-      warnSpy = jest.spyOn(console, 'warn').mockImplementation(() => {});
+      warnSpy = vi.spyOn(console, 'warn').mockImplementation(() => {});
     });
 
     afterEach(() => {

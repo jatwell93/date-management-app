@@ -5,7 +5,10 @@ import { Label } from './ui/label';
 import { Button } from './ui/button';
 import { Scanner } from './Scanner';
 import { apiService } from '../lib/api.service';
+import { calculateMarkdownPrice, getMarkdownLevelForDays } from '@shared/markdown';
 import { HardwareScanResult } from '../types/handheld';
+import { useFreshApiToken } from '../hooks/useFreshApiToken';
+import { useMarkdownMatrix } from '../hooks/useMarkdownMatrix';
 
 interface MarkdownCalculatorProps {
   token: string | null;
@@ -16,7 +19,8 @@ interface ProductDetails {
   name: string;
   sku: string;
   barcode: string;
-  cost_price: number;
+  costPrice?: number | null;
+  retailPrice?: number | null;
 }
 
 interface MarkdownResult {
@@ -30,6 +34,7 @@ const currencyFormatter = new Intl.NumberFormat('en-AU', {
 });
 
 export function MarkdownCalculator({ token }: MarkdownCalculatorProps) {
+  const getFreshApiToken = useFreshApiToken(token);
   const [costPrice, setCostPrice] = useState<string>('');
   const [expiryDate, setExpiryDate] = useState<string>('');
   const [markdownResult, setMarkdownResult] = useState<MarkdownResult | null>(null);
@@ -37,9 +42,20 @@ export function MarkdownCalculator({ token }: MarkdownCalculatorProps) {
   const [productDetails, setProductDetails] = useState<ProductDetails | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [validationError, setValidationError] = useState<string | null>(null);
+  // Load the org's markdown matrix so the calculator honors configured bands and
+  // basis (issue #338). Falls back to the default ladder if it cannot be loaded.
+  const markdownMatrix = useMarkdownMatrix(token);
+
+  const hasProductCost =
+    typeof productDetails?.costPrice === 'number' && Number.isFinite(productDetails.costPrice);
 
   const formattedProductCost = useMemo(
-    () => (productDetails ? currencyFormatter.format(productDetails.cost_price) : null),
+    () =>
+      productDetails &&
+      typeof productDetails.costPrice === 'number' &&
+      Number.isFinite(productDetails.costPrice)
+        ? currencyFormatter.format(productDetails.costPrice)
+        : 'Not available',
     [productDetails],
   );
 
@@ -59,7 +75,7 @@ export function MarkdownCalculator({ token }: MarkdownCalculatorProps) {
     try {
       let product: ProductDetails | null = null;
       const isSkuSearch = input.length <= 8;
-      const apiToken = token || undefined;
+      const apiToken = await getFreshApiToken('markdown-product-lookup');
 
       if (isSkuSearch) {
         product = await apiService.get<ProductDetails>(`/products/by-sku/${input}`, apiToken);
@@ -83,7 +99,11 @@ export function MarkdownCalculator({ token }: MarkdownCalculatorProps) {
       }
 
       setProductDetails(product);
-      setCostPrice(String(product.cost_price));
+      if (typeof product.costPrice === 'number' && Number.isFinite(product.costPrice)) {
+        setCostPrice(String(product.costPrice));
+      } else {
+        setCostPrice('');
+      }
     } catch (err: unknown) {
       const message = err instanceof Error ? err.message : '';
       if (message.includes('404')) {
@@ -120,22 +140,28 @@ export function MarkdownCalculator({ token }: MarkdownCalculatorProps) {
     const diffTime = expiry.getTime() - today.getTime();
     const diffDays = Math.ceil(diffTime / (1000 * 60 * 60 * 24));
 
+    // Status derives from the shared day-to-band mapping (no local ladder to drift).
+    const level = getMarkdownLevelForDays(diffDays);
     let status = 'Normal';
-    let value = parsedCostPrice;
-
     if (diffDays <= 0) {
       status = 'Expired';
-      value = parsedCostPrice;
-    } else if (diffDays <= 30) {
-      status = 'Markdown 3';
-      value = parsedCostPrice * 0.8;
-    } else if (diffDays <= 60) {
-      status = 'Markdown 2';
-      value = parsedCostPrice;
-    } else if (diffDays <= 90) {
-      status = 'Markdown 1';
-      value = parsedCostPrice * 1.2;
+    } else if (level !== null) {
+      status = `Markdown ${level}`;
     }
+
+    const retailPrice =
+      typeof productDetails?.retailPrice === 'number' && Number.isFinite(productDetails.retailPrice)
+        ? productDetails.retailPrice
+        : null;
+
+    // Expired stock is pulled, not marked down; everything else uses the org matrix,
+    // which selects cost or retail per band and falls back to cost without retail.
+    const resolved = calculateMarkdownPrice(
+      { costPrice: parsedCostPrice, retailPrice },
+      diffDays,
+      markdownMatrix,
+    );
+    const value = resolved ?? parsedCostPrice;
 
     setMarkdownResult({ status, value });
   };
@@ -216,7 +242,7 @@ export function MarkdownCalculator({ token }: MarkdownCalculatorProps) {
                   step="0.01"
                   value={costPrice}
                   onChange={(e) => setCostPrice(e.target.value)}
-                  disabled={!!productDetails}
+                  disabled={hasProductCost}
                   className="min-h-11"
                 />
               </div>

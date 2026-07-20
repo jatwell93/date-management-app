@@ -23,16 +23,16 @@ import {
 import { Logger } from '../../utils/logger';
 import { ApplicationMonitoringService } from '../../services/application.monitoring.service';
 
-jest.mock('@sentry/node', () => ({
-  captureMessage: jest.fn(),
-  captureException: jest.fn(),
+vi.mock('@sentry/node', () => ({
+  captureMessage: vi.fn(),
+  captureException: vi.fn(),
 }));
 
-jest.mock('../../services/webhook.service', () => ({
+vi.mock('../../services/webhook.service', () => ({
   WebhookService: class WebhookService {},
 }));
 
-jest.mock('../../services/clerk-webhook.service', () => ({
+vi.mock('../../services/clerk-webhook.service', () => ({
   ClerkWebhookService: class ClerkWebhookService {},
 }));
 
@@ -43,14 +43,14 @@ type MockResponse = Response & {
 
 function createResponse(): MockResponse {
   const res = {
-    status: jest.fn().mockReturnThis(),
-    json: jest.fn().mockReturnThis(),
+    status: vi.fn().mockReturnThis(),
+    json: vi.fn().mockReturnThis(),
   };
   return res as unknown as MockResponse;
 }
 
 function createNext(): jest.MockedFunction<NextFunction> {
-  return jest.fn() as jest.MockedFunction<NextFunction>;
+  return vi.fn() as jest.MockedFunction<NextFunction>;
 }
 
 describe('migrated controllers', () => {
@@ -67,8 +67,8 @@ describe('migrated controllers', () => {
     };
 
     it('creates a product through the organization-scoped service', async () => {
-      const createProduct = jest.fn().mockResolvedValue(product);
-      const serviceFactory = jest.fn().mockReturnValue({ createProduct });
+      const createProduct = vi.fn().mockResolvedValue(product);
+      const serviceFactory = vi.fn().mockReturnValue({ createProduct });
       const controller = new ProductController(serviceFactory);
       const req = {
         organizationId: 'org-1',
@@ -97,7 +97,7 @@ describe('migrated controllers', () => {
     });
 
     it('returns a validation response when required product fields are missing', async () => {
-      const serviceFactory = jest.fn();
+      const serviceFactory = vi.fn();
       const controller = new ProductController(serviceFactory);
       const req = { organizationId: 'org-1', body: { sku: 'SKU-1' } } as AuthRequest;
       const res = createResponse();
@@ -114,8 +114,8 @@ describe('migrated controllers', () => {
     it('passes unexpected service failures to error middleware', async () => {
       const error = new Error('database unavailable');
       const controller = new ProductController(
-        jest.fn().mockReturnValue({
-          getAllProducts: jest.fn().mockRejectedValue(error),
+        vi.fn().mockReturnValue({
+          getAllProducts: vi.fn().mockRejectedValue(error),
         }),
       );
       const req = { organizationId: 'org-1' } as AuthRequest;
@@ -133,14 +133,14 @@ describe('migrated controllers', () => {
     it('returns inventory rows for a valid barcode lookup', async () => {
       const inventoryItems = [{ id: 11, organizationId: 'org-1' }];
       const inventoryService = {
-        getInventoryItemsByProductId: jest.fn().mockResolvedValue(inventoryItems),
+        getInventoryItemsByProductId: vi.fn().mockResolvedValue(inventoryItems),
       };
       const productService = {
-        getProductByBarcode: jest.fn().mockResolvedValue({ id: 7 }),
+        getProductByBarcode: vi.fn().mockResolvedValue({ id: 7 }),
       };
       const controller = new InventoryController(
-        jest.fn().mockReturnValue(inventoryService),
-        jest.fn().mockReturnValue(productService),
+        vi.fn().mockReturnValue(inventoryService),
+        vi.fn().mockReturnValue(productService),
       );
       const req = {
         organizationId: 'org-1',
@@ -158,7 +158,7 @@ describe('migrated controllers', () => {
     });
 
     it('forwards validation failures to centralized error middleware', async () => {
-      const controller = new InventoryController(jest.fn(), jest.fn());
+      const controller = new InventoryController(vi.fn(), vi.fn());
       const req = {
         organizationId: 'org-1',
         params: { barcode: 'bad' },
@@ -173,7 +173,7 @@ describe('migrated controllers', () => {
     });
 
     it('forwards missing organization context to centralized error middleware', async () => {
-      const controller = new InventoryController(jest.fn(), jest.fn());
+      const controller = new InventoryController(vi.fn(), vi.fn());
       const req = { params: { id: '1' } } as unknown as AuthRequest;
       const res = createResponse();
       const next = createNext();
@@ -189,7 +189,7 @@ describe('migrated controllers', () => {
     let loggerErrorSpy: jest.SpyInstance;
 
     beforeEach(() => {
-      loggerErrorSpy = jest.spyOn(Logger, 'error').mockImplementation(() => undefined);
+      loggerErrorSpy = vi.spyOn(Logger, 'error').mockImplementation(() => undefined);
     });
 
     afterEach(() => {
@@ -211,9 +211,9 @@ describe('migrated controllers', () => {
       const stripe =
         overrides.stripe ??
         ({
-          customers: { create: jest.fn() },
-          checkout: { sessions: { create: jest.fn() } },
-          billingPortal: { sessions: { create: jest.fn() } },
+          customers: { create: vi.fn() },
+          checkout: { sessions: { create: vi.fn() } },
+          billingPortal: { sessions: { create: vi.fn() } },
         } as const);
 
       return new SubscriptionController(
@@ -228,7 +228,7 @@ describe('migrated controllers', () => {
       const trialEndDate = new Date(Date.now() + 3 * 24 * 60 * 60 * 1000);
       const controller = createController({
         userRepository: {
-          findByClerkUserIdWithOrganizationSubscriptions: jest.fn().mockResolvedValue({
+          findByClerkUserIdWithOrganizationSubscriptions: vi.fn().mockResolvedValue({
             organization: {
               subscriptionTiers: [
                 {
@@ -270,7 +270,7 @@ describe('migrated controllers', () => {
     it('wraps unexpected repository failures with an internal error', async () => {
       const controller = createController({
         userRepository: {
-          findByClerkUserIdWithOrganizationSubscriptions: jest
+          findByClerkUserIdWithOrganizationSubscriptions: vi
             .fn()
             .mockRejectedValue(new Error('repository failed')),
         },
@@ -285,7 +285,7 @@ describe('migrated controllers', () => {
 
   describe('WebhookController', () => {
     const monitor = {
-      recordWebhookEvent: jest.fn(),
+      recordWebhookEvent: vi.fn(),
     };
 
     let loggerInfoSpy: jest.SpyInstance;
@@ -294,10 +294,10 @@ describe('migrated controllers', () => {
     let monitorSpy: jest.SpyInstance;
 
     beforeEach(() => {
-      loggerInfoSpy = jest.spyOn(Logger, 'info').mockImplementation(() => undefined);
-      loggerWarnSpy = jest.spyOn(Logger, 'warn').mockImplementation(() => undefined);
-      loggerErrorSpy = jest.spyOn(Logger, 'error').mockImplementation(() => undefined);
-      monitorSpy = jest
+      loggerInfoSpy = vi.spyOn(Logger, 'info').mockImplementation(() => undefined);
+      loggerWarnSpy = vi.spyOn(Logger, 'warn').mockImplementation(() => undefined);
+      loggerErrorSpy = vi.spyOn(Logger, 'error').mockImplementation(() => undefined);
+      monitorSpy = vi
         .spyOn(ApplicationMonitoringService, 'getInstance')
         .mockReturnValue(monitor as unknown as ApplicationMonitoringService);
       monitor.recordWebhookEvent.mockClear();
@@ -317,23 +317,23 @@ describe('migrated controllers', () => {
       } = {},
     ): WebhookController {
       const webhookService = overrides.webhookService ?? {
-        verifySignature: jest.fn().mockReturnValue({
+        verifySignature: vi.fn().mockReturnValue({
           id: 'evt_test_1',
           type: 'customer.subscription.updated',
           data: { object: {} },
         }),
-        isNewEvent: jest.fn().mockResolvedValue(true),
-        handleEvent: jest.fn().mockResolvedValue(undefined),
-        markEventProcessed: jest.fn().mockResolvedValue(undefined),
+        isNewEvent: vi.fn().mockResolvedValue(true),
+        handleEvent: vi.fn().mockResolvedValue(undefined),
+        markEventProcessed: vi.fn().mockResolvedValue(undefined),
       };
       const clerkWebhookService = overrides.clerkWebhookService ?? {
-        verifySignature: jest.fn().mockReturnValue({
+        verifySignature: vi.fn().mockReturnValue({
           type: 'user.created',
           data: {},
         }),
-        isNewEvent: jest.fn().mockResolvedValue(true),
-        handleEvent: jest.fn().mockResolvedValue(undefined),
-        markEventProcessed: jest.fn().mockResolvedValue(undefined),
+        isNewEvent: vi.fn().mockResolvedValue(true),
+        handleEvent: vi.fn().mockResolvedValue(undefined),
+        markEventProcessed: vi.fn().mockResolvedValue(undefined),
       };
 
       return new WebhookController(webhookService as never, clerkWebhookService as never);
@@ -341,10 +341,10 @@ describe('migrated controllers', () => {
 
     it('rejects Stripe webhooks that are missing the signature header', async () => {
       const webhookService = {
-        verifySignature: jest.fn(),
-        isNewEvent: jest.fn(),
-        handleEvent: jest.fn(),
-        markEventProcessed: jest.fn(),
+        verifySignature: vi.fn(),
+        isNewEvent: vi.fn(),
+        handleEvent: vi.fn(),
+        markEventProcessed: vi.fn(),
       };
       const controller = createController({ webhookService });
       const req = { headers: {}, body: Buffer.from('{}') };
@@ -361,14 +361,14 @@ describe('migrated controllers', () => {
 
     it('processes new Stripe webhooks and records success telemetry', async () => {
       const webhookService = {
-        verifySignature: jest.fn().mockReturnValue({
+        verifySignature: vi.fn().mockReturnValue({
           id: 'evt_success',
           type: 'customer.subscription.updated',
           data: { object: {} },
         }),
-        isNewEvent: jest.fn().mockResolvedValue(true),
-        handleEvent: jest.fn().mockResolvedValue(undefined),
-        markEventProcessed: jest.fn().mockResolvedValue(undefined),
+        isNewEvent: vi.fn().mockResolvedValue(true),
+        handleEvent: vi.fn().mockResolvedValue(undefined),
+        markEventProcessed: vi.fn().mockResolvedValue(undefined),
       };
       const controller = createController({ webhookService });
       const req = {
@@ -400,14 +400,14 @@ describe('migrated controllers', () => {
 
     it('acknowledges non-recoverable Stripe processing errors to stop retry storms', async () => {
       const webhookService = {
-        verifySignature: jest.fn().mockReturnValue({
+        verifySignature: vi.fn().mockReturnValue({
           id: 'evt_not_found',
           type: 'customer.subscription.updated',
           data: { object: {} },
         }),
-        isNewEvent: jest.fn().mockResolvedValue(true),
-        handleEvent: jest.fn().mockRejectedValue(new NotFoundError('organization not found')),
-        markEventProcessed: jest.fn(),
+        isNewEvent: vi.fn().mockResolvedValue(true),
+        handleEvent: vi.fn().mockRejectedValue(new NotFoundError('organization not found')),
+        markEventProcessed: vi.fn(),
       };
       const controller = createController({ webhookService });
       const req = {
@@ -431,10 +431,10 @@ describe('migrated controllers', () => {
 
     it('rejects Clerk webhooks that are missing required Svix headers', async () => {
       const clerkWebhookService = {
-        verifySignature: jest.fn(),
-        isNewEvent: jest.fn(),
-        handleEvent: jest.fn(),
-        markEventProcessed: jest.fn(),
+        verifySignature: vi.fn(),
+        isNewEvent: vi.fn(),
+        handleEvent: vi.fn(),
+        markEventProcessed: vi.fn(),
       };
       const controller = createController({ clerkWebhookService });
       const req = { headers: {}, body: Buffer.from('{}') };
@@ -451,13 +451,13 @@ describe('migrated controllers', () => {
 
     it('processes new Clerk webhooks with Svix idempotency keys', async () => {
       const clerkWebhookService = {
-        verifySignature: jest.fn().mockReturnValue({
+        verifySignature: vi.fn().mockReturnValue({
           type: 'user.created',
           data: {},
         }),
-        isNewEvent: jest.fn().mockResolvedValue(true),
-        handleEvent: jest.fn().mockResolvedValue(undefined),
-        markEventProcessed: jest.fn().mockResolvedValue(undefined),
+        isNewEvent: vi.fn().mockResolvedValue(true),
+        handleEvent: vi.fn().mockResolvedValue(undefined),
+        markEventProcessed: vi.fn().mockResolvedValue(undefined),
       };
       const controller = createController({ clerkWebhookService });
       const req = {
@@ -498,13 +498,13 @@ describe('migrated controllers', () => {
 
     it('returns Clerk conflict errors without hiding duplicate-account details', async () => {
       const clerkWebhookService = {
-        verifySignature: jest.fn().mockReturnValue({
+        verifySignature: vi.fn().mockReturnValue({
           type: 'user.created',
           data: {},
         }),
-        isNewEvent: jest.fn().mockResolvedValue(true),
-        handleEvent: jest.fn().mockRejectedValue(new ConflictError('Email already registered')),
-        markEventProcessed: jest.fn(),
+        isNewEvent: vi.fn().mockResolvedValue(true),
+        handleEvent: vi.fn().mockRejectedValue(new ConflictError('Email already registered')),
+        markEventProcessed: vi.fn(),
       };
       const controller = createController({ clerkWebhookService });
       const req = {
@@ -538,8 +538,8 @@ describe('migrated controllers', () => {
         name: 'Back Room',
         subDepartment: 'General',
       };
-      const createStoreArea = jest.fn().mockResolvedValue(createdArea);
-      const serviceFactory = jest.fn().mockReturnValue({ createStoreArea });
+      const createStoreArea = vi.fn().mockResolvedValue(createdArea);
+      const serviceFactory = vi.fn().mockReturnValue({ createStoreArea });
       const controller = new StoreAreaController(serviceFactory);
       const req = {
         organizationId: 'org-1',
@@ -566,7 +566,7 @@ describe('migrated controllers', () => {
     });
 
     it('returns validation responses for invalid store area ids', async () => {
-      const serviceFactory = jest.fn();
+      const serviceFactory = vi.fn();
       const controller = new StoreAreaController(serviceFactory);
       const req = {
         organizationId: 'org-1',
@@ -585,9 +585,9 @@ describe('migrated controllers', () => {
 
     it('returns not-found responses when the service has no matching store area', async () => {
       const service = {
-        getStoreAreaById: jest.fn().mockResolvedValue(null),
+        getStoreAreaById: vi.fn().mockResolvedValue(null),
       };
-      const controller = new StoreAreaController(jest.fn().mockReturnValue(service));
+      const controller = new StoreAreaController(vi.fn().mockReturnValue(service));
       const req = {
         organizationId: 'org-1',
         params: { id: '12' },
@@ -606,8 +606,8 @@ describe('migrated controllers', () => {
     it('passes unexpected service failures to error middleware', async () => {
       const error = new Error('store area database unavailable');
       const controller = new StoreAreaController(
-        jest.fn().mockReturnValue({
-          getAllStoreAreas: jest.fn().mockRejectedValue(error),
+        vi.fn().mockReturnValue({
+          getAllStoreAreas: vi.fn().mockRejectedValue(error),
         }),
       );
       const req = { organizationId: 'org-1' } as AuthRequest;
@@ -632,8 +632,8 @@ describe('migrated controllers', () => {
         warningThreshold: 80,
         isWarning: false,
       };
-      const getStorageQuota = jest.fn().mockResolvedValue(quota);
-      const serviceFactory = jest.fn().mockReturnValue({ getStorageQuota });
+      const getStorageQuota = vi.fn().mockResolvedValue(quota);
+      const serviceFactory = vi.fn().mockReturnValue({ getStorageQuota });
       const controller = new StorageQuotaController(serviceFactory);
       const req = {
         params: { userId: '7' },
@@ -654,7 +654,7 @@ describe('migrated controllers', () => {
     });
 
     it('returns validation responses before creating a storage quota service', async () => {
-      const serviceFactory = jest.fn();
+      const serviceFactory = vi.fn();
       const controller = new StorageQuotaController(serviceFactory);
       const req = {
         params: { userId: 'not-a-number' },
@@ -677,8 +677,8 @@ describe('migrated controllers', () => {
     });
 
     it('returns a denied upload response with remaining quota details', async () => {
-      const canUploadFile = jest.fn().mockResolvedValue(false);
-      const getStorageQuota = jest.fn().mockResolvedValue({
+      const canUploadFile = vi.fn().mockResolvedValue(false);
+      const getStorageQuota = vi.fn().mockResolvedValue({
         used: 900,
         limit: 1000,
         percentageUsed: 90,
@@ -688,7 +688,7 @@ describe('migrated controllers', () => {
         isWarning: true,
       });
       const controller = new StorageQuotaController(
-        jest.fn().mockReturnValue({ canUploadFile, getStorageQuota }),
+        vi.fn().mockReturnValue({ canUploadFile, getStorageQuota }),
       );
       const req = {
         params: { userId: '7' },
@@ -715,8 +715,8 @@ describe('migrated controllers', () => {
     it('passes unexpected storage quota failures to error middleware', async () => {
       const error = new Error('quota backend unavailable');
       const controller = new StorageQuotaController(
-        jest.fn().mockReturnValue({
-          getStorageQuota: jest.fn().mockRejectedValue(error),
+        vi.fn().mockReturnValue({
+          getStorageQuota: vi.fn().mockRejectedValue(error),
         }),
       );
       const req = {
@@ -743,8 +743,8 @@ describe('migrated controllers', () => {
         totalInventoryItems: 34,
         totalValue: 567.89,
       };
-      const getDashboardData = jest.fn().mockResolvedValue(dashboardData);
-      const serviceFactory = jest.fn().mockReturnValue({ getDashboardData });
+      const getDashboardData = vi.fn().mockResolvedValue(dashboardData);
+      const serviceFactory = vi.fn().mockReturnValue({ getDashboardData });
       const controller = new DashboardController(serviceFactory);
       const req = { organizationId: 'org-1' } as AuthRequest;
       const res = createResponse();
@@ -761,8 +761,8 @@ describe('migrated controllers', () => {
     it('passes unexpected dashboard failures to error middleware', async () => {
       const error = new Error('dashboard backend unavailable');
       const controller = new DashboardController(
-        jest.fn().mockReturnValue({
-          getDashboardData: jest.fn().mockRejectedValue(error),
+        vi.fn().mockReturnValue({
+          getDashboardData: vi.fn().mockRejectedValue(error),
         }),
       );
       const req = { organizationId: 'org-1' } as AuthRequest;
@@ -786,8 +786,8 @@ describe('migrated controllers', () => {
           locationName: 'Cool Room',
         },
       ];
-      const getAllExpiredItems = jest.fn().mockResolvedValue(expiredItems);
-      const serviceFactory = jest.fn().mockReturnValue({ getAllExpiredItems });
+      const getAllExpiredItems = vi.fn().mockResolvedValue(expiredItems);
+      const serviceFactory = vi.fn().mockReturnValue({ getAllExpiredItems });
       const controller = new ExpiredItemController(serviceFactory);
       const req = { organizationId: 'org-1' } as AuthRequest;
       const res = createResponse();
@@ -802,7 +802,7 @@ describe('migrated controllers', () => {
     });
 
     it('returns validation responses before processing expired items', async () => {
-      const serviceFactory = jest.fn();
+      const serviceFactory = vi.fn();
       const controller = new ExpiredItemController(serviceFactory);
       const req = {
         organizationId: 'org-1',
@@ -824,10 +824,8 @@ describe('migrated controllers', () => {
 
     it('maps not-found processing failures to the existing response shape', async () => {
       const error = new Error('Inventory item with ID 1 not found');
-      const processExpiredItem = jest.fn().mockRejectedValue(error);
-      const controller = new ExpiredItemController(
-        jest.fn().mockReturnValue({ processExpiredItem }),
-      );
+      const processExpiredItem = vi.fn().mockRejectedValue(error);
+      const controller = new ExpiredItemController(vi.fn().mockReturnValue({ processExpiredItem }));
       const req = {
         organizationId: 'org-1',
         userId: 7,
@@ -845,14 +843,14 @@ describe('migrated controllers', () => {
     });
 
     it('returns expired loss reports from both service aggregations', async () => {
-      const getFinancialLossesBySKU = jest
+      const getFinancialLossesBySKU = vi
         .fn()
         .mockResolvedValue([{ sku: 'SKU-1', productName: 'Milk', totalLoss: 15 }]);
-      const getFinancialLossesByStoreArea = jest
+      const getFinancialLossesByStoreArea = vi
         .fn()
         .mockResolvedValue([{ locationName: 'Cool Room', totalLoss: 15 }]);
       const controller = new ExpiredItemController(
-        jest.fn().mockReturnValue({ getFinancialLossesBySKU, getFinancialLossesByStoreArea }),
+        vi.fn().mockReturnValue({ getFinancialLossesBySKU, getFinancialLossesByStoreArea }),
       );
       const req = { organizationId: 'org-1' } as AuthRequest;
       const res = createResponse();
@@ -873,8 +871,8 @@ describe('migrated controllers', () => {
   describe('ReportController', () => {
     it('returns monthly expiry reports through the organization-scoped service', async () => {
       const report = [{ month: '2026-05', count: 3 }];
-      const getMonthlyExpiryReport = jest.fn().mockResolvedValue(report);
-      const serviceFactory = jest.fn().mockReturnValue({ getMonthlyExpiryReport });
+      const getMonthlyExpiryReport = vi.fn().mockResolvedValue(report);
+      const serviceFactory = vi.fn().mockReturnValue({ getMonthlyExpiryReport });
       const controller = new ReportController(serviceFactory);
       const req = { organizationId: 'org-1' } as AuthRequest;
       const res = createResponse();
@@ -889,9 +887,9 @@ describe('migrated controllers', () => {
     });
 
     it('returns the existing update-statuses success response', async () => {
-      const updateAllMarkdownStatuses = jest.fn().mockResolvedValue(undefined);
+      const updateAllMarkdownStatuses = vi.fn().mockResolvedValue(undefined);
       const controller = new ReportController(
-        jest.fn().mockReturnValue({ updateAllMarkdownStatuses }),
+        vi.fn().mockReturnValue({ updateAllMarkdownStatuses }),
       );
       const req = { organizationId: 'org-1' } as AuthRequest;
       const res = createResponse();
@@ -907,7 +905,7 @@ describe('migrated controllers', () => {
     });
 
     it('returns validation responses before loading items-by-user reports', async () => {
-      const serviceFactory = jest.fn();
+      const serviceFactory = vi.fn();
       const controller = new ReportController(serviceFactory);
       const req = {
         organizationId: 'org-1',
@@ -926,8 +924,8 @@ describe('migrated controllers', () => {
 
     it('passes valid items-by-user timeframes to the report service', async () => {
       const report = [{ userId: 7, count: 4 }];
-      const getItemsByUserReport = jest.fn().mockResolvedValue(report);
-      const controller = new ReportController(jest.fn().mockReturnValue({ getItemsByUserReport }));
+      const getItemsByUserReport = vi.fn().mockResolvedValue(report);
+      const controller = new ReportController(vi.fn().mockReturnValue({ getItemsByUserReport }));
       const req = {
         organizationId: 'org-1',
         query: { timeFrame: '30' },
@@ -945,8 +943,8 @@ describe('migrated controllers', () => {
     it('passes unexpected report failures to error middleware', async () => {
       const error = new Error('report backend unavailable');
       const controller = new ReportController(
-        jest.fn().mockReturnValue({
-          getOverallExpiryReport: jest.fn().mockRejectedValue(error),
+        vi.fn().mockReturnValue({
+          getOverallExpiryReport: vi.fn().mockRejectedValue(error),
         }),
       );
       const req = { organizationId: 'org-1' } as AuthRequest;
@@ -978,19 +976,21 @@ describe('migrated controllers', () => {
       overrides: Partial<ConstructorParameters<typeof HealthController>[0]> = {},
     ) {
       const db = {
-        prepare: jest.fn().mockImplementation((sql: string) => ({
-          get: () => (sql.includes('ready') ? { ready: 1 } : { alive: 1 }),
-        })),
-        pragma: jest.fn().mockReturnValue(1),
+        prepare: vi.fn().mockImplementation(function (sql: string) {
+          return {
+            get: () => (sql.includes('ready') ? { ready: 1 } : { alive: 1 }),
+          };
+        }),
+        pragma: vi.fn().mockReturnValue(1),
       };
       const dependencies = {
-        getDb: jest.fn().mockReturnValue(db),
-        releaseDb: jest.fn(),
-        getDatabaseMetrics: jest.fn().mockReturnValue({ queryCount: 12 }),
-        validateTierFeatureFlags: jest.fn().mockResolvedValue(validTierResult),
-        getSubscriptionRepository: jest.fn().mockReturnValue({}),
-        now: jest.fn().mockReturnValue(new Date('2026-05-08T00:00:00.000Z')),
-        getProcessMetrics: jest.fn().mockReturnValue({
+        getDb: vi.fn().mockReturnValue(db),
+        releaseDb: vi.fn(),
+        getDatabaseMetrics: vi.fn().mockReturnValue({ queryCount: 12 }),
+        validateTierFeatureFlags: vi.fn().mockResolvedValue(validTierResult),
+        getSubscriptionRepository: vi.fn().mockReturnValue({}),
+        now: vi.fn().mockReturnValue(new Date('2026-05-08T00:00:00.000Z')),
+        getProcessMetrics: vi.fn().mockReturnValue({
           uptime: 123,
           memory: { rss: 1, heapTotal: 2, heapUsed: 3, external: 4 },
           cpu: { user: 5, system: 6 },
@@ -1056,7 +1056,7 @@ describe('migrated controllers', () => {
 
     it('returns database metrics errors with the existing response shape', async () => {
       const { controller } = createController({
-        getDatabaseMetrics: jest.fn(() => {
+        getDatabaseMetrics: vi.fn(() => {
           throw new Error('metrics unavailable');
         }),
       });
@@ -1077,8 +1077,8 @@ describe('migrated controllers', () => {
   describe('UserController', () => {
     it('returns users through the organization-scoped service', async () => {
       const users = [{ id: 1, organizationId: 'org-1', role: 'admin' }];
-      const getUsers = jest.fn().mockResolvedValue(users);
-      const serviceFactory = jest.fn().mockReturnValue({ getUsers });
+      const getUsers = vi.fn().mockResolvedValue(users);
+      const serviceFactory = vi.fn().mockReturnValue({ getUsers });
       const controller = new UserController(serviceFactory);
       const req = { organizationId: 'org-1' } as AuthRequest;
       const res = createResponse();
@@ -1093,7 +1093,7 @@ describe('migrated controllers', () => {
     });
 
     it('returns validation responses for invalid user ids before loading the service', async () => {
-      const serviceFactory = jest.fn();
+      const serviceFactory = vi.fn();
       const controller = new UserController(serviceFactory);
       const req = {
         params: { id: 'not-a-number' },
@@ -1111,8 +1111,8 @@ describe('migrated controllers', () => {
     });
 
     it('blocks access to users from another organization', async () => {
-      const getUserById = jest.fn().mockResolvedValue({ id: 2, organizationId: 'org-2' });
-      const controller = new UserController(jest.fn().mockReturnValue({ getUserById }));
+      const getUserById = vi.fn().mockResolvedValue({ id: 2, organizationId: 'org-2' });
+      const controller = new UserController(vi.fn().mockReturnValue({ getUserById }));
       const req = { params: { id: '2' }, organizationId: 'org-1' } as unknown as AuthRequest;
       const res = createResponse();
       const next = createNext();
@@ -1129,8 +1129,8 @@ describe('migrated controllers', () => {
 
     it('creates users only when pin, role, and organization context are present', async () => {
       const createdUser = { id: 3, organizationId: 'org-1', role: 'team_member' };
-      const createUser = jest.fn().mockResolvedValue(createdUser);
-      const controller = new UserController(jest.fn().mockReturnValue({ createUser }));
+      const createUser = vi.fn().mockResolvedValue(createdUser);
+      const controller = new UserController(vi.fn().mockReturnValue({ createUser }));
       const req = {
         body: { pin: '1234', role: 'team_member' },
         organizationId: 'org-1',
@@ -1153,7 +1153,7 @@ describe('migrated controllers', () => {
     it('passes unexpected user service failures to error middleware', async () => {
       const error = new Error('user backend unavailable');
       const controller = new UserController(
-        jest.fn().mockReturnValue({ getUsers: jest.fn().mockRejectedValue(error) }),
+        vi.fn().mockReturnValue({ getUsers: vi.fn().mockRejectedValue(error) }),
       );
       const req = { organizationId: 'org-1' } as AuthRequest;
       const res = createResponse();
@@ -1168,7 +1168,7 @@ describe('migrated controllers', () => {
 
   describe('OrgBootstrapController', () => {
     it('bootstraps Clerk users with generated organization defaults', async () => {
-      const bootstrap = jest.fn().mockResolvedValue({
+      const bootstrap = vi.fn().mockResolvedValue({
         userId: 7,
         organizationId: 'org-1',
         role: 'admin',
@@ -1178,7 +1178,7 @@ describe('migrated controllers', () => {
       });
       const controller = new OrgBootstrapController(
         { bootstrap } as never,
-        { seedDemoData: jest.fn() } as never,
+        { seedDemoData: vi.fn() } as never,
         () => 1777777777000,
       );
       const req = {
@@ -1212,10 +1212,10 @@ describe('migrated controllers', () => {
     });
 
     it('rejects bootstrap requests without Clerk authentication context', async () => {
-      const bootstrap = jest.fn();
+      const bootstrap = vi.fn();
       const controller = new OrgBootstrapController(
         { bootstrap } as never,
-        { seedDemoData: jest.fn() } as never,
+        { seedDemoData: vi.fn() } as never,
       );
       const req = { auth: {}, body: {} } as ClerkAuthRequest;
       const res = createResponse();
@@ -1229,9 +1229,9 @@ describe('migrated controllers', () => {
 
     it('seeds demo data for the authenticated organization', async () => {
       const seedResult = { productsCreated: 2, storeAreasCreated: 1 };
-      const seedDemoData = jest.fn().mockResolvedValue(seedResult);
+      const seedDemoData = vi.fn().mockResolvedValue(seedResult);
       const controller = new OrgBootstrapController(
-        { bootstrap: jest.fn() } as never,
+        { bootstrap: vi.fn() } as never,
         { seedDemoData } as never,
       );
       const req = { organizationId: 'org-1' } as AuthRequest;

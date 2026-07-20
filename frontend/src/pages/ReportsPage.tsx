@@ -11,6 +11,7 @@ import {
 } from '../components/ui/table';
 import { Button } from '../components/ui/button';
 import { apiService } from '../lib/api.service';
+import { useFreshApiToken } from '../hooks/useFreshApiToken';
 
 interface ReportsPageProps {
   token: string | null;
@@ -20,27 +21,108 @@ interface MonthlyExpiryReportItem {
   month: string;
   total_expiring: number;
   expired_count: number;
-  markdown1_count: number;
-  markdown2_count: number;
-  markdown3_count: number;
   total_markdown: number;
+  expiry_risk_count: number;
+  next_month_markdown_count: number;
+  active_expiry_stock_count: number;
   latest_expiry_date: string;
+}
+
+type RawMonthlyExpiryReportItem = Partial<
+  Omit<MonthlyExpiryReportItem, 'latest_expiry_date' | 'month'>
+> & {
+  month?: string | null;
+  latest_expiry_date?: string | null;
+};
+
+interface SellThroughByLevelItem {
+  markdownLevel: number | null;
+  soldCount: number;
+}
+
+const MARKDOWN_LEVEL_LABELS: Record<string, string> = {
+  '1': 'Markdown 1 (61–90 days)',
+  '2': 'Markdown 2 (31–60 days)',
+  '3': 'Markdown 3 (0–30 days)',
+  none: 'Sold before markdown',
+};
+
+function markdownLevelLabel(level: number | null): string {
+  return MARKDOWN_LEVEL_LABELS[level === null ? 'none' : String(level)] ?? `Level ${level}`;
 }
 
 const numberFormatter = new Intl.NumberFormat('en-AU');
 const dateFormatter = new Intl.DateTimeFormat('en-AU', { dateStyle: 'medium' });
+type RequiredOverallSummaryField =
+  | 'expiry_risk_count'
+  | 'next_month_markdown_count'
+  | 'active_expiry_stock_count';
 
 function formatReportDate(value: string) {
   const date = new Date(value);
   return Number.isNaN(date.getTime()) ? 'Date not available' : dateFormatter.format(date);
 }
 
+function normalizeReportNumber(value: unknown): number {
+  const numberValue = typeof value === 'number' ? value : Number(value);
+  return Number.isFinite(numberValue) ? numberValue : 0;
+}
+
+function normalizeRequiredReportNumber(
+  item: RawMonthlyExpiryReportItem,
+  field: RequiredOverallSummaryField,
+): number {
+  const rawValue = item[field];
+  if (
+    !Object.prototype.hasOwnProperty.call(item, field) ||
+    rawValue === null ||
+    rawValue === undefined
+  ) {
+    throw new Error(`Expiry summary response is missing ${field}.`);
+  }
+
+  const numberValue = typeof rawValue === 'number' ? rawValue : Number(rawValue);
+  if (!Number.isFinite(numberValue)) {
+    throw new Error(`Expiry summary response has invalid ${field}.`);
+  }
+
+  return numberValue;
+}
+
+function normalizeMonthlyExpiryReportItem(
+  item: RawMonthlyExpiryReportItem,
+): MonthlyExpiryReportItem {
+  return {
+    month: item.month || 'Unknown',
+    total_expiring: normalizeReportNumber(item.total_expiring),
+    expired_count: normalizeReportNumber(item.expired_count),
+    total_markdown: normalizeReportNumber(item.total_markdown),
+    expiry_risk_count: normalizeReportNumber(item.expiry_risk_count),
+    next_month_markdown_count: normalizeReportNumber(item.next_month_markdown_count),
+    active_expiry_stock_count: normalizeReportNumber(item.active_expiry_stock_count),
+    latest_expiry_date: item.latest_expiry_date || '',
+  };
+}
+
+function normalizeOverallExpiryReportItem(
+  item: RawMonthlyExpiryReportItem,
+): MonthlyExpiryReportItem {
+  return {
+    ...normalizeMonthlyExpiryReportItem(item),
+    expiry_risk_count: normalizeRequiredReportNumber(item, 'expiry_risk_count'),
+    next_month_markdown_count: normalizeRequiredReportNumber(item, 'next_month_markdown_count'),
+    active_expiry_stock_count: normalizeRequiredReportNumber(item, 'active_expiry_stock_count'),
+  };
+}
+
 const SKELETON_ROWS = Array.from({ length: 6 }, (_, i) => i);
 
 export function ReportsPage({ token }: ReportsPageProps) {
   const navigate = useNavigate();
+  const getFreshApiToken = useFreshApiToken(token);
   const [reportData, setReportData] = useState<MonthlyExpiryReportItem[] | null>(null);
   const [overallReportData, setOverallReportData] = useState<MonthlyExpiryReportItem | null>(null);
+  const [sellThroughData, setSellThroughData] = useState<SellThroughByLevelItem[] | null>(null);
   const [loading, setLoading] = useState(true);
   const [overallLoading, setOverallLoading] = useState(true);
   const [monthlyError, setMonthlyError] = useState<string | null>(null);
@@ -60,13 +142,14 @@ export function ReportsPage({ token }: ReportsPageProps) {
       }
 
       try {
-        const data = await apiService.get<MonthlyExpiryReportItem[]>(
+        const authToken = await getFreshApiToken('reports-expiry-monthly');
+        const data = await apiService.get<RawMonthlyExpiryReportItem[]>(
           '/reports/expiry',
-          token,
+          authToken,
           controller.signal,
         );
         if (!controller.signal.aborted) {
-          setReportData(data);
+          setReportData((data ?? []).map(normalizeMonthlyExpiryReportItem));
           setMonthlyError(null);
         }
       } catch (err: unknown) {
@@ -94,17 +177,19 @@ export function ReportsPage({ token }: ReportsPageProps) {
       }
 
       try {
-        const data = await apiService.get<MonthlyExpiryReportItem>(
+        const authToken = await getFreshApiToken('reports-expiry-overall');
+        const data = await apiService.get<RawMonthlyExpiryReportItem>(
           '/reports/expiry-overall',
-          token,
+          authToken,
           controller.signal,
         );
         if (!controller.signal.aborted) {
-          setOverallReportData(data);
+          setOverallReportData(data ? normalizeOverallExpiryReportItem(data) : null);
           setOverallError(null);
         }
       } catch (err: unknown) {
         if (controller.signal.aborted) return;
+        setOverallReportData(null);
         if (err instanceof Error) {
           setOverallError(err.message);
         } else {
@@ -117,10 +202,31 @@ export function ReportsPage({ token }: ReportsPageProps) {
       }
     };
 
+    const fetchSellThroughData = async () => {
+      if (!token) return;
+      try {
+        const authToken = await getFreshApiToken('reports-sell-through');
+        const data = await apiService.get<SellThroughByLevelItem[]>(
+          '/reports/sell-through',
+          authToken,
+          controller.signal,
+        );
+        if (!controller.signal.aborted) {
+          setSellThroughData(data ?? []);
+        }
+      } catch {
+        // Sell-through is a secondary insight; ignore failures rather than blocking the page.
+        if (!controller.signal.aborted) {
+          setSellThroughData([]);
+        }
+      }
+    };
+
     fetchReportData();
     fetchOverallReportData();
+    fetchSellThroughData();
     return () => controller.abort();
-  }, [token]);
+  }, [token, getFreshApiToken]);
 
   const hasAnyError = monthlyError || overallError;
 
@@ -155,9 +261,6 @@ export function ReportsPage({ token }: ReportsPageProps) {
                 <div className="h-4 w-20 rounded bg-semantic-surface-3 animate-pulse" />
                 <div className="h-4 w-16 rounded bg-semantic-surface-3 animate-pulse ml-auto" />
                 <div className="h-4 w-16 rounded bg-semantic-surface-3 animate-pulse" />
-                <div className="h-4 w-14 rounded bg-semantic-surface-3 animate-pulse" />
-                <div className="h-4 w-14 rounded bg-semantic-surface-3 animate-pulse" />
-                <div className="h-4 w-14 rounded bg-semantic-surface-3 animate-pulse" />
                 <div className="h-4 w-16 rounded bg-semantic-surface-3 animate-pulse" />
                 <div className="h-4 w-24 rounded bg-semantic-surface-3 animate-pulse" />
               </div>
@@ -199,29 +302,6 @@ export function ReportsPage({ token }: ReportsPageProps) {
               Start with expired stock and markdown pressure, then review month-by-month movement.
             </p>
           </div>
-          <button
-            onClick={() => window.print()}
-            aria-label="Print this report"
-            className="hidden md:flex shrink-0 items-center gap-2 rounded-md border border-semantic-primary px-3 py-1.5 text-sm font-medium text-semantic-primary hover:bg-semantic-primary/5 transition-colors no-print"
-          >
-            <svg
-              xmlns="http://www.w3.org/2000/svg"
-              width="16"
-              height="16"
-              viewBox="0 0 24 24"
-              fill="none"
-              stroke="currentColor"
-              strokeWidth="2"
-              strokeLinecap="round"
-              strokeLinejoin="round"
-              aria-hidden="true"
-            >
-              <path d="M6 9V2h12v7" />
-              <path d="M6 18H4a2 2 0 0 1-2-2v-5a2 2 0 0 1 2-2h16a2 2 0 0 1 2 2v5a2 2 0 0 1-2 2h-2" />
-              <rect x="6" y="14" width="12" height="8" />
-            </svg>
-            Print Report
-          </button>
         </div>
       </header>
       <Card>
@@ -253,21 +333,25 @@ export function ReportsPage({ token }: ReportsPageProps) {
                 role="region"
                 aria-label="Primary expiry decision"
               >
-                <p className="text-sm font-medium text-semantic-critical">Expired risk</p>
+                <p className="text-sm font-medium text-semantic-critical">Expiry risk</p>
                 <p className="mt-2 font-heading text-3xl font-bold text-semantic-critical">
-                  {numberFormatter.format(overallReportData.expired_count)}
+                  {numberFormatter.format(overallReportData.expiry_risk_count)}
                 </p>
                 <p className="mt-2 text-sm text-semantic-critical-muted-foreground">
-                  Remove or reconcile expired stock before the next shelf review.
+                  Stock expiring within 30 days — apply the deepest reduction (Markdown 3) before it
+                  becomes unsellable.
                 </p>
               </div>
-              <dl className="grid gap-3 rounded-lg border bg-semantic-secondary-muted p-5 sm:grid-cols-3">
+              <dl className="grid gap-3 rounded-lg border bg-semantic-secondary-muted p-5 sm:grid-cols-2">
                 <div>
                   <dt className="text-sm font-medium text-semantic-text-secondary">
-                    Markdown action
+                    Entering markdown next month
                   </dt>
                   <dd className="mt-1 font-heading text-2xl font-bold text-semantic-warning">
-                    {numberFormatter.format(overallReportData.total_markdown)}
+                    {numberFormatter.format(overallReportData.next_month_markdown_count)}
+                  </dd>
+                  <dd className="mt-1 text-xs text-semantic-text-secondary">
+                    Next batch crossing into Markdown 1 (≈3 months out) — line up first reductions.
                   </dd>
                 </div>
                 <div>
@@ -275,22 +359,10 @@ export function ReportsPage({ token }: ReportsPageProps) {
                     Active expiry stock
                   </dt>
                   <dd className="mt-1 font-heading text-2xl font-bold text-semantic-success">
-                    {numberFormatter.format(
-                      Math.max(
-                        overallReportData.total_expiring -
-                          overallReportData.expired_count -
-                          overallReportData.total_markdown,
-                        0,
-                      ),
-                    )}
+                    {numberFormatter.format(overallReportData.active_expiry_stock_count)}
                   </dd>
-                </div>
-                <div>
-                  <dt className="text-sm font-medium text-semantic-text-secondary">
-                    Next review window
-                  </dt>
-                  <dd className="mt-1 text-base font-semibold">
-                    {formatReportDate(overallReportData.latest_expiry_date)}
+                  <dd className="mt-1 text-xs text-semantic-text-secondary">
+                    All stock not yet expired — your live markdown pipeline.
                   </dd>
                 </div>
               </dl>
@@ -303,6 +375,35 @@ export function ReportsPage({ token }: ReportsPageProps) {
         </CardContent>
       </Card>
 
+      {sellThroughData && sellThroughData.length > 0 && (
+        <Card>
+          <CardHeader>
+            <CardTitle className="text-xl">Sell-through by markdown level</CardTitle>
+          </CardHeader>
+          <CardContent>
+            <p className="mb-4 text-sm text-semantic-text-secondary">
+              How many items sold at each reduction depth — stock that only moves at deeper
+              markdowns is a candidate for range or ordering review.
+            </p>
+            <dl className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
+              {sellThroughData.map((row) => (
+                <div
+                  key={row.markdownLevel === null ? 'none' : row.markdownLevel}
+                  className="rounded-lg border bg-semantic-surface-1 p-4"
+                >
+                  <dt className="text-sm font-medium text-semantic-text-secondary">
+                    {markdownLevelLabel(row.markdownLevel)}
+                  </dt>
+                  <dd className="mt-1 font-heading text-2xl font-bold">
+                    {numberFormatter.format(row.soldCount)}
+                  </dd>
+                </div>
+              ))}
+            </dl>
+          </CardContent>
+        </Card>
+      )}
+
       <Card>
         <CardHeader>
           <CardTitle className="text-xl">Monthly expiry report</CardTitle>
@@ -311,6 +412,9 @@ export function ReportsPage({ token }: ReportsPageProps) {
           <div className="no-print mb-4 flex flex-col gap-2 sm:flex-row">
             <Button asChild className="flex-1" size="lg">
               <a href="/detailed-expiry-report">Open next 90 days</a>
+            </Button>
+            <Button asChild variant="outline" className="flex-1" size="lg">
+              <a href="/expiry-entries">Open all expiry entries</a>
             </Button>
             <Button asChild variant="destructive" className="flex-1" size="lg">
               <a href="/expired-items">Review expired items</a>
@@ -344,24 +448,6 @@ export function ReportsPage({ token }: ReportsPageProps) {
                         </dd>
                       </div>
                       <div className="flex justify-between border-b border-dashed pb-1">
-                        <dt className="text-semantic-text-secondary">Total Markdown</dt>
-                        <dd className="font-bold text-semantic-warning">
-                          {numberFormatter.format(row.total_markdown)}
-                        </dd>
-                      </div>
-                      <div className="flex justify-between border-b border-dashed pb-1">
-                        <dt className="text-semantic-text-secondary">Markdown 1</dt>
-                        <dd>{numberFormatter.format(row.markdown1_count)}</dd>
-                      </div>
-                      <div className="flex justify-between border-b border-dashed pb-1">
-                        <dt className="text-semantic-text-secondary">Markdown 2</dt>
-                        <dd>{numberFormatter.format(row.markdown2_count)}</dd>
-                      </div>
-                      <div className="flex justify-between border-b border-dashed pb-1">
-                        <dt className="text-semantic-text-secondary">Markdown 3</dt>
-                        <dd>{numberFormatter.format(row.markdown3_count)}</dd>
-                      </div>
-                      <div className="flex justify-between border-b border-dashed pb-1">
                         <dt className="text-semantic-text-secondary">Latest Expiry</dt>
                         <dd className="font-medium">{formatReportDate(row.latest_expiry_date)}</dd>
                       </div>
@@ -383,18 +469,6 @@ export function ReportsPage({ token }: ReportsPageProps) {
                       <TableHead className="text-right text-xs font-semibold font-eyebrow text-semantic-text-secondary uppercase tracking-wider">
                         Expired Items
                       </TableHead>
-                      <TableHead className="text-right text-xs font-semibold font-eyebrow text-semantic-text-secondary uppercase tracking-wider">
-                        Markdown 1
-                      </TableHead>
-                      <TableHead className="text-right text-xs font-semibold font-eyebrow text-semantic-text-secondary uppercase tracking-wider">
-                        Markdown 2
-                      </TableHead>
-                      <TableHead className="text-right text-xs font-semibold font-eyebrow text-semantic-text-secondary uppercase tracking-wider">
-                        Markdown 3
-                      </TableHead>
-                      <TableHead className="text-right text-xs font-semibold font-eyebrow text-semantic-text-secondary uppercase tracking-wider">
-                        Total Markdown
-                      </TableHead>
                       <TableHead className="text-xs font-semibold font-eyebrow text-semantic-text-secondary uppercase tracking-wider">
                         Latest Expiry
                       </TableHead>
@@ -409,18 +483,6 @@ export function ReportsPage({ token }: ReportsPageProps) {
                         </TableCell>
                         <TableCell className="text-right tabular-nums text-semantic-critical font-bold">
                           {numberFormatter.format(row.expired_count)}
-                        </TableCell>
-                        <TableCell className="text-right tabular-nums">
-                          {numberFormatter.format(row.markdown1_count)}
-                        </TableCell>
-                        <TableCell className="text-right tabular-nums">
-                          {numberFormatter.format(row.markdown2_count)}
-                        </TableCell>
-                        <TableCell className="text-right tabular-nums">
-                          {numberFormatter.format(row.markdown3_count)}
-                        </TableCell>
-                        <TableCell className="text-right tabular-nums text-semantic-warning font-bold">
-                          {numberFormatter.format(row.total_markdown)}
                         </TableCell>
                         <TableCell className="tabular-nums">
                           {formatReportDate(row.latest_expiry_date)}

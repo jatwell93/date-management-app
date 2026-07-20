@@ -4,9 +4,12 @@
  */
 export const UploadStatus = {
   PENDING: 'pending',
+  QUEUED: 'queued',
+  VALIDATING: 'validating',
   UPLOADING: 'uploading',
   PROCESSING: 'processing',
   COMPLETED: 'completed',
+  COMPLETED_WITH_ERRORS: 'completed_with_errors',
   FAILED: 'failed',
 } as const;
 

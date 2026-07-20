@@ -8,18 +8,21 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '../co
 import { Button } from '../components/ui/button';
 import { buildApiUrl } from '../lib/api.service';
 import type { TierLevel, SubscriptionData, UsageData } from '../types/subscription';
+import { useFreshApiToken } from '../hooks/useFreshApiToken';
 
 interface SubscriptionSettingsPageProps {
   token: string | null;
 }
 
 export function SubscriptionSettingsPage({ token }: SubscriptionSettingsPageProps) {
+  const getFreshApiToken = useFreshApiToken(token);
   const [showUpgradeModal, setShowUpgradeModal] = useState(false);
   const [subscription, setSubscription] = useState<SubscriptionData | null>(null);
   const [usage, setUsage] = useState<UsageData | null>(null);
   const [cancelLoading, setCancelLoading] = useState(false);
   const [billingLoadError, setBillingLoadError] = useState<string | null>(null);
   const [billingLoading, setBillingLoading] = useState(false);
+  const [checkoutError, setCheckoutError] = useState<string | null>(null);
 
   const loadSubscriptionData = useCallback(
     async (isMounted: () => boolean = () => true) => {
@@ -35,12 +38,13 @@ export function SubscriptionSettingsPage({ token }: SubscriptionSettingsPageProp
       setBillingLoadError(null);
 
       try {
+        const authToken = await getFreshApiToken('subscription-settings-load');
         const [subscriptionRes, usageRes] = await Promise.all([
           fetch(buildApiUrl('/subscription/current'), {
-            headers: { Authorization: `Bearer ${token}` },
+            headers: { Authorization: `Bearer ${authToken}` },
           }),
           fetch(buildApiUrl('/organization/usage'), {
-            headers: { Authorization: `Bearer ${token}` },
+            headers: { Authorization: `Bearer ${authToken}` },
           }),
         ]);
 
@@ -80,12 +84,13 @@ export function SubscriptionSettingsPage({ token }: SubscriptionSettingsPageProp
         }
       }
     },
-    [token],
+    [token, getFreshApiToken],
   );
 
   useEffect(() => {
     let isMounted = true;
 
+    // eslint-disable-next-line react-hooks/set-state-in-effect -- intentional: kicks off subscription data fetch on mount/deps change
     loadSubscriptionData(() => isMounted);
 
     return () => {
@@ -97,11 +102,37 @@ export function SubscriptionSettingsPage({ token }: SubscriptionSettingsPageProp
     setShowUpgradeModal(true);
   };
 
+  // Only paid subscriptions with a reliable Stripe customer can open the billing
+  // portal. `active`, `past_due`, and `canceled` all retain one: past_due users
+  // need the portal to fix a failed payment, and canceled users can still view
+  // past invoices or re-subscribe. Free/trialing users have no Stripe customer
+  // yet, so we show a subscribe CTA instead of a button that would 402.
+  const canManageBilling =
+    !!subscription &&
+    subscription.tierLevel !== 'free' &&
+    (subscription.status === 'active' ||
+      subscription.status === 'past_due' ||
+      subscription.status === 'canceled');
+
+  const cancellationScheduled = subscription?.cancelAtPeriodEnd ?? false;
+
   const handleSelectPlan = async (tier: TierLevel, billingCycle: 'monthly' | 'annual') => {
     if (!token) return;
 
+    setCheckoutError(null);
+
+    if (tier === 'free') {
+      setShowUpgradeModal(false);
+      return;
+    }
+    if (tier === 'enterprise') {
+      setShowUpgradeModal(false);
+      setCheckoutError('Enterprise plans are configured by contract. Please contact support.');
+      return;
+    }
+
     try {
-      // Map tier to Stripe price ID (these would come from environment or config)
+      const authToken = await getFreshApiToken('subscription-settings-checkout');
       const priceIds = {
         starter: {
           monthly: process.env.REACT_APP_STRIPE_PRICE_STARTER_MONTHLY,
@@ -111,19 +142,12 @@ export function SubscriptionSettingsPage({ token }: SubscriptionSettingsPageProp
           monthly: process.env.REACT_APP_STRIPE_PRICE_PROFESSIONAL_MONTHLY,
           annual: process.env.REACT_APP_STRIPE_PRICE_PROFESSIONAL_ANNUAL,
         },
-        premium: {
-          monthly: process.env.REACT_APP_STRIPE_PRICE_PREMIUM_MONTHLY,
-          annual: process.env.REACT_APP_STRIPE_PRICE_PREMIUM_ANNUAL,
-        },
-        concierge: {
-          monthly: process.env.REACT_APP_STRIPE_PRICE_CONCIERGE_MONTHLY,
-          annual: process.env.REACT_APP_STRIPE_PRICE_CONCIERGE_MONTHLY,
-        },
       };
 
-      const priceId = priceIds[tier]?.[billingCycle];
+      const priceId = priceIds[tier as keyof typeof priceIds]?.[billingCycle];
       if (!priceId) {
-        alert('Price configuration not found. Please contact support.');
+        setShowUpgradeModal(false);
+        setCheckoutError('Price configuration not found. Please contact support.');
         return;
       }
 
@@ -131,7 +155,7 @@ export function SubscriptionSettingsPage({ token }: SubscriptionSettingsPageProp
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
-          Authorization: `Bearer ${token}`,
+          Authorization: `Bearer ${authToken}`,
         },
         body: JSON.stringify({
           priceId,
@@ -150,7 +174,8 @@ export function SubscriptionSettingsPage({ token }: SubscriptionSettingsPageProp
       Sentry.captureException(error, {
         tags: { feature: 'subscription-upgrade' },
       });
-      alert('Failed to start upgrade process. Please try again.');
+      setShowUpgradeModal(false);
+      setCheckoutError('Failed to start upgrade process. Please try again.');
     }
   };
 
@@ -163,13 +188,15 @@ export function SubscriptionSettingsPage({ token }: SubscriptionSettingsPageProp
 
     if (!confirmed) return;
 
+    setCheckoutError(null);
     setCancelLoading(true);
     try {
+      const authToken = await getFreshApiToken('subscription-settings-cancel');
       const response = await fetch(buildApiUrl('/subscription/cancel'), {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
-          Authorization: `Bearer ${token}`,
+          Authorization: `Bearer ${authToken}`,
         },
       });
 
@@ -177,15 +204,12 @@ export function SubscriptionSettingsPage({ token }: SubscriptionSettingsPageProp
         throw new Error('Failed to cancel subscription');
       }
 
-      alert(
-        'Your subscription has been scheduled for cancellation at the end of the billing period.',
-      );
-      window.location.reload();
+      await loadSubscriptionData();
     } catch (error) {
       Sentry.captureException(error, {
         tags: { feature: 'subscription-cancel' },
       });
-      alert('Failed to cancel subscription. Please try again or contact support.');
+      setCheckoutError('Failed to cancel subscription. Please try again or contact support.');
     } finally {
       setCancelLoading(false);
     }
@@ -212,6 +236,32 @@ export function SubscriptionSettingsPage({ token }: SubscriptionSettingsPageProp
                 {billingLoading ? 'Retrying...' : 'Retry billing data'}
               </Button>
             </CardContent>
+          </Card>
+        )}
+
+        {checkoutError && (
+          <Card className="border-destructive/40 bg-destructive/5">
+            <CardHeader>
+              <CardTitle>Billing action failed</CardTitle>
+              <CardDescription>{checkoutError}</CardDescription>
+            </CardHeader>
+            <CardContent>
+              <Button variant="outline" onClick={() => setCheckoutError(null)}>
+                Dismiss
+              </Button>
+            </CardContent>
+          </Card>
+        )}
+
+        {cancellationScheduled && (
+          <Card className="border-green-500/40 bg-green-500/5">
+            <CardHeader>
+              <CardTitle>Subscription cancellation scheduled</CardTitle>
+              <CardDescription>
+                Your subscription will remain active until the end of your current billing period.
+                After that, you will be downgraded to the Starter plan.
+              </CardDescription>
+            </CardHeader>
           </Card>
         )}
 
@@ -251,23 +301,34 @@ export function SubscriptionSettingsPage({ token }: SubscriptionSettingsPageProp
           <CardHeader>
             <CardTitle>Billing Management</CardTitle>
             <CardDescription>
-              Update payment methods, view invoices, and manage billing details
+              {canManageBilling
+                ? 'Update payment methods, view invoices, and manage billing details'
+                : 'Subscribe to a paid plan to manage payment methods, invoices, and billing details'}
             </CardDescription>
           </CardHeader>
           <CardContent>
             <div className="flex gap-3">
-              <ManageSubscriptionButton token={token} variant="default" />
-              <Button variant="outline" onClick={handleUpgrade}>
-                Change Plan
-              </Button>
+              {canManageBilling ? (
+                <>
+                  <ManageSubscriptionButton token={token} variant="default" />
+                  <Button variant="outline" onClick={handleUpgrade}>
+                    Change Plan
+                  </Button>
+                </>
+              ) : (
+                <Button variant="default" onClick={handleUpgrade}>
+                  View plans
+                </Button>
+              )}
             </div>
           </CardContent>
         </Card>
 
         {/* Plan Management */}
-        {subscription &&
+        {!cancellationScheduled &&
+          subscription &&
           subscription.status === 'active' &&
-          subscription.tierLevel !== 'starter' && (
+          subscription.tierLevel !== 'free' && (
             <Card>
               <CardHeader>
                 <CardTitle>Plan Management</CardTitle>
@@ -321,7 +382,7 @@ export function SubscriptionSettingsPage({ token }: SubscriptionSettingsPageProp
         isOpen={showUpgradeModal}
         onClose={() => setShowUpgradeModal(false)}
         onSelectPlan={handleSelectPlan}
-        currentTier={subscription?.tierLevel || 'starter'}
+        currentTier={subscription?.tierLevel || 'free'}
       />
     </div>
   );

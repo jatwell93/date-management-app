@@ -3,7 +3,7 @@
  * Simulates rapid keystroke sequences typical of barcode scanners
  */
 
-import { HardwareScanResult } from '../types/handheld';
+import type { GS1ParseResult, HardwareScanResult } from '../types/handheld';
 
 export interface KeyboardWedgeSimulatorOptions {
   typingSpeed?: number; // Delay between characters in ms (for human typing simulation)
@@ -118,21 +118,10 @@ export const simulateRapidEnterPresses = async (count = 2, delay = 10): Promise<
  * @returns Promise that resolves with the scan result or null if timeout
  */
 export const waitForScanResult = (
-  onScan: (result: HardwareScanResult) => void,
+  _onScan: (result: HardwareScanResult) => void,
   timeout = 1000,
 ): Promise<HardwareScanResult | null> => {
   return new Promise((resolve) => {
-    const timeoutId = setTimeout(() => {
-      resolve(null);
-    }, timeout);
-
-    const originalOnScan = onScan;
-    const wrappedOnScan = (result: HardwareScanResult) => {
-      clearTimeout(timeoutId);
-      resolve(result);
-      originalOnScan(result);
-    };
-
     // This is a simplified version - in real tests, you'd need to mock the onScan callback
     // For now, we'll just return null after timeout
     setTimeout(() => resolve(null), timeout);
@@ -155,7 +144,10 @@ export const createMockScanResult = (
 /**
  * Test utility to create GS1 mock scan results
  */
-export const createMockGS1ScanResult = (barcode: string, gs1Data: any): HardwareScanResult => ({
+export const createMockGS1ScanResult = (
+  barcode: string,
+  gs1Data: GS1ParseResult,
+): HardwareScanResult => ({
   barcode,
   timestamp: Date.now(),
   source: 'hardware',

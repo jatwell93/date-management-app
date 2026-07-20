@@ -18,8 +18,6 @@
 6. **Task Management with OpenSpec**
 7. **Quality & Testing**
 8. **Memory Management**
-9. **Security Code Review**
-10. **Best Practices**
 
 ---
 
@@ -51,7 +49,7 @@ SKILLs should be used when the work needs specific knowledge that a skill or age
 - **No Mock Data**: Never fake/simulated data in production; test fixtures are OK
 - **No Secrets**: Never hardcode API keys, passwords, or credentials
 - **TDD Mandatory**: Tests written before production code
-- **Code Quality**: Must pass `npm run lint`, `npm test`, and `doppler run -- cs delta`
+- **Code Quality**: Must pass `npm run lint` and the component test gate for what you touched — `npm run test:backend:diff` and/or `npm run test:frontend:diff` (the bare `npm test` at the repo root deliberately errors and is not a valid gate). `doppler run -- cs delta` is a separately authorized provider check, not part of the local loop.
 - **Task Tracking**: Use OpenSpec workflows for ALL work —- no outside markdown TODOs files
 
 ---
@@ -292,13 +290,13 @@ async function activateUser(user: User): Promise<User> {
 
 ### Project Structure
 
-Use `codemap` for a quick check of the project structure:
+Use `codemap` for a quick check of the project structure. Prefer scoping to the component you're touching — a full-root `codemap .` on this repo produces 1,700+ lines and is rarely worth it at startup:
 
 ```bash
-codemap .               # Project structure
-codemap --deps .        # How files connect
-codemap --diff          # What changed vs main
+codemap backend         # Scope to one component (backend | frontend | workers)
+codemap --diff          # What changed vs main (best default for routine work)
 codemap --diff --ref branch  # Changes vs specific branch
+codemap .               # Full project structure — only when you genuinely need the whole map
 ```
 
 Other useful commands
@@ -311,54 +309,14 @@ codemap serve      # HTTP API for non-MCP integrations
 
 ### Agentlens Integration
 
-This project uses **agentlens** for AI-optimized documentation.
+This project uses **agentlens** for AI-optimized documentation. Route through it before reading source:
 
-#### Reading Protocol
+1. `.agentlens/INDEX.md` — global routing table (start here)
+2. `.agentlens/AGENT.md` — full reading protocol, doc structure, commands, and key patterns (canonical — do not duplicate here)
+3. `.agentlens/modules/{module}/MODULE.md` — module file lists and entry points
+4. `.agentlens/modules/{module}/memory.md` — warnings/TODOs to check **before editing**
 
-Follow this order to understand the codebase efficiently:
-
-1. **Start here**: `.agentlens/INDEX.md` - Project overview and module routing
-2. **AI instructions**: `.agentlens/AGENT.md` - How to use the documentation
-3. **Module details**: `.agentlens/modules/{module}/MODULE.md` - File lists and entry points
-4. **Before editing**: Check `.agentlens/modules/{module}/memory.md` for warnings/TODOs
-
-## Documentation Structure
-
-```
-.agentlens/
-├── INDEX.md              # Start here - global routing table
-├── AGENT.md              # AI agent instructions
-├── modules/
-│   └── {module-slug}/
-│       ├── MODULE.md     # Module summary
-│       ├── outline.md    # Symbol maps for large files
-│       ├── memory.md     # Warnings, TODOs, business rules
-│       └── imports.md    # Dependencies
-└── files/                # Deep docs for complex files
-```
-
-## During Development
-
-- Use `.agentlens/modules/{module}/outline.md` to find symbols in large files
-- Check `.agentlens/modules/{module}/imports.md` for dependencies
-- For complex files, see `.agentlens/files/{file-slug}.md`
-
-## Commands
-
-| Task                       | Command                 |
-| -------------------------- | ----------------------- |
-| Regenerate docs            | `agentlens`             |
-| Fast update (changed only) | `agentlens --diff main` |
-| Check if stale             | `agentlens --check`     |
-| Force full regen           | `agentlens --force`     |
-
-## Key Patterns
-
-- **Module boundaries**: `mod.rs` (Rust), `index.ts` (TS), `__init__.py` (Python)
-- **Large files**: >500 lines, have symbol outlines
-- **Complex files**: >30 symbols, have L2 deep docs
-- **Hub files**: Imported by 3+ files, marked with 🔗
-- **Memory markers**: TODO, FIXME, WARNING, SAFETY, RULE
+Regenerate with `agentlens` (or `agentlens --diff main` for a fast changed-only update); check staleness with `agentlens --check`.
 
 ## 3. Session Startup Context
 
@@ -367,7 +325,7 @@ Follow this order to understand the codebase efficiently:
 **Every Session (Mandatory):**
 
 1. Load AGENTS.md
-2. Run `git standup -d 7` and check the project's commits over the past seven (7) days
+2. Run `git log -5 --oneline` for recent context (use `git standup -d 7` only when you need a deeper history sweep)
 3. Identify environment (development/test/staging/production)
 
 **Quick Bug Fix (< 30 min):**
@@ -418,7 +376,7 @@ Before starting work, clarify:
 **In:** Task contract / Feature request **Out:** Validated OpenSpec Proposal **Exit:** User approves proposal files
 **Actions:**
 
-1.  **Search Memory (REQUIRED):** Run `node scripts/mem-recall.js "<task keywords>"` to find similar patterns, past solutions, or related work
+1.  **Search Memory (when relevant):** For non-trivial changes, run `node scripts/mem-recall.js "<task keywords>"` to find similar patterns, past solutions, or related work. Recall is offline lexical search — skip it for pure docs/read-only tasks, and do not block on it if the index is unavailable.
 2.  Choose a concise `change-id` (e.g., `add-user-validation`).
 3.  Run: `openspec proposal <change-id>`.
 4.  Edit `openspec/changes/<change-id>/proposal.md` with analysis, reuse strategy, and implementation steps.
@@ -466,8 +424,8 @@ Before starting work, clarify:
 1. **Codemap:** Use codemap commands for context of project structure:
 
 ```bash
-codemap .               # Project structure
-codemap --deps          # How files connect
+codemap <component>     # Scope to backend | frontend | workers
+codemap --diff          # What changed vs main
 ```
 
 2.  **Read Tasks:** Review `openspec/changes/<change-id>/tasks.md`.
@@ -505,7 +463,7 @@ export const usersService = {
   },
 };
 
-// Verify: npm test (should now pass)
+// Verify: npm run test:backend:diff (or test:frontend:diff) — should now pass
 ```
 
 **Exit:** Tests pass (`npm run test:frontend:diff` or `npm run test:backend:diff`), linter clean, `tasks.md` fully checked `[x]`.
@@ -687,20 +645,24 @@ export const usersService = {
 Before marking task complete, run all (must pass):
 
 ```bash
-# Run all tests
-npm run test:coverage                     # Expected: high level of quality coverage
+# Run the coverage suite for the component(s) you changed
+npm run test:backend:coverage             # backend changes
+npm run test:frontend:coverage            # frontend changes
+npm run test:db                           # worker DB changes (real-SQL via pglite)
 
-# Run linter with auto-fix
-npm run lint                              # Expected: exit code 0 or only minor
+# Lint (root ESLint covers all packages)
+npm run lint                              # Expected: exit code 0
 
-# Check TypeScript compilation
-npm run build                             # Expected: exit code 0
-# OR
-tsc --noEmit
+# Type-check / build the affected component
+npm run build:frontend                    # frontend
+npm run build:workers                     # workers
+npm run compile                           # root tsc
 
 # Validate OpenSpec changes
 openspec validate --all                   # Expected: exit code 0
 ```
+
+> There is no root `npm test`, `npm run test:coverage`, or `npm run build`. Always use the component-scoped scripts above (see `package.json`).
 
 ---
 
@@ -708,14 +670,14 @@ openspec validate --all                   # Expected: exit code 0
 
 ## Memvid Memory System
 
-This project uses **Memvid** as a lightweight, file-based memory layer. All project knowledge is stored in a single `project-memory.mv2` file at the project root.
+This project uses **Memvid** as a lightweight, file-based memory layer. Project knowledge is committed to `memory.jsonl` at the project root. The local `project-memory.mv2` file is a gitignored, rebuildable search index derived from `memory.jsonl`.
 
 ### Why Memvid
 
-- **Zero daemon overhead** — No database server, just a single file
+- **Zero daemon overhead** — No database server; committed memory is append-only JSONL
 - **Offline-first** — Works entirely locally, perfect for low-resource devices
 - **Fast retrieval** — Rust-based lexical search (~1-2ms)
-- **Portable** — Memory travels with the project
+- **Portable** — `memory.jsonl` travels with the project; `.mv2` is rebuilt locally
 
 ### Core Commands
 
@@ -726,11 +688,18 @@ node scripts/mem-log.js <KIND> <TITLE> <MESSAGE>
 # Recall memories
 node scripts/mem-recall.js <QUERY>
 
+# Rebuild local search index after a fresh clone
+npm run mem:rebuild
+# or
+node scripts/mem-rebuild.js
+
 # Direct CLI access
 memvid find project-memory.mv2 --query "search term"
 memvid stats project-memory.mv2
 memvid timeline project-memory.mv2
 ```
+
+`project-memory.mv2` no longer belongs in commits. It is a local derived index that can be regenerated from `memory.jsonl`.
 
 ### Memory Kinds
 
@@ -762,9 +731,9 @@ node scripts/mem-recall.js "authentication"
 
 ## Memvid Memory Protocol
 
-### REQUIRED: Before Starting Work
+### Before Starting Work (when relevant)
 
-Run `node scripts/mem-recall.js "<task keywords>"` to check for relevant project context.
+For non-trivial changes, run `node scripts/mem-recall.js "<task keywords>"` to check for relevant project context. This is offline lexical search and needs no credentials — skip it for pure docs/read-only work and don't block on it if the index is missing.
 
 ### REQUIRED: Automatic Storage Triggers
 
@@ -777,116 +746,3 @@ Store memories using `node scripts/mem-log.js` on ANY of:
 - **Error resolved** → error message + fix
 
 Do NOT wait to be asked. Memory storage should happen as you work.
-
-## 9. Security Code Review
-
-### Security Checklist
-
-Before APPROVAL, verify:
-
-- ✅ No hardcoded secrets (API keys, passwords, tokens)
-- ✅ All user input validated (using validation middleware or libraries like `joi`, `zod`)
-- ✅ All user input sanitized when displayed
-- ✅ No SQL injection (use parameterized queries or ORM)
-- ✅ Authentication required on sensitive endpoints
-- ✅ Authorization verified (current user can perform action?)
-- ✅ Sensitive data logged appropriately (no passwords in logs)
-- ✅ CSRF protection enabled (if applicable)
-- ✅ Rate limiting on public endpoints (if applicable)
-
-**Good:**
-
-```typescript
-// src/controllers/usersController.ts
-import { Request, Response } from 'express';
-import { usersService } from '../services/usersService';
-import { authenticateUser, authorizeAdmin } from '../middleware/auth';
-
-export const usersController = {
-  async update(req: Request, res: Response) {
-    try {
-      // Validate input
-      const validated = updateUserSchema.parse(req.body);
-
-      // Authorization check
-      if (req.user.id !== Number(req.params.id) && !req.user.isAdmin) {
-        return res.status(403).json({ error: 'Not authorized' });
-      }
-
-      const user = await usersService.update(Number(req.params.id), validated);
-      res.json(user);
-    } catch (error) {
-      res.status(400).json({ error: error.message });
-    }
-  },
-};
-
-// src/routes/users.ts
-router.put('/:id', authenticateUser, usersController.update);
-```
-
-**Anti-Pattern:**
-
-```typescript
-// DONT DO THIS
-export const usersController = {
-  async update(req: Request, res: Response) {
-    // Raw SQL - vulnerable to injection!
-    const sql = `UPDATE users SET email = '${req.body.email}' WHERE id = ${req.params.id}`;
-    await db.run(sql);
-    res.json({ success: true });
-  },
-};
-```
-
-### Code Review Gates
-
-Must pass before merge:
-
-1.  ✅ Tests passing (`npm test`)
-2.  ✅ Linter clean (`npm run lint`)
-3.  ✅ Security checklist passed
-4.  ✅ No hardcoded secrets
-5.  ✅ `doppler run -- cs delta` findings actioned? Why/Why not?
-6.  ✅ Comments explain why, not what
-7.  ✅ OpenSpec validation passed (`openspec validate --all`)
-
----
-
-## Best Practices Summary
-
-### DO:
-
-- ✅ Follow Express REST patterns (routes → controllers → services → data access)
-- ✅ Use TypeScript strict mode with explicit types
-- ✅ Write tests before code (TDD)
-- ✅ Inject dependencies for testability
-- ✅ Keep controllers thin, logic in services
-- ✅ Use parameterized queries (avoid raw SQL)
-- ✅ Validate input, sanitize output
-- ✅ Comment why, not what
-- ✅ Cite code in plans (`src/controllers/users.ts:42`)
-- ✅ Use OpenSpec for change tracking (not markdown TODOs)
-- ✅ Request approval before merge
-- ✅ Document architectural decisions
-- ✅ Load `packages.md` when working with packages
-- ✅ Follow CRA conventions for React (components in `src/`, standard folder structure)
-- ✅ Validate OpenSpec changes before implementation
-
-### DON'T:
-
-- ❌ Hardcode secrets, APIs, or config
-- ❌ Skip tests or commit untested code
-- ❌ Skip UBS scanning (bugs found early ≠ bugs found in prod)
-- ❌ Modify code without reading full context
-- ❌ Use mock data in production
-- ❌ Write raw SQL instead of using ORM/query builder properly
-- ❌ Put business logic in controllers
-- ❌ Use `any` type without justification
-- ❌ Introduce unjustified abstraction
-- ❌ Commit to `main`/`master` directly
-- ❌ Force-push to shared branches
-- ❌ Ignore security checklist
-- ❌ Create markdown TODOs instead of OpenSpec changes
-- ❌ Skip OpenSpec validation steps
-- ❌ Eject CRA unless absolutely necessary

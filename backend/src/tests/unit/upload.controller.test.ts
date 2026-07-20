@@ -13,12 +13,12 @@ describe('UploadController', () => {
 
   beforeEach(() => {
     uploadRepository = {
-      findStatusByFileKey: jest.fn(),
+      findStatusByFileKey: vi.fn(),
     };
     controller = new UploadController(uploadService, uploadRepository as never);
     res = {
-      status: jest.fn().mockReturnThis(),
-      json: jest.fn(),
+      status: vi.fn().mockReturnThis(),
+      json: vi.fn(),
     };
   });
 

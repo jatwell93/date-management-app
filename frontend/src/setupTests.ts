@@ -1,39 +1,39 @@
-// jest-dom adds custom jest matchers for asserting on DOM nodes.
-// allows you to do things like:
-// expect(element).toHaveTextContent(/react/i)
+// jest-dom adds custom matchers for asserting on DOM nodes.
 // learn more: https://github.com/testing-library/jest-dom
 import '@testing-library/jest-dom';
-import fetchMock from 'jest-fetch-mock';
+import { fetchMock } from './test-utils/fetchMock';
+
 fetchMock.enableMocks();
 
 // Mock localforage to prevent "No available storage method found" in JSDOM
-jest.mock('localforage', () => {
+vi.mock('localforage', () => {
   let store: Record<string, any> = {};
-  return {
-    config: jest.fn(),
-    createInstance: jest.fn().mockReturnThis(),
-    setItem: jest.fn((key, value) => {
+  const localforage = {
+    config: vi.fn(),
+    createInstance: vi.fn().mockReturnThis(),
+    setItem: vi.fn((key, value) => {
       store[key] = value;
       return Promise.resolve(value);
     }),
-    getItem: jest.fn((key) => {
+    getItem: vi.fn((key) => {
       return Promise.resolve(store[key] || null);
     }),
-    removeItem: jest.fn((key) => {
+    removeItem: vi.fn((key) => {
       delete store[key];
       return Promise.resolve();
     }),
-    clear: jest.fn(() => {
+    clear: vi.fn(() => {
       store = {};
       return Promise.resolve();
     }),
-    keys: jest.fn(() => {
+    keys: vi.fn(() => {
       return Promise.resolve(Object.keys(store));
     }),
     INDEXEDDB: 'asyncStorage',
     WEBSQL: 'webSQLStorage',
     LOCALSTORAGE: 'localStorageWrapper',
   };
+  return { ...localforage, default: localforage };
 });
 
 // Mock Pointer Events for Radix UI
@@ -68,10 +68,10 @@ if (typeof window !== 'undefined') {
 
   (window as any).PointerEvent = MockPointerEvent;
 
-  window.HTMLElement.prototype.scrollIntoView = jest.fn();
-  window.HTMLElement.prototype.hasPointerCapture = jest.fn();
-  window.HTMLElement.prototype.releasePointerCapture = jest.fn();
-  window.HTMLElement.prototype.setPointerCapture = jest.fn();
+  window.HTMLElement.prototype.scrollIntoView = vi.fn();
+  window.HTMLElement.prototype.hasPointerCapture = vi.fn();
+  window.HTMLElement.prototype.releasePointerCapture = vi.fn();
+  window.HTMLElement.prototype.setPointerCapture = vi.fn();
 }
 
 // Mock ResizeObserver
@@ -82,7 +82,7 @@ global.ResizeObserver = class ResizeObserver {
 };
 
 // Mock uuid to fix ESM import issues in tests
-jest.mock('uuid', () => ({
+vi.mock('uuid', () => ({
   __esModule: true,
   v4: () => 'test-uuid-' + Math.random().toString(36).substr(2, 9),
   default: {

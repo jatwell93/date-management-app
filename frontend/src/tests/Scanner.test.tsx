@@ -10,7 +10,7 @@ import { useHardwareScan } from '../hooks/useHardwareScan';
 import Quagga from 'quagga';
 
 // Add the CameraScanner mock here
-jest.mock('../components/CameraScanner', () => ({
+vi.mock('../components/CameraScanner', () => ({
   CameraScanner: ({
     onDetected,
     disabled,
@@ -28,36 +28,39 @@ jest.mock('../components/CameraScanner', () => ({
 }));
 
 // Mock Quagga for camera mode
-jest.mock('quagga', () => ({
-  init: jest.fn(),
-  start: jest.fn(),
-  stop: jest.fn(),
-  onDetected: jest.fn(),
-  offDetected: jest.fn(),
-}));
+vi.mock('quagga', () => {
+  const quagga = {
+    init: vi.fn(),
+    start: vi.fn(),
+    stop: vi.fn(),
+    onDetected: vi.fn(),
+    offDetected: vi.fn(),
+  };
+  return { ...quagga, default: quagga };
+});
 
 // Mock `navigator.mediaDevices`
 Object.defineProperty(global.navigator, 'mediaDevices', {
   value: {
-    getUserMedia: jest.fn().mockResolvedValue({
-      getTracks: () => [{ stop: jest.fn() }],
+    getUserMedia: vi.fn().mockResolvedValue({
+      getTracks: () => [{ stop: vi.fn() }],
     }),
   },
   writable: true,
 });
 
 // Mock the useHardwareScan hook
-jest.mock('../hooks/useHardwareScan', () => ({
-  useHardwareScan: jest.fn(),
+vi.mock('../hooks/useHardwareScan', () => ({
+  useHardwareScan: vi.fn(),
 }));
 
 const mockUseHardwareScan = useHardwareScan as jest.MockedFunction<typeof useHardwareScan>;
 
 describe('Scanner', () => {
-  const mockOnScan = jest.fn();
+  const mockOnScan = vi.fn();
 
   beforeEach(() => {
-    jest.clearAllMocks();
+    vi.clearAllMocks();
     // Default mock implementation - hook returns void (no return value)
     mockUseHardwareScan.mockImplementation(() => {
       // No return value - side effect based hook

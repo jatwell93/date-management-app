@@ -16,15 +16,15 @@ describe('DailyMetricsJob', () => {
 
   beforeEach(() => {
     monitoringService = {
-      storeDailyMetrics: jest.fn().mockResolvedValue(undefined),
+      storeDailyMetrics: vi.fn().mockResolvedValue(undefined),
     };
     saasMetricsService = {
-      checkAlerts: jest.fn().mockResolvedValue(undefined),
-      getSaasMetrics: jest.fn().mockResolvedValue(null),
+      checkAlerts: vi.fn().mockResolvedValue(undefined),
+      getSaasMetrics: vi.fn().mockResolvedValue(null),
     };
     jobLockRepository = {
-      acquire: jest.fn().mockResolvedValue(true),
-      release: jest.fn().mockResolvedValue(undefined),
+      acquire: vi.fn().mockResolvedValue(true),
+      release: vi.fn().mockResolvedValue(undefined),
     };
   });
 

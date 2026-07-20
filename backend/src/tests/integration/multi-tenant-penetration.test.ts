@@ -11,12 +11,22 @@
 // Set environment before imports
 process.env.TEST_AUTH_BYPASS = 'false';
 
-// Mock jsonwebtoken to control JWT verification in tests
-const mockJwtVerify = jest.fn();
-jest.mock('jsonwebtoken', () => ({
-  ...jest.requireActual('jsonwebtoken'),
-  verify: mockJwtVerify,
-}));
+// Mock jsonwebtoken to control JWT verification in tests. The mock factory assigns
+// mockJwtVerify directly, and the SUT imports jwt at module-load, so it must be
+// initialized before the hoisted factory runs — lift via vi.hoisted().
+const mockJwtVerify = vi.hoisted(() => vi.fn());
+// Keep the real sign/decode (the test issues real tokens) but stub verify in
+// both the named and default exports — the SUT default-imports jwt and calls
+// jwt.verify, so overriding only the named export would miss it.
+vi.mock('jsonwebtoken', async () => {
+  const actual = await vi.importActual<typeof import('jsonwebtoken')>('jsonwebtoken');
+  const actualDefault = (actual as unknown as { default?: object }).default ?? actual;
+  return {
+    ...actual,
+    verify: mockJwtVerify,
+    default: { ...actualDefault, verify: mockJwtVerify },
+  };
+});
 
 import { PrismaClient } from '@prisma/client';
 import { getDefaultDatabaseClient } from '../../database/database-factory';
@@ -28,12 +38,16 @@ import jwt from 'jsonwebtoken';
 import { authenticateToken, AuthRequest } from '../../middleware/auth.middleware';
 
 // Mock Stripe
-jest.mock('stripe', () => {
-  return jest.fn().mockImplementation(() => ({
-    customers: {
-      create: jest.fn().mockResolvedValue({ id: 'cus_test_pentest' }),
-    },
-  }));
+vi.mock('stripe', () => {
+  // SUT default-imports Stripe; expose the constructor as `default`.
+  const StripeMock = vi.fn().mockImplementation(function () {
+    return {
+      customers: {
+        create: vi.fn().mockResolvedValue({ id: 'cus_test_pentest' }),
+      },
+    };
+  });
+  return { default: StripeMock };
 });
 
 describe('Multi-Tenant Penetration Tests', () => {

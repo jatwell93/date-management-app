@@ -58,15 +58,67 @@ describe('product-import helpers', () => {
         skuHeader: 'Item Code',
         nameHeader: 'Product Name',
         costHeader: 'Unit Price',
+        retailHeader: null,
         barcodeHeader: 'GTIN',
       });
       expect(getProductImportCsvRowValues(row, state)).toEqual({
         sku: 'SKU123',
         name: 'Product',
         costStr: '10.00',
+        retailStr: null,
         barcode: '123456',
       });
       expect(getProductImportCsvUnexpectedColumns(row, state)).toEqual(['Extra']);
+    });
+
+    it('resolves a retail column distinct from cost (CSV)', () => {
+      const row = {
+        SKU: 'SKU123',
+        Name: 'Product',
+        Cost: '10.00',
+        'Retail Price': '25.00',
+        Barcode: '123456',
+      };
+
+      const state = getProductImportCsvColumnState(row);
+
+      expect(state.costHeader).toBe('Cost');
+      expect(state.retailHeader).toBe('Retail Price');
+      // A retail column is a recognised header, so it is not flagged as unexpected.
+      expect(getProductImportCsvUnexpectedColumns(row, state)).toEqual([]);
+      expect(getProductImportCsvRowValues(row, state)).toEqual({
+        sku: 'SKU123',
+        name: 'Product',
+        costStr: '10.00',
+        retailStr: '25.00',
+        barcode: '123456',
+      });
+    });
+
+    it('recognizes retail_price as a retail column in non-streaming imports', () => {
+      const row = {
+        SKU: 'SKU123',
+        Name: 'Product',
+        Cost: '10.00',
+        retail_price: '25.00',
+        Barcode: '123456',
+      };
+      const headers = ['SKU', 'Name', 'Cost', 'retail_price', 'Barcode'];
+
+      const csvState = getProductImportCsvColumnState(row);
+      const xlsxState = getProductImportXlsxColumnState(headers);
+
+      expect(csvState.retailHeader).toBe('retail_price');
+      expect(getProductImportCsvRowValues(row, csvState).retailStr).toBe('25.00');
+      expect(xlsxState.retailColIndex).toBe(3);
+    });
+
+    it('treats "Selling Price" as retail, no longer as cost (XLSX)', () => {
+      const headers = ['SKU', 'Name', 'Cost', 'Selling Price', 'GTIN'];
+      const state = getProductImportXlsxColumnState(headers);
+
+      expect(state.costColIndex).toBe(2);
+      expect(state.retailColIndex).toBe(3);
     });
 
     it('resolves XLSX row state and unexpected columns', () => {
@@ -79,12 +131,14 @@ describe('product-import helpers', () => {
         skuColIndex: 0,
         nameColIndex: 1,
         costColIndex: 2,
+        retailColIndex: null,
         barcodeColIndex: 3,
       });
       expect(getProductImportXlsxRowValues(row, state)).toEqual({
         sku: 'SKU123',
         name: 'Product',
         costStr: '10.00',
+        retailStr: null,
         barcode: '123456',
       });
       expect(getProductImportXlsxUnexpectedColumns(headers, state)).toEqual(['Extra']);
@@ -99,6 +153,7 @@ describe('product-import helpers', () => {
           sku: '',
           name: null,
           costStr: undefined,
+          retailStr: undefined,
           barcode: '',
         },
         unexpectedColumns: [],
@@ -122,6 +177,7 @@ describe('product-import helpers', () => {
           sku: ' SKU-1 ',
           name: ' Product 1 ',
           costStr: ' $1,234.50 ',
+          retailStr: ' $1,999.00 ',
           barcode: ' BAR-1 ',
         },
         unexpectedColumns: [],
@@ -136,8 +192,44 @@ describe('product-import helpers', () => {
           costStr: '$1,234.50',
           barcode: 'BAR-1',
           cost: 1234.5,
+          retail: 1999,
         },
       });
+    });
+
+    it('leaves retail null when the retail column is absent, without erroring', () => {
+      const result = validateProductImportRow({
+        rowNumber: 4,
+        values: {
+          sku: 'SKU-2',
+          name: 'Product 2',
+          costStr: '10.00',
+          retailStr: undefined,
+          barcode: 'BAR-2',
+        },
+        unexpectedColumns: [],
+      });
+
+      expect(result.isValid).toBe(true);
+      if (result.isValid) {
+        expect(result.row.retail).toBeNull();
+      }
+    });
+
+    it('leaves retail null when the retail cell is blank or unparseable', () => {
+      const blank = validateProductImportRow({
+        rowNumber: 5,
+        values: { sku: 'S', name: 'N', costStr: '10', retailStr: '   ', barcode: 'B' },
+        unexpectedColumns: [],
+      });
+      const garbage = validateProductImportRow({
+        rowNumber: 6,
+        values: { sku: 'S', name: 'N', costStr: '10', retailStr: 'n/a', barcode: 'B' },
+        unexpectedColumns: [],
+      });
+
+      expect(blank.isValid && blank.row.retail).toBeNull();
+      expect(garbage.isValid && garbage.row.retail).toBeNull();
     });
 
     it('returns validation errors for invalid cost, length limits, and unexpected columns', () => {
@@ -147,6 +239,7 @@ describe('product-import helpers', () => {
           sku: 'S'.repeat(101),
           name: 'N'.repeat(201),
           costStr: 'not-a-cost',
+          retailStr: undefined,
           barcode: 'B'.repeat(101),
         },
         unexpectedColumns: ['Legacy Notes'],
