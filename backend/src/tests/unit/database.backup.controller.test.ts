@@ -1,23 +1,25 @@
 import { Request, Response } from 'express';
 
-const mockCreateBackup = jest.fn();
-const mockRestoreFromBackup = jest.fn();
-const mockListBackups = jest.fn();
+const mockCreateBackup = vi.fn();
+const mockRestoreFromBackup = vi.fn();
+const mockListBackups = vi.fn();
 
-jest.mock('../../services/database.backup.service', () => ({
-  DatabaseBackupService: jest.fn().mockImplementation(() => ({
-    createBackup: (...args: unknown[]) => mockCreateBackup(...args),
-    restoreFromBackup: (...args: unknown[]) => mockRestoreFromBackup(...args),
-    listBackups: (...args: unknown[]) => mockListBackups(...args),
-  })),
+vi.mock('../../services/database.backup.service', () => ({
+  DatabaseBackupService: vi.fn().mockImplementation(function () {
+    return {
+      createBackup: (...args: unknown[]) => mockCreateBackup(...args),
+      restoreFromBackup: (...args: unknown[]) => mockRestoreFromBackup(...args),
+      listBackups: (...args: unknown[]) => mockListBackups(...args),
+    };
+  }),
 }));
 
-jest.mock('../../utils/logger', () => ({
+vi.mock('../../utils/logger', () => ({
   Logger: {
-    info: jest.fn(),
-    warn: jest.fn(),
-    error: jest.fn(),
-    debug: jest.fn(),
+    info: vi.fn(),
+    warn: vi.fn(),
+    error: vi.fn(),
+    debug: vi.fn(),
   },
 }));
 
@@ -29,14 +31,14 @@ import {
 
 function createMockResponse(): Response {
   const res = {} as Response;
-  res.status = jest.fn().mockReturnValue(res);
-  res.json = jest.fn().mockReturnValue(res);
+  res.status = vi.fn().mockReturnValue(res);
+  res.json = vi.fn().mockReturnValue(res);
   return res;
 }
 
 describe('database.backup.controller', () => {
   beforeEach(() => {
-    jest.clearAllMocks();
+    vi.clearAllMocks();
   });
 
   it('returns 200 with backup metadata when createBackup succeeds', async () => {

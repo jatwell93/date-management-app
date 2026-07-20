@@ -15,6 +15,8 @@ export interface SubscriptionTier {
   trialConvertedAt?: Date;
   status: SubscriptionStatus;
   billingCycle: BillingCycle;
+  cancelAtPeriodEnd?: boolean;
+  currentPeriodEnd?: Date;
   createdAt: Date;
   updatedAt: Date;
 }
@@ -33,4 +35,6 @@ export interface UpdateSubscriptionTierInput {
   billingCycle?: BillingCycle;
   stripeSubscriptionId?: string;
   trialEndDate?: Date;
+  cancelAtPeriodEnd?: boolean;
+  currentPeriodEnd?: Date | null;
 }

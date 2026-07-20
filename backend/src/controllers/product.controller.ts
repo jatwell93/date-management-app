@@ -28,8 +28,7 @@ export class ProductController {
   constructor(
     @inject('ProductServiceFactory')
     private productServiceFactory: (orgId: string) => ProductService,
-  ) {
-  }
+  ) {}
 
   private getService(req: AuthRequest): ProductService {
     if (!req.organizationId) {

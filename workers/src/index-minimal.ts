@@ -9,80 +9,81 @@
  * to separate business logic from Node.js-specific code.
  */
 
-import { Env } from './types/env';
+import { CatalogueImportMessage, Env } from './types/env';
 import { handleHealthCheck } from './health';
 import { createWorkersDatabase } from './database';
 import * as Sentry from '@sentry/cloudflare';
-import { createClerkClient, verifyToken } from '@clerk/backend';
 import {
   resolveInventoryFields,
   getDeprecatedSnakeCaseFields,
   InventoryItemRequestBody,
 } from './utils/inventory-field-mapping';
+import {
+  applyCorsHeaders,
+  errorResponse,
+  getCorsHeaders,
+  handleOptions,
+  jsonResponse,
+  maybeCompressJsonResponse,
+} from './utils/worker-response';
+import {
+  applyRateLimitHeaders,
+  checkRateLimit,
+  inMemoryRateLimitStore,
+} from './utils/minimal-rate-limit';
+import { handleWorkerUploadRoute } from './upload/upload-router';
+import {
+  resolveBootstrapApiRoute,
+  resolveMinimalApiRoute,
+  type MinimalApiRoute,
+} from './minimal-api-routes';
+import type { ValidatedCatalogueRow } from './upload/catalogue-parser';
+import { processExpiryListUpload } from './upload/expiry-import';
+import {
+  parseUploadCompleteBody,
+  parseUploadProcessingSummary,
+  processProductCatalogUpload,
+  processStoredUpload,
+  processCompletedUploadSync,
+  queueCompletedCatalogueUpload,
+  serializeUploadProcessingSummary,
+  type UploadProcessingSummary,
+  userOwnsUploadKey,
+} from './upload/upload-handlers';
+import {
+  enqueueCatalogueImport,
+  failCatalogueImport,
+  isCatalogueWithinLimit,
+  processCatalogueImportJob,
+  takeImportBatch,
+} from './upload/catalogue-import';
+import {
+  authenticateClerkRequest,
+  getClerkAuthorizedParties,
+  handleOrganizationBootstrap,
+} from './clerk/bootstrap-handler';
+import { handleClerkWebhook } from './clerk/webhook-handler';
+import {
+  DEFAULT_MARKDOWN_MATRIX,
+  type MarkdownBasis,
+  type MarkdownMatrixConfig,
+} from '../../shared/domain/markdown';
+import { isCatalogueReviewState } from '../../shared/domain/brand-supplier';
+import {
+  isPolicyWrite,
+  validatePolicyWrite,
+  type PolicyFieldError,
+  type SupplierPolicyRecord,
+} from '../../shared/domain/supplier-policy';
+import { normalizeRole, ROLES } from './constants/roles';
 
-const COMPRESSION_MIN_BYTES = 1024;
 const DIRECT_UPLOAD_THRESHOLD_BYTES = 2 * 1024 * 1024;
 const PRESIGNED_UPLOAD_TTL_SECONDS = 15 * 60;
-const CLERK_WEBHOOK_MAX_SKEW_SECONDS = 5 * 60;
-const inMemoryRateLimitStore = new Map<string, { count: number; resetTime: number }>();
-
-interface RateLimitDecision {
-  allowed: boolean;
-  limit: number;
-  remaining: number;
-  resetTime: number;
-}
-
-/**
- * CORS headers for production
- */
-function getCorsHeaders(env: Env, requestOrigin?: string): HeadersInit {
-  // For development/testing: Allow all origins
-  // In production with real domain, use FRONTEND_URL env var
-  const allowAll = env.NODE_ENV !== 'production' || !env.FRONTEND_URL;
-
-  const allowedOrigin = allowAll
-    ? requestOrigin || '*'
-    : env.FRONTEND_URL || 'http://localhost:3000';
-
-  return {
-    'Access-Control-Allow-Origin': allowedOrigin,
-    'Access-Control-Allow-Methods': 'GET, POST, PUT, PATCH, DELETE, OPTIONS',
-    'Access-Control-Allow-Headers': 'Content-Type, Authorization',
-    'Access-Control-Max-Age': '86400',
-    ...(allowAll ? {} : { 'Access-Control-Allow-Credentials': 'true' }),
-  };
-}
-
-/**
- * Handle CORS preflight requests
- */
-function handleOptions(request: Request, env: Env): Response {
-  const origin = request.headers.get('Origin') || '';
-  return new Response(null, {
-    status: 204,
-    headers: getCorsHeaders(env, origin),
-  });
-}
-
-/**
- * JSON response helper
- */
-function jsonResponse(data: unknown, status = 200, env?: Env, requestOrigin?: string): Response {
-  const headers: HeadersInit = {
-    'Content-Type': 'application/json',
-    ...(env ? getCorsHeaders(env, requestOrigin) : {}),
-  };
-
-  return new Response(JSON.stringify(data), { status, headers });
-}
-
-/**
- * Error response helper
- */
-function errorResponse(message: string, status = 500, env?: Env, requestOrigin?: string): Response {
-  return jsonResponse({ error: message }, status, env, requestOrigin);
-}
+const STANDARD_MAX_FILE_SIZE = 25 * 1024 * 1024;
+// Must stay aligned with `max_retries` on the catalogue queue consumers in wrangler.toml.
+// After this many delivery attempts we mark the job failed (releasing the one-active-import
+// lock) rather than letting it retry forever and dead-letter while stuck in `processing`.
+const MAX_PROCESSING_ATTEMPTS = 5;
 
 // ---- Shared validation helpers ---------------------------------------------
 
@@ -125,6 +126,10 @@ function parsePositiveInt(value: string): number | null {
   return n;
 }
 
+function isPositiveInteger(value: unknown): value is number {
+  return typeof value === 'number' && Number.isInteger(value) && value > 0;
+}
+
 /** ISO calendar date YYYY-MM-DD (no time component). */
 const ISO_DATE_RE = /^\d{4}-\d{2}-\d{2}$/;
 
@@ -144,197 +149,117 @@ function isUniqueViolation(error: unknown): boolean {
   return false;
 }
 
-function requestSupportsGzip(request: Request): boolean {
-  const acceptEncoding = request.headers.get('Accept-Encoding') || '';
-  return acceptEncoding.toLowerCase().includes('gzip');
+// Postgres `undefined_column` (42703) or `undefined_table` (42P01). Guards
+// against a code-before-migration gap: e.g. the products.retail_price column or
+// organization_markdown_config table (#338) not yet applied to the live Neon DB.
+// Detecting it lets callers degrade to cost-only defaults instead of surfacing
+// a raw NeonDbError to the user.
+function isMissingSchemaError(error: unknown): boolean {
+  const hasMissingCode = (value: unknown): boolean =>
+    !!value &&
+    typeof value === 'object' &&
+    ((value as { code?: unknown }).code === '42703' ||
+      (value as { code?: unknown }).code === '42P01');
+  if (hasMissingCode(error)) return true;
+  // Some neon driver wrappers nest the pg error under .cause.
+  return hasMissingCode((error as { cause?: unknown }).cause);
 }
 
-function appendVaryHeader(headers: Headers, value: string): void {
-  const existing = headers.get('Vary');
+export { maybeCompressJsonResponse };
+export { isCatalogueWithinLimit, takeImportBatch };
+export type { ValidatedCatalogueRow };
 
-  if (!existing) {
-    headers.set('Vary', value.toLowerCase());
-    return;
-  }
-
-  const values = existing
-    .split(',')
-    .map((v) => v.trim().toLowerCase())
-    .filter((v) => v.length > 0);
-
-  const newValue = value.toLowerCase();
-
-  if (!values.includes(newValue)) {
-    values.push(newValue);
-  }
-
-  headers.set('Vary', values.join(', '));
-}
-
-export async function maybeCompressJsonResponse(
-  request: Request,
-  response: Response,
-): Promise<Response> {
-  if (!requestSupportsGzip(request)) {
-    return response;
-  }
-
-  if (request.method === 'HEAD') {
-    return response;
-  }
-
-  if (!response.body) {
-    return response;
-  }
-
-  if (response.headers.has('Content-Encoding')) {
-    return response;
-  }
-
-  const contentType = response.headers.get('Content-Type') || '';
-  if (!contentType.toLowerCase().includes('application/json')) {
-    return response;
-  }
-
-  const rawBody = await response.arrayBuffer();
-  if (rawBody.byteLength < COMPRESSION_MIN_BYTES) {
-    return new Response(rawBody, {
-      status: response.status,
-      statusText: response.statusText,
-      headers: response.headers,
-    });
-  }
-
-  const stream = new Blob([rawBody]).stream().pipeThrough(new CompressionStream('gzip'));
-  const headers = new Headers(response.headers);
-  headers.set('Content-Encoding', 'gzip');
-  headers.delete('Content-Length');
-  appendVaryHeader(headers, 'Accept-Encoding');
-
-  return new Response(stream, {
-    encodeBody: 'manual',
-    status: response.status,
-    statusText: response.statusText,
-    headers,
-  });
-}
-
-function getClientIp(request: Request): string {
-  return (
-    request.headers.get('CF-Connecting-IP') ||
-    request.headers.get('X-Forwarded-For')?.split(',')[0].trim() ||
-    'unknown'
-  );
-}
-
-function applyRateLimitHeaders(
-  response: Response,
-  decision: RateLimitDecision,
-  retryAfterSeconds?: number,
-): Response {
-  const headers = new Headers(response.headers);
-  headers.set('X-RateLimit-Limit', String(decision.limit));
-  headers.set('X-RateLimit-Remaining', String(decision.remaining));
-  headers.set('X-RateLimit-Reset', new Date(decision.resetTime).toISOString());
-
-  if (retryAfterSeconds !== undefined) {
-    headers.set('Retry-After', String(retryAfterSeconds));
-  }
-
-  return new Response(response.body, {
-    status: response.status,
-    statusText: response.statusText,
-    headers,
-  });
-}
-
-async function checkRateLimit(request: Request, env: Env): Promise<RateLimitDecision> {
-  const windowMs = parseInt(env.RATE_LIMIT_WINDOW || '60000', 10);
-  const maxAnonymous = parseInt(env.RATE_LIMIT_MAX_REQUESTS || '5', 10);
-  const maxAuthenticated = parseInt(env.RATE_LIMIT_MAX_AUTHENTICATED || '30', 10);
-
-  const pathname = new URL(request.url).pathname;
-  const isPresignedUpload = request.method === 'PUT' && pathname.includes('/upload/presigned/');
-  const isAuthenticated = Boolean(request.headers.get('Authorization')) || isPresignedUpload;
-  const limit = isAuthenticated ? maxAuthenticated : maxAnonymous;
-
-  const ip = getClientIp(request);
-  const keyBase = `${isAuthenticated ? 'auth' : 'anon'}:${ip}`;
-
-  const now = Date.now();
-  const currentWindow = Math.floor(now / windowMs);
-  const previousWindow = currentWindow - 1;
-  const currentKey = `ratelimit:${keyBase}:${currentWindow}`;
-  const previousKey = `ratelimit:${keyBase}:${previousWindow}`;
-  const resetTime = (currentWindow + 1) * windowMs;
-
-  if (env.RATE_LIMITER) {
-    const [currentRaw, previousRaw] = await Promise.all([
-      env.RATE_LIMITER.get(currentKey),
-      env.RATE_LIMITER.get(previousKey),
-    ]);
-
-    const currentCount = Number.parseInt(currentRaw || '0', 10) || 0;
-    const previousCount = Number.parseInt(previousRaw || '0', 10) || 0;
-
-    const elapsedInWindow = now - currentWindow * windowMs;
-    const previousWeight = (windowMs - elapsedInWindow) / windowMs;
-    const effectiveCount = currentCount + previousCount * previousWeight;
-
-    if (effectiveCount + 1 > limit) {
-      return {
-        allowed: false,
-        limit,
-        remaining: 0,
-        resetTime,
-      };
-    }
-
-    const nextCurrentCount = currentCount + 1;
-    await env.RATE_LIMITER.put(currentKey, String(nextCurrentCount), {
-      expirationTtl: Math.ceil((windowMs * 2) / 1000),
-    });
-
-    return {
-      allowed: true,
-      limit,
-      remaining: Math.max(0, Math.floor(limit - (effectiveCount + 1))),
-      resetTime,
-    };
-  }
-
-  const existing = inMemoryRateLimitStore.get(keyBase);
-  if (!existing || now > existing.resetTime) {
-    inMemoryRateLimitStore.set(keyBase, {
-      count: 1,
-      resetTime: now + windowMs,
-    });
-
-    return {
-      allowed: true,
-      limit,
-      remaining: limit - 1,
-      resetTime: now + windowMs,
-    };
-  }
-
-  if (existing.count >= limit) {
-    return {
-      allowed: false,
-      limit,
-      remaining: 0,
-      resetTime: existing.resetTime,
-    };
-  }
-
-  existing.count += 1;
-  return {
-    allowed: true,
-    limit,
-    remaining: limit - existing.count,
-    resetTime: existing.resetTime,
-  };
-}
+// Native Worker API route table. Handlers are referenced directly (function
+// declarations are hoisted) so each appears once and the matcher stays a small,
+// testable module. `kind` is omitted for the common `'static'` shape. Order
+// matters only where patterns could overlap.
+const RE_USER_ID = /^\/api\/users\/\d+$/;
+const RE_INVENTORY_ID = /^\/api\/inventory-items\/\d+$/;
+const RE_STORE_AREA_ID = /^\/api\/store-areas\/\d+$/;
+const RE_STORE_AREA_CHECK_CYCLE_COMPLETE = /^\/api\/store-areas\/check-cycles\/\d+\/complete$/;
+const RE_SUPPLIER_CREDIT_BRAND_SUPPLIER = /^\/api\/supplier-credits\/brands\/\d+\/supplier$/;
+const RE_SUPPLIER_CREDIT_PRODUCT_SUPPLIER = /^\/api\/supplier-credits\/products\/\d+\/supplier$/;
+const RE_SUPPLIER_CREDIT_SUPPLIER = /^\/api\/supplier-credits\/suppliers\/\d+$/;
+const RE_SUPPLIER_CREDIT_SUPPLIER_POLICY = /^\/api\/supplier-credits\/suppliers\/\d+\/policy$/;
+const RE_SUPPLIER_CREDIT_DISPOSE = /^\/api\/supplier-credits\/claimable-pool\/\d+\/dispose$/;
+const RE_PLATFORM_CATALOGUE_CORRECTION = /^\/api\/platform\/catalogue-corrections\/\d+$/;
+const OPEN_CREDIT_CLAIM_STATUSES = ['DRAFT', 'SENDING', 'SENT', 'ACKNOWLEDGED'];
+const SETTLED_CREDIT_CLAIM_STATUSES = ['CREDITED', 'PARTIALLY_CREDITED', 'REJECTED', 'CANCELLED'];
+export const MINIMAL_API_ROUTES: MinimalApiRoute[] = [
+  ['POST', '/api/auth/login', handleLogin],
+  ['POST', '/api/auth/register', handleRegister],
+  ['GET', '/api/users/me', handleGetCurrentUser],
+  ['GET', '/api/users', handleListUsers],
+  ['POST', '/api/users', handleCreateLegacyUser],
+  ['PUT', /^\/api\/users\/\d+\/reset-pin$/, handleResetUserPin],
+  ['PUT', RE_USER_ID, handleUpdateUser, 'path'],
+  ['DELETE', RE_USER_ID, handleDeleteUser, 'path'],
+  ['GET', '/api/products', handleGetProducts],
+  ['POST', '/api/products', handleCreateProduct],
+  ['GET', /^\/api\/products\/by-barcode\/[^/]+$/, handleGetProductByBarcode, 'path'],
+  ['GET', /^\/api\/products\/by-sku\/[^/]+$/, handleGetProductBySku, 'path'],
+  ['GET', /^\/api\/products\/\d+$/, handleGetProduct, 'path'],
+  ['GET', '/api/inventory-items', handleGetInventory],
+  ['POST', '/api/inventory-items', handleCreateInventoryItem],
+  ['GET', /^\/api\/inventory-items\/by-barcode\/[^/]+$/, handleGetInventoryByBarcode, 'path'],
+  [
+    'GET',
+    /^\/api\/inventory-items\/recent\/product\/\d+$/,
+    handleGetRecentInventoryByProduct,
+    'path',
+  ],
+  ['PUT', RE_INVENTORY_ID, handleUpdateInventoryItem, 'path'],
+  ['DELETE', RE_INVENTORY_ID, handleDeleteInventoryItem, 'path'],
+  ['GET', '/api/store-areas', handleGetStoreAreas],
+  ['POST', '/api/store-areas', handleCreateStoreArea],
+  ['GET', '/api/store-areas/check-cycles', handleListCheckCycles],
+  ['POST', '/api/store-areas/check-cycles', handleCreateCheckCycle],
+  ['POST', RE_STORE_AREA_CHECK_CYCLE_COMPLETE, handleCompleteCheckCycle, 'path'],
+  ['POST', '/api/store-areas/bay-checks', handleRecordBayCheck],
+  ['GET', '/api/store-areas/floor-progress', handleGetFloorProgress],
+  ['PUT', RE_STORE_AREA_ID, handleUpdateStoreArea, 'path'],
+  ['DELETE', RE_STORE_AREA_ID, handleDeleteStoreArea, 'path'],
+  ['GET', '/api/dashboard', handleGetDashboard],
+  ['GET', '/api/reports/expiry', handleGetExpiryReport],
+  ['GET', '/api/reports/expiry-overall', handleGetExpiryOverallReport],
+  ['GET', '/api/reports/expiry-details', handleGetExpiryDetailsReport],
+  ['GET', '/api/reports/expiry-entries', handleGetActiveExpiryEntriesReport],
+  ['GET', '/api/reports/daily-usage', handleGetDailyUsageReport],
+  ['GET', '/api/reports/items-by-user', handleGetItemsByUserReport],
+  ['GET', '/api/reports/items-by-date', handleGetItemsByDateReport],
+  ['GET', '/api/reports/store-walk-audit', handleGetStoreWalkAuditReport],
+  ['GET', '/api/reports/loss-by-sku', handleGetLossBySkuReport],
+  ['GET', '/api/reports/loss-by-department', handleGetLossByDepartmentReport],
+  ['GET', '/api/reports/sell-through', handleGetSellThroughReport],
+  ['GET', '/api/expired-items', handleGetExpiredItems],
+  ['GET', '/api/expired-items/reports/expired-losses', handleGetExpiredLossesReport],
+  ['GET', '/api/supplier-credits/suppliers', handleListSuppliers],
+  ['POST', '/api/supplier-credits/suppliers', handleCreateSupplier],
+  ['PUT', RE_SUPPLIER_CREDIT_SUPPLIER, handleReplaceSupplier, 'path'],
+  ['PATCH', RE_SUPPLIER_CREDIT_SUPPLIER, handlePatchSupplier, 'path'],
+  ['DELETE', RE_SUPPLIER_CREDIT_SUPPLIER_POLICY, handleClearSupplierPolicy, 'path'],
+  ['GET', '/api/supplier-credits/policy-review', handlePolicyReview],
+  ['POST', '/api/supplier-credits/policy-review/bulk-attach', handleBulkAttachPolicy],
+  ['POST', '/api/supplier-credits/brands/bulk-link', handleBulkLinkProducts],
+  ['GET', '/api/supplier-credits/brands', handleListBrands],
+  ['GET', '/api/supplier-credits/brand-review', handleBrandReview],
+  ['POST', '/api/supplier-credits/brands', handleAddBrand],
+  ['PUT', RE_SUPPLIER_CREDIT_BRAND_SUPPLIER, handleConfirmBrandSupplier, 'path'],
+  ['PUT', RE_SUPPLIER_CREDIT_PRODUCT_SUPPLIER, handleAssignProductSupplier, 'path'],
+  ['POST', RE_SUPPLIER_CREDIT_DISPOSE, handleDisposeClaimableWriteOff, 'path'],
+  ['GET', '/api/supplier-credits/claimable-pool', handleGetClaimablePool],
+  ['GET', '/api/supplier-credits/recovery-report', handleGetRecoveryReport],
+  ['GET', '/api/supplier-credits/claims', handleListCreditClaims],
+  ['GET', '/api/platform/catalogue-corrections', handleListCatalogueCorrections],
+  ['PATCH', RE_PLATFORM_CATALOGUE_CORRECTION, handleReviewCatalogueCorrection, 'path'],
+  ['POST', '/api/expired-items/process', handleProcessExpiredItem],
+  ['GET', '/api/subscription/current', handleGetCurrentSubscription],
+  ['GET', '/api/subscription/trial-status', handleGetTrialStatus],
+  ['GET', '/api/organization/usage', handleGetOrganizationUsage],
+  ['GET', '/api/markdown-config', handleGetMarkdownConfig],
+  ['PUT', '/api/markdown-config', handleUpdateMarkdownConfig],
+  ['POST', '/api/organization/bootstrap', handleOrganizationBootstrap, 'bootstrap'],
+];
 
 /**
  * Main Workers fetch handler
@@ -354,19 +279,7 @@ export default Sentry.withSentry(
       // that the browser blocks before the developer ever sees the real
       // error message.
       const withCors = (response: Response): Response => {
-        if (response.headers.has('Access-Control-Allow-Origin')) {
-          return response;
-        }
-        const corsHeaders = getCorsHeaders(env, requestOrigin) as Record<string, string>;
-        const merged = new Headers(response.headers);
-        for (const [key, value] of Object.entries(corsHeaders)) {
-          merged.set(key, value);
-        }
-        return new Response(response.body, {
-          status: response.status,
-          statusText: response.statusText,
-          headers: merged,
-        });
+        return applyCorsHeaders(response, env, requestOrigin);
       };
 
       const url = new URL(request.url);
@@ -384,12 +297,6 @@ export default Sentry.withSentry(
       }
 
       try {
-        // Test route for Sentry testing
-        if (pathname === '/api/test-error') {
-          // This will trigger an error that should be captured by Sentry
-          throw new Error('Test error from Cloudflare Workers - this should be captured by Sentry');
-        }
-
         // Health check endpoint (no auth required)
         if (pathname === '/health' || pathname === '/api/health') {
           const healthResponse = await handleHealthCheck(request, env);
@@ -425,7 +332,7 @@ export default Sentry.withSentry(
 
         // API routes
         if (pathname.startsWith('/api/') || pathname.startsWith('/upload/')) {
-          const rateLimitDecision = await checkRateLimit(request, env);
+          const rateLimitDecision = await checkRateLimit(request, env, inMemoryRateLimitStore);
           const finalizeApiResponse = async (responseLike: Response | Promise<Response>) => {
             const response = await responseLike;
             return maybeCompressJsonResponse(
@@ -451,6 +358,16 @@ export default Sentry.withSentry(
             );
           }
 
+          const bootstrapRouteResponse = resolveBootstrapApiRoute(MINIMAL_API_ROUTES, {
+            request,
+            pathname,
+            method,
+            env,
+          });
+          if (bootstrapRouteResponse) {
+            return finalizeApiResponse(bootstrapRouteResponse);
+          }
+
           if (!env.JWT_SECRET?.trim()) {
             const jwtErrorResponse = errorResponse(
               'JWT_SECRET is required',
@@ -461,204 +378,51 @@ export default Sentry.withSentry(
             return finalizeApiResponse(jwtErrorResponse);
           }
 
-          const uploadRouteBase = pathname.startsWith('/api/upload') ? '/api/upload' : '/upload';
-
-          // Workers-native upload endpoints
-          if (method === 'POST' && pathname === `${uploadRouteBase}/initiate`) {
-            return finalizeApiResponse(handleUploadInitiate(request, env, uploadRouteBase));
-          }
-
-          if (method === 'POST' && pathname.startsWith(`${uploadRouteBase}/direct/`)) {
-            const encodedKey = pathname.slice(`${uploadRouteBase}/direct/`.length);
-            if (!encodedKey) {
-              return finalizeApiResponse(
-                errorResponse('Missing key in URL', 400, env, requestOrigin),
-              );
-            }
-            let key: string;
-            try {
-              key = decodeURIComponent(encodedKey);
-            } catch (error) {
-              return finalizeApiResponse(
-                errorResponse('Invalid key encoding', 400, env, requestOrigin),
-              );
-            }
-            return finalizeApiResponse(handleUploadDirect(request, env, key));
-          }
-
-          if (method === 'PUT' && pathname.startsWith(`${uploadRouteBase}/presigned/`)) {
-            const encodedKey = pathname.slice(`${uploadRouteBase}/presigned/`.length);
-            if (!encodedKey) {
-              return finalizeApiResponse(
-                errorResponse('Missing key in URL', 400, env, requestOrigin),
-              );
-            }
-
-            let key: string;
-            try {
-              key = decodeURIComponent(encodedKey);
-            } catch {
-              return finalizeApiResponse(
-                errorResponse('Invalid key encoding', 400, env, requestOrigin),
-              );
-            }
-
-            const uploadToken = url.searchParams.get('token');
-            return finalizeApiResponse(handleUploadPresigned(request, env, key, uploadToken));
-          }
-
-          if (method === 'GET' && pathname.startsWith(`${uploadRouteBase}/status/`)) {
-            const encodedKey = pathname.slice(`${uploadRouteBase}/status/`.length);
-            if (!encodedKey) {
-              return finalizeApiResponse(
-                errorResponse('Missing key in URL', 400, env, requestOrigin),
-              );
-            }
-
-            let key: string;
-            try {
-              key = decodeURIComponent(encodedKey);
-            } catch {
-              return finalizeApiResponse(
-                errorResponse('Invalid key encoding', 400, env, requestOrigin),
-              );
-            }
-
-            return finalizeApiResponse(handleUploadStatus(request, env, key));
-          }
-
-          if (method === 'POST' && pathname === `${uploadRouteBase}/complete`) {
-            return finalizeApiResponse(handleUploadComplete(request, env));
+          let db: Database | null = null;
+          const getDb = (): Database => {
+            db ||= createWorkersDatabase(env);
+            return db;
+          };
+          const uploadResponse = await handleWorkerUploadRoute({
+            request,
+            env,
+            url,
+            pathname,
+            method,
+            requestOrigin,
+            getDb,
+            handlers: {
+              handleUploadInitiate,
+              handleUploadDirect,
+              handleUploadPresigned,
+              handleUploadStatus,
+              handleUploadErrorReport,
+              handleUploadComplete,
+            },
+          });
+          if (uploadResponse) {
+            return finalizeApiResponse(uploadResponse);
           }
 
           // Initialize database connection for remaining API endpoints
-          const db = createWorkersDatabase(env);
+          db = getDb();
 
-          // Route handling
-          switch (true) {
-            // Auth endpoints
-            case pathname === '/api/auth/login' && method === 'POST':
-              return finalizeApiResponse(handleLogin(request, db, env));
+          const apiRouteResponse = resolveMinimalApiRoute(MINIMAL_API_ROUTES, {
+            request,
+            pathname,
+            method,
+            db,
+            env,
+          });
 
-            case pathname === '/api/auth/register' && method === 'POST':
-              return finalizeApiResponse(handleRegister(request, db, env));
-
-            // User endpoints (require auth)
-            case pathname === '/api/users/me' && method === 'GET':
-              return finalizeApiResponse(handleGetCurrentUser(request, db, env));
-
-            case pathname === '/api/users' && method === 'GET':
-              return finalizeApiResponse(handleListUsers(request, db, env));
-
-            case pathname === '/api/users' && method === 'POST':
-              return finalizeApiResponse(handleCreateLegacyUser(request, db, env));
-
-            case pathname.match(/^\/api\/users\/\d+\/reset-pin$/) && method === 'PUT':
-              return finalizeApiResponse(handleResetUserPin(request, db, env));
-
-            case pathname.match(/^\/api\/users\/\d+$/) && method === 'PUT':
-              return finalizeApiResponse(handleUpdateUser(request, db, env, pathname));
-
-            case pathname.match(/^\/api\/users\/\d+$/) && method === 'DELETE':
-              return finalizeApiResponse(handleDeleteUser(request, db, env, pathname));
-
-            // Products endpoints
-            case pathname === '/api/products' && method === 'GET':
-              return finalizeApiResponse(handleGetProducts(request, db, env));
-
-            case pathname === '/api/products' && method === 'POST':
-              return finalizeApiResponse(handleCreateProduct(request, db, env));
-
-            case pathname.match(/^\/api\/products\/by-barcode\/[^/]+$/) && method === 'GET':
-              return finalizeApiResponse(handleGetProductByBarcode(request, db, env, pathname));
-
-            case pathname.match(/^\/api\/products\/by-sku\/[^/]+$/) && method === 'GET':
-              return finalizeApiResponse(handleGetProductBySku(request, db, env, pathname));
-
-            case pathname.match(/^\/api\/products\/\d+$/) && method === 'GET':
-              return finalizeApiResponse(handleGetProduct(request, db, env, pathname));
-
-            // Inventory endpoints
-            case pathname === '/api/inventory-items' && method === 'GET':
-              return finalizeApiResponse(handleGetInventory(request, db, env));
-
-            case pathname === '/api/inventory-items' && method === 'POST':
-              return finalizeApiResponse(handleCreateInventoryItem(request, db, env));
-
-            case pathname.match(/^\/api\/inventory-items\/by-barcode\/[^/]+$/) && method === 'GET':
-              return finalizeApiResponse(handleGetInventoryByBarcode(request, db, env, pathname));
-
-            case pathname.match(/^\/api\/inventory-items\/recent\/product\/\d+$/) &&
-              method === 'GET':
-              return finalizeApiResponse(
-                handleGetRecentInventoryByProduct(request, db, env, pathname),
-              );
-
-            case pathname.match(/^\/api\/inventory-items\/\d+$/) && method === 'PUT':
-              return finalizeApiResponse(handleUpdateInventoryItem(request, db, env, pathname));
-
-            case pathname.match(/^\/api\/inventory-items\/\d+$/) && method === 'DELETE':
-              return finalizeApiResponse(handleDeleteInventoryItem(request, db, env, pathname));
-
-            // Store areas endpoints
-            case pathname === '/api/store-areas' && method === 'GET':
-              return finalizeApiResponse(handleGetStoreAreas(request, db, env));
-
-            case pathname === '/api/store-areas' && method === 'POST':
-              return finalizeApiResponse(handleCreateStoreArea(request, db, env));
-
-            case pathname.match(/^\/api\/store-areas\/\d+$/) && method === 'PUT':
-              return finalizeApiResponse(handleUpdateStoreArea(request, db, env, pathname));
-
-            case pathname.match(/^\/api\/store-areas\/\d+$/) && method === 'DELETE':
-              return finalizeApiResponse(handleDeleteStoreArea(request, db, env, pathname));
-
-            // Dashboard endpoints
-            case pathname === '/api/dashboard' && method === 'GET':
-              return finalizeApiResponse(handleGetDashboard(request, db, env));
-
-            // Report endpoints
-            case pathname === '/api/reports/expiry' && method === 'GET':
-              return finalizeApiResponse(handleGetExpiryReport(request, db, env));
-
-            case pathname === '/api/reports/expiry-overall' && method === 'GET':
-              return finalizeApiResponse(handleGetExpiryOverallReport(request, db, env));
-
-            case pathname === '/api/reports/expiry-details' && method === 'GET':
-              return finalizeApiResponse(handleGetExpiryDetailsReport(request, db, env));
-
-            case pathname === '/api/reports/daily-usage' && method === 'GET':
-              return finalizeApiResponse(handleGetDailyUsageReport(request, db, env));
-
-            case pathname === '/api/reports/items-by-user' && method === 'GET':
-              return finalizeApiResponse(handleGetItemsByUserReport(request, db, env));
-
-            case pathname === '/api/reports/items-by-date' && method === 'GET':
-              return finalizeApiResponse(handleGetItemsByDateReport(request, db, env));
-
-            case pathname === '/api/reports/loss-by-sku' && method === 'GET':
-              return finalizeApiResponse(handleGetLossBySkuReport(request, db, env));
-
-            case pathname === '/api/reports/loss-by-department' && method === 'GET':
-              return finalizeApiResponse(handleGetLossByDepartmentReport(request, db, env));
-
-            // Expired items endpoints
-            case pathname === '/api/expired-items' && method === 'GET':
-              return finalizeApiResponse(handleGetExpiredItems(request, db, env));
-
-            case pathname === '/api/expired-items/process' && method === 'POST':
-              return finalizeApiResponse(handleProcessExpiredItem(request, db, env));
-
-            // Subscription endpoints
-            case pathname === '/api/subscription/trial-status' && method === 'GET':
-              return finalizeApiResponse(handleGetTrialStatus(request, db, env));
-
-            case pathname === '/api/organization/bootstrap' && method === 'POST':
-              return finalizeApiResponse(handleOrganizationBootstrap(request, env));
-
-            default:
-              return finalizeApiResponse(errorResponse('Not Found', 404, env));
-          }
+          // `return await` (not a bare `return`) so a rejected handler promise
+          // surfaces inside this try block and is caught by the outer handler,
+          // which wraps the 500 with CORS headers. A bare `return` adopts the
+          // rejected promise's state at the caller, skipping the catch and
+          // producing a CORS-less 500 the browser masks as a CORS error.
+          return await finalizeApiResponse(
+            apiRouteResponse ?? errorResponse('Not Found', 404, env),
+          );
         }
 
         return withCors(
@@ -693,15 +457,68 @@ export default Sentry.withSentry(
         }
       }
     },
+    async queue(batch: MessageBatch<unknown>, env: Env): Promise<void> {
+      await handleCatalogueImportQueue(batch, env);
+    },
   },
 );
+
+export async function handleCatalogueImportQueue(
+  batch: MessageBatch<unknown>,
+  env: Env,
+  db: Database = createWorkersDatabase(env),
+): Promise<void> {
+  for (const message of batch.messages) {
+    const body = message.body as Partial<CatalogueImportMessage> | null;
+    if (!body || !Number.isInteger(body.uploadId) || Number(body.uploadId) <= 0) {
+      message.ack();
+      continue;
+    }
+    try {
+      await processCatalogueImportJob(Number(body.uploadId), env, db);
+      message.ack();
+    } catch (error) {
+      Sentry.captureException(error, {
+        tags: { feature: 'catalogue-import', action: 'queue-consumer' },
+        extra: { uploadId: body.uploadId, attempts: message.attempts },
+      });
+      // After the final attempt, mark the job failed and ack so the org's
+      // one-active-import lock is released instead of leaving it stuck in
+      // `processing` once the message dead-letters.
+      if (message.attempts >= MAX_PROCESSING_ATTEMPTS) {
+        try {
+          await failCatalogueImport(
+            db,
+            Number(body.uploadId),
+            'processing',
+            'Catalogue import failed after repeated retries',
+          );
+        } catch (failError) {
+          Sentry.captureException(failError, {
+            tags: { feature: 'catalogue-import', action: 'queue-consumer-fail' },
+            extra: { uploadId: body.uploadId },
+          });
+        }
+        message.ack();
+      } else {
+        message.retry();
+      }
+    }
+  }
+}
 
 // =============================================================================
 // API Handlers (Using Neon serverless driver)
 // These use the typed Database interface from database.ts
 // =============================================================================
 
-import { Database } from './database';
+import {
+  Database,
+  type BulkAttachResult,
+  type BulkLinkResult,
+  type Supplier,
+  type SupplierWriteData,
+} from './database';
 import { SignJWT, jwtVerify } from 'jose';
 
 /**
@@ -832,10 +649,15 @@ async function createToken(userId: number, env: Env): Promise<string> {
 /**
  * Create short-lived upload token for presigned strategy
  */
-async function createUploadToken(userId: number, key: string, env: Env): Promise<string> {
+async function createUploadToken(
+  userId: number,
+  key: string,
+  maxFileSize: number,
+  env: Env,
+): Promise<string> {
   const secret = requireJwtSecret(env);
 
-  return await new SignJWT({ userId, key, purpose: 'upload' })
+  return await new SignJWT({ userId, key, maxFileSize, purpose: 'upload' })
     .setProtectedHeader({ alg: 'HS256' })
     .setExpirationTime(`${PRESIGNED_UPLOAD_TTL_SECONDS}s`)
     .setIssuedAt()
@@ -845,7 +667,11 @@ async function createUploadToken(userId: number, key: string, env: Env): Promise
 /**
  * Verify short-lived upload token
  */
-async function verifyUploadToken(token: string, key: string, env: Env): Promise<number | null> {
+async function verifyUploadToken(
+  token: string,
+  key: string,
+  env: Env,
+): Promise<{ userId: number; maxFileSize: number } | null> {
   const secret = requireJwtSecret(env);
 
   try {
@@ -854,6 +680,7 @@ async function verifyUploadToken(token: string, key: string, env: Env): Promise<
     const tokenUserId = Number(payload.userId);
     const tokenKey = typeof payload.key === 'string' ? payload.key : '';
     const tokenPurpose = payload.purpose;
+    const tokenMaxFileSize = Number(payload.maxFileSize);
 
     if (!Number.isFinite(tokenUserId) || tokenUserId <= 0) {
       return null;
@@ -863,7 +690,13 @@ async function verifyUploadToken(token: string, key: string, env: Env): Promise<
       return null;
     }
 
-    return tokenUserId;
+    return {
+      userId: tokenUserId,
+      maxFileSize:
+        Number.isFinite(tokenMaxFileSize) && tokenMaxFileSize > 0
+          ? tokenMaxFileSize
+          : STANDARD_MAX_FILE_SIZE,
+    };
   } catch {
     return null;
   }
@@ -885,933 +718,6 @@ async function authenticateRequest(request: Request, env: Env): Promise<{ userId
     return { userId: payload.userId as number };
   } catch {
     return null;
-  }
-}
-
-interface ClerkSessionClaims {
-  sub?: string;
-  email?: string;
-  username?: string;
-  org_id?: string;
-  org_role?: string;
-  role?: string;
-}
-
-interface ClerkAuthContext {
-  clerkUserId: string;
-  email: string | null;
-  username: string | null;
-  organizationId: string | null;
-  organizationRole: string | null;
-}
-
-interface OrganizationBootstrapBody {
-  organizationName?: string;
-  organizationSlug?: string;
-  clerkOrganizationId?: string;
-  clerkMembershipRole?: string | null;
-}
-
-type BootstrapRoleValue = 'admin' | 'manager' | 'team_member';
-
-const DEFAULT_PAGES_PREVIEW_BASE_HOST = 'date-management-frontend.pages.dev';
-
-function getPagesPreviewBaseHost(env: Env): string {
-  const candidates = [env.FRONTEND_URL];
-  for (const candidate of candidates) {
-    if (!candidate) continue;
-    try {
-      const { hostname } = new URL(candidate);
-      if (hostname.endsWith('.pages.dev')) {
-        return hostname;
-      }
-    } catch {
-      // ignore malformed env values
-    }
-  }
-  return DEFAULT_PAGES_PREVIEW_BASE_HOST;
-}
-
-export function getClerkAuthorizedParties(env: Env, requestOrigin?: string): string[] {
-  const parties = new Set<string>(['http://localhost:3002', 'http://127.0.0.1:3002']);
-
-  if (env.FRONTEND_URL) {
-    parties.add(env.FRONTEND_URL);
-  }
-
-  // In non-production, allow Cloudflare Pages preview deploys whose hostnames
-  // change per build (e.g. https://7f5e6f1a.date-management-frontend.pages.dev).
-  // Scope is restricted to this project's Pages subdomain (derived from
-  // FRONTEND_URL when it is a pages.dev host, otherwise the well-known
-  // project base) and to https only, so an attacker-controlled Origin
-  // header cannot expand the allowlist to arbitrary pages.dev tenants.
-  // Production keeps the strict allowlist defined by FRONTEND_URL.
-  if (env.NODE_ENV !== 'production' && requestOrigin) {
-    try {
-      const url = new URL(requestOrigin);
-      if (url.protocol === 'https:') {
-        const projectBase = getPagesPreviewBaseHost(env);
-        const previewSuffix = `.${projectBase}`;
-        if (url.hostname === projectBase || url.hostname.endsWith(previewSuffix)) {
-          parties.add(`https://${url.hostname}`);
-        }
-      }
-    } catch {
-      // ignore malformed Origin headers
-    }
-  }
-
-  return Array.from(parties);
-}
-
-function normalizeBootstrapRole(role: string | null | undefined): BootstrapRoleValue {
-  if (!role) {
-    return 'team_member';
-  }
-
-  if (
-    role === 'admin' ||
-    role === 'Admin' ||
-    role === 'ADMIN' ||
-    role === 'owner' ||
-    role === 'org:admin'
-  ) {
-    return 'admin';
-  }
-
-  if (role === 'manager' || role === 'Manager' || role === 'MANAGER' || role === 'org:manager') {
-    return 'manager';
-  }
-
-  return 'team_member';
-}
-
-async function authenticateClerkRequest(
-  request: Request,
-  env: Env,
-  requestOrigin?: string,
-): Promise<ClerkAuthContext | Response> {
-  const authHeader = request.headers.get('Authorization');
-  if (!authHeader?.startsWith('Bearer ')) {
-    return errorResponse('Missing or invalid Authorization header', 401, env, requestOrigin);
-  }
-
-  const token = authHeader.slice(7);
-  const secretKey = env.CLERK_SECRET_KEY?.trim();
-
-  if (!secretKey) {
-    return errorResponse('Auth service not configured', 500, env, requestOrigin);
-  }
-
-  try {
-    const payload = (await verifyToken(token, {
-      secretKey,
-      authorizedParties: getClerkAuthorizedParties(env, requestOrigin),
-    })) as ClerkSessionClaims;
-
-    if (!payload.sub) {
-      return errorResponse('Invalid or expired token', 401, env, requestOrigin);
-    }
-
-    return {
-      clerkUserId: payload.sub,
-      email: typeof payload.email === 'string' ? payload.email.toLowerCase() : null,
-      username: typeof payload.username === 'string' ? payload.username : null,
-      organizationId: typeof payload.org_id === 'string' ? payload.org_id : null,
-      organizationRole:
-        typeof payload.org_role === 'string'
-          ? payload.org_role
-          : typeof payload.role === 'string'
-            ? payload.role
-            : null,
-    };
-  } catch (error) {
-    console.error('[ORG_BOOTSTRAP] Clerk token verification failed', error);
-    return errorResponse('Invalid or expired token', 401, env, requestOrigin);
-  }
-}
-
-async function getClerkUserProfile(
-  clerkUserId: string,
-  env: Env,
-): Promise<{ email: string | null; username: string | null }> {
-  const secretKey = env.CLERK_SECRET_KEY?.trim();
-
-  if (!secretKey) {
-    return { email: null, username: null };
-  }
-
-  const clerkClient = createClerkClient({ secretKey });
-  const user = await clerkClient.users.getUser(clerkUserId);
-
-  return {
-    email: user.primaryEmailAddress?.emailAddress?.toLowerCase() ?? null,
-    username: typeof user.username === 'string' ? user.username : null,
-  };
-}
-
-export async function handleOrganizationBootstrap(request: Request, env: Env): Promise<Response> {
-  const requestOrigin = request.headers.get('Origin') || '';
-  const authResult = await authenticateClerkRequest(request, env, requestOrigin);
-
-  if (authResult instanceof Response) {
-    return authResult;
-  }
-
-  let body: OrganizationBootstrapBody = {};
-
-  try {
-    const rawBody = await request.text();
-    body = rawBody ? (JSON.parse(rawBody) as OrganizationBootstrapBody) : {};
-  } catch {
-    return errorResponse('Invalid request body', 400, env, requestOrigin);
-  }
-
-  const missingProfileFields = !authResult.email || !authResult.username;
-  const profile = missingProfileFields
-    ? await getClerkUserProfile(authResult.clerkUserId, env)
-    : { email: null, username: null };
-
-  const email = authResult.email || profile.email;
-  if (!email) {
-    return errorResponse(
-      'Authenticated Clerk user is missing a primary email',
-      400,
-      env,
-      requestOrigin,
-    );
-  }
-
-  const username =
-    authResult.username || profile.username || deriveUsername({}, email, authResult.clerkUserId);
-  const finalClerkOrgId =
-    body.clerkOrganizationId?.trim() ||
-    authResult.organizationId ||
-    `clerk-org-${authResult.clerkUserId}-${Date.now()}`;
-  const finalOrgName = body.organizationName?.trim() || `${email.split('@')[0]}'s Organization`;
-  const finalOrgSlug = sanitizeSlug(
-    body.organizationSlug?.trim() || finalOrgName,
-    `${email.split('@')[0]}-${Date.now()}`.toLowerCase().replace(/[^a-z0-9-]/g, '-'),
-  );
-
-  const db = createWorkersDatabase(env);
-  const existingOrg = await db.sql`
-    SELECT id
-    FROM organizations
-    WHERE clerk_organization_id = ${finalClerkOrgId}
-    LIMIT 1
-  `;
-  const isNewOrg = existingOrg.length === 0;
-  const organizationId = isNewOrg
-    ? await findOrCreateOrganization(
-        db.sql,
-        { id: finalClerkOrgId, name: finalOrgName, slug: finalOrgSlug },
-        email,
-      )
-    : String(existingOrg[0].id);
-
-  const existingUser = await db.sql`
-    SELECT id,
-           organization_id as "organizationId",
-           role
-    FROM users
-    WHERE clerk_user_id = ${authResult.clerkUserId}
-    LIMIT 1
-  `;
-
-  if (existingUser[0]) {
-    return jsonResponse(
-      {
-        userId: Number(existingUser[0].id),
-        organizationId: String(existingUser[0].organizationId),
-        role: normalizeBootstrapRole(String(existingUser[0].role)),
-        isNewOrg: false,
-        isNewUser: false,
-        isFirstAdmin: false,
-      },
-      200,
-      env,
-      requestOrigin,
-    );
-  }
-
-  const activeAdmin = await db.sql`
-    SELECT id
-    FROM users
-    WHERE organization_id = ${organizationId}
-      AND role = 'admin'
-      AND deleted_at IS NULL
-    LIMIT 1
-  `;
-
-  const isFirstAdmin = activeAdmin.length === 0;
-  const assignedRole = isFirstAdmin
-    ? 'admin'
-    : normalizeBootstrapRole(body.clerkMembershipRole ?? authResult.organizationRole);
-
-  await upsertClerkUser(db.sql, {
-    clerkUserId: authResult.clerkUserId,
-    organizationId,
-    role: assignedRole,
-    email,
-    username,
-  });
-
-  await ensureTrialSubscription(db.sql, organizationId);
-
-  const bootstrappedUser = await db.sql`
-    SELECT id,
-           role
-    FROM users
-    WHERE clerk_user_id = ${authResult.clerkUserId}
-    LIMIT 1
-  `;
-
-  if (!bootstrappedUser[0]) {
-    return errorResponse('Failed to bootstrap organization membership', 500, env, requestOrigin);
-  }
-
-  return jsonResponse(
-    {
-      userId: Number(bootstrappedUser[0].id),
-      organizationId,
-      role: normalizeBootstrapRole(String(bootstrappedUser[0].role)),
-      isNewOrg,
-      isNewUser: true,
-      isFirstAdmin,
-    },
-    201,
-    env,
-    requestOrigin,
-  );
-}
-
-type SqlClient = Database['sql'];
-
-interface ClerkWebhookHeaders {
-  id: string;
-  timestamp: string;
-  signature: string;
-}
-
-interface ClerkWebhookEventPayload {
-  type?: string;
-  data?: Record<string, unknown>;
-}
-
-function toBase64(buffer: ArrayBuffer): string {
-  const bytes = new Uint8Array(buffer);
-  let binary = '';
-
-  for (const byte of bytes) {
-    binary += String.fromCharCode(byte);
-  }
-
-  return btoa(binary);
-}
-
-function decodeClerkWebhookSecret(secret: string): Uint8Array {
-  const rawSecret = secret.startsWith('whsec_') ? secret.slice('whsec_'.length) : secret;
-  // Convert URL-safe base64 ('-' and '_') to standard base64 ('+' and '/')
-  // because atob expects the standard base64 alphabet.
-  const normalized = rawSecret.replace(/-/g, '+').replace(/_/g, '/');
-  const padded = normalized + '='.repeat((4 - (normalized.length % 4)) % 4);
-
-  try {
-    const binary = atob(padded);
-    return Uint8Array.from(binary, (char) => char.charCodeAt(0));
-  } catch {
-    // Fallback for non-base64 test/local secrets.
-    return new TextEncoder().encode(rawSecret);
-  }
-}
-
-function timingSafeEqual(a: string, b: string): boolean {
-  if (a.length !== b.length) {
-    return false;
-  }
-
-  let mismatch = 0;
-
-  for (let idx = 0; idx < a.length; idx += 1) {
-    mismatch |= a.charCodeAt(idx) ^ b.charCodeAt(idx);
-  }
-
-  return mismatch === 0;
-}
-
-function extractSvixV1Signatures(signatureHeader: string): string[] {
-  const matches = signatureHeader.matchAll(/v1,([A-Za-z0-9+/=]+)/g);
-  return Array.from(matches, (match) => match[1]);
-}
-
-async function verifyClerkSvixSignature(
-  rawBody: string,
-  headers: ClerkWebhookHeaders,
-  webhookSecret: string,
-): Promise<void> {
-  const timestampSeconds = Number.parseInt(headers.timestamp, 10);
-
-  if (!Number.isFinite(timestampSeconds)) {
-    throw new Error('Invalid svix-timestamp header');
-  }
-
-  const nowSeconds = Math.floor(Date.now() / 1000);
-  if (Math.abs(nowSeconds - timestampSeconds) > CLERK_WEBHOOK_MAX_SKEW_SECONDS) {
-    throw new Error('Webhook timestamp outside allowed window');
-  }
-
-  const message = `${headers.id}.${headers.timestamp}.${rawBody}`;
-  const secretBytes = decodeClerkWebhookSecret(webhookSecret);
-  const key = await crypto.subtle.importKey(
-    'raw',
-    secretBytes,
-    { name: 'HMAC', hash: 'SHA-256' },
-    false,
-    ['sign'],
-  );
-
-  const expectedSignature = toBase64(
-    await crypto.subtle.sign('HMAC', key, new TextEncoder().encode(message)),
-  );
-
-  const candidateSignatures = extractSvixV1Signatures(headers.signature);
-  if (candidateSignatures.length === 0) {
-    throw new Error('Invalid svix-signature header');
-  }
-
-  const isValid = candidateSignatures.some((signature) =>
-    timingSafeEqual(signature, expectedSignature),
-  );
-
-  if (!isValid) {
-    throw new Error('Invalid Clerk webhook signature');
-  }
-}
-
-function sanitizeSlug(value: string, fallback: string): string {
-  const slug = value
-    .toLowerCase()
-    .replace(/[^a-z0-9-]/g, '-')
-    .replace(/-+/g, '-')
-    .replace(/^-|-$/g, '')
-    .slice(0, 48);
-
-  return slug || fallback;
-}
-
-function mapClerkRole(role: unknown): string {
-  if (typeof role !== 'string') {
-    return 'Team Member';
-  }
-
-  if (role === 'admin' || role === 'org:admin') {
-    return 'Manager';
-  }
-
-  return 'Team Member';
-}
-
-function extractPrimaryClerkEmail(data: Record<string, unknown>): string | null {
-  const addresses = Array.isArray(data.email_addresses) ? data.email_addresses : [];
-  const primaryId =
-    typeof data.primary_email_address_id === 'string' ? data.primary_email_address_id : null;
-
-  const pickEmail = (candidate: unknown): string | null => {
-    if (!candidate || typeof candidate !== 'object') {
-      return null;
-    }
-
-    const record = candidate as Record<string, unknown>;
-    return typeof record.email_address === 'string' ? record.email_address.toLowerCase() : null;
-  };
-
-  if (primaryId) {
-    const primary = addresses.find((candidate) => {
-      if (!candidate || typeof candidate !== 'object') {
-        return false;
-      }
-
-      const record = candidate as Record<string, unknown>;
-      return record.id === primaryId;
-    });
-
-    const primaryEmail = pickEmail(primary);
-    if (primaryEmail) {
-      return primaryEmail;
-    }
-  }
-
-  for (const candidate of addresses) {
-    const email = pickEmail(candidate);
-    if (email) {
-      return email;
-    }
-  }
-
-  return null;
-}
-
-function deriveUsername(
-  data: Record<string, unknown>,
-  email: string | null,
-  clerkUserId: string,
-): string {
-  const raw =
-    typeof data.username === 'string' && data.username.trim().length > 0
-      ? data.username.trim()
-      : email?.split('@')[0] || `user-${clerkUserId.slice(-8)}`;
-
-  return sanitizeSlug(raw, `user-${Date.now().toString(36)}`);
-}
-
-async function ensureTrialSubscription(sql: SqlClient, organizationId: string): Promise<void> {
-  const existing = await sql`
-    SELECT id
-    FROM subscription_tiers
-    WHERE organization_id = ${organizationId}
-    LIMIT 1
-  `;
-
-  if (existing.length > 0) {
-    return;
-  }
-
-  await sql`
-    INSERT INTO subscription_tiers (
-      organization_id,
-      tier_level,
-      status,
-      billing_cycle,
-      trial_started_at,
-      trial_end_date,
-      created_at,
-      updated_at
-    ) VALUES (
-      ${organizationId},
-      'starter',
-      'trialing',
-      'monthly',
-      NOW(),
-      NOW() + INTERVAL '14 days',
-      NOW(),
-      NOW()
-    )
-  `;
-}
-
-async function findOrCreateOrganization(
-  sql: SqlClient,
-  clerkOrganization: Record<string, unknown> | null,
-  fallbackEmail?: string | null,
-): Promise<string> {
-  const clerkOrganizationId =
-    clerkOrganization && typeof clerkOrganization.id === 'string' ? clerkOrganization.id : null;
-
-  if (clerkOrganizationId) {
-    const existing = await sql`
-      SELECT id
-      FROM organizations
-      WHERE clerk_organization_id = ${clerkOrganizationId}
-      LIMIT 1
-    `;
-
-    if (existing[0]?.id) {
-      return String(existing[0].id);
-    }
-  }
-
-  const fallbackLabel = fallbackEmail?.split('@')[0] || 'organization';
-  const providedName =
-    clerkOrganization && typeof clerkOrganization.name === 'string' ? clerkOrganization.name : null;
-  const orgName = providedName || `${fallbackLabel}'s Organization`;
-
-  const providedSlug =
-    clerkOrganization && typeof clerkOrganization.slug === 'string' ? clerkOrganization.slug : null;
-  const baseSlug = sanitizeSlug(
-    providedSlug || orgName || clerkOrganizationId || fallbackLabel,
-    `org-${crypto.randomUUID().slice(0, 8)}`,
-  );
-
-  for (let attempt = 0; attempt < 5; attempt += 1) {
-    const slug =
-      attempt === 0 ? baseSlug : `${baseSlug}-${crypto.randomUUID().slice(0, 8)}-${attempt}`;
-
-    // Prisma's @default(uuid()) generates the UUID in the JS layer rather than
-    // creating a SQL DEFAULT, so the organizations.id column has no DB default.
-    // Raw SQL inserts must supply the id explicitly.
-    const newOrgId = crypto.randomUUID();
-    try {
-      const rows = await sql`
-        INSERT INTO organizations (
-          id,
-          clerk_organization_id,
-          name,
-          slug,
-          contact_email,
-          created_at,
-          updated_at
-        ) VALUES (
-          ${newOrgId},
-          ${clerkOrganizationId},
-          ${orgName},
-          ${slug},
-          ${fallbackEmail || null},
-          NOW(),
-          NOW()
-        )
-        RETURNING id
-      `;
-
-      if (rows[0]?.id) {
-        return String(rows[0].id);
-      }
-    } catch (error) {
-      const code = (error as { code?: string }).code;
-      if (code === '23505') {
-        continue;
-      }
-      throw error;
-    }
-  }
-
-  throw new Error('Unable to create organization for Clerk webhook event');
-}
-
-async function upsertClerkUser(
-  sql: SqlClient,
-  options: {
-    clerkUserId: string;
-    organizationId: string;
-    role: string;
-    email?: string | null;
-    username?: string | null;
-  },
-): Promise<void> {
-  const { clerkUserId, organizationId, role, email = null, username = null } = options;
-
-  try {
-    await sql`
-      INSERT INTO users (
-        organization_id,
-        clerk_user_id,
-        email,
-        username,
-        role,
-        created_at,
-        updated_at
-      ) VALUES (
-        ${organizationId},
-        ${clerkUserId},
-        ${email},
-        ${username},
-        ${role},
-        NOW(),
-        NOW()
-      )
-      ON CONFLICT (clerk_user_id)
-      DO UPDATE SET
-        organization_id = EXCLUDED.organization_id,
-        email = COALESCE(EXCLUDED.email, users.email),
-        username = COALESCE(EXCLUDED.username, users.username),
-        role = EXCLUDED.role,
-        deleted_at = NULL,
-        updated_at = NOW()
-    `;
-    return;
-  } catch (error) {
-    const code = (error as { code?: string }).code;
-    if (code !== '23505' || !email) {
-      throw error;
-    }
-  }
-
-  const updatedExisting = await sql`
-    UPDATE users
-    SET
-      clerk_user_id = ${clerkUserId},
-      organization_id = ${organizationId},
-      username = COALESCE(${username}, username),
-      role = ${role},
-      updated_at = NOW()
-    WHERE organization_id = ${organizationId}
-      AND LOWER(email) = LOWER(${email})
-    RETURNING id
-  `;
-
-  if (updatedExisting.length === 0) {
-    throw new Error('Unable to upsert Clerk user');
-  }
-}
-
-async function processClerkWebhookEvent(
-  sql: SqlClient,
-  event: ClerkWebhookEventPayload,
-): Promise<void> {
-  const eventType = typeof event.type === 'string' ? event.type : 'unknown';
-  const data =
-    event.data && typeof event.data === 'object' ? (event.data as Record<string, unknown>) : {};
-
-  switch (eventType) {
-    case 'user.created': {
-      const clerkUserId = typeof data.id === 'string' ? data.id : null;
-      if (!clerkUserId) {
-        return;
-      }
-
-      const primaryEmail = extractPrimaryClerkEmail(data);
-      const memberships = Array.isArray(data.organization_memberships)
-        ? data.organization_memberships
-        : [];
-      const firstMembership = memberships.find((item) => item && typeof item === 'object') as
-        | Record<string, unknown>
-        | undefined;
-      const orgPayload =
-        firstMembership && typeof firstMembership.organization === 'object'
-          ? (firstMembership.organization as Record<string, unknown>)
-          : null;
-
-      const organizationId = await findOrCreateOrganization(sql, orgPayload, primaryEmail);
-      const username = deriveUsername(data, primaryEmail, clerkUserId);
-      const role = mapClerkRole(firstMembership?.role);
-
-      await upsertClerkUser(sql, {
-        clerkUserId,
-        organizationId,
-        role,
-        email: primaryEmail,
-        username,
-      });
-
-      await ensureTrialSubscription(sql, organizationId);
-      return;
-    }
-
-    case 'user.updated': {
-      const clerkUserId = typeof data.id === 'string' ? data.id : null;
-      if (!clerkUserId) {
-        return;
-      }
-
-      const primaryEmail = extractPrimaryClerkEmail(data);
-      const memberships = Array.isArray(data.organization_memberships)
-        ? data.organization_memberships
-        : [];
-      const firstMembership = memberships.find((item) => item && typeof item === 'object') as
-        | Record<string, unknown>
-        | undefined;
-      const orgPayload =
-        firstMembership && typeof firstMembership.organization === 'object'
-          ? (firstMembership.organization as Record<string, unknown>)
-          : null;
-      const organizationId = await findOrCreateOrganization(sql, orgPayload, primaryEmail);
-
-      await upsertClerkUser(sql, {
-        clerkUserId,
-        organizationId,
-        role: mapClerkRole(firstMembership?.role),
-        email: primaryEmail,
-        username: deriveUsername(data, primaryEmail, clerkUserId),
-      });
-
-      return;
-    }
-
-    case 'organization.created':
-    case 'organization.updated': {
-      await findOrCreateOrganization(sql, data, null);
-      return;
-    }
-
-    case 'organizationMembership.created': {
-      const publicUserData = data.public_user_data as Record<string, unknown> | undefined;
-      const clerkUserId =
-        publicUserData && typeof publicUserData.user_id === 'string'
-          ? publicUserData.user_id
-          : null;
-
-      const organizationPayload =
-        data.organization && typeof data.organization === 'object'
-          ? (data.organization as Record<string, unknown>)
-          : null;
-
-      if (!clerkUserId || !organizationPayload) {
-        return;
-      }
-
-      const identifier =
-        publicUserData && typeof publicUserData.identifier === 'string'
-          ? publicUserData.identifier.toLowerCase()
-          : null;
-      const organizationId = await findOrCreateOrganization(sql, organizationPayload, identifier);
-      const role = mapClerkRole(data.role);
-
-      const updated = await sql`
-        UPDATE users
-        SET
-          organization_id = ${organizationId},
-          role = ${role},
-          deleted_at = NULL,
-          updated_at = NOW()
-        WHERE clerk_user_id = ${clerkUserId}
-        RETURNING id
-      `;
-
-      if (updated.length === 0 && identifier) {
-        await upsertClerkUser(sql, {
-          clerkUserId,
-          organizationId,
-          role,
-          email: identifier,
-          username: sanitizeSlug(identifier.split('@')[0], `user-${Date.now().toString(36)}`),
-        });
-      }
-
-      await ensureTrialSubscription(sql, organizationId);
-      return;
-    }
-
-    case 'organizationMembership.deleted': {
-      const publicUserData = data.public_user_data as Record<string, unknown> | undefined;
-      const clerkUserId =
-        publicUserData && typeof publicUserData.user_id === 'string'
-          ? publicUserData.user_id
-          : null;
-      const organizationPayload =
-        data.organization && typeof data.organization === 'object'
-          ? (data.organization as Record<string, unknown>)
-          : null;
-
-      if (!clerkUserId) {
-        return;
-      }
-
-      const clerkOrganizationId =
-        organizationPayload && typeof organizationPayload.id === 'string'
-          ? organizationPayload.id
-          : null;
-
-      if (clerkOrganizationId) {
-        const orgRows = await sql`
-          SELECT id
-          FROM organizations
-          WHERE clerk_organization_id = ${clerkOrganizationId}
-          LIMIT 1
-        `;
-
-        if (orgRows[0]?.id) {
-          await sql`
-            UPDATE users
-            SET
-              deleted_at = NOW(),
-              updated_at = NOW()
-            WHERE clerk_user_id = ${clerkUserId}
-              AND organization_id = ${String(orgRows[0].id)}
-          `;
-          return;
-        }
-      }
-
-      await sql`
-        UPDATE users
-        SET
-          deleted_at = NOW(),
-          updated_at = NOW()
-        WHERE clerk_user_id = ${clerkUserId}
-      `;
-      return;
-    }
-
-    default:
-      // Ignore unhandled events, but keep idempotency tracking.
-      return;
-  }
-}
-
-async function isNewClerkWebhookEvent(sql: SqlClient, eventId: string): Promise<boolean> {
-  const rows = await sql`
-    SELECT id
-    FROM clerk_webhook_events
-    WHERE id = ${eventId}
-    LIMIT 1
-  `;
-
-  return rows.length === 0;
-}
-
-async function markClerkWebhookEventProcessed(
-  sql: SqlClient,
-  eventId: string,
-  eventType: string,
-): Promise<void> {
-  await sql`
-    INSERT INTO clerk_webhook_events (id, event_type, processed_at)
-    VALUES (${eventId}, ${eventType}, NOW())
-    ON CONFLICT (id) DO NOTHING
-  `;
-}
-
-async function handleClerkWebhook(
-  request: Request,
-  env: Env,
-  requestOrigin?: string,
-): Promise<Response> {
-  const headers: ClerkWebhookHeaders = {
-    id: request.headers.get('svix-id') || '',
-    timestamp: request.headers.get('svix-timestamp') || '',
-    signature: request.headers.get('svix-signature') || '',
-  };
-
-  if (!headers.id || !headers.timestamp || !headers.signature) {
-    return errorResponse('Missing required Svix headers', 400, env, requestOrigin);
-  }
-
-  const webhookSecret = env.CLERK_WEBHOOK_SECRET?.trim();
-  if (!webhookSecret) {
-    return errorResponse('CLERK_WEBHOOK_SECRET is not configured', 500, env, requestOrigin);
-  }
-
-  const rawBody = await request.text();
-
-  try {
-    await verifyClerkSvixSignature(rawBody, headers, webhookSecret);
-  } catch (error) {
-    const message = error instanceof Error ? error.message : 'Signature verification failed';
-    console.error('[CLERK_WEBHOOK] Signature verification failed', {
-      message,
-      eventId: headers.id,
-    });
-    return errorResponse(message, 400, env, requestOrigin);
-  }
-
-  let event: ClerkWebhookEventPayload;
-  try {
-    event = JSON.parse(rawBody) as ClerkWebhookEventPayload;
-  } catch {
-    return errorResponse('Invalid webhook payload', 400, env, requestOrigin);
-  }
-
-  const eventType = typeof event.type === 'string' ? event.type : 'unknown';
-
-  try {
-    const db = createWorkersDatabase(env);
-    const isNew = await isNewClerkWebhookEvent(db.sql, headers.id);
-
-    if (!isNew) {
-      return jsonResponse({ received: true }, 200, env, requestOrigin);
-    }
-
-    await processClerkWebhookEvent(db.sql, event);
-    await markClerkWebhookEventProcessed(db.sql, headers.id, eventType);
-
-    return jsonResponse({ received: true }, 200, env, requestOrigin);
-  } catch (error) {
-    console.error('[CLERK_WEBHOOK] Error processing webhook event', {
-      eventId: headers.id,
-      eventType,
-      error: error instanceof Error ? error.message : 'unknown',
-    });
-    return errorResponse('Error processing Clerk webhook event', 500, env, requestOrigin);
   }
 }
 
@@ -2062,6 +968,128 @@ async function handleGetStoreAreas(request: Request, db: Database, env: Env): Pr
 }
 
 /**
+ * GET /api/store-areas/check-cycles
+ */
+async function handleListCheckCycles(request: Request, db: Database, env: Env): Promise<Response> {
+  const auth = await authenticateApiRequest(request, env, db);
+  if (auth instanceof Response) return auth;
+
+  const cycles = await db.listCheckCycles(auth.organizationId);
+  return jsonResponse(cycles, 200, env);
+}
+
+/**
+ * POST /api/store-areas/check-cycles
+ */
+async function handleCreateCheckCycle(request: Request, db: Database, env: Env): Promise<Response> {
+  const auth = await authenticateApiRequest(request, env, db);
+  if (auth instanceof Response) return auth;
+
+  const body = (await request.json()) as { name?: string; startedAt?: string };
+  if (!body.name || typeof body.name !== 'string' || body.name.trim().length === 0) {
+    return errorResponse('Missing required field: name', 400, env);
+  }
+
+  try {
+    const cycle = await db.createCheckCycle(auth.organizationId, {
+      name: body.name.trim(),
+      startedAt: body.startedAt,
+    });
+    return jsonResponse(cycle, 201, env);
+  } catch (error) {
+    const message = error instanceof Error ? error.message : 'Internal server error';
+    if (message.includes('Active check cycle already exists')) {
+      return errorResponse(message, 409, env);
+    }
+    console.error('handleCreateCheckCycle error:', error);
+    return errorResponse('Internal server error', 500, env);
+  }
+}
+
+/**
+ * POST /api/store-areas/check-cycles/:id/complete
+ */
+async function handleCompleteCheckCycle(
+  request: Request,
+  db: Database,
+  env: Env,
+  pathname: string,
+): Promise<Response> {
+  const auth = await authenticateApiRequest(request, env, db);
+  if (auth instanceof Response) return auth;
+
+  const match = pathname.match(/^\/api\/store-areas\/check-cycles\/(\d+)\/complete$/);
+  if (!match) {
+    return errorResponse('Invalid check cycle id', 400, env);
+  }
+
+  try {
+    const cycle = await db.completeCheckCycle(auth.organizationId, parseInt(match[1], 10));
+    return jsonResponse(cycle, 200, env);
+  } catch (error) {
+    const message = error instanceof Error ? error.message : 'Internal server error';
+    if (message.includes('not found')) {
+      return errorResponse(message, 404, env);
+    }
+    console.error('handleCompleteCheckCycle error:', error);
+    return errorResponse('Internal server error', 500, env);
+  }
+}
+
+/**
+ * POST /api/store-areas/bay-checks
+ */
+async function handleRecordBayCheck(request: Request, db: Database, env: Env): Promise<Response> {
+  const auth = await authenticateApiRequest(request, env, db);
+  if (auth instanceof Response) return auth;
+
+  const body = (await request.json()) as {
+    storeAreaId?: number;
+    store_area_id?: number;
+    checkedAt?: string;
+    checked_at?: string;
+    itemsAddedCount?: number;
+    items_added_count?: number;
+    notes?: string | null;
+  };
+  const storeAreaId = body.storeAreaId ?? body.store_area_id;
+  if (!Number.isInteger(storeAreaId) || Number(storeAreaId) <= 0) {
+    return errorResponse('Missing required field: storeAreaId', 400, env);
+  }
+
+  try {
+    const check = await db.recordBayCheck(auth.organizationId, auth.userId, {
+      storeAreaId: Number(storeAreaId),
+      checkedAt: body.checkedAt ?? body.checked_at,
+      itemsAddedCount: body.itemsAddedCount ?? body.items_added_count,
+      notes: body.notes,
+    });
+    return jsonResponse(check, 201, env);
+  } catch (error) {
+    const message = error instanceof Error ? error.message : 'Internal server error';
+    if (message.includes('Active check cycle is required')) {
+      return errorResponse(message, 409, env);
+    }
+    if (message.includes('leaf bay')) {
+      return errorResponse(message, 400, env);
+    }
+    console.error('handleRecordBayCheck error:', error);
+    return errorResponse('Internal server error', 500, env);
+  }
+}
+
+/**
+ * GET /api/store-areas/floor-progress
+ */
+async function handleGetFloorProgress(request: Request, db: Database, env: Env): Promise<Response> {
+  const auth = await authenticateApiRequest(request, env, db);
+  if (auth instanceof Response) return auth;
+
+  const progress = await db.getFloorProgress(auth.organizationId);
+  return jsonResponse(progress, 200, env);
+}
+
+/**
  * GET /api/dashboard
  */
 async function handleGetDashboard(request: Request, db: Database, env: Env): Promise<Response> {
@@ -2070,9 +1098,26 @@ async function handleGetDashboard(request: Request, db: Database, env: Env): Pro
     return auth;
   }
 
-  const stats = await db.getDashboardStats();
+  const [stats, lastCatalogueUpload, expiredItemsEnteredToday, stockLossLast30Days] =
+    await Promise.all([
+      db.getDashboardStats(auth.organizationId),
+      db.getLastCatalogueUpload(auth.organizationId),
+      db.getExpiredItemsEnteredToday(auth.organizationId),
+      db.getStockLossLast30Days(auth.organizationId),
+    ]);
 
-  return jsonResponse({ stats }, 200, env);
+  return jsonResponse(
+    {
+      stats,
+      activity: {
+        lastCatalogueUpload,
+        expiredItemsEnteredToday,
+        stockLossLast30Days,
+      },
+    },
+    200,
+    env,
+  );
 }
 
 /**
@@ -2081,7 +1126,7 @@ async function handleGetDashboard(request: Request, db: Database, env: Env): Pro
 async function handleGetExpiryReport(request: Request, db: Database, env: Env): Promise<Response> {
   const auth = await authenticateApiRequest(request, env, db);
   if (auth instanceof Response) return auth;
-  const report = await db.getMonthlyExpiryReport();
+  const report = await db.getMonthlyExpiryReport(auth.organizationId);
   return jsonResponse(report, 200, env);
 }
 
@@ -2095,7 +1140,7 @@ async function handleGetExpiryOverallReport(
 ): Promise<Response> {
   const auth = await authenticateApiRequest(request, env, db);
   if (auth instanceof Response) return auth;
-  const report = await db.getOverallExpiryReport();
+  const report = await db.getOverallExpiryReport(auth.organizationId);
   return jsonResponse(report, 200, env);
 }
 
@@ -2109,7 +1154,21 @@ async function handleGetExpiryDetailsReport(
 ): Promise<Response> {
   const auth = await authenticateApiRequest(request, env, db);
   if (auth instanceof Response) return auth;
-  const report = await db.getDetailedExpiryReport();
+  const report = await db.getDetailedExpiryReport(auth.organizationId);
+  return jsonResponse(report, 200, env);
+}
+
+/**
+ * GET /api/reports/expiry-entries
+ */
+async function handleGetActiveExpiryEntriesReport(
+  request: Request,
+  db: Database,
+  env: Env,
+): Promise<Response> {
+  const auth = await authenticateApiRequest(request, env, db);
+  if (auth instanceof Response) return auth;
+  const report = await db.getActiveExpiryEntries(auth.organizationId);
   return jsonResponse(report, 200, env);
 }
 
@@ -2123,7 +1182,7 @@ async function handleGetDailyUsageReport(
 ): Promise<Response> {
   const auth = await authenticateApiRequest(request, env, db);
   if (auth instanceof Response) return auth;
-  const report = await db.getDailyUsageReport();
+  const report = await db.getDailyUsageReport(auth.organizationId);
   return jsonResponse(report, 200, env);
 }
 
@@ -2139,7 +1198,7 @@ async function handleGetItemsByUserReport(
   if (auth instanceof Response) return auth;
   const url = new URL(request.url);
   const timeFrame = url.searchParams.get('timeFrame') || undefined;
-  const report = await db.getItemsByUserReport(timeFrame);
+  const report = await db.getItemsByUserReport(auth.organizationId, timeFrame);
   return jsonResponse(report, 200, env);
 }
 
@@ -2153,7 +1212,21 @@ async function handleGetItemsByDateReport(
 ): Promise<Response> {
   const auth = await authenticateApiRequest(request, env, db);
   if (auth instanceof Response) return auth;
-  const report = await db.getItemsByDateReport();
+  const report = await db.getItemsByDateReport(auth.organizationId);
+  return jsonResponse(report, 200, env);
+}
+
+/**
+ * GET /api/reports/store-walk-audit
+ */
+async function handleGetStoreWalkAuditReport(
+  request: Request,
+  db: Database,
+  env: Env,
+): Promise<Response> {
+  const auth = await authenticateApiRequest(request, env, db);
+  if (auth instanceof Response) return auth;
+  const report = await db.getStoreWalkAuditReport(auth.organizationId);
   return jsonResponse(report, 200, env);
 }
 
@@ -2167,7 +1240,21 @@ async function handleGetLossBySkuReport(
 ): Promise<Response> {
   const auth = await authenticateApiRequest(request, env, db);
   if (auth instanceof Response) return auth;
-  const report = await db.getLossBySkuReport();
+  const report = await db.getLossBySkuReport(auth.organizationId);
+  return jsonResponse(report, 200, env);
+}
+
+/**
+ * GET /api/reports/sell-through
+ */
+async function handleGetSellThroughReport(
+  request: Request,
+  db: Database,
+  env: Env,
+): Promise<Response> {
+  const auth = await authenticateApiRequest(request, env, db);
+  if (auth instanceof Response) return auth;
+  const report = await db.getSellThroughByMarkdownLevel(auth.organizationId);
   return jsonResponse(report, 200, env);
 }
 
@@ -2181,7 +1268,7 @@ async function handleGetLossByDepartmentReport(
 ): Promise<Response> {
   const auth = await authenticateApiRequest(request, env, db);
   if (auth instanceof Response) return auth;
-  const report = await db.getLossByDepartmentReport();
+  const report = await db.getLossByDepartmentReport(auth.organizationId);
   return jsonResponse(report, 200, env);
 }
 
@@ -2191,8 +1278,905 @@ async function handleGetLossByDepartmentReport(
 async function handleGetExpiredItems(request: Request, db: Database, env: Env): Promise<Response> {
   const auth = await authenticateApiRequest(request, env, db);
   if (auth instanceof Response) return auth;
-  const items = await db.getExpiredItems();
+  const items = await db.getExpiredItems(auth.organizationId);
   return jsonResponse(items, 200, env);
+}
+
+/**
+ * GET /api/expired-items/reports/expired-losses
+ */
+async function handleGetExpiredLossesReport(
+  request: Request,
+  db: Database,
+  env: Env,
+): Promise<Response> {
+  const auth = await authenticateApiRequest(request, env, db);
+  if (auth instanceof Response) return auth;
+  const [lossesBySKU, lossesByStoreArea] = await Promise.all([
+    db.getExpiredLossBySku(auth.organizationId),
+    db.getExpiredLossByStoreArea(auth.organizationId),
+  ]);
+  return jsonResponse({ lossesBySKU, lossesByStoreArea }, 200, env);
+}
+
+/**
+ * GET /api/supplier-credits/suppliers
+ */
+async function handleListSuppliers(request: Request, db: Database, env: Env): Promise<Response> {
+  const auth = await authenticateApiRequest(request, env, db);
+  if (auth instanceof Response) return auth;
+
+  const suppliers = await db.listSuppliers(auth.organizationId);
+  return jsonResponse(suppliers, 200, env);
+}
+
+type SupplierInput = Partial<
+  Pick<
+    SupplierWriteData,
+    | 'name'
+    | 'contactEmail'
+    | 'contactPhone'
+    | 'creditPolicyNote'
+    | 'policyWriteOffQty'
+    | 'policyCreditQty'
+    | 'followUpDays'
+    | 'representativeName'
+    | 'representativeEmail'
+  >
+>;
+
+interface StructuredErrorOptions {
+  code: string;
+  message: string;
+  statusCode: number;
+  errors?: Array<{ field: string; message: string }>;
+}
+
+function structuredErrorResponse(options: StructuredErrorOptions, env: Env): Response {
+  const { code, message, statusCode, errors } = options;
+  return jsonResponse(
+    { code, message, statusCode, ...(errors?.length ? { errors } : {}) },
+    statusCode,
+    env,
+  );
+}
+
+function policyValidationResponse(
+  message: string,
+  errors: Array<{ field: string; message: string }>,
+  env: Env,
+): Response {
+  return structuredErrorResponse(
+    { code: 'POLICY_VALIDATION_ERROR', message, statusCode: 422, errors },
+    env,
+  );
+}
+
+function normalizeOptionalText(value: string | null | undefined): string | null {
+  return value?.trim() || null;
+}
+
+function isEmail(value: string): boolean {
+  return /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(value);
+}
+
+type SupplierFieldError = { field: string; message: string };
+type SupplierTextField = 'name' | 'creditPolicyNote' | 'contactPhone' | 'representativeName';
+
+function parseSupplierTextField(
+  body: Record<string, unknown>,
+  input: SupplierInput,
+  errors: SupplierFieldError[],
+  field: SupplierTextField,
+  options: { max: number; nullable: boolean },
+): void {
+  const value = body[field];
+  if (value === undefined) return;
+  if (value === null && options.nullable) {
+    (input as Record<string, unknown>)[field] = value;
+    return;
+  }
+  if (typeof value !== 'string') {
+    errors.push({ field, message: 'Must be a string' });
+    return;
+  }
+  if (value.length > options.max) {
+    errors.push({ field, message: `Must be at most ${options.max} characters` });
+    return;
+  }
+  input[field] = value;
+}
+
+function parseSupplierEmailField(
+  body: Record<string, unknown>,
+  input: SupplierInput,
+  errors: SupplierFieldError[],
+  field: 'contactEmail' | 'representativeEmail',
+): void {
+  const value = body[field];
+  if (value === undefined) return;
+  if (value === null) {
+    input[field] = value;
+    return;
+  }
+  if (typeof value !== 'string' || value.length > 255 || !isEmail(value.trim())) {
+    errors.push({ field, message: 'Must be a valid email address' });
+    return;
+  }
+  input[field] = value;
+}
+
+function parseSupplierQuantityField(
+  body: Record<string, unknown>,
+  input: SupplierInput,
+  errors: SupplierFieldError[],
+  field: 'policyWriteOffQty' | 'policyCreditQty',
+): void {
+  const value = body[field];
+  if (value === undefined) return;
+  if (!isValidSupplierQuantity(field, value)) {
+    errors.push({
+      field,
+      message:
+        field === 'policyCreditQty'
+          ? 'Must be a non-negative integer or null'
+          : 'Must be a positive integer or null',
+    });
+    return;
+  }
+  input[field] = value;
+}
+
+function isValidSupplierQuantity(
+  field: 'policyWriteOffQty' | 'policyCreditQty',
+  value: unknown,
+): value is number | null {
+  if (value === null) return true;
+  if (typeof value !== 'number' || !Number.isInteger(value)) return false;
+  return field === 'policyCreditQty' ? value >= 0 : value > 0;
+}
+
+function parseFollowUpDays(
+  body: Record<string, unknown>,
+  input: SupplierInput,
+  errors: SupplierFieldError[],
+): void {
+  const value = body.followUpDays;
+  if (value === undefined) return;
+  if (!isPositiveInteger(value) || value > 365) {
+    errors.push({ field: 'followUpDays', message: 'Must be an integer between 1 and 365' });
+    return;
+  }
+  input.followUpDays = value;
+}
+
+function validateSupplierName(
+  input: SupplierInput,
+  errors: SupplierFieldError[],
+  requireName: boolean,
+): void {
+  if (typeof input.name !== 'string' || input.name.trim().length === 0) {
+    if (requireName || input.name !== undefined) {
+      errors.push({ field: 'name', message: 'Supplier name is required' });
+    }
+    return;
+  }
+  if (requireName && (input.name.includes('<') || input.name.includes('>'))) {
+    errors.push({ field: 'name', message: 'Supplier name cannot contain HTML tags' });
+  }
+}
+
+async function parseSupplierBody(
+  request: Request,
+  env: Env,
+  requireName: boolean,
+): Promise<{ input: SupplierInput } | { response: Response }> {
+  const body = (await request.json().catch(() => null)) as Record<string, unknown> | null;
+  if (!body || Array.isArray(body)) {
+    return {
+      response: structuredErrorResponse(
+        { code: 'VALIDATION_ERROR', message: 'Invalid request body', statusCode: 400 },
+        env,
+      ),
+    };
+  }
+
+  const errors: SupplierFieldError[] = [];
+  const input: SupplierInput = {};
+  parseSupplierTextField(body, input, errors, 'name', { max: 120, nullable: false });
+  parseSupplierTextField(body, input, errors, 'creditPolicyNote', {
+    max: 10_000,
+    nullable: false,
+  });
+  parseSupplierTextField(body, input, errors, 'contactPhone', { max: 80, nullable: true });
+  parseSupplierTextField(body, input, errors, 'representativeName', {
+    max: 120,
+    nullable: true,
+  });
+  parseSupplierEmailField(body, input, errors, 'contactEmail');
+  parseSupplierEmailField(body, input, errors, 'representativeEmail');
+  parseSupplierQuantityField(body, input, errors, 'policyWriteOffQty');
+  parseSupplierQuantityField(body, input, errors, 'policyCreditQty');
+  parseFollowUpDays(body, input, errors);
+  validateSupplierName(input, errors, requireName);
+  if (!requireName && Object.keys(input).length === 0) {
+    errors.push({ field: 'body', message: 'Provide at least one supplier field' });
+  }
+
+  return errors.length
+    ? {
+        response: structuredErrorResponse(
+          {
+            code: 'VALIDATION_ERROR',
+            message: 'Request validation failed',
+            statusCode: 400,
+            errors,
+          },
+          env,
+        ),
+      }
+    : { input };
+}
+
+function toCreateSupplierData(input: SupplierInput, policyChanged: boolean): SupplierWriteData {
+  return {
+    name: input.name?.trim() ?? '',
+    contactEmail: normalizeOptionalText(input.contactEmail),
+    contactPhone: normalizeOptionalText(input.contactPhone),
+    creditPolicyNote: input.creditPolicyNote?.trim() ?? '',
+    policyWriteOffQty: input.policyWriteOffQty ?? null,
+    policyCreditQty: input.policyCreditQty ?? null,
+    followUpDays: input.followUpDays ?? 7,
+    representativeName: normalizeOptionalText(input.representativeName),
+    representativeEmail: normalizeOptionalText(input.representativeEmail),
+    policyUpdatedAt: policyChanged ? new Date().toISOString() : null,
+  };
+}
+
+function mergedValue<T>(value: T | undefined, fallback: T): T {
+  return value === undefined ? fallback : value;
+}
+
+function mergedOptionalText(
+  value: string | null | undefined,
+  fallback: string | null,
+): string | null {
+  return value === undefined ? fallback : normalizeOptionalText(value);
+}
+
+function toMergedSupplierData(
+  input: SupplierInput,
+  existing: Supplier,
+  policyChanged: boolean,
+): SupplierWriteData {
+  return {
+    name: input.name === undefined ? existing.name : input.name.trim(),
+    contactEmail: mergedOptionalText(input.contactEmail, existing.contactEmail),
+    contactPhone: mergedOptionalText(input.contactPhone, existing.contactPhone),
+    creditPolicyNote:
+      input.creditPolicyNote === undefined
+        ? existing.creditPolicyNote
+        : input.creditPolicyNote.trim(),
+    policyWriteOffQty: mergedValue(input.policyWriteOffQty, existing.policyWriteOffQty),
+    policyCreditQty: mergedValue(input.policyCreditQty, existing.policyCreditQty),
+    followUpDays: mergedValue(input.followUpDays, existing.followUpDays),
+    representativeName: mergedOptionalText(input.representativeName, existing.representativeName),
+    representativeEmail: mergedOptionalText(
+      input.representativeEmail,
+      existing.representativeEmail,
+    ),
+    policyUpdatedAt: policyChanged ? new Date().toISOString() : existing.policyUpdatedAt,
+  };
+}
+
+function ratioErrors(data: SupplierPolicyRecord): Array<{ field: string; message: string }> {
+  return (data.policyWriteOffQty == null) !== (data.policyCreditQty == null)
+    ? [
+        {
+          field: 'policyCreditQty',
+          message:
+            'A credit ratio needs both a write-off quantity and a credit quantity, or neither.',
+        },
+      ]
+    : [];
+}
+
+function authorizeAndValidateWorkerPolicy(
+  input: SupplierPolicyRecord,
+  existing: SupplierPolicyRecord | null,
+  role: string,
+  env: Env,
+): Response | null {
+  if (!isPolicyWrite(input, existing)) return null;
+  if (normalizeRole(role) !== ROLES.ADMIN) {
+    return structuredErrorResponse(
+      { code: 'AUTHORIZATION_ERROR', message: 'Insufficient permissions', statusCode: 403 },
+      env,
+    );
+  }
+  const errors: PolicyFieldError[] = validatePolicyWrite(input, existing);
+  return errors.length ? policyValidationResponse('Supplier policy is invalid', errors, env) : null;
+}
+
+async function handleCreateSupplier(request: Request, db: Database, env: Env): Promise<Response> {
+  const auth = await authenticateApiRequest(request, env, db);
+  if (auth instanceof Response) return auth;
+  const parsed = await parseSupplierBody(request, env, true);
+  if ('response' in parsed) return parsed.response;
+  const policyError = authorizeAndValidateWorkerPolicy(parsed.input, null, auth.role, env);
+  if (policyError) return policyError;
+  const policyChanged = isPolicyWrite(parsed.input, null);
+  const data = toCreateSupplierData(parsed.input, policyChanged);
+  const ratio = ratioErrors(data);
+  if (ratio.length) return policyValidationResponse('Supplier policy is invalid', ratio, env);
+  return jsonResponse(await db.createSupplier(auth.organizationId, data), 201, env);
+}
+
+interface SupplierWriteRequest {
+  pathname: string;
+  replace: boolean;
+}
+
+async function writeSupplier(
+  request: Request,
+  db: Database,
+  env: Env,
+  options: SupplierWriteRequest,
+): Promise<Response> {
+  const auth = await authenticateApiRequest(request, env, db);
+  if (auth instanceof Response) return auth;
+  const supplierId = parsePositiveInt(options.pathname.split('/')[4] ?? '');
+  if (supplierId == null)
+    return structuredErrorResponse(
+      { code: 'VALIDATION_ERROR', message: 'Invalid supplier ID', statusCode: 400 },
+      env,
+    );
+  const parsed = await parseSupplierBody(request, env, options.replace);
+  if ('response' in parsed) return parsed.response;
+  const existing = await db.findSupplier(auth.organizationId, supplierId);
+  if (!existing) {
+    return structuredErrorResponse(
+      {
+        code: 'NOT_FOUND_ERROR',
+        message: `Supplier ${supplierId} not found`,
+        statusCode: 404,
+      },
+      env,
+    );
+  }
+  const replacement = options.replace ? toCreateSupplierData(parsed.input, false) : null;
+  const candidate: SupplierPolicyRecord = replacement ?? parsed.input;
+  const policyError = authorizeAndValidateWorkerPolicy(candidate, existing, auth.role, env);
+  if (policyError) return policyError;
+  const policyChanged = isPolicyWrite(candidate, existing);
+  const data: SupplierWriteData = replacement
+    ? {
+        ...replacement,
+        policyUpdatedAt: policyChanged ? new Date().toISOString() : existing.policyUpdatedAt,
+      }
+    : toMergedSupplierData(parsed.input, existing, policyChanged);
+  const ratio = ratioErrors(data);
+  if (ratio.length) return policyValidationResponse('Supplier policy is invalid', ratio, env);
+  const supplier = await db.updateSupplier(auth.organizationId, supplierId, data);
+  return supplier
+    ? jsonResponse(supplier, 200, env)
+    : structuredErrorResponse(
+        {
+          code: 'NOT_FOUND_ERROR',
+          message: `Supplier ${supplierId} not found`,
+          statusCode: 404,
+        },
+        env,
+      );
+}
+
+async function handleReplaceSupplier(
+  request: Request,
+  db: Database,
+  env: Env,
+  pathname: string,
+): Promise<Response> {
+  return writeSupplier(request, db, env, { pathname, replace: true });
+}
+
+async function handlePatchSupplier(
+  request: Request,
+  db: Database,
+  env: Env,
+  pathname: string,
+): Promise<Response> {
+  return writeSupplier(request, db, env, { pathname, replace: false });
+}
+
+async function handleClearSupplierPolicy(
+  request: Request,
+  db: Database,
+  env: Env,
+  pathname: string,
+): Promise<Response> {
+  const auth = await authenticateApiRequest(request, env, db);
+  if (auth instanceof Response) return auth;
+  if (normalizeRole(auth.role) !== ROLES.ADMIN) {
+    return structuredErrorResponse(
+      { code: 'AUTHORIZATION_ERROR', message: 'Insufficient permissions', statusCode: 403 },
+      env,
+    );
+  }
+  const supplierId = parsePositiveInt(pathname.split('/')[4] ?? '');
+  if (supplierId == null)
+    return structuredErrorResponse(
+      { code: 'VALIDATION_ERROR', message: 'Invalid supplier ID', statusCode: 400 },
+      env,
+    );
+  const supplier = await db.clearSupplierPolicy(auth.organizationId, supplierId);
+  return supplier
+    ? jsonResponse(supplier, 200, env)
+    : structuredErrorResponse(
+        {
+          code: 'NOT_FOUND_ERROR',
+          message: `Supplier ${supplierId} not found`,
+          statusCode: 404,
+        },
+        env,
+      );
+}
+
+function isPolicyStatus(value: string | null): value is 'ATTACHED' | 'MISSING' | null {
+  return value == null || value === 'ATTACHED' || value === 'MISSING';
+}
+
+async function handlePolicyReview(request: Request, db: Database, env: Env): Promise<Response> {
+  const auth = await authenticateApiRequest(request, env, db);
+  if (auth instanceof Response) return auth;
+  const query = new URL(request.url).searchParams;
+  const status = query.get('status');
+  if (!isPolicyStatus(status)) {
+    return structuredErrorResponse(
+      {
+        code: 'VALIDATION_ERROR',
+        message: 'Policy status must be ATTACHED or MISSING',
+        statusCode: 400,
+      },
+      env,
+    );
+  }
+  return jsonResponse(
+    await db.listPolicyReview(auth.organizationId, {
+      brand: query.get('brand') ?? undefined,
+      supplier: query.get('supplier') ?? undefined,
+      status: status ?? undefined,
+    }),
+    200,
+    env,
+  );
+}
+
+function normalizeBulkIds(
+  value: unknown,
+  field: string,
+  env: Env,
+): { ids: number[] } | { response: Response } {
+  if (!isValidBulkIdBatch(value)) {
+    return {
+      response: policyValidationResponse(
+        'Bulk request is invalid',
+        [{ field, message: 'Provide between 1 and 500 positive integer IDs' }],
+        env,
+      ),
+    };
+  }
+  return { ids: [...new Set(value)] };
+}
+
+function isValidBulkIdBatch(value: unknown): value is number[] {
+  if (!Array.isArray(value)) return false;
+  if (value.length < 1 || value.length > 500) return false;
+  return value.every(isPositiveInteger);
+}
+
+function bulkAttachResponse(result: BulkAttachResult, env: Env): Response {
+  if (result.kind === 'SUCCESS') {
+    const { kind: _kind, ...body } = result;
+    return jsonResponse(body, 200, env);
+  }
+  if (result.kind === 'SUPPLIER_POLICY_MISSING') {
+    return policyValidationResponse(
+      'Supplier policy is invalid',
+      [{ field: 'supplierId', message: 'The selected supplier has no store instructions' }],
+      env,
+    );
+  }
+  return structuredErrorResponse(
+    {
+      code: 'NOT_FOUND_ERROR',
+      message:
+        result.kind === 'SUPPLIER_NOT_FOUND'
+          ? 'Supplier not found'
+          : 'One or more brands were not found',
+      statusCode: 404,
+    },
+    env,
+  );
+}
+
+async function handleBulkAttachPolicy(request: Request, db: Database, env: Env): Promise<Response> {
+  const auth = await authenticateApiRequest(request, env, db);
+  if (auth instanceof Response) return auth;
+  if (normalizeRole(auth.role) !== ROLES.ADMIN) {
+    return structuredErrorResponse(
+      { code: 'AUTHORIZATION_ERROR', message: 'Insufficient permissions', statusCode: 403 },
+      env,
+    );
+  }
+  const body = (await request.json().catch(() => null)) as Record<string, unknown> | null;
+  if (!isPositiveInteger(body?.supplierId)) {
+    return policyValidationResponse(
+      'Bulk request is invalid',
+      [{ field: 'supplierId', message: 'Supplier ID must be a positive integer' }],
+      env,
+    );
+  }
+  const normalized = normalizeBulkIds(body.brandIds, 'brandIds', env);
+  if ('response' in normalized) return normalized.response;
+  return bulkAttachResponse(
+    await db.bulkAttachSupplier(auth.organizationId, body.supplierId, normalized.ids, auth.userId),
+    env,
+  );
+}
+
+function bulkLinkResponse(result: BulkLinkResult, env: Env): Response {
+  if (result.kind === 'SUCCESS') {
+    const { kind: _kind, ...body } = result;
+    return jsonResponse(body, 200, env);
+  }
+  if (result.kind === 'BRAND_CONFLICT') {
+    return structuredErrorResponse(
+      {
+        code: 'CONFLICT_ERROR',
+        message: 'One or more products are linked to a different brand',
+        statusCode: 409,
+      },
+      env,
+    );
+  }
+  return structuredErrorResponse(
+    {
+      code: 'NOT_FOUND_ERROR',
+      message:
+        result.kind === 'BRAND_NOT_FOUND'
+          ? 'Brand not found'
+          : 'One or more products were not found',
+      statusCode: 404,
+    },
+    env,
+  );
+}
+
+type BulkLinkTarget = { brandId: number } | { brandName: string };
+
+function parseBulkLinkTarget(
+  body: Record<string, unknown> | null,
+  env: Env,
+): { target: BulkLinkTarget } | { response: Response } {
+  const brandId = body?.brandId;
+  const brandName = typeof body?.brandName === 'string' ? body.brandName.trim() : '';
+  if ((brandId == null) === (brandName.length === 0)) {
+    return {
+      response: policyValidationResponse(
+        'Bulk request is invalid',
+        [{ field: 'brand', message: 'Provide exactly one brandId or brandName' }],
+        env,
+      ),
+    };
+  }
+  if (brandId != null && !isPositiveInteger(brandId)) {
+    return {
+      response: policyValidationResponse(
+        'Bulk request is invalid',
+        [{ field: 'brandId', message: 'Brand ID must be a positive integer' }],
+        env,
+      ),
+    };
+  }
+  if (brandName.length > 160) {
+    return {
+      response: policyValidationResponse(
+        'Bulk request is invalid',
+        [{ field: 'brandName', message: 'Brand name must be at most 160 characters' }],
+        env,
+      ),
+    };
+  }
+  return { target: brandId == null ? { brandName } : { brandId } };
+}
+
+async function handleBulkLinkProducts(request: Request, db: Database, env: Env): Promise<Response> {
+  const auth = await authenticateApiRequest(request, env, db);
+  if (auth instanceof Response) return auth;
+  const body = (await request.json().catch(() => null)) as Record<string, unknown> | null;
+  const normalized = normalizeBulkIds(body?.productIds, 'productIds', env);
+  if ('response' in normalized) return normalized.response;
+  const parsedTarget = parseBulkLinkTarget(body, env);
+  if ('response' in parsedTarget) return parsedTarget.response;
+  return bulkLinkResponse(
+    await db.bulkLinkProducts(
+      auth.organizationId,
+      parsedTarget.target,
+      normalized.ids,
+      auth.userId,
+    ),
+    env,
+  );
+}
+
+export function isPlatformAdminUser(
+  userId: number | undefined,
+  configuration: string | undefined,
+): boolean {
+  if (userId == null || !configuration) return false;
+  const tokens = configuration.split(',').map((token) => token.trim());
+  if (tokens.length === 0 || tokens.some((token) => !/^[1-9]\d*$/.test(token))) return false;
+  return tokens.map(Number).includes(userId);
+}
+
+async function handleListBrands(request: Request, db: Database, env: Env): Promise<Response> {
+  const auth = await authenticateApiRequest(request, env, db);
+  if (auth instanceof Response) return auth;
+  return jsonResponse(await db.listBrands(auth.organizationId), 200, env);
+}
+
+async function handleBrandReview(request: Request, db: Database, env: Env): Promise<Response> {
+  const auth = await authenticateApiRequest(request, env, db);
+  if (auth instanceof Response) return auth;
+  const query = new URL(request.url).searchParams;
+  const cursor = query.get('cursor');
+  const state = query.get('state');
+  if (state != null && !isCatalogueReviewState(state)) {
+    return errorResponse(
+      'Catalogue review state must be NEEDS_BRAND, PENDING_CONFIRMATION, or CONFIRMED',
+      400,
+      env,
+    );
+  }
+  const pageParam = query.get('page');
+  const pageSizeParam = query.get('pageSize');
+  const title = query.get('title')?.trim() ?? '';
+  const titleMatch = query.get('titleMatch');
+  const sort = query.get('sort');
+  const numbered =
+    pageParam != null ||
+    pageSizeParam != null ||
+    query.has('title') ||
+    titleMatch != null ||
+    sort != null;
+  if (numbered && cursor != null) {
+    return errorResponse('cursor cannot be combined with numbered pagination', 400, env);
+  }
+  const page = pageParam == null ? 1 : parsePositiveInt(pageParam);
+  if (numbered && page == null) {
+    return errorResponse('page must be a positive integer', 400, env);
+  }
+  const pageSize = pageSizeParam == null ? 50 : parsePositiveInt(pageSizeParam);
+  if (numbered && (pageSize == null || pageSize > 100)) {
+    return errorResponse('pageSize must be an integer from 1 to 100', 400, env);
+  }
+  if (titleMatch != null && titleMatch !== 'contains' && titleMatch !== 'startsWith') {
+    return errorResponse('titleMatch must be contains or startsWith', 400, env);
+  }
+  if (sort != null && sort !== 'titleAsc' && sort !== 'titleDesc') {
+    return errorResponse('sort must be titleAsc or titleDesc', 400, env);
+  }
+  if (numbered) {
+    return jsonResponse(
+      await db.reviewBrands(auth.organizationId, {
+        state: state ?? undefined,
+        group: query.get('group') ?? undefined,
+        page: page ?? 1,
+        pageSize: pageSize ?? 50,
+        ...(title ? { title } : {}),
+        titleMatch: (titleMatch ?? 'contains') as 'contains' | 'startsWith',
+        sort: (sort ?? 'titleAsc') as 'titleAsc' | 'titleDesc',
+      }),
+      200,
+      env,
+    );
+  }
+  const requestedLimit = Number(query.get('limit') ?? 50);
+  return jsonResponse(
+    await db.reviewBrands(auth.organizationId, {
+      state: state ?? undefined,
+      group: query.get('group') ?? undefined,
+      cursor: cursor == null ? undefined : (parsePositiveInt(cursor) ?? undefined),
+      limit: Number.isInteger(requestedLimit) ? Math.min(100, Math.max(1, requestedLimit)) : 50,
+    }),
+    200,
+    env,
+  );
+}
+
+async function handleAddBrand(request: Request, db: Database, env: Env): Promise<Response> {
+  const auth = await authenticateApiRequest(request, env, db);
+  if (auth instanceof Response) return auth;
+  const body = (await request.json().catch(() => null)) as {
+    productId?: unknown;
+    name?: unknown;
+    supplierId?: unknown;
+  } | null;
+  const name = typeof body?.name === 'string' ? body.name.trim() : '';
+  const productId = parsePositiveInt(String(body?.productId ?? ''));
+  const supplierId = body?.supplierId == null ? null : parsePositiveInt(String(body.supplierId));
+  const invalidSupplierId = body?.supplierId != null && supplierId == null;
+  if ([productId == null, name.length === 0, invalidSupplierId].includes(true)) {
+    return errorResponse(
+      'Valid productId, brand name, and optional supplierId are required',
+      400,
+      env,
+    );
+  }
+  const brand = await db.addBrand(auth.organizationId, auth.userId, {
+    productId: productId as number,
+    name,
+    supplierId,
+  });
+  if (!brand) return errorResponse('Product or supplier not found', 404, env);
+  return jsonResponse(brand, 201, env);
+}
+
+async function handleConfirmBrandSupplier(
+  request: Request,
+  db: Database,
+  env: Env,
+  pathname: string,
+): Promise<Response> {
+  const auth = await authenticateApiRequest(request, env, db);
+  if (auth instanceof Response) return auth;
+  const brandId = parsePositiveInt(pathname.split('/')[4] ?? '');
+  const body = (await request.json().catch(() => null)) as { supplierId?: unknown } | null;
+  if (brandId == null || !isPositiveInteger(body?.supplierId)) {
+    return errorResponse('Valid brand and supplier IDs are required', 400, env);
+  }
+  const brand = await db.confirmBrandSupplier(auth.organizationId, brandId, body.supplierId);
+  return brand
+    ? jsonResponse(brand, 200, env)
+    : errorResponse('Brand or supplier not found', 404, env);
+}
+
+async function handleAssignProductSupplier(
+  request: Request,
+  db: Database,
+  env: Env,
+  pathname: string,
+): Promise<Response> {
+  const auth = await authenticateApiRequest(request, env, db);
+  if (auth instanceof Response) return auth;
+  const productId = parsePositiveInt(pathname.split('/')[4] ?? '');
+  const body = (await request.json().catch(() => null)) as { supplierId?: unknown } | null;
+  const supplierId = body?.supplierId == null ? null : parsePositiveInt(String(body.supplierId));
+  const invalidSupplierId = body?.supplierId != null && supplierId == null;
+  if ([productId == null, invalidSupplierId].includes(true)) {
+    return errorResponse('Valid product and optional supplier IDs are required', 400, env);
+  }
+  const updated = await db.assignProductSupplier(
+    auth.organizationId,
+    auth.userId,
+    productId as number,
+    supplierId,
+  );
+  if (!updated) return errorResponse('Product or supplier not found', 404, env);
+  return jsonResponse({ productId, supplierId }, 200, env);
+}
+
+async function handleDisposeClaimableWriteOff(
+  request: Request,
+  db: Database,
+  env: Env,
+  pathname: string,
+): Promise<Response> {
+  const auth = await authenticateApiRequest(request, env, db);
+  if (auth instanceof Response) return auth;
+  const transactionId = parsePositiveInt(pathname.split('/')[4] ?? '');
+  if (transactionId == null) return errorResponse('Invalid expired transaction ID', 400, env);
+  const result = await db.disposeClaimableWriteOff(auth.organizationId, transactionId);
+  if (result === 'NOT_FOUND') return errorResponse('Expired transaction not found', 404, env);
+  if (result === 'CLAIMED')
+    return errorResponse('Expired transaction has entered a claim', 409, env);
+  return jsonResponse({ transactionId, creditDisposition: 'DISPOSED' }, 200, env);
+}
+
+async function handleListCatalogueCorrections(
+  request: Request,
+  db: Database,
+  env: Env,
+): Promise<Response> {
+  const auth = await authenticateApiRequest(request, env, db);
+  if (auth instanceof Response) return auth;
+  if (!isPlatformAdminUser(auth.userId, env.PLATFORM_ADMIN_USER_IDS)) {
+    return errorResponse('Platform catalogue review access required', 403, env);
+  }
+  const query = new URL(request.url).searchParams;
+  const cursor = query.get('cursor');
+  return jsonResponse(
+    await db.listCatalogueCorrections({
+      status: query.get('status') ?? 'PENDING',
+      cursor: cursor == null ? undefined : (parsePositiveInt(cursor) ?? undefined),
+      limit: 50,
+    }),
+    200,
+    env,
+  );
+}
+
+async function handleReviewCatalogueCorrection(
+  request: Request,
+  db: Database,
+  env: Env,
+  pathname: string,
+): Promise<Response> {
+  const auth = await authenticateApiRequest(request, env, db);
+  if (auth instanceof Response) return auth;
+  if (!isPlatformAdminUser(auth.userId, env.PLATFORM_ADMIN_USER_IDS)) {
+    return errorResponse('Platform catalogue review access required', 403, env);
+  }
+  const id = parsePositiveInt(pathname.split('/')[4] ?? '');
+  const body = (await request.json().catch(() => null)) as { status?: unknown } | null;
+  const status = body?.status;
+  const validStatus = ['ACCEPTED', 'REJECTED'].includes(String(status));
+  if ([id == null, !validStatus].includes(true)) {
+    return errorResponse('Status must be ACCEPTED or REJECTED', 400, env);
+  }
+  const result = await db.reviewCatalogueCorrection(
+    id as number,
+    status as 'ACCEPTED' | 'REJECTED',
+  );
+  if (result === 'NOT_FOUND') return errorResponse('Catalogue correction not found', 404, env);
+  if (result === 'ALREADY_REVIEWED') {
+    return errorResponse('Catalogue correction has already been reviewed', 409, env);
+  }
+  return jsonResponse({ id, status }, 200, env);
+}
+
+/**
+ * GET /api/supplier-credits/claimable-pool
+ */
+async function handleGetClaimablePool(request: Request, db: Database, env: Env): Promise<Response> {
+  const auth = await authenticateApiRequest(request, env, db);
+  if (auth instanceof Response) return auth;
+
+  const pool = await db.getClaimablePool(auth.organizationId);
+  return jsonResponse(pool, 200, env);
+}
+
+/**
+ * GET /api/supplier-credits/recovery-report
+ */
+async function handleGetRecoveryReport(
+  request: Request,
+  db: Database,
+  env: Env,
+): Promise<Response> {
+  const auth = await authenticateApiRequest(request, env, db);
+  if (auth instanceof Response) return auth;
+
+  const report = await db.getRecoveryReport(auth.organizationId);
+  return jsonResponse(report, 200, env);
+}
+
+/**
+ * GET /api/supplier-credits/claims?view=open|settled|all
+ */
+async function handleListCreditClaims(request: Request, db: Database, env: Env): Promise<Response> {
+  const auth = await authenticateApiRequest(request, env, db);
+  if (auth instanceof Response) return auth;
+
+  const view = new URL(request.url).searchParams.get('view');
+  const statuses =
+    view === 'open'
+      ? OPEN_CREDIT_CLAIM_STATUSES
+      : view === 'settled'
+        ? SETTLED_CREDIT_CLAIM_STATUSES
+        : undefined;
+  const claims = await db.listCreditClaims(auth.organizationId, statuses);
+  return jsonResponse(claims, 200, env);
 }
 
 /**
@@ -2488,6 +2472,8 @@ async function handleCreateStoreArea(request: Request, db: Database, env: Env): 
     name?: string;
     subDepartment?: string | null;
     sub_department?: string | null;
+    parentId?: number | null;
+    parent_id?: number | null;
   };
 
   if (!body.name || typeof body.name !== 'string' || body.name.trim().length === 0) {
@@ -2505,6 +2491,7 @@ async function handleCreateStoreArea(request: Request, db: Database, env: Env): 
     const area = await db.createStoreArea(auth.organizationId, {
       name: body.name.trim(),
       subDepartment: subDepartment ?? null,
+      parentId: body.parentId ?? body.parent_id ?? null,
     });
     return jsonResponse(area, 201, env);
   } catch (error) {
@@ -2538,14 +2525,21 @@ async function handleUpdateStoreArea(
     name?: string;
     subDepartment?: string | null;
     sub_department?: string | null;
+    parentId?: number | null;
+    parent_id?: number | null;
   };
 
-  const data: { name?: string; subDepartment?: string | null } = {};
+  const data: { name?: string; subDepartment?: string | null; parentId?: number | null } = {};
   if (typeof body.name === 'string') data.name = body.name.trim();
   if (body.subDepartment !== undefined) {
     data.subDepartment = body.subDepartment ?? null;
   } else if (body.sub_department !== undefined) {
     data.subDepartment = body.sub_department ?? null;
+  }
+  if (body.parentId !== undefined) {
+    data.parentId = body.parentId;
+  } else if (body.parent_id !== undefined) {
+    data.parentId = body.parent_id;
   }
 
   const updated = await db.updateStoreArea(auth.organizationId, id, data);
@@ -2779,6 +2773,53 @@ async function handleDeleteUser(
 /**
  * POST /api/expired-items/process
  */
+type ExpiredItemProcessBody = {
+  inventoryItemId?: unknown;
+  action?: unknown;
+  unitsDiscarded?: unknown;
+};
+
+type ParsedExpiredItemProcessBody =
+  | {
+      ok: true;
+      inventoryItemId: number;
+      action: 'sold_through' | 'expired';
+      unitsDiscarded?: number;
+    }
+  | { ok: false; message: string };
+
+function parseExpiredItemProcessBody(body: ExpiredItemProcessBody): ParsedExpiredItemProcessBody {
+  if (!isPositiveInteger(body.inventoryItemId)) {
+    return { ok: false, message: 'Missing or invalid required field: inventoryItemId' };
+  }
+
+  if (body.action !== 'sold_through' && body.action !== 'expired') {
+    return { ok: false, message: "Action must be either 'sold_through' or 'expired'" };
+  }
+
+  if (body.action === 'expired') {
+    if (!isPositiveInteger(body.unitsDiscarded)) {
+      return {
+        ok: false,
+        message: 'Units discarded must be a positive number when marking as expired',
+      };
+    }
+    return {
+      ok: true,
+      inventoryItemId: body.inventoryItemId,
+      action: body.action,
+      unitsDiscarded: body.unitsDiscarded,
+    };
+  }
+
+  return {
+    ok: true,
+    inventoryItemId: body.inventoryItemId,
+    action: body.action,
+    unitsDiscarded: undefined,
+  };
+}
+
 async function handleProcessExpiredItem(
   request: Request,
   db: Database,
@@ -2792,46 +2833,31 @@ async function handleProcessExpiredItem(
     action?: string;
     unitsDiscarded?: number;
   };
-
-  if (
-    !body.inventoryItemId ||
-    typeof body.inventoryItemId !== 'number' ||
-    body.inventoryItemId < 1
-  ) {
-    return errorResponse('Missing or invalid required field: inventoryItemId', 400, env);
-  }
-
-  if (!body.action || (body.action !== 'sold_through' && body.action !== 'expired')) {
-    return errorResponse("Action must be either 'sold_through' or 'expired'", 400, env);
-  }
-
-  if (body.action === 'expired') {
-    if (
-      !body.unitsDiscarded ||
-      typeof body.unitsDiscarded !== 'number' ||
-      body.unitsDiscarded <= 0
-    ) {
-      return errorResponse(
-        'Units discarded must be a positive number when marking as expired',
-        400,
-        env,
-      );
-    }
+  const parsed = parseExpiredItemProcessBody(body);
+  if (!parsed.ok) {
+    return errorResponse(parsed.message, 400, env);
   }
 
   try {
     const transaction = await db.processExpiredItem(
-      body.inventoryItemId,
+      parsed.inventoryItemId,
       auth.userId,
       auth.organizationId,
-      body.action,
-      body.unitsDiscarded,
+      parsed.action,
+      parsed.unitsDiscarded,
     );
     return jsonResponse(transaction, 201, env);
   } catch (error) {
     const message = error instanceof Error ? error.message : 'Internal server error';
     if (message.includes('not found')) {
       return errorResponse(message, 404, env);
+    }
+    // Predictable client-input failures — e.g. available stock changed between
+    // the worklist loading and the user submitting (race). These are 400s, not
+    // server faults, so surface the real message and keep them out of the
+    // 500/Sentry path.
+    if (message.includes('Cannot discard') || message.includes('must be a positive number')) {
+      return errorResponse(message, 400, env);
     }
     return errorResponse('Internal server error', 500, env);
   }
@@ -2863,16 +2889,22 @@ const SUBSCRIPTION_TIER_LIMITS: Record<
   string,
   { maxUsers: number; maxProducts: number; maxStoreAreas: number; features: string[] }
 > = {
-  starter: {
+  free: {
     maxUsers: 1,
     maxProducts: 500,
     maxStoreAreas: 3,
     features: ['Basic scanning', 'Expiry tracking', 'Basic reports'],
   },
-  professional: {
-    maxUsers: 10,
+  starter: {
+    maxUsers: 3,
     maxProducts: 5000,
     maxStoreAreas: 20,
+    features: ['Basic scanning', 'Expiry tracking', 'CSV uploads', 'Team management'],
+  },
+  professional: {
+    maxUsers: 10,
+    maxProducts: 50000,
+    maxStoreAreas: 100,
     features: [
       'Advanced scanning',
       'Expiry tracking',
@@ -2883,8 +2915,8 @@ const SUBSCRIPTION_TIER_LIMITS: Record<
     ],
   },
   premium: {
-    maxUsers: 50,
-    maxProducts: 25000,
+    maxUsers: 10,
+    maxProducts: 50000,
     maxStoreAreas: 100,
     features: [
       'All professional features',
@@ -2894,12 +2926,367 @@ const SUBSCRIPTION_TIER_LIMITS: Record<
     ],
   },
   concierge: {
-    maxUsers: -1,
-    maxProducts: -1,
-    maxStoreAreas: -1,
-    features: ['Unlimited everything', 'Dedicated support', 'Custom development'],
+    maxUsers: 10,
+    maxProducts: 250000,
+    maxStoreAreas: 100,
+    features: ['Enterprise fair-use access', 'Dedicated support', 'Custom development'],
+  },
+  enterprise: {
+    maxUsers: 10,
+    maxProducts: 250000,
+    maxStoreAreas: 100,
+    features: ['Enterprise fair-use access', 'Dedicated support', 'Custom development'],
   },
 };
+
+type SubscriptionSettingsRow = {
+  status?: string | null;
+  tier_level?: string | null;
+  billing_cycle?: string | null;
+  trial_end_date?: string | null;
+  current_period_end?: string | null;
+  cancel_at_period_end?: boolean | null;
+};
+
+type OrganizationUsageRow = {
+  total_skus?: number | string | null;
+  active_users?: number | string | null;
+  storage_used_bytes?: number | string | null;
+  total_inventory_items?: number | string | null;
+  max_users?: number | string | null;
+  max_skus?: number | string | null;
+  max_inventory_items?: number | string | null;
+};
+
+const toNullableLimit = (value: unknown): number | null =>
+  value === null || value === undefined ? null : Number(value);
+
+const mapSubscriptionSettingsResponse = (subscription?: SubscriptionSettingsRow) => ({
+  tierLevel: normalizeLaunchTier(subscription?.tier_level),
+  status: String(subscription?.status || 'expired').toLowerCase(),
+  billingCycle: subscription?.billing_cycle || 'monthly',
+  currentPeriodEnd: subscription?.current_period_end || null,
+  cancelAtPeriodEnd: subscription?.cancel_at_period_end ?? false,
+});
+
+// The frontend SubscriptionDashboard renders each resource as a
+// "{current} / {limit}" progress bar, so the API MUST return a nested
+// { current, limit } pair per resource — not a flat number. skus/users/
+// inventory limits are the per-org max_* columns (source of truth, see the
+// max_users enforcement query above). Storage has no per-org column, so its
+// limit is derived from the org's tier in the handler.
+const mapOrganizationUsageResponse = (
+  usage: OrganizationUsageRow | undefined,
+  storageLimitBytes: number,
+) => ({
+  skus: {
+    current: Number(usage?.total_skus ?? 0),
+    limit: toNullableLimit(usage?.max_skus),
+  },
+  users: {
+    current: Number(usage?.active_users ?? 0),
+    limit: Number(usage?.max_users ?? 0),
+  },
+  storage: {
+    current: Number(usage?.storage_used_bytes ?? 0),
+    limit: storageLimitBytes,
+  },
+  inventoryItems: {
+    current: Number(usage?.total_inventory_items ?? 0),
+    limit: toNullableLimit(usage?.max_inventory_items),
+  },
+});
+
+/**
+ * GET /api/subscription/current
+ */
+async function handleGetCurrentSubscription(
+  request: Request,
+  db: Database,
+  env: Env,
+): Promise<Response> {
+  const auth = await authenticateApiRequest(request, env, db);
+  if (auth instanceof Response) {
+    return auth;
+  }
+
+  const rows = await db.sql`
+    SELECT
+      status,
+      tier_level,
+      billing_cycle,
+      trial_end_date,
+      current_period_end,
+      cancel_at_period_end
+    FROM subscription_tiers
+    WHERE organization_id = ${auth.organizationId}
+    ORDER BY created_at DESC
+    LIMIT 1
+  `;
+
+  return jsonResponse(
+    mapSubscriptionSettingsResponse(rows[0] as SubscriptionSettingsRow),
+    200,
+    env,
+  );
+}
+
+/**
+ * GET /api/organization/usage
+ */
+async function handleGetOrganizationUsage(
+  request: Request,
+  db: Database,
+  env: Env,
+): Promise<Response> {
+  const auth = await authenticateApiRequest(request, env, db);
+  if (auth instanceof Response) {
+    return auth;
+  }
+
+  await db.sql`
+    INSERT INTO organization_usage (
+      organization_id,
+      active_users,
+      max_users,
+      total_skus,
+      max_skus,
+      total_inventory_items,
+      max_inventory_items,
+      storage_used_bytes,
+      created_at,
+      updated_at
+    )
+    VALUES (${auth.organizationId}, 0, 1, 0, 500, 0, 500, 0, NOW(), NOW())
+    ON CONFLICT (organization_id) DO NOTHING
+  `;
+
+  const rows = await db.sql`
+    SELECT
+      total_skus,
+      active_users,
+      storage_used_bytes,
+      total_inventory_items,
+      max_users,
+      max_skus,
+      max_inventory_items
+    FROM organization_usage
+    WHERE organization_id = ${auth.organizationId}
+    LIMIT 1
+  `;
+
+  const tier = await getOrganizationLaunchTier(auth.organizationId, db);
+  const storageLimitBytes = STORAGE_LIMIT_BYTES_BY_TIER[tier];
+
+  return jsonResponse(
+    mapOrganizationUsageResponse(rows[0] as OrganizationUsageRow, storageLimitBytes),
+    200,
+    env,
+  );
+}
+
+// A missing products.retail_price column (migration 0003 not applied) is
+// reported distinctly from "column present, zero retail rows": the GET path
+// degrades either way, but the PUT path must tell them apart so a retail-based
+// save returns an actionable 503 rather than a misleading 400.
+async function organizationHasRetailData(
+  organizationId: string,
+  db: Database,
+): Promise<{ hasRetailData: boolean; retailColumnMissing: boolean }> {
+  try {
+    const rows = await db.sql`
+      SELECT id
+      FROM products
+      WHERE organization_id = ${organizationId}
+        AND retail_price IS NOT NULL
+      LIMIT 1
+    `;
+    return { hasRetailData: rows.length > 0, retailColumnMissing: false };
+  } catch (error) {
+    // The products.retail_price column ships in Neon migration 0003 (#338). If
+    // it is missing the migration has not been applied yet — degrade to
+    // cost-only (no retail data) so markdown config still loads, rather than
+    // 500-ing with a raw NeonDbError. Log loudly so ops can spot the un-applied
+    // migration.
+    if (isMissingSchemaError(error)) {
+      console.error(
+        'organization_markdown_config: products.retail_price column missing — apply Neon migration 0003_add_configurable_markdown_matrix. Falling back to cost-only.',
+      );
+      return { hasRetailData: false, retailColumnMissing: true };
+    }
+    throw error;
+  }
+}
+
+// Shared 503 for when Neon migration 0003 (#338) has not been applied, so the
+// markdown config schema (organization_markdown_config table / retail_price
+// column) is missing.
+function markdownSchemaMissingResponse(env: Env): Response {
+  return errorResponse(
+    'Markdown settings storage is not ready yet. The database migration for this feature has not been applied — please contact your administrator.',
+    503,
+    env,
+  );
+}
+
+async function getOrganizationMarkdownMatrix(
+  organizationId: string,
+  db: Database,
+): Promise<MarkdownMatrixConfig> {
+  try {
+    const rows = await db.sql`
+      SELECT
+        band1_percentage,
+        band2_percentage,
+        band3_percentage,
+        band1_basis,
+        band2_basis,
+        band3_basis
+      FROM organization_markdown_config
+      WHERE organization_id = ${organizationId}
+      LIMIT 1
+    `;
+
+    return markdownConfigRowToMatrix(rows[0] as MarkdownConfigRow | undefined);
+  } catch (error) {
+    // organization_markdown_config ships in Neon migration 0003 (#338). If the
+    // table is missing, fall back to the default matrix (cost-only ladder) so
+    // Settings still renders instead of 500-ing. markdownConfigRowToMatrix(undefined)
+    // returns those defaults.
+    if (isMissingSchemaError(error)) {
+      console.error(
+        'organization_markdown_config table missing — apply Neon migration 0003_add_configurable_markdown_matrix. Falling back to default matrix.',
+      );
+      return markdownConfigRowToMatrix(undefined);
+    }
+    throw error;
+  }
+}
+
+/**
+ * GET /api/markdown-config
+ */
+async function handleGetMarkdownConfig(
+  request: Request,
+  db: Database,
+  env: Env,
+): Promise<Response> {
+  const auth = await authenticateApiRequest(request, env, db);
+  if (auth instanceof Response) {
+    return auth;
+  }
+
+  const [matrix, retailData] = await Promise.all([
+    getOrganizationMarkdownMatrix(auth.organizationId, db),
+    organizationHasRetailData(auth.organizationId, db),
+  ]);
+
+  return jsonResponse({ matrix, hasRetailData: retailData.hasRetailData }, 200, env);
+}
+
+/**
+ * PUT /api/markdown-config
+ */
+async function handleUpdateMarkdownConfig(
+  request: Request,
+  db: Database,
+  env: Env,
+): Promise<Response> {
+  const auth = await authenticateApiRequest(request, env, db);
+  if (auth instanceof Response) {
+    return auth;
+  }
+  if (!canManageUsers(auth.role)) {
+    return errorResponse('Only admins can update markdown settings', 403, env);
+  }
+
+  const parsedMatrix = parseMarkdownMatrix(await request.json().catch(() => null));
+  if (typeof parsedMatrix === 'string') {
+    return errorResponse(parsedMatrix, 400, env);
+  }
+
+  const { hasRetailData, retailColumnMissing } = await organizationHasRetailData(
+    auth.organizationId,
+    db,
+  );
+  if (matrixUsesRetail(parsedMatrix)) {
+    // A missing retail_price column means migration 0003 is not applied — the
+    // save cannot honour retail bands, and telling the user to "upload retail
+    // prices" would be unactionable. Surface it as the same 503 as the INSERT
+    // path. A cost-only matrix skips this block and saves normally.
+    if (retailColumnMissing) {
+      return markdownSchemaMissingResponse(env);
+    }
+    if (!hasRetailData) {
+      return errorResponse(
+        'Retail-based markdowns require retail prices. Upload a catalogue with a retail (or selling price) column first.',
+        400,
+        env,
+      );
+    }
+  }
+
+  let rows;
+  try {
+    rows = await db.sql`
+      INSERT INTO organization_markdown_config (
+        organization_id,
+        band1_percentage,
+        band2_percentage,
+        band3_percentage,
+        band1_basis,
+        band2_basis,
+        band3_basis,
+        created_at,
+        updated_at
+      )
+      VALUES (
+        ${auth.organizationId},
+        ${parsedMatrix.band1.percentage},
+        ${parsedMatrix.band2.percentage},
+        ${parsedMatrix.band3.percentage},
+        ${parsedMatrix.band1.basis},
+        ${parsedMatrix.band2.basis},
+        ${parsedMatrix.band3.basis},
+        NOW(),
+        NOW()
+      )
+      ON CONFLICT (organization_id) DO UPDATE SET
+        band1_percentage = EXCLUDED.band1_percentage,
+        band2_percentage = EXCLUDED.band2_percentage,
+        band3_percentage = EXCLUDED.band3_percentage,
+        band1_basis = EXCLUDED.band1_basis,
+        band2_basis = EXCLUDED.band2_basis,
+        band3_basis = EXCLUDED.band3_basis,
+        updated_at = NOW()
+      RETURNING
+        band1_percentage,
+        band2_percentage,
+        band3_percentage,
+        band1_basis,
+        band2_basis,
+        band3_basis
+    `;
+  } catch (error) {
+    // The organization_markdown_config table (and products.retail_price) ship in
+    // Neon migration 0003 (#338). A missing table/column here means the migration
+    // has not been applied to this database — return an actionable 503 rather than
+    // leaking a raw NeonDbError to the admin.
+    if (isMissingSchemaError(error)) {
+      console.error(
+        'handleUpdateMarkdownConfig: markdown config schema missing — apply Neon migration 0003_add_configurable_markdown_matrix.',
+      );
+      return markdownSchemaMissingResponse(env);
+    }
+    throw error;
+  }
+
+  return jsonResponse(
+    { matrix: markdownConfigRowToMatrix(rows[0] as MarkdownConfigRow), hasRetailData },
+    200,
+    env,
+  );
+}
 
 /**
  * GET /api/subscription/trial-status
@@ -2955,10 +3342,10 @@ async function handleGetTrialStatus(request: Request, db: Database, env: Env): P
     daysRemaining = Math.max(0, Math.ceil(diffTime / MILLISECONDS_PER_DAY));
   }
 
-  const normalizedTierKey = subscription?.tier_level?.trim().toLowerCase() || 'starter';
+  const normalizedTierKey = normalizeLaunchTier(subscription?.tier_level);
   const tierKey = Object.prototype.hasOwnProperty.call(SUBSCRIPTION_TIER_LIMITS, normalizedTierKey)
     ? normalizedTierKey
-    : 'starter';
+    : 'free';
   const tierLimits = SUBSCRIPTION_TIER_LIMITS[tierKey];
 
   const response: TrialStatusResponse = {
@@ -2967,7 +3354,7 @@ async function handleGetTrialStatus(request: Request, db: Database, env: Env): P
     subscription: subscription
       ? {
           status: normalizedStatus,
-          tierLevel: subscription.tier_level || 'starter',
+          tierLevel: normalizedTierKey,
           trialEndDate: subscription.trial_end_date || null,
           trialStartedAt: subscription.trial_started_at || null,
           trialConvertedAt: subscription.trial_converted_at || null,
@@ -2988,23 +3375,27 @@ export async function handleUploadInitiate(
   request: Request,
   env: Env,
   uploadRouteBase: '/upload' | '/api/upload',
+  db: Database,
 ): Promise<Response> {
-  const auth = await authenticateRequest(request, env);
-  if (!auth) {
-    return errorResponse('Unauthorized', 401, env);
+  const auth = await authenticateApiRequest(request, env, db);
+  if (auth instanceof Response) {
+    return auth;
   }
 
   const body = (await request.json()) as {
     filename?: string;
     fileSize?: number;
     contentType?: string;
+    importType?: string;
   };
 
   if (!body.filename || typeof body.fileSize !== 'number' || !body.contentType) {
     return errorResponse('Missing required fields: filename, fileSize, contentType', 400, env);
   }
 
-  const maxFileSize = parseInt(env.MAX_FILE_SIZE || '10485760', 10);
+  const queueEnabled = env.CATALOGUE_QUEUE_ENABLED === 'true';
+  const tier = queueEnabled ? await getOrganizationLaunchTier(auth.organizationId, db) : 'free';
+  const maxFileSize = queueEnabled ? getTierFileSizeLimit(tier, env) : STANDARD_MAX_FILE_SIZE;
   if (body.fileSize > maxFileSize) {
     return errorResponse(`File size exceeds maximum limit of ${maxFileSize} bytes`, 400, env);
   }
@@ -3012,7 +3403,7 @@ export async function handleUploadInitiate(
   const key = `uploads/user-${auth.userId}/${Date.now()}-${body.filename}`;
 
   if (body.fileSize > DIRECT_UPLOAD_THRESHOLD_BYTES) {
-    const uploadToken = await createUploadToken(auth.userId, key, env);
+    const uploadToken = await createUploadToken(auth.userId, key, maxFileSize, env);
     const requestUrl = new URL(request.url);
     const uploadUrl = `${requestUrl.origin}${uploadRouteBase}/presigned/${encodeURIComponent(key)}?token=${encodeURIComponent(uploadToken)}`;
 
@@ -3031,7 +3422,9 @@ export async function handleUploadInitiate(
   return jsonResponse(
     {
       strategy: 'direct',
-      uploadUrl: `${uploadRouteBase}/direct/${encodeURIComponent(key)}`,
+      uploadUrl: `${uploadRouteBase}/direct/${encodeURIComponent(key)}?importType=${encodeURIComponent(
+        body.importType === 'expiry-list' ? 'expiry-list' : 'product-catalog',
+      )}`,
       method: 'POST',
       key,
     },
@@ -3053,16 +3446,16 @@ async function handleUploadPresigned(
     return errorResponse('Missing upload token', 401, env);
   }
 
-  const tokenUserId = await verifyUploadToken(uploadToken, key, env);
-  if (!tokenUserId) {
+  const uploadContext = await verifyUploadToken(uploadToken, key, env);
+  if (!uploadContext) {
     return errorResponse('Invalid or expired upload token', 403, env);
   }
 
-  if (!key.startsWith(`uploads/user-${tokenUserId}/`)) {
+  if (!key.startsWith(`uploads/user-${uploadContext.userId}/`)) {
     return errorResponse('Access denied: Upload key does not belong to token user', 403, env);
   }
 
-  const maxFileSize = parseInt(env.MAX_FILE_SIZE || '10485760', 10);
+  const maxFileSize = uploadContext.maxFileSize;
   const contentLengthHeader = request.headers.get('Content-Length');
   if (contentLengthHeader) {
     const contentLength = parseInt(contentLengthHeader, 10);
@@ -3093,10 +3486,15 @@ async function handleUploadPresigned(
 /**
  * POST /upload/direct/:key and /api/upload/direct/:key
  */
-async function handleUploadDirect(request: Request, env: Env, key: string): Promise<Response> {
-  const auth = await authenticateRequest(request, env);
-  if (!auth) {
-    return errorResponse('Unauthorized', 401, env);
+export async function handleUploadDirect(
+  request: Request,
+  env: Env,
+  key: string,
+  db: Database,
+): Promise<Response> {
+  const auth = await authenticateApiRequest(request, env, db);
+  if (auth instanceof Response) {
+    return auth;
   }
 
   // Verify the key belongs to the authenticated user
@@ -3106,55 +3504,141 @@ async function handleUploadDirect(request: Request, env: Env, key: string): Prom
 
   const formData = await request.formData();
   const fileValue = formData.get('file') as unknown;
+  const requestedImportType =
+    new URL(request.url).searchParams.get('importType') || String(formData.get('importType') || '');
 
   if (!(fileValue instanceof File)) {
     return errorResponse('No file uploaded', 400, env);
   }
 
   // Re-validate file size and content type
-  const maxFileSize = parseInt(env.MAX_FILE_SIZE || '10485760', 10);
+  const queueEnabled = env.CATALOGUE_QUEUE_ENABLED === 'true';
+  const tier = queueEnabled ? await getOrganizationLaunchTier(auth.organizationId, db) : 'free';
+  const maxFileSize = queueEnabled ? getTierFileSizeLimit(tier, env) : STANDARD_MAX_FILE_SIZE;
   if (fileValue.size > maxFileSize) {
     return errorResponse(`File size exceeds maximum limit of ${maxFileSize} bytes`, 400, env);
   }
 
-  // Validate content type (assuming CSV files)
-  if (!fileValue.type || (!fileValue.type.includes('csv') && !fileValue.type.includes('text'))) {
+  const fileType = fileValue.type.toLowerCase();
+  const isCsvFileName = fileValue.name.toLowerCase().endsWith('.csv');
+  if (fileType && !fileType.includes('csv') && !fileType.includes('text') && !isCsvFileName) {
     return errorResponse('Invalid file type. Only CSV files are allowed.', 400, env);
   }
 
   const data = await fileValue.arrayBuffer();
 
+  if (queueEnabled && requestedImportType !== 'expiry-list') {
+    if (!env.CATALOGUE_IMPORT_QUEUE) {
+      return errorResponse('Catalogue import queue is not configured', 503, env);
+    }
+
+    await env.CSV_UPLOADS.put(key, data, {
+      httpMetadata: { contentType: fileValue.type || 'text/csv' },
+    });
+
+    const uploadId = await createQueuedCatalogueUpload({
+      db,
+      organizationId: auth.organizationId,
+      userId: auth.userId,
+      key,
+      fileName: fileValue.name,
+      fileSize: fileValue.size,
+      contentType: fileValue.type || 'text/csv',
+      tier,
+      env,
+    });
+    if (uploadId === null) {
+      await env.CSV_UPLOADS.delete(key);
+      return errorResponse(
+        'An active catalogue import already exists for this organization',
+        409,
+        env,
+      );
+    }
+
+    const queued = await enqueueCatalogueImport(env, db, uploadId);
+    if (!queued) {
+      try {
+        await env.CSV_UPLOADS.delete(key);
+      } catch (cleanupError) {
+        Sentry.captureException(cleanupError, {
+          tags: { feature: 'catalogue-import', action: 'enqueue-direct-cleanup' },
+          extra: { uploadId, key },
+        });
+      }
+      return errorResponse('Catalogue import queue is temporarily unavailable', 503, env);
+    }
+
+    return jsonResponse(
+      {
+        message: 'Catalogue upload queued',
+        key,
+        uploadId,
+        status: 'queued',
+        progress: 0,
+      },
+      202,
+      env,
+    );
+  }
+
+  const processingSummary = await processDirectUpload(
+    data,
+    requestedImportType,
+    auth.organizationId,
+    db,
+  );
+
   await env.CSV_UPLOADS.put(key, data, {
     httpMetadata: {
       contentType: fileValue.type || 'text/csv',
     },
+    customMetadata: serializeUploadProcessingSummary(processingSummary),
   });
 
   return jsonResponse(
     {
       message: 'File uploaded and processing started',
       key,
+      ...processingSummary,
     },
     200,
     env,
   );
 }
 
+function processDirectUpload(
+  data: ArrayBuffer,
+  requestedImportType: string,
+  organizationId: string,
+  db: Database,
+): Promise<UploadProcessingSummary> {
+  if (requestedImportType === 'expiry-list') {
+    return processExpiryListUpload(data, organizationId, db);
+  }
+
+  return processProductCatalogUpload(data, organizationId, db);
+}
+
 /**
  * POST /upload/complete and /api/upload/complete
  */
-async function handleUploadComplete(request: Request, env: Env): Promise<Response> {
-  const auth = await authenticateRequest(request, env);
-  if (!auth) {
-    return errorResponse('Unauthorized', 401, env);
+export async function handleUploadComplete(
+  request: Request,
+  env: Env,
+  db: Database,
+): Promise<Response> {
+  const auth = await authenticateApiRequest(request, env, db);
+  if (auth instanceof Response) {
+    return auth;
   }
 
-  const body = (await request.json()) as { key?: string };
+  const body = await parseUploadCompleteBody(request);
   if (!body.key) {
     return errorResponse('Missing required field: key', 400, env);
   }
 
-  if (!body.key.startsWith(`uploads/user-${auth.userId}/`)) {
+  if (!userOwnsUploadKey(body.key, auth.userId)) {
     return errorResponse('Access denied: Upload key does not belong to this user', 403, env);
   }
 
@@ -3163,7 +3647,30 @@ async function handleUploadComplete(request: Request, env: Env): Promise<Respons
     return errorResponse('Upload not found', 404, env);
   }
 
-  return jsonResponse({ message: 'Upload completed and processing started' }, 200, env);
+  if (env.CATALOGUE_QUEUE_ENABLED === 'true' && body.importType !== 'expiry-list') {
+    return queueCompletedCatalogueUpload({
+      env,
+      db,
+      key: body.key,
+      object,
+      organizationId: auth.organizationId,
+      userId: auth.userId,
+      deps: {
+        getOrganizationLaunchTier,
+        createQueuedCatalogueUpload,
+        enqueueCatalogueImport,
+      },
+    });
+  }
+
+  return processCompletedUploadSync({
+    env,
+    db,
+    key: body.key,
+    organizationId: auth.organizationId,
+    importType: body.importType,
+    deps: { processStoredUpload },
+  });
 }
 
 /**
@@ -3173,14 +3680,61 @@ export async function handleUploadStatus(
   request: Request,
   env: Env,
   key: string,
+  db: Database,
 ): Promise<Response> {
-  const auth = await authenticateRequest(request, env);
-  if (!auth) {
-    return errorResponse('Unauthorized', 401, env);
+  const auth = await authenticateApiRequest(request, env, db);
+  if (auth instanceof Response) {
+    return auth;
   }
 
   if (!key.startsWith(`uploads/user-${auth.userId}/`)) {
     return errorResponse('Access denied: Upload key does not belong to this user', 403, env);
+  }
+
+  if (env.CATALOGUE_QUEUE_ENABLED === 'true') {
+    const rows = await db.sql`
+      SELECT id,
+             status,
+             upload_progress as progress,
+             rows_processed as "rowsProcessed",
+             rows_total as "rowsTotal",
+             rows_imported as "importedCount",
+             rows_updated as "updatedCount",
+             rows_unchanged as "unchangedCount",
+             rows_skipped as "skippedCount",
+             row_error_count as "errorCount",
+             processing_message as message,
+             failure_category as "failureCategory",
+             row_errors as errors,
+             error_report_key as "errorReportKey"
+      FROM uploads
+      WHERE file_key = ${key} AND organization_id = ${auth.organizationId}
+      LIMIT 1
+    `;
+    const job = rows[0];
+    // Only queued catalogue imports have an `uploads` row. Synchronous uploads
+    // (e.g. expiry-list) store their result in R2 custom metadata and have no
+    // row here, so fall through to the R2 metadata path instead of 404ing.
+    if (job) {
+      let errors: unknown[] = [];
+      try {
+        errors = typeof job.errors === 'string' ? JSON.parse(job.errors) : [];
+      } catch {
+        errors = [];
+      }
+      return jsonResponse(
+        {
+          ...job,
+          key,
+          errors,
+          errorReportUrl: job.errorReportKey
+            ? `/api/upload/error-report/${encodeURIComponent(key)}`
+            : null,
+        },
+        200,
+        env,
+      );
+    }
   }
 
   const object = await env.CSV_UPLOADS.head(key);
@@ -3188,16 +3742,250 @@ export async function handleUploadStatus(
     return errorResponse('Upload not found', 404, env);
   }
 
+  const processingSummary = parseUploadProcessingSummary(object.customMetadata);
+
   return jsonResponse(
     {
       status: 'complete',
       progress: 100,
       message: 'File uploaded and processed successfully',
       key,
+      ...processingSummary,
     },
     200,
     env,
   );
 }
 
-export { handleLogin, handleRegister };
+export async function handleUploadErrorReport(
+  request: Request,
+  env: Env,
+  key: string,
+  db: Database,
+): Promise<Response> {
+  const auth = await authenticateApiRequest(request, env, db);
+  if (auth instanceof Response) return auth;
+  const rows = await db.sql`
+    SELECT id, error_report_key as "errorReportKey"
+    FROM uploads
+    WHERE file_key = ${key} AND organization_id = ${auth.organizationId}
+    LIMIT 1
+  `;
+  const reportKey = rows[0]?.errorReportKey;
+  if (!reportKey) return errorResponse('Error report not found', 404, env);
+  const report = await env.CSV_UPLOADS.get(String(reportKey));
+  if (!report) return errorResponse('Error report not found', 404, env);
+  return new Response(report.body, {
+    status: 200,
+    headers: {
+      'Content-Type': report.httpMetadata?.contentType || 'application/json',
+      'Content-Disposition': `attachment; filename="catalogue-import-${encodeURIComponent(String(rows[0]?.id || 'errors'))}.json"`,
+      ...getCorsHeaders(env, request.headers.get('Origin') || ''),
+    },
+  });
+}
+
+export { handleLogin, handleRegister, handleOrganizationBootstrap };
+export { getClerkAuthorizedParties };
+
+type LaunchTier = 'free' | 'starter' | 'professional' | 'enterprise';
+
+type MarkdownConfigRow = {
+  band1_percentage?: number | string | null;
+  band2_percentage?: number | string | null;
+  band3_percentage?: number | string | null;
+  band1_basis?: string | null;
+  band2_basis?: string | null;
+  band3_basis?: string | null;
+};
+
+function isMarkdownBasis(value: unknown): value is MarkdownBasis {
+  return value === 'cost' || value === 'retail';
+}
+
+function markdownConfigRowToMatrix(row: MarkdownConfigRow | undefined): MarkdownMatrixConfig {
+  if (!row) {
+    return DEFAULT_MARKDOWN_MATRIX;
+  }
+
+  return {
+    band1: {
+      percentage: Number(row.band1_percentage ?? DEFAULT_MARKDOWN_MATRIX.band1.percentage),
+      basis: isMarkdownBasis(row.band1_basis) ? row.band1_basis : 'cost',
+    },
+    band2: {
+      percentage: Number(row.band2_percentage ?? DEFAULT_MARKDOWN_MATRIX.band2.percentage),
+      basis: isMarkdownBasis(row.band2_basis) ? row.band2_basis : 'cost',
+    },
+    band3: {
+      percentage: Number(row.band3_percentage ?? DEFAULT_MARKDOWN_MATRIX.band3.percentage),
+      basis: isMarkdownBasis(row.band3_basis) ? row.band3_basis : 'cost',
+    },
+  };
+}
+
+function parseMarkdownMatrix(value: unknown): MarkdownMatrixConfig | string {
+  if (!value || typeof value !== 'object') {
+    return 'Request body must be a markdown matrix.';
+  }
+
+  const matrix = value as Partial<Record<keyof MarkdownMatrixConfig, unknown>>;
+  const parsed = {
+    band1: parseMarkdownBand(matrix.band1, 'Markdown 1'),
+    band2: parseMarkdownBand(matrix.band2, 'Markdown 2'),
+    band3: parseMarkdownBand(matrix.band3, 'Markdown 3'),
+  };
+
+  for (const band of [parsed.band1, parsed.band2, parsed.band3]) {
+    if (typeof band === 'string') {
+      return band;
+    }
+  }
+
+  const validMatrix = parsed as MarkdownMatrixConfig;
+  if (
+    validMatrix.band1.percentage > validMatrix.band2.percentage ||
+    validMatrix.band2.percentage > validMatrix.band3.percentage
+  ) {
+    return 'Discounts must not decrease as expiry nears: Markdown 1 <= Markdown 2 <= Markdown 3.';
+  }
+
+  return validMatrix;
+}
+
+function parseMarkdownBand(
+  value: unknown,
+  label: string,
+): { percentage: number; basis: MarkdownBasis } | string {
+  if (!value || typeof value !== 'object') {
+    return `${label} must include percentage and basis.`;
+  }
+
+  const band = value as { percentage?: unknown; basis?: unknown };
+  const percentage = Number(band.percentage);
+  if (!Number.isFinite(percentage) || percentage < 0 || percentage > 100) {
+    return `${label} percentage must be between 0 and 100.`;
+  }
+  if (!isMarkdownBasis(band.basis)) {
+    return `${label} basis must be cost or retail.`;
+  }
+
+  return { percentage, basis: band.basis };
+}
+
+function matrixUsesRetail(matrix: MarkdownMatrixConfig): boolean {
+  return (
+    matrix.band1.basis === 'retail' ||
+    matrix.band2.basis === 'retail' ||
+    matrix.band3.basis === 'retail'
+  );
+}
+
+const LAUNCH_TIER_LIMITS: Record<LaunchTier, { maxSkus: number; maxActiveExpiries: number }> = {
+  free: { maxSkus: 500, maxActiveExpiries: 500 },
+  starter: { maxSkus: 5000, maxActiveExpiries: 5000 },
+  professional: { maxSkus: 50000, maxActiveExpiries: 50000 },
+  enterprise: { maxSkus: 250000, maxActiveExpiries: 250000 },
+};
+
+const GIBIBYTE = 1024 * 1024 * 1024;
+
+// Per-tier storage limits (bytes). There is no per-org max_storage column, so
+// storage limits mirror StorageQuotaService's free/pro/enterprise buckets
+// (backend/src/services/storage-quota.service.ts), keyed by normalized launch
+// tier. Adjust here if product changes the storage entitlement per plan.
+const STORAGE_LIMIT_BYTES_BY_TIER: Record<LaunchTier, number> = {
+  free: 1 * GIBIBYTE,
+  starter: 10 * GIBIBYTE,
+  professional: 10 * GIBIBYTE,
+  enterprise: 1000 * GIBIBYTE,
+};
+
+function normalizeLaunchTier(value: unknown): LaunchTier {
+  const tier = String(value || '')
+    .trim()
+    .toLowerCase();
+  if (tier === 'free') return 'free';
+  if (tier === 'starter') return 'starter';
+  if (tier === 'professional') return 'professional';
+  if (tier === 'enterprise') return 'enterprise';
+  if (tier === 'premium') return 'professional';
+  if (tier === 'concierge') return 'enterprise';
+  return 'free';
+}
+
+async function getOrganizationLaunchTier(
+  organizationId: string,
+  db: Database,
+): Promise<LaunchTier> {
+  const rows = await db.sql`
+    SELECT tier_level
+    FROM subscription_tiers
+    WHERE organization_id = ${organizationId}
+    ORDER BY created_at DESC
+    LIMIT 1
+  `;
+  return normalizeLaunchTier(rows[0]?.tier_level);
+}
+
+// Parse a positive-integer env override, falling back to `fallback` when the value
+// is missing, non-numeric, NaN, or non-positive. Without this guard a misconfigured
+// ENTERPRISE_* var would yield NaN and silently fail every enterprise import
+// (e.g. `count <= NaN` is always false).
+function parsePositiveIntEnv(value: string | undefined, fallback: number): number {
+  const parsed = Number(value);
+  return Number.isFinite(parsed) && parsed > 0 ? Math.floor(parsed) : fallback;
+}
+
+function getTierFileSizeLimit(tier: LaunchTier, env: Env): number {
+  if (tier === 'enterprise') {
+    const configured = parsePositiveIntEnv(env.ENTERPRISE_MAX_FILE_SIZE, 100 * 1024 * 1024);
+    return Math.min(Math.max(configured, STANDARD_MAX_FILE_SIZE), 100 * 1024 * 1024);
+  }
+  return STANDARD_MAX_FILE_SIZE;
+}
+
+async function createQueuedCatalogueUpload(input: {
+  db: Database;
+  organizationId: string;
+  userId: number;
+  key: string;
+  fileName: string;
+  fileSize: number;
+  contentType: string;
+  tier: LaunchTier;
+  env: Env;
+}): Promise<number | null> {
+  const tierLimits = LAUNCH_TIER_LIMITS[input.tier];
+  const maxSkus =
+    input.tier === 'enterprise'
+      ? parsePositiveIntEnv(input.env.ENTERPRISE_MAX_SKUS, tierLimits.maxSkus)
+      : tierLimits.maxSkus;
+  const maxActiveExpiries =
+    input.tier === 'enterprise'
+      ? parsePositiveIntEnv(input.env.ENTERPRISE_MAX_ACTIVE_EXPIRIES, tierLimits.maxActiveExpiries)
+      : tierLimits.maxActiveExpiries;
+  try {
+    const rows = await input.db.sql`
+      INSERT INTO uploads (
+        organization_id, user_id, file_key, file_name, file_size_bytes, content_type,
+        import_type, tier_snapshot, max_skus_snapshot, max_active_expiries_snapshot,
+        status, upload_progress, processing_message, processing_offset, created_at, updated_at
+      )
+      SELECT ${input.organizationId}, ${input.userId}, ${input.key}, ${input.fileName},
+             ${input.fileSize}, ${input.contentType}, 'product-catalog', ${input.tier},
+             ${maxSkus}, ${maxActiveExpiries}, 'pending', 0, 'Preparing catalogue import', 0, NOW(), NOW()
+      WHERE NOT EXISTS (
+        SELECT 1 FROM uploads
+        WHERE organization_id = ${input.organizationId}
+          AND import_type = 'product-catalog'
+          AND status IN ('pending', 'queued', 'validating', 'processing')
+      )
+      RETURNING id
+    `;
+    return rows[0]?.id ? Number(rows[0].id) : null;
+  } catch (error) {
+    if (error instanceof Error && /unique|duplicate|23505/i.test(error.message)) return null;
+    throw error;
+  }
+}

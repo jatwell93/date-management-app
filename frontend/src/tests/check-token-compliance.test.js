@@ -1,6 +1,3 @@
-/* eslint-env node */
-/* global require, process */
-
 const path = require('path');
 
 const {

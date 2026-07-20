@@ -1,5 +1,6 @@
 import { offlineStorage } from './offline-storage';
 import { apiService } from './api.service';
+import { ClerkTokenGetter, resolveApiToken } from './auth-token';
 
 const PENDING_INVENTORY_ITEMS_PREFIX = 'pending-inventory-item-';
 
@@ -9,7 +10,23 @@ export async function getPendingInventoryItemCount(): Promise<number> {
   return keys.filter((key) => key.startsWith(PENDING_INVENTORY_ITEMS_PREFIX)).length;
 }
 
-export async function synchronizeOfflineData(token: string | null) {
+type OfflineSyncTokenSource = string | null | ClerkTokenGetter;
+
+async function resolveOfflineSyncToken(
+  tokenSource: OfflineSyncTokenSource,
+): Promise<string | undefined> {
+  if (typeof tokenSource === 'function') {
+    return resolveApiToken({
+      fallbackToken: null,
+      getToken: tokenSource,
+      actionTag: 'offline-sync',
+    });
+  }
+
+  return tokenSource || undefined;
+}
+
+export async function synchronizeOfflineData(token: OfflineSyncTokenSource) {
   if (!token) {
     // console.warn("Synchronization skipped: No authentication token available.");
     return;
@@ -17,6 +34,11 @@ export async function synchronizeOfflineData(token: string | null) {
 
   if (!navigator.onLine) {
     // console.log("Synchronization skipped: Application is offline.");
+    return;
+  }
+
+  const authToken = await resolveOfflineSyncToken(token);
+  if (!authToken) {
     return;
   }
 
@@ -31,27 +53,33 @@ export async function synchronizeOfflineData(token: string | null) {
     return;
   }
 
-  for (const key of pendingInventoryItemKeys) {
-    const item = await offlineStorage.getItem(key);
-    if (item) {
-      try {
+  await Promise.allSettled(
+    pendingInventoryItemKeys.map(async (key) => {
+      const item = await offlineStorage.getItem(key);
+      if (item) {
         // console.log(`Synchronizing item: ${key}`, item);
-        await apiService.post('/inventory-items', item, token);
+        await apiService.post('/inventory-items', item, authToken);
 
         // console.log(`Successfully synchronized item: ${key}`);
         await offlineStorage.removeItem(key);
-      } catch (err: unknown) {
+      }
+    }),
+  ).then((results) => {
+    results.forEach((result, i) => {
+      if (result.status === 'rejected') {
+        const err = result.reason;
         if (err instanceof Error) {
-          // eslint-disable-next-line no-console
-          console.error(`Error synchronizing item ${key}:`, err);
+          console.error(`Error synchronizing item ${pendingInventoryItemKeys[i]}:`, err);
           // Could add user notification here if needed
         } else {
-          // eslint-disable-next-line no-console
-          console.error(`An unknown error occurred while synchronizing item ${key}`, err);
+          console.error(
+            `An unknown error occurred while synchronizing item ${pendingInventoryItemKeys[i]}`,
+            err,
+          );
         }
         // Keep item in offline storage for retry later
       }
-    }
-  }
+    });
+  });
   // console.log("Offline data synchronization attempt finished.");
 }

@@ -3,17 +3,17 @@ import { dispatchStripeWebhookEvent } from '../../services/webhook-event-dispatc
 
 describe('dispatchStripeWebhookEvent', () => {
   it('routes subscription created events to the subscription handler', async () => {
-    const handleSubscriptionCreated = jest.fn().mockResolvedValue(undefined);
+    const handleSubscriptionCreated = vi.fn().mockResolvedValue(undefined);
     const handlers = {
       handleSubscriptionCreated,
-      handleSubscriptionUpdated: jest.fn(),
-      handleSubscriptionDeleted: jest.fn(),
-      handleCheckoutSessionCompleted: jest.fn(),
-      handleInvoicePaymentFailed: jest.fn(),
-      handleTrialWillEnd: jest.fn(),
-      handlePaymentIntentSucceeded: jest.fn(),
-      handlePaymentIntentFailed: jest.fn(),
-      handleUnhandledEvent: jest.fn(),
+      handleSubscriptionUpdated: vi.fn(),
+      handleSubscriptionDeleted: vi.fn(),
+      handleCheckoutSessionCompleted: vi.fn(),
+      handleInvoicePaymentFailed: vi.fn(),
+      handleTrialWillEnd: vi.fn(),
+      handlePaymentIntentSucceeded: vi.fn(),
+      handlePaymentIntentFailed: vi.fn(),
+      handleUnhandledEvent: vi.fn(),
     };
 
     const event = {
@@ -30,15 +30,15 @@ describe('dispatchStripeWebhookEvent', () => {
 
   it('routes unknown events to the unhandled callback', async () => {
     const handlers = {
-      handleSubscriptionCreated: jest.fn(),
-      handleSubscriptionUpdated: jest.fn(),
-      handleSubscriptionDeleted: jest.fn(),
-      handleCheckoutSessionCompleted: jest.fn(),
-      handleInvoicePaymentFailed: jest.fn(),
-      handleTrialWillEnd: jest.fn(),
-      handlePaymentIntentSucceeded: jest.fn(),
-      handlePaymentIntentFailed: jest.fn(),
-      handleUnhandledEvent: jest.fn(),
+      handleSubscriptionCreated: vi.fn(),
+      handleSubscriptionUpdated: vi.fn(),
+      handleSubscriptionDeleted: vi.fn(),
+      handleCheckoutSessionCompleted: vi.fn(),
+      handleInvoicePaymentFailed: vi.fn(),
+      handleTrialWillEnd: vi.fn(),
+      handlePaymentIntentSucceeded: vi.fn(),
+      handlePaymentIntentFailed: vi.fn(),
+      handleUnhandledEvent: vi.fn(),
     };
 
     const event = {

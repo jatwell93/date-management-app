@@ -4,26 +4,39 @@ import { UsageReportPage } from '../pages/UsageReportPage';
 import { apiService } from '../lib/api.service';
 import '@testing-library/jest-dom';
 
+vi.mock('../hooks/useFreshApiToken', () => ({
+  useFreshApiToken: (() => {
+    const callbacks = new Map<string, jest.Mock>();
+    return (token: string | null) => {
+      const key = token ?? '__missing__';
+      if (!callbacks.has(key)) {
+        callbacks.set(key, vi.fn().mockResolvedValue(token || undefined));
+      }
+      return callbacks.get(key);
+    };
+  })(),
+}));
+
 // Mock apiService
-jest.mock('../lib/api.service', () => ({
+vi.mock('../lib/api.service', () => ({
   apiService: {
-    get: jest.fn(),
+    get: vi.fn(),
   },
 }));
 
-jest.mock('react-chartjs-2', () => ({
+vi.mock('react-chartjs-2', () => ({
   Bar: () => <div role="img" aria-label="Items added by user chart" />,
   Line: () => <div role="img" aria-label="Items added per day chart" />,
 }));
 
 describe('UsageReportPage', () => {
   beforeEach(() => {
-    jest.clearAllMocks();
+    vi.clearAllMocks();
   });
 
   it('renders usage report data on successful fetch', async () => {
     // Mock all the API calls the component makes
-    // @ts-expect-error — apiService.get is mocked as jest.fn()
+    // @ts-expect-error — apiService.get is mocked as vi.fn()
     apiService.get.mockImplementation((url) => {
       if (url === '/reports/daily-usage') {
         return Promise.resolve([
@@ -42,6 +55,9 @@ describe('UsageReportPage', () => {
       }
       if (url === '/reports/items-by-date') {
         return Promise.resolve([{ date: '2025-01-30', itemCount: 20 }]);
+      }
+      if (url === '/reports/store-walk-audit') {
+        return Promise.resolve([]);
       }
       return Promise.resolve([]);
     });
@@ -75,6 +91,7 @@ describe('UsageReportPage', () => {
     expect(screen.getByRole('table', { name: /Items added per day summary/i })).toHaveTextContent(
       new Intl.DateTimeFormat('en-AU', { dateStyle: 'medium' }).format(new Date('2025-01-30')),
     );
+    expect(screen.queryByText(/Print Report/i)).not.toBeInTheDocument();
 
     expect(apiService.get).toHaveBeenCalledWith(
       '/reports/daily-usage',
@@ -92,7 +109,7 @@ describe('UsageReportPage', () => {
   });
 
   it('displays an error message on failed data fetch', async () => {
-    // @ts-expect-error — apiService.get is mocked as jest.fn()
+    // @ts-expect-error — apiService.get is mocked as vi.fn()
     apiService.get.mockRejectedValue(new Error('Failed to load usage report'));
 
     const tokenValue = 'test-session-value';
@@ -111,7 +128,7 @@ describe('UsageReportPage', () => {
       },
     );
 
-    // @ts-expect-error — apiService.get is mocked as jest.fn()
+    // @ts-expect-error — apiService.get is mocked as vi.fn()
     apiService.get.mockImplementation((url) => {
       if (url === '/reports/daily-usage') {
         return Promise.resolve([]);
@@ -141,5 +158,76 @@ describe('UsageReportPage', () => {
     expect(
       await screen.findByRole('table', { name: /Items added per day summary/i }),
     ).toBeInTheDocument();
+  });
+
+  it('renders store walk audit metrics and red flags', async () => {
+    // @ts-expect-error — apiService.get is mocked as vi.fn()
+    apiService.get.mockImplementation((url) => {
+      if (url === '/reports/daily-usage') {
+        return Promise.resolve([]);
+      }
+      if (url.startsWith('/reports/items-by-user')) {
+        return Promise.resolve([]);
+      }
+      if (url === '/reports/items-by-date') {
+        return Promise.resolve([]);
+      }
+      if (url === '/reports/store-walk-audit') {
+        return Promise.resolve([
+          {
+            cycleId: 31,
+            cycleName: 'July walk',
+            status: 'completed',
+            completionMinutes: 42,
+            users: [
+              {
+                userId: 7,
+                userName: 'Alex Checker',
+                baysChecked: 9,
+                coveragePercent: 75,
+                baysPerHour: 12.5,
+              },
+            ],
+            flags: [
+              {
+                type: 'implausible_pace',
+                userName: 'Alex Checker',
+                message: '12.5 bays/hour is faster than the review threshold.',
+              },
+              {
+                type: 'all_zero_findings',
+                userName: 'Alex Checker',
+                message: 'Six consecutive bay checks recorded zero items added.',
+              },
+            ],
+          },
+        ]);
+      }
+      return Promise.resolve([]);
+    });
+
+    render(<UsageReportPage token="test-session-value" />);
+
+    expect(await screen.findByRole('heading', { name: /Store Walk Audit/i })).toBeInTheDocument();
+    expect(screen.getByRole('region', { name: /Store walk audit/i })).toHaveTextContent(
+      /July walk/i,
+    );
+    expect(screen.getByRole('table', { name: /Store walk productivity/i })).toHaveTextContent(
+      /Alex Checker/i,
+    );
+    expect(screen.getByRole('table', { name: /Store walk productivity/i })).toHaveTextContent(
+      /75%/i,
+    );
+    expect(screen.getByRole('table', { name: /Store walk productivity/i })).toHaveTextContent(
+      /12.5 bays\/hour/i,
+    );
+    expect(screen.getByText(/42 min/i)).toBeInTheDocument();
+    expect(screen.getByText(/Implausible pace/i)).toBeInTheDocument();
+    expect(screen.getByText(/All-zero findings/i)).toBeInTheDocument();
+    expect(apiService.get).toHaveBeenCalledWith(
+      '/reports/store-walk-audit',
+      'test-session-value',
+      expect.any(AbortSignal),
+    );
   });
 });

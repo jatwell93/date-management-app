@@ -3,7 +3,7 @@ import { SaasMetricsService } from '../../services/saas-metrics.service';
 describe('SaasMetricsService', () => {
   it('records webhook metrics through the analytics repository', async () => {
     const analyticsRepo = {
-      incrementWebhookMetrics: jest.fn().mockResolvedValue(undefined),
+      incrementWebhookMetrics: vi.fn().mockResolvedValue(undefined),
     };
     const service = new SaasMetricsService({} as never, undefined, analyticsRepo as never);
 
@@ -19,7 +19,7 @@ describe('SaasMetricsService', () => {
 
   it('calculates trial conversion rate from analytics repository trials', async () => {
     const analyticsRepo = {
-      findTrialsEndedBetween: jest.fn().mockResolvedValue([
+      findTrialsEndedBetween: vi.fn().mockResolvedValue([
         { stripeSubscriptionId: 'sub_1', status: 'active' },
         { stripeSubscriptionId: null, status: 'trialing' },
       ]),
@@ -37,23 +37,24 @@ describe('SaasMetricsService', () => {
 
   it('calculates average revenue per user from repository revenue inputs', async () => {
     const analyticsRepo = {
-      findActivePaidSubscriptionTierLevels: jest
+      findActivePaidSubscriptionTierLevels: vi
         .fn()
         .mockResolvedValue([{ tierLevel: 'premium' }, { tierLevel: 'professional' }]),
-      sumActiveOrganizationUsers: jest.fn().mockResolvedValue(4),
+      sumActiveOrganizationUsers: vi.fn().mockResolvedValue(4),
     };
     const service = new SaasMetricsService({} as never, undefined, analyticsRepo as never);
 
     const result = await service.calculateAvgRevenuePerUser();
 
-    expect(result).toBe(32);
+    // premium ($99) + professional ($99) = $198 over 4 users
+    expect(result).toBe(49.5);
     expect(analyticsRepo.findActivePaidSubscriptionTierLevels).toHaveBeenCalledTimes(1);
     expect(analyticsRepo.sumActiveOrganizationUsers).toHaveBeenCalledTimes(1);
   });
 
   it('gets tier distribution from the analytics repository', async () => {
     const analyticsRepo = {
-      groupSubscriptionTiersByTierLevel: jest
+      groupSubscriptionTiersByTierLevel: vi
         .fn()
         .mockResolvedValue([{ tierLevel: 'basic', _count: 2 }]),
     };

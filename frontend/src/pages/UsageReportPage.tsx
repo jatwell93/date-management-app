@@ -17,34 +17,14 @@ import {
   SelectValue,
 } from '../components/ui/select';
 import { semanticDataViz } from '../theme/semantic-tokens';
+import { useFreshApiToken } from '../hooks/useFreshApiToken';
 
-// Import Chart.js components — lazy-loaded to keep initial bundle lean
-import {
-  Chart as ChartJS,
-  CategoryScale,
-  LinearScale,
-  BarElement,
-  Title,
-  Tooltip,
-  Legend,
-  PointElement,
-  LineElement,
-} from 'chart.js';
-
-// Register Chart.js components
-ChartJS.register(
-  CategoryScale,
-  LinearScale,
-  BarElement,
-  PointElement,
-  LineElement,
-  Title,
-  Tooltip,
-  Legend,
+// Chart.js is loaded on demand via the shared lazy chart module, keeping it out of
+// the initial bundle (chart.js registration lives inside that lazily-loaded chunk).
+const Bar = lazy(() => import('../components/charts/lazyCharts').then((m) => ({ default: m.Bar })));
+const Line = lazy(() =>
+  import('../components/charts/lazyCharts').then((m) => ({ default: m.Line })),
 );
-
-const Bar = lazy(() => import('react-chartjs-2').then((m) => ({ default: m.Bar })));
-const Line = lazy(() => import('react-chartjs-2').then((m) => ({ default: m.Line })));
 
 interface UsageReportPageProps {
   token: string | null;
@@ -70,6 +50,29 @@ interface ItemsByDateReportItem {
   itemCount: number;
 }
 
+interface StoreWalkAuditUser {
+  userId: number;
+  userName: string;
+  baysChecked: number;
+  coveragePercent: number;
+  baysPerHour: number;
+}
+
+interface StoreWalkAuditFlag {
+  type: 'implausible_pace' | 'all_zero_findings' | string;
+  userName: string;
+  message: string;
+}
+
+interface StoreWalkAuditCycle {
+  cycleId: number;
+  cycleName: string;
+  status: string;
+  completionMinutes: number | null;
+  users: StoreWalkAuditUser[];
+  flags: StoreWalkAuditFlag[];
+}
+
 const numberFormatter = new Intl.NumberFormat('en-AU');
 const dateFormatter = new Intl.DateTimeFormat('en-AU', { dateStyle: 'medium' });
 
@@ -82,137 +85,185 @@ function formatUserLabel(item: ItemsByUserReportItem) {
   return item.userName || `Unknown user ${item.userId}`;
 }
 
+function formatAuditFlagType(type: string) {
+  if (type === 'implausible_pace') return 'Implausible pace';
+  if (type === 'all_zero_findings') return 'All-zero findings';
+  return type
+    .split('_')
+    .filter(Boolean)
+    .map((part) => `${part.charAt(0).toUpperCase()}${part.slice(1)}`)
+    .join(' ');
+}
+
+interface ReportFetchOptions<T> {
+  token: string | null;
+  signal: AbortSignal;
+  getFreshApiToken: (actionTag: string) => Promise<string | undefined>;
+  actionTag: string;
+  endpoint: string;
+  unknownErrorMessage: string;
+  /** Runs before the token check (set loading true, clear error). Omit for fetchers that don't. */
+  onStart?: () => void;
+  /** Handles the absent-token case; responsible for clearing its own loading flag. */
+  onMissingToken: () => void;
+  /** Applies fetched data (and any success-side error clearing). Only called when not aborted. */
+  onData: (data: T) => void;
+  onError: (message: string) => void;
+  /** Runs in `finally` when not aborted (clear loading flag). */
+  onSettled: () => void;
+}
+
+// Shared skeleton for the report fetchers: abort-guarded token check → GET → data/error/settled.
+// Each effect supplies its own state setters and copy so behavior stays identical to before.
+async function runReportFetch<T>(options: ReportFetchOptions<T>): Promise<void> {
+  const {
+    token,
+    signal,
+    getFreshApiToken,
+    actionTag,
+    endpoint,
+    unknownErrorMessage,
+    onStart,
+    onMissingToken,
+    onData,
+    onError,
+    onSettled,
+  } = options;
+
+  onStart?.();
+
+  if (!token) {
+    onMissingToken();
+    return;
+  }
+
+  try {
+    const authToken = await getFreshApiToken(actionTag);
+    const data = await apiService.get<T>(endpoint, authToken, signal);
+    if (!signal.aborted) {
+      onData(data);
+    }
+  } catch (err: unknown) {
+    if (signal.aborted) return;
+    onError(err instanceof Error ? err.message : unknownErrorMessage);
+  } finally {
+    if (!signal.aborted) {
+      onSettled();
+    }
+  }
+}
+
 export function UsageReportPage({ token }: UsageReportPageProps) {
+  const getFreshApiToken = useFreshApiToken(token);
   const [usageData, setUsageData] = useState<DailyUsageReportItem[] | null>(null);
   const [loading, setLoading] = useState(true);
   const [usageError, setUsageError] = useState<string | null>(null);
   const [itemsByUser, setItemsByUser] = useState<ItemsByUserReportItem[] | null>(null);
   const [itemsByDate, setItemsByDate] = useState<ItemsByDateReportItem[] | null>(null);
+  const [storeWalkAudit, setStoreWalkAudit] = useState<StoreWalkAuditCycle[] | null>(null);
   const [itemsByUserLoading, setItemsByUserLoading] = useState(true);
   const [itemsByDateLoading, setItemsByDateLoading] = useState(true);
+  const [storeWalkAuditLoading, setStoreWalkAuditLoading] = useState(true);
   const [chartsError, setChartsError] = useState<string | null>(null);
+  const [storeWalkAuditError, setStoreWalkAuditError] = useState<string | null>(null);
   const [timeFrame, setTimeFrame] = useState('all-time');
   const chartsLoading = itemsByUserLoading || itemsByDateLoading;
 
+  // Daily usage — no pre-fetch reset (initial loading state already true).
   useEffect(() => {
     const controller = new AbortController();
-
-    const fetchUsageData = async () => {
-      if (!token) {
+    runReportFetch<DailyUsageReportItem[]>({
+      token,
+      signal: controller.signal,
+      getFreshApiToken,
+      actionTag: 'usage-report-daily',
+      endpoint: '/reports/daily-usage',
+      unknownErrorMessage: 'An unknown error occurred',
+      onMissingToken: () => {
         setUsageError('Authentication token is missing.');
         setLoading(false);
-        return;
-      }
-
-      try {
-        const data = await apiService.get<DailyUsageReportItem[]>(
-          '/reports/daily-usage',
-          token,
-          controller.signal,
-        );
-        if (!controller.signal.aborted) {
-          setUsageData(data);
-        }
-      } catch (err: unknown) {
-        if (controller.signal.aborted) return;
-        if (err instanceof Error) {
-          setUsageError(err.message);
-        } else {
-          setUsageError('An unknown error occurred');
-        }
-      } finally {
-        if (!controller.signal.aborted) {
-          setLoading(false);
-        }
-      }
-    };
-
-    fetchUsageData();
+      },
+      onData: (data) => setUsageData(data),
+      onError: (message) => setUsageError(message),
+      onSettled: () => setLoading(false),
+    });
     return () => controller.abort();
-  }, [token]);
+  }, [token, getFreshApiToken]);
 
-  // Fetch items-by-date (independent of timeFrame)
+  // Items-by-date (independent of timeFrame).
   useEffect(() => {
     const controller = new AbortController();
-
-    const fetchItemsByDate = async () => {
-      setItemsByDateLoading(true);
-      setChartsError(null);
-
-      if (!token) {
-        setItemsByDateLoading(false);
-        return;
-      }
-
-      try {
-        const data = await apiService.get<ItemsByDateReportItem[]>(
-          '/reports/items-by-date',
-          token,
-          controller.signal,
-        );
-        if (!controller.signal.aborted) {
-          setItemsByDate(data);
-          setChartsError(null);
-        }
-      } catch (err: unknown) {
-        if (controller.signal.aborted) return;
-        if (err instanceof Error) {
-          setChartsError(err.message);
-        } else {
-          setChartsError('An unknown error occurred when fetching chart data');
-        }
-      } finally {
-        if (!controller.signal.aborted) {
-          setItemsByDateLoading(false);
-        }
-      }
-    };
-
-    fetchItemsByDate();
+    runReportFetch<ItemsByDateReportItem[]>({
+      token,
+      signal: controller.signal,
+      getFreshApiToken,
+      actionTag: 'usage-report-items-by-date',
+      endpoint: '/reports/items-by-date',
+      unknownErrorMessage: 'An unknown error occurred when fetching chart data',
+      onStart: () => {
+        setItemsByDateLoading(true);
+        setChartsError(null);
+      },
+      onMissingToken: () => setItemsByDateLoading(false),
+      onData: (data) => {
+        setItemsByDate(data);
+        setChartsError(null);
+      },
+      onError: (message) => setChartsError(message),
+      onSettled: () => setItemsByDateLoading(false),
+    });
     return () => controller.abort();
-  }, [token]);
+  }, [token, getFreshApiToken]);
 
-  // Fetch items-by-user (depends on timeFrame)
+  // Items-by-user (depends on timeFrame).
   useEffect(() => {
     const controller = new AbortController();
-
-    const fetchItemsByUser = async () => {
-      setItemsByUserLoading(true);
-      setChartsError(null);
-
-      if (!token) {
+    runReportFetch<ItemsByUserReportItem[]>({
+      token,
+      signal: controller.signal,
+      getFreshApiToken,
+      actionTag: 'usage-report-items-by-user',
+      endpoint: `/reports/items-by-user?timeFrame=${timeFrame}`,
+      unknownErrorMessage: 'An unknown error occurred when fetching chart data',
+      onStart: () => {
+        setItemsByUserLoading(true);
+        setChartsError(null);
+      },
+      onMissingToken: () => {
         setChartsError('Authentication token is missing.');
         setItemsByUserLoading(false);
-        return;
-      }
-
-      try {
-        const data = await apiService.get<ItemsByUserReportItem[]>(
-          `/reports/items-by-user?timeFrame=${timeFrame}`,
-          token,
-          controller.signal,
-        );
-        if (!controller.signal.aborted) {
-          setItemsByUser(data);
-          setChartsError(null);
-        }
-      } catch (err: unknown) {
-        if (controller.signal.aborted) return;
-        if (err instanceof Error) {
-          setChartsError(err.message);
-        } else {
-          setChartsError('An unknown error occurred when fetching chart data');
-        }
-      } finally {
-        if (!controller.signal.aborted) {
-          setItemsByUserLoading(false);
-        }
-      }
-    };
-
-    fetchItemsByUser();
+      },
+      onData: (data) => {
+        setItemsByUser(data);
+        setChartsError(null);
+      },
+      onError: (message) => setChartsError(message),
+      onSettled: () => setItemsByUserLoading(false),
+    });
     return () => controller.abort();
-  }, [token, timeFrame]);
+  }, [token, timeFrame, getFreshApiToken]);
+
+  // Store walk audit.
+  useEffect(() => {
+    const controller = new AbortController();
+    runReportFetch<StoreWalkAuditCycle[]>({
+      token,
+      signal: controller.signal,
+      getFreshApiToken,
+      actionTag: 'usage-report-store-walk-audit',
+      endpoint: '/reports/store-walk-audit',
+      unknownErrorMessage: 'An unknown error occurred when fetching walk audit',
+      onStart: () => {
+        setStoreWalkAuditLoading(true);
+        setStoreWalkAuditError(null);
+      },
+      onMissingToken: () => setStoreWalkAuditLoading(false),
+      onData: (data) => setStoreWalkAudit(data),
+      onError: (message) => setStoreWalkAuditError(message),
+      onSettled: () => setStoreWalkAuditLoading(false),
+    });
+    return () => controller.abort();
+  }, [token, getFreshApiToken]);
 
   // Prepare chart data for Items by User
   const itemsByUserChartData = useMemo(
@@ -313,29 +364,6 @@ export function UsageReportPage({ token }: UsageReportPageProps) {
       <header className="max-w-3xl">
         <div className="flex items-center justify-between">
           <h1 className="font-heading text-2xl font-semibold">Usage Report</h1>
-          <button
-            onClick={() => window.print()}
-            aria-label="Print this report"
-            className="hidden md:flex items-center gap-2 rounded-md border border-semantic-primary px-3 py-1.5 text-sm font-medium text-semantic-primary hover:bg-semantic-primary/5 transition-colors no-print"
-          >
-            <svg
-              xmlns="http://www.w3.org/2000/svg"
-              width="16"
-              height="16"
-              viewBox="0 0 24 24"
-              fill="none"
-              stroke="currentColor"
-              strokeWidth="2"
-              strokeLinecap="round"
-              strokeLinejoin="round"
-              aria-hidden="true"
-            >
-              <path d="M6 9V2h12v7" />
-              <path d="M6 18H4a2 2 0 0 1-2-2v-5a2 2 0 0 1 2-2h16a2 2 0 0 1 2 2v5a2 2 0 0 1-2 2h-2" />
-              <rect x="6" y="14" width="12" height="8" />
-            </svg>
-            Print Report
-          </button>
         </div>
         <p className="mt-2 text-sm text-semantic-text-secondary">
           See which team members are adding stock, and review daily adds, edits, and removals over
@@ -503,6 +531,88 @@ export function UsageReportPage({ token }: UsageReportPageProps) {
           </CardContent>
         </Card>
       </div>
+
+      <Card role="region" aria-label="Store walk audit">
+        <CardHeader>
+          <CardTitle>
+            <h2 className="text-xl font-semibold">Store Walk Audit</h2>
+          </CardTitle>
+        </CardHeader>
+        <CardContent>
+          {storeWalkAuditLoading ? (
+            <div className="text-center py-8" role="status" aria-live="polite">
+              Loading store walk audit…
+            </div>
+          ) : storeWalkAuditError ? (
+            <p className="text-semantic-critical text-sm" role="alert">
+              {storeWalkAuditError}
+            </p>
+          ) : storeWalkAudit && storeWalkAudit.length > 0 ? (
+            <div className="space-y-5">
+              {storeWalkAudit.map((cycle) => (
+                <section key={cycle.cycleId} className="space-y-3" aria-label={cycle.cycleName}>
+                  <div className="flex flex-col gap-1 sm:flex-row sm:items-center sm:justify-between">
+                    <h3 className="font-heading text-base font-semibold">{cycle.cycleName}</h3>
+                    <span className="text-sm text-semantic-text-secondary">
+                      {cycle.completionMinutes === null
+                        ? 'In progress'
+                        : `${numberFormatter.format(cycle.completionMinutes)} min`}
+                    </span>
+                  </div>
+                  <div className="overflow-x-auto">
+                    <Table aria-label="Store walk productivity">
+                      <TableHeader>
+                        <TableRow>
+                          <TableHead>User</TableHead>
+                          <TableHead className="text-right">Bays checked</TableHead>
+                          <TableHead className="text-right">Coverage</TableHead>
+                          <TableHead className="text-right">Pace</TableHead>
+                        </TableRow>
+                      </TableHeader>
+                      <TableBody>
+                        {cycle.users.map((user) => (
+                          <TableRow key={`${cycle.cycleId}-${user.userId}`}>
+                            <TableCell>{user.userName || `Unknown user ${user.userId}`}</TableCell>
+                            <TableCell className="text-right tabular-nums">
+                              {numberFormatter.format(user.baysChecked)}
+                            </TableCell>
+                            <TableCell className="text-right tabular-nums">
+                              {numberFormatter.format(user.coveragePercent)}%
+                            </TableCell>
+                            <TableCell className="text-right tabular-nums">
+                              {numberFormatter.format(user.baysPerHour)} bays/hour
+                            </TableCell>
+                          </TableRow>
+                        ))}
+                      </TableBody>
+                    </Table>
+                  </div>
+                  {cycle.flags.length > 0 && (
+                    <ul className="grid gap-2" aria-label={`${cycle.cycleName} red flags`}>
+                      {cycle.flags.map((flag) => (
+                        <li
+                          key={`${cycle.cycleId}-${flag.type}-${flag.userName}-${flag.message}`}
+                          className="rounded-md border border-semantic-critical/30 bg-semantic-critical-muted p-3 text-sm"
+                        >
+                          <p className="font-medium text-semantic-critical">
+                            {formatAuditFlagType(flag.type)}
+                          </p>
+                          <p className="text-semantic-critical">{flag.userName}</p>
+                          <p className="text-semantic-critical">{flag.message}</p>
+                        </li>
+                      ))}
+                    </ul>
+                  )}
+                </section>
+              ))}
+            </div>
+          ) : (
+            <p className="text-center text-semantic-text-secondary">
+              No store walk audit data recorded yet.
+            </p>
+          )}
+        </CardContent>
+      </Card>
 
       {/* Original Table Section */}
       <Card>

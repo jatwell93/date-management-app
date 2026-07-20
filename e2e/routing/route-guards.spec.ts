@@ -16,6 +16,7 @@ test.describe('Route guards - unauthenticated', () => {
     '/dashboard',
     '/reports',
     '/detailed-expiry-report',
+    '/expiry-entries',
     '/expired-items',
     '/usage-report',
     '/markdown-calculator',

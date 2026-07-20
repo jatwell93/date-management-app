@@ -12,25 +12,25 @@ describe('OrganizationInviteService', () => {
   beforeEach(() => {
     mockPrisma = {
       subscriptionTier: {
-        findFirst: jest.fn(),
+        findFirst: vi.fn(),
       },
       user: {
-        count: jest.fn(),
-        findFirst: jest.fn(),
-        create: jest.fn(),
+        count: vi.fn(),
+        findFirst: vi.fn(),
+        create: vi.fn(),
       },
       organizationInvite: {
-        count: jest.fn(),
-        findFirst: jest.fn(),
-        findMany: jest.fn(),
-        create: jest.fn(),
-        update: jest.fn(),
-        updateMany: jest.fn(),
+        count: vi.fn(),
+        findFirst: vi.fn(),
+        findMany: vi.fn(),
+        create: vi.fn(),
+        update: vi.fn(),
+        updateMany: vi.fn(),
       },
       orgAuditLog: {
-        create: jest.fn(),
+        create: vi.fn(),
       },
-      $transaction: jest.fn(async (arg: any) => {
+      $transaction: vi.fn(async (arg: any) => {
         if (Array.isArray(arg)) {
           return Promise.all(arg);
         }
@@ -42,7 +42,7 @@ describe('OrganizationInviteService', () => {
   });
 
   afterEach(() => {
-    jest.clearAllMocks();
+    vi.clearAllMocks();
   });
 
   describe('createInvite', () => {
@@ -92,7 +92,7 @@ describe('OrganizationInviteService', () => {
 
     it('throws when user limit reached', async () => {
       mockPrisma.subscriptionTier.findFirst.mockResolvedValue({ tierLevel: 'professional' });
-      mockPrisma.user.count.mockResolvedValue(3);
+      mockPrisma.user.count.mockResolvedValue(10); // Professional user limit
       mockPrisma.organizationInvite.count.mockResolvedValue(0);
 
       await expect(

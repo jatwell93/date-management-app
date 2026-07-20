@@ -2,7 +2,20 @@ import React from 'react';
 import { render, screen, waitFor, act } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { StorageQuotaWarning } from '../StorageQuotaWarning';
-import fetchMock from 'jest-fetch-mock';
+import { fetchMock } from '../../test-utils/fetchMock';
+
+vi.mock('../../hooks/useFreshApiToken', () => ({
+  useFreshApiToken: (() => {
+    const callbacks = new Map<string, jest.Mock>();
+    return (token: string | null) => {
+      const key = token ?? '__missing__';
+      if (!callbacks.has(key)) {
+        callbacks.set(key, vi.fn().mockResolvedValue(token || undefined));
+      }
+      return callbacks.get(key);
+    };
+  })(),
+}));
 
 describe('StorageQuotaWarning', () => {
   const mockUserId = 1;
@@ -21,7 +34,7 @@ describe('StorageQuotaWarning', () => {
   beforeEach(() => {
     fetchMock.resetMocks();
     localStorage.clear();
-    jest.clearAllMocks();
+    vi.clearAllMocks();
   });
 
   const renderWarning = (props: Partial<React.ComponentProps<typeof StorageQuotaWarning>> = {}) =>
@@ -259,7 +272,7 @@ describe('StorageQuotaWarning', () => {
     });
 
     it('dismisses when close button is clicked', async () => {
-      const onDismiss = jest.fn();
+      const onDismiss = vi.fn();
       renderWarning({ onDismiss });
 
       await waitFor(() => {
@@ -276,7 +289,7 @@ describe('StorageQuotaWarning', () => {
     });
 
     it('dismisses when "Remind Me Later" button is clicked', async () => {
-      const onDismiss = jest.fn();
+      const onDismiss = vi.fn();
       renderWarning({ onDismiss });
 
       await waitFor(() => {
@@ -293,7 +306,7 @@ describe('StorageQuotaWarning', () => {
     });
 
     it('dismisses when overlay is clicked', async () => {
-      const onDismiss = jest.fn();
+      const onDismiss = vi.fn();
       renderWarning({ onDismiss });
 
       await waitFor(() => {
@@ -381,7 +394,7 @@ describe('StorageQuotaWarning', () => {
     });
 
     it('calls onUpgrade when Upgrade Plan button is clicked', async () => {
-      const onUpgrade = jest.fn();
+      const onUpgrade = vi.fn();
       renderWarning({ onUpgrade });
 
       await waitFor(() => {

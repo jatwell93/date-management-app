@@ -4,6 +4,27 @@ const RAW_API_BASE_URL =
 export const API_BASE_URL = RAW_API_BASE_URL.replace(/\/+$/, '');
 export const API_AUTH_UNAUTHORIZED_EVENT = 'app:auth-unauthorized';
 
+export interface ApiFieldError {
+  field: string;
+  message: string;
+}
+
+export class ApiError extends Error {
+  readonly name = 'ApiError';
+  readonly statusCode: number;
+
+  constructor(
+    message: string,
+    readonly status: number,
+    readonly code?: string,
+    readonly errors: ApiFieldError[] = [],
+  ) {
+    super(message);
+    this.statusCode = status;
+    Object.setPrototypeOf(this, new.target.prototype);
+  }
+}
+
 const ABSOLUTE_URL_REGEX = /^https?:\/\//i;
 
 function normalizeEndpoint(endpoint: string): string {
@@ -78,15 +99,33 @@ class ApiService {
     }
 
     if (!response.ok) {
-      const errorData = await response.json().catch(() => ({}));
+      const errorData: unknown = await response.json().catch(() => ({}));
+      const errorRecord =
+        typeof errorData === 'object' && errorData !== null
+          ? (errorData as Record<string, unknown>)
+          : {};
       const errorMessage =
-        typeof errorData.message === 'string'
-          ? errorData.message
-          : typeof errorData.error === 'string'
-            ? errorData.error
+        typeof errorRecord.message === 'string'
+          ? errorRecord.message
+          : typeof errorRecord.error === 'string'
+            ? errorRecord.error
             : `HTTP error! status: ${response.status}`;
+      const fieldErrors = Array.isArray(errorRecord.errors)
+        ? errorRecord.errors.filter(
+            (error): error is ApiFieldError =>
+              typeof error === 'object' &&
+              error !== null &&
+              typeof (error as Record<string, unknown>).field === 'string' &&
+              typeof (error as Record<string, unknown>).message === 'string',
+          )
+        : [];
 
-      throw new Error(errorMessage);
+      throw new ApiError(
+        errorMessage,
+        response.status,
+        typeof errorRecord.code === 'string' ? errorRecord.code : undefined,
+        fieldErrors,
+      );
     }
 
     return response.json();
@@ -123,6 +162,25 @@ class ApiService {
 
     return this.request<T>(endpoint, {
       method: 'PUT',
+      headers,
+      body: JSON.stringify(data),
+      signal,
+    });
+  }
+
+  async patch<T>(
+    endpoint: string,
+    data: unknown,
+    token?: string,
+    signal?: AbortSignal,
+  ): Promise<T> {
+    const headers: HeadersInit = {};
+    if (token) {
+      headers.Authorization = `Bearer ${token}`;
+    }
+
+    return this.request<T>(endpoint, {
+      method: 'PATCH',
       headers,
       body: JSON.stringify(data),
       signal,

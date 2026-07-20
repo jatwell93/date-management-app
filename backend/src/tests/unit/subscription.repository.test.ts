@@ -17,28 +17,48 @@ describe('SubscriptionRepository', () => {
       findUnique: jest.Mock;
       upsert: jest.Mock;
     };
+    inventoryItem: {
+      count: jest.Mock;
+    };
   };
   let repository: SubscriptionRepository;
 
   beforeEach(() => {
     prisma = {
       subscriptionTier: {
-        findMany: jest.fn(),
-        findFirst: jest.fn(),
-        groupBy: jest.fn(),
-        updateMany: jest.fn(),
-        update: jest.fn(),
+        findMany: vi.fn(),
+        findFirst: vi.fn(),
+        groupBy: vi.fn(),
+        updateMany: vi.fn(),
+        update: vi.fn(),
       },
       organizationUsage: {
-        upsert: jest.fn(),
+        upsert: vi.fn(),
       },
       tierFeatureFlag: {
-        count: jest.fn(),
-        findUnique: jest.fn(),
-        upsert: jest.fn(),
+        count: vi.fn(),
+        findUnique: vi.fn(),
+        upsert: vi.fn(),
+      },
+      inventoryItem: {
+        count: vi.fn(),
       },
     };
     repository = new SubscriptionRepository(prisma as never);
+  });
+
+  it('counts only unresolved active expiry records for quota enforcement', async () => {
+    prisma.inventoryItem.count.mockResolvedValue(17);
+
+    await expect(repository.countActiveExpiryItems('org-123')).resolves.toBe(17);
+    expect(prisma.inventoryItem.count).toHaveBeenCalledWith({
+      where: {
+        organizationId: 'org-123',
+        status: {
+          notIn: ['Processed', 'Completed', 'Discarded', 'Archived', 'Sold Through'],
+        },
+      },
+    });
   });
 
   it('updates a subscription Stripe customer id', async () => {
@@ -205,7 +225,7 @@ describe('SubscriptionRepository', () => {
         totalSkus: 0,
         maxSkus: 500,
         totalInventoryItems: 0,
-        maxInventoryItems: 5000,
+        maxInventoryItems: 500,
         storageUsedBytes: 0,
       },
       update: {},

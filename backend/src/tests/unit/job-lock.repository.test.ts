@@ -9,8 +9,8 @@ describe('JobLockRepository', () => {
 
   beforeEach(() => {
     prisma = {
-      $executeRaw: jest.fn(),
-      $queryRaw: jest.fn(),
+      $executeRaw: vi.fn(),
+      $queryRaw: vi.fn(),
     };
     repository = new JobLockRepository(prisma as never);
   });

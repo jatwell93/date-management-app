@@ -15,25 +15,25 @@ describe('UploadService', () => {
 
   beforeEach(() => {
     mockStorage = {
-      upload: jest.fn() as jest.Mock,
-      download: jest.fn() as jest.Mock,
-      delete: jest.fn() as jest.Mock,
-      exists: jest.fn() as jest.Mock,
-      getMetadata: jest.fn() as jest.Mock,
-      getPresignedUploadUrl: jest.fn() as jest.Mock,
+      upload: vi.fn() as jest.Mock,
+      download: vi.fn() as jest.Mock,
+      delete: vi.fn() as jest.Mock,
+      exists: vi.fn() as jest.Mock,
+      getMetadata: vi.fn() as jest.Mock,
+      getPresignedUploadUrl: vi.fn() as jest.Mock,
     } as any as jest.Mocked<StorageProvider>;
 
     mockCsvParser = {
-      processFile: jest.fn() as jest.Mock,
+      processFile: vi.fn() as jest.Mock,
     } as any as jest.Mocked<CSVParserService>;
 
     mockStorageQuotaService = {
-      recordUpload: jest.fn() as jest.Mock,
-      markUploadDeleted: jest.fn() as jest.Mock,
+      recordUpload: vi.fn() as jest.Mock,
+      markUploadDeleted: vi.fn() as jest.Mock,
     } as any as jest.Mocked<StorageQuotaService>;
     mockUploadRepository = {
-      markCompleted: jest.fn(),
-      markFailed: jest.fn(),
+      markCompleted: vi.fn(),
+      markFailed: vi.fn(),
     };
 
     uploadService = new UploadService(
@@ -46,7 +46,7 @@ describe('UploadService', () => {
   });
 
   afterEach(() => {
-    jest.clearAllMocks();
+    vi.clearAllMocks();
   });
 
   describe('initiateUpload', () => {

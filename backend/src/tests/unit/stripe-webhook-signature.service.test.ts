@@ -3,7 +3,7 @@ import { StripeWebhookSignatureService } from '../../services/stripe-webhook-sig
 
 describe('StripeWebhookSignatureService', () => {
   it('verifies signatures using Stripe webhook secret', () => {
-    const constructEvent = jest.fn().mockReturnValue({ id: 'evt_1' });
+    const constructEvent = vi.fn().mockReturnValue({ id: 'evt_1' });
     const service = new StripeWebhookSignatureService('sk_test_123', 'whsec_test_123');
     (service as unknown as { stripe: Stripe }).stripe = {
       webhooks: { constructEvent },

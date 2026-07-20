@@ -1,11 +1,11 @@
 import { PrismaClient } from '@prisma/client';
 import * as Sentry from '@sentry/node';
 import Stripe from 'stripe';
-import { InternalError, NotFoundError } from '../errors';
+import { InternalError, NotFoundError, ValidationError } from '../errors';
 import { SubscriptionTier } from '../models/subscription-tier.model';
 import { BillingCycle, SubscriptionStatus, TierLevel } from '../types/subscription';
 import { Logger } from '../utils/logger';
-import { getPriceIdForTier } from './subscription-billing.helpers';
+import { getPriceIdForTier, normalizeLegacyTier } from './subscription-billing.helpers';
 import { buildTrialSubscriptionSetup } from './subscription-trial.helpers';
 import { getErrorMessage, mapPrismaSubscriptionTierToModel } from './subscription-mapping.helpers';
 import { OrganizationRepository } from '../repositories/organization.repository';
@@ -83,44 +83,48 @@ export class SubscriptionTrialLifecycleService {
       now,
     );
 
+    // Pre-filter synchronously to only trials at reminder thresholds
+    const cutoffMs = now.getTime() - 24 * 60 * 60 * 1000;
+    const eligibleTrials = expiringTrials.flatMap((trial) => {
+      if (!trial.trialEndDate) {
+        Logger.warn('Skipping trial reminder check: trialEndDate is null', {
+          organizationId: trial.organizationId,
+        });
+        return [];
+      }
+      const daysRemaining = Math.ceil(
+        (trial.trialEndDate.getTime() - now.getTime()) / (1000 * 60 * 60 * 24),
+      );
+      if (![10, 5, 2].includes(daysRemaining)) return [];
+      return [{ trial, daysRemaining }];
+    });
+
+    // Check deduplication for all eligible trials in parallel
+    const existingEvents = await Promise.all(
+      eligibleTrials.map(({ trial }) =>
+        this.trialEventRepo.findRecentByOrganizationAndType(
+          trial.organizationId,
+          'trial_reminder_sent',
+          new Date(cutoffMs),
+        ),
+      ),
+    );
+
     const results: Array<{
       organizationId: string;
       organizationName: string;
       contactEmail: string | null;
       daysRemaining: number;
       trialEndDate: Date;
-    }> = [];
-
-    for (const trial of expiringTrials) {
-      if (!trial.trialEndDate) {
-        Logger.warn('Skipping trial reminder check: trialEndDate is null', {
-          organizationId: trial.organizationId,
-        });
-        continue;
-      }
-
-      const daysRemaining = Math.ceil(
-        (trial.trialEndDate.getTime() - now.getTime()) / (1000 * 60 * 60 * 24),
-      );
-
-      if (![10, 5, 2].includes(daysRemaining)) continue;
-
-      const existingEvent = await this.trialEventRepo.findRecentByOrganizationAndType(
-        trial.organizationId,
-        'trial_reminder_sent',
-        new Date(now.getTime() - 24 * 60 * 60 * 1000),
-      );
-
-      if (existingEvent) continue;
-
-      results.push({
+    }> = eligibleTrials
+      .filter((_, i) => !existingEvents[i])
+      .map(({ trial, daysRemaining }) => ({
         organizationId: trial.organizationId,
         organizationName: trial.organization.name,
         contactEmail: trial.organization.contactEmail,
         daysRemaining,
-        trialEndDate: trial.trialEndDate,
-      });
-    }
+        trialEndDate: trial.trialEndDate!,
+      }));
 
     return results;
   }
@@ -156,7 +160,7 @@ export class SubscriptionTrialLifecycleService {
             trial.id,
             {
               status: SubscriptionStatus.ACTIVE,
-              tierLevel: 'starter',
+              tierLevel: 'free',
               stripeSubscriptionId: null,
             },
             tx,
@@ -166,7 +170,7 @@ export class SubscriptionTrialLifecycleService {
             {
               organizationId: trial.organizationId,
               eventType: 'trial_expired',
-              metadata: JSON.stringify({ downgradedTo: 'starter' }),
+              metadata: JSON.stringify({ downgradedTo: 'free' }),
               occurredAt: new Date(),
             },
             tx,
@@ -198,7 +202,16 @@ export class SubscriptionTrialLifecycleService {
       throw new InternalError('No Stripe customer found for this trial');
     }
 
-    const priceId = getPriceIdForTier(trial.tierLevel as TierLevel, billingCycle);
+    // Legacy premium/concierge trials normalize to their launch-tier
+    // replacements; tiers without a Checkout price (free, enterprise) are
+    // rejected as a client error rather than surfacing as a 500.
+    const checkoutTier = normalizeLegacyTier(trial.tierLevel as TierLevel);
+    let priceId: string;
+    try {
+      priceId = getPriceIdForTier(checkoutTier, billingCycle);
+    } catch (error) {
+      throw new ValidationError(getErrorMessage(error));
+    }
 
     try {
       const stripeSubscription = await this.stripe.subscriptions.create({
@@ -276,15 +289,18 @@ export class SubscriptionTrialLifecycleService {
 
     const events = await this.trialEventRepo.findRecentByType('trial_expired', yesterday);
 
+    const orgs = await Promise.all(
+      events.map((event) => this.orgRepo.findByIdSelect(event.organizationId)),
+    );
+
     const results: Array<{
       organizationId: string;
       organizationName: string;
       contactEmail: string | null;
     }> = [];
 
-    for (const event of events) {
-      const org = await this.orgRepo.findByIdSelect(event.organizationId);
-
+    events.forEach((event, i) => {
+      const org = orgs[i];
       if (org) {
         results.push({
           organizationId: event.organizationId,
@@ -292,7 +308,7 @@ export class SubscriptionTrialLifecycleService {
           contactEmail: org.contactEmail,
         });
       }
-    }
+    });
 
     return results;
   }

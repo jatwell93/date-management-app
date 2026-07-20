@@ -14,6 +14,7 @@ describe('App route performance boundaries', () => {
       './pages/StoreAreaManagementPage',
       './pages/CSVUploadPage',
       './pages/DetailedExpiryReportPage',
+      './pages/ExpiryEntriesPage',
       './pages/ExpiredItemsPage',
       './pages/SubscriptionSettingsPage',
     ].forEach((modulePath) => {

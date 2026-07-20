@@ -1,31 +1,40 @@
 import { HourlyWebhookCheckJob } from '../../jobs/daily-metrics.job';
 import { SaasMetricsService } from '../../services/saas-metrics.service';
 
-jest.mock('../../services/saas-metrics.service');
-jest.mock('../../database/database-factory');
+vi.mock('../../services/saas-metrics.service');
+vi.mock('../../database/database-factory');
+// Auto-mock Sentry so its exports are Vitest-controlled vi.fns shared with the
+// SUT's module graph. (Spying on a real `await import('@sentry/node')` namespace
+// fails with "Cannot redefine property" — ESM namespaces are non-configurable.)
+vi.mock('@sentry/node');
 
 describe('Webhook Monitoring', () => {
   let job: HourlyWebhookCheckJob;
   let mockSaasMetrics: jest.Mocked<SaasMetricsService>;
 
   beforeEach(() => {
-    jest.clearAllMocks();
+    vi.clearAllMocks();
 
     mockSaasMetrics = {
-      calculateWebhookFailureRate: jest.fn().mockResolvedValue(0),
-      getDailyWebhookErrorCount: jest.fn().mockResolvedValue(0),
-      getProcessedWebhookEventGrowthRate: jest.fn().mockResolvedValue(1.0),
+      calculateWebhookFailureRate: vi.fn().mockResolvedValue(0),
+      getDailyWebhookErrorCount: vi.fn().mockResolvedValue(0),
+      getProcessedWebhookEventGrowthRate: vi.fn().mockResolvedValue(1.0),
     } as any;
 
-    (SaasMetricsService as unknown as jest.Mock).mockImplementation(() => mockSaasMetrics);
+    // A regular function (not an arrow) is required: Vitest invokes the mock impl
+    // with `new` here (the SUT does `new SaasMetricsService()`), and arrows cannot
+    // be constructed.
+    (SaasMetricsService as unknown as jest.Mock).mockImplementation(function () {
+      return mockSaasMetrics;
+    });
     job = new HourlyWebhookCheckJob();
   });
 
   it('captures Sentry alert when daily webhook error count exceeds 1', async () => {
     mockSaasMetrics.getDailyWebhookErrorCount.mockResolvedValue(2);
 
-    const Sentry = require('@sentry/node');
-    jest.spyOn(Sentry, 'captureMessage').mockImplementation(() => 'id');
+    const Sentry = await import('@sentry/node');
+    vi.mocked(Sentry.captureMessage).mockImplementation(() => 'id');
 
     await job.execute();
 
@@ -38,8 +47,8 @@ describe('Webhook Monitoring', () => {
   it('does NOT alert when daily webhook error count is 0', async () => {
     mockSaasMetrics.getDailyWebhookErrorCount.mockResolvedValue(0);
 
-    const Sentry = require('@sentry/node');
-    jest.spyOn(Sentry, 'captureMessage').mockImplementation(() => 'id');
+    const Sentry = await import('@sentry/node');
+    vi.mocked(Sentry.captureMessage).mockImplementation(() => 'id');
 
     await job.execute();
 
@@ -52,8 +61,8 @@ describe('Webhook Monitoring', () => {
   it('captures Sentry alert when replay attack growth rate exceeds threshold', async () => {
     mockSaasMetrics.getProcessedWebhookEventGrowthRate.mockResolvedValue(15.0); // 15x baseline
 
-    const Sentry = require('@sentry/node');
-    jest.spyOn(Sentry, 'captureMessage').mockImplementation(() => 'id');
+    const Sentry = await import('@sentry/node');
+    vi.mocked(Sentry.captureMessage).mockImplementation(() => 'id');
 
     await job.execute();
 
@@ -66,8 +75,8 @@ describe('Webhook Monitoring', () => {
   it('does NOT alert when growth rate is normal (<=5x)', async () => {
     mockSaasMetrics.getProcessedWebhookEventGrowthRate.mockResolvedValue(2.0);
 
-    const Sentry = require('@sentry/node');
-    jest.spyOn(Sentry, 'captureMessage').mockImplementation(() => 'id');
+    const Sentry = await import('@sentry/node');
+    vi.mocked(Sentry.captureMessage).mockImplementation(() => 'id');
 
     await job.execute();
 

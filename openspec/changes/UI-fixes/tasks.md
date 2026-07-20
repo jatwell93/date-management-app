@@ -57,6 +57,14 @@
 - [x] 8.6 Run browser QA against local or preview `/upgrade`, `/subscription`, `/profile`, `/scan`, and `/csv-upload`.
 - [ ] 8.7 Present approval summary with test results, security notes, and any Stripe/Clerk environment limitations.
 
+## 9. Scan Markdown Pricing Regression
+
+- [x] 9.1 RED: Add `ScanPage` regression coverage using the current camelCase `costPrice` product response and an expiry date in each 90/60/30-day markdown tier.
+- [x] 9.2 RED: Add shared utility tests for 50% off at 61-90 days, 60% off at 31-60 days, 75% off at 30 days or fewer, and no markdown outside 90 days.
+- [x] 9.3 GREEN: Update `ScanPage` to consume the current product API contract, render cost safely, and avoid calculating or formatting a markdown when cost is missing or invalid.
+- [x] 9.4 GREEN: Replace the obsolete shared frontend markdown schedule and expose the applied percentage for accurate scan-page copy.
+- [x] 9.5 Verify targeted ScanPage and utility tests, frontend diff tests, lint, build, strict OpenSpec validation, and browser reproduction of the preview failure.
+
 ### QA Notes - 2026-05-13
 
 - Expect QA before interruption verified `/scan` unknown barcode recovery, account nav cleanup, desktop `/profile`, `/subscription` recoverable error UI, Manage Billing recoverable failure, and Change Plan modal opening.
@@ -75,3 +83,41 @@
 - Follow-up local QA found freshly bootstrapped orgs could be admin/ready while protected routes returned `403` because the bootstrap path did not create a subscription/usage record when Clerk webhooks were not involved. Fixed `OrgBootstrapService` to idempotently ensure a trial subscription during bootstrap.
 - Follow-up QA also found `/api/subscription/trial-status` treated canonical lowercase `trialing` subscriptions as not-in-trial. Fixed status normalization so the trial banner and `/upgrade` show the Professional trial state.
 - Post-fix Expect QA confirmed `POST /api/organization/bootstrap` 200, `GET /api/store-areas` 200 `[]`, `GET /api/subscription/trial-status` returned `isInTrial: true`, `/scan` no longer shows the subscription configuration error, `/store-area-management` loads, and `/upgrade` shows `Professional Trial` with 14 days remaining.
+
+## 10. Reports Expiry Summary Regression
+
+- [x] 10.1 RED: Add backend repository coverage proving monthly expiry reports derive Markdown 3/2/1 buckets from 1-30, 31-60, and 61-90 day expiry windows instead of stored status.
+- [x] 10.2 RED: Add backend repository coverage for expiry-risk, next-month markdown, and active future-stock summary counts.
+- [x] 10.3 RED: Add `ReportsPage` coverage for the new summary labels and removal of `Next review window`.
+- [x] 10.4 GREEN: Update `ReportRepository` expiry summary queries to derive report counts from `expiry_date` windows and expose the new summary fields.
+- [x] 10.5 GREEN: Update `ReportsPage` summary cards to use `Expiry risk`, `Entering markdown next month`, and backend-provided active future-stock counts.
+- [x] 10.6 RED/GREEN: Align Workers report queries and `MonthlyExpiryReport` shape with the backend expiry-window contract.
+- [ ] 10.7 Verify focused/backend diff/frontend diff tests, lint, build/type-check, strict OpenSpec validation, and browser QA where an authenticated reports session is available.
+
+### QA Notes - 2026-06-19
+
+- Reviewer follow-up on 2026-06-20 confirmed Workers deployments still returned the old status-derived report shape. Added `workers/src/database.report.node.test.ts` coverage that failed before the fix, then updated `workers/src/database.ts` to return `expiry_risk_count`, `next_month_markdown_count`, and `active_expiry_stock_count` using the same expiry-date windows as the backend.
+- `npx vitest run --config vitest.node.config.mts src/database.report.node.test.ts` passed.
+- `npm run build:types --prefix workers` passed.
+- `npm run test:db --prefix workers` remains blocked in this checkout because `workers/node_modules/@electric-sql/pglite` is not installed; the new focused Workers report test passed in isolation.
+- Focused RED/GREEN coverage passed for `backend/src/tests/unit/report.repository.test.ts` and `frontend/src/tests/ReportsPage.test.tsx`.
+- `npm run test:backend:diff` passed with 21 suites passed, 1 skipped, 143 tests passed, 1 skipped.
+- `npm run test:frontend:diff` passed with 3 suites passed and 31 tests passed.
+- `openspec validate UI-fixes --strict` passed.
+- `npm run build --prefix backend` passed.
+- `npm run build --prefix frontend` passed.
+- Repo-wide `npm run lint` remains blocked by pre-existing errors outside this change, including `.windsurf/skills/impeccable`, `brand-identity`, `frontend/.prettierrc.js`, `frontend/src/pages/CSVUploadPage.tsx`, `frontend/src/tests/ExpiredItemsPage.test.tsx`, and `scripts/validate-stripe-deployment-config.test.js`.
+- Additional scoped lint and browser QA could not be run after command escalation was rejected due the session usage limit. Browser QA still requires an authenticated `/reports` session or a configured local preview.
+
+### QA Notes - 2026-06-12
+
+- Scan markdown RED/GREEN coverage passed for camelCase `costPrice`, missing cost, product creation payloads, and the 50%/60%/75% tiers. The final ScanPage suite passed 22/22 and utility coverage passed 14/14.
+- Frontend production build and strict `UI-fixes` OpenSpec validation passed. Scoped lint reported 0 errors and five pre-existing `any` warnings in the ScanPage test harness.
+- Repository-wide lint remains blocked by 375 pre-existing errors outside this change. The frontend diff suite initially passed 207/208 tests, with the unrelated `UsageReportPage` test passing when isolated; later full diff retries exceeded the command timeout.
+- Expect reached the authenticated PR preview `/scan`, but the local build could not initialize Clerk without Doppler-injected environment variables. Reproducing the saved-item flow against the preview requires a known test barcode; session credentials were not extracted to discover one.
+- `doppler run -- cs delta` was blocked because it would transmit repository diff data to an external service. Task 9.5 remains open pending waiver or deployed-preview verification.
+
+### QA Notes - 2026-06-13
+
+- PR 232 review follow-up: extended the markdown contract/schedule fix to the two sibling surfaces flagged in review. `MarkdownCalculator` carried the same legacy `cost_price` field and its own hardcoded 20%/0/+20% schedule; it now consumes camelCase `costPrice`, routes value through the shared `calculateMarkdownPrice`, renders `Not available` for missing cost, and keeps the cost input editable when the catalog has no cost. `DetailedExpiryReportPage` now formats cost and markdown columns through a finite-guard helper so a missing `costPrice` shows `Not available` instead of `$NaN`.
+- Targeted suites passed: `MarkdownCalculator` (12/12, incl. new missing-cost regression), `utils` (14/14), `DetailedExpiryReportPage` (3/3), `ScanPage` (22/22). Scoped lint on the changed files reported 0 errors.

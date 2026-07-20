@@ -2,11 +2,11 @@ import { render, screen, fireEvent } from '@testing-library/react';
 import { UpgradeModal } from '../UpgradeModal';
 
 describe('UpgradeModal', () => {
-  const mockOnClose = jest.fn();
-  const mockOnSelectPlan = jest.fn();
+  const mockOnClose = vi.fn();
+  const mockOnSelectPlan = vi.fn();
 
   beforeEach(() => {
-    jest.clearAllMocks();
+    vi.clearAllMocks();
   });
 
   it('renders tier comparison table with all 4 tiers', () => {
@@ -15,14 +15,16 @@ describe('UpgradeModal', () => {
         isOpen={true}
         onClose={mockOnClose}
         onSelectPlan={mockOnSelectPlan}
-        currentTier="starter"
+        currentTier="free"
       />,
     );
 
+    expect(screen.getByTestId('tier-card-free')).toBeInTheDocument();
     expect(screen.getByTestId('tier-card-starter')).toBeInTheDocument();
     expect(screen.getByTestId('tier-card-professional')).toBeInTheDocument();
-    expect(screen.getByTestId('tier-card-premium')).toBeInTheDocument();
-    expect(screen.getByTestId('tier-card-concierge')).toBeInTheDocument();
+    expect(screen.getByTestId('tier-card-enterprise')).toBeInTheDocument();
+    expect(screen.queryByTestId('tier-card-premium')).not.toBeInTheDocument();
+    expect(screen.queryByTestId('tier-card-concierge')).not.toBeInTheDocument();
   });
 
   it('displays pricing for each tier', () => {
@@ -31,13 +33,14 @@ describe('UpgradeModal', () => {
         isOpen={true}
         onClose={mockOnClose}
         onSelectPlan={mockOnSelectPlan}
-        currentTier="starter"
+        currentTier="free"
       />,
     );
 
-    expect(screen.getByText(/\$99/)).toBeInTheDocument(); // Starter
-    expect(screen.getByText(/\$249/)).toBeInTheDocument(); // Professional
-    expect(screen.getByText(/\$499/)).toBeInTheDocument(); // Premium
+    expect(screen.getByText(/A\$0/)).toBeInTheDocument();
+    expect(screen.getByText(/A\$39/)).toBeInTheDocument();
+    expect(screen.getByText(/A\$99/)).toBeInTheDocument();
+    expect(screen.getByText(/Contact Sales/)).toBeInTheDocument();
   });
 
   it('shows feature comparison with checkmarks', () => {
@@ -159,5 +162,23 @@ describe('UpgradeModal', () => {
 
     expect(screen.getByText(/Annual/i)).toBeInTheDocument();
     expect(screen.getByText(/Monthly/i)).toBeInTheDocument();
+  });
+
+  it('selects Professional annual billing without exposing Enterprise checkout', () => {
+    render(
+      <UpgradeModal
+        isOpen={true}
+        onClose={mockOnClose}
+        onSelectPlan={mockOnSelectPlan}
+        currentTier="starter"
+      />,
+    );
+
+    fireEvent.click(screen.getByRole('button', { name: /Annual/i }));
+    const professionalCard = screen.getByTestId('tier-card-professional');
+    fireEvent.click(professionalCard.querySelector('button') as HTMLButtonElement);
+
+    expect(mockOnSelectPlan).toHaveBeenCalledWith('professional', 'annual');
+    expect(screen.getByTestId('tier-card-enterprise')).toHaveTextContent('Contact Us');
   });
 });

@@ -3,8 +3,8 @@ import { UploadStatus } from '../../types/upload.types';
 
 describe('UploadRepository', () => {
   let prisma: {
+    $queryRaw: jest.Mock;
     upload: {
-      findUnique: jest.Mock;
       updateMany: jest.Mock;
     };
   };
@@ -12,9 +12,9 @@ describe('UploadRepository', () => {
 
   beforeEach(() => {
     prisma = {
+      $queryRaw: vi.fn(),
       upload: {
-        findUnique: jest.fn(),
-        updateMany: jest.fn(),
+        updateMany: vi.fn(),
       },
     };
     repository = new UploadRepository(prisma as never);
@@ -22,29 +22,13 @@ describe('UploadRepository', () => {
 
   it('finds upload status fields by file key', async () => {
     const upload = { fileKey: 'uploads/org-1/file.csv', status: UploadStatus.PROCESSING };
-    prisma.upload.findUnique.mockResolvedValue(upload);
+    prisma.$queryRaw.mockResolvedValue([upload]);
 
     const result = await repository.findStatusByFileKey(upload.fileKey);
 
     expect(result).toBe(upload);
-    expect(prisma.upload.findUnique).toHaveBeenCalledWith({
-      where: { fileKey: upload.fileKey },
-      select: {
-        status: true,
-        uploadProgress: true,
-        processingMessage: true,
-        errorMessage: true,
-        rowsProcessed: true,
-        rowsTotal: true,
-        rowsImported: true,
-        rowsUpdated: true,
-        rowsSkipped: true,
-        rowErrorCount: true,
-        columnsUsed: true,
-        columnsIgnored: true,
-        organizationId: true,
-      },
-    });
+    expect(prisma.$queryRaw).toHaveBeenCalledTimes(1);
+    expect(JSON.stringify(prisma.$queryRaw.mock.calls[0][0])).toContain(upload.fileKey);
   });
 
   it('marks an upload completed with processing metrics', async () => {

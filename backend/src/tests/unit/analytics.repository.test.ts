@@ -29,25 +29,25 @@ describe('AnalyticsRepository', () => {
   beforeEach(() => {
     prisma = {
       metricsSnapshot: {
-        findMany: jest.fn(),
-        findUnique: jest.fn(),
-        upsert: jest.fn(),
+        findMany: vi.fn(),
+        findUnique: vi.fn(),
+        upsert: vi.fn(),
       },
       subscriptionTier: {
-        findMany: jest.fn(),
-        aggregate: jest.fn(),
-        count: jest.fn(),
-        groupBy: jest.fn(),
+        findMany: vi.fn(),
+        aggregate: vi.fn(),
+        count: vi.fn(),
+        groupBy: vi.fn(),
       },
       organizationUsage: {
-        aggregate: jest.fn(),
+        aggregate: vi.fn(),
       },
       webhookMetrics: {
-        findMany: jest.fn(),
-        upsert: jest.fn(),
+        findMany: vi.fn(),
+        upsert: vi.fn(),
       },
       processedWebhookEvent: {
-        count: jest.fn(),
+        count: vi.fn(),
       },
     };
     repository = new AnalyticsRepository(prisma as never);

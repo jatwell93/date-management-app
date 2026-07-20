@@ -4,31 +4,33 @@ import { CameraScanner } from '../CameraScanner';
 import Quagga from 'quagga';
 
 // Mock Quagga
-jest.mock('quagga', () => ({
-  init: jest.fn(),
-  start: jest.fn(),
-  stop: jest.fn(),
-  onDetected: jest.fn(),
-  offDetected: jest.fn(),
-}));
+vi.mock('quagga', () => {
+  const quagga = {
+    init: vi.fn(),
+    start: vi.fn(),
+    stop: vi.fn(),
+    onDetected: vi.fn(),
+    offDetected: vi.fn(),
+  };
+  return { ...quagga, default: quagga };
+});
 
 // Mock `navigator.mediaDevices`
 Object.defineProperty(global.navigator, 'mediaDevices', {
   value: {
-    getUserMedia: jest.fn().mockResolvedValue({
-      getTracks: () => [{ stop: jest.fn() }],
+    getUserMedia: vi.fn().mockResolvedValue({
+      getTracks: () => [{ stop: vi.fn() }],
     }),
   },
   writable: true,
 });
 
 describe('CameraScanner', () => {
-  const mockOnDetected = jest.fn();
-  const mockOnScannerReady = jest.fn();
-  const mockOnScannerReset = jest.fn();
+  const mockOnDetected = vi.fn();
+  const mockOnScannerReady = vi.fn();
 
   beforeEach(() => {
-    jest.clearAllMocks();
+    vi.clearAllMocks();
   });
 
   it('initializes Quagga on mount', () => {
@@ -92,7 +94,7 @@ describe('CameraScanner', () => {
   });
 
   it('stops scanner after detection (after delay)', () => {
-    jest.useFakeTimers();
+    vi.useFakeTimers();
     let onDetectedCallback: ((data: any) => void) | null = null;
     (Quagga.onDetected as jest.Mock).mockImplementation((cb) => {
       onDetectedCallback = cb;
@@ -111,11 +113,11 @@ describe('CameraScanner', () => {
 
     // Advance time
     act(() => {
-      jest.advanceTimersByTime(1000);
+      vi.advanceTimersByTime(1000);
     });
 
     expect(Quagga.stop).toHaveBeenCalled();
-    jest.useRealTimers();
+    vi.useRealTimers();
   });
 
   it('stops scanner on unmount', () => {
@@ -134,7 +136,7 @@ describe('CameraScanner', () => {
   });
 
   it('resets scanner when retry button is clicked', () => {
-    jest.useFakeTimers();
+    vi.useFakeTimers();
 
     // 1. Mock failure first.
     (Quagga.init as jest.Mock).mockImplementationOnce((config, callback) => {
@@ -151,7 +153,7 @@ describe('CameraScanner', () => {
     expect(retryButton).toBeInTheDocument();
 
     // Clear mocks to track calls during reset
-    jest.clearAllMocks();
+    vi.clearAllMocks();
 
     // 2. Click retry
     fireEvent.click(retryButton);
@@ -162,22 +164,22 @@ describe('CameraScanner', () => {
 
     // 3. Fast forward for timeout
     act(() => {
-      jest.advanceTimersByTime(300);
+      vi.advanceTimersByTime(300);
     });
 
     // 4. Verify start called
     expect(Quagga.start).toHaveBeenCalled();
 
-    jest.useRealTimers();
+    vi.useRealTimers();
   });
 
   describe('continuous mode', () => {
     beforeEach(() => {
-      jest.useFakeTimers();
+      vi.useFakeTimers();
     });
 
     afterEach(() => {
-      jest.useRealTimers();
+      vi.useRealTimers();
     });
 
     it('does not stop scanner after detection when continuous=true', () => {
@@ -196,7 +198,7 @@ describe('CameraScanner', () => {
 
       // Advance time beyond the normal stop delay
       act(() => {
-        jest.advanceTimersByTime(2000);
+        vi.advanceTimersByTime(2000);
       });
 
       // Should NOT have stopped the scanner
@@ -219,7 +221,7 @@ describe('CameraScanner', () => {
 
       // Advance time to trigger stop
       act(() => {
-        jest.advanceTimersByTime(1000);
+        vi.advanceTimersByTime(1000);
       });
 
       expect(Quagga.stop).toHaveBeenCalled();
@@ -255,7 +257,7 @@ describe('CameraScanner', () => {
 
       // Advance time past the 2-second window
       act(() => {
-        jest.advanceTimersByTime(2100);
+        vi.advanceTimersByTime(2100);
       });
 
       // Third scan should work now

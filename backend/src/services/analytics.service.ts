@@ -1,5 +1,7 @@
 import { Logger } from '../utils/logger';
 import { IAnalyticsAdapter } from '../adapters/analytics/IAnalyticsAdapter';
+import { getDefaultDatabaseClient } from '../database/database-factory';
+import { SQLiteAnalyticsAdapter } from '../adapters/analytics/SQLiteAnalyticsAdapter';
 import { randomBytes } from 'crypto';
 
 // Define analytics event types
@@ -319,9 +321,16 @@ export class AnalyticsService {
    */
   public static getInstance(): AnalyticsService {
     if (!AnalyticsService.instance) {
-      const db = require('../database/database-factory').getDefaultDatabaseClient();
-      const { SQLiteAnalyticsAdapter } = require('../adapters/analytics/SQLiteAnalyticsAdapter');
-      const adapter = new SQLiteAnalyticsAdapter(db);
+      // Statically imported (was a lazy `require`): the adapter's import back to
+      // this module is type-only and elided at runtime, so there is no cycle, and
+      // `better-sqlite3` is an always-installed dependency. Vitest's ESM runner
+      // does not resolve relative `require()` of `.ts` source, so static is required.
+      // The legacy lazy `require` typed this as `any`; preserve that exact runtime
+      // behaviour (and the pre-existing client/adapter shape mismatch) with a cast.
+      const db = getDefaultDatabaseClient();
+      const adapter = new SQLiteAnalyticsAdapter(
+        db as unknown as ConstructorParameters<typeof SQLiteAnalyticsAdapter>[0],
+      );
       AnalyticsService.instance = new AnalyticsService(adapter);
       AnalyticsService.instance.initialize();
     }

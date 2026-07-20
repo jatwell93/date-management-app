@@ -2,35 +2,42 @@ import express from 'express';
 import request from 'supertest';
 
 const mockReportService = {
-  getMonthlyExpiryReport: jest.fn(),
-  getOverallExpiryReport: jest.fn(),
-  getDetailedExpiryReport: jest.fn(),
-  getMonthlyMarkdownReport: jest.fn(),
-  updateAllMarkdownStatuses: jest.fn(),
-  getUsageReport: jest.fn(),
-  getDailyUsageReport: jest.fn(),
-  getLossBySkuReport: jest.fn(),
-  getLossByDepartmentReport: jest.fn(),
-  getItemsByUserReport: jest.fn(),
-  getItemsByDateReport: jest.fn(),
-  getDashboardAnalytics: jest.fn(),
+  getMonthlyExpiryReport: vi.fn(),
+  getOverallExpiryReport: vi.fn(),
+  getDetailedExpiryReport: vi.fn(),
+  getActiveExpiryEntries: vi.fn(),
+  getMonthlyMarkdownReport: vi.fn(),
+  updateAllMarkdownStatuses: vi.fn(),
+  getUsageReport: vi.fn(),
+  getDailyUsageReport: vi.fn(),
+  getLossBySkuReport: vi.fn(),
+  getLossByDepartmentReport: vi.fn(),
+  getItemsByUserReport: vi.fn(),
+  getItemsByDateReport: vi.fn(),
+  getStoreWalkAuditReport: vi.fn(),
+  getDashboardAnalytics: vi.fn(),
 };
 
-const mockServiceProviderCtor = jest.fn().mockImplementation(() => ({
-  getReportService: () => mockReportService,
-}));
+const mockServiceProviderCtor = vi.fn().mockImplementation(function () {
+  return {
+    getReportService: () => mockReportService,
+  };
+});
 
-const mockRequireFeature = jest
-  .fn()
-  .mockImplementation(() => (_req: any, _res: any, next: any) => next());
+// Invoked at the SUT's module-load (requireFeature() builds middleware), so it
+// must exist before the hoisted vi.mock factory runs — wrap in vi.hoisted()
+// (Vitest auto-hoists bare vi.fn() but not chained .mockImplementation()).
+const mockRequireFeature = vi.hoisted(() =>
+  vi.fn().mockImplementation(() => (_req: any, _res: any, next: any) => next()),
+);
 
-jest.mock('../../services/service-provider', () => ({
+vi.mock('../../services/service-provider', () => ({
   ServiceProvider: function ServiceProvider(...args: unknown[]) {
     return mockServiceProviderCtor(...args);
   },
 }));
 
-jest.mock('../../middleware/auth.middleware', () => ({
+vi.mock('../../middleware/auth.middleware', () => ({
   authenticateToken: (req: any, _res: any, next: any) => {
     req.organizationId = req.get('x-org-id') || 'org-report-test';
     req.userId = 101;
@@ -38,7 +45,7 @@ jest.mock('../../middleware/auth.middleware', () => ({
   },
 }));
 
-jest.mock('../../middleware/feature-gate.middleware', () => ({
+vi.mock('../../middleware/feature-gate.middleware', () => ({
   requireFeature: (...args: unknown[]) => mockRequireFeature(...args),
 }));
 
@@ -53,11 +60,12 @@ describe('report.routes', () => {
   });
 
   beforeEach(() => {
-    jest.clearAllMocks();
+    vi.clearAllMocks();
 
     mockReportService.getMonthlyExpiryReport.mockResolvedValue({ report: 'expiry' });
     mockReportService.getOverallExpiryReport.mockResolvedValue({ report: 'overall' });
     mockReportService.getDetailedExpiryReport.mockResolvedValue({ report: 'details' });
+    mockReportService.getActiveExpiryEntries.mockResolvedValue({ report: 'entries' });
     mockReportService.getMonthlyMarkdownReport.mockResolvedValue({ report: 'markdown' });
     mockReportService.updateAllMarkdownStatuses.mockResolvedValue(undefined);
     mockReportService.getUsageReport.mockResolvedValue({ report: 'usage' });
@@ -66,6 +74,7 @@ describe('report.routes', () => {
     mockReportService.getLossByDepartmentReport.mockResolvedValue({ report: 'loss-by-department' });
     mockReportService.getItemsByUserReport.mockResolvedValue({ report: 'items-by-user' });
     mockReportService.getItemsByDateReport.mockResolvedValue({ report: 'items-by-date' });
+    mockReportService.getStoreWalkAuditReport.mockResolvedValue({ report: 'store-walk-audit' });
     mockReportService.getDashboardAnalytics.mockResolvedValue({ report: 'analytics' });
   });
 
@@ -82,6 +91,7 @@ describe('report.routes', () => {
     const cases = [
       ['/reports/expiry-overall', { report: 'overall' }, 'getOverallExpiryReport'],
       ['/reports/expiry-details', { report: 'details' }, 'getDetailedExpiryReport'],
+      ['/reports/expiry-entries', { report: 'entries' }, 'getActiveExpiryEntries'],
       ['/reports/monthly-markdown', { report: 'markdown' }, 'getMonthlyMarkdownReport'],
       ['/reports/usage', { report: 'usage' }, 'getUsageReport'],
       ['/reports/daily-usage', { report: 'daily-usage' }, 'getDailyUsageReport'],
@@ -92,6 +102,7 @@ describe('report.routes', () => {
         'getLossByDepartmentReport',
       ],
       ['/reports/items-by-date', { report: 'items-by-date' }, 'getItemsByDateReport'],
+      ['/reports/store-walk-audit', { report: 'store-walk-audit' }, 'getStoreWalkAuditReport'],
       ['/reports/analytics', { report: 'analytics' }, 'getDashboardAnalytics'],
     ] as const;
 

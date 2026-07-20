@@ -1,6 +1,6 @@
 import { Request, Response, NextFunction } from 'express';
 import { Logger } from '../utils/logger';
-import { isBaseError, ValidationError } from '../errors';
+import { isBaseError, PolicyValidationError, ValidationError } from '../errors';
 
 /**
  * Type-safe error payload structure
@@ -48,7 +48,10 @@ export const errorHandler = (err: Error, req: Request, res: Response, _next: Nex
     };
 
     // Include validation errors if present
-    if (err instanceof ValidationError && err.errors) {
+    if (
+      (err instanceof ValidationError || err instanceof PolicyValidationError) &&
+      err.errors?.length
+    ) {
       errorPayload.errors = err.errors;
     }
   } else {

@@ -4,6 +4,7 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from './ui/
 import { Button } from './ui/button';
 import { buildApiUrl } from '../lib/api.service';
 import type { SubscriptionData, UsageData } from '../types/subscription';
+import { useFreshApiToken } from '../hooks/useFreshApiToken';
 
 interface SubscriptionDashboardProps {
   token: string | null;
@@ -66,6 +67,7 @@ function formatBytes(bytes: number): string {
 }
 
 export function SubscriptionDashboard({ token, onUpgrade }: SubscriptionDashboardProps) {
+  const getFreshApiToken = useFreshApiToken(token);
   const [subscription, setSubscription] = useState<SubscriptionData | null>(null);
   const [usage, setUsage] = useState<UsageData | null>(null);
   const [loading, setLoading] = useState(true);
@@ -73,18 +75,20 @@ export function SubscriptionDashboard({ token, onUpgrade }: SubscriptionDashboar
 
   useEffect(() => {
     if (!token) {
+      // eslint-disable-next-line react-hooks/set-state-in-effect -- intentional: guard state when the auth prerequisite is absent
       setLoading(false);
       return;
     }
 
     const fetchData = async () => {
       try {
+        const authToken = await getFreshApiToken('subscription-dashboard');
         const [subscriptionRes, usageRes] = await Promise.all([
           fetch(buildApiUrl('/subscription/current'), {
-            headers: { Authorization: `Bearer ${token}` },
+            headers: { Authorization: `Bearer ${authToken}` },
           }),
           fetch(buildApiUrl('/organization/usage'), {
-            headers: { Authorization: `Bearer ${token}` },
+            headers: { Authorization: `Bearer ${authToken}` },
           }),
         ]);
 
@@ -108,7 +112,7 @@ export function SubscriptionDashboard({ token, onUpgrade }: SubscriptionDashboar
     };
 
     fetchData();
-  }, [token]);
+  }, [token, getFreshApiToken]);
 
   if (loading) {
     return (
@@ -132,6 +136,7 @@ export function SubscriptionDashboard({ token, onUpgrade }: SubscriptionDashboar
   }
 
   const tierColors = {
+    free: 'bg-semantic-surface-2 text-semantic-text-primary border-hairline',
     starter: 'bg-semantic-surface-2 text-semantic-text-primary border-hairline',
     professional:
       'bg-semantic-secondary-muted text-semantic-secondary-muted-foreground border-semantic-secondary-muted',
@@ -139,12 +144,16 @@ export function SubscriptionDashboard({ token, onUpgrade }: SubscriptionDashboar
       'bg-semantic-success-muted text-semantic-success-muted-foreground border-semantic-success-muted',
     concierge:
       'bg-semantic-warning-muted text-semantic-warning-muted-foreground border-semantic-warning-muted',
+    enterprise:
+      'bg-semantic-warning-muted text-semantic-warning-muted-foreground border-semantic-warning-muted',
   };
 
   const tierDisplayName =
     subscription.tierLevel.charAt(0).toUpperCase() + subscription.tierLevel.slice(1);
   const showUpgrade =
-    subscription.tierLevel !== 'premium' && subscription.tierLevel !== 'concierge';
+    subscription.tierLevel !== 'enterprise' &&
+    subscription.tierLevel !== 'premium' &&
+    subscription.tierLevel !== 'concierge';
 
   return (
     <Card>

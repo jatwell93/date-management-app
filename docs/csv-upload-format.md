@@ -33,6 +33,7 @@ Your CSV file must contain the following four columns. You can use alternative n
 - `Cost`
 - `Cost Price`
 - `Unit Cost`
+- `Item Cost`
 - `Cost ex`
 - `Price`
 - `Unit Price`
@@ -145,6 +146,44 @@ If your CSV file has issues, the system will return specific error messages:
 - **Field Too Long**: "Row X: [FIELD NAME] too long (max [N] characters) - "[VALUE]...". Please ensure the [FIELD NAME] value is [N] characters or fewer."
 - **Missing Column Header**: "Missing required column header for [FIELD NAME]. Acceptable alternatives: [LIST OF ALTERNATIVES]. Column headers are case-insensitive and leading/trailing spaces are ignored."
 - **Unexpected Columns**: "Row X: Unexpected columns found - [COLUMN NAMES]"
+
+## Expiry List Import
+
+The **Expiry List Import** tab (`/csv-upload`) is a separate flow for loading records you already
+track in a spreadsheet (e.g. an Excel sheet of SKUs and used-by dates). It does **not** require the
+barcode or cost columns that the product catalogue import needs.
+
+### Required Columns
+
+| Field | Accepted Column Names |
+| --- | --- |
+| SKU | `SKU`, `Item Code`, `Reorder Number`, `Product Code`, `Item Number` |
+| Used-By Date | `Used-By Date`, `Used By Date`, `Used By`, `Use By Date`, `Use By`, `Expiry Date`, `Expiry`, `Best Before` |
+
+### Optional Columns
+
+| Field | Accepted Column Names |
+| --- | --- |
+| Item Description | `Name`, `Item Description`, `Product Name`, `Description`, `Item Name` |
+| Department | `Department`, `Dept`, `Location`, `Store Area`, `Area`, `Section` |
+
+### Accepted Date Formats
+
+Only numeric formats are supported (month names such as `Dec/2026` are rejected):
+
+- `dd/mm/yy`, `dd/mm/yyyy` — e.g. `12/12/26`, `12/12/2026`
+- `mm/yy`, `mm/yyyy`, `mm-yy`, `mm-yyyy` — month/year formats normalize to the **last day of the month** (e.g. `12/2026` → 31 Dec 2026)
+
+Ambiguous values such as `12/12` (no year) are rejected. Each unparseable row is reported
+individually; the rest of the file still imports.
+
+### Behaviour
+
+- If a SKU does not already exist, a product is created automatically with a generated barcode
+  (`EXP-IMPORT-<sku>`), a zero cost, and the item description (or the SKU) as its name.
+- When the Department column is omitted or blank, items are assigned to the `Unallocated` store area.
+- Rows are merged (not duplicated) when the same SKU + used-by date already exists — both within the
+  uploaded file and against inventory already recorded for that day.
 
 ## Technical Notes
 

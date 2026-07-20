@@ -3,7 +3,7 @@ import { ReportRepository } from '../../repositories/report.repository';
 import Database from 'better-sqlite3';
 
 // Mock the ReportRepository
-jest.mock('../../repositories/report.repository');
+vi.mock('../../repositories/report.repository');
 
 describe('ReportService', () => {
   let reportService: ReportService;
@@ -15,21 +15,22 @@ describe('ReportService', () => {
     mockDb = {} as Database;
 
     // Create service with mock database
-    reportService = new ReportService(mockDb as Database);
+    reportService = new ReportService(mockDb as Database, 'test-org');
 
     // Create mock repository
     mockRepository = {
-      getMonthlyExpiryReport: jest.fn().mockResolvedValue([]),
-      getOverallExpiryReport: jest.fn().mockResolvedValue({}),
-      getDetailedExpiryReport: jest.fn().mockResolvedValue([]),
-      getMonthlyMarkdownReport: jest.fn().mockResolvedValue([]),
-      getUsageReport: jest.fn().mockResolvedValue([]),
-      getDailyUsageReport: jest.fn().mockResolvedValue([]),
-      getDashboardAnalytics: jest.fn().mockResolvedValue({}),
-      getLossBySkuReport: jest.fn().mockResolvedValue([]),
-      getLossByDepartmentReport: jest.fn().mockResolvedValue([]),
-      getItemsByUserReport: jest.fn().mockResolvedValue([]),
-      getItemsByDateReport: jest.fn().mockResolvedValue([]),
+      getMonthlyExpiryReport: vi.fn().mockResolvedValue([]),
+      getOverallExpiryReport: vi.fn().mockResolvedValue({}),
+      getDetailedExpiryReport: vi.fn().mockResolvedValue([]),
+      getActiveExpiryEntries: vi.fn().mockResolvedValue([]),
+      getMonthlyMarkdownReport: vi.fn().mockResolvedValue([]),
+      getUsageReport: vi.fn().mockResolvedValue([]),
+      getDailyUsageReport: vi.fn().mockResolvedValue([]),
+      getDashboardAnalytics: vi.fn().mockResolvedValue({}),
+      getLossBySkuReport: vi.fn().mockResolvedValue([]),
+      getLossByDepartmentReport: vi.fn().mockResolvedValue([]),
+      getItemsByUserReport: vi.fn().mockResolvedValue([]),
+      getItemsByDateReport: vi.fn().mockResolvedValue([]),
     } as any;
 
     // Inject the mock repository into the service
@@ -37,7 +38,7 @@ describe('ReportService', () => {
   });
 
   afterEach(() => {
-    jest.clearAllMocks();
+    vi.clearAllMocks();
   });
 
   it('should return monthly markdown report', async () => {
@@ -77,6 +78,18 @@ describe('ReportService', () => {
 
     expect(report).toEqual(mockReport);
     expect(mockRepository.getMonthlyExpiryReport).toHaveBeenCalledTimes(1);
+  });
+
+  it('should return all active expiry entries', async () => {
+    const mockEntries = [
+      { inventoryId: 1, expiryDate: '2027-01-01', status: 'Normal', locationName: 'Aisle 1' },
+    ];
+    (mockRepository.getActiveExpiryEntries as any).mockResolvedValue(mockEntries);
+
+    const entries = await reportService.getActiveExpiryEntries();
+
+    expect(entries).toEqual(mockEntries);
+    expect(mockRepository.getActiveExpiryEntries).toHaveBeenCalledTimes(1);
   });
 
   it('should return dashboard analytics', async () => {

@@ -16,12 +16,16 @@ import { InventoryService } from '../../services/inventory.service';
 import { SubscriptionStatus } from '../../types/subscription';
 
 // Mock Stripe to avoid API calls in tests
-jest.mock('stripe', () => {
-  return jest.fn().mockImplementation(() => ({
-    customers: {
-      create: jest.fn().mockResolvedValue({ id: 'cus_test123' }),
-    },
-  }));
+vi.mock('stripe', () => {
+  // SUT default-imports Stripe; expose the constructor as `default`.
+  const StripeMock = vi.fn().mockImplementation(function () {
+    return {
+      customers: {
+        create: vi.fn().mockResolvedValue({ id: 'cus_test123' }),
+      },
+    };
+  });
+  return { default: StripeMock };
 });
 
 describe('Multi-Tenant Cross-Tenant Isolation Tests', () => {

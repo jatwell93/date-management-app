@@ -16,6 +16,7 @@ import {
   calculateInventoryMarkdownStatus,
   INVENTORY_MARKDOWN_THRESHOLDS,
 } from './inventory-markdown.helpers';
+import { MarkdownConfigService } from './markdown-config.service';
 
 export interface CreateInventoryItemInput {
   productId: number;
@@ -38,6 +39,7 @@ type InventoryItemRaw = {
 type DbClient = PrismaClient | Prisma.TransactionClient;
 type InventoryStatus = InventoryItem['status'];
 type InventoryTransactionInput = Omit<ItemTransaction, 'id' | 'transaction_date'>;
+type CreatedItemTransaction = { id: number };
 
 @injectable()
 export class InventoryService {
@@ -150,7 +152,7 @@ export class InventoryService {
         if (usage.totalInventoryItems >= usage.maxInventoryItems) {
           throw new Error(
             `Cannot create inventory item: maximum limit of ${usage.maxInventoryItems} inventory items reached. ` +
-            `Current usage: ${usage.totalInventoryItems}.`,
+              `Current usage: ${usage.totalInventoryItems}.`,
           );
         }
       }
@@ -305,7 +307,7 @@ export class InventoryService {
   private async logTransactionInternal(
     transaction: InventoryTransactionInput,
     tx?: DbClient,
-  ): Promise<any> {
+  ): Promise<CreatedItemTransaction> {
     const client = tx ?? this.prisma;
     return client.itemTransaction.create({
       data: {
@@ -382,7 +384,13 @@ export class InventoryService {
       return null;
     }
 
-    return calculateInventoryMarkdownPrice(item.product.costPrice, item.expiryDate);
+    // Honor the org's configured matrix and retail basis (issue #338).
+    const matrix = await new MarkdownConfigService(this.organizationId, this.prisma).getMatrix();
+
+    return calculateInventoryMarkdownPrice(item.product.costPrice, item.expiryDate, new Date(), {
+      retailPrice: item.product.retailPrice ?? null,
+      matrix,
+    });
   }
 
   private async validateResourceOwnership(

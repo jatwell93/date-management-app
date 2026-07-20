@@ -6,6 +6,16 @@ import { getExpiredItems, processExpiredItem } from '../services/expiredItemServ
 import ExpiredLossReport from '../components/ExpiredLossReport';
 import { Button } from '../components/ui/button';
 import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from '../components/ui/dialog';
+import { Input } from '../components/ui/input';
+import { Label } from '../components/ui/label';
+import {
   AlertDialog,
   AlertDialogAction,
   AlertDialogCancel,
@@ -25,23 +35,13 @@ import {
   TableHeader,
   TableRow,
 } from '../components/ui/table';
+import { useFreshApiToken } from '../hooks/useFreshApiToken';
 
-// Import Chart.js components — lazy-loaded to keep initial bundle lean
-import {
-  Chart as ChartJS,
-  CategoryScale,
-  LinearScale,
-  BarElement,
-  Title,
-  Tooltip,
-  Legend,
-  ChartOptions,
-} from 'chart.js';
+// Type-only import — no runtime cost. Chart.js itself is loaded on demand via the
+// shared lazy chart module (registration lives inside that lazily-loaded chunk).
+import type { ChartOptions } from 'chart.js';
 
-// Register Chart.js components
-ChartJS.register(CategoryScale, LinearScale, BarElement, Title, Tooltip, Legend);
-
-const Bar = lazy(() => import('react-chartjs-2').then((m) => ({ default: m.Bar })));
+const Bar = lazy(() => import('../components/charts/lazyCharts').then((m) => ({ default: m.Bar })));
 
 interface ExpiredItemsPageProps {
   token: string | null;
@@ -77,14 +77,45 @@ function formatExpiry(raw: string): string {
 }
 
 const SKELETON_ROWS = Array.from({ length: 5 }, (_, i) => i);
+const PROCESS_DIALOG_LABEL_CLASS = 'text-xs font-medium text-semantic-text-secondary';
+const PROCESS_DIALOG_VALUE_CLASS = 'text-sm font-medium text-semantic-text-primary break-words';
+const PROCESS_DIALOG_HELP_CLASS = 'mt-1 text-sm font-medium text-semantic-text-secondary';
+const PROCESS_DIALOG_ERROR_CLASS = 'mt-1 text-sm font-medium text-semantic-critical';
+
+// The number entered here is the physically-counted expired quantity, recorded
+// at write-off time. It is intentionally NOT capped by `quantityAvailable`: the
+// scan flow only logs a SKU + expiry marker (not real stock-on-hand), so the true
+// expired count is only known now. See issue #268. We still require a whole number
+// >= 1; the write-off ledger is the source of truth for the recorded loss.
+function parseUnitsDiscardedInput(rawUnitsDiscarded: string): {
+  value?: number;
+  error: string | null;
+} {
+  const trimmed = rawUnitsDiscarded.trim();
+  if (trimmed === '') {
+    return { error: 'Must be at least 1' };
+  }
+
+  if (!/^\d+$/.test(trimmed)) {
+    return { error: 'Enter a whole number' };
+  }
+
+  const parsed = Number(trimmed);
+  if (parsed < 1) {
+    return { error: 'Must be at least 1' };
+  }
+
+  return { value: parsed, error: null };
+}
 
 const ExpiredItemsPage: React.FC<ExpiredItemsPageProps> = ({ token }) => {
+  const getFreshApiToken = useFreshApiToken(token);
   const [expiredItems, setExpiredItems] = useState<ExpiredItem[]>([]);
   const [loading, setLoading] = useState<boolean>(true);
   const [error, setError] = useState<string | null>(null);
   const [selectedItem, setSelectedItem] = useState<ExpiredItem | null>(null);
   const [action, setAction] = useState<'sold_through' | 'expired' | null>(null);
-  const [unitsDiscarded, setUnitsDiscarded] = useState<number>(1);
+  const [unitsDiscarded, setUnitsDiscarded] = useState<string>('1');
   const [isModalOpen, setIsModalOpen] = useState<boolean>(false);
   const [processError, setProcessError] = useState<string | null>(null);
   const [isConfirmDialogOpen, setIsConfirmDialogOpen] = useState(false);
@@ -106,6 +137,7 @@ const ExpiredItemsPage: React.FC<ExpiredItemsPageProps> = ({ token }) => {
 
   useEffect(() => {
     if (!token) {
+      // eslint-disable-next-line react-hooks/set-state-in-effect -- intentional: guard state when the auth prerequisite is absent
       setError('Authentication token is missing.');
       setLoading(false);
       return;
@@ -116,7 +148,8 @@ const ExpiredItemsPage: React.FC<ExpiredItemsPageProps> = ({ token }) => {
     const fetchExpiredItems = async () => {
       try {
         setLoading(true);
-        const data = await getExpiredItems(token, controller.signal);
+        const authToken = await getFreshApiToken('expired-items-list');
+        const data = await getExpiredItems(authToken || null, controller.signal);
         if (!controller.signal.aborted) {
           setExpiredItems(data);
         }
@@ -140,25 +173,21 @@ const ExpiredItemsPage: React.FC<ExpiredItemsPageProps> = ({ token }) => {
 
     fetchExpiredItems();
     return () => controller.abort();
-  }, [token]);
+  }, [token, getFreshApiToken]);
 
   const handleAction = useCallback((item: ExpiredItem, actionType: 'sold_through' | 'expired') => {
     setSelectedItem(item);
     setAction(actionType);
     setProcessError(null);
     setUnitsDiscardedError(null);
-    setUnitsDiscarded(actionType === 'expired' ? 1 : 0);
+    setUnitsDiscarded(actionType === 'expired' ? '1' : '0');
     setIsModalOpen(true);
   }, []);
 
   const handleUnitsDiscardedChange = useCallback((e: React.ChangeEvent<HTMLInputElement>) => {
-    const parsed = parseInt(e.target.value, 10);
-    if (!Number.isNaN(parsed)) {
-      setUnitsDiscarded(parsed);
-      setUnitsDiscardedError(null);
-    } else {
-      setUnitsDiscardedError('Enter a whole number');
-    }
+    const rawUnitsDiscarded = e.target.value;
+    setUnitsDiscarded(rawUnitsDiscarded);
+    setUnitsDiscardedError(parseUnitsDiscardedInput(rawUnitsDiscarded).error);
   }, []);
 
   const showToast = useCallback((message: string, type: 'success' | 'error') => {
@@ -181,14 +210,9 @@ const ExpiredItemsPage: React.FC<ExpiredItemsPageProps> = ({ token }) => {
     setUnitsDiscardedError(null);
 
     if (action === 'expired') {
-      if (!unitsDiscarded || unitsDiscarded <= 0) {
-        setUnitsDiscardedError('Must be at least 1');
-        return;
-      }
-      if (unitsDiscarded > selectedItem.quantityAvailable) {
-        setUnitsDiscardedError(
-          `Cannot exceed available quantity (${selectedItem.quantityAvailable})`,
-        );
+      const validation = parseUnitsDiscardedInput(unitsDiscarded);
+      if (validation.error) {
+        setUnitsDiscardedError(validation.error);
         return;
       }
     }
@@ -203,18 +227,26 @@ const ExpiredItemsPage: React.FC<ExpiredItemsPageProps> = ({ token }) => {
     setProcessError(null);
 
     try {
-      const processUnitsDiscarded = action === 'expired' ? unitsDiscarded : 0;
+      const processUnitsDiscarded =
+        action === 'expired' ? parseUnitsDiscardedInput(unitsDiscarded).value : undefined;
+      if (action === 'expired' && processUnitsDiscarded === undefined) {
+        setUnitsDiscardedError('Must be at least 1');
+        setIsProcessing(false);
+        return;
+      }
+
+      const authToken = await getFreshApiToken('expired-items-process');
 
       await processExpiredItem(
         {
           inventoryItemId: selectedItem.id,
           action,
-          unitsDiscarded: processUnitsDiscarded,
+          ...(action === 'expired' ? { unitsDiscarded: processUnitsDiscarded } : {}),
         },
-        token,
+        authToken || null,
       );
 
-      const data = await getExpiredItems(token);
+      const data = await getExpiredItems(authToken || null);
       setExpiredItems(data);
 
       const label = action === 'expired' ? 'Expired' : 'Sold Through';
@@ -241,7 +273,7 @@ const ExpiredItemsPage: React.FC<ExpiredItemsPageProps> = ({ token }) => {
     } finally {
       setIsProcessing(false);
     }
-  }, [selectedItem, action, unitsDiscarded, isProcessing, token, showToast]);
+  }, [selectedItem, action, unitsDiscarded, isProcessing, getFreshApiToken, showToast]);
 
   const retryControllerRef = useRef<AbortController | null>(null);
 
@@ -259,7 +291,8 @@ const ExpiredItemsPage: React.FC<ExpiredItemsPageProps> = ({ token }) => {
     setLoading(true);
     setError(null);
     try {
-      const data = await getExpiredItems(token, controller.signal);
+      const authToken = await getFreshApiToken('expired-items-retry');
+      const data = await getExpiredItems(authToken || null, controller.signal);
       if (!controller.signal.aborted) {
         setExpiredItems(data);
       }
@@ -276,10 +309,11 @@ const ExpiredItemsPage: React.FC<ExpiredItemsPageProps> = ({ token }) => {
         setLoading(false);
       }
     }
-  }, [token]);
+  }, [token, getFreshApiToken]);
 
   const closeModal = useCallback(() => {
     setIsModalOpen(false);
+    setIsConfirmDialogOpen(false);
     setSelectedItem(null);
     setAction(null);
     setProcessError(null);
@@ -298,11 +332,16 @@ const ExpiredItemsPage: React.FC<ExpiredItemsPageProps> = ({ token }) => {
       }
 
       try {
+        const authToken = await getFreshApiToken('expired-items-loss-reports');
         const [lossBySkuResult, lossByDeptResult] = await Promise.allSettled([
-          apiService.get<LossBySkuReportItem[]>('/reports/loss-by-sku', token, controller.signal),
+          apiService.get<LossBySkuReportItem[]>(
+            '/reports/loss-by-sku',
+            authToken,
+            controller.signal,
+          ),
           apiService.get<LossByDepartmentReportItem[]>(
             '/reports/loss-by-department',
-            token,
+            authToken,
             controller.signal,
           ),
         ]);
@@ -334,7 +373,7 @@ const ExpiredItemsPage: React.FC<ExpiredItemsPageProps> = ({ token }) => {
 
     fetchChartData();
     return () => controller.abort();
-  }, [token]);
+  }, [token, getFreshApiToken]);
 
   const lossBySkuChartData = useMemo(
     () => ({
@@ -395,7 +434,7 @@ const ExpiredItemsPage: React.FC<ExpiredItemsPageProps> = ({ token }) => {
       ...chartOptions,
       plugins: {
         ...chartOptions.plugins,
-        title: { display: true, text: 'Top SKUs by Total Loss Value' },
+        title: { display: true, text: '5 Worst Performing SKUs' },
       },
     }),
     [chartOptions],
@@ -406,7 +445,7 @@ const ExpiredItemsPage: React.FC<ExpiredItemsPageProps> = ({ token }) => {
       ...chartOptions,
       plugins: {
         ...chartOptions.plugins,
-        title: { display: true, text: 'Losses by Department' },
+        title: { display: true, text: '5 Worst Performing Departments' },
       },
     }),
     [chartOptions],
@@ -455,7 +494,7 @@ const ExpiredItemsPage: React.FC<ExpiredItemsPageProps> = ({ token }) => {
   }
 
   return (
-    <div className="container mx-auto px-4 py-8">
+    <div className="print-report-root container mx-auto px-4 py-8">
       <header className="mb-6">
         <div className="flex items-center justify-between">
           <h1 className="text-3xl font-semibold font-heading">Expired Items</h1>
@@ -547,88 +586,146 @@ const ExpiredItemsPage: React.FC<ExpiredItemsPageProps> = ({ token }) => {
             ))}
           </ul>
 
-          <div className="hidden lg:block overflow-x-auto rounded-md border">
-            <Table>
-              <TableHeader>
-                <TableRow className="bg-semantic-surface-2 hover:bg-semantic-surface-2">
-                  <TableHead className="text-left text-xs font-semibold font-eyebrow text-semantic-text-secondary uppercase tracking-wider">
-                    SKU
-                  </TableHead>
-                  <TableHead className="text-left text-xs font-semibold font-eyebrow text-semantic-text-secondary uppercase tracking-wider">
-                    Product Name
-                  </TableHead>
-                  <TableHead className="text-left text-xs font-semibold font-eyebrow text-semantic-text-secondary uppercase tracking-wider">
-                    Location
-                  </TableHead>
-                  <TableHead className="text-left text-xs font-semibold font-eyebrow text-semantic-text-secondary uppercase tracking-wider">
-                    Expiry Date
-                  </TableHead>
-                  <TableHead className="text-left text-xs font-semibold font-eyebrow text-semantic-text-secondary uppercase tracking-wider">
-                    Cost Price
-                  </TableHead>
-                  <TableHead className="text-left text-xs font-semibold font-eyebrow text-semantic-text-secondary uppercase tracking-wider">
-                    Qty
-                  </TableHead>
-                  <TableHead className="text-left text-xs font-semibold font-eyebrow text-semantic-text-secondary uppercase tracking-wider">
-                    Status
-                  </TableHead>
-                  <TableHead className="text-left text-xs font-semibold font-eyebrow text-semantic-text-secondary uppercase tracking-wider">
-                    Actions
-                  </TableHead>
-                </TableRow>
-              </TableHeader>
-              <TableBody>
-                {expiredItems.map((item) => (
-                  <TableRow
-                    key={item.id}
-                    className="hover:bg-semantic-surface-2/50 transition-colors"
-                  >
-                    <TableCell className="whitespace-nowrap text-sm text-semantic-text-primary">
-                      {item.sku}
-                    </TableCell>
-                    <TableCell className="whitespace-nowrap text-sm font-medium text-semantic-text-primary">
-                      {item.productName}
-                    </TableCell>
-                    <TableCell className="whitespace-nowrap text-sm text-semantic-text-secondary">
-                      {item.locationName}
-                    </TableCell>
-                    <TableCell className="whitespace-nowrap text-sm tabular-nums text-semantic-text-primary">
-                      {formatExpiry(item.expiryDate)}
-                    </TableCell>
-                    <TableCell className="whitespace-nowrap text-sm text-semantic-text-primary">
-                      {currencyFormatter.format(item.costPrice)}
-                    </TableCell>
-                    <TableCell className="whitespace-nowrap text-sm text-semantic-text-primary">
-                      {item.quantityAvailable}
-                    </TableCell>
-                    <TableCell className="whitespace-nowrap text-sm font-medium text-semantic-critical">
-                      {item.status}
-                    </TableCell>
-                    <TableCell className="whitespace-nowrap text-sm">
-                      <div className="flex gap-2">
-                        <Button
-                          onClick={() => handleAction(item, 'sold_through')}
-                          variant="outline"
-                          size="sm"
-                          disabled={isProcessing}
-                        >
-                          Sold Through
-                        </Button>
-                        <Button
-                          onClick={() => handleAction(item, 'expired')}
-                          variant="outline"
-                          size="sm"
-                          className="text-semantic-critical border-semantic-critical hover:bg-semantic-critical/10"
-                          disabled={isProcessing}
-                        >
-                          Expired
-                        </Button>
-                      </div>
-                    </TableCell>
+          <div className="hidden lg:block overflow-x-auto rounded-md border print-report-target">
+            <div className="no-print">
+              <Table>
+                <TableHeader>
+                  <TableRow className="bg-semantic-surface-2 hover:bg-semantic-surface-2">
+                    <TableHead className="text-left text-xs font-semibold font-eyebrow text-semantic-text-secondary uppercase tracking-wider">
+                      SKU
+                    </TableHead>
+                    <TableHead className="text-left text-xs font-semibold font-eyebrow text-semantic-text-secondary uppercase tracking-wider">
+                      Product Name
+                    </TableHead>
+                    <TableHead className="text-left text-xs font-semibold font-eyebrow text-semantic-text-secondary uppercase tracking-wider">
+                      Location
+                    </TableHead>
+                    <TableHead className="text-left text-xs font-semibold font-eyebrow text-semantic-text-secondary uppercase tracking-wider">
+                      Expiry Date
+                    </TableHead>
+                    <TableHead className="text-left text-xs font-semibold font-eyebrow text-semantic-text-secondary uppercase tracking-wider">
+                      Cost Price
+                    </TableHead>
+                    <TableHead className="text-left text-xs font-semibold font-eyebrow text-semantic-text-secondary uppercase tracking-wider">
+                      Qty
+                    </TableHead>
+                    <TableHead className="text-left text-xs font-semibold font-eyebrow text-semantic-text-secondary uppercase tracking-wider">
+                      Status
+                    </TableHead>
+                    <TableHead className="text-left text-xs font-semibold font-eyebrow text-semantic-text-secondary uppercase tracking-wider">
+                      Actions
+                    </TableHead>
                   </TableRow>
-                ))}
-              </TableBody>
-            </Table>
+                </TableHeader>
+                <TableBody>
+                  {expiredItems.map((item) => (
+                    <TableRow
+                      key={item.id}
+                      className="hover:bg-semantic-surface-2/50 transition-colors"
+                    >
+                      <TableCell className="whitespace-nowrap text-sm text-semantic-text-primary">
+                        {item.sku}
+                      </TableCell>
+                      <TableCell className="whitespace-nowrap text-sm font-medium text-semantic-text-primary">
+                        {item.productName}
+                      </TableCell>
+                      <TableCell className="whitespace-nowrap text-sm text-semantic-text-secondary">
+                        {item.locationName}
+                      </TableCell>
+                      <TableCell className="whitespace-nowrap text-sm tabular-nums text-semantic-text-primary">
+                        {formatExpiry(item.expiryDate)}
+                      </TableCell>
+                      <TableCell className="whitespace-nowrap text-sm text-semantic-text-primary">
+                        {currencyFormatter.format(item.costPrice)}
+                      </TableCell>
+                      <TableCell className="whitespace-nowrap text-sm text-semantic-text-primary">
+                        {item.quantityAvailable}
+                      </TableCell>
+                      <TableCell className="whitespace-nowrap text-sm font-medium text-semantic-critical">
+                        {item.status}
+                      </TableCell>
+                      <TableCell className="whitespace-nowrap text-sm">
+                        <div className="flex gap-2">
+                          <Button
+                            onClick={() => handleAction(item, 'sold_through')}
+                            variant="outline"
+                            size="sm"
+                            disabled={isProcessing}
+                          >
+                            Sold Through
+                          </Button>
+                          <Button
+                            onClick={() => handleAction(item, 'expired')}
+                            variant="outline"
+                            size="sm"
+                            className="text-semantic-critical border-semantic-critical hover:bg-semantic-critical/10"
+                            disabled={isProcessing}
+                          >
+                            Expired
+                          </Button>
+                        </div>
+                      </TableCell>
+                    </TableRow>
+                  ))}
+                </TableBody>
+              </Table>
+            </div>
+            <div className="print-only">
+              <Table aria-label="Printable expired items table">
+                <TableHeader>
+                  <TableRow className="bg-semantic-surface-2 hover:bg-semantic-surface-2">
+                    <TableHead className="text-left text-xs font-semibold font-eyebrow text-semantic-text-secondary uppercase tracking-wider">
+                      SKU
+                    </TableHead>
+                    <TableHead className="text-left text-xs font-semibold font-eyebrow text-semantic-text-secondary uppercase tracking-wider">
+                      Product Name
+                    </TableHead>
+                    <TableHead className="text-left text-xs font-semibold font-eyebrow text-semantic-text-secondary uppercase tracking-wider">
+                      Location
+                    </TableHead>
+                    <TableHead className="text-left text-xs font-semibold font-eyebrow text-semantic-text-secondary uppercase tracking-wider">
+                      Expiry Date
+                    </TableHead>
+                    <TableHead className="text-left text-xs font-semibold font-eyebrow text-semantic-text-secondary uppercase tracking-wider">
+                      Cost Price
+                    </TableHead>
+                    <TableHead className="text-left text-xs font-semibold font-eyebrow text-semantic-text-secondary uppercase tracking-wider">
+                      Qty
+                    </TableHead>
+                    <TableHead className="text-left text-xs font-semibold font-eyebrow text-semantic-text-secondary uppercase tracking-wider">
+                      Status
+                    </TableHead>
+                  </TableRow>
+                </TableHeader>
+                <TableBody>
+                  {expiredItems.map((item) => (
+                    <TableRow key={item.id}>
+                      <TableCell className="whitespace-nowrap text-sm text-semantic-text-primary">
+                        {item.sku}
+                      </TableCell>
+                      <TableCell className="whitespace-nowrap text-sm font-medium text-semantic-text-primary">
+                        {item.productName}
+                      </TableCell>
+                      <TableCell className="whitespace-nowrap text-sm text-semantic-text-secondary">
+                        {item.locationName}
+                      </TableCell>
+                      <TableCell className="whitespace-nowrap text-sm tabular-nums text-semantic-text-primary">
+                        {formatExpiry(item.expiryDate)}
+                      </TableCell>
+                      <TableCell className="whitespace-nowrap text-sm text-semantic-text-primary">
+                        {currencyFormatter.format(item.costPrice)}
+                      </TableCell>
+                      <TableCell className="whitespace-nowrap text-sm text-semantic-text-primary">
+                        {item.quantityAvailable}
+                      </TableCell>
+                      <TableCell className="whitespace-nowrap text-sm font-medium text-semantic-critical">
+                        {item.status}
+                      </TableCell>
+                    </TableRow>
+                  ))}
+                </TableBody>
+              </Table>
+            </div>
           </div>
         </>
       )}
@@ -645,7 +742,7 @@ const ExpiredItemsPage: React.FC<ExpiredItemsPageProps> = ({ token }) => {
       <div className="grid grid-cols-1 md:grid-cols-2 gap-6 mb-6 mt-8">
         <Card>
           <CardHeader>
-            <CardTitle>Worst Loss by SKU</CardTitle>
+            <CardTitle>5 Worst Performing SKUs</CardTitle>
           </CardHeader>
           <CardContent>
             <div className="min-h-[12rem]">
@@ -674,7 +771,7 @@ const ExpiredItemsPage: React.FC<ExpiredItemsPageProps> = ({ token }) => {
 
         <Card>
           <CardHeader>
-            <CardTitle>Worst Loss by Department</CardTitle>
+            <CardTitle>5 Worst Performing Departments</CardTitle>
           </CardHeader>
           <CardContent>
             <div className="min-h-[12rem]">
@@ -703,85 +800,65 @@ const ExpiredItemsPage: React.FC<ExpiredItemsPageProps> = ({ token }) => {
       </div>
 
       {/* Process Expired Item Dialog */}
-      {isModalOpen && selectedItem && action && (
-        <div
-          className="fixed inset-0 z-50 flex items-center justify-center"
-          role="dialog"
-          aria-modal="true"
-          aria-labelledby="process-dialog-title"
-        >
-          <button
-            type="button"
-            aria-label="Close dialog"
-            className="fixed inset-0 bg-semantic-canvas/50 backdrop-blur-sm"
-            onClick={closeModal}
-          />
-          <div className="relative z-10 bg-background rounded-lg shadow-lg w-11/12 max-w-md p-6">
-            <div className="flex justify-between items-center mb-4">
-              <h3
-                id="process-dialog-title"
-                className="text-lg font-semibold font-heading text-foreground"
-              >
-                Process Expired Item
-              </h3>
-              <button
-                onClick={closeModal}
-                aria-label="Close dialog"
-                className="rounded text-muted-foreground hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
-              >
-                <span className="text-2xl" aria-hidden="true">
-                  &times;
-                </span>
-              </button>
-            </div>
-
+      <Dialog
+        open={isModalOpen && !!selectedItem && !!action}
+        onOpenChange={(open) => !open && closeModal()}
+      >
+        {selectedItem && action && (
+          <DialogContent className="sm:max-w-md">
+            <DialogHeader>
+              <DialogTitle>Process Expired Item</DialogTitle>
+              <DialogDescription>
+                Review item details and choose the quantity to process.
+              </DialogDescription>
+            </DialogHeader>
             <dl className="mb-4 grid grid-cols-2 gap-x-4 gap-y-2 text-sm">
               <div className="col-span-2">
-                <dt className="text-muted-foreground">Product</dt>
-                <dd className="font-medium break-words">{selectedItem.productName}</dd>
+                <dt className={PROCESS_DIALOG_LABEL_CLASS}>Product</dt>
+                <dd className={PROCESS_DIALOG_VALUE_CLASS}>{selectedItem.productName}</dd>
               </div>
               <div>
-                <dt className="text-muted-foreground">SKU</dt>
-                <dd className="font-mono">{selectedItem.sku}</dd>
+                <dt className={PROCESS_DIALOG_LABEL_CLASS}>SKU</dt>
+                <dd className={PROCESS_DIALOG_VALUE_CLASS}>{selectedItem.sku}</dd>
               </div>
               <div>
-                <dt className="text-muted-foreground">Location</dt>
-                <dd>{selectedItem.locationName}</dd>
+                <dt className={PROCESS_DIALOG_LABEL_CLASS}>Location</dt>
+                <dd className={PROCESS_DIALOG_VALUE_CLASS}>{selectedItem.locationName}</dd>
               </div>
               <div>
-                <dt className="text-muted-foreground">Expiry Date</dt>
-                <dd className="tabular-nums">{formatExpiry(selectedItem.expiryDate)}</dd>
+                <dt className={PROCESS_DIALOG_LABEL_CLASS}>Expiry Date</dt>
+                <dd className={PROCESS_DIALOG_VALUE_CLASS}>
+                  {formatExpiry(selectedItem.expiryDate)}
+                </dd>
               </div>
               <div>
-                <dt className="text-muted-foreground">Cost Price</dt>
-                <dd className="tabular-nums">{currencyFormatter.format(selectedItem.costPrice)}</dd>
+                <dt className={PROCESS_DIALOG_LABEL_CLASS}>Cost Price</dt>
+                <dd className={PROCESS_DIALOG_VALUE_CLASS}>
+                  {currencyFormatter.format(selectedItem.costPrice)}
+                </dd>
               </div>
             </dl>
 
             {action === 'expired' && (
               <div className="mb-4">
-                <label
-                  htmlFor="units-discarded"
-                  className="block text-sm font-medium text-foreground mb-1"
-                >
+                <Label htmlFor="units-discarded" className="mb-1 block">
                   Units to Discard
-                </label>
-                <input
+                </Label>
+                <Input
                   id="units-discarded"
                   type="number"
                   min="1"
-                  max={selectedItem.quantityAvailable}
+                  step="1"
                   value={unitsDiscarded}
                   onChange={handleUnitsDiscardedChange}
-                  aria-describedby="units-hint units-error"
+                  aria-describedby={unitsDiscardedError ? 'units-hint units-error' : 'units-hint'}
                   aria-invalid={!!unitsDiscardedError}
-                  className="w-full px-3 py-2 border border-input rounded-md focus:outline-none focus:ring-2 focus:ring-ring focus:border-transparent"
                 />
-                <p id="units-hint" className="mt-1 text-xs text-muted-foreground">
-                  Maximum available: {selectedItem.quantityAvailable}
+                <p id="units-hint" className={PROCESS_DIALOG_HELP_CLASS}>
+                  Enter the total number of expired units to write off.
                 </p>
                 {unitsDiscardedError && (
-                  <p id="units-error" className="mt-1 text-xs text-semantic-critical" role="alert">
+                  <p id="units-error" className={PROCESS_DIALOG_ERROR_CLASS} role="alert">
                     {unitsDiscardedError}
                   </p>
                 )}
@@ -794,7 +871,7 @@ const ExpiredItemsPage: React.FC<ExpiredItemsPageProps> = ({ token }) => {
               </div>
             )}
 
-            <div className="mt-6 flex justify-end gap-2">
+            <DialogFooter className="mt-6">
               <Button variant="outline" onClick={closeModal} disabled={isProcessing}>
                 Cancel
               </Button>
@@ -807,15 +884,19 @@ const ExpiredItemsPage: React.FC<ExpiredItemsPageProps> = ({ token }) => {
               >
                 {action === 'expired' ? 'Mark Expired' : 'Mark Sold Through'}
               </Button>
-            </div>
+            </DialogFooter>
 
             <AlertDialog open={isConfirmDialogOpen} onOpenChange={setIsConfirmDialogOpen}>
               <AlertDialogContent>
                 <AlertDialogHeader>
                   <AlertDialogTitle>Confirm Action</AlertDialogTitle>
                   <AlertDialogDescription>
-                    Are you sure you want to mark this item as {action}? This action cannot be
-                    undone.
+                    {action === 'expired'
+                      ? `Confirm writing off ${unitsDiscarded} units for ${currencyFormatter.format(
+                          (parseUnitsDiscardedInput(unitsDiscarded).value ?? 0) *
+                            selectedItem.costPrice,
+                        )} loss. This action cannot be undone.`
+                      : 'Confirm marking this item as sold through. This action cannot be undone.'}
                   </AlertDialogDescription>
                 </AlertDialogHeader>
                 <AlertDialogFooter>
@@ -833,9 +914,9 @@ const ExpiredItemsPage: React.FC<ExpiredItemsPageProps> = ({ token }) => {
                 </AlertDialogFooter>
               </AlertDialogContent>
             </AlertDialog>
-          </div>
-        </div>
-      )}
+          </DialogContent>
+        )}
+      </Dialog>
 
       {/* Expired Losses Report Section */}
       <div className="mt-12">

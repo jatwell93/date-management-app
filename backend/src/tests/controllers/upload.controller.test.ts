@@ -1,4 +1,3 @@
-/* eslint-disable @typescript-eslint/no-explicit-any */
 import request from 'supertest';
 import express from 'express';
 import { UploadController } from '../../controllers/upload.controller';
@@ -7,17 +6,17 @@ import { authenticateToken } from '../../middleware/auth.middleware';
 
 // Mock dependencies
 const mockUploadService = {
-  initiateUpload: jest.fn(),
-  completeUpload: jest.fn(),
-  handleDirectUpload: jest.fn(),
+  initiateUpload: vi.fn(),
+  completeUpload: vi.fn(),
+  handleDirectUpload: vi.fn(),
 } as unknown as jest.Mocked<UploadService>;
 
 const mockUploadRepository = {
-  findStatusByFileKey: jest.fn(),
+  findStatusByFileKey: vi.fn(),
 };
 
 // Mock middleware
-jest.mock('../../middleware/auth.middleware', () => ({
+vi.mock('../../middleware/auth.middleware', () => ({
   authenticateToken: (req: any, res: any, next: any) => {
     req.user = { id: 1, email: 'test@example.com' };
     req.userId = 1;
@@ -63,7 +62,7 @@ app.use('/api/upload', router);
 
 describe('UploadRoutes', () => {
   beforeEach(() => {
-    jest.clearAllMocks();
+    vi.clearAllMocks();
   });
 
   describe('POST /api/upload/initiate', () => {

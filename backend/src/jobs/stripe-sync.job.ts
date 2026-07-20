@@ -23,10 +23,10 @@ let cronJob: ScheduledTask | null = null;
 // Tier extraction — mirrors webhook.service.ts logic
 function extractTierFromStripeSubscription(subscription: Stripe.Subscription): string {
   const price = subscription.items.data[0]?.price;
-  if (!price) return 'starter';
+  if (!price) return 'free';
   const tier = price.metadata?.tier as string | undefined;
-  const validTiers = ['starter', 'professional', 'premium', 'concierge'];
-  return tier && validTiers.includes(tier) ? tier : 'starter';
+  const validTiers = ['free', 'starter', 'professional', 'enterprise', 'premium', 'concierge'];
+  return tier && validTiers.includes(tier) ? tier : 'free';
 }
 
 // Normalize Stripe status to local status string
@@ -88,9 +88,17 @@ export async function runStripeSyncJob(
 
     Logger.info(`Fetched ${stripeSubscriptionMap.size} subscriptions from Stripe`);
 
-    // Step 3: Compare and sync
-    let syncCount = 0;
+    // Step 3: Compare and sync — classify synchronously, then update in parallel
     let divergenceCount = 0;
+
+    type PendingUpdate = {
+      stripeId: string;
+      organizationId: string;
+      stripeTier: string;
+      stripeStatus: string;
+      stripeTrialEnd: Date | null;
+    };
+    const toUpdate: PendingUpdate[] = [];
 
     for (const local of localSubscriptions) {
       const stripeId = local.stripeSubscriptionId;
@@ -131,17 +139,27 @@ export async function runStripeSyncJob(
           localStatus: local.status,
           stripeStatus,
         });
+        toUpdate.push({
+          stripeId,
+          organizationId: local.organizationId,
+          stripeTier,
+          stripeStatus,
+          stripeTrialEnd,
+        });
+        divergenceCount++;
+      }
+    }
 
-        await subscriptionRepository.updateByStripeSubscriptionId(stripeId, {
+    await Promise.all(
+      toUpdate.map(({ stripeId, stripeTier, stripeStatus, stripeTrialEnd }) =>
+        subscriptionRepository.updateByStripeSubscriptionId(stripeId, {
           tierLevel: stripeTier,
           status: stripeStatus,
           trialEndDate: stripeTrialEnd,
-        });
-
-        divergenceCount++;
-        syncCount++;
-      }
-    }
+        }),
+      ),
+    );
+    const syncCount = toUpdate.length;
 
     Logger.info('Hourly Stripe sync completed', {
       checkedCount: localSubscriptions.length,
@@ -182,7 +200,7 @@ export function startStripeSyncJob(): void {
 
   const subscriptionRepository = getDiContainer().resolve(SubscriptionRepository);
   const stripeClient = new Stripe(envConfig.STRIPE_SECRET_KEY, {
-    apiVersion: '2023-08-16',
+    apiVersion: '2026-06-24.dahlia',
   });
 
   // Schedule: Every hour at minute 0

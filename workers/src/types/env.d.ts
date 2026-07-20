@@ -10,7 +10,7 @@ export interface Env {
   // Environment Variables
   // ============================================================================
 
-  NODE_ENV: 'production' | 'staging' | 'development';
+  NODE_ENV: 'production' | 'staging' | 'development' | 'test';
   STORAGE_PROVIDER: 'r2' | 'local';
   MAX_FILE_SIZE: string; // e.g., "10485760" (10MB)
   CSV_BATCH_SIZE: string; // e.g., "100"
@@ -21,6 +21,11 @@ export interface Env {
   QUERY_MAX_RESULTS?: string; // default: 100
   QUERY_TIMEOUT_MS?: string; // default: 10000
   FRONTEND_URL?: string; // Frontend URL for CORS + Clerk authorizedParties
+  CATALOGUE_QUEUE_ENABLED?: string;
+  ENTERPRISE_MAX_SKUS?: string;
+  ENTERPRISE_MAX_ACTIVE_EXPIRIES?: string;
+  ENTERPRISE_MAX_FILE_SIZE?: string;
+  PLATFORM_ADMIN_USER_IDS?: string;
 
   // ============================================================================
   // Secrets (Set via wrangler secret put)
@@ -57,6 +62,9 @@ export interface Env {
   // R2 bucket for CSV file uploads
   CSV_UPLOADS: R2Bucket;
 
+  // Queue for durable catalogue import processing
+  CATALOGUE_IMPORT_QUEUE?: Queue<CatalogueImportMessage>;
+
   // ============================================================================
   // Hyperdrive Bindings
   // ============================================================================
@@ -77,6 +85,10 @@ export interface Env {
 
   // Analytics Engine dataset for metrics collection (production only)
   ANALYTICS?: AnalyticsEngineDataset;
+}
+
+export interface CatalogueImportMessage {
+  uploadId: number;
 }
 
 /**

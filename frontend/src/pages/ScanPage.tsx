@@ -6,6 +6,7 @@ import { Card, CardContent, CardHeader, CardTitle } from '../components/ui/card'
 import { Input } from '../components/ui/input';
 import { Button } from '../components/ui/button';
 import { Label } from '../components/ui/label';
+import { Badge } from '../components/ui/badge';
 import {
   Select,
   SelectContent,
@@ -14,10 +15,12 @@ import {
   SelectValue,
 } from '../components/ui/select';
 import { offlineStorage } from '../lib/offline-storage';
-import { isWithinMarkdownPeriod, calculateMarkdownPrice } from '../lib/utils';
+import { calculateMarkdownPrice, getMarkdownBandConfig } from '@shared/markdown';
+import { useMarkdownMatrix } from '../hooks/useMarkdownMatrix';
 import { apiService } from '../lib/api.service';
 import { parseGS1Barcode } from '../lib/gs1-parser';
 import { synchronizeOfflineData } from '../lib/sync-manager';
+import { useFreshApiToken } from '../hooks/useFreshApiToken';
 import { useHandheldDetectionContext } from '../contexts/HandheldContext';
 import { HardwareScanResult } from '../types/handheld';
 import {
@@ -47,7 +50,8 @@ interface ProductDetails {
   name: string;
   sku: string;
   barcode: string;
-  cost_price: number;
+  costPrice?: number | null;
+  retailPrice?: number | null;
 }
 
 interface InventoryItem {
@@ -77,6 +81,8 @@ function formatExpiryDateForCopy(expiryDate: string): string {
 }
 
 export function ScanPage({ token }: ScanPageProps) {
+  const getFreshApiToken = useFreshApiToken(token);
+  const markdownMatrix = useMarkdownMatrix(token);
   const { isHandheld } = useHandheldDetectionContext();
   const [scannedBarcode, setScannedBarcode] = useState<string | null>(null);
   const [productDetails, setProductDetails] = useState<ProductDetails | null>(null);
@@ -91,6 +97,8 @@ export function ScanPage({ token }: ScanPageProps) {
   const [newProductSKU, setNewProductSKU] = useState<string>('');
   const [newProductCostPrice, setNewProductCostPrice] = useState<string>('');
   const [markdownPrice, setMarkdownPrice] = useState<number | null>(null);
+  const [markdownPercentage, setMarkdownPercentage] = useState<number | null>(null);
+  const [isExpiredStock, setIsExpiredStock] = useState<boolean>(false);
   const [recentEntries, setRecentEntries] = useState<RecentInventoryItem[] | null>(null);
   const [isAlertDialogOpen, setAlertDialogOpen] = useState(false);
   const [itemToDelete, setItemToDelete] = useState<number | null>(null);
@@ -109,7 +117,8 @@ export function ScanPage({ token }: ScanPageProps) {
     const fetchStoreAreas = async () => {
       if (!token) return;
       try {
-        const data = await apiService.get<StoreArea[]>('/store-areas', token);
+        const authToken = await getFreshApiToken('scan-store-areas');
+        const data = await apiService.get<StoreArea[]>('/store-areas', authToken);
         setStoreAreas(data);
       } catch (err: unknown) {
         if (err instanceof Error) {
@@ -120,7 +129,7 @@ export function ScanPage({ token }: ScanPageProps) {
       }
     };
     fetchStoreAreas();
-  }, [token]);
+  }, [token, getFreshApiToken]);
 
   useEffect(() => {
     if (productDetails && expiryDate) {
@@ -128,16 +137,44 @@ export function ScanPage({ token }: ScanPageProps) {
       const today = new Date();
       const daysToExpiry = Math.ceil((expiry.getTime() - today.getTime()) / (1000 * 60 * 60 * 24));
 
-      const isMarkdown = isWithinMarkdownPeriod(expiryDate, 90); // Check if within 90 days
-      if (isMarkdown) {
-        setMarkdownPrice(calculateMarkdownPrice(productDetails.cost_price, daysToExpiry));
-      } else {
+      const costPrice = productDetails.costPrice;
+      const isExpired = daysToExpiry <= 0;
+      if (isExpired) {
+        // eslint-disable-next-line react-hooks/set-state-in-effect -- intentional: derives markdown pricing state from productDetails/expiryDate
         setMarkdownPrice(null);
+        setMarkdownPercentage(null);
+        setIsExpiredStock(true);
+        return;
       }
+
+      setIsExpiredStock(false);
+
+      // Price against the org's configured matrix (issue #338): the band picks the
+      // percentage and whether it comes off cost or retail. Retail falls back to
+      // cost when the product has none, so no in-window item is left unpriced.
+      const band = getMarkdownBandConfig(daysToExpiry, markdownMatrix);
+      if (band && typeof costPrice === 'number' && Number.isFinite(costPrice)) {
+        const retailPrice =
+          typeof productDetails.retailPrice === 'number' &&
+          Number.isFinite(productDetails.retailPrice)
+            ? productDetails.retailPrice
+            : null;
+        setMarkdownPrice(
+          calculateMarkdownPrice({ costPrice, retailPrice }, daysToExpiry, markdownMatrix),
+        );
+        setMarkdownPercentage(band.percentage);
+        return;
+      }
+
+      setMarkdownPrice(null);
+      setMarkdownPercentage(null);
+      setIsExpiredStock(false);
     } else {
       setMarkdownPrice(null);
+      setMarkdownPercentage(null);
+      setIsExpiredStock(false);
     }
-  }, [productDetails, expiryDate]);
+  }, [productDetails, expiryDate, markdownMatrix]);
 
   const resetScanState = (barcode: string) => {
     setScannedBarcode(barcode);
@@ -147,6 +184,8 @@ export function ScanPage({ token }: ScanPageProps) {
     setSuccessMessage(null);
     setShowNewProductForm(false);
     setMarkdownPrice(null);
+    setMarkdownPercentage(null);
+    setIsExpiredStock(false);
   };
 
   const resolveBarcodeForLookup = (rawBarcode: string): string => {
@@ -226,7 +265,8 @@ export function ScanPage({ token }: ScanPageProps) {
 
     try {
       const barcodeToSearch = resolveBarcodeForLookup(rawBarcode);
-      const product = await fetchProductWithFallback(barcodeToSearch, token);
+      const authToken = await getFreshApiToken('scan-product-lookup');
+      const product = await fetchProductWithFallback(barcodeToSearch, authToken || token);
 
       if (!product) {
         setShowNewProductForm(true);
@@ -235,7 +275,7 @@ export function ScanPage({ token }: ScanPageProps) {
 
       setProductDetails(product);
 
-      await loadProductRelatedData(product, token);
+      await loadProductRelatedData(product, authToken || token);
     } catch (err: unknown) {
       if (err instanceof Error) {
         if (err.message.includes('404')) {
@@ -256,15 +296,16 @@ export function ScanPage({ token }: ScanPageProps) {
     }
 
     try {
+      const authToken = await getFreshApiToken('scan-product-create');
       const newProduct = await apiService.post<ProductDetails>(
         '/products',
         {
           barcode: scannedBarcode,
           name: newProductName,
           sku: newProductSKU,
-          cost_price: parseFloat(newProductCostPrice),
+          costPrice: parseFloat(newProductCostPrice),
         },
-        token,
+        authToken,
       );
       setProductDetails(newProduct);
       setSuccessMessage('Product created. Add expiry details next.');
@@ -315,6 +356,8 @@ export function ScanPage({ token }: ScanPageProps) {
         setSelectedSubDepartment('');
         setError(null);
         setMarkdownPrice(null);
+        setMarkdownPercentage(null);
+        setIsExpiredStock(false);
       } catch (err: unknown) {
         if (err instanceof Error) {
           setError(err.message);
@@ -327,6 +370,8 @@ export function ScanPage({ token }: ScanPageProps) {
     }
 
     try {
+      const authToken = await getFreshApiToken('scan-inventory-submit');
+
       await apiService.post(
         '/inventory-items',
         {
@@ -334,7 +379,7 @@ export function ScanPage({ token }: ScanPageProps) {
           expiryDate: expiryDate,
           locationId: parsedLocationId,
         },
-        token,
+        authToken,
       );
 
       setSuccessMessage('Expiry item saved to inventory.');
@@ -345,6 +390,8 @@ export function ScanPage({ token }: ScanPageProps) {
       setSelectedSubDepartment('');
       setError(null);
       setMarkdownPrice(null);
+      setMarkdownPercentage(null);
+      setIsExpiredStock(false);
     } catch (err: unknown) {
       if (err instanceof Error) {
         setError(err.message);
@@ -364,7 +411,8 @@ export function ScanPage({ token }: ScanPageProps) {
     if (!token || !itemToDelete) return;
 
     try {
-      await apiService.delete(`/inventory-items/${itemToDelete}`, token);
+      const authToken = await getFreshApiToken('scan-recent-entry-delete');
+      await apiService.delete(`/inventory-items/${itemToDelete}`, authToken);
       setSuccessMessage('Expiry entry deleted.');
       setAlertDialogOpen(false);
       setItemToDelete(null);
@@ -372,7 +420,7 @@ export function ScanPage({ token }: ScanPageProps) {
       if (productDetails) {
         const recent: RecentInventoryItem[] = await apiService.get<RecentInventoryItem[]>(
           `/inventory-items/recent/product/${productDetails.id}`,
-          token,
+          authToken,
         );
         setRecentEntries(recent);
       }
@@ -393,7 +441,7 @@ export function ScanPage({ token }: ScanPageProps) {
 
     try {
       setError(null);
-      await synchronizeOfflineData(token);
+      await synchronizeOfflineData(() => getFreshApiToken('scan-offline-sync'));
       setSuccessMessage('Inventory sync complete.');
       setTimeout(() => setSuccessMessage(null), 3000);
     } catch (err: unknown) {
@@ -519,14 +567,22 @@ export function ScanPage({ token }: ScanPageProps) {
                 </div>
                 <div>
                   <p className="text-foreground">
-                    <span className="font-medium">Cost Price:</span> $
-                    {productDetails.cost_price?.toFixed(2)}
+                    <span className="font-medium">Cost Price:</span>{' '}
+                    {typeof productDetails.costPrice === 'number' &&
+                    Number.isFinite(productDetails.costPrice)
+                      ? `$${productDetails.costPrice.toFixed(2)}`
+                      : 'Not available'}
                   </p>
 
-                  {markdownPrice !== null && (
+                  {markdownPrice !== null && markdownPercentage !== null && (
                     <p className="text-semantic-warning font-semibold mt-1">
-                      Markdown Price (20% off): ${markdownPrice.toFixed(2)}
+                      Markdown Price ({markdownPercentage}% off): ${markdownPrice.toFixed(2)}
                     </p>
+                  )}
+                  {isExpiredStock && (
+                    <div className="mt-2">
+                      <Badge variant="error">Expired</Badge>
+                    </div>
                   )}
                 </div>
               </div>

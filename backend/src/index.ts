@@ -3,7 +3,6 @@ import 'reflect-metadata';
 
 try {
   // Optional instrumentation (Sentry/analytics). Safe to skip if missing.
-  // eslint-disable-next-line @typescript-eslint/no-var-requires
   require('../instrument');
 } catch {
   // Instrumentation not present in this environment; continue without it.
@@ -33,11 +32,16 @@ import storageQuotaRoutes from './routes/storage-quota.routes';
 import webhookRoutes from './routes/webhook.routes';
 import orgBootstrapRoutes from './routes/org-bootstrap.routes';
 import subscriptionRoutes from './routes/subscription.routes';
+import markdownConfigRoutes from './routes/markdown-config.routes';
+import supplierCreditRoutes, {
+  platformCatalogueCorrectionRouter,
+} from './routes/supplier-credit.routes';
 import { authenticateToken } from './middleware/auth.middleware';
 import { errorHandler } from './middleware/error.middleware';
 import { corsMiddleware } from './middleware/cors';
 import { globalLimiter } from './middleware/rateLimiter';
-import { initializeDiContainer, registerApplicationServices } from './di';
+import { initializeDiContainer } from './di/container';
+import { registerApplicationServices } from './di/services';
 import { SchedulerService } from './services/scheduler.service';
 import { DatabaseMonitoringService } from './services/database.monitoring.service';
 import { ApplicationMonitoringService } from './services/application.monitoring.service';
@@ -51,7 +55,6 @@ let organizationInviteRoutes: ExpressRouter | null = null;
 
 if (envConfig.ENABLE_CUSTOM_ORG_INVITES) {
   // Keep legacy invite endpoints behind an explicit feature flag.
-  // eslint-disable-next-line @typescript-eslint/no-var-requires
   organizationInviteRoutes = require('./routes/organization-invite.routes').default;
 }
 
@@ -327,6 +330,11 @@ app.use('/api/expired-items', authenticateToken, expiredItemRoutes);
 app.use('/api/upload', authenticateToken, uploadRoutes);
 app.use('/api/storage-quota', authenticateToken, storageQuotaRoutes);
 app.use('/api/subscription', subscriptionRoutes);
+app.use('/markdown-config', authenticateToken, markdownConfigRoutes);
+app.use('/api/markdown-config', authenticateToken, markdownConfigRoutes);
+app.use('/supplier-credits', authenticateToken, supplierCreditRoutes);
+app.use('/api/supplier-credits', authenticateToken, supplierCreditRoutes);
+app.use('/api/platform', authenticateToken, platformCatalogueCorrectionRouter);
 
 app.get('/', (req, res) => {
   res.json({

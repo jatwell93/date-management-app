@@ -22,12 +22,12 @@ jobs:
         working-directory: ./backend
 
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
         with:
           fetch-depth: 0 # Needed for changedSince
 
       - name: Setup Node.js
-        uses: actions/setup-node@v4
+        uses: actions/setup-node@v7
         with:
           node-version: '22'
           cache: 'npm'
@@ -56,7 +56,7 @@ jobs:
 
       - name: Archive Coverage Report
         if: always()
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           name: coverage-report
           path: backend/coverage/
@@ -69,12 +69,12 @@ jobs:
         working-directory: ./backend
 
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
         with:
           fetch-depth: 0
 
       - name: Setup Node.js
-        uses: actions/setup-node@v4
+        uses: actions/setup-node@v7
         with:
           node-version: '22'
           cache: 'npm'
@@ -88,19 +88,19 @@ jobs:
         continue-on-error: true
 
       - name: Run Multi-Tenant Feature Gate Tests
-        run: npm test -- --testPathPattern="multi-tenant-feature-gates" --verbose
+        run: npm test -- multi-tenant-feature-gates --reporter verbose
 
       - name: Run Multi-Tenant Route Filtering Tests
-        run: npm test -- --testPathPattern="multi-tenant-route-filtering" --verbose
+        run: npm test -- multi-tenant-route-filtering --reporter verbose
 
       - name: Run Cross-Tenant Isolation Tests
-        run: npm test -- --testPathPattern="cross-tenant-isolation" --verbose
+        run: npm test -- cross-tenant-isolation --reporter verbose
 
       - name: Run Multi-Tenant Penetration Tests
-        run: npm test -- --testPathPattern="multi-tenant-penetration" --verbose
+        run: npm test -- multi-tenant-penetration --reporter verbose
 
       - name: Run Multi-Tenant Concurrency Load Tests
-        run: npm test -- --testPathPattern="multi-tenant-concurrency" --verbose
+        run: npm test -- multi-tenant-concurrency --reporter verbose
 
       - name: Generate Multi-Tenant Test Summary
         if: always()

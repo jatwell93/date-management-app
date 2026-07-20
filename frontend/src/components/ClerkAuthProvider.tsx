@@ -98,12 +98,12 @@ function ClerkAuthInner({ children }: { children: React.ReactNode }) {
   }, []);
 
   useEffect(() => {
-    offlineSyncService.setAuthTokenProvider(() => token);
+    offlineSyncService.setAuthTokenProvider(async () => (await getToken()) || token);
 
     return () => {
       offlineSyncService.setAuthTokenProvider(() => null);
     };
-  }, [token]);
+  }, [getToken, token]);
 
   // Handle Clerk authentication state changes
   useEffect(() => {
@@ -145,6 +145,7 @@ function ClerkAuthInner({ children }: { children: React.ReactNode }) {
         });
     } else if (isLoaded && !isSignedIn) {
       // User signed out
+      // eslint-disable-next-line react-hooks/set-state-in-effect -- intentional: syncs local auth state to Clerk's external sign-in state
       setToken(null);
       setIsLoggedIn(false);
       setIsFullySignedIn(false);

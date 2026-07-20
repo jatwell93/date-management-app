@@ -4,6 +4,7 @@ import { X } from 'lucide-react';
 import { Button } from './ui/button';
 import { Card, CardContent } from './ui/card';
 import { buildApiUrl } from '../lib/api.service';
+import { useFreshApiToken } from '../hooks/useFreshApiToken';
 
 interface SubscriptionTierResponse {
   status: 'ACTIVE' | 'TRIALING' | 'EXPIRED' | 'CANCELED';
@@ -32,6 +33,7 @@ interface TrialBannerProps {
 }
 
 export function TrialBanner({ token }: TrialBannerProps) {
+  const getFreshApiToken = useFreshApiToken(token);
   const [trialStatus, setTrialStatus] = useState<TrialStatusResponse | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -40,15 +42,17 @@ export function TrialBanner({ token }: TrialBannerProps) {
 
   useEffect(() => {
     if (!token) {
+      // eslint-disable-next-line react-hooks/set-state-in-effect -- intentional: guard state when the auth prerequisite is absent
       setLoading(false);
       return;
     }
 
     const fetchTrialStatus = async () => {
       try {
+        const authToken = await getFreshApiToken('trial-banner-status');
         const response = await fetch(buildApiUrl('/subscription/trial-status'), {
           headers: {
-            Authorization: `Bearer ${token}`,
+            Authorization: `Bearer ${authToken}`,
           },
         });
 
@@ -66,7 +70,7 @@ export function TrialBanner({ token }: TrialBannerProps) {
     };
 
     fetchTrialStatus();
-  }, [token]);
+  }, [token, getFreshApiToken]);
 
   if (dismissed || loading || !token) {
     return null;
@@ -77,8 +81,8 @@ export function TrialBanner({ token }: TrialBannerProps) {
   }
 
   const { isInTrial, isTrialExpired, subscription, tierLimits } = trialStatus;
-  const tierLevel = subscription?.tierLevel?.toLowerCase() || 'starter';
-  const isPaidTier = tierLevel !== 'starter' && !isInTrial;
+  const tierLevel = subscription?.tierLevel?.toLowerCase() || 'free';
+  const isPaidTier = tierLevel !== 'free' && !isInTrial;
 
   const daysRemaining = subscription?.daysRemaining ?? 0;
   if (isInTrial && daysRemaining > 0) {

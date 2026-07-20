@@ -8,8 +8,10 @@ import {
   DetailedExpiryReportItem,
   LossBySkuReportItem,
   LossByDepartmentReportItem,
+  SellThroughByLevelItem,
   ItemsByUserReportItem,
   ItemsByDateReportItem,
+  StoreWalkAuditCycle,
   DashboardAnalytics,
 } from '../repositories/report.repository';
 import { SchedulerService } from './scheduler.service';
@@ -26,9 +28,13 @@ export class ReportService {
   /**
    * Constructor with dependency injection
    * @param db Database instance (injected)
+   * @param organizationId Organization scope for all queries
    */
-  constructor(private db: DB) {
-    this.repository = new ReportRepository(db);
+  constructor(
+    private db: DB,
+    organizationId: string,
+  ) {
+    this.repository = new ReportRepository(db, organizationId);
   }
   async getMonthlyExpiryReport(): Promise<MonthlyExpiryReport[]> {
     return this.repository.getMonthlyExpiryReport();
@@ -40,6 +46,10 @@ export class ReportService {
 
   async getDetailedExpiryReport(): Promise<DetailedExpiryReportItem[]> {
     return this.repository.getDetailedExpiryReport();
+  }
+
+  async getActiveExpiryEntries(): Promise<DetailedExpiryReportItem[]> {
+    return this.repository.getActiveExpiryEntries();
   }
 
   async getMonthlyMarkdownReport(): Promise<MonthlyMarkdownReport[]> {
@@ -70,12 +80,20 @@ export class ReportService {
     return this.repository.getLossByDepartmentReport();
   }
 
+  async getSellThroughByMarkdownLevel(): Promise<SellThroughByLevelItem[]> {
+    return this.repository.getSellThroughByMarkdownLevel();
+  }
+
   async getItemsByUserReport(timeFrame?: string): Promise<ItemsByUserReportItem[]> {
     return this.repository.getItemsByUserReport(timeFrame);
   }
 
   async getItemsByDateReport(): Promise<ItemsByDateReportItem[]> {
     return this.repository.getItemsByDateReport();
+  }
+
+  async getStoreWalkAuditReport(): Promise<StoreWalkAuditCycle[]> {
+    return this.repository.getStoreWalkAuditReport();
   }
 }
 
@@ -89,5 +107,6 @@ export type {
   LossByDepartmentReportItem,
   ItemsByUserReportItem,
   ItemsByDateReportItem,
+  StoreWalkAuditCycle,
   DashboardAnalytics,
 };

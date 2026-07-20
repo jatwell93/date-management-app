@@ -1,29 +1,31 @@
 import express from 'express';
 import request from 'supertest';
 
-const mockCreateBackup = jest.fn();
-const mockRestoreBackup = jest.fn();
-const mockListBackups = jest.fn();
+const mockCreateBackup = vi.fn();
+const mockRestoreBackup = vi.fn();
+const mockListBackups = vi.fn();
 
-const mockValidateRequestFactory = jest.fn();
-const mockStandardLimiter = jest.fn();
-
-mockValidateRequestFactory.mockImplementation(() => (req: any, res: any, next: any) => {
-  if (req.get('x-validation-fail') === 'true') {
-    return res.status(400).json({ message: 'Validation failed' });
-  }
-  next();
+// These middleware-factory mocks are invoked at the SUT's module-load (the router
+// calls validateRequest()/standardLimiter to build middleware), so they must be
+// initialized before the hoisted vi.mock factories run — lift via vi.hoisted().
+const { mockValidateRequestFactory, mockStandardLimiter } = vi.hoisted(() => {
+  const mockValidateRequestFactory = vi.fn(() => (req: any, res: any, next: any) => {
+    if (req.get('x-validation-fail') === 'true') {
+      return res.status(400).json({ message: 'Validation failed' });
+    }
+    next();
+  });
+  const mockStandardLimiter = vi.fn((_req: any, _res: any, next: any) => next());
+  return { mockValidateRequestFactory, mockStandardLimiter };
 });
 
-mockStandardLimiter.mockImplementation((_req: any, _res: any, next: any) => next());
-
-jest.mock('../../controllers/database.backup.controller', () => ({
+vi.mock('../../controllers/database.backup.controller', () => ({
   createBackup: (...args: unknown[]) => mockCreateBackup(...args),
   restoreBackup: (...args: unknown[]) => mockRestoreBackup(...args),
   listBackups: (...args: unknown[]) => mockListBackups(...args),
 }));
 
-jest.mock('../../middleware/auth.middleware', () => ({
+vi.mock('../../middleware/auth.middleware', () => ({
   authenticateToken: (req: any, res: any, next: any) => {
     if (req.get('x-auth') !== 'ok') {
       return res.status(401).json({ message: 'Unauthorized' });
@@ -32,7 +34,7 @@ jest.mock('../../middleware/auth.middleware', () => ({
   },
 }));
 
-jest.mock('../../middleware/requireOrgRole', () => ({
+vi.mock('../../middleware/requireOrgRole', () => ({
   requireOrgRole:
     (...allowedRoles: string[]) =>
     (req: any, res: any, next: any) => {
@@ -43,11 +45,11 @@ jest.mock('../../middleware/requireOrgRole', () => ({
     },
 }));
 
-jest.mock('../../middleware/validateRequest', () => ({
+vi.mock('../../middleware/validateRequest', () => ({
   validateRequest: (...args: unknown[]) => mockValidateRequestFactory(...args),
 }));
 
-jest.mock('../../middleware/rateLimiter', () => ({
+vi.mock('../../middleware/rateLimiter', () => ({
   standardLimiter: (...args: unknown[]) => mockStandardLimiter(...args),
 }));
 
@@ -60,7 +62,7 @@ describe('database.backup.routes', () => {
   app.use('/database', backupRouter);
 
   beforeEach(() => {
-    jest.clearAllMocks();
+    vi.clearAllMocks();
 
     mockCreateBackup.mockImplementation((_req: any, res: any) => {
       res.status(200).json({ message: 'Database backup created successfully' });

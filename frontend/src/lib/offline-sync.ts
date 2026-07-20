@@ -13,7 +13,7 @@ type OfflineOperation = {
   timestamp: number;
 };
 
-type AuthTokenProvider = () => string | null;
+type AuthTokenProvider = () => string | null | undefined | Promise<string | null | undefined>;
 
 // Define sync strategy types
 export type SyncStrategy = 'real-time' | 'batch' | 'manual';
@@ -31,11 +31,23 @@ const logSyncEvent = (
     return;
   }
 
-  Sentry.captureMessage(message, {
-    level,
-    tags: { feature: 'offline-sync' },
-    extra,
-  });
+  // Only capture warning/error messages as Sentry issues.
+  // Info-level messages (e.g. routine sync lifecycle logs) are recorded as
+  // breadcrumbs so they appear in trace context without generating noisy issues.
+  if (level === 'warning' || level === 'error') {
+    Sentry.captureMessage(message, {
+      level,
+      tags: { feature: 'offline-sync' },
+      extra,
+    });
+  } else {
+    Sentry.addBreadcrumb({
+      category: 'offline-sync',
+      message,
+      level: 'info',
+      data: extra,
+    });
+  }
 };
 
 class OfflineSyncService {
@@ -347,21 +359,21 @@ class OfflineSyncService {
       case 'create':
         response = await fetch(endpoint, {
           method: 'POST',
-          headers: this.getHeaders(),
+          headers: await this.getHeaders(),
           body: JSON.stringify(data),
         });
         break;
       case 'update':
         response = await fetch(`${endpoint}/${data.id}`, {
           method: 'PUT',
-          headers: this.getHeaders(),
+          headers: await this.getHeaders(),
           body: JSON.stringify(data),
         });
         break;
       case 'delete':
         response = await fetch(`${endpoint}/${data.id}`, {
           method: 'DELETE',
-          headers: this.getHeaders(),
+          headers: await this.getHeaders(),
         });
         break;
       default:
@@ -378,20 +390,9 @@ class OfflineSyncService {
     logSyncEvent('Synced operation', 'info', { action, entityType, result });
   }
 
-  // Get authentication headers
-  private getAuthHeaders() {
-    const token = this.authTokenProvider();
-    if (token) {
-      return {
-        Authorization: `Bearer ${token}`,
-      };
-    }
-    return {};
-  }
-
   // Get properly typed headers for fetch requests
-  private getHeaders(): { 'Content-Type': string; Authorization?: string } {
-    const token = this.authTokenProvider();
+  private async getHeaders(): Promise<{ 'Content-Type': string; Authorization?: string }> {
+    const token = await this.authTokenProvider();
     const headers: { 'Content-Type': string; Authorization?: string } = {
       'Content-Type': 'application/json',
     };

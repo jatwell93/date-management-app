@@ -4,6 +4,19 @@ import { BrowserRouter } from 'react-router-dom';
 
 import { TrialBanner } from '../TrialBanner';
 
+vi.mock('../../hooks/useFreshApiToken', () => ({
+  useFreshApiToken: (() => {
+    const callbacks = new Map<string, jest.Mock>();
+    return (token: string | null) => {
+      const key = token ?? '__missing__';
+      if (!callbacks.has(key)) {
+        callbacks.set(key, vi.fn().mockResolvedValue(token || undefined));
+      }
+      return callbacks.get(key);
+    };
+  })(),
+}));
+
 const trialStatus = {
   isInTrial: true,
   isTrialExpired: false,
@@ -26,14 +39,14 @@ const trialStatus = {
 
 describe('TrialBanner', () => {
   beforeEach(() => {
-    jest.spyOn(global, 'fetch').mockResolvedValue({
+    vi.spyOn(global, 'fetch').mockResolvedValue({
       ok: true,
       json: async () => trialStatus,
     } as Response);
   });
 
   afterEach(() => {
-    jest.restoreAllMocks();
+    vi.restoreAllMocks();
   });
 
   it('lets users dismiss the trial CTA for the current page session', async () => {

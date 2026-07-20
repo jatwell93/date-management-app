@@ -13,46 +13,49 @@ describe('DatabaseMonitoringService', () => {
 
   afterEach(() => {
     service.stopMonitoring(true);
-    jest.restoreAllMocks();
+    vi.restoreAllMocks();
   });
 
-  it('records query metrics and emits slow query alert', (done) => {
-    service.initialize({
-      slowQueryThreshold: 10,
-      checkInterval: 60_000,
-      enableAlerting: true,
-    });
+  it('records query metrics and emits slow query alert', async () => {
+    // Vitest removed the `done` callback; await a Promise the listener resolves.
+    await new Promise<void>((resolve) => {
+      service.initialize({
+        slowQueryThreshold: 10,
+        checkInterval: 60_000,
+        enableAlerting: true,
+      });
 
-    service.on('alert', (alert) => {
-      if (alert.type === DatabaseAlertType.SLOW_QUERY) {
-        expect(alert.message).toContain('Slow query detected');
-        done();
-      }
-    });
+      service.on('alert', (alert) => {
+        if (alert.type === DatabaseAlertType.SLOW_QUERY) {
+          expect(alert.message).toContain('Slow query detected');
+          resolve();
+        }
+      });
 
-    service.recordQuery(50);
+      service.recordQuery(50);
+    });
   });
 
   it('emits threshold alerts when collected metrics exceed limits', async () => {
-    jest.spyOn(service as any, 'getConnectionPoolMetrics').mockResolvedValue({
+    vi.spyOn(service as any, 'getConnectionPoolMetrics').mockResolvedValue({
       totalConnections: 10,
       activeConnections: 9,
       idleConnections: 1,
       maxConnections: 10,
       utilization: 95,
     });
-    jest.spyOn(service as any, 'getPerformanceMetrics').mockResolvedValue({
+    vi.spyOn(service as any, 'getPerformanceMetrics').mockResolvedValue({
       totalQueries: 10,
       slowQueries: 1,
       avgQueryTime: 20,
       lastQueryTime: 20,
     });
-    jest.spyOn(service as any, 'getHealthMetrics').mockResolvedValue({
+    vi.spyOn(service as any, 'getHealthMetrics').mockResolvedValue({
       uptime: 100,
       tableSizes: { products: 200 * 1024 * 1024 },
       rowCount: { products: 200_000 },
     });
-    jest.spyOn(service as any, 'getDiskSpaceMetrics').mockResolvedValue({
+    vi.spyOn(service as any, 'getDiskSpaceMetrics').mockResolvedValue({
       total: 100,
       used: 90,
       free: 10,

@@ -16,12 +16,17 @@ import { requireFeature, checkUsageLimit } from '../../middleware/feature-gate.m
 import { SubscriptionStatus } from '../../types/subscription';
 
 // Mock Stripe
-jest.mock('stripe', () => {
-  return jest.fn().mockImplementation(() => ({
-    customers: {
-      create: jest.fn().mockResolvedValue({ id: 'cus_test123' }),
-    },
-  }));
+vi.mock('stripe', () => {
+  // The SUT default-imports Stripe (`import Stripe from 'stripe'`), so the mock
+  // module must expose the constructor as `default` (Vitest does not synthesize it).
+  const StripeMock = vi.fn().mockImplementation(function () {
+    return {
+      customers: {
+        create: vi.fn().mockResolvedValue({ id: 'cus_test123' }),
+      },
+    };
+  });
+  return { default: StripeMock };
 });
 
 describe('Multi-Tenant Feature Gate Enforcement Tests', () => {

@@ -8,11 +8,11 @@ import Stripe from 'stripe';
 import { SubscriptionService } from '../../services/subscription.service';
 import { BillingCycle, SubscriptionStatus, TierLevel } from '../../types/subscription';
 import { SubscriptionTier } from '../../models/subscription-tier.model';
-import { InternalError, NotFoundError } from '../../errors';
+import { InternalError, NotFoundError, ValidationError } from '../../errors';
 
 // Mock Stripe and Prisma
-jest.mock('stripe');
-jest.mock('../../database/database-factory');
+vi.mock('stripe');
+vi.mock('../../database/database-factory');
 
 describe('SubscriptionService', () => {
   let service: SubscriptionService;
@@ -21,43 +21,43 @@ describe('SubscriptionService', () => {
 
   beforeEach(() => {
     // Reset mocks
-    jest.clearAllMocks();
+    vi.clearAllMocks();
 
     // Create mock Stripe instance
     mockStripe = {
       customers: {
-        create: jest.fn(),
-        update: jest.fn(),
+        create: vi.fn(),
+        update: vi.fn(),
       },
       subscriptions: {
-        create: jest.fn(),
-        update: jest.fn(),
-        cancel: jest.fn(),
-        retrieve: jest.fn(),
+        create: vi.fn(),
+        update: vi.fn(),
+        cancel: vi.fn(),
+        retrieve: vi.fn(),
       },
     } as any;
 
     // Create mock Prisma client with necessary methods
     mockPrisma = {
       organization: {
-        findUnique: jest.fn(),
+        findUnique: vi.fn(),
       },
       subscriptionTier: {
-        findUnique: jest.fn(),
-        findFirst: jest.fn(),
-        findMany: jest.fn(),
-        create: jest.fn(),
-        update: jest.fn(),
+        findUnique: vi.fn(),
+        findFirst: vi.fn(),
+        findMany: vi.fn(),
+        create: vi.fn(),
+        update: vi.fn(),
       },
       organizationUsage: {
-        create: jest.fn(),
-        findUnique: jest.fn(),
+        create: vi.fn(),
+        findUnique: vi.fn(),
       },
       trialEvent: {
-        create: jest.fn(),
-        findFirst: jest.fn(),
+        create: vi.fn(),
+        findFirst: vi.fn(),
       },
-      $transaction: jest.fn((callback) => callback(mockPrisma)),
+      $transaction: vi.fn((callback) => callback(mockPrisma)),
     } as any;
 
     // Initialize service with mocks
@@ -95,11 +95,11 @@ describe('SubscriptionService', () => {
                 id: priceId,
                 metadata: { tier: 'starter' },
               },
+              current_period_end: Math.floor(Date.now() / 1000) + 30 * 24 * 60 * 60,
             },
           ],
         },
         status: 'active' as const,
-        current_period_end: Math.floor(Date.now() / 1000) + 30 * 24 * 60 * 60,
         trial_end: null,
       } as unknown as Stripe.Subscription;
       (mockStripe.subscriptions.create as jest.Mock).mockResolvedValueOnce(stripeSubscription);
@@ -246,6 +246,7 @@ describe('SubscriptionService', () => {
         id: 1,
         organizationId,
         status: SubscriptionStatus.ACTIVE,
+        cancelAtPeriodEnd: true,
         updatedAt: new Date(),
       });
 
@@ -255,6 +256,12 @@ describe('SubscriptionService', () => {
       expect(mockStripe.subscriptions.update).toHaveBeenCalledWith('sub_test123', {
         cancel_at_period_end: true,
       });
+      expect(mockPrisma.subscriptionTier.update).toHaveBeenCalledWith(
+        expect.objectContaining({
+          data: expect.objectContaining({ cancelAtPeriodEnd: true }),
+        }),
+      );
+      expect(result.cancelAtPeriodEnd).toBe(true);
     });
 
     it('should throw NotFoundError if subscription does not exist', async () => {
@@ -357,9 +364,9 @@ describe('SubscriptionService', () => {
         data: expect.objectContaining({
           organizationId,
           activeUsers: 1,
-          maxUsers: 3,
+          maxUsers: 10,
           totalSkus: 0,
-          maxSkus: 2000,
+          maxSkus: 50000,
         }),
       });
     });
@@ -387,7 +394,7 @@ describe('SubscriptionService', () => {
       (mockStripe.subscriptions.create as jest.Mock).mockResolvedValueOnce(stripeSubscription);
 
       // Mock $transaction to execute callback
-      (mockPrisma.$transaction as jest.Mock) = jest.fn((callback) => callback(mockPrisma));
+      (mockPrisma.$transaction as jest.Mock) = vi.fn((callback) => callback(mockPrisma));
 
       // Mock subscription update within transaction
       (mockPrisma.subscriptionTier.update as jest.Mock).mockResolvedValueOnce({
@@ -412,6 +419,67 @@ describe('SubscriptionService', () => {
       expect(result.status).toBe(SubscriptionStatus.ACTIVE);
       expect(result.stripeSubscriptionId).toBe('sub_test123');
       expect(mockPrisma.$transaction).toHaveBeenCalled();
+    });
+
+    it('converts a legacy premium trial at the Professional launch price', async () => {
+      const originalProfessionalMonthly = process.env.STRIPE_PROFESSIONAL_MONTHLY_PRICE_ID;
+      process.env.STRIPE_PROFESSIONAL_MONTHLY_PRICE_ID = 'price_professional_monthly';
+
+      (mockPrisma.subscriptionTier.findFirst as jest.Mock).mockResolvedValueOnce({
+        id: 1,
+        organizationId: 'org-123',
+        tierLevel: 'premium',
+        stripeCustomerId: 'cus_test123',
+        status: SubscriptionStatus.TRIALING,
+      });
+
+      const stripeSubscription = {
+        id: 'sub_test123',
+        status: 'active' as const,
+      } as unknown as Stripe.Subscription;
+      (mockStripe.subscriptions.create as jest.Mock).mockResolvedValueOnce(stripeSubscription);
+      (mockPrisma.$transaction as jest.Mock) = vi.fn((callback) => callback(mockPrisma));
+      (mockPrisma.subscriptionTier.update as jest.Mock).mockResolvedValueOnce({
+        id: 1,
+        organizationId: 'org-123',
+        tierLevel: 'premium',
+        status: SubscriptionStatus.ACTIVE,
+        stripeSubscriptionId: 'sub_test123',
+        trialConvertedAt: new Date(),
+        billingCycle: BillingCycle.MONTHLY,
+      });
+      (mockPrisma.trialEvent.create as jest.Mock).mockResolvedValueOnce({ id: '1' });
+
+      try {
+        await service.convertTrialToPaid('org-123', 'pm_test123', BillingCycle.MONTHLY);
+
+        expect(mockStripe.subscriptions.create).toHaveBeenCalledWith(
+          expect.objectContaining({
+            items: [{ price: 'price_professional_monthly' }],
+          }),
+        );
+      } finally {
+        if (originalProfessionalMonthly === undefined) {
+          delete process.env.STRIPE_PROFESSIONAL_MONTHLY_PRICE_ID;
+        } else {
+          process.env.STRIPE_PROFESSIONAL_MONTHLY_PRICE_ID = originalProfessionalMonthly;
+        }
+      }
+    });
+
+    it('rejects trial conversion for tiers without a Checkout price', async () => {
+      (mockPrisma.subscriptionTier.findFirst as jest.Mock).mockResolvedValueOnce({
+        id: 1,
+        organizationId: 'org-123',
+        tierLevel: 'concierge',
+        stripeCustomerId: 'cus_test123',
+        status: SubscriptionStatus.TRIALING,
+      });
+
+      await expect(
+        service.convertTrialToPaid('org-123', 'pm_test123', BillingCycle.MONTHLY),
+      ).rejects.toThrow(ValidationError);
+      expect(mockStripe.subscriptions.create).not.toHaveBeenCalled();
     });
 
     it('should throw NotFoundError if no TRIALING subscription exists', async () => {
@@ -445,7 +513,7 @@ describe('SubscriptionService', () => {
       ]);
 
       // Mock $transaction for each downgrade
-      (mockPrisma.$transaction as jest.Mock) = jest.fn((callback) => callback(mockPrisma));
+      (mockPrisma.$transaction as jest.Mock) = vi.fn((callback) => callback(mockPrisma));
       (mockPrisma.subscriptionTier.update as jest.Mock).mockResolvedValue({});
       (mockPrisma.trialEvent.create as jest.Mock).mockResolvedValue({});
 
@@ -471,7 +539,7 @@ describe('SubscriptionService', () => {
       ]);
 
       // Mock $transaction
-      (mockPrisma.$transaction as jest.Mock) = jest.fn((callback) => callback(mockPrisma));
+      (mockPrisma.$transaction as jest.Mock) = vi.fn((callback) => callback(mockPrisma));
 
       // First update fails, second succeeds
       (mockPrisma.subscriptionTier.update as jest.Mock)
@@ -629,10 +697,10 @@ describe('SubscriptionService', () => {
       const limits = service.getTierLimits('starter' as TierLevel);
 
       expect(limits).toEqual({
-        max_skus: 500,
-        max_users: 1,
+        max_skus: 5000,
+        max_users: 3,
         max_inventory_items: 5000,
-        storage_bytes: 1073741824, // 1GB
+        storage_bytes: 10737418240, // 10GB
       });
     });
 
@@ -640,19 +708,19 @@ describe('SubscriptionService', () => {
       const limits = service.getTierLimits('professional' as TierLevel);
 
       expect(limits).toEqual({
-        max_skus: 2000,
-        max_users: 3,
-        max_inventory_items: 20000,
-        storage_bytes: 10737418240, // 10GB
+        max_skus: 50000,
+        max_users: 10,
+        max_inventory_items: 50000,
+        storage_bytes: 107374182400, // 100GB
       });
     });
 
-    it('should return unlimited SKUs for premium tier', () => {
+    it('should return limits for legacy premium tier', () => {
       const limits = service.getTierLimits('premium' as TierLevel);
 
-      expect(limits.max_skus).toBeNull();
+      expect(limits.max_skus).toBe(50000);
       expect(limits.max_users).toBe(10);
-      expect(limits.max_inventory_items).toBeNull(); // unlimited
+      expect(limits.max_inventory_items).toBe(50000);
       expect(limits.storage_bytes).toBe(107374182400); // 100GB
     });
   });
@@ -690,7 +758,7 @@ describe('SubscriptionService', () => {
         id: 'sub_test123',
         status: 'active' as const,
         cancel_at_period_end: true,
-        current_period_end: Math.floor(Date.now() / 1000) + 3600,
+        items: { data: [{ current_period_end: Math.floor(Date.now() / 1000) + 3600 }] },
       } as unknown as Stripe.Subscription;
 
       (mockStripe.subscriptions.retrieve as jest.Mock).mockResolvedValueOnce(stripeSubscription);
@@ -716,7 +784,7 @@ describe('SubscriptionService', () => {
         id: 'sub_test123',
         status: 'canceled' as const,
         cancel_at_period_end: true,
-        current_period_end: Math.floor(Date.now() / 1000) - 3600,
+        items: { data: [{ current_period_end: Math.floor(Date.now() / 1000) - 3600 }] },
       } as unknown as Stripe.Subscription;
 
       (mockStripe.subscriptions.retrieve as jest.Mock).mockResolvedValueOnce(stripeSubscription);

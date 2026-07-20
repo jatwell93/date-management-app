@@ -2,46 +2,63 @@ import express from 'express';
 import path from 'path';
 import request from 'supertest';
 
-const mockUploadMiddleware = jest.fn();
-const mockMulterSingle = jest.fn(() => (req: any, res: any, next: any) => {
-  mockUploadMiddleware(req, res, next);
+// `vi.mock('multer', () => mockMulter)` references mockMulter directly, so the
+// whole multer mock group is lifted via vi.hoisted() to exist before the hoisted
+// factory runs. capturedMulterOptions lives on a holder so tests can read it.
+const { mockUploadMiddleware, mockMulter, multerState } = vi.hoisted(() => {
+  const mockUploadMiddleware = vi.fn();
+  const mockMulterSingle = vi.fn(() => (req: any, res: any, next: any) => {
+    mockUploadMiddleware(req, res, next);
+  });
+  const multerState: { options: unknown } = { options: undefined };
+  const mockMulter = vi.fn((options: unknown) => {
+    multerState.options = options;
+    return {
+      single: mockMulterSingle,
+    };
+  });
+  return { mockUploadMiddleware, mockMulter, multerState };
 });
-const mockMulter = jest.fn(() => ({
-  single: mockMulterSingle,
-}));
 
-const mockUnlink = jest.fn();
+const mockUnlink = vi.fn();
 
 const mockPrisma = {
   subscriptionTier: {
-    findFirst: jest.fn(),
+    findFirst: vi.fn(),
   },
   organizationUsage: {
-    findUnique: jest.fn(),
+    findUnique: vi.fn(),
   },
   product: {
-    findMany: jest.fn(),
+    findMany: vi.fn(),
   },
 };
 
-const mockProductService = {
-  getAllProducts: jest.fn(),
-  getProductByBarcode: jest.fn(),
-  getProductBySku: jest.fn(),
-  getProductById: jest.fn(),
-  createProduct: jest.fn(),
-  updateProduct: jest.fn(),
-  deleteProduct: jest.fn(),
-  processCSVUpload: jest.fn(),
-  getExcessProductsView: jest.fn(),
-};
-
-const MockProductService = jest.fn().mockImplementation(() => mockProductService);
+// The vi.mock factory references MockProductService directly, so both it and the
+// object it returns must be initialized before the hoisted factory runs. A
+// regular function (not arrow) lets the SUT `new ProductService()` construct it.
+const { mockProductService, MockProductService } = vi.hoisted(() => {
+  const mockProductService = {
+    getAllProducts: vi.fn(),
+    getProductByBarcode: vi.fn(),
+    getProductBySku: vi.fn(),
+    getProductById: vi.fn(),
+    createProduct: vi.fn(),
+    updateProduct: vi.fn(),
+    deleteProduct: vi.fn(),
+    processCSVUpload: vi.fn(),
+    getExcessProductsView: vi.fn(),
+  };
+  const MockProductService = vi.fn().mockImplementation(function () {
+    return mockProductService;
+  });
+  return { mockProductService, MockProductService };
+});
 let mockProductController: any;
 
-jest.mock('multer', () => mockMulter);
+vi.mock('multer', () => ({ default: mockMulter }));
 
-jest.mock('fs', () => ({
+vi.mock('fs', () => ({
   __esModule: true,
   default: {
     unlink: (...args: unknown[]) => mockUnlink(...args),
@@ -49,7 +66,7 @@ jest.mock('fs', () => ({
   unlink: (...args: unknown[]) => mockUnlink(...args),
 }));
 
-jest.mock('../../middleware/auth.middleware', () => ({
+vi.mock('../../middleware/auth.middleware', () => ({
   authenticateToken: (req: any, _res: any, next: any) => {
     req.organizationId = req.get('x-org-id') || undefined;
     req.user = { id: 1, role: 'Manager' };
@@ -57,35 +74,35 @@ jest.mock('../../middleware/auth.middleware', () => ({
   },
 }));
 
-jest.mock('../../middleware/feature-gate.middleware', () => ({
+vi.mock('../../middleware/feature-gate.middleware', () => ({
   checkUsageLimit: () => (_req: any, _res: any, next: any) => next(),
 }));
 
-jest.mock('../../middleware/validation.middleware', () => ({
+vi.mock('../../middleware/validation.middleware', () => ({
   validateDataIntegrity: (_req: any, _res: any, next: any) => next(),
 }));
 
-jest.mock('../../middleware/validateRequest', () => ({
+vi.mock('../../middleware/validateRequest', () => ({
   validateRequest: () => (_req: any, _res: any, next: any) => next(),
 }));
 
-jest.mock('../../middleware/data-integrity.middleware', () => ({
+vi.mock('../../middleware/data-integrity.middleware', () => ({
   validateBusinessRules: (_req: any, _res: any, next: any) => next(),
 }));
 
-jest.mock('../../middleware/rateLimiter', () => ({
+vi.mock('../../middleware/rateLimiter', () => ({
   standardLimiter: (_req: any, _res: any, next: any) => next(),
 }));
 
-jest.mock('../../services/product.service', () => ({
+vi.mock('../../services/product.service', () => ({
   ProductService: MockProductService,
 }));
 
-jest.mock('../../database/database-factory', () => ({
+vi.mock('../../database/database-factory', () => ({
   getDefaultDatabaseClient: () => mockPrisma,
 }));
 
-jest.mock('../../di/services', () => ({
+vi.mock('../../di/services', () => ({
   createProductController: () => mockProductController,
 }));
 
@@ -95,9 +112,7 @@ import { ProductController } from '../../controllers/product.controller';
 
 describe('product.routes organization guards', () => {
   beforeAll(() => {
-    mockProductController = new ProductController(
-      () => mockProductService as any,
-    );
+    mockProductController = new ProductController(() => mockProductService as any);
     mockProductController.uploadCsv = async (req: any, res: any, next: any) => {
       try {
         if (!req.file) {
@@ -167,9 +182,9 @@ describe('product.routes organization guards', () => {
   };
 
   beforeEach(() => {
-    jest.clearAllMocks();
+    vi.clearAllMocks();
 
-    jest.spyOn(console, 'error').mockImplementation(() => undefined);
+    vi.spyOn(console, 'error').mockImplementation(() => undefined);
 
     mockPrisma.subscriptionTier.findFirst.mockResolvedValue({ tierLevel: 'professional' });
     mockPrisma.organizationUsage.findUnique.mockResolvedValue({ totalSkus: 2005 });
@@ -201,11 +216,26 @@ describe('product.routes organization guards', () => {
           path: path.resolve('uploads', 'products-upload.csv'),
           originalname: 'products-upload.csv',
         };
+      } else if (mode === 'valid-xlsx') {
+        req.file = {
+          path: path.resolve('uploads', 'products-upload.xlsx'),
+          originalname: 'products-upload.xlsx',
+        };
       } else if (mode === 'invalid-path') {
         req.file = {
           path: path.join('uploads', 'products-upload.csv'),
           originalname: 'products-upload.csv',
         };
+      } else if (mode === 'too-large') {
+        const error = new Error('File too large') as Error & { code?: string };
+        error.code = 'LIMIT_FILE_SIZE';
+        next(error);
+        return;
+      } else if (mode === 'invalid-type-code') {
+        const error = new Error('Multer rejected uploaded file type') as Error & { code?: string };
+        error.code = 'INVALID_PRODUCT_UPLOAD_TYPE';
+        next(error);
+        return;
       }
 
       next();
@@ -219,7 +249,7 @@ describe('product.routes organization guards', () => {
   });
 
   afterEach(() => {
-    jest.restoreAllMocks();
+    vi.restoreAllMocks();
   });
 
   it('returns all products for GET /products', async () => {
@@ -395,9 +425,7 @@ describe('product.routes organization guards', () => {
   });
 
   it('returns 500 on export-excess when data retrieval throws', async () => {
-    mockProductService.getExcessProductsView.mockRejectedValue(
-      new Error('tier lookup failed'),
-    );
+    mockProductService.getExcessProductsView.mockRejectedValue(new Error('tier lookup failed'));
 
     const response = await request(app).get('/products/export-excess').set('x-org-id', 'org-1');
 
@@ -612,6 +640,40 @@ describe('product.routes organization guards', () => {
     expect(response.body.message).toBe('No file provided');
   });
 
+  it('configures multer with the default 10MB upload limit', () => {
+    expect(multerState.options).toEqual(
+      expect.objectContaining({
+        limits: { fileSize: 10 * 1024 * 1024 },
+      }),
+    );
+  });
+
+  it('returns 400 on upload-csv when multer rejects an oversized file', async () => {
+    const response = await request(app)
+      .post('/products/upload-csv')
+      .set('x-org-id', 'org-1')
+      .set('x-upload-mode', 'too-large');
+
+    expect(response.status).toBe(400);
+    expect(response.body).toEqual({
+      message: 'File too large. Maximum upload size is 10MB.',
+    });
+    expect(mockProductService.processCSVUpload).not.toHaveBeenCalled();
+  });
+
+  it('returns a canonical 400 when multer rejects an invalid file type', async () => {
+    const response = await request(app)
+      .post('/products/upload-csv')
+      .set('x-org-id', 'org-1')
+      .set('x-upload-mode', 'invalid-type-code');
+
+    expect(response.status).toBe(400);
+    expect(response.body).toEqual({
+      message: 'Invalid file type. Only CSV, XLSX, and XLS files are allowed.',
+    });
+    expect(mockProductService.processCSVUpload).not.toHaveBeenCalled();
+  });
+
   it('returns 400 on upload-csv when file path fails safety check', async () => {
     const response = await request(app)
       .post('/products/upload-csv')
@@ -643,6 +705,27 @@ describe('product.routes organization guards', () => {
     expect(mockProductService.processCSVUpload).toHaveBeenCalledWith(
       absolutePath,
       'products-upload.csv',
+    );
+  });
+
+  it('returns successful upload summary when XLSX processing succeeds within the limit', async () => {
+    const absolutePath = path.resolve('uploads', 'products-upload.xlsx');
+
+    const response = await request(app)
+      .post('/products/upload-csv')
+      .set('x-org-id', 'org-1')
+      .set('x-upload-mode', 'valid-xlsx');
+
+    expect(response.status).toBe(200);
+    expect(response.body).toEqual({
+      success: true,
+      message: 'CSV processed successfully',
+      imported: 1,
+      updated: 0,
+    });
+    expect(mockProductService.processCSVUpload).toHaveBeenCalledWith(
+      absolutePath,
+      'products-upload.xlsx',
     );
   });
 

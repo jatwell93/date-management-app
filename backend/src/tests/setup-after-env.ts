@@ -11,10 +11,10 @@ import { closeDb } from '../database';
 import { resetOrgCounter } from './helpers/test-factories';
 
 const prisma = new PrismaClient();
-const INTEGRATION_TEST_TIMEOUT_MS = 60_000;
 
-// Large integration suites can exceed Jest's default 30s hook timeout on Windows/SQLite.
-jest.setTimeout(INTEGRATION_TEST_TIMEOUT_MS);
+// The 60s test/hook timeout that large integration suites need on Windows/SQLite
+// is now set centrally in vitest.config.ts (testTimeout/hookTimeout) — Vitest has
+// no per-file `jest.setTimeout` equivalent.
 
 function stopBackgroundServices(): void {
   AnalyticsService.resetInstance();
@@ -189,9 +189,10 @@ async function seedDefaultOrganizationAndUsers(): Promise<void> {
   });
 }
 
-beforeEach(async () => {
-  const testPath =
-    (expect as unknown as { getState?: () => { testPath?: string } }).getState?.().testPath || '';
+beforeEach(async (ctx) => {
+  // Vitest exposes the running file's path on the test context, replacing jest's
+  // `expect.getState().testPath`. Used to branch unit (skip DB) vs integration.
+  const testPath = ctx.task.file.filepath || '';
   const isUnitSuite = isUnitTestSuite(testPath);
   const isPostgres = isUnitSuite ? false : isPostgresRuntime();
   const isTierFlagsSuite = testPath.includes('validate-tier-flags.test.ts');

@@ -2,7 +2,7 @@
 import './instrument'; // Correct: This must stay at the top!
 import React from 'react';
 import ReactDOM from 'react-dom/client';
-import './tailwind-output.css';
+import './index.css';
 import { ClerkAuthProvider } from './components/ClerkAuthProvider';
 import App from './App';
 import * as serviceWorkerRegistration from './serviceWorkerRegistration';
