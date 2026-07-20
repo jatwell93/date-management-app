@@ -10,9 +10,15 @@ import { NotFoundError } from '../../errors';
 // namespaces are non-configurable).
 vi.mock('@sentry/node');
 
+// `email.service.ts` uses a default import (`import sgMail from '@sendgrid/mail'`),
+// so the mock must expose a `default` export — a bare named-export factory leaves
+// `sgMail` undefined and throws at EmailService construction.
 vi.mock('@sendgrid/mail', () => ({
-  setApiKey: vi.fn(),
-  send: vi.fn(),
+  __esModule: true,
+  default: {
+    setApiKey: vi.fn(),
+    send: vi.fn(),
+  },
 }));
 
 vi.mock('../../database/database-factory');
@@ -220,11 +226,11 @@ describe('WebhookService', () => {
               price: {
                 metadata: { tier: 'starter' },
               },
+              current_period_end: Math.floor(Date.now() / 1000) + 1000,
             },
           ],
         },
         trial_end: null,
-        current_period_end: Math.floor(Date.now() / 1000) + 1000,
       } as unknown as Stripe.Subscription;
 
       await (service as any).handleSubscriptionUpdated(subscription);
@@ -253,10 +259,14 @@ describe('WebhookService', () => {
         customer: customerId,
         status: 'active',
         items: {
-          data: [{ price: { metadata: { tier: 'starter' } } }],
+          data: [
+            {
+              price: { metadata: { tier: 'starter' } },
+              current_period_end: Math.floor(Date.now() / 1000) + 1000,
+            },
+          ],
         },
         trial_end: null,
-        current_period_end: Math.floor(Date.now() / 1000) + 1000,
       } as unknown as Stripe.Subscription;
 
       await (service as any).handleSubscriptionUpdated(subscription);
@@ -325,10 +335,14 @@ describe('WebhookService', () => {
         customer: customerId,
         status: 'active',
         items: {
-          data: [{ price: { metadata: { tier: 'starter' } } }],
+          data: [
+            {
+              price: { metadata: { tier: 'starter' } },
+              current_period_end: Math.floor(Date.now() / 1000) + 1000,
+            },
+          ],
         },
         trial_end: null,
-        current_period_end: Math.floor(Date.now() / 1000) + 1000,
       } as unknown as Stripe.Subscription;
 
       await (service as any).handleSubscriptionUpdated(subscription);

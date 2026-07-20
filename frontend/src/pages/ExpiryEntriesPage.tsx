@@ -166,6 +166,7 @@ export function ExpiryEntriesPage({ token, role }: ExpiryEntriesPageProps) {
 
   useEffect(() => {
     const controller = new AbortController();
+    // eslint-disable-next-line react-hooks/set-state-in-effect -- intentional: sets loading before kicking off an abortable fetch
     setLoading(true);
     fetchReportData(controller.signal);
     return () => {

@@ -824,6 +824,36 @@ Contrary to the original framing of #291, the Jest 30 upgrade does **not** clear
 | -------- | ------ | ---------------- |
 | Backend | Replaced Jest with Vitest (v8 coverage); dropped `jest` / `ts-jest` / `@types/jest` (247 transitive packages removed) | `@jest/*`, `babel-plugin-istanbul`, `@istanbuljs/load-nyc-config`, and the dev/test `js-yaml <= 4.1.1` they pulled in are **gone**. `npm audit` for `/backend` drops from 19 → 1; the only remaining advisory is the pre-existing `xlsx` runtime risk (below). This is the change that closes the backend Jest-toolchain accepted-risk row. |
 
+**2026-07-19** — Triaged the backlog of 32 open Dependabot PRs by package boundary (no advisories were outstanding beyond the accepted risks below; this was routine version hygiene, not remediation). All bumps were validated as npm-registry-sourced, so the supply-chain source policy was never at risk — the only concern was breakage from major version jumps.
+
+- **Closed as superseded (2):** root `wrangler` #212 (target 4.103.0 < shipped 4.105.0) and workers `esbuild` #163 (target 0.28.0 < shipped 0.28.1) — merging either would have been a downgrade.
+- **Safe batch — approved for squash auto-merge (registry-sourced dev/type/tooling, no runtime code paths):** backend `@types/csv-parse` #200, `@types/supertest` #203, `@types/sqlite3` #196; frontend `@types/jwt-decode` #160, `@types/uuid` #157; workers `@types/bcryptjs` #156, `cross-env` #176, `wrangler` #211, `@cloudflare/vitest-pool-workers` #208; root `globals` #278; the `github-actions` group #362. The `@types/node` → 26 bumps for root #277 and backend #289 were each **locally `tsc`-verified clean** before auto-merge was enabled.
+- **Deferred (left open with per-PR remediation notes):**
+  - `@types/node` → 26 for **frontend #285** (fails local `tsc` — TypeScript 4.9.5 cannot parse Node-26 `.d.ts`; coupled to the frontend TS upgrade #152) and **workers #276** (fails the `bundle-size` gate's typecheck/build). Their green PR-level CI was misleading because those boundaries' merge gates do not run `tsc`; the failure only surfaced under a local typecheck.
+  - Runtime majors requiring code changes + focused tests: `rate-limiter-flexible` 8→11 #286 (security control), `stripe` 13→22 #283, `@prisma/client` + `prisma` 5→7 #183/#153 (must move as a pair), `web-vitals` 2→5 #287 (`getCLS`→`onCLS`/`onINP`).
+  - Tooling majors requiring coordinated migration: `eslint` 8→10 group #279/#170/#288/#178 (flat-config migration across boundaries) and `typescript` → 6 group #159/#198/#166/#152.
+
+| Boundary | Change | Outcome |
+| -------- | ------ | ------- |
+| root / backend / frontend / workers / actions | Closed 2 stale PRs; approved ~11 dev/type/tooling bumps for auto-merge; deferred 15 major-version PRs with tracked remediation notes | `npm run security:npm-supply-chain` passes; `npm audit` unchanged — only the documented `xlsx` (backend/frontend) and `quagga` (frontend) accepted risks remain, root/workers clean. Open Dependabot count reduced 32 → 15 (the deferred majors), each with a documented next step. |
+
+**2026-07-20** — Executed the deferred major-version upgrades from the 2026-07-19 triage as a risk-ordered set of per-PR branches (OpenSpec change `upgrade-deferred-dependency-majors`). This was capability/version hygiene, not advisory remediation — **no new advisories were introduced and none of the accepted risks changed**; `npm run security:npm-supply-chain` passes and `npm audit` reports only the documented `xlsx`/`quagga` risks (root/workers clean). Two upgrades also **shrank the supply-chain surface** by removing dead dependencies (`rate-limiter-flexible`, `@prisma/adapter-planetscale`).
+
+| Boundary | Change | Outcome |
+| -------- | ------ | ------- |
+| Frontend | `web-vitals 2→5` (#287): `getCLS/getFID/…` → `onCLS/onINP/…`, FID→INP in `reportWebVitals.ts` | Landed; `vitest`/`tsc`/`vite build` green |
+| Backend | `rate-limiter-flexible` 8→11 (#286) — **removed** as a dead dep (declared, imported nowhere; live limiting is `express-rate-limit`) | Supply-chain surface reduced; tier behaviour unchanged |
+| root + backend + workers + frontend | `typescript → 6.0.3` (#159/#198/#166/#152) as one coordinated set | All boundaries typecheck/build green |
+| Backend + frontend | `eslint → 9` + flat-config migration; `eslint-plugin-react-hooks 4→7` (#178) | Migration delivered; all boundaries lint clean |
+| Frontend + workers | `@types/node → 26.1.1` (#285/#276), unblocked by the TS 6 upgrade | typecheck/build/`test:db` green |
+| Backend | `stripe 13→22` (#283): adopted API `2026-06-24.dahlia`, migrated the "basil" `current_period_end` move to subscription items | Suite green; caught+fixed a v22 empty-key construction throw masked by Doppler |
+| root + backend | `@prisma/client` + `prisma` `5→6.19.3` (#373); removed dead `@prisma/adapter-planetscale@7.8.0` | Suite green; `test:db` 70/70 |
+
+**Still deferred (left open with recorded reasons):**
+
+- **ESLint 10** — root `eslint` #279, backend `eslint` #288, `@eslint/js` #170. Upstream-blocked: `eslint-plugin-react@7.37.x` calls `context.getFilename()`, removed in ESLint 10, and the react/a11y/import plugins cap their `eslint` peer at `^9`. ESLint **9** is the max viable version and is already flat-config-native, so the migration was delivered at 9. Re-attempt when `eslint-plugin-react` ships ESLint 10 support.
+- **Prisma 7** — `@prisma/client` #183, `prisma` #153. Prisma 7 is an ORM re-architecture, not a bump: it mandates **driver adapters** (`new PrismaClient()` no longer self-connects), is **ESM-only** (`"type":"module"`), and needs the new `prisma-client` generator + `prisma.config.ts`. This backend is CommonJS + tsyringe/reflect-metadata + SWC decorator metadata, so 7 is a separate architecture change; landed **6** (classic engine, CJS, auto-`.env`) as the safe forward step.
+
 ### Accepted Dependency Risks
 
 | Package area | Current status | Mitigation |

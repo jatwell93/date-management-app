@@ -3,7 +3,6 @@ import 'reflect-metadata';
 
 try {
   // Optional instrumentation (Sentry/analytics). Safe to skip if missing.
-  // eslint-disable-next-line @typescript-eslint/no-var-requires
   require('../instrument');
 } catch {
   // Instrumentation not present in this environment; continue without it.
@@ -56,7 +55,6 @@ let organizationInviteRoutes: ExpressRouter | null = null;
 
 if (envConfig.ENABLE_CUSTOM_ORG_INVITES) {
   // Keep legacy invite endpoints behind an explicit feature flag.
-  // eslint-disable-next-line @typescript-eslint/no-var-requires
   organizationInviteRoutes = require('./routes/organization-invite.routes').default;
 }
 

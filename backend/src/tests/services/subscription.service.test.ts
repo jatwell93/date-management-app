@@ -95,11 +95,11 @@ describe('SubscriptionService', () => {
                 id: priceId,
                 metadata: { tier: 'starter' },
               },
+              current_period_end: Math.floor(Date.now() / 1000) + 30 * 24 * 60 * 60,
             },
           ],
         },
         status: 'active' as const,
-        current_period_end: Math.floor(Date.now() / 1000) + 30 * 24 * 60 * 60,
         trial_end: null,
       } as unknown as Stripe.Subscription;
       (mockStripe.subscriptions.create as jest.Mock).mockResolvedValueOnce(stripeSubscription);
@@ -758,7 +758,7 @@ describe('SubscriptionService', () => {
         id: 'sub_test123',
         status: 'active' as const,
         cancel_at_period_end: true,
-        current_period_end: Math.floor(Date.now() / 1000) + 3600,
+        items: { data: [{ current_period_end: Math.floor(Date.now() / 1000) + 3600 }] },
       } as unknown as Stripe.Subscription;
 
       (mockStripe.subscriptions.retrieve as jest.Mock).mockResolvedValueOnce(stripeSubscription);
@@ -784,7 +784,7 @@ describe('SubscriptionService', () => {
         id: 'sub_test123',
         status: 'canceled' as const,
         cancel_at_period_end: true,
-        current_period_end: Math.floor(Date.now() / 1000) - 3600,
+        items: { data: [{ current_period_end: Math.floor(Date.now() / 1000) - 3600 }] },
       } as unknown as Stripe.Subscription;
 
       (mockStripe.subscriptions.retrieve as jest.Mock).mockResolvedValueOnce(stripeSubscription);

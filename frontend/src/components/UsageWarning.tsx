@@ -31,6 +31,7 @@ export function UsageWarning({
       const hoursSinceDismiss = (now.getTime() - dismissedDate.getTime()) / (1000 * 60 * 60);
 
       if (hoursSinceDismiss < 24) {
+        // eslint-disable-next-line react-hooks/set-state-in-effect -- intentional: restores dismissed state from localStorage; effect re-runs per resourceType
         setDismissed(true);
       }
     }

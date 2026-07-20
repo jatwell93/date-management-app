@@ -104,6 +104,7 @@ export const PolicyReviewPanel: React.FC<Props> = ({ suppliers, isAdmin, getToke
   }, [appliedFilters, getToken]);
 
   useEffect(() => {
+    // eslint-disable-next-line react-hooks/set-state-in-effect -- intentional: kicks off the policy data fetch on deps change
     void load();
   }, [load]);
 

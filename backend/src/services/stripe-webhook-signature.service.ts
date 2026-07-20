@@ -15,7 +15,7 @@ export class StripeWebhookSignatureService {
 
     if (stripeSecretKey) {
       this.stripe = new Stripe(stripeSecretKey, {
-        apiVersion: '2023-08-16',
+        apiVersion: '2026-06-24.dahlia',
       });
     } else {
       this.stripe = null;
