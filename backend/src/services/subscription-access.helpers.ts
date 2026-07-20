@@ -1,8 +1,9 @@
 import Stripe from 'stripe';
+import { getSubscriptionCurrentPeriodEndDate } from './subscription-billing.helpers';
 
 type StripeAccessWindowSubscription = Pick<
   Stripe.Subscription,
-  'status' | 'cancel_at_period_end' | 'current_period_end'
+  'status' | 'cancel_at_period_end' | 'items'
 >;
 
 export function hasActiveStripeAccessWindow(
@@ -12,9 +13,7 @@ export function hasActiveStripeAccessWindow(
     return true;
   }
 
-  const periodEnd = stripeSubscription.current_period_end
-    ? new Date(stripeSubscription.current_period_end * 1000)
-    : null;
+  const periodEnd = getSubscriptionCurrentPeriodEndDate(stripeSubscription);
 
   return Boolean(
     stripeSubscription.cancel_at_period_end && periodEnd && periodEnd.getTime() > Date.now(),

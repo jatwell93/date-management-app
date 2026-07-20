@@ -837,6 +837,23 @@ Contrary to the original framing of #291, the Jest 30 upgrade does **not** clear
 | -------- | ------ | ------- |
 | root / backend / frontend / workers / actions | Closed 2 stale PRs; approved ~11 dev/type/tooling bumps for auto-merge; deferred 15 major-version PRs with tracked remediation notes | `npm run security:npm-supply-chain` passes; `npm audit` unchanged — only the documented `xlsx` (backend/frontend) and `quagga` (frontend) accepted risks remain, root/workers clean. Open Dependabot count reduced 32 → 15 (the deferred majors), each with a documented next step. |
 
+**2026-07-20** — Executed the deferred major-version upgrades from the 2026-07-19 triage as a risk-ordered set of per-PR branches (OpenSpec change `upgrade-deferred-dependency-majors`). This was capability/version hygiene, not advisory remediation — **no new advisories were introduced and none of the accepted risks changed**; `npm run security:npm-supply-chain` passes and `npm audit` reports only the documented `xlsx`/`quagga` risks (root/workers clean). Two upgrades also **shrank the supply-chain surface** by removing dead dependencies (`rate-limiter-flexible`, `@prisma/adapter-planetscale`).
+
+| Boundary | Change | Outcome |
+| -------- | ------ | ------- |
+| Frontend | `web-vitals 2→5` (#287): `getCLS/getFID/…` → `onCLS/onINP/…`, FID→INP in `reportWebVitals.ts` | Landed; `vitest`/`tsc`/`vite build` green |
+| Backend | `rate-limiter-flexible` 8→11 (#286) — **removed** as a dead dep (declared, imported nowhere; live limiting is `express-rate-limit`) | Supply-chain surface reduced; tier behaviour unchanged |
+| root + backend + workers + frontend | `typescript → 6.0.3` (#159/#198/#166/#152) as one coordinated set | All boundaries typecheck/build green |
+| Backend + frontend | `eslint → 9` + flat-config migration; `eslint-plugin-react-hooks 4→7` (#178) | Migration delivered; all boundaries lint clean |
+| Frontend + workers | `@types/node → 26.1.1` (#285/#276), unblocked by the TS 6 upgrade | typecheck/build/`test:db` green |
+| Backend | `stripe 13→22` (#283): adopted API `2026-06-24.dahlia`, migrated the "basil" `current_period_end` move to subscription items | Suite green; caught+fixed a v22 empty-key construction throw masked by Doppler |
+| root + backend | `@prisma/client` + `prisma` `5→6.19.3` (#373); removed dead `@prisma/adapter-planetscale@7.8.0` | Suite green; `test:db` 70/70 |
+
+**Still deferred (left open with recorded reasons):**
+
+- **ESLint 10** — root `eslint` #279, backend `eslint` #288, `@eslint/js` #170. Upstream-blocked: `eslint-plugin-react@7.37.x` calls `context.getFilename()`, removed in ESLint 10, and the react/a11y/import plugins cap their `eslint` peer at `^9`. ESLint **9** is the max viable version and is already flat-config-native, so the migration was delivered at 9. Re-attempt when `eslint-plugin-react` ships ESLint 10 support.
+- **Prisma 7** — `@prisma/client` #183, `prisma` #153. Prisma 7 is an ORM re-architecture, not a bump: it mandates **driver adapters** (`new PrismaClient()` no longer self-connects), is **ESM-only** (`"type":"module"`), and needs the new `prisma-client` generator + `prisma.config.ts`. This backend is CommonJS + tsyringe/reflect-metadata + SWC decorator metadata, so 7 is a separate architecture change; landed **6** (classic engine, CJS, auto-`.env`) as the safe forward step.
+
 ### Accepted Dependency Risks
 
 | Package area | Current status | Mitigation |

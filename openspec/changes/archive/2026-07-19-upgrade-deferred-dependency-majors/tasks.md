@@ -98,29 +98,81 @@ boundary tests green, `npm run security:npm-supply-chain` passes, `npm audit` sh
 
 ### 3a. Stripe 13→22 (backend, #283)
 
-- [ ] 3.1 Bump `stripe ^13.10.0 → ^22.3.0` (lockfile-only). Pin the SDK `apiVersion` in the Stripe
-      client init to the account's current version; do not rely on the SDK default.
-- [ ] 3.2 Reconcile type/name changes across the 9 majors (event, subscription, and webhook types);
-      update the webhook handler and any `Stripe.*` type references. Keep signature verification and
-      idempotency unchanged.
-- [ ] 3.3 Run billing + webhook tests (`vitest run`), `tsc`, and `npm run validate:stripe-config` /
-      `test:stripe-config`. Confirm `workers-deploy.yml` Stripe config validation still passes. Verify.
+- [x] 3.1 **Bumped `stripe ^13.10.0 → ^22.3.2`** (#283; backend only — the Worker doesn't call the
+      Stripe SDK). SDK v22 pins its types to `LatestApiVersion = "2026-06-24.dahlia"` and the config
+      field is strictly typed `apiVersion?: LatestApiVersion`, so the five `new Stripe(...)` sites
+      (`utils/stripe.ts`, `jobs/stripe-sync.job.ts`, `services/{stripe-webhook-signature,subscription,
+      webhook}.service.ts`) had to move off `'2023-08-16'`. Per the user decision, **adopted the SDK's
+      native `'2026-06-24.dahlia'`** rather than casting the old version — pinned explicitly, not relying
+      on the SDK default. No other lockfile packages changed (v22 dropped the `qs` dep and made
+      `@types/node` an optional peer).
+- [x] 3.2 **Reconciled the "basil" breaking change.** Stripe's 2025 API moved
+      `current_period_start/end` off the `Subscription` onto each **subscription item**. Added two
+      accessors to `subscription-billing.helpers.ts` (`getSubscriptionCurrentPeriodEnd` →
+      `items.data[0].current_period_end`, plus a `…Date` wrapper) and routed all 9 read sites through
+      them (`subscription-access.helpers.ts` + 4 in `webhook.service.ts`). Signature verification
+      (`constructEvent`) and idempotency are untouched; webhook payload shape is governed by the
+      Dashboard endpoint version, not the SDK. Updated 4 test fixtures to the item-based shape and fixed
+      a **latent broken `@sendgrid/mail` mock** in `webhook.service.test.ts` (missing `default` export →
+      the file's 24 tests never ran; now green standalone).
+- [x] 3.3 **Verified.** Backend `tsc --noEmit` clean. Stripe-touched suites green: `webhook.service`
+      24/24, `subscription.service` (incl. access-window), `subscription-access.helpers`,
+      `subscription-lifecycle-services`. `validate:stripe-config` valid under Doppler + `test:stripe-config`
+      3/3 (pure config JS, SDK-version-independent). `security:npm-supply-chain` passes; backend `npm audit`
+      unchanged (only accepted `xlsx` highs). Pre-existing, non-Stripe failures left as-is and proven
+      unrelated: `storage-factory` R2-env artifact, `auth.service` JWT `tierLevel` payload drift, and the
+      live-Stripe `subscription.integration.test.ts` (`No such price` — a stale hardcoded test-account
+      price ID, only runs locally because Doppler injects an `sk_test_` key; skipped in CI).
+      **CI regression caught + fixed:** v22 throws `Neither apiKey nor config.authenticator provided`
+      at *construction* when the key is empty (v13 deferred it to first request). The eagerly-wired
+      `SubscriptionService.createStripeClient` used `new Stripe(key || '', …)`, crashing 41 tests across
+      21 files in CI — masked locally because `doppler run` injects `STRIPE_SECRET_KEY`. Fixed by falling
+      back to an obviously-invalid placeholder key so construction succeeds and real calls still 401.
+      Re-verified against a **no-Doppler** run (CI-parity, no key): full unit suite 1515/1516, the lone
+      failure being the local-only `storage-factory` `.env.production` R2 bleed.
 
-### 3b. Prisma 5→7 pair (root + backend, #183 + #153)
+### 3b. Prisma 5→6 (root + backend); Prisma 7 re-deferred (PR #373, was #183 + #153)
 
-- [ ] 3.4 Bump `@prisma/client` and `prisma` `^5.22.0 → ^7.8.0` in **both** root and backend (all four
-      declarations) in one branch; run `prisma generate`.
-- [ ] 3.5 Review Prisma 6→7 breaking changes: client engine/runtime, `$queryRaw`/`$executeRaw` typing,
-      any renamed client APIs. Update `backend/src/**` call sites; keep the **triplicated schema**
-      (Prisma base + Neon SQL + SQLite migration + pglite harness) in agreement (golden rule 6).
-- [ ] 3.6 Migrate + test both backends: apply migrations on SQLite dev and Neon test DBs; run the full
-      backend suite `vitest run` **and** `npm run test:db` (pglite worker harness) and the dual-backend
-      conformance tests. Verify.
+  SCOPE DECISION (user-confirmed): land Prisma **6**, not 7. Prisma 7 is an ORM re-architecture, not a
+  bump — it mandates **driver adapters** (`new PrismaClient()` no longer self-connects), is **ESM-only**
+  (`"type": "module"`), and needs the new `prisma-client` generator + `prisma.config.ts` + explicit
+  `.env` loading. This backend is CommonJS + tsyringe/reflect-metadata + SWC decorator metadata, so 7 is
+  a multi-day architecture change out of scope for a dependency wave. Prisma 6 keeps the classic Rust
+  engine, CJS, and auto-`.env`, making 5→6 a genuine low-risk forward step. **Dependabot #183/#153
+  (target ^7) re-deferred** with this reason (recorded here + in 4.1).
+
+- [x] 3.4 Bumped `@prisma/client` and `prisma` `^5.22.0 → ^6.19.3` in **both** root and backend (all four
+      declarations); `prisma generate` clean (classic Rust query engine retained). Also removed a dead
+      `@prisma/adapter-planetscale@^7.8.0` (zero imports, PlanetScale not in stack, leftover from early
+      R2 work) whose hard peer on `@prisma/client@7` would ERESOLVE against the v6 pin.
+- [x] 3.5 Reviewed 5→6 breaking changes — **none apply**: no `Bytes` fields (Buffer→Uint8Array n/a), no
+      implicit m-n relations (PK change n/a), `NotFoundError` here is a **custom app error** not Prisma's
+      removed one, full-text search unused. TS `^6.0.3` + `@types/node ^26` already clear v6 floors. No
+      `backend/src/**` call-site changes needed. Triplicated schema untouched (no model changes).
+- [x] 3.6 Verified. `tsc --noEmit` clean; full backend Vitest **1882 passing** (9 remaining failures are
+      pre-existing Doppler/local-env artifacts — storage-factory `.env.production` R2 bleed, live-Stripe
+      integration price IDs, auth JWT payload drift — all pass/skip in CI's secret-free env); workers
+      `npm run test:db` (pglite harness) **70/70**; supply-chain policy pass; `npm audit` only accepted
+      `xlsx`. One test-only fix: `database-factory` `instanceof PrismaClient` smoke checks — v6 returns a
+      proxy-wrapped client whose prototype is an internal class, so `instanceof` is false even for a
+      valid client → replaced with a behavioral method-surface assertion. PR #373.
 
 ## 4. Completion
 
-- [ ] 4.1 All 13 deferred PRs + #285/#276 merged or explicitly re-deferred with a recorded reason.
-- [ ] 4.2 Final sweep: `npm run security:npm-supply-chain` + `npm audit` across all four boundaries;
-      confirm only `xlsx`/`quagga` remain.
-- [ ] 4.3 `docs/security.md` remediation log updated per wave.
-- [ ] 4.4 `npx openspec validate upgrade-deferred-dependency-majors --strict`.
+- [x] 4.1 All 13 deferred PRs + #285/#276 reconciled. **Merged/done:** web-vitals #287, rate-limiter
+      #286 (removed as dead dep), TS 6 #159/#198/#166/#152, react-hooks #178, `@types/node` #285/#276,
+      stripe #283 (PR #372), prisma #183/#153 landed at **6** (PR #373). **Still deferred with recorded
+      reasons (left open):** ESLint 10 #279/#170/#288 (upstream-blocked — `eslint-plugin-react` uses the
+      removed `getFilename()`; ESLint 9 is the max viable version and delivered the flat-config migration)
+      and Prisma 7 #183/#153 (ORM re-architecture needing ESM + driver adapters vs this CJS/tsyringe/SWC
+      backend; landed 6 as the safe step). Reasons captured in the 2b/3b notes above and the 2026-07-20
+      `docs/security.md` remediation-log entry. (The remaining open PRs — #362/#284/#203/#200/#196/#157 —
+      are the 2026-07-19 triage's Tier-A safe dev/type/tooling batch, out of scope for this deferred-
+      majors change.)
+- [x] 4.2 Final sweep clean: `npm run security:npm-supply-chain` **passes**; `npm audit` across all four
+      boundaries shows **no new advisories** — root **0**, workers **0**, backend **2 high** (`xlsx`
+      Prototype-Pollution + ReDoS, accepted), frontend **8** (6 moderate + 2 high = the pre-existing
+      `quagga` chain `qs`/`tough-cookie`/`uuid` + `xlsx`, identical to main). Only `xlsx`/`quagga` remain.
+- [x] 4.3 `docs/security.md` Dependabot Remediation Log updated with the **2026-07-20** entry covering the
+      full deferred-majors execution (per-wave table + the two still-deferred groups with reasons).
+- [x] 4.4 `npx openspec validate upgrade-deferred-dependency-majors --strict` → **valid**.
