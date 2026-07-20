@@ -8,6 +8,34 @@
  */
 
 import Database from 'better-sqlite3';
+import { DISPOSITIONED_STATUSES, EXPIRED_STATUS } from '../../../shared/domain/disposition';
+import { MARKDOWN_WINDOWS } from '../../../shared/domain/markdown';
+import {
+  buildStoreWalkAuditReport,
+  type StoreWalkAuditCycle,
+  type StoreWalkAuditCycleRow,
+  type StoreWalkAuditUserRow,
+} from '../../../shared/domain/store-walk-audit';
+
+// Re-exported so existing consumers (report.service) keep importing these from
+// the repository; the definitions now live in shared/domain/store-walk-audit.
+export type {
+  StoreWalkAuditCycle,
+  StoreWalkAuditFlag,
+  StoreWalkAuditUser,
+} from '../../../shared/domain/store-walk-audit';
+
+const dispositionedStatusPlaceholders = DISPOSITIONED_STATUSES.map(() => '?').join(', ');
+
+function sqliteWindowClause(minDays: number, maxDays?: number): string {
+  if (maxDays === undefined) {
+    return `date(expiry_date) >= date('now', '+${minDays} days')`;
+  }
+  if (minDays === 0) {
+    return `date(expiry_date) BETWEEN date('now') AND date('now', '+${maxDays} days')`;
+  }
+  return `date(expiry_date) BETWEEN date('now', '+${minDays} days') AND date('now', '+${maxDays} days')`;
+}
 
 // Report interfaces
 export interface MonthlyExpiryReport {
@@ -18,6 +46,9 @@ export interface MonthlyExpiryReport {
   markdown2_count: number;
   markdown3_count: number;
   total_markdown: number;
+  expiry_risk_count: number;
+  next_month_markdown_count: number;
+  active_expiry_stock_count: number;
   latest_expiry_date: string;
 }
 
@@ -35,6 +66,7 @@ export interface DetailedExpiryReportItem {
   productName: string;
   sku: string;
   costPrice: number;
+  retailPrice: number | null;
   locationId: number;
   locationName: string;
   subDepartment: string | null;
@@ -68,6 +100,11 @@ export interface LossByDepartmentReportItem {
   department: string;
   totalLoss: number;
   count: number;
+}
+
+export interface SellThroughByLevelItem {
+  markdownLevel: number | null;
+  soldCount: number;
 }
 
 export interface ItemsByUserReportItem {
@@ -104,7 +141,10 @@ export interface DashboardData {
 }
 
 export class ReportRepository {
-  constructor(private db: InstanceType<typeof Database>) {}
+  constructor(
+    private db: InstanceType<typeof Database>,
+    private organizationId: string,
+  ) {}
 
   /**
    * Get monthly expiry report
@@ -114,19 +154,23 @@ export class ReportRepository {
       `SELECT
         strftime('%Y-%m', expiry_date) as month,
         COUNT(*) as total_expiring,
-        SUM(CASE WHEN status = 'Expired' THEN 1 ELSE 0 END) as expired_count,
-        SUM(CASE WHEN status = 'Markdown 1' THEN 1 ELSE 0 END) as markdown1_count,
-        SUM(CASE WHEN status = 'Markdown 2' THEN 1 ELSE 0 END) as markdown2_count,
-        SUM(CASE WHEN status = 'Markdown 3' THEN 1 ELSE 0 END) as markdown3_count,
-        SUM(CASE WHEN status LIKE 'Markdown%' THEN 1 ELSE 0 END) as total_markdown,
+        SUM(CASE WHEN date(expiry_date) < date('now') THEN 1 ELSE 0 END) as expired_count,
+        SUM(CASE WHEN ${sqliteWindowClause(MARKDOWN_WINDOWS.markdown1.minDays, MARKDOWN_WINDOWS.markdown1.maxDays)} THEN 1 ELSE 0 END) as markdown1_count,
+        SUM(CASE WHEN ${sqliteWindowClause(MARKDOWN_WINDOWS.markdown2.minDays, MARKDOWN_WINDOWS.markdown2.maxDays)} THEN 1 ELSE 0 END) as markdown2_count,
+        SUM(CASE WHEN ${sqliteWindowClause(MARKDOWN_WINDOWS.markdown3.minDays, MARKDOWN_WINDOWS.markdown3.maxDays)} THEN 1 ELSE 0 END) as markdown3_count,
+        SUM(CASE WHEN ${sqliteWindowClause(MARKDOWN_WINDOWS.totalMarkdown.minDays, MARKDOWN_WINDOWS.totalMarkdown.maxDays)} THEN 1 ELSE 0 END) as total_markdown,
+        SUM(CASE WHEN ${sqliteWindowClause(MARKDOWN_WINDOWS.markdown3.minDays, MARKDOWN_WINDOWS.markdown3.maxDays)} THEN 1 ELSE 0 END) as expiry_risk_count,
+        SUM(CASE WHEN ${sqliteWindowClause(MARKDOWN_WINDOWS.nextMonthMarkdown.minDays, MARKDOWN_WINDOWS.nextMonthMarkdown.maxDays)} THEN 1 ELSE 0 END) as next_month_markdown_count,
+        SUM(CASE WHEN ${sqliteWindowClause(MARKDOWN_WINDOWS.activeExpiryStock.minDays)} THEN 1 ELSE 0 END) as active_expiry_stock_count,
         MAX(expiry_date) as latest_expiry_date
       FROM inventory_items
-      WHERE expiry_date IS NOT NULL AND expiry_date != ''
+      WHERE expiry_date IS NOT NULL AND expiry_date != '' AND date(expiry_date) IS NOT NULL
+        AND organization_id = ?
       GROUP BY month
       ORDER BY month DESC
       LIMIT 12`,
     );
-    return stmt.all() as MonthlyExpiryReport[];
+    return stmt.all(this.organizationId) as MonthlyExpiryReport[];
   }
 
   /**
@@ -137,16 +181,20 @@ export class ReportRepository {
       `SELECT
         'Overall' as month,
         COUNT(*) as total_expiring,
-        SUM(CASE WHEN status = 'Expired' THEN 1 ELSE 0 END) as expired_count,
-        SUM(CASE WHEN status = 'Markdown 1' THEN 1 ELSE 0 END) as markdown1_count,
-        SUM(CASE WHEN status = 'Markdown 2' THEN 1 ELSE 0 END) as markdown2_count,
-        SUM(CASE WHEN status = 'Markdown 3' THEN 1 ELSE 0 END) as markdown3_count,
-        SUM(CASE WHEN status LIKE 'Markdown%' THEN 1 ELSE 0 END) as total_markdown,
+        SUM(CASE WHEN date(expiry_date) < date('now') THEN 1 ELSE 0 END) as expired_count,
+        SUM(CASE WHEN ${sqliteWindowClause(MARKDOWN_WINDOWS.markdown1.minDays, MARKDOWN_WINDOWS.markdown1.maxDays)} THEN 1 ELSE 0 END) as markdown1_count,
+        SUM(CASE WHEN ${sqliteWindowClause(MARKDOWN_WINDOWS.markdown2.minDays, MARKDOWN_WINDOWS.markdown2.maxDays)} THEN 1 ELSE 0 END) as markdown2_count,
+        SUM(CASE WHEN ${sqliteWindowClause(MARKDOWN_WINDOWS.markdown3.minDays, MARKDOWN_WINDOWS.markdown3.maxDays)} THEN 1 ELSE 0 END) as markdown3_count,
+        SUM(CASE WHEN ${sqliteWindowClause(MARKDOWN_WINDOWS.totalMarkdown.minDays, MARKDOWN_WINDOWS.totalMarkdown.maxDays)} THEN 1 ELSE 0 END) as total_markdown,
+        SUM(CASE WHEN ${sqliteWindowClause(MARKDOWN_WINDOWS.markdown3.minDays, MARKDOWN_WINDOWS.markdown3.maxDays)} THEN 1 ELSE 0 END) as expiry_risk_count,
+        SUM(CASE WHEN ${sqliteWindowClause(MARKDOWN_WINDOWS.nextMonthMarkdown.minDays, MARKDOWN_WINDOWS.nextMonthMarkdown.maxDays)} THEN 1 ELSE 0 END) as next_month_markdown_count,
+        SUM(CASE WHEN ${sqliteWindowClause(MARKDOWN_WINDOWS.activeExpiryStock.minDays)} THEN 1 ELSE 0 END) as active_expiry_stock_count,
         MAX(expiry_date) as latest_expiry_date
       FROM inventory_items
-      WHERE expiry_date IS NOT NULL AND expiry_date != ''`,
+      WHERE expiry_date IS NOT NULL AND expiry_date != '' AND date(expiry_date) IS NOT NULL
+        AND organization_id = ?`,
     );
-    return stmt.get() as MonthlyExpiryReport;
+    return stmt.get(this.organizationId) as MonthlyExpiryReport;
   }
 
   /**
@@ -162,17 +210,65 @@ export class ReportRepository {
         p.name as productName,
         p.sku as sku,
         p.cost_price as costPrice,
+        p.retail_price as retailPrice,
         sa.id as locationId,
         sa.name as locationName,
         sa.sub_department as subDepartment
       FROM inventory_items ii
       JOIN products p ON ii.product_id = p.id
       JOIN store_areas sa ON ii.location_id = sa.id
-      WHERE ii.expiry_date >= date('now') 
+      WHERE ii.expiry_date >= date('now')
         AND ii.expiry_date <= date('now', '+90 days')
-      ORDER BY ii.expiry_date ASC`,
+        AND ii.organization_id = ?
+        -- Exclude items already dispositioned via sold-through so they do not
+        -- reappear in the worklist after refresh. 'Processed' is the SQLite
+        -- backend marker; 'Sold Through' is the workers marker. 'Expired' is
+        -- intentionally NOT excluded: a day-0 item is the most urgent worklist
+        -- entry, and write-offs are already excluded by the date window.
+        AND ii.status NOT IN (${dispositionedStatusPlaceholders})
+      -- ii.id tiebreaker keeps ordering deterministic across engines when two
+      -- items share an expiry_date; without it Postgres and SQLite can break
+      -- the tie differently and the conformance test would drift.
+      ORDER BY ii.expiry_date ASC, ii.id ASC`,
     );
-    return stmt.all() as DetailedExpiryReportItem[];
+    return stmt.all(this.organizationId, ...DISPOSITIONED_STATUSES) as DetailedExpiryReportItem[];
+  }
+
+  /**
+   * Get all active expiry entries (every future-dated, non-dispositioned item).
+   *
+   * Unlike getDetailedExpiryReport this has no 90-day upper bound, so it surfaces
+   * the whole active pipeline — including data-entry errors with far-future dates
+   * (e.g. year 2666) that would otherwise be invisible in the 90-day worklist.
+   */
+  getActiveExpiryEntries(): DetailedExpiryReportItem[] {
+    const stmt = this.db.prepare(
+      `SELECT
+        ii.id as inventoryId,
+        ii.expiry_date as expiryDate,
+        ii.status as status,
+        p.id as productId,
+        p.name as productName,
+        p.sku as sku,
+        p.cost_price as costPrice,
+        p.retail_price as retailPrice,
+        sa.id as locationId,
+        sa.name as locationName,
+        sa.sub_department as subDepartment
+      FROM inventory_items ii
+      JOIN products p ON ii.product_id = p.id
+      JOIN store_areas sa ON ii.location_id = sa.id
+      WHERE ii.expiry_date >= date('now')
+        AND ii.organization_id = ?
+        -- Exclude items already dispositioned via sold-through so they do not
+        -- reappear after refresh. 'Processed' is the SQLite backend marker;
+        -- 'Sold Through' is the workers marker.
+        AND ii.status NOT IN (${dispositionedStatusPlaceholders})
+      -- ii.id tiebreaker keeps ordering deterministic across engines when two
+      -- items share an expiry_date, matching getDetailedExpiryReport.
+      ORDER BY ii.expiry_date ASC, ii.id ASC`,
+    );
+    return stmt.all(this.organizationId, ...DISPOSITIONED_STATUSES) as DetailedExpiryReportItem[];
   }
 
   /**
@@ -185,11 +281,11 @@ export class ReportRepository {
         SUM(CASE WHEN status LIKE 'Markdown%' THEN 10.00 ELSE 0 END) as totalMarkdownValue,
         COUNT(*) as itemCount
       FROM inventory_items
-      WHERE status LIKE 'Markdown%'
+      WHERE status LIKE 'Markdown%' AND organization_id = ?
       GROUP BY month
       ORDER BY month DESC`,
     );
-    return stmt.all() as MonthlyMarkdownReport[];
+    return stmt.all(this.organizationId) as MonthlyMarkdownReport[];
   }
 
   /**
@@ -205,10 +301,11 @@ export class ReportRepository {
         COUNT(CASE WHEN al.change_description LIKE '%deleted%' THEN 1 END) as deletions
       FROM audit_log al
       LEFT JOIN users u ON al.user_id = u.id
+      WHERE al.organization_id = ?
       GROUP BY COALESCE(u.role, 'Unknown')
       ORDER BY COALESCE(u.role, 'Unknown')`,
     );
-    return stmt.all() as UsageReport[];
+    return stmt.all(this.organizationId) as UsageReport[];
   }
 
   /**
@@ -226,40 +323,49 @@ export class ReportRepository {
       FROM audit_log al
       LEFT JOIN users u ON al.user_id = u.id
       WHERE date(al.created_at) >= date('now', '-90 days')
+        AND al.organization_id = ?
       GROUP BY date(al.created_at), COALESCE(u.id, al.user_id)
       ORDER BY date(al.created_at) DESC`,
     );
-    return stmt.all() as DailyUsageReportItem[];
+    return stmt.all(this.organizationId) as DailyUsageReportItem[];
   }
 
   /**
    * Get dashboard analytics summary
    */
   getDashboardAnalytics(): DashboardAnalytics {
-    const totalProducts = this.db.prepare('SELECT COUNT(*) as count FROM products').get() as {
+    const totalProducts = this.db
+      .prepare('SELECT COUNT(*) as count FROM products WHERE organization_id = ?')
+      .get(this.organizationId) as {
       count: number;
     };
     const totalInventoryItems = this.db
-      .prepare('SELECT COUNT(*) as count FROM inventory_items')
-      .get() as { count: number };
+      .prepare('SELECT COUNT(*) as count FROM inventory_items WHERE organization_id = ?')
+      .get(this.organizationId) as { count: number };
     const activeItems = this.db
-      .prepare("SELECT COUNT(*) as count FROM inventory_items WHERE status != 'Expired'")
-      .get() as { count: number };
+      .prepare(
+        "SELECT COUNT(*) as count FROM inventory_items WHERE status != 'Expired' AND organization_id = ?",
+      )
+      .get(this.organizationId) as { count: number };
     const expiredItems = this.db
-      .prepare("SELECT COUNT(*) as count FROM inventory_items WHERE status = 'Expired'")
-      .get() as { count: number };
+      .prepare(
+        "SELECT COUNT(*) as count FROM inventory_items WHERE status = 'Expired' AND organization_id = ?",
+      )
+      .get(this.organizationId) as { count: number };
     const markdownItems = this.db
-      .prepare("SELECT COUNT(*) as count FROM inventory_items WHERE status LIKE 'Markdown%'")
-      .get() as { count: number };
+      .prepare(
+        "SELECT COUNT(*) as count FROM inventory_items WHERE status LIKE 'Markdown%' AND organization_id = ?",
+      )
+      .get(this.organizationId) as { count: number };
 
     // Get upcoming expiry items (next 30 days)
     const upcomingExpiry = this.db
       .prepare(
         `SELECT COUNT(*) as count FROM inventory_items
        WHERE expiry_date >= date('now') AND expiry_date <= date('now', '+30 days')
-       AND status != 'Expired'`,
+       AND status != 'Expired' AND organization_id = ?`,
       )
-      .get() as { count: number };
+      .get(this.organizationId) as { count: number };
 
     return {
       totalProducts: totalProducts.count,
@@ -272,25 +378,29 @@ export class ReportRepository {
   }
 
   getDashboardData(): DashboardData {
-    const totalProductsResult = this.db.prepare('SELECT COUNT(*) as count FROM products').get() as {
+    const totalProductsResult = this.db
+      .prepare('SELECT COUNT(*) as count FROM products WHERE organization_id = ?')
+      .get(this.organizationId) as {
       count: number;
     };
 
     const expiringSoonResult = this.db
       .prepare(
-        `SELECT COUNT(*) as count FROM inventory_items WHERE expiry_date <= date('now', '+90 day') AND status = 'Normal'`,
+        `SELECT COUNT(*) as count FROM inventory_items WHERE expiry_date <= date('now', '+90 day') AND status = 'Normal' AND organization_id = ?`,
       )
-      .get() as { count: number };
+      .get(this.organizationId) as { count: number };
 
     const markdownItemsResult = this.db
-      .prepare(`SELECT COUNT(*) as count FROM inventory_items WHERE status LIKE 'Markdown%'`)
-      .get() as { count: number };
+      .prepare(
+        `SELECT COUNT(*) as count FROM inventory_items WHERE status LIKE 'Markdown%' AND organization_id = ?`,
+      )
+      .get(this.organizationId) as { count: number };
 
     const recentActivityResult = this.db
       .prepare(
-        'SELECT id, change_description as description, created_at as timestamp FROM audit_log ORDER BY created_at DESC LIMIT 5',
+        'SELECT id, change_description as description, created_at as timestamp FROM audit_log WHERE organization_id = ? ORDER BY created_at DESC LIMIT 5',
       )
-      .all() as DashboardActivity[];
+      .all(this.organizationId) as DashboardActivity[];
 
     return {
       totalProducts: totalProductsResult.count,
@@ -301,23 +411,33 @@ export class ReportRepository {
   }
 
   /**
-   * Get loss by SKU report (top 10 expired items)
+   * Get loss by SKU report (top 5 expired items by loss value)
    */
   getLossBySkuReport(): LossBySkuReportItem[] {
+    // "Currently expired" is defined by expiry_date (or an explicit 'Expired'
+    // status), not solely a literal status, so the Workers backend — which stores
+    // scanned items as 'Normal' and never recomputes status — reports the same
+    // stock. Dispositioned items are excluded so written-off stock isn't counted.
     const stmt = this.db.prepare(`
-      SELECT 
+      SELECT
         p.sku as sku,
         p.name as productName,
         SUM(p.cost_price) as totalLoss,
         COUNT(*) as count
       FROM inventory_items ii
       JOIN products p ON ii.product_id = p.id
-      WHERE ii.status = 'Expired'
+      WHERE (ii.expiry_date < date('now') OR ii.status = ?)
+        AND ii.status NOT IN (${dispositionedStatusPlaceholders})
+        AND ii.organization_id = ?
       GROUP BY p.sku, p.name
       ORDER BY totalLoss DESC
-      LIMIT 10
+      LIMIT 5
     `);
-    return stmt.all() as LossBySkuReportItem[];
+    return stmt.all(
+      EXPIRED_STATUS,
+      ...DISPOSITIONED_STATUSES,
+      this.organizationId,
+    ) as LossBySkuReportItem[];
   }
 
   /**
@@ -325,26 +445,54 @@ export class ReportRepository {
    */
   getLossByDepartmentReport(): LossByDepartmentReportItem[] {
     const stmt = this.db.prepare(`
-      SELECT 
+      SELECT
         sa.sub_department as department,
         SUM(p.cost_price) as totalLoss,
         COUNT(*) as count
       FROM inventory_items ii
       JOIN products p ON ii.product_id = p.id
       JOIN store_areas sa ON ii.location_id = sa.id
-      WHERE ii.status = 'Expired' AND sa.sub_department IS NOT NULL
+      WHERE (ii.expiry_date < date('now') OR ii.status = ?)
+        AND sa.sub_department IS NOT NULL
+        AND ii.status NOT IN (${dispositionedStatusPlaceholders})
+        AND ii.organization_id = ?
       GROUP BY sa.sub_department
       ORDER BY totalLoss DESC
+      LIMIT 5
     `);
-    return stmt.all() as LossByDepartmentReportItem[];
+    return stmt.all(
+      EXPIRED_STATUS,
+      ...DISPOSITIONED_STATUSES,
+      this.organizationId,
+    ) as LossByDepartmentReportItem[];
+  }
+
+  /**
+   * Get sell-through counts grouped by the markdown level at which items sold,
+   * surfacing stock that only moves once reduced (NULL = sold before markdown).
+   */
+  getSellThroughByMarkdownLevel(): SellThroughByLevelItem[] {
+    const stmt = this.db.prepare(`
+      SELECT
+        markdown_level as markdownLevel,
+        COUNT(*) as soldCount
+      FROM expired_item_transactions
+      WHERE action = 'sold_through' AND organization_id = ?
+      GROUP BY markdown_level
+      -- NULLS LAST keeps "sold before markdown" (NULL level) at the end and matches
+      -- the workers/Postgres query, so card order is identical across both backends.
+      -- SQLite defaults NULLs first, hence the explicit clause.
+      ORDER BY markdown_level ASC NULLS LAST
+    `);
+    return stmt.all(this.organizationId) as SellThroughByLevelItem[];
   }
 
   /**
    * Get items by user report
    */
   getItemsByUserReport(timeFrameDays?: string): ItemsByUserReportItem[] {
-    let whereClause = "WHERE al.change_description LIKE '%created%'";
-    const params: string[] = [];
+    let whereClause = "WHERE al.change_description LIKE '%created%' AND al.organization_id = ?";
+    const params: string[] = [this.organizationId];
 
     if (timeFrameDays && timeFrameDays !== 'all-time') {
       whereClause += ` AND al.created_at >= date('now', '-' || ? || ' days')`;
@@ -377,11 +525,97 @@ export class ReportRepository {
         date(al.created_at) as date,
         COUNT(*) as itemCount
       FROM audit_log al
-      WHERE al.change_description LIKE '%created%'
+      WHERE al.change_description LIKE '%created%' AND al.organization_id = ?
       GROUP BY date(al.created_at)
       ORDER BY date DESC
       LIMIT 30
     `);
-    return stmt.all() as ItemsByDateReportItem[];
+    return stmt.all(this.organizationId) as ItemsByDateReportItem[];
+  }
+
+  getStoreWalkAuditReport(): StoreWalkAuditCycle[] {
+    const totalBays = (
+      this.db
+        .prepare(
+          `SELECT COUNT(*) as count
+           FROM store_areas
+           WHERE organization_id = ? AND parent_id IS NOT NULL`,
+        )
+        .get(this.organizationId) as { count: number }
+    ).count;
+
+    const rawCycleRows = this.db
+      .prepare(
+        `SELECT id as cycleId,
+                name as cycleName,
+                status,
+                started_at as startedAt,
+                completed_at as completedAt
+         FROM check_cycles
+         WHERE organization_id = ?
+         ORDER BY started_at DESC, id DESC
+         LIMIT 12`,
+      )
+      .all(this.organizationId) as Array<{
+      cycleId: number;
+      cycleName: string;
+      status: string;
+      startedAt: string;
+      completedAt: string | null;
+    }>;
+
+    const rawUserRows = this.db
+      .prepare(
+        `SELECT bc.cycle_id as cycleId,
+                COALESCE(u.id, bc.user_id, 0) as userId,
+                COALESCE(u.pin, u.role, 'Unknown user') as userName,
+                COUNT(DISTINCT bc.store_area_id) as baysChecked,
+                MIN(bc.checked_at) as firstCheckedAt,
+                MAX(bc.checked_at) as lastCheckedAt,
+                SUM(CASE WHEN bc.items_added_count = 0 THEN 1 ELSE 0 END) as zeroFindingChecks
+         FROM bay_checks bc
+         LEFT JOIN users u ON bc.user_id = u.id
+         WHERE bc.organization_id = ?
+         GROUP BY bc.cycle_id, COALESCE(u.id, bc.user_id, 0), COALESCE(u.pin, u.role, 'Unknown user')
+         ORDER BY bc.cycle_id DESC, baysChecked DESC`,
+      )
+      .all(this.organizationId) as Array<{
+      cycleId: number;
+      userId: number;
+      userName: string;
+      baysChecked: number;
+      firstCheckedAt: string;
+      lastCheckedAt: string;
+      zeroFindingChecks: number;
+    }>;
+
+    // Normalize SQLite rows to the shared rollup's shape: SQLite has no date
+    // arithmetic here, so completionMinutes and the clamped elapsedHours are
+    // computed in JS (Postgres does the equivalent in SQL on the Workers side).
+    const cycleRows: StoreWalkAuditCycleRow[] = rawCycleRows.map((cycle) => ({
+      cycleId: cycle.cycleId,
+      cycleName: cycle.cycleName,
+      status: cycle.status,
+      completionMinutes: cycle.completedAt
+        ? Math.round(
+            (new Date(cycle.completedAt).getTime() - new Date(cycle.startedAt).getTime()) / 60_000,
+          )
+        : null,
+    }));
+
+    const userRows: StoreWalkAuditUserRow[] = rawUserRows.map((row) => {
+      const firstCheckedAt = new Date(row.firstCheckedAt).getTime();
+      const lastCheckedAt = new Date(row.lastCheckedAt).getTime();
+      return {
+        cycleId: row.cycleId,
+        userId: row.userId,
+        userName: row.userName,
+        baysChecked: row.baysChecked,
+        elapsedHours: Math.max((lastCheckedAt - firstCheckedAt) / 3_600_000, 1 / 60),
+        zeroFindingChecks: row.zeroFindingChecks,
+      };
+    });
+
+    return buildStoreWalkAuditReport(cycleRows, userRows, totalBays);
   }
 }

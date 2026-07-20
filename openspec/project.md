@@ -15,6 +15,8 @@ Define canonical conventions for **tenant-scoped development** across backend, w
 2. **Service Boundary = Tenant Boundary** – every service method requires active org context.
 3. **Delete = Cascade** – FK relations specify `onDelete: CASCADE` to prevent orphan data.
 4. **Logs & Metrics include `organizationId`** – necessary for tenant-level debugging.
+5. **Dual-backend parity is explicit** – logic implemented in both `workers/` and `backend/` sources shared values from `shared/domain/*` and has a conformance test that compares PostgreSQL/pglite and SQLite outputs, including row order.
+6. **Schema changes stay triplicated intentionally** – a column/table/index change represented in `backend/prisma/schema.prisma`, hand-written Neon SQL under `backend/prisma/neon-sql/*.sql` (+ rollback), and runtime SQLite migrations under `backend/src/migrations/` must be kept in sync. Production is authoritative through `npm run migrate:prod` (`prisma db push`); `prisma/neon-sql` is review/operator SQL, not a Prisma-managed migration folder.
 
 ## Backend Patterns
 
@@ -56,4 +58,4 @@ export function listInventory(req: Request, res: Response) {
 
 ---
 
-_Last reviewed: Feb 2026_
+_Last reviewed: Jun 2026_

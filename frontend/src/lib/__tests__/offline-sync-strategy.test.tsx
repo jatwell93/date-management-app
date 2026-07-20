@@ -1,7 +1,7 @@
 import { offlineSyncService } from '../../lib/offline-sync';
 
 // Mock uuid to avoid ESM issues
-jest.mock('uuid', () => ({
+vi.mock('uuid', () => ({
   __esModule: true,
   v4: () => 'test-uuid-' + Math.random().toString(36).substr(2, 9),
   default: {
@@ -32,7 +32,7 @@ Object.defineProperty(window, 'localStorage', {
 });
 
 // Mock fetch
-global.fetch = jest.fn(() =>
+global.fetch = vi.fn(() =>
   Promise.resolve({
     ok: true,
     json: () => Promise.resolve({}),
@@ -62,7 +62,7 @@ describe('OfflineSyncService - Sync Strategy Tests', () => {
 
   afterEach(() => {
     // Clean up any intervals
-    jest.useRealTimers();
+    vi.useRealTimers();
   });
 
   test('should initialize with real-time strategy as default', () => {
@@ -82,14 +82,17 @@ describe('OfflineSyncService - Sync Strategy Tests', () => {
     expect(localStorage.getItem('sync-strategy')).toBe('manual');
   });
 
-  test('should load sync strategy from localStorage on initialization', () => {
+  test('should load sync strategy from localStorage on initialization', async () => {
     // Set a strategy in localStorage before initializing the service
     localStorage.setItem('sync-strategy', 'batch');
 
-    jest.isolateModules(() => {
-      const isolatedService = require('../../lib/offline-sync').offlineSyncService;
+    vi.resetModules();
+    try {
+      const isolatedService = (await import('../../lib/offline-sync')).offlineSyncService;
       expect(isolatedService.getSyncStrategy()).toBe('batch');
-    });
+    } finally {
+      vi.resetModules();
+    }
   });
 
   test('should handle real-time strategy with immediate sync on addOperation', async () => {
@@ -97,7 +100,7 @@ describe('OfflineSyncService - Sync Strategy Tests', () => {
     service.setSyncStrategy('real-time');
 
     // Spy on performSync to verify it's called
-    const performSyncSpy = jest.spyOn(service, 'performSync').mockResolvedValue(undefined);
+    const performSyncSpy = vi.spyOn(service, 'performSync').mockResolvedValue(undefined);
 
     // Add an operation
     await service.addOperation('create', 'product', { name: 'Test Product' });
@@ -113,7 +116,7 @@ describe('OfflineSyncService - Sync Strategy Tests', () => {
     service.setSyncStrategy('batch');
 
     // Spy on performSync to verify it's not called immediately
-    const performSyncSpy = jest.spyOn(service, 'performSync').mockResolvedValue(undefined);
+    const performSyncSpy = vi.spyOn(service, 'performSync').mockResolvedValue(undefined);
 
     // Add an operation
     await service.addOperation('create', 'product', { name: 'Test Product' });
@@ -125,52 +128,52 @@ describe('OfflineSyncService - Sync Strategy Tests', () => {
   });
 
   test('should not schedule automatic syncs in manual strategy', () => {
-    jest.useFakeTimers();
+    vi.useFakeTimers();
 
     const service = offlineSyncService;
     service.setSyncStrategy('manual');
 
     // Advance timers significantly
-    jest.advanceTimersByTime(100000); // 100 seconds
+    vi.advanceTimersByTime(100000); // 100 seconds
 
     // Verify that no sync happened during this time in manual mode
     // (We can't directly spy on the interval since it's cleared, but we can verify behavior)
     expect(service.getSyncStrategy()).toBe('manual');
 
-    jest.useRealTimers();
+    vi.useRealTimers();
   });
 
   test('should schedule 10-minute intervals for batch strategy', () => {
-    jest.useFakeTimers();
+    vi.useFakeTimers();
 
     const service = offlineSyncService;
     service.setSyncStrategy('batch');
 
     // Advance timers by 9 minutes (should not trigger sync)
-    jest.advanceTimersByTime(9 * 60 * 1000); // 9 minutes
+    vi.advanceTimersByTime(9 * 60 * 1000); // 9 minutes
 
     // Advance timers by 1 more minute (should trigger sync)
-    jest.advanceTimersByTime(1 * 60 * 1000); // 1 more minute = 10 minutes total
+    vi.advanceTimersByTime(1 * 60 * 1000); // 1 more minute = 10 minutes total
 
     // Verify that sync would have been triggered
     expect(service.getSyncStrategy()).toBe('batch');
 
-    jest.useRealTimers();
+    vi.useRealTimers();
   });
 
   test('should schedule 30-second intervals for real-time strategy', () => {
-    jest.useFakeTimers();
+    vi.useFakeTimers();
 
     const service = offlineSyncService;
     service.setSyncStrategy('real-time');
 
     // Advance timers by 30 seconds (should trigger sync)
-    jest.advanceTimersByTime(30000); // 30 seconds
+    vi.advanceTimersByTime(30000); // 30 seconds
 
     // Verify that sync would have been triggered
     expect(service.getSyncStrategy()).toBe('real-time');
 
-    jest.useRealTimers();
+    vi.useRealTimers();
   });
 
   test('should retry sync with exponential backoff on failure', async () => {
@@ -187,7 +190,7 @@ describe('OfflineSyncService - Sync Strategy Tests', () => {
     await service.addOperation('create', 'product', { name: 'Test Product' });
 
     // Spy on the delay helper to verify backoff timing
-    const delaySpy = jest.spyOn<any, any>(service, 'delay').mockResolvedValue(undefined);
+    const delaySpy = vi.spyOn<any, any>(service, 'delay').mockResolvedValue(undefined);
 
     // Perform sync with retry logic
     await service.performSync();

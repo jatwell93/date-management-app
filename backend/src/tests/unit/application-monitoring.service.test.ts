@@ -4,12 +4,14 @@ import {
 } from '../../services/application.monitoring.service';
 import { Logger } from '../../utils/logger';
 
-jest.mock('../../services/saas-metrics.service', () => ({
-  SaasMetricsService: jest.fn().mockImplementation(() => ({
-    getSaasMetrics: jest.fn().mockResolvedValue(undefined),
-    storeDailyMetrics: jest.fn().mockResolvedValue(undefined),
-    recordWebhookMetrics: jest.fn().mockResolvedValue(undefined),
-  })),
+vi.mock('../../services/saas-metrics.service', () => ({
+  SaasMetricsService: vi.fn().mockImplementation(function () {
+    return {
+      getSaasMetrics: vi.fn().mockResolvedValue(undefined),
+      storeDailyMetrics: vi.fn().mockResolvedValue(undefined),
+      recordWebhookMetrics: vi.fn().mockResolvedValue(undefined),
+    };
+  }),
 }));
 
 describe('ApplicationMonitoringService', () => {
@@ -44,25 +46,28 @@ describe('ApplicationMonitoringService', () => {
     expect(metrics.errors.errorRate).toBe(50);
   });
 
-  it('emits a slow endpoint alert when duration exceeds threshold', (done) => {
-    service.initialize({
-      slowEndpointThreshold: 10,
-      checkInterval: 60_000,
-      enableAlerting: true,
-    });
+  it('emits a slow endpoint alert when duration exceeds threshold', async () => {
+    // Vitest removed the `done` callback; await a Promise the listener resolves.
+    await new Promise<void>((resolve) => {
+      service.initialize({
+        slowEndpointThreshold: 10,
+        checkInterval: 60_000,
+        enableAlerting: true,
+      });
 
-    service.on('alert', (alert) => {
-      if (alert.type === ApplicationAlertType.SLOW_ENDPOINT) {
-        expect(alert.message).toContain('Slow endpoint detected');
-        done();
-      }
-    });
+      service.on('alert', (alert) => {
+        if (alert.type === ApplicationAlertType.SLOW_ENDPOINT) {
+          expect(alert.message).toContain('Slow endpoint detected');
+          resolve();
+        }
+      });
 
-    service.recordRequest({
-      endpoint: 'GET /api/reports/usage',
-      duration: 50,
-      statusCode: 200,
-      url: '/api/reports/usage',
+      service.recordRequest({
+        endpoint: 'GET /api/reports/usage',
+        duration: 50,
+        statusCode: 200,
+        url: '/api/reports/usage',
+      });
     });
   });
 
@@ -73,12 +78,12 @@ describe('ApplicationMonitoringService', () => {
     const req: any = { method: 'GET', url: '/api/products' };
     const res: any = {
       statusCode: 200,
-      on: jest.fn((event: string, cb: () => void) => {
+      on: vi.fn((event: string, cb: () => void) => {
         handlers[event] = cb;
       }),
     };
 
-    const next = jest.fn();
+    const next = vi.fn();
     middleware(req, res, next);
     expect(next).toHaveBeenCalledTimes(1);
 
@@ -116,11 +121,11 @@ describe('ApplicationMonitoringService', () => {
 
   it('does not start background metrics collection before the first interval', () => {
     const saasMetricsService = {
-      getSaasMetrics: jest.fn().mockResolvedValue(undefined),
-      storeDailyMetrics: jest.fn().mockResolvedValue(undefined),
-      recordWebhookMetrics: jest.fn().mockResolvedValue(undefined),
+      getSaasMetrics: vi.fn().mockResolvedValue(undefined),
+      storeDailyMetrics: vi.fn().mockResolvedValue(undefined),
+      recordWebhookMetrics: vi.fn().mockResolvedValue(undefined),
     };
-    const debugSpy = jest.spyOn(Logger, 'debug').mockImplementation(() => undefined);
+    const debugSpy = vi.spyOn(Logger, 'debug').mockImplementation(() => undefined);
 
     service = new ApplicationMonitoringService(saasMetricsService as any);
     service.startMonitoring();

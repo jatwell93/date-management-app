@@ -8,8 +8,21 @@
 import React from 'react';
 import { render, screen, waitFor } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
-import fetchMock from 'jest-fetch-mock';
+import { fetchMock } from '../../test-utils/fetchMock';
 import { StorageQuotaWarning } from '../StorageQuotaWarning';
+
+vi.mock('../../hooks/useFreshApiToken', () => ({
+  useFreshApiToken: (() => {
+    const callbacks = new Map<string, jest.Mock>();
+    return (token: string | null) => {
+      const key = token ?? '__missing__';
+      if (!callbacks.has(key)) {
+        callbacks.set(key, vi.fn().mockResolvedValue(token || undefined));
+      }
+      return callbacks.get(key);
+    };
+  })(),
+}));
 
 // Mock the App component parts we need
 const MockAppWithStorageWarning: React.FC<{
@@ -41,7 +54,7 @@ describe('StorageQuotaWarning - Smoke Tests', () => {
   beforeEach(() => {
     fetchMock.resetMocks();
     localStorage.clear();
-    jest.clearAllMocks();
+    vi.clearAllMocks();
   });
 
   describe('Integration with App', () => {

@@ -1,11 +1,11 @@
-const mockFsAccess = jest.fn();
-const mockFsMkdir = jest.fn();
-const mockFsCopyFile = jest.fn();
-const mockFsReaddir = jest.fn();
-const mockFsStat = jest.fn();
-const mockFsUnlink = jest.fn();
+const mockFsAccess = vi.fn();
+const mockFsMkdir = vi.fn();
+const mockFsCopyFile = vi.fn();
+const mockFsReaddir = vi.fn();
+const mockFsStat = vi.fn();
+const mockFsUnlink = vi.fn();
 
-jest.mock('fs', () => ({
+vi.mock('fs', () => ({
   promises: {
     access: (...args: unknown[]) => mockFsAccess(...args),
     mkdir: (...args: unknown[]) => mockFsMkdir(...args),
@@ -16,10 +16,10 @@ jest.mock('fs', () => ({
   },
 }));
 
-jest.mock('../../utils/logger', () => ({
+vi.mock('../../utils/logger', () => ({
   Logger: {
-    info: jest.fn(),
-    error: jest.fn(),
+    info: vi.fn(),
+    error: vi.fn(),
   },
 }));
 
@@ -33,7 +33,7 @@ describe('DatabaseBackupService', () => {
   };
 
   beforeEach(() => {
-    jest.clearAllMocks();
+    vi.clearAllMocks();
 
     mockFsAccess.mockResolvedValue(undefined);
     mockFsMkdir.mockResolvedValue(undefined);
@@ -49,7 +49,7 @@ describe('DatabaseBackupService', () => {
     mockFsAccess.mockRejectedValueOnce(new Error('missing directory'));
 
     const service = new DatabaseBackupService({ backupDirectory: './tmp-backups' });
-    const cleanupSpy = jest.spyOn(service, 'cleanupOldBackups').mockResolvedValue(undefined);
+    const cleanupSpy = vi.spyOn(service, 'cleanupOldBackups').mockResolvedValue(undefined);
 
     await service.createBackup();
 
@@ -59,12 +59,12 @@ describe('DatabaseBackupService', () => {
   });
 
   it('creates backup using DATABASE_PATH and returns generated backup path', async () => {
-    jest.useFakeTimers();
-    jest.setSystemTime(new Date('2026-04-11T08:55:30.111Z'));
+    vi.useFakeTimers();
+    vi.setSystemTime(new Date('2026-04-11T08:55:30.111Z'));
     process.env.DATABASE_PATH = './custom-source.sqlite';
 
     const service = new DatabaseBackupService({ backupDirectory: './backups-test' });
-    const cleanupSpy = jest.spyOn(service, 'cleanupOldBackups').mockResolvedValue(undefined);
+    const cleanupSpy = vi.spyOn(service, 'cleanupOldBackups').mockResolvedValue(undefined);
 
     const backupPath = await service.createBackup();
 
@@ -74,7 +74,7 @@ describe('DatabaseBackupService', () => {
     expect(logger.info).toHaveBeenCalledWith(`Database backup created: ${backupPath}`);
     expect(cleanupSpy).toHaveBeenCalledTimes(1);
 
-    jest.useRealTimers();
+    vi.useRealTimers();
   });
 
   it('logs and rethrows createBackup failures', async () => {
@@ -187,10 +187,10 @@ describe('DatabaseBackupService', () => {
       './backups/backup-over-limit.sqlite',
       './backups/backup-old.sqlite',
     ];
-    jest.spyOn(service, 'listBackups').mockResolvedValue(allBackups);
+    vi.spyOn(service, 'listBackups').mockResolvedValue(allBackups);
 
-    jest.useFakeTimers();
-    jest.setSystemTime(new Date('2026-04-11T00:00:00.000Z'));
+    vi.useFakeTimers();
+    vi.setSystemTime(new Date('2026-04-11T00:00:00.000Z'));
 
     mockFsStat.mockImplementation(async (path: string) => {
       if (path.endsWith('backup-old.sqlite')) {
@@ -204,12 +204,12 @@ describe('DatabaseBackupService', () => {
     expect(mockFsUnlink).toHaveBeenCalledWith('./backups/backup-old.sqlite');
     expect(mockFsUnlink).toHaveBeenCalledWith('./backups/backup-over-limit.sqlite');
 
-    jest.useRealTimers();
+    vi.useRealTimers();
   });
 
   it('logs and rethrows cleanup errors', async () => {
     const service = new DatabaseBackupService();
-    jest.spyOn(service, 'listBackups').mockRejectedValue(new Error('listing failed'));
+    vi.spyOn(service, 'listBackups').mockRejectedValue(new Error('listing failed'));
 
     await expect(service.cleanupOldBackups()).rejects.toThrow('listing failed');
     expect(logger.error).toHaveBeenCalledWith('Failed to clean up old backups', {

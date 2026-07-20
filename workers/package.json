@@ -8,13 +8,16 @@
     "build": "node build.js",
     "build:types": "tsc --noEmit -p tsconfig.deploy.json",
     "lint": "tsc --noEmit -p tsconfig.deploy.json",
+    "typecheck": "tsc --noEmit -p tsconfig.test.json",
     "deploy": "npm run build && wrangler deploy",
     "deploy:prod": "npm run build && wrangler deploy --env production",
     "deploy:dev": "npm run build && wrangler deploy --env development",
     "tail": "wrangler tail",
     "tail:prod": "wrangler tail --env production",
     "test": "vitest",
-    "test:preview": "cross-env RUN_WORKERS_PREVIEW_TESTS=true vitest run src/workers-deployment.test.ts",
+    "test:build-artifact": "npm run build && node -e \"const fs=require('node:fs');const routes=['/api/expired-items/reports/expired-losses','/api/subscription/current','/api/organization/usage'];const artifact=fs.readFileSync('dist/index.js','utf8');for(const route of routes){if(!artifact.includes(route)){throw new Error('Built Worker artifact is missing '+route)}}\"",
+    "test:preview": "npm run test:build-artifact && cross-env RUN_WORKERS_PREVIEW_TESTS=true vitest run src/workers-deployment.test.ts",
+    "test:db": "vitest run --config vitest.node.config.mts",
     "test:workers:integration": "vitest run src/__tests__",
     "test:workers:integration:coverage": "vitest run src/__tests__ --coverage --coverage.provider=istanbul",
     "test:coverage": "vitest --coverage --coverage.provider=istanbul"
@@ -28,23 +31,25 @@
   "author": "",
   "license": "MIT",
   "dependencies": {
-    "@clerk/backend": "^3.4.13",
-    "@cloudflare/workers-types": "^4.20260524.1",
+    "@clerk/backend": "^3.8.4",
+    "@cloudflare/workers-types": "^4.20260627.1",
     "@neondatabase/serverless": "^1.1.0",
-    "@sentry/cloudflare": "^10.53.1",
+    "@sentry/cloudflare": "^10.62.0",
     "jose": "^6.2.3"
   },
   "devDependencies": {
-    "@cloudflare/vitest-pool-workers": "^0.16.9",
-    "@types/bcryptjs": "^2.4.6",
+    "@cloudflare/vitest-pool-workers": "^0.18.6",
+    "@electric-sql/pglite": "^0.5.1",
+    "@types/bcryptjs": "^3.0.0",
+    "@types/better-sqlite3": "^7.6.13",
     "@types/jsonwebtoken": "^9.0.10",
-    "@types/node": "^20.19.41",
+    "@types/node": "^26.1.1",
     "@vitest/coverage-istanbul": "^4.1.7",
     "@vitest/coverage-v8": "^4.1.7",
-    "cross-env": "^7.0.3",
-    "esbuild": "^0.27.7",
-    "typescript": "^5.3.3",
+    "cross-env": "^10.1.0",
+    "esbuild": "^0.28.1",
+    "typescript": "^6.0.3",
     "vitest": "^4.1.7",
-    "wrangler": "^4.94.0"
+    "wrangler": "^4.112.0"
   }
 }

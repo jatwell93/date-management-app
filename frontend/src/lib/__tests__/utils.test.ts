@@ -27,13 +27,13 @@ describe('utils', () => {
 
   describe('isWithinMarkdownPeriod', () => {
     beforeAll(() => {
-      jest.useFakeTimers();
+      vi.useFakeTimers();
       // Set "now" to 2023-01-01
-      jest.setSystemTime(new Date('2023-01-01T00:00:00Z'));
+      vi.setSystemTime(new Date('2023-01-01T00:00:00Z'));
     });
 
     afterAll(() => {
-      jest.useRealTimers();
+      vi.useRealTimers();
     });
 
     it('should return false if expiryDate is null', () => {
@@ -62,43 +62,82 @@ describe('utils', () => {
   describe('calculateMarkdownPrice', () => {
     const COST = 100;
 
-    it('should markdown by 20% if expiry <= 30 days', () => {
-      expect(calculateMarkdownPrice(COST, 30)).toBe(80);
-      expect(calculateMarkdownPrice(COST, 1)).toBe(80);
-      expect(calculateMarkdownPrice(COST, 0)).toBe(80);
-      expect(calculateMarkdownPrice(COST, -5)).toBe(80); // Already expired
+    it('delegates markdown pricing to the shared domain helper', async () => {
+      const calculateMarkdownPriceFromCost = vi.fn().mockReturnValue(12.34);
+      const getMarkdownDiscountPercentageForDays = vi.fn().mockReturnValue(37);
+
+      vi.resetModules();
+      vi.doMock('@shared/markdown', () => ({
+        calculateMarkdownPriceFromCost,
+        getMarkdownDiscountPercentageForDays,
+      }));
+
+      try {
+        const {
+          calculateMarkdownPrice: isolatedCalculateMarkdownPrice,
+          calculateMarkdownPercentage: isolatedCalculateMarkdownPercentage,
+        } = await import('../utils');
+
+        expect(isolatedCalculateMarkdownPrice(47.25, 12)).toBe(12.34);
+        expect(calculateMarkdownPriceFromCost).toHaveBeenCalledWith(47.25, 12);
+
+        expect(isolatedCalculateMarkdownPercentage(12)).toBe(37);
+        expect(getMarkdownDiscountPercentageForDays).toHaveBeenCalledWith(12);
+      } finally {
+        vi.doUnmock('@shared/markdown');
+        vi.resetModules();
+      }
     });
 
-    it('should apply no markdown if expiry is between 31 and 60 days', () => {
-      expect(calculateMarkdownPrice(COST, 31)).toBe(100);
-      expect(calculateMarkdownPrice(COST, 60)).toBe(100);
+    it('should markdown by 75% if expiry is between 1 and 30 days', () => {
+      expect(calculateMarkdownPrice(COST, 30)).toBe(25);
+      expect(calculateMarkdownPrice(COST, 1)).toBe(25);
     });
 
-    it('should markup by 20% if expiry is between 61 and 90 days', () => {
-      expect(calculateMarkdownPrice(COST, 61)).toBe(120);
-      expect(calculateMarkdownPrice(COST, 90)).toBe(120);
+    it('should apply no markdown to day-zero or expired stock', () => {
+      expect(calculateMarkdownPrice(COST, 0)).toBe(100);
+      expect(calculateMarkdownPrice(COST, -5)).toBe(100);
+    });
+
+    it('should markdown by 60% if expiry is between 31 and 60 days', () => {
+      expect(calculateMarkdownPrice(COST, 31)).toBe(40);
+      expect(calculateMarkdownPrice(COST, 60)).toBe(40);
+    });
+
+    it('should markdown by 50% if expiry is between 61 and 90 days', () => {
+      expect(calculateMarkdownPrice(COST, 61)).toBe(50);
+      expect(calculateMarkdownPrice(COST, 90)).toBe(50);
     });
 
     it('should apply no markdown if expiry is > 90 days', () => {
       expect(calculateMarkdownPrice(COST, 91)).toBe(100);
       expect(calculateMarkdownPrice(COST, 100)).toBe(100);
     });
+
+    it('should not round fractional markdown prices', () => {
+      expect(calculateMarkdownPrice(47.25, 12)).toBe(11.8125);
+    });
   });
 
   describe('calculateMarkdownPercentage', () => {
-    it('should return -20 if expiry <= 30 days', () => {
-      expect(calculateMarkdownPercentage(30)).toBe(-20);
-      expect(calculateMarkdownPercentage(5)).toBe(-20);
+    it('should return 75 if expiry is between 1 and 30 days', () => {
+      expect(calculateMarkdownPercentage(30)).toBe(75);
+      expect(calculateMarkdownPercentage(5)).toBe(75);
     });
 
-    it('should return 0 if expiry is between 31 and 60 days', () => {
-      expect(calculateMarkdownPercentage(31)).toBe(0);
-      expect(calculateMarkdownPercentage(60)).toBe(0);
+    it('should return 0 for day-zero or expired stock', () => {
+      expect(calculateMarkdownPercentage(0)).toBe(0);
+      expect(calculateMarkdownPercentage(-5)).toBe(0);
     });
 
-    it('should return 20 if expiry is between 61 and 90 days', () => {
-      expect(calculateMarkdownPercentage(61)).toBe(20);
-      expect(calculateMarkdownPercentage(90)).toBe(20);
+    it('should return 60 if expiry is between 31 and 60 days', () => {
+      expect(calculateMarkdownPercentage(31)).toBe(60);
+      expect(calculateMarkdownPercentage(60)).toBe(60);
+    });
+
+    it('should return 50 if expiry is between 61 and 90 days', () => {
+      expect(calculateMarkdownPercentage(61)).toBe(50);
+      expect(calculateMarkdownPercentage(90)).toBe(50);
     });
 
     it('should return 0 if expiry is > 90 days', () => {

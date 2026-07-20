@@ -5,7 +5,7 @@
  * pending → uploading → processing → completed/failed
  */
 
-import { describe, it, expect, beforeEach, afterEach } from '@jest/globals';
+import { describe, it, expect, beforeEach, afterEach } from 'vitest';
 import { PrismaClient } from '@prisma/client';
 import { UploadStatus } from '../../types/upload.types';
 import { StorageQuotaService } from '../../services/storage-quota.service';

@@ -5,6 +5,8 @@
  */
 Object.defineProperty(exports, '__esModule', { value: true });
 exports.ALERT_THRESHOLDS =
+  exports.PROFESSIONAL_TRIAL_DAYS =
+  exports.TIER_ANNUAL_PRICES =
   exports.TIER_PRICES =
   exports.TIER_LIMITS =
   exports.AVAILABLE_FEATURES =
@@ -42,40 +44,63 @@ exports.AVAILABLE_FEATURES = {
  * Single source of truth for both backend and workers
  */
 exports.TIER_LIMITS = {
-  starter: {
+  free: {
     max_skus: 500,
     max_users: 1,
+    max_inventory_items: 500,
+    storage_bytes: 1073741824,
+  },
+  starter: {
+    max_skus: 5000,
+    max_users: 3,
     max_inventory_items: 5000,
-    storage_bytes: 1073741824, // 1GB
+    storage_bytes: 10737418240,
   },
   professional: {
-    max_skus: 2000,
-    max_users: 3,
-    max_inventory_items: 20000,
-    storage_bytes: 10737418240, // 10GB
+    max_skus: 50000,
+    max_users: 10,
+    max_inventory_items: 50000,
+    storage_bytes: 107374182400,
+  },
+  enterprise: {
+    max_skus: 250000,
+    max_users: 10,
+    max_inventory_items: 250000,
+    storage_bytes: 107374182400,
   },
   premium: {
-    max_skus: null, // unlimited
+    max_skus: 50000,
     max_users: 10,
-    max_inventory_items: null, // unlimited
-    storage_bytes: 107374182400, // 100GB
+    max_inventory_items: 50000,
+    storage_bytes: 107374182400,
   },
   concierge: {
-    max_skus: null, // unlimited
+    max_skus: 250000,
     max_users: 10,
-    max_inventory_items: null, // unlimited
-    storage_bytes: null, // unlimited
+    max_inventory_items: 250000,
+    storage_bytes: 107374182400,
   },
 };
 /**
  * Standard pricing in cents for MRR calculations
  */
 exports.TIER_PRICES = {
-  starter: 0,
-  professional: 2900, // $29.00
-  premium: 9900, // $99.00
-  concierge: 29900, // $299.00
+  free: 0,
+  starter: 3900,
+  professional: 9900,
+  enterprise: 0,
+  premium: 9900,
+  concierge: 0,
 };
+exports.TIER_ANNUAL_PRICES = {
+  free: 0,
+  starter: 39000,
+  professional: 99000,
+  enterprise: 0,
+  premium: 99000,
+  concierge: 0,
+};
+exports.PROFESSIONAL_TRIAL_DAYS = 14;
 /**
  * Default alert thresholds for metrics
  */

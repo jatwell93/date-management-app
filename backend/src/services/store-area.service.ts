@@ -1,6 +1,12 @@
 import { PrismaClient } from '@prisma/client';
 import { getDefaultDatabaseClient } from '../database/database-factory';
-import { StoreArea } from '../models/store-area.model';
+import {
+  BayCheck,
+  CheckCycle,
+  FloorProgress,
+  FloorProgressBay,
+  StoreArea,
+} from '../models/store-area.model';
 import { StoreAreaRepository } from '../repositories/store-area.repository';
 import { getOrganizationId } from '../utils/auth-bypass';
 import { isPrismaNotFound } from '../utils/prisma-error';
@@ -103,6 +109,50 @@ export class StoreAreaService {
     }
   }
 
+  async listCheckCycles(): Promise<CheckCycle[]> {
+    const cycles = await this.storeAreaRepo.listCheckCycles(this.organizationId);
+    return cycles.map(this.mapCheckCycle);
+  }
+
+  async createCheckCycle(data: { name: string; startedAt?: string }): Promise<CheckCycle> {
+    const cycle = await this.storeAreaRepo.createCheckCycle(this.organizationId, {
+      name: data.name,
+      startedAt: data.startedAt,
+    });
+    return this.mapCheckCycle(cycle);
+  }
+
+  async completeCheckCycle(id: number): Promise<CheckCycle> {
+    const cycle = await this.storeAreaRepo.completeCheckCycle(this.organizationId, id);
+    return this.mapCheckCycle(cycle);
+  }
+
+  async recordBayCheck(
+    userId: number,
+    data: {
+      storeAreaId: number;
+      checkedAt?: string;
+      itemsAddedCount?: number;
+      notes?: string | null;
+    },
+  ): Promise<BayCheck> {
+    const check = await this.storeAreaRepo.recordBayCheck(this.organizationId, userId, data);
+    return this.mapBayCheck(check);
+  }
+
+  async getFloorProgress(): Promise<FloorProgress> {
+    const progress = await this.storeAreaRepo.getFloorProgress(this.organizationId);
+    return {
+      activeCycle: progress.activeCycle ? this.mapCheckCycle(progress.activeCycle) : null,
+      summary: progress.summary,
+      departments: progress.departments.map((department) => ({
+        department: department.department,
+        summary: department.summary,
+        bays: department.bays.map(this.mapFloorProgressBay),
+      })),
+    };
+  }
+
   /**
    * Map Prisma model to legacy StoreArea interface
    */
@@ -111,6 +161,7 @@ export class StoreAreaService {
     organizationId: string;
     name: string;
     subDepartment: string | null;
+    parentId?: number | null;
     lastChecked: Date | null;
     createdAt: Date;
     updatedAt: Date;
@@ -120,9 +171,68 @@ export class StoreAreaService {
       organizationId: area.organizationId,
       name: area.name,
       subDepartment: area.subDepartment ?? undefined,
+      parentId: area.parentId ?? undefined,
       lastChecked: area.lastChecked?.toISOString() ?? undefined,
       createdAt: area.createdAt.toISOString(),
       updatedAt: area.updatedAt.toISOString(),
     };
+  }
+
+  private mapCheckCycle(cycle: {
+    id: number;
+    organizationId: string;
+    name: string;
+    status: CheckCycle['status'];
+    startedAt: string | Date;
+    completedAt: string | Date | null;
+    createdAt: string | Date;
+    updatedAt: string | Date;
+  }): CheckCycle {
+    return {
+      id: cycle.id,
+      organizationId: cycle.organizationId,
+      name: cycle.name,
+      status: cycle.status,
+      startedAt: this.toIsoString(cycle.startedAt),
+      completedAt: cycle.completedAt === null ? null : this.toIsoString(cycle.completedAt),
+      createdAt: this.toIsoString(cycle.createdAt),
+      updatedAt: this.toIsoString(cycle.updatedAt),
+    };
+  }
+
+  private mapBayCheck(check: {
+    id: number;
+    organizationId: string;
+    cycleId: number;
+    storeAreaId: number;
+    userId: number | null;
+    checkedAt: string | Date;
+    itemsAddedCount: number;
+    notes: string | null;
+    createdAt: string | Date;
+    updatedAt: string | Date;
+  }): BayCheck {
+    return {
+      id: check.id,
+      organizationId: check.organizationId,
+      cycleId: check.cycleId,
+      storeAreaId: check.storeAreaId,
+      userId: check.userId,
+      checkedAt: this.toIsoString(check.checkedAt),
+      itemsAddedCount: check.itemsAddedCount,
+      notes: check.notes,
+      createdAt: this.toIsoString(check.createdAt),
+      updatedAt: this.toIsoString(check.updatedAt),
+    };
+  }
+
+  private mapFloorProgressBay = (bay: FloorProgressBay): FloorProgressBay => ({
+    ...bay,
+    checkedAt: bay.checkedAt === null ? null : this.toIsoString(bay.checkedAt),
+  });
+
+  private toIsoString(value: string | Date): string {
+    const date = value instanceof Date ? value : new Date(value);
+    return Number.isNaN(date.getTime()) ? String(value) : date.toISOString();
   }
 }

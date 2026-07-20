@@ -1,20 +1,11 @@
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { Card, CardContent, CardHeader, CardTitle } from '../components/ui/card';
 import { Button } from '../components/ui/button';
-import { Input } from '../components/ui/input';
-import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from '../components/ui/select';
 import { apiService } from '../lib/api.service';
-import { calculateMarkdownPrice } from '../lib/utils';
-import { DataTable } from '../components/ui/data-table';
-import { DataTableColumnHeader } from '../components/ui/data-table-column-header';
-import { ColumnDef } from '@tanstack/react-table';
+import { calculateMarkdownPrice } from '@shared/markdown';
 import Toast from '../components/ui/toast';
+import { useFreshApiToken } from '../hooks/useFreshApiToken';
+import { useMarkdownMatrix } from '../hooks/useMarkdownMatrix';
 
 interface DetailedExpiryReportPageProps {
   token: string | null;
@@ -28,15 +19,10 @@ interface DetailedExpiryReportItem {
   productName: string;
   sku: string;
   costPrice: number;
+  retailPrice: number | null;
   locationId: number;
   locationName: string;
   subDepartment: string | null;
-}
-
-interface EditableInventoryItem {
-  inventoryId: number;
-  expiryDate: string;
-  locationId: number;
 }
 
 interface ToastState {
@@ -50,7 +36,10 @@ const currencyFormatter = new Intl.NumberFormat('en-AU', {
   style: 'currency',
   currency: 'AUD',
 });
-const dateFormatter = new Intl.DateTimeFormat('en-AU', { dateStyle: 'medium' });
+
+function formatCurrencyValue(value: number): string {
+  return Number.isFinite(value) ? currencyFormatter.format(value) : 'Not available';
+}
 
 function getDaysToExpiry(expiryDate: string) {
   const parsedExpiryDate = new Date(expiryDate);
@@ -62,54 +51,45 @@ function getDaysToExpiry(expiryDate: string) {
   return Math.ceil((parsedExpiryDate.getTime() - today.getTime()) / (1000 * 60 * 60 * 24));
 }
 
-function formatExpiryDate(value: string) {
-  const date = new Date(value);
-  return Number.isNaN(date.getTime()) ? 'Date not available' : dateFormatter.format(date);
-}
+type WorklistGroupKey = 'markdown1' | 'markdown2' | 'markdown3';
 
-function getMarkdownStatus(daysToExpiry: number | null) {
-  if (daysToExpiry === null) return 'Review date';
-  if (daysToExpiry <= 0) return 'Expired';
-  if (daysToExpiry <= 30) return 'Markdown 3';
-  if (daysToExpiry <= 60) return 'Markdown 2';
-  if (daysToExpiry <= 90) return 'Markdown 1';
-  return 'Normal';
-}
+// The monthly markdown worklist mirrors the in-store process: items entering the
+// Markdown 1 window get their first reduction, then nearer-dated stock is deepened
+// or recorded as sold through. Write-offs happen on the Expired items page.
+const WORKLIST_GROUPS: ReadonlyArray<{
+  key: WorklistGroupKey;
+  label: string;
+  hint: string;
+}> = [
+  { key: 'markdown1', label: 'Apply Markdown 1', hint: '61–90 days to expiry — first reduction' },
+  {
+    key: 'markdown2',
+    label: 'Markdown 2 — review',
+    hint: '31–60 days — deepen the reduction or record sold through',
+  },
+  {
+    key: 'markdown3',
+    label: 'Markdown 3 — urgent',
+    hint: '0–30 days — record sold through before it expires',
+  },
+];
 
-function getMobileBadgeClass(daysToExpiry: number | null): string {
-  if (daysToExpiry === null) return 'bg-semantic-secondary-muted text-semantic-text-secondary';
-  if (daysToExpiry <= 0) return 'bg-semantic-critical-muted text-semantic-critical';
-  if (daysToExpiry <= 90) return 'bg-semantic-warning-muted text-semantic-warning-muted-foreground';
-  return 'bg-semantic-success-muted text-semantic-success';
-}
-
-function TableSkeleton() {
-  return (
-    <div className="animate-pulse space-y-3 p-4" aria-hidden="true">
-      {[...Array(6)].map((_, i) => (
-        <div key={i} className="flex gap-4">
-          <div className="h-4 w-28 rounded bg-semantic-surface-4" />
-          <div className="h-4 w-44 rounded bg-semantic-surface-4" />
-          <div className="h-4 w-24 rounded bg-semantic-surface-4" />
-          <div className="h-4 w-20 rounded bg-semantic-surface-4" />
-          <div className="h-4 w-16 rounded bg-semantic-surface-4" />
-        </div>
-      ))}
-    </div>
-  );
+function worklistGroupForDays(daysToExpiry: number | null): WorklistGroupKey | null {
+  if (daysToExpiry === null || daysToExpiry < 0) return null;
+  if (daysToExpiry <= 30) return 'markdown3';
+  if (daysToExpiry <= 60) return 'markdown2';
+  if (daysToExpiry <= 90) return 'markdown1';
+  return null;
 }
 
 export function DetailedExpiryReportPage({ token }: DetailedExpiryReportPageProps) {
+  const getFreshApiToken = useFreshApiToken(token);
+  const markdownMatrix = useMarkdownMatrix(token);
   const [reportData, setReportData] = useState<DetailedExpiryReportItem[] | null>(null);
   const [loading, setLoading] = useState(true);
   const [fetchError, setFetchError] = useState<string | null>(null);
   const [actionError, setActionError] = useState<string | null>(null);
-  const [editingItem, setEditingItem] = useState<EditableInventoryItem | null>(null);
-  const [saving, setSaving] = useState(false);
-  const [deleting, setDeleting] = useState(false);
-  const [deleteConfirmation, setDeleteConfirmation] = useState<number | null>(null);
-  const [storeAreas, setStoreAreas] = useState<{ id: number; name: string }[]>([]);
-  const [storeAreasError, setStoreAreasError] = useState<string | null>(null);
+  const [soldThroughId, setSoldThroughId] = useState<number | null>(null);
   const [toast, setToast] = useState<ToastState>({ message: '', type: 'success', visible: false });
 
   const showToast = useCallback((message: string, type: ToastState['type']) => {
@@ -124,9 +104,10 @@ export function DetailedExpiryReportPage({ token }: DetailedExpiryReportPageProp
         return;
       }
       try {
+        const authToken = await getFreshApiToken('detailed-expiry-report-fetch');
         const data = await apiService.get<DetailedExpiryReportItem[]>(
           '/reports/expiry-details',
-          token,
+          authToken,
           signal,
         );
         if (!signal?.aborted) {
@@ -145,11 +126,12 @@ export function DetailedExpiryReportPage({ token }: DetailedExpiryReportPageProp
         }
       }
     },
-    [token],
+    [token, getFreshApiToken],
   );
 
   useEffect(() => {
     const controller = new AbortController();
+    // eslint-disable-next-line react-hooks/set-state-in-effect -- intentional: sets loading before kicking off an abortable fetch
     setLoading(true);
     fetchReportData(controller.signal);
     return () => {
@@ -157,430 +139,38 @@ export function DetailedExpiryReportPage({ token }: DetailedExpiryReportPageProp
     };
   }, [fetchReportData]);
 
-  useEffect(() => {
-    if (!token) return;
-
-    const controller = new AbortController();
-
-    const fetchStoreAreas = async () => {
-      try {
-        const data = await apiService.get<{ id: number; name: string }[]>(
-          '/store-areas',
-          token,
-          controller.signal,
-        );
-        if (!controller.signal.aborted) {
-          setStoreAreas(data);
-          setStoreAreasError(null);
-        }
-      } catch (err: unknown) {
-        if (!controller.signal.aborted) {
-          setStoreAreasError(err instanceof Error ? err.message : 'Failed to load store areas.');
-        }
-      }
-    };
-
-    fetchStoreAreas();
-    return () => {
-      controller.abort();
-    };
-  }, [token]);
-
-  const handleSaveEdit = useCallback(async (): Promise<boolean> => {
-    if (!editingItem) return true;
-    if (!token) {
-      setActionError('Authentication token is missing.');
-      return false;
-    }
-    setSaving(true);
-    setActionError(null);
-    try {
-      await apiService.put(
-        `/inventory-items/${editingItem.inventoryId}`,
-        { expiryDate: editingItem.expiryDate, locationId: editingItem.locationId },
-        token,
-      );
-      const updatedData = await apiService.get<DetailedExpiryReportItem[]>(
-        '/reports/expiry-details',
-        token,
-      );
-      setReportData(updatedData);
-      setEditingItem(null);
-      showToast('Item updated successfully.', 'success');
-      return true;
-    } catch (err: unknown) {
-      setActionError(
-        err instanceof Error ? err.message : 'Failed to update item. Please try again.',
-      );
-      return false;
-    } finally {
-      setSaving(false);
-    }
-  }, [editingItem, token, showToast]);
-
-  const handleEdit = useCallback(
-    async (item: DetailedExpiryReportItem) => {
-      if (editingItem && editingItem.inventoryId !== item.inventoryId) {
-        const saved = await handleSaveEdit();
-        if (!saved) {
-          return;
-        }
-      }
-      setActionError(null);
-      setEditingItem({
-        inventoryId: item.inventoryId,
-        expiryDate: item.expiryDate,
-        locationId: item.locationId,
-      });
-    },
-    [editingItem, handleSaveEdit],
-  );
-
-  const handleCancelEdit = useCallback(() => {
-    setEditingItem(null);
-    setActionError(null);
-  }, []);
-
-  const handleDelete = useCallback(
+  const handleSoldThrough = useCallback(
     async (inventoryId: number) => {
       if (!token) {
         setActionError('Authentication token is missing.');
         return;
       }
-      setDeleting(true);
+      setSoldThroughId(inventoryId);
       setActionError(null);
       try {
-        await apiService.delete(`/inventory-items/${inventoryId}`, token);
+        const authToken = await getFreshApiToken('detailed-expiry-sold-through');
+        // Reuse the existing disposition endpoint; the markdown level at sale is
+        // snapshotted server-side from the item's expiry date.
+        await apiService.post(
+          '/expired-items/process',
+          { inventoryItemId: inventoryId, action: 'sold_through' },
+          authToken,
+        );
         const updatedData = await apiService.get<DetailedExpiryReportItem[]>(
           '/reports/expiry-details',
-          token,
+          authToken,
         );
         setReportData(updatedData);
-        setDeleteConfirmation(null);
-        showToast('Item deleted.', 'success');
+        showToast('Item recorded as sold through.', 'success');
       } catch (err: unknown) {
         setActionError(
-          err instanceof Error ? err.message : 'Failed to delete item. Please try again.',
+          err instanceof Error ? err.message : 'Failed to record sold through. Please try again.',
         );
       } finally {
-        setDeleting(false);
+        setSoldThroughId(null);
       }
     },
-    [token, showToast],
-  );
-
-  const confirmDelete = useCallback((inventoryId: number) => {
-    setDeleteConfirmation(inventoryId);
-    setActionError(null);
-  }, []);
-
-  const cancelDelete = useCallback(() => {
-    setDeleteConfirmation(null);
-  }, []);
-
-  // Define columns for the data table
-  const columns: ColumnDef<DetailedExpiryReportItem>[] = useMemo(
-    () => [
-      {
-        accessorKey: 'expiryDate',
-        header: ({ column }) => <DataTableColumnHeader column={column} title="Expiry Date" />,
-        cell: ({ row }) => {
-          const isEditing = editingItem && editingItem.inventoryId === row.original.inventoryId;
-
-          if (isEditing) {
-            return (
-              <div className="min-w-[140px]">
-                <Input
-                  type="date"
-                  value={editingItem.expiryDate}
-                  onChange={(e) =>
-                    setEditingItem({
-                      ...editingItem,
-                      expiryDate: e.target.value,
-                    })
-                  }
-                  className="w-full"
-                  disabled={saving}
-                />
-              </div>
-            );
-          }
-
-          const daysToExpiry = getDaysToExpiry(row.original.expiryDate);
-          return (
-            <div
-              className={`min-w-[140px] ${daysToExpiry !== null && daysToExpiry <= 0 ? 'text-semantic-critical font-bold' : ''}`}
-            >
-              {formatExpiryDate(row.original.expiryDate)}
-              <div className="text-xs text-semantic-text-tertiary">
-                {daysToExpiry === null
-                  ? ''
-                  : daysToExpiry > 0
-                    ? `${daysToExpiry} days left`
-                    : 'Expired'}
-              </div>
-            </div>
-          );
-        },
-      },
-      {
-        accessorKey: 'productName',
-        header: ({ column }) => <DataTableColumnHeader column={column} title="Product Name" />,
-        cell: ({ row }) => (
-          <div
-            className="font-medium min-w-[160px] max-w-[200px] truncate"
-            title={row.original.productName}
-          >
-            {row.original.productName}
-          </div>
-        ),
-      },
-      {
-        accessorKey: 'sku',
-        header: ({ column }) => <DataTableColumnHeader column={column} title="SKU" />,
-        cell: ({ row }) => (
-          <div className="min-w-[100px] max-w-[140px] truncate" title={row.original.sku}>
-            {row.original.sku}
-          </div>
-        ),
-      },
-      {
-        accessorKey: 'costPrice',
-        header: ({ column }) => <DataTableColumnHeader column={column} title="Cost Price" />,
-        cell: ({ row }) => (
-          <div className="min-w-[100px] tabular-nums">
-            {currencyFormatter.format(row.original.costPrice)}
-          </div>
-        ),
-      },
-      {
-        accessorKey: 'daysToExpiry',
-        header: ({ column }) => <DataTableColumnHeader column={column} title="Days to Expiry" />,
-        cell: ({ row }) => {
-          const isEditing = editingItem && editingItem.inventoryId === row.original.inventoryId;
-          const daysToExpiry = isEditing
-            ? getDaysToExpiry(editingItem.expiryDate)
-            : getDaysToExpiry(row.original.expiryDate);
-
-          const urgencyClass =
-            daysToExpiry === null
-              ? ''
-              : daysToExpiry <= 0
-                ? 'text-semantic-critical font-bold'
-                : daysToExpiry <= 30
-                  ? 'text-semantic-warning font-semibold'
-                  : '';
-
-          return (
-            <div className={`min-w-[100px] tabular-nums ${urgencyClass}`}>
-              {daysToExpiry === null ? '—' : daysToExpiry}
-            </div>
-          );
-        },
-      },
-      {
-        accessorKey: 'status',
-        header: ({ column }) => <DataTableColumnHeader column={column} title="Markdown Status" />,
-        cell: ({ row }) => {
-          const isEditing = editingItem && editingItem.inventoryId === row.original.inventoryId;
-          const daysToExpiry = isEditing
-            ? getDaysToExpiry(editingItem.expiryDate)
-            : getDaysToExpiry(row.original.expiryDate);
-          const markdownStatus = getMarkdownStatus(daysToExpiry);
-
-          const statusClass =
-            markdownStatus === 'Expired'
-              ? 'text-semantic-critical'
-              : markdownStatus.startsWith('Markdown')
-                ? 'text-semantic-warning'
-                : 'text-semantic-text-secondary';
-
-          return (
-            <div className={`min-w-[120px] text-sm font-medium ${statusClass}`}>
-              {markdownStatus}
-            </div>
-          );
-        },
-      },
-      {
-        accessorKey: 'markdownPrice',
-        header: ({ column }) => <DataTableColumnHeader column={column} title="Markdown Price" />,
-        cell: ({ row }) => {
-          const isEditing = editingItem && editingItem.inventoryId === row.original.inventoryId;
-          const daysToExpiry = isEditing
-            ? getDaysToExpiry(editingItem.expiryDate)
-            : getDaysToExpiry(row.original.expiryDate);
-          const markdownPrice =
-            daysToExpiry === null
-              ? row.original.costPrice
-              : calculateMarkdownPrice(row.original.costPrice, daysToExpiry);
-
-          return (
-            <div className="min-w-[100px] tabular-nums">
-              {currencyFormatter.format(markdownPrice)}
-            </div>
-          );
-        },
-      },
-      {
-        accessorKey: 'locationName',
-        header: ({ column }) => <DataTableColumnHeader column={column} title="Location" />,
-        cell: ({ row }) => {
-          const isEditing = editingItem && editingItem.inventoryId === row.original.inventoryId;
-
-          if (isEditing) {
-            return (
-              <div className="min-w-[120px]">
-                {storeAreasError ? (
-                  <p className="text-xs text-semantic-critical">{storeAreasError}</p>
-                ) : (
-                  <Select
-                    value={editingItem.locationId.toString()}
-                    onValueChange={(value) =>
-                      setEditingItem({
-                        ...editingItem,
-                        locationId: parseInt(value, 10),
-                      })
-                    }
-                    disabled={saving || storeAreas.length === 0}
-                  >
-                    <SelectTrigger className="w-full" aria-label="Location">
-                      <SelectValue
-                        placeholder={storeAreas.length === 0 ? 'Loading…' : 'Location'}
-                      />
-                    </SelectTrigger>
-                    <SelectContent>
-                      {storeAreas.map((area) => (
-                        <SelectItem key={area.id} value={area.id.toString()}>
-                          {area.name}
-                        </SelectItem>
-                      ))}
-                    </SelectContent>
-                  </Select>
-                )}
-              </div>
-            );
-          }
-
-          return (
-            <div className="min-w-[120px] max-w-[160px] truncate" title={row.original.locationName}>
-              {row.original.locationName}
-            </div>
-          );
-        },
-      },
-      {
-        accessorKey: 'subDepartment',
-        header: ({ column }) => <DataTableColumnHeader column={column} title="Sub-Department" />,
-        cell: ({ row }) => (
-          <div
-            className="min-w-[120px] max-w-[140px] truncate"
-            title={row.original.subDepartment || 'N/A'}
-          >
-            {row.original.subDepartment || 'N/A'}
-          </div>
-        ),
-      },
-      {
-        id: 'actions',
-        header: () => <div className="min-w-[140px]">Actions</div>,
-        cell: ({ row }) => {
-          const rowId = row.original.inventoryId;
-          const isEditing = editingItem && editingItem.inventoryId === rowId;
-          const isPendingDelete = deleteConfirmation === rowId;
-          const anotherRowEditing = editingItem && editingItem.inventoryId !== rowId;
-
-          if (isPendingDelete) {
-            return (
-              <div className="flex gap-2 justify-start min-w-[140px]">
-                <Button
-                  onClick={() => handleDelete(rowId)}
-                  disabled={deleting}
-                  size="sm"
-                  variant="destructive"
-                  className="text-xs flex-shrink-0 min-w-[70px]"
-                  aria-busy={deleting}
-                >
-                  {deleting ? 'Deleting…' : 'Confirm delete'}
-                </Button>
-                <Button
-                  onClick={cancelDelete}
-                  disabled={deleting}
-                  size="sm"
-                  variant="neutral"
-                  className="text-xs flex-shrink-0 min-w-[60px]"
-                >
-                  Cancel
-                </Button>
-              </div>
-            );
-          }
-
-          if (isEditing) {
-            return (
-              <div className="flex gap-2 justify-start min-w-[140px]">
-                <Button
-                  onClick={handleSaveEdit}
-                  disabled={saving}
-                  size="sm"
-                  variant="success"
-                  className="min-w-[50px] font-medium"
-                  aria-busy={saving}
-                >
-                  {saving ? 'Saving…' : 'Save'}
-                </Button>
-                <Button
-                  onClick={handleCancelEdit}
-                  disabled={saving}
-                  size="sm"
-                  variant="neutral"
-                  className="min-w-[50px] font-medium"
-                >
-                  Cancel
-                </Button>
-              </div>
-            );
-          }
-
-          return (
-            <div className="flex gap-2 justify-start min-w-[140px]">
-              <Button
-                onClick={() => handleEdit(row.original)}
-                disabled={!!anotherRowEditing || deleting}
-                size="sm"
-                variant="default"
-                className="min-w-[50px] font-medium"
-              >
-                Edit
-              </Button>
-              <Button
-                onClick={() => confirmDelete(rowId)}
-                disabled={!!editingItem || deleting}
-                size="sm"
-                variant="destructive"
-                className="min-w-[50px] font-medium"
-              >
-                Delete
-              </Button>
-            </div>
-          );
-        },
-      },
-    ],
-    [
-      editingItem,
-      saving,
-      deleting,
-      deleteConfirmation,
-      storeAreas,
-      storeAreasError,
-      handleSaveEdit,
-      handleCancelEdit,
-      handleEdit,
-      handleDelete,
-      confirmDelete,
-      cancelDelete,
-    ],
+    [token, getFreshApiToken, showToast],
   );
 
   const retryControllerRef = useRef<AbortController | null>(null);
@@ -599,6 +189,21 @@ export function DetailedExpiryReportPage({ token }: DetailedExpiryReportPageProp
     setLoading(true);
     fetchReportData(controller.signal);
   }, [fetchReportData]);
+
+  const worklistGroups = useMemo(() => {
+    const groups: Record<WorklistGroupKey, DetailedExpiryReportItem[]> = {
+      markdown1: [],
+      markdown2: [],
+      markdown3: [],
+    };
+    for (const item of reportData || []) {
+      const group = worklistGroupForDays(getDaysToExpiry(item.expiryDate));
+      if (group) {
+        groups[group].push(item);
+      }
+    }
+    return groups;
+  }, [reportData]);
 
   const expirySummary = useMemo(
     () =>
@@ -643,8 +248,9 @@ export function DetailedExpiryReportPage({ token }: DetailedExpiryReportPageProp
               aria-hidden="true"
             />
           </CardHeader>
-          <CardContent className="p-0 sm:p-6">
-            <TableSkeleton />
+          <CardContent className="space-y-3 p-4">
+            <div className="h-16 animate-pulse rounded bg-semantic-surface-4" />
+            <div className="h-16 animate-pulse rounded bg-semantic-surface-4" />
           </CardContent>
         </Card>
         <p className="sr-only" role="status" aria-live="polite">
@@ -681,37 +287,15 @@ export function DetailedExpiryReportPage({ token }: DetailedExpiryReportPageProp
       aria-label="Detailed expiry reporting workspace"
     >
       <header className="mb-5">
-        <div className="flex items-center justify-between">
-          <h1 className="font-heading text-2xl font-semibold">
-            Detailed Expiry Report (Next 90 Days)
-          </h1>
-          <button
-            onClick={() => window.print()}
-            aria-label="Print this report"
-            className="hidden md:flex items-center gap-2 rounded-md border border-semantic-primary px-3 py-1.5 text-sm font-medium text-semantic-primary hover:bg-semantic-primary/5 transition-colors no-print"
-          >
-            <svg
-              xmlns="http://www.w3.org/2000/svg"
-              width="16"
-              height="16"
-              viewBox="0 0 24 24"
-              fill="none"
-              stroke="currentColor"
-              strokeWidth="2"
-              strokeLinecap="round"
-              strokeLinejoin="round"
-              aria-hidden="true"
-            >
-              <path d="M6 9V2h12v7" />
-              <path d="M6 18H4a2 2 0 0 1-2-2v-5a2 2 0 0 1 2-2h16a2 2 0 0 1 2 2v5a2 2 0 0 1-2 2h-2" />
-              <rect x="6" y="14" width="12" height="8" />
-            </svg>
-            Print Report
-          </button>
+        <div className="flex flex-wrap items-center justify-between gap-3">
+          <h1 className="font-heading text-2xl font-semibold">Markdown Worklist (Next 90 Days)</h1>
+          <Button asChild variant="outline" size="sm">
+            <a href="/expiry-entries">Browse all expiry entries</a>
+          </Button>
         </div>
         <p className="mt-2 max-w-3xl text-sm text-semantic-text-secondary">
-          Open each row summary for the immediate shelf decision, then use the full table for
-          sorting and edits.
+          Work top to bottom through this month&apos;s markdown decisions. To navigate or fix every
+          active entry, open the full expiry entries table.
         </p>
       </header>
 
@@ -768,71 +352,89 @@ export function DetailedExpiryReportPage({ token }: DetailedExpiryReportPageProp
       )}
 
       {hasData ? (
-        <ul className="mb-5 space-y-3 md:hidden" aria-label="Mobile expiry row summary">
-          {reportData.slice(0, 50).map((item) => {
-            const daysToExpiry = getDaysToExpiry(item.expiryDate);
-            const markdownPrice =
-              daysToExpiry === null
-                ? item.costPrice
-                : calculateMarkdownPrice(item.costPrice, daysToExpiry);
-
-            return (
-              <li key={item.inventoryId} className="rounded-lg border bg-semantic-surface-1 p-4">
-                <div className="flex items-start justify-between gap-3">
-                  <div className="min-w-0">
-                    <p className="break-words font-medium">{item.productName}</p>
-                    <p className="mt-1 text-sm text-semantic-text-secondary">
-                      {item.sku} · {item.locationName}
+        <Card className="overflow-hidden">
+          <CardHeader>
+            <CardTitle>
+              <h2 className="text-xl font-semibold">This month&apos;s markdown worklist</h2>
+            </CardTitle>
+            <p className="mt-1 text-sm text-semantic-text-secondary">
+              Work top to bottom: apply the first markdown, then deepen or record sold-through
+              stock.
+            </p>
+          </CardHeader>
+          <CardContent className="space-y-6">
+            {WORKLIST_GROUPS.map(({ key, label, hint }) => {
+              const items = worklistGroups[key];
+              return (
+                <section key={key} aria-label={label}>
+                  <div className="flex items-baseline justify-between gap-3 border-b pb-2">
+                    <h3 className="font-heading text-base font-semibold">{label}</h3>
+                    <span className="text-xs text-semantic-text-secondary">
+                      {numberFormatter.format(items.length)} item{items.length === 1 ? '' : 's'}
+                    </span>
+                  </div>
+                  <p className="mt-1 text-xs text-semantic-text-tertiary">{hint}</p>
+                  {items.length === 0 ? (
+                    <p className="mt-3 text-sm text-semantic-text-secondary">
+                      Nothing in this group right now.
                     </p>
-                  </div>
-                  <span
-                    className={`shrink-0 rounded-md px-2 py-1 text-xs font-medium ${getMobileBadgeClass(daysToExpiry)}`}
-                  >
-                    {getMarkdownStatus(daysToExpiry)}
-                  </span>
-                </div>
-                <dl className="mt-3 grid grid-cols-2 gap-3 text-sm">
-                  <div>
-                    <dt className="text-semantic-text-secondary">Expiry</dt>
-                    <dd className="font-medium">{formatExpiryDate(item.expiryDate)}</dd>
-                  </div>
-                  <div>
-                    <dt className="text-semantic-text-secondary">Markdown price</dt>
-                    <dd className="font-medium">{currencyFormatter.format(markdownPrice)}</dd>
-                  </div>
-                </dl>
-              </li>
-            );
-          })}
-        </ul>
-      ) : null}
-
-      <Card className="overflow-hidden">
-        <CardHeader>
-          <CardTitle>
-            <h2 className="text-xl font-semibold">Full expiry table</h2>
-          </CardTitle>
-        </CardHeader>
-        <CardContent className="p-0 sm:p-6">
-          {hasData ? (
-            <div className="overflow-x-auto pb-4">
-              <div className="min-w-[1000px] px-4 sm:px-0">
-                <DataTable
-                  columns={columns}
-                  data={reportData}
-                  filtering={true}
-                  pagination={true}
-                  sorting={true}
-                />
-              </div>
-            </div>
-          ) : (
+                  ) : (
+                    <ul className="mt-3 space-y-2">
+                      {items.map((item) => {
+                        const daysToExpiry = getDaysToExpiry(item.expiryDate);
+                        const markdownPrice =
+                          calculateMarkdownPrice(
+                            { costPrice: item.costPrice, retailPrice: item.retailPrice },
+                            daysToExpiry,
+                            markdownMatrix,
+                          ) ?? item.costPrice;
+                        const isSubmitting = soldThroughId === item.inventoryId;
+                        return (
+                          <li
+                            key={item.inventoryId}
+                            className="flex flex-wrap items-center justify-between gap-3 rounded-lg border bg-semantic-surface-1 p-3"
+                          >
+                            <div className="min-w-0">
+                              <p className="break-words font-medium">{item.productName}</p>
+                              <p className="mt-0.5 text-xs text-semantic-text-secondary">
+                                {item.sku} · {item.locationName} ·{' '}
+                                {daysToExpiry === null ? '—' : `${daysToExpiry} days left`}
+                              </p>
+                            </div>
+                            <div className="flex items-center gap-3">
+                              <span className="tabular-nums text-sm font-medium">
+                                {formatCurrencyValue(markdownPrice)}
+                              </span>
+                              <Button
+                                onClick={() => handleSoldThrough(item.inventoryId)}
+                                disabled={isSubmitting || soldThroughId !== null}
+                                size="sm"
+                                variant="success"
+                                className="text-xs font-medium"
+                                aria-busy={isSubmitting}
+                              >
+                                {isSubmitting ? 'Recording…' : 'Sold through'}
+                              </Button>
+                            </div>
+                          </li>
+                        );
+                      })}
+                    </ul>
+                  )}
+                </section>
+              );
+            })}
+          </CardContent>
+        </Card>
+      ) : (
+        <Card className="overflow-hidden">
+          <CardContent>
             <p className="py-8 text-center text-sm text-semantic-text-secondary">
               No expiry items found in the next 90 days.
             </p>
-          )}
-        </CardContent>
-      </Card>
+          </CardContent>
+        </Card>
+      )}
 
       <Toast
         message={toast.message}

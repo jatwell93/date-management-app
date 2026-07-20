@@ -64,7 +64,7 @@ export interface SubscriptionTierData {
  * Type guard for TierLevel
  */
 export function isTierLevel(value: string): value is TierLevel {
-  return ['starter', 'professional', 'premium', 'concierge'].includes(value);
+  return ['free', 'starter', 'professional', 'enterprise', 'premium', 'concierge'].includes(value);
 }
 
 /**
@@ -226,7 +226,7 @@ export async function authenticateWorkerRequest(
     return {
       userId: 0,
       organizationId: '',
-      tierLevel: 'starter',
+      tierLevel: 'free',
       subscription: {} as SubscriptionTierData,
       isValid: false,
       error: 'Unauthorized: No token provided',
@@ -239,7 +239,7 @@ export async function authenticateWorkerRequest(
     return {
       userId: 0,
       organizationId: '',
-      tierLevel: 'starter',
+      tierLevel: 'free',
       subscription: {} as SubscriptionTierData,
       isValid: false,
       error: 'Access denied: Invalid or expired token',
@@ -252,7 +252,7 @@ export async function authenticateWorkerRequest(
     return {
       userId: 0,
       organizationId: '',
-      tierLevel: 'starter',
+      tierLevel: 'free',
       subscription: {} as SubscriptionTierData,
       isValid: false,
       error: 'Access denied: Missing tenant context in token',
@@ -267,7 +267,7 @@ export async function authenticateWorkerRequest(
     return {
       userId: decodedToken.userId,
       organizationId,
-      tierLevel: 'starter',
+      tierLevel: 'free',
       subscription: {} as SubscriptionTierData,
       isValid: false,
       error: statusValidation.error,

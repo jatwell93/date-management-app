@@ -2,6 +2,7 @@ import { useState } from 'react';
 import * as Sentry from '@sentry/react';
 import { Button } from './ui/button';
 import { buildApiUrl } from '../lib/api.service';
+import { useFreshApiToken } from '../hooks/useFreshApiToken';
 
 interface ManageSubscriptionButtonProps {
   token: string | null;
@@ -16,6 +17,7 @@ export function ManageSubscriptionButton({
   size = 'default',
   className,
 }: ManageSubscriptionButtonProps) {
+  const getFreshApiToken = useFreshApiToken(token);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
@@ -25,11 +27,12 @@ export function ManageSubscriptionButton({
     setLoading(true);
     setError(null);
     try {
+      const authToken = await getFreshApiToken('subscription-portal-session');
       const response = await fetch(buildApiUrl('/subscription/create-portal-session'), {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
-          Authorization: `Bearer ${token}`,
+          Authorization: `Bearer ${authToken}`,
         },
         body: JSON.stringify({
           returnUrl: window.location.href,
@@ -37,6 +40,13 @@ export function ManageSubscriptionButton({
       });
 
       if (!response.ok) {
+        // 400/402/404 are expected "not eligible for billing portal" responses
+        // (no org / no Stripe customer). Surface an actionable message and skip
+        // Sentry — these are not errors, just users without a billing account.
+        if ([400, 402, 404].includes(response.status)) {
+          setError('Please subscribe to a paid plan to access billing management.');
+          return;
+        }
         throw new Error('Failed to create portal session');
       }
 

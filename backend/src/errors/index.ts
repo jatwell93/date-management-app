@@ -36,6 +36,23 @@ export class ValidationError extends BaseError {
 }
 
 /**
+ * 422 Unprocessable Entity - a syntactically valid supplier policy violates
+ * the policy domain rules. Kept distinct from request-shape validation so
+ * clients can render field guidance without treating it as a malformed body.
+ */
+export class PolicyValidationError extends BaseError {
+  public readonly errors: Array<{ field: string; message: string }>;
+
+  constructor(
+    message = 'Supplier policy is invalid',
+    errors: Array<{ field: string; message: string }> = [],
+  ) {
+    super(message, 422, 'POLICY_VALIDATION_ERROR');
+    this.errors = errors;
+  }
+}
+
+/**
  * 401 Unauthorized - Missing or invalid authentication
  */
 export class AuthenticationError extends BaseError {

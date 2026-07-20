@@ -95,7 +95,7 @@ describe('StoreAreaService repository injection', () => {
 
   it('uses the injected repository for store area reads', async () => {
     const repository = {
-      findAll: jest.fn().mockResolvedValue([
+      findAll: vi.fn().mockResolvedValue([
         {
           id: 1,
           organizationId,
@@ -123,6 +123,133 @@ describe('StoreAreaService repository injection', () => {
         createdAt: now.toISOString(),
         updatedAt: now.toISOString(),
       },
+    ]);
+  });
+
+  it('creates check cycles through the injected repository', async () => {
+    const repository = {
+      createCheckCycle: vi.fn().mockResolvedValue({
+        id: 11,
+        organizationId,
+        name: 'Morning walk',
+        status: 'active',
+        startedAt: now,
+        completedAt: null,
+        createdAt: now,
+        updatedAt: now,
+      }),
+    } as unknown as StoreAreaRepository;
+
+    const service = new StoreAreaService(organizationId, {} as PrismaClient, repository);
+
+    const result = await service.createCheckCycle({ name: 'Morning walk' });
+
+    expect(repository.createCheckCycle).toHaveBeenCalledWith(organizationId, {
+      name: 'Morning walk',
+      startedAt: undefined,
+    });
+    expect(result).toEqual({
+      id: 11,
+      organizationId,
+      name: 'Morning walk',
+      status: 'active',
+      startedAt: now.toISOString(),
+      completedAt: null,
+      createdAt: now.toISOString(),
+      updatedAt: now.toISOString(),
+    });
+  });
+
+  it('passes active-cycle and duplicate-cycle validation errors through unchanged', async () => {
+    const duplicate = new Error('Active check cycle already exists');
+    const noActiveCycle = new Error('Active check cycle is required');
+    const repository = {
+      createCheckCycle: vi.fn().mockRejectedValue(duplicate),
+      recordBayCheck: vi.fn().mockRejectedValue(noActiveCycle),
+    } as unknown as StoreAreaRepository;
+    const service = new StoreAreaService(organizationId, {} as PrismaClient, repository);
+
+    await expect(service.createCheckCycle({ name: 'Morning walk' })).rejects.toThrow(
+      'Active check cycle already exists',
+    );
+    await expect(service.recordBayCheck(7, { storeAreaId: 5 })).rejects.toThrow(
+      'Active check cycle is required',
+    );
+  });
+
+  it('rejects bay checks for non-leaf departments through the repository validation', async () => {
+    const repository = {
+      recordBayCheck: vi.fn().mockRejectedValue(new Error('Bay check must target a leaf bay')),
+    } as unknown as StoreAreaRepository;
+    const service = new StoreAreaService(organizationId, {} as PrismaClient, repository);
+
+    await expect(service.recordBayCheck(7, { storeAreaId: 1 })).rejects.toThrow(
+      'Bay check must target a leaf bay',
+    );
+  });
+
+  it('returns floor progress grouped by department using repository data', async () => {
+    const repository = {
+      getFloorProgress: vi.fn().mockResolvedValue({
+        activeCycle: {
+          id: 11,
+          organizationId,
+          name: 'Morning walk',
+          status: 'active',
+          startedAt: now,
+          completedAt: null,
+          createdAt: now,
+          updatedAt: now,
+        },
+        summary: {
+          totalBays: 2,
+          checkedBays: 1,
+          notCheckedBays: 1,
+          overdueBays: 0,
+          coveragePercent: 50,
+          uncheckedBays: 1,
+        },
+        departments: [
+          {
+            department: { id: 1, name: 'Dairy' },
+            summary: {
+              totalBays: 2,
+              checkedBays: 1,
+              notCheckedBays: 1,
+              overdueBays: 0,
+              coveragePercent: 50,
+              uncheckedBays: 1,
+            },
+            bays: [
+              {
+                id: 5,
+                name: 'Bay 1',
+                parentId: 1,
+                state: 'checked',
+                checkedAt: now,
+                checkedBy: { id: 7, name: 'Manager' },
+              },
+              {
+                id: 6,
+                name: 'Bay 2',
+                parentId: 1,
+                state: 'not_checked',
+                checkedAt: null,
+                checkedBy: null,
+              },
+            ],
+          },
+        ],
+      }),
+    } as unknown as StoreAreaRepository;
+    const service = new StoreAreaService(organizationId, {} as PrismaClient, repository);
+
+    const result = await service.getFloorProgress();
+
+    expect(repository.getFloorProgress).toHaveBeenCalledWith(organizationId);
+    expect(result.departments[0].bays).toEqual([
+      expect.objectContaining({ id: 5, state: 'checked', checkedAt: now.toISOString() }),
+      expect.objectContaining({ id: 6, state: 'not_checked', checkedAt: null }),
     ]);
   });
 });

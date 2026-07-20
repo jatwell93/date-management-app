@@ -3,6 +3,7 @@ import validator from 'validator';
 import { inject, injectable } from 'tsyringe';
 import { AuthRequest } from '../middleware/auth.middleware';
 import { ReportService } from '../services/report.service';
+import { ServiceProvider } from '../services/service-provider';
 
 type ReportServiceFactory = (organizationId?: string) => ReportService;
 
@@ -47,6 +48,14 @@ export class ReportController {
     await this.respondWithReport(req, res, next, (service) => service.getDetailedExpiryReport());
   }
 
+  async getActiveExpiryEntriesReport(
+    req: AuthRequest,
+    res: Response,
+    next: NextFunction,
+  ): Promise<void> {
+    await this.respondWithReport(req, res, next, (service) => service.getActiveExpiryEntries());
+  }
+
   async getMonthlyMarkdownReport(
     req: AuthRequest,
     res: Response,
@@ -88,6 +97,12 @@ export class ReportController {
     await this.respondWithReport(req, res, next, (service) => service.getLossByDepartmentReport());
   }
 
+  async getSellThroughReport(req: AuthRequest, res: Response, next: NextFunction): Promise<void> {
+    await this.respondWithReport(req, res, next, (service) =>
+      service.getSellThroughByMarkdownLevel(),
+    );
+  }
+
   async getItemsByUserReport(req: AuthRequest, res: Response, next: NextFunction): Promise<void> {
     const timeFrame = req.query.timeFrame as string | undefined;
     if (timeFrame && !validator.isInt(timeFrame, { min: 1, max: 3650 })) {
@@ -104,6 +119,14 @@ export class ReportController {
     await this.respondWithReport(req, res, next, (service) => service.getItemsByDateReport());
   }
 
+  async getStoreWalkAuditReport(
+    req: AuthRequest,
+    res: Response,
+    next: NextFunction,
+  ): Promise<void> {
+    await this.respondWithReport(req, res, next, (service) => service.getStoreWalkAuditReport());
+  }
+
   async getDashboardAnalytics(req: AuthRequest, res: Response, next: NextFunction): Promise<void> {
     await this.respondWithReport(req, res, next, (service) => service.getDashboardAnalytics());
   }
@@ -111,8 +134,10 @@ export class ReportController {
 
 export function createReportController(): ReportController {
   return new ReportController((organizationId?: string) => {
-    const { ServiceProvider } =
-      require('../services/service-provider') as typeof import('../services/service-provider');
+    // Statically imported (was a lazy `require`): Vitest's ESM runner cannot
+    // resolve a relative `require()` of `.ts` source, and the static import also
+    // lets tests mock service-provider. No cycle: service-provider does not import
+    // this controller.
     return new ServiceProvider({ organizationId }).getReportService();
   });
 }

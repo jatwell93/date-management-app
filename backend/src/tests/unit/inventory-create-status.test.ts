@@ -129,7 +129,7 @@ describe('InventoryService - createInventoryItem Status Handling', () => {
       userId,
     );
 
-    // Should be Markdown 3 based on 5 days (within 7 days)
+    // Should be Markdown 3 based on 5 days (within the 0-30 day window)
     expect(item.status).toBe('Markdown 3');
   });
 
@@ -149,7 +149,7 @@ describe('InventoryService - createInventoryItem Status Handling', () => {
   });
 
   it('should handle normal items correctly', async () => {
-    const expiryDate = new Date(Date.now() + 90 * 24 * 60 * 60 * 1000).toISOString(); // 90 days from now
+    const expiryDate = new Date(Date.now() + 120 * 24 * 60 * 60 * 1000).toISOString(); // 120 days from now (beyond the 90-day markdown window)
     const item = await service.createInventoryItem(
       {
         productId,

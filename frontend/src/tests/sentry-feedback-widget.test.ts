@@ -1,9 +1,9 @@
-const mockSentryInit = jest.fn();
-const mockBrowserTracingIntegration = jest.fn(() => ({ name: 'browser-tracing' }));
-const mockReplayIntegration = jest.fn(() => ({ name: 'session-replay' }));
-const mockFeedbackIntegration = jest.fn((_options?: unknown) => ({ name: 'feedback-widget' }));
+const mockSentryInit = vi.fn();
+const mockBrowserTracingIntegration = vi.fn(() => ({ name: 'browser-tracing' }));
+const mockReplayIntegration = vi.fn(() => ({ name: 'session-replay' }));
+const mockFeedbackIntegration = vi.fn((_options?: unknown) => ({ name: 'feedback-widget' }));
 
-jest.mock('@sentry/react', () => ({
+vi.mock('@sentry/react', () => ({
   init: (options?: unknown) => mockSentryInit(options),
   browserTracingIntegration: () => mockBrowserTracingIntegration(),
   replayIntegration: () => mockReplayIntegration(),
@@ -16,8 +16,8 @@ describe('Sentry feedback widget instrumentation', () => {
   const originalDsn = process.env.REACT_APP_SENTRY_FRONTEND_DSN;
 
   beforeEach(() => {
-    jest.resetModules();
-    jest.clearAllMocks();
+    vi.resetModules();
+    vi.clearAllMocks();
     writableEnv.NODE_ENV = 'production';
     writableEnv.REACT_APP_SENTRY_FRONTEND_DSN = 'https://example@o0.ingest.sentry.io/0';
   });

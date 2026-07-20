@@ -15,6 +15,7 @@ export const initialSchemaMigration: Migration = {
     db.exec(`
       CREATE TABLE IF NOT EXISTS products (
         id INTEGER PRIMARY KEY AUTOINCREMENT,
+        organization_id TEXT NOT NULL DEFAULT 'default-org',
         barcode TEXT UNIQUE NOT NULL,
         sku TEXT UNIQUE NOT NULL,
         name TEXT NOT NULL,
@@ -25,6 +26,7 @@ export const initialSchemaMigration: Migration = {
 
       CREATE TABLE IF NOT EXISTS inventory_items (
         id INTEGER PRIMARY KEY AUTOINCREMENT,
+        organization_id TEXT NOT NULL DEFAULT 'default-org',
         product_id INTEGER NOT NULL,
         expiry_date TEXT NOT NULL,
         location_id INTEGER NOT NULL,
@@ -55,6 +57,7 @@ export const initialSchemaMigration: Migration = {
 
       CREATE TABLE IF NOT EXISTS audit_log (
         id INTEGER PRIMARY KEY AUTOINCREMENT,
+        organization_id TEXT NOT NULL DEFAULT 'default-org',
         user_id INTEGER NOT NULL,
         inventory_item_id INTEGER NOT NULL,
         change_description TEXT NOT NULL,

@@ -1,14 +1,14 @@
 const mockDb = {
-  exec: jest.fn(),
-  prepare: jest.fn(() => ({
-    run: jest.fn(),
-    get: jest.fn(),
-    all: jest.fn(),
+  exec: vi.fn(),
+  prepare: vi.fn(() => ({
+    run: vi.fn(),
+    get: vi.fn(),
+    all: vi.fn(),
   })),
-  transaction: jest.fn((cb) => cb),
-  close: jest.fn(),
+  transaction: vi.fn((cb) => cb),
+  close: vi.fn(),
 };
 
-export const getDb = jest.fn(() => mockDb);
-export const releaseDb = jest.fn();
-export const closeDb = jest.fn(() => mockDb.close());
+export const getDb = vi.fn(() => mockDb);
+export const releaseDb = vi.fn();
+export const closeDb = vi.fn(() => mockDb.close());

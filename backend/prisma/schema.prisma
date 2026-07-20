@@ -8,14 +8,14 @@ datasource db {
 }
 
 model Organization {
-  id                      String                   @id @default(uuid())
-  clerkOrganizationId     String?                  @unique @map("clerk_organization_id")
+  id                      String                      @id @default(uuid())
+  clerkOrganizationId     String?                     @unique @map("clerk_organization_id")
   name                    String
-  slug                    String                   @unique
-  contactEmail            String?                  @map("contact_email")
-  createdAt               DateTime                 @default(now()) @map("created_at")
-  updatedAt               DateTime                 @updatedAt @map("updated_at")
-  isCreationLocked        Boolean                  @default(false) @map("is_creation_locked")
+  slug                    String                      @unique
+  contactEmail            String?                     @map("contact_email")
+  createdAt               DateTime                    @default(now()) @map("created_at")
+  updatedAt               DateTime                    @updatedAt @map("updated_at")
+  isCreationLocked        Boolean                     @default(false) @map("is_creation_locked")
   auditLogs               AuditLog[]
   orgAuditLogs            OrgAuditLog[]
   expiredItemTransactions ExpiredItemTransaction[]
@@ -23,12 +23,22 @@ model Organization {
   itemTransactions        ItemTransaction[]
   organizationInvites     OrganizationInvite[]
   organizationUsages      OrganizationUsage?
+  markdownConfig          OrganizationMarkdownConfig?
+  checkCycles             CheckCycle[]
+  bayChecks               BayCheck[]
   products                Product[]
   storeAreas              StoreArea[]
   subscriptionTiers       SubscriptionTier[]
   trialEvents             TrialEvent[]
   uploads                 Upload[]
   users                   User[]
+  suppliers               Supplier[]
+  brands                  Brand[]
+  catalogueCorrections    CatalogueCorrection[]
+  creditClaims            CreditClaim[]
+  creditClaimLines        CreditClaimLine[]
+  creditClaimPhotos       CreditClaimPhoto[]
+  creditClaimEvents       CreditClaimEvent[]
 
   @@map("organizations")
 }
@@ -44,6 +54,8 @@ model SubscriptionTier {
   pastDueSince         DateTime?    @map("past_due_since")
   status               String       @default("active")
   billingCycle         String       @default("monthly") @map("billing_cycle")
+  cancelAtPeriodEnd    Boolean      @default(false) @map("cancel_at_period_end")
+  currentPeriodEnd     DateTime?    @map("current_period_end")
   createdAt            DateTime     @default(now()) @map("created_at")
   updatedAt            DateTime     @updatedAt @map("updated_at")
   stripeCustomerId     String?      @map("stripe_customer_id")
@@ -101,6 +113,22 @@ model OrganizationUsage {
   @@map("organization_usage")
 }
 
+model OrganizationMarkdownConfig {
+  id              Int          @id @default(autoincrement())
+  organizationId  String       @unique @map("organization_id")
+  band1Percentage Float        @default(50) @map("band1_percentage")
+  band2Percentage Float        @default(60) @map("band2_percentage")
+  band3Percentage Float        @default(75) @map("band3_percentage")
+  band1Basis      String       @default("cost") @map("band1_basis")
+  band2Basis      String       @default("cost") @map("band2_basis")
+  band3Basis      String       @default("cost") @map("band3_basis")
+  createdAt       DateTime     @default(now()) @map("created_at")
+  updatedAt       DateTime     @updatedAt @map("updated_at")
+  organization    Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+
+  @@map("organization_markdown_config")
+}
+
 model ProcessedWebhookEvent {
   id          String   @id
   eventType   String   @map("event_type")
@@ -120,17 +148,23 @@ model ClerkWebhookEvent {
 }
 
 model Product {
-  id             Int             @id @default(autoincrement())
-  organizationId String          @map("organization_id")
-  barcode        String
-  sku            String
-  name           String
-  costPrice      Float           @map("cost_price")
-  notes          String          @default("")
-  createdAt      DateTime        @default(now()) @map("created_at")
-  updatedAt      DateTime        @updatedAt @map("updated_at")
-  inventoryItems InventoryItem[]
-  organization   Organization    @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  id                   Int                   @id @default(autoincrement())
+  organizationId       String                @map("organization_id")
+  barcode              String
+  sku                  String
+  name                 String
+  costPrice            Float                 @map("cost_price")
+  retailPrice          Float?                @map("retail_price")
+  notes                String                @default("")
+  supplierId           Int?                  @map("supplier_id")
+  brandId              Int?                  @map("brand_id")
+  createdAt            DateTime              @default(now()) @map("created_at")
+  updatedAt            DateTime              @updatedAt @map("updated_at")
+  inventoryItems       InventoryItem[]
+  supplier             Supplier?             @relation(fields: [supplierId], references: [id], onDelete: SetNull)
+  brand                Brand?                @relation(fields: [brandId], references: [id], onDelete: SetNull)
+  catalogueCorrections CatalogueCorrection[]
+  organization         Organization          @relation(fields: [organizationId], references: [id], onDelete: Cascade)
 
   @@unique([organizationId, sku])
   @@unique([organizationId, barcode])
@@ -138,6 +172,8 @@ model Product {
   @@index([organizationId, barcode])
   @@index([sku])
   @@index([barcode])
+  @@index([supplierId])
+  @@index([brandId])
   @@map("products")
 }
 
@@ -168,18 +204,64 @@ model InventoryItem {
 model StoreArea {
   id             Int             @id @default(autoincrement())
   organizationId String          @map("organization_id")
+  parentId       Int?            @map("parent_id")
   name           String
   subDepartment  String?         @map("sub_department")
   lastChecked    DateTime?       @map("last_checked")
   createdAt      DateTime        @default(now()) @map("created_at")
   updatedAt      DateTime        @updatedAt @map("updated_at")
   inventoryItems InventoryItem[]
+  bayChecks      BayCheck[]
   organization   Organization    @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  parent         StoreArea?      @relation("StoreAreaHierarchy", fields: [parentId], references: [id], onDelete: Cascade)
+  children       StoreArea[]     @relation("StoreAreaHierarchy")
 
   @@unique([organizationId, name, subDepartment])
   @@index([organizationId])
+  @@index([parentId])
   @@index([name])
   @@map("store_areas")
+}
+
+model CheckCycle {
+  id             Int          @id @default(autoincrement())
+  organizationId String       @map("organization_id")
+  name           String
+  status         String       @default("active")
+  startedAt      DateTime     @default(now()) @map("started_at")
+  completedAt    DateTime?    @map("completed_at")
+  createdAt      DateTime     @default(now()) @map("created_at")
+  updatedAt      DateTime     @updatedAt @map("updated_at")
+  organization   Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  bayChecks      BayCheck[]
+
+  @@index([organizationId])
+  @@index([status])
+  @@index([startedAt])
+  @@map("check_cycles")
+}
+
+model BayCheck {
+  id              Int          @id @default(autoincrement())
+  organizationId  String       @map("organization_id")
+  cycleId         Int          @map("cycle_id")
+  storeAreaId     Int          @map("store_area_id")
+  userId          Int?         @map("user_id")
+  checkedAt       DateTime     @default(now()) @map("checked_at")
+  itemsAddedCount Int          @default(0) @map("items_added_count")
+  notes           String?
+  createdAt       DateTime     @default(now()) @map("created_at")
+  updatedAt       DateTime     @updatedAt @map("updated_at")
+  organization    Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  cycle           CheckCycle   @relation(fields: [cycleId], references: [id], onDelete: Cascade)
+  storeArea       StoreArea    @relation(fields: [storeAreaId], references: [id], onDelete: Cascade)
+  user            User?        @relation(fields: [userId], references: [id], onDelete: SetNull)
+
+  @@index([organizationId])
+  @@index([cycleId])
+  @@index([storeAreaId])
+  @@index([checkedAt])
+  @@map("bay_checks")
 }
 
 model User {
@@ -193,11 +275,15 @@ model User {
   createdAt               DateTime                 @default(now()) @map("created_at")
   updatedAt               DateTime                 @updatedAt @map("updated_at")
   auditLogs               AuditLog[]
+  bayChecks               BayCheck[]
   expiredItemTransactions ExpiredItemTransaction[]
   itemTransactions        ItemTransaction[]
   sentInvites             OrganizationInvite[]     @relation("InvitedBy")
   refreshTokens           RefreshToken[]
   uploads                 Upload[]
+  creditClaims            CreditClaim[]
+  creditClaimEvents       CreditClaimEvent[]
+  catalogueCorrections    CatalogueCorrection[]
   organization            Organization             @relation(fields: [organizationId], references: [id], onDelete: Cascade)
 
   @@index([organizationId])
@@ -208,19 +294,19 @@ model User {
 }
 
 model OrganizationInvite {
-  id              String       @id @default(uuid())
-  organizationId  String       @map("organization_id")
-  email               String
-  role                String
-  inviteTokenHash     String?      @map("invite_token_hash")
-  inviteTokenExpiresAt DateTime?   @map("invite_token_expires_at")
-  status              String       @default("PENDING")
-  expiresAt           DateTime     @map("expires_at")
-  acceptedAt          DateTime?    @map("accepted_at")
-  invitedByUserId     Int          @map("invited_by_user_id")
-  createdAt           DateTime     @default(now()) @map("created_at")
-  invitedByUser   User         @relation("InvitedBy", fields: [invitedByUserId], references: [id], onDelete: Cascade)
-  organization    Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  id                   String       @id @default(uuid())
+  organizationId       String       @map("organization_id")
+  email                String
+  role                 String
+  inviteTokenHash      String?      @map("invite_token_hash")
+  inviteTokenExpiresAt DateTime?    @map("invite_token_expires_at")
+  status               String       @default("PENDING")
+  expiresAt            DateTime     @map("expires_at")
+  acceptedAt           DateTime?    @map("accepted_at")
+  invitedByUserId      Int          @map("invited_by_user_id")
+  createdAt            DateTime     @default(now()) @map("created_at")
+  invitedByUser        User         @relation("InvitedBy", fields: [invitedByUserId], references: [id], onDelete: Cascade)
+  organization         Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
 
   @@index([organizationId])
   @@index([email])
@@ -264,20 +350,20 @@ model AuditLog {
 }
 
 model OrgAuditLog {
-  id                     Int          @id @default(autoincrement())
-  organizationId         String       @map("organization_id")
-  eventType              String       @map("event_type")
-  actorUserId            Int?         @map("actor_user_id")
-  actorOrganizationId    String?      @map("actor_organization_id")
-  targetUserId           Int?         @map("target_user_id")
-  targetOrganizationId   String?      @map("target_organization_id")
-  oldRole                String?      @map("old_role")
-  newRole                String?      @map("new_role")
-  inviteId               String?      @map("invite_id")
-  ipAddress              String?      @map("ip_address")
-  metadata               String?
-  createdAt              DateTime     @default(now()) @map("created_at")
-  organization           Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  id                   Int          @id @default(autoincrement())
+  organizationId       String       @map("organization_id")
+  eventType            String       @map("event_type")
+  actorUserId          Int?         @map("actor_user_id")
+  actorOrganizationId  String?      @map("actor_organization_id")
+  targetUserId         Int?         @map("target_user_id")
+  targetOrganizationId String?      @map("target_organization_id")
+  oldRole              String?      @map("old_role")
+  newRole              String?      @map("new_role")
+  inviteId             String?      @map("invite_id")
+  ipAddress            String?      @map("ip_address")
+  metadata             String?
+  createdAt            DateTime     @default(now()) @map("created_at")
+  organization         Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
 
   @@index([organizationId])
   @@index([eventType])
@@ -310,57 +396,260 @@ model ItemTransaction {
 }
 
 model ExpiredItemTransaction {
-  id              Int           @id @default(autoincrement())
-  organizationId  String        @map("organization_id")
-  inventoryItemId Int           @map("inventory_item_id")
-  userId          Int?          @map("user_id")
-  action          String
-  unitsDiscarded  Int?          @map("units_discarded")
-  financialLoss   Float?        @map("financial_loss")
-  transactionDate DateTime      @default(now()) @map("transaction_date")
-  createdAt       DateTime      @default(now()) @map("created_at")
-  updatedAt       DateTime      @updatedAt @map("updated_at")
-  user            User?         @relation(fields: [userId], references: [id], onDelete: SetNull)
-  inventoryItem   InventoryItem @relation(fields: [inventoryItemId], references: [id])
-  organization    Organization  @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  id                Int              @id @default(autoincrement())
+  organizationId    String           @map("organization_id")
+  inventoryItemId   Int              @map("inventory_item_id")
+  userId            Int?             @map("user_id")
+  action            String
+  unitsDiscarded    Int?             @map("units_discarded")
+  financialLoss     Float?           @map("financial_loss")
+  markdownLevel     Int?             @map("markdown_level")
+  creditDisposition String           @default("PENDING") @map("credit_disposition")
+  transactionDate   DateTime         @default(now()) @map("transaction_date")
+  createdAt         DateTime         @default(now()) @map("created_at")
+  updatedAt         DateTime         @updatedAt @map("updated_at")
+  user              User?            @relation(fields: [userId], references: [id], onDelete: SetNull)
+  inventoryItem     InventoryItem    @relation(fields: [inventoryItemId], references: [id])
+  organization      Organization     @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  creditClaimLine   CreditClaimLine?
 
   @@index([organizationId])
   @@index([inventoryItemId])
   @@index([userId])
   @@index([action])
   @@index([transactionDate])
+  @@index([creditDisposition])
   @@map("expired_item_transactions")
 }
 
+model Supplier {
+  id                   Int                   @id @default(autoincrement())
+  organizationId       String                @map("organization_id")
+  name                 String
+  contactEmail         String?               @map("contact_email")
+  contactPhone         String?               @map("contact_phone")
+  creditPolicyNote     String                @default("") @map("credit_policy_note")
+  policyWriteOffQty    Int?                  @map("policy_write_off_qty")
+  policyCreditQty      Int?                  @map("policy_credit_qty")
+  followUpDays         Int                   @default(7) @map("follow_up_days")
+  representativeName  String?               @map("representative_name")
+  representativeEmail String?               @map("representative_email")
+  policyUpdatedAt      DateTime?             @map("policy_updated_at")
+  createdAt            DateTime              @default(now()) @map("created_at")
+  updatedAt            DateTime              @updatedAt @map("updated_at")
+  organization         Organization          @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  products             Product[]
+  claims               CreditClaim[]
+  brands               Brand[]
+  catalogueCorrections CatalogueCorrection[]
+
+  @@unique([organizationId, name])
+  @@index([organizationId])
+  @@map("suppliers")
+}
+
+model Brand {
+  id                    Int                   @id @default(autoincrement())
+  organizationId        String                @map("organization_id")
+  name                  String
+  manufacturerName      String?               @map("manufacturer_name")
+  suggestedSupplierName String?               @map("suggested_supplier_name")
+  supplierId            Int?                  @map("supplier_id")
+  source                String                @default("REFERENCE")
+  createdAt             DateTime              @default(now()) @map("created_at")
+  updatedAt             DateTime              @updatedAt @map("updated_at")
+  organization          Organization          @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  supplier              Supplier?             @relation(fields: [supplierId], references: [id], onDelete: SetNull)
+  products              Product[]
+  catalogueCorrections  CatalogueCorrection[]
+
+  @@unique([organizationId, name])
+  @@index([organizationId])
+  @@index([supplierId])
+  @@map("brands")
+}
+
+model MasterCatalogueEntry {
+  id               Int      @id @default(autoincrement())
+  barcode          String   @unique
+  description      String
+  apiSku           String?  @map("api_sku")
+  sigmaSku         String?  @map("sigma_sku")
+  ch2Sku           String?  @map("ch2_sku")
+  brandName        String   @map("brand_name")
+  manufacturerName String?  @map("manufacturer_name")
+  category         String?
+  subCategory      String?  @map("sub_category")
+  rrp              Float?
+  metroPrice       Float?   @map("metro_price")
+  createdAt        DateTime @default(now()) @map("created_at")
+  updatedAt        DateTime @updatedAt @map("updated_at")
+
+  @@index([apiSku])
+  @@index([sigmaSku])
+  @@index([ch2Sku])
+  @@map("master_catalogue_entries")
+}
+
+model CatalogueCorrection {
+  id               Int          @id @default(autoincrement())
+  organizationId   String       @map("organization_id")
+  productId        Int?         @map("product_id")
+  brandId          Int?         @map("brand_id")
+  barcode          String?
+  enteredBrandName String?      @map("entered_brand_name")
+  chosenSupplierId Int?         @map("chosen_supplier_id")
+  kind             String
+  status           String       @default("PENDING")
+  createdByUserId  Int?         @map("created_by_user_id")
+  createdAt        DateTime     @default(now()) @map("created_at")
+  updatedAt        DateTime     @updatedAt @map("updated_at")
+  organization     Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  product          Product?     @relation(fields: [productId], references: [id], onDelete: SetNull)
+  brand            Brand?       @relation(fields: [brandId], references: [id], onDelete: SetNull)
+  chosenSupplier   Supplier?    @relation(fields: [chosenSupplierId], references: [id], onDelete: SetNull)
+  createdByUser    User?        @relation(fields: [createdByUserId], references: [id], onDelete: SetNull)
+
+  @@index([organizationId])
+  @@index([status])
+  @@index([productId])
+  @@index([brandId])
+  @@map("catalogue_corrections")
+}
+
+model CreditClaim {
+  id                   Int                @id @default(autoincrement())
+  organizationId       String             @map("organization_id")
+  supplierId           Int                @map("supplier_id")
+  createdByUserId      Int?               @map("created_by_user_id")
+  status               String             @default("DRAFT")
+  contactEmailSnapshot String?            @map("contact_email_snapshot")
+  expectedCreditUnits  Int?               @map("expected_credit_units")
+  expectedCreditValue  Float?             @map("expected_credit_value")
+  creditedValue        Float?             @map("credited_value")
+  sentAt               DateTime?          @map("sent_at")
+  nextFollowUpAt       DateTime?          @map("next_follow_up_at")
+  followUpCount        Int                @default(0) @map("follow_up_count")
+  settledAt            DateTime?          @map("settled_at")
+  createdAt            DateTime           @default(now()) @map("created_at")
+  updatedAt            DateTime           @updatedAt @map("updated_at")
+  organization         Organization       @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  supplier             Supplier           @relation(fields: [supplierId], references: [id])
+  createdBy            User?              @relation(fields: [createdByUserId], references: [id], onDelete: SetNull)
+  lines                CreditClaimLine[]
+  events               CreditClaimEvent[]
+
+  @@index([organizationId])
+  @@index([supplierId])
+  @@index([status])
+  @@index([nextFollowUpAt])
+  @@map("credit_claims")
+}
+
+model CreditClaimLine {
+  id                       Int                    @id @default(autoincrement())
+  organizationId           String                 @map("organization_id")
+  claimId                  Int                    @map("claim_id")
+  expiredItemTransactionId Int                    @unique @map("expired_item_transaction_id")
+  batchNumber              String?                @map("batch_number")
+  unitsClaimed             Int                    @map("units_claimed")
+  expectedCreditUnits      Int?                   @map("expected_credit_units")
+  expectedCreditValue      Float?                 @map("expected_credit_value")
+  createdAt                DateTime               @default(now()) @map("created_at")
+  updatedAt                DateTime               @updatedAt @map("updated_at")
+  organization             Organization           @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  claim                    CreditClaim            @relation(fields: [claimId], references: [id], onDelete: Cascade)
+  expiredItemTransaction   ExpiredItemTransaction @relation(fields: [expiredItemTransactionId], references: [id])
+  photos                   CreditClaimPhoto[]
+
+  @@index([organizationId])
+  @@index([claimId])
+  @@map("credit_claim_lines")
+}
+
+model CreditClaimPhoto {
+  id             Int             @id @default(autoincrement())
+  organizationId String          @map("organization_id")
+  claimLineId    Int             @map("claim_line_id")
+  storageKey     String          @map("storage_key")
+  fileName       String          @map("file_name")
+  sizeBytes      Int             @map("size_bytes")
+  deleteAfter    DateTime?       @map("delete_after")
+  createdAt      DateTime        @default(now()) @map("created_at")
+  organization   Organization    @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  claimLine      CreditClaimLine @relation(fields: [claimLineId], references: [id], onDelete: Cascade)
+
+  @@index([organizationId])
+  @@index([claimLineId])
+  @@index([deleteAfter])
+  @@map("credit_claim_photos")
+}
+
+model CreditClaimEvent {
+  id             Int          @id @default(autoincrement())
+  organizationId String       @map("organization_id")
+  claimId        Int          @map("claim_id")
+  userId         Int?         @map("user_id")
+  type           String
+  note           String?
+  createdAt      DateTime     @default(now()) @map("created_at")
+  organization   Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  claim          CreditClaim  @relation(fields: [claimId], references: [id], onDelete: Cascade)
+  user           User?        @relation(fields: [userId], references: [id], onDelete: SetNull)
+
+  @@index([organizationId])
+  @@index([claimId])
+  @@map("credit_claim_events")
+}
+
 model Upload {
-  id                Int          @id @default(autoincrement())
-  organizationId    String       @map("organization_id")
-  userId            Int          @map("user_id")
-  fileKey           String       @unique @map("file_key")
-  fileName          String       @map("file_name")
-  fileSizeBytes     Int          @map("file_size_bytes")
-  contentType       String?      @map("content_type")
-  status            String       @default("pending") // pending, uploading, processing, completed, failed
-  uploadProgress    Int          @default(0) @map("upload_progress") // 0-100
-  processingMessage String?      @map("processing_message") // Current processing step
-  errorMessage      String?      @map("error_message") // Error details if failed
-  rowsProcessed     Int          @default(0) @map("rows_processed") // CSV rows processed
-  rowsTotal         Int?         @map("rows_total") // Total rows in CSV
-  rowsImported      Int          @default(0) @map("rows_imported") // Rows inserted as new products
-  rowsUpdated       Int          @default(0) @map("rows_updated") // Rows applied as updates
-  rowsSkipped       Int          @default(0) @map("rows_skipped") // Rows skipped due to validation/business errors
-  rowErrorCount     Int          @default(0) @map("row_error_count") // Total row-level errors
-  columnsUsed       String?     @map("columns_used") // JSON array of column names that were used
-  columnsIgnored    Int          @default(0) @map("columns_ignored") // Number of columns ignored
-  createdAt         DateTime     @default(now()) @map("created_at")
-  updatedAt         DateTime     @updatedAt @map("updated_at")
-  user              User         @relation(fields: [userId], references: [id], onDelete: Cascade)
-  organization      Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  id                        Int          @id @default(autoincrement())
+  organizationId            String       @map("organization_id")
+  userId                    Int          @map("user_id")
+  fileKey                   String       @unique @map("file_key")
+  fileName                  String       @map("file_name")
+  fileSizeBytes             Int          @map("file_size_bytes")
+  contentType               String?      @map("content_type")
+  status                    String       @default("pending") // pending, uploading, processing, completed, failed
+  importType                String       @default("product-catalog") @map("import_type")
+  tierSnapshot              String?      @map("tier_snapshot")
+  maxSkusSnapshot           Int?         @map("max_skus_snapshot")
+  maxActiveExpiriesSnapshot Int?         @map("max_active_expiries_snapshot")
+  uploadProgress            Int          @default(0) @map("upload_progress") // 0-100
+  processingMessage         String?      @map("processing_message") // Current processing step
+  errorMessage              String?      @map("error_message") // Error details if failed
+  rowsProcessed             Int          @default(0) @map("rows_processed") // CSV rows processed
+  rowsTotal                 Int?         @map("rows_total") // Total rows in CSV
+  rowsImported              Int          @default(0) @map("rows_imported") // Rows inserted as new products
+  rowsUpdated               Int          @default(0) @map("rows_updated") // Rows applied as updates
+  rowsUnchanged             Int          @default(0) @map("rows_unchanged")
+  rowsSkipped               Int          @default(0) @map("rows_skipped") // Rows skipped due to validation/business errors
+  rowErrorCount             Int          @default(0) @map("row_error_count") // Total row-level errors
+  rowErrors                 String?      @map("row_errors")
+  processingOffset          Int          @default(0) @map("processing_offset")
+  retryCount                Int          @default(0) @map("retry_count")
+  failureCategory           String?      @map("failure_category")
+  errorReportKey            String?      @map("error_report_key")
+  queuedAt                  DateTime?    @map("queued_at")
+  validationStartedAt       DateTime?    @map("validation_started_at")
+  processingStartedAt       DateTime?    @map("processing_started_at")
+  completedAt               DateTime?    @map("completed_at")
+  failedAt                  DateTime?    @map("failed_at")
+  columnsUsed               String?      @map("columns_used") // JSON array of column names that were used
+  columnsIgnored            Int          @default(0) @map("columns_ignored") // Number of columns ignored
+  createdAt                 DateTime     @default(now()) @map("created_at")
+  updatedAt                 DateTime     @updatedAt @map("updated_at")
+  user                      User         @relation(fields: [userId], references: [id], onDelete: Cascade)
+  organization              Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
 
   @@index([organizationId, createdAt])
   @@index([userId, createdAt])
   @@index([status])
   @@index([createdAt])
+  // NOTE: a partial UNIQUE index `uploads_one_active_catalogue_per_org` (enforcing one
+  // active catalogue import per organization) is owned by the raw migration
+  // prisma/neon-sql/0001_queued_catalogue_imports.sql. Prisma cannot express
+  // partial indexes, so it is intentionally absent here — do not let drift tooling drop it.
   @@map("uploads")
 }
 

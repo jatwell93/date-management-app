@@ -12,11 +12,13 @@ export interface InventoryItem {
 
 export interface ExpiredItem {
   id: number;
+  productId: number;
   expiryDate: string;
   sku: string;
   productName: string;
   costPrice: number;
   locationName: string;
+  locationId: number;
   status: string;
   quantityAvailable: number;
 }
@@ -28,6 +30,7 @@ export interface ExpiredItemTransaction {
   action: 'sold_through' | 'expired';
   unitsDiscarded: number | null;
   financialLoss: number | null;
+  markdownLevel: number | null;
   transactionDate: string;
 }
 

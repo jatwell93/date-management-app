@@ -4,22 +4,22 @@ import { ClerkProvider } from '@clerk/clerk-react';
 import { ClerkAuthProvider, useAuthContext } from '../components/ClerkAuthProvider';
 import { ClerkSignInPage, ClerkSignUpPage } from '../components/ClerkAuthPage';
 
-const mockUseUser = jest.fn();
-const mockUseAuth = jest.fn();
-const mockUseOrganization = jest.fn();
-const mockSentryCaptureException = jest.fn();
-const mockSentrySetUser = jest.fn();
-const mockSignIn = jest.fn();
-const mockSignUp = jest.fn();
+const mockUseUser = vi.fn();
+const mockUseAuth = vi.fn();
+const mockUseOrganization = vi.fn();
+const mockSentryCaptureException = vi.fn();
+const mockSentrySetUser = vi.fn();
+const mockSignIn = vi.fn();
+const mockSignUp = vi.fn();
 
-jest.mock('@sentry/react', () => ({
+vi.mock('@sentry/react', () => ({
   captureException: (...args: unknown[]) => mockSentryCaptureException(...args),
   setUser: (...args: unknown[]) => mockSentrySetUser(...args),
-  reactErrorHandler: () => jest.fn(),
+  reactErrorHandler: () => vi.fn(),
   ErrorBoundary: ({ children }: { children: React.ReactNode }) => <>{children}</>,
 }));
 
-jest.mock('@clerk/clerk-react', () => ({
+vi.mock('@clerk/clerk-react', () => ({
   ClerkProvider: ({ children }: { children: React.ReactNode }) => <>{children}</>,
   SignIn: (props: unknown) => {
     mockSignIn(props);
@@ -49,7 +49,7 @@ describe('Clerk Integration Setup', () => {
     // Set mock env var for testing
     process.env.REACT_APP_CLERK_PUBLISHABLE_KEY = 'pk_test_example';
     localStorage.clear();
-    jest.clearAllMocks();
+    vi.clearAllMocks();
 
     mockUseUser.mockReturnValue({
       isSignedIn: true,
@@ -61,8 +61,8 @@ describe('Clerk Integration Setup', () => {
     });
 
     mockUseAuth.mockReturnValue({
-      getToken: jest.fn().mockResolvedValue('clerk-token'),
-      signOut: jest.fn().mockResolvedValue(undefined),
+      getToken: vi.fn().mockResolvedValue('clerk-token'),
+      signOut: vi.fn().mockResolvedValue(undefined),
     });
 
     mockUseOrganization.mockReturnValue({
@@ -83,7 +83,7 @@ describe('Clerk Integration Setup', () => {
   });
 
   it('should throw error if REACT_APP_CLERK_PUBLISHABLE_KEY is missing', () => {
-    const consoleSpy = jest.spyOn(console, 'error').mockImplementation();
+    const consoleSpy = vi.spyOn(console, 'error').mockImplementation(() => {});
 
     // This should fail during initialization
     const missingKey = process.env.REACT_APP_CLERK_PUBLISHABLE_KEY?.trim() === '';
@@ -95,7 +95,7 @@ describe('Clerk Integration Setup', () => {
   it('keeps Clerk session tokens in memory instead of localStorage', async () => {
     localStorage.setItem('session', 'legacy-session');
     localStorage.setItem('authToken', 'legacy-auth-token');
-    const setItemSpy = jest.spyOn(Storage.prototype, 'setItem');
+    const setItemSpy = vi.spyOn(Storage.prototype, 'setItem');
 
     render(
       <ClerkAuthProvider publishableKey="pk_test_example">
@@ -136,7 +136,7 @@ describe('Clerk Integration Setup', () => {
 
 describe('Clerk auth pages', () => {
   beforeEach(() => {
-    jest.clearAllMocks();
+    vi.clearAllMocks();
   });
 
   it('constrains the sign-in shell on mobile viewports', () => {
@@ -219,35 +219,30 @@ describe('Frontend startup configuration guidance', () => {
 
   afterEach(() => {
     process.env.REACT_APP_CLERK_PUBLISHABLE_KEY = originalClerkKey;
-    jest.dontMock('react-dom/client');
-    jest.dontMock('../serviceWorkerRegistration');
-    jest.dontMock('../reportWebVitals');
-    jest.dontMock('../App');
+    vi.doUnmock('react-dom/client');
+    vi.doUnmock('../serviceWorkerRegistration');
+    vi.doUnmock('../reportWebVitals');
+    vi.doUnmock('../App');
+    vi.resetModules();
   });
 
-  it('renders recoverable guidance instead of throwing when the Clerk key is missing', () => {
-    const renderSpy = jest.fn();
+  it('renders recoverable guidance instead of throwing when the Clerk key is missing', async () => {
+    const renderSpy = vi.fn();
     delete process.env.REACT_APP_CLERK_PUBLISHABLE_KEY;
     document.body.innerHTML = '<div id="root"></div>';
 
-    jest.isolateModules(() => {
-      jest.doMock('react-dom/client', () => ({
-        createRoot: () => ({
-          render: renderSpy,
-        }),
-      }));
-      jest.doMock('../serviceWorkerRegistration', () => ({ register: jest.fn() }));
-      jest.doMock('../reportWebVitals', () => jest.fn());
-      jest.doMock('../App', () => {
-        function MockApp() {
-          return <div>App shell</div>;
-        }
+    vi.resetModules();
+    const reactDomClientMock = { createRoot: () => ({ render: renderSpy }) };
+    vi.doMock('react-dom/client', () => ({ ...reactDomClientMock, default: reactDomClientMock }));
+    vi.doMock('../serviceWorkerRegistration', () => ({ register: vi.fn() }));
+    vi.doMock('../reportWebVitals', () => ({ default: vi.fn() }));
+    vi.doMock('../App', () => ({
+      default: function MockApp() {
+        return <div>App shell</div>;
+      },
+    }));
 
-        return MockApp;
-      });
-
-      expect(() => require('../index')).not.toThrow();
-    });
+    await expect(import('../index')).resolves.toBeDefined();
 
     render(renderSpy.mock.calls[0][0]);
 

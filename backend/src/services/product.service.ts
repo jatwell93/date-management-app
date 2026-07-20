@@ -16,16 +16,16 @@ import {
   getProductImportXlsxColumnState,
   getProductImportXlsxRowValues,
   getProductImportXlsxUnexpectedColumns,
-  findColumnByAlternatives,
-  findColumnIndexByAlternatives,
   parseProductImportCost,
   resolveProductImportOperation,
   validateProductImportRow,
+  ProductImportRowValues,
 } from './product-import.helpers';
 
 import { injectable, inject } from 'tsyringe';
 import { ProductRepository } from '../repositories/product.repository';
 import { SubscriptionRepository } from '../repositories/subscription.repository';
+import { SupplierCreditRepository } from '../repositories/supplier-credit.repository';
 import { TIER_LIMITS, TierLevel } from '../types/subscription';
 
 export function extractCostValue(costStr: string): number | null {
@@ -78,6 +78,7 @@ export class ProductService {
   private organizationId: string;
   private productRepo: ProductRepository;
   private subscriptionRepo: SubscriptionRepository;
+  private supplierCreditRepo: SupplierCreditRepository;
 
   /**
    * Constructor with optional dependency injection
@@ -91,11 +92,13 @@ export class ProductService {
     @inject('OrganizationId') organizationId?: string,
     @inject(ProductRepository) productRepo?: ProductRepository,
     @inject(SubscriptionRepository) subscriptionRepo?: SubscriptionRepository,
+    @inject(SupplierCreditRepository) supplierCreditRepo?: SupplierCreditRepository,
   ) {
     this.prisma = prismaClient ?? getDefaultDatabaseClient();
     this.organizationId = getOrganizationId(organizationId);
     this.productRepo = productRepo ?? new ProductRepository(this.prisma);
     this.subscriptionRepo = subscriptionRepo ?? new SubscriptionRepository(this.prisma);
+    this.supplierCreditRepo = supplierCreditRepo ?? new SupplierCreditRepository(this.prisma);
   }
 
   // Expose parser for tests that reference it via ProductService["extractCostValueEnhanced"]
@@ -144,6 +147,7 @@ export class ProductService {
           sku: product.sku,
           name: product.name,
           costPrice: product.costPrice,
+          retailPrice: product.retailPrice ?? null,
           organizationId: this.organizationId,
         },
         tx,
@@ -189,12 +193,25 @@ export class ProductService {
    */
   private buildProductUpdateData(
     product: Partial<Omit<Product, 'id' | 'createdAt' | 'updatedAt'>>,
-  ): { barcode?: string; sku?: string; name?: string; costPrice?: number } {
-    const data: { barcode?: string; sku?: string; name?: string; costPrice?: number } = {};
+  ): {
+    barcode?: string;
+    sku?: string;
+    name?: string;
+    costPrice?: number;
+    retailPrice?: number | null;
+  } {
+    const data: {
+      barcode?: string;
+      sku?: string;
+      name?: string;
+      costPrice?: number;
+      retailPrice?: number | null;
+    } = {};
     if (product.barcode !== undefined) data.barcode = product.barcode;
     if (product.sku !== undefined) data.sku = product.sku;
     if (product.name !== undefined) data.name = product.name;
     if (product.costPrice !== undefined) data.costPrice = product.costPrice;
+    if (product.retailPrice !== undefined) data.retailPrice = product.retailPrice;
     return data;
   }
 
@@ -244,6 +261,7 @@ export class ProductService {
     sku: string;
     name: string;
     costPrice: number;
+    retailPrice?: number | null;
     notes: string;
     createdAt: Date;
     updatedAt: Date;
@@ -255,6 +273,7 @@ export class ProductService {
       sku: product.sku,
       name: product.name,
       costPrice: product.costPrice,
+      retailPrice: product.retailPrice ?? null,
       createdAt: product.createdAt.toISOString(),
       updatedAt: product.updatedAt.toISOString(),
     };
@@ -351,24 +370,20 @@ export class ProductService {
     errors: string[];
   }> {
     const errors: string[] = [];
-    let imported = 0;
-    let updated = 0;
-    // First, validate the CSV structure
+    const counters = { imported: 0, updated: 0 };
     const validation = await this.validateCSVStructure(filePath);
     if (!validation.isValid) {
       return { imported: 0, updated: 0, errors: [...errors, ...validation.errors] };
     }
-    // Use a Promise to handle the async processing correctly
     return new Promise((resolve, reject) => {
       let recordCount = 0;
       const processingPromises: Promise<void>[] = [];
       fs.createReadStream(filePath)
         .pipe(
           parse({
-            columns: true, // Use auto-generated columns from header row
+            columns: true,
             skip_empty_lines: true,
-            // Add additional CSV validation options
-            skip_records_with_error: true, // Skip records that cause errors
+            skip_records_with_error: true,
             cast: (value, _context) => {
               // Don't cast any values to avoid automatic type conversion
               // This ensures barcodes in scientific notation stay as strings
@@ -381,83 +396,59 @@ export class ProductService {
             error: error instanceof Error ? error.message : String(error),
           });
           errors.push(`CSV parsing error: ${error.message}`);
-          reject({ imported, updated, errors });
+          reject({ imported: counters.imported, updated: counters.updated, errors });
         })
         .on('data', (row) => {
           recordCount++;
           const rowNumber = recordCount;
 
-          // Create a promise for each row processing to handle async operations properly
           const rowProcessingPromise = (async () => {
             try {
-              // Find the correct column for each field based on alternatives
               const columnState = getProductImportCsvColumnState(row);
-
-              // Validate required fields - check if headers exist before accessing
-              const { sku, name, costStr, barcode } = getProductImportCsvRowValues(
+              const { sku, name, costStr, retailStr, barcode } = getProductImportCsvRowValues(
                 row,
                 columnState,
               );
-              const validation = validateProductImportRow({
-                rowNumber,
-                values: { sku, name, costStr, barcode },
-                unexpectedColumns: getProductImportCsvUnexpectedColumns(row, columnState),
-              });
+              const unexpectedColumns = getProductImportCsvUnexpectedColumns(row, columnState);
 
-              if (!validation.isValid) {
-                errors.push(...validation.errors);
+              const preValidation = validateProductImportRow({
+                rowNumber,
+                values: { sku, name, costStr, retailStr, barcode },
+                unexpectedColumns,
+              });
+              if (!preValidation.isValid) {
+                errors.push(...preValidation.errors);
                 return;
               }
 
-              // Check if product already exists (by SKU or Barcode)
-              let existingProduct: Product | null = null;
+              const trimmedSku = String(sku ?? '').trim();
+              const trimmedBarcode = String(barcode ?? '').trim();
+              let bySku: Product | null = null;
+              let byBarcode: Product | null = null;
               try {
-                existingProduct = await this.getProductBySkuOrBarcode(
-                  validation.row.sku,
-                  validation.row.barcode,
+                const lookup = await this.productRepo.findBySkuOrBarcode(
+                  trimmedSku,
+                  trimmedBarcode,
+                  this.organizationId,
                 );
-              } catch (duplicateError: unknown) {
+                bySku = lookup.bySku ? this.mapPrismaToModel(lookup.bySku) : null;
+                byBarcode = lookup.byBarcode ? this.mapPrismaToModel(lookup.byBarcode) : null;
+              } catch (lookupError: unknown) {
                 const errorMessage =
-                  duplicateError instanceof Error ? duplicateError.message : 'Unknown error';
+                  lookupError instanceof Error ? lookupError.message : 'Unknown error';
                 errors.push(`Row ${rowNumber}: ${errorMessage}`);
-                return; // Skip processing this row
+                return;
               }
 
-              if (existingProduct) {
-                // Update existing product
-                try {
-                  await this.updateProduct(existingProduct.id, {
-                    barcode: validation.row.barcode,
-                    sku: validation.row.sku, // Update SKU as well in case it changed
-                    name: validation.row.name,
-                    costPrice: validation.row.cost,
-                  });
-                  updated++;
-                } catch (updateError: unknown) {
-                  const errorMessage =
-                    updateError instanceof Error ? updateError.message : 'Unknown error';
-                  errors.push(
-                    `Row ${rowNumber}: Failed to update existing product (SKU: ${validation.row.sku}) - ${errorMessage}`,
-                  );
-                }
-              } else {
-                // Create new product
-                try {
-                  await this.createProduct({
-                    barcode: validation.row.barcode,
-                    sku: validation.row.sku,
-                    name: validation.row.name,
-                    costPrice: validation.row.cost,
-                  });
-                  imported++;
-                } catch (createError: unknown) {
-                  const errorMessage =
-                    createError instanceof Error ? createError.message : 'Unknown error';
-                  errors.push(
-                    `Row ${rowNumber}: Failed to create new product (SKU: ${validation.row.sku}) - ${errorMessage}`,
-                  );
-                }
-              }
+              await this.upsertImportedProduct(
+                rowNumber,
+                { sku, name, costStr, retailStr, barcode },
+                unexpectedColumns,
+                bySku,
+                byBarcode,
+                errors,
+                counters,
+              );
             } catch (error: unknown) {
               const errorMessage = error instanceof Error ? error.message : 'Unknown error';
               Logger.error(`Error processing row ${rowNumber}`, { error: errorMessage });
@@ -472,7 +463,7 @@ export class ProductService {
             processingPromises,
             recordCount,
             errors,
-            () => ({ imported, updated }),
+            () => ({ imported: counters.imported, updated: counters.updated }),
             resolve,
             reject,
           );
@@ -512,178 +503,57 @@ export class ProductService {
     filePath: string,
   ): Promise<{ imported: number; updated: number; errors: string[] }> {
     const errors: string[] = [];
-    let imported = 0;
-    let updated = 0;
+    const counters = { imported: 0, updated: 0 };
 
     try {
-      // Read the Excel file
       const workbook = XLSX.readFile(filePath);
-
-      // Get the first sheet (we'll assume the user wants to import from the first sheet)
       const sheetName = workbook.SheetNames[0];
       const worksheet = workbook.Sheets[sheetName];
-
-      // Convert to JSON - this will preserve the original formats of all cells
       const jsonData = XLSX.utils.sheet_to_json(worksheet, { header: 1 });
 
       if (jsonData.length < 2) {
         errors.push('XLSX file is empty or has no data rows');
-        return { imported, updated, errors };
+        return { ...counters, errors };
       }
 
-      // Get headers from the first row
       const headers = jsonData[0] as string[];
-
-      // Create a mapping of headers to their index for easier access
-      const headerMap: { [key: string]: number } = {};
-      headers.forEach((header, index) => {
-        if (header) headerMap[header.toString().trim()] = index;
-      });
-
       const columnState = getProductImportXlsxColumnState(headers as (string | null | undefined)[]);
 
-      // Validate required columns exist
-      if (columnState.skuColIndex === null) {
-        errors.push(
-          'Missing required column for SKU. Acceptable alternatives: SKU, Item Code, Reorder Number, Product Code, Item Number. Column headers are case-insensitive and leading/trailing spaces are ignored.',
-        );
-        return { imported, updated, errors };
+      const headerErrors = this.validateXlsxHeaders(columnState, headers);
+      if (headerErrors.length > 0) {
+        return { ...counters, errors: headerErrors };
       }
 
-      if (columnState.nameColIndex === null) {
-        errors.push(
-          'Missing required column for Name. Acceptable alternatives: Name, Item Description, Product Name, Description, Item Name. Column headers are case-insensitive and leading/trailing spaces are ignored.',
-        );
-        return { imported, updated, errors };
-      }
+      const { productMap, barcodeMap } = this.buildProductLookupMaps(await this.getAllProducts());
 
-      if (columnState.costColIndex === null) {
-        errors.push(
-          'Missing required column for Cost. Acceptable alternatives: Cost, Cost Price, Unit Cost, Cost ex, Price, Unit Price, Cost inc, Selling Price, Retail Price. Column headers are case-insensitive and leading/trailing spaces are ignored.',
-        );
-        return { imported, updated, errors };
-      }
-
-      // Check for unexpected columns (not in our required or alternative columns list)
-      const unexpectedColumns = getProductImportXlsxUnexpectedColumns(headers, columnState);
-
-      if (unexpectedColumns.length > 0) {
-        errors.push(`Unexpected columns found - ${unexpectedColumns.join(', ')}`);
-        return { imported, updated, errors };
-      }
-
-      // Pre-load all existing products for faster lookup (avoid repeated DB queries)
-      const allProducts = await this.getAllProducts();
-      const productMap = new Map<string, Product>();
-      const barcodeMap = new Map<string, Product>();
-
-      for (const product of allProducts) {
-        if (product.sku) {
-          productMap.set(product.sku, product);
-        }
-        if (product.barcode) {
-          barcodeMap.set(product.barcode, product);
-        }
-      }
-
-      // Process each row (starting from index 1, since 0 is headers)
       for (let i = 1; i < jsonData.length; i++) {
-        const row: unknown[] = jsonData[i] as unknown[];
-        const recordCount = i; // Row number for error reporting
+        const row = jsonData[i] as unknown[];
+        const recordCount = i;
 
         try {
-          // Get values from the appropriate columns
-          const { sku, name, costStr, barcode } = getProductImportXlsxRowValues(row, columnState);
-          const validation = validateProductImportRow({
-            rowNumber: recordCount,
-            values: { sku, name, costStr, barcode },
-            unexpectedColumns: [],
-          });
+          const { sku, name, costStr, retailStr, barcode } = getProductImportXlsxRowValues(
+            row,
+            columnState,
+          );
+          const bySku = productMap.get(String(sku ?? '').trim()) || null;
+          const byBarcode = barcodeMap.get(String(barcode ?? '').trim()) || null;
 
-          if (!validation.isValid) {
-            errors.push(...validation.errors);
-            continue;
-          }
+          const result = await this.upsertImportedProduct(
+            recordCount,
+            { sku, name, costStr, retailStr, barcode },
+            [],
+            bySku,
+            byBarcode,
+            errors,
+            counters,
+          );
 
-          const operation = resolveProductImportOperation({
-            sku: validation.row.sku,
-            barcode: validation.row.barcode,
-            bySku: productMap.get(validation.row.sku) || null,
-            byBarcode: barcodeMap.get(validation.row.barcode) || null,
-          });
-
-          if (operation.type === 'conflict') {
-            throw new Error(operation.error);
-          }
-
-          if (operation.type === 'update') {
-            const existingProduct = operation.product;
-            // Update existing product
-            try {
-              const updatedProduct = await this.updateProduct(existingProduct.id, {
-                barcode: validation.row.barcode,
-                sku: validation.row.sku, // Update SKU as well in case it changed
-                name: validation.row.name,
-                costPrice: validation.row.cost,
-              });
-
-              if (updatedProduct) {
-                updated++;
-
-                // Update our in-memory maps for consistency if the SKU changed
-                if (existingProduct.sku !== validation.row.sku) {
-                  productMap.delete(existingProduct.sku);
-                  productMap.set(validation.row.sku, updatedProduct);
-                }
-
-                // Update in case the barcode changed too
-                if (existingProduct.barcode !== validation.row.barcode) {
-                  barcodeMap.delete(existingProduct.barcode);
-                  barcodeMap.set(validation.row.barcode, updatedProduct);
-                } else {
-                  // Update with new record otherwise
-                  barcodeMap.set(validation.row.barcode, updatedProduct);
-                }
-              } else {
-                errors.push(
-                  `Row ${recordCount}: Failed to update existing product (SKU: ${validation.row.sku})`,
-                );
-              }
-            } catch (updateError) {
-              errors.push(
-                `Row ${recordCount}: Failed to update existing product (SKU: ${validation.row.sku}) - ${(updateError as Error).message}`,
-              );
-            }
-          } else {
-            // Create new product
-            try {
-              const newProduct = await this.createProduct({
-                barcode: validation.row.barcode,
-                sku: validation.row.sku,
-                name: validation.row.name,
-                costPrice: validation.row.cost,
-              });
-
-              if (newProduct) {
-                imported++;
-
-                // Add the new product to our in-memory maps
-                if (newProduct.sku) {
-                  productMap.set(newProduct.sku, newProduct);
-                }
-                if (newProduct.barcode) {
-                  barcodeMap.set(newProduct.barcode, newProduct);
-                }
-              } else {
-                errors.push(
-                  `Row ${recordCount}: Failed to create new product (SKU: ${validation.row.sku})`,
-                );
-              }
-            } catch (createError) {
-              errors.push(
-                `Row ${recordCount}: Failed to create new product (SKU: ${validation.row.sku}) - ${(createError as Error).message}`,
-              );
-            }
+          if (result) {
+            if (bySku && bySku.sku !== result.sku) productMap.delete(bySku.sku);
+            if (byBarcode && byBarcode.barcode !== result.barcode)
+              barcodeMap.delete(byBarcode.barcode);
+            productMap.set(result.sku, result);
+            barcodeMap.set(result.barcode, result);
           }
         } catch (error) {
           errors.push(`Row ${recordCount}: ${(error as Error).message}`);
@@ -693,17 +563,154 @@ export class ProductService {
       errors.push(`Error processing XLSX file: ${(error as Error).message}`);
     }
 
-    Logger.info('XLSX processing complete', { imported, updated, errors: errors.length });
-    return { imported, updated, errors };
+    Logger.info('XLSX processing complete', {
+      imported: counters.imported,
+      updated: counters.updated,
+      errors: errors.length,
+    });
+    return { imported: counters.imported, updated: counters.updated, errors };
   }
 
-  // Helper method to find column index by alternatives
-  private findColumnIndexByAlternatives(
-    headers: (string | null | undefined)[],
-    alternatives: string[],
-  ): number | null {
-    return findColumnIndexByAlternatives(headers, alternatives);
+  private validateXlsxHeaders(
+    columnState: ReturnType<typeof getProductImportXlsxColumnState>,
+    headers: string[],
+  ): string[] {
+    const errors: string[] = [];
+
+    if (columnState.skuColIndex === null) {
+      errors.push(
+        'Missing required column for SKU. Acceptable alternatives: SKU, Item Code, Reorder Number, Product Code, Item Number. Column headers are case-insensitive and leading/trailing spaces are ignored.',
+      );
+    }
+    if (columnState.nameColIndex === null) {
+      errors.push(
+        'Missing required column for Name. Acceptable alternatives: Name, Item Description, Product Name, Description, Item Name. Column headers are case-insensitive and leading/trailing spaces are ignored.',
+      );
+    }
+    if (columnState.costColIndex === null) {
+      errors.push(
+        'Missing required column for Cost. Acceptable alternatives: Cost, Cost Price, Unit Cost, Item Cost, Cost ex, Price, Unit Price, Cost inc. Column headers are case-insensitive and leading/trailing spaces are ignored.',
+      );
+    }
+
+    if (errors.length === 0) {
+      const unexpectedColumns = getProductImportXlsxUnexpectedColumns(headers, columnState);
+      if (unexpectedColumns.length > 0) {
+        errors.push(`Unexpected columns found - ${unexpectedColumns.join(', ')}`);
+      }
+    }
+
+    return errors;
   }
+
+  private buildProductLookupMaps(products: Product[]): {
+    productMap: Map<string, Product>;
+    barcodeMap: Map<string, Product>;
+  } {
+    const productMap = new Map<string, Product>();
+    const barcodeMap = new Map<string, Product>();
+    for (const product of products) {
+      if (product.sku) productMap.set(product.sku, product);
+      if (product.barcode) barcodeMap.set(product.barcode, product);
+    }
+    return { productMap, barcodeMap };
+  }
+
+  private async upsertImportedProduct(
+    rowNumber: number,
+    values: ProductImportRowValues,
+    unexpectedColumns: string[],
+    bySku: Product | null,
+    byBarcode: Product | null,
+    errors: string[],
+    counters: { imported: number; updated: number },
+  ): Promise<Product | null> {
+    const validation = validateProductImportRow({
+      rowNumber,
+      values,
+      unexpectedColumns,
+    });
+
+    if (!validation.isValid) {
+      errors.push(...validation.errors);
+      return null;
+    }
+
+    const operation = resolveProductImportOperation({
+      sku: validation.row.sku,
+      barcode: validation.row.barcode,
+      bySku,
+      byBarcode,
+    });
+
+    if (operation.type === 'conflict') {
+      errors.push(`Row ${rowNumber}: ${operation.error}`);
+      return null;
+    }
+
+    if (operation.type === 'update') {
+      try {
+        const updatedProduct = await this.updateProduct(operation.product.id, {
+          barcode: validation.row.barcode,
+          sku: validation.row.sku,
+          name: validation.row.name,
+          costPrice: validation.row.cost,
+          // Only overwrite retail when the upload actually carried one, so a
+          // cost-only re-import preserves existing retail — parity with the
+          // workers COALESCE(c."retailPrice", p.retail_price) upsert (#338).
+          ...(validation.row.retail !== null ? { retailPrice: validation.row.retail } : {}),
+        });
+        if (updatedProduct) {
+          await this.enrichImportedProductSafely(updatedProduct);
+          counters.updated++;
+          return updatedProduct;
+        }
+        errors.push(
+          `Row ${rowNumber}: Failed to update existing product (SKU: ${validation.row.sku})`,
+        );
+      } catch (updateError) {
+        errors.push(
+          `Row ${rowNumber}: Failed to update existing product (SKU: ${validation.row.sku}) - ${(updateError as Error).message}`,
+        );
+      }
+      return null;
+    }
+
+    try {
+      const newProduct = await this.createProduct({
+        barcode: validation.row.barcode,
+        sku: validation.row.sku,
+        name: validation.row.name,
+        costPrice: validation.row.cost,
+        retailPrice: validation.row.retail,
+      });
+      await this.enrichImportedProductSafely(newProduct);
+      counters.imported++;
+      return newProduct;
+    } catch (createError) {
+      errors.push(
+        `Row ${rowNumber}: Failed to create new product (SKU: ${validation.row.sku}) - ${(createError as Error).message}`,
+      );
+      return null;
+    }
+  }
+
+  private async enrichImportedProductSafely(product: Product): Promise<void> {
+    try {
+      await this.supplierCreditRepo.enrichImportedProduct(this.organizationId, {
+        productId: product.id,
+        barcode: product.barcode,
+        sku: product.sku,
+      });
+    } catch (error) {
+      Logger.error('Catalogue brand enrichment failed', {
+        organizationId: this.organizationId,
+        productId: product.id,
+        error: error instanceof Error ? error.message : String(error),
+      });
+    }
+  }
+
   private async validateCSVStructure(filePath: string): Promise<{
     isValid: boolean;
     errors: string[];
@@ -752,7 +759,7 @@ export class ProductService {
             }
             if (!columnState.costHeader) {
               errors.push(
-                `Missing required column header for Cost. Acceptable alternatives: Cost, Cost Price, Unit Cost, Cost ex, Price, Unit Price, Cost inc, Selling Price, Retail Price. Column headers are case-insensitive and leading/trailing spaces are ignored.`,
+                `Missing required column header for Cost. Acceptable alternatives: Cost, Cost Price, Unit Cost, Item Cost, Cost ex, Price, Unit Price, Cost inc. Column headers are case-insensitive and leading/trailing spaces are ignored.`,
               );
               isValid = false;
             }
@@ -768,43 +775,5 @@ export class ProductService {
           resolve({ isValid, errors });
         });
     });
-  }
-
-  // Helper function to find the actual column name in the CSV header
-  private findColumnByAlternatives(
-    row: Record<string, unknown>,
-    alternatives: string[],
-  ): string | null {
-    return findColumnByAlternatives(row, alternatives);
-  }
-
-  private async getProductBySkuOrBarcode(sku: string, barcode: string): Promise<Product | null> {
-    const { bySku, byBarcode } = await this.productRepo.findBySkuOrBarcode(
-      sku,
-      barcode,
-      this.organizationId,
-    );
-    const operation = resolveProductImportOperation({ sku, barcode, bySku, byBarcode });
-
-    if (operation.type === 'conflict') {
-      throw new Error(operation.error);
-    }
-
-    if (operation.type === 'create') {
-      return null;
-    }
-
-    const prismaProduct = operation.product;
-
-    return {
-      id: prismaProduct.id,
-      organizationId: prismaProduct.organizationId,
-      barcode: prismaProduct.barcode,
-      sku: prismaProduct.sku,
-      name: prismaProduct.name,
-      costPrice: prismaProduct.costPrice,
-      createdAt: prismaProduct.createdAt.toISOString(),
-      updatedAt: prismaProduct.updatedAt.toISOString(),
-    };
   }
 }

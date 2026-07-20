@@ -2,18 +2,18 @@ import { apiService } from '../lib/api.service';
 import { InventoryItem } from '../types/inventory';
 
 // Mock apiService
-jest.mock('../lib/api.service', () => ({
+vi.mock('../lib/api.service', () => ({
   apiService: {
-    post: jest.fn(),
+    post: vi.fn(),
   },
 }));
 
 // Mock console.warn to capture deprecation warnings
-const mockConsoleWarn = jest.spyOn(console, 'warn').mockImplementation();
+const mockConsoleWarn = vi.spyOn(console, 'warn').mockImplementation(() => {});
 
 describe('API Contract Compatibility', () => {
   beforeEach(() => {
-    jest.clearAllMocks();
+    vi.clearAllMocks();
     mockConsoleWarn.mockClear();
   });
 

@@ -22,20 +22,20 @@ Object.defineProperty(window, 'localStorage', {
 });
 
 // Spy on navigator.onLine
-const mockNavigatorOnline = jest.spyOn(navigator, 'onLine', 'get');
+const mockNavigatorOnline = vi.spyOn(navigator, 'onLine', 'get');
 
 describe('OfflineSyncService', () => {
   const OFFLINE_QUEUE_KEY = 'offline-queue';
 
   beforeEach(() => {
     localStorage.clear();
-    jest.clearAllMocks();
+    vi.clearAllMocks();
 
     // Set API base URL for tests
     process.env.REACT_APP_API_BASE_URL = 'http://localhost:3001';
 
     // Reset fetch mock to default
-    global.fetch = jest.fn().mockResolvedValue({
+    global.fetch = vi.fn().mockResolvedValue({
       ok: true,
       json: () => Promise.resolve({ success: true }),
     });
@@ -152,9 +152,7 @@ describe('OfflineSyncService', () => {
     });
 
     it('should retry failed operations on next sync', async () => {
-      const delaySpy = jest
-        .spyOn<any, any>(offlineSyncService, 'delay')
-        .mockResolvedValue(undefined);
+      const delaySpy = vi.spyOn<any, any>(offlineSyncService, 'delay').mockResolvedValue(undefined);
 
       // First attempt fails
       (global.fetch as jest.Mock)
@@ -194,7 +192,7 @@ describe('OfflineSyncService', () => {
 
     it('should trigger sync when coming online', () => {
       offlineSyncService.setSyncStrategy('real-time');
-      const syncSpy = jest.spyOn(offlineSyncService, 'performSync');
+      const syncSpy = vi.spyOn(offlineSyncService, 'performSync');
 
       // Go offline
       (offlineSyncService as any).handleOffline();
@@ -274,7 +272,7 @@ describe('OfflineSyncService', () => {
 
     it('should trigger sync immediately in real-time mode', async () => {
       offlineSyncService.setSyncStrategy('real-time');
-      const performSyncSpy = jest.spyOn(offlineSyncService, 'performSync');
+      const performSyncSpy = vi.spyOn(offlineSyncService, 'performSync');
       performSyncSpy.mockResolvedValue();
 
       await offlineSyncService.addOperation('create', 'product', { name: 'Test' });
@@ -286,7 +284,7 @@ describe('OfflineSyncService', () => {
 
     it('should not trigger sync immediately in batch mode', async () => {
       offlineSyncService.setSyncStrategy('batch');
-      const performSyncSpy = jest.spyOn(offlineSyncService, 'performSync');
+      const performSyncSpy = vi.spyOn(offlineSyncService, 'performSync');
       performSyncSpy.mockResolvedValue();
 
       await offlineSyncService.addOperation('create', 'product', { name: 'Test' });
@@ -298,7 +296,7 @@ describe('OfflineSyncService', () => {
 
     it('should not trigger sync immediately in manual mode', async () => {
       offlineSyncService.setSyncStrategy('manual');
-      const performSyncSpy = jest.spyOn(offlineSyncService, 'performSync');
+      const performSyncSpy = vi.spyOn(offlineSyncService, 'performSync');
       performSyncSpy.mockResolvedValue();
 
       await offlineSyncService.addOperation('create', 'product', { name: 'Test' });

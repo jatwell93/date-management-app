@@ -4,40 +4,40 @@ import webhookRouter from '../../routes/webhook.routes';
 import { ConflictError, NotFoundError } from '../../errors';
 import { WebhookController } from '../../controllers/webhook.controller';
 
-const mockRecordWebhookEvent = jest.fn();
+const mockRecordWebhookEvent = vi.fn();
 
 const webhookService = {
-  verifySignature: jest.fn(),
-  isNewEvent: jest.fn(),
-  handleEvent: jest.fn(),
-  markEventProcessed: jest.fn(),
+  verifySignature: vi.fn(),
+  isNewEvent: vi.fn(),
+  handleEvent: vi.fn(),
+  markEventProcessed: vi.fn(),
 };
 
 const clerkWebhookService = {
-  verifySignature: jest.fn(),
-  isNewEvent: jest.fn(),
-  handleEvent: jest.fn(),
-  markEventProcessed: jest.fn(),
+  verifySignature: vi.fn(),
+  isNewEvent: vi.fn(),
+  handleEvent: vi.fn(),
+  markEventProcessed: vi.fn(),
 };
 
-jest.mock('../../di/services', () => ({
-  createWebhookController: jest.fn(),
+vi.mock('../../di/services', () => ({
+  createWebhookController: vi.fn(),
 }));
 
-jest.mock('../../services/application.monitoring.service', () => ({
+vi.mock('../../services/application.monitoring.service', () => ({
   ApplicationMonitoringService: {
-    getInstance: jest.fn().mockReturnValue({
+    getInstance: vi.fn().mockReturnValue({
       recordWebhookEvent: (...args: unknown[]) => mockRecordWebhookEvent(...args),
     }),
   },
 }));
 
-jest.mock('@sentry/node', () => ({
-  captureMessage: jest.fn(),
-  captureException: jest.fn(),
+vi.mock('@sentry/node', () => ({
+  captureMessage: vi.fn(),
+  captureException: vi.fn(),
 }));
 
-const { createWebhookController } = jest.requireMock('../../di/services') as {
+const { createWebhookController } = (await vi.importMock('../../di/services')) as {
   createWebhookController: jest.Mock;
 };
 
@@ -46,7 +46,7 @@ describe('webhook.routes Stripe error handling', () => {
   app.use('/webhooks', express.raw({ type: '*/*' }), webhookRouter);
 
   beforeEach(() => {
-    jest.clearAllMocks();
+    vi.clearAllMocks();
 
     createWebhookController.mockReturnValue(
       new WebhookController(webhookService as any, clerkWebhookService as any),
@@ -194,7 +194,7 @@ describe('webhook.routes Clerk error handling', () => {
   app.use('/webhooks', express.raw({ type: '*/*' }), webhookRouter);
 
   beforeEach(() => {
-    jest.clearAllMocks();
+    vi.clearAllMocks();
 
     createWebhookController.mockReturnValue(
       new WebhookController(webhookService as any, clerkWebhookService as any),

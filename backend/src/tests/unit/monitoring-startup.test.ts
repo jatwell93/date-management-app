@@ -86,31 +86,34 @@ describe('Monitoring Startup', () => {
   });
 
   describe('Alert Event Handling', () => {
-    it('should emit alert events that can be listened to', (done) => {
-      const alertHandler = jest.fn((alert) => {
-        expect(alert).toHaveProperty('type');
-        expect(alert).toHaveProperty('message');
-        expect(alert).toHaveProperty('severity');
-        expect(alert).toHaveProperty('timestamp');
-        done();
-      });
+    it('should emit alert events that can be listened to', async () => {
+      // Vitest removed the `done` callback; await a Promise the handler resolves.
+      await new Promise<void>((resolve) => {
+        const alertHandler = vi.fn((alert) => {
+          expect(alert).toHaveProperty('type');
+          expect(alert).toHaveProperty('message');
+          expect(alert).toHaveProperty('severity');
+          expect(alert).toHaveProperty('timestamp');
+          resolve();
+        });
 
-      appMonitoringService.on('alert', alertHandler);
+        appMonitoringService.on('alert', alertHandler);
 
-      // Trigger an alert by simulating conditions
-      appMonitoringService.startMonitoring();
+        // Trigger an alert by simulating conditions
+        appMonitoringService.startMonitoring();
 
-      // Manually trigger alert for test
-      (appMonitoringService as any).emitAlert({
-        type: 'HIGH_ERROR_RATE',
-        message: 'Test alert',
-        severity: 'high',
-        timestamp: new Date(),
+        // Manually trigger alert for test
+        (appMonitoringService as any).emitAlert({
+          type: 'HIGH_ERROR_RATE',
+          message: 'Test alert',
+          severity: 'high',
+          timestamp: new Date(),
+        });
       });
     });
 
     it('should not crash when alert handler throws exception', () => {
-      const faultyHandler = jest.fn(() => {
+      const faultyHandler = vi.fn(() => {
         throw new Error('Handler error');
       });
 
@@ -140,11 +143,9 @@ describe('Monitoring Startup', () => {
       appMonitoringService.startMonitoring();
 
       // Simulate exception in metrics collection
-      const mockGetMetrics = jest
-        .spyOn(appMonitoringService, 'getMetrics')
-        .mockImplementation(() => {
-          throw new Error('Metrics collection error');
-        });
+      const mockGetMetrics = vi.spyOn(appMonitoringService, 'getMetrics').mockImplementation(() => {
+        throw new Error('Metrics collection error');
+      });
 
       // Should not crash, just log error
       expect(() => {
@@ -164,12 +165,12 @@ describe('Monitoring Startup', () => {
 
       const createMockResponse = () => ({
         statusCode: 200,
-        on: jest.fn(),
+        on: vi.fn(),
       });
 
       const mockReq = { method: 'GET', path: '/test' } as any;
       const mockRes = createMockResponse() as any;
-      const mockNext = jest.fn();
+      const mockNext = vi.fn();
 
       // First call should work
       expect(() => {
@@ -194,11 +195,9 @@ describe('Monitoring Startup', () => {
       }).not.toThrow();
 
       // Simulating a failure during metrics collection
-      const mockGetMetrics = jest
-        .spyOn(dbMonitoringService, 'getMetrics')
-        .mockImplementation(() => {
-          throw new Error('Database query failed');
-        });
+      const mockGetMetrics = vi.spyOn(dbMonitoringService, 'getMetrics').mockImplementation(() => {
+        throw new Error('Database query failed');
+      });
 
       // Should not crash the service
       expect(() => {
@@ -217,7 +216,7 @@ describe('Monitoring Startup', () => {
   describe('Process Handler Registration', () => {
     it('should allow process handlers to be registered without conflicts', () => {
       // Verify we can register handlers (simulating bootstrap behavior)
-      const mockHandler = jest.fn();
+      const mockHandler = vi.fn();
 
       expect(() => {
         process.once('SIGTERM', mockHandler);
@@ -228,7 +227,7 @@ describe('Monitoring Startup', () => {
     });
 
     it('should support uncaughtException handler registration', () => {
-      const mockHandler = jest.fn();
+      const mockHandler = vi.fn();
 
       expect(() => {
         process.once('uncaughtException', mockHandler);
@@ -239,7 +238,7 @@ describe('Monitoring Startup', () => {
     });
 
     it('should support unhandledRejection handler registration', () => {
-      const mockHandler = jest.fn();
+      const mockHandler = vi.fn();
 
       expect(() => {
         process.once('unhandledRejection', mockHandler);
@@ -250,7 +249,7 @@ describe('Monitoring Startup', () => {
     });
 
     it('should support SIGINT handler registration', () => {
-      const mockHandler = jest.fn();
+      const mockHandler = vi.fn();
 
       expect(() => {
         process.once('SIGINT', mockHandler);
@@ -261,7 +260,7 @@ describe('Monitoring Startup', () => {
     });
 
     it('should handle exceptions in process handlers gracefully', () => {
-      const faultyHandler = jest.fn(() => {
+      const faultyHandler = vi.fn(() => {
         throw new Error('Handler error');
       });
 
@@ -301,14 +300,14 @@ describe('Monitoring Startup', () => {
 
       // Simulate concurrent requests tracking
       const middleware = appMonitoringService.requestTrackingMiddleware();
-      const mockNext = jest.fn();
+      const mockNext = vi.fn();
 
       // Mock response with EventEmitter behavior
       const createMockResponse = () => {
         const listeners: Record<string, Array<() => void>> = {};
         return {
           statusCode: 200,
-          on: jest.fn((event: string, handler: () => void) => {
+          on: vi.fn((event: string, handler: () => void) => {
             if (!listeners[event]) listeners[event] = [];
             listeners[event].push(handler);
           }),
@@ -340,7 +339,7 @@ describe('Monitoring Startup', () => {
 
       // Mock getMetrics to throw
       const originalGetMetrics = appMonitoringService.getMetrics;
-      (appMonitoringService as any).getMetrics = jest.fn(() => {
+      (appMonitoringService as any).getMetrics = vi.fn(() => {
         throw new Error('Corrupted state');
       });
 
@@ -359,7 +358,7 @@ describe('Monitoring Startup', () => {
     });
 
     it('should maintain alerting capability after multiple start/stop cycles', () => {
-      const alertHandler = jest.fn();
+      const alertHandler = vi.fn();
       appMonitoringService.on('alert', alertHandler);
 
       // Multiple cycles
@@ -387,14 +386,14 @@ describe('Monitoring Startup', () => {
       appMonitoringService.startMonitoring();
 
       const middleware = appMonitoringService.requestTrackingMiddleware();
-      const mockNext = jest.fn();
+      const mockNext = vi.fn();
 
       // Mock response with EventEmitter
       const createMockResponse = () => {
         const listeners: Record<string, Array<() => void>> = {};
         return {
           statusCode: 200,
-          on: jest.fn((event: string, handler: () => void) => {
+          on: vi.fn((event: string, handler: () => void) => {
             if (!listeners[event]) listeners[event] = [];
             listeners[event].push(handler);
             // Immediately trigger finish for test speed

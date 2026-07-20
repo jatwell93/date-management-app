@@ -1,35 +1,92 @@
 version: 2
+
+# Noise control: routine minor/patch version bumps are batched into grouped
+# PRs (one for production deps, one for development deps) per boundary so we
+# get at most a couple of PRs per ecosystem each week instead of one branch
+# per dependency. Production and development stay in separate groups to honour
+# the "review by boundary, don't mix runtime and tooling" rule in
+# docs/security.md. Major bumps are left ungrouped so each gets individual
+# review, and Dependabot security PRs remain individual (they are the ones we
+# want to see and triage on their own).
 updates:
   - package-ecosystem: npm
     directory: /
     schedule:
-      interval: daily
-    open-pull-requests-limit: 10
+      interval: weekly
+    open-pull-requests-limit: 5
     versioning-strategy: increase
+    groups:
+      production-minor-patch:
+        dependency-type: production
+        update-types:
+          - minor
+          - patch
+      development-minor-patch:
+        dependency-type: development
+        update-types:
+          - minor
+          - patch
 
   - package-ecosystem: npm
     directory: /backend
     schedule:
-      interval: daily
-    open-pull-requests-limit: 10
+      interval: weekly
+    open-pull-requests-limit: 5
     versioning-strategy: increase
+    groups:
+      production-minor-patch:
+        dependency-type: production
+        update-types:
+          - minor
+          - patch
+      development-minor-patch:
+        dependency-type: development
+        update-types:
+          - minor
+          - patch
 
   - package-ecosystem: npm
     directory: /frontend
     schedule:
-      interval: daily
-    open-pull-requests-limit: 10
+      interval: weekly
+    open-pull-requests-limit: 5
     versioning-strategy: increase
+    groups:
+      production-minor-patch:
+        dependency-type: production
+        update-types:
+          - minor
+          - patch
+      development-minor-patch:
+        dependency-type: development
+        update-types:
+          - minor
+          - patch
 
   - package-ecosystem: npm
     directory: /workers
     schedule:
-      interval: daily
-    open-pull-requests-limit: 10
+      interval: weekly
+    open-pull-requests-limit: 5
     versioning-strategy: increase
+    groups:
+      production-minor-patch:
+        dependency-type: production
+        update-types:
+          - minor
+          - patch
+      development-minor-patch:
+        dependency-type: development
+        update-types:
+          - minor
+          - patch
 
   - package-ecosystem: github-actions
     directory: /
     schedule:
       interval: weekly
     open-pull-requests-limit: 5
+    groups:
+      github-actions:
+        patterns:
+          - "*"

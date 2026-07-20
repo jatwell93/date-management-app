@@ -123,7 +123,7 @@ describe('SubscriptionService Integration Tests', () => {
       );
 
       // Simulate webhook: fetch latest Stripe state and sync
-      const stripe = require('stripe')(process.env.STRIPE_SECRET_KEY);
+      const stripe = (await import('stripe')).default(process.env.STRIPE_SECRET_KEY!);
       const stripeSubscription = await stripe.subscriptions.retrieve(
         createdSub.stripeSubscriptionId!,
       );
@@ -227,17 +227,21 @@ describe('SubscriptionService Integration Tests', () => {
 
   describe('Tier Limits', () => {
     it('should return correct tier limits', () => {
+      const freeLimits = subscriptionService.getTierLimits('free');
+      expect(freeLimits.max_skus).toBe(500);
+      expect(freeLimits.max_users).toBe(1);
+
       const starterLimits = subscriptionService.getTierLimits('starter');
-      expect(starterLimits.max_skus).toBe(500);
-      expect(starterLimits.max_users).toBe(1);
+      expect(starterLimits.max_skus).toBe(5000);
+      expect(starterLimits.max_users).toBe(3);
 
       const professionalLimits = subscriptionService.getTierLimits('professional');
-      expect(professionalLimits.max_skus).toBe(2000);
-      expect(professionalLimits.max_users).toBe(3);
+      expect(professionalLimits.max_skus).toBe(50000);
+      expect(professionalLimits.max_users).toBe(10);
 
-      const premiumLimits = subscriptionService.getTierLimits('premium');
-      expect(premiumLimits.max_skus).toBeNull(); // Unlimited
-      expect(premiumLimits.max_users).toBe(10);
+      const enterpriseLimits = subscriptionService.getTierLimits('enterprise');
+      expect(enterpriseLimits.max_skus).toBe(250000);
+      expect(enterpriseLimits.max_users).toBe(10);
     });
   });
 });

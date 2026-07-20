@@ -2,19 +2,19 @@ import express from 'express';
 import request from 'supertest';
 import { isBaseError } from '../../errors';
 
-const mockGetAllInventoryItems = jest.fn();
-const mockGetInventoryItemById = jest.fn();
-const mockGetInventoryItemsByProductId = jest.fn();
-const mockGetRecentInventoryItemsByProductId = jest.fn();
-const mockGetInventoryItemsByLocationId = jest.fn();
-const mockCreateInventoryItem = jest.fn();
-const mockUpdateInventoryItem = jest.fn();
-const mockDeleteInventoryItem = jest.fn();
+const mockGetAllInventoryItems = vi.fn();
+const mockGetInventoryItemById = vi.fn();
+const mockGetInventoryItemsByProductId = vi.fn();
+const mockGetRecentInventoryItemsByProductId = vi.fn();
+const mockGetInventoryItemsByLocationId = vi.fn();
+const mockCreateInventoryItem = vi.fn();
+const mockUpdateInventoryItem = vi.fn();
+const mockDeleteInventoryItem = vi.fn();
 
-const mockGetProductByBarcode = jest.fn();
-const mockLogTransaction = jest.fn();
+const mockGetProductByBarcode = vi.fn();
+const mockLogTransaction = vi.fn();
 
-jest.mock('../../middleware/auth.middleware', () => ({
+vi.mock('../../middleware/auth.middleware', () => ({
   authenticateToken: (req: any, _res: any, next: any) => {
     req.organizationId = req.get('x-org-id') || undefined;
     const userIdHeader = req.get('x-user-id');
@@ -23,48 +23,55 @@ jest.mock('../../middleware/auth.middleware', () => ({
   },
 }));
 
-jest.mock('../../middleware/validateRequest', () => ({
+vi.mock('../../middleware/validateRequest', () => ({
   validateRequest: () => (_req: any, _res: any, next: any) => next(),
 }));
 
-jest.mock('../../middleware/data-integrity.middleware', () => ({
+vi.mock('../../middleware/data-integrity.middleware', () => ({
   validateReferentialIntegrity: (_req: any, _res: any, next: any) => next(),
   validateDataConsistency: (_req: any, _res: any, next: any) => next(),
   validateBusinessRules: (_req: any, _res: any, next: any) => next(),
 }));
 
-jest.mock('../../middleware/rateLimiter', () => ({
+vi.mock('../../middleware/rateLimiter', () => ({
   standardLimiter: (_req: any, _res: any, next: any) => next(),
 }));
 
-jest.mock('../../middleware/feature-gate.middleware', () => ({
+vi.mock('../../middleware/feature-gate.middleware', () => ({
   checkUsageLimit: () => (_req: any, _res: any, next: any) => next(),
 }));
 
-jest.mock('../../services/inventory.service', () => ({
-  InventoryService: jest.fn().mockImplementation(() => ({
-    getAllInventoryItems: (...args: unknown[]) => mockGetAllInventoryItems(...args),
-    getInventoryItemById: (...args: unknown[]) => mockGetInventoryItemById(...args),
-    getInventoryItemsByProductId: (...args: unknown[]) => mockGetInventoryItemsByProductId(...args),
-    getRecentInventoryItemsByProductId: (...args: unknown[]) =>
-      mockGetRecentInventoryItemsByProductId(...args),
-    getInventoryItemsByLocationId: (...args: unknown[]) =>
-      mockGetInventoryItemsByLocationId(...args),
-    createInventoryItem: (...args: unknown[]) => mockCreateInventoryItem(...args),
-    updateInventoryItem: (...args: unknown[]) => mockUpdateInventoryItem(...args),
-    deleteInventoryItem: (...args: unknown[]) => mockDeleteInventoryItem(...args),
-    logTransaction: (...args: unknown[]) => mockLogTransaction(...args),
-  })),
+vi.mock('../../services/inventory.service', () => ({
+  InventoryService: vi.fn().mockImplementation(function () {
+    return {
+      getAllInventoryItems: (...args: unknown[]) => mockGetAllInventoryItems(...args),
+      getInventoryItemById: (...args: unknown[]) => mockGetInventoryItemById(...args),
+      getInventoryItemsByProductId: (...args: unknown[]) =>
+        mockGetInventoryItemsByProductId(...args),
+      getRecentInventoryItemsByProductId: (...args: unknown[]) =>
+        mockGetRecentInventoryItemsByProductId(...args),
+      getInventoryItemsByLocationId: (...args: unknown[]) =>
+        mockGetInventoryItemsByLocationId(...args),
+      createInventoryItem: (...args: unknown[]) => mockCreateInventoryItem(...args),
+      updateInventoryItem: (...args: unknown[]) => mockUpdateInventoryItem(...args),
+      deleteInventoryItem: (...args: unknown[]) => mockDeleteInventoryItem(...args),
+      logTransaction: (...args: unknown[]) => mockLogTransaction(...args),
+    };
+  }),
 }));
 
-jest.mock('../../services/product.service', () => ({
-  ProductService: jest.fn().mockImplementation(() => ({
-    getProductByBarcode: (...args: unknown[]) => mockGetProductByBarcode(...args),
-  })),
+vi.mock('../../services/product.service', () => ({
+  ProductService: vi.fn().mockImplementation(function () {
+    return {
+      getProductByBarcode: (...args: unknown[]) => mockGetProductByBarcode(...args),
+    };
+  }),
 }));
 
 import inventoryRouter from '../../routes/inventory.routes';
-const actualDi = jest.requireActual('../../di/container') as typeof import('../../di/container');
+const actualDi = (await vi.importActual(
+  '../../di/container',
+)) as typeof import('../../di/container');
 
 describe('inventory.routes', () => {
   const app = express();
@@ -88,7 +95,7 @@ describe('inventory.routes', () => {
   );
 
   beforeEach(() => {
-    jest.clearAllMocks();
+    vi.clearAllMocks();
 
     mockGetAllInventoryItems.mockResolvedValue([{ id: 1, organizationId: 'org-1' }]);
     mockGetInventoryItemById.mockResolvedValue({

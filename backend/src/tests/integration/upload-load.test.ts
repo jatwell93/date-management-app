@@ -12,7 +12,7 @@ import { UploadController } from '../../controllers/upload.controller';
 import { UploadService } from '../../services/upload.service';
 import { StorageProvider } from '../../storage/storage-provider.interface';
 
-jest.mock('../../config/environment', () => ({
+vi.mock('../../config/environment', () => ({
   envConfig: {
     NODE_ENV: 'development',
     MAX_UPLOAD_SIZE_BYTES: 10 * 1024 * 1024,
@@ -20,7 +20,7 @@ jest.mock('../../config/environment', () => ({
   },
 }));
 
-jest.mock('../../middleware/auth.middleware', () => ({
+vi.mock('../../middleware/auth.middleware', () => ({
   authenticateToken: (_req: any, _res: any, next: any) => next(),
 }));
 
@@ -71,7 +71,7 @@ const createTestApp = (
     csvParser as any,
     storageQuotaService as any,
   );
-  const uploadRepository = { findStatusByFileKey: jest.fn() };
+  const uploadRepository = { findStatusByFileKey: vi.fn() };
   const controller = new UploadController(uploadService, uploadRepository as any);
 
   app.post('/api/upload/direct', upload.single('file'), (req, res) => controller.direct(req, res));
@@ -85,10 +85,10 @@ const describeMaybe = shouldRun ? describe : describe.skip;
 describeMaybe('Upload Load Test', () => {
   it('handles 1000 concurrent direct uploads', async () => {
     const storage = new InMemoryStorageProvider();
-    const csvParser = { processFile: jest.fn().mockResolvedValue({ imported: 1, errors: [] }) };
+    const csvParser = { processFile: vi.fn().mockResolvedValue({ imported: 1, errors: [] }) };
     const storageQuotaService = {
-      recordUpload: jest.fn().mockResolvedValue(undefined),
-      markUploadDeleted: jest.fn().mockResolvedValue(undefined),
+      recordUpload: vi.fn().mockResolvedValue(undefined),
+      markUploadDeleted: vi.fn().mockResolvedValue(undefined),
     };
 
     const app = createTestApp(storage, csvParser, storageQuotaService);

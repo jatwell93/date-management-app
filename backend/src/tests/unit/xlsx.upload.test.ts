@@ -7,25 +7,25 @@ import { PrismaClient } from '@prisma/client';
 // Mock Prisma manually
 const mockPrisma = {
   product: {
-    findUnique: jest.fn(),
-    create: jest.fn(),
-    findMany: jest.fn(),
-    update: jest.fn(),
-    delete: jest.fn(),
-    upsert: jest.fn(),
+    findUnique: vi.fn(),
+    create: vi.fn(),
+    findMany: vi.fn(),
+    update: vi.fn(),
+    delete: vi.fn(),
+    upsert: vi.fn(),
   },
   organizationUsage: {
-    findUnique: jest
+    findUnique: vi
       .fn()
       .mockResolvedValue({ organizationId: 'default-org', totalSkus: 0, maxSkus: 1000 }),
-    update: jest.fn(),
+    update: vi.fn(),
   },
-  $transaction: jest.fn((callback) => callback(mockPrisma)),
+  $transaction: vi.fn((callback) => callback(mockPrisma)),
 } as unknown as PrismaClient; // Cast to PrismaClient to satisfy type checker
 
 // Mock the module
-jest.mock('@prisma/client', () => ({
-  PrismaClient: jest.fn(() => mockPrisma),
+vi.mock('@prisma/client', () => ({
+  PrismaClient: vi.fn(() => mockPrisma),
 }));
 
 describe('XLSX Upload Functionality Tests', () => {
@@ -34,7 +34,7 @@ describe('XLSX Upload Functionality Tests', () => {
 
   beforeEach(() => {
     // Reset mocks
-    jest.clearAllMocks();
+    vi.clearAllMocks();
 
     // Reset organizationUsage mock (cleared by clearAllMocks)
     (mockPrisma.organizationUsage.findUnique as jest.Mock).mockResolvedValue({
@@ -116,7 +116,7 @@ describe('XLSX Upload Functionality Tests', () => {
 
   it('should process XLSX with alternative header names', async () => {
     const jsonData = [
-      ['Item Code', 'Product Name', 'Unit Price', 'GTIN'],
+      ['Item Code', 'Product Name', 'Item Cost', 'GTIN'],
       ['TEST001', 'Product 1', '$12.99', '1234567890123'],
       ['TEST002', 'Product 2', '€15.50', '1234567890124'],
     ];

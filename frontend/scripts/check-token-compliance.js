@@ -1,5 +1,4 @@
 #!/usr/bin/env node
-/* eslint-env node */
 /* global require, __dirname, console, process, module */
 
 /**

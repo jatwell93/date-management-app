@@ -7,13 +7,13 @@ describe('DashboardService', () => {
 
   beforeEach(() => {
     reportRepository = {
-      getDashboardData: jest.fn(),
+      getDashboardData: vi.fn(),
     };
     dashboardService = new DashboardService(reportRepository);
   });
 
   afterEach(() => {
-    jest.clearAllMocks();
+    vi.clearAllMocks();
   });
 
   it('should return dashboard data', async () => {

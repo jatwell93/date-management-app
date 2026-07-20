@@ -5,29 +5,29 @@ import { StorageQuotaService } from '../../services/storage-quota.service';
 
 // Mock dependencies
 const mockStorageProvider = {
-  upload: jest.fn(),
-  download: jest.fn(),
-  delete: jest.fn(),
-  exists: jest.fn(),
-  getPresignedUploadUrl: jest.fn(),
+  upload: vi.fn(),
+  download: vi.fn(),
+  delete: vi.fn(),
+  exists: vi.fn(),
+  getPresignedUploadUrl: vi.fn(),
 } as unknown as jest.Mocked<StorageProvider>;
 
 const mockCsvParserService = {
-  processFile: jest.fn(),
+  processFile: vi.fn(),
 } as unknown as jest.Mocked<CSVParserService>;
 
 const mockStorageQuotaService = {
-  recordUpload: jest.fn().mockResolvedValue(undefined),
-  markUploadDeleted: jest.fn().mockResolvedValue(undefined),
+  recordUpload: vi.fn().mockResolvedValue(undefined),
+  markUploadDeleted: vi.fn().mockResolvedValue(undefined),
 } as unknown as jest.Mocked<StorageQuotaService>;
 
 const mockUploadRepository = {
-  markCompleted: jest.fn().mockResolvedValue(undefined),
-  markFailed: jest.fn().mockResolvedValue(undefined),
+  markCompleted: vi.fn().mockResolvedValue(undefined),
+  markFailed: vi.fn().mockResolvedValue(undefined),
 };
-const mockGetDefaultDatabaseClient = jest.fn();
+const mockGetDefaultDatabaseClient = vi.fn();
 
-jest.mock('../../config/environment', () => ({
+vi.mock('../../config/environment', () => ({
   envConfig: {
     NODE_ENV: 'development',
     MAX_UPLOAD_SIZE_BYTES: 10 * 1024 * 1024, // 10MB
@@ -35,11 +35,11 @@ jest.mock('../../config/environment', () => ({
   },
 }));
 
-jest.mock('../../database/database-factory', () => ({
+vi.mock('../../database/database-factory', () => ({
   getDefaultDatabaseClient: () => mockGetDefaultDatabaseClient(),
 }));
 
-jest.mock('../../di/container', () => ({
+vi.mock('../../di/container', () => ({
   getDiContainer: () => ({
     resolve: (token: unknown) => {
       const tokenName =
@@ -55,9 +55,9 @@ jest.mock('../../di/container', () => ({
 }));
 
 // Mock fs to avoid actual file I/O during tests
-jest.mock('fs/promises', () => ({
-  writeFile: jest.fn(),
-  unlink: jest.fn(),
+vi.mock('fs/promises', () => ({
+  writeFile: vi.fn(),
+  unlink: vi.fn(),
 }));
 import * as fs from 'fs/promises';
 
@@ -66,7 +66,7 @@ describe('UploadService', () => {
   const organizationId = 'org-123';
 
   beforeEach(() => {
-    jest.clearAllMocks();
+    vi.clearAllMocks();
     uploadService = new UploadService(
       organizationId,
       mockStorageProvider,
@@ -170,7 +170,7 @@ describe('UploadService', () => {
       const filename = 'direct.csv';
       const key = `uploads/${organizationId}/123-${filename}`;
       // mock Date.now
-      jest.spyOn(Date, 'now').mockReturnValue(123);
+      vi.spyOn(Date, 'now').mockReturnValue(123);
 
       mockStorageProvider.upload.mockResolvedValue(key);
       (mockCsvParserService.processFile as jest.Mock).mockResolvedValue({ imported: 1 });

@@ -8,10 +8,10 @@ import { ClerkWebhookService } from '../../services/clerk-webhook.service';
 import { SubscriptionService } from '../../services/subscription.service';
 import { ConflictError } from '../../errors';
 
-jest.mock('../../services/subscription.service');
-jest.mock('@sentry/node', () => ({
-  captureMessage: jest.fn(),
-  captureException: jest.fn(),
+vi.mock('../../services/subscription.service');
+vi.mock('@sentry/node', () => ({
+  captureMessage: vi.fn(),
+  captureException: vi.fn(),
 }));
 
 describe('Trial Abuse Prevention', () => {
@@ -35,10 +35,10 @@ describe('Trial Abuse Prevention', () => {
   });
 
   beforeEach(async () => {
-    jest.clearAllMocks();
+    vi.clearAllMocks();
 
     mockSubscriptionService = {
-      createTrialSubscription: jest.fn().mockResolvedValue(undefined),
+      createTrialSubscription: vi.fn().mockResolvedValue(undefined),
     } as any;
 
     service = new ClerkWebhookService(prisma, mockSubscriptionService);
@@ -145,7 +145,7 @@ describe('Trial Abuse Prevention', () => {
       expect(mockSubscriptionService.createTrialSubscription).not.toHaveBeenCalled();
 
       // Verify Sentry was notified
-      const Sentry = require('@sentry/node');
+      const Sentry = await import('@sentry/node');
       expect(Sentry.captureMessage).toHaveBeenCalledWith(
         'Trial abuse attempt blocked',
         expect.objectContaining({ level: 'warning' }),

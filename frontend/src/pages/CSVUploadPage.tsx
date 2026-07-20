@@ -1,7 +1,5 @@
 import React, { useRef, useState } from 'react';
 import { useSearchParams, useNavigate } from 'react-router-dom';
-import * as Sentry from '@sentry/react';
-import * as XLSX from 'xlsx';
 import {
   Table,
   TableBody,
@@ -21,47 +19,9 @@ import {
   type RowEstimate,
   type UploadImportType,
 } from '../utils/csvValidator';
-import { buildApiUrl } from '../lib/api.service';
-
-interface RejectedRowDetail {
-  rowNumber: number;
-  rawValues: {
-    sku: string;
-    itemDescription: string;
-    usedByDate: string;
-  };
-  reason: string;
-  reasonCode?: string;
-}
-
-interface UploadResponse {
-  success: boolean;
-  message: string;
-  importedCount?: number;
-  updatedCount?: number;
-  mergedCount?: number;
-  rejectedCount?: number;
-  errorCount?: number;
-  skippedCount?: number;
-  processedCount?: number;
-  totalCount?: number;
-  rejectedRows?: RejectedRowDetail[];
-  errors?: string[];
-  columnsUsed?: string[];
-  columnsIgnored?: number;
-}
-
-interface LastUploadSummary {
-  fileName: string;
-  importType: UploadImportType;
-  status: 'completed';
-  importedCount: number;
-  updatedCount: number;
-  rejectedCount: number;
-  processedCount: number;
-}
-
-const LAST_UPLOAD_SUMMARY_KEY = 'csvUpload:lastUploadSummary';
+import * as XLSX from 'xlsx';
+import { downloadExpiryTemplate, downloadCatalogTemplate } from '../utils/uploadUtils';
+import { useUploadOrchestrator } from '../hooks/useUploadOrchestrator';
 
 export const CSVUploadPage: React.FC<{
   token: string | null;
@@ -83,267 +43,32 @@ export const CSVUploadPage: React.FC<{
   const formatGuidelinesRef = useRef<HTMLDivElement | null>(null);
   const [importType, setImportType] = useState<UploadImportType>(defaultImportType);
   const [selectedFile, setSelectedFile] = useState<File | null>(null);
-  const [isUploading, setIsUploading] = useState(false);
-  const [uploadResult, setUploadResult] = useState<UploadResponse | null>(null);
   const [fileName, setFileName] = useState<string | null>(null);
   const [filePreview, setFilePreview] = useState<string[][]>([]);
-  const [uploadProgress, setUploadProgress] = useState<number>(0);
-  const [progressMessage, setProgressMessage] = useState<string>('');
   const [columnValidation, setColumnValidation] = useState<ColumnValidationResult | null>(null);
   const [rowEstimate, setRowEstimate] = useState<RowEstimate | null>(null);
-  const [lastUploadSummary, setLastUploadSummary] = useState<LastUploadSummary | null>(() => {
-    const storedSummary = localStorage.getItem(LAST_UPLOAD_SUMMARY_KEY);
-    if (!storedSummary) {
-      return null;
-    }
 
-    try {
-      return JSON.parse(storedSummary) as LastUploadSummary;
-    } catch (_error) {
-      localStorage.removeItem(LAST_UPLOAD_SUMMARY_KEY);
-      return null;
-    }
-  });
-
-  const logUploadMetric = (event: string, data: Record<string, unknown>) => {
-    if (process.env.NODE_ENV === 'test') {
-      return;
-    }
-
-    Sentry.captureMessage('client_upload_metrics', {
-      level: 'info',
-      extra: {
-        event,
-        ...data,
-      },
-    });
-  };
-
-  const categorizeUploadError = (error: unknown): string => {
-    if (error instanceof Error) {
-      const message = error.message.toLowerCase();
-      if (message.includes('initiate')) return 'initiate_failed';
-      if (message.includes('processing')) return 'processing_failed';
-      if (message.includes('upload')) return 'upload_failed';
-      return 'unknown_error';
-    }
-    return 'unknown_error';
-  };
-
-  const MAX_UPLOAD_SIZE = 10 * 1024 * 1024;
-
-  const isAllowedUploadType = (file: File): boolean => {
-    return (
-      file.type === 'text/csv' ||
-      file.type === 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' ||
-      file.type === 'application/vnd.ms-excel' ||
-      file.name.endsWith('.csv') ||
-      file.name.endsWith('.xlsx') ||
-      file.name.endsWith('.xls')
-    );
-  };
-
-  const validateSelectedFile = (file: File | null): string | null => {
-    if (!file) {
-      return 'Please select a CSV, XLSX, or XLS file to upload';
-    }
-
-    if (!isAllowedUploadType(file)) {
-      return 'Please select a valid CSV, XLSX, or XLS file';
-    }
-
-    if (file.size > MAX_UPLOAD_SIZE) {
-      return 'File size exceeds 10MB limit';
-    }
-
-    return null;
-  };
+  const {
+    isUploading,
+    uploadResult,
+    uploadProgress,
+    progressMessage,
+    lastUploadSummary,
+    submitUpload,
+    resetUploadState,
+    downloadErrorReport,
+  } = useUploadOrchestrator({ token, importType });
 
   const isExpiryImport = importType === 'expiry-list';
-
-  const toUploadResultFromSummary = (summary: Record<string, unknown>): UploadResponse => {
-    return {
-      success: true,
-      message: 'File uploaded and processed successfully',
-      importedCount: Number(summary.importedCount ?? 0),
-      updatedCount: Number(summary.updatedCount ?? 0),
-      mergedCount: Number(summary.mergedCount ?? summary.updatedCount ?? 0),
-      rejectedCount: Number(summary.rejectedCount ?? summary.skippedCount ?? 0),
-      errorCount: Number(summary.errorCount ?? 0),
-      skippedCount: Number(summary.skippedCount ?? summary.rejectedCount ?? 0),
-      processedCount: Number(summary.rowsProcessed ?? summary.processedCount ?? 0),
-      totalCount: Number(summary.rowsTotal ?? summary.totalCount ?? 0),
-      columnsUsed: Array.isArray(summary.columnsUsed)
-        ? (summary.columnsUsed as string[])
-        : undefined,
-      columnsIgnored:
-        typeof summary.columnsIgnored === 'number' ? (summary.columnsIgnored as number) : undefined,
-      errors: Array.isArray(summary.errors) ? (summary.errors as string[]) : undefined,
-      rejectedRows: Array.isArray(summary.rejectedRows)
-        ? (summary.rejectedRows as RejectedRowDetail[])
-        : undefined,
-    };
-  };
-
-  const recordCompletedUpload = (
-    result: UploadResponse,
-    completedFileName: string,
-    completedImportType: UploadImportType,
-  ) => {
-    setUploadResult(result);
-
-    const summary: LastUploadSummary = {
-      fileName: completedFileName,
-      importType: completedImportType,
-      status: 'completed',
-      importedCount: result.importedCount ?? 0,
-      updatedCount: result.updatedCount ?? result.mergedCount ?? 0,
-      rejectedCount: result.rejectedCount ?? result.skippedCount ?? 0,
-      processedCount: result.processedCount ?? result.totalCount ?? 0,
-    };
-
-    setLastUploadSummary(summary);
-    localStorage.setItem(LAST_UPLOAD_SUMMARY_KEY, JSON.stringify(summary));
-  };
-
-  const triggerFileDownload = (blob: Blob, filename: string) => {
-    const url = URL.createObjectURL(blob);
-    const anchor = document.createElement('a');
-    anchor.href = url;
-    anchor.download = filename;
-    document.body.appendChild(anchor);
-    anchor.click();
-    anchor.remove();
-    URL.revokeObjectURL(url);
-  };
-
-  const downloadExpiryTemplate = (format: 'csv' | 'xlsx' | 'xls') => {
-    const templateRows = [
-      ['SKU', 'Item Description', 'Used-By Date', 'Department'],
-      ['1001', 'Sample Vitamin C 500mg', '12/12/26', 'Vitamins'],
-      ['1002', 'Sample Moisturiser 200ml', '12/2026', 'Skincare'],
-    ];
-
-    const guidanceRows = [
-      ['Guidance', 'Value'],
-      ['Required columns', 'SKU, Used-By Date'],
-      ['Optional columns', 'Item Description, Department'],
-      ['Accepted date formats', 'dd/mm/yy, dd/mm/yyyy, mm/yy, mm/yyyy, mm-yy, mm-yyyy'],
-      ['Rejected examples', '12/12 (ambiguous year), Dec/2026 (month names unsupported)'],
-      ['Normalization rule', 'Month-year formats normalize to the last day of the month'],
-    ];
-
-    if (format === 'csv') {
-      const csvBody = templateRows
-        .map((row) => row.map((cell) => `"${String(cell).replace(/"/g, '""')}"`).join(','))
-        .join('\n');
-      const csvGuidance = guidanceRows.map((row) => `# ${row[0]}: ${row[1]}`).join('\n');
-      const csvContent = `${csvBody}\n\n${csvGuidance}\n`;
-
-      triggerFileDownload(
-        new Blob([csvContent], { type: 'text/csv;charset=utf-8' }),
-        'expiry-import-template.csv',
-      );
-      return;
-    }
-
-    const workbook = XLSX.utils.book_new();
-    const templateSheet = XLSX.utils.aoa_to_sheet(templateRows);
-    const guidanceSheet = XLSX.utils.aoa_to_sheet(guidanceRows);
-    XLSX.utils.book_append_sheet(workbook, templateSheet, 'Template');
-    XLSX.utils.book_append_sheet(workbook, guidanceSheet, 'Guidance');
-
-    const binary = XLSX.write(workbook, {
-      bookType: format,
-      type: 'array',
-    });
-
-    const mimeType =
-      format === 'xlsx'
-        ? 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet'
-        : 'application/vnd.ms-excel';
-    triggerFileDownload(new Blob([binary], { type: mimeType }), `expiry-import-template.${format}`);
-  };
-
-  const normalizeUploadFile = async (
-    file: File,
-  ): Promise<{ fileToUpload: File; fileNameToUpload: string }> => {
-    const fileExtension = file.name.split('.').pop()?.toLowerCase();
-    if ((fileExtension === 'xlsx' || fileExtension === 'xls') && file.type !== 'text/csv') {
-      setProgressMessage('Converting spreadsheet to CSV');
-      const buffer = await file.arrayBuffer();
-      const workbook = XLSX.read(buffer, { type: 'array' });
-      const firstSheetName = workbook.SheetNames[0];
-      const worksheet = workbook.Sheets[firstSheetName];
-      const csvContent = XLSX.utils.sheet_to_csv(worksheet);
-      const fileToUpload = new File([csvContent], file.name.replace(/\.[^/.]+$/, '.csv'), {
-        type: 'text/csv',
-      });
-
-      return {
-        fileToUpload,
-        fileNameToUpload: fileToUpload.name,
-      };
-    }
-
-    return {
-      fileToUpload: file,
-      fileNameToUpload: file.name,
-    };
-  };
-
-  const uploadWithRetry = async (url: string, options: RequestInit, retries = 3) => {
-    for (let i = 0; i < retries; i++) {
-      try {
-        const res = await fetch(url, options);
-        if (res.ok) return res;
-        Sentry.captureMessage('Upload attempt failed with status', {
-          level: 'warning',
-          extra: { attempt: i + 1, status: res.status },
-        });
-        if (i < retries - 1) {
-          logUploadMetric('upload_retry', {
-            attempt: i + 1,
-            status: res.status,
-            errorCategory: 'http_error',
-          });
-        }
-      } catch (err) {
-        if (err instanceof Error) {
-          Sentry.captureException(err, {
-            tags: { feature: 'csv-upload' },
-            extra: { attempt: i + 1 },
-          });
-        } else {
-          Sentry.captureMessage('Upload attempt failed with unknown error', {
-            level: 'warning',
-            extra: { attempt: i + 1 },
-          });
-        }
-        if (i < retries - 1) {
-          logUploadMetric('upload_retry', {
-            attempt: i + 1,
-            errorCategory: 'network_error',
-          });
-        }
-      }
-      if (i < retries - 1) {
-        const delay = 1000 * Math.pow(2, i);
-        await new Promise((r) => setTimeout(r, delay));
-      }
-    }
-
-    throw new Error('Upload failed after multiple attempts');
-  };
 
   const handleFileChange = async (event: React.ChangeEvent<HTMLInputElement>) => {
     if (event.target.files && event.target.files[0]) {
       const file = event.target.files[0];
       setSelectedFile(file);
       setFileName(file.name);
-      setUploadResult(null); // Reset any previous results
       setColumnValidation(null);
       setRowEstimate(null);
+      resetUploadState();
 
       // Generate preview of the first 5 rows
       previewFile(file);
@@ -399,302 +124,18 @@ export const CSVUploadPage: React.FC<{
     }
   };
 
-  const pollUploadStatus = async (
-    key: string,
-    completedFileName: string,
-    completedImportType: UploadImportType,
-  ) => {
-    const maxAttempts = 30; // 30 seconds max
-    const pollInterval = 1000; // 1 second
-    const nonRetryableStatusCodes = new Set([400, 401, 403, 404]);
-
-    for (let attempt = 0; attempt < maxAttempts; attempt++) {
-      try {
-        // URL encode the key to handle slashes in the path
-        const encodedKey = encodeURIComponent(key);
-        const statusRes = await fetch(buildApiUrl(`/upload/status/${encodedKey}`), {
-          headers: {
-            Authorization: `Bearer ${token}`,
-          },
-        });
-
-        if (!statusRes.ok) {
-          if (nonRetryableStatusCodes.has(statusRes.status)) {
-            let statusErrorMessage = '';
-
-            try {
-              const errorBody = (await statusRes.json()) as {
-                error?: unknown;
-                message?: unknown;
-              };
-              const apiMessage =
-                typeof errorBody.error === 'string'
-                  ? errorBody.error
-                  : typeof errorBody.message === 'string'
-                    ? errorBody.message
-                    : '';
-
-              if (apiMessage) {
-                statusErrorMessage = `: ${apiMessage}`;
-              }
-            } catch (_parseError) {
-              // Ignore malformed/empty error payloads and fall back to generic message.
-            }
-
-            throw new Error(`Processing failed${statusErrorMessage}`);
-          }
-
-          throw new Error(`Failed to get upload status (HTTP ${statusRes.status})`);
-        }
-
-        const statusData = await statusRes.json();
-
-        if (statusData.status === 'complete' || statusData.status === 'completed') {
-          recordCompletedUpload(
-            toUploadResultFromSummary(statusData),
-            completedFileName,
-            completedImportType,
-          );
-          return;
-        } else if (statusData.status === 'failed') {
-          setUploadResult({
-            success: false,
-            message: statusData.error || 'Processing failed',
-          });
-          return;
-        }
-
-        // Still processing, update progress
-        setUploadProgress(statusData.progress || 0);
-        setProgressMessage(statusData.message || 'Processing file');
-
-        // Wait before next poll
-        await new Promise((resolve) => setTimeout(resolve, pollInterval));
-      } catch (error) {
-        if (error instanceof Error && error.message.startsWith('Processing failed')) {
-          throw error;
-        }
-
-        // Continue polling on transient errors.
-      }
-    }
-
-    // Timeout
-    setUploadResult({
-      success: false,
-      message: 'Processing timed out. Please check your uploads.',
-    });
-  };
-
-  const handleSubmit = async (event: React.FormEvent) => {
+  const handleFormSubmit = (event: React.FormEvent) => {
     event.preventDefault();
-
-    const validationError = validateSelectedFile(selectedFile);
-    if (validationError) {
-      setUploadResult({
-        success: false,
-        message: validationError,
-      });
-      return;
-    }
-
-    // Check column validation
-    if (columnValidation && !columnValidation.isValid) {
-      setUploadResult({
-        success: false,
-        message: formatColumnValidationError(columnValidation),
-      });
-      return;
-    }
-
-    const file = selectedFile;
-    if (!file) {
-      return;
-    }
-
-    setIsUploading(true);
-    setUploadProgress(0);
-    setProgressMessage('Preparing file');
-    setUploadResult(null);
-
-    const uploadStartTime = Date.now();
-
-    try {
-      const { fileToUpload, fileNameToUpload } = await normalizeUploadFile(file);
-
-      // 1. Initiate Upload
-      setProgressMessage('Starting upload');
-      const uploadBaseUrl = buildApiUrl('/upload');
-
-      const initiateRes = await fetch(`${uploadBaseUrl}/initiate`, {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          Authorization: `Bearer ${token}`,
-        },
-        body: JSON.stringify({
-          filename: fileNameToUpload,
-          fileSize: fileToUpload.size,
-          contentType: fileToUpload.type,
-          importType,
-        }),
-      });
-
-      if (!initiateRes.ok) {
-        throw new Error('Failed to initiate upload');
-      }
-
-      const { strategy, uploadUrl, method, key } = await initiateRes.json();
-
-      // 2. Perform Upload
-      setProgressMessage('Uploading file');
-
-      // Simulate progress for user feedback
-      const progressInterval = setInterval(() => {
-        setUploadProgress((prev) => {
-          if (prev >= 90) return prev;
-          return prev + 5;
-        });
-      }, 500);
-
-      let uploadKey = key; // From initiate
-
-      try {
-        if (strategy === 'direct') {
-          const formData = new FormData();
-          formData.append('file', fileToUpload);
-          formData.append('importType', importType);
-
-          const directUrl = uploadUrl.startsWith('http') ? uploadUrl : `${uploadBaseUrl}/direct`;
-
-          const directRes = await uploadWithRetry(directUrl, {
-            method: 'POST',
-            headers: {
-              Authorization: `Bearer ${token}`,
-            },
-            body: formData,
-          });
-
-          if (!directRes.ok) {
-            throw new Error('Direct upload failed');
-          }
-
-          const directData = await directRes.json();
-          uploadKey = directData.key || key; // Use key from response if available
-
-          if (isExpiryImport && directData.importedCount !== undefined) {
-            recordCompletedUpload(toUploadResultFromSummary(directData), file.name, importType);
-            setUploadProgress(0);
-            setProgressMessage('');
-
-            logUploadMetric('upload_complete', {
-              fileSize: fileToUpload.size,
-              durationMs: Date.now() - uploadStartTime,
-              result: 'success',
-              method: strategy,
-              fileType: fileToUpload.type,
-              importType,
-            });
-            return;
-          }
-        } else {
-          // Presigned PUT
-          await uploadWithRetry(uploadUrl, {
-            method: method,
-            headers: {
-              'Content-Type': fileToUpload.type,
-            },
-            body: fileToUpload,
-          });
-        }
-      } finally {
-        clearInterval(progressInterval);
-      }
-
-      setUploadProgress(100);
-
-      // 3. Complete (Trigger Processing)
-      if (strategy === 'presigned') {
-        setProgressMessage('Processing file');
-        const completeRes = await fetch(`${uploadBaseUrl}/complete`, {
-          method: 'POST',
-          headers: {
-            'Content-Type': 'application/json',
-            Authorization: `Bearer ${token}`,
-          },
-          body: JSON.stringify({ key: uploadKey, importType }),
-        });
-
-        if (!completeRes.ok) throw new Error('Processing failed');
-
-        const completeData = await completeRes.json();
-        if (isExpiryImport && completeData.importedCount !== undefined) {
-          recordCompletedUpload(toUploadResultFromSummary(completeData), file.name, importType);
-
-          logUploadMetric('upload_complete', {
-            fileSize: fileToUpload.size,
-            durationMs: Date.now() - uploadStartTime,
-            result: 'success',
-            method: strategy,
-            fileType: fileToUpload.type,
-            importType,
-          });
-          setUploadProgress(0);
-          setProgressMessage('');
-          return;
-        }
-      }
-
-      // Poll for processing completion
-      await pollUploadStatus(uploadKey, file.name, importType);
-
-      logUploadMetric('upload_complete', {
-        fileSize: fileToUpload.size,
-        durationMs: Date.now() - uploadStartTime,
-        result: 'success',
-        method: strategy,
-        fileType: fileToUpload.type,
-        importType,
-      });
-      setUploadProgress(0);
-      setProgressMessage('');
-    } catch (error) {
-      if (error instanceof Error) {
-        Sentry.captureException(error, {
-          tags: { feature: 'csv-upload' },
-        });
-      } else {
-        Sentry.captureMessage('Upload failed with unknown error', {
-          level: 'error',
-          tags: { feature: 'csv-upload' },
-        });
-      }
-      setUploadResult({
-        success: false,
-        message: error instanceof Error ? error.message : 'An error occurred during upload',
-      });
-      logUploadMetric('upload_complete', {
-        fileSize: file.size,
-        durationMs: Date.now() - uploadStartTime,
-        result: 'failure',
-        method: 'unknown',
-        errorCategory: categorizeUploadError(error),
-        importType,
-      });
-    } finally {
-      setIsUploading(false);
-    }
+    void submitUpload({ file: selectedFile, columnValidation });
   };
 
   const handleReset = () => {
     setSelectedFile(null);
     setFileName(null);
     setFilePreview([]);
-    setUploadResult(null);
-    setUploadProgress(0);
-    setProgressMessage('');
     setColumnValidation(null);
     setRowEstimate(null);
+    resetUploadState();
   };
 
   const handleImportTypeChange = (nextType: UploadImportType) => {
@@ -773,7 +214,7 @@ export const CSVUploadPage: React.FC<{
             <p className="mb-4 text-semantic-text-secondary">
               {isExpiryImport
                 ? 'Upload a CSV, XLSX, or XLS file containing SKU, optional item description, and used-by date data to import expiry list records.'
-                : 'Upload a CSV, XLSX, or XLS file containing product information (SKU, Name, Cost, Barcode) to update your product database.'}
+                : 'Upload a CSV, XLSX, or XLS file containing product information (SKU, Name, Cost, Barcode, and optional Retail Price) to update your product database.'}
             </p>
 
             <div className="mb-6 p-4 bg-semantic-surface-2 rounded-md border border-hairline">
@@ -804,6 +245,10 @@ export const CSVUploadPage: React.FC<{
                     : {lastUploadSummary.updatedCount}
                   </p>
                   <p>Rows rejected: {lastUploadSummary.rejectedCount}</p>
+                  <ReviewBrandMatchesAction
+                    importType={lastUploadSummary.importType}
+                    onReview={() => navigate('/supplier-credits?view=catalogue-review')}
+                  />
                 </div>
               ) : (
                 <p className="text-sm text-semantic-text-secondary">No completed uploads yet.</p>
@@ -860,11 +305,17 @@ export const CSVUploadPage: React.FC<{
                     </span>
                   </li>
                   <li>
+                    Optional column:{' '}
+                    <code className="bg-semantic-primary-muted px-1 rounded">Retail Price</code>{' '}
+                    (also accepts "Selling Price", "Sell Price", "RRP", "Sale Price") — enables
+                    retail-based markdown bands
+                  </li>
+                  <li>
                     Column names are case-insensitive and can include common variations (e.g.,
                     "Product Name", "Item Name", "Item Cost", "Unit Cost")
                   </li>
                   <li>
-                    Cost format: Use decimal numbers like{' '}
+                    Cost and Retail format: Use decimal numbers like{' '}
                     <code className="bg-semantic-secondary-muted px-1 rounded">1.99</code> or{' '}
                     <code className="bg-semantic-secondary-muted px-1 rounded">19.99</code> (no
                     currency symbols)
@@ -873,45 +324,52 @@ export const CSVUploadPage: React.FC<{
               )}
             </div>
 
-            {isExpiryImport && (
-              <div className="mb-6 p-4 bg-semantic-surface-2 rounded-md border border-hairline">
-                <h3 className="text-lg font-medium text-semantic-text-primary mb-2">
-                  Download Import Templates
-                </h3>
-                <p className="text-sm text-semantic-text-secondary mb-3">
-                  Templates include required fields, accepted date examples, and rejected-format
-                  guidance.
-                </p>
-                <div className="grid gap-2 sm:flex sm:flex-wrap">
-                  <Button
-                    type="button"
-                    onClick={() => downloadExpiryTemplate('csv')}
-                    size="sm"
-                    className="min-h-11 w-full sm:w-auto"
-                  >
-                    Download CSV Template
-                  </Button>
-                  <Button
-                    type="button"
-                    onClick={() => downloadExpiryTemplate('xlsx')}
-                    size="sm"
-                    className="min-h-11 w-full sm:w-auto"
-                  >
-                    Download XLSX Template
-                  </Button>
-                  <Button
-                    type="button"
-                    onClick={() => downloadExpiryTemplate('xls')}
-                    size="sm"
-                    className="min-h-11 w-full sm:w-auto"
-                  >
-                    Download XLS Template
-                  </Button>
-                </div>
+            <div className="mb-6 p-4 bg-semantic-surface-2 rounded-md border border-hairline">
+              <h3 className="text-lg font-medium text-semantic-text-primary mb-2">
+                Download Import Templates
+              </h3>
+              <p className="text-sm text-semantic-text-secondary mb-3">
+                {isExpiryImport
+                  ? 'Templates include required fields, accepted date examples, and rejected-format guidance.'
+                  : 'Templates include the required columns (SKU, Name, Cost, Barcode), the optional Retail Price column, and accepted header variations.'}
+              </p>
+              <div className="grid gap-2 sm:flex sm:flex-wrap">
+                <Button
+                  type="button"
+                  onClick={() =>
+                    isExpiryImport ? downloadExpiryTemplate('csv') : downloadCatalogTemplate('csv')
+                  }
+                  size="sm"
+                  className="min-h-11 w-full sm:w-auto"
+                >
+                  Download CSV Template
+                </Button>
+                <Button
+                  type="button"
+                  onClick={() =>
+                    isExpiryImport
+                      ? downloadExpiryTemplate('xlsx')
+                      : downloadCatalogTemplate('xlsx')
+                  }
+                  size="sm"
+                  className="min-h-11 w-full sm:w-auto"
+                >
+                  Download XLSX Template
+                </Button>
+                <Button
+                  type="button"
+                  onClick={() =>
+                    isExpiryImport ? downloadExpiryTemplate('xls') : downloadCatalogTemplate('xls')
+                  }
+                  size="sm"
+                  className="min-h-11 w-full sm:w-auto"
+                >
+                  Download XLS Template
+                </Button>
               </div>
-            )}
+            </div>
 
-            <form onSubmit={handleSubmit} aria-busy={isUploading}>
+            <form onSubmit={handleFormSubmit} aria-busy={isUploading}>
               <div className="mb-4">
                 <label
                   htmlFor={fileInputId}
@@ -943,13 +401,15 @@ export const CSVUploadPage: React.FC<{
                 <p className="mt-2 text-sm text-semantic-text-tertiary">
                   {isExpiryImport
                     ? 'The file should include SKU and Used-By Date columns. When the Department column is omitted, items are assigned to Unallocated.'
-                    : 'The CSV/XLSX/XLS file should contain columns: SKU, Name, Cost, and Barcode (in that order).'}
+                    : 'The CSV/XLSX/XLS file should contain columns: SKU, Name, Cost, and Barcode, plus an optional Retail Price column.'}
                 </p>
               </div>
 
               {filePreview.length > 0 && (
                 <div className="mb-6">
                   <h3 className="text-lg font-medium mb-2">File Preview (First 5 rows):</h3>
+                  {/* Keyboard users need a focus target to scroll the wide preview table horizontally. */}
+                  {/* eslint-disable jsx-a11y/no-noninteractive-tabindex */}
                   <div
                     className="overflow-x-auto rounded-md border border-hairline"
                     role="region"
@@ -985,6 +445,7 @@ export const CSVUploadPage: React.FC<{
                       </TableBody>
                     </Table>
                   </div>
+                  {/* eslint-enable jsx-a11y/no-noninteractive-tabindex */}
                 </div>
               )}
 
@@ -1112,9 +573,14 @@ export const CSVUploadPage: React.FC<{
                         Rows merged: {uploadResult.mergedCount ?? uploadResult.updatedCount ?? 0}
                       </p>
                     ) : (
-                      uploadResult.updatedCount !== undefined && (
-                        <p>Products updated: {uploadResult.updatedCount}</p>
-                      )
+                      <>
+                        {uploadResult.updatedCount !== undefined && (
+                          <p>Products updated: {uploadResult.updatedCount}</p>
+                        )}
+                        {uploadResult.unchangedCount !== undefined && (
+                          <p>Products unchanged: {uploadResult.unchangedCount}</p>
+                        )}
+                      </>
                     )}
                     {uploadResult.errorCount !== undefined && (
                       <p>Errors: {uploadResult.errorCount}</p>
@@ -1135,6 +601,16 @@ export const CSVUploadPage: React.FC<{
                       </p>
                     )}
                   </div>
+                )}
+
+                {uploadResult.errorReportUrl && (
+                  <button
+                    type="button"
+                    onClick={() => downloadErrorReport(uploadResult.errorReportUrl as string)}
+                    className="mt-3 text-sm font-medium underline text-semantic-link"
+                  >
+                    Download full error report
+                  </button>
                 )}
 
                 {isExpiryImport &&
@@ -1236,6 +712,20 @@ export const CSVUploadPage: React.FC<{
           </div>
         </CardContent>
       </Card>
+    </div>
+  );
+};
+
+const ReviewBrandMatchesAction: React.FC<{
+  importType: UploadImportType;
+  onReview: () => void;
+}> = ({ importType, onReview }) => {
+  if (importType !== 'product-catalog') return null;
+  return (
+    <div className="mt-3 sm:col-span-2">
+      <Button type="button" onClick={onReview}>
+        Review brand matches
+      </Button>
     </div>
   );
 };

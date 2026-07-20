@@ -3,27 +3,26 @@
   "version": "0.1.0",
   "private": true,
   "dependencies": {
-    "@clerk/clerk-react": "^5.61.7",
+    "@clerk/clerk-react": "^5.61.8",
     "@fontsource/fraunces": "^5.2.9",
     "@fontsource/inter": "^5.2.8",
     "@fontsource/outfit": "^5.2.8",
-    "@radix-ui/react-alert-dialog": "^1.1.15",
+    "@radix-ui/react-alert-dialog": "^1.1.17",
     "@radix-ui/react-dialog": "^1.1.15",
-    "@radix-ui/react-dropdown-menu": "^2.1.16",
-    "@radix-ui/react-label": "^2.1.8",
-    "@radix-ui/react-select": "^2.2.6",
+    "@radix-ui/react-dropdown-menu": "^2.1.18",
+    "@radix-ui/react-label": "^2.1.10",
+    "@radix-ui/react-select": "^2.3.1",
     "@radix-ui/react-slot": "^1.2.4",
-    "@sentry/react": "^10.53.1",
+    "@sentry/react": "^10.62.0",
     "@tanstack/react-table": "^8.21.3",
     "@testing-library/dom": "^10.4.1",
     "@testing-library/jest-dom": "^6.9.1",
     "@testing-library/react": "^16.3.2",
     "@testing-library/user-event": "^13.5.0",
-    "@types/jest": "^27.5.2",
-    "@types/jwt-decode": "^2.2.1",
-    "@types/localforage": "^0.0.33",
-    "@types/node": "^16.18.126",
-    "@types/react": "^19.2.15",
+    "@types/jwt-decode": "^3.1.0",
+    "@types/localforage": "^0.0.34",
+    "@types/node": "^26.1.1",
+    "@types/react": "^19.2.17",
     "@types/react-dom": "^19.2.3",
     "@types/uuid": "^10.0.0",
     "chart.js": "^4.5.1",
@@ -32,96 +31,40 @@
     "localforage": "^1.10.0",
     "lucide-react": "^0.544.0",
     "quagga": "^0.12.1",
-    "react": "^19.2.6",
+    "react": "^19.2.7",
     "react-chartjs-2": "^5.3.1",
-    "react-dom": "^19.2.6",
-    "react-hook-form": "^7.76.1",
-    "react-router-dom": "^7.15.1",
-    "react-scripts": "^5.0.1",
+    "react-dom": "^19.2.7",
+    "react-hook-form": "^7.80.0",
+    "react-markdown": "^10.1.0",
+    "react-router-dom": "^7.18.0",
+    "remark-breaks": "^4.0.0",
     "tailwind-merge": "^3.6.0",
     "tailwindcss-animate": "^1.0.7",
-    "typescript": "^4.9.5",
-    "uuid": "^14.0.0",
-    "web-vitals": "^2.1.4",
+    "typescript": "^6.0.3",
+    "uuid": "^14.0.1",
+    "web-vitals": "^5.3.0",
     "xlsx": "^0.18.5"
   },
   "overrides": {
-    "js-cookie": "3.0.7"
+    "js-cookie": "3.0.7",
+    "request": {
+      "form-data": "^2.5.6"
+    }
   },
   "scripts": {
-    "prestart": "npm run tailwind:build",
-    "start": "cross-env PORT=3002 craco start",
-    "build": "craco build",
-    "test": "craco test",
-    "test:coverage": "craco test --coverage --watchAll=false",
-    "test:diff": "craco test --coverage --watchAll=false --changedSince=origin/main",
-    "lint": "cross-env ESLINT_USE_FLAT_CONFIG=false eslint src --ext .js,.jsx,.ts,.tsx",
-    "lint:fix": "cross-env ESLINT_USE_FLAT_CONFIG=false eslint src --ext .js,.jsx,.ts,.tsx --fix",
-    "eject": "react-scripts eject",
+    "start": "vite",
+    "build": "vite build",
+    "preview": "vite preview --port 3002",
+    "type-check": "tsc --noEmit",
+    "test": "cross-env TZ=UTC vitest run",
+    "test:watch": "cross-env TZ=UTC vitest",
+    "test:coverage": "cross-env TZ=UTC vitest run --coverage",
+    "test:diff": "cross-env TZ=UTC vitest run --coverage --changed origin/main",
+    "lint": "eslint src",
+    "lint:fix": "eslint src --fix",
     "format": "prettier --config .prettierrc.js --write \"src/**/*.{js,jsx,ts,tsx,json,css,md}\"",
-    "tailwind": "npx tailwindcss -i src/index.css -o src/tailwind-output.css --watch",
-    "tailwind:build": "npx tailwindcss -i src/index.css -o src/tailwind-output.css",
     "token-compliance": "node scripts/check-token-compliance.js",
     "token-compliance:baseline": "node scripts/check-token-compliance.js --baseline"
-  },
-  "eslintConfig": {
-    "extends": [
-      "react-app",
-      "react-app/jest",
-      "plugin:@typescript-eslint/recommended",
-      "plugin:prettier/recommended"
-    ],
-    "plugins": [
-      "@typescript-eslint",
-      "prettier"
-    ],
-    "rules": {
-      "prettier/prettier": [
-        "error",
-        {
-          "printWidth": 100,
-          "singleQuote": true,
-          "trailingComma": "all",
-          "semi": true,
-          "tabWidth": 2,
-          "bracketSpacing": true,
-          "arrowParens": "always"
-        }
-      ],
-      "no-console": "warn",
-      "@typescript-eslint/no-unused-vars": [
-        "warn",
-        {
-          "argsIgnorePattern": "^_",
-          "varsIgnorePattern": "^_"
-        }
-      ]
-    },
-    "overrides": [
-      {
-        "files": [
-          "**/*.test.ts",
-          "**/*.test.tsx",
-          "**/tests/**",
-          "**/__tests__/**",
-          "**/setupTests.ts"
-        ],
-        "rules": {
-          "testing-library/no-node-access": "warn",
-          "testing-library/no-wait-for-multiple-assertions": "warn",
-          "testing-library/no-unnecessary-act": "warn",
-          "testing-library/no-container": "warn",
-          "@typescript-eslint/no-empty-function": "off",
-          "@typescript-eslint/no-var-requires": "off",
-          "@typescript-eslint/ban-ts-comment": "warn"
-        }
-      }
-    ],
-    "settings": {
-      "react": {
-        "version": "detect"
-      }
-    }
   },
   "browserslist": {
     "production": [
@@ -136,19 +79,31 @@
     ]
   },
   "devDependencies": {
-    "@craco/craco": "^7.1.0",
-    "@types/xlsx": "^0.0.35",
-    "autoprefixer": "^10.5.0",
+    "@babel/core": "^7.29.6",
+    "@types/xlsx": "^0.0.36",
+    "@vitejs/plugin-react": "^4.3.4",
+    "@vitest/coverage-v8": "^3.2.4",
+    "autoprefixer": "^10.5.2",
     "cross-env": "^10.1.0",
+    "eslint": "^9.39.0",
     "eslint-config-prettier": "^10.1.8",
-    "eslint-plugin-prettier": "^5.5.5",
+    "eslint-plugin-prettier": "^5.5.6",
     "husky": "^9.1.7",
-    "jest-fetch-mock": "^3.0.3",
+    "jsdom": "^25.0.1",
     "lint-staged": "^16.4.0",
     "postcss": "^8.5.15",
-    "prettier": "3.8.1",
+    "prettier": "3.8.5",
     "tailwindcss": "^3.4.19",
-    "webpack-bundle-analyzer": "^4.10.2"
+    "vite": "^6.0.7",
+    "vite-plugin-pwa": "^0.21.1",
+    "vitest": "^3.2.4",
+    "vitest-fetch-mock": "^0.4.5",
+    "workbox-core": "^7.3.0",
+    "workbox-expiration": "^7.3.0",
+    "workbox-precaching": "^7.3.0",
+    "workbox-routing": "^7.3.0",
+    "workbox-strategies": "^7.3.0",
+    "workbox-window": "^7.3.0"
   },
   "lint-staged": {
     "src/**/*.{ts,tsx,js,jsx}": "prettier --config .prettierrc.js --write"

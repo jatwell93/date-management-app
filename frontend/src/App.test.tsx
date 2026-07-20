@@ -3,15 +3,34 @@ import { API_AUTH_UNAUTHORIZED_EVENT } from './lib/api.service';
 import { useAuthContext } from './components/ClerkAuthProvider';
 import type { RoleValue } from './constants/roles';
 
-jest.mock('react-router-dom');
+const mockNavigate = vi.hoisted(() => vi.fn());
 
-jest.mock('./components/ClerkAuthProvider', () => ({
-  useAuthContext: jest.fn(),
+vi.mock('react-router-dom', async () => ({
+  ...(await import('./__mocks__/react-router-dom')),
+  mockNavigate,
+  useNavigate: () => mockNavigate,
 }));
 
-const mockUserProfile = jest.fn();
+vi.mock('./hooks/useFreshApiToken', () => ({
+  useFreshApiToken: (() => {
+    const callbacks = new Map<string, jest.Mock>();
+    return (token: string | null) => {
+      const key = token ?? '__missing__';
+      if (!callbacks.has(key)) {
+        callbacks.set(key, vi.fn().mockResolvedValue(token || undefined));
+      }
+      return callbacks.get(key);
+    };
+  })(),
+}));
 
-jest.mock('@clerk/clerk-react', () => ({
+vi.mock('./components/ClerkAuthProvider', () => ({
+  useAuthContext: vi.fn(),
+}));
+
+const mockUserProfile = vi.fn();
+
+vi.mock('@clerk/clerk-react', () => ({
   UserProfile: (props: unknown) => {
     mockUserProfile(props);
     return <div data-testid="clerk-user-profile">Clerk profile</div>;
@@ -24,24 +43,24 @@ let mockOrgBootstrapState = {
   isBootstrapping: false,
   bootstrapError: null as string | null,
   bootstrapResult: null as { userId: number; role: RoleValue; organizationId?: string } | null,
-  retry: jest.fn(),
+  retry: vi.fn(),
 };
 
 // Mock useOrgBootstrap to avoid Clerk hooks
-jest.mock('./hooks/useOrgBootstrap', () => ({
+vi.mock('./hooks/useOrgBootstrap', () => ({
   useOrgBootstrap: () => mockOrgBootstrapState,
 }));
 
 // Mock child page components to avoid their imports
-jest.mock('./pages/ScanPage', () => ({
+vi.mock('./pages/ScanPage', () => ({
   ScanPage: () => <div data-testid="scan-page">Scan page</div>,
 }));
 
-jest.mock('./components/StorageQuotaWarning', () => ({
+vi.mock('./components/StorageQuotaWarning', () => ({
   StorageQuotaWarning: () => null,
 }));
 
-jest.mock('./components/TrialBanner', () => ({
+vi.mock('./components/TrialBanner', () => ({
   TrialBanner: () => null,
 }));
 
@@ -54,15 +73,15 @@ let mockHandheldContext = {
     screenHeight: number;
   },
   syncStrategy: 'real-time',
-  setSyncStrategy: jest.fn(),
+  setSyncStrategy: vi.fn(),
 };
 
-jest.mock('./contexts/HandheldContext', () => ({
+vi.mock('./contexts/HandheldContext', () => ({
   HandheldProvider: ({ children }: { children: React.ReactNode }) => children,
   useHandheldDetectionContext: () => mockHandheldContext,
 }));
 
-jest.mock('./components/ui/dropdown-menu', () => ({
+vi.mock('./components/ui/dropdown-menu', () => ({
   DropdownMenu: ({ children }: { children: React.ReactNode }) => <div>{children}</div>,
   DropdownMenuTrigger: ({ children }: { children: React.ReactNode }) => (
     <button type="button">{children}</button>
@@ -81,10 +100,9 @@ jest.mock('./components/ui/dropdown-menu', () => ({
   DropdownMenuItem: ({ children }: { children: React.ReactNode }) => <div>{children}</div>,
 }));
 
-const App = require('./App').default;
+const App = (await import('./App')).default;
 
-const getMockNavigate = () =>
-  (jest.requireMock('react-router-dom') as { mockNavigate: jest.Mock }).mockNavigate;
+const getMockNavigate = () => mockNavigate;
 
 const mockSignedInContext = (overrides = {}) => {
   (useAuthContext as jest.Mock).mockReturnValue({
@@ -94,9 +112,9 @@ const mockSignedInContext = (overrides = {}) => {
     userId: 1,
     userName: 'Test User',
     userRole: 'admin',
-    updateBootstrapRole: jest.fn(),
+    updateBootstrapRole: vi.fn(),
     token: 'test-token',
-    handleLogout: jest.fn(),
+    handleLogout: vi.fn(),
     ...overrides,
   });
 };
@@ -107,22 +125,22 @@ beforeEach(() => {
     isHandheld: false,
     detectionResult: null,
     syncStrategy: 'real-time',
-    setSyncStrategy: jest.fn(),
+    setSyncStrategy: vi.fn(),
   };
   mockOrgBootstrapState = {
     isBootstrapped: true,
     isBootstrapping: false,
     bootstrapError: null,
     bootstrapResult: null,
-    retry: jest.fn(),
+    retry: vi.fn(),
   };
-  jest.clearAllMocks();
+  vi.clearAllMocks();
 });
 
 describe('App unauthorized event handling', () => {
   it('should call handleLogout when unauthorized event is fired', async () => {
-    jest.spyOn(console, 'warn').mockImplementation(() => undefined);
-    const handleLogout = jest.fn();
+    vi.spyOn(console, 'warn').mockImplementation(() => undefined);
+    const handleLogout = vi.fn();
 
     (useAuthContext as jest.Mock).mockReturnValue({
       handleLogout,
@@ -221,7 +239,7 @@ describe('App navigation', () => {
   });
 
   it('uses the current bootstrap role when Clerk token does not include a numeric user id', () => {
-    const updateBootstrapRole = jest.fn();
+    const updateBootstrapRole = vi.fn();
     mockSignedInContext({
       userId: null,
       userRole: null,
@@ -236,7 +254,7 @@ describe('App navigation', () => {
         role: 'admin',
         organizationId: 'org_expect',
       },
-      retry: jest.fn(),
+      retry: vi.fn(),
     };
 
     render(<App />);
@@ -406,7 +424,7 @@ describe('App Expect QA diagnostics', () => {
         role: 'team_member',
         organizationId: 'org_expect',
       },
-      retry: jest.fn(),
+      retry: vi.fn(),
     };
 
     render(<App />);

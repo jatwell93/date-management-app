@@ -3,9 +3,9 @@ import { TIER_LIMITS } from '../../types/subscription';
 import crypto from 'crypto';
 
 // Mock external services - we're testing database integration only
-jest.mock('../../services/subscription.service');
-jest.mock('../../services/email.service');
-jest.mock('stripe');
+vi.mock('../../services/subscription.service');
+vi.mock('../../services/email.service');
+vi.mock('stripe');
 
 const prisma = new PrismaClient();
 

@@ -33,6 +33,15 @@ router.get(
   },
 );
 
+// GET /reports/expiry-entries - Get all active (non-expired) expiry entries
+router.get(
+  '/expiry-entries',
+  authenticateToken,
+  async (req: AuthRequest, res: Response, next: NextFunction) => {
+    await reportController.getActiveExpiryEntriesReport(req, res, next);
+  },
+);
+
 // GET /reports/monthly-markdown - Get monthly markdown report
 router.get(
   '/monthly-markdown',
@@ -87,6 +96,15 @@ router.get(
   },
 );
 
+// GET /reports/sell-through - Sell-through counts by markdown level
+router.get(
+  '/sell-through',
+  authenticateToken,
+  async (req: AuthRequest, res: Response, next: NextFunction) => {
+    await reportController.getSellThroughReport(req, res, next);
+  },
+);
+
 // GET /reports/items-by-user - Get items added by user
 router.get(
   '/items-by-user',
@@ -102,6 +120,15 @@ router.get(
   authenticateToken,
   async (req: AuthRequest, res: Response, next: NextFunction) => {
     await reportController.getItemsByDateReport(req, res, next);
+  },
+);
+
+// GET /reports/store-walk-audit - Get store walk checking productivity and flags
+router.get(
+  '/store-walk-audit',
+  authenticateToken,
+  async (req: AuthRequest, res: Response, next: NextFunction) => {
+    await reportController.getStoreWalkAuditReport(req, res, next);
   },
 );
 

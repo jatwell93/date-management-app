@@ -24,6 +24,10 @@ import * as Sentry from '@sentry/node';
 import { ApplicationMonitoringService } from './application.monitoring.service';
 import { invalidateSubscriptionCache } from '../middleware/auth.middleware';
 import { getTierLimits, TierLimits } from './webhook-subscription.helpers';
+import {
+  getSubscriptionCurrentPeriodEnd,
+  getSubscriptionCurrentPeriodEndDate,
+} from './subscription-billing.helpers';
 import { dispatchStripeWebhookEvent } from './webhook-event-dispatcher';
 import { injectable, inject } from 'tsyringe';
 import { Logger } from '../utils/logger';
@@ -90,7 +94,7 @@ export class WebhookService {
 
     if (envConfig.STRIPE_SECRET_KEY) {
       this.stripe = new Stripe(envConfig.STRIPE_SECRET_KEY, {
-        apiVersion: '2023-08-16',
+        apiVersion: '2026-06-24.dahlia',
       });
     } else {
       this.stripe = null;
@@ -283,6 +287,8 @@ export class WebhookService {
                 ? 'annual'
                 : 'monthly',
             trialEndDate: subscription.trial_end ? new Date(subscription.trial_end * 1000) : null,
+            cancelAtPeriodEnd: subscription.cancel_at_period_end,
+            currentPeriodEnd: getSubscriptionCurrentPeriodEndDate(subscription),
           },
           tx,
         );
@@ -361,7 +367,7 @@ export class WebhookService {
       log.info('Subscription updated', {
         subscriptionId: subscription.id,
         status: subscription.status,
-        currentPeriodEnd: subscription.current_period_end,
+        currentPeriodEnd: getSubscriptionCurrentPeriodEnd(subscription),
       });
 
       const organizationId = await this.validateWebhookMetadata(subscription.customer as string);
@@ -411,36 +417,36 @@ export class WebhookService {
 
       // Update in transaction
       await this.prisma.$transaction(async (tx) => {
-        // Set status to canceled and downgrade to starter
+        // Set status to canceled and downgrade to Free
         await this.subscriptionRepo.updateManyByOrganizationId(
           organizationId,
           {
             status: SubscriptionStatus.CANCELED,
-            tierLevel: 'starter',
+            tierLevel: 'free',
             trialEndDate: null,
           },
           tx,
         );
 
-        // Update usage limits to Starter tier
-        const starterLimits = TIER_LIMITS.starter;
+        // Update usage limits to Free tier
+        const freeLimits = TIER_LIMITS.free;
         await this.subscriptionRepo.updateUsage(
           organizationId,
           {
-            maxSkus: starterLimits.max_skus || 500,
-            maxUsers: starterLimits.max_users || 1,
-            maxInventoryItems: starterLimits.max_inventory_items || 5000,
+            maxSkus: freeLimits.max_skus || 500,
+            maxUsers: freeLimits.max_users || 1,
+            maxInventoryItems: freeLimits.max_inventory_items || 500,
           },
           tx,
         );
 
-        // Apply creation lock if usage exceeds Starter limits
+        // Apply creation lock if usage exceeds Free limits
         const usage = await this.subscriptionRepo.findUsageByOrganizationId(organizationId, tx);
 
         if (usage) {
-          const isOverSkuLimit = usage.totalSkus > (starterLimits.max_skus || 500);
+          const isOverSkuLimit = usage.totalSkus > (freeLimits.max_skus || 500);
           const isOverInventoryLimit =
-            usage.totalInventoryItems > (starterLimits.max_inventory_items || 5000);
+            usage.totalInventoryItems > (freeLimits.max_inventory_items || 500);
 
           if (isOverSkuLimit || isOverInventoryLimit) {
             await this.orgRepo.updateById(organizationId, { isCreationLocked: true }, tx);
@@ -449,14 +455,14 @@ export class WebhookService {
               organizationId,
               currentSkus: usage.totalSkus,
               currentInventoryItems: usage.totalInventoryItems,
-              starterSkuLimit: starterLimits.max_skus,
-              starterInventoryLimit: starterLimits.max_inventory_items,
+              freeSkuLimit: freeLimits.max_skus,
+              freeInventoryLimit: freeLimits.max_inventory_items,
             });
 
             await this.emailService.sendDowngradeWarningEmail(
               organizationId,
               usage.totalSkus,
-              starterLimits.max_skus || 500,
+              freeLimits.max_skus || 500,
             );
           }
         }
@@ -920,6 +926,8 @@ export class WebhookService {
       trialEndDate: subscription.trial_end ? new Date(subscription.trial_end * 1000) : null,
       billingCycle:
         subscription.items.data[0]?.price.recurring?.interval === 'year' ? 'annual' : 'monthly',
+      cancelAtPeriodEnd: subscription.cancel_at_period_end,
+      currentPeriodEnd: getSubscriptionCurrentPeriodEndDate(subscription),
     };
 
     if (existingTier) {
@@ -1110,6 +1118,8 @@ export class WebhookService {
           checkoutData.stripeSubscription.items.data[0]?.price.recurring?.interval === 'year'
             ? 'annual'
             : 'monthly',
+        cancelAtPeriodEnd: checkoutData.stripeSubscription.cancel_at_period_end,
+        currentPeriodEnd: getSubscriptionCurrentPeriodEndDate(checkoutData.stripeSubscription),
       },
       tx,
     );
@@ -1152,20 +1162,20 @@ export class WebhookService {
 export function extractTierFromSubscriptionPrice(subscription: Stripe.Subscription): TierLevel {
   const price = subscription.items.data[0]?.price;
   if (!price) {
-    log.warn('No price found on subscription, defaulting to starter', {
+    log.warn('No price found on subscription, defaulting to free', {
       subscriptionId: subscription.id,
     });
-    return 'starter';
+    return 'free';
   }
 
-  const tier = (price.metadata?.tier as TierLevel) || 'starter';
+  const tier = (price.metadata?.tier as TierLevel) || 'free';
   if (!Object.keys(TIER_LIMITS).includes(tier)) {
-    log.warn('Unknown tier in price metadata, defaulting to starter', {
+    log.warn('Unknown tier in price metadata, defaulting to free', {
       subscriptionId: subscription.id,
       priceId: price.id,
       tier,
     });
-    return 'starter';
+    return 'free';
   }
 
   return tier;

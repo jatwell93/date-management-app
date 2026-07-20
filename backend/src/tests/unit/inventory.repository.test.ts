@@ -26,8 +26,8 @@ describe('InventoryRepository', () => {
   beforeEach(() => {
     prisma = {
       inventoryItem: {
-        findMany: jest.fn(),
-        findFirst: jest.fn(),
+        findMany: vi.fn(),
+        findFirst: vi.fn(),
       },
     };
     repository = new InventoryRepository(prisma as never);

@@ -10,6 +10,7 @@ export interface Product {
   sku: string;
   name: string;
   costPrice: number;
+  retailPrice?: number | null;
   createdAt: string;
   updatedAt: string;
 }

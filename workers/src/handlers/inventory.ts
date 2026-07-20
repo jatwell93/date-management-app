@@ -7,6 +7,7 @@
 
 import { neon } from '@neondatabase/serverless';
 import type { Env } from '../types/env';
+import { getConnectionString } from '../utils/db-connection';
 
 export interface InventoryItem {
   id: number;
@@ -136,8 +137,4 @@ export async function deleteInventoryItem(
     DELETE FROM inventory_items WHERE id = ${itemId} RETURNING id
   `;
   return results.length > 0;
-}
-
-function getConnectionString(env: Env): string {
-  return env.HYPERDRIVE?.connectionString || env.NEON_CONNECTION_STRING || '';
 }

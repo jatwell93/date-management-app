@@ -7,10 +7,10 @@ import {
 import * as ClerkBackend from '@clerk/backend';
 
 // Mock Clerk backend module
-jest.mock('@clerk/backend');
+vi.mock('@clerk/backend');
 
 // Mock environment config with CLERK_SECRET_KEY set
-jest.mock('../config/environment', () => ({
+vi.mock('../config/environment', () => ({
   envConfig: {
     CLERK_SECRET_KEY: 'test_secret_key',
     CLERK_PUBLISHABLE_KEY: 'pk_test_example',
@@ -28,14 +28,14 @@ describe('Clerk Auth Middleware', () => {
       headers: {},
     };
     mockRes = {
-      status: jest.fn().mockReturnThis(),
-      json: jest.fn().mockReturnThis(),
+      status: vi.fn().mockReturnThis(),
+      json: vi.fn().mockReturnThis(),
     };
-    mockNext = jest.fn();
+    mockNext = vi.fn();
   });
 
   afterEach(() => {
-    jest.clearAllMocks();
+    vi.clearAllMocks();
   });
 
   describe('Test bypass', () => {
@@ -130,7 +130,7 @@ describe('Clerk Auth Middleware', () => {
         sub: 'user_clerk_123',
         org_id: 'org_clerk_123',
       };
-      const getUser = jest.fn().mockResolvedValue({
+      const getUser = vi.fn().mockResolvedValue({
         primaryEmailAddress: { emailAddress: 'hydrated@example.com' },
         username: 'hydrated-user',
       });
@@ -183,7 +183,7 @@ describe('Clerk Auth Middleware', () => {
       (ClerkBackend.verifyToken as jest.Mock).mockResolvedValue(mockDecoded);
       (ClerkBackend.createClerkClient as jest.Mock).mockReturnValue({
         users: {
-          getUser: jest.fn().mockResolvedValue({
+          getUser: vi.fn().mockResolvedValue({
             primaryEmailAddress: { emailAddress: 'minimal@example.com' },
             username: undefined,
           }),

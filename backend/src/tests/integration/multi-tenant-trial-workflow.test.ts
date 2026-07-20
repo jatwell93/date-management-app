@@ -14,19 +14,23 @@ import { SubscriptionService } from '../../services/subscription.service';
 import { SubscriptionStatus, TIER_LIMITS, BillingCycle } from '../../types/subscription';
 
 // Mock Stripe
-jest.mock('stripe', () => {
-  return jest.fn().mockImplementation(() => ({
-    customers: {
-      create: jest.fn().mockResolvedValue({ id: 'cus_test_trial' }),
-    },
-    subscriptions: {
-      create: jest.fn().mockResolvedValue({
-        id: 'sub_test_trial',
-        status: 'trialing',
-        trial_end: Math.floor(Date.now() / 1000) + 14 * 24 * 60 * 60,
-      }),
-    },
-  }));
+vi.mock('stripe', () => {
+  // SUT default-imports Stripe; expose the constructor as `default`.
+  const StripeMock = vi.fn().mockImplementation(function () {
+    return {
+      customers: {
+        create: vi.fn().mockResolvedValue({ id: 'cus_test_trial' }),
+      },
+      subscriptions: {
+        create: vi.fn().mockResolvedValue({
+          id: 'sub_test_trial',
+          status: 'trialing',
+          trial_end: Math.floor(Date.now() / 1000) + 14 * 24 * 60 * 60,
+        }),
+      },
+    };
+  });
+  return { default: StripeMock };
 });
 
 describe('Multi-Tenant Trial Workflow Tests', () => {
@@ -44,10 +48,10 @@ describe('Multi-Tenant Trial Workflow Tests', () => {
     prisma = getDefaultDatabaseClient();
     mockStripeClient = {
       customers: {
-        create: jest.fn().mockResolvedValue({ id: 'cus_test_trial' }),
+        create: vi.fn().mockResolvedValue({ id: 'cus_test_trial' }),
       },
       subscriptions: {
-        create: jest.fn().mockResolvedValue({
+        create: vi.fn().mockResolvedValue({
           id: 'sub_test_trial',
           status: 'active',
         }),
@@ -163,7 +167,7 @@ describe('Multi-Tenant Trial Workflow Tests', () => {
       expect(isTrialActive).toBe(true);
     });
 
-    it('should downgrade to Starter tier after trial expires', async () => {
+    it('should downgrade to Free tier after trial expires', async () => {
       // Ensure subscription record exists for trial
       const trialSubscription = await prisma.subscriptionTier.create({
         data: {
@@ -180,7 +184,7 @@ describe('Multi-Tenant Trial Workflow Tests', () => {
         where: { organizationId: orgTrial.id },
       });
 
-      expect(updatedSubscription?.tierLevel).toBe('starter');
+      expect(updatedSubscription?.tierLevel).toBe('free');
       expect(updatedSubscription?.status).toBe(SubscriptionStatus.ACTIVE);
     });
 
@@ -328,8 +332,8 @@ describe('Multi-Tenant Trial Workflow Tests', () => {
         where: { organizationId: orgTrial.id },
       });
 
-      expect(usage?.maxSkus).toBe(2000); // Professional limit
-      expect(usage?.maxUsers).toBe(3);
+      expect(usage?.maxSkus).toBe(50000); // Professional limit
+      expect(usage?.maxUsers).toBe(10);
     });
 
     it('should update orgUsage limits on trial expiration downgrade', async () => {
@@ -365,7 +369,7 @@ describe('Multi-Tenant Trial Workflow Tests', () => {
       const subscription = await prisma.subscriptionTier.findFirst({
         where: { organizationId: orgTrial.id },
       });
-      expect(subscription?.tierLevel).toBe('starter');
+      expect(subscription?.tierLevel).toBe('free');
       expect(subscription?.status).toBe(SubscriptionStatus.ACTIVE);
 
       // Note: downgradeExpiredTrials does NOT update orgUsage limits
@@ -400,7 +404,7 @@ describe('Multi-Tenant Trial Workflow Tests', () => {
       });
 
       expect(trialEvent).toBeDefined();
-      expect(trialEvent?.metadata).toContain('starter');
+      expect(trialEvent?.metadata).toContain('free');
     });
 
     it('should handle multiple expired trials atomically', async () => {
@@ -446,8 +450,8 @@ describe('Multi-Tenant Trial Workflow Tests', () => {
         where: { organizationId: orgTrial2.id },
       });
 
-      expect(sub1?.tierLevel).toBe('starter');
-      expect(sub2?.tierLevel).toBe('starter');
+      expect(sub1?.tierLevel).toBe('free');
+      expect(sub2?.tierLevel).toBe('free');
     });
   });
 

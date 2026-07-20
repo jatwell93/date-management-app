@@ -9,7 +9,7 @@ import Toast from '../toast';
 
 describe('phase 2 semantic UI primitives', () => {
   beforeEach(() => {
-    jest.useRealTimers();
+    vi.useRealTimers();
   });
   it('uses semantic intent tokens for button variants', () => {
     expect(buttonVariants({ variant: 'default' })).toContain('bg-semantic-primary');
@@ -60,27 +60,27 @@ describe('phase 2 semantic UI primitives', () => {
   });
 
   it('resets the auto-hide timer when visible toast content changes', () => {
-    jest.useFakeTimers();
-    const onClose = jest.fn();
+    vi.useFakeTimers();
+    const onClose = vi.fn();
     const { rerender } = render(
       <Toast message="First toast" type="success" isVisible onClose={onClose} />,
     );
 
     act(() => {
-      jest.advanceTimersByTime(2000);
+      vi.advanceTimersByTime(2000);
     });
 
     rerender(<Toast message="Second toast" type="error" isVisible onClose={onClose} />);
 
     act(() => {
-      jest.advanceTimersByTime(1000);
+      vi.advanceTimersByTime(1000);
     });
 
     expect(onClose).not.toHaveBeenCalled();
     expect(screen.getByText('Second toast')).toBeInTheDocument();
 
     act(() => {
-      jest.advanceTimersByTime(2000);
+      vi.advanceTimersByTime(2000);
     });
 
     expect(onClose).toHaveBeenCalledTimes(1);

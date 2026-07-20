@@ -1,0 +1,7 @@
+- [x] 1. Add reusable print-target classes in `frontend/src/theme/print-reports.css` and apply them to the report pages without changing backend or API behavior.
+- [x] 2. Update `frontend/src/pages/DetailedExpiryReportPage.tsx` so the print action targets the full expiry table and prints all loaded rows from `reportData`, not the paginated `DataTable` view.
+- [x] 3. Update `frontend/src/pages/ExpiredItemsPage.tsx` so the print action targets the desktop table surface and the printed output omits the interactive Actions column/buttons.
+- [x] 4. Remove the header print button from `frontend/src/pages/ReportsPage.tsx`.
+- [x] 5. Remove the header print button from `frontend/src/pages/UsageReportPage.tsx`.
+- [x] 6. Add/adjust focused tests in `frontend/src/tests/DetailedExpiryReportPage.test.tsx`, `frontend/src/tests/ExpiredItemsPage.test.tsx`, `frontend/src/tests/ReportsPage.test.tsx`, and `frontend/src/tests/UsageReportPage.test.tsx`.
+- [x] 7. Run `npm run test --prefix frontend -- DetailedExpiryReportPage.test.tsx ExpiredItemsPage.test.tsx ReportsPage.test.tsx UsageReportPage.test.tsx`, `npm run lint --prefix frontend`, `npm run build --prefix frontend`, and capture the results.

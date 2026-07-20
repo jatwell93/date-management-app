@@ -1,12 +1,12 @@
 import express from 'express';
 import request from 'supertest';
 
-const mockGetSaasMetrics = jest.fn();
-const mockGetApplicationMetrics = jest.fn();
-const mockGroupBy = jest.fn();
-const mockFindMany = jest.fn();
-const mockResolve = jest.fn();
-const mockGetDefaultDatabaseClient = jest.fn(() => {
+const mockGetSaasMetrics = vi.fn();
+const mockGetApplicationMetrics = vi.fn();
+const mockGroupBy = vi.fn();
+const mockFindMany = vi.fn();
+const mockResolve = vi.fn();
+const mockGetDefaultDatabaseClient = vi.fn(() => {
   throw new Error('admin metrics routes must resolve repositories through DI');
 });
 const mockSubscriptionRepository = {
@@ -16,7 +16,7 @@ const mockAnalyticsRepository = {
   findMetricsSnapshotsSince: (...args: unknown[]) => mockFindMany(...args),
 };
 
-jest.mock('../../middleware/requireOrgRole', () => ({
+vi.mock('../../middleware/requireOrgRole', () => ({
   requireOrgRole:
     (...allowedRoles: string[]) =>
     (req: any, _res: any, next: any) => {
@@ -27,44 +27,46 @@ jest.mock('../../middleware/requireOrgRole', () => ({
     },
 }));
 
-jest.mock('../../services/application.monitoring.service', () => ({
+vi.mock('../../services/application.monitoring.service', () => ({
   ApplicationMonitoringService: {
-    getInstance: jest.fn(() => ({
+    getInstance: vi.fn(() => ({
       getMetrics: (...args: unknown[]) => mockGetApplicationMetrics(...args),
     })),
   },
 }));
 
-jest.mock('../../services/saas-metrics.service', () => ({
-  SaasMetricsService: jest.fn().mockImplementation(() => ({
-    getSaasMetrics: (...args: unknown[]) => mockGetSaasMetrics(...args),
-  })),
+vi.mock('../../services/saas-metrics.service', () => ({
+  SaasMetricsService: vi.fn().mockImplementation(function () {
+    return {
+      getSaasMetrics: (...args: unknown[]) => mockGetSaasMetrics(...args),
+    };
+  }),
 }));
 
-jest.mock('../../database/database-factory', () => ({
+vi.mock('../../database/database-factory', () => ({
   getDefaultDatabaseClient: () => mockGetDefaultDatabaseClient(),
 }));
 
-jest.mock('../../di/container', () => ({
+vi.mock('../../di/container', () => ({
   getDiContainer: () => ({
     resolve: (...args: unknown[]) => mockResolve(...args),
   }),
 }));
 
-jest.mock('../../repositories/subscription.repository', () => ({
+vi.mock('../../repositories/subscription.repository', () => ({
   SubscriptionRepository: class SubscriptionRepository {},
 }));
 
-jest.mock('../../repositories/analytics.repository', () => ({
+vi.mock('../../repositories/analytics.repository', () => ({
   AnalyticsRepository: class AnalyticsRepository {},
 }));
 
-jest.mock('../../utils/logger', () => ({
+vi.mock('../../utils/logger', () => ({
   Logger: {
-    info: jest.fn(),
-    warn: jest.fn(),
-    error: jest.fn(),
-    debug: jest.fn(),
+    info: vi.fn(),
+    warn: vi.fn(),
+    error: vi.fn(),
+    debug: vi.fn(),
   },
 }));
 
@@ -93,7 +95,7 @@ describe('admin.metrics.routes', () => {
   app.use('/api/admin/metrics', adminMetricsRouter);
 
   beforeEach(() => {
-    jest.clearAllMocks();
+    vi.clearAllMocks();
 
     mockGetSaasMetrics.mockResolvedValue({
       trialConversionRate: 22,
@@ -185,10 +187,13 @@ describe('admin.metrics.routes', () => {
     expect(response.status).toBe(200);
     expect(response.body.tiers.starter.trial).toBe(3);
     expect(response.body.tiers.starter.canceled).toBe(1);
-    expect(response.body.tiers.professional.monthlyRevenue).toBe(58);
-    expect(response.body.tiers.pro.monthlyRevenue).toBe(29);
-    expect(response.body.tiers.enterprise.monthlyRevenue).toBe(299);
-    expect(response.body.totalRevenue).toBe(386);
+    // Professional $99/mo: 2 active = $198
+    expect(response.body.tiers.professional.monthlyRevenue).toBe(198);
+    // Legacy 'pro' maps to professional pricing: 1 active = $99
+    expect(response.body.tiers.pro.monthlyRevenue).toBe(99);
+    // Enterprise is quote-based (TIER_PRICES.enterprise = 0)
+    expect(response.body.tiers.enterprise.monthlyRevenue).toBe(0);
+    expect(response.body.totalRevenue).toBe(297);
     expect(response.body.totalSubscriptions).toBe(8);
   });
 

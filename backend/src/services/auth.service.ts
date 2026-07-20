@@ -281,7 +281,7 @@ export class AuthService {
   verifyToken(token: string): TokenPayload {
     try {
       const secret = envConfig.JWT_SECRET;
-      const decoded = jwt.verify(token, secret) as TokenPayload;
+      const decoded = jwt.verify(token, secret, { algorithms: ['HS256'] }) as TokenPayload;
       return decoded;
     } catch (error) {
       Logger.warn('Auth service: Token verification failed', {

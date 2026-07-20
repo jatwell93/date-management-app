@@ -17,12 +17,19 @@
     "skipLibCheck": true,
     "esModuleInterop": true,
     "outDir": "./dist",
+    // TS 6 deprecates `baseUrl` (removed in TS 7); `ignoreDeprecations: "6.0"`
+    // is the sanctioned bridge until the TS 7 upgrade migrates baseUrl → paths.
+    "ignoreDeprecations": "6.0",
     "baseUrl": "../",
+    // This project deliberately compiles the sibling `../shared/**` package into
+    // the Worker. TS 6 now enforces rootDir containment, so pin rootDir to the
+    // repo root (these configs are noEmit; real emit is esbuild via build.js).
+    "rootDir": "../",
     "paths": {
       "@/*": ["workers/src/*"]
     }
   },
-  "include": ["src/**/*"],
+  "include": ["src/**/*", "../shared/**/*"],
   "exclude": [
     "node_modules",
     "dist",

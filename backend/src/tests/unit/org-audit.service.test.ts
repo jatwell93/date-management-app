@@ -14,15 +14,15 @@ describe('OrgAuditService', () => {
   beforeEach(() => {
     prisma = {
       orgAuditLog: {
-        create: jest.fn(),
-        findMany: jest.fn(),
+        create: vi.fn(),
+        findMany: vi.fn(),
       },
     };
   });
 
   it('delegates emit to the repository when injected', async () => {
     const repository = {
-      create: jest.fn(),
+      create: vi.fn(),
     };
     const service = new OrgAuditService(prisma as unknown as PrismaClient, repository as never);
 
@@ -44,11 +44,11 @@ describe('OrgAuditService', () => {
 
   it('delegates emitWithClient to the repository with the provided client', async () => {
     const repository = {
-      create: jest.fn(),
+      create: vi.fn(),
     };
     const tx = {
       orgAuditLog: {
-        create: jest.fn(),
+        create: vi.fn(),
       },
     };
     const service = new OrgAuditService(prisma as unknown as PrismaClient, repository as never);
@@ -72,7 +72,7 @@ describe('OrgAuditService', () => {
 
   it('delegates organization audit queries to the repository', async () => {
     const repository = {
-      findByOrganization: jest.fn().mockResolvedValue([{ id: 1 }]),
+      findByOrganization: vi.fn().mockResolvedValue([{ id: 1 }]),
     };
     const service = new OrgAuditService(prisma as unknown as PrismaClient, repository as never);
 

@@ -11,7 +11,7 @@ import { UploadController } from '../../controllers/upload.controller';
 import { UploadService } from '../../services/upload.service';
 import { StorageProvider } from '../../storage/storage-provider.interface';
 
-jest.mock('../../config/environment', () => ({
+vi.mock('../../config/environment', () => ({
   envConfig: {
     NODE_ENV: 'development',
     MAX_UPLOAD_SIZE_BYTES: 10 * 1024 * 1024,
@@ -19,7 +19,7 @@ jest.mock('../../config/environment', () => ({
   },
 }));
 
-jest.mock('../../middleware/auth.middleware', () => ({
+vi.mock('../../middleware/auth.middleware', () => ({
   authenticateToken: (req: any, _res: any, next: any) => {
     req.userId = 1;
     req.organizationId = 'org-test-upload';
@@ -81,7 +81,7 @@ const createTestApp = (
     csvParser as any,
     storageQuotaService as any,
   );
-  const uploadRepository = { findStatusByFileKey: jest.fn() };
+  const uploadRepository = { findStatusByFileKey: vi.fn() };
   const controller = new UploadController(uploadService, uploadRepository as any);
 
   app.post('/api/upload/initiate', (req, res) => controller.initiate(req, res));
@@ -91,26 +91,26 @@ const createTestApp = (
   return app;
 };
 
-const getEnvConfig = () =>
-  require('../../config/environment').envConfig as {
+const getEnvConfig = async () =>
+  (await import('../../config/environment')).envConfig as {
     NODE_ENV: string;
     MAX_UPLOAD_SIZE_BYTES: number;
     DIRECT_UPLOAD_THRESHOLD_BYTES: number;
   };
 
 describe('CSV Upload Flow', () => {
-  beforeEach(() => {
-    const envConfig = getEnvConfig();
+  beforeEach(async () => {
+    const envConfig = await getEnvConfig();
     envConfig.NODE_ENV = 'development';
     envConfig.DIRECT_UPLOAD_THRESHOLD_BYTES = 2 * 1024 * 1024;
   });
 
   it('supports direct upload flow end-to-end', async () => {
     const storage = new InMemoryStorageProvider();
-    const csvParser = { processFile: jest.fn().mockResolvedValue({ imported: 1, errors: [] }) };
+    const csvParser = { processFile: vi.fn().mockResolvedValue({ imported: 1, errors: [] }) };
     const storageQuotaService = {
-      recordUpload: jest.fn().mockResolvedValue(undefined),
-      markUploadDeleted: jest.fn().mockResolvedValue(undefined),
+      recordUpload: vi.fn().mockResolvedValue(undefined),
+      markUploadDeleted: vi.fn().mockResolvedValue(undefined),
     };
 
     const app = createTestApp(storage, csvParser, storageQuotaService);
@@ -131,15 +131,15 @@ describe('CSV Upload Flow', () => {
   });
 
   it('supports presigned upload + complete flow', async () => {
-    const envConfig = getEnvConfig();
+    const envConfig = await getEnvConfig();
     envConfig.NODE_ENV = 'production';
     envConfig.DIRECT_UPLOAD_THRESHOLD_BYTES = 1024; // Force presigned for 2KB file
 
     const storage = new InMemoryStorageProvider();
-    const csvParser = { processFile: jest.fn().mockResolvedValue({ imported: 1, errors: [] }) };
+    const csvParser = { processFile: vi.fn().mockResolvedValue({ imported: 1, errors: [] }) };
     const storageQuotaService = {
-      recordUpload: jest.fn().mockResolvedValue(undefined),
-      markUploadDeleted: jest.fn().mockResolvedValue(undefined),
+      recordUpload: vi.fn().mockResolvedValue(undefined),
+      markUploadDeleted: vi.fn().mockResolvedValue(undefined),
     };
 
     const app = createTestApp(storage, csvParser, storageQuotaService);

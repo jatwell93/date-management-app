@@ -23,6 +23,13 @@ out/
 *.manifest.json
 *.pgdump.sql
 
+# Memvid local index
+# Derived index, rebuildable from memory.jsonl. See scripts/mem-rebuild.js.
+project-memory.mv2
+*.mv2
+*.mv2.bak*
+*.mv2e
+
 # Cache directories
 .cache/
 node_modules/.cache/
@@ -56,7 +63,7 @@ Thumbs.db
 .vscode/
 .windsurf/
 .codex/
-specs/
+/specs/
 .quint/
 prompts/
 skills/
@@ -67,8 +74,10 @@ go-to-market-docs/
 brand-identity-pharma-apps/
 brand-identity/
 
-# Real pharmacy data with sensitive pricing
+# Real pharmacy data with sensitive information
 backend/src/tests/fixtures/real-pharmacy-products.csv
+supplier-doc-examples/*
+!supplier-doc-examples/sample_100_ipa_price_brands.xlsx
 
 # Coverage
 coverage/

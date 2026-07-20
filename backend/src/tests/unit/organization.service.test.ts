@@ -2,9 +2,9 @@ import { OrganizationService } from '../../services/organization.service';
 import { PrismaClient } from '@prisma/client';
 import { OrganizationRepository } from '../../repositories/organization.repository';
 
-const invalidateSubscriptionCacheMock = jest.fn();
+const invalidateSubscriptionCacheMock = vi.fn();
 
-jest.mock('../../middleware/auth.middleware', () => ({
+vi.mock('../../middleware/auth.middleware', () => ({
   invalidateSubscriptionCache: (organizationId: string) =>
     invalidateSubscriptionCacheMock(organizationId),
 }));
@@ -16,35 +16,35 @@ describe('OrganizationService', () => {
   beforeEach(() => {
     mockPrisma = {
       organization: {
-        findUnique: jest.fn(),
-        update: jest.fn(),
-        delete: jest.fn(),
+        findUnique: vi.fn(),
+        update: vi.fn(),
+        delete: vi.fn(),
       },
       user: {
-        findMany: jest.fn().mockResolvedValue([]),
-        deleteMany: jest.fn().mockResolvedValue({ count: 0 }),
+        findMany: vi.fn().mockResolvedValue([]),
+        deleteMany: vi.fn().mockResolvedValue({ count: 0 }),
       },
-      auditLog: { deleteMany: jest.fn().mockResolvedValue({ count: 0 }) },
-      itemTransaction: { deleteMany: jest.fn().mockResolvedValue({ count: 0 }) },
-      expiredItemTransaction: { deleteMany: jest.fn().mockResolvedValue({ count: 0 }) },
-      upload: { deleteMany: jest.fn().mockResolvedValue({ count: 0 }) },
-      organizationInvite: { deleteMany: jest.fn().mockResolvedValue({ count: 0 }) },
-      refreshToken: { deleteMany: jest.fn().mockResolvedValue({ count: 0 }) },
-      inventoryItem: { deleteMany: jest.fn().mockResolvedValue({ count: 0 }) },
-      storeArea: { deleteMany: jest.fn().mockResolvedValue({ count: 0 }) },
-      product: { deleteMany: jest.fn().mockResolvedValue({ count: 0 }) },
-      subscriptionTier: { deleteMany: jest.fn().mockResolvedValue({ count: 0 }) },
-      trialEvent: { deleteMany: jest.fn().mockResolvedValue({ count: 0 }) },
-      organizationUsage: { deleteMany: jest.fn().mockResolvedValue({ count: 0 }) },
+      auditLog: { deleteMany: vi.fn().mockResolvedValue({ count: 0 }) },
+      itemTransaction: { deleteMany: vi.fn().mockResolvedValue({ count: 0 }) },
+      expiredItemTransaction: { deleteMany: vi.fn().mockResolvedValue({ count: 0 }) },
+      upload: { deleteMany: vi.fn().mockResolvedValue({ count: 0 }) },
+      organizationInvite: { deleteMany: vi.fn().mockResolvedValue({ count: 0 }) },
+      refreshToken: { deleteMany: vi.fn().mockResolvedValue({ count: 0 }) },
+      inventoryItem: { deleteMany: vi.fn().mockResolvedValue({ count: 0 }) },
+      storeArea: { deleteMany: vi.fn().mockResolvedValue({ count: 0 }) },
+      product: { deleteMany: vi.fn().mockResolvedValue({ count: 0 }) },
+      subscriptionTier: { deleteMany: vi.fn().mockResolvedValue({ count: 0 }) },
+      trialEvent: { deleteMany: vi.fn().mockResolvedValue({ count: 0 }) },
+      organizationUsage: { deleteMany: vi.fn().mockResolvedValue({ count: 0 }) },
     };
-    mockPrisma.$transaction = jest.fn(async (operation: (tx: typeof mockPrisma) => Promise<void>) =>
+    mockPrisma.$transaction = vi.fn(async (operation: (tx: typeof mockPrisma) => Promise<void>) =>
       operation(mockPrisma),
     );
     organizationService = new OrganizationService(mockPrisma as unknown as PrismaClient);
   });
 
   afterEach(() => {
-    jest.clearAllMocks();
+    vi.clearAllMocks();
   });
 
   describe('getOrganization', () => {
@@ -219,7 +219,7 @@ describe('OrganizationService repository injection', () => {
 
   it('uses the injected repository for organization reads', async () => {
     const repository = {
-      findById: jest.fn().mockResolvedValue({
+      findById: vi.fn().mockResolvedValue({
         id: 'org-123',
         name: 'Test Organization',
         slug: 'test-org',
@@ -243,7 +243,7 @@ describe('OrganizationService repository injection', () => {
 
   it('invalidates subscription cache after repository deletion succeeds', async () => {
     const repository = {
-      deleteCascade: jest.fn().mockResolvedValue(undefined),
+      deleteCascade: vi.fn().mockResolvedValue(undefined),
     } as unknown as OrganizationRepository;
     const service = new OrganizationService({} as PrismaClient, repository);
 

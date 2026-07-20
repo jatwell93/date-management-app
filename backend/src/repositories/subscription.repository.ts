@@ -146,6 +146,17 @@ export class SubscriptionRepository {
     });
   }
 
+  async countActiveExpiryItems(organizationId: string, tx?: DbClient): Promise<number> {
+    return this.getClient(tx).inventoryItem.count({
+      where: {
+        organizationId,
+        status: {
+          notIn: ['Processed', 'Completed', 'Discarded', 'Archived', 'Sold Through'],
+        },
+      },
+    });
+  }
+
   async findPastDueExpired(
     cutoffDate: Date,
     tx?: DbClient,
@@ -233,7 +244,7 @@ export class SubscriptionRepository {
         totalSkus: 0,
         maxSkus: 500,
         totalInventoryItems: 0,
-        maxInventoryItems: 5000,
+        maxInventoryItems: 500,
         storageUsedBytes: 0,
       },
       update: {},

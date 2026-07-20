@@ -8,31 +8,39 @@ import { apiService } from '../../lib/api.service';
 import { offlineStorage } from '../../lib/offline-storage';
 
 // Mock dependencies
-jest.mock('../../lib/api.service');
-jest.mock('../../lib/offline-storage');
+vi.mock('../../lib/api.service');
+vi.mock('../../lib/offline-storage');
+
+const mockGetToken = vi.fn();
+
+vi.mock('@clerk/clerk-react', () => ({
+  useAuth: () => ({
+    getToken: mockGetToken,
+  }),
+}));
 
 // Mock HandheldContext
 const mockHandheldContext = {
   isHandheld: false,
   syncStrategy: 'real-time' as SyncStrategy,
-  setSyncStrategy: jest.fn(),
+  setSyncStrategy: vi.fn(),
   detectionResult: null,
   hapticEnabled: true,
   audioFeedbackEnabled: true,
-  setHapticEnabled: jest.fn(),
-  setAudioFeedbackEnabled: jest.fn(),
-  refreshDetection: jest.fn(),
+  setHapticEnabled: vi.fn(),
+  setAudioFeedbackEnabled: vi.fn(),
+  refreshDetection: vi.fn(),
 };
 
-jest.mock('../../contexts/HandheldContext', () => ({
+vi.mock('../../contexts/HandheldContext', () => ({
   HandheldProvider: ({ children }: { children: React.ReactNode }) => <>{children}</>,
   useHandheldDetectionContext: () => mockHandheldContext,
 }));
 
 // Mock scrollIntoView for Radix UI
-window.HTMLElement.prototype.scrollIntoView = jest.fn();
-window.HTMLElement.prototype.hasPointerCapture = jest.fn();
-window.HTMLElement.prototype.releasePointerCapture = jest.fn();
+window.HTMLElement.prototype.scrollIntoView = vi.fn();
+window.HTMLElement.prototype.hasPointerCapture = vi.fn();
+window.HTMLElement.prototype.releasePointerCapture = vi.fn();
 
 // Mock ResizeObserver
 global.ResizeObserver = class ResizeObserver {
@@ -42,18 +50,21 @@ global.ResizeObserver = class ResizeObserver {
 };
 
 // Mock localforage
-jest.mock('localforage', () => ({
-  createInstance: jest.fn(() => ({
-    setItem: jest.fn(),
-    getItem: jest.fn(),
-    removeItem: jest.fn(),
-    clear: jest.fn(),
-  })),
-  config: jest.fn(),
-}));
+vi.mock('localforage', () => {
+  const localforage = {
+    createInstance: vi.fn(() => ({
+      setItem: vi.fn(),
+      getItem: vi.fn(),
+      removeItem: vi.fn(),
+      clear: vi.fn(),
+    })),
+    config: vi.fn(),
+  };
+  return { ...localforage, default: localforage };
+});
 
 // Mock Scanner
-jest.mock('../../components/Scanner', () => ({
+vi.mock('../../components/Scanner', () => ({
   Scanner: ({ onScan }: { onScan: (val: any) => void }) => (
     <div data-testid="mock-scanner">
       <input
@@ -79,7 +90,7 @@ jest.mock('../../components/Scanner', () => ({
 }));
 
 // Mock HandheldScanner
-jest.mock('../../components/HandheldScanner', () => ({
+vi.mock('../../components/HandheldScanner', () => ({
   HandheldScanner: ({ onScan }: { onScan: (val: any) => void }) => (
     <main className="flex-1 overflow-auto" role="main">
       <div data-testid="handheld-scan-toolbar">
@@ -144,7 +155,7 @@ jest.mock('../../components/HandheldScanner', () => ({
 }));
 
 // Mock Radix UI Select components
-jest.mock('../../components/ui/select', () => ({
+vi.mock('../../components/ui/select', () => ({
   Select: ({ onValueChange, value, children }: any) => (
     <select
       data-testid="location-select"
@@ -173,7 +184,7 @@ describe('ScanPage Integration', () => {
     name: 'Test Product Barcode',
     sku: 'TEST-SKU-1',
     barcode: '1234567890',
-    cost_price: 10.0,
+    costPrice: 10.0,
   };
 
   // Valid Product (SKU <= 8 chars)
@@ -182,11 +193,11 @@ describe('ScanPage Integration', () => {
     name: 'Test Product SKU',
     sku: '123456',
     barcode: '9999999999',
-    cost_price: 20.0,
+    costPrice: 20.0,
   };
 
   beforeEach(() => {
-    jest.clearAllMocks();
+    vi.clearAllMocks();
 
     // Reset handheld context mock
     mockHandheldContext.isHandheld = false;
@@ -214,6 +225,7 @@ describe('ScanPage Integration', () => {
     });
 
     (apiService.post as jest.Mock).mockResolvedValue({});
+    mockGetToken.mockResolvedValue(undefined);
 
     // Mock Online status
     Object.defineProperty(navigator, 'onLine', {
@@ -258,9 +270,118 @@ describe('ScanPage Integration', () => {
       );
     });
 
-    expect(screen.getByText('Test Product Barcode')).toBeInTheDocument();
+    expect(await screen.findByText('Test Product Barcode')).toBeInTheDocument();
     expect(screen.getByText('TEST-SKU-1')).toBeInTheDocument();
   });
+
+  it.each([
+    { daysToExpiry: 89, percentage: 50, price: '5.00' },
+    { daysToExpiry: 59, percentage: 60, price: '4.00' },
+    { daysToExpiry: 29, percentage: 75, price: '2.50' },
+  ])(
+    'shows the $percentage% markdown for an expiry $daysToExpiry days away',
+    async ({ daysToExpiry, percentage, price }) => {
+      render(
+        <HandheldProvider>
+          <ScanPage token={mockToken} />
+        </HandheldProvider>,
+      );
+
+      await screen.findByTestId('mock-scanner');
+      userEvent.click(screen.getByTestId('trigger-scan'));
+      await screen.findByText('Test Product Barcode');
+
+      expect(screen.getByText(/Cost Price:/i).parentElement).toHaveTextContent('$10.00');
+
+      const expiry = new Date();
+      expiry.setDate(expiry.getDate() + daysToExpiry);
+      const expiryValue = [
+        expiry.getFullYear(),
+        String(expiry.getMonth() + 1).padStart(2, '0'),
+        String(expiry.getDate()).padStart(2, '0'),
+      ].join('-');
+      fireEvent.change(screen.getByLabelText(/Expiry Date/i), {
+        target: { value: expiryValue },
+      });
+
+      expect(
+        await screen.findByText((_content, element) =>
+          Boolean(element?.textContent === `Markdown Price (${percentage}% off): $${price}`),
+        ),
+      ).toBeInTheDocument();
+      expect(screen.queryByText(/\$NaN/i)).not.toBeInTheDocument();
+    },
+  );
+
+  it('does not render a markdown price when the product cost is missing', async () => {
+    (apiService.get as jest.Mock).mockImplementation((url) => {
+      if (url === '/store-areas') return Promise.resolve(mockStoreAreas);
+      if (url.includes('/products/by-barcode/1234567890')) {
+        return Promise.resolve({ ...mockProductBarcode, costPrice: undefined });
+      }
+      if (url.includes('/inventory-items/')) return Promise.resolve([]);
+      return Promise.reject(new Error(`Not found call: ${url}`));
+    });
+
+    render(
+      <HandheldProvider>
+        <ScanPage token={mockToken} />
+      </HandheldProvider>,
+    );
+
+    await screen.findByTestId('mock-scanner');
+    userEvent.click(screen.getByTestId('trigger-scan'));
+    await screen.findByText('Test Product Barcode');
+
+    const expiry = new Date();
+    expiry.setDate(expiry.getDate() + 30);
+    fireEvent.change(screen.getByLabelText(/Expiry Date/i), {
+      target: {
+        value: [
+          expiry.getFullYear(),
+          String(expiry.getMonth() + 1).padStart(2, '0'),
+          String(expiry.getDate()).padStart(2, '0'),
+        ].join('-'),
+      },
+    });
+
+    expect(screen.getByText(/Cost Price:/i).parentElement).toHaveTextContent('Not available');
+    expect(screen.queryByText(/Markdown Price/i)).not.toBeInTheDocument();
+    expect(screen.queryByText(/\$NaN/i)).not.toBeInTheDocument();
+  });
+
+  it.each([
+    { label: 'today', daysOffset: 0 },
+    { label: 'already expired', daysOffset: -1 },
+  ])(
+    'shows an expired badge instead of markdown pricing when stock is $label',
+    async ({ daysOffset }) => {
+      render(
+        <HandheldProvider>
+          <ScanPage token={mockToken} />
+        </HandheldProvider>,
+      );
+
+      await screen.findByTestId('mock-scanner');
+      userEvent.click(screen.getByTestId('trigger-scan'));
+      await screen.findByText('Test Product Barcode');
+
+      const expiry = new Date();
+      expiry.setDate(expiry.getDate() + daysOffset);
+      fireEvent.change(screen.getByLabelText(/Expiry Date/i), {
+        target: {
+          value: [
+            expiry.getFullYear(),
+            String(expiry.getMonth() + 1).padStart(2, '0'),
+            String(expiry.getDate()).padStart(2, '0'),
+          ].join('-'),
+        },
+      });
+
+      expect(await screen.findByText('Expired')).toHaveAttribute('data-slot', 'badge');
+      expect(screen.queryByText(/Markdown Price/i)).not.toBeInTheDocument();
+    },
+  );
 
   it('displays product details after scanning a valid SKU (<=8 chars)', async () => {
     render(
@@ -315,6 +436,44 @@ describe('ScanPage Integration', () => {
     ).toBeInTheDocument();
   });
 
+  it('creates a scanned product using the camelCase cost price contract', async () => {
+    (apiService.get as jest.Mock).mockImplementation((url) => {
+      if (url === '/store-areas') return Promise.resolve(mockStoreAreas);
+      return Promise.reject(new Error('404 Not found'));
+    });
+    (apiService.post as jest.Mock).mockResolvedValue(mockProductBarcode);
+
+    render(
+      <HandheldProvider>
+        <ScanPage token={mockToken} />
+      </HandheldProvider>,
+    );
+
+    await screen.findByTestId('mock-scanner');
+    userEvent.click(screen.getByTestId('trigger-scan'));
+    await screen.findByText(/No catalog match for barcode 1234567890/i);
+
+    fireEvent.change(screen.getByLabelText(/Product Name/i), {
+      target: { value: 'Created Product' },
+    });
+    fireEvent.change(screen.getByLabelText(/^SKU$/i), { target: { value: 'CREATED-1' } });
+    fireEvent.change(screen.getByLabelText(/Cost Price/i), { target: { value: '12.50' } });
+    userEvent.click(screen.getByRole('button', { name: /Create product/i }));
+
+    await waitFor(() => {
+      expect(apiService.post).toHaveBeenCalledWith(
+        '/products',
+        {
+          barcode: '1234567890',
+          name: 'Created Product',
+          sku: 'CREATED-1',
+          costPrice: 12.5,
+        },
+        mockToken,
+      );
+    });
+  });
+
   it('keeps unknown barcode lookup failures recoverable on the scan page', async () => {
     (apiService.get as jest.Mock).mockImplementation((url) => {
       if (url === '/store-areas') return Promise.resolve(mockStoreAreas);
@@ -351,7 +510,7 @@ describe('ScanPage Integration', () => {
 
     // 1. Scan
     userEvent.click(screen.getByTestId('trigger-scan'));
-    await waitFor(() => screen.findByText('Test Product Barcode'));
+    await screen.findByText('Test Product Barcode');
 
     // 2. Fill Expiry
     const expiryInput = screen.getByLabelText(/Expiry Date/i);
@@ -380,6 +539,63 @@ describe('ScanPage Integration', () => {
     expect(await screen.findByText(/Expiry item saved to inventory/i)).toBeInTheDocument();
   });
 
+  it('refreshes the Clerk token before submitting an online expiry item', async () => {
+    mockGetToken.mockResolvedValue('fresh-clerk-token');
+    render(
+      <HandheldProvider>
+        <ScanPage token="expired-prop-token" />
+      </HandheldProvider>,
+    );
+
+    await waitFor(() =>
+      expect(apiService.get).toHaveBeenCalledWith('/store-areas', 'fresh-clerk-token'),
+    );
+
+    userEvent.click(screen.getByTestId('trigger-scan'));
+    await screen.findByText('Test Product Barcode');
+
+    fireEvent.change(screen.getByLabelText(/Expiry Date/i), { target: { value: '2025-12-31' } });
+    fireEvent.change(screen.getByTestId('location-select'), { target: { value: '1' } });
+
+    userEvent.click(screen.getByText(/Save expiry item/i));
+
+    await waitFor(() => {
+      expect(mockGetToken).toHaveBeenCalled();
+      expect(apiService.post).toHaveBeenCalledWith(
+        '/inventory-items',
+        expect.objectContaining({
+          productId: 101,
+          expiryDate: '2025-12-31',
+          locationId: 1,
+        }),
+        'fresh-clerk-token',
+      );
+    });
+  });
+
+  it('refreshes the Clerk token before looking up scanned product details', async () => {
+    mockGetToken.mockResolvedValue('fresh-clerk-token');
+    render(
+      <HandheldProvider>
+        <ScanPage token="expired-prop-token" />
+      </HandheldProvider>,
+    );
+
+    await waitFor(() =>
+      expect(apiService.get).toHaveBeenCalledWith('/store-areas', 'fresh-clerk-token'),
+    );
+
+    userEvent.click(screen.getByTestId('trigger-scan'));
+
+    await waitFor(() => {
+      expect(mockGetToken).toHaveBeenCalled();
+      expect(apiService.get).toHaveBeenCalledWith(
+        expect.stringContaining('/products/by-barcode/1234567890'),
+        'fresh-clerk-token',
+      );
+    });
+  });
+
   it('saves to offline storage when offline', async () => {
     Object.defineProperty(navigator, 'onLine', { value: false, writable: true });
 
@@ -394,7 +610,7 @@ describe('ScanPage Integration', () => {
 
     // 1. Scan
     userEvent.click(screen.getByTestId('trigger-scan'));
-    await waitFor(() => screen.findByText('Test Product Barcode'));
+    await screen.findByText('Test Product Barcode');
 
     // 2. Fill Form
     fireEvent.change(screen.getByLabelText(/Expiry Date/i), { target: { value: '2025-12-31' } });
@@ -508,7 +724,7 @@ describe('ScanPage Integration', () => {
             name: 'GS1 Product',
             sku: 'GS1-001',
             barcode: gs1Barcode,
-            cost_price: 15.0,
+            costPrice: 15.0,
           });
         }
         if (url.includes('/inventory-items/by-barcode')) {
@@ -534,7 +750,7 @@ describe('ScanPage Integration', () => {
       userEvent.click(triggerButton);
 
       // Wait for product to load
-      await waitFor(() => screen.findByText('GS1 Product'));
+      await screen.findByText('GS1 Product');
 
       // Verify expiry date was auto-populated from GS1 data
       const expiryInput = screen.getByLabelText(/Expiry Date/i);
@@ -607,7 +823,7 @@ describe('ScanPage Integration', () => {
       const triggerButton = screen.getByTestId('handheld-scan-trigger');
       userEvent.click(triggerButton);
 
-      await waitFor(() => screen.findByText('Test Product Barcode'));
+      await screen.findByText('Test Product Barcode');
 
       // Fill form and submit
       fireEvent.change(screen.getByLabelText(/Expiry Date/i), { target: { value: '2025-12-31' } });

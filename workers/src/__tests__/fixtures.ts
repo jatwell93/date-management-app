@@ -6,6 +6,7 @@
  */
 
 import { expect } from 'vitest';
+import type { Env } from '../types/env';
 
 /**
  * Test organization factory for creating isolated test data
@@ -49,9 +50,9 @@ export function createTestJWT(payload: JWTTestPayload): string {
 /**
  * Test environment setup
  */
-export const testEnv = {
-  NODE_ENV: 'test' as const,
-  STORAGE_PROVIDER: 'r2' as const,
+export const testEnv: Env = {
+  NODE_ENV: 'test',
+  STORAGE_PROVIDER: 'r2',
   MAX_FILE_SIZE: '10485760',
   CSV_BATCH_SIZE: '100',
   RATE_LIMIT_WINDOW: '60000',
@@ -59,13 +60,15 @@ export const testEnv = {
   RATE_LIMIT_MAX_AUTHENTICATED: '1000',
   NEON_CONNECTION_STRING: process.env.NEON_TEST_CONNECTION_STRING || '',
   JWT_SECRET: 'test-secret-key',
+  CLERK_WEBHOOK_SECRET: 'whsec_test',
   R2_ACCOUNT_ID: 'test-account',
   R2_ACCESS_KEY_ID: 'test-key',
   R2_SECRET_ACCESS_KEY: 'test-secret',
   R2_BUCKET_NAME: 'test-bucket',
+  CSV_UPLOADS: {} as unknown as R2Bucket,
   HYPERDRIVE: {
     connectionString: process.env.NEON_TEST_CONNECTION_STRING || '',
-  },
+  } as unknown as Hyperdrive,
 };
 
 /**

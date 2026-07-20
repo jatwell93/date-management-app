@@ -1,7 +1,6 @@
 import { Response, NextFunction } from 'express';
 import { AuthRequest } from './auth.middleware';
 import {
-  ROLES,
   RoleValue,
   isValidRole,
   normalizeRole,
@@ -10,6 +9,19 @@ import {
   PermissionValue,
 } from '../constants/roles';
 import { AnalyticsService, AnalyticsEventType } from '../services/analytics.service';
+import { AuthorizationError } from '../errors';
+
+/** Canonical role assertion for service-layer authorization decisions. */
+export function assertOrgRole(
+  rawRole: string | null | undefined,
+  ...allowedRoles: RoleValue[]
+): RoleValue {
+  const canonical = normalizeRole(rawRole);
+  if (!rawRole || !allowedRoles.includes(canonical)) {
+    throw new AuthorizationError('Organization admin access required');
+  }
+  return canonical;
+}
 
 /**
  * Middleware: require the authenticated user to have one of the specified canonical roles.

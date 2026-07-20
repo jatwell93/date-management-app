@@ -10,9 +10,16 @@ import {
 } from '../utils/url-validator';
 import { injectable, inject } from 'tsyringe';
 import { Logger } from '../utils/logger';
-import { NotFoundError, ValidationError, AuthenticationError, InternalError } from '../errors';
+import {
+  NotFoundError,
+  ValidationError,
+  AuthenticationError,
+  InternalError,
+  PaymentRequiredError,
+} from '../errors';
 import { UserRepository } from '../repositories/user.repository';
 import { SubscriptionRepository } from '../repositories/subscription.repository';
+import type { OrganizationUsage, SubscriptionTier } from '@prisma/client';
 
 interface SubscriptionTierResponse {
   status: `${SubscriptionStatus}`;
@@ -36,17 +43,77 @@ interface TrialStatusResponse {
   };
 }
 
+interface CurrentSubscriptionResponse {
+  tierLevel: string;
+  status: string;
+  billingCycle: string | null;
+  currentPeriodEnd: string | null;
+  cancelAtPeriodEnd: boolean;
+}
+
+interface OrganizationUsageResponse {
+  skus: number;
+  users: number;
+  storage: number;
+  inventoryItems: number;
+}
+
+const getClerkUserId = (req: Request): string => {
+  const userId = (req as unknown as ClerkAuthRequest).userId;
+
+  if (!userId) {
+    throw new AuthenticationError('User ID missing from request');
+  }
+
+  return userId;
+};
+
+const mapCurrentSubscriptionResponse = (
+  subscription: SubscriptionTier | null,
+): CurrentSubscriptionResponse => ({
+  tierLevel: subscription?.tierLevel ?? 'free',
+  status: subscription?.status ?? 'expired',
+  billingCycle: subscription?.billingCycle ?? null,
+  currentPeriodEnd: subscription?.currentPeriodEnd?.toISOString() ?? null,
+  cancelAtPeriodEnd: subscription?.cancelAtPeriodEnd ?? false,
+});
+
+const mapOrganizationUsageResponse = (usage: OrganizationUsage): OrganizationUsageResponse => ({
+  skus: usage.totalSkus,
+  users: usage.activeUsers,
+  storage: usage.storageUsedBytes,
+  inventoryItems: usage.totalInventoryItems,
+});
+
+const handleSubscriptionControllerError = (message: string, error: unknown): never => {
+  Logger.error(message, {
+    error: error instanceof Error ? error.message : String(error),
+  });
+
+  if (error instanceof NotFoundError || error instanceof AuthenticationError) {
+    throw error;
+  }
+
+  throw new InternalError(message);
+};
+
 const TIER_LIMITS = {
-  starter: {
+  free: {
     maxUsers: 1,
     maxProducts: 500,
     maxStoreAreas: 3,
     features: ['Basic scanning', 'Expiry tracking', 'Basic reports'],
   },
-  professional: {
-    maxUsers: 10,
+  starter: {
+    maxUsers: 3,
     maxProducts: 5000,
     maxStoreAreas: 20,
+    features: ['CSV uploads', 'Team management'],
+  },
+  professional: {
+    maxUsers: 10,
+    maxProducts: 50000,
+    maxStoreAreas: 100,
     features: [
       'Advanced scanning',
       'Expiry tracking',
@@ -57,8 +124,8 @@ const TIER_LIMITS = {
     ],
   },
   premium: {
-    maxUsers: 50,
-    maxProducts: 25000,
+    maxUsers: 10,
+    maxProducts: 50000,
     maxStoreAreas: 100,
     features: [
       'All professional features',
@@ -68,10 +135,16 @@ const TIER_LIMITS = {
     ],
   },
   concierge: {
-    maxUsers: -1,
-    maxProducts: -1,
-    maxStoreAreas: -1,
-    features: ['Unlimited everything', 'Dedicated support', 'Custom development'],
+    maxUsers: 10,
+    maxProducts: 250000,
+    maxStoreAreas: 100,
+    features: ['Enterprise fair-use access', 'Dedicated support', 'Custom development'],
+  },
+  enterprise: {
+    maxUsers: 10,
+    maxProducts: 250000,
+    maxStoreAreas: 100,
+    features: ['Enterprise fair-use access', 'Dedicated support', 'Custom development'],
   },
 };
 
@@ -84,6 +157,40 @@ export class SubscriptionController {
     @inject('StripeClientFactory')
     private stripeClientFactory: () => ReturnType<typeof getStripeClient>,
   ) {}
+
+  private async getAuthenticatedOrganizationId(req: Request): Promise<string> {
+    const userId = getClerkUserId(req);
+    const user = await this.userRepository.findOrganizationIdByClerkUserId(userId);
+
+    if (!user?.organizationId) {
+      throw new NotFoundError('User organization not found');
+    }
+
+    return user.organizationId;
+  }
+
+  async getCurrentSubscription(req: Request, res: Response): Promise<void> {
+    try {
+      const organizationId = await this.getAuthenticatedOrganizationId(req);
+      const subscription =
+        await this.subscriptionRepository.findLatestByOrganizationId(organizationId);
+
+      res.json(mapCurrentSubscriptionResponse(subscription));
+    } catch (error) {
+      handleSubscriptionControllerError('Failed to fetch current subscription', error);
+    }
+  }
+
+  async getOrganizationUsage(req: Request, res: Response): Promise<void> {
+    try {
+      const organizationId = await this.getAuthenticatedOrganizationId(req);
+      const usage = await this.subscriptionRepository.getOrCreateUsage(organizationId);
+
+      res.json(mapOrganizationUsageResponse(usage));
+    } catch (error) {
+      handleSubscriptionControllerError('Failed to fetch organization usage', error);
+    }
+  }
 
   async getTrialStatus(req: Request, res: Response): Promise<void> {
     try {
@@ -114,8 +221,14 @@ export class SubscriptionController {
         isTrialExpired = daysRemaining < 0;
       }
 
-      const tierKey = subscription?.tierLevel?.toLowerCase() || 'starter';
-      const limits = TIER_LIMITS[tierKey as keyof typeof TIER_LIMITS] || TIER_LIMITS.starter;
+      const rawTierKey = subscription?.tierLevel?.toLowerCase() || 'free';
+      const tierKey =
+        rawTierKey === 'premium'
+          ? 'professional'
+          : rawTierKey === 'concierge'
+            ? 'enterprise'
+            : rawTierKey;
+      const limits = TIER_LIMITS[tierKey as keyof typeof TIER_LIMITS] || TIER_LIMITS.free;
 
       const response: TrialStatusResponse = {
         isInTrial: subscriptionStatus === SubscriptionStatus.TRIALING && !isTrialExpired,
@@ -290,6 +403,16 @@ export class SubscriptionController {
     }
   }
 
+  async cancelSubscription(req: Request, res: Response): Promise<void> {
+    try {
+      const organizationId = await this.getAuthenticatedOrganizationId(req);
+      await this.subscriptionService.cancelSubscription(organizationId);
+      res.json({ success: true });
+    } catch (error) {
+      handleSubscriptionControllerError('Failed to cancel subscription', error);
+    }
+  }
+
   async createPortalSession(req: Request, res: Response): Promise<void> {
     try {
       const userId = (req as unknown as ClerkAuthRequest).userId;
@@ -312,13 +435,15 @@ export class SubscriptionController {
 
       const user = await this.userRepository.findByClerkUserIdWithOrganizationSubscriptions(userId);
 
-      if (!user?.organization) {
-        throw new NotFoundError('Organization not found');
-      }
-
-      const subscription = user.organization.subscriptionTiers?.[0];
+      const subscription = user?.organization?.subscriptionTiers?.[0];
       if (!subscription?.stripeCustomerId) {
-        throw new ValidationError('No Stripe customer found');
+        // No org, no subscription, or no Stripe customer all mean the same thing
+        // from the caller's perspective: there is no billing account to manage.
+        // Return 402 (not 404/400) so this eligibility gate is distinguishable
+        // from a genuine server error and the frontend can prompt to subscribe.
+        throw new PaymentRequiredError(
+          'No active billing account found. Subscribe to a paid plan to manage billing.',
+        );
       }
 
       const stripe = this.stripeClientFactory();
@@ -335,7 +460,8 @@ export class SubscriptionController {
       if (
         error instanceof ValidationError ||
         error instanceof NotFoundError ||
-        error instanceof AuthenticationError
+        error instanceof AuthenticationError ||
+        error instanceof PaymentRequiredError
       ) {
         throw error;
       }
