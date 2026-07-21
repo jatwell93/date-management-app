@@ -64,13 +64,11 @@ Thumbs.db
 .windsurf/
 .codex/
 /specs/
-.quint/
 prompts/
 skills/
 instructions/
 agents/
 go-to-market-docs/
-.agentlens/
 brand-identity-pharma-apps/
 brand-identity/
 
@@ -98,14 +96,8 @@ playwright-report/
 .playwright-mcp/
 .expect/
 
-# graphify
-# keep graph outputs, skip heavy/local-only files
+# graphify (tool removed; ignore any regenerated output)
+graphify-out/
 
-# optional: commit for shared extraction speed, skip to keep repo small
-graphify-out/cache/
-
-# mtime-based, invalid after git clone - always gitignore this
-graphify-out/manifest.json
-
-# local token tracking, not useful to share
-graphify-out/cost.json
+# quint (tool removed; leftover local db, not for commit)
+.quint/

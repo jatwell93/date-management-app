@@ -1,748 +1,134 @@
 # AGENTS.md
 
-**Node.js/Express/TypeScript Development Guide**
+**Monorepo development guide for AI-assisted work.**
+Node/Express/TypeScript backend · React frontend · Cloudflare Workers · shared libs.
 
-**Version:** 1.2.4
-**Status:** Canonical guide for AI-assisted Node/Express/TypeScript development  
-**Last Updated:** May 2026
-
----
-
-## Table of Contents
-
-1. **Compliance Core Rules**
-2. **Express/TypeScript Development Standards**
-3. **Session Startup Context**
-4. **Project Structure Memory Bank**
-5. **OpenSpec Workflow**
-6. **Task Management with OpenSpec**
-7. **Quality & Testing**
-8. **Memory Management**
+**Last updated:** July 2026
 
 ---
 
-### Note on SKILLS/AGENTS
+## 1. Core Rules (non-negotiable)
 
-SKILLs should be used when the work needs specific knowledge that a skill or agent contains e.g. working on Stripe webhooks? Invoke the Stripe skill. Using git trees? Use the git skill.md
-
-### Note on MCP
-
-**Always** check for tools and MCP servers to assist with modifications e.g. use the shadcn-UI-mcp to find default components rather than building from scratch.
-
----
-
-## 1. Compliance Core Rules
-
-### Startup Compliance Output (Every Session)
-
-| Rule                                         | Requirement                                                                                                                                            | Validation                                                                                                                                                                                             |
-| -------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------ | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
-| ❌ **No new files without reuse analysis**   | Search codebase, check existing controllers/services, provide justification                                                                            | "Analyzed `src/controllers/X`, `src/services/Y`. Cannot extend because [reason]"                                                                                                                       |
-| ❌ **No rewrites when refactoring possible** | Prefer incremental improvements to existing services/controllers                                                                                       | "Extending `User` service at line X rather than creating new service"                                                                                                                                  |
-| ❌ **No ignoring Express/TS conventions**    | Follow Express REST patterns, layered architecture (routes → controllers → services → data access), TypeScript strict types, CRA conventions for React | "Follows Express patterns: routes in `src/routes/`, controllers in `src/controllers/`, services in `src/services/`, DB access in `src/db/` or `src/repositories/`; React follows CRA `src/` structure" |
-| ❌ **No skipping tests**                     | TDD mandatory—red, green, refactor. Never commit without tests                                                                                         | "Red: wrote failing test \| Green: implemented \| Verified: exit code 0"                                                                                                                               |
-
-### The Four Sacred Rules (Express/TypeScript-Specific)
-
-- **Sandbox First**: All work in feature branches, never `main`
-- **Citations**: Always `src/path/file.ts:42` (single line) or `src/path/file.ts:42-58` (range) when referring to errors/fixes
-- **No Mock Data**: Never fake/simulated data in production; test fixtures are OK
-- **No Secrets**: Never hardcode API keys, passwords, or credentials
-- **TDD Mandatory**: Tests written before production code
-- **Code Quality**: Must pass `npm run lint` and the component test gate for what you touched — `npm run test:backend:diff` and/or `npm run test:frontend:diff` (the bare `npm test` at the repo root deliberately errors and is not a valid gate). `doppler run -- cs delta` is a separately authorized provider check, not part of the local loop.
-- **Task Tracking**: Use OpenSpec workflows for ALL work —- no outside markdown TODOs files
+- **Reuse before creating.** Search for an existing controller/service/repository/component before adding a new file. If you must add one, say why the existing code couldn't be extended.
+- **Feature branches, never `main`.** All work on `feature/<change-id>` (or `fix/`, `chore/`).
+- **Tests for what you touch.** No new behaviour without a test. Prefer writing the failing test first.
+- **No secrets in code.** Never hardcode keys/passwords. Secrets come from env / Doppler.
+- **No mock data in production paths.** Test fixtures are fine.
+- **Cite code as `path/file.ts:42`** (or `:42-58` for a range) when referring to specific lines.
+- **Track work in OpenSpec**, not ad-hoc markdown TODO files (see §5).
 
 ---
 
-### Non-Negotiables
+## 2. Repository Layout
 
-Following Express/TypeScript conventions reduces code. Always ask: **"Does Express/Node already provide this?"**
+This is a monorepo. There is **no** root `src/` app — packages live in subfolders:
 
-**Good:**
+| Path | What it is |
+| ---- | ---------- |
+| `backend/` | Express/TypeScript API. Prisma (v6) + tsyringe DI + SWC. Layered: `backend/src/{routes,controllers,services,repositories,db,models,middleware}`. Tests in `backend/src/tests`. |
+| `frontend/` | React (CRA) app. |
+| `workers/` | Cloudflare Workers. Real-SQL tests via pglite (`npm run test:db`). |
+| `shared/` | Code shared across packages (e.g. domain logic). |
+| `e2e/` | Playwright end-to-end tests. |
+| `docs/` | Operational and reference documentation. |
+| `openspec/` | Change proposals and specs (see §5). |
 
-- **Route**: `src/routes/users.ts` defining endpoints
-- **Controller**: `src/controllers/usersController.ts` handling requests/responses
-- **Service**: `src/services/usersService.ts` containing business logic
-- **Repository/DB**: `src/db/usersRepository.ts` or `src/repositories/usersRepository.ts` for data access
-- **Model/Types**: `src/models/User.ts` or `src/types/User.ts` for TypeScript interfaces/types
+**Backend layering** (keep it clean): `routes → controllers → services → repositories/db`.
+Controllers coordinate HTTP; business logic lives in services; DB access lives in repositories. Use DI (tsyringe) rather than hardcoding dependencies. Use strict TypeScript — no unjustified `any`.
 
-**Anti-Pattern:**
+### Understanding structure quickly
 
-- Custom database layer bypassing established patterns
-- Non-standard directory structures
-- Controllers with business logic (should be in services)
-- Missing TypeScript types
-
----
-
-## 2. Express/TypeScript Development Standards
-
-### Core Express Principles
-
-#### Layered Architecture (Separation of Concerns)
-
-| Component                  | Responsibility                                           | Anti-Pattern                            |
-| -------------------------- | -------------------------------------------------------- | --------------------------------------- |
-| **Route**                  | Define endpoints, map HTTP methods to controllers        | Business logic in routes                |
-| **Controller**             | Handle requests/responses, validate input, call services | Direct database queries, business logic |
-| **Service**                | Business logic, orchestration, data transformation       | HTTP-specific code, direct DB queries   |
-| **Repository/Data Access** | Database operations, queries, transactions               | Business logic                          |
-| **Model/Type**             | TypeScript interfaces/types, data shape validation       | Logic implementation                    |
-
-#### RESTful Design
-
-Actions correspond to HTTP verbs:
-
-```typescript
-// src/routes/users.ts
-import express from 'express';
-import { usersController } from '../controllers/usersController';
-
-const router = express.Router();
-
-router.get('/', usersController.index); // GET /users - list all
-router.get('/:id', usersController.show); // GET /users/:id - single resource
-router.post('/', usersController.create); // POST /users - create new
-router.put('/:id', usersController.update); // PUT /users/:id - full update
-router.patch('/:id', usersController.update); // PATCH /users/:id - partial update
-router.delete('/:id', usersController.destroy); // DELETE /users/:id - delete
-
-export default router;
-```
-
-#### TypeScript Strict Types
-
-All code must use strict TypeScript:
-
-```typescript
-// src/types/User.ts
-export interface User {
-  id: number;
-  email: string;
-  name: string;
-  createdAt: Date;
-}
-
-export interface CreateUserDTO {
-  email: string;
-  name: string;
-}
-```
-
-Never use `any` without justification. Use proper types or `unknown` with type guards.
-
-#### Thin Controllers, Logic in Services
-
-**Good:**
-
-```typescript
-// src/controllers/usersController.ts - Coordination only
-import { Request, Response } from 'express';
-import { usersService } from '../services/usersService';
-
-export const usersController = {
-  async create(req: Request, res: Response) {
-    try {
-      const user = await usersService.createUser(req.body);
-      res.status(201).json(user);
-    } catch (error) {
-      res.status(400).json({ error: error.message });
-    }
-  },
-};
-
-// src/services/usersService.ts - Business logic
-import { usersRepository } from '../db/usersRepository';
-import { CreateUserDTO } from '../types/User';
-
-export const usersService = {
-  async createUser(userData: CreateUserDTO) {
-    // Validate business rules
-    if (!userData.email.includes('@')) {
-      throw new Error('Invalid email format');
-    }
-
-    // Create user
-    const user = await usersRepository.create(userData);
-
-    // Send welcome email (business logic)
-    await emailService.sendWelcome(user.email);
-
-    return user;
-  },
-};
-```
-
-**Anti-Pattern:**
-
-```typescript
-// Controller with business logic - DON'T DO THIS
-export const usersController = {
-  async create(req: Request, res: Response) {
-    // Email validation in controller - should be in service!
-    if (!req.body.email.includes('@')) {
-      return res.status(400).json({ error: 'Invalid email' });
-    }
-
-    const user = await usersRepository.create(req.body);
-    await emailService.sendWelcome(user.email); // Business logic in controller!
-    res.json(user);
-  },
-};
-```
-
-#### Single Responsibility Principle (SRP)
-
-Each module/class should have one reason to change.
-
-**Good:**
-
-```typescript
-// src/services/userRegistration.ts
-import { CreateUserDTO, User } from '../types/User';
-import { usersRepository } from '../db/usersRepository';
-import { emailService } from './emailService';
-
-export class UserRegistration {
-  constructor(
-    private userRepo = usersRepository,
-    private emailSvc = emailService,
-  ) {}
-
-  async register(userData: CreateUserDTO): Promise<User> {
-    const user = await this.userRepo.create(userData);
-    await this.emailSvc.sendConfirmation(user.email);
-    return user;
-  }
-}
-```
-
-**Anti-Pattern:**
-
-```typescript
-// Service doing too much
-export class UserService {
-  async registerAndEmailAndNotifyAdminAndLog(data: any) {
-    // Too many responsibilities!
-  }
-}
-```
-
-#### Dependency Injection
-
-Pass dependencies as parameters, don't hardcode them:
-
-```typescript
-// Good - Dependency injected
-export class UserService {
-  constructor(private emailService: EmailService) {}
-
-  async createAndNotify(params: CreateUserDTO) {
-    const user = await usersRepository.create(params);
-    await this.emailService.notify(user);
-    return user;
-  }
-}
-
-// Testing it
-describe('UserService', () => {
-  it('sends email on create', async () => {
-    const mockEmailService = { notify: jest.fn() };
-    const service = new UserService(mockEmailService);
-
-    await service.createAndNotify({ email: 'test@example.com', name: 'Test' });
-
-    expect(mockEmailService.notify).toHaveBeenCalled();
-  });
-});
-```
-
-### Clean Code Rules
-
-- **Intention-Revealing Names**: `activeUsersCount` not `x` or `getUsers`
-- **Single Responsibility**: Each function one clear purpose
-- **Guard Clauses First**: Return early for edge cases
-- **Constants**: `STATUS.ACTIVE` not `'active'` string literals
-- **Input → Process → Return**: Clear structure
-- **Fail with Specific Errors**: Throw custom errors, not generic ones
-- **Comments Explain Why**: Why, not what (code shows what)
-
-**Good:**
-
-```typescript
-async function activateUser(user: User): Promise<User> {
-  // Guard clause - early return
-  if (user.isActive) {
-    return user;
-  }
-
-  try {
-    user.activatedAt = new Date();
-    await usersRepository.update(user);
-    await emailService.sendWelcome(user);
-    return user;
-  } catch (error) {
-    logger.error(`Activation failed: ${error.message}`);
-    throw new ActivationError(`Could not activate user ${user.id}`);
-  }
-}
-```
-
-### Project Structure
-
-Use `codemap` for a quick check of the project structure. Prefer scoping to the component you're touching — a full-root `codemap .` on this repo produces 1,700+ lines and is rarely worth it at startup:
+Use **codemap** — scoped and diff-aware, generated on demand:
 
 ```bash
-codemap backend         # Scope to one component (backend | frontend | workers)
-codemap --diff          # What changed vs main (best default for routine work)
-codemap --diff --ref branch  # Changes vs specific branch
-codemap .               # Full project structure — only when you genuinely need the whole map
+codemap --diff          # what changed vs main — best default for routine work
+codemap backend         # scope to one package (backend | frontend | workers)
+codemap .               # full map (~1,700 lines — only when you truly need it)
 ```
 
-Other useful commands
+---
+
+## 3. Session Startup
+
+Every session: skim recent history with `git log -5 --oneline`, and check active work with `openspec list`. Load only the files your task touches — this repo is large; read on demand rather than up front.
+
+For non-trivial changes, recall prior context: `node scripts/mem-recall.js "<keywords>"` (offline lexical search over `memory.jsonl`; skip for pure read-only/docs work, don't block if the index is missing).
+
+---
+
+## 4. Workflow
+
+Agents are trusted to use judgment; there's no rigid state machine. The through-line is:
+
+**Understand → (propose if non-trivial) → branch → build with tests → verify → get approval → commit/PR.**
+
+- **Small/obvious fixes:** just make the change on a branch, add/adjust tests, run the gate (§6), and summarise.
+- **Non-trivial or spec-affecting work:** open an OpenSpec proposal first (§5), get it approved, then implement.
+- **Human gate before pushing:** present a short summary (what changed, tests run + result, anything risky). Push/PR only after the user approves.
+
+Commits use conventional format, e.g. `feat(backend): add markdown resolver`. Include a `Refs: <change-id>` line when tied to an OpenSpec change.
+
+---
+
+## 5. OpenSpec (change tracking)
+
+Use OpenSpec for all tracked change work — **no ad-hoc markdown TODO files, no planning docs in the repo root.**
 
 ```bash
-codemap handoff .  # Save layered handoff for cross-agent continuation
-codemap context    # Universal JSON context for any AI tool
-codemap serve      # HTTP API for non-MCP integrations
+openspec list                           # active changes + progress
+openspec list --specs                   # current specs
+openspec proposal <change-id>           # scaffold a new change
+openspec validate <change-id> --strict  # validate formatting
+openspec show <change-id>               # review proposal/tasks/deltas
+openspec archive <change-id> --yes      # archive after all tasks complete + merged
 ```
 
-### Agentlens Integration
-
-This project uses **agentlens** for AI-optimized documentation. Route through it before reading source:
-
-1. `.agentlens/INDEX.md` — global routing table (start here)
-2. `.agentlens/AGENT.md` — full reading protocol, doc structure, commands, and key patterns (canonical — do not duplicate here)
-3. `.agentlens/modules/{module}/MODULE.md` — module file lists and entry points
-4. `.agentlens/modules/{module}/memory.md` — warnings/TODOs to check **before editing**
-
-Regenerate with `agentlens` (or `agentlens --diff main` for a fast changed-only update); check staleness with `agentlens --check`.
-
-## 3. Session Startup Context
-
-### Load Priority Based on Task Complexity
-
-**Every Session (Mandatory):**
-
-1. Load AGENTS.md
-2. Run `git log -5 --oneline` for recent context (use `git standup -d 7` only when you need a deeper history sweep)
-3. Identify environment (development/test/staging/production)
-
-**Quick Bug Fix (< 30 min):**
-
-- Load relevant controller/service/repository
-- Understand failing test (if applicable)
-- Load affected routes
-- Check OpenSpec: `openspec list` (active changes)
-
-**Standard Feature Work (2-4 hours):**
-
-- Load `README.md` (project overview)
-- Load database schema from `src/db/schema.sql` or migration files
-- Load relevant controllers, services, repositories
-- Load existing tests (same area) as reference
-- Check OpenSpec: `openspec list` and `openspec list --specs` (get context)
-
-**Architecture/Refactoring (4+ hours):**
-
-- Load all of above
-- Load architecture documentation
-- Load decision logs (if exists)
-- Review existing patterns in codebase
-- Check OpenSpec: `openspec list` and review `openspec/project.md`
-
-### Session Question Protocol
-
-Before starting work, clarify:
-
-1. **Task**: What is the clear objective?
-2. **Scope**: Which controllers/services/repositories affected?
-3. **Success**: What does "done" look like? Acceptance criteria?
-4. **Constraints**: Any architectural requirements or limitations?
-5. **Context**: What related work exists? PRs, issues, patterns
+Flow: `list` → `proposal` → edit `proposal.md` + `tasks.md` → `validate --strict` → implement tasks sequentially (checking `[x]`) → `archive`. Don't archive with incomplete tasks; don't skip `--strict` validation.
 
 ---
 
-## 4. State Machine
+## 6. Quality Gate
 
-`PLAN → BUILD → QA → APPROVAL → APPLY → DOCS → END  OR ↓ (fail/changes/major changes needed)`
-
-### States: PLAN → BUILD → QA → APPROVAL → APPLY → DOCS
-
----
-
-### PLAN State (Proposal)
-
-**In:** Task contract / Feature request **Out:** Validated OpenSpec Proposal **Exit:** User approves proposal files
-**Actions:**
-
-1.  **Search Memory (when relevant):** For non-trivial changes, run `node scripts/mem-recall.js "<task keywords>"` to find similar patterns, past solutions, or related work. Recall is offline lexical search — skip it for pure docs/read-only tasks, and do not block on it if the index is unavailable.
-2.  Choose a concise `change-id` (e.g., `add-user-validation`).
-3.  Run: `openspec proposal <change-id>`.
-4.  Edit `openspec/changes/<change-id>/proposal.md` with analysis, reuse strategy, and implementation steps.
-5.  Edit `openspec/changes/<change-id>/tasks.md` with the checklist of work.
-6.  (Optional) Create `spec.md` deltas if requirements are changing.
-7.  Validate: `openspec validate <change-id> --strict`.
-
-**Required Content (in `proposal.md`):**
-
-```markdown
-# EXAMPLE
-
-## Proposal: [Feature/Fix Name]
-
-## Analysis -
-
-**Current**: `src/controllers/usersController.ts`
-
-- User controller with X endpoints
-  **Affected**: `src/services/usersService.ts`, `src/__tests__/users.test.ts`
-  **Pattern**: Extends existing validation middleware
-
-## Reuse Strategy
-
-- Extend User service with new validation method
-- Follow existing test pattern from `src/__tests__/posts.test.ts`
-
-## Implementation Steps
-
-1. Add validation method to `usersService.ts`
-2. Update controller to use new validation
-3. Add helper to `usersRepository.ts`
-```
-
-**Exit:** User approves the proposal files (`proposal.md` & `tasks.md`).
-
----
-
-### BUILD State (Implementation)
-
-**In:** Approved Proposal **Out:** Code changes
-
-**Actions:**
-
-1. **Codemap:** Use codemap commands for context of project structure:
+Run the gate for the package(s) you changed. There is **no** root `npm test` / `npm run build` (the bare `npm test` errors on purpose).
 
 ```bash
-codemap <component>     # Scope to backend | frontend | workers
-codemap --diff          # What changed vs main
-```
+# Component test gate (fast, diff-scoped — this is the minimum before commit)
+npm run test:backend:diff        # backend changes
+npm run test:frontend:diff       # frontend changes
+npm run test:db                  # worker DB changes (pglite real-SQL)
 
-2.  **Read Tasks:** Review `openspec/changes/<change-id>/tasks.md`.
-3.  **Branch (REQUIRED):** `git checkout -b feature/<change-id>` # if not already done
-4.  **Loop through Tasks:**
-    - Mark task "In Progress" in `tasks.md` (mentally or via status if applicable).
-    - **RED Phase:** Write failing tests.
-    - **GREEN Phase:** Implement code.
-    - **Refactor:** Clean up.
-    - Mark task `[x]` in `tasks.md`.
+# Fuller coverage run when warranted
+npm run test:backend:coverage
+npm run test:frontend:coverage
 
-#### TDD Phases
-
-```typescript
-// PHASE 1: RED - Failing test
-// src/__tests__/users.test.ts
-describe('User', () => {
-  describe('validations', () => {
-    it('validates email format', () => {
-      const result = usersService.validateEmail('invalid');
-      expect(result.isValid).toBe(false);
-    });
-  });
-});
-
-// PHASE 2: GREEN - Implementation
-// src/services/usersService.ts
-export const usersService = {
-  validateEmail(email: string): ValidationResult {
-    // ... implementation
-    return {
-      isValid: true,
-      errors: [],
-    };
-  },
-};
-
-// Verify: npm run test:backend:diff (or test:frontend:diff) — should now pass
-```
-
-**Exit:** Tests pass (`npm run test:frontend:diff` or `npm run test:backend:diff`), linter clean, `tasks.md` fully checked `[x]`.
-
----
-
-### QA State
-
-**In:** BUILD presented **Out:** Test results cs delta results, Linter **Exit:** Tests pass OR user waiver
-
----
-
-### APPROVAL State (HUMAN GATE)
-
-**In:** QA passed **Out:** User decision
-
-**Present:**
-
-```markdown
-## Ready for Approval
-
-### Summary
-
-3. Code Review Checklist
-
-Before committing, verify:
-
-- ✅ Tests written first (TDD)
-- ✅ >80% coverage for new code
-- ✅ No any types (except justified in comments)
-- ✅ Services have <50 lines per method
-- ✅ Custom errors used for business logic errors
-- ✅ DI used for dependencies
-- ✅ No hardcoded config (use environment)
-- ✅ Linter: clean
-- ✅ `cs delta` feedback addressed
-- ✅ OpenSpec: completed task marked in `tasks.md`  
-  **Please review. Reply with:** - "approved" / "looks good" → push to git - "change X" → Back to BUILD - "revert" → Discard all
-```
-
----
-
-### APPLY State
-
-**In:** User approved **Out:** Changes applied/merged
-
-**Actions:**
-
-1. Verify all tests pass (one final time).
-2. Commit Changes: Use conventional commit format:
-
-```bash
-git add .
-git commit -m "feat(<area>): brief description
-
-- Task 1 completed
-- Task 2 completed
-
-Refs: <change-id>"
-```
-
-2. Push feature branch: `git push feature/<change-id>`
-3. User creates a pull request via GitHub
-4. User raises any findings from CodeSense check
-5. After PR approval and merge, confirm success
-
----
-
-## 6. Task Management with OpenSpec
-
-### Essential OpenSpec Commands
-
-Use `--json` flag for programmatic output.
-
-```bash
-# Check what to work on
-openspec list                           # Active changes with task progress
-openspec list --specs                   # List current specifications
-openspec show <change-id> --json        # View change details
-
-# Create changes (proposal stage)
-openspec proposal <change-id>           # Create new change proposal
-openspec validate <change-id> --strict  # Validate proposal formatting
-
-# Manage workflow
-openspec show <change-id>               # Review proposal, tasks, deltas
-openspec archive <change-id> --yes      # Archive completed change
-openspec validate --all                 # Validate all changes and specs
-```
-
-### Workflow: From Proposal to Archive
-
-1.  **Start session:** `openspec list` (see active changes and progress).
-2.  **Create proposal:** `openspec proposal add-feature` (scaffolds change structure).
-3.  **Plan:** Edit `proposal.md` and `tasks.md` in `openspec/changes/<id>/`.
-4.  **Validate:** `openspec validate <id> --strict` (ensure formatting is correct).
-5.  **Implement:** Work through tasks in `tasks.md` sequentially (BUILD state).
-6.  **Archive:** `openspec archive <id> --yes` (move to archive, update specs).
-
-### Change Progress Tracking
-
-OpenSpec tracks progress through `tasks.md` files using markdown checkboxes:
-
-| Status      | Display      | Meaning                 |
-| ----------- | ------------ | ----------------------- |
-| No tasks.md | "No tasks"   | Still in proposal stage |
-| All `[ ]`   | "3/5 tasks"  | Active implementation   |
-| All `[x]`   | "✓ Complete" | Ready for archive       |
-
-### Important Rules
-
-- Use **OpenSpec** for ALL change tracking (no markdown TODOs).
-- Always validate proposals: `openspec validate <id> --strict`.
-- Run `openspec list` to see active work before starting.
-- Complete tasks sequentially in `tasks.md`.
-- Archive changes after deployment: `openspec archive <id> --yes`.
-- Store change files in `openspec/changes/[change-id]/` structure.
-- Do **NOT** create planning documents in repo root.
-- Do **NOT** skip validation steps.
-- Do **NOT** archive without completing all tasks.
-
-### Change Types
-
-- **Features:** New capabilities (use `## ADDED Requirements` in specs).
-- **Modifications:** Changes to existing behavior (use `## MODIFIED Requirements` in specs).
-- **Removals:** Deprecated features (use `## REMOVED Requirements` in specs).
-- **Renaming:** Requirement name changes only (use `## RENAMED Requirements` in specs).
-
----
-
-## 7. Quality & Testing
-
-### Test-Driven Development (TDD) - Mandatory
-
-#### Three-Phase Cycle
-
-1.  **Red**: Write test that fails
-
-```
-// src/__tests__/users.test.ts
-it('sends welcome email when user created', async () => {
-  const user = await usersService.create({ email: 'test@example.com', name: 'Test' });
-  expect(emailService.sendWelcome).toHaveBeenCalledWith(user.email);
-});
-```
-
-2.  **Green**: Implement minimal code to pass
-
-```
-// src/services/usersService.ts
-export const usersService = {
-  async create(data: CreateUserDTO): Promise<User> {
-    const user = await usersRepository.create(data);
-    await emailService.sendWelcome(user.email);
-    return user;
-  }
-};
-```
-
-3.  **Refactor**: Improve without changing behavior
-
-```
-// src/services/usersService.ts
-export const usersService = {
-  async create(data: CreateUserDTO): Promise<User> {
-    const user = await usersRepository.create(data);
-    await this.queueWelcomeEmail(user);
-    return user;
-  },
-
-  private async queueWelcomeEmail(user: User) {
-    await emailQueue.add({ userId: user.id });
-  }
-};
-```
-
-### Completion Checklist
-
-Before marking task complete, run all (must pass):
-
-```bash
-# Run the coverage suite for the component(s) you changed
-npm run test:backend:coverage             # backend changes
-npm run test:frontend:coverage            # frontend changes
-npm run test:db                           # worker DB changes (real-SQL via pglite)
-
-# Lint (root ESLint covers all packages)
-npm run lint                              # Expected: exit code 0
+# Lint (root ESLint covers all packages) — must exit 0
+npm run lint
 
 # Type-check / build the affected component
-npm run build:frontend                    # frontend
-npm run build:workers                     # workers
-npm run compile                           # root tsc
+npm run compile                  # root tsc
+npm run build:frontend
+npm run build:workers
 
-# Validate OpenSpec changes
-openspec validate --all                   # Expected: exit code 0
+# Validate OpenSpec if you touched a change
+openspec validate --all
 ```
 
-> There is no root `npm test`, `npm run test:coverage`, or `npm run build`. Always use the component-scoped scripts above (see `package.json`).
+Notes:
+- Backend tests: run via `doppler run -- npm test` when a real secret is needed; for logic gated on a secret being **unset**, also run without Doppler for CI parity.
+- `doppler run -- cs delta` (CodeSense) is a separately authorized provider check, not part of the local loop.
 
 ---
 
-## 8. Memory Management
+## 7. Memory (Memvid)
 
-## Memvid Memory System
-
-This project uses **Memvid** as a lightweight, file-based memory layer. Project knowledge is committed to `memory.jsonl` at the project root. The local `project-memory.mv2` file is a gitignored, rebuildable search index derived from `memory.jsonl`.
-
-### Why Memvid
-
-- **Zero daemon overhead** — No database server; committed memory is append-only JSONL
-- **Offline-first** — Works entirely locally, perfect for low-resource devices
-- **Fast retrieval** — Rust-based lexical search (~1-2ms)
-- **Portable** — `memory.jsonl` travels with the project; `.mv2` is rebuilt locally
-
-### Core Commands
+Project knowledge — bugs, fixes, decisions, patterns — is stored in `memory.jsonl` (committed, append-only). `project-memory.mv2` is a **local, gitignored, rebuildable** search index derived from it.
 
 ```bash
-# Store a memory
-node scripts/mem-log.js <KIND> <TITLE> <MESSAGE>
-
-# Recall memories
-node scripts/mem-recall.js <QUERY>
-
-# Rebuild local search index after a fresh clone
-npm run mem:rebuild
-# or
-node scripts/mem-rebuild.js
-
-# Direct CLI access
-memvid find project-memory.mv2 --query "search term"
-memvid stats project-memory.mv2
-memvid timeline project-memory.mv2
+node scripts/mem-recall.js "<query>"                 # recall before non-trivial work
+node scripts/mem-log.js <KIND> "<title>" "<message>" # store as you work
+npm run mem:rebuild                                   # rebuild local index after a fresh clone
 ```
 
-`project-memory.mv2` no longer belongs in commits. It is a local derived index that can be regenerated from `memory.jsonl`.
+`KIND` ∈ `FIX | PATTERN | DECISION | FEATURE | ERROR | ARCHITECTURE | WORKFLOW`.
 
-### Memory Kinds
-
-| Kind           | Use For                                     |
-| -------------- | ------------------------------------------- |
-| `FIX`          | Bug fixes and their solutions               |
-| `PATTERN`      | Architectural decisions, coding conventions |
-| `DECISION`     | Why we chose X over Y                       |
-| `FEATURE`      | New feature implementations                 |
-| `ERROR`        | Common errors and how to resolve them       |
-| `ARCHITECTURE` | System design patterns                      |
-| `WORKFLOW`     | Process/workflow documentation              |
-
-### Usage Examples
-
-```bash
-# After fixing a bug
-node scripts/mem-log.js FIX "Auth Token Bug" "Fixed JWT expiry by adding timezone normalization"
-
-# Recording a pattern
-node scripts/mem-log.js PATTERN "Database Access" "All DB queries go through repository layer"
-
-# Recording a decision
-node scripts/mem-log.js DECISION "State Management" "Using React Context instead of Redux for simplicity"
-
-# Recalling context before a task
-node scripts/mem-recall.js "authentication"
-```
-
-## Memvid Memory Protocol
-
-### Before Starting Work (when relevant)
-
-For non-trivial changes, run `node scripts/mem-recall.js "<task keywords>"` to check for relevant project context. This is offline lexical search and needs no credentials — skip it for pure docs/read-only work and don't block on it if the index is missing.
-
-### REQUIRED: Automatic Storage Triggers
-
-Store memories using `node scripts/mem-log.js` on ANY of:
-
-- **Bug fix** → problem + solution
-- **Architecture decision** → choice + rationale
-- **Pattern discovered** → reusable approach
-- **Feature completed** → what was built and why
-- **Error resolved** → error message + fix
-
-Do NOT wait to be asked. Memory storage should happen as you work.
+**Store proactively** — don't wait to be asked — on: a bug fix (problem + solution), an architecture/design decision (choice + rationale), a reusable pattern, a completed feature, or a resolved error (message + fix).
