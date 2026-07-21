@@ -45,6 +45,10 @@ jobs:
       - name: Install Doppler CLI
         uses: dopplerhq/cli-action@v4
 
+      # Keep npm major in sync with the lockfile generator (see backend-test.yml).
+      - name: Pin npm to match lockfile generator
+        run: npm i -g npm@11
+
       - name: Install frontend dependencies
         run: npm ci --ignore-scripts
         working-directory: ./frontend
@@ -148,6 +152,10 @@ jobs:
 
       - name: Install Doppler CLI
         uses: dopplerhq/cli-action@v4
+
+      # Keep npm major in sync with the lockfile generator (see backend-test.yml).
+      - name: Pin npm to match lockfile generator
+        run: npm i -g npm@11
 
       - name: Install frontend dependencies
         run: npm ci --ignore-scripts
