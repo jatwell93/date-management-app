@@ -21,7 +21,9 @@ interface AuthenticatedRateLimitRequest extends Request {
   };
 }
 
-function getRetryAfterIso(req: Request): string | undefined {
+// Exported for unit testing: the limiters themselves are module-level singletons
+// with fixed windows, so this helper is only reachable directly.
+export function getRetryAfterIso(req: Request): string | undefined {
   const resetTime = (req as AuthenticatedRateLimitRequest).rateLimit?.resetTime;
   if (!resetTime) {
     return undefined;
