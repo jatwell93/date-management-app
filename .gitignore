@@ -101,3 +101,7 @@ graphify-out/
 
 # quint (tool removed; leftover local db, not for commit)
 .quint/
+
+# agentlens (tool retired from the workflow, but the CLI may still be
+# installed locally and regenerate this; never commit generated docs)
+.agentlens/
