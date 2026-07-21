@@ -33,6 +33,12 @@ jobs:
           cache: 'npm'
           cache-dependency-path: backend/package-lock.json
 
+      # Dependabot regenerates lockfiles with npm 11; Node 22 ships npm 10, which
+      # rejects those locks (e.g. nested optional peers). Pin npm so `npm ci`
+      # validates the lockfile with the same major that wrote it.
+      - name: Pin npm to match lockfile generator
+        run: npm i -g npm@11
+
       - name: Install dependencies
         run: npm ci
 
@@ -79,6 +85,12 @@ jobs:
           node-version: '22'
           cache: 'npm'
           cache-dependency-path: backend/package-lock.json
+
+      # Dependabot regenerates lockfiles with npm 11; Node 22 ships npm 10, which
+      # rejects those locks (e.g. nested optional peers). Pin npm so `npm ci`
+      # validates the lockfile with the same major that wrote it.
+      - name: Pin npm to match lockfile generator
+        run: npm i -g npm@11
 
       - name: Install dependencies
         run: npm ci
