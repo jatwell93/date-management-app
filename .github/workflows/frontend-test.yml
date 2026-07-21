@@ -31,6 +31,10 @@ jobs:
           cache: 'npm'
           cache-dependency-path: frontend/package-lock.json
 
+      # Keep npm major in sync with the lockfile generator (see backend-test.yml).
+      - name: Pin npm to match lockfile generator
+        run: npm i -g npm@11
+
       - name: Install dependencies
         run: npm ci
 
