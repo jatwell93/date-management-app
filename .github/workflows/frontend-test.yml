@@ -7,7 +7,12 @@ on:
   pull_request:
   push:
     branches:
+      # Kept in sync with backend-test.yml. `master` is listed defensively: the
+      # ruleset targets ~DEFAULT_BRANCH, so if the default branch were ever
+      # renamed, pushes to it must still run this workflow — otherwise the
+      # required "Frontend CI Gate" check would never report for those pushes.
       - main
+      - master
 
 permissions:
   contents: read
