@@ -1,21 +1,72 @@
 name: Backend Test & Coverage
 
+# This workflow deliberately has NO `paths:` filter on its triggers.
+#
+# Why: a required status check must always report. A workflow that is filtered
+# out by `paths:` never runs, so its check never appears and a required check
+# waits forever — permanently blocking any PR that does not touch that path. A
+# workflow that DOES run but whose job is skipped via `if:` still posts a check
+# (conclusion "skipped"), which satisfies a required check.
+#
+# So we always trigger, detect changed paths in the `changes` job, and gate the
+# real jobs on its output. That makes these checks safe to mark as required.
 on:
   pull_request:
-    paths:
-      - 'backend/**'
   push:
     branches:
       - main
       - master
-    paths:
-      - 'backend/**'
 
 permissions:
   contents: read
 
 jobs:
+  # Path detection is done with plain git rather than a third-party action to
+  # avoid adding a new supply-chain dependency (see docs/security.md).
+  changes:
+    name: Detect backend changes
+    runs-on: ubuntu-latest
+    outputs:
+      backend: ${{ steps.filter.outputs.backend }}
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          fetch-depth: 0
+
+      - name: Detect changed paths
+        id: filter
+        env:
+          EVENT: ${{ github.event_name }}
+          PR_BASE: ${{ github.event.pull_request.base.sha }}
+          PR_HEAD: ${{ github.event.pull_request.head.sha }}
+          PUSH_BEFORE: ${{ github.event.before }}
+          PUSH_AFTER: ${{ github.sha }}
+        run: |
+          set -eu
+          if [ "$EVENT" = "pull_request" ]; then
+            base="$PR_BASE"; head="$PR_HEAD"
+          else
+            base="$PUSH_BEFORE"; head="$PUSH_AFTER"
+          fi
+          # Fail safe: if the range cannot be resolved (force push, first commit,
+          # all-zero SHA), run the tests rather than silently skipping them.
+          if [ -z "$base" ] || [ "$base" = "0000000000000000000000000000000000000000" ] \
+             || ! git cat-file -e "${base}^{commit}" 2>/dev/null; then
+            echo "Base commit unresolvable; running backend tests."
+            echo "backend=true" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+          if git diff --name-only "$base" "$head" | grep -q '^backend/'; then
+            echo "backend=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "backend=false" >> "$GITHUB_OUTPUT"
+          fi
+
+  # Correctness signal. No coverage thresholds — safe to require.
   test:
+    name: Backend Tests
+    needs: changes
+    if: needs.changes.outputs.backend == 'true'
     runs-on: ubuntu-latest
     defaults:
       run:
@@ -44,10 +95,45 @@ jobs:
 
       - name: Run Tests (Changed Files Only)
         if: github.event_name == 'pull_request'
-        run: npm run test:diff || npm run test:coverage
+        run: npm run test:diff || npm test
 
       - name: Run Full Tests
         if: github.event_name != 'pull_request'
+        run: npm test
+
+  # Coverage thresholds run separately and are intentionally NOT a required
+  # check: branch coverage currently sits below the 70% threshold in
+  # backend/vitest.config.ts, and correctness should not be blocked on that.
+  # This job reports honestly (red while below threshold) so the gap stays
+  # visible. Add it to required checks once branch coverage is back over 70%.
+  coverage:
+    name: Backend Coverage
+    needs: changes
+    if: needs.changes.outputs.backend == 'true'
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: ./backend
+
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          fetch-depth: 0
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v7
+        with:
+          node-version: '22'
+          cache: 'npm'
+          cache-dependency-path: backend/package-lock.json
+
+      - name: Pin npm to match lockfile generator
+        run: npm i -g npm@11
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Run Coverage
         run: npm run test:coverage
 
       - name: Generate Coverage Summary
@@ -69,6 +155,9 @@ jobs:
 
   # Multi-Tenant Tests - Dedicated job for SaaS monetization validation (16A.F.3.2)
   multi-tenant-tests:
+    name: Backend Multi-Tenant Tests
+    needs: changes
+    if: needs.changes.outputs.backend == 'true'
     runs-on: ubuntu-latest
     defaults:
       run:
