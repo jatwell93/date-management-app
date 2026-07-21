@@ -32,20 +32,43 @@ jobs:
           PUSH_BEFORE: ${{ github.event.before }}
           PUSH_AFTER: ${{ github.sha }}
         run: |
-          set -eu
+          # Deliberately NOT `set -e` -- see the explanation in backend-test.yml.
+          # Every failure path must fall back to RUNNING the tests, and the
+          # `gate` job is the backstop if this job fails outright.
+          set -u
+
+          if [ -z "${GITHUB_OUTPUT:-}" ]; then
+            echo "::error::GITHUB_OUTPUT is unset; cannot publish detection result."
+            exit 1
+          fi
+
           if [ "$EVENT" = "pull_request" ]; then
             base="$PR_BASE"; head="$PR_HEAD"
           else
             base="$PUSH_BEFORE"; head="$PUSH_AFTER"
           fi
-          # Fail safe: unresolvable range means run the tests, never skip silently.
-          if [ -z "$base" ] || [ "$base" = "0000000000000000000000000000000000000000" ] \
-             || ! git cat-file -e "${base}^{commit}" 2>/dev/null; then
-            echo "Base commit unresolvable; running frontend tests."
+
+          run_tests() {
+            echo "$1"
             echo "frontend=true" >> "$GITHUB_OUTPUT"
             exit 0
+          }
+
+          if [ -z "$base" ] || [ "$base" = "0000000000000000000000000000000000000000" ]; then
+            run_tests "Base commit unavailable (force push or first commit); running frontend tests."
           fi
-          if git diff --name-only "$base" "$head" | grep -q '^frontend/'; then
+
+          if ! git cat-file -e "${base}^{commit}" 2>/dev/null; then
+            run_tests "Base commit ${base} not found; running frontend tests."
+          fi
+
+          # Capture explicitly: piping straight into grep would mask a git failure
+          # as "no matches" (no pipefail), silently skipping the tests.
+          if ! changed=$(git diff --name-only "$base" "$head" 2>&1); then
+            run_tests "git diff failed (${changed}); running frontend tests."
+          fi
+
+          if printf '%s\n' "$changed" | grep -q '^frontend/'; then
             echo "frontend=true" >> "$GITHUB_OUTPUT"
           else
             echo "frontend=false" >> "$GITHUB_OUTPUT"
@@ -138,3 +161,35 @@ jobs:
         with:
           name: frontend-coverage-report
           path: frontend/coverage/
+
+  # THE required status check -- see the explanation in backend-test.yml.
+  # Require "Frontend CI Gate", not the individual jobs. `coverage` excluded.
+  gate:
+    name: Frontend CI Gate
+    if: always()
+    needs: [changes, test]
+    runs-on: ubuntu-latest
+    steps:
+      - name: Evaluate frontend job results
+        env:
+          CHANGES_RESULT: ${{ needs.changes.result }}
+          FRONTEND_CHANGED: ${{ needs.changes.outputs.frontend }}
+          TEST_RESULT: ${{ needs.test.result }}
+        run: |
+          set -u
+          echo "changes=${CHANGES_RESULT} frontend_changed=${FRONTEND_CHANGED:-<unset>} test=${TEST_RESULT}"
+
+          if [ "$CHANGES_RESULT" != "success" ]; then
+            echo "::error::Change detection did not succeed (${CHANGES_RESULT}). Failing the gate rather than letting a skipped test job pass as success."
+            exit 1
+          fi
+
+          if [ "${FRONTEND_CHANGED:-}" != "true" ]; then
+            echo "No frontend changes detected - gate passes with test job skipped."
+            exit 0
+          fi
+
+          if [ "$TEST_RESULT" != "success" ]; then
+            echo "::error::Frontend Tests did not succeed (result: ${TEST_RESULT})."
+            exit 1
+          fi

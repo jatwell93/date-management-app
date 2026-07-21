@@ -9,7 +9,14 @@ name: Backend Test & Coverage
 # (conclusion "skipped"), which satisfies a required check.
 #
 # So we always trigger, detect changed paths in the `changes` job, and gate the
-# real jobs on its output. That makes these checks safe to mark as required.
+# real jobs on its output.
+#
+# That alone is NOT sufficient, though: because a skipped job counts as success,
+# a FAILURE of the `changes` job would skip the test jobs and still satisfy a
+# required check placed on them -- merging without any test having run. So the
+# check to mark as required is the `gate` job at the bottom, which runs with
+# `if: always()` (never skippable) and explicitly fails unless the results are
+# genuinely acceptable.
 on:
   pull_request:
   push:
@@ -42,21 +49,44 @@ jobs:
           PUSH_BEFORE: ${{ github.event.before }}
           PUSH_AFTER: ${{ github.sha }}
         run: |
-          set -eu
+          # Deliberately NOT `set -e`. Every failure path here must fall back to
+          # RUNNING the tests. Aborting mid-script would fail this job, which
+          # would leave the dependent jobs *skipped* -- and a skipped job counts
+          # as success for a required check. The `gate` job is the real backstop.
+          set -u
+
+          if [ -z "${GITHUB_OUTPUT:-}" ]; then
+            echo "::error::GITHUB_OUTPUT is unset; cannot publish detection result."
+            exit 1
+          fi
+
           if [ "$EVENT" = "pull_request" ]; then
             base="$PR_BASE"; head="$PR_HEAD"
           else
             base="$PUSH_BEFORE"; head="$PUSH_AFTER"
           fi
-          # Fail safe: if the range cannot be resolved (force push, first commit,
-          # all-zero SHA), run the tests rather than silently skipping them.
-          if [ -z "$base" ] || [ "$base" = "0000000000000000000000000000000000000000" ] \
-             || ! git cat-file -e "${base}^{commit}" 2>/dev/null; then
-            echo "Base commit unresolvable; running backend tests."
+
+          run_tests() {
+            echo "$1"
             echo "backend=true" >> "$GITHUB_OUTPUT"
             exit 0
+          }
+
+          if [ -z "$base" ] || [ "$base" = "0000000000000000000000000000000000000000" ]; then
+            run_tests "Base commit unavailable (force push or first commit); running backend tests."
           fi
-          if git diff --name-only "$base" "$head" | grep -q '^backend/'; then
+
+          if ! git cat-file -e "${base}^{commit}" 2>/dev/null; then
+            run_tests "Base commit ${base} not found; running backend tests."
+          fi
+
+          # Capture explicitly: piping straight into grep would mask a git failure
+          # as "no matches" (no pipefail), silently skipping the tests.
+          if ! changed=$(git diff --name-only "$base" "$head" 2>&1); then
+            run_tests "git diff failed (${changed}); running backend tests."
+          fi
+
+          if printf '%s\n' "$changed" | grep -q '^backend/'; then
             echo "backend=true" >> "$GITHUB_OUTPUT"
           else
             echo "backend=false" >> "$GITHUB_OUTPUT"
@@ -215,3 +245,52 @@ jobs:
           echo "- Feature Gate Enforcement" >> $GITHUB_STEP_SUMMARY
           echo "" >> $GITHUB_STEP_SUMMARY
           echo "All multi-tenant tests must pass for Phase 16B validation." >> $GITHUB_STEP_SUMMARY
+
+  # THE required status check.
+  #
+  # Runs unconditionally (`if: always()`) so it can never be skipped. This
+  # matters because GitHub counts a *skipped* job as SUCCESS for a required
+  # check: if `changes` failed, the test jobs would be skipped and a required
+  # check placed on them would pass without any test having run. This job
+  # inspects the real results and fails unless they are genuinely acceptable.
+  #
+  # Require THIS check ("Backend CI Gate"), not the individual test jobs.
+  # `coverage` is intentionally excluded -- it is advisory until branch
+  # coverage clears the 70% threshold.
+  gate:
+    name: Backend CI Gate
+    if: always()
+    needs: [changes, test, multi-tenant-tests]
+    runs-on: ubuntu-latest
+    steps:
+      - name: Evaluate backend job results
+        env:
+          CHANGES_RESULT: ${{ needs.changes.result }}
+          BACKEND_CHANGED: ${{ needs.changes.outputs.backend }}
+          TEST_RESULT: ${{ needs.test.result }}
+          MULTI_TENANT_RESULT: ${{ needs['multi-tenant-tests'].result }}
+        run: |
+          set -u
+          echo "changes=${CHANGES_RESULT} backend_changed=${BACKEND_CHANGED:-<unset>}"
+          echo "test=${TEST_RESULT} multi-tenant=${MULTI_TENANT_RESULT}"
+
+          if [ "$CHANGES_RESULT" != "success" ]; then
+            echo "::error::Change detection did not succeed (${CHANGES_RESULT}). Failing the gate rather than letting skipped test jobs pass as success."
+            exit 1
+          fi
+
+          if [ "${BACKEND_CHANGED:-}" != "true" ]; then
+            echo "No backend changes detected - gate passes with test jobs skipped."
+            exit 0
+          fi
+
+          status=0
+          for pair in "Backend Tests:${TEST_RESULT}" "Backend Multi-Tenant Tests:${MULTI_TENANT_RESULT}"; do
+            name=${pair%%:*}
+            result=${pair#*:}
+            if [ "$result" != "success" ]; then
+              echo "::error::${name} did not succeed (result: ${result})."
+              status=1
+            fi
+          done
+          exit $status
