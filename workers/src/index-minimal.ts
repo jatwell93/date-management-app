@@ -64,12 +64,17 @@ import {
 } from './clerk/bootstrap-handler';
 import { handleClerkWebhook } from './clerk/webhook-handler';
 import {
+  CREDIT_SCOPES,
+  DEFAULT_FULL_CREDIT_MARKDOWN_MATRIX,
   DEFAULT_MARKDOWN_MATRIX,
+  DEFAULT_MARKDOWN_MATRIX_SET,
   type MarkdownBasis,
   type MarkdownMatrixConfig,
+  type MarkdownMatrixSet,
 } from '../../shared/domain/markdown';
 import { isCatalogueReviewState } from '../../shared/domain/brand-supplier';
 import {
+  isCreditType,
   isPolicyWrite,
   validatePolicyWrite,
   type PolicyFieldError,
@@ -1314,6 +1319,7 @@ type SupplierInput = Partial<
   Pick<
     SupplierWriteData,
     | 'name'
+    | 'creditType'
     | 'contactEmail'
     | 'contactPhone'
     | 'creditPolicyNote'
@@ -1497,6 +1503,13 @@ async function parseSupplierBody(
   parseSupplierEmailField(body, input, errors, 'representativeEmail');
   parseSupplierQuantityField(body, input, errors, 'policyWriteOffQty');
   parseSupplierQuantityField(body, input, errors, 'policyCreditQty');
+  if (Object.prototype.hasOwnProperty.call(body, 'creditType')) {
+    if (!isCreditType(body.creditType)) {
+      errors.push({ field: 'creditType', message: 'Credit type must be NONE or FULL_CREDIT' });
+    } else {
+      input.creditType = body.creditType;
+    }
+  }
   parseFollowUpDays(body, input, errors);
   validateSupplierName(input, errors, requireName);
   if (!requireName && Object.keys(input).length === 0) {
@@ -1521,6 +1534,7 @@ async function parseSupplierBody(
 function toCreateSupplierData(input: SupplierInput, policyChanged: boolean): SupplierWriteData {
   return {
     name: input.name?.trim() ?? '',
+    creditType: input.creditType ?? 'NONE',
     contactEmail: normalizeOptionalText(input.contactEmail),
     contactPhone: normalizeOptionalText(input.contactPhone),
     creditPolicyNote: input.creditPolicyNote?.trim() ?? '',
@@ -1551,6 +1565,7 @@ function toMergedSupplierData(
 ): SupplierWriteData {
   return {
     name: input.name === undefined ? existing.name : input.name.trim(),
+    creditType: mergedValue(input.creditType, existing.creditType),
     contactEmail: mergedOptionalText(input.contactEmail, existing.contactEmail),
     contactPhone: mergedOptionalText(input.contactPhone, existing.contactPhone),
     creditPolicyNote:
@@ -3129,13 +3144,14 @@ function markdownSchemaMissingResponse(env: Env): Response {
   );
 }
 
-async function getOrganizationMarkdownMatrix(
+async function getOrganizationMarkdownMatrices(
   organizationId: string,
   db: Database,
-): Promise<MarkdownMatrixConfig> {
+): Promise<MarkdownMatrixSet> {
   try {
     const rows = await db.sql`
       SELECT
+        credit_scope,
         band1_percentage,
         band2_percentage,
         band3_percentage,
@@ -3144,10 +3160,17 @@ async function getOrganizationMarkdownMatrix(
         band3_basis
       FROM organization_markdown_config
       WHERE organization_id = ${organizationId}
-      LIMIT 1
     `;
-
-    return markdownConfigRowToMatrix(rows[0] as MarkdownConfigRow | undefined);
+    const scoped = new Map(
+      rows.map((row) => [String(row.credit_scope ?? 'NO_CREDIT'), row as MarkdownConfigRow]),
+    );
+    return {
+      NO_CREDIT: markdownConfigRowToMatrix(scoped.get('NO_CREDIT'), DEFAULT_MARKDOWN_MATRIX),
+      FULL_CREDIT: markdownConfigRowToMatrix(
+        scoped.get('FULL_CREDIT'),
+        DEFAULT_FULL_CREDIT_MARKDOWN_MATRIX,
+      ),
+    };
   } catch (error) {
     // organization_markdown_config ships in Neon migration 0003 (#338). If the
     // table is missing, fall back to the default matrix (cost-only ladder) so
@@ -3157,7 +3180,7 @@ async function getOrganizationMarkdownMatrix(
       console.error(
         'organization_markdown_config table missing — apply Neon migration 0003_add_configurable_markdown_matrix. Falling back to default matrix.',
       );
-      return markdownConfigRowToMatrix(undefined);
+      return DEFAULT_MARKDOWN_MATRIX_SET;
     }
     throw error;
   }
@@ -3176,12 +3199,16 @@ async function handleGetMarkdownConfig(
     return auth;
   }
 
-  const [matrix, retailData] = await Promise.all([
-    getOrganizationMarkdownMatrix(auth.organizationId, db),
+  const [matrices, retailData] = await Promise.all([
+    getOrganizationMarkdownMatrices(auth.organizationId, db),
     organizationHasRetailData(auth.organizationId, db),
   ]);
 
-  return jsonResponse({ matrix, hasRetailData: retailData.hasRetailData }, 200, env);
+  return jsonResponse(
+    { matrices, matrix: matrices.NO_CREDIT, hasRetailData: retailData.hasRetailData },
+    200,
+    env,
+  );
 }
 
 /**
@@ -3200,16 +3227,17 @@ async function handleUpdateMarkdownConfig(
     return errorResponse('Only admins can update markdown settings', 403, env);
   }
 
-  const parsedMatrix = parseMarkdownMatrix(await request.json().catch(() => null));
-  if (typeof parsedMatrix === 'string') {
-    return errorResponse(parsedMatrix, 400, env);
+  const body = await request.json().catch(() => null);
+  const parsedMatrices = parseMarkdownMatrixRequest(body);
+  if (typeof parsedMatrices === 'string') {
+    return errorResponse(parsedMatrices, 400, env);
   }
 
   const { hasRetailData, retailColumnMissing } = await organizationHasRetailData(
     auth.organizationId,
     db,
   );
-  if (matrixUsesRetail(parsedMatrix)) {
+  if (Object.values(parsedMatrices.matrices).some(matrixUsesRetail)) {
     // A missing retail_price column means migration 0003 is not applied — the
     // save cannot honour retail bands, and telling the user to "upload retail
     // prices" would be unactionable. Surface it as the same 503 as the INSERT
@@ -3226,11 +3254,32 @@ async function handleUpdateMarkdownConfig(
     }
   }
 
-  let rows;
+  const noCredit = parsedMatrices.matrices.NO_CREDIT;
   try {
-    rows = await db.sql`
+    if (parsedMatrices.legacy) {
+      await db.sql`
+        INSERT INTO organization_markdown_config (
+          organization_id, credit_scope, band1_percentage, band2_percentage,
+          band3_percentage, band1_basis, band2_basis, band3_basis, created_at, updated_at
+        ) VALUES (
+          ${auth.organizationId}, 'NO_CREDIT', ${noCredit.band1.percentage},
+          ${noCredit.band2.percentage}, ${noCredit.band3.percentage}, ${noCredit.band1.basis},
+          ${noCredit.band2.basis}, ${noCredit.band3.basis}, NOW(), NOW()
+        )
+        ON CONFLICT (organization_id, credit_scope) DO UPDATE SET
+          band1_percentage = EXCLUDED.band1_percentage,
+          band2_percentage = EXCLUDED.band2_percentage,
+          band3_percentage = EXCLUDED.band3_percentage,
+          band1_basis = EXCLUDED.band1_basis,
+          band2_basis = EXCLUDED.band2_basis,
+          band3_basis = EXCLUDED.band3_basis,
+          updated_at = NOW()
+      `;
+    } else {
+      const fullCredit = parsedMatrices.matrices.FULL_CREDIT;
+      await db.sql`
       INSERT INTO organization_markdown_config (
-        organization_id,
+        organization_id, credit_scope,
         band1_percentage,
         band2_percentage,
         band3_percentage,
@@ -3241,17 +3290,15 @@ async function handleUpdateMarkdownConfig(
         updated_at
       )
       VALUES (
-        ${auth.organizationId},
-        ${parsedMatrix.band1.percentage},
-        ${parsedMatrix.band2.percentage},
-        ${parsedMatrix.band3.percentage},
-        ${parsedMatrix.band1.basis},
-        ${parsedMatrix.band2.basis},
-        ${parsedMatrix.band3.basis},
-        NOW(),
-        NOW()
+        ${auth.organizationId}, 'NO_CREDIT', ${noCredit.band1.percentage},
+        ${noCredit.band2.percentage}, ${noCredit.band3.percentage}, ${noCredit.band1.basis},
+        ${noCredit.band2.basis}, ${noCredit.band3.basis}, NOW(), NOW()
+      ), (
+        ${auth.organizationId}, 'FULL_CREDIT', ${fullCredit.band1.percentage},
+        ${fullCredit.band2.percentage}, ${fullCredit.band3.percentage}, ${fullCredit.band1.basis},
+        ${fullCredit.band2.basis}, ${fullCredit.band3.basis}, NOW(), NOW()
       )
-      ON CONFLICT (organization_id) DO UPDATE SET
+      ON CONFLICT (organization_id, credit_scope) DO UPDATE SET
         band1_percentage = EXCLUDED.band1_percentage,
         band2_percentage = EXCLUDED.band2_percentage,
         band3_percentage = EXCLUDED.band3_percentage,
@@ -3259,14 +3306,8 @@ async function handleUpdateMarkdownConfig(
         band2_basis = EXCLUDED.band2_basis,
         band3_basis = EXCLUDED.band3_basis,
         updated_at = NOW()
-      RETURNING
-        band1_percentage,
-        band2_percentage,
-        band3_percentage,
-        band1_basis,
-        band2_basis,
-        band3_basis
     `;
+    }
   } catch (error) {
     // The organization_markdown_config table (and products.retail_price) ship in
     // Neon migration 0003 (#338). A missing table/column here means the migration
@@ -3281,11 +3322,10 @@ async function handleUpdateMarkdownConfig(
     throw error;
   }
 
-  return jsonResponse(
-    { matrix: markdownConfigRowToMatrix(rows[0] as MarkdownConfigRow), hasRetailData },
-    200,
-    env,
-  );
+  const matrices = parsedMatrices.legacy
+    ? { ...(await getOrganizationMarkdownMatrices(auth.organizationId, db)), NO_CREDIT: noCredit }
+    : parsedMatrices.matrices;
+  return jsonResponse({ matrices, matrix: matrices.NO_CREDIT, hasRetailData }, 200, env);
 }
 
 /**
@@ -3791,6 +3831,7 @@ export { getClerkAuthorizedParties };
 type LaunchTier = 'free' | 'starter' | 'professional' | 'enterprise';
 
 type MarkdownConfigRow = {
+  credit_scope?: string | null;
   band1_percentage?: number | string | null;
   band2_percentage?: number | string | null;
   band3_percentage?: number | string | null;
@@ -3803,25 +3844,55 @@ function isMarkdownBasis(value: unknown): value is MarkdownBasis {
   return value === 'cost' || value === 'retail';
 }
 
-function markdownConfigRowToMatrix(row: MarkdownConfigRow | undefined): MarkdownMatrixConfig {
+function markdownConfigRowToMatrix(
+  row: MarkdownConfigRow | undefined,
+  fallback: MarkdownMatrixConfig = DEFAULT_MARKDOWN_MATRIX,
+): MarkdownMatrixConfig {
   if (!row) {
-    return DEFAULT_MARKDOWN_MATRIX;
+    return fallback;
   }
 
   return {
     band1: {
-      percentage: Number(row.band1_percentage ?? DEFAULT_MARKDOWN_MATRIX.band1.percentage),
+      percentage: Number(row.band1_percentage ?? fallback.band1.percentage),
       basis: isMarkdownBasis(row.band1_basis) ? row.band1_basis : 'cost',
     },
     band2: {
-      percentage: Number(row.band2_percentage ?? DEFAULT_MARKDOWN_MATRIX.band2.percentage),
+      percentage: Number(row.band2_percentage ?? fallback.band2.percentage),
       basis: isMarkdownBasis(row.band2_basis) ? row.band2_basis : 'cost',
     },
     band3: {
-      percentage: Number(row.band3_percentage ?? DEFAULT_MARKDOWN_MATRIX.band3.percentage),
+      percentage: Number(row.band3_percentage ?? fallback.band3.percentage),
       basis: isMarkdownBasis(row.band3_basis) ? row.band3_basis : 'cost',
     },
   };
+}
+
+function parseMarkdownMatrixRequest(
+  value: unknown,
+): { matrices: MarkdownMatrixSet; legacy: boolean } | string {
+  const body = value as { matrices?: unknown } | null;
+  if (body?.matrices !== undefined) {
+    if (!body.matrices || typeof body.matrices !== 'object') {
+      return 'matrices must include NO_CREDIT and FULL_CREDIT.';
+    }
+    const candidate = body.matrices as Record<string, unknown>;
+    if (!CREDIT_SCOPES.every((scope) => candidate[scope] !== undefined)) {
+      return 'matrices must include NO_CREDIT and FULL_CREDIT.';
+    }
+    const noCredit = parseMarkdownMatrix(candidate.NO_CREDIT);
+    if (typeof noCredit === 'string') return `NO_CREDIT: ${noCredit}`;
+    const fullCredit = parseMarkdownMatrix(candidate.FULL_CREDIT);
+    if (typeof fullCredit === 'string') return `FULL_CREDIT: ${fullCredit}`;
+    return { matrices: { NO_CREDIT: noCredit, FULL_CREDIT: fullCredit }, legacy: false };
+  }
+  const matrix = parseMarkdownMatrix(value);
+  return typeof matrix === 'string'
+    ? matrix
+    : {
+        matrices: { NO_CREDIT: matrix, FULL_CREDIT: DEFAULT_FULL_CREDIT_MARKDOWN_MATRIX },
+        legacy: true,
+      };
 }
 
 function parseMarkdownMatrix(value: unknown): MarkdownMatrixConfig | string {
@@ -3862,15 +3933,19 @@ function parseMarkdownBand(
   }
 
   const band = value as { percentage?: unknown; basis?: unknown };
-  const percentage = Number(band.percentage);
-  if (!Number.isFinite(percentage) || percentage < 0 || percentage > 100) {
+  if (
+    typeof band.percentage !== 'number' ||
+    !Number.isFinite(band.percentage) ||
+    band.percentage < 0 ||
+    band.percentage > 100
+  ) {
     return `${label} percentage must be between 0 and 100.`;
   }
   if (!isMarkdownBasis(band.basis)) {
     return `${label} basis must be cost or retail.`;
   }
 
-  return { percentage, basis: band.basis };
+  return { percentage: band.percentage, basis: band.basis };
 }
 
 function matrixUsesRetail(matrix: MarkdownMatrixConfig): boolean {
