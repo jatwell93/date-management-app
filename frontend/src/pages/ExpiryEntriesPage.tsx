@@ -11,7 +11,10 @@ import {
 } from '../components/ui/select';
 import { apiService } from '../lib/api.service';
 import { calculateMarkdownPrice } from '@shared/markdown';
-import { useMarkdownMatrix } from '../hooks/useMarkdownMatrix';
+import { useMarkdownMatrices } from '../hooks/useMarkdownMatrix';
+import type { MarkdownCreditContext } from '@shared/markdown-credit-context';
+import { MarkdownCreditScopeBadge } from '../components/MarkdownCreditScopeBadge';
+import { MarkdownMatricesNotice } from '../components/MarkdownMatricesNotice';
 import { DataTable } from '../components/ui/data-table';
 import { DataTableColumnHeader } from '../components/ui/data-table-column-header';
 import { ColumnDef } from '@tanstack/react-table';
@@ -24,7 +27,7 @@ interface ExpiryEntriesPageProps {
   role: RoleValue | null;
 }
 
-interface ExpiryEntryItem {
+interface ExpiryEntryItem extends MarkdownCreditContext {
   inventoryId: number;
   expiryDate: string; // Format: YYYY-MM-DD
   status: string;
@@ -111,7 +114,7 @@ function TableSkeleton() {
 
 export function ExpiryEntriesPage({ token, role }: ExpiryEntriesPageProps) {
   const getFreshApiToken = useFreshApiToken(token);
-  const markdownMatrix = useMarkdownMatrix(token);
+  const markdownConfig = useMarkdownMatrices(token);
   // Only admins (manage_members) may delete entries; everyone can edit typos.
   const canDelete = !!role && hasPermission(role, PERMISSIONS.MANAGE_MEMBERS);
   const [reportData, setReportData] = useState<ExpiryEntryItem[] | null>(null);
@@ -430,16 +433,30 @@ export function ExpiryEntriesPage({ token, role }: ExpiryEntriesPageProps) {
         },
       },
       {
+        id: 'creditScope',
+        header: 'Credit scope',
+        cell: ({ row }) => (
+          <MarkdownCreditScopeBadge
+            creditScope={row.original.creditScope ?? 'NO_CREDIT'}
+            creditScopeReason={row.original.creditScopeReason ?? 'NO_CREDIT'}
+            creditSupplierId={row.original.creditSupplierId ?? null}
+            creditSupplierName={row.original.creditSupplierName ?? null}
+          />
+        ),
+      },
+      {
         id: 'markdownPrice',
         // Computed column: derive the markdown price for sorting/filtering rather
         // than relying on a `markdownPrice` field that isn't on the data model.
         accessorFn: (row) => {
           const days = getDaysToExpiry(row.expiryDate);
+          const matrix = markdownConfig.matrices?.[row.creditScope ?? 'NO_CREDIT'];
+          if (!matrix) return null;
           return (
             calculateMarkdownPrice(
               { costPrice: row.costPrice, retailPrice: row.retailPrice },
               days,
-              markdownMatrix,
+              matrix,
             ) ?? row.costPrice
           );
         },
@@ -449,11 +466,15 @@ export function ExpiryEntriesPage({ token, role }: ExpiryEntriesPageProps) {
           const daysToExpiry = isEditing
             ? getDaysToExpiry(editingItem.expiryDate)
             : getDaysToExpiry(row.original.expiryDate);
+          const matrix = markdownConfig.matrices?.[row.original.creditScope ?? 'NO_CREDIT'];
+          if (!matrix) {
+            return <div className="min-w-[100px] text-sm text-muted-foreground">Unavailable</div>;
+          }
           const markdownPrice =
             calculateMarkdownPrice(
               { costPrice: row.original.costPrice, retailPrice: row.original.retailPrice },
               daysToExpiry,
-              markdownMatrix,
+              matrix,
             ) ?? row.original.costPrice;
 
           return (
@@ -614,7 +635,7 @@ export function ExpiryEntriesPage({ token, role }: ExpiryEntriesPageProps) {
       deleting,
       deleteConfirmation,
       canDelete,
-      markdownMatrix,
+      markdownConfig.matrices,
       storeAreas,
       storeAreasError,
       handleSaveEdit,
@@ -748,6 +769,7 @@ export function ExpiryEntriesPage({ token, role }: ExpiryEntriesPageProps) {
           date or location{canDelete ? ', or delete entries that were logged in error.' : '.'}
         </p>
       </header>
+      <MarkdownMatricesNotice {...markdownConfig} />
 
       {actionError && (
         <div
@@ -770,12 +792,14 @@ export function ExpiryEntriesPage({ token, role }: ExpiryEntriesPageProps) {
         <ul className="mb-5 space-y-3 md:hidden" aria-label="Mobile expiry entry summary">
           {filteredData.slice(0, 50).map((item) => {
             const daysToExpiry = getDaysToExpiry(item.expiryDate);
-            const markdownPrice =
-              calculateMarkdownPrice(
-                { costPrice: item.costPrice, retailPrice: item.retailPrice },
-                daysToExpiry,
-                markdownMatrix,
-              ) ?? item.costPrice;
+            const matrix = markdownConfig.matrices?.[item.creditScope ?? 'NO_CREDIT'];
+            const markdownPrice = matrix
+              ? (calculateMarkdownPrice(
+                  { costPrice: item.costPrice, retailPrice: item.retailPrice },
+                  daysToExpiry,
+                  matrix,
+                ) ?? item.costPrice)
+              : null;
 
             return (
               <li key={item.inventoryId} className="rounded-lg border bg-semantic-surface-1 p-4">
@@ -792,6 +816,14 @@ export function ExpiryEntriesPage({ token, role }: ExpiryEntriesPageProps) {
                     {getMarkdownStatus(daysToExpiry)}
                   </span>
                 </div>
+                <div className="mt-2">
+                  <MarkdownCreditScopeBadge
+                    creditScope={item.creditScope ?? 'NO_CREDIT'}
+                    creditScopeReason={item.creditScopeReason ?? 'NO_CREDIT'}
+                    creditSupplierId={item.creditSupplierId ?? null}
+                    creditSupplierName={item.creditSupplierName ?? null}
+                  />
+                </div>
                 <dl className="mt-3 grid grid-cols-2 gap-3 text-sm">
                   <div>
                     <dt className="text-semantic-text-secondary">Expiry</dt>
@@ -799,7 +831,9 @@ export function ExpiryEntriesPage({ token, role }: ExpiryEntriesPageProps) {
                   </div>
                   <div>
                     <dt className="text-semantic-text-secondary">Markdown price</dt>
-                    <dd className="font-medium">{formatCurrencyValue(markdownPrice)}</dd>
+                    <dd className="font-medium">
+                      {markdownPrice == null ? 'Unavailable' : formatCurrencyValue(markdownPrice)}
+                    </dd>
                   </div>
                 </dl>
               </li>

@@ -5,6 +5,7 @@ import { render, screen, fireEvent, waitFor, within } from '@testing-library/rea
 import { MarkdownCalculator } from '../components/MarkdownCalculator';
 import { apiService } from '../lib/api.service';
 import '@testing-library/jest-dom';
+import { DEFAULT_MARKDOWN_MATRIX_SET } from '@shared/markdown';
 
 const mockGetToken = vi.fn();
 
@@ -53,22 +54,56 @@ vi.mock('../lib/api.service', () => ({
 describe('MarkdownCalculator', () => {
   const mockToken = 'fake-token';
   const mockedApiGet = apiService.get as jest.Mock;
+  const markdownConfigResponse = {
+    matrices: DEFAULT_MARKDOWN_MATRIX_SET,
+    matrix: DEFAULT_MARKDOWN_MATRIX_SET.NO_CREDIT,
+    hasRetailData: false,
+  };
 
   beforeEach(() => {
     mockScannerProps.length = 0;
     mockedApiGet.mockReset();
+    mockedApiGet.mockImplementation((path: string) =>
+      path === '/markdown-config' ? Promise.resolve(markdownConfigResponse) : Promise.resolve(null),
+    );
     mockGetToken.mockResolvedValue(undefined);
   });
 
-  it('renders the markdown calculator form', () => {
+  async function waitForMatrixReady() {
+    await waitFor(() => {
+      expect(screen.queryByText(/Loading markdown pricing/i)).not.toBeInTheDocument();
+    });
+  }
+
+  it('does not calculate or display a price before markdown matrices are ready', async () => {
+    mockedApiGet.mockImplementation((path: string) =>
+      path === '/markdown-config' ? new Promise(() => undefined) : Promise.resolve(null),
+    );
     render(<MarkdownCalculator token={mockToken} />);
+
+    fireEvent.change(screen.getByLabelText(/Cost Price/i), { target: { value: '100' } });
+    const futureDate = new Date();
+    futureDate.setDate(futureDate.getDate() + 15);
+    fireEvent.change(screen.getByLabelText(/Expiry Date/i), {
+      target: { value: futureDate.toISOString().split('T')[0] },
+    });
+
+    expect(screen.getByRole('button', { name: /Calculate Markdown/i })).toBeDisabled();
+    expect(screen.getByText(/Loading markdown pricing/i)).toBeInTheDocument();
+    expect(screen.queryByText(/\$25\.00/i)).not.toBeInTheDocument();
+  });
+
+  it('renders the markdown calculator form', async () => {
+    render(<MarkdownCalculator token={mockToken} />);
+    await waitForMatrixReady();
     expect(screen.getByLabelText(/Cost Price/i)).toBeInTheDocument();
     expect(screen.getByLabelText(/Expiry Date/i)).toBeInTheDocument();
     expect(screen.getByRole('button', { name: /Calculate Markdown/i })).toBeInTheDocument();
   });
 
-  it('calculates markdown price correctly for items expiring within 30 days', () => {
+  it('calculates markdown price correctly for items expiring within 30 days', async () => {
     render(<MarkdownCalculator token={mockToken} />);
+    await waitForMatrixReady();
 
     // Set cost price
     fireEvent.change(screen.getByLabelText(/Cost Price/i), {
@@ -99,16 +134,18 @@ describe('MarkdownCalculator', () => {
     expect(componentSource).toContain("currency: 'AUD'");
   });
 
-  it('starts with an explicit not-yet-calculated result state', () => {
+  it('starts with an explicit not-yet-calculated result state', async () => {
     render(<MarkdownCalculator token={mockToken} />);
+    await waitForMatrixReady();
 
     const result = screen.getByRole('status', { name: /markdown result/i });
     expect(result).toHaveTextContent(/No markdown calculated yet/i);
     expect(result).not.toHaveTextContent(/^Normal$/i);
   });
 
-  it('displays Expired status for items past expiry date', () => {
+  it('displays Expired status for items past expiry date', async () => {
     render(<MarkdownCalculator token={mockToken} />);
+    await waitForMatrixReady();
 
     // Set cost price
     fireEvent.change(screen.getByLabelText(/Cost Price/i), {
@@ -128,8 +165,9 @@ describe('MarkdownCalculator', () => {
     expect(screen.getByText(/Expired/i)).toBeInTheDocument();
   });
 
-  it('announces calculated markdown results in the result region', () => {
+  it('announces calculated markdown results in the result region', async () => {
     render(<MarkdownCalculator token={mockToken} />);
+    await waitForMatrixReady();
 
     fireEvent.change(screen.getByLabelText(/Cost Price/i), {
       target: { value: '100' },
@@ -148,8 +186,9 @@ describe('MarkdownCalculator', () => {
     expect(result).toHaveTextContent(/\$25\.00/i);
   });
 
-  it('shows specific validation guidance for missing expiry date', () => {
+  it('shows specific validation guidance for missing expiry date', async () => {
     render(<MarkdownCalculator token={mockToken} />);
+    await waitForMatrixReady();
 
     fireEvent.change(screen.getByLabelText(/Cost Price/i), {
       target: { value: '12.50' },
@@ -161,8 +200,9 @@ describe('MarkdownCalculator', () => {
     );
   });
 
-  it('shows specific validation guidance for invalid cost values', () => {
+  it('shows specific validation guidance for invalid cost values', async () => {
     render(<MarkdownCalculator token={mockToken} />);
+    await waitForMatrixReady();
 
     fireEvent.change(screen.getByLabelText(/Cost Price/i), {
       target: { value: '-4' },
@@ -178,7 +218,11 @@ describe('MarkdownCalculator', () => {
   });
 
   it('shows recoverable product lookup errors without leaking raw API wording', async () => {
-    mockedApiGet.mockRejectedValue(new Error('Request failed with status 500: stack trace'));
+    mockedApiGet.mockImplementation((path: string) =>
+      path === '/markdown-config'
+        ? Promise.resolve(markdownConfigResponse)
+        : Promise.reject(new Error('Request failed with status 500: stack trace')),
+    );
 
     render(<MarkdownCalculator token={mockToken} />);
 
@@ -193,13 +237,16 @@ describe('MarkdownCalculator', () => {
   });
 
   it('wraps long scanned and product values inside structured product feedback', async () => {
-    mockedApiGet.mockResolvedValue({
+    const product = {
       id: 1,
       name: 'Long pharmacy product name '.repeat(8),
       sku: 'SKU-' + '1234567890'.repeat(6),
       barcode: '9300000000000'.repeat(5),
       costPrice: 42.5,
-    });
+    };
+    mockedApiGet.mockImplementation((path: string) =>
+      Promise.resolve(path === '/markdown-config' ? markdownConfigResponse : product),
+    );
 
     render(<MarkdownCalculator token={mockToken} />);
 
@@ -214,13 +261,16 @@ describe('MarkdownCalculator', () => {
 
   it('refreshes the Clerk token before scanning product details', async () => {
     mockGetToken.mockResolvedValue('fresh-clerk-token');
-    mockedApiGet.mockResolvedValue({
+    const product = {
       id: 1,
       name: 'Fresh Token Product',
       sku: 'SKU123',
       barcode: '9300000000000',
       costPrice: 42.5,
-    });
+    };
+    mockedApiGet.mockImplementation((path: string) =>
+      Promise.resolve(path === '/markdown-config' ? markdownConfigResponse : product),
+    );
 
     render(<MarkdownCalculator token="expired-prop-token" />);
 
@@ -233,15 +283,19 @@ describe('MarkdownCalculator', () => {
   });
 
   it('lets the user enter cost manually when the catalog product has no cost price', async () => {
-    mockedApiGet.mockResolvedValue({
+    const product = {
       id: 7,
       name: 'No Cost Product',
       sku: 'SKU123',
       barcode: '9300000000001',
       costPrice: undefined,
-    });
+    };
+    mockedApiGet.mockImplementation((path: string) =>
+      Promise.resolve(path === '/markdown-config' ? markdownConfigResponse : product),
+    );
 
     render(<MarkdownCalculator token={mockToken} />);
+    await waitForMatrixReady();
 
     fireEvent.click(screen.getByRole('button', { name: /Scan test product/i }));
 
@@ -265,8 +319,9 @@ describe('MarkdownCalculator', () => {
     expect(screen.getByText(/\$25\.00/i)).toBeInTheDocument();
   });
 
-  it('passes handheld scanner intent and uses touch-friendly primary controls', () => {
+  it('passes handheld scanner intent and uses touch-friendly primary controls', async () => {
     render(<MarkdownCalculator token={mockToken} />);
+    await waitForMatrixReady();
 
     expect(mockScannerProps[0]).toEqual(expect.objectContaining({ isHandheld: true }));
     expect(screen.getByRole('button', { name: /Calculate Markdown/i })).toHaveClass('min-h-11');

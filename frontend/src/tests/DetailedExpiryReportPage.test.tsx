@@ -180,12 +180,21 @@ describe('DetailedExpiryReportPage', () => {
     // @ts-expect-error — apiService.get is mocked as vi.fn()
     apiService.get.mockImplementation((url) => {
       if (url === '/markdown-config') {
+        const noCredit = {
+          band1: { percentage: 50, basis: 'retail' },
+          band2: { percentage: 60, basis: 'cost' },
+          band3: { percentage: 75, basis: 'cost' },
+        } as const;
         return Promise.resolve({
-          matrix: {
-            band1: { percentage: 50, basis: 'retail' },
-            band2: { percentage: 60, basis: 'cost' },
-            band3: { percentage: 75, basis: 'cost' },
+          matrices: {
+            NO_CREDIT: noCredit,
+            FULL_CREDIT: {
+              band1: { percentage: 20, basis: 'cost' },
+              band2: { percentage: 20, basis: 'cost' },
+              band3: { percentage: 20, basis: 'cost' },
+            },
           },
+          matrix: noCredit,
           hasRetailData: true,
         });
       }

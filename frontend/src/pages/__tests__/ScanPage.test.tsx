@@ -6,6 +6,7 @@ import { HandheldProvider } from '../../contexts/HandheldContext';
 import { SyncStrategy } from '../../config/handheld';
 import { apiService } from '../../lib/api.service';
 import { offlineStorage } from '../../lib/offline-storage';
+import { DEFAULT_MARKDOWN_MATRIX_SET } from '@shared/markdown';
 
 // Mock dependencies
 vi.mock('../../lib/api.service');
@@ -205,6 +206,13 @@ describe('ScanPage Integration', () => {
 
     // Default API mocks
     (apiService.get as jest.Mock).mockImplementation((url) => {
+      if (url === '/markdown-config') {
+        return Promise.resolve({
+          matrices: DEFAULT_MARKDOWN_MATRIX_SET,
+          matrix: DEFAULT_MARKDOWN_MATRIX_SET.NO_CREDIT,
+          hasRetailData: false,
+        });
+      }
       if (url === '/store-areas') {
         return Promise.resolve(mockStoreAreas);
       }
