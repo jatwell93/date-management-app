@@ -2,6 +2,13 @@ import { PrismaClient, Prisma, Product } from '@prisma/client';
 import { injectable, inject } from 'tsyringe';
 
 type ProductWithCount = Product & { _count: { inventoryItems: number } };
+const creditContextInclude = {
+  supplier: true,
+  brand: { include: { supplier: true } },
+} satisfies Prisma.ProductInclude;
+export type ProductWithCreditRelations = Prisma.ProductGetPayload<{
+  include: typeof creditContextInclude;
+}>;
 export interface ProductIdentifierLookup {
   bySku: Product | null;
   byBarcode: Product | null;
@@ -30,12 +37,17 @@ export class ProductRepository {
     });
   }
 
-  async findById(id: number, organizationId: string, tx?: DbClient): Promise<Product | null> {
+  async findById(
+    id: number,
+    organizationId: string,
+    tx?: DbClient,
+  ): Promise<ProductWithCreditRelations | null> {
     return this.getClient(tx).product.findUnique({
       where: {
         id,
         organizationId,
       },
+      include: creditContextInclude,
     });
   }
 
@@ -43,13 +55,18 @@ export class ProductRepository {
     barcode: string,
     organizationId: string,
     tx?: DbClient,
-  ): Promise<Product | null> {
+  ): Promise<ProductWithCreditRelations | null> {
     return this.getClient(tx).product.findFirst({
       where: { barcode, organizationId },
+      include: creditContextInclude,
     });
   }
 
-  async findBySku(sku: string, organizationId: string, tx?: DbClient): Promise<Product | null> {
+  async findBySku(
+    sku: string,
+    organizationId: string,
+    tx?: DbClient,
+  ): Promise<ProductWithCreditRelations | null> {
     return this.getClient(tx).product.findUnique({
       where: {
         organizationId_sku: {
@@ -57,6 +74,7 @@ export class ProductRepository {
           sku,
         },
       },
+      include: creditContextInclude,
     });
   }
 

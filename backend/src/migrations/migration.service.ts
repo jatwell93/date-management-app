@@ -881,6 +881,71 @@ export class MigrationService {
           );
         },
       },
+      {
+        id: 18,
+        name: '018-add-credit-scoped-markdown-matrix',
+        up: (db: DB) => {
+          addColumnIfMissing(
+            db,
+            'suppliers',
+            'credit_type',
+            "TEXT NOT NULL DEFAULT 'NONE' CHECK (credit_type IN ('NONE', 'FULL_CREDIT'))",
+          );
+
+          const columns = db
+            .prepare('PRAGMA table_info(organization_markdown_config)')
+            .all() as PragmaTableInfoRow[];
+          if (columns.some((column) => column.name === 'credit_scope')) return;
+
+          db.exec(`
+            DROP INDEX IF EXISTS idx_organization_markdown_config_org_id;
+            ALTER TABLE organization_markdown_config
+              RENAME TO organization_markdown_config_legacy_018;
+
+            CREATE TABLE organization_markdown_config (
+              id INTEGER PRIMARY KEY AUTOINCREMENT,
+              organization_id TEXT NOT NULL,
+              credit_scope TEXT NOT NULL DEFAULT 'NO_CREDIT',
+              band1_percentage REAL NOT NULL DEFAULT 50,
+              band2_percentage REAL NOT NULL DEFAULT 60,
+              band3_percentage REAL NOT NULL DEFAULT 75,
+              band1_basis TEXT NOT NULL DEFAULT 'cost',
+              band2_basis TEXT NOT NULL DEFAULT 'cost',
+              band3_basis TEXT NOT NULL DEFAULT 'cost',
+              created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+              updated_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+              FOREIGN KEY (organization_id) REFERENCES organizations (id) ON DELETE CASCADE,
+              CHECK (credit_scope IN ('NO_CREDIT', 'FULL_CREDIT')),
+              CHECK (band1_basis IN ('cost', 'retail')),
+              CHECK (band2_basis IN ('cost', 'retail')),
+              CHECK (band3_basis IN ('cost', 'retail')),
+              CHECK (band1_percentage BETWEEN 0 AND 100),
+              CHECK (band2_percentage BETWEEN 0 AND 100),
+              CHECK (band3_percentage BETWEEN 0 AND 100),
+              UNIQUE (organization_id, credit_scope)
+            );
+
+            INSERT INTO organization_markdown_config (
+              id, organization_id, credit_scope,
+              band1_percentage, band2_percentage, band3_percentage,
+              band1_basis, band2_basis, band3_basis, created_at, updated_at
+            )
+            SELECT id, organization_id, 'NO_CREDIT',
+              band1_percentage, band2_percentage, band3_percentage,
+              band1_basis, band2_basis, band3_basis, created_at, updated_at
+            FROM organization_markdown_config_legacy_018;
+
+            DROP TABLE organization_markdown_config_legacy_018;
+            CREATE UNIQUE INDEX idx_organization_markdown_config_org_scope
+              ON organization_markdown_config (organization_id, credit_scope);
+          `);
+        },
+        down: () => {
+          Logger.warn(
+            'SQLite rollback leaves credit-scoped markdown columns in place to preserve customized matrices',
+          );
+        },
+      },
     ];
   }
 

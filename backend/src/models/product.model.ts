@@ -3,7 +3,7 @@
  * Represents a unique product in the inventory system
  */
 
-export interface Product {
+export interface Product extends Partial<MarkdownCreditContext> {
   id: number;
   organizationId: string;
   barcode: string;
@@ -19,3 +19,4 @@ export interface Product {
  * Deprecated: ProductModel uses legacy sqlite3 approach
  * Use Prisma services (ProductService, etc.) instead
  */
+import type { MarkdownCreditContext } from '../../../shared/domain/markdown-credit-context';

@@ -224,3 +224,20 @@ describe('SupplierCreditRepository numbered catalogue review', () => {
     });
   });
 });
+
+describe('SupplierCreditRepository policy clearing', () => {
+  it('resets credit type to NONE with the rest of the policy', async () => {
+    const supplier = {
+      updateMany: vi.fn(async () => ({ count: 1 })),
+      findFirst: vi.fn(async () => ({ id: 3, creditType: 'NONE' })),
+    };
+    const repository = new SupplierCreditRepository({ supplier } as unknown as PrismaClient);
+
+    await repository.clearSupplierPolicy('org-a', 3, new Date('2026-07-22T00:00:00Z'));
+
+    expect(supplier.updateMany).toHaveBeenCalledWith({
+      where: { id: 3, organizationId: 'org-a' },
+      data: expect.objectContaining({ creditType: 'NONE' }),
+    });
+  });
+});

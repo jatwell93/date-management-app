@@ -23,6 +23,7 @@ export interface SupplierWriteData {
   name: string;
   contactEmail: string | null;
   creditPolicyNote: string;
+  creditType: 'NONE' | 'FULL_CREDIT';
   policyWriteOffQty: number | null;
   policyCreditQty: number | null;
   followUpDays: number;
@@ -310,6 +311,7 @@ export class SupplierCreditRepository {
       where: { id, organizationId },
       data: {
         creditPolicyNote: '',
+        creditType: 'NONE',
         policyWriteOffQty: null,
         policyCreditQty: null,
         followUpDays: 7,

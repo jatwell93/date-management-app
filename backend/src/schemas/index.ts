@@ -342,6 +342,7 @@ const supplierBody = z.object({
     .string()
     .max(10000, 'Credit policy note must be at most 10000 characters')
     .optional(),
+  creditType: z.enum(['NONE', 'FULL_CREDIT'] as const).optional(),
   policyWriteOffQty: z
     .number()
     .int()
@@ -382,6 +383,7 @@ export const supplierPatchSchema = z.object({
       contactEmail: z.string().email().max(255).nullable().optional(),
       contactPhone: z.string().max(80).nullable().optional(),
       creditPolicyNote: z.string().max(10000).optional(),
+      creditType: z.enum(['NONE', 'FULL_CREDIT'] as const).optional(),
       policyWriteOffQty: z.number().int().positive().nullable().optional(),
       policyCreditQty: z.number().int().nonnegative().nullable().optional(),
       followUpDays: z.number().int().min(1).max(365).optional(),
@@ -640,23 +642,33 @@ const markdownBandSchema = z.object({
   basis: z.enum(['cost', 'retail'], { error: "Basis must be 'cost' or 'retail'" }),
 });
 
+const markdownMatrixSchema = z
+  .object({
+    band1: markdownBandSchema,
+    band2: markdownBandSchema,
+    band3: markdownBandSchema,
+  })
+  .refine(
+    (matrix) =>
+      matrix.band1.percentage <= matrix.band2.percentage &&
+      matrix.band2.percentage <= matrix.band3.percentage,
+    {
+      message:
+        'Discounts must not decrease as expiry nears: band 1 (61-90 days) ≤ band 2 (31-60 days) ≤ band 3 (0-30 days).',
+      path: ['band3', 'percentage'],
+    },
+  );
+
 export const markdownConfigSchema = z.object({
-  body: z
-    .object({
-      band1: markdownBandSchema,
-      band2: markdownBandSchema,
-      band3: markdownBandSchema,
-    })
-    .refine(
-      (matrix) =>
-        matrix.band1.percentage <= matrix.band2.percentage &&
-        matrix.band2.percentage <= matrix.band3.percentage,
-      {
-        message:
-          'Discounts must not decrease as expiry nears: band 1 (61-90 days) ≤ band 2 (31-60 days) ≤ band 3 (0-30 days).',
-        path: ['band3', 'percentage'],
-      },
-    ),
+  body: z.union([
+    markdownMatrixSchema,
+    z.object({
+      matrices: z.object({
+        NO_CREDIT: markdownMatrixSchema,
+        FULL_CREDIT: markdownMatrixSchema,
+      }),
+    }),
+  ]),
 });
 
 // ============================================================================

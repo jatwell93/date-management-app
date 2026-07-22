@@ -10,6 +10,11 @@
 import Database from 'better-sqlite3';
 import { DISPOSITIONED_STATUSES, EXPIRED_STATUS } from '../../../shared/domain/disposition';
 import { MARKDOWN_WINDOWS } from '../../../shared/domain/markdown';
+import { resolveSupplierContext } from '../../../shared/domain/brand-supplier';
+import {
+  resolveMarkdownCreditContext,
+  type MarkdownCreditContext,
+} from '../../../shared/domain/markdown-credit-context';
 import {
   buildStoreWalkAuditReport,
   type StoreWalkAuditCycle,
@@ -58,7 +63,7 @@ export interface MonthlyMarkdownReport {
   itemCount: number;
 }
 
-export interface DetailedExpiryReportItem {
+export interface DetailedExpiryReportItem extends MarkdownCreditContext {
   inventoryId: number;
   expiryDate: string;
   status: string;
@@ -70,6 +75,37 @@ export interface DetailedExpiryReportItem {
   locationId: number;
   locationName: string;
   subDepartment: string | null;
+}
+
+function mapCreditContext(row: Record<string, unknown>): MarkdownCreditContext {
+  const supplier = (prefix: 'productSupplier' | 'brandSupplier') =>
+    row[`${prefix}Id`] == null
+      ? null
+      : {
+          id: Number(row[`${prefix}Id`]),
+          name: (row[`${prefix}Name`] as string | null) ?? null,
+          hasPolicy: Boolean(String(row[`${prefix}PolicyNote`] ?? '').trim()),
+          creditType: row[`${prefix}CreditType`] === 'FULL_CREDIT' ? 'FULL_CREDIT' : 'NONE',
+        };
+  return resolveMarkdownCreditContext(
+    resolveSupplierContext({
+      productSupplier: supplier('productSupplier'),
+      brand:
+        row.brandId == null
+          ? null
+          : {
+              id: Number(row.brandId),
+              name: (row.brandName as string | null) ?? null,
+              source: (row.brandSource as string | null) ?? null,
+              suggestedSupplierName: (row.suggestedSupplierName as string | null) ?? null,
+              supplier: supplier('brandSupplier'),
+            },
+    }),
+  );
+}
+
+function mapCreditContextRow(row: Record<string, unknown>): DetailedExpiryReportItem {
+  return { ...(row as unknown as DetailedExpiryReportItem), ...mapCreditContext(row) };
 }
 
 export interface UsageReport {
@@ -211,11 +247,26 @@ export class ReportRepository {
         p.sku as sku,
         p.cost_price as costPrice,
         p.retail_price as retailPrice,
+        ps.id as productSupplierId,
+        ps.name as productSupplierName,
+        ps.credit_policy_note as productSupplierPolicyNote,
+        ps.credit_type as productSupplierCreditType,
+        b.id as brandId,
+        b.name as brandName,
+        b.source as brandSource,
+        b.suggested_supplier_name as suggestedSupplierName,
+        bs.id as brandSupplierId,
+        bs.name as brandSupplierName,
+        bs.credit_policy_note as brandSupplierPolicyNote,
+        bs.credit_type as brandSupplierCreditType,
         sa.id as locationId,
         sa.name as locationName,
         sa.sub_department as subDepartment
       FROM inventory_items ii
-      JOIN products p ON ii.product_id = p.id
+      JOIN products p ON ii.product_id = p.id AND p.organization_id = ii.organization_id
+      LEFT JOIN suppliers ps ON p.supplier_id = ps.id AND ps.organization_id = ii.organization_id
+      LEFT JOIN brands b ON p.brand_id = b.id AND b.organization_id = ii.organization_id
+      LEFT JOIN suppliers bs ON b.supplier_id = bs.id AND bs.organization_id = ii.organization_id
       JOIN store_areas sa ON ii.location_id = sa.id
       WHERE ii.expiry_date >= date('now')
         AND ii.expiry_date <= date('now', '+90 days')
@@ -231,7 +282,9 @@ export class ReportRepository {
       -- the tie differently and the conformance test would drift.
       ORDER BY ii.expiry_date ASC, ii.id ASC`,
     );
-    return stmt.all(this.organizationId, ...DISPOSITIONED_STATUSES) as DetailedExpiryReportItem[];
+    return (
+      stmt.all(this.organizationId, ...DISPOSITIONED_STATUSES) as Record<string, unknown>[]
+    ).map(mapCreditContextRow);
   }
 
   /**
@@ -252,11 +305,26 @@ export class ReportRepository {
         p.sku as sku,
         p.cost_price as costPrice,
         p.retail_price as retailPrice,
+        ps.id as productSupplierId,
+        ps.name as productSupplierName,
+        ps.credit_policy_note as productSupplierPolicyNote,
+        ps.credit_type as productSupplierCreditType,
+        b.id as brandId,
+        b.name as brandName,
+        b.source as brandSource,
+        b.suggested_supplier_name as suggestedSupplierName,
+        bs.id as brandSupplierId,
+        bs.name as brandSupplierName,
+        bs.credit_policy_note as brandSupplierPolicyNote,
+        bs.credit_type as brandSupplierCreditType,
         sa.id as locationId,
         sa.name as locationName,
         sa.sub_department as subDepartment
       FROM inventory_items ii
-      JOIN products p ON ii.product_id = p.id
+      JOIN products p ON ii.product_id = p.id AND p.organization_id = ii.organization_id
+      LEFT JOIN suppliers ps ON p.supplier_id = ps.id AND ps.organization_id = ii.organization_id
+      LEFT JOIN brands b ON p.brand_id = b.id AND b.organization_id = ii.organization_id
+      LEFT JOIN suppliers bs ON b.supplier_id = bs.id AND bs.organization_id = ii.organization_id
       JOIN store_areas sa ON ii.location_id = sa.id
       WHERE ii.expiry_date >= date('now')
         AND ii.organization_id = ?
@@ -268,7 +336,9 @@ export class ReportRepository {
       -- items share an expiry_date, matching getDetailedExpiryReport.
       ORDER BY ii.expiry_date ASC, ii.id ASC`,
     );
-    return stmt.all(this.organizationId, ...DISPOSITIONED_STATUSES) as DetailedExpiryReportItem[];
+    return (
+      stmt.all(this.organizationId, ...DISPOSITIONED_STATUSES) as Record<string, unknown>[]
+    ).map(mapCreditContextRow);
   }
 
   /**

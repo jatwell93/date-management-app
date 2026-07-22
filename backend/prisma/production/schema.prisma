@@ -32,21 +32,21 @@ datasource db {
 }
 
 model Organization {
-  id                      String                      @id @default(uuid())
-  clerkOrganizationId     String?                     @unique @map("clerk_organization_id")
+  id                      String                       @id @default(uuid())
+  clerkOrganizationId     String?                      @unique @map("clerk_organization_id")
   name                    String
-  slug                    String                      @unique
-  contactEmail            String?                     @map("contact_email")
-  createdAt               DateTime                    @default(now()) @map("created_at")
-  updatedAt               DateTime                    @updatedAt @map("updated_at")
-  isCreationLocked        Boolean                     @default(false) @map("is_creation_locked")
+  slug                    String                       @unique
+  contactEmail            String?                      @map("contact_email")
+  createdAt               DateTime                     @default(now()) @map("created_at")
+  updatedAt               DateTime                     @updatedAt @map("updated_at")
+  isCreationLocked        Boolean                      @default(false) @map("is_creation_locked")
   auditLogs               AuditLog[]
   expiredItemTransactions ExpiredItemTransaction[]
   inventoryItems          InventoryItem[]
   itemTransactions        ItemTransaction[]
   organizationInvites     OrganizationInvite[]
   organizationUsages      OrganizationUsage?
-  markdownConfig          OrganizationMarkdownConfig?
+  markdownConfigs         OrganizationMarkdownConfig[]
   checkCycles             CheckCycle[]
   bayChecks               BayCheck[]
   products                Product[]
@@ -136,7 +136,8 @@ model OrganizationUsage {
 
 model OrganizationMarkdownConfig {
   id              Int          @id @default(autoincrement())
-  organizationId  String       @unique @map("organization_id")
+  organizationId  String       @map("organization_id")
+  creditScope     String       @default("NO_CREDIT") @map("credit_scope")
   band1Percentage Float        @default(50) @map("band1_percentage")
   band2Percentage Float        @default(60) @map("band2_percentage")
   band3Percentage Float        @default(75) @map("band3_percentage")
@@ -147,6 +148,7 @@ model OrganizationMarkdownConfig {
   updatedAt       DateTime     @updatedAt @map("updated_at")
   organization    Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
 
+  @@unique([organizationId, creditScope])
   @@map("organization_markdown_config")
 }
 
@@ -424,11 +426,12 @@ model Supplier {
   contactEmail         String?               @map("contact_email")
   contactPhone         String?               @map("contact_phone")
   creditPolicyNote     String                @default("") @map("credit_policy_note")
+  creditType           String                @default("NONE") @map("credit_type")
   policyWriteOffQty    Int?                  @map("policy_write_off_qty")
   policyCreditQty      Int?                  @map("policy_credit_qty")
   followUpDays         Int                   @default(7) @map("follow_up_days")
-  representativeName  String?               @map("representative_name")
-  representativeEmail String?               @map("representative_email")
+  representativeName   String?               @map("representative_name")
+  representativeEmail  String?               @map("representative_email")
   policyUpdatedAt      DateTime?             @map("policy_updated_at")
   createdAt            DateTime              @default(now()) @map("created_at")
   updatedAt            DateTime              @updatedAt @map("updated_at")

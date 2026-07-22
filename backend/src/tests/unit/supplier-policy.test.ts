@@ -1,5 +1,6 @@
 import {
   brandPolicyStatus,
+  creditScopeForSupplier,
   hasPolicy,
   isPolicyWrite,
   validatePolicyWrite,
@@ -7,6 +8,7 @@ import {
 } from '../../../../shared/domain/supplier-policy';
 
 const baseline: SupplierPolicyRecord = {
+  creditType: 'NONE',
   creditPolicyNote: '',
   policyWriteOffQty: null,
   policyCreditQty: null,
@@ -36,6 +38,10 @@ describe('supplier-policy shared domain', () => {
   });
 
   describe('policy write detection', () => {
+    it('treats a credit-type-only classification change as a policy write', () => {
+      expect(isPolicyWrite({ creditType: 'FULL_CREDIT' }, baseline)).toBe(true);
+      expect(isPolicyWrite({ creditType: 'NONE' }, baseline)).toBe(false);
+    });
     it('uses bare supplier defaults as the create baseline', () => {
       expect(isPolicyWrite({ name: 'New Supplier' }, null)).toBe(false);
       expect(isPolicyWrite({ name: 'New Supplier', followUpDays: 7 }, null)).toBe(false);
@@ -63,6 +69,17 @@ describe('supplier-policy shared domain', () => {
       expect(isPolicyWrite({ contactPhone: '02 9999' }, existing)).toBe(false);
       expect(isPolicyWrite({ contactEmail: 'claims@example.com' }, existing)).toBe(false);
       expect(isPolicyWrite({ creditPolicyNote: null }, existing)).toBe(true);
+    });
+  });
+
+  describe('credit scope', () => {
+    it.each([
+      [null, 'NO_CREDIT'],
+      [{ creditType: 'NONE' }, 'NO_CREDIT'],
+      [{ creditType: 'UNKNOWN' }, 'NO_CREDIT'],
+      [{ creditType: 'FULL_CREDIT' }, 'FULL_CREDIT'],
+    ] as const)('fails safe for supplier %j', (supplier, expected) => {
+      expect(creditScopeForSupplier(supplier)).toBe(expected);
     });
   });
 
