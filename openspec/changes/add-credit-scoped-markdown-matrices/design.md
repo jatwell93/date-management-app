@@ -52,24 +52,34 @@ now and would quadruple it the moment a third scope (partial credit) appears. Ro
 The cost is that the table's unique key must change, which is a real (if mechanical) migration on all
 three schema targets. That is a one-time cost against a recurring one.
 
-## Credit scope resolution (the one derived rule)
+## Credit context resolution (the one derived rule)
 
 ```
-creditScopeForSupplier(supplier):
-    # Fail-safe: absent, unclassified, or unknown supplier prices as no-credit,
-    # so the store never under-discounts stock it cannot actually claim back.
-    if supplier is null:            return "NO_CREDIT"
-    if supplier.creditType == "FULL_CREDIT": return "FULL_CREDIT"
-    return "NO_CREDIT"
+resolveMarkdownCreditContext(product, brand, productSupplier, brandSupplier):
+    # A direct product supplier is authoritative.
+    if product.supplierId is present: return contextForSupplier(productSupplier)
+    # A reference brand is not confirmed catalogue truth and can never select full credit.
+    if brand is null: return NO_CREDIT / NEEDS_BRAND
+    if brand.state == REFERENCE: return NO_CREDIT / PENDING_CONFIRMATION
+    if brand.supplierId is absent: return NO_CREDIT / NO_POLICY
+    return contextForSupplier(brandSupplier)
 
-scopeForProduct(product, brand, supplierById):
-    supplierId = resolveSupplier(product, brand)      # reused from #358
-    return creditScopeForSupplier(supplierById(supplierId))
+contextForSupplier(supplier):
+    if supplier has no recorded policy: return NO_CREDIT / NO_POLICY
+    if supplier.creditType == FULL_CREDIT: return FULL_CREDIT / FULL_CREDIT
+    return NO_CREDIT / NO_CREDIT
 ```
 
-`resolveSupplier` (`shared/domain/brand-supplier.ts`) is reused unchanged — it is the same
-`product.supplierId ?? brand.supplierId` chain the claimable pool already relies on, so pricing and
-claiming can never disagree about who owns a SKU.
+The product/brand state selection embedded in the claimability rollup is extracted into a shared
+supplier-context resolver. Both claimability and markdown context compose that resolver so they
+cannot drift. A direct product supplier remains authoritative. Brand fallback may select
+`FULL_CREDIT` only for a confirmed (non-`REFERENCE`) brand. Unknown enum values fail safe to
+`NO_CREDIT`.
+
+Every projected pricing row carries `creditScope`, `creditScopeReason`, `creditSupplierId`, and
+`creditSupplierName`. Express and Workers map through the same shared resolver after selecting the
+product supplier, brand state, and brand supplier in the original org-scoped query; no per-row
+supplier queries are permitted.
 
 ### Relationship to `ClaimabilityState`
 
@@ -157,6 +167,16 @@ re-prices individual items on demand for a user walking the aisle.
 The same reasoning is why a per-scan override is rejected: with nothing persisted, an override would
 vanish on the next render and the worklist would quietly contradict the printed sticker.
 
+## Configuration compatibility and atomicity
+
+`GET /markdown-config` returns `{ matrices, matrix, hasRetailData }`, where `matrix` is the deprecated
+`NO_CREDIT` alias. Missing stored rows fall back independently to their scoped defaults.
+
+The new `PUT` body is `{ matrices: MarkdownMatrixSet }`. Express validates both matrices before a
+single Prisma transaction writes them. Workers use one multi-row `INSERT ... ON CONFLICT` statement.
+The legacy bare-matrix body updates only `NO_CREDIT`; it must not overwrite a previously customized
+`FULL_CREDIT` row.
+
 ## Read-path plumbing
 
 The main implementation cost is not logic but threading `creditScope` onto payloads that carry
@@ -169,8 +189,29 @@ The main implementation cost is not logic but threading `creditScope` onto paylo
 | Detailed Expiry Report worklist          | detailed-expiry-report rows                  |
 | Backend price resolution                 | `inventory.service.ts` markdown price by id  |
 
-Each is derived server-side via `resolveSupplier` → `creditScopeForSupplier`, in both the Express and
-Worker backends, with a conformance test pinning the two together (golden rule 5).
+Each is derived server-side via `resolveMarkdownCreditContext`, in both the Express and Worker
+backends, with a conformance test pinning the two together (golden rule 5). Queries remain
+organization-scoped even for malformed supplier references, and deterministic report ordering is
+preserved.
+
+## Loading and operator recovery
+
+`useMarkdownMatrices` exposes `{ matrices, status, error, retry }`. Production pricing surfaces do
+not render a potentially printable markdown price until `status === 'ready'`; a load failure renders
+a retryable error with no price. The deprecated single-matrix hook is retained only for source
+compatibility.
+
+The reusable scope badge deep-links `NO_POLICY` to policy review and `PENDING_CONFIRMATION` /
+`NEEDS_BRAND` to catalogue review, including the supplier id where one is known. Supplier policy
+editors expose `creditType` to admins and the resolved value read-only to non-admins.
+
+## Migration and deployment safety
+
+Both Prisma schemas use the plural `Organization.markdownConfigs` relation. Database checks reject
+unknown credit types/scopes in Neon and SQLite. Neon rollback removes `FULL_CREDIT` rows before
+restoring uniqueness on `organization_id`, then drops the new columns. SQLite migration 018
+recreates the matrix table while retaining data, timestamps, foreign keys, checks, and indexes and
+is idempotent. Deployment order is migration, then Express/Worker APIs, then frontend.
 
 ## Alternatives considered
 
