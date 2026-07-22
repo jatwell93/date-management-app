@@ -37,6 +37,10 @@ export interface MarkdownMatrixConfig {
   band3: MarkdownBandConfig;
 }
 
+export const CREDIT_SCOPES = ['NO_CREDIT', 'FULL_CREDIT'] as const;
+export type CreditScope = (typeof CREDIT_SCOPES)[number];
+export type MarkdownMatrixSet = Record<CreditScope, MarkdownMatrixConfig>;
+
 /**
  * The pre-existing hardcoded ladder, expressed as a matrix: 50/60/75% off cost.
  * Organizations that have not customized their matrix use this, so behavior is
@@ -47,6 +51,17 @@ export const DEFAULT_MARKDOWN_MATRIX: MarkdownMatrixConfig = {
   band2: { percentage: MARKDOWN_DISCOUNT_PERCENTAGES.markdown2, basis: 'cost' },
   band3: { percentage: MARKDOWN_DISCOUNT_PERCENTAGES.markdown3, basis: 'cost' },
 } as const;
+
+export const DEFAULT_FULL_CREDIT_MARKDOWN_MATRIX: MarkdownMatrixConfig = {
+  band1: { percentage: 20, basis: 'cost' },
+  band2: { percentage: 20, basis: 'cost' },
+  band3: { percentage: 20, basis: 'cost' },
+} as const;
+
+export const DEFAULT_MARKDOWN_MATRIX_SET: MarkdownMatrixSet = {
+  NO_CREDIT: DEFAULT_MARKDOWN_MATRIX,
+  FULL_CREDIT: DEFAULT_FULL_CREDIT_MARKDOWN_MATRIX,
+};
 
 /**
  * An item whose markdown price can be resolved. Retail is optional — items
@@ -155,4 +170,28 @@ export function calculateMarkdownPrice(
   const basisPrice = useRetail ? (item.retailPrice as number) : item.costPrice;
 
   return basisPrice * (1 - band.percentage / 100);
+}
+
+export function selectMatrix(set: MarkdownMatrixSet, scope: CreditScope): MarkdownMatrixConfig {
+  return set[scope];
+}
+
+export interface ResolvedMarkdown {
+  price: number | null;
+  band: MarkdownBandConfig | null;
+  scope: CreditScope;
+}
+
+export function resolveMarkdown(
+  item: MarkdownableItem,
+  daysToExpiry: number | null,
+  set: MarkdownMatrixSet,
+  scope: CreditScope,
+): ResolvedMarkdown {
+  const matrix = selectMatrix(set, scope);
+  return {
+    price: calculateMarkdownPrice(item, daysToExpiry, matrix),
+    band: getMarkdownBandConfig(daysToExpiry, matrix),
+    scope,
+  };
 }
