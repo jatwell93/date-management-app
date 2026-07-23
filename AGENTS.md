@@ -17,6 +17,7 @@ Neon PostgreSQL database · Clerk authentication · Sentry monitoring · Stripe 
 - **No mock data in production paths.** Test fixtures are fine.
 - **Cite code as `path/file.ts:42`** (or `:42-58` for a range) when referring to specific lines.
 - **Track work in OpenSpec**, not ad-hoc markdown TODO files (see §5).
+- **Use Context7** when you need up-to-date library/API documentation, setup or configuration steps without me having to explicitly ask.
 
 ---
 
