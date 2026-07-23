@@ -25,15 +25,15 @@ Neon PostgreSQL database · Clerk authentication · Sentry monitoring · Stripe 
 
 This is a monorepo. There is **no** root `src/` app — packages live in subfolders:
 
-| Path | What it is |
-| ---- | ---------- |
-| `backend/` | Express/TypeScript API. Prisma (v6) + tsyringe DI + SWC. Layered: `backend/src/{routes,controllers,services,repositories,db,models,middleware}`. Tests in `backend/src/tests`. |
-| `frontend/` | React (CRA) app. |
-| `workers/` | Cloudflare Workers. Real-SQL tests via pglite (`npm run test:db`). |
-| `shared/` | Code shared across packages (e.g. domain logic). |
-| `e2e/` | Playwright end-to-end tests. |
-| `docs/` | Operational and reference documentation. |
-| `openspec/` | Change proposals and specs (see §5). |
+| Path        | What it is                                                                                                                                                                     |
+| ----------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| `backend/`  | Express/TypeScript API. Prisma (v6) + tsyringe DI + SWC. Layered: `backend/src/{routes,controllers,services,repositories,db,models,middleware}`. Tests in `backend/src/tests`. |
+| `frontend/` | React (CRA) app.                                                                                                                                                               |
+| `workers/`  | Cloudflare Workers. Real-SQL tests via pglite (`npm run test:db`).                                                                                                             |
+| `shared/`   | Code shared across packages (e.g. domain logic).                                                                                                                               |
+| `e2e/`      | Playwright end-to-end tests.                                                                                                                                                   |
+| `docs/`     | Operational and reference documentation.                                                                                                                                       |
+| `openspec/` | Change proposals and specs (see §5).                                                                                                                                           |
 
 **Backend layering** (keep it clean): `routes → controllers → services → repositories/db`.
 Controllers coordinate HTTP; business logic lives in services; DB access lives in repositories. Use DI (tsyringe) rather than hardcoding dependencies. Use strict TypeScript — no unjustified `any`.
@@ -118,6 +118,7 @@ openspec validate --all
 ```
 
 Notes:
+
 - Backend tests: run via `doppler run -- npm test` when a real secret is needed; for logic gated on a secret being **unset**, also run without Doppler for CI parity.
 - `doppler run -- cs delta` (CodeSense) is a separately authorized provider check, not part of the local loop.
 
@@ -139,28 +140,29 @@ npm run mem:rebuild                                   # rebuild local index afte
 
 ### Search & Refactor: When to Use What
 
-Pick the tool by the *question*, not by habit. For everyday "where is this string/symbol" lookups, `ripgrep` is the default and the fastest — reach for `mgrep` or `ast-grep` only when the question is genuinely semantic or structural.
+Pick the tool by the _question_, not by habit. For everyday "where is this string/symbol" lookups, `ripgrep` is the default and the fastest — reach for `mgrep` or `ast-grep` only when the question is genuinely semantic or structural.
 
-| Scenario | Tool | Why |
-| --- | --- | --- |
-| "Find all uses of `verifyToken`" / "which files import `@clerk/backend`" | `ripgrep` (the built-in Grep tool) | **Default choice — literal / symbol search.** Sub-second; honours `.gitignore` so vendored deps are skipped automatically. Prefer this for confirming whether/where something is used. |
-| "Find files with a `console.log`" | `ripgrep` | **Simple pattern matching:** fast, literal, line-by-line regex. |
-| "How is markdown-matrix pricing implemented?" | `mgrep` | **Semantic search:** finds code by intent when you don't know the exact identifier. Index-backed and returns *ranked* relevance (top matches), not every literal hit — trades a few seconds of query time for not having to know the search term. |
-| "Where does auth/session handling live?" | `mgrep` | **Conceptual search:** locate architectural components with a natural-language query. |
-| "Rename `unwrap()` → `expect()` everywhere" / "change every `useState(x)` call shape" | `ast-grep` | **Structural refactor:** understands the AST for safe, syntax-aware edits. **Always scope it to source paths** (e.g. `backend/src frontend/src workers/src shared`) — an unscoped run parses every file in the tree, including vendored deps, and will crawl. |
+| Scenario                                                                              | Tool                               | Why                                                                                                                                                                                                                                                           |
+| ------------------------------------------------------------------------------------- | ---------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| "Find all uses of `verifyToken`" / "which files import `@clerk/backend`"              | `ripgrep` (the built-in Grep tool) | **Default choice — literal / symbol search.** Sub-second; honours `.gitignore` so vendored deps are skipped automatically. Prefer this for confirming whether/where something is used.                                                                        |
+| "Find files with a `console.log`"                                                     | `ripgrep`                          | **Simple pattern matching:** fast, literal, line-by-line regex.                                                                                                                                                                                               |
+| "How is markdown-matrix pricing implemented?"                                         | `mgrep`                            | **Semantic search:** finds code by intent when you don't know the exact identifier. Index-backed and returns _ranked_ relevance (top matches), not every literal hit — trades a few seconds of query time for not having to know the search term.             |
+| "Where does auth/session handling live?"                                              | `mgrep`                            | **Conceptual search:** locate architectural components with a natural-language query.                                                                                                                                                                         |
+| "Rename `unwrap()` → `expect()` everywhere" / "change every `useState(x)` call shape" | `ast-grep`                         | **Structural refactor:** understands the AST for safe, syntax-aware edits. **Always scope it to source paths** (e.g. `backend/src frontend/src workers/src shared`) — an unscoped run parses every file in the tree, including vendored deps, and will crawl. |
 
 **Rule of thumb:** default to `ripgrep`; use `mgrep` when you don't know the exact term; use `ast-grep` only for structural rewrites, and always give it explicit source paths.
 
-## Serena Tool Usage  
-  
-This project uses Serena for semantic code operations. When working on code files:  
-  
-**PRIORITY**: Use Serena's symbolic tools instead of basic file operations:  
-- For code structure overview: `get_symbols_overview`  
-- For reading symbol bodies: `find_symbol` with `include_body=true`  
-- For finding references: `find_referencing_symbols`  
-- For editing code: `replace_symbol_body`, `insert_before_symbol`, `insert_after_symbol`, or `replace_content`  
-  
-**AVOID** using basic `read_file`, `grep`, or line-based `edit` tools on code files when Serena equivalents exist. Serena's tools are more token-efficient and maintain semantic correctness.  
-  
-Before editing code: 1) Get symbol overview, 2) Read specific symbols needed, 3) Use Serena editing tools.
+## Serena Tool Usage
+
+This project uses Serena for semantic code operations. Serena's symbolic editors prevent broken edits by understanding the AST, so they are the **preferred way to edit code**.
+
+**Editing code (use Serena):**
+
+- `replace_symbol_body`, `insert_before_symbol`, `insert_after_symbol`, or `replace_content`
+- Before editing: 1) `get_symbols_overview`, 2) `find_symbol` with `include_body=true`, 3) apply the edit with a Serena symbol tool.
+
+**Reading and searching (basic tools are fine):**
+
+- `read`, `grep`/ripgrep, and `find_file_by_name` are acceptable for exploration, quick lookups, reading a few lines, or finding where a string/symbol is used. These are often faster and simpler than the symbolic equivalents for small reads.
+- Reach for Serena's `find_symbol` / `get_symbols_overview` when you need the full body of a named symbol or a structural overview of a file — not for every small read.
+- Use `mgrep` for semantic search when you don't know the exact term.

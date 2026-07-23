@@ -22,10 +22,13 @@ import {
   buildCatalogueProvenanceResponse,
   type CatalogueProvenanceResponse,
 } from '../../shared/domain/platform-catalogue';
-import {
-  resolveSupplierContext,
-  type CatalogueReviewState,
-} from '../../shared/domain/brand-supplier';
+import { resolveSupplierContext, type BrandSource } from '../../shared/domain/brand-supplier';
+import type {
+  Brand as SharedBrand,
+  BrandReviewItem,
+  BrandReviewOptions,
+  BrandReviewPage,
+} from '../../shared/domain/catalogue-review';
 import {
   resolveMarkdownCreditContext,
   type MarkdownCreditContext,
@@ -365,45 +368,7 @@ export type BulkLinkResult =
     }
   | { kind: 'BRAND_NOT_FOUND' | 'PRODUCT_NOT_FOUND' | 'BRAND_CONFLICT' };
 
-export interface Brand {
-  id: number;
-  name: string;
-  manufacturerName: string | null;
-  suggestedSupplierName: string | null;
-  supplierId: number | null;
-  source: string;
-  supplier?: Supplier | null;
-  productCount?: number;
-}
-
-export interface BrandReviewItem {
-  productId: number;
-  sku: string;
-  barcode: string;
-  productName: string;
-  brand: Brand | null;
-}
-
-export interface BrandReviewOptions {
-  state?: CatalogueReviewState;
-  group?: string;
-  cursor?: number;
-  limit?: number;
-  page?: number;
-  pageSize?: number;
-  title?: string;
-  titleMatch?: 'contains' | 'startsWith';
-  sort?: 'titleAsc' | 'titleDesc';
-}
-
-export interface BrandReviewPage {
-  items: BrandReviewItem[];
-  nextCursor: number | null;
-  page?: number;
-  pageSize?: number;
-  totalItems?: number;
-  totalPages?: number;
-}
+export type Brand = SharedBrand<Supplier>;
 
 function mapBrandReviewRows(rows: Array<Record<string, unknown>>): BrandReviewItem[] {
   return rows.map((row) => ({
@@ -420,7 +385,7 @@ function mapBrandReviewRows(rows: Array<Record<string, unknown>>): BrandReviewIt
             manufacturerName: (row.manufacturerName as string | null) ?? null,
             suggestedSupplierName: (row.suggestedSupplierName as string | null) ?? null,
             supplierId: row.brandSupplierId == null ? null : Number(row.brandSupplierId),
-            source: String(row.brandSource),
+            source: String(row.brandSource) as BrandSource,
           },
   }));
 }
@@ -1587,7 +1552,7 @@ export function createWorkersDatabase(env: Env): Database {
         manufacturerName: (row.manufacturerName as string | null) ?? null,
         suggestedSupplierName: (row.suggestedSupplierName as string | null) ?? null,
         supplierId: row.supplierId == null ? null : Number(row.supplierId),
-        source: String(row.source),
+        source: String(row.source) as BrandSource,
         productCount: Number(row.productCount ?? 0),
       }));
     },
@@ -1725,7 +1690,7 @@ export function createWorkersDatabase(env: Env): Database {
             manufacturerName: (row.manufacturerName as string | null) ?? null,
             suggestedSupplierName: (row.suggestedSupplierName as string | null) ?? null,
             supplierId: row.supplierId == null ? null : Number(row.supplierId),
-            source: String(row.source),
+            source: String(row.source) as BrandSource,
           }
         : null;
     },
@@ -1748,7 +1713,7 @@ export function createWorkersDatabase(env: Env): Database {
             manufacturerName: (row.manufacturerName as string | null) ?? null,
             suggestedSupplierName: (row.suggestedSupplierName as string | null) ?? null,
             supplierId: Number(row.supplierId),
-            source: String(row.source),
+            source: String(row.source) as BrandSource,
           }
         : null;
     },

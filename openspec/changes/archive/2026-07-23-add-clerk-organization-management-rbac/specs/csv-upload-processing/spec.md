@@ -1,16 +1,4 @@
-# csv-upload-processing Specification
-
-## Purpose
-TBD - created by archiving change harden-security-review-findings. Update Purpose after archive.
-## Requirements
-### Requirement: Workers Debug Endpoint Removal
-The system SHALL remove or production-gate the Workers debug endpoint.
-
-#### Scenario: Debug endpoint unavailable in production
-- GIVEN a production Workers environment
-- WHEN a request is made to `/api/test-error`
-- THEN the endpoint is unavailable
-- AND returns an appropriate response
+## ADDED Requirements
 
 ### Requirement: Role-based upload authorization
 
@@ -38,4 +26,3 @@ does not differ depending on which API serves the request.
 - **GIVEN** the same `team_member` user authenticated against both the backend and Workers APIs
 - **WHEN** the user attempts to initiate an upload on either API
 - **THEN** both APIs return HTTP 403
-

@@ -17,7 +17,7 @@ vi.mock('@neondatabase/serverless', () => ({
 }));
 
 import { createWorkersDatabase, type PolicyReviewItem, type SupplierWriteData } from './database';
-import type { BrandReviewOptions, BrandReviewPage } from './database';
+import type { BrandReviewOptions, BrandReviewPage } from '../../shared/domain/catalogue-review';
 
 const ORG = 'policy-org';
 const OTHER_ORG = 'policy-other';
