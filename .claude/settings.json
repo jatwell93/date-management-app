@@ -21,7 +21,7 @@
        ]
    },
    {
-       "matcher": "mcp__serena__*",
+       "matcher": "mcp__serena__.*",
        "hooks": [
            {
                "type": "command",
