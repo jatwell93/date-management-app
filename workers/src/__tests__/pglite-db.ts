@@ -46,7 +46,9 @@ const SCHEMA_SQL = `
 
   CREATE TABLE organization_markdown_config (
     id SERIAL PRIMARY KEY,
-    organization_id TEXT NOT NULL UNIQUE,
+    organization_id TEXT NOT NULL,
+    credit_scope TEXT NOT NULL DEFAULT 'NO_CREDIT'
+      CHECK (credit_scope IN ('NO_CREDIT', 'FULL_CREDIT')),
     band1_percentage DOUBLE PRECISION NOT NULL DEFAULT 50,
     band2_percentage DOUBLE PRECISION NOT NULL DEFAULT 60,
     band3_percentage DOUBLE PRECISION NOT NULL DEFAULT 75,
@@ -54,7 +56,8 @@ const SCHEMA_SQL = `
     band2_basis TEXT NOT NULL DEFAULT 'cost',
     band3_basis TEXT NOT NULL DEFAULT 'cost',
     created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
-    updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+    updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+    UNIQUE (organization_id, credit_scope)
   );
 
   CREATE TABLE uploads (
@@ -225,6 +228,8 @@ const SCHEMA_SQL = `
     contact_email TEXT,
     contact_phone TEXT,
     credit_policy_note TEXT NOT NULL DEFAULT '',
+    credit_type TEXT NOT NULL DEFAULT 'NONE'
+      CHECK (credit_type IN ('NONE', 'FULL_CREDIT')),
     policy_write_off_qty INTEGER,
     policy_credit_qty INTEGER,
     follow_up_days INTEGER NOT NULL DEFAULT 7,

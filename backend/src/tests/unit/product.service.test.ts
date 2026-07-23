@@ -23,6 +23,13 @@ import {
   extractCostValueEnhanced,
 } from '../../services/product.service';
 
+// Mirrors ProductRepository.creditContextInclude — the relations findAll now loads so
+// mapPrismaToModel can resolve an accurate creditScope on the GET /products list.
+const creditContextInclude = {
+  supplier: true,
+  brand: { include: { supplier: true } },
+};
+
 describe('ProductService with organizationId', () => {
   let productService: ProductService;
   let mockPrisma: any;
@@ -86,6 +93,7 @@ describe('ProductService with organizationId', () => {
         where: {
           organizationId,
         },
+        include: creditContextInclude,
       });
     });
 
@@ -98,6 +106,7 @@ describe('ProductService with organizationId', () => {
         where: {
           organizationId,
         },
+        include: creditContextInclude,
         take: 10,
         skip: 20,
       });
@@ -130,6 +139,10 @@ describe('ProductService with organizationId', () => {
           id: 1,
           organizationId,
         },
+        include: {
+          supplier: true,
+          brand: { include: { supplier: true } },
+        },
       });
     });
 
@@ -143,6 +156,10 @@ describe('ProductService with organizationId', () => {
         where: {
           id: 999,
           organizationId,
+        },
+        include: {
+          supplier: true,
+          brand: { include: { supplier: true } },
         },
       });
     });
@@ -170,6 +187,67 @@ describe('ProductService with organizationId', () => {
       expect(product?.barcode).toBe('123456789');
       expect(mockPrisma.product.findFirst).toHaveBeenCalledWith({
         where: { barcode: '123456789', organizationId },
+        include: {
+          supplier: true,
+          brand: { include: { supplier: true } },
+        },
+      });
+    });
+
+    it('projects full-credit context from an organization-owned direct supplier', async () => {
+      mockPrisma.product.findFirst.mockResolvedValue({
+        id: 1,
+        organizationId,
+        barcode: '123456789',
+        sku: 'TEST-001',
+        name: 'Test Product',
+        costPrice: 10.99,
+        notes: '',
+        createdAt: new Date(),
+        updatedAt: new Date(),
+        supplier: {
+          id: 9,
+          organizationId,
+          name: 'Direct Supplier',
+          creditType: 'FULL_CREDIT',
+          creditPolicyNote: 'Return monthly',
+        },
+        brand: null,
+      });
+
+      await expect(productService.getProductByBarcode('123456789')).resolves.toMatchObject({
+        creditScope: 'FULL_CREDIT',
+        creditScopeReason: 'FULL_CREDIT',
+        creditSupplierId: 9,
+        creditSupplierName: 'Direct Supplier',
+      });
+    });
+
+    it('ignores a malformed cross-organization supplier relation', async () => {
+      mockPrisma.product.findFirst.mockResolvedValue({
+        id: 1,
+        organizationId,
+        barcode: '123456789',
+        sku: 'TEST-001',
+        name: 'Test Product',
+        costPrice: 10.99,
+        notes: '',
+        createdAt: new Date(),
+        updatedAt: new Date(),
+        supplier: {
+          id: 99,
+          organizationId: 'other-org',
+          name: 'Other Tenant',
+          creditType: 'FULL_CREDIT',
+          creditPolicyNote: 'Return monthly',
+        },
+        brand: null,
+      });
+
+      await expect(productService.getProductByBarcode('123456789')).resolves.toMatchObject({
+        creditScope: 'NO_CREDIT',
+        creditScopeReason: 'NEEDS_BRAND',
+        creditSupplierId: null,
       });
     });
   });
@@ -200,6 +278,10 @@ describe('ProductService with organizationId', () => {
             organizationId,
             sku: 'TEST-001',
           },
+        },
+        include: {
+          supplier: true,
+          brand: { include: { supplier: true } },
         },
       });
     });
@@ -413,6 +495,7 @@ describe('ProductService with organizationId', () => {
         where: {
           organizationId: customOrgId,
         },
+        include: creditContextInclude,
       });
     });
 
@@ -427,6 +510,7 @@ describe('ProductService with organizationId', () => {
         where: {
           organizationId: 'default-org', // From getOrganizationId default
         },
+        include: creditContextInclude,
       });
     });
   });

@@ -16,7 +16,10 @@ import {
 } from '../components/ui/select';
 import { offlineStorage } from '../lib/offline-storage';
 import { calculateMarkdownPrice, getMarkdownBandConfig } from '@shared/markdown';
-import { useMarkdownMatrix } from '../hooks/useMarkdownMatrix';
+import { useMarkdownMatrices } from '../hooks/useMarkdownMatrix';
+import type { MarkdownCreditContext } from '@shared/markdown-credit-context';
+import { MarkdownCreditScopeBadge } from '../components/MarkdownCreditScopeBadge';
+import { MarkdownMatricesNotice } from '../components/MarkdownMatricesNotice';
 import { apiService } from '../lib/api.service';
 import { parseGS1Barcode } from '../lib/gs1-parser';
 import { synchronizeOfflineData } from '../lib/sync-manager';
@@ -45,7 +48,7 @@ interface StoreArea {
   subDepartment?: string;
 }
 
-interface ProductDetails {
+interface ProductDetails extends MarkdownCreditContext {
   id: number;
   name: string;
   sku: string;
@@ -82,7 +85,7 @@ function formatExpiryDateForCopy(expiryDate: string): string {
 
 export function ScanPage({ token }: ScanPageProps) {
   const getFreshApiToken = useFreshApiToken(token);
-  const markdownMatrix = useMarkdownMatrix(token);
+  const markdownConfig = useMarkdownMatrices(token);
   const { isHandheld } = useHandheldDetectionContext();
   const [scannedBarcode, setScannedBarcode] = useState<string | null>(null);
   const [productDetails, setProductDetails] = useState<ProductDetails | null>(null);
@@ -152,6 +155,12 @@ export function ScanPage({ token }: ScanPageProps) {
       // Price against the org's configured matrix (issue #338): the band picks the
       // percentage and whether it comes off cost or retail. Retail falls back to
       // cost when the product has none, so no in-window item is left unpriced.
+      const markdownMatrix = markdownConfig.matrices?.[productDetails.creditScope ?? 'NO_CREDIT'];
+      if (markdownConfig.status !== 'ready' || !markdownMatrix) {
+        setMarkdownPrice(null);
+        setMarkdownPercentage(null);
+        return;
+      }
       const band = getMarkdownBandConfig(daysToExpiry, markdownMatrix);
       if (band && typeof costPrice === 'number' && Number.isFinite(costPrice)) {
         const retailPrice =
@@ -174,7 +183,7 @@ export function ScanPage({ token }: ScanPageProps) {
       setMarkdownPercentage(null);
       setIsExpiredStock(false);
     }
-  }, [productDetails, expiryDate, markdownMatrix]);
+  }, [productDetails, expiryDate, markdownConfig.matrices, markdownConfig.status]);
 
   const resetScanState = (barcode: string) => {
     setScannedBarcode(barcode);
@@ -573,7 +582,16 @@ export function ScanPage({ token }: ScanPageProps) {
                       ? `$${productDetails.costPrice.toFixed(2)}`
                       : 'Not available'}
                   </p>
+                  <div className="mt-2">
+                    <MarkdownCreditScopeBadge
+                      creditScope={productDetails.creditScope ?? 'NO_CREDIT'}
+                      creditScopeReason={productDetails.creditScopeReason ?? 'NO_CREDIT'}
+                      creditSupplierId={productDetails.creditSupplierId ?? null}
+                      creditSupplierName={productDetails.creditSupplierName ?? null}
+                    />
+                  </div>
 
+                  <MarkdownMatricesNotice {...markdownConfig} />
                   {markdownPrice !== null && markdownPercentage !== null && (
                     <p className="text-semantic-warning font-semibold mt-1">
                       Markdown Price ({markdownPercentage}% off): ${markdownPrice.toFixed(2)}

@@ -29,6 +29,7 @@ function createSqlitePolicyDb(): import('better-sqlite3').Database {
       id INTEGER PRIMARY KEY,
       organization_id TEXT NOT NULL,
       name TEXT NOT NULL,
+      credit_type TEXT NOT NULL DEFAULT 'NONE',
       contact_email TEXT,
       contact_phone TEXT,
       credit_policy_note TEXT NOT NULL DEFAULT '',
@@ -112,6 +113,7 @@ function sqlitePolicyReview(
     .prepare(
       `SELECT b.id AS brandId, b.name AS brandName,
               s.id AS supplierId, s.name AS supplierName,
+              s.credit_type AS creditType,
               s.contact_email AS contactEmail, s.contact_phone AS contactPhone,
               s.credit_policy_note AS creditPolicyNote,
               s.policy_write_off_qty AS policyWriteOffQty,
@@ -135,6 +137,9 @@ function sqlitePolicyReview(
         : {
             id: Number(row.supplierId),
             name: String(row.supplierName),
+            creditType: (row.creditType === 'FULL_CREDIT' ? 'FULL_CREDIT' : 'NONE') as
+              | 'FULL_CREDIT'
+              | 'NONE',
             contactEmail: (row.contactEmail as string | null) ?? null,
             contactPhone: (row.contactPhone as string | null) ?? null,
             creditPolicyNote: String(row.creditPolicyNote ?? ''),
@@ -192,6 +197,7 @@ describe('Worker supplier policy database and dual-backend conformance', () => {
     const db = createWorkersDatabase({ DATABASE_URL: 'postgres://test' } as never);
     const data: SupplierWriteData = {
       name: 'Supplier',
+      creditType: 'FULL_CREDIT',
       contactEmail: 'claims@example.com',
       contactPhone: '02 1234 5678',
       creditPolicyNote: 'Return monthly',
@@ -215,6 +221,7 @@ describe('Worker supplier policy database and dual-backend conformance', () => {
 
     const cleared = await db.clearSupplierPolicy(ORG, created.id);
     expect(cleared).toMatchObject({
+      creditType: 'NONE',
       contactEmail: 'claims@example.com',
       contactPhone: '03 9999 0000',
       creditPolicyNote: '',

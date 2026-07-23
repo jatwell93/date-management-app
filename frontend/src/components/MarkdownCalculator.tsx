@@ -8,13 +8,16 @@ import { apiService } from '../lib/api.service';
 import { calculateMarkdownPrice, getMarkdownLevelForDays } from '@shared/markdown';
 import { HardwareScanResult } from '../types/handheld';
 import { useFreshApiToken } from '../hooks/useFreshApiToken';
-import { useMarkdownMatrix } from '../hooks/useMarkdownMatrix';
+import { useMarkdownMatrices } from '../hooks/useMarkdownMatrix';
+import type { MarkdownCreditContext } from '@shared/markdown-credit-context';
+import { MarkdownCreditScopeBadge } from './MarkdownCreditScopeBadge';
+import { MarkdownMatricesNotice } from './MarkdownMatricesNotice';
 
 interface MarkdownCalculatorProps {
   token: string | null;
 }
 
-interface ProductDetails {
+interface ProductDetails extends MarkdownCreditContext {
   id: number;
   name: string;
   sku: string;
@@ -44,7 +47,7 @@ export function MarkdownCalculator({ token }: MarkdownCalculatorProps) {
   const [validationError, setValidationError] = useState<string | null>(null);
   // Load the org's markdown matrix so the calculator honors configured bands and
   // basis (issue #338). Falls back to the default ladder if it cannot be loaded.
-  const markdownMatrix = useMarkdownMatrix(token);
+  const markdownConfig = useMarkdownMatrices(token);
 
   const hasProductCost =
     typeof productDetails?.costPrice === 'number' && Number.isFinite(productDetails.costPrice);
@@ -119,6 +122,10 @@ export function MarkdownCalculator({ token }: MarkdownCalculatorProps) {
   };
 
   const calculateMarkdown = () => {
+    if (markdownConfig.status !== 'ready' || !markdownConfig.matrices) {
+      setMarkdownResult(null);
+      return;
+    }
     const parsedCostPrice = Number(costPrice);
 
     setValidationError(null);
@@ -156,6 +163,7 @@ export function MarkdownCalculator({ token }: MarkdownCalculatorProps) {
 
     // Expired stock is pulled, not marked down; everything else uses the org matrix,
     // which selects cost or retail per band and falls back to cost without retail.
+    const markdownMatrix = markdownConfig.matrices[productDetails?.creditScope ?? 'NO_CREDIT'];
     const resolved = calculateMarkdownPrice(
       { costPrice: parsedCostPrice, retailPrice },
       diffDays,
@@ -219,6 +227,14 @@ export function MarkdownCalculator({ token }: MarkdownCalculatorProps) {
                   <dt className="font-medium text-muted-foreground">Cost price</dt>
                   <dd className="min-w-0 break-words">{formattedProductCost}</dd>
                 </dl>
+                <div className="mt-3">
+                  <MarkdownCreditScopeBadge
+                    creditScope={productDetails.creditScope ?? 'NO_CREDIT'}
+                    creditScopeReason={productDetails.creditScopeReason ?? 'NO_CREDIT'}
+                    creditSupplierId={productDetails.creditSupplierId ?? null}
+                    creditSupplierName={productDetails.creditSupplierName ?? null}
+                  />
+                </div>
               </section>
             )}
           </div>
@@ -256,7 +272,13 @@ export function MarkdownCalculator({ token }: MarkdownCalculatorProps) {
                   className="min-h-11"
                 />
               </div>
-              <Button onClick={calculateMarkdown} size="lg" className="min-h-11 w-full">
+              <MarkdownMatricesNotice {...markdownConfig} />
+              <Button
+                onClick={calculateMarkdown}
+                size="lg"
+                className="min-h-11 w-full"
+                disabled={markdownConfig.status !== 'ready'}
+              >
                 Calculate markdown
               </Button>
               {validationError && (

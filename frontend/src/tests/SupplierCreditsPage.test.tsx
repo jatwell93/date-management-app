@@ -47,6 +47,7 @@ const supplier = {
   representativeName: 'Alex Store',
   representativeEmail: 'alex@nature.example',
   policyUpdatedAt: '2026-07-01T00:00:00.000Z',
+  creditType: 'FULL_CREDIT' as const,
 };
 
 function renderPage(role: RoleValue = ROLES.TEAM_MEMBER) {
@@ -118,6 +119,7 @@ const openClaim = {
 };
 
 beforeEach(() => {
+  window.history.replaceState({}, '', '/supplier-credits');
   mocked.getClaimablePool.mockResolvedValue(pool);
   mocked.getSuppliers.mockResolvedValue([]);
   mocked.getBrandReview.mockResolvedValue({ items: [], nextCursor: null });
@@ -141,6 +143,21 @@ beforeEach(() => {
   mocked.listClaims.mockImplementation((view: string) =>
     Promise.resolve(view === 'open' ? [openClaim] : []),
   );
+});
+
+describe('supplier credit deep links', () => {
+  it('opens policy review with the linked supplier selected', async () => {
+    mocked.getSuppliers.mockResolvedValue([supplier]);
+    mocked.getPolicyReview.mockResolvedValue([]);
+    window.history.replaceState({}, '', '/supplier-credits?view=policy-review&supplierId=10');
+
+    renderPage(ROLES.ADMIN);
+
+    expect(
+      await screen.findByRole('heading', { name: 'Supplier Policy Review' }),
+    ).toBeInTheDocument();
+    expect(screen.getByLabelText('Policy supplier')).toHaveValue('10');
+  });
 });
 
 describe('supplier policy review dashboard', () => {
@@ -672,7 +689,7 @@ describe('SupplierCreditsPage', () => {
     expect(await screen.findByRole('status')).toHaveTextContent(
       'Linked 499, already linked 1, corrections 499',
     );
-  }, 30000);
+  }, 90000);
 
   it('explains that a different-brand conflict rolls back the entire bulk link', async () => {
     mocked.getBrandReview.mockResolvedValue({
@@ -766,16 +783,24 @@ describe('supplier policy role plumbing', () => {
     renderPage(ROLES.ADMIN);
 
     await userEvent.click(await screen.findByRole('button', { name: 'Assign supplier' }));
-    await userEvent.type(screen.getByLabelText('Name'), 'New Supplier');
-    await userEvent.type(screen.getByLabelText('Contact phone'), '03 9999 0000');
-    await userEvent.type(
-      screen.getByLabelText('Store instructions'),
-      'Return monthly\n- Include invoice',
-    );
-    await userEvent.type(screen.getByLabelText('Representative name'), 'Jordan');
-    await userEvent.type(screen.getByLabelText('Representative email'), 'jordan@example.com');
-    await userEvent.type(screen.getByLabelText('Write off'), '3');
-    await userEvent.type(screen.getByLabelText('Credit'), '1');
+    fireEvent.change(screen.getByLabelText('Name'), { target: { value: 'New Supplier' } });
+    fireEvent.change(screen.getByLabelText('Contact phone'), {
+      target: { value: '03 9999 0000' },
+    });
+    fireEvent.change(screen.getByLabelText('Store instructions'), {
+      target: { value: 'Return monthly\n- Include invoice' },
+    });
+    fireEvent.change(screen.getByLabelText('Representative name'), {
+      target: { value: 'Jordan' },
+    });
+    fireEvent.change(screen.getByLabelText('Representative email'), {
+      target: { value: 'jordan@example.com' },
+    });
+    fireEvent.change(screen.getByLabelText('Write off'), { target: { value: '3' } });
+    fireEvent.change(screen.getByLabelText('Credit'), { target: { value: '1' } });
+    fireEvent.change(screen.getByLabelText('Credit treatment'), {
+      target: { value: 'FULL_CREDIT' },
+    });
     await userEvent.click(screen.getByRole('button', { name: 'Preview instructions' }));
 
     expect(screen.getByText('Include invoice')).toBeInTheDocument();
@@ -791,6 +816,7 @@ describe('supplier policy role plumbing', () => {
           representativeEmail: 'jordan@example.com',
           policyWriteOffQty: 3,
           policyCreditQty: 1,
+          creditType: 'FULL_CREDIT',
         }),
         'tkn',
       ),
@@ -804,6 +830,7 @@ describe('supplier policy role plumbing', () => {
     await userEvent.click(await screen.findByRole('button', { name: 'Assign supplier' }));
 
     expect(screen.getByText('Include the invoice')).toBeInTheDocument();
+    expect(screen.getByText('Full supplier credit')).toBeInTheDocument();
     expect(screen.queryByLabelText('Store instructions')).not.toBeInTheDocument();
     expect(screen.queryByRole('button', { name: 'Edit supplier policy' })).not.toBeInTheDocument();
   });

@@ -17,7 +17,15 @@ import {
   WORKERS_SOLD_THROUGH_STATUS,
 } from '../../shared/domain/disposition';
 import { getMarkdownLevelForDays, MARKDOWN_WINDOWS } from '../../shared/domain/markdown';
-import type { CatalogueReviewState } from '../../shared/domain/brand-supplier';
+import type { CreditType } from '../../shared/domain/supplier-policy';
+import {
+  resolveSupplierContext,
+  type CatalogueReviewState,
+} from '../../shared/domain/brand-supplier';
+import {
+  resolveMarkdownCreditContext,
+  type MarkdownCreditContext,
+} from '../../shared/domain/markdown-credit-context';
 import {
   resolveBayState,
   rollupCoverage,
@@ -268,7 +276,7 @@ export interface CreateUserData {
 // fields were removed when the schema migrated to sku/cost_price/notes and
 // location_id/status. Optional flags exist purely so legacy frontend code
 // that still reads those properties degrades to undefined instead of throwing.
-export interface Product {
+export interface Product extends MarkdownCreditContext {
   id: number;
   name: string;
   barcode: string | null;
@@ -309,6 +317,7 @@ export interface StoreArea {
 export interface Supplier {
   id: number;
   name: string;
+  creditType: CreditType;
   contactEmail: string | null;
   contactPhone: string | null;
   creditPolicyNote: string;
@@ -567,7 +576,7 @@ export type {
   StoreWalkAuditUser,
 } from '../../shared/domain/store-walk-audit';
 
-export interface DetailedExpiryReportItem {
+export interface DetailedExpiryReportItem extends MarkdownCreditContext {
   inventoryId: number;
   expiryDate: string;
   status: string;
@@ -579,6 +588,37 @@ export interface DetailedExpiryReportItem {
   locationId: number;
   locationName: string;
   subDepartment: string | null;
+}
+
+function mapCreditContext(row: Record<string, unknown>): MarkdownCreditContext {
+  const supplier = (prefix: 'productSupplier' | 'brandSupplier') =>
+    row[`${prefix}Id`] == null
+      ? null
+      : {
+          id: Number(row[`${prefix}Id`]),
+          name: (row[`${prefix}Name`] as string | null) ?? null,
+          hasPolicy: Boolean(String(row[`${prefix}PolicyNote`] ?? '').trim()),
+          creditType: row[`${prefix}CreditType`] === 'FULL_CREDIT' ? 'FULL_CREDIT' : 'NONE',
+        };
+  return resolveMarkdownCreditContext(
+    resolveSupplierContext({
+      productSupplier: supplier('productSupplier'),
+      brand:
+        row.brandId == null
+          ? null
+          : {
+              id: Number(row.brandId),
+              name: (row.brandName as string | null) ?? null,
+              source: (row.brandSource as string | null) ?? null,
+              suggestedSupplierName: (row.suggestedSupplierName as string | null) ?? null,
+              supplier: supplier('brandSupplier'),
+            },
+    }),
+  );
+}
+
+function mapCreditContextRow<T>(row: Record<string, unknown>): T & MarkdownCreditContext {
+  return { ...(row as T), ...mapCreditContext(row) };
 }
 
 export interface LossBySkuReportItem {
@@ -1196,7 +1236,8 @@ export function createWorkersDatabase(env: Env): Database {
     },
 
     async getDetailedExpiryReport(organizationId: string): Promise<DetailedExpiryReportItem[]> {
-      return (await sql`
+      return (
+        (await sql`
         SELECT
           ii.id as "inventoryId",
           ii.expiry_date::text as "expiryDate",
@@ -1206,11 +1247,22 @@ export function createWorkersDatabase(env: Env): Database {
           COALESCE(p.sku, '') as sku,
           COALESCE(p.cost_price, 0) as "costPrice",
           p.retail_price as "retailPrice",
+          ps.id AS "productSupplierId",
+          ps.name AS "productSupplierName", ps.credit_policy_note AS "productSupplierPolicyNote",
+          ps.credit_type AS "productSupplierCreditType",
+          b.id AS "brandId", b.name AS "brandName", b.source AS "brandSource",
+          b.suggested_supplier_name AS "suggestedSupplierName",
+          bs.id AS "brandSupplierId", bs.name AS "brandSupplierName",
+          bs.credit_policy_note AS "brandSupplierPolicyNote",
+          bs.credit_type AS "brandSupplierCreditType",
           sa.id as "locationId",
           sa.name as "locationName",
           sa.sub_department as "subDepartment"
         FROM inventory_items ii
-        JOIN products p ON ii.product_id = p.id
+        JOIN products p ON ii.product_id = p.id AND p.organization_id = ii.organization_id
+        LEFT JOIN suppliers ps ON ps.id = p.supplier_id AND ps.organization_id = p.organization_id
+        LEFT JOIN brands b ON b.id = p.brand_id AND b.organization_id = p.organization_id
+        LEFT JOIN suppliers bs ON bs.id = b.supplier_id AND bs.organization_id = b.organization_id
         JOIN store_areas sa ON ii.location_id = sa.id
         WHERE ii.expiry_date >= CURRENT_DATE
           AND ii.expiry_date <= CURRENT_DATE + INTERVAL '90 days'
@@ -1225,11 +1277,13 @@ export function createWorkersDatabase(env: Env): Database {
         -- items share an expiry_date; without it Postgres and SQLite can break
         -- the tie differently and the conformance test would drift.
         ORDER BY ii.expiry_date ASC, ii.id ASC
-      `) as DetailedExpiryReportItem[];
+      `) as Array<Record<string, unknown>>
+      ).map((row) => mapCreditContextRow<DetailedExpiryReportItem>(row));
     },
 
     async getActiveExpiryEntries(organizationId: string): Promise<DetailedExpiryReportItem[]> {
-      return (await sql`
+      return (
+        (await sql`
         SELECT
           ii.id as "inventoryId",
           ii.expiry_date::text as "expiryDate",
@@ -1239,11 +1293,22 @@ export function createWorkersDatabase(env: Env): Database {
           COALESCE(p.sku, '') as sku,
           COALESCE(p.cost_price, 0) as "costPrice",
           p.retail_price as "retailPrice",
+          ps.id AS "productSupplierId",
+          ps.name AS "productSupplierName", ps.credit_policy_note AS "productSupplierPolicyNote",
+          ps.credit_type AS "productSupplierCreditType",
+          b.id AS "brandId", b.name AS "brandName", b.source AS "brandSource",
+          b.suggested_supplier_name AS "suggestedSupplierName",
+          bs.id AS "brandSupplierId", bs.name AS "brandSupplierName",
+          bs.credit_policy_note AS "brandSupplierPolicyNote",
+          bs.credit_type AS "brandSupplierCreditType",
           sa.id as "locationId",
           sa.name as "locationName",
           sa.sub_department as "subDepartment"
         FROM inventory_items ii
-        JOIN products p ON ii.product_id = p.id
+        JOIN products p ON ii.product_id = p.id AND p.organization_id = ii.organization_id
+        LEFT JOIN suppliers ps ON ps.id = p.supplier_id AND ps.organization_id = p.organization_id
+        LEFT JOIN brands b ON b.id = p.brand_id AND b.organization_id = p.organization_id
+        LEFT JOIN suppliers bs ON bs.id = b.supplier_id AND bs.organization_id = b.organization_id
         JOIN store_areas sa ON ii.location_id = sa.id
         WHERE ii.expiry_date >= CURRENT_DATE
           AND ii.organization_id = ${organizationId}
@@ -1254,7 +1319,8 @@ export function createWorkersDatabase(env: Env): Database {
         -- ii.id tiebreaker keeps ordering deterministic across engines, matching
         -- getDetailedExpiryReport.
         ORDER BY ii.expiry_date ASC, ii.id ASC
-      `) as DetailedExpiryReportItem[];
+      `) as Array<Record<string, unknown>>
+      ).map((row) => mapCreditContextRow<DetailedExpiryReportItem>(row));
     },
 
     async getDailyUsageReport(organizationId: string): Promise<DailyUsageReportItem[]> {
@@ -1897,6 +1963,7 @@ export function createWorkersDatabase(env: Env): Database {
                cc.settled_at::text AS "settledAt",
                s.id AS "supplier_id",
                s.name AS "supplier_name",
+               s.credit_type AS "supplier_credit_type",
                s.contact_email AS "supplier_contact_email",
                s.contact_phone AS "supplier_contact_phone",
                s.credit_policy_note AS "supplier_credit_policy_note",
@@ -2020,6 +2087,7 @@ export function createWorkersDatabase(env: Env): Database {
           supplier: {
             id: Number(row.supplier_id),
             name: String(row.supplier_name),
+            creditType: row.supplier_credit_type === 'FULL_CREDIT' ? 'FULL_CREDIT' : 'NONE',
             contactEmail: (row.supplier_contact_email as string | null) ?? null,
             contactPhone: (row.supplier_contact_phone as string | null) ?? null,
             creditPolicyNote: String(row.supplier_credit_policy_note ?? ''),
@@ -2140,26 +2208,48 @@ export function createWorkersDatabase(env: Env): Database {
     // ---- Product CRUD (scan flow) ----
     async findProductByBarcode(organizationId: string, barcode: string): Promise<Product | null> {
       const rows = await sql`
-        SELECT id, name, barcode, sku,
-               cost_price as "costPrice", notes,
-               created_at as "createdAt", updated_at as "updatedAt"
-        FROM products
-        WHERE organization_id = ${organizationId} AND barcode = ${barcode}
+        SELECT p.id, p.name, p.barcode, p.sku,
+               p.cost_price as "costPrice", p.retail_price as "retailPrice", p.notes,
+               p.created_at as "createdAt", p.updated_at as "updatedAt",
+               ps.id AS "productSupplierId",
+               ps.name AS "productSupplierName", ps.credit_policy_note AS "productSupplierPolicyNote",
+               ps.credit_type AS "productSupplierCreditType",
+               b.id AS "brandId", b.name AS "brandName", b.source AS "brandSource",
+               b.suggested_supplier_name AS "suggestedSupplierName",
+               bs.id AS "brandSupplierId", bs.name AS "brandSupplierName",
+               bs.credit_policy_note AS "brandSupplierPolicyNote",
+               bs.credit_type AS "brandSupplierCreditType"
+        FROM products p
+        LEFT JOIN suppliers ps ON ps.id = p.supplier_id AND ps.organization_id = p.organization_id
+        LEFT JOIN brands b ON b.id = p.brand_id AND b.organization_id = p.organization_id
+        LEFT JOIN suppliers bs ON bs.id = b.supplier_id AND bs.organization_id = b.organization_id
+        WHERE p.organization_id = ${organizationId} AND p.barcode = ${barcode}
         LIMIT 1
       `;
-      return (rows[0] as Product) || null;
+      return rows[0] ? mapCreditContextRow<Product>(rows[0] as Record<string, unknown>) : null;
     },
 
     async findProductBySku(organizationId: string, sku: string): Promise<Product | null> {
       const rows = await sql`
-        SELECT id, name, barcode, sku,
-               cost_price as "costPrice", notes,
-               created_at as "createdAt", updated_at as "updatedAt"
-        FROM products
-        WHERE organization_id = ${organizationId} AND sku = ${sku}
+        SELECT p.id, p.name, p.barcode, p.sku,
+               p.cost_price as "costPrice", p.retail_price as "retailPrice", p.notes,
+               p.created_at as "createdAt", p.updated_at as "updatedAt",
+               ps.id AS "productSupplierId",
+               ps.name AS "productSupplierName", ps.credit_policy_note AS "productSupplierPolicyNote",
+               ps.credit_type AS "productSupplierCreditType",
+               b.id AS "brandId", b.name AS "brandName", b.source AS "brandSource",
+               b.suggested_supplier_name AS "suggestedSupplierName",
+               bs.id AS "brandSupplierId", bs.name AS "brandSupplierName",
+               bs.credit_policy_note AS "brandSupplierPolicyNote",
+               bs.credit_type AS "brandSupplierCreditType"
+        FROM products p
+        LEFT JOIN suppliers ps ON ps.id = p.supplier_id AND ps.organization_id = p.organization_id
+        LEFT JOIN brands b ON b.id = p.brand_id AND b.organization_id = p.organization_id
+        LEFT JOIN suppliers bs ON bs.id = b.supplier_id AND bs.organization_id = b.organization_id
+        WHERE p.organization_id = ${organizationId} AND p.sku = ${sku}
         LIMIT 1
       `;
-      return (rows[0] as Product) || null;
+      return rows[0] ? mapCreditContextRow<Product>(rows[0] as Record<string, unknown>) : null;
     },
 
     async createProduct(

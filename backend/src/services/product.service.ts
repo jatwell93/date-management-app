@@ -27,6 +27,9 @@ import { ProductRepository } from '../repositories/product.repository';
 import { SubscriptionRepository } from '../repositories/subscription.repository';
 import { SupplierCreditRepository } from '../repositories/supplier-credit.repository';
 import { TIER_LIMITS, TierLevel } from '../types/subscription';
+import { hasPolicy } from '../../../shared/domain/supplier-policy';
+import { resolveSupplierContext } from '../../../shared/domain/brand-supplier';
+import { resolveMarkdownCreditContext } from '../../../shared/domain/markdown-credit-context';
 
 export function extractCostValue(costStr: string): number | null {
   // Remove common currency symbols and formatting
@@ -107,7 +110,9 @@ export class ProductService {
   }
   async getAllProducts(limit?: number, offset?: number): Promise<Product[]> {
     const products = await this.productRepo.findAll(this.organizationId, limit, offset);
-    return products.map(this.mapPrismaToModel);
+    // Bind via arrow: mapPrismaToModel reads this.organizationId, so it must not be
+    // passed as an unbound reference to Array.map (this would be undefined there).
+    return products.map((product) => this.mapPrismaToModel(product));
   }
 
   async getProductById(id: number): Promise<Product | null> {
@@ -265,7 +270,50 @@ export class ProductService {
     notes: string;
     createdAt: Date;
     updatedAt: Date;
+    supplier?: {
+      id: number;
+      organizationId: string;
+      name: string;
+      creditType: string;
+      creditPolicyNote: string;
+    } | null;
+    brand?: {
+      id: number;
+      organizationId: string;
+      name: string;
+      source: string;
+      suggestedSupplierName?: string | null;
+      supplier?: {
+        id: number;
+        organizationId: string;
+        name: string;
+        creditType: string;
+        creditPolicyNote: string;
+      } | null;
+    } | null;
   }): Product {
+    const toSupplier = (supplier: typeof product.supplier) =>
+      supplier && supplier.organizationId === this.organizationId
+        ? {
+            id: supplier.id,
+            name: supplier.name,
+            creditType: supplier.creditType,
+            hasPolicy: hasPolicy(supplier),
+          }
+        : null;
+    const brand =
+      product.brand && product.brand.organizationId === this.organizationId
+        ? {
+            id: product.brand.id,
+            name: product.brand.name,
+            source: product.brand.source,
+            suggestedSupplierName: product.brand.suggestedSupplierName,
+            supplier: toSupplier(product.brand.supplier),
+          }
+        : null;
+    const creditContext = resolveMarkdownCreditContext(
+      resolveSupplierContext({ productSupplier: toSupplier(product.supplier), brand }),
+    );
     return {
       id: product.id,
       organizationId: product.organizationId ?? this.organizationId,
@@ -276,6 +324,7 @@ export class ProductService {
       retailPrice: product.retailPrice ?? null,
       createdAt: product.createdAt.toISOString(),
       updatedAt: product.updatedAt.toISOString(),
+      ...creditContext,
     };
   }
 

@@ -1,7 +1,11 @@
 import {
   calculateMarkdownPrice,
+  DEFAULT_FULL_CREDIT_MARKDOWN_MATRIX,
+  DEFAULT_MARKDOWN_MATRIX_SET,
   getMarkdownBandConfig,
   DEFAULT_MARKDOWN_MATRIX,
+  resolveMarkdown,
+  selectMatrix,
   type MarkdownMatrixConfig,
 } from '../../../../shared/domain/markdown';
 
@@ -106,5 +110,71 @@ describe('calculateMarkdownPrice (org-configurable matrix)', () => {
       expect(getMarkdownBandConfig(0)).toBeNull();
       expect(getMarkdownBandConfig(null)).toBeNull();
     });
+  });
+});
+
+describe('credit-scoped markdown matrices', () => {
+  it('provides independent no-credit and flat full-credit defaults', () => {
+    expect(DEFAULT_MARKDOWN_MATRIX_SET.NO_CREDIT).toEqual(DEFAULT_MARKDOWN_MATRIX);
+    expect(DEFAULT_FULL_CREDIT_MARKDOWN_MATRIX).toEqual({
+      band1: { percentage: 20, basis: 'cost' },
+      band2: { percentage: 20, basis: 'cost' },
+      band3: { percentage: 20, basis: 'cost' },
+    });
+    expect(DEFAULT_MARKDOWN_MATRIX_SET.FULL_CREDIT).toEqual(DEFAULT_FULL_CREDIT_MARKDOWN_MATRIX);
+  });
+
+  it('selects and resolves the requested scope without changing pricing arithmetic', () => {
+    expect(selectMatrix(DEFAULT_MARKDOWN_MATRIX_SET, 'FULL_CREDIT')).toBe(
+      DEFAULT_FULL_CREDIT_MARKDOWN_MATRIX,
+    );
+    expect(
+      resolveMarkdown(
+        { costPrice: 10, retailPrice: 30 },
+        20,
+        DEFAULT_MARKDOWN_MATRIX_SET,
+        'NO_CREDIT',
+      ),
+    ).toEqual({
+      price: 2.5,
+      band: DEFAULT_MARKDOWN_MATRIX.band3,
+      scope: 'NO_CREDIT',
+    });
+    expect(
+      resolveMarkdown(
+        { costPrice: 10, retailPrice: 30 },
+        20,
+        DEFAULT_MARKDOWN_MATRIX_SET,
+        'FULL_CREDIT',
+      ),
+    ).toEqual({
+      price: 8,
+      band: DEFAULT_FULL_CREDIT_MARKDOWN_MATRIX.band3,
+      scope: 'FULL_CREDIT',
+    });
+  });
+
+  it.each([91, 0, -1, null])('keeps out-of-window day value %s unpriced in both scopes', (days) => {
+    expect(
+      resolveMarkdown({ costPrice: 10 }, days, DEFAULT_MARKDOWN_MATRIX_SET, 'NO_CREDIT').price,
+    ).toBeNull();
+    expect(
+      resolveMarkdown({ costPrice: 10 }, days, DEFAULT_MARKDOWN_MATRIX_SET, 'FULL_CREDIT').price,
+    ).toBeNull();
+  });
+
+  it('keeps retail-basis fallback to cost in both scopes', () => {
+    const retailSet = {
+      NO_CREDIT: {
+        ...DEFAULT_MARKDOWN_MATRIX,
+        band3: { percentage: 50, basis: 'retail' as const },
+      },
+      FULL_CREDIT: {
+        ...DEFAULT_FULL_CREDIT_MARKDOWN_MATRIX,
+        band3: { percentage: 20, basis: 'retail' as const },
+      },
+    };
+    expect(resolveMarkdown({ costPrice: 10 }, 20, retailSet, 'NO_CREDIT').price).toBe(5);
+    expect(resolveMarkdown({ costPrice: 10 }, 20, retailSet, 'FULL_CREDIT').price).toBe(8);
   });
 });

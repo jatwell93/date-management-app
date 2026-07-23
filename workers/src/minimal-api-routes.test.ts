@@ -272,6 +272,18 @@ describe('minimal API route table', () => {
 
     expect(response?.status).toBe(200);
     await expect(response?.json()).resolves.toEqual({
+      matrices: {
+        NO_CREDIT: {
+          band1: { percentage: 50, basis: 'cost' },
+          band2: { percentage: 60, basis: 'cost' },
+          band3: { percentage: 75, basis: 'cost' },
+        },
+        FULL_CREDIT: {
+          band1: { percentage: 20, basis: 'cost' },
+          band2: { percentage: 20, basis: 'cost' },
+          band3: { percentage: 20, basis: 'cost' },
+        },
+      },
       matrix: {
         band1: { percentage: 50, basis: 'cost' },
         band2: { percentage: 60, basis: 'cost' },
@@ -314,6 +326,18 @@ describe('minimal API route table', () => {
 
     expect(response?.status).toBe(200);
     await expect(response?.json()).resolves.toEqual({
+      matrices: {
+        NO_CREDIT: {
+          band1: { percentage: 40, basis: 'retail' },
+          band2: { percentage: 55, basis: 'cost' },
+          band3: { percentage: 80, basis: 'retail' },
+        },
+        FULL_CREDIT: {
+          band1: { percentage: 20, basis: 'cost' },
+          band2: { percentage: 20, basis: 'cost' },
+          band3: { percentage: 20, basis: 'cost' },
+        },
+      },
       matrix: {
         band1: { percentage: 40, basis: 'retail' },
         band2: { percentage: 55, basis: 'cost' },
@@ -321,6 +345,80 @@ describe('minimal API route table', () => {
       },
       hasRetailData: true,
     });
+  });
+
+  it('persists both scoped matrices with one atomic upsert statement', async () => {
+    mockedAuthenticateClerkRequest.mockResolvedValue(authenticatedClerkOrgContext);
+    const queries: string[] = [];
+    const database = {
+      sql: vi.fn((strings: TemplateStringsArray) => {
+        const query = strings.join(' ');
+        queries.push(query);
+        if (query.includes('FROM users')) {
+          return Promise.resolve([{ id: 7, organizationId: 'org_123', role: 'admin' }]);
+        }
+        if (query.includes('FROM products')) return Promise.resolve([]);
+        return Promise.resolve([]);
+      }),
+    } as unknown as Database;
+    const NO_CREDIT = {
+      band1: { percentage: 50, basis: 'cost' },
+      band2: { percentage: 60, basis: 'cost' },
+      band3: { percentage: 75, basis: 'cost' },
+    };
+    const FULL_CREDIT = {
+      band1: { percentage: 10, basis: 'cost' },
+      band2: { percentage: 20, basis: 'cost' },
+      band3: { percentage: 30, basis: 'cost' },
+    };
+
+    const response = await resolveMinimalApiRoute(getMinimalRoutes(), {
+      request: new Request('https://example.com/api/markdown-config', {
+        method: 'PUT',
+        body: JSON.stringify({ matrices: { NO_CREDIT, FULL_CREDIT } }),
+      }),
+      pathname: '/api/markdown-config',
+      method: 'PUT',
+      db: database,
+      env,
+    });
+
+    expect(response?.status).toBe(200);
+    expect(
+      queries.filter((query) => query.includes('INSERT INTO organization_markdown_config')),
+    ).toHaveLength(1);
+    expect(
+      queries.find((query) => query.includes('INSERT INTO organization_markdown_config')),
+    ).toContain('ON CONFLICT (organization_id, credit_scope)');
+    await expect(response?.json()).resolves.toMatchObject({
+      matrices: { NO_CREDIT, FULL_CREDIT },
+      matrix: NO_CREDIT,
+    });
+  });
+
+  it.each([null, '', '50'])('rejects non-numeric markdown percentages (%j)', async (percentage) => {
+    mockedAuthenticateClerkRequest.mockResolvedValue(authenticatedClerkOrgContext);
+    const database = createAuthenticatedOrgDatabase({});
+
+    const response = await resolveMinimalApiRoute(getMinimalRoutes(), {
+      request: new Request('https://example.com/api/markdown-config', {
+        method: 'PUT',
+        body: JSON.stringify({
+          band1: { percentage, basis: 'cost' },
+          band2: { percentage: 60, basis: 'cost' },
+          band3: { percentage: 75, basis: 'cost' },
+        }),
+      }),
+      pathname: '/api/markdown-config',
+      method: 'PUT',
+      db: database,
+      env,
+    });
+
+    expect(response?.status).toBe(400);
+    expect(database.sql).not.toHaveBeenCalledWith(
+      expect.arrayContaining([expect.stringContaining('INSERT INTO organization_markdown_config')]),
+    );
   });
 
   it('degrades to the default matrix when the markdown schema is not yet migrated', async () => {
@@ -353,6 +451,18 @@ describe('minimal API route table', () => {
 
     expect(response?.status).toBe(200);
     await expect(response?.json()).resolves.toEqual({
+      matrices: {
+        NO_CREDIT: {
+          band1: { percentage: 50, basis: 'cost' },
+          band2: { percentage: 60, basis: 'cost' },
+          band3: { percentage: 75, basis: 'cost' },
+        },
+        FULL_CREDIT: {
+          band1: { percentage: 20, basis: 'cost' },
+          band2: { percentage: 20, basis: 'cost' },
+          band3: { percentage: 20, basis: 'cost' },
+        },
+      },
       matrix: {
         band1: { percentage: 50, basis: 'cost' },
         band2: { percentage: 60, basis: 'cost' },
@@ -573,11 +683,35 @@ describe('minimal API route table', () => {
       'org_123',
       expect.objectContaining({
         name: 'Bare Supplier',
+        creditType: 'NONE',
         creditPolicyNote: '',
         followUpDays: 7,
         policyUpdatedAt: null,
       }),
     );
+  });
+
+  it('rejects an unknown supplier credit type before writing', async () => {
+    mockedAuthenticateClerkRequest.mockResolvedValue(authenticatedClerkOrgContext);
+    const createSupplier = vi.fn();
+    const database = {
+      sql: vi.fn().mockResolvedValue([{ id: 7, organizationId: 'org_123', role: 'admin' }]),
+      createSupplier,
+    } as unknown as Database;
+
+    const response = await resolveMinimalApiRoute(getMinimalRoutes(), {
+      request: new Request('https://example.com/api/supplier-credits/suppliers', {
+        method: 'POST',
+        body: JSON.stringify({ name: 'Supplier', creditType: 'PARTIAL' }),
+      }),
+      pathname: '/api/supplier-credits/suppliers',
+      method: 'POST',
+      db: database,
+      env,
+    });
+
+    expect(response?.status).toBe(400);
+    expect(createSupplier).not.toHaveBeenCalled();
   });
 
   it('forbids a changed policy for a non-admin before writing', async () => {

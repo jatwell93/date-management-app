@@ -13,6 +13,8 @@ export interface MarkdownConfigWriteData {
   band3Basis: string;
 }
 
+export type MarkdownCreditScope = 'NO_CREDIT' | 'FULL_CREDIT';
+
 @injectable()
 export class MarkdownConfigRepository {
   constructor(@inject(PrismaClient) private prisma: PrismaClient) {}
@@ -21,23 +23,24 @@ export class MarkdownConfigRepository {
     return tx ?? this.prisma;
   }
 
-  async findByOrganizationId(
+  async findAllByOrganizationId(
     organizationId: string,
     tx?: DbClient,
-  ): Promise<MarkdownConfigRecord | null> {
-    return this.getClient(tx).organizationMarkdownConfig.findUnique({
+  ): Promise<MarkdownConfigRecord[]> {
+    return this.getClient(tx).organizationMarkdownConfig.findMany({
       where: { organizationId },
     });
   }
 
   async upsert(
     organizationId: string,
+    creditScope: MarkdownCreditScope,
     data: MarkdownConfigWriteData,
     tx?: DbClient,
   ): Promise<MarkdownConfigRecord> {
     return this.getClient(tx).organizationMarkdownConfig.upsert({
-      where: { organizationId },
-      create: { organizationId, ...data },
+      where: { organizationId_creditScope: { organizationId, creditScope } },
+      create: { organizationId, creditScope, ...data },
       update: data,
     });
   }

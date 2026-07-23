@@ -2,12 +2,15 @@ import { MarkdownConfigService } from '../../services/markdown-config.service';
 import { MarkdownConfigRepository } from '../../repositories/markdown-config.repository';
 import { ValidationError } from '../../errors';
 import {
+  DEFAULT_FULL_CREDIT_MARKDOWN_MATRIX,
   DEFAULT_MARKDOWN_MATRIX,
+  DEFAULT_MARKDOWN_MATRIX_SET,
   type MarkdownMatrixConfig,
 } from '../../../../shared/domain/markdown';
 
 type Record = {
   organizationId: string;
+  creditScope: string;
   band1Percentage: number;
   band2Percentage: number;
   band3Percentage: number;
@@ -16,41 +19,55 @@ type Record = {
   band3Basis: string;
 };
 
-function makeService(overrides: { record?: Record | null; hasRetailData?: boolean }) {
+function makeService(overrides: { records?: Record[]; hasRetailData?: boolean }) {
   const upsert = vi.fn(
-    async (organizationId: string, data): Promise<Record> => ({
+    async (organizationId: string, creditScope: string, data): Promise<Record> => ({
       organizationId,
+      creditScope,
       ...data,
     }),
   );
   const repo = {
-    findByOrganizationId: vi.fn(async () => overrides.record ?? null),
+    findAllByOrganizationId: vi.fn(async () => overrides.records ?? []),
     hasRetailData: vi.fn(async () => overrides.hasRetailData ?? false),
     upsert,
   } as unknown as MarkdownConfigRepository;
 
-  // prisma is unused because the fake repo is injected.
-  const service = new MarkdownConfigService('org-1', {} as never, repo);
-  return { service, repo, upsert };
+  const transaction = vi.fn(async (callback) => callback({ transaction: true }));
+  const service = new MarkdownConfigService('org-1', { $transaction: transaction } as never, repo);
+  return { service, repo, upsert, transaction };
 }
 
 describe('MarkdownConfigService', () => {
   it('returns the default matrix when the org has no stored config', async () => {
-    const { service } = makeService({ record: null });
+    const { service } = makeService({});
     await expect(service.getMatrix()).resolves.toEqual(DEFAULT_MARKDOWN_MATRIX);
+  });
+
+  it('defaults each missing scope independently', async () => {
+    const noCredit = makeRecord('NO_CREDIT', 40);
+    const { service } = makeService({ records: [noCredit] });
+
+    await expect(service.getMatrices()).resolves.toEqual({
+      NO_CREDIT: recordMatrix(noCredit),
+      FULL_CREDIT: DEFAULT_FULL_CREDIT_MARKDOWN_MATRIX,
+    });
   });
 
   it('maps a stored record to a resolver-ready matrix', async () => {
     const { service } = makeService({
-      record: {
-        organizationId: 'org-1',
-        band1Percentage: 40,
-        band2Percentage: 55,
-        band3Percentage: 80,
-        band1Basis: 'retail',
-        band2Basis: 'cost',
-        band3Basis: 'retail',
-      },
+      records: [
+        {
+          organizationId: 'org-1',
+          creditScope: 'NO_CREDIT',
+          band1Percentage: 40,
+          band2Percentage: 55,
+          band3Percentage: 80,
+          band1Basis: 'retail',
+          band2Basis: 'cost',
+          band3Basis: 'retail',
+        },
+      ],
       hasRetailData: true,
     });
 
@@ -62,8 +79,9 @@ describe('MarkdownConfigService', () => {
   });
 
   it('getConfig reports whether retail data is available', async () => {
-    const { service } = makeService({ record: null, hasRetailData: false });
+    const { service } = makeService({ hasRetailData: false });
     const config = await service.getConfig();
+    expect(config.matrices).toEqual(DEFAULT_MARKDOWN_MATRIX_SET);
     expect(config.matrix).toEqual(DEFAULT_MARKDOWN_MATRIX);
     expect(config.hasRetailData).toBe(false);
   });
@@ -92,6 +110,38 @@ describe('MarkdownConfigService', () => {
     expect(result.hasRetailData).toBe(true);
   });
 
+  it('writes both scoped matrices in one transaction', async () => {
+    const { service, upsert, transaction } = makeService({ hasRetailData: true });
+    const matrices = {
+      NO_CREDIT: makeMatrix(10, 'cost'),
+      FULL_CREDIT: makeMatrix(20, 'retail'),
+    } as const;
+
+    const result = await service.updateConfig({ matrices });
+
+    expect(transaction).toHaveBeenCalledOnce();
+    expect(upsert).toHaveBeenCalledTimes(2);
+    expect(upsert).toHaveBeenNthCalledWith(1, 'org-1', 'NO_CREDIT', expect.any(Object), {
+      transaction: true,
+    });
+    expect(upsert).toHaveBeenNthCalledWith(2, 'org-1', 'FULL_CREDIT', expect.any(Object), {
+      transaction: true,
+    });
+    expect(result).toEqual({ matrices, matrix: matrices.NO_CREDIT, hasRetailData: true });
+  });
+
+  it('legacy writes update NO_CREDIT only and preserve FULL_CREDIT', async () => {
+    const { service, upsert, transaction } = makeService({ hasRetailData: false });
+    const matrix = makeMatrix(15, 'cost');
+
+    const result = await service.updateConfig(matrix);
+
+    expect(transaction).not.toHaveBeenCalled();
+    expect(upsert).toHaveBeenCalledOnce();
+    expect(upsert).toHaveBeenCalledWith('org-1', 'NO_CREDIT', expect.any(Object));
+    expect(result.matrices.FULL_CREDIT).toEqual(DEFAULT_FULL_CREDIT_MARKDOWN_MATRIX);
+  });
+
   it('persists a cost-only matrix even without retail data', async () => {
     const { service, upsert } = makeService({ hasRetailData: false });
     const matrix: MarkdownMatrixConfig = {
@@ -103,3 +153,28 @@ describe('MarkdownConfigService', () => {
     expect(upsert).toHaveBeenCalledOnce();
   });
 });
+
+function makeMatrix(percentage: number, basis: 'cost' | 'retail'): MarkdownMatrixConfig {
+  return {
+    band1: { percentage, basis },
+    band2: { percentage, basis },
+    band3: { percentage, basis },
+  };
+}
+
+function makeRecord(creditScope: string, percentage: number): Record {
+  return {
+    organizationId: 'org-1',
+    creditScope,
+    band1Percentage: percentage,
+    band2Percentage: percentage,
+    band3Percentage: percentage,
+    band1Basis: 'cost',
+    band2Basis: 'cost',
+    band3Basis: 'cost',
+  };
+}
+
+function recordMatrix(record: Record): MarkdownMatrixConfig {
+  return makeMatrix(record.band1Percentage, 'cost');
+}

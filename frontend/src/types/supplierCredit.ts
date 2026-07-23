@@ -1,6 +1,8 @@
 // Types for the Supplier Credits workspace. Mirror the backend response shapes
 // (shared/domain/credit-claim rollups + Prisma records).
 
+export type CreditType = 'NONE' | 'FULL_CREDIT';
+
 export interface Supplier {
   id: number;
   name: string;
@@ -13,6 +15,7 @@ export interface Supplier {
   representativeName: string | null;
   representativeEmail: string | null;
   policyUpdatedAt: string | null;
+  creditType: CreditType;
 }
 
 export interface SupplierInput {
@@ -25,6 +28,7 @@ export interface SupplierInput {
   contactPhone?: string | null;
   representativeName?: string | null;
   representativeEmail?: string | null;
+  creditType?: CreditType;
 }
 
 export type PolicyStatus = 'ATTACHED' | 'MISSING';
