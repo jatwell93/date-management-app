@@ -95,7 +95,7 @@ test-results/
 playwright-report/
 .playwright-mcp/
 .expect/
-
+.serena/memories/
 # graphify (tool removed; ignore any regenerated output)
 graphify-out/
 
