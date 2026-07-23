@@ -2,6 +2,7 @@
 
 **Monorepo development guide for AI-assisted work.**
 Node/Express/TypeScript backend · React frontend · Cloudflare Workers · shared libs.
+Neon PostgreSQL database · Clerk authentication · Sentry monitoring · Stripe payments.
 
 **Last updated:** July 2026
 
@@ -132,3 +133,27 @@ npm run mem:rebuild                                   # rebuild local index afte
 `KIND` ∈ `FIX | PATTERN | DECISION | FEATURE | ERROR | ARCHITECTURE | WORKFLOW`.
 
 **Store proactively** — don't wait to be asked — on: a bug fix (problem + solution), an architecture/design decision (choice + rationale), a reusable pattern, a completed feature, or a resolved error (message + fix).
+
+### Search & Refactor: When to Use What
+
+| Scenario | Tool | Why |
+| --- | --- | --- |
+| "How is pattern matching implemented?" | `mgrep` | **Semantic search:** Finds code by intent and context rather than exact text strings. |
+| "Where is the quick reject filter?" | `mgrep` | **Conceptual search:** Locates architectural components using natural language queries. |
+| "Find all uses of `Regex::new`" | `ripgrep` | **Targeted literal search:** Best for finding exact string matches or exact code symbols. |
+| "Find files with `println!`" | `ripgrep` | **Simple pattern matching:** Fast, literal line-by-line regex matching. |
+| "Replace all `unwrap()` with `expect()`" | `ast-grep` | **Structural refactor:** Understands the Abstract Syntax Tree (AST) to safely modify code structure. |
+
+## Serena Tool Usage  
+  
+This project uses Serena for semantic code operations. When working on code files:  
+  
+**PRIORITY**: Use Serena's symbolic tools instead of basic file operations:  
+- For code structure overview: `get_symbols_overview`  
+- For reading symbol bodies: `find_symbol` with `include_body=true`  
+- For finding references: `find_referencing_symbols`  
+- For editing code: `replace_symbol_body`, `insert_before_symbol`, `insert_after_symbol`, or `replace_content`  
+  
+**AVOID** using basic `read_file`, `grep`, or line-based `edit` tools on code files when Serena equivalents exist. Serena's tools are more token-efficient and maintain semantic correctness.  
+  
+Before editing code: 1) Get symbol overview, 2) Read specific symbols needed, 3) Use Serena editing tools.
