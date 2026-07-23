@@ -56,6 +56,8 @@ Every session: skim recent history with `git log -5 --oneline`, and check active
 
 For non-trivial changes, recall prior context: `node scripts/mem-recall.js "<keywords>"` (offline lexical search over `memory.jsonl`; skip for pure read-only/docs work, don't block if the index is missing).
 
+**Install `dcg`** — the repo's Destructive Command Guard. `.dcg.toml` (committed) defines the deny policy (Neon prod, Stripe, SQLite, Windows FS), and `.claude/settings.json` wires it as a `Bash` PreToolUse hook, so it only enforces if the `dcg` binary is on your `PATH`. Without it you'll see a non-blocking `command not found` on every Bash call and get **no** protection (it fails open). Install it so destructive commands (`rm -rf`, `DROP DATABASE`, …) are actually blocked.
+
 ---
 
 ## 4. Workflow
