@@ -10,8 +10,9 @@
             "statusMessage": "Checking markdown location"
           }
         ]
-      }
-      "matcher": "",
+      },
+      {
+       "matcher": "",
        "hooks": [
            {
                "type": "command",
@@ -27,6 +28,7 @@
                "command": "serena-hooks auto-approve --client=claude-code"
            }
        ]
+    }
     ],
     "SessionStart": [
         {
@@ -62,7 +64,7 @@
           }
         ]
       }
-    ]
+    ],
     "SessionEnd": [
         {
             "matcher": "",
